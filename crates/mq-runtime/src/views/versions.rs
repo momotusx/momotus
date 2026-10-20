@@ -1734,9 +1734,97 @@ fn first_line(description: &str, name: &str) -> String {
         .to_owned()
 }
 
+/// Tests: a view whose ranking lists `rows`, nothing recommended. Their
+/// sources are the view's streams, so a relearn ranks them again.
+#[cfg(test)]
+impl VersionsView {
+    pub(crate) fn rows_for_tests(&self, rows: Vec<RankedRow>) {
+        let mut s = lock(&self.state);
+        s.streams = rows
+            .iter()
+            .flat_map(|r| std::iter::once(&r.stream).chain(&r.failover))
+            .cloned()
+            .collect();
+        s.ranked = Ranked {
+            rows,
+            hidden: Vec::new(),
+        };
+        s.recommended = None;
+    }
+}
+
+/// Tests: the parameters of a film for a 1080p stick.
+#[cfg(test)]
+pub(crate) fn film_params() -> VersionsParams {
+    VersionsParams {
+        kind: "movie".into(),
+        video_id: "tt1".into(),
+        target: Target {
+            title: "Movie".into(),
+            year: Some(2020),
+            season: None,
+            episode: None,
+        },
+        caps: DeviceCaps::basic_1080p(),
+        prefs: StreamPrefs::default(),
+        last_binge_group: None,
+        // Facts sent: no meta is asked, so nothing ranks the view again.
+        facts: TitleFacts::read(Some("120 min"), Some("2020"), None, None),
+    }
+}
+
+/// Tests: `streams` ranked for a 1080p stick with the engine.
+#[cfg(test)]
+pub(crate) fn rank_for_tests(streams: Vec<ParsedStream>) -> Vec<RankedRow> {
+    let params = film_params();
+    let conditions = Conditions {
+        engine: true,
+        free_bytes: Some(1 << 40),
+        ..Conditions::default()
+    };
+    let input = RankInput {
+        caps: &params.caps,
+        prefs: &params.prefs,
+        target: &params.target,
+        last_binge_group: None,
+        kids: None,
+        conditions: &conditions,
+    };
+    rank(streams, &input).rows
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn wire(json: &str) -> ParsedStream {
+        let body = format!(r#"{{"streams":[{json}]}}"#);
+        let wire = mq_protocol::decode_streams(body.as_bytes()).unwrap();
+        normalize(&wire.streams[0], "t", "T", 0, 0)
+    }
+
+    /// Code review 2026-10-20 r3 P3-8, r4 P3-8: nobodySharing reads every
+    /// source of a row: a dead swarm with a link behind it can still play.
+    #[tokio::test]
+    async fn nobody_sharing_reads_every_source_of_a_row() {
+        let core = Core::temporary("p").unwrap();
+        let view = VersionsView::open(&core, film_params());
+        let hash = "d".repeat(40);
+        let swarm = wire(&format!(
+            r#"{{"title":"Movie.2020.1080p.WEB-DL.x264-GRP\n👤 1 💾 2.0 GB","infoHash":"{hash}"}}"#
+        ));
+        let link =
+            wire(r#"{"title":"Movie.2020.1080p.WEB-DL.x264-GRP","url":"https://a.example/m.mkv"}"#);
+        let mut row = rank_for_tests(vec![swarm]).remove(0);
+        assert_eq!(row.class, SourceClass::Swarm);
+        let mut s = lock(&view.state);
+        s.live.insert(hash, 1);
+        s.ranked.rows = vec![row.clone()];
+        assert!(nobody_sharing(&s), "a dead swarm alone");
+        row.failover.push(link);
+        s.ranked.rows = vec![row];
+        assert!(!nobody_sharing(&s), "a link behind it can play");
+    }
 
     /// Code review r1 P3: with two accounts, one store's cache answer
     /// marks only the rows that resolve on it.

@@ -305,8 +305,9 @@ struct State {
     /// A source of the version failed for a reason of the version's own:
     /// no picture here, a dead swarm, the wrong file.
     version_failed: bool,
-    /// The versions this view started (row keys), and how many it moved on
-    /// to by itself.
+    /// Every source key of every chain this view started (the pick's and
+    /// each version it moved on to), and how many times it moved on by
+    /// itself.
     tried: Vec<String>,
     hops: u8,
     /// The pick's own chain, for "Try again" to start afresh.
@@ -547,10 +548,12 @@ impl PlaybackView {
         view
     }
 
-    /// "Try again" once every source failed: the same versions again from
-    /// the first, each torrent with the full start deadline, so a swarm
-    /// that is only slow to start gets its chance. Ignored unless the
-    /// playback failed.
+    /// "Try again" once every source failed: the pick's own sources again
+    /// from the first, patiently (no early cut), so a swarm that is only
+    /// slow to start gets its chance, within one 3 minute budget for the
+    /// whole run: each wait is cut to what is left, and when it is spent the
+    /// run ends with the attempt "Tried again for 3 minutes" (via
+    /// "Marquee"). Ignored unless the playback failed.
     pub fn retry(&self) {
         {
             let mut s = lock(&self.state);
@@ -1031,7 +1034,10 @@ fn adopt(s: &mut State, run: u64, lease: Lease) -> bool {
     s.progressed = false;
     s.reported_ms = None;
     s.played_ms = 0;
+    // A source plays: the "Try again" run is over, its patience and its
+    // budget with it (code review 2026-10-20 r4 P3-2).
     s.retry_until = None;
+    s.patient = false;
     s.snapshot.trying = None;
     true
 }
@@ -1187,6 +1193,11 @@ async fn resolve_next(
                 return;
             }
             if budget_left(&s).is_some_and(|left| left.is_zero()) {
+                // A hand pick keeps its offer (code review 2026-10-20 r4
+                // P3-3): move_on only sets it for one.
+                if s.pick.as_ref().is_some_and(|p| !p.recommended()) {
+                    move_on(&mut s);
+                }
                 s.snapshot.attempts.push(Attempt {
                     key: String::new(),
                     via: "Marquee".into(),
@@ -1626,24 +1637,28 @@ async fn open_torrent(
             "torrent did not start"
         );
     };
-    let torrent = tokio::time::timeout(
-        within_budget(state, METADATA_TIMEOUT),
-        engine.add_magnet(info_hash, trackers, &[]),
-    )
-    .await
-    .map_err(|_| {
-        did_not_start();
-        // Stale seeder counts fail this way: dead, once the chain shows
-        // the connection works.
-        let now = {
-            let mut s = lock(state);
-            s.version_failed = true;
-            s.dead.failed(info_hash, false)
-        };
-        remember_dead(core, now);
-        "No peer sent the torrent's details in time".to_owned()
-    })?
-    .map_err(|e| e.to_string())?;
+    let wait = within_budget(state, METADATA_TIMEOUT);
+    let torrent = tokio::time::timeout(wait, engine.add_magnet(info_hash, trackers, &[]))
+        .await
+        .map_err(|_| {
+            did_not_start();
+            // Stale seeder counts fail this way: dead, once the chain shows
+            // the connection works, and only when it had the full wait (a
+            // "Try again" budget can cut it short, code review 2026-10-20 r4
+            // P3-1).
+            let now = {
+                let mut s = lock(state);
+                s.version_failed = true;
+                if wait == METADATA_TIMEOUT {
+                    s.dead.failed(info_hash, false)
+                } else {
+                    Vec::new()
+                }
+            };
+            remember_dead(core, now);
+            "No peer sent the torrent's details in time".to_owned()
+        })?
+        .map_err(|e| e.to_string())?;
     // This profile's use of it, for as long as the playback lives: a hold
     // for another profile leaves the torrent running for it.
     let profile = core.profile();
@@ -1855,9 +1870,14 @@ fn judge_file(
     by_episode: bool,
 ) -> Option<&'static str> {
     let why = wrong_file(path, len, stream.size_bytes, target, by_episode)?;
-    let now = mq_library::hlc::now_ms();
-    let played_for = (target.season, target.episode);
-    crate::speed::record_wrong_file(core.library(), &stream.key, played_for, now);
+    // A film's key without a file index (`bt:{hash}:auto`) can stand for
+    // every film of a collection: only an episode, or a file index, says
+    // which file was wrong (code review 2026-10-20 r4 P3-7).
+    if target.episode.is_some() || !stream.key.ends_with(":auto") {
+        let now = mq_library::hlc::now_ms();
+        let played_for = (target.season, target.episode);
+        crate::speed::record_wrong_file(core.library(), &stream.key, played_for, now);
+    }
     Some(why)
 }
 
@@ -3058,6 +3078,120 @@ mod tests {
         assert_eq!(kept, [digest(5)]);
         assert!(!kept.contains(&digest(6)), "another episode of the pack");
         assert!(judge_file(&core, &pack, &fifth, path, 1 << 30, false).is_none());
+    }
+
+    /// Code review 2026-10-20 r4 P3-7: a film's key without a file index
+    /// can stand for every film of a collection, so its wrong file is not
+    /// kept; with a file index, or for an episode, it is.
+    #[test]
+    fn a_wrong_file_is_kept_only_where_it_names_one_file() {
+        let core = Core::temporary("default").unwrap();
+        let film = PlayTarget::default();
+        let mut collection = stream(&format!(r#"{{"infoHash":"{}"}}"#, "c".repeat(40)));
+        collection.size_bytes = Some(1 << 30);
+        let path = "Trilogy/Film.3.1080p.mkv";
+        assert!(judge_file(&core, &collection, &film, path, 3 << 30, false).is_some());
+        let kept = || crate::speed::wrong_file(core.library(), mq_library::hlc::now_ms());
+        assert!(kept().is_empty(), "{}: no file index", collection.key);
+        let mut one = stream(&format!(
+            r#"{{"infoHash":"{}","fileIdx":2}}"#,
+            "c".repeat(40)
+        ));
+        one.size_bytes = Some(1 << 30);
+        assert!(judge_file(&core, &one, &film, path, 3 << 30, false).is_some());
+        assert_eq!(kept().len(), 1, "{}: a file index", one.key);
+    }
+
+    /// Code review 2026-10-20 r4 P3-3: when a "Try again" run of a hand pick
+    /// runs out of budget, the card keeps offering the next version.
+    #[tokio::test]
+    async fn a_hand_pick_keeps_its_offer_when_the_budget_runs_out() {
+        let core = Core::temporary("default").unwrap();
+        let versions = crate::views::versions::VersionsView::open(
+            &core,
+            crate::views::versions::film_params(),
+        );
+        // Loopback links from no install are refused at once.
+        let link = |name: &str, n: u32| {
+            stream(&format!(
+                r#"{{"title":"{name}","url":"http://127.0.0.1:9/{n}.mkv"}}"#
+            ))
+        };
+        let rows = crate::views::versions::rank_for_tests(vec![
+            link("Movie.2020.1080p.WEB-DL.x264-HAND", 1),
+            link("Movie.2020.1080p.BluRay.x264-NEXT", 2),
+        ]);
+        assert!(rows.len() == 2 && rows.iter().all(|r| r.key.viable));
+        let (hand, next) = (rows[0].stream.key.clone(), rows[1].stream.key.clone());
+        while !versions.snapshot().done {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        versions.rows_for_tests(rows);
+        let view =
+            PlaybackView::open_picked(&core, versions.pick(&hand), PlayTarget::default(), &[]);
+        let failed = || async {
+            for _ in 0..3000 {
+                if view.snapshot().phase == PlaybackPhase::Failed {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            panic!("never failed: {:?}", view.snapshot());
+        };
+        failed().await;
+        view.retry();
+        {
+            // As when the hand pick's source failed for a reason of its own
+            // (a stall) just as the 3 minutes ran out.
+            let mut s = lock(&view.state);
+            s.version_failed = true;
+            s.retry_until = Some(tokio::time::Instant::now());
+        }
+        failed().await;
+        let s = view.snapshot();
+        assert_eq!(s.attempts.last().unwrap().error, RETRY_GAVE_UP);
+        assert_eq!(s.offer.map(|o| o.key), Some(next));
+    }
+
+    /// Code review 2026-10-20 r4 P3-8: in a "Try again" run with 20 s left,
+    /// the metadata wait, the deadline and the cap are cut to 20 s.
+    #[cfg(feature = "torrent")]
+    #[tokio::test(start_paused = true)]
+    async fn a_retry_cuts_each_limit_to_what_is_left() {
+        let core = Core::temporary("default").unwrap();
+        let view = PlaybackView::open(&core, Vec::new(), PlayTarget::default());
+        let left = Duration::from_secs(20);
+        lock(&view.state).retry_until = Some(tokio::time::Instant::now() + left);
+        let rule = start_rule(&lock(&view.state));
+        assert_eq!((rule.deadline, rule.cap), (left, left));
+        assert_eq!(within_budget(&view.state, METADATA_TIMEOUT), left);
+    }
+
+    /// Code review 2026-10-20 r4 P3-1: a metadata wait a "Try again" budget
+    /// cut short is not taken for a dead swarm, though a peer was reached
+    /// before in the chain.
+    #[cfg(feature = "torrent")]
+    #[tokio::test(start_paused = true)]
+    async fn a_metadata_wait_the_budget_cut_short_is_not_a_dead_swarm() {
+        let core = Core::temporary("default").unwrap();
+        let hash = "e".repeat(40);
+        let swarm = stream(&format!(r#"{{"infoHash":"{hash}","fileIdx":0}}"#));
+        let view = PlaybackView::open(&core, vec![swarm], PlayTarget::default());
+        {
+            let mut s = lock(&view.state);
+            s.retry_until = Some(tokio::time::Instant::now() + Duration::from_secs(5));
+            s.dead.reached = true;
+        }
+        for _ in 0..600 {
+            if view.snapshot().phase == PlaybackPhase::Failed {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        let s = view.snapshot();
+        assert_eq!(s.phase, PlaybackPhase::Failed, "{s:?}");
+        let dead = crate::speed::dead_swarms(core.library(), mq_library::hlc::now_ms());
+        assert!(dead.is_empty(), "{dead:?}");
     }
 
     /// A swarm with peers that sends nothing is cut once its first window

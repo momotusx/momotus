@@ -1157,6 +1157,46 @@ async fn almost_nobody_sharing_is_said_before_play() {
     assert_eq!((deadline, quiet), (Duration::from_secs(60), None));
 }
 
+/// Code review 2026-10-20 r4 P3-2, P3-8: once a source of a "Try again" run
+/// plays, the run's patience and budget end: a later failover is judged as
+/// on a first play (the window cut on, the full cap).
+#[cfg(feature = "torrent")]
+#[tokio::test]
+async fn a_source_that_plays_ends_the_try_again_run() {
+    let base = range_origin(media_fixture("h264.mp4"), Duration::ZERO).await;
+    let link = |url: String, install: Option<&str>| {
+        let json = format!(r#"{{"streams":[{{"url":"{url}"}}]}}"#);
+        let wire = mq_protocol::decode_streams(json.as_bytes()).unwrap();
+        let mut s = mq_streams::normalize(&wire.streams[0], "t", "T", 0, 0);
+        s.addon_url = install.map(|i| url::Url::parse(i).unwrap());
+        s
+    };
+    let install = format!("{base}/manifest.json");
+    let sources = vec![
+        // From no install, a loopback link is refused at once.
+        link("http://127.0.0.1:9/dead.mp4".into(), None),
+        link(format!("{base}/a.mp4"), Some(&install)),
+        link(format!("{base}/b.mp4"), Some(&install)),
+    ];
+    let b = sources[2].key.clone();
+    let core = Core::temporary("p").unwrap();
+    let view = mq_runtime::PlaybackView::open(&core, sources, mq_runtime::PlayTarget::default());
+    until("a plays", || view.snapshot().url.is_some()).await;
+    view.fail_over(None, Some("network"), None, "gone");
+    until("b plays", || view.snapshot().key.as_ref() == Some(&b)).await;
+    view.fail_over(None, Some("network"), None, "gone");
+    let failed = || view.snapshot().phase == mq_runtime::PlaybackPhase::Failed;
+    until("every source failed", failed).await;
+    view.retry();
+    until("a plays again", || view.snapshot().url.is_some()).await;
+    let (windows, _, _, _, cap) = view.start_rule();
+    assert!(
+        windows,
+        "no longer patient: a source falling short may be cut"
+    );
+    assert_eq!(cap, Duration::from_secs(180), "no budget left over");
+}
+
 /// After a restart the core reads the network the app last reported, not
 /// "other", until the app reports one again.
 #[tokio::test]
