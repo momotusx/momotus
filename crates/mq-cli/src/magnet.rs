@@ -37,6 +37,7 @@ pub struct MagnetOptions {
     /// second, and the offset that read starts at.
     pub walk: bool,
     pub walk_rate: Option<u64>,
+    pub walk_for: Option<Duration>,
     pub resume_at: Option<u64>,
     pub cache_budget: Option<u64>,
     pub download_limit: Option<u32>,
@@ -131,13 +132,15 @@ fn each(list: Option<&Value>, key: &str) -> Vec<u64> {
 }
 
 /// `want` bytes of `bytes=offset-` through the loopback, at most `rate`
-/// bytes per second when set, each whole piece checked. A stall is a wait
-/// of over 1 s for the next bytes after the first.
+/// bytes per second when set and for at most `stop` when set, each whole
+/// piece checked. A stall is a wait of over 1 s for the next bytes after
+/// the first. The fill is the bytes of each whole second from the first
+/// byte, p10 and p50.
 async fn read_checked(
     http: &HttpClient,
     url: &str,
     (offset, want): (u64, u64),
-    rate: Option<u64>,
+    (rate, stop): (Option<u64>, Option<Duration>),
     check: &mut PieceCheck,
 ) -> Value {
     check.seek(offset);
@@ -150,7 +153,8 @@ async fn read_checked(
         Err(e) => return json!({ "offset": offset, "error": e.to_string() }),
     };
     let (mut got, mut first, mut stalls, mut stall_ms) = (0u64, None, 0u32, 0u64);
-    while got < want {
+    let mut per_s: Vec<u64> = Vec::new();
+    while got < want && stop.is_none_or(|s| started.elapsed() < s) {
         if let Some(rate) = rate.filter(|r| *r > 0) {
             let due = Duration::from_secs_f64(got as f64 / rate as f64);
             if let Some(wait) = due.checked_sub(started.elapsed()) {
@@ -170,33 +174,43 @@ async fn read_checked(
         let take = chunk.len().min((want - got) as usize);
         check.feed(&chunk[..take]);
         got += take as u64;
-        first.get_or_insert_with(|| ms(started));
+        let first = *first.get_or_insert_with(|| ms(started));
+        let second = (ms(started) - first) as usize / 1000;
+        if per_s.len() <= second {
+            per_s.resize(second + 1, 0);
+        }
+        per_s[second] += take as u64;
     }
+    // The last second is partial.
+    per_s.pop();
     json!({
         "offset": offset, "bytes": got, "first_byte_ms": first,
         "ms": (got >= want).then(|| ms(started)), "stalls": stalls, "stall_ms": stall_ms,
+        "fill_secs": per_s.len(),
+        "fill_p10_bytes_per_s": percentile(&per_s, 0.1),
+        "fill_p50_bytes_per_s": percentile(&per_s, 0.5),
     })
 }
 
 /// `--walk`: reads at 25, 50 and 75% (4 MiB each), the whole file from
-/// `from` at `rate`, then 64 MiB back at 10%.
+/// `from` at `rate` (for at most `stop`), then 64 MiB back at 10%.
 async fn walk(
     http: &HttpClient,
     url: &str,
     len: u64,
-    (from, rate): (u64, Option<u64>),
+    (from, rate, stop): (u64, Option<u64>, Option<Duration>),
     mut check: PieceCheck,
 ) -> Value {
     let at = |pct: f64| (len as f64 * pct / 100.0) as u64;
     let mut forward = Vec::new();
     for pct in SEEKS {
         let span = (at(pct), (4 * MIB).min(len - at(pct)));
-        forward.push(read_checked(http, url, span, None, &mut check).await);
+        forward.push(read_checked(http, url, span, (None, None), &mut check).await);
     }
     let from = from.min(len);
-    let whole = read_checked(http, url, (from, len - from), rate, &mut check).await;
+    let whole = read_checked(http, url, (from, len - from), (rate, stop), &mut check).await;
     let back = (at(10.0), (64 * MIB).min(len - at(10.0)));
-    let back = read_checked(http, url, back, None, &mut check).await;
+    let back = read_checked(http, url, back, (None, None), &mut check).await;
     json!({
         "forward": forward, "whole": whole, "back": [back],
         "checked": check.checked, "wrong": check.wrong,
@@ -404,7 +418,7 @@ async fn run(
         (ready.ok().and_then(Result::ok).map(|()| ms(selected)), head)
     }));
     let (mut ready_ms, mut peers_at_ready, mut kept_head) = (None, None, None);
-    if !o.bytes {
+    if !o.bytes && !o.walk {
         let task = ready_task.take().expect("set above");
         let (ready, head) = task.await.map_err(|e| e.to_string())?;
         let peers = engine.stats(t).await.map_err(|e| e.to_string())?.peers;
@@ -431,7 +445,7 @@ async fn run(
         json!({ "seeks": seeks })
     } else if o.walk {
         let check = engine.piece_check(t, file).map_err(|e| e.to_string())?;
-        let span = (o.resume_at.unwrap_or(0), o.walk_rate);
+        let span = (o.resume_at.unwrap_or(0), o.walk_rate, o.walk_for);
         walk(&http, &url, info.len, span, check).await
     } else {
         let options = PlayOptions {
@@ -467,6 +481,18 @@ async fn run(
     };
     let walked = played.get("whole");
     let stalls = walked.unwrap_or(&played);
+    let walk_row = o.walk.then(|| {
+        json!({
+            "rate": o.walk_rate, "from": o.resume_at.unwrap_or(0),
+            "bytes": walked.and_then(|w| w.get("bytes")), "ms": walked.and_then(|w| w.get("ms")),
+            "for_s": o.walk_for.map(|d| d.as_secs()),
+            "fill_secs": walked.and_then(|w| w.get("fill_secs")),
+            "fill_p10_bytes_per_s": walked.and_then(|w| w.get("fill_p10_bytes_per_s")),
+            "fill_p50_bytes_per_s": walked.and_then(|w| w.get("fill_p50_bytes_per_s")),
+            "back": played.get("back"), "forward": played.get("forward"),
+            "checked": played.get("checked"), "wrong": played.get("wrong"),
+        })
+    });
     // The lease's claim ends first: the engine keeps a claimed torrent.
     drop(lease);
     let _ = engine.remove(t, keep_data).await;
@@ -501,12 +527,7 @@ async fn run(
         "seek_back_p90_ms": percentile(&back, 0.9),
         "stalls": stalls.get("stalls"),
         "stall_ms": stalls.get("stall_ms"),
-        "walk": o.walk.then(|| json!({
-            "rate": o.walk_rate, "from": o.resume_at.unwrap_or(0),
-            "bytes": walked.and_then(|w| w.get("bytes")), "ms": walked.and_then(|w| w.get("ms")),
-            "back": played.get("back"), "forward": played.get("forward"),
-            "checked": played.get("checked"), "wrong": played.get("wrong"),
-        })),
+        "walk": walk_row,
         "total_ms": ms(started),
         "peak_rss_bytes": peak_rss_bytes(),
     }))

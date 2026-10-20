@@ -125,6 +125,10 @@ enum Command {
         /// the bytes come).
         #[arg(long, requires = "walk")]
         walk_rate: Option<u64>,
+        /// The walk's whole read ends after this many seconds (a fill-rate
+        /// run on a large file).
+        #[arg(long, requires = "walk")]
+        walk_for: Option<u64>,
         /// The walk's whole read starts at this byte offset (a resume).
         #[arg(long, requires = "walk")]
         resume_at: Option<u64>,
@@ -226,6 +230,7 @@ async fn main() {
         peer,
         walk,
         walk_rate,
+        walk_for,
         resume_at,
         cache_budget,
         download_limit,
@@ -243,6 +248,7 @@ async fn main() {
             peer,
             walk,
             walk_rate,
+            walk_for: walk_for.map(Duration::from_secs),
             resume_at,
             cache_budget,
             download_limit,
