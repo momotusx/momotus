@@ -801,3 +801,118 @@ async fn two_installations_of_one_addon_are_two_rows() {
             .all(|r| r.state == RowState::Ready && !r.tiles.is_empty())
     );
 }
+
+/// Live (web journey review P3-20): a real Kitsu series through the core
+/// with the default Anime Kitsu addon. Its next to last aired episode is
+/// finished and marked watched: Next Up must name the last aired one, and
+/// the calendar must list the series. `KITSU_ID` picks another series.
+/// Run with `--ignored --nocapture`; prints a bench row.
+#[tokio::test]
+#[ignore = "network"]
+async fn live_kitsu_next_up_and_calendar() {
+    use mq_runtime::CalendarView;
+    let core = Core::temporary("p").unwrap();
+    core.install_addon("https://anime-kitsu.strem.fun/manifest.json")
+        .await
+        .unwrap();
+    let id = std::env::var("KITSU_ID").unwrap_or_else(|_| "kitsu:49847".into());
+    let now_ms = mq_library::hlc::now_ms() as i64;
+    let (meta, source) = core.fetch_meta("anime", &id).await.unwrap();
+    let mut aired: Vec<_> = meta
+        .videos
+        .iter()
+        .filter_map(|v| Some((v, v.series_info.clone()?)))
+        .filter(|(v, s)| s.season > 0 && v.released.is_some_and(|r| r.timestamp_millis() <= now_ms))
+        .collect();
+    aired.sort_by_key(|(_, s)| (s.season, s.episode));
+    let [.., (done, _), (next, next_info)] = aired.as_slice() else {
+        panic!("{id}: fewer than two aired episodes");
+    };
+    let item = LibraryItemRow {
+        item_id: id.clone(),
+        kind: "anime".into(),
+        name: meta.preview.name.clone(),
+        poster: None,
+        poster_shape: None,
+        added_ms: 1,
+    };
+    let library = core.library();
+    library.upsert_item("p", &item, true, &core.hlc()).unwrap();
+    let progress = ProgressRow {
+        video_id: &done.id,
+        item_id: &id,
+        position_ms: 1_400_000,
+        duration_ms: 1_440_000,
+        updated_ms: now_ms,
+    };
+    library.set_progress("p", progress, &core.hlc()).unwrap();
+    library
+        .set_watched("p", &id, &done.id, true, &core.hlc())
+        .unwrap();
+
+    let started = std::time::Instant::now();
+    let home = HomeView::open(&core);
+    let mut tile = None;
+    for _ in 0..2000 {
+        tile = home
+            .snapshot()
+            .rows
+            .into_iter()
+            .find(|r| r.row_id == CONTINUE_ROW_ID)
+            .and_then(|r| {
+                r.tiles
+                    .into_iter()
+                    .find(|t| t.id == id && t.release_info.is_some())
+            });
+        if tile.as_ref().is_some_and(|t| {
+            t.release_info
+                .as_deref()
+                .is_some_and(|r| r.starts_with("Next"))
+        }) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let next_up_ms = started.elapsed().as_millis() as u64;
+    let tile = tile.expect("a Continue Watching tile for the series");
+
+    let days = now_ms / 86_400_000;
+    let today =
+        chrono::NaiveDate::from_ymd_opt(1970, 1, 1).unwrap() + chrono::Days::new(days as u64);
+    let started = std::time::Instant::now();
+    let calendar = CalendarView::open(&core, today);
+    let mut s = calendar.snapshot();
+    for _ in 0..2000 {
+        s = calendar.snapshot();
+        if s.pending == 0 && (!s.days.is_empty() || !s.failed.is_empty()) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let calendar_ms = started.elapsed().as_millis() as u64;
+    let listed: Vec<String> = s
+        .days
+        .iter()
+        .flat_map(|d| {
+            d.items
+                .iter()
+                .filter(|i| i.item_id == id)
+                .map(|i| format!("{} {}", d.date, i.video_id))
+        })
+        .collect();
+    println!(
+        "{}",
+        serde_json::json!({
+            "series": id, "name": meta.preview.name, "meta_from": source, "today": today.to_string(),
+            "watched": done.id, "next_up_tile": tile.video_id, "next_up_label": tile.release_info,
+            "expected_next": next.id, "next_up_ms": next_up_ms,
+            "calendar_items": listed, "calendar_failed": s.failed.len(), "calendar_ms": calendar_ms,
+        })
+    );
+    assert_eq!(tile.video_id.as_deref(), Some(next.id.as_str()));
+    assert_eq!(
+        tile.release_info.as_deref(),
+        Some(format!("Next: S{}:E{}", next_info.season, next_info.episode).as_str())
+    );
+    assert!(!listed.is_empty(), "the series is in the calendar");
+}
