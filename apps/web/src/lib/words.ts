@@ -205,6 +205,8 @@ export const nextVersion = {
   /** The card when the playback view could not open at all (the error goes under it). */
   notOpened: "This version could not be opened",
   tryingAgain: "Trying again",
+  /** A version picked by hand, waiting for Versions to list it (as Android). */
+  finding: "Finding this version",
 };
 
 /** The busy line while a play starts over: a move on names the version it

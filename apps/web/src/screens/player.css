@@ -127,6 +127,8 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 .end-body .attempts { text-align: left; }
 /* What the core said when the playback could not open, under the headline. */
 .end-detail { font: 400 var(--type-callout) / 1.35 var(--font-text); color: var(--muted); }
+.end-note { display: inline-flex; align-items: center; gap: 12px; }
+.end-note svg { width: 28px; height: 28px; }
 .end-body .acts { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin-top: 18px; }
 .endcard .btn { transform-origin: center; }
 

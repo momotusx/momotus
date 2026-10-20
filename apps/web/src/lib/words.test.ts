@@ -194,6 +194,7 @@ test("the next version, tried or offered, by its label", () => {
   expect(restartLine({ phase: "failed", trying: null }, true)).toBe("Trying again");
   expect(restartLine({ phase: "resolving", trying: null }, false)).toBeNull();
   expect(nextVersion.notOpened).toBe("This version could not be opened");
+  expect(nextVersion.finding).toBe("Finding this version");
   // The headline never says nothing played while it offers another version.
   expect(nextVersion.failed(true)).toBe("This version could not be played");
   expect(nextVersion.failed(false)).toBe("None of the sources could be played");

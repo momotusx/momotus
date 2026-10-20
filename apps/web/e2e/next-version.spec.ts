@@ -112,7 +112,7 @@ function versions(): Promise<Server> {
       setTimeout(() => {
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ streams: [...BROKEN, ...REAL].map(stream) }));
-      }, 400);
+      }, 800);
       return;
     }
     if (req.url === `/stream/movie/${SINTEL}.json`) {
@@ -327,11 +327,14 @@ test("a source that fails before its metadata is not a decode failure, and Try a
   await expect(p.locator(".endcard .acts > *").first()).toHaveAttribute("data-f", "player:retry");
   await expect(p.locator('[data-f="player:retry"]')).toHaveText("Try again");
   await expect.poll(() => p.evaluate(() => document.activeElement?.getAttribute("data-f"))).toBe("player:retry");
-  // Try again while the server still fails: the play fails again at once, the
-  // same card as before, so the player says it tried again (`retries`).
+  // Try again while the server still fails: the play fails again at once, and
+  // the card stays with "Trying again" under its headline for a moment
+  // (`retries`), as on Android and Apple, never a spinner in its place.
   await p.keyboard.press("Enter");
-  await expect(p.locator(".pstate .st")).toHaveText("Trying again");
-  await expect(card).toBeVisible({ timeout: 30_000 });
+  await expect(card.locator(".end-note")).toHaveText("Trying again");
+  await expect(card).toBeVisible();
+  await expect(p.locator(".pstate")).toHaveCount(0);
+  await expect(card.locator(".end-note")).toHaveCount(0, { timeout: 10_000 });
   await expect.poll(() => p.evaluate(() => document.activeElement?.getAttribute("data-f"))).toBe("player:retry");
   // The server answers again; Try again asks the core to start over.
   await p.unroute(server);
@@ -363,6 +366,8 @@ test("a reload after a hand pick plays that version once Versions lists it again
   // A reload opens a new Versions view, which lists nothing at first; the
   // entry still holds the key, and the play waits for it to be listed.
   await p.reload();
+  // Until Versions lists it again, the pick is being found (as on Android).
+  await expect(p.locator(".pstate .st")).toHaveText("Finding this version");
   expect(p.url()).not.toContain("key");
   expect(await chosen(p)).toBe(keyOf(file));
   await expect.poll(() => source(p), { timeout: 60_000 }).toContain(file);
@@ -372,7 +377,7 @@ test("a reload after a hand pick plays that version once Versions lists it again
   await context.close();
 });
 
-test("a playback that cannot open says so with the error, Try again reopens it, then Choose a version and Back", async ({ browser }) => {
+test("a playback that cannot open says so with the error: Choose a version first, Try again reopens it, then Back", async ({ browser }) => {
   const { context, page: p, sent } = await page(browser);
   await p.goto(`/play/movie/${BBB_ID}/${BBB_ID}?form=tv`);
   await expect(p.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 60_000 });
@@ -384,16 +389,18 @@ test("a playback that cannot open says so with the error, Try again reopens it, 
   // Apple's words: the headline, then what the core said under it.
   await expect(card.locator(".st")).toHaveText("This version could not be opened");
   await expect(card.locator(".end-detail")).toContainText("no longer listed");
+  // Mostly a version no longer listed, which Try again cannot bring back:
+  // Choose a version first and focused, then Try again, then Back.
   const acts = card.locator(".acts > *");
   await expect(acts).toHaveCount(3);
-  await expect(acts.nth(0)).toHaveAttribute("data-f", "player:retry");
-  await expect(acts.nth(1)).toHaveAttribute("data-f", "player:versions");
+  await expect(acts.nth(0)).toHaveAttribute("data-f", "player:versions");
+  await expect(acts.nth(1)).toHaveAttribute("data-f", "player:retry");
   await expect(acts.nth(2)).toHaveAttribute("data-f", "player:back");
-  await expect.poll(() => p.evaluate(() => document.activeElement?.getAttribute("data-f"))).toBe("player:retry");
+  await expect.poll(() => p.evaluate(() => document.activeElement?.getAttribute("data-f"))).toBe("player:versions");
   // Try again opens the playback once more; still not listed, the same card comes back.
   const opens = () => sent.filter((m) => m.op === "subscribe" && m.view === "playback").length;
   const before = opens();
-  await p.keyboard.press("Enter");
+  await acts.nth(1).click();
   await expect.poll(opens).toBe(before + 1);
   await expect(card.locator(".st")).toHaveText("This version could not be opened");
   await context.close();

@@ -455,7 +455,20 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   // With no track on: what the core found so far, and whether it still asks.
   const subsOff = () => offSummary(snap()?.subtitles.length ?? 0, !!snap()?.subtitlesPending);
   const pct = (x: number) => `${duration() ? Math.min(100, (x / duration()) * 100) : 0}%`;
-  const status = (): { tone: string; text: string; detail?: string; busy: boolean } | null => {
+  // The failure card's Choose a version: the way on when nothing else is (primary and focused then).
+  const chooseVersion = () => (
+    <A
+      class="btn big"
+      classList={{ primary: !snap()?.offer && !failed() }}
+      href={versionsPath(props.kind, props.id, props.videoId)}
+      data-f="player:versions"
+      data-autofocus={snap()?.offer || failed() ? undefined : ""}
+    >
+      <Layers aria-hidden />
+      Choose a version
+    </A>
+  );
+  const status = (): { tone: string; text: string; detail?: string; note?: string; busy: boolean } | null => {
     const v = ctx.versions();
     if (v?.state.status.state === "failed") return { tone: "bad", text: (v.state.status as { reason: string }).reason, busy: false };
     // The playback could not open (a version no longer listed): a card with
@@ -463,15 +476,19 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     const open = openError();
     if (open) return { tone: "bad", text: nextVersion.notOpened, detail: open, busy: false };
     const s = snap();
-    // Moving on (the recommendation failed for a reason of its own), or Try again.
-    const restart = restartLine(s, again());
-    if (restart) return { tone: "warn", text: restart, busy: true };
     if (s?.phase === "ready") return null;
-    if (s?.phase === "failed") return { tone: "bad", text: nextVersion.failed(!!s.offer), busy: false };
+    // A Try again that failed again at once keeps the card, with "Trying
+    // again" under its headline for the hold, as Android and Apple do.
+    if (s?.phase === "failed") return { tone: "bad", text: nextVersion.failed(!!s.offer), note: again() ? nextVersion.tryingAgain : undefined, busy: false };
     if (s?.phase === "resolving") {
+      // Moving on (the recommendation failed for a reason of its own), or Try again.
+      const restart = restartLine(s, again());
+      if (restart) return { tone: "warn", text: restart, busy: true };
       const r = playing();
       return { tone: "warn", text: r ? `Starting ${qualityText(r.quality)}${r.sizeBytes ? `, ${bytes(r.sizeBytes)}` : ""} from ${r.via}` : "Starting", busy: true };
     }
+    // A version picked by hand that Versions has not listed yet.
+    if (props.chosen && !key()) return { tone: "warn", text: nextVersion.finding, busy: true };
     const vs = versions();
     if (vs?.blocked) return { tone: "bad", text: blockedWords(vs.blocked.reason, vs.blocked.count).text, busy: false };
     if (vs?.done && !vs.recommended && !vs.rows.length) return { tone: "bad", text: "No playable version found", busy: false };
@@ -531,6 +548,14 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                   {s().text}
                 </p>
                 <Show when={s().detail}>{(d) => <p class="end-detail">{d()}</p>}</Show>
+                <Show when={s().note}>
+                  {(n) => (
+                    <p class="end-detail end-note" role="status">
+                      <LoaderCircle aria-hidden class="spin" />
+                      {n()}
+                    </p>
+                  )}
+                </Show>
                 <Show when={snap()?.attempts.length}>
                   <ul class="attempts">
                     <For each={groupFailures(snap()?.attempts ?? [])}>
@@ -559,30 +584,25 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                       </button>
                     )}
                   </Show>
-                  {/* This play again from its first pick (`retry`): what
-                      failed may be the moment, not the version. */}
+                  {/* A playback that could not open: mostly a version no
+                      longer listed, which Try again cannot bring back, so
+                      Choose a version comes first and has the focus. */}
+                  <Show when={openError()}>{chooseVersion()}</Show>
+                  {/* This play again from its first pick (`retry`), or the
+                      playback opened again: what failed may be the moment. */}
                   <Show when={failed() || openError()}>
                     <button
                       class="btn big"
-                      classList={{ primary: !snap()?.offer }}
+                      classList={{ primary: !snap()?.offer && !openError() }}
                       data-f="player:retry"
-                      data-autofocus={snap()?.offer ? undefined : ""}
+                      data-autofocus={snap()?.offer || openError() ? undefined : ""}
                       onClick={() => (openError() ? setOpens((n) => n + 1) : void playback()?.command({ type: "retry" }))}
                     >
                       <RefreshCw aria-hidden />
                       Try again
                     </button>
                   </Show>
-                  <A
-                    class="btn big"
-                    classList={{ primary: !snap()?.offer && !failed() && !openError() }}
-                    href={versionsPath(props.kind, props.id, props.videoId)}
-                    data-f="player:versions"
-                    data-autofocus={snap()?.offer || failed() || openError() ? undefined : ""}
-                  >
-                    <Layers aria-hidden />
-                    Choose a version
-                  </A>
+                  <Show when={!openError()}>{chooseVersion()}</Show>
                   <button class="btn big" data-f="player:back" onClick={goBack}>
                     <ArrowLeft aria-hidden />
                     Back
