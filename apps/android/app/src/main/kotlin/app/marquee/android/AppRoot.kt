@@ -40,6 +40,7 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import app.marquee.core.Format
 import app.marquee.core.PendingRemoval
+import app.marquee.core.SyncRules
 import app.marquee.core.TileCopy
 import app.marquee.core.model.HomeCatalog
 import app.marquee.core.model.Tile
@@ -506,6 +507,7 @@ private fun AppNav(
                             onKit = { backStack.add(Route.RecoveryKit) },
                             onLost = { backStack.add(Route.ReportLost(it)) },
                             onCompare = { backStack.add(Route.SyncFork) },
+                            canDelete = SyncRules.mayDeleteAccount(gate.snapshot),
                         )
                     }
                     entry<Route.SyncFork> { ForkScreen(sync, onDone = ::pop) }

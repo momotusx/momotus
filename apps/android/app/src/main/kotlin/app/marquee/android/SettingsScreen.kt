@@ -386,7 +386,7 @@ fun SettingsScreen(
             // The state is said whole, never cut short.
             LinkRow(Icons.ListChecks, TraktCopy.TITLE, TraktCopy.row(trakt.status, ::clockTime), onTrakt, lines = 4)
         }
-        item(key = "devices-head") { Kicker("Devices and sync") }
+        item(key = "devices-head") { Kicker("Account") }
         item(key = "devices") {
             // One page for the account: its state when joined, else the ways to join one (the web's line).
             // What is wrong or still waits first, never "Synced" over a round that failed or waits (the web's words).

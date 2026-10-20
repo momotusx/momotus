@@ -4,6 +4,8 @@ import app.marquee.core.model.DeviceKits
 import app.marquee.core.model.ForkPreview
 import app.marquee.core.model.LostPreview
 import app.marquee.core.model.MemberInfo
+import app.marquee.core.model.ProfileInfo
+import app.marquee.core.model.ProfilesSnapshot
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import java.util.TimeZone
@@ -25,6 +27,22 @@ class SyncRulesTest {
         kit: Boolean = false,
         thisDevice: Boolean = false,
     ) = MemberInfo(id = id, kit = kit, name = name, sponsor = sponsor, addedMs = addedMs, thisDevice = thisDevice)
+
+    @Test
+    fun `Delete account shows on the owner profile only`() {
+        fun profile(
+            id: String,
+            owner: Boolean,
+        ) = ProfileInfo(id, id, "fox:amber", 0, hasPin = false, isOwner = owner, syncing = false, kids = false)
+
+        fun snapshot(active: String) =
+            ProfilesSnapshot(listOf(profile("default", true), profile("kid", false)), active, false, 6, false)
+        assertTrue(SyncRules.mayDeleteAccount(snapshot("default")))
+        assertFalse(SyncRules.mayDeleteAccount(snapshot("kid")))
+        // Before the profiles arrive, or for a profile that is gone: not shown.
+        assertFalse(SyncRules.mayDeleteAccount(null))
+        assertFalse(SyncRules.mayDeleteAccount(snapshot("nobody")))
+    }
 
     @Test
     fun `only a pairing code is taken, and only its server's host is shown`() {

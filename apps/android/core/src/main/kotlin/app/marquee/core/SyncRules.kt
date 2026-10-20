@@ -3,6 +3,7 @@ package app.marquee.core
 import app.marquee.core.model.ForkPreview
 import app.marquee.core.model.LostPreview
 import app.marquee.core.model.MemberInfo
+import app.marquee.core.model.ProfilesSnapshot
 import app.marquee.core.model.SyncRecord
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.longOrNull
@@ -10,6 +11,10 @@ import java.net.URI
 
 /** Sync rules the screens share, as the web's `lib/sync.ts` and Apple's `SyncRules` have them. */
 object SyncRules {
+    /** Delete account shows on the owner profile only: the account holds every profile (D15). */
+    fun mayDeleteAccount(snapshot: ProfilesSnapshot?) =
+        snapshot?.profiles?.firstOrNull { it.id == snapshot.active }?.isOwner == true
+
     /** A pairing code as the new device shows it; any other QR in view is ignored. */
     fun isPairingCode(text: String) = text.trim().startsWith("marquee:pair?")
 

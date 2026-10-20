@@ -45,7 +45,7 @@ sealed interface Route : NavKey {
     @Serializable
     data object Pairing : Route
 
-    /** Devices and sync: this device's account, or the ways to join one. */
+    /** Account (the sync page): this device's account, or the ways to join one. */
     @Serializable
     data object Sync : Route
 

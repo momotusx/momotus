@@ -104,7 +104,7 @@ import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
 
-// Devices and sync (plans/m7-sync.md, plans/core-protocol.md; the web's screens/sync.tsx and Apple's
+// Account, the sync page (plans/m7-sync.md, plans/core-protocol.md; the web's screens/sync.tsx and Apple's
 // Sync/*): start an account, join one by pairing or with a recovery kit, see this device's state and
 // the others, add a device, make a kit, remove a device or report one lost, stop syncing. The record
 // lives in the encrypted secret store ([SyncController]); a kit is shown once and kept nowhere.
@@ -357,7 +357,7 @@ internal fun CoroutineScope.refocus(vararg targets: FocusRequester) {
 // The hub
 
 /**
- * Devices and sync: not joined, the three ways in (pair, start an account, use a kit); joined, this
+ * Account, the sync page: not joined, the three ways in (pair, start an account, use a kit); joined, this
  * device's state with every fact of the last round and the 12 characters to compare, the devices with
  * Remove and Report lost, Add a device, Make a recovery kit, stopping, and deleting the account.
  */
@@ -370,6 +370,8 @@ fun SyncScreen(
     onKit: () -> Unit,
     onLost: (String) -> Unit,
     onCompare: () -> Unit,
+    /** The session runs the owner profile: only it deletes the account (D15). */
+    canDelete: Boolean,
 ) {
     val tv = Marquee.form == Form.Tv
     var left by remember { mutableStateOf(false) }
@@ -385,10 +387,11 @@ fun SyncScreen(
             block("not-joined") {
                 when {
                     sync.leftHere -> MqText(SyncCopy.LEFT_HERE, role = TextRole.Callout)
+                    sync.deletedHere -> StatusWord(SyncCopy.ACCOUNT_GONE, Status.Ok)
                     left -> StatusWord(SyncCopy.LEFT, Status.Ok)
                 }
                 sync.problem?.let { problem ->
-                    // Deleted, here or on another device: said once, and OK puts it away.
+                    // Deleted on another device: said until OK, also after a restart.
                     if (problem.code == SyncAccount.GONE) {
                         Said(problem.words, Status.Warn)
                         SecondaryButton(SyncCopy.OK, { sync.dismissGone() }, focusRequester = stepFocus())
@@ -403,7 +406,7 @@ fun SyncScreen(
                 key = "recover",
             ) { LinkRow(Icons.LifeBuoy, SyncCopy.RECOVER_TITLE, SyncCopy.RECOVER_TEXT, { onJoin(true) }) }
         } else {
-            joined(sync, tv, onAdd, onKit, onLost, onCompare, onLeft = { left = true }, addFocus)
+            joined(sync, tv, onAdd, onKit, onLost, onCompare, onLeft = { left = true }, addFocus, canDelete)
         }
     }
 }
@@ -417,6 +420,7 @@ private fun LazyListScope.joined(
     onCompare: () -> Unit,
     onLeft: () -> Unit,
     addFocus: FocusRequester,
+    canDelete: Boolean,
 ) {
     item(key = "state") { StateCard(sync, onCompare) }
     item(key = "devices") { DeviceList(sync, onLost, onKit, addFocus) }
@@ -430,11 +434,10 @@ private fun LazyListScope.joined(
     } else {
         item(key = "kit") { LinkRow(Icons.KeyRound, SyncCopy.KIT_TITLE, SyncCopy.KIT_TEXT, onKit) }
     }
-    // A stuck device's way out is in the state card; a plain stop (or a delete) would only fail again.
-    if (!sync.stuck) {
-        block("leave") { Leave(sync, onLeft) }
-        block("delete") { DeleteAccount(sync) }
-    }
+    // A stuck device's way out is in the state card; a plain stop would only fail again. Deleting needs
+    // only the relay's token, so it stays, a fork included: that is where someone who wants out looks.
+    if (!sync.stuck) block("leave") { Leave(sync, onLeft) }
+    if (canDelete) block("delete") { DeleteAccount(sync) }
 }
 
 /** This device: the state, every fact of the last round, Sync now and a fix, and the 12 characters. */
@@ -840,8 +843,9 @@ private fun Leave(
 }
 
 /**
- * Delete the account for every device: one ask that names what goes, then who is there (a TV with no
- * screen lock asks a second time, as for Remove). This device keeps its library; the page then says so.
+ * Delete the account for every device: one ask that names what goes, then the screen lock. Without a
+ * lock that ask is the step, as for Leave (D15): deleting ends access and every library stays, and a
+ * phone with no lock must still be able to delete. This device keeps its library; the page says so.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -850,7 +854,6 @@ private fun DeleteAccount(sync: SyncController) {
     val scope = rememberCoroutineScope()
     val owner = rememberOwnerCheck()
     var asking by remember { mutableStateOf(false) }
-    var again by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val deleteFocus = remember { FocusRequester() }
@@ -869,46 +872,30 @@ private fun DeleteAccount(sync: SyncController) {
     Kicker(SyncCopy.DELETE_TITLE, side = 0.dp)
     MqText(SyncCopy.DELETE_TEXT, role = TextRole.Callout, color = Marquee.colors.muted)
     error?.let { Said(it, Status.Bad) }
-    when {
-        again -> {
-            AskAgain(SyncCopy.DELETE_BUTTON, onYes = {
-                again = false
-                scope.launch { delete() }
-            }, onCancel = {
-                again = false
-                asking = false
-                scope.refocus(deleteFocus)
-            })
-        }
-
-        asking -> {
-            MqText(SyncCopy.DELETE_ASK, role = TextRole.Callout)
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-                verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-            ) {
-                SecondaryButton(SyncCopy.DELETE_BUTTON, {
-                    if (busy) return@SecondaryButton
-                    error = null
-                    scope.launch {
-                        guarded(owner, tv, SyncCopy.AUTH_DELETE, askAgain = { again = true }) { delete() }
-                            ?.let { error = it }
-                    }
-                }, icon = Icons.Trash, busy = busy)
-                // A remote lands on Cancel: two presses never delete the account.
-                SecondaryButton(SyncCopy.CANCEL, {
-                    asking = false
-                    scope.refocus(deleteFocus)
-                }, focusRequester = stepFocus())
+    if (!asking) {
+        SecondaryButton(SyncCopy.DELETE_BUTTON, {
+            error = null
+            asking = true
+        }, icon = Icons.Trash, focusRequester = deleteFocus)
+        return
+    }
+    MqText(SyncCopy.DELETE_ASK, role = TextRole.Callout)
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+        verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+    ) {
+        SecondaryButton(SyncCopy.DELETE_BUTTON, {
+            if (busy) return@SecondaryButton
+            error = null
+            scope.launch {
+                guarded(owner, tv, SyncCopy.AUTH_DELETE, askAgain = null) { delete() }?.let { error = it }
             }
-        }
-
-        else -> {
-            SecondaryButton(SyncCopy.DELETE_BUTTON, {
-                error = null
-                asking = true
-            }, icon = Icons.Trash, focusRequester = deleteFocus)
-        }
+        }, icon = Icons.Trash, busy = busy)
+        // A remote lands on Cancel: two presses never delete the account.
+        SecondaryButton(SyncCopy.CANCEL, {
+            asking = false
+            scope.refocus(deleteFocus)
+        }, focusRequester = stepFocus())
     }
 }
 
@@ -2155,7 +2142,7 @@ private fun Session(
             val steps = @Composable {
                 Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
                     MqText(
-                        "On a device that already syncs, open Settings, then Devices and sync, then Add a device, " +
+                        "On a device that already syncs, open Settings, then Account, then Add a device, " +
                             "and scan this code.",
                         role = TextRole.Callout,
                         modifier = Modifier.widthIn(max = 720.dp),

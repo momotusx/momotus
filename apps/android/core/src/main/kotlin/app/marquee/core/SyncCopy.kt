@@ -10,12 +10,12 @@ import kotlin.math.abs
 import kotlin.math.roundToLong
 
 /**
- * Devices and sync copy, word for word the web's `syncWords` and Apple's `SyncWords` (where the
+ * Account (the sync page) copy, word for word the web's `syncWords` and Apple's `SyncWords` (where the
  * platforms differ, it says so). No protocol words: a device list, not a roster; "the 12 characters
  * to compare", not a fingerprint.
  */
 object SyncCopy {
-    const val TITLE = "Devices and sync"
+    const val TITLE = "Account"
     const val LEDE =
         "Sync keeps your library, progress, addons and settings the same on all your devices. The sync server " +
             "stores them sealed and cannot read them."
@@ -114,7 +114,7 @@ object SyncCopy {
 
     // Add a device
     const val ADD_LEDE =
-        "On the new device, open Settings, then Devices and sync, then Pair this device. It shows a code."
+        "On the new device, open Settings, then Account, then Pair this device. It shows a code."
     const val ADD_WARNING =
         "Approve only a code on a screen in front of you. Whoever controls that screen gets your account."
     const val SCAN = "Scan the code"
@@ -436,6 +436,11 @@ object SyncCopy {
                 "The sync server did not answer, so the lists could not be compared. Try again in a moment."
             }
 
+            // The relay may have deleted it before its answer was lost: claim nothing.
+            Action.Delete -> {
+                "The deletion was not confirmed. The sync server did not answer. Try again in a moment."
+            }
+
             else -> {
                 "The sync server did not answer. Try again in a moment."
             }
@@ -602,7 +607,7 @@ object SyncCopy {
         return if (parts.isEmpty()) null else "Since this device joined, ${parts.joinToString(", and ")}."
     }
 
-    /** The Settings row under Devices and sync: what is wrong or waits first, then the time. */
+    /** The Settings row under Account: what is wrong or waits first, then the time. */
     fun summary(
         joined: Boolean,
         problem: String?,

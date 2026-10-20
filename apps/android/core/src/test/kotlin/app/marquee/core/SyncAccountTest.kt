@@ -208,10 +208,11 @@ class SyncAccountTest {
         }
 
     @Test
-    fun `accountGone forgets the account here and says so until OK`() =
+    fun `accountGone forgets the account here and says so until OK, across a restart`() =
         runBlocking {
             val store = Store(record(1))
-            val sync = account(store)
+            val kept = CopyOnWriteArrayList<Boolean>()
+            val sync = SyncAccount(CoreOps(client), store, scope, io = Dispatchers.IO, saveGone = { kept += it })
             sync.startRounds()
             answers["syncNow"] = { fail("accountGone", "this account was deleted") }
             sync.request()
@@ -219,8 +220,13 @@ class SyncAccountTest {
             assertNull(store.held)
             assertEquals(SyncAccount.GONE, sync.problem?.code)
             assertEquals("Your Marquee account was deleted. Your library stays on this device.", sync.problem?.words)
+            assertEquals(listOf(true), kept.toList())
+            // The next launch says it again.
+            val restarted = SyncAccount(CoreOps(client), Store(null), scope, io = Dispatchers.IO, goneAtStart = true)
+            assertEquals(SyncAccount.GONE, restarted.problem?.code)
             sync.dismissGone()
             assertNull(sync.problem)
+            assertEquals(listOf(true, false), kept.toList())
         }
 
     @Test
@@ -232,8 +238,9 @@ class SyncAccountTest {
             assertFailsWith<CoreError> { sync.deleteAccount() }
             assertTrue(sync.joined)
             assertEquals(3, store.held.revision())
+            // The relay may have deleted it before the answer was lost: the words claim nothing.
             assertEquals(
-                "The sync server did not answer. Try again in a moment.",
+                "The deletion was not confirmed. The sync server did not answer. Try again in a moment.",
                 SyncAccount.problemOf(CoreError("http status 502"), SyncCopy.Action.Delete).words,
             )
             var sent: JsonObject? = null
@@ -245,9 +252,11 @@ class SyncAccountTest {
             assertEquals(3, sent!!.getValue("record").jsonObject.revision())
             assertFalse(sync.joined)
             assertNull(store.held)
-            assertEquals(SyncAccount.GONE, sync.problem?.code)
-            sync.dismissGone()
+            // Said as a sign-out is, not as news from another device.
             assertNull(sync.problem)
+            assertTrue(sync.deletedHere)
+            sync.join(record(1, account = "next")).join()
+            assertFalse(sync.deletedHere)
         }
 
     @Test

@@ -39,6 +39,8 @@ class SyncController(
                 ?.filter { it.isNotEmpty() }
                 .orEmpty(),
         savePendingKits = { context.prefs().edit { putString(PENDING_KITS, it.joinToString(",")) } },
+        goneAtStart = context.prefs().getBoolean(GONE_LINE, false),
+        saveGone = { context.prefs().edit { putBoolean(GONE_LINE, it) } },
     ) {
     private var timer: Job? = null
 
@@ -73,6 +75,7 @@ class SyncController(
         const val EVERY_MS = 5 * 60_000L
         const val RECOVERED = "syncRecovered"
         const val PENDING_KITS = "syncPendingKits"
+        const val GONE_LINE = "syncGone"
 
         fun Context.prefs() = getSharedPreferences("marquee", Context.MODE_PRIVATE)
     }

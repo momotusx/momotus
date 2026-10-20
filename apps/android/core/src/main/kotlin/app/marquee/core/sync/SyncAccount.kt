@@ -72,6 +72,10 @@ open class SyncAccount(
     private val savePendingKits: (List<String>) -> Unit = {},
     /** How long a made kit's letters stay in memory once its page is left. */
     private val holdMs: Long = KIT_HOLD_MS,
+    /** Another device deleted the account and nobody pressed OK yet (an earlier run heard it). */
+    goneAtStart: Boolean = false,
+    /** Keeps that across launches until OK or a join. */
+    private val saveGone: (Boolean) -> Unit = {},
 ) {
     /** A failure in words, with the core's code when it has one (the page offers a fix for some). */
     data class Problem(
@@ -117,7 +121,7 @@ open class SyncAccount(
     )
 
     /** What went wrong in the last round, in words. */
-    var problem: Problem? by mutableStateOf(null)
+    var problem: Problem? by mutableStateOf(if (goneAtStart) Problem(GONE, SyncCopy.ACCOUNT_GONE) else null)
         private set
 
     /** The last round ended where the server will not let this device leave: only stopping here helps. */
@@ -133,6 +137,10 @@ open class SyncAccount(
 
     /** The last leave was here only: the sync server still lists this device. */
     var leftHere by mutableStateOf(false)
+        private set
+
+    /** This device deleted the account: the page says so, as after a sign-out. */
+    var deletedHere by mutableStateOf(false)
         private set
 
     /** A kit made and not yet confirmed saved: its id (its row in the device list) and its letters. */
@@ -261,6 +269,8 @@ open class SyncAccount(
             }
         dropKits()
         leftHere = false
+        deletedHere = false
+        saveGone(false)
         return scope.launch {
             heldOnly = !durable
             joined = true
@@ -475,11 +485,13 @@ open class SyncAccount(
                 forget()
                 problem = null
                 leftHere = false
+                deletedHere = false
             }.await()
 
     /**
      * Deletes the account on the sync server for every device. Once the server confirmed, this device
-     * forgets it as after [signOut] (the library stays) and says the account was deleted, with OK.
+     * forgets it as after [signOut] (the library stays) and the page says the account was deleted, as it
+     * says a sign-out (the OK line is for news from another device).
      */
     suspend fun deleteAccount() =
         scope
@@ -487,13 +499,15 @@ open class SyncAccount(
                 // All of it in the app's scope: Back while the core answers still forgets the account here.
                 withRecord("deleteAccount", { ops.deleteAccount(it) }) { null }
                 forget()
-                problem = Problem(GONE, SyncCopy.ACCOUNT_GONE)
+                problem = null
                 leftHere = false
+                deletedHere = true
             }.await()
 
-    /** OK on "Your Marquee account was deleted": the line goes. */
+    /** OK on "Your Marquee account was deleted": the line goes, also from the next launch. */
     fun dismissGone() {
         if (problem?.code == GONE) problem = null
+        saveGone(false)
     }
 
     /** After `fork`: both device lists, read only, for the user to compare. */
@@ -531,6 +545,7 @@ open class SyncAccount(
                 forget()
                 problem = null
                 leftHere = true
+                deletedHere = false
             }.await()
 
     /**
@@ -560,6 +575,8 @@ open class SyncAccount(
                             CoreLog.w("sync $name: ${e.code}")
                             if (e.code != "fork") forget()
                             problem = problemOf(e, SyncCopy.Action.Round)
+                            // Said again at the next launch until OK: nobody may have seen it yet.
+                            if (e.code == GONE) saveGone(true)
                         }
                         throw e
                     }
