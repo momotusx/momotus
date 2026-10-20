@@ -896,6 +896,21 @@ mod tests {
         let (count, took) = timed(&tracker(Some(1)), refused).await;
         assert_eq!(count, seeders(1));
         assert!(took < early, "a failed tracker was waited for: {took:?}");
+        // Two hashes: the first has heard from every tracker (one failed),
+        // the second has seeders while a tracker of its own is still out.
+        let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+        let s = Scraper::new(http.torrent_scope(&[V4]));
+        let started = Instant::now();
+        let both = [
+            (H1.to_owned(), vec![tracker(Some(1)), refused.to_owned()]),
+            (H2.to_owned(), vec![tracker(Some(5)), tracker(None)]),
+        ];
+        assert_eq!(s.scrape(&both, &[]).await, [seeders(1), seeders(5)]);
+        let took = started.elapsed();
+        assert!(
+            took < early,
+            "a hash with every tracker in still out: {took:?}"
+        );
     }
 
     /// At most 16 own trackers per hash and 24 per call, the shared ones
