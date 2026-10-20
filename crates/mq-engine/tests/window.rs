@@ -271,13 +271,15 @@ async fn a_round_skips_a_piece_being_read() {
         let l = l.clone();
         async move { l.evict(&[5, 6]).await }
     });
+    // A thread sleep, not a timer: a round that blocks holds the torrent
+    // lock, and the workers that drive the timers block behind it.
     let started = Instant::now();
     while !round.is_finished() {
         assert!(
             started.elapsed() < Duration::from_secs(10),
             "the round waits on the reader's piece"
         );
-        tokio::time::sleep(Duration::from_millis(20)).await;
+        std::thread::sleep(Duration::from_millis(20));
     }
     let r = round.await.unwrap();
     assert_eq!((r.skipped, r.evicted), (vec![5], vec![6]));
