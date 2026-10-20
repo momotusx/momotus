@@ -117,6 +117,14 @@ enum Command {
         #[arg(long)]
         peer: Option<std::net::SocketAddr>,
     },
+    /// Scrape info hashes on a fresh engine (the app's first scrape) and
+    /// report each tracker's stages.
+    Scrape {
+        hashes: Vec<String>,
+        /// Wait this long after the engine starts.
+        #[arg(long, default_value_t = 0)]
+        wait_ms: u64,
+    },
     /// Probe an http(s) stream, play it in mpv and report time to first frame.
     PlayUrl {
         url: String,
@@ -214,6 +222,13 @@ async fn main() {
         }
         return;
     }
+    if let Command::Scrape { hashes, wait_ms } = &cli.command {
+        match magnet::scrape(hashes, *wait_ms).await {
+            Ok(run) => emit(run),
+            Err(e) => fail(&e),
+        }
+        return;
+    }
     // The engine keeps torrents in `<data>/torrents` (Core::open).
     let fresh = match &cli.command {
         Command::Play {
@@ -268,7 +283,9 @@ async fn main() {
             pick,
             ..
         } => play(&core, kind, id, headless, seconds, pick).await,
-        Command::PlayMagnet { .. } => unreachable!("handled before the core opens"),
+        Command::PlayMagnet { .. } | Command::Scrape { .. } => {
+            unreachable!("handled before the core opens")
+        }
         Command::PlayUrl {
             url,
             headless,

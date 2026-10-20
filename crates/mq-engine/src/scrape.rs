@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use mq_http::AddressScope;
@@ -20,6 +20,40 @@ use tokio::task::JoinSet;
 pub struct SwarmCount {
     pub seeders: u32,
     pub leechers: u32,
+}
+
+/// One tracker's part in the last scrape call, for diagnosis: milliseconds
+/// from the call's start to the end of each stage it reached. A stage left
+/// `None` with no `failed` was cut by the budget.
+#[derive(Clone, Debug, Default)]
+pub struct TrackerTrace {
+    pub tracker: String,
+    /// The name resolved (UDP; an HTTP tracker resolves inside its request).
+    pub resolved_ms: Option<u64>,
+    /// The BEP 15 connect answered.
+    pub connected_ms: Option<u64>,
+    /// The counts came.
+    pub answered_ms: Option<u64>,
+    /// Why it gave up before the budget, when it did.
+    pub failed: Option<&'static str>,
+}
+
+/// Where a tracker's stages are written as they end.
+#[derive(Clone)]
+struct Trace {
+    t0: Instant,
+    to: Arc<Mutex<TrackerTrace>>,
+}
+
+impl Trace {
+    fn ms(&self) -> Option<u64> {
+        Some(u64::try_from(self.t0.elapsed().as_millis()).unwrap_or(u64::MAX))
+    }
+
+    fn fail<T>(&self, why: &'static str) -> Option<T> {
+        lock(&self.to).failed = Some(why);
+        None
+    }
 }
 
 /// The whole scrape, every tracker in parallel: late answers are dropped.
@@ -36,6 +70,7 @@ pub(crate) struct Scraper {
     scope: AddressScope,
     http: reqwest::Client,
     kept: Mutex<HashMap<String, (Instant, SwarmCount)>>,
+    last: Mutex<Vec<TrackerTrace>>,
 }
 
 impl Scraper {
@@ -54,7 +89,13 @@ impl Scraper {
             scope,
             http,
             kept: Mutex::default(),
+            last: Mutex::default(),
         }
+    }
+
+    /// Each tracker's stages in the last call that asked any.
+    pub fn last(&self) -> Vec<TrackerTrace> {
+        lock(&self.last).clone()
     }
 
     /// One count per `(info hash, its own trackers)`, `None` when no tracker
@@ -94,10 +135,19 @@ impl Scraper {
             }
         }
         let mut asks = JoinSet::new();
+        let mut traces = Vec::new();
         for (tracker, hashes) in by_tracker {
             let (scope, http) = (self.scope.clone(), self.http.clone());
+            let trace = Trace {
+                t0: now,
+                to: Arc::new(Mutex::new(TrackerTrace {
+                    tracker: tracker.clone(),
+                    ..Default::default()
+                })),
+            };
+            traces.push(trace.to.clone());
             asks.spawn(async move {
-                let counts = ask(&scope, &http, &tracker, &hashes).await;
+                let counts = ask(&scope, &http, &tracker, &hashes, &trace).await;
                 (tracker, counts)
             });
         }
@@ -124,6 +174,9 @@ impl Scraper {
             }
         }
         asks.abort_all();
+        if !traces.is_empty() {
+            *lock(&self.last) = traces.iter().map(|t| lock(t).clone()).collect();
+        }
         {
             let mut kept = lock(&self.kept);
             kept.retain(|_, (at, _)| now.duration_since(*at) < KEEP);
@@ -150,9 +203,10 @@ async fn ask(
     http: &reqwest::Client,
     tracker: &str,
     hashes: &[String],
+    trace: &Trace,
 ) -> Vec<(String, SwarmCount)> {
     let Ok(url) = mq_http::Url::parse(tracker) else {
-        return Vec::new();
+        return trace.fail("not a URL").unwrap_or_default();
     };
     // A hash in another form (base32) is not asked for.
     let (hashes, ids): (Vec<String>, Vec<[u8; 20]>) = hashes
@@ -160,13 +214,16 @@ async fn ask(
         .filter_map(|h| id(h).map(|i| (h.clone(), i)))
         .unzip();
     if ids.is_empty() {
-        return Vec::new();
+        return trace.fail("no hex info hash").unwrap_or_default();
     }
     let counts = match url.scheme() {
-        "udp" => udp(scope, &url, &ids).await,
-        "http" | "https" => over_http(scope, http, &url, &ids).await,
-        _ => None,
+        "udp" => udp(scope, &url, &ids, trace).await,
+        "http" | "https" => over_http(scope, http, &url, &ids, trace).await,
+        _ => trace.fail("no scrape for this scheme"),
     };
+    if counts.is_some() {
+        lock(&trace.to).answered_ms = trace.ms();
+    }
     counts
         .map(|c| hashes.into_iter().zip(c).collect())
         .unwrap_or_default()
@@ -209,19 +266,28 @@ async fn udp(
     scope: &AddressScope,
     url: &mq_http::Url,
     ids: &[[u8; 20]],
+    trace: &Trace,
 ) -> Option<Vec<SwarmCount>> {
-    let to = address(scope, url).await?;
+    let Some(to) = address(scope, url).await else {
+        return trace.fail("refused or not resolved");
+    };
+    lock(&trace.to).resolved_ms = trace.ms();
     let local: SocketAddr = match to {
         SocketAddr::V4(_) => (std::net::Ipv4Addr::UNSPECIFIED, 0).into(),
         SocketAddr::V6(_) => (std::net::Ipv6Addr::UNSPECIFIED, 0).into(),
     };
-    let socket = UdpSocket::bind(local).await.ok()?;
+    let Ok(socket) = UdpSocket::bind(local).await else {
+        return trace.fail("no socket");
+    };
     let tid = || rand_u32();
     let t = tid();
     let mut connect = PROTOCOL_ID.to_be_bytes().to_vec();
     connect.extend(0u32.to_be_bytes());
     connect.extend(t.to_be_bytes());
-    let answer = exchange(&socket, to, &connect, 0, t).await?;
+    let Some(answer) = exchange(&socket, to, &connect, 0, t).await else {
+        return trace.fail("connect not sent or not received");
+    };
+    lock(&trace.to).connected_ms = trace.ms();
     let conn = u64::from_be_bytes(answer.get(8..16)?.try_into().ok()?);
     let mut out = Vec::with_capacity(ids.len());
     for chunk in ids.chunks(PER_PACKET) {
@@ -230,7 +296,9 @@ async fn udp(
         scrape.extend(2u32.to_be_bytes());
         scrape.extend(t.to_be_bytes());
         chunk.iter().for_each(|h| scrape.extend(h));
-        let answer = exchange(&socket, to, &scrape, 2, t).await?;
+        let Some(answer) = exchange(&socket, to, &scrape, 2, t).await else {
+            return trace.fail("scrape not sent or not received");
+        };
         for i in 0..chunk.len() {
             let at = 8 + 12 * i;
             let seeders = u32::from_be_bytes(answer.get(at..at + 4)?.try_into().ok()?);
@@ -296,24 +364,29 @@ async fn over_http(
     http: &reqwest::Client,
     announce: &mq_http::Url,
     ids: &[[u8; 20]],
+    trace: &Trace,
 ) -> Option<Vec<SwarmCount>> {
     // A literal skips the resolver: it is checked here.
     if literal(announce).is_some_and(|ip| !scope.permits(ip)) {
-        return None;
+        return trace.fail("refused");
     }
-    let url = scrape_url(announce, ids)?;
-    let mut answer = http.get(url).send().await.ok()?;
+    let Some(url) = scrape_url(announce, ids) else {
+        return trace.fail("no scrape URL");
+    };
+    let Ok(mut answer) = http.get(url).send().await else {
+        return trace.fail("request failed");
+    };
     if !answer.status().is_success() {
-        return None;
+        return trace.fail("not a success status");
     }
     let mut body = Vec::new();
     while let Some(chunk) = answer.chunk().await.ok()? {
         body.extend_from_slice(&chunk);
         if body.len() > MAX_ANSWER {
-            return None;
+            return trace.fail("answer too large");
         }
     }
-    files(&body, ids)
+    files(&body, ids).or_else(|| trace.fail("not a scrape answer"))
 }
 
 /// The `files` dictionary of a bencoded scrape answer, in the order asked;

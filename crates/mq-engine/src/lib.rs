@@ -25,7 +25,7 @@ pub use adapter::PeerTally;
 pub use librqbit;
 pub use pick::FileHint;
 pub use reader::{RangeReader, StreamReader};
-pub use scrape::SwarmCount;
+pub use scrape::{SwarmCount, TrackerTrace};
 
 use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, SocketAddr};
@@ -535,6 +535,12 @@ impl Engine {
             &[]
         };
         self.inner.scraper.scrape(&asked, defaults).await
+    }
+
+    /// Each tracker's stages in the last scrape that asked any (diagnosis:
+    /// `mq scrape`, bench/m13/cold-scrape.jsonl).
+    pub fn last_scrape(&self) -> Vec<TrackerTrace> {
+        self.inner.scraper.last()
     }
 
     /// Addresses the policy refused so far, per kind.

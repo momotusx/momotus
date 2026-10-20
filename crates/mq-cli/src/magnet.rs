@@ -118,6 +118,66 @@ async fn timed_read(http: &HttpClient, url: &str, offset: u64, want: u64) -> Val
     })
 }
 
+/// `mq scrape`: one scrape on a fresh engine, as the app's first: its own
+/// temporary folder, the production address policy, the DHT and default
+/// trackers on, `wait_ms` after the start. Per hash its count; per tracker
+/// the stages it reached and the one the budget cut.
+pub async fn scrape(hashes: &[String], wait_ms: u64) -> Result<Value, String> {
+    let dir = std::env::temp_dir().join(format!("mq-scrape-{}", std::process::id()));
+    let result = scrape_in(&dir, hashes, wait_ms).await;
+    let _ = std::fs::remove_dir_all(&dir);
+    result
+}
+
+async fn scrape_in(
+    dir: &std::path::Path,
+    hashes: &[String],
+    wait_ms: u64,
+) -> Result<Value, String> {
+    let http = HttpClient::new(ClientConfig::default()).map_err(|e| e.to_string())?;
+    let started = Instant::now();
+    let config = EngineConfig {
+        upload: false,
+        ..EngineConfig::new(dir, http.torrent_scope(&[]))
+    };
+    let engine = Engine::start(config).await.map_err(|e| e.to_string())?;
+    let engine_start_ms = ms(started);
+    tokio::time::sleep(Duration::from_millis(wait_ms)).await;
+    let asked: Vec<(&str, &[String])> = hashes.iter().map(|h| (h.as_str(), &[][..])).collect();
+    let at = Instant::now();
+    let counts = engine.scrape(&asked).await;
+    let scrape_ms = ms(at);
+    let trackers: Vec<Value> = engine
+        .last_scrape()
+        .into_iter()
+        .map(|t| {
+            let cut = match (t.answered_ms, t.failed) {
+                (Some(_), _) | (_, Some(_)) => None,
+                _ if !t.tracker.starts_with("udp") => Some("http"),
+                _ if t.resolved_ms.is_none() => Some("resolve"),
+                _ if t.connected_ms.is_none() => Some("connect"),
+                _ => Some("scrape"),
+            };
+            json!({
+                "tracker": t.tracker, "resolved_ms": t.resolved_ms,
+                "connected_ms": t.connected_ms, "answered_ms": t.answered_ms,
+                "failed": t.failed, "cut": cut,
+            })
+        })
+        .collect();
+    Ok(json!({
+        "event": "scrape",
+        "engine_start_ms": engine_start_ms,
+        "wait_ms": wait_ms,
+        "scrape_ms": scrape_ms,
+        "answered": counts.iter().filter(|c| c.is_some()).count(),
+        "counts": hashes.iter().zip(&counts).map(|(h, c)| json!({
+            "hash": h, "seeders": c.map(|c| c.seeders), "leechers": c.map(|c| c.leechers),
+        })).collect::<Vec<_>>(),
+        "trackers": trackers,
+    }))
+}
+
 pub async fn play_magnet(input: &str, o: MagnetOptions) -> Result<Value, String> {
     let (hash, trackers) = parse_magnet(input)?;
     let temporary = o.data_dir.is_none();
