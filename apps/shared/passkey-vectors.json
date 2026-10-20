@@ -1,5 +1,5 @@
 {
-  "about": "Sign-in and passkey vectors (plans/accounts.md 2.4 and 3.1). nonce: the provider nonce for a relay's flow, lowercase hex of SHA-256(relayNonce bytes || 0x00 || UTF-8 host), relayNonce given as base64url without padding. The passkey contract's vectors come in phase 1b.",
+  "about": "Sign-in and passkey vectors (plans/accounts.md 2.4 and 3.1). nonce: the provider nonce for a relay's flow, lowercase hex of SHA-256(relayNonce bytes || 0x00 || UTF-8 host), relayNonce given as base64url without padding. passkeyKit: a passkey's 32-byte PRF output (base64url without padding, as savePasskey and recover take it), the kit secret (hex: the first 20 bytes of HKDF-SHA256 with no salt, info marquee/passkey-kit/v1), and the kit's lookup id from that secret (hex: 16 bytes of HKDF-SHA256 with no salt, info marquee/recovery/lookup/v1, as for a recovery kit). The PRF input each platform evaluates comes in phase 1b.",
   "nonce": [
     {
       "relayNonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
@@ -15,6 +15,23 @@
       "relayNonce": "__________________________________________8",
       "host": "relay.example.com",
       "nonce": "ab2cc419af6953e02e1d98d0705cda286f1571ffef87a12157115d18d7697189"
+    }
+  ],
+  "passkeyKit": [
+    {
+      "prf": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "kitSecret": "c54de7d82e54cd5db2be7a6e8c8537e5e8ff77e2",
+      "lookup": "9b12310ce0c7625bc4a1203e3354ebda"
+    },
+    {
+      "prf": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "kitSecret": "4ce4df5494dba37bb8d04f2987f7fabddc7976d2",
+      "lookup": "0738d885a7242add45ffce629147bc15"
+    },
+    {
+      "prf": "__________________________________________8",
+      "kitSecret": "b2ea9453af683a59cfa742eeb23e4bcd81c95922",
+      "lookup": "a73d0ffa49cdd7dba1679a1037b98e52"
     }
   ]
 }

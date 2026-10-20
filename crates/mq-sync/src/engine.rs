@@ -11,7 +11,7 @@
 
 use crate::roster::{
     Bundle, Digest32, Entry, Hex, Id, Kind, MemberSecret, Role, Roster, RosterError, TokenRequest,
-    open_name,
+    open_form, open_name,
 };
 use crate::seal::{AccountKey, SealError};
 use crate::wire::{
@@ -225,6 +225,13 @@ pub enum SyncError {
     /// The relay's sign-in budget for this address is spent for the minute.
     #[error("too many sign-in requests; try again in a minute")]
     Busy,
+    /// No account knows this kit or passkey (another passkey's PRF, a typo,
+    /// or a lookup squatted in another account).
+    #[error("this kit or passkey opens no account; try another way in")]
+    KitUnknown,
+    /// Another account holds this passkey's lookup.
+    #[error("this passkey cannot be saved for this account")]
+    KitTaken,
 }
 
 /// The relay's coded answers map in one place. Only the relay's own 410
@@ -246,6 +253,8 @@ impl From<HttpError> for SyncError {
             (403, Some("ticketExpired")) => SyncError::TicketExpired,
             (403, Some("receiptRefused")) => SyncError::ReceiptRefused,
             (429, Some("busy")) => SyncError::Busy,
+            (404, Some("kitUnknown")) => SyncError::KitUnknown,
+            (422, Some("kitTaken")) => SyncError::KitTaken,
             _ => SyncError::Http(e),
         }
     }
@@ -296,6 +305,8 @@ impl SyncError {
             SyncError::OtherRelay => "otherRelay",
             SyncError::ReceiptRefused => "receiptRefused",
             SyncError::Busy => "busy",
+            SyncError::KitUnknown => "kitUnknown",
+            SyncError::KitTaken => "kitTaken",
             _ => return None,
         })
     }
@@ -371,14 +382,15 @@ pub async fn create_account(
     invite: Option<&str>,
     name: &str,
 ) -> Result<SyncConfig, SyncError> {
-    create_account_with(http, server, invite, name, None, false).await
+    create_account_with(http, server, invite, name, None, false, None).await
 }
 
 /// `create_account` on a relay with sign-in: the sign-in's `ticket` links
 /// its identity to the new account. `move_link` (Start over) takes the
 /// identity from the account it signs in to now, which is then scheduled
 /// for deletion. A retry after a lost answer finds the account made and
-/// signs for its token; the ticket was used once, by the first.
+/// signs for its token; the ticket was used once, by the first. `form`:
+/// this device's (one of `roster::FORMS`), sealed.
 pub async fn create_account_with(
     http: &HttpClient,
     server: &str,
@@ -386,11 +398,14 @@ pub async fn create_account_with(
     name: &str,
     ticket: Option<&str>,
     move_link: bool,
+    form: Option<&str>,
 ) -> Result<SyncConfig, SyncError> {
     require_secure(server)?;
+    let form = crate::pair::checked_form(form)?;
     let info = relay_info(http, server).await?;
     let member = MemberSecret::generate();
-    let (entry, keys) = Roster::genesis_entry(&member, Hex(random()), name, info.server_ms);
+    let (entry, keys) =
+        Roster::genesis_entry_as(&member, Hex(random()), name, form, info.server_ms);
     let mut options = options(server, "");
     options.headers = invite
         .map(|i| vec![("x-invite".to_owned(), i.to_owned())])
@@ -1486,6 +1501,7 @@ pub struct MemberInfo {
     #[cfg_attr(feature = "ts", ts(type = "string"))]
     pub id: Id,
     pub kit: bool,
+    /// A device's name, or a kit's label.
     pub name: Option<String>,
     /// Who vouched for it.
     #[cfg_attr(feature = "ts", ts(type = "string | null"))]
@@ -1494,6 +1510,18 @@ pub struct MemberInfo {
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub added_ms: u64,
     pub this_device: bool,
+    /// A kit made from a passkey (else a recovery kit).
+    pub passkey: bool,
+    /// A device's form (`phone`, `tablet`, `tv`, `computer`, `web`), when
+    /// it said: only phones and tablets approve.
+    pub form: Option<String>,
+    /// A device that joined through a passkey ("Joined with a passkey").
+    pub via_passkey: bool,
+    /// A kit's newest device (gone or not) and when it joined: "Last used".
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    pub last_used_by: Option<Id>,
+    #[cfg_attr(feature = "ts", ts(type = "number | null"))]
+    pub last_used_ms: Option<u64>,
 }
 
 /// The account's members, after catching up.
@@ -1516,10 +1544,12 @@ pub struct Devices {
 /// What a revoke on `roster` drops for `dropped`: those that are members,
 /// and the kits that would be left without their device.
 fn with_kits(roster: &Roster, dropped: Vec<Id>) -> Vec<Id> {
-    let mut drop: Vec<Id> = dropped
-        .into_iter()
-        .filter(|id| roster.members().contains_key(id))
-        .collect();
+    let mut drop: Vec<Id> = Vec::new();
+    for id in dropped {
+        if roster.members().contains_key(&id) && !drop.contains(&id) {
+            drop.push(id);
+        }
+    }
     for kit in roster.kits_of(&drop) {
         if !drop.contains(&kit) {
             drop.push(kit);
@@ -1528,19 +1558,28 @@ fn with_kits(roster: &Roster, dropped: Vec<Id>) -> Vec<Id> {
     drop
 }
 
-/// The members of `roster` as the devices screen shows them. Names are
-/// sealed under `idKey`, which never changes, so any branch's open.
+/// The members of `roster` as the devices screen shows them. Names, labels
+/// and forms are sealed under `idKey`, which never changes, so any branch's
+/// open.
 fn member_infos(roster: &Roster, keys: &Bundle, me: &Id) -> Vec<MemberInfo> {
     roster
         .members()
         .iter()
-        .map(|(id, m)| MemberInfo {
-            id: *id,
-            kit: m.role == Role::Kit,
-            name: m.name.as_deref().and_then(|n| open_name(keys, id, n)),
-            sponsor: m.sponsor,
-            added_ms: m.added_ms,
-            this_device: id == me,
+        .map(|(id, m)| {
+            let last_used = roster.last_used(id).filter(|_| m.role == Role::Kit);
+            MemberInfo {
+                id: *id,
+                kit: m.role == Role::Kit,
+                name: m.name.as_deref().and_then(|n| open_name(keys, id, n)),
+                sponsor: m.sponsor,
+                added_ms: m.added_ms,
+                this_device: id == me,
+                passkey: m.passkey,
+                form: m.form.as_deref().and_then(|f| open_form(keys, id, f)),
+                via_passkey: m.role == Role::Device && roster.joined_with_passkey(id),
+                last_used_by: last_used.map(|(device, _)| device),
+                last_used_ms: last_used.map(|(_, at)| at),
+            }
         })
         .collect()
 }
@@ -1572,13 +1611,22 @@ pub async fn devices(
 )]
 #[serde(rename_all = "camelCase")]
 pub struct LostPreview {
+    /// Ticked to go with the lost device: those it vouched for, and every
+    /// device that joined through a passkey. Never this device.
     #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
     pub devices: Vec<Id>,
-    /// Every kit that goes when the lost device and all of `devices` go.
+    /// Those of `devices` that joined through a passkey, newest first
+    /// ("Joined with a passkey on <date>"): a stolen phone may hold any
+    /// synced passkey.
+    #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
+    pub passkey_joined: Vec<Id>,
+    /// Every kit that goes when the lost device and all of `devices` go,
+    /// every passkey kit among them, whoever added it.
     #[cfg_attr(feature = "ts", ts(type = "Array<string>"))]
     pub kits: Vec<Id>,
-    /// The kits each of `devices` made: they stay with a device the user
-    /// unticks, and go with it otherwise.
+    /// The recovery kits each of `devices` made: they stay with a device
+    /// the user unticks, and go with it otherwise. Passkey kits go whatever
+    /// is unticked.
     pub device_kits: Vec<DeviceKits>,
 }
 
@@ -1590,20 +1638,41 @@ pub async fn lost_preview(
     lost: Id,
 ) -> Result<LostPreview, SyncError> {
     let session = Session::open(library, http, config, clock).await?;
-    let devices = session.roster.descendants(&lost, &session.member.id());
+    let me = session.member.id();
+    let passkey_joined: Vec<Id> = session
+        .roster
+        .passkey_joined(&me)
+        .into_iter()
+        .filter(|id| *id != lost)
+        .collect();
+    let mut devices = session.roster.descendants(&lost, &me);
+    for id in &passkey_joined {
+        if !devices.contains(id) {
+            devices.push(*id);
+        }
+    }
     let mut all = devices.clone();
     all.push(lost);
+    let mut kits = session.roster.kits_of(&all);
+    for kit in session.roster.passkey_kits() {
+        if !kits.contains(&kit) {
+            kits.push(kit);
+        }
+    }
     let made_by = |device: &Id| {
         session
             .roster
             .members()
             .iter()
-            .filter(|(_, m)| m.role == Role::Kit && m.sponsor.as_ref() == Some(device))
+            .filter(|(_, m)| {
+                m.role == Role::Kit && !m.passkey && m.sponsor.as_ref() == Some(device)
+            })
             .map(|(id, _)| *id)
             .collect()
     };
     Ok(LostPreview {
-        kits: session.roster.kits_of(&all),
+        kits,
+        passkey_joined,
         device_kits: devices
             .iter()
             .map(|device| DeviceKits {
@@ -1633,7 +1702,10 @@ pub async fn remove_devices(
 }
 
 /// Reports `lost` stolen or lost: drops it, every device it vouched for
-/// (transitively) except those in `keep`, and every kit any of them added.
+/// (transitively) and every device that joined through a passkey, except
+/// those in `keep` (never this device), every kit any of them added, and
+/// every passkey kit, whoever added it: the lost device may hold any synced
+/// passkey (3.2).
 pub async fn report_lost(
     library: &Library,
     http: &HttpClient,
@@ -1654,9 +1726,11 @@ pub async fn report_lost(
             let mut drop: Vec<Id> = roster
                 .descendants(&lost, &me)
                 .into_iter()
+                .chain(roster.passkey_joined(&me))
                 .filter(|id| !keep.contains(id))
                 .collect();
             drop.push(lost);
+            drop.extend(roster.passkey_kits());
             drop
         })
         .await?;

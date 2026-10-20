@@ -32,7 +32,13 @@ const NAME_INFO: &[u8] = b"marquee/name/v1";
 const EPOCH_INFO: &[u8] = b"marquee/epoch/v1";
 const CHAIN_INFO: &[u8] = b"marquee/chain/v1";
 pub const MAX_DEVICES: usize = 32;
-pub const MAX_KITS: usize = 4;
+/// Apple, Google and a password manager's passkeys, a recovery kit, and
+/// room for stale passkeys (D8).
+pub const MAX_KITS: usize = 8;
+/// What a device says it is (sealed, padded to one length so the relay
+/// cannot tell them apart): only phones and tablets approve a new device.
+pub const FORMS: [&str; 5] = ["phone", "tablet", "tv", "computer", "web"];
+const FORM_LEN: usize = 8;
 /// The largest entry body, checked before parsing: 32 boxes and a name fit
 /// many times over.
 pub const MAX_ENTRY: usize = 64 * 1024;
@@ -350,6 +356,9 @@ pub struct Genesis {
     pub keys: MemberKeys,
     /// The first device's name, sealed for members.
     pub name: String,
+    /// Its form (`FORMS`), sealed for members.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub form: Option<String>,
 }
 
 /// Authored by the new device itself, which proves it holds both keys.
@@ -360,6 +369,20 @@ pub struct AddDevice {
     /// The device's name, sealed for members.
     pub name: String,
     pub sponsor: Sponsor,
+    /// Its form (`FORMS`), sealed for members.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub form: Option<String>,
+}
+
+/// A recovery kit (its secret shown once) or a passkey kit (its secret from
+/// a passkey's PRF output). The relay reads the kind: it checks how long
+/// each may stay (3.2).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum KitKind {
+    #[default]
+    Recovery,
+    Passkey,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -373,6 +396,12 @@ pub struct AddKit {
     pub auth_hash: Hex<32>,
     #[serde(rename = "box")]
     pub boxed: SealedBox,
+    #[serde(default)]
+    pub kind: KitKind,
+    /// What the kit is ("Passkey, saved on Robin's iPhone, 20 Oct"), sealed
+    /// for members.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
 }
 
 /// Starts a new epoch: drops members (possibly none, a plain rotation) and
@@ -445,7 +474,23 @@ pub struct Member {
     pub sponsor: Option<Id>,
     pub added_seq: u64,
     pub added_ms: u64,
+    /// A device's name, or a kit's label; sealed.
     pub name: Option<String>,
+    /// A device's form, sealed.
+    pub form: Option<String>,
+    /// A passkey kit.
+    pub passkey: bool,
+}
+
+/// Every id ever admitted, dropped or not: ids are never reused, and a lost
+/// device's descendants are found even through members that are gone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Admission {
+    role: Role,
+    sponsor: Option<Id>,
+    seq: u64,
+    at_ms: u64,
+    passkey: bool,
 }
 
 /// What a rotation brought: the previous key sealed under the new one, and
@@ -463,6 +508,9 @@ pub struct NewKit {
     pub tag_key: [u8; 32],
     pub lookup_hash: [u8; 32],
     pub auth_hash: [u8; 32],
+    pub kind: KitKind,
+    /// In the clear here; sealed in the entry.
+    pub label: Option<String>,
 }
 
 /// The state the entries so far describe.
@@ -473,10 +521,7 @@ pub struct Roster {
     head: Option<(u64, Digest32)>,
     epoch: u32,
     members: BTreeMap<Id, Member>,
-    /// Every id ever admitted, with its role and sponsor, dropped or not:
-    /// ids are never reused, and a lost device's descendants are found
-    /// even through members that are gone.
-    ancestry: BTreeMap<Id, (Role, Option<Id>)>,
+    ancestry: BTreeMap<Id, Admission>,
     rotation_pending: bool,
     rotations: BTreeMap<u32, Rotation>,
     /// A kit's box from `addKit`, with that epoch, and its id tag.
@@ -588,25 +633,35 @@ impl Roster {
         if self.count(member.role) >= limit {
             return Err(Invalid("too many members"));
         }
-        self.ancestry.insert(id, (member.role, member.sponsor));
+        let admission = Admission {
+            role: member.role,
+            sponsor: member.sponsor,
+            seq: member.added_seq,
+            at_ms: member.added_ms,
+            passkey: member.passkey,
+        };
+        self.ancestry.insert(id, admission);
         self.members.insert(id, member);
         Ok(())
     }
 
     fn change(&mut self, body: &Body) -> Result<(), RosterError> {
-        let member = |role, keys, sponsor, name| Member {
+        let member = |role, keys, sponsor, name, form| Member {
             role,
             keys,
             sponsor,
             added_seq: body.seq,
             added_ms: body.at_ms,
             name,
+            form,
+            passkey: false,
         };
         match &body.kind {
             Kind::Genesis(g) => {
                 self.account = body.account;
                 let name = Some(g.name.clone());
-                self.admit(g.keys, member(Role::Device, g.keys, None, name))
+                let form = g.form.clone();
+                self.admit(g.keys, member(Role::Device, g.keys, None, name, form))
             }
             Kind::AddDevice(a) => {
                 let sponsor = self
@@ -620,9 +675,10 @@ impl Roster {
                     return Err(Invalid("sponsor statement is not for this roster"));
                 }
                 let name = Some(a.name.clone());
+                let form = a.form.clone();
                 self.admit(
                     a.keys,
-                    member(Role::Device, a.keys, Some(a.sponsor.by), name),
+                    member(Role::Device, a.keys, Some(a.sponsor.by), name, form),
                 )
             }
             Kind::AddKit(k) => {
@@ -630,7 +686,11 @@ impl Roster {
                 if k.boxed.to != k.keys.id() {
                     return Err(Invalid("kit box is for someone else"));
                 }
-                self.admit(k.keys, member(Role::Kit, k.keys, Some(body.author), None))?;
+                let kit = Member {
+                    passkey: k.kind == KitKind::Passkey,
+                    ..member(Role::Kit, k.keys, Some(body.author), k.label.clone(), None)
+                };
+                self.admit(k.keys, kit)?;
                 self.kit_boxes
                     .insert(k.keys.id(), (self.epoch, k.boxed.sealed.clone()));
                 self.kit_tags.insert(k.keys.id(), k.id_tag);
@@ -660,11 +720,11 @@ impl Roster {
                 {
                     return Err(Invalid("boxes must cover exactly the members left"));
                 }
-                // A kit goes with the device that added it (dropped or gone).
-                let orphan = left.iter().any(|id| {
-                    let m = &self.members[id];
-                    m.role == Role::Kit && !m.sponsor.is_some_and(|s| left.contains(&s))
-                });
+                // A kit goes with the device that added it (dropped or gone),
+                // a passkey kit unless a device that joined through it stays.
+                let orphan = left
+                    .iter()
+                    .any(|id| self.members[id].role == Role::Kit && !self.kit_stays(id, &left));
                 if orphan {
                     return Err(Invalid("a kit outlives the device that added it"));
                 }
@@ -701,8 +761,8 @@ impl Roster {
             let more: Vec<Id> = self
                 .ancestry
                 .iter()
-                .filter(|(id, (_, sponsor))| {
-                    !found.contains(id) && sponsor.is_some_and(|s| found.contains(&s))
+                .filter(|(id, a)| {
+                    !found.contains(id) && a.sponsor.is_some_and(|s| found.contains(&s))
                 })
                 .map(|(id, _)| *id)
                 .collect();
@@ -725,12 +785,76 @@ impl Roster {
     /// device is among them or already gone (a kit shown on a stolen device
     /// may sit in its screenshots). A revoke that keeps one is refused.
     pub fn kits_of(&self, devices: &[Id]) -> Vec<Id> {
-        let stays = |s: &Id| self.members.contains_key(s) && !devices.contains(s);
+        let stays: BTreeSet<Id> = self
+            .members
+            .keys()
+            .filter(|id| !devices.contains(id))
+            .copied()
+            .collect();
         self.members
             .iter()
-            .filter(|(_, m)| m.role == Role::Kit && !m.sponsor.is_some_and(|s| stays(&s)))
+            .filter(|(id, m)| m.role == Role::Kit && !self.kit_stays(id, &stays))
             .map(|(id, _)| *id)
             .collect()
+    }
+
+    /// Whether `kit` may stay when exactly `left` stay (3.2): a recovery kit
+    /// while the device that added it stays; a passkey kit also while a
+    /// device that joined through it stays (the new phone that joined with
+    /// it keeps it when the old one signs out).
+    fn kit_stays(&self, kit: &Id, left: &BTreeSet<Id>) -> bool {
+        let Some(m) = self.members.get(kit) else {
+            return false;
+        };
+        let joined_through = || {
+            self.members.iter().any(|(id, d)| {
+                d.role == Role::Device && d.sponsor == Some(*kit) && left.contains(id)
+            })
+        };
+        m.sponsor.is_some_and(|s| left.contains(&s)) || (m.passkey && joined_through())
+    }
+
+    /// Every passkey kit of the account: Report lost drops them all,
+    /// whoever added them (a stolen phone may hold any synced passkey).
+    pub fn passkey_kits(&self) -> Vec<Id> {
+        self.members
+            .iter()
+            .filter(|(_, m)| m.role == Role::Kit && m.passkey)
+            .map(|(id, _)| *id)
+            .collect()
+    }
+
+    /// The current devices that joined through a passkey kit (gone or not),
+    /// newest first, never `author`: Report lost lists them ticked.
+    pub fn passkey_joined(&self, author: &Id) -> Vec<Id> {
+        let mut joined: Vec<(&Id, &Member)> = self
+            .members
+            .iter()
+            .filter(|(id, m)| {
+                *id != author && m.role == Role::Device && self.joined_with_passkey(id)
+            })
+            .collect();
+        joined.sort_by_key(|(_, m)| std::cmp::Reverse(m.added_seq));
+        joined.into_iter().map(|(id, _)| *id).collect()
+    }
+
+    /// The newest device a kit vouched for (gone or not), and when: "Last
+    /// used" on its row, so a dead passkey is easy to tell at the cap.
+    pub fn last_used(&self, kit: &Id) -> Option<(Id, u64)> {
+        self.ancestry
+            .iter()
+            .filter(|(_, a)| a.role == Role::Device && a.sponsor == Some(*kit))
+            .max_by_key(|(_, a)| a.seq)
+            .map(|(id, a)| (*id, a.at_ms))
+    }
+
+    /// Whether `id` joined through a passkey kit.
+    pub fn joined_with_passkey(&self, id: &Id) -> bool {
+        self.ancestry
+            .get(id)
+            .and_then(|a| a.sponsor)
+            .and_then(|s| self.ancestry.get(&s))
+            .is_some_and(|a| a.role == Role::Kit && a.passkey)
     }
 
     fn body(&self, author: &MemberSecret, kind: Kind, at_ms: u64) -> Body {
@@ -755,6 +879,17 @@ impl Roster {
         name: &str,
         at_ms: u64,
     ) -> (Entry, Bundle) {
+        Self::genesis_entry_as(me, account, name, None, at_ms)
+    }
+
+    /// As `genesis_entry`, with the first device's form (one of `FORMS`).
+    pub fn genesis_entry_as(
+        me: &MemberSecret,
+        account: Id,
+        name: &str,
+        form: Option<&str>,
+        at_ms: u64,
+    ) -> (Entry, Bundle) {
         let mut bundle = Bundle {
             v: 1,
             account,
@@ -773,6 +908,7 @@ impl Roster {
             kind: Kind::Genesis(Genesis {
                 keys: me.public,
                 name: seal_name(&bundle, &me.id(), name),
+                form: form.map(|f| seal_form(&bundle, &me.id(), f)),
             }),
         };
         let entry = Entry::sign(me, &body);
@@ -788,10 +924,23 @@ impl Roster {
         name: String,
         at_ms: u64,
     ) -> Entry {
+        self.add_device_as(me, sponsor, name, None, at_ms)
+    }
+
+    /// As `add_device`, with the device's sealed form (`seal_form`).
+    pub fn add_device_as(
+        &self,
+        me: &MemberSecret,
+        sponsor: Sponsor,
+        name: String,
+        form: Option<String>,
+        at_ms: u64,
+    ) -> Entry {
         let kind = Kind::AddDevice(AddDevice {
             keys: me.public,
             name,
             sponsor,
+            form,
         });
         Entry::sign(me, &self.body(me, kind, at_ms))
     }
@@ -811,6 +960,11 @@ impl Roster {
             lookup_hash: Hex(kit.lookup_hash),
             auth_hash: Hex(kit.auth_hash),
             boxed: seal_box(&kit.keys, bundle)?,
+            kind: kit.kind,
+            label: kit
+                .label
+                .as_deref()
+                .map(|l| seal_name(bundle, &kit.keys.id(), l)),
         });
         Ok(Entry::sign(me, &self.body(me, kind, at_ms)))
     }
@@ -1047,6 +1201,19 @@ pub fn seal_name(bundle: &Bundle, member: &Id, name: &str) -> String {
     B64.encode([&nonce[..], &sealed].concat())
 }
 
+/// A device's form (one of `FORMS`, checked by the caller), sealed as a
+/// name padded to one length: the relay cannot tell a TV from a phone.
+pub fn seal_form(bundle: &Bundle, member: &Id, form: &str) -> String {
+    seal_name(bundle, member, &format!("{form:<FORM_LEN$}"))
+}
+
+/// A sealed form, opened: one of `FORMS`, else none.
+pub fn open_form(bundle: &Bundle, member: &Id, sealed: &str) -> Option<String> {
+    let form = open_name(bundle, member, sealed)?;
+    let form = form.trim_end();
+    FORMS.contains(&form).then(|| form.to_owned())
+}
+
 pub fn open_name(bundle: &Bundle, member: &Id, sealed: &str) -> Option<String> {
     let blob = B64.decode(sealed).ok()?;
     let (nonce, sealed) = blob.split_at_checked(NONCE)?;
@@ -1122,6 +1289,16 @@ mod tests {
             tag_key,
             lookup_hash: random(),
             auth_hash: random(),
+            kind: KitKind::Recovery,
+            label: None,
+        }
+    }
+
+    pub(super) fn passkey(kit: &MemberSecret) -> NewKit {
+        NewKit {
+            kind: KitKind::Passkey,
+            label: Some("Passkey, saved on the phone".into()),
+            ..new_kit(kit, random())
         }
     }
 
@@ -1688,5 +1865,162 @@ mod round5 {
         assert_eq!(open_name(&held, &stranger, &sealed), None);
         let (_, other, _) = account();
         assert_eq!(open_name(&other, &phone.id(), &sealed), None);
+    }
+}
+
+/// Passkey kits (plans/accounts.md 3.2): how long each kind of kit may stay,
+/// what Report lost takes, labels and forms.
+#[cfg(test)]
+mod passkeys {
+    use super::tests::{new_kit, passkey};
+    use super::*;
+
+    fn account() -> (Roster, Bundle, MemberSecret) {
+        let phone = MemberSecret::generate();
+        let (genesis, held) =
+            Roster::genesis_entry_as(&phone, Hex(random()), "phone", Some("phone"), 1);
+        let mut roster = Roster::default();
+        roster.apply(&genesis).unwrap();
+        (roster, held, phone)
+    }
+
+    fn add(
+        roster: &mut Roster,
+        by: &MemberSecret,
+        held: &Bundle,
+        made: fn(&MemberSecret) -> NewKit,
+    ) -> MemberSecret {
+        let kit = MemberSecret::generate();
+        let entry = roster.add_kit(by, held, &made(&kit), 3).unwrap();
+        roster.apply(&entry).unwrap();
+        kit
+    }
+
+    fn recovery(kit: &MemberSecret) -> NewKit {
+        new_kit(kit, random())
+    }
+
+    /// A device that joined through `sponsor` (a device's approval, or a kit).
+    fn joined(roster: &mut Roster, sponsor: &MemberSecret) -> MemberSecret {
+        let new = MemberSecret::generate();
+        let statement = Sponsor::new(sponsor, roster, new.public());
+        let entry = roster.add_device(&new, statement, "d".into(), 4);
+        roster.apply(&entry).unwrap();
+        new
+    }
+
+    #[test]
+    fn a_passkey_stays_while_a_device_that_joined_through_it_stays() {
+        let (mut roster, held, phone) = account();
+        let key = add(&mut roster, &phone, &held, passkey);
+        let new_phone = joined(&mut roster, &key);
+        roster.apply(&roster.leave(&phone, 5)).unwrap();
+        assert!(roster.kits_of(&[]).is_empty(), "the new phone keeps it");
+        let (rotation, _) = roster.revoke(&new_phone, &held, vec![], 6).unwrap();
+        roster.apply(&rotation).unwrap();
+        assert!(roster.members()[&key.id()].passkey);
+        // A recovery kit goes with the device that made it, whoever joined.
+        let (mut roster, held, phone) = account();
+        let kit = add(&mut roster, &phone, &held, recovery);
+        let laptop = joined(&mut roster, &kit);
+        roster.apply(&roster.leave(&phone, 5)).unwrap();
+        assert_eq!(roster.kits_of(&[]), vec![kit.id()]);
+        let (keeps, _) = roster.revoke(&laptop, &held, vec![], 6).unwrap();
+        assert_eq!(
+            roster.clone().apply(&keeps),
+            Err(Invalid("a kit outlives the device that added it"))
+        );
+    }
+
+    #[test]
+    fn a_passkey_goes_with_its_device_when_no_one_joined_through_it() {
+        let (mut roster, held, phone) = account();
+        let tv = joined(&mut roster, &phone);
+        let key = add(&mut roster, &tv, &held, passkey);
+        assert_eq!(roster.kits_of(&[tv.id()]), vec![key.id()]);
+        let (keeps, _) = roster.revoke(&phone, &held, vec![tv.id()], 5).unwrap();
+        assert_eq!(
+            roster.clone().apply(&keeps),
+            Err(Invalid("a kit outlives the device that added it"))
+        );
+        // Once a device joined through it, it stays when the TV goes.
+        let laptop = joined(&mut roster, &key);
+        assert!(roster.kits_of(&[tv.id()]).is_empty());
+        let (drops_tv, _) = roster.revoke(&phone, &held, vec![tv.id()], 6).unwrap();
+        roster.apply(&drops_tv).unwrap();
+        assert!(roster.members().contains_key(&key.id()));
+        // And it goes when that device goes too.
+        assert_eq!(roster.kits_of(&[laptop.id()]), vec![key.id()]);
+    }
+
+    #[test]
+    fn report_lost_takes_every_passkey_and_lists_who_joined_through_one() {
+        let (mut roster, held, phone) = account();
+        let tv = joined(&mut roster, &phone);
+        let mine = add(&mut roster, &phone, &held, passkey);
+        let theirs = add(&mut roster, &tv, &held, passkey);
+        add(&mut roster, &phone, &held, recovery);
+        let desk = joined(&mut roster, &mine);
+        let laptop = joined(&mut roster, &theirs);
+        let mut kits = roster.passkey_kits();
+        kits.sort();
+        let mut expected = vec![mine.id(), theirs.id()];
+        expected.sort();
+        assert_eq!(kits, expected, "passkeys only, whoever added them");
+        assert_eq!(
+            roster.passkey_joined(&phone.id()),
+            vec![laptop.id(), desk.id()],
+            "newest first"
+        );
+        assert_eq!(
+            roster.passkey_joined(&desk.id()),
+            vec![laptop.id()],
+            "never the device reporting"
+        );
+        assert!(roster.joined_with_passkey(&desk.id()) && !roster.joined_with_passkey(&tv.id()));
+        assert_eq!(roster.last_used(&mine.id()), Some((desk.id(), 4)));
+    }
+
+    #[test]
+    fn a_dropped_passkey_is_never_let_in_again_and_kits_stop_at_eight() {
+        let (mut roster, held, phone) = account();
+        let key = MemberSecret::generate();
+        let first = roster.add_kit(&phone, &held, &passkey(&key), 3).unwrap();
+        roster.apply(&first).unwrap();
+        let (drop, held) = roster.revoke(&phone, &held, vec![key.id()], 4).unwrap();
+        roster.apply(&drop).unwrap();
+        let again = roster.add_kit(&phone, &held, &passkey(&key), 5).unwrap();
+        assert_eq!(
+            roster.clone().apply(&again),
+            Err(Invalid("that member id already existed"))
+        );
+        for _ in 0..MAX_KITS {
+            add(&mut roster, &phone, &held, passkey);
+        }
+        let ninth = roster
+            .add_kit(&phone, &held, &passkey(&MemberSecret::generate()), 6)
+            .unwrap();
+        assert_eq!(roster.apply(&ninth), Err(Invalid("too many members")));
+    }
+
+    #[test]
+    fn labels_and_forms_are_sealed_and_forms_look_alike() {
+        let (mut roster, held, phone) = account();
+        let key = add(&mut roster, &phone, &held, passkey);
+        let label = roster.members()[&key.id()].name.clone().unwrap();
+        assert_eq!(
+            open_name(&held, &key.id(), &label).as_deref(),
+            Some("Passkey, saved on the phone")
+        );
+        let form = roster.members()[&phone.id()].form.clone().unwrap();
+        assert_eq!(
+            open_form(&held, &phone.id(), &form).as_deref(),
+            Some("phone")
+        );
+        let tv = seal_form(&held, &phone.id(), "tv");
+        let computer = seal_form(&held, &phone.id(), "computer");
+        assert_eq!(tv.len(), computer.len(), "the relay cannot tell them apart");
+        let odd = seal_name(&held, &phone.id(), "toaster");
+        assert_eq!(open_form(&held, &phone.id(), &odd), None);
     }
 }

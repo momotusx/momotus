@@ -20,7 +20,10 @@ use crate::engine::{
     APPROVAL, CANCEL, PAIRING_MS, Session, SyncConfig, SyncError, fetch_roster, options, rebuild,
     relay_info, require_secure,
 };
-use crate::roster::{Bundle, Hex, Id, MemberKeys, MemberSecret, NewKit, Sponsor, seal_name};
+use crate::roster::{
+    Bundle, FORMS, Hex, Id, KitKind, MemberKeys, MemberSecret, NewKit, Sponsor, seal_form,
+    seal_name,
+};
 use crate::wire::{AccountResponse, AppendRequest, Redeemed, RosterHead};
 use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD as B64, URL_SAFE_NO_PAD as B64URL};
@@ -211,6 +214,18 @@ impl PairingRequest {
         offer: Offer,
         name: &str,
     ) -> Result<SyncConfig, SyncError> {
+        self.claim_as(http, offer, name, None).await
+    }
+
+    /// As `claim`, with this device's form (one of `FORMS`).
+    pub async fn claim_as(
+        &self,
+        http: &HttpClient,
+        offer: Offer,
+        name: &str,
+        form: Option<&str>,
+    ) -> Result<SyncConfig, SyncError> {
+        let form = checked_form(form)?;
         let payload = offer.payload;
         let info = relay_info(http, &self.server).await?;
         if info.relay_id != payload.relay_id {
@@ -230,7 +245,7 @@ impl PairingRequest {
             &claimed.device_token,
             &self.member,
             JoinBy::Pairing(payload),
-            name,
+            (name, form),
             info.relay_id,
         )
         .await
@@ -244,14 +259,14 @@ enum JoinBy {
 }
 
 /// Reads and checks the roster with a pending token, then appends `member`'s
-/// own `addDevice`, which makes the token active.
+/// own `addDevice` (its name and form), which makes the token active.
 async fn join(
     http: &HttpClient,
     server: &str,
     token: &str,
     member: &MemberSecret,
     by: JoinBy,
-    name: &str,
+    (name, form): (&str, Option<&str>),
     relay_id: Id,
 ) -> Result<SyncConfig, SyncError> {
     let (entries, _) = fetch_roster(http, server, token, 0).await?;
@@ -267,17 +282,20 @@ async fn join(
                 .map_err(|e| SyncError::Roster(e.to_string()))?;
             (keys, payload.sponsor)
         }
+        // Keys that do not carry this account's id tag: the lookup was
+        // squatted in another account. Nothing is used.
         JoinBy::Kit { kit, tag } => {
             let keys = roster
                 .open_for_kit(&kit, &tag)
-                .map_err(|_| bad("the recovered keys are not this account's; do not use them"))?;
+                .map_err(|_| SyncError::KitUnknown)?;
             (keys, Sponsor::new(&kit, &roster, member.public()))
         }
     };
-    let entry = roster.add_device(
+    let entry = roster.add_device_as(
         member,
         sponsor,
         seal_name(&keys, &member.id(), name),
+        form.map(|f| seal_form(&keys, &member.id(), f)),
         now_ms(),
     );
     http.post_json(
@@ -441,10 +459,32 @@ struct KitKeys {
 }
 
 fn kit_keys(kit: &str) -> Result<KitKeys, SyncError> {
-    let secret = unbase32(kit)
-        .filter(|s| s.len() == 20)
+    let secret: [u8; 20] = unbase32(kit)
+        .and_then(|s| s.try_into().ok())
         .ok_or_else(|| bad("not a recovery kit"))?;
-    let hk = Hkdf::<Sha256>::new(None, &secret);
+    Ok(kit_keys_from(&secret))
+}
+
+/// A passkey kit's secret (plans/accounts.md 3.1): the first 20 bytes of
+/// HKDF-SHA256 of the passkey's 32-byte PRF output; then every key comes as
+/// from a recovery kit's.
+pub fn passkey_secret(prf: &[u8; 32]) -> [u8; 20] {
+    let mut secret = [0u8; 20];
+    Hkdf::<Sha256>::new(None, prf)
+        .expand(PASSKEY_KIT_INFO, &mut secret)
+        .expect("valid length");
+    secret
+}
+
+const PASSKEY_KIT_INFO: &[u8] = b"marquee/passkey-kit/v1";
+
+/// A PRF output as the apps send it: 32 bytes, base64url without padding.
+pub fn read_prf(text: &str) -> Option<[u8; 32]> {
+    B64URL.decode(text).ok()?.try_into().ok()
+}
+
+fn kit_keys_from(secret: &[u8; 20]) -> KitKeys {
+    let hk = Hkdf::<Sha256>::new(None, secret);
     let mut lookup = [0u8; 16];
     let mut auth = [0u8; 32];
     let mut tag = [0u8; 32];
@@ -457,12 +497,27 @@ fn kit_keys(kit: &str) -> Result<KitKeys, SyncError> {
         .expect("valid length");
     hk.expand(b"marquee/recovery/member/v1", &mut seed)
         .expect("valid length");
-    Ok(KitKeys {
+    KitKeys {
         lookup: hex::encode(lookup),
         auth,
         tag,
         member: MemberSecret::from_seed(seed),
-    })
+    }
+}
+
+impl KitKeys {
+    /// What the roster gets of this kit.
+    fn new_kit(&self, kind: KitKind, label: Option<String>) -> NewKit {
+        let lookup = hex::decode(&self.lookup).expect("hex we made");
+        NewKit {
+            keys: *self.member.public(),
+            tag_key: self.tag,
+            lookup_hash: Sha256::digest(lookup).into(),
+            auth_hash: Sha256::digest(self.auth).into(),
+            kind,
+            label,
+        }
+    }
 }
 
 /// The approver saw other digits on the new device: the approval for `qr`
@@ -510,13 +565,41 @@ pub async fn make_kit(
 ) -> Result<(String, Id, SyncConfig), SyncError> {
     let kit = new_recovery_kit();
     let keys = kit_keys(&kit)?;
-    let lookup = hex::decode(&keys.lookup).expect("hex we made");
-    let new_kit = NewKit {
-        keys: *keys.member.public(),
-        tag_key: keys.tag,
-        lookup_hash: Sha256::digest(lookup).into(),
-        auth_hash: Sha256::digest(keys.auth).into(),
-    };
+    let new_kit = keys.new_kit(KitKind::Recovery, None);
+    let (id, record) = add_kit(library, http, config, clock, new_kit).await?;
+    Ok((kit, id, record))
+}
+
+/// Saves a passkey as a way into the account: a kit whose secret comes from
+/// the passkey's 32-byte PRF output (3.1), labelled for the devices screen
+/// ("Passkey, saved on Robin's iPhone, 20 Oct"). Returns its id in the
+/// roster and this device's record to store. A PRF output whose lookup
+/// another account holds is `kitTaken`; a kit dropped before is never let
+/// in again.
+pub async fn save_passkey(
+    library: &Library,
+    http: &HttpClient,
+    config: &SyncConfig,
+    clock: &HlcClock,
+    prf: &[u8; 32],
+    label: &str,
+) -> Result<(Id, SyncConfig), SyncError> {
+    let new_kit = passkey_kit(prf, Some(label.to_owned()));
+    add_kit(library, http, config, clock, new_kit).await
+}
+
+/// What the roster gets of the passkey kit a PRF output makes.
+pub fn passkey_kit(prf: &[u8; 32], label: Option<String>) -> NewKit {
+    kit_keys_from(&passkey_secret(prf)).new_kit(KitKind::Passkey, label)
+}
+
+async fn add_kit(
+    library: &Library,
+    http: &HttpClient,
+    config: &SyncConfig,
+    clock: &HlcClock,
+    new_kit: NewKit,
+) -> Result<(Id, SyncConfig), SyncError> {
     let mut session = Session::open(library, http, config, clock).await?;
     let at_ms = clock.tick(clock.wall_now()).wall_ms;
     session
@@ -527,7 +610,24 @@ pub async fn make_kit(
         })
         .await?;
     let record = session.changed().unwrap_or_else(|| session.record.clone());
-    Ok((kit, keys.member.id(), record))
+    Ok((new_kit.keys.id(), record))
+}
+
+/// A way back into an account.
+pub enum Recovery {
+    /// A recovery kit as typed.
+    Kit(String),
+    /// A passkey's 32-byte PRF output.
+    Passkey([u8; 32]),
+}
+
+/// Which way a recovered device came in: only a kit's user is told to make
+/// a new one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Via {
+    Kit,
+    Passkey,
 }
 
 /// Joins the account a recovery kit belongs to, as a new device named
@@ -538,8 +638,29 @@ pub async fn recover(
     kit: &str,
     name: &str,
 ) -> Result<SyncConfig, SyncError> {
+    recover_with(http, server, Recovery::Kit(kit.to_owned()), name, None)
+        .await
+        .map(|(record, _)| record)
+}
+
+/// Joins the account a kit or a passkey opens, as a new device named `name`
+/// of `form`: the new device's keystore record, and which way it came. A
+/// kit the relay does not know (another passkey's PRF, a typo) and keys
+/// that are not that account's (a lookup squatted in another account) are
+/// both `kitUnknown`.
+pub async fn recover_with(
+    http: &HttpClient,
+    server: &str,
+    way: Recovery,
+    name: &str,
+    form: Option<&str>,
+) -> Result<(SyncConfig, Via), SyncError> {
     require_secure(server)?;
-    let keys = kit_keys(kit)?;
+    let form = checked_form(form)?;
+    let (keys, via) = match way {
+        Recovery::Kit(kit) => (kit_keys(&kit)?, Via::Kit),
+        Recovery::Passkey(prf) => (kit_keys_from(&passkey_secret(&prf)), Via::Passkey),
+    };
     let info = relay_info(http, server).await?;
     let redeemed: Redeemed = http
         .post_json(
@@ -550,9 +671,9 @@ pub async fn recover(
         .await?
         .json()?;
     if redeemed.kit != keys.member.id() {
-        return Err(bad("the relay answered for another kit"));
+        return Err(SyncError::KitUnknown);
     }
-    join(
+    let record = join(
         http,
         server,
         &redeemed.device_token,
@@ -561,10 +682,19 @@ pub async fn recover(
             kit: keys.member,
             tag: keys.tag,
         },
-        name,
+        (name, form),
         info.relay_id,
     )
-    .await
+    .await?;
+    Ok((record, via))
+}
+
+/// A form as the caller gave it: one of `FORMS`, or none.
+pub(crate) fn checked_form(form: Option<&str>) -> Result<Option<&str>, SyncError> {
+    match form {
+        Some(f) if !FORMS.contains(&f) => Err(bad("unknown device form")),
+        form => Ok(form),
+    }
 }
 
 const ALPHABET: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
@@ -621,5 +751,26 @@ mod tests {
         assert_eq!(base32(b"foobar"), "MZXW6YTBOI");
         assert_eq!(unbase32("MZXW6YTBOI").unwrap(), b"foobar");
         assert_eq!(six_digits().len(), 6);
+    }
+
+    /// The HKDF step every platform shares (`apps/shared/passkey-vectors.json`,
+    /// computed apart from this code).
+    #[test]
+    fn passkey_kits_derive_as_the_shared_vectors_say() {
+        let vectors: serde_json::Value =
+            serde_json::from_str(include_str!("../../../apps/shared/passkey-vectors.json"))
+                .unwrap();
+        let cases = vectors["passkeyKit"].as_array().unwrap();
+        assert_eq!(cases.len(), 3);
+        for case in cases {
+            let prf = read_prf(case["prf"].as_str().unwrap()).unwrap();
+            let secret = passkey_secret(&prf);
+            assert_eq!(hex::encode(secret), case["kitSecret"].as_str().unwrap());
+            assert_eq!(
+                kit_keys_from(&secret).lookup,
+                case["lookup"].as_str().unwrap()
+            );
+        }
+        assert!(read_prf("AAAA").is_none(), "only 32 bytes");
     }
 }
