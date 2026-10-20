@@ -281,6 +281,17 @@ Mutations SR1 to SR7.
   - A dropped engine cancels its session's tasks before its folder lock goes.
   - The address-order scrape rule has a test, on two addresses of one family (a lookup puts IPv4 first).
 
+## Review answers: engine round 5 (2026-10-20)
+
+`plans/reviews/engine-2026-10-20-r5.md`, 9/10. Each rule has a test that fails on revert and a mutation row (E5A to E5F in `bench/m13/mutations.jsonl`).
+
+- **P3-1, a removal syncing data it deletes.** A removal or an eviction deletes the `.have` and renames the folder aside before the session drops the torrent, so the bitfield finds no file to sync and the caller never waits for one.
+- **P3-2, a full check's bitfield stored unsynced.** The data a full check claims is synced before its bitfield is stored. When the sync fails, the result stays in memory and the next launch checks again.
+- **P3-3, sync tests on a process-wide counter.** The fork logs data syncs and bitfield writes in order (feature `sync-log`, on with `test-hooks`). Each test reads its own folder's log and asserts the movie's sync comes before the first write that claims a piece.
+- **P3-4, read-only handles on Windows.** The sync opens each file with write access (no create, no truncate).
+- **P3-5, a pause keeping claims in memory.** A pause flushes the bitfield, so an app killed after its idle torrents pause keeps the claims since the last 16 MiB.
+- **Cold relaunch** (`bench/m13/relaunch-resume.jsonl`): `purge` needs root here, so the data folder was evicted from the page cache with `msync(MS_INVALIDATE)` before each relaunch (resident bytes read with `mincore`: 4.7 to 8.1 MB before, 0 after). Ready came 3 to 10 ms after the file was chosen, against 2 ms warm. Not measured on Android.
+
 ## Disk used while measuring
 
 The engine target directory (`$HOME/.cargo-targets/marquee-engine`, release profile only during the runs) stayed at 1.3 GB; torrent data lived in a per-run temporary folder deleted after each run (largest: 571 MB for a stock Tears of Steel run).
