@@ -150,3 +150,45 @@ private struct PhoneSketch: View {
             .frame(width: size.width, height: size.height, alignment: .top)
     }
 }
+
+/// The app's own column on the device's containers, with a horizontal scroll
+/// row in the block as the actions have and the places' scroll margin over
+/// it as the shell sets it under the player: the scrubber's bar and the row
+/// sit at the safe area's foot (the iPhone walk, round 3: the 66 pt bar
+/// margin had lifted them to 61% of the height across).
+@MainActor @Test func thePhoneScrubberSitsAtTheSafeFoot() {
+    // iPhone 13 Pro: across 844 x 390 with a 21 pt foot, upright 390 x 844 with 47 and 34.
+    for size in [CGSize(width: 844, height: 369), CGSize(width: 390, height: 763)] {
+        let frames = Frames()
+        let column = PhoneOSD {
+            Color.clear.frame(height: 44)
+        } bottom: {
+            VStack(spacing: 6) {
+                Capsule().frame(height: PhoneFrame.barHeight)
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frames.bar = $0 }
+                ScrollView(.horizontal) { Text("Audio Default    Subtitles German    Versions 720p").padding(.vertical, 6) }
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frames.row = $0 }
+            }
+        }
+        let shell = column
+            .contentMargins(.bottom, TabBarMetrics.scrollMargin(immersive: true), for: .scrollContent)
+            .frame(width: size.width, height: size.height)
+        let host = NSHostingView(rootView: shell)
+        host.frame = CGRect(origin: .zero, size: size)
+        host.layoutSubtreeIfNeeded()
+        let foot = size.height - PhoneFrame.bottomGap
+        #expect(abs(frames.row.maxY - foot) < 0.5, "\(size): the row ends at \(frames.row.maxY), not \(foot)")
+        #expect(frames.row.height < 60, "\(size): the row stretched to \(frames.row.height) pt")
+        #expect(abs(frames.bar.maxY + 6 - frames.row.minY) < 0.5)
+    }
+}
+
+@Test func thePlacesKeepTheBarsMarginButNotUnderThePlayer() {
+    #expect(TabBarMetrics.scrollMargin(immersive: false) == TabBarMetrics.height)
+    #expect(TabBarMetrics.scrollMargin(immersive: true) == 0)
+}
+
+@MainActor private final class Frames {
+    var bar = CGRect.null
+    var row = CGRect.null
+}

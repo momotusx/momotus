@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import SwiftUI
 
 /// Where the phone player puts its parts, as Android settled after three
 /// review rounds (plans/android-design-v2.md, slices 14 to 16). Heights are
@@ -371,5 +372,22 @@ extension PhoneFrame {
         guard boxHeight > room else { return (foot, 1) }
         if boxHeight * subtitleShrink <= room { return (foot, subtitleShrink) }
         return (foot, max(room / boxHeight, subtitleFloor))
+    }
+}
+
+/// The iPhone OSD's column (`PhoneFrame`): the top bar `topGap` under the
+/// safe area's top, the scrubber block `bottomGap` over its foot.
+struct PhoneOSD<Top: View, Bottom: View>: View {
+    @ViewBuilder let top: Top
+    @ViewBuilder let bottom: Bottom
+
+    var body: some View {
+        VStack(spacing: 0) {
+            top
+            Spacer(minLength: 0)
+            bottom
+        }
+        .padding(.top, PhoneFrame.topGap)
+        .padding(.bottom, PhoneFrame.bottomGap)
     }
 }

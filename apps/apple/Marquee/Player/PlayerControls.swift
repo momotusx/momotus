@@ -232,15 +232,9 @@ struct PlayerControls: View {
     /// screen, upright and across alike.
     private var phoneLayout: some View {
         ZStack {
-            VStack(spacing: 0) {
-                top
-                Spacer(minLength: 0)
-                phoneBottom
-            }
-            .padding(.leading, PhoneFrame.side(safe: safe.leading))
-            .padding(.trailing, PhoneFrame.side(safe: safe.trailing))
-            .padding(.top, PhoneFrame.topGap)
-            .padding(.bottom, PhoneFrame.bottomGap)
+            PhoneOSD { top } bottom: { phoneBottom }
+                .padding(.leading, PhoneFrame.side(safe: safe.leading))
+                .padding(.trailing, PhoneFrame.side(safe: safe.trailing))
             transport(gap: PhoneFrame.transportGap(landscape: landscape))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .ignoresSafeArea()
@@ -332,14 +326,31 @@ struct PlayerControls: View {
     /// Audio, Subtitles, Versions, Speed: each a word with its current value.
     /// The actions keep their spread when they fit; past the width (a small
     /// phone, a large text size, long track names) the row scrolls, with a
-    /// fade at the end while more is out of sight.
-    private var actions: some View {
+    /// fade at the end while more is out of sight. On the iPhone a word is
+    /// never cut: when the row is short the values go first (Default, 720p,
+    /// 1x), then it scrolls (the iPhone walk, round 3: "Vers...", "S...").
+    @ViewBuilder private var actions: some View {
+        if Self.phone {
+            ViewThatFits(in: .horizontal) {
+                padded(actionRow(values: true)).fixedSize()
+                padded(actionRow(values: false)).fixedSize()
+                scrolling(actionRow(values: false))
+            }
+        } else {
+            scrolling(actionRow(values: true))
+        }
+    }
+
+    /// Room for a focus ring and the lift, which a scroll view would clip.
+    private func padded(_ row: some View) -> some View {
+        row
+            .padding(.vertical, metrics.wide ? 14 : 4)
+            .padding(.horizontal, metrics.wide ? 14 : 2)
+    }
+
+    private func scrolling(_ row: some View) -> some View {
         ScrollView(.horizontal) {
-            actionRow
-                .fixedSize(horizontal: true, vertical: false)
-                // Room for a focus ring and the lift, which the scroll view would clip.
-                .padding(.vertical, metrics.wide ? 14 : 4)
-                .padding(.horizontal, metrics.wide ? 14 : 2)
+            padded(row.fixedSize(horizontal: true, vertical: false))
                 .frame(minWidth: actionsWidth, alignment: metrics.wide && !Self.phone ? .trailing : .center)
         }
         .scrollIndicators(.hidden)
@@ -354,9 +365,9 @@ struct PlayerControls: View {
         }
     }
 
-    private var actionRow: some View {
+    private func actionRow(values: Bool) -> some View {
         HStack(spacing: metrics.wide ? 26 : 16) {
-            menu("Audio", "volume-2", audioValue) {
+            menu("Audio", "volume-2", audioValue, values: values) {
                 if model.audioTracks.isEmpty {
                     Choice(text: "As the file has it", selected: true)
                 }
@@ -367,7 +378,7 @@ struct PlayerControls: View {
                 }
             }
             .focused($focus, equals: .audio)
-            menu("Subtitles", "captions", subtitleValue.text, searching: subtitleValue.searching) {
+            menu("Subtitles", "captions", subtitleValue.text, searching: subtitleValue.searching, values: values) {
                 Button { model.chooseSubtitle(nil); hold(false) } label: {
                     Choice(text: "Off", selected: model.subtitle == nil && model.textTrack == nil)
                 }
@@ -419,7 +430,7 @@ struct PlayerControls: View {
             }
             .focused($focus, equals: .subtitles)
             if let versions, let snapshot = versions.snapshot {
-                menu("Versions", "layers", currentQuality(snapshot)) {
+                menu("Versions", "layers", currentQuality(snapshot), values: values) {
                     ForEach([snapshot.recommended].compactMap { $0 } + snapshot.rows.prefix(12)) { row in
                         Button { model.switchVersion(row.key); hold(false) } label: {
                             Choice(text: "\(VersionWords.line(row)), \(row.via)", selected: row.key == playingKey)
@@ -428,7 +439,7 @@ struct PlayerControls: View {
                 }
                 .focused($focus, equals: .versions)
             }
-            menu("Speed", "gauge", speedText(model.rate)) {
+            menu("Speed", "gauge", speedText(model.rate), values: values) {
                 ForEach([0.5, 0.75, 1, 1.25, 1.5, 2] as [Float], id: \.self) { speed in
                     Button { model.rate = speed; hold(false) } label: {
                         Choice(text: speedText(speed), selected: model.rate == speed)
@@ -460,17 +471,18 @@ struct PlayerControls: View {
     /// hide (and close it) under the viewer's finger. Each pick ends the hold;
     /// iOS never calls the content's `onDisappear`, so a tap outside ends it
     /// at the next touch or at `PlayerLayout.menuHoldLimit`.
-    private func menu<Items: View>(_ title: String, _ symbol: String, _ value: String, searching: Bool = false, @ViewBuilder items: () -> Items) -> some View {
+    private func menu<Items: View>(_ title: String, _ symbol: String, _ value: String, searching: Bool = false, values: Bool = true, @ViewBuilder items: () -> Items) -> some View {
         Menu {
             Group { items() }
                 .onAppear { hold(true) }
                 .onDisappear { hold(false) }
         } label: {
-            action(title, symbol, value, searching: searching)
+            action(title, symbol, value, searching: searching, shown: values)
         }
     }
 
-    private func action(_ title: String, _ symbol: String, _ value: String, searching: Bool = false) -> some View {
+    /// `shown` false: the value is left out of sight and said with the word.
+    private func action(_ title: String, _ symbol: String, _ value: String, searching: Bool = false, shown: Bool = true) -> some View {
         let current = HStack(spacing: 4) {
             // Capped: a long track name ("English Audio Description") must not widen the row without end.
             Text(value).font(.text(Theme.type.caption, relativeTo: .caption))
@@ -489,9 +501,11 @@ struct PlayerControls: View {
                 HStack(spacing: 6) {
                     Glyph(symbol, size: 16)
                     Text(title).font(.text(Theme.type.caption + 1, weight: .semibold, relativeTo: .caption))
-                    current
+                        .fixedSize()
+                    if shown { current }
                 }
                 .padding(.vertical, 6)
+                .accessibilityValue(shown ? "" : value)
             } else {
                 VStack(spacing: 3) {
                     Glyph(symbol, size: 18)
@@ -582,3 +596,4 @@ private extension View {
         #endif
     }
 }
+

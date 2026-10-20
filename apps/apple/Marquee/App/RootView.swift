@@ -187,7 +187,7 @@ struct MainShell: View {
         // The bar's inset below does not reach scroll views inside the tabs'
         // navigation stacks (a page's end stayed under the bar): every page,
         // pushed or not, keeps the bar's height free at its end.
-        .contentMargins(.bottom, TabBarMetrics.height, for: .scrollContent)
+        .contentMargins(.bottom, TabBarMetrics.scrollMargin(immersive: immersion.active), for: .scrollContent)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             // Off while the keyboard is up, as a tab bar sits behind it.
             if !immersion.active && !typing {
