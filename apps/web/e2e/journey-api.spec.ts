@@ -1047,6 +1047,14 @@ test("TV: closing Search leaves the page where it was scrolled", async ({ browse
   await p.keyboard.press("ArrowRight");
   const scrolled = () => p.evaluate(() => document.querySelector(".settings-page")?.scrollTop ?? document.scrollingElement?.scrollTop ?? 0);
   await expect.poll(scrolled).toBeGreaterThan(100);
+  // Once the page has come to rest (the move scrolls it smoothly).
+  await expect
+    .poll(async () => {
+      const a = await scrolled();
+      await p.waitForTimeout(200);
+      return (await scrolled()) === a;
+    })
+    .toBe(true);
   const at = await scrolled();
   await p.locator('[data-f="nav:/search"]').focus();
   await p.keyboard.press("Enter");
