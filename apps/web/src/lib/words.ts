@@ -199,6 +199,9 @@ export const turkceAltyaziCredit = "Turkish subtitles from TurkceAltyazi.org, fe
 export const nextVersion = {
   trying: (label: string) => `Trying the next version: ${label}`,
   play: (label: string) => `Play ${label}`,
+  /** The failure card's headline: one version failed when the core offers
+   * another (the card says Play {label}), else every source did. */
+  failed: (offered: boolean) => (offered ? "This version could not be played" : "None of the sources could be played"),
 };
 
 export const tokenInLink = {

@@ -187,4 +187,7 @@ test("a built-in source says where it runs instead of a host", () => {
 test("the next version, tried or offered, by its label", () => {
   expect(nextVersion.trying("1080p WEB")).toBe("Trying the next version: 1080p WEB");
   expect(nextVersion.play("4K Remux")).toBe("Play 4K Remux");
+  // The headline never says nothing played while it offers another version.
+  expect(nextVersion.failed(true)).toBe("This version could not be played");
+  expect(nextVersion.failed(false)).toBe("None of the sources could be played");
 });

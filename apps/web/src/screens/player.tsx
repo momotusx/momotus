@@ -400,7 +400,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     if (v?.state.status.state === "failed") return { tone: "bad", text: (v.state.status as { reason: string }).reason, busy: false };
     const s = snap();
     if (s?.phase === "ready") return null;
-    if (s?.phase === "failed") return { tone: "bad", text: "None of the sources could be played", busy: false };
+    if (s?.phase === "failed") return { tone: "bad", text: nextVersion.failed(!!s.offer), busy: false };
     if (s?.phase === "resolving") {
       // The recommendation failed for a reason of its own: the core moved on.
       if (s.trying) return { tone: "warn", text: nextVersion.trying(s.trying.label), busy: true };

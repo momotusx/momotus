@@ -194,6 +194,8 @@ test("a version picked by hand that cannot play offers the next one first", asyn
   const offer = p.locator('.endcard [data-f="player:offer"]');
   await expect(offer).toBeVisible({ timeout: 60_000 });
   await expect(offer).toHaveText(/^Play .+/);
+  // One version failed, and another is offered: the headline says so.
+  await expect(p.locator(".endcard .st")).toHaveText("This version could not be played");
   // The offer is the card's first action and has the focus.
   await expect(p.locator(".endcard .acts > *").first()).toHaveAttribute("data-f", "player:offer");
   await expect(p.locator(".endcard .acts > *").nth(1)).toHaveAttribute("data-f", "player:retry");
@@ -258,6 +260,8 @@ test("a source that fails before its metadata is not a decode failure, and Try a
   expect(failOvers().length).toBeGreaterThan(0);
   for (const f of failOvers()) expect(f).toMatchObject({ kind: "http", status: 500 });
   await expect(card.locator(".attempts")).toContainText("(500)");
+  // Nothing offered: every source failed.
+  await expect(card.locator(".st")).toHaveText("None of the sources could be played");
   await expect(card.locator(".attempts")).not.toContainText("decode");
   // No offer here: Try again is the first action and has the focus.
   await expect(p.locator(".endcard .acts > *").first()).toHaveAttribute("data-f", "player:retry");
