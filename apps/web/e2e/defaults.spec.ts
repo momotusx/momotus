@@ -125,6 +125,13 @@ test("Start fresh: nothing installed before Continue, two switches turned off st
   expect(await states()).toMatchObject({ cinemeta: "on", torrentio: "off", trakt: "off", kitsu: "on", opensubtitles: "on" });
   // Torrentio is off, so the setup check offers it through the core's defaults.
   await expect(page.locator('[data-f="check:Sources"]')).toHaveText("Add Torrentio");
+  // Go to Home leaves the steps behind: Back on Home stays on Home, never
+  // back into the setup check or the question.
+  await page.locator('[data-f="welcome:home"]').click();
+  await expect(page).toHaveURL(/127\.0\.0\.1:\d+\/(\?.*)?$/);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(500);
+  await expect(page).toHaveURL(/127\.0\.0\.1:\d+\/(\?.*)?$/);
 
   // Settings shows the same switches, the two still off.
   await page.goto("/recommended-addons?form=desktop");
@@ -143,7 +150,7 @@ test("Start fresh: nothing installed before Continue, two switches turned off st
   expect((await client.req<Prefs>("setPrefs", { patch: {} })).defaultsSeen).toBe(1);
 });
 
-test("Browse first passes the switches, then opens Home", async ({ browser }) => {
+test("Browse first passes the switches, then opens Home as the root", async ({ browser }) => {
   const page = await device(browser, "phone");
   await page.goto("/?form=phone");
   await expect(page).toHaveURL(/\/welcome/);
@@ -153,12 +160,11 @@ test("Browse first passes the switches, then opens Home", async ({ browser }) =>
   expect(await allAbsent()).toBe(true);
   await page.waitForTimeout(500);
   await page.screenshot({ path: `${OUT}/defaults-step-phone.jpg`, type: "jpeg", quality: 80, fullPage: true });
+  // No question on the way: its defaults are Start fast's, and nothing is written.
   await page.locator('[data-f="welcome:next"]').click();
-  await expect(page).toHaveURL(/step=choice&then=home/);
+  await expect(page).toHaveURL(/127\.0\.0\.1:\d+\/(\?.*)?$/);
+  await page.keyboard.press("Escape");
   await page.waitForTimeout(500);
-  await page.screenshot({ path: `${OUT}/stream-choice-question-phone.jpg`, type: "jpeg", quality: 80, fullPage: true });
-  // Skip writes nothing: the defaults are Start fast's.
-  await page.locator('[data-f="welcome:skip"]').click();
   await expect(page).toHaveURL(/127\.0\.0\.1:\d+\/(\?.*)?$/);
   expect(Object.values(await states()).every((s) => s === "on")).toBe(true);
   expect(sent.some((m) => m.op === "setPrefs" && JSON.stringify(m).includes("streams"))).toBe(false);
@@ -343,8 +349,7 @@ test("after an import, Back from the setup check does not call Marquee's own ins
   await expect(page).toHaveURL(/step=choice/);
   await page.locator('[data-f="welcome:fast"]').click();
   await expect(page).toHaveURL(/step=3/);
-  await page.goBack();
-  await expect(page).toHaveURL(/step=choice/);
+  // The question is not kept under the setup check: its doors would rewrite the choice.
   await page.goBack();
   await expect(page).toHaveURL(/step=2/);
   await expect(page).not.toHaveURL(/from=import/);

@@ -22,6 +22,7 @@ import type { DefaultAddonInfo } from "../core/generated/DefaultAddonInfo";
 import type { DefaultAddons } from "../core/generated/DefaultAddons";
 import { autoFocusSoon } from "../focus/dom";
 import { form } from "../form";
+import { resetHistoryBase } from "../history";
 import { afterContinue, catalogMissing, choicesFor, defaultsWords, grouped, switchable } from "../lib/defaults";
 import { choiceWords, findAddons, type Tone } from "../lib/words";
 import { InstallField } from "./addons";
@@ -57,6 +58,14 @@ function useDefaults() {
   return { addons, defaults, error };
 }
 
+/** Leaving the welcome steps: the step never stays under the next one, and
+ * Home opens as the root, so Back never walks back into Setup or the stream
+ * question (whose doors would rewrite the stream preferences). */
+function leave(navigate: (to: string, o?: { replace?: boolean }) => void, to: string) {
+  if (to === "/") resetHistoryBase();
+  navigate(to, { replace: true });
+}
+
 export default function Onboarding() {
   const [query, setQuery] = useSearchParams();
   const step = () => (query.step === "2" ? 2 : query.step === "3" ? 3 : query.step === "choice" ? "choice" : 1);
@@ -83,14 +92,20 @@ export default function Onboarding() {
         <div class="brand">Marquee</div>
         {/* Browse first still passes the switches: nothing is installed unasked. */}
         <Show when={step() === 1}>
-          <A class="skip" href={fresh() ? "/welcome?step=2&then=home" : "/"} data-f="welcome:skip">
+          <A class="skip" href={fresh() ? "/welcome?step=2&then=home" : "/"} replace={!fresh()} onClick={() => !fresh() && resetHistoryBase()} data-f="welcome:skip">
             Browse first
             <ChevronRight aria-hidden />
           </A>
         </Show>
         {/* Skip writes nothing: the defaults are Start fast's. */}
         <Show when={step() === "choice"}>
-          <A class="skip" href={afterContinue(query.then as string | undefined)} data-f="welcome:skip">
+          <A
+            class="skip"
+            href={afterContinue(query.then as string | undefined)}
+            replace
+            onClick={() => query.then === "home" && resetHistoryBase()}
+            data-f="welcome:skip"
+          >
             {choiceWords.question.skip.label}
             <ChevronRight aria-hidden />
           </A>
@@ -238,8 +253,9 @@ function Recommended(props: { defaults: DefaultAddons | null; error: string | nu
         here.searchParams.delete("from");
         history.replaceState(history.state, "", `${here.pathname}${here.search}`);
       }
-      // Review (the Home card) goes home; a first run asks the one question.
-      navigate(props.review ? afterContinue("home") : `/welcome?step=choice${props.then === "home" ? "&then=home" : ""}`);
+      // Review (the Home card) and Browse first go home; a first run asks the one question.
+      if (props.review || props.then === "home") leave(navigate, afterContinue("home"));
+      else navigate("/welcome?step=choice");
     } catch (e) {
       setProblem(`Could not add the addons: ${reasonOf(e)}`);
     } finally {
@@ -338,7 +354,7 @@ function Question(props: { then?: string }) {
     setProblem(null);
     try {
       await op("setPrefs", { patch: { streams: patch } });
-      navigate(afterContinue(props.then));
+      leave(navigate, afterContinue(props.then));
     } catch (e) {
       setProblem(`Could not save the choice: ${reasonOf(e)}`);
     } finally {
@@ -460,7 +476,7 @@ function SetupCheck(props: {
         )}
       </Show>
       <div class="acts">
-        <A class="btn primary" href="/" data-f="welcome:home" data-autofocus>
+        <A class="btn primary" href="/" replace onClick={() => resetHistoryBase()} data-f="welcome:home" data-autofocus>
           Go to Home
           <ChevronRight aria-hidden />
         </A>
