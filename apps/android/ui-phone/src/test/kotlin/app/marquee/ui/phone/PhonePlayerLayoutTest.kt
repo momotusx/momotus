@@ -93,14 +93,14 @@ class PhonePlayerLayoutTest {
     }
 
     /**
-     * Two lines of cues as the subtitle view will draw them: its own foot and text size, and the span its first
-     * cue's lines keep to (with the view's own padding beside the text), read from the view.
+     * Two lines of cues as the subtitle view will draw them: its first cue's foot (from the line the view was given,
+     * as Media3's painter places it), the view's text size, and the span the cue's lines keep to (with the view's
+     * own padding beside the text), read from the view.
      */
     private class Cues(
         val top: Float,
         val foot: Float,
         val text: Float,
-        val bottom: Float,
         val left: Float,
         val right: Float,
     )
@@ -119,9 +119,7 @@ class PhonePlayerLayoutTest {
                 .getFloat(view)
         val height = view.height.toFloat()
         val width = view.width.toFloat()
-        val bottom = field("bottomPaddingFraction")
         val text = field("defaultTextSize")
-        val foot = height * (1 - bottom)
 
         @Suppress("UNCHECKED_CAST")
         val cue =
@@ -131,14 +129,22 @@ class PhonePlayerLayoutTest {
                     .apply { isAccessible = true }
                     .get(view) as List<Cue>
             ).firstOrNull()
+        val foot =
+            when {
+                cue == null -> error("no cue on screen")
+                cue.lineType == Cue.LINE_TYPE_FRACTION && cue.lineAnchor == Cue.ANCHOR_TYPE_END -> cue.line * height
+                cue.line == Cue.DIMEN_UNSET -> height * (1 - field("bottomPaddingFraction"))
+                cue.lineType == Cue.LINE_TYPE_NUMBER && cue.line == -1f -> height
+                else -> error("a cue on a line of its own: $cue")
+            }
         val side = text * height * TEXT_PADDING
         val (left, right) =
-            if (cue == null || cue.size == Cue.DIMEN_UNSET) {
+            if (cue.size == Cue.DIMEN_UNSET || cue.size >= 1f) {
                 0f to width
             } else {
                 width * (cue.position - cue.size / 2) - side to width * (cue.position + cue.size / 2) + side
             }
-        return Cues(foot - CUE_LINES * CUE_LINE * text * height, foot, text, bottom, left, right)
+        return Cues(foot - CUE_LINES * CUE_LINE * text * height, foot, text, left, right)
     }
 
     /** The cues' size with the controls hidden: the system caption size (1 here) times the profile's. */
@@ -174,16 +180,23 @@ class PhonePlayerLayoutTest {
         assertTrue(shown.foot <= transport.top, "over the controls: ${shown.foot} against ${transport.top}")
         assertEquals(full(SubtitleSize.Medium), shown.text, "two lines at Medium fit: full size")
         assertEquals(0f to root.width, shown.left to shown.right, "nothing in the corner: the whole width")
+        // A cue with no line of its own (as SubRip has it) is lifted the same way.
+        player.say("Who are you, and what are you doing here", line = Cue.DIMEN_UNSET)
+        compose.waitForIdle()
+        assertTrue(cues().foot <= transport.top, "with no line, over the controls too: ${cues().foot}")
         // The controls hide while it plays: the subtitles go back to the foot, at full size.
+        player.say("Who are you, and what are you doing here")
         controlsHidden()
         val hidden = cues()
-        assertEquals(SubtitleView.DEFAULT_BOTTOM_PADDING_FRACTION, hidden.bottom, 1e-5f, "at the foot")
+        assertEquals(root.bottom, hidden.foot, "on the bottom line again, as the file has it")
         assertEquals(full(SubtitleSize.Medium), hidden.text, "full size")
     }
 
     @Test
     fun `two lines at the largest size never meet a control, at 85% while the controls show`() {
         playing(SubtitleSize.ExtraLarge)
+        player.say("Who are you, and what are you doing here")
+        compose.waitForIdle()
         val shown = cues()
         val transport = bounds("Back 10 seconds")
         val over =

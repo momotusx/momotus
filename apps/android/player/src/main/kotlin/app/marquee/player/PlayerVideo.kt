@@ -88,7 +88,7 @@ fun PlayerVideo(
                 }
             }
         // The view keeps the whole picture area, so the cues keep their size and a picture cue (PGS) its shape.
-        Subtitles(player, frame, Modifier.fillMaxSize().testTag(SUBTITLES_TAG))
+        Subtitles(player, frame, lifted = subtitleLift > 0.dp, Modifier.fillMaxSize().testTag(SUBTITLES_TAG))
     }
 }
 
@@ -171,6 +171,7 @@ fun subtitleScale(size: SubtitleSize): Float =
 private fun Subtitles(
     player: Player,
     frame: CueFrame,
+    lifted: Boolean,
     modifier: Modifier,
 ) {
     var cues by remember(player) { mutableStateOf(player.currentCues.cues) }
@@ -178,8 +179,7 @@ private fun Subtitles(
         factory = { context -> SubtitleView(context).also { it.setUserDefaultStyle() } },
         update = {
             it.setFractionalTextSize(frame.text)
-            it.setBottomPaddingFraction(frame.bottom)
-            it.setCues(cues.map(frame::fit))
+            it.setCues(cues.map { cue -> frame.fit(cue, lifted) })
         },
         modifier = modifier,
     )
@@ -196,20 +196,35 @@ private fun Subtitles(
 }
 
 /**
- * A cue the frame lifts (text with no line of its own) kept to the frame's width; a picture cue (PGS) or a cue
- * its file put on a line of its own stays as it is.
+ * Text set from the foot: no line of its own (SubRip), or a line counted up from the bottom (WebVTT, and what Media3
+ * hands over for most subtitles: line -1). A picture cue (PGS) or a cue its file put on a line of its own (SSA
+ * positions, a WebVTT line from the top) stays where the file put it.
  */
-private fun CueFrame.fit(cue: Cue): Cue =
-    if (width >= 1f || cue.bitmap != null || cue.line != Cue.DIMEN_UNSET) {
-        cue
-    } else {
-        cue
-            .buildUpon()
+private fun fromFoot(cue: Cue) =
+    cue.bitmap == null && (cue.line == Cue.DIMEN_UNSET || (cue.lineType == Cue.LINE_TYPE_NUMBER && cue.line < 0))
+
+/**
+ * A cue set from the foot, kept to the frame's width; while [lifted], with its foot at the frame's (a cue stacked
+ * over another, line -2 and up, a line higher each), as the view's own bottom padding moves only cues with no line.
+ */
+internal fun CueFrame.fit(
+    cue: Cue,
+    lifted: Boolean,
+): Cue {
+    if (!fromFoot(cue) || (width >= 1f && !lifted)) return cue
+    val fitted = cue.buildUpon()
+    if (width < 1f) {
+        fitted
             .setSize(if (cue.size == Cue.DIMEN_UNSET) width else minOf(cue.size, width))
             .setPosition(center)
             .setPositionAnchor(Cue.ANCHOR_TYPE_MIDDLE)
-            .build()
     }
+    if (lifted) {
+        val over = if (cue.line == Cue.DIMEN_UNSET) 0f else -cue.line - 1
+        fitted.setLine(1f - bottom - over * CUE_LINE * text, Cue.LINE_TYPE_FRACTION).setLineAnchor(Cue.ANCHOR_TYPE_END)
+    }
+    return fitted.build()
+}
 
 /** The system caption text size, 1 when captions are off in the system settings (as SubtitleView reads it). */
 private fun captionScale(context: Context): Float {

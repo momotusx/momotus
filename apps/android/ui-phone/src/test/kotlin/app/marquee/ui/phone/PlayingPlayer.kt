@@ -45,9 +45,17 @@ internal class PlayingPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
         firstFrame = false
     }
 
-    /** A subtitle line on screen now, as the file has it (no line or position of its own). */
-    fun say(text: String) {
-        cues = listOf(Cue.Builder().setText(text).build())
+    /**
+     * A subtitle on screen now, as Media3 hands most subtitles over: on the bottom line ([line] -1, counted up),
+     * centred, the whole width; [line] unset is a cue with no line of its own.
+     */
+    fun say(
+        text: String,
+        line: Float = -1f,
+    ) {
+        val cue = Cue.Builder().setText(text)
+        if (line != Cue.DIMEN_UNSET) cue.setLine(line, Cue.LINE_TYPE_NUMBER).setPosition(0.5f).setSize(1f)
+        cues = listOf(cue.build())
         invalidateState()
     }
 
