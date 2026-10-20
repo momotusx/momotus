@@ -348,7 +348,7 @@ test.describe("Versions", () => {
     await expect(page.locator(".player-scr")).toContainText("only through a streaming service account", { timeout: 60_000 });
   });
 
-  test("almost nobody sharing: the card says so before Play, and the list over its rows", async ({ browser }) => {
+  test("almost nobody sharing is said once: on the card before Play, over the list only with no card", async ({ browser }) => {
     const words = `${choice.nobodySharing.text}${choice.nobodySharing.details}`;
     for (const form of ["desktop", "phone"] as const) {
       const page = await device(browser, form, PORTS.bridge, { versions: (s) => ({ ...s, nobodySharing: true }) });
@@ -359,10 +359,19 @@ test.describe("Versions", () => {
       await expect(card).toHaveAttribute("role", "status");
       // Said before Play: the line comes right before the button.
       await expect(page.locator('.pick .nobody + [data-f="versions:play"]')).toHaveCount(1);
-      await expect(page.locator(".alts .lnote.nobody")).toHaveText(words);
+      // Once per screen: not over the list as well.
+      await expect(page.locator(".nobody")).toHaveCount(1);
       await shot(page, "stream-choice-nobody-sharing", form);
       await page.context().close();
     }
+    // No recommended card: the list says it, once.
+    const listOnly = await device(browser, "desktop", PORTS.bridge, { versions: (s) => ({ ...s, nobodySharing: true, recommended: null }) });
+    await listOnly.goto(path("desktop"));
+    await firstRow(listOnly);
+    await expect(listOnly.locator(".alts .lnote.nobody")).toHaveText(words);
+    await expect(listOnly.locator(".alts .lnote.nobody")).toHaveAttribute("role", "status");
+    await expect(listOnly.locator(".nobody")).toHaveCount(1);
+    await listOnly.context().close();
     // This core has no engine, so no live counts: it never says so.
     const plain = await device(browser, "desktop", PORTS.bridge);
     await plain.goto(path("desktop"));

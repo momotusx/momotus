@@ -339,8 +339,9 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
           </section>
 
           <section class="alts" aria-label="All versions">
-            <Show when={snap()?.nobodySharing}>
-              <NobodySharing class="lnote nobody" />
+            {/* Once per screen: on the recommended card when there is one. */}
+            <Show when={snap()?.nobodySharing && !pick()}>
+              <NobodySharing class="lnote nobody" status />
             </Show>
             <Show when={note()?.text}>
               {(text) => (
