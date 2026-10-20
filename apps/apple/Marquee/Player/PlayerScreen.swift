@@ -294,14 +294,15 @@ struct PlayerScreen: View {
     }
 
     /// Where the drawn subtitle's box ends and how large it draws: on the
-    /// iPhone with the controls up clear of the scrubber and the transport
-    /// (`PhoneFrame.subtitle`), else at the picture's foot over the controls.
+    /// iPhone in the black band under the picture when it holds it, else clear
+    /// of the scrubber and the transport (`PhoneFrame.subtitle`); elsewhere at
+    /// the picture's foot over the controls.
     private func subtitlePlace(_ size: CGSize) -> (foot: CGFloat, scale: CGFloat) {
         #if os(iOS)
-        if controlsShown, UIDevice.current.userInterfaceIdiom == .phone {
+        if UIDevice.current.userInterfaceIdiom == .phone {
             return PhoneFrame.subtitle(
-                screenHeight: size.height, pictureHeight: fittedHeight(size),
-                scrubberTop: size.height - safeBottom - controlsHeight, boxHeight: subtitleBox)
+                screenHeight: size.height, pictureHeight: fittedHeight(size), safeBottom: safeBottom,
+                controlsShown: controlsShown, scrubberTop: size.height - safeBottom - controlsHeight, boxHeight: subtitleBox)
         }
         #endif
         let foot = PlayerLayout.subtitleFoot(

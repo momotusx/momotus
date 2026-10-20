@@ -137,7 +137,7 @@ private struct PhoneSketch: View {
     /// at the size it takes there (its box: two 25 pt lines and 6 pt above and below).
     private var subtitle: some View {
         let place = PhoneFrame.subtitle(
-            screenHeight: size.height, pictureHeight: picture.height,
+            screenHeight: size.height, pictureHeight: picture.height, safeBottom: safe.bottom, controlsShown: true,
             scrubberTop: size.height - safe.bottom - blockHeight, boxHeight: 2 * 25 * 1.2 + 12)
         return Text("Diese Klinge birgt eine\nfinstere Vergangenheit.")
             .font(.system(size: 25, weight: .semibold))

@@ -708,24 +708,42 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     for shape in shapes {
         let scrubberTop = shape.height - shape.safeBottom - block
         let transport = (shape.height / 2 - PhoneFrame.transportHalfHeight)...(shape.height / 2 + PhoneFrame.transportHalfHeight)
+        let pictureBottom = (shape.height + shape.picture) / 2
         for size in SubtitleSize.allCases {
             for lines in [1, 2] {
                 // The drawn line's box at full size: its lines (20 pt on the phone at the system caption size) and 6 pt above and below.
                 let box = CGFloat(lines) * (20 * CaptionStyle.factor(size) * 1.2) + 12
-                let placed = PhoneFrame.subtitle(screenHeight: shape.height, pictureHeight: shape.picture, scrubberTop: scrubberTop, boxHeight: box)
-                let top = placed.foot - box * placed.scale
-                #expect(top >= transport.upperBound, "\(shape.height) \(size) \(lines) lines meets the transport")
-                #expect(placed.foot <= scrubberTop - PhoneFrame.subtitleGap, "\(shape.height) \(size) \(lines) lines meets the scrubber")
-                #expect(placed.scale > 0 && placed.scale <= 1)
+                for shown in [true, false] {
+                    let placed = PhoneFrame.subtitle(
+                        screenHeight: shape.height, pictureHeight: shape.picture, safeBottom: shape.safeBottom,
+                        controlsShown: shown, scrubberTop: scrubberTop, boxHeight: box)
+                    let top = placed.foot - box * placed.scale
+                    if shown {
+                        #expect(top >= transport.upperBound, "\(shape.height) \(size) \(lines) lines meets the transport")
+                        #expect(placed.foot <= scrubberTop - PhoneFrame.subtitleGap, "\(shape.height) \(size) \(lines) lines meets the scrubber")
+                    }
+                    #expect(placed.scale > 0 && placed.scale <= 1)
+                    if shape.height > shape.picture * 2 {
+                        // Upright, the black band under the picture holds it: just under the picture, full size.
+                        #expect(placed.foot == pictureBottom + PhoneFrame.bandGap + box, "\(size) \(lines) lines not in the band")
+                        #expect(placed.scale == 1)
+                    }
+                }
             }
         }
     }
-    // Across, the foot sits 8 pt over the capsule; one Medium line keeps its size.
-    let across = PhoneFrame.subtitle(screenHeight: 402, pictureHeight: 402, scrubberTop: 296, boxHeight: 36)
+    // Across, no band: the foot sits 8 pt over the capsule; one Medium line keeps its size.
+    let across = PhoneFrame.subtitle(screenHeight: 402, pictureHeight: 402, safeBottom: 21, controlsShown: true, scrubberTop: 296, boxHeight: 36)
     #expect(across.foot == 288)
     #expect(across.scale == 1)
-    // Upright, at the picture's foot; two Medium lines just over the transport take 85%.
-    let upright = PhoneFrame.subtitle(screenHeight: 874, pictureHeight: 226, scrubberTop: 755, boxHeight: 60)
-    #expect(upright.foot == 534)
-    #expect(upright.scale == PhoneFrame.subtitleShrink)
+    // Upright two Medium lines go under the picture (550), controls up or not.
+    for shown in [true, false] {
+        let upright = PhoneFrame.subtitle(screenHeight: 874, pictureHeight: 226, safeBottom: 34, controlsShown: shown, scrubberTop: 755, boxHeight: 60)
+        #expect(upright.foot == 618)
+        #expect(upright.scale == 1)
+    }
+    // A tall picture leaves no band that holds the box: the foot inside the picture, as before.
+    let tall = PhoneFrame.subtitle(screenHeight: 874, pictureHeight: 600, safeBottom: 34, controlsShown: false, scrubberTop: 755, boxHeight: 72)
+    #expect(tall.foot == 711)
+    #expect(tall.scale == 1)
 }

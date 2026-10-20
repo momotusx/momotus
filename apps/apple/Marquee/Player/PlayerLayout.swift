@@ -291,13 +291,25 @@ extension PhoneFrame {
     /// The size a subtitle takes while it would meet the transport.
     static let subtitleShrink: CGFloat = 0.85
 
-    /// A drawn subtitle on the iPhone while the controls show: its box's foot
-    /// 8 pt over the scrubber's capsule, or at the picture's foot when that is
-    /// higher (upright); at 85% while its box would meet the transport's,
-    /// smaller still if 85% does not clear it, so a subtitle and a control
-    /// never overlap. `boxHeight` is the subtitle's box at full size.
-    static func subtitle(screenHeight: CGFloat, pictureHeight: CGFloat, scrubberTop: CGFloat, boxHeight: CGFloat) -> (foot: CGFloat, scale: CGFloat) {
-        let pictureFoot = (screenHeight + pictureHeight) / 2 - 16
+    /// The gap between the picture's foot and a subtitle drawn in the black band under it.
+    static let bandGap: CGFloat = 8
+
+    /// A drawn subtitle on the iPhone, where its box ends and how large it
+    /// draws. A black band under the picture that holds the box at full size
+    /// and 8 pt takes it, just under the picture, the controls up or not
+    /// (upright). Else, with the controls up, the box's foot sits 8 pt over the
+    /// scrubber's capsule or at the picture's foot when that is higher, at 85%
+    /// while it would meet the transport and smaller still if 85% does not
+    /// clear it, so a subtitle and a control never overlap; with them hidden
+    /// it sits at the picture's foot. `boxHeight` is the box at full size.
+    static func subtitle(screenHeight: CGFloat, pictureHeight: CGFloat, safeBottom: CGFloat, controlsShown: Bool, scrubberTop: CGFloat, boxHeight: CGFloat) -> (foot: CGFloat, scale: CGFloat) {
+        let pictureBottom = (screenHeight + pictureHeight) / 2
+        let limit = controlsShown ? scrubberTop - subtitleGap : screenHeight - max(40, safeBottom + 24)
+        if limit - pictureBottom >= boxHeight + bandGap {
+            return (pictureBottom + bandGap + boxHeight, 1)
+        }
+        let pictureFoot = pictureBottom - 16
+        guard controlsShown else { return (min(pictureFoot, limit) - 10, 1) }
         let foot = min(pictureFoot, scrubberTop - subtitleGap)
         let room = foot - (screenHeight / 2 + transportHalfHeight + subtitleClearance)
         guard boxHeight > room else { return (foot, 1) }
