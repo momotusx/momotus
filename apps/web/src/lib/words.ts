@@ -262,10 +262,10 @@ export const findAddons = {
   fromHost: "from {host}",
 } as const;
 
-/** Devices and sync copy (plans/m7-sync.md). No protocol words: a device
+/** Account (the sync page) copy (plans/m7-sync.md, plans/accounts.md 4.3). No protocol words: a device
  * list, not a roster; "the 12 characters to compare", not a fingerprint. */
 export const syncWords = {
-  title: "Devices and sync",
+  title: "Account",
   lede: "Sync keeps your library, progress, addons and settings the same on all your devices. The sync server stores them sealed and cannot read them.",
   offLine: "Keep your library, progress and addons the same on every device.",
   tabOnly: "A browser has no safe place for this device's sync key, so it lasts until this tab closes or reloads. The apps keep it in the device's secure storage.",
@@ -356,7 +356,7 @@ export const syncWords = {
   forkChanged: "The sync server's list changed while you looked. Here it is again; check it before you continue.",
   forkTokenLost: "This device cannot read the sync server's list: the server no longer knows it. Sync from another of your devices, or pair this one again.",
   // Add a device
-  addLede: "On the new device, open Settings, then Devices and sync, then Pair this device. It shows a code.",
+  addLede: "On the new device, open Settings, then Account, then Pair this device. It shows a code.",
   addWarning: "Approve only a code on a screen in front of you. Whoever controls that screen gets your account.",
   scan: "Scan the code",
   scanning: "Point the camera at the code on the other device.",
@@ -425,7 +425,7 @@ export const syncWords = {
   leaveHereText: "This device forgets the account without telling the sync server, which lists it until another device removes it. Your library stays here, and you can pair this device again.",
   leftHere: "This device no longer syncs. The sync server still lists it until another device removes it; you can pair it again.",
   notRemembered: "Not remembered: the sync key lasts until this tab closes or reloads.",
-  lockedFirst: "This browser remembers a sync account. Unlock it or forget it on Devices and sync before joining another.",
+  lockedFirst: "This browser remembers a sync account. Unlock it or forget it on Account before joining another.",
   forkNone: "This device and the sync server list the same devices. There is nothing to compare.",
   locked: "This browser remembers your sync account, locked with a passkey.",
   unlock: "Unlock with your passkey",
@@ -518,7 +518,8 @@ const notDone = {
   remove: "Nothing was removed.",
   lost: "Nothing was removed.",
   leave: "This device still syncs.",
-  delete: "Nothing was deleted.",
+  // The relay may have deleted it before its answer was lost: claim nothing.
+  delete: "The deletion was not confirmed.",
   serverList: "Nothing changed.",
   compare: "The lists could not be compared.",
   unlock: "Sync is still locked.",
@@ -596,7 +597,7 @@ export function failedSince(refused: number, unreadable: number, newer = 0): str
   return parts.length ? `Since this device joined, ${parts.join(", and ")}.` : null;
 }
 
-/** The Settings row under Devices and sync: what is wrong or waits first, then the time. */
+/** The Settings row under Account: what is wrong or waits first, then the time. */
 export function syncSummary(s: { locked: boolean; problem: string | null; joined: boolean; refused: number; unreadable: number; newer?: number; report: Facts | null; time: string | null }): string {
   // A problem first: a storage that could not be read is locked too, and "locked with a passkey" would be wrong.
   if (s.problem) return s.problem;

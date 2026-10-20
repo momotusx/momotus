@@ -1,7 +1,11 @@
 /** Sync rules the screens share (plans/core-protocol.md, the sync ops). */
 
 import type { MemberInfo } from "../core/generated/MemberInfo";
+import type { ProfilesSnapshot } from "../core/generated/ProfilesSnapshot";
 import { syncWords as w } from "./words";
+
+/** Delete account shows on the owner profile only: the account holds every profile (D15). */
+export const mayDeleteAccount = (s: ProfilesSnapshot | null | undefined) => s?.profiles.find((p) => p.id === s.active)?.isOwner === true;
 
 /** The keystore record (`SyncConfig`): opaque to the app but for its revision. */
 export type SyncRecord = Record<string, unknown>;

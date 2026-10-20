@@ -1,4 +1,4 @@
-/** Devices and sync (plans/m7-sync.md, plans/core-protocol.md): start an
+/** Account, the sync page (plans/m7-sync.md, plans/core-protocol.md): start an
  * account, join one with a recovery kit, see this device's state and the
  * others, add a device, make a kit, remove a device or report one lost,
  * compare device lists after the server changed, stop syncing, delete the
@@ -26,6 +26,7 @@ import X from "lucide-solid/icons/x";
 import { createEffect, createMemo, createResource, createSignal, For, type JSX, on, onCleanup, onMount, Show } from "solid-js";
 import { privateLink } from "../core/client";
 import type { MemberInfo } from "../core/generated/MemberInfo";
+import { profiles } from "../core/profiles";
 import * as sync from "../core/sync";
 import { autoFocusSoon } from "../focus/dom";
 import { form } from "../form";
@@ -37,6 +38,7 @@ import {
   kitsGoing,
   lostDrop,
   lostRows,
+  mayDeleteAccount,
   memberName,
   sortMembers,
   sponsorName,
@@ -491,7 +493,9 @@ function Joined() {
 
       <Remember />
       <Leave />
-      <DeleteAccount />
+      <Show when={mayDeleteAccount(profiles())}>
+        <DeleteAccount />
+      </Show>
     </>
   );
 }

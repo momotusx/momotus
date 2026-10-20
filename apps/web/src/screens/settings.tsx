@@ -300,7 +300,7 @@ export default function SettingsScreen() {
       </section>
 
       <section class="set">
-        <h2>Devices and sync</h2>
+        <h2>Account</h2>
         <div class="links">
           <LinkRow href="/sync" fkey="settings:sync" icon={<MonitorSmartphone aria-hidden />} title={syncWords.title} text={syncLine()} />
         </div>

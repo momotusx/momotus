@@ -107,6 +107,7 @@ function withRecord<T>(name: string, fields: Record<string, unknown>, recordIn: 
       if (mine === account && e instanceof BridgeError && (e.code === "dropped" || e.code === "accountGone" || e.code === "fork")) {
         if (e.code !== "fork") await forget();
         setProblem(problemOf(e));
+        if (e.code === "accountGone") keepGone(true);
       }
       throw e;
     }
@@ -178,6 +179,7 @@ export function join(next: SyncRecord, recoveredWithKit = false) {
   reset();
   record = next;
   setNotice(null);
+  keepGone(false);
   // Opened from this browser's passkey: it stays remembered.
   setRemembered(vault.active());
   setJoined(true);
@@ -353,8 +355,33 @@ export async function deleteAccount() {
   setNotice(syncWords.accountGone);
 }
 
+const GONE_KEY = "mq.syncGone";
+
+/** "Your Marquee account was deleted" stays across a reload until OK or a join. */
+function keepGone(on: boolean) {
+  try {
+    if (on) localStorage.setItem(GONE_KEY, "1");
+    else localStorage.removeItem(GONE_KEY);
+  } catch {
+    // Said on this page only.
+  }
+}
+
+function goneEarlier(): boolean {
+  try {
+    return localStorage.getItem(GONE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+if (goneEarlier()) setProblem({ code: "accountGone", words: syncWords.accountGone });
+
 /** OK on the "account was deleted" line. */
-export const clearProblem = () => setProblem(null);
+export function clearProblem() {
+  setProblem(null);
+  keepGone(false);
+}
 
 /** Both sides of a different device list, read only. */
 export const forkPreview = () => withRecord<ForkPreview>("forkPreview", {}, () => null);

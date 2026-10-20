@@ -426,7 +426,7 @@ test.describe.serial("sync across three devices", () => {
       // The page is up while the check is still out: nothing that starts an account shows.
       await expect(desk.locator("main h1")).toBeVisible();
       expect(await desk.locator(".qrbox, [data-f=\"sync-form:go\"], [data-f=\"pair:start\"]").count()).toBe(0);
-      await expect(desk.getByText("This browser remembers a sync account. Unlock it or forget it on Devices and sync before joining another.")).toBeVisible({ timeout: 10_000 });
+      await expect(desk.getByText("This browser remembers a sync account. Unlock it or forget it on Account before joining another.")).toBeVisible({ timeout: 10_000 });
       expect(asked.slice(from).filter((a) => a.port === SYNC_PORTS.a && a.view === "pairing")).toEqual([]);
     }
     // Storage that cannot be read at load may hold an account: /pair starts nothing and says why.
@@ -436,7 +436,7 @@ test.describe.serial("sync across three devices", () => {
     await expect(desk.getByText('This browser could not check whether it remembers a sync account, so nothing new starts here.')).toBeVisible();
     expect(await desk.locator(".qrbox").count()).toBe(0);
     expect(asked.slice(from).filter((a) => a.port === SYNC_PORTS.a && a.view === "pairing")).toEqual([]);
-    // The same on Devices and sync, with Check again in place of Unlock.
+    // The same on Account, with Check again in place of Unlock.
     await desk.evaluate(() => sessionStorage.setItem("mq.e2e.failIdb", "1"));
     from = asked.length;
     await desk.goto("/sync");
@@ -649,12 +649,12 @@ test.describe.serial("sync across three devices", () => {
 
   test("on the TV every action is reachable with the remote", async () => {
     const seen = new Set<string>();
-    for (let i = 0; i < 18; i++) {
+    for (let i = 0; i < 24; i++) {
       seen.add(await focused(tv));
       await tv.keyboard.press("ArrowDown");
     }
     expect([...seen].join(" ")).toMatch(/sync:[0-9a-f]+:remove/);
-    for (const k of ["sync:add", "sync:kit", "sync:leave"]) expect(seen.has(k)).toBe(true);
+    for (const k of ["sync:add", "sync:kit", "sync:leave", "sync:delete"]) expect(seen.has(k)).toBe(true);
     // Report lost sits right of Remove; it opens with the remote, its focus
     // starts on Cancel, and Back leaves it untouched.
     const row = member(tv, "Phone");
@@ -1104,7 +1104,13 @@ test.describe.serial("sync across three devices", () => {
     await expect(tv.locator('[data-f="sync:pair"]')).toBeVisible();
     await expect.poll(() => focused(tv)).toBe("sync:gone-ok");
     await shot(tv, "sync-account-gone-tv");
+    // Not seen yet when the page reloads: it is said again, until OK.
+    await tv.reload();
+    await expect(gone).toBeVisible();
     await press("sync:gone-ok");
+    await expect(gone).toHaveCount(0);
+    await tv.reload();
+    await expect(tv.locator('[data-f="sync:pair"]')).toBeVisible();
     await expect(gone).toHaveCount(0);
 
     // Deleting here, for real: one confirmation that names what goes, then the sync server deletes it.
@@ -1114,10 +1120,15 @@ test.describe.serial("sync across three devices", () => {
     await expect(tv.locator(".sync-ask")).toContainText("Your profiles, library, progress and settings are deleted from the sync service. This device keeps its own copy.");
     await expect.poll(() => focused(tv)).toBe("sync:delete-cancel");
     await shot(tv, "sync-delete-ask-tv");
+    // No answer: the page claims nothing, keeps the account, and the confirm works again.
+    failOnce.set(SYNC_PORTS.c, { op: "deleteAccount" });
+    await press("sync:delete-confirm");
+    await expect(tv.getByText("The deletion was not confirmed. The sync server did not answer. Try again in a moment.")).toBeVisible();
+    await expect(card(tv)).toBeVisible();
     await press("sync:delete-confirm");
     await expect(gone).toBeVisible();
     await expect(tv.locator('[data-f="sync:pair"]')).toBeVisible();
-    expect(asked.slice(from).filter((a) => a.port === SYNC_PORTS.c && a.op === "deleteAccount")).toHaveLength(1);
+    expect(asked.slice(from).filter((a) => a.port === SYNC_PORTS.c && a.op === "deleteAccount")).toHaveLength(2);
   });
 
   test("nothing secret reaches storage, history, the URL or the console", async () => {

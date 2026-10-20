@@ -81,7 +81,7 @@ function Session(props: { server: string; name: string; onDone: () => void; onJo
               <Qr text={w().qr} label="Pairing QR code" />
             </div>
             <div class="pair-steps">
-              <p class="step">On a device that already syncs, open Settings, then Devices and sync, then Add a device, and scan this code.</p>
+              <p class="step">On a device that already syncs, open Settings, then Account, then Add a device, and scan this code.</p>
               <p class="st warn live">
                 <i class="dot" />
                 {/* One text box: the dot's flex row would split the time and the period into columns. */}

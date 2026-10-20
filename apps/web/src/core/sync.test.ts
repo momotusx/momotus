@@ -5,6 +5,7 @@
 
 import { afterEach, expect, jest, mock, test } from "bun:test";
 import type { SyncRecord } from "../lib/sync";
+import { BridgeError } from "./bridge";
 import { clientMock, fake } from "./fake-client";
 
 const g = globalThis as unknown as Record<string, unknown>;
@@ -13,11 +14,16 @@ const calls: Call[] = [];
 
 /** Rounds and leaving answer at once; a start waits for the test to answer it. */
 const QUIET = { record: null, fingerprint: "ABCD", again: false, refused: 0, unreadable: 0, newer: 0 };
+/** The next round hears from the core that the account was deleted. */
+let goneNext = false;
 mock.module("./client", clientMock);
 fake.op = (name, fields) =>
   new Promise((answer, fail) => {
     calls.push({ name, fields, answer, fail });
-    if (name === "syncNow") answer(QUIET);
+    if (name === "syncNow" && goneNext) {
+      goneNext = false;
+      fail(new BridgeError("this account was deleted", "accountGone"));
+    } else if (name === "syncNow") answer(QUIET);
     if (name === "signOut") answer({});
   });
 mock.module("../form", () => ({ form: () => "desktop" }));
@@ -95,6 +101,51 @@ test("an answer that no longer owns the slot is dropped", async () => {
   await creating;
   await until(joinedRound);
   expect(syncing()).toEqual(["created"]);
+});
+
+/** A started account, its first round done. */
+async function started(name: string) {
+  const creating = sync.createAccount("https://sync.example", "Desk", "");
+  await until(asked("createSyncAccount"));
+  calls.find((c) => c.name === "createSyncAccount")?.answer(account(name));
+  await creating;
+  await until(() => syncing().includes(name));
+}
+
+test("a delete keeps the account until the sync server confirmed it, then forgets it here", async () => {
+  await started("doomed");
+  const deletes = () => calls.filter((c) => c.name === "deleteAccount");
+  const refused = sync.deleteAccount().catch((e: Error) => e);
+  await until(() => deletes().length === 1);
+  deletes()[0]?.fail(new Error("http status 502"));
+  expect(await refused).toBeInstanceOf(Error);
+  expect(sync.joined()).toBe(true);
+  const deleting = sync.deleteAccount();
+  await until(() => deletes().length === 2);
+  expect((deletes()[1]?.fields.record as { deviceToken: string }).deviceToken).toBe("doomed");
+  deletes()[1]?.answer({});
+  await deleting;
+  expect(sync.joined()).toBe(false);
+  expect(sync.notice()).toBe("Your Marquee account was deleted. Your library stays on this device.");
+});
+
+test("accountGone from a round forgets the account and keeps the line until OK", async () => {
+  const kept = new Map<string, string>();
+  g.localStorage = { getItem: (k: string) => kept.get(k) ?? null, setItem: (k: string, v: string) => kept.set(k, v), removeItem: (k: string) => kept.delete(k) };
+  try {
+    await started("elsewhere");
+    goneNext = true;
+    await sync.syncNow();
+    expect(sync.joined()).toBe(false);
+    expect(sync.problem()).toEqual({ code: "accountGone", words: "Your Marquee account was deleted. Your library stays on this device." });
+    // Kept for the next load of the page, until OK.
+    expect(kept.get("mq.syncGone")).toBe("1");
+    sync.clearProblem();
+    expect(sync.problem()).toBeNull();
+    expect(kept.has("mq.syncGone")).toBe(false);
+  } finally {
+    delete g.localStorage;
+  }
 });
 
 test("a failed start frees the slot", async () => {

@@ -11,6 +11,7 @@ import {
   kitsGoing,
   lostDrop,
   lostRows,
+  mayDeleteAccount,
   memberName,
   sortMembers,
   sponsorName,
@@ -35,6 +36,16 @@ import {
 
 const member = (id: string, o: Partial<MemberInfo> = {}): MemberInfo => ({ id, kit: false, name: id.toUpperCase(), sponsor: null, addedMs: 0, thisDevice: false, ...o });
 const quiet = { clockGapMs: 0, waiting: 0, parked: 0, oldEpochWrites: 0, rotationWaitMs: 0, blocked: null, refused: 0, unreadable: 0, newer: 0, again: false } as const;
+
+test("Delete account shows on the owner profile only", () => {
+  const profile = (id: string, isOwner: boolean) => ({ id, name: id, avatar: "fox:amber", position: 0, hasPin: false, isOwner, syncing: false, kids: false });
+  const snapshot = (active: string) => ({ profiles: [profile("default", true), profile("kid", false)], active, locked: false }) as unknown as Parameters<typeof mayDeleteAccount>[0];
+  expect(mayDeleteAccount(snapshot("default"))).toBe(true);
+  expect(mayDeleteAccount(snapshot("kid"))).toBe(false);
+  // Before the profiles arrive, or for a profile that is gone: not shown.
+  expect(mayDeleteAccount(null)).toBe(false);
+  expect(mayDeleteAccount(snapshot("nobody"))).toBe(false);
+});
 
 test("the record with the highest revision is kept", () => {
   const held = { revision: 3, token: "a" };
@@ -191,9 +202,10 @@ test("sync failures read by code and by action, and never show the server's addr
   // A passkey without PRF is not a server that did not answer.
   expect(syncProblem("noPrf", "this passkey has no PRF")).toBe(syncWords.noPrf);
   expect(syncProblem("rosterChanged", "x")).toBe(syncWords.forkChanged);
-  // A deleted account says so plainly, whichever call heard it; a delete that did not land says nothing went.
+  // A deleted account says so plainly, whichever call heard it. A delete without an answer claims
+  // nothing: the sync server may have deleted it before the answer was lost.
   expect(syncProblem("accountGone", "this account was deleted")).toBe("Your Marquee account was deleted. Your library stays on this device.");
-  expect(stepProblem(undefined, "http status 502", "delete")).toStartWith("Nothing was deleted.");
+  expect(stepProblem(undefined, "http status 502", "delete")).toBe("The deletion was not confirmed. The sync server did not answer. Try again in a moment.");
   expect(syncWords.deleteAsk).toBe("Your profiles, library, progress and settings are deleted from the sync service. This device keeps its own copy.");
   // Remembering fails in this browser's storage, never on the sync server.
   expect(stepProblem(undefined, "AbortError", "remember")).toBe(syncWords.storageFailed);
