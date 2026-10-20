@@ -45,6 +45,8 @@ pub struct MagnetOptions {
     pub rate: Option<u64>,
     /// The walk-only window override, in bytes.
     pub window: Option<u64>,
+    /// No open-pieces limit in the window.
+    pub no_open_limit: bool,
 }
 
 /// The P2P speed the CLI plans a window with (the app's prior).
@@ -434,9 +436,12 @@ async fn run(
             piece_len: u64::from(engine.piece_len(t).map_err(|e| e.to_string())?),
             fill: FILL_ESTIMATE,
         };
-        let plan = mq_engine::window_plan(engine.device_class(), inputs)
+        let mut plan = mq_engine::window_plan(engine.device_class(), inputs)
             .and_then(|p| p.within(limit).ok_or(mq_engine::EngineError::DeviceFull))
             .map_err(|e| e.to_string())?;
+        if o.no_open_limit {
+            (plan.open_floor, plan.open_cap) = (1 << 40, 1 << 40);
+        }
         let w = mq_engine::Window {
             plan,
             bitrate: rate,
@@ -598,6 +603,7 @@ async fn run(
         "readahead_bytes": stats.readahead_bytes,
         "window": window_row,
         "held_bytes": stats.held_bytes,
+        "evict_rounds": stats.evict_rounds,
         "max_allocated_bytes": max_allocated_bytes,
         "allocated_bytes": allocated_bytes,
         "seek_forward_p50_ms": percentile(&forward, 0.5),

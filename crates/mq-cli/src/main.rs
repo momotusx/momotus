@@ -148,6 +148,10 @@ enum Command {
         /// the free space.
         #[arg(long, requires = "rate")]
         window: Option<u64>,
+        /// The window without its open-pieces limit (the fill rows' second
+        /// arm).
+        #[arg(long, requires = "window")]
+        no_open_limit: bool,
     },
     /// Scrape info hashes on a fresh engine (the app's first scrape) and
     /// report each tracker's stages.
@@ -246,6 +250,7 @@ async fn main() {
         download_limit,
         rate,
         window,
+        no_open_limit,
     } = cli.command
     {
         let options = magnet::MagnetOptions {
@@ -266,6 +271,7 @@ async fn main() {
             download_limit,
             rate,
             window,
+            no_open_limit,
         };
         match magnet::play_magnet(&magnet, options).await {
             Ok(run) => emit(run),
