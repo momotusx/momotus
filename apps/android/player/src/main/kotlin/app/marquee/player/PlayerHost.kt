@@ -35,6 +35,9 @@ class PlayerHost(
 
     private val session: MediaSession
 
+    /** Debug walks only (`--ez walklog true`): the once-a-second playback line. */
+    private val walkLog: WalkLog?
+
     init {
         val renderers = DefaultRenderersFactory(context).setEnableDecoderFallback(true)
         val selector =
@@ -74,6 +77,7 @@ class PlayerHost(
                 .setWakeMode(C.WAKE_MODE_NETWORK)
                 .build()
         if (WalkMute.on) player.volume = 0f
+        walkLog = WalkLog.attach(context, player)
         // Media keys and the system's now-playing card; no service, so nothing plays in the background.
         // The id is unique per host: a new player can start while the old one is still being cleared.
         session =
@@ -86,6 +90,7 @@ class PlayerHost(
     }
 
     fun release() {
+        walkLog?.release()
         session.release()
         player.release()
     }

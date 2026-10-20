@@ -14,6 +14,7 @@ import androidx.core.graphics.drawable.toDrawable
 import app.marquee.core.route.Route
 import app.marquee.design.MarqueeTheme
 import app.marquee.design.Tokens
+import app.marquee.player.WalkLog
 import app.marquee.player.WalkMute
 
 /**
@@ -34,7 +35,10 @@ class MainActivity : ComponentActivity() {
                 .toDrawable(),
         )
 
-        if (debuggable) WalkMute.read(this, intent)
+        if (debuggable) {
+            WalkMute.read(this, intent)
+            WalkLog.read(this, intent)
+        }
         DebugEntry.launched(this)
         if (DebugEntry.show(this, form)) return
         val session = (application as MarqueeApp).session
@@ -59,7 +63,10 @@ class MainActivity : ComponentActivity() {
     // One activity (singleTask): a link opened while the app runs comes here.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) WalkMute.read(this, intent)
+        if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+            WalkMute.read(this, intent)
+            WalkLog.read(this, intent)
+        }
         addonLink(intent)?.let { (application as MarqueeApp).addonLink = it }
     }
 
