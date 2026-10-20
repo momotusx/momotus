@@ -56,7 +56,9 @@ impl PieceCheck {
     /// A hash starts only at a piece's first byte. A piece that ends past
     /// the file never completes, since feeding stops at the file's end.
     fn start_piece(&self) -> Option<sha1w::Sha1> {
-        self.pos.is_multiple_of(self.piece_len).then(sha1w::Sha1::new)
+        self.pos
+            .is_multiple_of(self.piece_len)
+            .then(sha1w::Sha1::new)
     }
 
     /// File bytes, in order from the last `seek`.
