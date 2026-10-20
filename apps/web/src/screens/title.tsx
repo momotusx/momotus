@@ -1,8 +1,10 @@
 import { A, useParams, useSearchParams } from "@solidjs/router";
 import BookmarkCheck from "lucide-solid/icons/bookmark-check";
 import BookmarkPlus from "lucide-solid/icons/bookmark-plus";
+import CalendarClock from "lucide-solid/icons/calendar-clock";
 import Check from "lucide-solid/icons/check";
 import CircleAlert from "lucide-solid/icons/circle-alert";
+import CircleX from "lucide-solid/icons/circle-x";
 import LoaderCircle from "lucide-solid/icons/loader-circle";
 import KeyRound from "lucide-solid/icons/key-round";
 import Plus from "lucide-solid/icons/plus";
@@ -13,14 +15,15 @@ import Play from "lucide-solid/icons/play";
 import { createEffect, createMemo, createSignal, For, type JSX, Match, Show, Switch } from "solid-js";
 import { Backdrop, Logo } from "../components/art";
 import { KeyedPage } from "../components/keyed-page";
+import { CONTINUE_ROW, removeFromContinue } from "../components/row";
 import { separators } from "../components/separators";
 import { TrailerOverlay } from "../components/trailer";
-import { type TitleView, titleView, versionsView } from "../core/client";
+import { homeView, type TitleView, titleView, versionsView } from "../core/client";
 import type { Episode } from "../core/generated/Episode";
 import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
 import { focusEl, remember } from "../focus/dom";
 import { form } from "../form";
-import { bytes, clock, decoded, episodeLabel, parseVideo, pct, playPath, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
+import { airDate, bytes, clock, decoded, episodeLabel, parseVideo, pct, playPath, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
 import { blockedWords, choiceWords, kindLabel, qualityText, statusText } from "../lib/words";
 import "./title.css";
 
@@ -162,7 +165,22 @@ function TitlePage(props: { kind: string; id: string }) {
                         </Show>
                       }
                     >
-                      <Show when={target()}>
+                      {/* The next episode is not out yet: its day, in place of Play
+                          (header.nextAirs). A series watched to its end gets
+                          "Play again from S1:E1" from the core as its label. */}
+                      <Show
+                        when={target()}
+                        fallback={
+                          <Show when={header()?.nextAirs}>
+                            {(day) => (
+                              <p class="airs-next" role="status">
+                                <CalendarClock aria-hidden />
+                                Next episode airs {airDate(day())}
+                              </p>
+                            )}
+                          </Show>
+                        }
+                      >
                         {(t) => (
                           <A class="btn primary big" href={playPath(props.kind, props.id, t().videoId)} data-f="title:play" data-autofocus>
                             <Play aria-hidden class="fill" />
@@ -188,7 +206,10 @@ function TitlePage(props: { kind: string; id: string }) {
                       </button>
                     </Show>
                   </div>
-                  <VersionLine snap={versions()?.state.data ?? null} />
+                  {/* No target, no versions to find: nothing under the play row. */}
+                  <Show when={target()}>
+                    <VersionLine snap={versions()?.state.data ?? null} />
+                  </Show>
                 </div>
                 <div class="acts">
                   <Show when={target()}>
@@ -214,6 +235,7 @@ function TitlePage(props: { kind: string; id: string }) {
                   <button
                     class="btn"
                     data-f="title:library"
+                    data-autofocus={!target() && header()?.nextAirs ? "" : undefined}
                     aria-pressed={header()?.inLibrary ?? false}
                     onClick={() => view.command({ type: "setInLibrary", value: !header()?.inLibrary })}
                   >
@@ -222,6 +244,14 @@ function TitlePage(props: { kind: string; id: string }) {
                     </Show>
                     {header()?.inLibrary ? "In Library" : "Add to Library"}
                   </button>
+                  {/* TV has no remove button on its tiles: the title page carries it
+                      while the title is in Continue Watching (or Next Up). */}
+                  <Show when={form() === "tv" && inContinue(props.id)}>
+                    <button class="btn" data-f="title:uncontinue" onClick={() => void removeFromContinue(props.id).catch(() => undefined)}>
+                      <CircleX aria-hidden />
+                      <span class="long">Remove from Continue Watching</span>
+                    </button>
+                  </Show>
                 </div>
                 {/* Phone reads top to bottom: episodes before the details. */}
                 <Show when={series() && form() === "phone"}>
@@ -274,6 +304,8 @@ function Fact(props: { label: string; value: string }): JSX.Element {
 }
 
 /** Every addon answered and none offers a version this device can play. */
+const inContinue = (id: string) => homeView().rows.find((r) => r.rowId === CONTINUE_ROW)?.tiles.some((t) => t.id === id) ?? false;
+
 const noVersion = (s: VersionsSnapshot | null) => !!s && s.done && !s.recommended && s.rows.length === 0;
 
 /** "36 min left" from what the file has left (Continue Watching's figure), else from the runtime,
@@ -367,7 +399,7 @@ function Episodes(props: { view: TitleView; kind: string; id: string; runtime: n
     if (e.leftMs) return minutesLeft(e.leftMs);
     if (e.progress !== null) return props.runtime ? `${Math.max(1, Math.round(props.runtime * (1 - e.progress)))} min left` : `${pct(e.progress)} watched`;
     // A release is a date, not an instant: read in UTC, it stays the day it names west of UTC too.
-    if (!released(e)) return `Airs ${new Date(e.released as string).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}`;
+    if (!released(e)) return `Airs ${airDate(e.released as string)}`;
     return props.runtime ? `${props.runtime} min` : "";
   };
   return (

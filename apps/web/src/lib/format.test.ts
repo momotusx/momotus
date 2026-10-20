@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { bytes, clock, episodeLabel, groupFailures, parseVideo, playPath, releaseParts, runtimeMinutes } from "./format";
+import { airDate, bytes, clock, delayText, episodeLabel, groupFailures, parseVideo, playPath, releaseParts, runtimeMinutes } from "./format";
 
 test("bytes are 1024-based, as addons print sizes", () => {
   expect(bytes(5368709120)).toBe("5 GB");
@@ -56,4 +56,15 @@ test("groupFailures says sources that failed alike once, in first order", () => 
     { via: "Torrentio", words: `${gone} · 2 sources` },
     { via: "Local", words: gone },
   ]);
+});
+
+test("an air date reads as its UTC day", () => {
+  expect(airDate("2026-10-27")).toBe("Oct 27, 2026");
+  expect(airDate("2026-01-01T00:00:00Z")).toBe("Jan 1, 2026");
+});
+
+test("the subtitle delay says which way", () => {
+  expect(delayText(0)).toBe("In step");
+  expect(delayText(0.5)).toBe("0.5 s later");
+  expect(delayText(-1)).toBe("1.0 s earlier");
 });

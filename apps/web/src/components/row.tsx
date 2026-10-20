@@ -6,10 +6,12 @@ import { A } from "@solidjs/router";
 import CircleAlert from "lucide-solid/icons/circle-alert";
 import Star from "lucide-solid/icons/star";
 import Wrench from "lucide-solid/icons/wrench";
+import X from "lucide-solid/icons/x";
 import { createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
 import { Poster } from "./art";
 import type { HomeRow } from "../core/generated/HomeRow";
 import type { Tile as TileData } from "../core/generated/Tile";
+import { op } from "../core/client";
 import { onProfileReset } from "../core/profiles";
 import { form } from "../form";
 import { pct, titlePath } from "../lib/format";
@@ -60,12 +62,17 @@ export function TileCard(props: {
   eager?: boolean;
   /** Continue Watching: a 16:9 still with the logo, Apple TV Up Next style. */
   wide?: boolean;
+  /** A remove button on the tile (Continue Watching off TV; TV removes from the title page). */
+  onRemove?: () => void;
 }) {
   // Two lines under the art: the name, then the core's caption (Continue
   // Watching, Library) or the year.
   const cap = () => (props.captions === false ? null : caption(props.tile));
   const sub = () => cap() ?? props.tile.releaseInfo;
-  return (
+  // A button cannot sit inside the link: with a remove button, both go in a
+  // slot that takes the tile's place.
+  const slotted = !!props.onRemove;
+  const card = (
     <A
       href={titlePath(props.tile.kind, props.tile.id)}
       class="tile"
@@ -74,7 +81,7 @@ export function TileCard(props: {
       data-index={props.index}
       data-autofocus={props.autofocus ? "" : undefined}
       aria-label={cap() ? `${props.tile.name}, ${cap()}` : props.tile.name}
-      style={{ width: `${props.w}px`, ...props.style }}
+      style={slotted ? { width: `${props.w}px` } : { width: `${props.w}px`, ...props.style }}
       onClick={() => props.onOpen?.()}
     >
       <div class="pic" style={{ height: `${props.h}px` }}>
@@ -116,7 +123,27 @@ export function TileCard(props: {
       </Show>
     </A>
   );
+  if (!slotted) return card;
+  return (
+    <div class="tile-slot" style={{ width: `${props.w}px`, ...props.style }}>
+      {card}
+      <button
+        class="tile-x"
+        data-index={props.index}
+        aria-label={`Remove ${props.tile.name} from Continue Watching`}
+        title="Remove from Continue Watching"
+        onClick={() => props.onRemove?.()}
+      >
+        <X aria-hidden />
+      </button>
+    </div>
+  );
 }
+
+/** "Remove from Continue Watching": the core drops the title from Continue
+ * Watching and Next Up on every synced device until it is played again, and
+ * Home's row updates from the core. */
+export const removeFromContinue = (itemId: string) => op("removeFromContinue", { itemId });
 
 export function Row(props: { row: HomeRow; autofocus: boolean; root: () => Element | null; onOpen?: () => void; scope?: string }) {
   let section!: HTMLElement;
@@ -241,6 +268,7 @@ export function Row(props: { row: HomeRow; autofocus: boolean; root: () => Eleme
                           onOpen={props.onOpen}
                           eager
                           wide={wide()}
+                          onRemove={wide() && form() !== "tv" ? () => void removeFromContinue(tile().id).catch(() => undefined) : undefined}
                         />
                       )}
                     </Show>

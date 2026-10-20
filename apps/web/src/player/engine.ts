@@ -63,6 +63,9 @@ export interface Engine {
   setVolume(percent: number): void;
   /** One of the core's WebVTT tracks, or none. */
   setSubtitle(sub: { url: string; lang: string } | null): void;
+  /** Shows the subtitle `sec` seconds later (earlier when negative), for
+   * this play and every track loaded after. */
+  setSubtitleDelay(sec: number): void;
   /** One of the engine's own tracks (`tracks`). */
   selectTrack(kind: Track["kind"], id: string): void;
   /** Leaving the player: stop and let go of the source. */

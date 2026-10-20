@@ -29,6 +29,23 @@ export function createVideoEngine(events: EngineEvents): Engine {
     );
   };
 
+  // The subtitle delay moves each cue from the time its file gave it.
+  let delay = 0;
+  const given = new WeakMap<TextTrackCue, [number, number]>();
+  const shiftCues = () => {
+    const cues = video?.textTracks[0]?.cues;
+    if (!cues) return;
+    for (const cue of Array.from(cues)) {
+      let at = given.get(cue);
+      if (!at) {
+        at = [cue.startTime, cue.endTime];
+        given.set(cue, at);
+      }
+      cue.startTime = Math.max(0, at[0] + delay);
+      cue.endTime = Math.max(0, at[1] + delay);
+    }
+  };
+
   const start = pendingStart();
   // The listener that applies the loading source's start; a source that
   // fails before its metadata must not leave it to seek the next one.
@@ -76,7 +93,7 @@ export function createVideoEngine(events: EngineEvents): Engine {
       }}
     >
       <Show when={subtitle()} keyed>
-        {(t) => <track kind="subtitles" src={t.url} srclang={t.lang} default onError={() => events.onSubtitleError(t.lang)} />}
+        {(t) => <track kind="subtitles" src={t.url} srclang={t.lang} default onLoad={shiftCues} onError={() => events.onSubtitleError(t.lang)} />}
       </Show>
     </video>
   ) as HTMLVideoElement;
@@ -129,6 +146,10 @@ export function createVideoEngine(events: EngineEvents): Engine {
           const tt = video.textTracks[0];
           if (tt) tt.mode = "showing";
         });
+    },
+    setSubtitleDelay(sec) {
+      delay = sec;
+      shiftCues();
     },
     selectTrack(kind, id) {
       const list = audioList();

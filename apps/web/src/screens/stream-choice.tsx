@@ -14,8 +14,8 @@ import { debridAccounts } from "../core/debrid";
 import type { Prefs } from "../core/generated/Prefs";
 import type { StreamConditions } from "../core/generated/StreamConditions";
 import { form } from "../form";
-import { anyLearned, choiceWords, conditionsLine, languageName, learnedRows, screenClass, speedFor } from "../lib/words";
-import { Choice, LANGS } from "./settings";
+import { anyLearned, choiceWords, conditionsLine, learnedRows, screenClass, speedFor } from "../lib/words";
+import { Choice, LanguagePicker } from "./settings";
 import "./browse.css";
 import "./settings.css";
 
@@ -31,7 +31,6 @@ export default function StreamChoice() {
     op<Prefs>("setPrefs", { patch: x }).catch((e) => setError(reasonOf(e)));
   };
   const patch = (x: Record<string, unknown>) => write({ streams: x });
-  const toggle = (list: string[], v: string) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
   const hasAccount = () => (debridAccounts()?.accounts.length ?? 0) > 0;
   // Undo and Forget take their row away: focus stays near, on the Learn
   // choice, never on Forget (a second press there would clear the rest).
@@ -118,14 +117,13 @@ export default function StreamChoice() {
                   onPick={(v) => patch({ preferReady: v })}
                 />
               </Show>
-              <Choice<string>
-                multi
+              <LanguagePicker
+                audio
                 label={w.audio.label}
                 help={w.audio.help}
                 group="choice-audio"
-                items={LANGS.map(([iso1]) => ({ value: iso1, label: languageName(iso1) }))}
-                isOn={(v) => s().languages.includes(v)}
-                onPick={(v) => patch({ languages: toggle(s().languages, v) })}
+                chosen={s().languages}
+                onChange={(next) => patch({ languages: next })}
               />
               <Choice<boolean> label={w.learn.label} group="choice-learn" items={labelled(w.learn.choices)} isOn={(v) => s().learn === v} onPick={(v) => patch({ learn: v })} />
               <Show when={anyLearned(x())}>

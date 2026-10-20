@@ -105,6 +105,18 @@
   [data-form="desktop"] .tile:hover .pic { box-shadow: var(--lift-hover-edge); }
   [data-form="desktop"] .tile:hover .cap b { color: var(--accent); }
 }
+/* Continue Watching off TV: a remove button on the still's top right
+ * corner, shown on hover or focus, always on touch screens. */
+.tile-x { position: absolute; z-index: 3; top: 10px; right: 10px; display: grid; place-items: center; width: 36px; height: 36px;
+  padding: 0; border: 0; border-radius: 50%; background: rgba(0, 0, 0, .62); color: var(--text); cursor: pointer; opacity: 0;
+  transition: opacity var(--motion-focus) var(--ease), transform var(--motion-focus) var(--ease); }
+.tile-x svg { width: 20px; height: 20px; }
+.tile-slot:hover .tile-x, .tile-slot:focus-within .tile-x { opacity: 1; }
+.tile-x:focus-visible { outline: var(--focus-ring) solid var(--accent); outline-offset: 2px; }
+@media (hover: none) { .tile-x { opacity: 1; } }
+@media (hover: hover) { [data-form="desktop"] .tile-slot:hover .tile-x { transform: translateY(-8px); } }
+[data-form="phone"] .tile-x { opacity: 1; top: 6px; right: 6px; width: 32px; height: 32px; }
+[data-form="phone"] .tile-x svg { width: 18px; height: 18px; }
 /* Progress: a thin accent line on a dark strip at the art's foot, so it
  * reads on any picture. */
 .bar { position: absolute; z-index: 2; left: 0; right: 0; bottom: 0; height: 30px; display: flex; align-items: flex-end; padding: 0 12px 12px;

@@ -8,6 +8,8 @@ import Gauge from "lucide-solid/icons/gauge";
 import Layers from "lucide-solid/icons/layers";
 import ListVideo from "lucide-solid/icons/list-video";
 import LoaderCircle from "lucide-solid/icons/loader-circle";
+import Minus from "lucide-solid/icons/minus";
+import Plus from "lucide-solid/icons/plus";
 import Pause from "lucide-solid/icons/pause";
 import Maximize from "lucide-solid/icons/maximize";
 import Minimize from "lucide-solid/icons/minimize";
@@ -22,7 +24,7 @@ import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMo
 import { Backdrop } from "../components/art";
 import { KeyedPage } from "../components/keyed-page";
 import { TraktMark } from "../components/trakt-mark";
-import { liveView, prefsView } from "../core/client";
+import { liveView, prefsView, serverMoves } from "../core/client";
 import type { PlaybackSnapshot } from "../core/generated/PlaybackSnapshot";
 import type { Segment } from "../core/generated/Segment";
 import type { SegmentKind } from "../core/generated/SegmentKind";
@@ -33,7 +35,7 @@ import { form } from "../form";
 import { entryFrom } from "../history";
 import { createVideoEngine } from "../player/video-engine";
 import { loadedSource, type Retry, sourceStart, TRYING_AGAIN_MS, tryingAgain } from "../lib/failover";
-import { bytes, clock, decoded, episodeLabel, groupFailures, playPath, playState, seasonName, titlePath, versionsPath } from "../lib/format";
+import { bytes, clock, decoded, delayText, episodeLabel, groupFailures, playPath, playState, seasonName, titlePath, versionsPath } from "../lib/format";
 import { byLanguage, offSummary, trackDetail } from "../lib/subtitles";
 import { blockedWords, languageName, nextVersion, qualityCell, qualityText, restartLine, subtitleNote } from "../lib/words";
 import "./player.css";
@@ -114,6 +116,9 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   const [opens, setOpens] = createSignal(0);
   const playback = createMemo(() => {
     opens();
+    // The stream server took another port while the app was away: the
+    // loaded item's URLs point at the old one, so the playback opens anew.
+    serverMoves();
     const view = ctx.versions();
     const sub = view?.sub();
     const k = key();
@@ -190,6 +195,13 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     onSubtitleError: (lang) => setSubError(`Could not load ${languageName(lang)} subtitles from the core`),
   });
   const { time, duration, paused, buffered, started, rate } = engine;
+  // Subtitle timing, for this play only (the size is the profile's, synced).
+  const [subDelay, setSubDelay] = createSignal(0);
+  const nudgeSubs = (by: number) => {
+    const next = Math.round((subDelay() + by) * 10) / 10;
+    setSubDelay(next);
+    engine.setSubtitleDelay(next);
+  };
   // A desktop has no volume keys of its own here: a mute button and a level,
   // and full screen (with Back in the header on a desktop and a phone).
   const [volume, setVolumeLevel] = createSignal(100);
@@ -542,6 +554,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     <div
       class="player-scr"
       data-scheme="dark"
+      data-subsize={prefs.state.data?.subtitleSize ?? "medium"}
       classList={{ idle: !osd() && !!url(), started: started(), paused: pausedNow() }}
       onPointerMove={wake}
       onPointerDown={(e) => {
@@ -904,6 +917,21 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       <Show when={panel() === "subs"}>
         <aside class="panel" aria-label="Subtitles" data-fgroup="subs">
           <h2>Subtitles</h2>
+          {/* Timing for a subtitle out of step with the speech, this play only. */}
+          <Show when={track()}>
+            <div class="sub-delay" role="group" aria-label="Subtitle timing">
+              <span>Timing</span>
+              <button class="sub-step" data-f="sub:earlier" aria-label="Show subtitles half a second earlier" onClick={() => nudgeSubs(-0.5)}>
+                <Minus aria-hidden />
+              </button>
+              <output class="num" aria-live="polite">
+                {delayText(subDelay())}
+              </output>
+              <button class="sub-step" data-f="sub:later" aria-label="Show subtitles half a second later" onClick={() => nudgeSubs(0.5)}>
+                <Plus aria-hidden />
+              </button>
+            </div>
+          </Show>
           <div class="panel-list" data-vscroll>
             <button class="opt" classList={{ on: !track() }} data-f="sub:off" data-autofocus onClick={() => chooseSubtitle(null)}>
               <Show when={!track()}>

@@ -27,6 +27,8 @@ export const NOTES_PORT = 17811 + shift;
 export const LANGS_PORT = 17812 + shift;
 /** The next version spec's own: a core whose first versions cannot play here. */
 export const NEXT_PORT = 17813 + shift;
+/** The journey API spec's own: a core with a local addon's series, one episode not out yet. */
+export const JOURNEY_PORT = 17814 + shift;
 export const GOT = { id: "tt0944947", resume: "tt0944947:2:3" };
 /** Where every spec writes its shots: SHOTS_DIR, else the run's own ignored
  * output. The committed set in e2e/shots/ changes only when a run is asked

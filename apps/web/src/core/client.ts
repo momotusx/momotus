@@ -53,7 +53,18 @@ export function networkType(): Network {
   const type = connection?.type;
   return type === "wifi" || type === "ethernet" || type === "cellular" ? type : "other";
 }
-document.addEventListener("visibilitychange", () => lifecycle(document.hidden ? "background" : "foreground"));
+// Back in front, the core may lock a PIN profile that was away over 30
+// minutes, and it binds the stream server again when the system took its
+// port: then `serverMoved`, and a loaded playback opens again (the player
+// watches `serverMoves`).
+const [serverMoves, setServerMoves] = createSignal(0);
+export { serverMoves };
+const foreground = () =>
+  void bridge
+    .request<{ serverMoved?: boolean }>("lifecycle", { event: "foreground" })
+    .then((r) => r?.serverMoved && setServerMoves((n) => n + 1))
+    .catch(() => undefined);
+document.addEventListener("visibilitychange", () => (document.hidden ? lifecycle("background") : foreground()));
 // Leaving the page: the core pauses what it scrobbles (Trakt) before the tab goes.
 window.addEventListener("pagehide", () => lifecycle("background"));
 window.addEventListener("online", () => lifecycle("networkChanged", { network: networkType() }));

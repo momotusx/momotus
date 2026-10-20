@@ -36,6 +36,10 @@
 .syn:focus-visible, [data-form="tv"] .syn:focus, .syn:hover { -webkit-line-clamp: unset; background: var(--glass-strong); color: var(--text); }
 .play { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; margin: 28px 0 24px; }
 .play-row { display: flex; align-items: center; gap: 20px; }
+/* The next episode is not out: its day stands where Play would be. */
+.airs-next { display: flex; align-items: center; gap: 12px; height: 84px; margin: 0;
+  font: 600 var(--type-callout) / 1.2 var(--font-text); color: var(--text); }
+.airs-next svg { width: 26px; height: 26px; color: var(--muted); }
 
 /* Watched: a labeled pill beside Play with two states; watched is a filled
  * pill with a check (selection is a fill and a check, never a ring: the ring
@@ -52,6 +56,7 @@
   background: linear-gradient(145deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, .065));
   box-shadow: inset 0 0 0 2px var(--control), inset 0 1px 0 rgba(255, 255, 255, .09);
   transition: transform var(--motion-focus) var(--ease); }
+.info .acts .btn .long { max-width: 9em; white-space: normal; text-align: center; line-height: 1.2; }
 .info .acts .btn[aria-pressed="true"] svg { background: var(--selected-fill); box-shadow: var(--selected-edge); }
 .info .acts .btn:focus-visible, [data-form="tv"] .info .acts .btn:focus { outline: none; box-shadow: none; transform: none; color: var(--text); }
 .info .acts .btn:focus-visible svg, [data-form="tv"] .info .acts .btn:focus svg { outline: var(--focus-ring) solid var(--accent); outline-offset: var(--focus-ring);
@@ -165,6 +170,8 @@
 [data-form="phone"] .title-scr.noart .info { padding-top: 24px; }
 [data-form="phone"] .play { margin: 16px 0 14px; gap: 10px; width: 100%; align-items: stretch; }
 [data-form="phone"] .play-row { width: 100%; gap: 10px; }
+[data-form="phone"] .airs-next { height: 52px; gap: 8px; }
+[data-form="phone"] .airs-next svg { width: 20px; height: 20px; }
 [data-form="phone"] .play-row .btn { flex: 1; min-width: 0; justify-content: center; }
 [data-form="phone"] .play-row .btn.watched { flex: none; padding: 0 16px; font-size: 14px; }
 /* Secondary actions on a phone: a centered row of circles with their word. */
