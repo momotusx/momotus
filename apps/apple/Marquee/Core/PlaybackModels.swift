@@ -21,6 +21,9 @@ struct VersionsSnapshot: Decodable, Hashable, Sendable {
     let blocked: BlockedVersions?
     /// The one-time learning note, shown with Undo.
     let note: LearnedNote?
+    /// Every listed version is a swarm with one seeder or none: said over the
+    /// list and on the recommended card before Play (optional for older cores).
+    var nobodySharing: Bool?
 }
 
 /// What the ranking read (plans/m13-stream-choice.md 4.2): "This TV: 4K HDR,

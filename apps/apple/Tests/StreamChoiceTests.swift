@@ -155,6 +155,17 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
     #expect(try JSONDecoder().decode(VersionsSnapshot.self, from: Data((snap + "}").utf8)).conditions == nil)
 }
 
+@Test func almostNobodySharingDecodesWithItsSharedWords() throws {
+    let snap = #"{"recommended": null, "rows": [], "hidden": {"count": 0, "byReason": []}, "pendingAddons": [], "slowAddons": [], "failedAddons": [], "done": true, "frozen": false"#
+    #expect(try JSONDecoder().decode(VersionsSnapshot.self, from: Data((snap + #", "nobodySharing": true}"#).utf8)).nobodySharing == true)
+    #expect(try JSONDecoder().decode(VersionsSnapshot.self, from: Data((snap + #", "nobodySharing": false}"#).utf8)).nobodySharing == false)
+    // An older core sends none: nothing is said.
+    #expect(try JSONDecoder().decode(VersionsSnapshot.self, from: Data((snap + "}").utf8)).nobodySharing == nil)
+    // The words every app shows, from apps/shared/stream-choice-words.json.
+    #expect(StreamChoice.words.nobodySharing.text == "Almost nobody is sharing this right now")
+    #expect(StreamChoice.words.nobodySharing.details == "Every version has one seeder or none at the moment, so it may not start.")
+}
+
 @Suite(.serialized) @MainActor struct StreamChoiceWiringTests {
     @Test func settingsReadsTheDeviceAndMeasureAgainAnswersIt() async throws {
         let core = RealCore()

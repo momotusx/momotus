@@ -110,7 +110,7 @@ struct VersionsScreen: View {
 
     @ViewBuilder private var pick: some View {
         if let best = snapshot?.recommended {
-            PickCard(row: best, play: { playing = model.play(best.key) }, focus: $pickFocused)
+            PickCard(row: best, nobodySharing: snapshot?.nobodySharing == true, play: { playing = model.play(best.key) }, focus: $pickFocused)
         } else if let blocked = snapshot?.blocked, let words = StreamChoice.blockedWords(blocked) {
             // Every addon answered and the hidden rows say why: the way on, as one action.
             VStack(alignment: .leading, spacing: 10) {
@@ -173,6 +173,13 @@ struct VersionsScreen: View {
 
     private var table: some View {
         VStack(alignment: .leading, spacing: 14) {
+            if snapshot?.nobodySharing == true {
+                NobodySharingLine()
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+            }
             if let note = snapshot?.note, !undone, let text = StreamChoice.learnedNote(note, device: StreamChoice.device) {
                 LearnedNoteBar(text: text) { undo(note) }
             }
@@ -264,6 +271,8 @@ struct VersionsScreen: View {
 /// The recommended version: what it is, why it was picked, and Play.
 private struct PickCard: View {
     let row: VersionRow
+    /// Every listed version has one seeder or none: said right before Play.
+    let nobodySharing: Bool
     let play: () -> Void
     /// TV: the page enters on Play.
     var focus: FocusState<Bool>.Binding
@@ -284,6 +293,7 @@ private struct PickCard: View {
             #if os(tvOS)
             // TV: Play under the heading, where the page enters, so it is in
             // view whatever the details below run to.
+            if nobodySharing { NobodySharingLine() }
             playButton
             #endif
             Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 6) {
@@ -308,6 +318,7 @@ private struct PickCard: View {
                 .font(.mono(Theme.type.caption + 1))
                 .foregroundStyle(Theme.Palette.muted)
             #if !os(tvOS)
+            if nobodySharing { NobodySharingLine().padding(.top, 6) }
             playButton.padding(.top, 6)
             #endif
             Label(VersionWords.failover(row), glyph: "refresh-cw")
@@ -471,6 +482,26 @@ private struct VersionRowView: View {
 }
 
 /// The one-time learning note over the table, with Undo (stream choice 3.9).
+/// "Almost nobody is sharing this right now", with why beneath.
+private struct NobodySharingLine: View {
+    var body: some View {
+        let words = StreamChoice.words.nobodySharing
+        Label {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(words.text).font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
+                Text(words.details)
+                    .font(.text(Theme.type.caption, relativeTo: .caption))
+                    .foregroundStyle(Theme.Palette.muted)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Glyph(VersionWords.Tone.warn.glyph).foregroundStyle(VersionWords.Tone.warn.color)
+        }
+        .foregroundStyle(Theme.Palette.text)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 private struct LearnedNoteBar: View {
     let text: String
     let undo: () -> Void

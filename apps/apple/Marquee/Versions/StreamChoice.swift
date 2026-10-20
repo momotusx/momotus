@@ -17,6 +17,11 @@ struct StreamChoiceWords: Decodable, Sendable {
         let value: Value?
     }
 
+    struct Note: Decodable, Sendable {
+        let text: String
+        let details: String
+    }
+
     struct UpDown: Decodable, Sendable {
         let up: String
         let down: String
@@ -154,6 +159,7 @@ struct StreamChoiceWords: Decodable, Sendable {
     let question: Question
     let settings: Settings
     let conditions: Conditions
+    let nobodySharing: Note
 
     /// The bundled file: the app's own bundle, or the test bundle that compiles this file.
     static let shared: StreamChoiceWords = {
