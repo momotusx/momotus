@@ -81,8 +81,13 @@ class PlayerLogicTest {
                 PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE to "unreadable",
                 PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED to "unreadable",
                 PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED to "unreadable",
-                PlaybackException.ERROR_CODE_DECODER_INIT_FAILED to "decode",
+                // Only a decoder that cannot decode this file is decode; a busy or unstarted one is the moment.
+                PlaybackException.ERROR_CODE_DECODING_FAILED to "decode",
                 PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED to "decode",
+                PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES to "decode",
+                PlaybackException.ERROR_CODE_DECODER_INIT_FAILED to "other",
+                PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED to "other",
+                PlaybackException.ERROR_CODE_DECODING_RESOURCES_RECLAIMED to "other",
                 PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED to "audio",
                 PlaybackException.ERROR_CODE_UNSPECIFIED to "other",
             )

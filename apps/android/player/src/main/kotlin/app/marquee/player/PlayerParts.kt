@@ -311,6 +311,8 @@ fun PlayerStatus(
     /** The core's next version after a version picked by hand failed: the first way on, "Play {label}". */
     offer: OtherVersion? = null,
     onOffer: (String) -> Unit = {},
+    /** "Try again" when the core's play failed: after Play {offer}, else first. */
+    onRetry: (() -> Unit)? = null,
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
@@ -360,14 +362,19 @@ fun PlayerStatus(
                 horizontalArrangement = Arrangement.spacedBy(Marquee.space.m),
                 modifier = Modifier.padding(top = Marquee.space.xs),
             ) {
+                // The core's next version comes first, then Try again (the same versions from the first pick:
+                // what failed may be the moment), then another version, then Back. The first one takes focus.
                 if (offer != null) {
-                    // The core's next version comes first; the others stay a step away.
                     PrimaryButton(
                         "Play ${offer.label}",
                         { onOffer(offer.key) },
                         icon = PlayFilled,
                         focusRequester = focus,
                     )
+                    onRetry?.let { SecondaryButton("Try again", it, icon = Icons.RefreshCw) }
+                    SecondaryButton("Choose a version", onVersions, icon = Icons.Layers)
+                } else if (onRetry != null) {
+                    PrimaryButton("Try again", onRetry, icon = Icons.RefreshCw, focusRequester = focus)
                     SecondaryButton("Choose a version", onVersions, icon = Icons.Layers)
                 } else {
                     PrimaryButton("Choose a version", onVersions, icon = Icons.Layers, focusRequester = focus)

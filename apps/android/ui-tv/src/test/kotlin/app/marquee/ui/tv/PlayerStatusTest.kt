@@ -26,7 +26,10 @@ class PlayerStatusTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private fun show(offer: OtherVersion?): MutableList<String> {
+    private fun show(
+        offer: OtherVersion?,
+        retry: Boolean = false,
+    ): MutableList<String> {
         val events = mutableListOf<String>()
         val focus = FocusRequester()
         compose.setContent {
@@ -42,6 +45,7 @@ class PlayerStatusTest {
                     focus = focus,
                     offer = offer,
                     onOffer = { events += "offer:$it" },
+                    onRetry = if (retry) ({ events += "retry" }) else null,
                 )
             }
         }
@@ -62,6 +66,36 @@ class PlayerStatusTest {
     fun `without an offer Choose a version is the way on`() {
         show(null)
         compose.onAllNodesWithText("Play", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("Try again").assertCountEquals(0)
         compose.onNodeWithText("Choose a version").assertIsFocused()
+    }
+
+    /** The buttons' texts from the left. */
+    private fun order() =
+        listOf("Play 720p BluRay", "Try again", "Choose a version", "Back")
+            .filter { compose.onAllNodesWithText(it).fetchSemanticsNodes().isNotEmpty() }
+            .sortedBy {
+                compose
+                    .onNodeWithText(it)
+                    .fetchSemanticsNode()
+                    .boundsInRoot.left
+            }
+
+    @Test
+    fun `a failed play offers Try again right after the offered version, and it sends retry`() {
+        val events = show(OtherVersion("k3", "720p BluRay"), retry = true)
+        assertEquals(listOf("Play 720p BluRay", "Try again", "Choose a version", "Back"), order())
+        compose.onNodeWithText("Play 720p BluRay").assertIsFocused()
+        compose.onNodeWithText("Try again").performClick()
+        assertEquals(listOf("retry"), events)
+    }
+
+    @Test
+    fun `with no offer Try again comes first and takes the focus`() {
+        val events = show(null, retry = true)
+        assertEquals(listOf("Try again", "Choose a version", "Back"), order())
+        compose.onNodeWithText("Try again").assertIsFocused()
+        compose.onNodeWithText("Try again").performClick()
+        assertEquals(listOf("retry"), events)
     }
 }

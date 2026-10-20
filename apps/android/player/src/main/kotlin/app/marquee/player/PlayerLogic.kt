@@ -240,13 +240,22 @@ fun classifyFailure(
             Failure(FailureKind.Unreadable, "The file could not be read")
         }
 
-        PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
-        PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED,
+        // Only a decoder that cannot decode this file is decode, which the core keeps against the version
+        // (plans/reviews/stream-runtime-2026-10-20-r1.md P2-2).
         PlaybackException.ERROR_CODE_DECODING_FAILED,
         PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES,
         PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
         -> {
             Failure(FailureKind.Decode, "This device cannot decode the video")
+        }
+
+        // A decoder that did not start, could not be asked or was taken back by the system (another app
+        // holds it): the moment, not the file.
+        PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+        PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED,
+        PlaybackException.ERROR_CODE_DECODING_RESOURCES_RECLAIMED,
+        -> {
+            Failure(FailureKind.Other, "The video decoder is busy or could not start")
         }
 
         PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED,

@@ -390,6 +390,24 @@ class SubtitleFailureTest {
     }
 
     @Test
+    fun `a failed play offers Try again, which sends retry and opens again`() {
+        val (_, controller) = open()
+        assertEquals(false, controller.retryable)
+        push(snapshot(phase = "failed"))
+        until("the playback failed") { controller.stage == PlaybackController.Stage.Failed }
+        assertTrue(controller.retryable)
+        controller.retry()
+        until("retry goes to the core") { commands("retry").size == 1 }
+        assertEquals(PlaybackController.Stage.Opening, controller.stage)
+        assertEquals(false, controller.retryable)
+        // Pressed again before the core answers: nothing more goes out.
+        controller.retry()
+        runFor(200)
+        assertEquals(1, commands("retry").size)
+        controller.release()
+    }
+
+    @Test
     fun `moving on to the next version says which, and a failed pick offers the next`() {
         val (_, controller) = open()
         push(

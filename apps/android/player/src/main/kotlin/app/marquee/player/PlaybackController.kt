@@ -86,6 +86,10 @@ class PlaybackController(
     var offer: OtherVersion? by mutableStateOf(null)
         private set
 
+    /** The core's play failed: the failure card offers Try again ([retry]). */
+    var retryable by mutableStateOf(false)
+        private set
+
     var positionMs by mutableLongStateOf(0L)
         private set
 
@@ -281,6 +285,7 @@ class PlaybackController(
         nextAtMs = s.nextAtMs
         trakt = s.trakt
         offer = s.offer
+        retryable = s.phase == PlaybackPhase.Failed
         // While a source is being found its list is still to come: not "None found".
         subtitlesPending = s.subtitlesPending || s.phase == PlaybackPhase.Resolving
         snapshotSubs = s.subtitles
@@ -606,6 +611,17 @@ class PlaybackController(
     }
 
     // What the viewer does
+
+    /** "Try again": the core plays the same versions again from its first pick; what failed may be the moment. */
+    fun retry() {
+        val playback = view ?: return
+        if (!retryable || released) return
+        retryable = false
+        problem = null
+        status = null
+        stage = Stage.Opening
+        playback.retryPlay()
+    }
 
     fun togglePlay() {
         // At the end the player still has playWhenReady set, but the viewer's press means "again".

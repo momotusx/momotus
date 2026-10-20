@@ -404,6 +404,12 @@ class PlaybackView(
      * title remembers the choice for its next plays (plans/m13-subtitle-languages.md 6).
      */
     fun subtitleChosen(url: String?) = post(command("subtitleChosen") { put("url", url) })
+
+    /**
+     * "Try again" on the failure card (the core's `retry`): the same versions again from the first pick. Not
+     * [retry], which opens a failed view again.
+     */
+    fun retryPlay() = post(command("retry"))
 }
 
 /** `name` is how the account's other devices will show this one. */
