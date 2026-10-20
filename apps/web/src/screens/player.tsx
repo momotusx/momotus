@@ -53,22 +53,25 @@ export default function Player() {
     const key = (location.state as { key?: unknown } | null)?.key;
     return typeof key === "string" ? key : null;
   };
+  // Try again on a title that could not be opened: the page opens anew.
+  const [attempt, setAttempt] = createSignal(0);
   return (
     <KeyedPage
-      address={`${params.kind}/${params.id}/${params.videoId}/${chosen() ?? ""}`}
+      address={`${params.kind}/${params.id}/${params.videoId}/${chosen() ?? ""}/${attempt()}`}
       read={() => ({
         kind: decoded(params.kind),
         id: decoded(params.id),
         videoId: decoded(params.videoId),
         chosen: chosen(),
         binge: typeof query.binge === "string" ? query.binge : undefined,
+        retry: () => setAttempt((n) => n + 1),
       })}
       page={PlayerPage}
     />
   );
 }
 
-function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: string | null; binge?: string }) {
+function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: string | null; binge?: string; retry: () => void }) {
   const navigate = useNavigate();
   // The page this play was opened from, read when needed: the router renders
   // a route before it writes its history entry. Leaving the play for that
@@ -135,6 +138,9 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     const s = playback()?.state.status;
     return s?.state === "failed" ? (s as { reason: string }).reason : null;
   };
+  // The title itself could not be opened (its meta addon failed): nothing to
+  // choose from, so Try again (the page anew) and Back.
+  const titleError = () => ctx.failure();
   // Try again as the core took it (`retries` rose): "Trying again" until the
   // play starts, and a moment at least (lib/failover.ts tryingAgain).
   const [retry, setRetry] = createSignal<Retry | null>(null);
@@ -503,6 +509,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     </A>
   );
   const status = (): { tone: string; text: string; detail?: string; note?: string; busy: boolean } | null => {
+    const t = titleError();
+    if (t) return { tone: "bad", text: nextVersion.titleNotOpened, detail: t, busy: false };
     const v = ctx.versions();
     if (v?.state.status.state === "failed") return { tone: "bad", text: (v.state.status as { reason: string }).reason, busy: false };
     // The playback could not open (a version no longer listed): a card with
@@ -627,22 +635,22 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                   {/* A playback that could not open: mostly a version no
                       longer listed, which Try again cannot bring back, so
                       Choose a version comes first and has the focus. */}
-                  <Show when={openError()}>{chooseVersion()}</Show>
+                  <Show when={openError() && !titleError()}>{chooseVersion()}</Show>
                   {/* This play again from its first pick (`retry`), or the
                       playback opened again: what failed may be the moment. */}
-                  <Show when={failed() || openError()}>
+                  <Show when={failed() || openError() || titleError()}>
                     <button
                       class="btn big"
-                      classList={{ primary: !snap()?.offer && !openError() }}
+                      classList={{ primary: !snap()?.offer && (!openError() || !!titleError()) }}
                       data-f="player:retry"
-                      data-autofocus={snap()?.offer || openError() ? undefined : ""}
-                      onClick={() => (openError() ? setOpens((n) => n + 1) : void playback()?.command({ type: "retry" }))}
+                      data-autofocus={snap()?.offer || (openError() && !titleError()) ? undefined : ""}
+                      onClick={() => (titleError() ? props.retry() : openError() ? setOpens((n) => n + 1) : void playback()?.command({ type: "retry" }))}
                     >
                       <RefreshCw aria-hidden />
                       Try again
                     </button>
                   </Show>
-                  <Show when={!openError()}>{chooseVersion()}</Show>
+                  <Show when={!openError() && !titleError()}>{chooseVersion()}</Show>
                   <button class="btn big" data-f="player:back" onClick={goBack}>
                     <ArrowLeft aria-hidden />
                     Back

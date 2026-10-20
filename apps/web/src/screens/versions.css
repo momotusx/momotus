@@ -118,6 +118,7 @@
 .alist-wait { display: grid; gap: 8px; margin-top: 16px; }
 .alist-wait .skel { height: 64px; border-radius: var(--radius-m); }
 .vempty { position: absolute; left: var(--safe-side); right: var(--safe-side); top: 260px; }
+.vempty .acts { display: flex; gap: 16px; margin-top: 24px; }
 
 /* Phone: the pick is a card on top, groups as sections below. */
 [data-form="phone"] .versions-scr { position: relative; padding: 12px 16px 40px; }

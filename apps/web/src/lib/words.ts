@@ -204,6 +204,8 @@ export const nextVersion = {
   failed: (offered: boolean) => (offered ? "This version could not be played" : "None of the sources could be played"),
   /** The card when the playback view could not open at all (the error goes under it). */
   notOpened: "This version could not be opened",
+  /** The player's and Versions' card when the title's details could not be read. */
+  titleNotOpened: "This title could not be opened",
   tryingAgain: "Trying again",
   /** A version picked by hand, waiting for Versions to list it (as Android). */
   finding: "Finding this version",

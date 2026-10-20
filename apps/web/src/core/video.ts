@@ -38,5 +38,12 @@ export function videoContext(kind: string, id: string, videoId: string, bingeGro
     });
   });
   const label = () => (ref ? `${episodeLabel(ref.season, ref.episode)}${episode()?.title ? ` ${episode()?.title}` : ""}` : null);
-  return { title, details, versions, episode, ref, label };
+  // The title could not be opened (its meta addon failed): the reason, else null.
+  const failure = () => {
+    const s = title.state.status;
+    if (s.state === "failed") return s.reason;
+    const h = title.state.header?.state;
+    return h?.state === "failed" ? h.reason : null;
+  };
+  return { title, details, versions, episode, ref, label, failure };
 }

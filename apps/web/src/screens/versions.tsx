@@ -1,4 +1,5 @@
 import { A, useNavigate, useParams } from "@solidjs/router";
+import ArrowLeft from "lucide-solid/icons/arrow-left";
 import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronRight from "lucide-solid/icons/chevron-right";
@@ -25,6 +26,7 @@ import type { ReasonLine } from "../core/generated/ReasonLine";
 import type { VersionRow } from "../core/generated/VersionRow";
 import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
 import { videoContext } from "../core/video";
+import { goBack } from "../focus/dom";
 import { form } from "../form";
 import { bytes, decoded, playPath, playState, releaseParts } from "../lib/format";
 import {
@@ -38,6 +40,7 @@ import {
   languageName,
   learnedNote,
   lineWords,
+  nextVersion,
   qualityCell,
   qualityText,
   reasonText,
@@ -49,10 +52,12 @@ const SHOWN = 3;
 
 export default function Versions() {
   const params = useParams();
+  // Try again on a title or a list that could not be loaded: the page anew.
+  const [attempt, setAttempt] = createSignal(0);
   return (
     <KeyedPage
-      address={`${params.kind}/${params.id}/${params.videoId}`}
-      read={() => ({ kind: decoded(params.kind), id: decoded(params.id), videoId: decoded(params.videoId) })}
+      address={`${params.kind}/${params.id}/${params.videoId}/${attempt()}`}
+      read={() => ({ kind: decoded(params.kind), id: decoded(params.id), videoId: decoded(params.videoId), retry: () => setAttempt((n) => n + 1) })}
       page={VersionsPage}
     />
   );
@@ -117,7 +122,7 @@ function LineWord(props: { line: ReasonLine }) {
 const languages = (r: VersionRow) => r.languages.map(languageName).join(", ");
 const subLine = (r: VersionRow) => [languages(r) || null, r.failoverCount > 0 ? `${r.failoverCount + 1} sources` : null].filter(Boolean).join(", ") || "Language not stated";
 
-function VersionsPage(props: { kind: string; id: string; videoId: string }) {
+function VersionsPage(props: { kind: string; id: string; videoId: string; retry: () => void }) {
   const navigate = useNavigate();
   const ctx = videoContext(props.kind, props.id, props.videoId);
   const snap = (): VersionsSnapshot | null => ctx.versions()?.state.data ?? null;
@@ -171,6 +176,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
   };
   const progress = () => {
     const s = snap();
+    if (ctx.failure()) return { tone: "bad", text: "Could not be opened" };
     if (!s) return { tone: "idle", text: "Opening" };
     if (s.pendingAddons.length) return { tone: "warn live", text: `Asking ${s.pendingAddons.join(", ")}` };
     if (s.slowAddons.length) return { tone: "warn", text: `${s.slowAddons.join(", ")} is slow, still waiting` };
@@ -214,11 +220,25 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
       </header>
 
       <Switch>
-        <Match when={ctx.versions()?.state.status.state === "failed"}>
-          <section class="vempty problem">
-            <h2>Versions could not be loaded</h2>
-            <p>{(ctx.versions()?.state.status as { reason?: string }).reason}</p>
-          </section>
+        {/* The title's details, or the list itself, could not be loaded:
+            the reason, Try again (the page anew) and Back, never "Opening". */}
+        <Match when={ctx.failure() ?? (ctx.versions()?.state.status.state === "failed" ? ((ctx.versions()?.state.status as { reason?: string }).reason ?? "") : null)}>
+          {(reason) => (
+            <section class="vempty problem">
+              <h2>{ctx.failure() ? nextVersion.titleNotOpened : "Versions could not be loaded"}</h2>
+              <p>{reason()}</p>
+              <div class="acts">
+                <button class="btn primary" data-f="versions:retry" data-autofocus onClick={() => props.retry()}>
+                  <RefreshCw aria-hidden />
+                  Try again
+                </button>
+                <button class="btn" data-f="versions:back" onClick={goBack}>
+                  <ArrowLeft aria-hidden />
+                  Back
+                </button>
+              </div>
+            </section>
+          )}
         </Match>
         <Match when={snap()?.done && !pick() && (snap()?.rows.length ?? 0) === 0 && !blocked()}>
           <section class="vempty problem">

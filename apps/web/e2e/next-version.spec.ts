@@ -218,7 +218,7 @@ test.afterAll(() => {
 
 type Sent = { op?: string; view?: string; command?: { type?: string; kind?: string; status?: number } };
 
-async function page(browser: Browser, viewport = { width: 1440, height: 900 }) {
+async function page(browser: Browser, viewport = { width: 1440, height: 900 }, opts: { failTitle?: () => boolean } = {}) {
   // What the page asked the core, in order.
   const sent: Sent[] = [];
   const context = await browser.newContext({ viewport, colorScheme: "dark", baseURL: `http://127.0.0.1:${PORTS.vite}` });
@@ -231,7 +231,12 @@ async function page(browser: Browser, viewport = { width: 1440, height: 900 }) {
     upstream.addEventListener("message", (e) => ws.send(String(e.data)));
     upstream.addEventListener("close", () => ws.close());
     ws.onMessage((m) => {
-      sent.push(JSON.parse(String(m)));
+      const msg = JSON.parse(String(m));
+      sent.push(msg);
+      // A title view the meta addon cannot answer for, made up at the socket.
+      if (msg.op === "subscribe" && msg.view === "title" && opts.failTitle?.()) {
+        return ws.send(JSON.stringify({ id: msg.id, ok: false, error: "the meta addon did not answer" }));
+      }
       if (upstream.readyState === WebSocket.OPEN) upstream.send(String(m));
       else early.push(String(m));
     });
@@ -520,5 +525,49 @@ test("a version changed from the player replaces that play in history: Back goes
   await expect(p).toHaveURL(/\/versions\//);
   await p.goBack();
   await expect(p).toHaveURL(new RegExp(`/title/movie/${BBB_ID}(\\?|$)`));
+  await context.close();
+});
+
+test("a title that cannot be opened: the player and Versions say so, with Try again and Back", async ({ browser }) => {
+  let failing = true;
+  const { context, page: p, sent } = await page(browser, undefined, { failTitle: () => failing });
+  const titles = () => sent.filter((m) => m.op === "subscribe" && m.view === "title").length;
+  const focused = () => p.evaluate(() => document.activeElement?.getAttribute("data-f") ?? null);
+  // The player: a card, never "Opening" for good.
+  await p.goto(`/play/movie/${BBB_ID}/${BBB_ID}?form=tv`);
+  const card = p.locator(".endcard");
+  await expect(card).toBeVisible({ timeout: 30_000 });
+  await expect(card.locator(".st")).toHaveText("This title could not be opened");
+  await expect(card.locator(".end-detail")).toHaveText("the meta addon did not answer");
+  const acts = card.locator(".acts > *");
+  await expect(acts).toHaveCount(2);
+  await expect(acts.nth(0)).toHaveAttribute("data-f", "player:retry");
+  await expect(acts.nth(1)).toHaveAttribute("data-f", "player:back");
+  await expect.poll(focused).toBe("player:retry");
+  // Try again opens the title anew: still failing, the same card.
+  let before = titles();
+  await p.keyboard.press("Enter");
+  await expect.poll(titles).toBe(before + 1);
+  await expect(card.locator(".st")).toHaveText("This title could not be opened");
+  // The addon answers again: Try again, and the film plays.
+  failing = false;
+  await expect.poll(focused).toBe("player:retry");
+  await p.keyboard.press("Enter");
+  await expect(card).toHaveCount(0, { timeout: 30_000 });
+  await mute(p);
+  await expect.poll(() => playing(p), { timeout: 60_000 }).toBeGreaterThan(0.5);
+  // Versions: the same, in its own block.
+  failing = true;
+  await p.goto(`/title/movie/${BBB_ID}/versions/${BBB_ID}?form=tv`);
+  const block = p.locator(".vempty.problem");
+  await expect(block.locator("h2")).toHaveText("This title could not be opened", { timeout: 30_000 });
+  await expect(block.locator("p")).toHaveText("the meta addon did not answer");
+  await expect.poll(focused).toBe("versions:retry");
+  await expect(p.locator('[data-f="versions:back"]')).toBeVisible();
+  failing = false;
+  before = titles();
+  await p.keyboard.press("Enter");
+  await expect.poll(titles).toBe(before + 1);
+  await expect(p.locator(".vrow").first()).toBeVisible({ timeout: 30_000 });
   await context.close();
 });
