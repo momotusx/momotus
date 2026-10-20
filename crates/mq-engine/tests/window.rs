@@ -299,39 +299,71 @@ async fn a_round_skips_a_piece_being_read() {
     assert!(l.piece_matches(5).await && l.piece_matches(6).await);
 }
 
-/// b and c. Three seeders writing, three readers and a round every 100 ms
-/// for 30 s: no deadlock, and every read gets the seeder's bytes (or
-/// waits for them), never a hole's zeros.
+/// b and c. Three seeders writing, three readers each reading one piece
+/// four times, and a round aimed at each piece a reader picks while it
+/// reads it, for 30 s: rounds meet readers inside their piece and writers
+/// refetching it. No deadlock (a round that does not end in 20 s aborts
+/// the test: a deadlocked round blocks the workers that drive the timers),
+/// and every read gets the seeder's bytes, never a hole's zeros.
 #[tokio::test(flavor = "multi_thread", worker_threads = 6)]
 async fn rounds_under_readers_and_writers_never_serve_a_hole() {
+    use std::sync::atomic::{AtomicU64, Ordering};
     let l = std::sync::Arc::new(chosen(3).await);
     let deadline = Instant::now() + Duration::from_secs(30);
+    // Each reader's pick: its number of picks so far, then the piece.
+    let on: std::sync::Arc<[AtomicU64; 3]> = std::sync::Arc::new(Default::default());
     let mut readers = Vec::new();
-    for seed in 1..=3u64 {
-        let l = l.clone();
+    for i in 0..3usize {
+        let (l, on) = (l.clone(), on.clone());
         readers.push(tokio::spawn(async move {
-            let mut x = seed.wrapping_mul(0x9e37_79b9_7f4a_7c15);
-            let mut reads = 0;
+            let mut x = (i as u64 + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+            let mut reads = 0u64;
             while Instant::now() < deadline {
                 x = x.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
-                let a = (x >> 33) % l.len();
-                let b = (a + 1 + (x >> 11) % (3 * PIECE)).min(l.len());
-                let got = within(60, l.read((a, b))).await;
-                assert!(got == l.source((a, b)), "read {a}..{b} differs");
-                reads += 1;
+                let p = 1 + ((x >> 33) % 20) as u32;
+                on[i].store((reads + 1) << 32 | u64::from(p), Ordering::Relaxed);
+                for _ in 0..4 {
+                    let read = tokio::time::timeout(Duration::from_secs(60), l.read(l.span(p)));
+                    let Ok(got) = read.await else {
+                        let state = test_hooks::piece_state(l.engine(), l.t, p).await;
+                        panic!("a read of piece {p} waited 60 s: {state}");
+                    };
+                    assert!(got == l.source(l.span(p)), "piece {p} differs");
+                    reads += 1;
+                }
             }
             reads
         }));
     }
     let (mut rounds, mut evicted) = (0, 0);
-    let mut x = 7u64;
+    let mut seen = [0u64; 3];
     while Instant::now() < deadline {
-        x = x.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
-        let first = ((x >> 33) % 18) as u32;
-        let r = within(30, l.evict(&[first, first + 1, first + 2, first + 3])).await;
+        let mut pieces = Vec::new();
+        for (i, on) in on.iter().enumerate() {
+            let pick = on.load(Ordering::Relaxed);
+            if pick >> 32 != seen[i] >> 32 {
+                seen[i] = pick;
+                pieces.push(pick as u32);
+            }
+        }
+        if pieces.is_empty() {
+            std::thread::sleep(Duration::from_millis(1));
+            continue;
+        }
+        let round = tokio::spawn({
+            let l = l.clone();
+            async move { l.evict(&pieces).await }
+        });
+        let started = Instant::now();
+        while !round.is_finished() {
+            if started.elapsed() > Duration::from_secs(20) {
+                eprintln!("deadlock: a round did not end in 20 s");
+                std::process::abort();
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
         rounds += 1;
-        evicted += r.evicted.len();
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        evicted += round.await.unwrap().evicted.len();
     }
     let mut reads = 0;
     for r in readers {
@@ -339,7 +371,7 @@ async fn rounds_under_readers_and_writers_never_serve_a_hole() {
     }
     eprintln!("{rounds} rounds, {evicted} pieces evicted, {reads} reads");
     assert!(
-        rounds > 100 && evicted > 50 && reads > 30,
+        rounds > 50 && evicted > 20 && reads > 100,
         "{rounds} {evicted} {reads}"
     );
 }

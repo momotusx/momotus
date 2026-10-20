@@ -129,6 +129,16 @@ impl TorrentStateLive {
 }
 
 impl ManagedTorrent {
+    /// Marquee fork, for tests: piece `p`'s claim, chunk bits set and in
+    /// all, and whether a round has it gated.
+    #[cfg(feature = "sync-log")]
+    pub fn piece_state(&self, p: u32) -> Option<(bool, usize, usize, bool)> {
+        let idx = self
+            .with_metadata(|m| m.lengths().validate_piece_index(p))
+            .ok()??;
+        self.with_chunk_tracker(|ct| ct.piece_state(idx)).ok()
+    }
+
     /// Verified pieces as BEP 3 bitfield bytes, when the torrent is paused or
     /// live (pieces found on disk at start included).
     pub fn ext_have_pieces(&self) -> Option<Vec<u8>> {

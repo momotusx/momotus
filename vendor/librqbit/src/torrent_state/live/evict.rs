@@ -70,6 +70,7 @@ impl TorrentStateLive {
             self.shared.options.disable_upload() && self.ext_drives(),
             "eviction needs upload off and drive mode"
         );
+        self.evicts.store(true, Ordering::Relaxed);
         let mut out = Evicted::default();
         let (gated, ack) = {
             let mut g = self.lock_write("evict_gate");

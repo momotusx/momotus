@@ -387,6 +387,19 @@ impl ChunkTracker {
         self.evicting.set(id, false);
     }
 
+    /// Marquee fork, for tests: a piece's claim, its chunk bits set and in
+    /// all, and whether a round has it gated.
+    #[cfg(feature = "sync-log")]
+    pub(crate) fn piece_state(&self, idx: ValidPieceIndex) -> (bool, usize, usize, bool) {
+        let bits = &self.chunk_status[self.lengths.chunk_range(idx)];
+        (
+            self.have.as_slice()[idx.get_usize()],
+            bits.count_ones(),
+            bits.len(),
+            self.evicting[idx.get_usize()],
+        )
+    }
+
     /// Marquee fork: every piece still gated, released (a pause or an
     /// abandoned round).
     pub(crate) fn release_all_evicting(&mut self) -> Vec<ValidPieceIndex> {

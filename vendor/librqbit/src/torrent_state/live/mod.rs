@@ -218,6 +218,9 @@ pub struct TorrentStateLive {
         ChunkInfo,
     )>,
     ratelimits: Limits,
+    /// Marquee fork (streaming window phase 1): an eviction round ran, so
+    /// a finish keeps the peers (see `on_piece_completed`).
+    evicts: std::sync::atomic::AtomicBool,
 }
 
 impl TorrentStateLive {
@@ -299,6 +302,7 @@ impl TorrentStateLive {
                 .collect(),
             ratelimit_upload_tx,
             ratelimits,
+            evicts: Default::default(),
         });
 
         state.spawn(
@@ -878,7 +882,12 @@ impl TorrentStateLive {
             }
             self.finished_notify.notify_waiters();
 
-            if !self.has_active_streams_unfinished_files(locked) {
+            // Marquee fork (streaming window phase 1): a torrent that evicts
+            // will need pieces again; reconnecting peers dropped here races
+            // their old connections, which can drop them for good.
+            if !self.has_active_streams_unfinished_files(locked)
+                && !self.evicts.load(Ordering::Relaxed)
+            {
                 // prevent deadlocks.
                 drop(g);
                 // There is not point being connected to peers that have all the torrent, when

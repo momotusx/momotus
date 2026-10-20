@@ -72,6 +72,35 @@ pub async fn pause_skipping_the_keeper(engine: &Engine, h: crate::TorrentHandle)
     }
 }
 
+/// Piece `p`'s state in the fork (claim, chunk bits set and in all, gated)
+/// and the live peers, for a test's failure message.
+pub async fn piece_state(engine: &Engine, h: crate::TorrentHandle, p: u32) -> String {
+    let Ok(t) = engine.torrent(h) else {
+        return "no torrent".into();
+    };
+    let live = t.live.lock().await;
+    let Some(l) = live.as_ref() else {
+        return "not live".into();
+    };
+    let peers = l.managed.live().map(|s| {
+        let mut states: Vec<&str> = s
+            .per_peer_stats_snapshot(librqbit::PeerStatsFilter {
+                state: librqbit::PeerStatsFilterState::All,
+            })
+            .peers
+            .values()
+            .map(|p| p.state)
+            .collect();
+        states.sort_unstable();
+        states
+    });
+    format!(
+        "piece {p}: {:?} (have, bits set, bits, gated); peers {peers:?}; paused {}",
+        l.managed.piece_state(p),
+        l.managed.is_paused()
+    )
+}
+
 pub(crate) async fn wait(engine: &Engine) {
     pass(&engine.inner.hold).await;
 }
