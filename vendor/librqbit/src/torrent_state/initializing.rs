@@ -295,6 +295,13 @@ impl TorrentStateInitializing {
                     .shared
                     .spawner
                     .block_in_place_with_semaphore(|| {
+                        #[cfg(feature = "sync-log")]
+                        if crate::bitv::sync_log::failing(
+                            &self.shared.options.output_folder,
+                            crate::bitv::sync_log::Fail::CheckSync,
+                        ) {
+                            return Err(std::io::Error::other("injected"));
+                        }
                         crate::bitv::Written::new(files.clone()).sync_data(&have_pieces)
                     })
                     .await;

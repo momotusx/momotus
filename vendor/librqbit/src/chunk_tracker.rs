@@ -400,8 +400,8 @@ impl ChunkTracker {
         )
     }
 
-    /// Marquee fork: every piece still gated, released (a pause or an
-    /// abandoned round).
+    /// Marquee fork: every piece still gated, released (a pause, or a round
+    /// that stopped before its release ended).
     pub(crate) fn release_all_evicting(&mut self) -> Vec<ValidPieceIndex> {
         let gated: Vec<ValidPieceIndex> = self
             .evicting

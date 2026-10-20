@@ -48,11 +48,15 @@ pub struct Evicted {
     /// Not touched: someone was reading or writing it, or it was neither
     /// verified nor partly written, or its hash may be running.
     pub skipped: Vec<u32>,
-    /// Verified pieces gated and claimed again whole, with no byte freed: a
-    /// flusher failure, a refused punch, or no whole block inside them.
+    /// Verified pieces gated and claimed again whole, with no punch tried
+    /// on their bytes: a flusher failure, a punch refused before any work,
+    /// or no whole block inside them.
     pub kept: Vec<u32>,
+    /// Bytes freed by punches that succeeded (a failed one may have freed
+    /// some too).
     pub punched_bytes: u64,
-    /// The failure that kept pieces, if any.
+    /// The first failure of the round, a flusher's or a punch's; its pieces
+    /// are in `kept` or `evicted` by the rules above.
     pub error: Option<String>,
 }
 
@@ -70,8 +74,13 @@ impl TorrentStateLive {
             self.shared.options.disable_upload() && self.ext_drives(),
             "eviction needs upload off and drive mode"
         );
-        self.evicts.store(true, Ordering::Relaxed);
         let mut out = Evicted::default();
+        // Armed before the first gate (N2): any exit before the release,
+        // a panic included, releases what is still gated.
+        let mut guard = Abandoned {
+            live: self,
+            armed: true,
+        };
         let (gated, ack) = {
             let mut g = self.lock_write("evict_gate");
             let ct = g.get_pieces_mut()?.chunks_mut();
@@ -102,12 +111,9 @@ impl TorrentStateLive {
             (gated, ack)
         };
         if gated.is_empty() {
+            guard.armed = false;
             return Ok(out);
         }
-        let mut guard = Abandoned {
-            live: self,
-            pieces: gated.iter().map(|g| g.0).collect(),
-        };
         // The torrent needs these pieces again: a finished one dropped its
         // seeders as not needed.
         self.reconnect_all_not_needed_peers();
@@ -146,7 +152,7 @@ impl TorrentStateLive {
                     out.evicted.push(idx.get());
                 }
             }
-            guard.pieces.clear();
+            guard.armed = false;
         }
         self.hook(Point::Released);
         Ok(out)
@@ -192,11 +198,14 @@ impl TorrentStateLive {
                     freed.push((file, r));
                 }
                 Ok(_) => {}
-                // A failed call may have freed part of its range: its
-                // pieces leave as if punched, never claimed again.
+                // A refusal touched nothing (N3): its pieces stay. Any other
+                // failure may have freed part of its range: its pieces leave
+                // as if punched, never claimed again.
                 Err(e) => {
                     out.error.get_or_insert_with(|| format!("punch: {e:#}"));
-                    freed.push((file, a..b));
+                    if !refused(&e) {
+                        freed.push((file, a..b));
+                    }
                 }
             }
         }
@@ -212,6 +221,10 @@ impl TorrentStateLive {
             .collect()
     }
 
+    // Note (N5): a round that outlived a pause (librqbit's own skips the
+    // keeper lock) punches through this state's storage, which the pause
+    // emptied (`take()` moves every descriptor out), so it can never punch
+    // bytes the resumed state fetched again.
     #[cfg(feature = "sync-log")]
     fn hook(&self, point: Point) {
         let dir = &self.shared.options.output_folder;
@@ -224,17 +237,20 @@ impl TorrentStateLive {
     fn hook(&self, _point: Point) {}
 }
 
-/// The second exit for every piece still listed when dropped: a round that
-/// stops before its release (future dropped, panic, failed release). It
-/// never claims a piece again, since a punch may have touched it.
+/// The second exit for every piece still gated when dropped armed: a round
+/// that stops before its release ends (future dropped, panic, failed
+/// release). A piece the release step already restored or released is no
+/// longer gated, so it is left alone. It never claims a piece again, since
+/// a punch may have touched it. One round runs per torrent at a time (the
+/// caller's keeper lock), so the gated pieces are this round's.
 struct Abandoned<'a> {
     live: &'a TorrentStateLive,
-    pieces: Vec<ValidPieceIndex>,
+    armed: bool,
 }
 
 impl Drop for Abandoned<'_> {
     fn drop(&mut self) {
-        if self.pieces.is_empty() {
+        if !self.armed {
             return;
         }
         let mut g = self.live.lock_write("evict_abandoned");
@@ -242,9 +258,7 @@ impl Drop for Abandoned<'_> {
             // Paused or failed: the pause released them.
             return;
         };
-        let ct = pt.chunks_mut();
-        for &idx in &self.pieces {
-            ct.release_evicted(idx);
+        for idx in pt.chunks_mut().release_all_evicting() {
             self.live
                 .ext_emit(ExtEvent::PieceEvicted { piece: idx.get() });
         }
@@ -262,6 +276,23 @@ enum Point {
     Acked,
     Punched,
     Released,
+}
+
+/// A punch refused before any work: no byte of its range was touched.
+fn refused(e: &anyhow::Error) -> bool {
+    if matches!(
+        e.downcast_ref::<crate::Error>(),
+        Some(crate::Error::FsFileIsNone)
+    ) {
+        return true;
+    }
+    e.downcast_ref::<std::io::Error>().is_some_and(|e| {
+        e.kind() == std::io::ErrorKind::Unsupported
+            || matches!(
+                e.raw_os_error(),
+                Some(libc::EOPNOTSUPP | libc::ENOTTY | libc::EINVAL | libc::EBADF | libc::ENOSYS)
+            )
+    })
 }
 
 impl ManagedTorrent {

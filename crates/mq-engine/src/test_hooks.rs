@@ -101,6 +101,22 @@ pub async fn piece_state(engine: &Engine, h: crate::TorrentHandle, p: u32) -> St
     )
 }
 
+/// The fork's three counts of what is held: the per-file counts summed,
+/// `have_bytes`, and the have-needed-selected count. They agree whenever no
+/// piece is between its claim and its count.
+pub async fn have_counts(engine: &Engine, h: crate::TorrentHandle) -> Option<(u64, u64, u64)> {
+    let t = engine.torrent(h).ok()?;
+    let live = t.live.lock().await;
+    let managed = &live.as_ref()?.managed;
+    let state = managed.live()?;
+    let files: u64 = managed.stats().file_progress.iter().sum();
+    Some((
+        files,
+        state.get_approx_have_bytes(),
+        state.get_hns()?.have_bytes,
+    ))
+}
+
 pub(crate) async fn wait(engine: &Engine) {
     pass(&engine.inner.hold).await;
 }

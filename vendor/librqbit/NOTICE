@@ -98,7 +98,11 @@ Marquee changes (each changed spot carries a "Marquee fork" comment):
   `PieceChecked(ok)`, the per-file count and `have_bytes` move under the
   lock that sets `have`.
 - src/storage/filesystem/punch.rs: the punch is retried on EINTR.
-- src/torrent_state/live/mod.rs, src/torrent_state/live/evict.rs: a
-  torrent that evicts keeps its peers when it finishes (upstream drops
-  them, and queuing them again while their old connections go can drop a
-  peer for good).
+- src/torrent_state/live/mod.rs: a peer connection's death acts only on
+  its own peer slot (upstream took a newer connection's state for its own
+  when a peer disconnected as not needed was queued again before its old
+  connection was gone, and could drop the peer for good).
+- src/torrent_state/live/evict.rs, src/bitv.rs: the round's guard is armed
+  before the first gate and releases what is still gated; a punch refused
+  before any work keeps its pieces; a bitfield only in memory answers an
+  acknowledged flush with a failure, so nothing is punched.

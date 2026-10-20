@@ -32,9 +32,15 @@ pub(crate) fn punch_file(
     // A test's failure punches the first block, then fails: neither call
     // promises all or nothing.
     #[cfg(feature = "sync-log")]
-    if crate::bitv::sync_log::failing(path, crate::bitv::sync_log::Fail::Punch) {
-        sys_punch(file, start, block)?;
-        return Err(io::Error::other("injected after one block"));
+    {
+        use crate::bitv::sync_log::{Fail, failing};
+        if failing(path, Fail::PunchRefused) {
+            return Err(io::Error::from_raw_os_error(libc::EOPNOTSUPP));
+        }
+        if failing(path, Fail::Punch) {
+            sys_punch(file, start, block)?;
+            return Err(io::Error::other("injected after one block"));
+        }
     }
     sys_punch(file, start, end - start)?;
     #[cfg(feature = "sync-log")]

@@ -218,9 +218,6 @@ pub struct TorrentStateLive {
         ChunkInfo,
     )>,
     ratelimits: Limits,
-    /// Marquee fork (streaming window phase 1): an eviction round ran, so
-    /// a finish keeps the peers (see `on_piece_completed`).
-    evicts: std::sync::atomic::AtomicBool,
 }
 
 impl TorrentStateLive {
@@ -302,7 +299,6 @@ impl TorrentStateLive {
                 .collect(),
             ratelimit_upload_tx,
             ratelimits,
-            evicts: Default::default(),
         });
 
         state.spawn(
@@ -882,12 +878,7 @@ impl TorrentStateLive {
             }
             self.finished_notify.notify_waiters();
 
-            // Marquee fork (streaming window phase 1): a torrent that evicts
-            // will need pieces again; reconnecting peers dropped here races
-            // their old connections, which can drop them for good.
-            if !self.has_active_streams_unfinished_files(locked)
-                && !self.evicts.load(Ordering::Relaxed)
-            {
+            if !self.has_active_streams_unfinished_files(locked) {
                 // prevent deadlocks.
                 drop(g);
                 // There is not point being connected to peers that have all the torrent, when
@@ -1294,6 +1285,13 @@ impl PeerConnectionHandler for &'_ PeerHandler {
 
 impl PeerHandler {
     fn on_peer_died(self, error: Option<crate::Error>) -> crate::Result<()> {
+        #[cfg(feature = "sync-log")]
+        self.state.shared.spawner.block_in_place(|| {
+            crate::sync_log::pass(
+                &self.state.shared.options.output_folder,
+                crate::sync_log::Point::PeerDied,
+            )
+        });
         let peers = &self.state.peers;
         let handle = self.addr;
         let mut pe = match peers.states.get_mut(&handle) {
@@ -1308,6 +1306,20 @@ impl PeerHandler {
                 return Ok(());
             }
         };
+        // Marquee fork (streaming window phase 1, verification b N1): a
+        // connection's death acts only on its own slot. A peer disconnected
+        // as not needed may be queued again (a reconnect after an eviction,
+        // a file choice or a stream) before its old connection is gone:
+        // upstream then took the new attempt's state for its own, marked it
+        // dead or dropped the peer for good. `NotNeeded` was only restored.
+        let ours = match pe.value().get_state() {
+            PeerState::Connecting(tx) => tx.same_channel(&self.tx),
+            PeerState::Live(live) => live.tx.same_channel(&self.tx),
+            _ => false,
+        };
+        if !ours {
+            return Ok(());
+        }
         let prev = pe.value_mut().take_state(peers);
 
         match prev {

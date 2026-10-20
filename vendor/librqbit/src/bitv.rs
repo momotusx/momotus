@@ -21,10 +21,12 @@ pub trait BitV: Send + Sync {
     fn sync_data_of(&mut self, _files: Vec<(PathBuf, Range<usize>)>) {}
     /// Marquee fork (plans/streaming-window.md 2.5): writes the bitfield as
     /// it is now and answers once that write and its fsync are done, or
-    /// with the step that failed. In memory there is nothing to write.
+    /// with the step that failed. In memory nothing becomes durable, while a
+    /// stale bitfield on disk may still claim the pieces (verification b
+    /// N4), so the answer is a failure and no piece is punched.
     fn flush_acked(&mut self) -> FlushAck {
         let (tx, rx) = tokio::sync::oneshot::channel();
-        let _ = tx.send(Ok(()));
+        let _ = tx.send(Err("no bitfield on disk".to_owned()));
         rx
     }
 }
@@ -87,6 +89,8 @@ pub mod sync_log {
         Fsync,
         /// A piece just verified, after its claim and `PieceChecked`.
         Checked,
+        /// A peer connection's death, before it touches the peer's slot.
+        PeerDied,
     }
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -94,7 +98,12 @@ pub mod sync_log {
         DataSync,
         HaveWrite,
         HaveFsync,
+        /// A punch that frees its first block, then fails.
         Punch,
+        /// A punch refused before any work (EOPNOTSUPP).
+        PunchRefused,
+        /// The data sync before a full check's bitfield is stored.
+        CheckSync,
     }
 
     #[derive(Default)]
@@ -108,6 +117,10 @@ pub mod sync_log {
         /// Something stopped here.
         pub fn reached(&self) -> bool {
             self.state.lock().unwrap_or_else(|e| e.into_inner()).0
+        }
+
+        fn is_open(&self) -> bool {
+            self.state.lock().unwrap_or_else(|e| e.into_inner()).1
         }
 
         /// Lets every held step, and every later one, go on.
@@ -142,7 +155,8 @@ pub mod sync_log {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .iter()
-            .find(|(d, p, _)| *p == point && path.starts_with(d))
+            .rev()
+            .find(|(d, p, h)| *p == point && path.starts_with(d) && !h.is_open())
             .map(|(_, _, h)| h.clone());
         if let Some(h) = hold {
             let mut s = h.state.lock().unwrap_or_else(|e| e.into_inner());

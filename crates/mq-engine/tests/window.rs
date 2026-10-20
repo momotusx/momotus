@@ -335,6 +335,24 @@ async fn rounds_under_readers_and_writers_never_serve_a_hole() {
             reads
         }));
     }
+    // Readers parked in their read for 5 to 20 ms at a time, so rounds meet
+    // a reader between its `have` check and its `pread` (verification b N7).
+    let parker = tokio::spawn({
+        let dir = l.dir();
+        async move {
+            let mut x = 11u64;
+            loop {
+                x = x.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+                let held = sync_log::hold(&dir, Point::Read);
+                while !held.reached() {
+                    tokio::time::sleep(Duration::from_millis(1)).await;
+                }
+                tokio::time::sleep(Duration::from_millis(5 + (x >> 33) % 16)).await;
+                held.open();
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        }
+    });
     let (mut rounds, mut evicted) = (0, 0);
     let mut seen = [0u64; 3];
     while Instant::now() < deadline {
@@ -369,6 +387,15 @@ async fn rounds_under_readers_and_writers_never_serve_a_hole() {
     for r in readers {
         reads += within(90, r).await.unwrap();
     }
+    parker.abort();
+    // The counts of what is held agree once nothing moves (verification b
+    // N8): the claim, its per-file count and `have_bytes` change together.
+    settle(&l).await;
+    let counts = test_hooks::have_counts(l.engine(), l.t).await.unwrap();
+    assert!(
+        counts.0 == counts.2 && counts.1 == counts.2,
+        "per file, have_bytes, needed: {counts:?}"
+    );
     eprintln!("{rounds} rounds, {evicted} pieces evicted, {reads} reads");
     assert!(
         rounds > 50 && evicted > 20 && reads > 100,
@@ -442,13 +469,16 @@ async fn a_killed_round_leaves_only_true_claims() {
             s.seeder_addr,
             s.info_hash
         );
-        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
-            .args(["--exact", "crash_child", "--nocapture"])
-            .env(CRASH, spec)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-            .unwrap();
+        let mut child = Reaped(
+            std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "crash_child", "--nocapture"])
+                .env(CRASH, spec)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .unwrap(),
+        );
+        let child = &mut child.0;
         let waited = Instant::now();
         while !ready.exists() {
             assert!(
@@ -506,12 +536,29 @@ async fn a_killed_round_leaves_only_true_claims() {
     }
 }
 
+/// A child process killed and reaped when dropped, so a failing test leaves
+/// none behind.
+struct Reaped(std::process::Child);
+
+impl Drop for Reaped {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
 /// The child of test f; a passing no-op in a normal run.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn crash_child() {
     let Ok(spec) = std::env::var(CRASH) else {
         return;
     };
+    // Whatever ends or abandons the parent, the child ends: a held round
+    // keeps its runtime from exiting on its own.
+    std::thread::spawn(|| {
+        std::thread::sleep(Duration::from_secs(180));
+        std::process::exit(3);
+    });
     let parts: Vec<&str> = spec.split(' ').collect();
     let (step, root, seeder, hash) = (parts[0], Path::new(parts[1]), parts[2], parts[3]);
     let engine = engine_on(root).await;
@@ -634,7 +681,10 @@ async fn an_orphan_is_punched_and_fetched_again() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_failed_punch_never_claims_its_pieces_again() {
     let ok = tempfile::tempdir().unwrap();
-    assert!(mq_engine::librqbit::punch_supported(ok.path()));
+    if !mq_engine::librqbit::punch_supported(ok.path()) {
+        eprintln!("skipped: this host's temp folder cannot punch holes");
+        return;
+    }
     let refused = tempfile::tempdir().unwrap();
     sync_log::fail(refused.path(), Fail::Punch, usize::MAX);
     assert!(!mq_engine::librqbit::punch_supported(refused.path()));
@@ -650,6 +700,14 @@ async fn a_failed_punch_never_claims_its_pieces_again() {
         "pieces 5 and 6 claimed after the punch"
     );
     assert!(l.piece_matches(5).await && l.piece_matches(6).await);
+
+    // Refused before any work (EOPNOTSUPP): nothing was touched, so the
+    // pieces stay claimed (verification b N3).
+    sync_log::fail(l.root(), Fail::PunchRefused, usize::MAX);
+    let r = l.evict(&[9, 10]).await;
+    assert_eq!((r.kept, r.evicted), (vec![9, 10], vec![]));
+    assert!(r.error.is_some() && r.punched_bytes == 0);
+    assert!(l.piece_matches(9).await && l.piece_matches(10).await);
 }
 
 /// k. Unaligned piece edges: a block shared with a piece that is not gated
@@ -854,6 +912,9 @@ async fn a_piece_verified_just_before_a_round_is_fetched_again() {
         async move { l.request(8, 0..16).await }
     });
     reached(&checked).await;
+    // The held writer is piece 8's (verification a P3-4).
+    let state = test_hooks::piece_state(l.engine(), l.t, 8).await;
+    assert!(state.contains("Some((true,"), "{state}");
     assert_eq!(l.evict(&[8]).await.evicted, [8]);
     checked.open();
     assert!(l.piece_matches(8).await, "piece 8 fetched again");
@@ -895,6 +956,115 @@ async fn a_pause_mid_round_releases_the_gated_pieces() {
     gated.open();
     let _ = within(30, round).await.unwrap();
     assert!(l.piece_matches(5).await && l.piece_matches(9).await);
+}
+
+/// A connection's death acts only on its own peer slot (verification b
+/// N1). A torrent with only the `.nfo` chosen finishes and drops its seeder
+/// as not needed; choosing the video then queues the seeder again while the
+/// old connection's death waits. Upstream took the new connection's slot
+/// for the old one's and lost the peer; here the video reads.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_dying_connection_never_takes_a_new_ones_slot() {
+    let s = support::swarm(true).await;
+    let root = tempfile::tempdir().unwrap();
+    let engine = engine_on(root.path()).await;
+    let t = engine
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let dir = root.path().join(&s.info_hash);
+    let died = hold(&dir, Point::PeerDied);
+    let nfo = engine
+        .select_file(t, "default", &FileHint::Name("a.nfo".into()))
+        .await
+        .unwrap();
+    let reader = engine.open_reader(t, "default", nfo).await.unwrap();
+    let mut range = reader.range(0, Some(NFO)).await.unwrap();
+    within(30, range.ready()).await.unwrap();
+    drop(range);
+    reached(&died).await;
+    let movie = engine
+        .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
+        .await
+        .unwrap();
+    until("the seeder connected again", || async {
+        test_hooks::piece_state(&engine, t, 10)
+            .await
+            .contains("\"live\"")
+    })
+    .await;
+    died.open();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let (a, b) = (10 * PIECE - NFO, 11 * PIECE - NFO);
+    let reader = engine.open_reader(t, "default", movie).await.unwrap();
+    let mut range = reader.range(a, Some(b)).await.unwrap();
+    let read = async {
+        range.ready().await.unwrap();
+        let mut got = Vec::new();
+        range.read_to_end(&mut got).await.unwrap();
+        got
+    };
+    let Ok(got) = tokio::time::timeout(Duration::from_secs(30), read).await else {
+        panic!("{}", test_hooks::piece_state(&engine, t, 10).await);
+    };
+    assert!(got == s.movie[a as usize..b as usize]);
+}
+
+/// A torrent whose bitfield lives only in memory (its full check's data
+/// sync failed, so nothing was stored) never punches: a stale bitfield on
+/// disk may still claim the pieces (verification b N4).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_bitfield_only_in_memory_never_punches() {
+    let s = support::swarm(true).await;
+    let root = tempfile::tempdir().unwrap();
+    let folder = root.path().join(&s.info_hash);
+    std::fs::create_dir_all(&folder).unwrap();
+    std::fs::write(folder.join("a.nfo"), vec![b'n'; NFO as usize]).unwrap();
+    std::fs::write(folder.join("movie.mkv"), &s.movie).unwrap();
+    sync_log::fail(&folder, Fail::CheckSync, 1);
+    let engine = engine_on(root.path()).await;
+    let t = engine
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    engine
+        .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
+        .await
+        .unwrap();
+    until("the full check", || async {
+        let s = engine.stats(t).await.unwrap();
+        s.pieces_total > 0 && s.pieces_have == s.pieces_total
+    })
+    .await;
+    let mark = sync_log::under(&folder).len();
+    let r = engine.evict_pieces(t, &[5]).await.unwrap();
+    assert_eq!((r.kept, r.evicted), (vec![5], vec![]));
+    assert!(r.error.is_some());
+    let punched = sync_log::under(&folder)
+        .split_off(mark)
+        .into_iter()
+        .any(|e| matches!(e, Event::Punched { .. }));
+    assert!(!punched, "a piece was punched");
+}
+
+/// A round that outlives a pause (librqbit's own skips the keeper lock)
+/// punches nothing the resumed torrent fetched again: the pause emptied
+/// that state's storage (verification b N5).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_round_that_outlives_a_pause_never_punches_the_resumed_torrent() {
+    let l = std::sync::Arc::new(leeched().await);
+    let acked = hold(&l.dir(), Point::Acked);
+    let round = tokio::spawn({
+        let l = l.clone();
+        async move { l.engine().evict_pieces(l.t, &[5, 9]).await }
+    });
+    reached(&acked).await;
+    test_hooks::pause_skipping_the_keeper(l.engine(), l.t).await;
+    assert!(l.piece_matches(5).await && l.piece_matches(9).await);
+    acked.open();
+    let _ = within(30, round).await.unwrap();
+    assert!(l.piece_matches(5).await && l.piece_matches(9).await);
+    assert_eq!(l.have().await.0, 21);
 }
 
 async fn engine_on(dir: &Path) -> Engine {
