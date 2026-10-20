@@ -854,17 +854,11 @@ async fn joining_a_sync_account_ends_the_defaults_step() {
 #[path = "../../mq-sync-server/tests/support/mock_oidc.rs"]
 mod mock_oidc;
 
-/// Sign-in over the protocol (plans/accounts.md 3.4), against the relay and
-/// its mock provider: the relay's providers, a native sheet's token and the
-/// brokered `signIn` view each end in a ticket; the ticket makes an account
-/// linked to the identity, which the next sign-in finds. A flow this
-/// session did not start is refused; a return for another flow is ignored,
-/// a cancelled one fails the view. Links and unlinks answer `{record}`, the
-/// owner only (D16); any profile reads the links and cancels a deletion.
-#[tokio::test]
-async fn sign_in_over_the_protocol() {
+/// A relay with sign-in through the mock provider (route id `mock`): the
+/// mock, the relay's address, and its directory (remove it after).
+async fn sign_in_relay(name: &str) -> (mock_oidc::Mock, String, std::path::PathBuf) {
     let mock = mock_oidc::Mock::start(0).await;
-    let dir = std::env::temp_dir().join(format!("mq-bridge-signin-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("mq-bridge-{name}-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let server = format!("http://{}", listener.local_addr().unwrap());
@@ -881,7 +875,82 @@ async fn sign_in_over_the_protocol() {
     };
     let app = mq_sync_server::router(&dir.join("relay.sqlite"), config).unwrap();
     tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+    (mock, server, dir)
+}
 
+/// A proxy in front of `target` whose first `POST /v1/auth/token` never
+/// reaches the relay (502, as a gateway whose upstream dropped); everything
+/// else passes through.
+async fn flaky_proxy(target: String) -> String {
+    use axum::response::IntoResponse;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let dropped = std::sync::Arc::new(AtomicBool::new(false));
+    let app = axum::Router::new().fallback(move |request: axum::extract::Request| {
+        let (target, dropped) = (target.clone(), dropped.clone());
+        async move {
+            if request.uri().path() == "/v1/auth/token" && !dropped.swap(true, Ordering::Relaxed) {
+                return (axum::http::StatusCode::BAD_GATEWAY, "upstream gone").into_response();
+            }
+            let (parts, body) = request.into_parts();
+            let body = axum::body::to_bytes(body, usize::MAX).await.unwrap();
+            let mut ask = reqwest::Client::new()
+                .request(parts.method, format!("{target}{}", parts.uri))
+                .body(body);
+            if let Some(kind) = parts.headers.get("content-type") {
+                ask = ask.header("content-type", kind);
+            }
+            let answer = ask.send().await.unwrap();
+            let status = answer.status();
+            (status, answer.bytes().await.unwrap()).into_response()
+        }
+    });
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    url
+}
+
+/// A native sign-in whose token request was lost on the way (no definite
+/// answer): the flow stays, and the same token succeeds when sent again.
+#[tokio::test]
+async fn a_native_sign_in_sent_again_after_a_lost_request() {
+    let (mock, server, dir) = sign_in_relay("retry").await;
+    let proxy = flaky_proxy(server).await;
+    let (tx, mut rx) = Output::channel();
+    let mut s = Session::new(Core::temporary("default").unwrap(), tx);
+    let mut ask = async |request: Value| {
+        let id = request["id"].as_u64().unwrap();
+        s.handle_text(&request.to_string()).await;
+        reply_to(&mut rx, id).await
+    };
+    let started =
+        ask(json!({"id": 1, "op": "nativeSignInStart", "server": proxy, "provider": "mock"})).await;
+    let flow = &started["result"]["flow"];
+    let token = mock.sign(mock.claims(
+        "marquee",
+        "alice",
+        started["result"]["nonce"].as_str().unwrap(),
+    ));
+    let lost = ask(json!({"id": 2, "op": "nativeSignIn", "flow": flow, "idToken": token})).await;
+    assert_eq!(lost["ok"], false, "{lost}");
+    let again = ask(json!({"id": 3, "op": "nativeSignIn", "flow": flow, "idToken": token})).await;
+    assert_eq!(again["result"]["phase"], "new", "{again}");
+    // Taken: the flow is gone from the core now.
+    let twice = ask(json!({"id": 4, "op": "nativeSignIn", "flow": flow, "idToken": token})).await;
+    assert_eq!(twice["code"], "wrongFlow", "{twice}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Sign-in over the protocol (plans/accounts.md 3.4), against the relay and
+/// its mock provider: the relay's providers, a native sheet's token and the
+/// brokered `signIn` view each end in a ticket; the ticket makes an account
+/// linked to the identity, which the next sign-in finds. A flow this
+/// session did not start is refused; a return for another flow is ignored,
+/// a cancelled one fails the view. Links and unlinks answer `{record}`, the
+/// owner only (D16); any profile reads the links and cancels a deletion.
+#[tokio::test]
+async fn sign_in_over_the_protocol() {
+    let (mock, server, dir) = sign_in_relay("signin").await;
     let (tx, mut rx) = Output::channel();
     let mut s = Session::new(Core::temporary("default").unwrap(), tx);
     let mut ask = async |request: Value| {
