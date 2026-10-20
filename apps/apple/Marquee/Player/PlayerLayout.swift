@@ -97,6 +97,18 @@ enum PlayerLayout {
     static func overlayBottom(controlsShown: Bool, controlsHeight: CGFloat) -> CGFloat {
         controlsShown ? controlsHeight + 8 : 24
     }
+
+    /// The waiting status sits centred, unless the shown controls reach the
+    /// middle (a phone in landscape): then it sits just over them, in one
+    /// line, and stays in sight, since the viewer tapped to see what is
+    /// happening. Nil keeps it centred; else its bottom padding.
+    static func statusOverControls(controlsShown: Bool, windowHeight: CGFloat, controlsHeight: CGFloat) -> CGFloat? {
+        guard controlsShown, windowHeight > 0, controlsHeight > windowHeight / 2 - statusHalfHeight else { return nil }
+        return overlayBottom(controlsShown: true, controlsHeight: controlsHeight)
+    }
+
+    /// Half the centred status: the large spinner, its gap and one line.
+    static let statusHalfHeight: CGFloat = 48
 }
 
 /// Seeking on the TV's position bar: 10 s a press, growing while the same

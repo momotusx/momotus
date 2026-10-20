@@ -81,7 +81,10 @@ struct PlayerScreen: View {
                 .allowsHitTesting(false)
                 .animation(Theme.Motion.panel, value: controls)
             }
-            StatusOverlay(model: model, back: close, chooseVersion: model.versions == nil ? nil : { showVersions = true })
+            StatusOverlay(
+                model: model, back: close, chooseVersion: model.versions == nil ? nil : { showVersions = true },
+                overControls: PlayerLayout.statusOverControls(controlsShown: controlsShown, windowHeight: windowHeight, controlsHeight: controlsHeight)
+            )
             if controlsShown {
                 PlayerControls(model: model, versions: model.versions, back: close, hold: { open in
                     menuOpenedAt = open ? .now : nil
@@ -336,6 +339,9 @@ private struct StatusOverlay: View {
     /// Opens this title's Versions: failover only tries the same release from
     /// other sources, so another version is the way on.
     let chooseVersion: (() -> Void)?
+    /// Set when the shown controls reach the middle: the waiting status sits
+    /// this far up, just over them (PlayerLayout.statusOverControls).
+    var overControls: CGFloat?
     /// The way on takes focus when the failure shows, so a remote is on it.
     @FocusState private var primary: Bool
 
@@ -385,6 +391,20 @@ private struct StatusOverlay: View {
             .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true)
             .padding(.horizontal, Theme.Space.m)
             .onAppear { primary = true }
+        } else if model.firstFrameMs == nil || model.waiting, let overControls {
+            HStack(spacing: 10) {
+                ProgressView().tint(.white)
+                if model.firstFrameMs == nil {
+                    Text(PlayerLayout.waitingWords(model.playback, notice: model.notice))
+                        .font(.text(Theme.type.callout, relativeTo: .callout))
+                        .foregroundStyle(.white.opacity(0.8))
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, Theme.Space.s)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            .padding(.bottom, overControls)
+            .allowsHitTesting(false)
         } else if model.firstFrameMs == nil || model.waiting {
             VStack(spacing: 14) {
                 ProgressView().controlSize(.large).tint(.white)

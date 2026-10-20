@@ -385,3 +385,13 @@ private func phase(_ phase: String, _ extra: String = "") throws -> PlaybackSnap
     let groups = SubtitleMenu.groups(tracks, preferred: SubtitleMenu.preferred(subtitle: [], audio: [], device: "en"))
     #expect(groups.top.map(\.language) == ["en"] && groups.other.map(\.language) == ["ar"])
 }
+
+@Test func theWaitingLineSitsOverControlsThatReachTheMiddle() {
+    // A phone in landscape: the shown controls reach the middle, so the line sits just over them.
+    #expect(PlayerLayout.statusOverControls(controlsShown: true, windowHeight: 402, controlsHeight: 290) == 298)
+    // A Mac window: the controls stay low, the line stays centred.
+    #expect(PlayerLayout.statusOverControls(controlsShown: true, windowHeight: 1000, controlsHeight: 200) == nil)
+    // Controls hidden, or no height yet: centred.
+    #expect(PlayerLayout.statusOverControls(controlsShown: false, windowHeight: 402, controlsHeight: 290) == nil)
+    #expect(PlayerLayout.statusOverControls(controlsShown: true, windowHeight: 0, controlsHeight: 290) == nil)
+}
