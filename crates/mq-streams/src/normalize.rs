@@ -66,6 +66,16 @@ pub fn normalize(
     }
 }
 
+/// What a device keeps of a stream key: `h` and 32 hex digits of its
+/// SHA-256. A key can be a whole URL, and an addon's URL can hold an
+/// account's API key (code review 2026-10-20 P2-5).
+pub fn key_digest(key: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let hash = Sha256::digest(key.as_bytes());
+    let hex: String = hash[..16].iter().map(|b| format!("{b:02x}")).collect();
+    format!("h{hex}")
+}
+
 /// Torrent identity is hash and file; URLs are their own identity; anything
 /// else falls back to title plus size.
 fn stream_key(source: &Source, title: &str, size: Option<u64>) -> String {

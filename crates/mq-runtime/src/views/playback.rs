@@ -120,7 +120,8 @@ pub struct PlaybackSnapshot {
     /// The recommended version failed for a reason of its own (no picture
     /// on this device, a dead swarm, the wrong file) and the view moved on
     /// by itself to this one, the ranking's next pick, at most twice: "Trying
-    /// the next version: {label}" while `phase` is `resolving`.
+    /// the next version: {label}" while `phase` is `resolving`. Cleared once
+    /// a source of it starts.
     pub trying: Option<OtherVersion>,
     /// A version picked by hand failed for a reason of its own: the failure
     /// card offers this one, the ranking's next pick (open `playback` with
@@ -304,6 +305,11 @@ struct State {
     /// to by itself.
     tried: Vec<String>,
     hops: u8,
+    /// The pick's own chain, for "Try again" to start afresh.
+    first: Vec<ParsedStream>,
+    /// The playing source got past where it started (a progress report):
+    /// a decode error after that is not the version's.
+    progressed: bool,
     /// The playing source's token: its URL and its subtitles' URLs live as
     /// long as it is kept here.
     lease: Option<Lease>,
@@ -394,10 +400,12 @@ impl State {
                 .map(|c| c.key.clone())
                 .into_iter()
                 .collect(),
+            first: candidates.clone(),
             candidates,
             next: 0,
             version_failed: false,
             hops: 0,
+            progressed: false,
             lease: None,
             run: 0,
             closed: false,
@@ -536,10 +544,17 @@ impl PlaybackView {
             if s.snapshot.phase != PlaybackPhase::Failed || s.closed {
                 return;
             }
+            // A fresh start of the pick itself, after any moves on (code
+            // review 2026-10-20 P1-1), each torrent with the full deadline.
+            s.candidates = s.first.clone();
+            s.tried = s.first.first().map(|c| c.key.clone()).into_iter().collect();
+            s.hops = 0;
             s.next = 0;
+            s.version_failed = false;
             s.patient = true;
             s.snapshot.phase = PlaybackPhase::Resolving;
             s.snapshot.attempts.clear();
+            s.snapshot.trying = None;
             s.snapshot.offer = None;
             self.snapshot.set(s.snapshot.clone());
         }
@@ -553,11 +568,12 @@ impl PlaybackView {
         may_cut_early(&lock(&self.state))
     }
 
-    /// Tests: how long a torrent's start would be given now.
+    /// Tests: how a torrent's start would be judged now: an early cut,
+    /// the deadline, and how long a swarm where no peer unchokes is given.
     #[doc(hidden)]
     #[cfg(feature = "torrent")]
-    pub fn start_deadline(&self) -> Duration {
-        start_rule(&lock(&self.state)).1
+    pub fn start_rule(&self) -> (bool, Duration, Option<Duration>) {
+        start_rule(&lock(&self.state))
     }
 
     /// A kids policy refused the target at open.
@@ -644,7 +660,7 @@ impl PlaybackView {
     ) {
         let error = mq_server::failure_words(kind, status, error);
         let error = error.as_str();
-        {
+        let (failed, pick, decode) = {
             let mut s = lock(&self.state);
             let other = failed.is_some_and(|failed| failed != s.snapshot.attempt);
             // A stopped view opens no other source (a debrid one would
@@ -655,28 +671,39 @@ impl PlaybackView {
             // The running task's work for this source ends here.
             s.run += 1;
             release_all(&mut s);
-            if let Some(stream) = s.next.checked_sub(1).and_then(|i| s.candidates.get(i)) {
-                let attempt = attempt(stream, error);
-                s.snapshot.attempts.push(attempt);
+            let failed = s
+                .next
+                .checked_sub(1)
+                .and_then(|i| s.candidates.get(i))
+                .cloned();
+            if let Some(stream) = &failed {
+                s.snapshot.attempts.push(attempt(stream, error));
             }
-            // The player could not decode it (Apple reports a frame that
-            // never came this way): the version's own failure, and this
-            // device remembers it.
-            if kind == Some("decode") {
+            // The player could not decode it before it ever played (Apple
+            // reports a frame that never came this way): the version's own
+            // failure, and this device remembers it. A decode error after
+            // good playback is not the version's (code review 2026-10-20
+            // P2-2).
+            let decode = kind == Some("decode") && !s.progressed;
+            if decode {
                 s.version_failed = true;
-                if let Some(stream) = s.next.checked_sub(1).and_then(|i| s.candidates.get(i)) {
-                    let now = mq_library::hlc::now_ms();
-                    crate::speed::record_did_not_play(self.core.library(), &stream.key, now);
-                }
-            }
-            if let Some(pick) = &s.pick {
-                pick.failed();
             }
             s.snapshot.phase = PlaybackPhase::Resolving;
             s.snapshot.key = None;
             s.snapshot.subtitles_pending = false;
             clear_segments(&mut s);
             self.snapshot.set(s.snapshot.clone());
+            (failed, s.pick.clone(), decode)
+        };
+        // Written and reported outside the playback's lock.
+        if let Some(stream) = &failed {
+            if decode {
+                let now = mq_library::hlc::now_ms();
+                crate::speed::record_did_not_play(self.core.library(), &stream.key, now);
+            }
+            if let Some(pick) = &pick {
+                pick.failed(&stream.key);
+            }
         }
         self.spawn_resolve();
     }
@@ -781,6 +808,11 @@ impl PlaybackView {
         }
         let due = {
             let mut s = lock(&self.state);
+            if position_ms
+                > s.snapshot.resume_ms.unwrap_or(0) + PLAYED_PAST_START.as_millis() as u64
+            {
+                s.progressed = true;
+            }
             s.last = Some((position_ms, duration_ms));
             s.dirty = true;
             s.saved_at.is_none_or(|t| t.elapsed() >= SAVE_EVERY)
@@ -972,8 +1004,11 @@ fn adopt(s: &mut State, run: u64, lease: Lease) -> bool {
     s.snapshot.attempt += 1;
     s.lease = Some(lease);
     // A source plays: what failed before it says nothing about a later
-    // failure.
+    // failure, and the move on that led here is over (code review
+    // 2026-10-20 P3: a later source failover is not a next version).
     s.version_failed = false;
+    s.progressed = false;
+    s.snapshot.trying = None;
     true
 }
 
@@ -1193,7 +1228,13 @@ async fn resolve_next(
                     snapshot.set(s.snapshot.clone());
                     proven
                 };
-                remember_dead(&core, proven);
+                if !proven.is_empty() {
+                    remember_dead(&core, proven);
+                    let pick = lock(&state).pick.clone();
+                    if let Some(pick) = pick {
+                        pick.relearn();
+                    }
+                }
                 if matches!(upstream, Upstream::Http { .. }) {
                     let attempt = lock(&state).snapshot.attempt;
                     spawn_http_sample(&core, &state, attempt);
@@ -1274,12 +1315,15 @@ async fn resolve_next(
                 return;
             }
             Err(error) => {
-                let mut s = lock(&state);
-                s.snapshot.attempts.push(attempt(&stream, &error));
-                if let Some(pick) = &s.pick {
-                    pick.failed();
+                let pick = {
+                    let mut s = lock(&state);
+                    s.snapshot.attempts.push(attempt(&stream, &error));
+                    snapshot.set(s.snapshot.clone());
+                    s.pick.clone()
+                };
+                if let Some(pick) = pick {
+                    pick.failed(&stream.key);
                 }
-                snapshot.set(s.snapshot.clone());
             }
         }
     }
@@ -1304,20 +1348,27 @@ async fn shows_picture(
     Err("This file's video shows no picture on this device".into())
 }
 
+/// A source that played this far past where it started played well: a
+/// decode error after it is not the version's (code review 2026-10-20
+/// P2-2). Apple reports a picture that never came within 4 s.
+const PLAYED_PAST_START: Duration = Duration::from_secs(30);
+
 /// The recommendation moves on by itself at most this many times.
 const HOPS: u8 = 2;
 
 /// How a torrent's start is judged: whether a swarm that falls short may be
-/// cut at its first window, and the deadline. When almost nobody is sharing
-/// any version of the title, the attempt gives up after that first window
-/// rather than waiting the full deadline; never after "Try again".
+/// cut at its first window, the deadline, and how long a swarm where no
+/// peer unchokes is given. When almost nobody is sharing any version of the
+/// title, the stall windows stay and the deadline is the full 60 s, but a
+/// swarm where no peer unchoked by the end of the first window is let go
+/// (code review 2026-10-20 P1-1); never after "Try again".
 #[cfg(feature = "torrent")]
-fn start_rule(s: &State) -> (bool, Duration) {
+fn start_rule(s: &State) -> (bool, Duration, Option<Duration>) {
     let hopeless = !s.patient && s.pick.as_ref().is_some_and(|p| p.nobody_sharing());
     if hopeless {
-        (true, STALL.first)
+        (true, TORRENT_READY_TIMEOUT, Some(STALL.first))
     } else {
-        (may_cut_early(s), TORRENT_READY_TIMEOUT)
+        (may_cut_early(s), TORRENT_READY_TIMEOUT, None)
     }
 }
 
@@ -1552,8 +1603,8 @@ async fn open_torrent(
                 unchoked: s.unchoked_ms.is_some(),
             })
         };
-        let (others, deadline) = start_rule(&lock(state));
-        let ready = watch_start(head.ready(), progress, STALL, others, deadline).await;
+        let (others, deadline, quiet) = start_rule(&lock(state));
+        let ready = watch_start(head.ready(), progress, STALL, others, deadline, quiet).await;
         Ok::<_, mq_engine::EngineError>((file, info, ready))
     };
     let failed = match started.await {
@@ -1656,8 +1707,9 @@ struct Progress {
 /// first unchoke (the metadata is already in), and each `floor` of
 /// received payload must come within it (`first`, then `later`). A swarm
 /// that falls short is cut when `others` can play instead; otherwise, and
-/// with no unchoke at all, it gets until `deadline`. Never cut while it
-/// progresses.
+/// with no unchoke at all, it gets until `deadline`, or `quiet` when no
+/// peer unchoked by then. Never cut while it progresses, the deadline
+/// included.
 #[cfg(any(test, feature = "torrent"))]
 async fn watch_start<T, P, F>(
     ready: impl std::future::Future<Output = T>,
@@ -1665,6 +1717,7 @@ async fn watch_start<T, P, F>(
     stall: Stall,
     others: bool,
     deadline: Duration,
+    quiet: Option<Duration>,
 ) -> Started<T>
 where
     P: FnMut() -> F,
@@ -1681,7 +1734,10 @@ where
             out = &mut ready => return Started::Ready(out),
             _ = tick.tick() => {
                 let now = tokio::time::Instant::now();
-                if now - start >= deadline {
+                // Within its current window, a swarm is progressing.
+                let progressing = window.is_some_and(|(_, since, length)| now - since < length);
+                let silent = window.is_none() && quiet.is_some_and(|q| now - start >= q);
+                if silent || (now - start >= deadline && !progressing) {
                     return Started::Late { unchoked: window.is_some() };
                 }
                 let Some(p) = progress().await else { continue };
@@ -2785,6 +2841,15 @@ mod tests {
         at: impl Fn(u64) -> (u64, usize),
         others: bool,
     ) -> (Started<()>, Duration) {
+        watch_quiet(ready_after, at, others, None).await
+    }
+
+    async fn watch_quiet(
+        ready_after: Option<Duration>,
+        at: impl Fn(u64) -> (u64, usize),
+        others: bool,
+        quiet: Option<Duration>,
+    ) -> (Started<()>, Duration) {
         let begun = tokio::time::Instant::now();
         let ready = async move {
             match ready_after {
@@ -2792,7 +2857,7 @@ mod tests {
                 None => std::future::pending::<()>().await,
             }
         };
-        let started = watch_start(ready, fake(at), STALL, others, DEADLINE).await;
+        let started = watch_start(ready, fake(at), STALL, others, DEADLINE, quiet).await;
         (started, begun.elapsed())
     }
 
@@ -2841,14 +2906,31 @@ mod tests {
         assert!((19..23).contains(&took.as_secs()), "{took:?}");
     }
 
-    /// A swarm that keeps sending is never cut early: it gets the deadline,
-    /// and a ready head wins at once.
+    /// A swarm that keeps sending is never cut, the deadline included (the
+    /// doc's promise, code review 2026-10-20 P1-1): a slow head that is ready
+    /// at 90 s plays, and a ready head wins at once.
     #[tokio::test(start_paused = true)]
-    async fn a_swarm_that_keeps_sending_is_never_cut_early() {
-        let (started, _) = watch(None, |t| (t * 300 * KIB, 5), true).await;
-        assert!(matches!(started, Started::Late { .. }));
+    async fn a_swarm_that_keeps_sending_is_never_cut() {
+        let sending = |t| (t * 30 * KIB, 5);
+        let (started, took) = watch(Some(Duration::from_secs(90)), sending, true).await;
+        assert!(matches!(started, Started::Ready(())), "{took:?}");
         let (started, _) = watch(Some(Duration::from_secs(20)), |t| (t * 300 * KIB, 5), true).await;
         assert!(matches!(started, Started::Ready(())));
+    }
+
+    /// Almost nobody sharing: a swarm where no peer unchoked by 30 s is let
+    /// go then; one that unchoked and still delivers keeps its windows and
+    /// is not cut at 30 s.
+    #[tokio::test(start_paused = true)]
+    async fn nobody_sharing_lets_a_silent_swarm_go_at_30s_only() {
+        let quiet = Some(Duration::from_secs(30));
+        let (started, took) = watch_quiet(None, |_| (0, 0), true, quiet).await;
+        assert!(matches!(started, Started::Late { unchoked: false }));
+        assert!((30..32).contains(&took.as_secs()), "{took:?}");
+        let delivering = |t: u64| (t * 30 * KIB, 1);
+        let ready = Some(Duration::from_secs(45));
+        let (started, took) = watch_quiet(ready, delivering, true, quiet).await;
+        assert!(matches!(started, Started::Ready(())), "{took:?}");
     }
 
     /// 3.4: the engine's file must be the version listed; only larger

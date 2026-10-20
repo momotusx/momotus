@@ -113,8 +113,9 @@ pub struct VersionsSnapshot {
     pub frozen: bool,
     /// Every listed version is a swarm the engine would fetch whose
     /// trackers count one seeder or none: almost nobody is sharing this
-    /// title right now, so say so before Play. Its attempt gives up after
-    /// the first 30 s window.
+    /// title right now, so say so before Play. Its attempt keeps the stall
+    /// windows and the full deadline, but a swarm where no peer unchoked by
+    /// the end of the first window (30 s) is let go then.
     pub nobody_sharing: bool,
 }
 
@@ -184,8 +185,12 @@ const SIDE_WAIT: Duration = Duration::from_secs(3);
 
 struct State {
     conditions: VersionsConditions,
-    /// A playback of the recommendation failed in this view.
+    /// A playback of a pick failed in this view: no later pick teaches
+    /// (an offer taken after a failed hand pick included).
     recommendation_failed: bool,
+    /// What the rows rank with, for a rank again outside the view's task
+    /// (a playback's failure, `PickHandle::failed`). None when denied.
+    ranking: Option<Arc<Ranking>>,
     /// The recommendation was picked and has not started or failed yet:
     /// a pick now could still turn out to follow its failure (code review
     /// r1 P3), so it teaches nothing.
@@ -266,18 +271,38 @@ pub struct Pick {
 #[derive(Clone)]
 pub struct PickHandle {
     state: std::sync::Weak<Mutex<State>>,
+    core: Core,
+    snapshot: SharedObservable<VersionsSnapshot>,
     recommended: bool,
     /// The device's engine shows HEVC only from `hvc1` entries.
     pub hvc1_only: bool,
 }
 
 impl PickHandle {
-    pub fn failed(&self) {
-        if let (true, Some(state)) = (self.recommended, self.state.upgrade()) {
-            let mut s = lock(&state);
-            s.recommendation_failed = true;
-            s.recommendation_starting = false;
-        }
+    /// The source `key` of the pick failed. No later pick in this view
+    /// teaches (3.9), and the view learns what the device recorded of the
+    /// failure: its rows rank again, and a frozen pick that failed is let
+    /// go (code review 2026-10-20 P2-1). Called outside the playback's lock.
+    pub fn failed(&self, key: &str) {
+        let Some(state) = self.state.upgrade() else {
+            return;
+        };
+        let mut s = lock(&state);
+        s.recommendation_failed = true;
+        s.recommendation_starting = false;
+        relearn(&self.core, &mut s, Some(key));
+        self.snapshot.set(render(&s));
+    }
+
+    /// The device recorded something since (a swarm proven dead once
+    /// another source reached a peer): the rows rank again.
+    pub fn relearn(&self) {
+        let Some(state) = self.state.upgrade() else {
+            return;
+        };
+        let mut s = lock(&state);
+        relearn(&self.core, &mut s, None);
+        self.snapshot.set(render(&s));
     }
 
     /// The picked row started playing.
@@ -604,6 +629,7 @@ impl VersionsView {
             done: eligible.is_empty(),
             prefetched: false,
             counting: 0,
+            ranking: None,
         }));
         let snapshot = SharedObservable::new(render(&lock(&state)));
         let mut tasks = JoinSet::new();
@@ -612,6 +638,7 @@ impl VersionsView {
             params,
             item_id,
         });
+        lock(&state).ranking = Some(ranking.clone());
         tasks.spawn(supervise(
             core.clone(),
             changes,
@@ -657,6 +684,7 @@ impl VersionsView {
             done: false,
             prefetched: true,
             counting: 0,
+            ranking: None,
         };
         Self {
             core: core.clone(),
@@ -729,19 +757,21 @@ impl VersionsView {
 
     /// The stream for row `key` followed by its failover chain, for playback.
     pub fn candidates(&self, key: &str) -> Vec<ParsedStream> {
-        let state = lock(&self.state);
-        state
-            .ranked
-            .rows
-            .iter()
-            .find(|r| r.stream.key == key)
-            .map(|r| {
-                std::iter::once(&r.stream)
-                    .chain(&r.failover)
-                    .cloned()
-                    .collect()
-            })
-            .unwrap_or_default()
+        let s = lock(&self.state);
+        // The frozen pick plays its own source first, wherever a later
+        // answer folded it (code review 2026-10-20 P2-3).
+        let row = s
+            .recommended
+            .clone()
+            .filter(|r| r.stream.key == key)
+            .or_else(|| holding(&s.ranked.rows, |st| st.key == key));
+        row.map(|r| {
+            std::iter::once(&r.stream)
+                .chain(&r.failover)
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default()
     }
 
     /// The user picked row `key` to play. A pick counts toward learning
@@ -755,6 +785,8 @@ impl VersionsView {
         let recommended = s.recommended.as_ref().is_some_and(|r| r.stream.key == key);
         let handle = PickHandle {
             state: Arc::downgrade(&self.state),
+            core: self.core.clone(),
+            snapshot: self.snapshot.clone(),
             recommended,
             hvc1_only: self.learning.caps.hvc1_only,
         };
@@ -1232,11 +1264,13 @@ fn live_asks(
     asks
 }
 
-/// One scrape of the trackers, within 3 s. A swarm no answer told anything
-/// about keeps the addon's number: the engine gives no count for a default
-/// tracker's 0/0, the answer for a swarm it does not track, and gives a
-/// zero that a tracker counting leechers, or the stream's own tracker,
-/// reported (`Engine::scrape`).
+/// One scrape of the trackers: an ask takes at most 10 s, and one that
+/// answers nothing at all is asked again a second later, so counts can come
+/// up to about 21 s after an answer; they never hold `done`. A swarm no
+/// answer told anything about keeps the addon's number: the engine gives no
+/// count for a default tracker's 0/0, the answer for a swarm it does not
+/// track, and gives a zero that a tracker counting leechers, or the
+/// stream's own tracker, reported (`Engine::scrape`).
 async fn live_check(core: Core, swarms: Vec<(String, Vec<String>)>) -> Side {
     let ask = || async {
         let counts = tokio::time::timeout(LIVE_WAIT, core.live_seeders(&swarms)).await;
@@ -1421,13 +1455,57 @@ fn rerank(s: &mut State, ranking: &Ranking) {
     } else if let Some(pick) = &s.recommended {
         // Frozen: the pick stays, its facts (live seeders, line) follow,
         // as long as its row still leads with the same source.
-        let same = |r: &&RankedRow| {
-            let (a, b) = (&r.stream, &pick.stream);
-            (&a.key, &a.addon_url, &a.service) == (&b.key, &b.addon_url, &b.service)
-        };
+        let same = |r: &&RankedRow| same_source(&r.stream, &pick.stream);
         if let Some(row) = s.ranked.rows.iter().find(same) {
             s.recommended = Some(row.clone());
+        } else if let Some(row) = holding(&s.ranked.rows, |st| same_source(st, &pick.stream)) {
+            // A later answer folded the pick into another row: it follows
+            // that row, still led by its own source.
+            s.recommended = Some(row);
         }
+    }
+}
+
+/// The same source: one key from one install and one service.
+fn same_source(a: &ParsedStream, b: &ParsedStream) -> bool {
+    (&a.key, &a.addon_url, &a.service) == (&b.key, &b.addon_url, &b.service)
+}
+
+/// The row holding a source `is` matches, led by that source: a row's own
+/// head, or a source folded into its failover chain.
+fn holding(rows: &[RankedRow], is: impl Fn(&ParsedStream) -> bool) -> Option<RankedRow> {
+    rows.iter().find_map(|r| {
+        if is(&r.stream) {
+            return Some(r.clone());
+        }
+        let at = r.failover.iter().position(&is)?;
+        let mut led = r.clone();
+        let source = led.failover.remove(at);
+        let head = std::mem::replace(&mut led.stream, source);
+        led.failover.insert(0, head);
+        Some(led)
+    })
+}
+
+/// What the device recorded since the view opened (a swarm that stalled,
+/// a file with no picture, a version its player could not decode) is read
+/// again and the rows rank again; a frozen pick that just failed is let
+/// go, so the next one can lead (code review 2026-10-20 P2-1).
+fn relearn(core: &Core, s: &mut State, failed: Option<&str>) {
+    let (lib, now) = (core.library(), mq_library::hlc::now_ms());
+    s.rank.dead_swarms = crate::speed::dead_swarms(lib, now);
+    s.rank.no_picture = crate::speed::no_picture(lib);
+    s.rank.did_not_play = crate::speed::did_not_play(lib, now);
+    let pick_failed = s
+        .recommended
+        .as_ref()
+        .zip(failed)
+        .is_some_and(|(r, key)| r.stream.key == key);
+    if pick_failed {
+        s.frozen = false;
+    }
+    if let Some(ranking) = s.ranking.clone() {
+        rerank(s, &ranking);
     }
 }
 
@@ -1488,13 +1566,20 @@ fn render(s: &State) -> VersionsSnapshot {
     }
 }
 
-/// Every listed version is a swarm the engine would fetch, and its
-/// trackers count one seeder or none. A version without a live count, or
-/// one a service or a link serves, can still start.
+/// Every listed version is a swarm the engine would fetch, and every
+/// source of it a swarm whose trackers count one seeder or none. A source
+/// without a live count, a link, or one a service may have ready can still
+/// start.
 fn nobody_sharing(s: &State) -> bool {
+    let dead_source = |st: &ParsedStream| {
+        let maybe_ready = st.cached == Some(true) || (s.rank.debrid && st.cached.is_none());
+        !maybe_ready && info_hash(st).is_some_and(|h| s.live.get(&h).is_some_and(|n| *n <= 1))
+    };
     let dead = |r: &RankedRow| {
         r.class == SourceClass::Swarm
-            && info_hash(&r.stream).is_some_and(|h| s.live.get(&h).is_some_and(|n| *n <= 1))
+            && std::iter::once(&r.stream)
+                .chain(&r.failover)
+                .all(dead_source)
     };
     !s.ranked.rows.is_empty() && s.ranked.rows.iter().all(dead)
 }

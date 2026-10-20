@@ -203,6 +203,22 @@ fn deleting_a_profile_purges_every_table_and_keeps_the_others() {
     );
 }
 
+/// Code review 2026-10-20 P2-5: the device's version lists name streams a
+/// profile's addons listed, so they go with the profile, as http_cache
+/// does; other device state stays.
+#[test]
+fn deleting_a_profile_clears_the_version_lists() {
+    let lib = Library::temporary().unwrap();
+    lib.create_profile("x", "x", "", &hlc(1, 1)).unwrap();
+    for key in ["no_picture", "did_not_play", "network"] {
+        lib.set_device_value(key, r#"{"h00":1}"#).unwrap();
+    }
+    lib.delete_profile("x", &hlc(2, 1)).unwrap();
+    assert_eq!(lib.device_value("no_picture").unwrap(), None);
+    assert_eq!(lib.device_value("did_not_play").unwrap(), None);
+    assert!(lib.device_value("network").unwrap().is_some(), "kept");
+}
+
 #[test]
 fn every_local_writer_is_refused_for_a_gone_profile() {
     let lib = Library::temporary().unwrap();

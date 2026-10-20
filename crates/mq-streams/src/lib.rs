@@ -7,5 +7,5 @@ mod normalize;
 mod rank;
 
 pub use model::*;
-pub use normalize::normalize;
+pub use normalize::{key_digest, normalize};
 pub use rank::{RankInput, rank, screen_class, title_similarity};

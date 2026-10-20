@@ -255,6 +255,52 @@ async fn frozen_pick_survives_late_results() {
     assert!(view.recommended().is_some());
 }
 
+/// One release as a link from two installs: the later answer comes from
+/// the install placed first, so it leads the row after the pick froze.
+const LINK_LATER: &str = r#"{"streams":[
+ {"name":"Later 1080p","title":"Game.of.Thrones.S01E01.1080p.BluRay.x264-DEMAND","url":"https://later.example/got.mkv","behaviorHints":{"videoSize":3100000000}}
+]}"#;
+const LINK_FIRST: &str = r#"{"streams":[
+ {"name":"First 1080p","title":"Game.of.Thrones.S01E01.1080p.BluRay.x264-DEMAND","url":"https://first.example/got.mkv","behaviorHints":{"videoSize":3100000000}}
+]}"#;
+
+/// Code review 2026-10-20 P2-3: a frozen pick a later answer folds into
+/// another row still plays: its key leads its own chain, and the pick
+/// stays.
+#[tokio::test]
+async fn a_frozen_pick_folded_into_another_row_still_plays() {
+    mq_relparse::warm_up();
+    let core = Core::temporary("p").unwrap();
+    let later = stream_addon("later", Duration::from_millis(800), LINK_LATER).await;
+    let first = stream_addon("first", Duration::ZERO, LINK_FIRST).await;
+    core.library()
+        .set_addons("p", &[later, first], &core.hlc())
+        .unwrap();
+    let view = VersionsView::open(&core, params());
+    while view.snapshot().recommended.is_none() {
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let key = view.snapshot().recommended.unwrap().key;
+    view.freeze();
+    while !view.snapshot().done {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let snap = view.snapshot();
+    assert_eq!(snap.recommended.unwrap().key, key, "the pick stays");
+    let led = snap
+        .rows
+        .iter()
+        .find(|r| r.key != key && r.failover_count == 1);
+    assert!(
+        led.is_some(),
+        "the later answer leads the row: {:?}",
+        snap.rows
+    );
+    let chain = view.candidates(&key);
+    assert_eq!(chain.first().map(|c| c.key.clone()), Some(key.clone()));
+    assert_eq!(chain.len(), 2, "its own source, then the row's");
+}
+
 /// Focus can move before any addon answered; that must not freeze an empty
 /// pick for good.
 #[tokio::test]

@@ -167,11 +167,12 @@ pub struct Conditions {
     /// The size limit is one the user set (or an older app's quality set),
     /// not the default: the line says "the size you chose".
     pub limit_chosen: bool,
-    /// Stream keys whose file showed no picture on this device (an `hev1`
-    /// entry without parameter sets on an `hvc1_only` engine).
+    /// Digests (`key_digest`) of the stream keys whose file showed no
+    /// picture on this device (an `hev1` entry without parameter sets on
+    /// an `hvc1_only` engine).
     pub no_picture: Vec<String>,
-    /// Stream keys this device's player could not decode when it last
-    /// played them.
+    /// Digests (`key_digest`) of the stream keys this device's player could
+    /// not decode when it last played them.
     pub did_not_play: Vec<String>,
 }
 

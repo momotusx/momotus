@@ -1223,8 +1223,13 @@ pub(crate) mod sql {
         purge(c, profile)?;
         if first {
             // Cached addon answers are keyed by URLs that may carry the
-            // profile's addon keys or searches.
+            // profile's addon keys or searches; the device's version lists
+            // name streams those addons listed (digests of their keys).
             c.execute("DELETE FROM http_cache", [])?;
+            c.execute(
+                "DELETE FROM device_state WHERE key IN ('no_picture', 'did_not_play')",
+                [],
+            )?;
         }
         Ok(changed)
     }

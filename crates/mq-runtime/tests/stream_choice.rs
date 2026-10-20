@@ -288,6 +288,18 @@ async fn live_seeders_stand_over_the_addons_number() {
     );
 }
 
+/// Code review 2026-10-20 P3: after a failed hand pick, a later pick in
+/// the view (an offer taken) teaches nothing.
+#[tokio::test]
+async fn a_pick_after_a_failed_hand_pick_teaches_nothing() {
+    let (core, _server) = learning_core().await;
+    let view = settled_view(&core).await;
+    view.pick(LARGE).handle.failed(LARGE);
+    view.freeze();
+    assert!(view.pick(LARGE).note.is_none());
+    assert_eq!(core.prefs().learned.fhd.size, 0);
+}
+
 /// Learning (3.9): two 1080p torrents, R small and well seeded (the
 /// recommendation), C three times its size.
 fn sizes() -> String {
@@ -369,7 +381,7 @@ async fn replays_and_picks_after_a_failure_teach_nothing() {
     let view = settled_view(&core).await;
     view.freeze();
     let recommended = view.snapshot().recommended.unwrap().key;
-    view.pick(&recommended).handle.failed();
+    view.pick(&recommended).handle.failed(&recommended);
     view.pick(LARGE);
     assert_eq!(
         core.prefs().learned.fhd.size,
@@ -691,8 +703,9 @@ async fn a_file_with_no_picture_here_does_not_start_and_ranks_last() {
     assert_eq!(s.attempts.len(), 1, "{:?}", s.attempts);
     assert_eq!(&s.attempts[0].key, bare);
     assert_eq!(s.attempts[0].error, NO_PICTURE);
-    let trying = s.trying.expect("the version it moved on to");
-    assert_eq!((&trying.key, trying.label.as_str()), (fine, "720p WEB"));
+    // Named while it started, cleared once it did (code review 2026-10-20
+    // P3: a later source failover is not a next version).
+    assert!(s.trying.is_none(), "{:?}", s.trying);
     assert!(s.offer.is_none());
     drop((playback, view));
 
@@ -764,7 +777,9 @@ async fn the_recommendation_moves_on_at_most_twice() {
 }
 
 /// Only a failure of the version's own moves on: the player's "decode"
-/// does, a network failure does not.
+/// does; a network failure, the kinds the apps send for a fetch that
+/// failed or a busy decoder ("unreadable", "other") and a kind this core
+/// does not know do not, and none of them is kept.
 #[tokio::test]
 async fn only_a_failure_of_the_versions_own_moves_on() {
     let (core, _server, keys) = direct_rows(vec![
@@ -779,16 +794,22 @@ async fn only_a_failure_of_the_versions_own_moves_on() {
     ])
     .await;
     let caps = DeviceCaps::basic_1080p();
-    let view = versions_for(&core, caps.clone()).await;
-    assert_eq!(view.snapshot().recommended.unwrap().key, keys[0]);
-    let playback = play(&core, &view, &keys[0]);
-    until("ready", || playback.snapshot().url.is_some()).await;
-    playback.fail_over(None, Some("network"), None, "offline");
-    let failed = || playback.snapshot().phase == mq_runtime::PlaybackPhase::Failed;
-    until("the version to fail", failed).await;
-    let s = playback.snapshot();
-    assert!(s.trying.is_none() && s.offer.is_none());
-    drop((playback, view));
+    for kind in ["network", "unreadable", "other", "a-kind-from-a-newer-app"] {
+        let view = versions_for(&core, caps.clone()).await;
+        assert_eq!(
+            view.snapshot().recommended.unwrap().key,
+            keys[0],
+            "{kind}: not kept"
+        );
+        let playback = play(&core, &view, &keys[0]);
+        until("ready", || playback.snapshot().url.is_some()).await;
+        playback.fail_over(None, Some(kind), None, "the player failed");
+        let failed = || playback.snapshot().phase == mq_runtime::PlaybackPhase::Failed;
+        until("the version to fail", failed).await;
+        let s = playback.snapshot();
+        assert!(s.trying.is_none() && s.offer.is_none(), "{kind}");
+        assert_eq!(s.attempts.len(), 1, "{kind}: words, never refused");
+    }
 
     let view = versions_for(&core, caps).await;
     let playback = play(&core, &view, &keys[0]);
@@ -796,10 +817,99 @@ async fn only_a_failure_of_the_versions_own_moves_on() {
     playback.fail_over(None, Some("decode"), None, "no frame");
     let moved = || playback.snapshot().key.as_ref() == Some(&keys[1]);
     until("the next version", moved).await;
-    assert_eq!(
-        playback.snapshot().trying.map(|t| t.key),
-        Some(keys[1].clone())
-    );
+    let s = playback.snapshot();
+    assert_eq!(s.attempts.len(), 1, "the decode failure, then the next");
+}
+
+/// Code review 2026-10-20 P1-1: "Try again" is a fresh start of the pick
+/// itself after any moves on: its chain, nothing tried, no moves made. Here
+/// the device learned the first three have no picture, so the pick fails
+/// again and moves on to the one that plays.
+#[tokio::test]
+async fn try_again_starts_the_pick_afresh() {
+    let (core, _server, keys) = direct_rows(vec![
+        ("Show.S01E01.1080p.WEB-DL.HEVC-A", bare_hev1()),
+        ("Show.S01E01.720p.WEB-DL.HEVC-B", bare_hev1()),
+        ("Show.S01E01.480p.WEB-DL.HEVC-C", bare_hev1()),
+        ("Show.S01E01.360p.WEB-DL.HEVC-D", media_fixture("hvc1.mp4")),
+    ])
+    .await;
+    let view = versions_for(&core, apple()).await;
+    let playback = play(&core, &view, &keys[0]);
+    let failed = || playback.snapshot().phase == mq_runtime::PlaybackPhase::Failed;
+    until("the last move to fail", failed).await;
+    playback.retry();
+    let s = playback.snapshot();
+    assert!(s.trying.is_none() && s.attempts.is_empty());
+    until("the retry to play", || playback.snapshot().url.is_some()).await;
+    let s = playback.snapshot();
+    let tried: Vec<&String> = s.attempts.iter().map(|a| &a.key).collect();
+    assert_eq!(tried, [&keys[0]], "the pick first again");
+    assert_eq!(s.key.as_ref(), Some(&keys[3]));
+}
+
+/// Code review 2026-10-20 P2-1: the open Versions view learns its own
+/// playback's failure: the version that did not decode ranks below the
+/// others there at once, and the frozen pick that failed is let go.
+#[tokio::test]
+async fn the_open_view_learns_its_playbacks_failure() {
+    let (core, _server, keys) = direct_rows(vec![
+        (
+            "Show.S01E01.1080p.WEB-DL.x264-ONE",
+            media_fixture("h264.mp4"),
+        ),
+        (
+            "Show.S01E01.720p.WEB-DL.x264-TWO",
+            media_fixture("h264.mp4"),
+        ),
+    ])
+    .await;
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    view.freeze();
+    assert_eq!(view.snapshot().recommended.unwrap().key, keys[0]);
+    let playback = play(&core, &view, &keys[0]);
+    until("ready", || playback.snapshot().url.is_some()).await;
+    playback.fail_over(None, Some("decode"), None, "no frame");
+    until("the next version", || {
+        playback.snapshot().key.as_ref() == Some(&keys[1])
+    })
+    .await;
+    let s = view.snapshot();
+    assert!(!s.frozen, "the failed pick is let go");
+    assert_eq!(s.recommended.unwrap().key, keys[1]);
+    let row = s.rows.iter().find(|r| r.key == keys[0]).unwrap();
+    assert_eq!(row.line, mq_streams::ReasonLine::DidNotPlay);
+}
+
+/// Code review 2026-10-20 P2-2: a decode error after good playback is not
+/// the version's: it is not kept, and the playback does not move on.
+#[tokio::test]
+async fn a_decode_error_after_good_playback_is_not_kept() {
+    let (core, _server, keys) = direct_rows(vec![
+        (
+            "Show.S01E01.1080p.WEB-DL.x264-ONE",
+            media_fixture("h264.mp4"),
+        ),
+        (
+            "Show.S01E01.720p.WEB-DL.x264-TWO",
+            media_fixture("h264.mp4"),
+        ),
+    ])
+    .await;
+    let caps = DeviceCaps::basic_1080p();
+    let view = versions_for(&core, caps.clone()).await;
+    let playback = play(&core, &view, &keys[0]);
+    until("ready", || playback.snapshot().url.is_some()).await;
+    playback.report_progress(60_000, 600_000, false);
+    playback.fail_over(None, Some("decode"), None, "decoder lost");
+    let failed = || playback.snapshot().phase == mq_runtime::PlaybackPhase::Failed;
+    until("the version to fail", failed).await;
+    assert!(playback.snapshot().trying.is_none(), "no move on");
+    drop((playback, view));
+
+    let view = versions_for(&core, caps).await;
+    let s = view.snapshot();
+    assert_eq!(s.recommended.unwrap().key, keys[0], "not kept");
 }
 
 /// A swarm that falls short is cut at its first window when something else
@@ -961,12 +1071,18 @@ async fn almost_nobody_sharing_is_said_before_play() {
     };
     let (_server, view, playback) = open([(HASH_A, 1), (HASH_B, 1)]).await;
     assert!(view.snapshot().nobody_sharing, "{:?}", view.snapshot());
-    assert_eq!(playback.start_deadline(), Duration::from_secs(30));
+    // The stall windows and the full deadline stay; a swarm where no peer
+    // unchoked is let go at 30 s (code review 2026-10-20 P1-1).
+    let (cut, deadline, quiet) = playback.start_rule();
+    assert!(cut);
+    assert_eq!(deadline, Duration::from_secs(60));
+    assert_eq!(quiet, Some(Duration::from_secs(30)));
     drop((playback, view));
 
     let (_server, view, playback) = open([(HASH_A, 1), (HASH_B, 12)]).await;
     assert!(!view.snapshot().nobody_sharing, "one healthy version");
-    assert_eq!(playback.start_deadline(), Duration::from_secs(60));
+    let (_, deadline, quiet) = playback.start_rule();
+    assert_eq!((deadline, quiet), (Duration::from_secs(60), None));
 }
 
 /// After a restart the core reads the network the app last reported, not

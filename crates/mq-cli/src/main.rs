@@ -552,8 +552,14 @@ async fn play(
         Arm::First => PlaybackView::open(core, versions.candidates(&key), target),
     };
     // The race's start timeout (plans/m13-stream-choice.md 6.4): 120 s.
+    // The version it moved on to shows while it starts; the core clears
+    // it once that version plays.
+    let moved = std::cell::RefCell::new(None::<String>);
     let ready = until(Duration::from_secs(120), || {
         let s = playback.snapshot();
+        if let Some(t) = &s.trying {
+            *moved.borrow_mut() = Some(t.key.clone());
+        }
         (s.phase != PlaybackPhase::Resolving).then_some(s)
     })
     .await;
@@ -573,7 +579,7 @@ async fn play(
             "line": pick.line, "readyMs": ready_ms, "firstFrameMs": first_frame.map(|f| ready_ms + f),
             "stalls": played["stalls"], "stallMs": played["stall_ms"], "attempts": attempts.len(),
             "failures": attempts.iter().map(|a| a.error.clone()).collect::<Vec<_>>(),
-            "played": snap.key, "moved": snap.trying.as_ref().map(|t| &t.key),
+            "played": snap.key, "moved": moved.borrow().clone(),
             "versionsMs": versions_ms, "countedMs": counted_ms,
             "nobodySharing": snapshot.nobody_sharing, "ok": first_frame.is_some(),
         })

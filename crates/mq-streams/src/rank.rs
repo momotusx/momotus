@@ -529,12 +529,19 @@ fn size_ok(size: Option<u64>, class: SourceClass, prefs: &StreamPrefs) -> bool {
 
 /// This version's file showed no picture here: it does not play here.
 fn no_picture(s: &ParsedStream, input: &RankInput<'_>) -> bool {
-    input.caps.hvc1_only && input.conditions.no_picture.contains(&s.key)
+    input.caps.hvc1_only
+        && input
+            .conditions
+            .no_picture
+            .contains(&crate::key_digest(&s.key))
 }
 
 /// This device's player could not decode this version last time.
 fn did_not_play(s: &ParsedStream, input: &RankInput<'_>) -> bool {
-    input.conditions.did_not_play.contains(&s.key)
+    input
+        .conditions
+        .did_not_play
+        .contains(&crate::key_digest(&s.key))
 }
 
 /// Whether the screen shows this dynamic range. Dolby Vision and HDR10+

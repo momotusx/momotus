@@ -1389,7 +1389,7 @@ fn a_file_that_showed_no_picture_here_is_not_started_first() {
         .key
         .clone();
     case.conditions = Conditions {
-        no_picture: vec![bare],
+        no_picture: vec![mq_streams::key_digest(&bare)],
         ..engine().clone()
     };
     let shows = case.rank(rows());
@@ -1424,7 +1424,7 @@ fn a_version_the_player_could_not_decode_is_not_started_first() {
         .key
         .clone();
     case.conditions = Conditions {
-        did_not_play: vec![failed],
+        did_not_play: vec![mq_streams::key_digest(&failed)],
         ..engine().clone()
     };
     let ranked = case.rank(rows());

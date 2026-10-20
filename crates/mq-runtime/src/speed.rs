@@ -7,7 +7,7 @@
 //! time is never used, so a small file does not lock the estimate low.
 
 use mq_library::Library;
-use mq_streams::{Conditions, Speed};
+use mq_streams::{Conditions, Speed, key_digest};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -261,30 +261,61 @@ pub fn record_dead(lib: &Library, info_hash: &str, now_ms: u64) {
     stamp(lib, DEAD_KEY, hash, DEAD_FOR_MS, now_ms);
 }
 
-/// Stream keys whose file showed no picture on this device.
+/// Digests (`key_digest`) of the stream keys whose file showed no picture
+/// on this device.
 pub fn no_picture(lib: &Library) -> Vec<String> {
     stamped(lib, NO_PICTURE_KEY, u64::MAX, 0)
 }
 
-/// The file of `stream_key` showed no picture on this device.
+/// The file of `stream_key` showed no picture on this device. Only its
+/// digest is kept: a key can carry an account's API key.
 pub fn record_no_picture(lib: &Library, stream_key: &str, now_ms: u64) {
-    stamp(lib, NO_PICTURE_KEY, stream_key.to_owned(), u64::MAX, now_ms);
+    stamp(
+        lib,
+        NO_PICTURE_KEY,
+        key_digest(stream_key),
+        u64::MAX,
+        now_ms,
+    );
 }
 
-/// Stream keys this device's player could not decode in the last 30 days.
+/// Digests of the stream keys this device's player could not decode in
+/// the last 30 days.
 pub fn did_not_play(lib: &Library, now_ms: u64) -> Vec<String> {
     stamped(lib, DID_NOT_PLAY_KEY, DID_NOT_PLAY_FOR_MS, now_ms)
 }
 
-/// The player could not decode the stream `stream_key`.
+/// The player could not decode the stream `stream_key`; its digest is kept.
 pub fn record_did_not_play(lib: &Library, stream_key: &str, now_ms: u64) {
-    stamp(
-        lib,
-        DID_NOT_PLAY_KEY,
-        stream_key.to_owned(),
-        DID_NOT_PLAY_FOR_MS,
-        now_ms,
-    );
+    let digest = key_digest(stream_key);
+    stamp(lib, DID_NOT_PLAY_KEY, digest, DID_NOT_PLAY_FOR_MS, now_ms);
+}
+
+/// Lists written before digests kept raw stream keys: each becomes its
+/// digest (code review 2026-10-20 P2-5). Run when the core opens.
+pub fn digest_version_lists(lib: &Library) {
+    for store_key in [NO_PICTURE_KEY, DID_NOT_PLAY_KEY] {
+        let map = stamped_map(lib, store_key);
+        if map.keys().all(|k| is_digest(k)) {
+            continue;
+        }
+        let digested: std::collections::BTreeMap<String, u64> = map
+            .into_iter()
+            .map(|(k, at)| {
+                if is_digest(&k) {
+                    (k, at)
+                } else {
+                    (key_digest(&k), at)
+                }
+            })
+            .collect();
+        let value = serde_json::to_string(&digested).unwrap_or_default();
+        let _ = lib.set_device_value(store_key, &value);
+    }
+}
+
+fn is_digest(entry: &str) -> bool {
+    entry.len() == 33 && entry.starts_with('h') && entry[1..].bytes().all(|b| b.is_ascii_hexdigit())
 }
 
 #[cfg(test)]
@@ -370,6 +401,33 @@ mod tests {
         };
         assert!(!record(&lib, net, &unknown, 50, 0));
         assert!((mbps(&lib, net, Kind::P2p, 0) - 40.0).abs() < 0.5);
+    }
+
+    /// Code review 2026-10-20 P2-5: a stream key can be a URL with an
+    /// account's API key; the device keeps only its digest, and lists from
+    /// before are digested when the core opens.
+    #[test]
+    fn version_lists_keep_digests_of_stream_keys() {
+        let lib = Library::temporary().unwrap();
+        let key = "url:https://torrentio.example/resolve/realdebrid/SECRETKEY/aaaa/0/x.mkv";
+        record_did_not_play(&lib, key, 1_000);
+        record_no_picture(&lib, key, 1_000);
+        for store_key in [DID_NOT_PLAY_KEY, NO_PICTURE_KEY] {
+            let stored = lib.device_value(store_key).unwrap().unwrap();
+            assert!(!stored.contains("SECRETKEY"), "{stored}");
+        }
+        assert_eq!(did_not_play(&lib, 2_000), [key_digest(key)]);
+        assert_eq!(no_picture(&lib), [key_digest(key)]);
+
+        let old = Library::temporary().unwrap();
+        let raw = serde_json::json!({ key: 1_000 }).to_string();
+        old.set_device_value(NO_PICTURE_KEY, &raw).unwrap();
+        old.set_device_value(DID_NOT_PLAY_KEY, &raw).unwrap();
+        digest_version_lists(&old);
+        assert_eq!(no_picture(&old), [key_digest(key)]);
+        assert_eq!(did_not_play(&old, 2_000), [key_digest(key)]);
+        let stored = old.device_value(NO_PICTURE_KEY).unwrap().unwrap();
+        assert!(!stored.contains("SECRETKEY"), "{stored}");
     }
 
     #[test]

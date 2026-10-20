@@ -235,6 +235,8 @@ impl Core {
         // Build the release-name rule table off the UI path, so the first
         // stream list does not pay for it.
         std::thread::spawn(mq_relparse::warm_up);
+        // Older version lists kept raw stream keys (code review 2026-10-20 P2-5).
+        crate::speed::digest_version_lists(&device.library);
         let http = HttpClient::new(ClientConfig::default())?;
         let store = Arc::new(LibraryCache(device.library.clone()));
         let addons = AddonClient::with_cache(http.clone(), ResponseCache::with_store(512, store));
