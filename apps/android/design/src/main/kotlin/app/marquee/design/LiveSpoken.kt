@@ -5,6 +5,7 @@ import android.widget.TextView
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.AccessibilityManager
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.viewinterop.AndroidView
 
@@ -57,3 +58,11 @@ private const val QUIET_MS = 400L
  * region said after that focus waits for it instead.
  */
 const val ON_ARRIVAL_MS = 1_500L
+
+/**
+ * How long a note with a control (Undo) waits before it goes: [ms], or what the system asks for instead, as a
+ * snackbar does (the "Time to take action" setting, or no end while TalkBack is on before Android 10).
+ */
+fun AccessibilityManager?.actionWindow(ms: Long): Long =
+    this?.calculateRecommendedTimeoutMillis(ms, containsIcons = false, containsText = true, containsControls = true)
+        ?: ms

@@ -621,6 +621,46 @@ class SubtitleFailureTest {
     }
 
     @Test
+    fun `a Timing reload keeps the subtitle rows and the choice while the new item has no tracks yet`() {
+        val (player, controller) = open()
+        controller.selectText("late:$subtitle")
+        until("the subtitle is side-loaded") { player.items.size == 2 }
+        player.media(withLoadedSubtitle, 10_000_000L)
+        player.state(Player.STATE_READY)
+        until("the loaded subtitle is on") { controller.subtitleOn }
+        controller.shiftSubtitles(SUBTITLE_STEP_MS)
+        until("the item is set again") { player.items.size == 3 }
+        // Media3 masks the new item with no tracks until it has selected them again.
+        player.media(Tracks.EMPTY, 10_000_000L)
+        runFor(300)
+        assertTrue(controller.subtitleOn, "the Timing row left the panel during the reload")
+        player.media(withLoadedSubtitle, 10_000_000L)
+        player.state(Player.STATE_READY)
+        runFor(300)
+        assertTrue(controller.subtitleOn)
+        controller.release()
+    }
+
+    /** The video and the side-loaded subtitle file (the item's first, `ext:0`), on. */
+    private val withLoadedSubtitle =
+        Tracks(
+            video264.groups +
+                Tracks.Group(
+                    TrackGroup(
+                        Format
+                            .Builder()
+                            .setId("ext:0")
+                            .setSampleMimeType(MimeTypes.APPLICATION_SUBRIP)
+                            .setLanguage("tr")
+                            .build(),
+                    ),
+                    false,
+                    intArrayOf(C.FORMAT_HANDLED),
+                    booleanArrayOf(true),
+                ),
+        )
+
+    @Test
     fun `a stream server that moved while the app was away opens the play again at its new address`() {
         val moved = "http://127.0.0.1:7790/video.mp4"
         val subscribes =

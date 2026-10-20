@@ -11,6 +11,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -19,6 +20,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import app.marquee.design.Form
@@ -52,6 +54,8 @@ class TrackPanelTest {
     fun `each language has one heading, and Down goes from row to row past them`() {
         compose.setContent { MarqueeTheme(Form.Tv) { TrackPanel("Subtitles", rows, onPick = {}) } }
         compose.waitForIdle()
+        // The panel opens on the chosen English track: back to the top of the list.
+        compose.onNode(hasScrollToIndexAction()).performScrollToIndex(0)
 
         fun heading(text: String) =
             compose
@@ -92,6 +96,7 @@ class TrackPanelTest {
         }
         // Under the title, outside the list: there without scrolling, however long the list.
         compose.onNodeWithText("On time").assertExists()
+        compose.onNode(hasScrollToIndexAction()).performScrollToIndex(0)
         val first = compose.onNodeWithContentDescription("Off")
         first.requestFocus()
         first.performKeyInput { pressKey(Key.DirectionUp) }
@@ -105,5 +110,41 @@ class TrackPanelTest {
     fun `with no subtitle on there is no Timing row`() {
         compose.setContent { MarqueeTheme(Form.Tv) { TrackPanel("Subtitles", rows, onPick = {}, timing = null) } }
         compose.onAllNodesWithText("Timing").assertCountEquals(0)
+    }
+
+    /** Off, then one track under each of twelve languages, then the file's own track, chosen (always last). */
+    private val many =
+        listOf(TrackChoice("off", "Off")) +
+            listOf(
+                "Arabic",
+                "Bulgarian",
+                "Chinese",
+                "Croatian",
+                "Czech",
+                "Danish",
+                "Dutch",
+                "English",
+                "Finnish",
+                "French",
+                "German",
+                "Greek",
+            ).map { TrackChoice("late:$it", "OpenSubtitles v3 $it", section = it) } +
+            TrackChoice("0:0", "English", "SRT", section = "In the file", selected = true)
+
+    @Test
+    fun `with many language headings over the chosen track, the panel opens on it with the focus`() {
+        compose.setContent { MarqueeTheme(Form.Tv) { TrackPanel("Subtitles", many, onPick = {}) } }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("English, SRT").assertIsFocused()
+    }
+
+    @Test
+    fun `Left from any track goes to the Timing row`() {
+        compose.setContent { MarqueeTheme(Form.Tv) { TrackPanel("Subtitles", many, onPick = {}, timing = 0L) } }
+        compose.waitForIdle()
+        val chosen = compose.onNodeWithContentDescription("English, SRT")
+        chosen.requestFocus()
+        chosen.performKeyInput { pressKey(Key.DirectionLeft) }
+        compose.onNode(isFocused() and hasText("Earlier")).assertExists()
     }
 }

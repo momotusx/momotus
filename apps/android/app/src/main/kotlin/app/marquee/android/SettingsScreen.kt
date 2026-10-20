@@ -825,8 +825,8 @@ internal fun Languages(
             }
     }
     var query by remember { mutableStateOf("") }
-    // The device's own language is offered first.
-    val device = LocalConfiguration.current.locales[0].language
+    // The device's own language is offered first, by the code the core reads ("he", never Java's old "iw").
+    val device = DeviceCaps.deviceLanguage(LocalConfiguration.current.locales[0])
     // On a remote, focus follows a picked language to its new place with the chosen ones, so a second
     // press of select never lands on the language that took its slot.
     val tv = Marquee.form == Form.Tv

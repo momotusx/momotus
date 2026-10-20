@@ -2,7 +2,10 @@ package app.marquee.ui.tv
 
 import android.os.Handler
 import android.os.Looper
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.platform.AccessibilityManager
+import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -15,6 +18,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.requestFocus
 import app.marquee.core.PendingRemoval
 import app.marquee.core.TileCopy
 import app.marquee.core.client.CoreClient
@@ -86,7 +90,10 @@ class TvHomeHoldTest {
 
     private val sent = java.util.concurrent.CopyOnWriteArrayList<kotlinx.serialization.json.JsonObject>()
 
-    private fun show(failedRow: Boolean = false) {
+    private fun show(
+        failedRow: Boolean = false,
+        accessibility: AccessibilityManager? = null,
+    ) {
         val popular =
             if (failedRow) {
                 HomeRow("cinemeta:series:top", "Popular", "Cinemeta", RowState.Failed("timed out"))
@@ -129,7 +136,19 @@ class TvHomeHoldTest {
         val home = HomeView(client, scope)
         compose.setContent {
             MarqueeTheme(Form.Tv) {
-                TvHome(home, TvHomeState(), onOpen = {}, onPlay = {}, onSetup = {}, onAddons = {}, removal = removal)
+                CompositionLocalProvider(
+                    LocalAccessibilityManager provides (accessibility ?: LocalAccessibilityManager.current),
+                ) {
+                    TvHome(
+                        home,
+                        TvHomeState(),
+                        onOpen = {},
+                        onPlay = {},
+                        onSetup = {},
+                        onAddons = {},
+                        removal = removal,
+                    )
+                }
             }
         }
         compose.waitForIdle()
@@ -151,6 +170,8 @@ class TvHomeHoldTest {
         val end = System.currentTimeMillis() + 60_000
         while (!check()) {
             check(System.currentTimeMillis() < end) { "waited 60 s and it never happened: $what" }
+            // The core's updates are applied on its state thread: tell Compose.
+            Snapshot.sendApplyNotifications()
             compose.waitForIdle()
             Thread.sleep(20)
         }
@@ -207,5 +228,48 @@ class TvHomeHoldTest {
                     command["rowId"]?.jsonPrimitive?.content == "cinemeta:series:top"
             }
         }
+    }
+
+    /** The core's update for the row under Continue Watching. */
+    private fun second(row: HomeRow) =
+        client.onMessage(
+            """{"sub":7,"updates":[{"kind":"rows","diffs":[{"op":"set","index":1,"value":""" +
+                CoreJson.encodeToString(HomeRow.serializer(), row) + "}]}]}",
+        )
+
+    @Test
+    fun `a failed row's Try again gives the focus to its first tile once the tiles come`() {
+        show(failedRow = true)
+        val tryAgain = compose.onNodeWithText("Try again")
+        tryAgain.requestFocus()
+        tryAgain.performClick()
+        // The core turns the row to a skeleton (the focused button goes), then answers with the tiles.
+        second(HomeRow("cinemeta:series:top", "Popular", "Cinemeta", RowState.Loading))
+        waitFor("the row loads") { compose.onAllNodesWithText("Try again").fetchSemanticsNodes().isEmpty() }
+        second(HomeRow("cinemeta:series:top", "Popular", "Cinemeta", RowState.Ready, listOf(tile("tt2", "Andor"))))
+        waitFor("the row's first tile takes the focus") { focused(hasContentDescription("Andor")) }
+    }
+
+    @Test
+    fun `with TalkBack on, Undo waits as long as the system asks`() {
+        // Before Android 10, TalkBack makes a note with a control wait until it is answered.
+        val talkBack =
+            object : AccessibilityManager {
+                override fun calculateRecommendedTimeoutMillis(
+                    originalTimeoutMillis: Long,
+                    containsIcons: Boolean,
+                    containsText: Boolean,
+                    containsControls: Boolean,
+                ) = if (containsControls) Long.MAX_VALUE else originalTimeoutMillis
+            }
+        show(accessibility = talkBack)
+        compose.onNodeWithContentDescription("Severance").performSemanticsAction(SemanticsActions.OnLongClick)
+        compose.onNodeWithText(TileCopy.REMOVE_CONTINUE).performClick()
+        waitFor("Undo shows") { compose.onAllNodesWithText("Undo").fetchSemanticsNodes().isNotEmpty() }
+        // Well past the 600 ms this removal has without TalkBack.
+        Thread.sleep(2_500)
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(emptyList(), removed.map { it.id }) }
+        compose.onNodeWithText("Undo").assertExists()
     }
 }

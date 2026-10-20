@@ -3,6 +3,7 @@ package app.marquee.core
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.marquee.core.client.CoreLog
 import app.marquee.core.model.Tile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -30,7 +31,14 @@ class PendingRemoval(
 
     private var waiting: Job? = null
 
-    fun remove(tile: Tile) {
+    /**
+     * Leaves [tile] out and sends it after the Undo window; [longer] may stretch the window (the system's
+     * "Time to take action", or no end at all while TalkBack is on before Android 10).
+     */
+    fun remove(
+        tile: Tile,
+        longer: (Long) -> Long = { it },
+    ) {
         val earlier = removing
         waiting?.cancel()
         if (earlier != null) scope.launch { deliver(earlier) }
@@ -38,9 +46,29 @@ class PendingRemoval(
         removing = tile
         waiting =
             scope.launch {
-                delay(undoMs)
+                delay(longer(undoMs))
                 deliver(tile)
             }
+    }
+
+    /**
+     * The screens are going for good (Back out of the app, the process ending): a removal still waiting for
+     * its Undo goes now on [outliving], a scope that lasts longer than this one, instead of being lost.
+     */
+    fun sendNow(outliving: CoroutineScope) {
+        val tile = removing ?: return
+        waiting?.cancel()
+        waiting = null
+        removing = null
+        outliving.launch {
+            try {
+                send(tile)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                CoreLog.w("a removal sent on the way out failed: ${CoreLog.describe(e)}")
+            }
+        }
     }
 
     /** Undo: nothing goes to the core, and the title is back. */

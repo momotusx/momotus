@@ -522,6 +522,7 @@ class PlaybackController(
                     CoreLog.d("subtitle reload ${SystemClock.elapsedRealtime() - reloadedAt} ms")
                     reloadedAt = 0L
                 }
+                retiming = false
                 if (seekPending) {
                     seekPending = false
                     report()
@@ -895,11 +896,15 @@ class PlaybackController(
         timing =
             scope.launch {
                 delay(TIMING_SETTLE_MS)
+                retiming = true
                 reloadWith(loadedSubs)
             }
     }
 
     private var timing: Job? = null
+
+    // A Timing reload is setting the same item again: its empty track list until then changes nothing.
+    private var retiming = false
 
     /** A subtitle is on (a track other than Off is chosen): the subtitle panel shows its Timing row. */
     val subtitleOn: Boolean get() = text.any { it.selected && it.id != TRACK_OFF }
@@ -950,6 +955,10 @@ class PlaybackController(
     }
 
     private fun refreshTracks(tracks: Tracks = player.currentTracks) {
+        // A Timing reload sets the same item again, and Media3 reports no tracks until it has selected them
+        // again: the rows and the choice stay as they were, so the Timing row and its focus stay.
+        if (tracks.isEmpty && retiming) return
+        if (!tracks.isEmpty) retiming = false
         val audioRows = ArrayList<TrackChoice>()
         val fileRows = ArrayList<TrackChoice>()
         val loaded = HashMap<String, TrackChoice>()

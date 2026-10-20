@@ -28,6 +28,7 @@ import androidx.media3.ui.SubtitleView
 import androidx.media3.ui.compose.ContentFrame
 import androidx.media3.ui.compose.SURFACE_TYPE_SURFACE_VIEW
 import app.marquee.core.model.SubtitleSize
+import kotlin.math.ceil
 import kotlin.math.max
 
 /**
@@ -108,7 +109,8 @@ data class CueFrame(
  * [text] (a fraction of [height]). While two lines there would reach above [ceiling], they draw at 85%, or smaller
  * still when 85% does not clear it, so a subtitle and a control never overlap; the iPhone keeps the same rule.
  * Beside a control in the bottom corner ([corner], px), the lines keep left of it: centred on the screen while that
- * leaves them half its width, else centred in the room left of it.
+ * leaves them half its width, else centred in the room left of it; two lines kept narrower wrap into more, and the
+ * size is set for those.
  */
 fun cueFrame(
     height: Float,
@@ -118,7 +120,18 @@ fun cueFrame(
     text: Float,
     corner: Rect? = null,
 ): CueFrame {
-    val box = CUE_LINES * CUE_LINE * text * height
+    // A corner control beside two lines at the foot (not wholly under or over them) narrows the lines first.
+    val twoLines = CUE_LINES * CUE_LINE * text * height
+    val left = corner?.takeIf { it.top < foot && it.bottom > foot - twoLines }?.left?.coerceAtLeast(0f)
+    val centred = left?.let { 2 * it / width - 1 }
+    val (span, center) =
+        when {
+            left == null || centred == null -> 1f to 0.5f
+            centred >= CUE_MIN_WIDTH -> centred to 0.5f
+            else -> left / width to left / width / 2
+        }
+    // Two lines of the whole width, kept to a narrower span, wrap into more.
+    val box = ceil(CUE_LINES / span) * CUE_LINE * text * height
     val room = foot - ceiling
     val scale =
         when {
@@ -126,14 +139,7 @@ fun cueFrame(
             box * CUE_SHRINK <= room -> CUE_SHRINK
             else -> max(room, 0f) / box
         }
-    val bottom = 1f - foot / height
-    val drawn = text * scale
-    // No corner control, or one wholly under or over the two lines: the whole width.
-    if (corner == null || corner.top >= foot || corner.bottom <= foot - box * scale) return CueFrame(bottom, drawn)
-    val centred = 2 * corner.left / width - 1
-    if (centred >= CUE_MIN_WIDTH) return CueFrame(bottom, drawn, centred)
-    val left = max(corner.left, 0f) / width
-    return CueFrame(bottom, drawn, left, left / 2)
+    return CueFrame(1f - foot / height, text * scale, span, center)
 }
 
 /** The lines the rule makes room for: two, the most a subtitle usually has. */
@@ -196,12 +202,22 @@ private fun Subtitles(
 }
 
 /**
- * Text set from the foot: no line of its own (SubRip), or a line counted up from the bottom (WebVTT, and what Media3
- * hands over for most subtitles: line -1). A picture cue (PGS) or a cue its file put on a line of its own (SSA
- * positions, a WebVTT line from the top) stays where the file put it.
+ * How many lines over the foot a text cue set from the foot sits: 0 with no line of its own (SubRip) or at the foot
+ * of an SSA or ASS screen (a line of 0.9 or more, anchored at its end: Media3 gives 0.95 to every bottom-aligned
+ * dialogue line), n for a line counted up from the bottom (-1 - n: WebVTT, and what Media3 hands over for most
+ * subtitles). Null for a picture cue (PGS) or a cue its file placed anywhere else, which stays where it is.
  */
-private fun fromFoot(cue: Cue) =
-    cue.bitmap == null && (cue.line == Cue.DIMEN_UNSET || (cue.lineType == Cue.LINE_TYPE_NUMBER && cue.line < 0))
+private fun linesOverFoot(cue: Cue): Float? =
+    when {
+        cue.bitmap != null -> null
+        cue.line == Cue.DIMEN_UNSET -> 0f
+        cue.lineType == Cue.LINE_TYPE_NUMBER && cue.line < 0 -> -cue.line - 1
+        cue.lineType == Cue.LINE_TYPE_FRACTION && cue.lineAnchor == Cue.ANCHOR_TYPE_END && cue.line >= SSA_FOOT -> 0f
+        else -> null
+    }
+
+/** An SSA or ASS line this low (a fraction of the screen, its foot) is a subtitle at the foot, not a sign. */
+private const val SSA_FOOT = 0.9f
 
 /**
  * A cue set from the foot, kept to the frame's width; while [lifted], with its foot at the frame's (a cue stacked
@@ -211,7 +227,8 @@ internal fun CueFrame.fit(
     cue: Cue,
     lifted: Boolean,
 ): Cue {
-    if (!fromFoot(cue) || (width >= 1f && !lifted)) return cue
+    val over = linesOverFoot(cue) ?: return cue
+    if (width >= 1f && !lifted) return cue
     val fitted = cue.buildUpon()
     if (width < 1f) {
         fitted
@@ -220,7 +237,6 @@ internal fun CueFrame.fit(
             .setPositionAnchor(Cue.ANCHOR_TYPE_MIDDLE)
     }
     if (lifted) {
-        val over = if (cue.line == Cue.DIMEN_UNSET) 0f else -cue.line - 1
         fitted.setLine(1f - bottom - over * CUE_LINE * text, Cue.LINE_TYPE_FRACTION).setLineAnchor(Cue.ANCHOR_TYPE_END)
     }
     return fitted.build()

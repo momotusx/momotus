@@ -196,10 +196,12 @@ fun TrackPanel(
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
     val requesters = remember(rows.size) { List(rows.size) { FocusRequester() } }
+    val earlier = remember { FocusRequester() }
     val chosen = rows.indexOfFirst { it.selected }.coerceAtLeast(0)
     // The list starts at the chosen row, so its node exists to take focus (a list of 40 subtitle tracks
-    // composes only the rows in view).
-    val state = rememberLazyListState(initialFirstVisibleItemIndex = (chosen - 1).coerceAtLeast(0))
+    // composes only the rows in view); the list also holds a heading over each language, counted here.
+    val chosenItem = chosen + (0..chosen).count { startsSection(rows, it) }
+    val state = rememberLazyListState(initialFirstVisibleItemIndex = (chosenItem - 1).coerceAtLeast(0))
     if (tv) {
         LaunchedEffect(Unit) {
             withFrameNanos { }
@@ -224,7 +226,7 @@ fun TrackPanel(
             modifier = Modifier.padding(horizontal = 12.dp).semantics { heading() },
             maxLines = 1,
         )
-        if (timing != null) TimingRow(timing, onShift)
+        if (timing != null) TimingRow(timing, onShift, earlier)
         LazyColumn(
             Modifier.heightIn(max = if (tv) 520.dp else 230.dp),
             state = state,
@@ -234,10 +236,11 @@ fun TrackPanel(
         ) {
             rows.forEachIndexed { index, row ->
                 // A run of one language (or the file's own tracks) under its heading, which focus skips.
-                if (row.section != null && row.section != rows.getOrNull(index - 1)?.section) {
+                val section = row.section
+                if (section != null && startsSection(rows, index)) {
                     item(key = "section:$index") {
                         MqText(
-                            row.section,
+                            section,
                             role = TextRole.Caption,
                             color = colors.muted,
                             weight = FontWeight.SemiBold,
@@ -252,7 +255,9 @@ fun TrackPanel(
                         )
                     }
                 }
-                item(key = row.id) { TrackRow(row, index, rows.lastIndex, requesters[index], onPick, timing != null) }
+                item(key = row.id) {
+                    TrackRow(row, index, rows.lastIndex, requesters[index], onPick, earlier.takeIf { timing != null })
+                }
             }
             if (note != null) {
                 item(key = "note") {
@@ -272,6 +277,7 @@ fun TrackPanel(
 private fun TimingRow(
     delayMs: Long,
     onShift: (Long) -> Unit,
+    earlier: FocusRequester,
 ) {
     Row(
         Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp),
@@ -291,7 +297,7 @@ private fun TimingRow(
         SecondaryButton(
             "Earlier",
             { onShift(-SUBTITLE_STEP_MS) },
-            Modifier.focusProperties {
+            Modifier.focusRequester(earlier).focusProperties {
                 left = FocusRequester.Cancel
                 up = FocusRequester.Cancel
             },
@@ -315,8 +321,8 @@ private fun TrackRow(
     last: Int,
     requester: FocusRequester,
     onPick: (String) -> Unit,
-    // Up from the first track goes on to the Timing row over the list.
-    timingAbove: Boolean,
+    // The Timing row's Earlier, while it shows: Up from the first track and Left from any track go there.
+    timing: FocusRequester?,
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
@@ -328,9 +334,9 @@ private fun TrackRow(
             .focusRequester(requester)
             // Focus stays in the panel while it is open: the ends of the list and the sides go nowhere.
             .focusProperties {
-                left = FocusRequester.Cancel
+                left = timing ?: FocusRequester.Cancel
                 right = FocusRequester.Cancel
-                if (index == 0 && !timingAbove) up = FocusRequester.Cancel
+                if (index == 0 && timing == null) up = FocusRequester.Cancel
                 if (index == last) down = FocusRequester.Cancel
             }.marqueeFocus(Marquee.radius.m, scale = 1.02f)
             .clip(shape)
@@ -783,4 +789,13 @@ fun rememberTouchExploration(): Boolean {
         onDispose { manager?.removeTouchExplorationStateChangeListener(listener) }
     }
     return on
+}
+
+/** Row [index] opens a run of one language (or the file's own tracks), which has a heading over it in the list. */
+private fun startsSection(
+    rows: List<TrackChoice>,
+    index: Int,
+): Boolean {
+    val section = rows.getOrNull(index)?.section ?: return false
+    return section != rows.getOrNull(index - 1)?.section
 }

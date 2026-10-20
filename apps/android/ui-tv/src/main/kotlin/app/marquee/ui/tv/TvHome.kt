@@ -39,6 +39,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -78,12 +79,15 @@ import app.marquee.design.StateMessage
 import app.marquee.design.TextRole
 import app.marquee.design.TileShape
 import app.marquee.design.Tokens
+import app.marquee.design.actionWindow
 import app.marquee.design.describe
 import app.marquee.design.focusSoon
 import app.marquee.design.laneHeight
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 private const val HERO_PLAY = "hero:play"
 private const val HERO_DETAILS = "hero:details"
@@ -131,6 +135,7 @@ fun TvHome(
     // The held tile and its key, while its menu is open.
     var menuFor by remember { mutableStateOf<Pair<Tile, String>?>(null) }
     val scope = rememberCoroutineScope()
+    val accessibility = LocalAccessibilityManager.current
     val undoFocus = remember { FocusRequester() }
     // After Remove: where focus goes when the note leaves. The next tile (the next one, the one before, or the
     // next row) when the removal went through; the title itself after Undo or a failure, when it is back.
@@ -148,7 +153,7 @@ fun TvHome(
                         leaving = focusAfterRemove(home.rows.toList(), key) to key
                         undone = false
                         actedAt = state.focus.interactions
-                        removal?.remove(tile)
+                        removal?.remove(tile, accessibility::actionWindow)
                         // Undo is the one thing the viewer may want now: it takes the focus at once.
                         scope.launch { focusSoon(undoFocus, UNDO_FOCUS_FRAMES) }
                     },
@@ -157,6 +162,26 @@ fun TvHome(
         )
     }
     val hold: ((Tile, String) -> Unit)? = removal?.let { { tile, key -> menuFor = tile to key } }
+    // A failed row's Try again: the row turns to a skeleton and its focused button goes, so focus goes to the
+    // row's first tile when the tiles come, unless the viewer has moved on by then.
+    val retry: (String) -> Unit = { rowId ->
+        home.retryRow(rowId)
+        scope.launch {
+            val seen = state.focus.interactions
+            val first =
+                withTimeoutOrNull(FOCUS_WAIT_MS) {
+                    snapshotFlow {
+                        home.rows
+                            .toList()
+                            .firstOrNull { it.rowId == rowId }
+                            ?.tileKeys()
+                            ?.firstOrNull()
+                    }.filterNotNull()
+                        .first()
+                }
+            if (first != null && state.focus.interactions == seen) restoreFocus(home, state, first)
+        }
+    }
     val removing = removal?.removing
     LaunchedEffect(removing) {
         val (next, held) = leaving ?: return@LaunchedEffect
@@ -215,7 +240,7 @@ fun TvHome(
                 items(
                     rows.subList(0, split),
                     key = { it.rowId },
-                ) { row -> TvRow(row, state, onOpen, hold, home::retryRow) }
+                ) { row -> TvRow(row, state, onOpen, hold, retry) }
                 val said = removing?.let { TileCopy.removed(it.name) } ?: removal?.failed
                 if (said != null) {
                     item(key = "notice") {
@@ -230,7 +255,7 @@ fun TvHome(
                 items(
                     rows.subList(split, rows.size),
                     key = { it.rowId },
-                ) { row -> TvRow(row, state, onOpen, hold, home::retryRow) }
+                ) { row -> TvRow(row, state, onOpen, hold, retry) }
             }
         }
     }

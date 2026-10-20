@@ -233,7 +233,8 @@ class PhonePlayerLayoutTest {
         val shown = cues()
         assertTrue(shown.right <= skip(), "clear of Skip: the lines end at ${shown.right}, Skip starts at ${skip()}")
         assertTrue(abs((shown.left + shown.right) / 2 - root.center.x) < 1f, "centred: ${shown.left} to ${shown.right}")
-        assertEquals(full(SubtitleSize.Medium), shown.text, "at full size")
+        // Two lines kept to 78% of the width wrap into three, which do not fit at full size on this phone.
+        assertEquals(full(SubtitleSize.Medium) * CUE_SHRINK, shown.text, 1e-6f, "three lines at 85%")
         controlsHidden()
         val hidden = cues()
         assertTrue(hidden.right <= skip(), "clear of Skip at the foot: ${hidden.right} against ${skip()}")

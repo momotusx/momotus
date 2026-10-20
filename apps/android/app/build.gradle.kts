@@ -42,7 +42,8 @@ android {
         unitTests.isIncludeAndroidResources = true
         unitTests.all {
             // Robolectric's Android 16 sets up shared memory through JDK internals.
-            it.jvmArgs("--add-opens=java.base/jdk.internal.access=ALL-UNNAMED")
+            // Old ISO codes ("iw", "in", "ji") as Android's Locale keeps them, so a test sees what a phone gives.
+            it.jvmArgs("--add-opens=java.base/jdk.internal.access=ALL-UNNAMED", "-Djava.locale.useOldISOCodes=true")
         }
     }
 

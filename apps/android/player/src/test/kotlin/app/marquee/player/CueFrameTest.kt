@@ -90,4 +90,36 @@ class CueFrameTest {
         for (cue in listOf(picture, placed, fromTop)) assertEquals(cue.line, lifted.fit(cue, lifted = true).line)
         assertEquals(-1f, lifted.fit(bottomLine, lifted = false).line)
     }
+
+    @Test
+    fun `an SSA line at the foot of its screen is lifted like the rest, a sign at the top stays`() {
+        val dialogue =
+            Cue
+                .Builder()
+                .setText("a")
+                .setLine(0.95f, Cue.LINE_TYPE_FRACTION)
+                .setLineAnchor(Cue.ANCHOR_TYPE_END)
+                .setPosition(0.5f)
+                .setPositionAnchor(Cue.ANCHOR_TYPE_MIDDLE)
+                .build()
+        assertEquals(0.5f, lifted.fit(dialogue, lifted = true).line, 1e-6f)
+        val sign =
+            dialogue
+                .buildUpon()
+                .setLine(
+                    0.05f,
+                    Cue.LINE_TYPE_FRACTION,
+                ).setLineAnchor(Cue.ANCHOR_TYPE_START)
+                .build()
+        assertEquals(0.05f, lifted.fit(sign, lifted = true).line, 1e-6f)
+    }
+
+    @Test
+    fun `two lines kept beside a wide card wrap into four, and the size is set for four`() {
+        val upNext = Rect(left = 520f, top = 150f, right = 884f, bottom = 320f)
+        // Room for two lines (50 px) but not for four (100 px), nor for four at 85%.
+        val frame = cueFrame(height = 400f, width = 900f, foot = foot, ceiling = 220f, text = text, corner = upNext)
+        assertEquals(520f / 900f, frame.width, 1e-6f)
+        assertEquals(text * 80f / 100f, frame.text, 1e-6f)
+    }
 }

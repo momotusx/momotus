@@ -77,4 +77,29 @@ class PendingRemovalTest {
         scope.runCurrent()
         assertEquals(emptyList(), sent)
     }
+
+    @Test
+    fun `leaving the app inside the Undo window sends the removal on a scope that outlives the screens`() {
+        val outliving = TestScope(StandardTestDispatcher())
+        removal.remove(tile("a"))
+        removal.sendNow(outliving)
+        outliving.runCurrent()
+        assertEquals(listOf("a"), sent)
+        assertNull(removal.removing)
+        // The window passing later sends nothing twice.
+        scope.advanceTimeBy(10_000)
+        scope.runCurrent()
+        assertEquals(listOf("a"), sent)
+    }
+
+    @Test
+    fun `a longer window from the system holds the removal past five seconds`() {
+        removal.remove(tile("a")) { it * 4 }
+        scope.advanceTimeBy(10_000)
+        scope.runCurrent()
+        assertEquals(emptyList(), sent)
+        scope.advanceTimeBy(10_100)
+        scope.runCurrent()
+        assertEquals(listOf("a"), sent)
+    }
 }

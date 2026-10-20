@@ -33,7 +33,17 @@ class LanguagePickerTest {
             LanguageChoice("en", "English"),
             LanguageChoice("pl", "Polish"),
             LanguageChoice("pt-BR", "Portuguese (Brazil)"),
+            LanguageChoice("he", "Hebrew"),
         )
+
+    @Test
+    @Config(qualifiers = "iw-rIL")
+    fun `a Hebrew phone offers Hebrew first and saves the core's code, not Java's old one`() {
+        var chosen by mutableStateOf(emptyList<String>())
+        compose.setContent { MarqueeTheme(Form.Phone) { Languages(chosen, { all }, { chosen = it }) } }
+        compose.onNodeWithText("Hebrew").performClick()
+        compose.runOnIdle { assertEquals(listOf("he"), chosen) }
+    }
 
     @Test
     fun `a language outside the old eight is found by name and added after the chosen ones`() {

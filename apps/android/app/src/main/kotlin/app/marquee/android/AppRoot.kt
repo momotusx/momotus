@@ -23,6 +23,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -57,6 +58,7 @@ import app.marquee.design.MqText
 import app.marquee.design.SecondaryButton
 import app.marquee.design.StateMessage
 import app.marquee.design.TextRole
+import app.marquee.design.actionWindow
 import app.marquee.ui.phone.PhoneHome
 import app.marquee.ui.phone.PhoneShell
 import app.marquee.ui.tv.TvHome
@@ -184,6 +186,7 @@ private fun AppNav(
     val marquee = LocalContext.current.applicationContext as MarqueeApp
     val sync = (LocalContext.current.applicationContext as MarqueeApp).sync
     val gate = (LocalContext.current.applicationContext as MarqueeApp).profiles
+    val accessibility = LocalAccessibilityManager.current
     val backStack = rememberProfileStack(gate.snapshot?.active, initial, app.stacksSeen)
     val routes = backStack.map { it as Route }
     val top = routes.last()
@@ -383,7 +386,7 @@ private fun AppNav(
                                 rowsHidden = rowsHidden,
                                 onHomeRows = onHomeRows,
                                 card = card,
-                                onRemove = app.removal::remove,
+                                onRemove = { app.removal.remove(it, accessibility::actionWindow) },
                                 removing = app.removal.removing?.id,
                                 notice = notice,
                             )

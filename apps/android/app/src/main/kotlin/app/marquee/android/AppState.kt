@@ -157,6 +157,8 @@ class AppState(
     }
 
     override fun onCleared() {
+        // Back out of the app inside the Undo window: the removal goes, on the session's own scope.
+        removal.sendNow(session.scope)
         screens.viewModelStore.clear()
         versions.closeAll()
         homeView?.close()
