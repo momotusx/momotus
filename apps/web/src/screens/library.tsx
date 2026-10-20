@@ -2,8 +2,8 @@ import { A } from "@solidjs/router";
 import Compass from "lucide-solid/icons/compass";
 import { Match, Switch } from "solid-js";
 import { Chips, Grid, SkeletonGrid } from "../components/grid";
-import { liveView } from "../core/client";
-import type { LibrarySnapshot } from "../core/generated/LibrarySnapshot";
+import { libraryView } from "../core/client";
+import { onProfileReset } from "../core/profiles";
 import type { LibrarySort } from "../core/generated/LibrarySort";
 import "./browse.css";
 
@@ -13,13 +13,22 @@ const sorts: { value: LibrarySort; label: string }[] = [
   { value: "name", label: "Name" },
 ];
 
+// Where the page was scrolled to: the view is kept, so Back lands here too.
+const pageScroll = { top: 0 };
+onProfileReset(() => {
+  pageScroll.top = 0;
+});
+
 export default function Library() {
-  const view = liveView<LibrarySnapshot>("library");
+  const view = libraryView();
+  const attach = (el: HTMLElement) => {
+    if (pageScroll.top) queueMicrotask(() => el.scrollTo({ top: pageScroll.top }));
+  };
   const l = () => view.state.data;
   const total = () => l()?.kinds.reduce((n, k) => n + k.count, 0) ?? 0;
 
   return (
-    <main class="browse page" data-vscroll>
+    <main class="browse page" data-vscroll ref={attach} onScroll={(e) => (pageScroll.top = e.currentTarget.scrollTop)}>
       <h1 data-eyebrow="Yours">Library</h1>
       <Switch fallback={<SkeletonGrid />}>
         <Match when={view.state.status.state === "failed"}>

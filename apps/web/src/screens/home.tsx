@@ -14,7 +14,7 @@ import { CONTINUE_ROW, Row } from "../components/row";
 import { homeView, liveView, op, prefsView } from "../core/client";
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import type { DefaultAddons } from "../core/generated/DefaultAddons";
-import { profiles } from "../core/profiles";
+import { onProfileReset, profiles } from "../core/profiles";
 import { cardOffer, defaultsWords, namesLine } from "../lib/defaults";
 import { allFailed } from "../lib/rows";
 import { form } from "../form";
@@ -24,6 +24,10 @@ import { kindLabel } from "../lib/words";
 import "./home.css";
 
 const pageScroll = { top: 0 };
+// Another profile's Home opens at the top (web journey review P3-14).
+onProfileReset(() => {
+  pageScroll.top = 0;
+});
 
 /** Where a hero or tile's Play goes: a known video, or the movie itself. */
 export function playHref(t: Tile): string | null {

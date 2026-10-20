@@ -396,3 +396,42 @@ test("tv: with no backdrop from any catalog, Home's hero closes once the rows ha
   await expect(page.locator(".hero")).toBeHidden();
   await context.close();
 });
+
+test("desktop: Discover keeps the viewer's type and place on Back", async ({ browser }) => {
+  const { context, page, go } = await open(browser, "desktop", "/discover");
+  await go();
+  // Another type than the first one Discover opens on.
+  const kinds = page.locator('[data-fgroup="kinds"] [data-f]');
+  await expect(kinds.nth(1)).toBeVisible({ timeout: 30_000 });
+  const kind = (await kinds.nth(1).getAttribute("data-f")) as string;
+  await kinds.nth(1).click();
+  await expect(page.locator(`[data-f="${kind}"]`)).toHaveClass(/\bon\b/);
+  const tiles = page.locator('[data-fgroup^="grid:"] [data-f]');
+  await expect(tiles.nth(12)).toBeVisible({ timeout: 30_000 });
+  // Down the page, then a title, then Back.
+  const page_ = page.locator("main.page");
+  await page_.evaluate((el) => el.scrollTo({ top: 600 }));
+  await expect.poll(() => page_.evaluate((el) => el.scrollTop)).toBeGreaterThan(500);
+  await tiles.nth(12).click();
+  await expect(page).toHaveURL(/\/title\//);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/discover/);
+  await expect(page.locator(`[data-f="${kind}"]`)).toHaveClass(/\bon\b/, { timeout: 10_000 });
+  await expect.poll(() => page.locator("main.page").evaluate((el) => el.scrollTop)).toBeGreaterThan(500);
+  await context.close();
+});
+
+test("desktop: Library keeps the viewer's filter and sort on Back", async ({ browser }) => {
+  const { context, page, go } = await open(browser, "desktop", "/library");
+  await go();
+  await expect(page.locator('[data-fgroup="lib-sort"] [data-f]').first()).toBeVisible({ timeout: 30_000 });
+  const name = page.locator('[data-f="lib-sort:name"]');
+  await name.click();
+  await expect(name).toHaveClass(/\bon\b/);
+  await page.locator('[data-fgroup^="grid:"] [data-f]').first().click();
+  await expect(page).toHaveURL(/\/title\//);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/library/);
+  await expect(page.locator('[data-f="lib-sort:name"]')).toHaveClass(/\bon\b/, { timeout: 10_000 });
+  await context.close();
+});

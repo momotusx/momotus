@@ -3,20 +3,29 @@ import Puzzle from "lucide-solid/icons/puzzle";
 import Wrench from "lucide-solid/icons/wrench";
 import { Match, Show, Switch } from "solid-js";
 import { Chips, Grid, SkeletonGrid } from "../components/grid";
-import { liveView } from "../core/client";
-import type { DiscoverSnapshot } from "../core/generated/DiscoverSnapshot";
+import { discoverView } from "../core/client";
+import { onProfileReset } from "../core/profiles";
 import { defaultsWords } from "../lib/defaults";
 import "./browse.css";
 
+// Where the page was scrolled to: the view is kept, so Back lands here too.
+const pageScroll = { top: 0 };
+onProfileReset(() => {
+  pageScroll.top = 0;
+});
+
 export default function Discover() {
-  const view = liveView<DiscoverSnapshot>("discover");
+  const view = discoverView();
+  const attach = (el: HTMLElement) => {
+    if (pageScroll.top) queueMicrotask(() => el.scrollTo({ top: pageScroll.top }));
+  };
   const d = () => view.state.data;
   const select = (c: { kind?: string; catalog?: string; genre?: string | null }) => void view.command({ type: "select", ...c });
   const catalogName = () => d()?.catalogs.find((c) => c.id === d()?.catalog)?.name ?? "this catalog";
   const loadMore = () => d()?.state.state === "ready" && void view.command({ type: "loadMore" });
 
   return (
-    <main class="browse page" data-vscroll>
+    <main class="browse page" data-vscroll ref={attach} onScroll={(e) => (pageScroll.top = e.currentTarget.scrollTop)}>
       <h1 data-eyebrow="Browse">Discover</h1>
       <Switch>
         <Match when={view.state.status.state === "failed"}>

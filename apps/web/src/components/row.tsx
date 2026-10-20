@@ -10,6 +10,7 @@ import { createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch 
 import { Poster } from "./art";
 import type { HomeRow } from "../core/generated/HomeRow";
 import type { Tile as TileData } from "../core/generated/Tile";
+import { onProfileReset } from "../core/profiles";
 import { form } from "../form";
 import { pct, titlePath } from "../lib/format";
 import { caption } from "../lib/words";
@@ -39,8 +40,10 @@ export const metrics = () => (form() === "phone" ? PHONE : TV);
 const sizeOf = (m: Metrics, shape: string | undefined) =>
   shape === "landscape" ? m.landscape : shape === "square" ? m.square : m.poster;
 
-// Survives the Home screen unmounting, so Back lands on the same offsets.
+// Survives the Home screen unmounting, so Back lands on the same offsets;
+// another profile's Home starts at the start of each row.
 const offsets = new Map<string, number>();
+onProfileReset(() => offsets.clear());
 
 export function TileCard(props: {
   tile: TileData;

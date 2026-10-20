@@ -7,11 +7,13 @@ import { createStore, reconcile } from "solid-js/store";
 import { Bridge, BridgeError, ipcTransport, shellPost, webSocketTransport } from "./bridge";
 import { applyDiffs } from "./diff";
 import { isPrivateLink } from "../lib/sync";
+import type { DiscoverSnapshot } from "./generated/DiscoverSnapshot";
 import type { Episode } from "./generated/Episode";
 import type { Hero } from "./generated/Hero";
 import type { HomeRow } from "./generated/HomeRow";
 import type { HomeSnapshot } from "./generated/HomeSnapshot";
 import type { HomeUpdate } from "./generated/HomeUpdate";
+import type { LibrarySnapshot } from "./generated/LibrarySnapshot";
 import type { Prefs } from "./generated/Prefs";
 import { commandQueue } from "./command-queue";
 import type { TitleHeader } from "./generated/TitleHeader";
@@ -341,16 +343,33 @@ export function versionsView(p: VersionsParams): LiveView<VersionsSnapshot> {
 }
 
 let prefs: LiveView<Prefs> | undefined;
+let discover: LiveView<DiscoverSnapshot> | undefined;
+let library: LiveView<LibrarySnapshot> | undefined;
+
+/** Discover, kept open for the app's life as Home is: Back lands on the
+ * viewer's type, catalog, genre and loaded pages. One that failed opens anew. */
+export function discoverView(): LiveView<DiscoverSnapshot> {
+  if (!discover || discover.state.status.state === "failed") discover = liveView<DiscoverSnapshot>("discover", {}, true);
+  return discover;
+}
+
+/** Library, kept open for the app's life: Back lands on the viewer's filter and sort. */
+export function libraryView(): LiveView<LibrarySnapshot> {
+  if (!library || library.state.status.state === "failed") library = liveView<LibrarySnapshot>("library", {}, true);
+  return library;
+}
 
 /** Before a profile switch or after a lock: the views this module keeps for
  * the app's life belong to the old profile, so they close and reopen fresh.
  * Settles once the core closed each of them, including one still opening. */
 export async function closeProfileViews() {
-  const closing = [homeOpening && closeWhenOpen(homeOpening), versions?.view.close(), prefs?.close()];
+  const closing = [homeOpening && closeWhenOpen(homeOpening), versions?.view.close(), prefs?.close(), discover?.close(), library?.close()];
   home = undefined;
   homeOpening = undefined;
   versions = null;
   prefs = undefined;
+  discover = undefined;
+  library = undefined;
   await Promise.all(closing);
 }
 
