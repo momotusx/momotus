@@ -158,9 +158,19 @@ So a cold engine on this Mac should answer within its budget. Where it does not,
 
 Mutations SR1 to SR7.
 
-## Review answers: engine round 1 (2026-10-20, plan)
+## Review answers: engine round 1 (2026-10-20)
 
 `plans/reviews/engine-2026-10-20-r1.md`, 6/10. The order of work is the coordinator's: P1s, then P2, then the P3s marked "now".
+
+**Status:**
+- **Done:**
+  - P1-1, the parser bound: c80316fd and its tests.
+  - P1-2, extended by Apple walk NS1, so an answer counts when it comes from an own tracker or counts any seeder or leecher: eb96e1ec.
+  - P2: eb96e1ec. The runtime keeps every count the engine gives: 277e9b9d.
+  - Mutations BD1 to BD5, ST1 to ST6 and CP1 to CP4: all caught.
+  - Without the bound, every path's test overflowed its stack and aborted, the DHT one inside its tokio worker.
+- **Live:** Big Buck Bunny a9df29de now scrapes 0 seeders and 40 leechers from all 8 default trackers in 724 ms. Torrentio lists 28.
+- **Still open:** the P3 items marked "now" below, for the next engine turn.
 
 **P1-1, nesting depth: fixed in the parser, once.**
 - **Where.** Every bencode parse in the engine goes through `librqbit-bencode`'s `BencodeDeserializer`:
