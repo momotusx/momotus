@@ -4,25 +4,32 @@ import android.os.Handler
 import android.os.Looper
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.AccessibilityManager
 import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
+import androidx.compose.ui.unit.dp
 import app.marquee.core.PendingRemoval
 import app.marquee.core.TileCopy
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
+import app.marquee.core.model.Hero
 import app.marquee.core.model.HomeHeader
 import app.marquee.core.model.HomeRow
 import app.marquee.core.model.HomeSnapshot
@@ -45,11 +52,14 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /** A held select on a Continue Watching tile offers "Remove from Continue Watching" (journey reviews 2026-10-20). */
+@OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], qualifiers = "w960dp-h540dp")
 class TvHomeHoldTest {
@@ -93,6 +103,8 @@ class TvHomeHoldTest {
     private fun show(
         failedRow: Boolean = false,
         accessibility: AccessibilityManager? = null,
+        more: Int = 0,
+        hero: Hero? = null,
     ) {
         val popular =
             if (failedRow) {
@@ -102,7 +114,7 @@ class TvHomeHoldTest {
             }
         val snapshot =
             HomeSnapshot(
-                HomeHeader(),
+                HomeHeader(hero),
                 listOfNotNull(
                     HomeRow(
                         TileCopy.CONTINUE_ROW,
@@ -119,7 +131,16 @@ class TvHomeHoldTest {
                             RowState.Ready,
                             listOf(tile("tt2", "Andor")),
                         ),
-                ),
+                ) +
+                    (1..more).map { n ->
+                        HomeRow(
+                            "walk:row:$n",
+                            "Row $n",
+                            "Walk",
+                            RowState.Ready,
+                            (1..4).map { tile("tt$n$it", "Title $n.$it") },
+                        )
+                    },
             )
         client.attach { text ->
             val msg = CoreJson.parseToJsonElement(text).jsonObject
@@ -271,5 +292,47 @@ class TvHomeHoldTest {
         compose.waitForIdle()
         compose.runOnIdle { assertEquals(emptyList(), removed.map { it.id }) }
         compose.onNodeWithText("Undo").assertExists()
+    }
+
+    @Test
+    fun `moving down and back up the rows keeps each focused row's header in view, never above the page`() {
+        show(more = 6)
+        compose.onNodeWithContentDescription("Severance").performSemanticsAction(SemanticsActions.RequestFocus)
+        val rows = listOf("Popular" to "Andor") + (1..5).map { "Row $it" to "Title $it.1" }
+        // Down brings a row up from the foot; Up brings one down from above the page to the anchor, where its
+        // header has to fit under the top edge (the pill's foot in the app; the Fire TV walk, FTV4).
+        val walk = rows.map { Key.DirectionDown to it } + rows.reversed().drop(1).map { Key.DirectionUp to it }
+        for ((key, row) in walk) {
+            val (title, first) = row
+            compose.onNode(isFocused()).performKeyInput { pressKey(key) }
+            waitFor("$title's first tile takes the focus") { focused(hasContentDescription(first)) }
+            compose.mainClock.advanceTimeBy(1_000)
+            compose.waitForIdle()
+            // Unclipped: a header scrolled under the page's top edge is clipped to it, not moved.
+            val header = compose.onNodeWithText(title).getUnclippedBoundsInRoot()
+            assertTrue(header.top >= 0.dp, "$title's header went above the page: ${header.top}")
+        }
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `a hero with a long name and no logo keeps its Details label whole`() {
+        // The Fire TV walk (FTV4): a two-line name in place of a logo and three lines of text pushed the
+        // buttons past the card's foot, and the label under Details was cut.
+        val tile =
+            Tile(id = "tt9", kind = "movie", name = "Project Hail Mary and the Very Long Title", posterShape = "poster")
+        val text = (1..60).joinToString(" ") { "word$it" }
+        show(hero = Hero(tile, "#1 in Popular Movies on Cinemeta", text, listOf("Drama"), "2 h 36 min"))
+        waitFor("the hero draws") {
+            compose.onAllNodesWithContentDescription("Details").fetchSemanticsNodes().isNotEmpty()
+        }
+        val circle = compose.onNodeWithContentDescription("Details").fetchSemanticsNode()
+        // The button's column: the ring, the 10 dp gap and the label under it.
+        val button = checkNotNull(circle.layoutInfo.parentInfo)
+        // In the TV canvas's units: the ring is 72 of them, whatever the test screen's density.
+        val unit = circle.size.height / 72f
+        val whole = button.height / unit
+        val ring = 72f
+        assertTrue(whole >= ring + 10 + 24, "the Details label got ${whole - ring - 10} dp of its line")
     }
 }

@@ -45,7 +45,9 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import app.marquee.core.model.NextEpisode
 import app.marquee.design.Icons
@@ -121,6 +123,9 @@ fun TvPlayer(
     val stage = controller.stage
     val live = stage == Stage.Playing || stage == Stage.Paused || stage == Stage.Buffering || stage == Stage.Ended
     var osd by remember { mutableStateOf(true) }
+    // The controls band's height (bar, transport and options), as last laid out: the cues sit over it.
+    var controlsHeight by remember { mutableStateOf(0.dp) }
+    val density = LocalDensity.current
     var wake by remember { mutableIntStateOf(0) }
     var panel by remember { mutableStateOf<Panel?>(null) }
     val ended = stage == Stage.Ended
@@ -342,7 +347,13 @@ fun TvPlayer(
             }.focusProperties { exit = { FocusRequester.Cancel } }
             .focusable(),
     ) {
-        PlayerVideo(controller.player, Modifier.fillMaxSize(), controller.subtitleSize)
+        // While the controls show, the cues' foot sits 8 dp over their band, as on the phone.
+        PlayerVideo(
+            controller.player,
+            Modifier.fillMaxSize(),
+            controller.subtitleSize,
+            subtitleLift = if (showControls) controlsHeight else 0.dp,
+        )
 
         // Scrims run edge to edge (no box with an edge to see): 320 dp at the foot to 72% black,
         // 200 dp at the top to 60%, so the words over bright pictures hold their contrast.
@@ -412,7 +423,10 @@ fun TvPlayer(
                 onSubtitles = { panel = Panel.Subtitles },
                 onVersions = onVersions,
                 onEpisodes = onEpisodes,
-                modifier = Modifier.padding(start = safe.side, end = safe.side, bottom = safe.bottom),
+                modifier =
+                    Modifier
+                        .onSizeChanged { if (it.height > 0) controlsHeight = with(density) { it.height.toDp() } }
+                        .padding(start = safe.side, end = safe.side, bottom = safe.bottom),
             )
         }
 

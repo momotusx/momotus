@@ -39,10 +39,13 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalAccessibilityManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.marquee.core.PendingRemoval
 import app.marquee.core.TileCopy
@@ -77,6 +80,7 @@ import app.marquee.design.SecondaryButton
 import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
 import app.marquee.design.TextRole
+import app.marquee.design.TileMetrics
 import app.marquee.design.TileShape
 import app.marquee.design.Tokens
 import app.marquee.design.actionWindow
@@ -220,8 +224,10 @@ fun TvHome(
         }
     }
 
-    // A focused row rests under the pill, never behind it.
-    AnchoredScrolling(lead = tvContentTop(), trail = 0.dp) {
+    // A focused row rests under the pill with its header, never behind it: a focused tile comes to rest
+    // its header's room lower than the content's top (the lanes keep their own leading edge, TileLane).
+    var headerRoom by remember { mutableStateOf(0.dp) }
+    AnchoredScrolling(lead = tvContentTop() + headerRoom, trail = 0.dp) {
         LazyColumn(
             state = state.page,
             modifier = modifier.fillMaxSize(),
@@ -240,7 +246,7 @@ fun TvHome(
                 items(
                     rows.subList(0, split),
                     key = { it.rowId },
-                ) { row -> TvRow(row, state, onOpen, hold, retry) }
+                ) { row -> TvRow(row, state, onOpen, hold, retry, { headerRoom = it }) }
                 val said = removing?.let { TileCopy.removed(it.name) } ?: removal?.failed
                 if (said != null) {
                     item(key = "notice") {
@@ -255,7 +261,7 @@ fun TvHome(
                 items(
                     rows.subList(split, rows.size),
                     key = { it.rowId },
-                ) { row -> TvRow(row, state, onOpen, hold, retry) }
+                ) { row -> TvRow(row, state, onOpen, hold, retry, { headerRoom = it }) }
             }
         }
     }
@@ -390,7 +396,14 @@ private fun TvHero(
             Logo(tile.logo, tile.name, height = 120.dp, maxWidth = 520.dp, color = colors.text)
             RatingLine(tile.rating, TileCopy.heroMeta(hero))
             hero.description?.let {
-                MqText(it, role = TextRole.Callout, color = colors.muted, maxLines = 3)
+                // Measured last, so a two-line name in place of a logo takes its lines, never the buttons'.
+                MqText(
+                    it,
+                    Modifier.weight(1f, fill = false),
+                    role = TextRole.Callout,
+                    color = colors.muted,
+                    maxLines = 3,
+                )
             }
             Row(
                 Modifier.padding(top = Marquee.space.xs),
@@ -437,12 +450,26 @@ private fun TvRow(
     onHold: ((Tile, String) -> Unit)?,
     /** A failed row's Try again: that catalog only. */
     onRetry: (String) -> Unit,
+    /**
+     * The room a row's header takes over its tiles (its height, the gap under it and the tiles' lift room), for the
+     * page's anchor: the anchor places a focused tile, and its header has to fit above.
+     */
+    onHeaderRoom: (Dp) -> Unit,
 ) {
     val inset = Marquee.safe.side
-    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
+    val density = LocalDensity.current
+    val gap = Marquee.space.xs
+    val lift = Marquee.tiles.pad
+    Column(verticalArrangement = Arrangement.spacedBy(gap)) {
         // A remote has no long press to discover: Continue Watching says how to remove a title.
         val hint = TileCopy.HOLD_TO_REMOVE.takeIf { onHold != null && TileCopy.removable(row.rowId) }
-        RowHeader(row.title, TileCopy.source(row.rowId, row.source) ?: hint, Modifier.padding(horizontal = inset))
+        RowHeader(
+            row.title,
+            TileCopy.source(row.rowId, row.source) ?: hint,
+            Modifier
+                .padding(horizontal = inset)
+                .onSizeChanged { if (it.height > 0) onHeaderRoom(with(density) { it.height.toDp() } + gap + lift) },
+        )
         when (val notice = row.notice()) {
             is RowNotice.Waiting -> {
                 SkeletonLane(shapeOf(row))
@@ -508,6 +535,20 @@ private fun TileLane(
     val metrics = Marquee.tiles
     val shape = shapeOf(row)
     val keys = remember(row.tiles) { row.tileKeys() }
+    // The lane's own leading edge: the page's anchor is lower by a header (TvHome).
+    AnchoredScrolling(lead = tvContentTop(), trail = 0.dp) { Lane(row, state, onOpen, onHold, metrics, shape, keys) }
+}
+
+@Composable
+private fun Lane(
+    row: HomeRow,
+    state: TvHomeState,
+    onOpen: (Tile) -> Unit,
+    onHold: ((Tile, String) -> Unit)?,
+    metrics: TileMetrics,
+    shape: TileShape,
+    keys: List<String>,
+) {
     LazyRow(
         state = state.rowState(row.rowId),
         modifier =

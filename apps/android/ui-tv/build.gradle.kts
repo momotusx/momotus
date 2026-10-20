@@ -38,5 +38,7 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)
+    // The subtitle view the cue test reads its cues' place from.
+    testImplementation(libs.media3.ui)
     debugImplementation(libs.compose.ui.test.manifest)
 }

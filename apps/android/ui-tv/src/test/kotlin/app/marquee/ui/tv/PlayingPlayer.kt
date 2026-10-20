@@ -3,6 +3,8 @@ package app.marquee.ui.tv
 import android.os.Looper
 import androidx.media3.common.Player
 import androidx.media3.common.SimpleBasePlayer
+import androidx.media3.common.text.Cue
+import androidx.media3.common.text.CueGroup
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 
@@ -12,6 +14,7 @@ internal class PlayingPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
     private var wants = true
     private var ready = false
     private var firstFrame = false
+    private var cues = emptyList<Cue>()
 
     override fun getState(): State {
         val state =
@@ -26,6 +29,7 @@ internal class PlayingPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
                 // Constant: the position moves only by a seek, so a test reads exact numbers.
                 .setContentPositionMs(PositionSupplier.getConstant(at))
                 .setNewlyRenderedFirstFrame(firstFrame)
+                .setCurrentCues(CueGroup(cues, at * 1000))
         if (!ready) return state.setPlaybackState(Player.STATE_IDLE).build()
         return state
             .setPlaylist(listOf(MediaItemData.Builder("film").setDurationUs(600_000_000L).build()))
@@ -39,6 +43,20 @@ internal class PlayingPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
         firstFrame = true
         invalidateState()
         firstFrame = false
+    }
+
+    /**
+     * A subtitle on screen now, as Media3 hands most subtitles over: on the bottom line ([line] -1, counted up),
+     * centred, the whole width; [line] unset is a cue with no line of its own.
+     */
+    fun say(
+        text: String,
+        line: Float = -1f,
+    ) {
+        val cue = Cue.Builder().setText(text)
+        if (line != Cue.DIMEN_UNSET) cue.setLine(line, Cue.LINE_TYPE_NUMBER).setPosition(0.5f).setSize(1f)
+        cues = listOf(cue.build())
+        invalidateState()
     }
 
     override fun handleSetPlayWhenReady(playWhenReady: Boolean): ListenableFuture<*> {
