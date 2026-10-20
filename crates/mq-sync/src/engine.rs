@@ -172,8 +172,9 @@ pub enum Blocked {
 
 #[derive(Debug, thiserror::Error)]
 pub enum SyncError {
+    /// Any HTTP failure but 410, which is `AccountGone`.
     #[error(transparent)]
-    Http(#[from] HttpError),
+    Http(HttpError),
     #[error(transparent)]
     Library(#[from] LibraryError),
     #[error("the relay must use https unless it is on this network")]
@@ -198,6 +199,19 @@ pub enum SyncError {
     WrongRecord,
     #[error("the relay's roster changed since it was shown; compare again")]
     RosterChanged,
+    #[error("this account was deleted")]
+    AccountGone,
+}
+
+/// The relay answers 410 on every route that names a deleted account, so
+/// every call maps it in one place.
+impl From<HttpError> for SyncError {
+    fn from(e: HttpError) -> Self {
+        match e {
+            HttpError::Status { status: 410, .. } => SyncError::AccountGone,
+            e => SyncError::Http(e),
+        }
+    }
 }
 
 impl SyncError {
@@ -213,6 +227,7 @@ impl SyncError {
             SyncError::Unsent => "unsent",
             SyncError::WrongRecord => "wrongRecord",
             SyncError::RosterChanged => "rosterChanged",
+            SyncError::AccountGone => "accountGone",
             _ => return None,
         })
     }
@@ -676,10 +691,19 @@ impl<'a> Session<'a> {
                 // backup): give it back the roster this device holds, which
                 // may include this device's own joining, then ask for a
                 // fresh token as a member.
+                // A deleted account (its tokens went with it) answers 410
+                // there: this device forgets the account as a removed one
+                // does, and the library stays.
                 Err(SyncError::Http(HttpError::Status { status: 401, .. })) if !refreshed => {
                     refreshed = true;
-                    self.replay(0).await?;
-                    self.fresh_token().await?;
+                    let back = match self.replay(0).await {
+                        Ok(()) => self.fresh_token().await,
+                        failed => failed,
+                    };
+                    if matches!(back, Err(SyncError::AccountGone)) {
+                        self.library.forget_sync()?;
+                    }
+                    back?;
                     continue;
                 }
                 fetched => fetched?,
@@ -1555,6 +1579,37 @@ pub async fn sign_out(
     session
         .propose(|s| Ok(s.roster.leave(&s.member, at_ms)))
         .await?;
+    library.forget_sync()?;
+    Ok(())
+}
+
+/// Deletes the account on the relay for every device: its records, roster,
+/// recovery data and tokens. Returns once the relay confirmed (an account
+/// already gone counts, so a retry after a lost answer succeeds); this
+/// device then forgets the account as after a sign-out, and the library
+/// stays. The app deletes the keystore record.
+pub async fn delete_account(
+    library: &Library,
+    http: &HttpClient,
+    config: &SyncConfig,
+    clock: &HlcClock,
+) -> Result<(), SyncError> {
+    let session = match Session::open(library, http, config, clock).await {
+        Err(SyncError::AccountGone) => return Ok(()),
+        opened => opened?,
+    };
+    let deleted = http
+        .request(
+            mq_http::Method::DELETE,
+            &format!("{}/v1/account", session.server()),
+            None,
+            &options(session.server(), session.token()),
+        )
+        .await;
+    match deleted.map_err(SyncError::from) {
+        Ok(_) | Err(SyncError::AccountGone) => {}
+        Err(e) => return Err(e),
+    }
     library.forget_sync()?;
     Ok(())
 }

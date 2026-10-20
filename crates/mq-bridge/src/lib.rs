@@ -8,7 +8,8 @@
 //! "undoLearned" | "setDebridKeys" |
 //! "restoreDebrid" | "ackDebrid" | "setDebridKey" | "disconnectDebrid" |
 //! "createSyncAccount" | "syncNow" | "approvePairing" | "createRecoveryKit" | "recover" |
-//! "syncDevices" | "lostPreview" | "removeDevice" | "reportLost" | "signOut" | "cancelPairing" |
+//! "syncDevices" | "lostPreview" | "removeDevice" | "reportLost" | "signOut" | "deleteAccount" |
+//! "cancelPairing" |
 //! "forkPreview" | "useServerRoster" | "createProfile" | "updateProfile" | "deleteProfile" |
 //! "setPin" | "switchProfile" | "unlockProfile" | "lockSession" | "removeFromContinue" |
 //! "languages",
@@ -213,6 +214,13 @@ enum Request {
         /// will not let leave.
         #[serde(default)]
         local: bool,
+    },
+    /// Deletes the account on the sync server for every device; replies `{}`
+    /// once the relay confirmed. This device forgets the account as after a
+    /// sign-out (the library stays); the platform deletes the keystore record.
+    DeleteAccount {
+        id: u64,
+        record: Box<SyncConfig>,
     },
     /// The digits on the new device differ: ends the approval of `qr` now
     /// with a key rotation (dropping the device if it joined). Replies the
@@ -769,6 +777,15 @@ impl Session {
                     }
                     let (library, http, clock) = (core.library(), core.http(), core.clock());
                     mq_sync::sign_out(library, http, &record, clock, force)
+                        .await
+                        .map(|()| json!({}))
+                });
+            }
+            Request::DeleteAccount { id, record } => {
+                self.spawn(id, async move {
+                    let _gate = core.sync_gate().await;
+                    let (library, http, clock) = (core.library(), core.http(), core.clock());
+                    mq_sync::delete_account(library, http, &record, clock)
                         .await
                         .map(|()| json!({}))
                 });

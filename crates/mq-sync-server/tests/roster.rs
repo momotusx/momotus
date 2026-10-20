@@ -1828,3 +1828,169 @@ async fn a_damaged_roster_still_lets_its_own_device_leave_here() {
     mq_sync::leave_here(&phone.library, &phone.record).unwrap();
     assert!(phone.library.roster_entries(&genesis).unwrap().is_empty());
 }
+
+impl Relay {
+    fn count(&self, table: &str) -> i64 {
+        self.sql()
+            .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))
+            .unwrap()
+    }
+
+    fn journal(&self) -> String {
+        std::fs::read_to_string(self.db.with_extension("roster.jsonl")).unwrap()
+    }
+}
+
+impl Device {
+    async fn delete_account(&self) {
+        mq_sync::delete_account(&self.library, &http(), &self.record, &self.clock)
+            .await
+            .unwrap();
+    }
+}
+
+/// A phone and a TV that synced, with a recovery kit; the genesis to send
+/// again later.
+async fn synced_pair(relay: &Relay) -> (Device, Device, Entry) {
+    let mut phone = Device::first(relay).await;
+    let mut tv = phone.pair(relay, "TV").await;
+    tv.watch("v1", 300);
+    tv.sync().await;
+    phone.sync().await;
+    let genesis = relay.entries()[0].clone();
+    let (_, _, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
+        .await
+        .unwrap();
+    phone.record = record;
+    (phone, tv, genesis)
+}
+
+fn assert_gone(err: SyncError) {
+    assert!(matches!(err, SyncError::AccountGone), "{err:?}");
+    assert_eq!(err.code(), Some("accountGone"));
+}
+
+/// Deleting leaves nothing but the tombstone. A device that never heard of
+/// it gets 401, replays its roster and gets 410: the replay creates nothing,
+/// and the device forgets the account but keeps its library. Its signed
+/// token request, the genesis sent again and a second delete all meet the
+/// tombstone.
+#[tokio::test]
+async fn a_deleted_account_is_gone_for_every_device() {
+    let relay = Relay::new().await;
+    let (phone, mut tv, genesis) = synced_pair(&relay).await;
+    phone.delete_account().await;
+    for table in [
+        "account", "roster", "record", "recovery", "device", "pairing",
+    ] {
+        assert_eq!(relay.count(table), 0, "{table}");
+    }
+    assert_eq!(relay.count("gone"), 1);
+    let stored = hex::encode(phone.record.keys.genesis.0);
+    assert!(
+        phone.library.roster_entries(&stored).unwrap().is_empty(),
+        "the deleting device forgot it"
+    );
+
+    assert_gone(tv.round().await.unwrap_err());
+    assert_eq!(relay.count("account"), 0, "the replay made nothing");
+    assert_eq!(tv.position("v1"), Some(300), "the library stays");
+    assert_eq!(tv.library.sync_state("pull_seq").unwrap(), None);
+
+    let grant = signed(&relay, tv.record.keys.account, &tv.record.secret()).await;
+    let asked = ask(&relay, &grant).await;
+    assert!(
+        matches!(asked, Err(HttpError::Status { status: 410, .. })),
+        "{asked:?}"
+    );
+    let again = http()
+        .post_json(
+            &format!("{}/v1/accounts", relay.url),
+            &mq_sync::wire::AccountRequest { entry: genesis },
+            &token(""),
+        )
+        .await;
+    assert!(
+        matches!(again, Err(HttpError::Status { status: 410, .. })),
+        "{again:?}"
+    );
+    assert_eq!(relay.count("account"), 0);
+    // A delete whose answer was lost, sent again, is done.
+    phone.delete_account().await;
+}
+
+/// A device with no roster in its store has nothing to replay: the 410
+/// comes from its signed token request.
+#[tokio::test]
+async fn a_token_request_for_a_deleted_account_is_account_gone() {
+    let relay = Relay::new().await;
+    let (phone, mut tv, _) = synced_pair(&relay).await;
+    phone.delete_account().await;
+    tv.library
+        .clear_roster(&hex::encode(tv.record.keys.genesis.0))
+        .unwrap();
+    assert_gone(tv.round().await.unwrap_err());
+}
+
+/// The relay stopped after the deletion committed and before the journal
+/// was written again: the journal still holds the account's entries and no
+/// `gone` line. The tombstone in the database keeps them out at the start,
+/// and the journal gets its `gone` line.
+#[tokio::test]
+async fn a_crash_before_the_journal_rewrite_keeps_the_account_deleted() {
+    let relay = Relay::new().await;
+    let (phone, mut tv, _) = synced_pair(&relay).await;
+    let before = relay.journal();
+    phone.delete_account().await;
+    std::fs::write(relay.db.with_extension("roster.jsonl"), &before).unwrap();
+    let restarted = Relay::start(relay.db.clone(), relay.offset.clone(), false).await;
+    assert_eq!(restarted.count("account"), 0);
+    assert_eq!(restarted.count("roster"), 0);
+    tv.record.server = restarted.url.clone();
+    assert_gone(tv.round().await.unwrap_err());
+    assert_eq!(restarted.count("account"), 0);
+    let journal = restarted.journal();
+    assert!(journal.contains("\"gone\""), "{journal}");
+}
+
+/// A database backup from before the deletion, restored with the journal
+/// and a new generation (the replay grace hour): the `gone` line deletes the
+/// account again and writes its tombstone back, so a device that still
+/// holds a token valid in the backup cannot bring it back by replaying.
+#[tokio::test]
+async fn a_restored_backup_from_before_the_deletion_stays_deleted() {
+    let relay = Relay::new().await;
+    let (phone, mut tv, _) = synced_pair(&relay).await;
+    let backup = relay.snapshot();
+    phone.delete_account().await;
+    let restored = relay.restored(&backup, true).await;
+    assert_eq!(restored.count("account"), 0);
+    assert_eq!(restored.count("gone"), 1);
+    tv.record.server = restored.url.clone();
+    assert_gone(tv.round().await.unwrap_err());
+    assert_eq!(restored.count("account"), 0, "the replay made nothing");
+}
+
+/// The journal is a new file after a deletion: entries accepted later land
+/// in it, not in the file it replaced.
+#[tokio::test]
+async fn the_journal_keeps_recording_after_a_deletion() {
+    let relay = Relay::new().await;
+    let gone = Device::first(&relay).await;
+    let mut phone = Device::first(&relay).await;
+    gone.delete_account().await;
+    let (_, _, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
+        .await
+        .unwrap();
+    phone.record = record;
+    let mut tv = phone.pair(&relay, "TV").await;
+    tv.sync().await;
+    let journal = relay.journal();
+    assert_eq!(relay.rows(), 3, "genesis, kit, the TV");
+    assert_eq!(
+        journal.lines().count() as i64,
+        relay.rows() + 1,
+        "{journal}"
+    );
+    assert!(journal.lines().next().unwrap().contains("\"gone\""));
+}

@@ -308,6 +308,7 @@ async fn a_locked_session_answers_only_the_picker_unlocking_and_sync() {
         json!({"op": "createRecoveryKit", "record": record}),
         json!({"op": "syncDevices", "record": record}),
         json!({"op": "signOut", "record": record}),
+        json!({"op": "deleteAccount", "record": record}),
         json!({"op": "createProfile", "name": "N"}),
         json!({"op": "updateProfile", "profile": "default", "name": "N"}),
         json!({"op": "deleteProfile", "profile": "x"}),

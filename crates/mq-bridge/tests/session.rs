@@ -435,6 +435,17 @@ async fn sync_account_then_two_devices_share_preferences() {
         .await;
     let left = next(&mut rx_a).await;
     assert_eq!(left["ok"], true, "{left}");
+
+    // Deleting answers once the relay confirmed; the account then answers
+    // `accountGone` to every sync.
+    a.handle_text(&json!({"id": 18, "op": "deleteAccount", "record": other}).to_string())
+        .await;
+    let deleted = next(&mut rx_a).await;
+    assert_eq!(deleted["result"], json!({}), "{deleted}");
+    a.handle_text(&json!({"id": 19, "op": "syncNow", "record": other}).to_string())
+        .await;
+    let gone = next(&mut rx_a).await;
+    assert_eq!(gone["code"], "accountGone", "{gone}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

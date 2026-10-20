@@ -8,7 +8,7 @@ pub mod wire;
 
 pub use engine::{
     Blocked, DeviceKits, Devices, ForkPreview, LostPreview, MemberInfo, PAIRING_MS, SyncConfig,
-    SyncError, SyncReport, create_account, devices, fork_preview, leave_here, lost_preview,
-    pull_changes, push_changes, remove_devices, report_lost, sign_out, sync_once,
+    SyncError, SyncReport, create_account, delete_account, devices, fork_preview, leave_here,
+    lost_preview, pull_changes, push_changes, remove_devices, report_lost, sign_out, sync_once,
     use_server_roster,
 };
