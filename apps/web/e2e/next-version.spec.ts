@@ -290,10 +290,16 @@ test("a source that fails before its metadata is not a decode failure, and Try a
   await expect(p.locator(".endcard .acts > *").first()).toHaveAttribute("data-f", "player:retry");
   await expect(p.locator('[data-f="player:retry"]')).toHaveText("Try again");
   await expect.poll(() => p.evaluate(() => document.activeElement?.getAttribute("data-f"))).toBe("player:retry");
+  // Try again while the server still fails: the play fails again at once, the
+  // same card as before, so the player says it tried again (`retries`).
+  await p.keyboard.press("Enter");
+  await expect(p.locator(".pstate .st")).toHaveText("Trying again");
+  await expect(card).toBeVisible({ timeout: 30_000 });
+  await expect.poll(() => p.evaluate(() => document.activeElement?.getAttribute("data-f"))).toBe("player:retry");
   // The server answers again; Try again asks the core to start over.
   await p.unroute(server);
   await p.keyboard.press("Enter");
-  await expect.poll(() => sent.some((m) => m.op === "command" && m.command?.type === "retry")).toBe(true);
+  await expect.poll(() => sent.filter((m) => m.op === "command" && m.command?.type === "retry").length).toBe(2);
   await expect(card).toHaveCount(0, { timeout: 30_000 });
   await mute(p);
   // It plays: once started (at a resume point, maybe), the playhead moves on.

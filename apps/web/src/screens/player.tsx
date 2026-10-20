@@ -26,7 +26,7 @@ import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
 import { videoContext } from "../core/video";
 import { autoFocus, goBack } from "../focus/dom";
 import { createVideoEngine } from "../player/video-engine";
-import { loadedSource, sourceStart } from "../lib/failover";
+import { loadedSource, type Retry, sourceStart, TRYING_AGAIN_MS, tryingAgain } from "../lib/failover";
 import { bytes, clock, decoded, episodeLabel, groupFailures, playPath, playState, seasonName, titlePath, versionsPath } from "../lib/format";
 import { byLanguage, offSummary, trackDetail } from "../lib/subtitles";
 import { blockedWords, languageName, nextVersion, qualityCell, qualityText, subtitleNote } from "../lib/words";
@@ -112,6 +112,29 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   });
   const snap = () => playback()?.state.data ?? null;
   const failed = () => snap()?.phase === "failed";
+  // Try again as the core took it (`retries` rose): "Trying again" until the
+  // play starts, and a moment at least (lib/failover.ts tryingAgain).
+  const [retry, setRetry] = createSignal<Retry | null>(null);
+  const [held, setHeld] = createSignal(0);
+  createEffect(
+    on(
+      () => snap()?.retries ?? 0,
+      (n, was) => {
+        if (was === undefined || n <= was) return;
+        setRetry({ retries: n, at: Date.now() });
+        // The hold ends: read the rule again.
+        const t = setTimeout(() => setHeld((h) => h + 1), TRYING_AGAIN_MS);
+        onCleanup(() => clearTimeout(t));
+      },
+    ),
+  );
+  createEffect(() => {
+    if (snap()?.phase === "ready") setRetry(null);
+  });
+  const again = () => {
+    held();
+    return tryingAgain(snap()?.phase, retry(), Date.now());
+  };
   const url = () => (snap()?.phase === "ready" ? snap()?.url : null) ?? null;
   const playing = () => [...(versions()?.recommended ? [versions()?.recommended] : []), ...(versions()?.rows ?? [])].find((r) => r?.key === snap()?.key) ?? null;
 
@@ -416,6 +439,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     const p = playback()?.state.status;
     if (p?.state === "failed") return { tone: "bad", text: (p as { reason: string }).reason, busy: false };
     const s = snap();
+    if (again()) return { tone: "warn", text: "Trying again", busy: true };
     if (s?.phase === "ready") return null;
     if (s?.phase === "failed") return { tone: "bad", text: nextVersion.failed(!!s.offer), busy: false };
     if (s?.phase === "resolving") {

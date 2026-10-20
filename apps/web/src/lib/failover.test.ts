@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { PlaybackSnapshot } from "../core/generated/PlaybackSnapshot";
-import { earlyFailure, loadedSource, mediaFailure, pendingStart, sourceStart } from "./failover";
+import { earlyFailure, loadedSource, mediaFailure, pendingStart, sourceStart, tryingAgain } from "./failover";
 
 test("a failover names the source the engine loaded, not the one the core moved to", () => {
   let snapshot = { attempt: 1 } as PlaybackSnapshot;
@@ -87,4 +87,18 @@ test("an error before the metadata asks the source: a failed fetch is never deco
   expect((await earlyFailure("u", error, late)).kind).toBe("timeout");
   // The bytes came and the browser still cannot play them: the file's own.
   expect((await earlyFailure("u", error, answering(206))).kind).toBe("decode");
+});
+
+test("Trying again shows while the core starts over, and a moment at least when it fails again at once", () => {
+  const retry = { retries: 1, at: 1000 };
+  // No Try again taken: nothing to say.
+  expect(tryingAgain("resolving", null, 1000)).toBe(false);
+  // Taken: while the core starts the play again.
+  expect(tryingAgain("resolving", retry, 1200)).toBe(true);
+  expect(tryingAgain("resolving", retry, 9000)).toBe(true);
+  // Failed again at once: the same card as before, so the words hold a moment.
+  expect(tryingAgain("failed", retry, 1200)).toBe(true);
+  expect(tryingAgain("failed", retry, 2600)).toBe(false);
+  // Started: nothing to say.
+  expect(tryingAgain("ready", retry, 1200)).toBe(false);
 });

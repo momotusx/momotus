@@ -125,3 +125,20 @@ export function sourceStart() {
     },
   };
 }
+
+/** How long "Trying again" shows at least after Try again was taken. */
+export const TRYING_AGAIN_MS = 1500;
+
+/** Try again as the core took it: the `retries` it rose to, and when. */
+export type Retry = { retries: number; at: number };
+
+/** Whether the player says "Trying again" (`PlaybackSnapshot.retries`): from
+ * the moment the count rises while the core starts the play again, and for
+ * `holdMs` at least, so a play that fails again at once (a snapshot that
+ * otherwise equals the last) still reads as a new try. The player drops
+ * `retry` once the play starts. */
+export function tryingAgain(phase: string | undefined, retry: Retry | null, now: number, holdMs = TRYING_AGAIN_MS): boolean {
+  if (!retry) return false;
+  if (now - retry.at < holdMs) return phase !== "ready";
+  return phase === "resolving";
+}
