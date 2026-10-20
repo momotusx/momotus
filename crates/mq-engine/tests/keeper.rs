@@ -191,12 +191,59 @@ async fn a_window_never_holds_more_than_its_budget() {
     );
 }
 
+/// m. The bitfield's fsync held (a round can free nothing until it ends),
+/// and a seek meanwhile: past `W` the scheduler fetches only the seek's
+/// urgent windows (blocking and critical, 5 MiB here, 6 pieces rounded
+/// out), not its 1.9 MiB playback window (the grace keeps back its
+/// readahead).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_seek_while_a_round_waits_fetches_only_its_urgent_windows() {
+    let w = windowed(48 << 20, plan(), None).await;
+    let fsync = sync_log::hold(w.root.path(), Point::Fsync);
+    let reader = w.engine.open_reader(w.t, "default", w.movie).await.unwrap();
+    let mut range = reader.range(0, None).await.unwrap();
+    let mut buf = vec![0u8; 64 * 1024];
+    let started = Instant::now();
+    while !fsync.reached() {
+        within(30, range.read(&mut buf)).await.unwrap();
+        assert!(started.elapsed() < Duration::from_secs(30), "no round");
+    }
+    drop(range);
+    let before = allocated(&w.dir());
+    let sampler = Sampler::start(w.dir());
+    let at = 36 * MIB;
+    let mut seek = reader.range(at, None).await.unwrap();
+    within(30, seek.ready()).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    let max = sampler.max();
+    fsync.open();
+    drop(seek);
+    // A half piece over for the file system's own blocks.
+    let bound = plan().budget.max(before + 6 * MIB) + MIB / 2;
+    assert!(
+        max <= bound,
+        "allocated {max} over {bound} ({before} before the seek)"
+    );
+}
+
 /// c. A seek back within `B` reads from disk (no piece verified again);
 /// further back the pieces are fetched again, and the bytes are right.
+/// The playing read stays open at 30 MiB with 8 MiB of readahead, so its
+/// kept set fills the window and the keeper takes every piece behind it
+/// but `B`.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_seek_back_within_b_asks_nothing() {
-    let w = windowed(48 << 20, plan(), None).await;
-    assert!(w.read(0, 30 * MIB).await == w.movie(0, 30 * MIB));
+    let plan = WindowPlan {
+        ahead: 8 * MIB,
+        ..plan()
+    };
+    let w = windowed(64 << 20, plan, None).await;
+    let reader = w.engine.open_reader(w.t, "default", w.movie).await.unwrap();
+    let mut playing = reader.range(0, None).await.unwrap();
+    let mut head = vec![0u8; (30 * MIB) as usize];
+    within(60, playing.read_exact(&mut head)).await.unwrap();
+    assert!(head == w.movie(0, 30 * MIB));
+    tokio::time::sleep(Duration::from_millis(1500)).await;
     let back = 30 * MIB - MIB;
     assert!(w.read(back, back + 512 * 1024).await == w.movie(back, back + 512 * 1024));
     assert_eq!(w.stats().await.refetched_bytes, 0, "within B: from disk");
@@ -206,6 +253,7 @@ async fn a_seek_back_within_b_asks_nothing() {
         w.stats().await.refetched_bytes > 0,
         "beyond B: fetched again"
     );
+    drop(playing);
 }
 
 /// d. With no reader the anchor keeps `[position - B, playback end)`: a
@@ -271,7 +319,14 @@ async fn a_trimmed_window_resumes_warm() {
     assert!(held.contains(&29) && held.contains(&47), "{held:?}");
     drop(engine);
     let len = s.movie.len() as u64;
-    let w = windowed_on(s, root, plan(), Some(at)).await;
+    // A 10 MiB window, so the reads at the head and the index fill it past
+    // its trigger by more than the head pieces they leave behind, and the
+    // reader waits out the index read's grace.
+    let small = WindowPlan {
+        budget: 10 * MIB,
+        ..plan()
+    };
+    let w = windowed_on(s, root, small, Some(at)).await;
     let reader = w.engine.open_reader(w.t, "default", w.movie).await.unwrap();
     let mut probes = Vec::new();
     for (from, to) in [(0, MIB), (0, 64 * 1024), (len - 64 * 1024, len)] {
@@ -279,11 +334,13 @@ async fn a_trimmed_window_resumes_warm() {
         within(30, r.ready()).await.unwrap();
         probes.push(r);
     }
-    for from in [0, len - 2 * MIB] {
-        let mut r = reader.range(from, None).await.unwrap();
-        within(30, r.ready()).await.unwrap();
-        drop(r);
-    }
+    // The player's header read: nothing behind it to evict, so a round
+    // past the trigger takes the resume window unless it is kept.
+    assert!(w.read(0, 2 * MIB).await == w.movie(0, 2 * MIB));
+    let mut index = reader.range(len - 2 * MIB, None).await.unwrap();
+    within(30, index.ready()).await.unwrap();
+    drop(index);
+    tokio::time::sleep(Duration::from_secs(6)).await;
     assert!(w.read(at, at + 2 * MIB).await == w.movie(at, at + 2 * MIB));
     assert_eq!(
         w.stats().await.refetched_bytes,
