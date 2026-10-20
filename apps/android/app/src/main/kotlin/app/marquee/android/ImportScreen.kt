@@ -16,7 +16,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -48,6 +47,7 @@ import app.marquee.design.StateMessage
 import app.marquee.design.Status
 import app.marquee.design.StatusWord
 import app.marquee.design.TextRole
+import app.marquee.design.focusSoon
 import app.marquee.design.openLink
 
 // Import from Stremio (plans/android-design-v2.md slice 13, the web's import screen): a code to
@@ -240,10 +240,7 @@ private fun Done(
     val home = remember { FocusRequester() }
     val tv = Marquee.form == Form.Tv
     LaunchedEffect(Unit) {
-        if (tv) {
-            withFrameNanos { }
-            runCatching { home.requestFocus() }
-        }
+        if (tv) focusSoon(home)
     }
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
         Row(

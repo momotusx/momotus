@@ -93,6 +93,7 @@ import app.marquee.design.Status
 import app.marquee.design.StatusWord
 import app.marquee.design.TextRole
 import app.marquee.design.focusClickable
+import app.marquee.design.focusSoon
 import app.marquee.design.marqueeFocus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -435,10 +436,7 @@ private fun StateCard(
     val tv = Marquee.form == Form.Tv
     val now = remember { FocusRequester() }
     LaunchedEffect(Unit) {
-        if (tv) {
-            withFrameNanos { }
-            runCatching { now.requestFocus() }
-        }
+        if (tv) focusSoon(now)
     }
     Section {
         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
@@ -966,10 +964,7 @@ fun SyncJoinScreen(
         scope.launch { join(s, n) }
     }
     LaunchedEffect(Unit) {
-        if (tv) {
-            withFrameNanos { }
-            runCatching { first.requestFocus() }
-        }
+        if (tv) focusSoon(first)
     }
     LazyColumn(
         Modifier.fillMaxSize().focusRestorer(),
@@ -2053,10 +2048,7 @@ private fun Session(
             }
         }
     LaunchedEffect(step) {
-        if (tv && step != null) {
-            withFrameNanos { }
-            runCatching { answer.requestFocus() }
-        }
+        if (tv && step != null) focusSoon(answer)
     }
     if (status is ViewStatus.Failed) {
         StateMessage(

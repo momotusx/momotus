@@ -458,8 +458,9 @@ internal suspend fun restoreFocus(
     waitMs: Long = FOCUS_WAIT_MS,
 ) {
     val focus = state.focus
-    val started = withFrameNanos { it }
+    // Counted before the first frame: a press during it is the viewer's move, not something to undo.
     val seen = focus.interactions
+    val started = withFrameNanos { it }
     while (true) {
         val elapsed = (withFrameNanos { it } - started) / 1_000_000
         if (elapsed >= waitMs) return

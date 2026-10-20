@@ -3,6 +3,7 @@ package app.marquee.ui.tv
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
@@ -149,18 +150,39 @@ class TvHomeState {
 }
 
 /**
+ * A screen's first focus: on [target] once there is one (it often comes late, with the data), or on
+ * the key this screen last had focused while that is still composed. Never after a D-pad press since
+ * the screen asked (on entry, or when [ask] changes, as on Try again): the viewer's move stands even
+ * when the target came after it, as on the web (d8aa39f1).
+ */
+@Composable
+fun FocusMemory.FirstFocus(
+    target: String?,
+    ask: Any? = null,
+) {
+    val asked = remember(this, ask) { interactions }
+    LaunchedEffect(this, target, asked) {
+        if (target == null) return@LaunchedEffect
+        // A remembered key that is no longer composed (a row that moved into the card) is not a target.
+        val wanted = focusedKey?.takeIf { requester(it) != null } ?: target
+        focusWhenReady(wanted, asked, waitMs = 10_000)
+    }
+}
+
+/**
  * Puts focus on [key] as soon as its node exists, trying once per frame for up to [waitMs]; stops
- * when it lands or when the user presses a key first. For screens whose targets are always
- * composed (a title page); Home scrolls its lists first and has its own routine.
+ * when it lands or when a key went down since [asked] (the count of [FocusMemory.interactions] when
+ * the focus was asked for). For screens whose targets are always composed (a title page); Home
+ * scrolls its lists first and has its own routine.
  */
 suspend fun FocusMemory.focusWhenReady(
     key: String,
+    asked: Int,
     waitMs: Long = 4_000,
 ) {
-    val seen = interactions
     val started = withFrameNanos { it }
     while ((withFrameNanos { it } - started) / 1_000_000 < waitMs) {
-        if (interactions != seen) return
+        if (interactions != asked) return
         val requester = requester(key) ?: continue
         try {
             requester.requestFocus()

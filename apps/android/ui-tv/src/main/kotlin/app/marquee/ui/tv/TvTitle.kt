@@ -129,15 +129,15 @@ fun TvTitle(
     val scrim = Marquee.colors.bg
     val failed = header?.state is TitleState.Failed
     // Focus goes to Play once the page has loaded (or to Try again when it could not), not before:
-    // the buttons do not exist while the skeleton shows.
-    LaunchedEffect(focus, details != null, failed) {
-        if (failed) {
-            focus.focusWhenReady(RETRY, waitMs = 10_000)
-        } else if (details != null) {
-            val wanted = focus.focusedKey?.takeIf { focus.requester(it) != null } ?: PLAY
-            focus.focusWhenReady(wanted, waitMs = 10_000)
-        }
-    }
+    // the buttons do not exist while the skeleton shows. Try again asks again.
+    focus.FirstFocus(
+        when {
+            failed -> RETRY
+            details != null -> PLAY
+            else -> null
+        },
+        ask = failed,
+    )
 
     Box(
         modifier.fillMaxSize().onPreviewKeyEvent { event ->

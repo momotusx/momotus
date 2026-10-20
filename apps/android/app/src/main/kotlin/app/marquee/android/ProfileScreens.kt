@@ -92,6 +92,7 @@ import app.marquee.design.StatusWord
 import app.marquee.design.TextRole
 import app.marquee.design.avatarColor
 import app.marquee.design.focusClickable
+import app.marquee.design.focusSoon
 import app.marquee.design.marqueeFocus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -218,8 +219,7 @@ internal fun Keypad(
     // The keypad owns the keys from the start: on TV its 5, on a phone the keypad itself, so a
     // hardware keyboard types into it wherever the touch focus was.
     LaunchedEffect(Unit) {
-        withFrameNanos { }
-        runCatching { if (tv) five.requestFocus() else surface.requestFocus() }
+        focusSoon(if (tv) five else surface)
     }
 
     fun press(d: Char) {
@@ -605,10 +605,7 @@ fun PickerScreen(
             if (onManage != null && owner && !locked) SecondaryButton("Manage profiles", onManage)
         }
         LaunchedEffect(Unit) {
-            if (tv) {
-                withFrameNanos { }
-                runCatching { first.requestFocus() }
-            }
+            if (tv) focusSoon(first)
         }
     }
 }

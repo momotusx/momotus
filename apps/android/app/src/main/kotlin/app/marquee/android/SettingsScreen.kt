@@ -26,7 +26,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -88,6 +87,7 @@ import app.marquee.design.SwitchRow
 import app.marquee.design.TextRole
 import app.marquee.design.dpadExits
 import app.marquee.design.focusClickable
+import app.marquee.design.focusSoon
 import app.marquee.design.marqueeFocus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -210,8 +210,7 @@ fun SettingsScreen(
     if (sourcesOnly) {
         LaunchedEffect(Unit) {
             // The field is laid out in the first frame; focus it after that.
-            withFrameNanos {}
-            runCatching { installFocus.requestFocus() }
+            focusSoon(installFocus)
         }
     }
     LazyColumn(

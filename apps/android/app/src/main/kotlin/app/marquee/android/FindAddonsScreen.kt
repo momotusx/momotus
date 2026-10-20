@@ -84,6 +84,7 @@ import app.marquee.core.views.ViewStatus
 import app.marquee.design.Chip
 import app.marquee.design.Form
 import app.marquee.design.Icons
+import app.marquee.design.KeyPresses
 import app.marquee.design.Marquee
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
@@ -322,10 +323,13 @@ fun FindAddonsScreen(
         fun land(ask: FindAddonsFocus.Ask) {
             if (!tv) return
             landing[0]?.cancel()
+            val asked = KeyPresses.count
             landing[0] =
                 scope.launch {
                     repeat(LAND_FRAMES) { frame ->
                         withFrameNanos {}
+                        // The page's first focus never takes back a move the viewer made while it loaded.
+                        if (ask == FindAddonsFocus.Ask.Open && KeyPresses.count != asked) return@launch
                         val state = now.value
                         val target =
                             FindAddonsFocus.target(

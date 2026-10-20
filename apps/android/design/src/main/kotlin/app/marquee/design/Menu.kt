@@ -14,7 +14,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
@@ -105,11 +104,7 @@ fun ActionMenu(
     }
     // The window is attached a frame or two after the first composition. A touch screen has no focus to place.
     LaunchedEffect(first, tv) {
-        if (!tv) return@LaunchedEffect
-        repeat(MENU_FOCUS_FRAMES) {
-            withFrameNanos { }
-            if (runCatching { first.requestFocus() }.getOrDefault(false)) return@LaunchedEffect
-        }
+        if (tv) focusSoon(first, MENU_FOCUS_FRAMES)
     }
 }
 

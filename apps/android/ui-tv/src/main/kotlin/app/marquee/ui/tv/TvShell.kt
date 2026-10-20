@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import app.marquee.core.route.Route
 import app.marquee.core.route.TOP_LEVEL
 import app.marquee.design.Icons
+import app.marquee.design.KeyPresses
 import app.marquee.design.Marquee
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
@@ -81,7 +82,10 @@ fun TvShell(
             .fillMaxSize()
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                if (event.key in dpadKeys) onKey()
+                if (event.key in dpadKeys) {
+                    KeyPresses.pressed()
+                    onKey()
+                }
                 val axis =
                     when (event.key) {
                         Key.DirectionLeft, Key.DirectionRight -> Axis.Horizontal

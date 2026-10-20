@@ -23,7 +23,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -142,11 +141,7 @@ fun TvVersions(
             nothing -> ADD
             else -> snapshot?.rows?.firstOrNull()?.let { rowKey(it) }
         }
-    LaunchedEffect(target) {
-        // A remembered row that is no longer in the list (it moved into the card) is not a target.
-        val wanted = focus.focusedKey?.takeIf { focus.requester(it) != null } ?: target
-        if (wanted != null) focus.focusWhenReady(wanted, waitMs = 10_000)
-    }
+    focus.FirstFocus(target, ask = failure != null)
 
     Column(
         modifier

@@ -20,9 +20,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -293,3 +295,34 @@ fun scrollByKey(
 }
 
 private const val SCROLL_STEP = 240f
+
+/**
+ * D-pad presses in the app's window, counted by the TV shell. A focus asked for before a press never
+ * lands after it: on a slow frame the viewer's first move comes first, and a late first focus would
+ * take it back (the web's autoFocusSoon, d8aa39f1).
+ */
+object KeyPresses {
+    var count = 0
+        private set
+
+    fun pressed() {
+        count++
+    }
+}
+
+/**
+ * A deferred first focus: asks [requester] for focus once per frame (a node composed now is attached
+ * a frame or two later) for up to [frames] frames, until it takes it. Ends when a D-pad key went down
+ * since it was asked: the viewer's move stands.
+ */
+suspend fun focusSoon(
+    requester: FocusRequester,
+    frames: Int = 1,
+) {
+    val asked = KeyPresses.count
+    repeat(frames) {
+        withFrameNanos { }
+        if (KeyPresses.count != asked) return
+        if (runCatching { requester.requestFocus() }.getOrDefault(false)) return
+    }
+}

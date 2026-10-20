@@ -18,7 +18,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -39,12 +38,14 @@ import app.marquee.design.MqText
 import app.marquee.design.PrimaryButton
 import app.marquee.design.StateMessage
 import app.marquee.design.TextRole
+import app.marquee.design.focusSoon
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /**
  * Puts focus on [requester] once the screen is laid out, for D-pad devices: tries once per frame
- * for about a second, because the node may not be attached on the first frame.
+ * for about a second, because the node may not be attached on the first frame. A D-pad press in
+ * the meantime ends it: the viewer's move stands (focusSoon).
  */
 @Composable
 internal fun AutoFocus(requester: FocusRequester) {
@@ -57,10 +58,7 @@ internal fun AutoFocus(requester: FocusRequester) {
             focusManager.clearFocus()
             return@LaunchedEffect
         }
-        repeat(AUTO_FOCUS_FRAMES) {
-            withFrameNanos { }
-            if (runCatching { requester.requestFocus() }.getOrDefault(false)) return@LaunchedEffect
-        }
+        focusSoon(requester, AUTO_FOCUS_FRAMES)
     }
 }
 
