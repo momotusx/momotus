@@ -157,7 +157,15 @@ enum Request {
         #[serde(default, rename = "move")]
         move_link: bool,
     },
-    /// Opens a native sheet's flow: `{flow, nonce}`, the nonce for the sheet.
+    /// The sign-in providers a relay offers: `{providers}` (empty: no
+    /// sign-in there, only the pairing and recovery doors). Reads nothing
+    /// of the account.
+    RelayInfo {
+        id: u64,
+        server: String,
+    },
+    /// Opens a native sheet's flow: `{flow, nonce, expiresMs}`, the nonce
+    /// for the sheet; the relay takes the flow until `expiresMs` (its time).
     NativeSignInStart {
         id: u64,
         server: String,
@@ -544,10 +552,14 @@ struct Shared {
     subs: HashMap<u64, Subscription>,
     /// (active profile, locked) for the picker view.
     state: watch::Sender<SessionState>,
-    /// Native sign-in flows started and not yet finished, by flow id: their
-    /// verifiers stay here, in memory only.
-    native: HashMap<String, mq_sync::identity::NativeFlow>,
+    /// Native sign-in flows started and not yet finished, by flow id, with
+    /// when they started: their verifiers stay here, in memory only, for as
+    /// long as the relay takes the flow.
+    native: HashMap<String, (std::time::Instant, mq_sync::identity::NativeFlow)>,
 }
+
+/// A native flow lives this long at the relay; then the core drops it too.
+const NATIVE_FLOW_LIFE: std::time::Duration = std::time::Duration::from_secs(10 * 60);
 
 impl Shared {
     /// A switch or a lock: every view but the picker and the device's debrid
@@ -761,10 +773,18 @@ impl Session {
                         move_link,
                     )
                     .await;
+                    // Not joined: a new account still gets the recommended
+                    // addons (plans/accounts.md 3.3).
                     if made.is_ok() {
-                        core.joined_sync_account();
+                        core.created_sync_account();
                     }
                     answer(made)
+                });
+            }
+            Request::RelayInfo { id, server } => {
+                self.spawn(id, async move {
+                    let providers = mq_sync::identity::providers(core.http(), &server).await?;
+                    Ok::<_, mq_sync::SyncError>(json!({ "providers": providers }))
                 });
             }
             Request::NativeSignInStart {
@@ -778,8 +798,16 @@ impl Session {
                     let flow =
                         mq_sync::identity::start_native(core.http(), &server, &provider, revoke)
                             .await?;
-                    let answer = json!({ "flow": flow.flow, "nonce": flow.nonce });
-                    lock(&shared).native.insert(flow.flow.clone(), flow);
+                    let answer = json!({
+                        "flow": flow.flow, "nonce": flow.nonce, "expiresMs": flow.expires_ms,
+                    });
+                    let mut shared = lock(&shared);
+                    // A cancelled sheet, or a flow renewed while the screen stays open.
+                    shared
+                        .native
+                        .retain(|_, (started, _)| started.elapsed() < NATIVE_FLOW_LIFE);
+                    let now = std::time::Instant::now();
+                    shared.native.insert(flow.flow.clone(), (now, flow));
                     Ok::<_, mq_sync::SyncError>(answer)
                 });
             }
@@ -789,20 +817,27 @@ impl Session {
                 id_token,
                 authorization_code,
             } => {
-                let Some(native) = lock(&self.shared).native.remove(&flow) else {
+                let Some((started, native)) = lock(&self.shared).native.remove(&flow) else {
                     let refused = Failure::coded("wrongFlow", "this sign-in was not started here");
                     send_answer(&self.out, json!(id), Err(refused));
                     return;
                 };
+                let shared = self.shared.clone();
                 self.spawn(id, async move {
                     let taken = native
                         .finish(core.http(), &id_token, authorization_code.as_deref())
-                        .await?;
-                    to_value(&SignInSnapshot::taken(taken)).map_err(Failure::from)
+                        .await;
+                    // No definite answer: the flow stays for a retry with
+                    // the same token.
+                    if matches!(&taken, Err(e) if e.transient()) {
+                        lock(&shared).native.insert(flow, (started, native));
+                    }
+                    to_value(&SignInSnapshot::taken(taken?)).map_err(Failure::from)
                 });
             }
             Request::Identities { id, record } => {
                 self.spawn(id, async move {
+                    let _gate = core.sync_gate().await;
                     let (library, http, clock) = (core.library(), core.http(), core.clock());
                     let (links, record) =
                         mq_sync::identity::identities(library, http, &record, clock).await?;
@@ -815,7 +850,13 @@ impl Session {
                 ticket,
                 move_link,
             } => {
+                // Who signs in to the whole account: the owner decides (D16).
+                if let Err(refused) = owner_only(&core) {
+                    send_answer(&self.out, json!(id), Err(refused));
+                    return;
+                }
                 self.spawn(id, async move {
+                    let _gate = core.sync_gate().await;
                     let (library, http, clock) = (core.library(), core.http(), core.clock());
                     let record = mq_sync::identity::link_identity(
                         library, http, &record, clock, &ticket, move_link,
@@ -830,7 +871,12 @@ impl Session {
                 link,
                 receipt,
             } => {
+                if let Err(refused) = owner_only(&core) {
+                    send_answer(&self.out, json!(id), Err(refused));
+                    return;
+                }
                 self.spawn(id, async move {
+                    let _gate = core.sync_gate().await;
                     let (library, http, clock) = (core.library(), core.http(), core.clock());
                     let record = mq_sync::identity::unlink_identity(
                         library,
@@ -845,7 +891,9 @@ impl Session {
                 });
             }
             Request::CancelDeletion { id, record, unlink } => {
+                // Any profile: a cancel only protects the account.
                 self.spawn(id, async move {
+                    let _gate = core.sync_gate().await;
                     let (library, http, clock) = (core.library(), core.http(), core.clock());
                     let record =
                         mq_sync::identity::cancel_deletion(library, http, &record, clock, unlink)
@@ -945,9 +993,7 @@ impl Session {
                 receipt,
             } => {
                 // The account holds every profile: only the owner deletes it.
-                if core.profile() != mq_library::OWNER {
-                    let refused =
-                        Failure::coded("notOwner", "only the main profile can delete the account");
+                if let Err(refused) = owner_only(&core) {
                     send_answer(&self.out, json!(id), Err(refused));
                     return;
                 }
@@ -1858,6 +1904,19 @@ fn param(params: &Value, key: &str) -> Result<String, String> {
 
 fn to_value<T: serde::Serialize>(value: &T) -> Result<Value, String> {
     serde_json::to_value(value).map_err(|e| e.to_string())
+}
+
+/// Ops that change the whole account (its deletion, who signs in to it):
+/// the main profile only (D15, D16).
+fn owner_only(core: &Core) -> Result<(), Failure> {
+    if core.profile() == mq_library::OWNER {
+        Ok(())
+    } else {
+        Err(Failure::coded(
+            "notOwner",
+            "only the main profile can change the account",
+        ))
+    }
 }
 
 fn answer<T: serde::Serialize>(result: Result<T, mq_sync::SyncError>) -> Result<Value, Failure> {

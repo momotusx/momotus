@@ -353,6 +353,23 @@ async fn a_device_in_a_sync_account_never_starts_at_the_defaults() {
     );
 }
 
+/// A device that made its sync account has no list to receive: it keeps the
+/// defaults step after its roster is stored (plans/accounts.md 3.3).
+#[tokio::test]
+async fn a_device_that_created_its_account_still_starts_at_the_defaults() {
+    let core = Core::temporary(OWNER).unwrap();
+    core.created_sync_account();
+    core.library()
+        .add_roster_entry("genesis", 0, b"{}", &[0; 64])
+        .unwrap();
+    assert!(core.addons_fresh(), "a genesis receives no list");
+    core.joined_sync_account();
+    assert!(
+        !core.addons_fresh(),
+        "joined elsewhere: that account's list"
+    );
+}
+
 /// A device that existed before default addons (its library had the owner)
 /// never starts a profile at the defaults step, list or not: those profiles
 /// get the card for the new addons instead.

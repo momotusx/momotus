@@ -998,9 +998,9 @@ impl Core {
         Ok(())
     }
 
-    /// This device joined a sync account (created one, paired or
-    /// recovered): it gets the account's addons by sync and never starts at
-    /// the defaults step, also before its first sync stores the roster.
+    /// This device joined a sync account (paired or recovered): it gets the
+    /// account's addons by sync and never starts at the defaults step, also
+    /// before its first sync stores the roster.
     pub fn joined_sync_account(&self) {
         // Announced as an addons change: an open addons view drops `fresh`.
         if let Err(e) =
@@ -1011,19 +1011,35 @@ impl Core {
         }
     }
 
+    /// This device created a sync account: a genesis receives no addon list,
+    /// so a device that started fresh still gets the recommended addons once
+    /// its roster is stored (plans/accounts.md 3.3).
+    pub fn created_sync_account(&self) {
+        let library = self.library();
+        let fresh = library
+            .device_value(DEFAULTS_ERA)
+            .is_ok_and(|era| era.as_deref() == Some("fresh"));
+        if fresh && let Err(e) = library.set_device_value(DEFAULTS_ERA, "created") {
+            tracing::warn!("could not mark the sync account made here: {e}");
+        }
+    }
+
     /// Whether this profile starts at the defaults step: it never had an
-    /// addon list, this device belongs to no sync account (a joined device
-    /// gets the account's list), and it is not a kids profile (it reads the
-    /// owner's list).
+    /// addon list, this device belongs to no sync account it did not create
+    /// (a joined device gets the account's list), and it is not a kids
+    /// profile (it reads the owner's list).
     pub fn addons_fresh(&self) -> bool {
         let library = self.library();
-        library
-            .device_value(DEFAULTS_ERA)
-            .is_ok_and(|era| era.as_deref() == Some("fresh"))
+        let era = library.device_value(DEFAULTS_ERA).ok().flatten();
+        let starts = match era.as_deref() {
+            Some("fresh") => library.in_sync_account().is_ok_and(|joined| !joined),
+            Some("created") => true,
+            _ => false,
+        };
+        starts
             && library
                 .addon_list_hlc(self.profile())
                 .is_ok_and(|h| h.is_none())
-            && library.in_sync_account().is_ok_and(|joined| !joined)
             && !self.policy().kids()
     }
 

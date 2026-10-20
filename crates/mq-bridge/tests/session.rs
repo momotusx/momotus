@@ -746,9 +746,10 @@ async fn defaults_and_links_with_a_sign_in_over_the_protocol() {
     assert_ne!(tried["code"], "tokenInLink", "{tried}");
 }
 
-/// A device that creates, pairs into or recovers a sync account gets the
-/// account's addons by sync: it never starts at the defaults step, also
-/// before its first sync has stored the roster.
+/// A device that pairs into or recovers a sync account gets the account's
+/// addons by sync: it never starts at the defaults step, also before its
+/// first sync has stored the roster. One that creates an account still
+/// gets the recommended addons.
 #[tokio::test]
 async fn joining_a_sync_account_ends_the_defaults_step() {
     use mq_runtime::views::pairing::{PairingSnapshot, PairingView};
@@ -761,9 +762,6 @@ async fn joining_a_sync_account_ends_the_defaults_step() {
 
     let core_a = Core::temporary("p").unwrap();
     assert!(core_a.addons_fresh());
-    // An addons view open through the join drops `fresh` at once.
-    let view = mq_runtime::views::addons::AddonsView::open(&core_a);
-    assert!(view.snapshot().fresh);
     let (tx_a, mut rx_a) = Output::channel();
     let mut a = Session::new(core_a.clone(), tx_a);
     a.handle_text(
@@ -771,18 +769,26 @@ async fn joining_a_sync_account_ends_the_defaults_step() {
     )
     .await;
     let record = next(&mut rx_a).await["result"].clone();
-    assert!(!core_a.addons_fresh(), "created an account");
-    tokio::time::timeout(Duration::from_secs(5), async {
-        while view.snapshot().fresh {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .expect("the open addons view follows the join");
+    // A new account has nothing to bring: the recommended addons still come
+    // (plans/accounts.md 3.3), also once its first sync stored the roster.
+    assert!(core_a.addons_fresh(), "created an account");
+    a.handle_text(&json!({"id": 40, "op": "syncNow", "record": record}).to_string())
+        .await;
+    let synced = next(&mut rx_a).await;
+    assert_eq!(synced["ok"], true, "{synced}");
+    assert!(core_a.library().in_sync_account().unwrap());
+    assert!(core_a.addons_fresh(), "created, then synced");
+    let record = match &synced["result"]["record"] {
+        Value::Null => record,
+        stored => stored.clone(),
+    };
 
     // Paired: B shows its QR, A approves it, B confirms the code.
     let core_b = Core::temporary("p").unwrap();
     assert!(core_b.addons_fresh());
+    // An addons view open through the join drops `fresh` at once.
+    let view = mq_runtime::views::addons::AddonsView::open(&core_b);
+    assert!(view.snapshot().fresh);
     let pairing = PairingView::open(&core_b, &server, "TV");
     let until = |want: fn(&PairingSnapshot) -> bool| {
         let pairing = &pairing;
@@ -815,6 +821,13 @@ async fn joining_a_sync_account_ends_the_defaults_step() {
     pairing.confirm();
     until(|s| matches!(s, PairingSnapshot::Joined { .. })).await;
     assert!(!core_b.addons_fresh(), "paired");
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while view.snapshot().fresh {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("the open addons view follows the join");
 
     // Recovered with a kit.
     a.handle_text(
@@ -842,10 +855,12 @@ async fn joining_a_sync_account_ends_the_defaults_step() {
 mod mock_oidc;
 
 /// Sign-in over the protocol (plans/accounts.md 3.4), against the relay and
-/// its mock provider: a native sheet's token and the brokered `signIn`
-/// view each end in a ticket; the ticket makes an account linked to the
-/// identity, which the next sign-in finds. A flow this session did not
-/// start is refused.
+/// its mock provider: the relay's providers, a native sheet's token and the
+/// brokered `signIn` view each end in a ticket; the ticket makes an account
+/// linked to the identity, which the next sign-in finds. A flow this
+/// session did not start is refused; a return for another flow is ignored,
+/// a cancelled one fails the view. Links and unlinks answer `{record}`, the
+/// owner only (D16); any profile reads the links and cancels a deletion.
 #[tokio::test]
 async fn sign_in_over_the_protocol() {
     let mock = mock_oidc::Mock::start(0).await;
@@ -874,12 +889,22 @@ async fn sign_in_over_the_protocol() {
         s.handle_text(&request.to_string()).await;
         reply_to(&mut rx, id).await
     };
+    let offered = ask(json!({"id": 20, "op": "relayInfo", "server": server})).await;
+    assert_eq!(
+        offered["result"],
+        json!({ "providers": ["mock"] }),
+        "{offered}"
+    );
     let started =
         ask(json!({"id": 1, "op": "nativeSignInStart", "server": server, "provider": "mock"}))
             .await;
     let (flow, nonce) = (
         &started["result"]["flow"],
         started["result"]["nonce"].as_str().unwrap(),
+    );
+    assert!(
+        started["result"]["expiresMs"].as_u64().unwrap() > 0,
+        "{started}"
     );
     let token = mock.sign(mock.claims("marquee", "alice", nonce));
     let signed = ask(json!({"id": 2, "op": "nativeSignIn", "flow": flow, "idToken": token})).await;
@@ -917,5 +942,84 @@ async fn sign_in_over_the_protocol() {
     })
     .await;
     assert_eq!(found["account"], record["keys"]["account"], "{found}");
+
+    // A return for another flow is ignored; this flow's cancel fails the view.
+    mock.next(mock_oidc::Next::Cancel);
+    s.handle_text(
+        &json!({"id": 8, "op": "subscribe", "view": "signIn", "params": params}).to_string(),
+    )
+    .await;
+    let sub = reply_to(&mut rx, 8).await["result"]["sub"]
+        .as_u64()
+        .unwrap();
+    let browser = push_until(&mut rx, sub, |u| u["phase"] == "browser").await;
+    assert!(browser["expiresMs"].as_u64().unwrap() > 0, "{browser}");
+    let returned = |id: u64, fragment: &str| {
+        json!({"id": id, "op": "command", "sub": sub, "command": {"type": "returned", "fragment": fragment}})
+            .to_string()
+    };
+    s.handle_text(&returned(9, "flow=another&code=x&relay=127.0.0.1"))
+        .await;
+    let cancelled = mock_oidc::browse(browser["url"].as_str().unwrap()).await;
+    s.handle_text(&returned(10, &cancelled)).await;
+    let failed = push_until(&mut rx, sub, |u| u["phase"] == "failed").await;
+    assert_eq!(failed["code"], "cancelled", "{failed}");
+
+    // Link and unlink: `{record}` (none: the stored token was good).
+    let mut ask = async |request: Value| {
+        let id = request["id"].as_u64().unwrap();
+        s.handle_text(&request.to_string()).await;
+        reply_to(&mut rx, id).await
+    };
+    let bob =
+        ask(json!({"id": 11, "op": "nativeSignInStart", "server": server, "provider": "mock"}))
+            .await;
+    let token = mock.sign(mock.claims("marquee", "bob", bob["result"]["nonce"].as_str().unwrap()));
+    let bob = ask(
+        json!({"id": 12, "op": "nativeSignIn", "flow": bob["result"]["flow"], "idToken": token}),
+    )
+    .await;
+    let ticket = &bob["result"]["ticket"];
+    let linked =
+        ask(json!({"id": 13, "op": "linkIdentity", "record": record, "ticket": ticket})).await;
+    assert_eq!(linked["result"], json!({ "record": null }), "{linked}");
+    let links = ask(json!({"id": 14, "op": "identities", "record": record})).await;
+    let links = links["result"]["links"].as_array().unwrap().clone();
+    assert_eq!(links.len(), 2);
+    let link = &links[1]["link"];
+
+    // Another profile reads the links and cancels a deletion; it does not
+    // change who signs in.
+    let (tx_p, mut rx_p) = Output::channel();
+    let mut p = Session::new(Core::temporary("p").unwrap(), tx_p);
+    let mut ask_p = async |request: Value| {
+        let id = request["id"].as_u64().unwrap();
+        p.handle_text(&request.to_string()).await;
+        reply_to(&mut rx_p, id).await
+    };
+    let refused =
+        ask_p(json!({"id": 1, "op": "unlinkIdentity", "record": record, "link": link})).await;
+    assert_eq!(refused["code"], "notOwner", "{refused}");
+    let refused =
+        ask_p(json!({"id": 2, "op": "linkIdentity", "record": record, "ticket": ticket})).await;
+    assert_eq!(refused["code"], "notOwner", "{refused}");
+    let read = ask_p(json!({"id": 3, "op": "identities", "record": record})).await;
+    assert_eq!(
+        read["result"]["links"].as_array().map(Vec::len),
+        Some(2),
+        "{read}"
+    );
+    let kept = ask_p(json!({"id": 4, "op": "cancelDeletion", "record": record})).await;
+    assert_eq!(kept["result"], json!({ "record": null }), "{kept}");
+
+    let unlinked =
+        ask(json!({"id": 15, "op": "unlinkIdentity", "record": record, "link": link})).await;
+    assert_eq!(unlinked["result"], json!({ "record": null }), "{unlinked}");
+    let links = ask(json!({"id": 16, "op": "identities", "record": record})).await;
+    assert_eq!(
+        links["result"]["links"].as_array().map(Vec::len),
+        Some(1),
+        "{links}"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -13,8 +13,7 @@ use mq_sync::identity::start_brokered;
 use mq_sync::wire::Taken;
 use serde::Serialize;
 use std::pin::Pin;
-use std::sync::Mutex;
-use tokio::sync::oneshot;
+use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -26,9 +25,13 @@ use tokio::task::JoinHandle;
 #[serde(tag = "phase", rename_all = "camelCase")]
 pub enum SignInSnapshot {
     Starting,
-    /// Open `url` in a browser; its redirect back goes to `returned`.
+    /// Open `url` in a browser; its redirect back goes to `returned`. The
+    /// relay takes the flow until `expiresMs` (relay time).
     Browser {
         url: String,
+        #[serde(rename = "expiresMs")]
+        #[cfg_attr(feature = "ts", ts(type = "number"))]
+        expires_ms: u64,
     },
     /// The return arrived; the result is being taken.
     Waiting,
@@ -48,8 +51,9 @@ pub enum SignInSnapshot {
         ticket: String,
         account: Option<String>,
     },
-    /// `code` as the core names errors (`cancelled`, `wrongRelay`,
-    /// `wrongFlow`, `signInRefused`, ...), or `unreachable`.
+    /// `code` as the core names errors (`cancelled`, `ticketExpired`,
+    /// `signInRefused`, `busy`, ...), or `unreachable` when the relay or
+    /// the provider did not answer.
     Failed {
         code: String,
     },
@@ -88,7 +92,7 @@ impl SignInSnapshot {
 
 pub struct SignInView {
     snapshot: SharedObservable<SignInSnapshot>,
-    back: Mutex<Option<oneshot::Sender<String>>>,
+    back: mpsc::Sender<String>,
     task: JoinHandle<()>,
 }
 
@@ -97,7 +101,7 @@ impl SignInView {
     /// `marquee://auth`, or a loopback page); `revoke` runs Apple's revoke.
     pub fn open(core: &Core, server: &str, provider: &str, return_to: &str, revoke: bool) -> Self {
         let snapshot = SharedObservable::new(SignInSnapshot::Starting);
-        let (back, returned) = oneshot::channel();
+        let (back, returned) = mpsc::channel(4);
         let task = tokio::spawn(run(
             core.clone(),
             [server.to_owned(), provider.to_owned(), return_to.to_owned()],
@@ -107,17 +111,17 @@ impl SignInView {
         ));
         Self {
             snapshot,
-            back: Mutex::new(Some(back)),
+            back,
             task,
         }
     }
 
-    /// The redirect came back to the app: its fragment.
+    /// The redirect came back to the app: its fragment. Only this flow's
+    /// return from this relay goes on; any other is ignored and the view
+    /// keeps waiting.
     pub fn returned(&self, fragment: &str) {
-        if matches!(self.snapshot.get(), SignInSnapshot::Browser { .. })
-            && let Some(back) = self.back.lock().unwrap_or_else(|p| p.into_inner()).take()
-        {
-            let _ = back.send(fragment.to_owned());
+        if matches!(self.snapshot.get(), SignInSnapshot::Browser { .. }) {
+            let _ = self.back.try_send(fragment.to_owned());
         }
     }
 
@@ -146,7 +150,7 @@ async fn run(
     [server, provider, return_to]: [String; 3],
     revoke: bool,
     snapshot: SharedObservable<SignInSnapshot>,
-    returned: oneshot::Receiver<String>,
+    mut returned: mpsc::Receiver<String>,
 ) {
     let end = |state: SignInSnapshot| drop(snapshot.set(state));
     let flow = match start_brokered(core.http(), &server, &provider, &return_to, revoke).await {
@@ -155,9 +159,17 @@ async fn run(
     };
     snapshot.set(SignInSnapshot::Browser {
         url: flow.url.clone(),
+        expires_ms: flow.expires_ms,
     });
-    let Ok(fragment) = returned.await else {
-        return;
+    let fragment = loop {
+        let Some(fragment) = returned.recv().await else {
+            return;
+        };
+        if flow.owns(&fragment) {
+            break fragment;
+        }
+        // A late return of an abandoned flow, or a link another app fired.
+        tracing::info!("a sign-in return for another flow was ignored");
     };
     snapshot.set(SignInSnapshot::Waiting);
     end(match flow.finish(core.http(), &fragment).await {
