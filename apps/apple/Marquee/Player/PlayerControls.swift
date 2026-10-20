@@ -38,19 +38,38 @@ struct PlayerControls: View {
 
     enum Control: Hashable { case back, rewind, play, forward, scrub, audio, subtitles, versions, speed }
 
+    /// The iPhone lays the OSD out as the system player does (`PhoneFrame`).
+    private static var phone: Bool {
+        #if os(iOS)
+        UIDevice.current.userInterfaceIdiom == .phone
+        #else
+        false
+        #endif
+    }
+
+    /// The phone's safe area and turn, read from the layout.
+    @State private var safe = EdgeInsets()
+    @State private var landscape = false
+
     var body: some View {
-        VStack(spacing: 0) {
-            top
-            Spacer()
-            bottom
+        Group {
+            if Self.phone {
+                phoneLayout
+            } else {
+                VStack(spacing: 0) {
+                    top
+                    Spacer()
+                    bottom
+                }
+                .padding(.horizontal, metrics.gutter)
+                .padding(.vertical, metrics.wide ? Theme.Space.m : Theme.Space.s)
+            }
         }
         .onChange(of: focus) { activity() }
         #if os(tvOS)
         .defaultFocus($focus, .play)
         .onAppear { focus = .play }
         #endif
-        .padding(.horizontal, metrics.gutter)
-        .padding(.vertical, metrics.wide ? Theme.Space.m : Theme.Space.s)
         .background {
             // Full-bleed scrims, never boxes, so every OSD word holds 4.5:1 on
             // any picture. The phone's bottom one reaches above the scrubber.
@@ -96,21 +115,11 @@ struct PlayerControls: View {
                 TraktMark(trakt: model.playback?.trakt)
             }
             Spacer()
-            if model.duration > 0, model.playback?.phase != "failed" {
-                Text("Ends at \(endsAt.formatted(date: .omitted, time: .shortened))")
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
-                    .foregroundStyle(.white.opacity(0.8))
-            }
+            // Right: Picture in Picture, AirPlay when the stream allows it, then the end time.
             #if os(iOS)
             // The system's own glyphs: AirPlay's picker and Picture in Picture's.
             // AirPlay only for a stream a receiver can reach: for the core's loopback
             // one it would carry the sound alone (Control Center mirroring stays).
-            if model.airPlayable {
-                AirPlayButton()
-                    .frame(width: 40, height: 40)
-                    .glass(Circle())
-                    .accessibilityLabel("AirPlay")
-            }
             if let pip, pip.possible {
                 Button(action: pip.start) {
                     Image(uiImage: AVPictureInPictureController.pictureInPictureButtonStartImage)
@@ -122,7 +131,19 @@ struct PlayerControls: View {
                 .buttonStyle(.round)
                 .accessibilityLabel("Picture in Picture")
             }
+            if model.airPlayable {
+                AirPlayButton()
+                    .frame(width: 40, height: 40)
+                    .glass(Circle())
+                    .accessibilityLabel("AirPlay")
+            }
             #endif
+            if model.duration > 0, model.playback?.phase != "failed" {
+                Text("Ends at \(endsAt.formatted(date: .omitted, time: .shortened))")
+                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .foregroundStyle(.white.opacity(0.8))
+                    .frame(minHeight: 40)
+            }
         }
     }
 
@@ -169,24 +190,8 @@ struct PlayerControls: View {
                 }
             }
             #else
-            HStack(spacing: 12) {
-                Text(timecode(scrub ?? model.position)).monospacedDigit()
-                Slider(
-                    value: Binding(get: { scrub ?? model.position }, set: { scrub = $0 }),
-                    in: 0...max(model.duration, 1)
-                ) { editing in
-                    if !editing, let value = scrub {
-                        model.seek(to: value)
-                        scrub = nil
-                    }
-                }
-                .tint(.white)
-                .accessibilityLabel("Position")
-                // As on TV: "12:04 of 45:10", not raw seconds.
-                .accessibilityValue("\(timecode(scrub ?? model.position)) of \(timecode(model.duration))")
-                Text("-" + timecode(max(0, model.duration - (scrub ?? model.position)))).monospacedDigit()
-            }
-            .font(.text(Theme.type.callout, relativeTo: .callout))
+            scrubRow(spacing: 12)
+                .font(.text(Theme.type.callout, relativeTo: .callout))
             #endif
             if metrics.wide {
                 HStack(alignment: .center) {
@@ -212,6 +217,69 @@ struct PlayerControls: View {
 
     private var footPadding: CGFloat { metrics.wide ? Theme.Space.m : Theme.Space.s }
 
+    /// The iPhone, as the system player: the top bar under the safe area's
+    /// top, the transport in the screen's middle, the scrubber and the actions
+    /// just over the safe area's foot, the bars `PhoneFrame.edge` from the
+    /// screen, upright and across alike.
+    private var phoneLayout: some View {
+        ZStack {
+            VStack(spacing: 0) {
+                top
+                Spacer(minLength: 0)
+                phoneBottom
+            }
+            .padding(.leading, PhoneFrame.side(safe: safe.leading))
+            .padding(.trailing, PhoneFrame.side(safe: safe.trailing))
+            .padding(.top, PhoneFrame.topGap)
+            .padding(.bottom, PhoneFrame.bottomGap)
+            transport(gap: PhoneFrame.transportGap(landscape: landscape))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .ignoresSafeArea()
+        }
+        .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { safe = $0 }
+        .onGeometryChange(for: Bool.self) { $0.size.width > $0.size.height } action: { landscape = $0 }
+    }
+
+    /// The scrubber in its bar, the times inside it, then the actions in one
+    /// compact row under it.
+    private var phoneBottom: some View {
+        VStack(spacing: 6) {
+            #if !os(tvOS)
+            scrubRow(spacing: 8)
+                .font(.text(Theme.type.caption, relativeTo: .caption))
+                .padding(.horizontal, PhoneFrame.barInset)
+                .frame(height: PhoneFrame.barHeight)
+                .glass(Capsule())
+            #endif
+            actions
+        }
+        // Skip, Up Next and the drawn subtitles sit just over this.
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { measured($0 + PhoneFrame.bottomGap) }
+    }
+
+    #if !os(tvOS)
+    /// Elapsed, the slider, remaining.
+    private func scrubRow(spacing: CGFloat) -> some View {
+        HStack(spacing: spacing) {
+            Text(timecode(scrub ?? model.position)).monospacedDigit()
+            Slider(
+                value: Binding(get: { scrub ?? model.position }, set: { scrub = $0 }),
+                in: 0...max(model.duration, 1)
+            ) { editing in
+                if !editing, let value = scrub {
+                    model.seek(to: value)
+                    scrub = nil
+                }
+            }
+            .tint(.white)
+            .accessibilityLabel("Position")
+            // As on TV: "12:04 of 45:10", not raw seconds.
+            .accessibilityValue("\(timecode(scrub ?? model.position)) of \(timecode(model.duration))")
+            Text("-" + timecode(max(0, model.duration - (scrub ?? model.position)))).monospacedDigit()
+        }
+    }
+    #endif
+
     /// One press on the TV bar: 10 s, more while the same direction comes again within a second.
     private func seek(_ direction: Int) {
         let now = ContinuousClock.now
@@ -222,9 +290,11 @@ struct PlayerControls: View {
         activity()
     }
 
-    private var transport: some View {
+    private var transport: some View { transport(gap: metrics.wide ? 28 : 20) }
+
+    private func transport(gap: CGFloat) -> some View {
         // Play/Pause is the white circle; only focus draws a ring.
-        HStack(spacing: metrics.wide ? 28 : 20) {
+        HStack(spacing: gap) {
             Button { model.skip(-10) } label: { SkipGlyph(name: "rotate-ccw", wide: metrics.wide) }
                 .focused($focus, equals: .rewind)
                 .accessibilityLabel("Back 10 seconds")
@@ -254,7 +324,7 @@ struct PlayerControls: View {
                 // Room for a focus ring and the lift, which the scroll view would clip.
                 .padding(.vertical, metrics.wide ? 14 : 4)
                 .padding(.horizontal, metrics.wide ? 14 : 2)
-                .frame(minWidth: actionsWidth, alignment: metrics.wide ? .trailing : .center)
+                .frame(minWidth: actionsWidth, alignment: metrics.wide && !Self.phone ? .trailing : .center)
         }
         .scrollIndicators(.hidden)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { actionsWidth = $0 }
@@ -385,21 +455,34 @@ struct PlayerControls: View {
     }
 
     private func action(_ title: String, _ symbol: String, _ value: String, searching: Bool = false) -> some View {
-        VStack(spacing: 3) {
-            Glyph(symbol, size: 18)
-            Text(title).font(.text(Theme.type.caption + 1, weight: .semibold, relativeTo: .caption))
-            HStack(spacing: 4) {
-                // Capped: a long track name ("English Audio Description") must not widen the row without end.
-                Text(value).font(.text(Theme.type.caption, relativeTo: .caption))
-                    .lineLimit(1)
-                // More may come: the core is still asking subtitle addons.
-                if searching {
-                    Glyph("loader-circle", size: Theme.type.caption, relativeTo: .caption)
-                        .accessibilityLabel("still searching")
+        let current = HStack(spacing: 4) {
+            // Capped: a long track name ("English Audio Description") must not widen the row without end.
+            Text(value).font(.text(Theme.type.caption, relativeTo: .caption))
+                .lineLimit(1)
+            // More may come: the core is still asking subtitle addons.
+            if searching {
+                Glyph("loader-circle", size: Theme.type.caption, relativeTo: .caption)
+                    .accessibilityLabel("still searching")
+            }
+        }
+        .foregroundStyle(.white.opacity(0.75))
+        .frame(maxWidth: metrics.wide ? 220 : 120)
+        return Group {
+            if Self.phone {
+                // One compact line under the scrubber: icon, word, value.
+                HStack(spacing: 6) {
+                    Glyph(symbol, size: 16)
+                    Text(title).font(.text(Theme.type.caption + 1, weight: .semibold, relativeTo: .caption))
+                    current
+                }
+                .padding(.vertical, 6)
+            } else {
+                VStack(spacing: 3) {
+                    Glyph(symbol, size: 18)
+                    Text(title).font(.text(Theme.type.caption + 1, weight: .semibold, relativeTo: .caption))
+                    current
                 }
             }
-            .foregroundStyle(.white.opacity(0.75))
-            .frame(maxWidth: metrics.wide ? 220 : 120)
         }
         .foregroundStyle(.white)
         .accessibilityElement(children: .combine)

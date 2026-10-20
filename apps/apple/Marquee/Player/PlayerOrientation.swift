@@ -1,9 +1,9 @@
 #if os(iOS)
 import UIKit
 
-/// The phone player is landscape, either side by the sensor, as Android's
-/// player locks itself; leaving puts back the orientation the pages had.
-/// iPad windows keep theirs.
+/// The phone player opens across, either side by the sensor, and turns
+/// upright when the phone does, as the system player does; leaving puts back
+/// the orientation the pages had. iPad windows keep theirs.
 @MainActor
 enum PlayerOrientation {
     /// Answered by the app delegate for every window.
@@ -14,7 +14,7 @@ enum PlayerOrientation {
         guard UIDevice.current.userInterfaceIdiom == .phone, let scene else { return }
         // A second appear (back from Versions over the player) keeps the pages' first one.
         before = before ?? scene.effectiveGeometry.interfaceOrientation
-        turn(scene, allowing: .landscape, to: .landscape)
+        turn(scene, allowing: .allButUpsideDown, to: .landscape)
     }
 
     static func leave() {

@@ -244,3 +244,39 @@ enum SeekRamp {
     /// The run a press starts or continues: the same direction within the window goes on, anything else starts over.
     static func run(after previous: Int, continuing: Bool) -> Int { continuing ? previous + 1 : 0 }
 }
+
+/// The iPhone player's frame, as the system player lays it out
+/// (AVPlayerViewController on an iPhone 17 simulator, 2026-10-20): the bars at
+/// least 10 pt from the screen's edge, at the safe area where it is wider; the
+/// top bar 12 pt under the safe area's top; the scrubber and the actions at
+/// the foot, 5 pt over the safe area's bottom; the transport in the screen's
+/// middle, 36 pt between its buttons upright and 68 pt across.
+enum PhoneFrame {
+    static let edge: CGFloat = 10
+    static let topGap: CGFloat = 12
+    static let bottomGap: CGFloat = 5
+    /// The scrubber's bar: the system's capsule height, its times 11 pt in.
+    static let barHeight: CGFloat = 38
+    static let barInset: CGFloat = 11
+
+    /// Padding inside a safe area edge that keeps a bar `edge` from the screen.
+    static func side(safe: CGFloat) -> CGFloat {
+        max(edge - safe, 0)
+    }
+
+    static func transportGap(landscape: Bool) -> CGFloat {
+        landscape ? 68 : 36
+    }
+}
+
+extension PlayerLayout {
+    /// Where a drawn subtitle's foot sits, from the screen's top: at the
+    /// picture's foot, and over the controls' foot block (on the iPhone the
+    /// scrubber and the actions) while they show, the safe area's foot counted:
+    /// the lower part of the screen, never its top.
+    static func subtitleFoot(screenHeight: CGFloat, pictureHeight: CGFloat, safeBottom: CGFloat, controlsShown: Bool, controlsHeight: CGFloat) -> CGFloat {
+        let pictureFoot = (screenHeight + pictureHeight) / 2 - 16
+        let clear = controlsShown ? safeBottom + controlsHeight + 16 : max(40, safeBottom + 24)
+        return min(pictureFoot, screenHeight - clear)
+    }
+}

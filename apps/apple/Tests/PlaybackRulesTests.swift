@@ -671,3 +671,32 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     #expect(!PlayerLayout.resumesAfterRestore(playingAtRestore: false, playingNow: false))
     #expect(!PlayerLayout.resumesAfterRestore(playingAtRestore: true, playingNow: true))
 }
+
+@Test func thePhonePlayerSitsWhereTheSystemPlayerDoes() {
+    // Measured on the system player, iPhone 17 upright: 402 x 874, the safe
+    // area 62 on top and 34 at the foot, none at the sides.
+    #expect(0 + PhoneFrame.side(safe: 0) == 10, "the bars 10 pt from the screen")
+    #expect(62 + PhoneFrame.topGap == 74, "the top bar")
+    #expect(874 - 34 - PhoneFrame.bottomGap == 835, "the scrubber block's foot")
+    #expect(PhoneFrame.transportGap(landscape: false) == 36)
+    // Across: 874 x 402, the safe area 62 at each side, 21 at the foot, none on top.
+    #expect(62 + PhoneFrame.side(safe: 62) == 62, "the bars at the safe area")
+    #expect(0 + PhoneFrame.topGap == 12)
+    #expect(402 - 21 - PhoneFrame.bottomGap == 376)
+    #expect(PhoneFrame.transportGap(landscape: true) == 68)
+    // The scrubber's capsule and its times' inset.
+    #expect(PhoneFrame.barHeight == 38)
+    #expect(PhoneFrame.barInset == 11)
+}
+
+@Test func drawnSubtitlesSitLowNeverAtTheTop() {
+    // Across, the picture fills the height; the foot block (scrubber and actions) is 92 pt over the safe area.
+    let across = PlayerLayout.subtitleFoot(screenHeight: 402, pictureHeight: 402, safeBottom: 21, controlsShown: true, controlsHeight: 92)
+    #expect(across == 273, "over the scrubber block and the home indicator")
+    #expect(across > 402 / 2, "in the lower half")
+    #expect(PlayerLayout.subtitleFoot(screenHeight: 402, pictureHeight: 402, safeBottom: 21, controlsShown: false, controlsHeight: 92) == 357)
+    // Upright, at the picture's foot, well over the scrubber at the screen's foot.
+    #expect(PlayerLayout.subtitleFoot(screenHeight: 874, pictureHeight: 226, safeBottom: 34, controlsShown: true, controlsHeight: 92) == 534)
+    // A Mac window: no safe area, as before.
+    #expect(PlayerLayout.subtitleFoot(screenHeight: 900, pictureHeight: 900, safeBottom: 0, controlsShown: false, controlsHeight: 200) == 860)
+}

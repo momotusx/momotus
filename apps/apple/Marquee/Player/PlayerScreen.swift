@@ -22,6 +22,8 @@ struct PlayerScreen: View {
     @State private var windowHeight: CGFloat = 0
     /// The bottom controls' measured height; a guess until they have shown once.
     @State private var controlsHeight: CGFloat = 200
+    /// The safe area's foot (the home indicator), which the drawn subtitles keep clear of.
+    @State private var safeBottom: CGFloat = 0
     #if os(iOS)
     @State private var pip = PictureInPicture()
     @Environment(FloatingPlayer.self) private var floating
@@ -84,9 +86,11 @@ struct PlayerScreen: View {
             #endif
             if let text = model.subtitleText {
                 GeometryReader { geo in
-                    // The bottom of the picture as fitted on screen, kept clear of the controls.
-                    let picture = fittedHeight(geo.size)
-                    let bottom = min((geo.size.height + picture) / 2 - 16, geo.size.height - (controlsShown ? controlsHeight + 16 : 40))
+                    // The bottom of the picture as fitted on screen, kept clear of the
+                    // controls' foot block and the safe area: never the screen's top.
+                    let bottom = PlayerLayout.subtitleFoot(
+                        screenHeight: geo.size.height, pictureHeight: fittedHeight(geo.size), safeBottom: safeBottom,
+                        controlsShown: controlsShown, controlsHeight: controlsHeight)
                     // Its foot stays put; a larger caption style or a second line grows upward.
                     SubtitleLine(text: text, size: model.subtitleSize)
                         .frame(width: geo.size.width, height: max(bottom - 10, 0), alignment: .bottom)
@@ -158,6 +162,7 @@ struct PlayerScreen: View {
             }
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height + $0.safeAreaInsets.top + $0.safeAreaInsets.bottom } action: { windowHeight = $0 }
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { safeBottom = $0 }
         .animation(Theme.Motion.panel, value: model.showNext)
         .animation(Theme.Motion.panel, value: model.showEndCard)
         .animation(Theme.Motion.panel, value: model.segment)
