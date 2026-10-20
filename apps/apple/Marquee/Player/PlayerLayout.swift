@@ -87,6 +87,12 @@ enum PlayerLayout {
         return delay > 0 ? "\(amount) s later" : "\(amount) s earlier"
     }
 
+    /// A film brought back from Picture in Picture while it played is playing
+    /// again once the window has closed; one paused in the window stays paused.
+    static func resumesAfterRestore(playingAtRestore: Bool, playingNow: Bool) -> Bool {
+        playingAtRestore && !playingNow
+    }
+
     /// Picture in Picture shows the picture only: an addon's subtitles are
     /// drawn over the page, which has left. Said once per film.
     static func pipSubtitleNote(addonSubtitle: Bool, told: Bool) -> String? {

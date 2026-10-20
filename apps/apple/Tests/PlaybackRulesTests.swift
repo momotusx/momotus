@@ -663,3 +663,11 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     #expect(choices.subtitleStep(attempt: 2, auto: other.url, tracks: [other, moved]).drop == false)
     #expect(choices.startSubtitle(other.url, tracks: [other, moved]) == nil)
 }
+
+@Test func aFilmBroughtBackFromPictureInPicturePlaysOn() {
+    // Playing at restore, paused once the window closed (AVKit): it plays again.
+    #expect(PlayerLayout.resumesAfterRestore(playingAtRestore: true, playingNow: false))
+    // Paused in the window: it stays paused; already playing: nothing to do.
+    #expect(!PlayerLayout.resumesAfterRestore(playingAtRestore: false, playingNow: false))
+    #expect(!PlayerLayout.resumesAfterRestore(playingAtRestore: true, playingNow: true))
+}

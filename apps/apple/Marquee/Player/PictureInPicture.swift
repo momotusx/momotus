@@ -127,7 +127,13 @@ final class FloatingPlayer {
 
     func restore() {
         shown = held
+        playingAtRestore = (held?.model.player.rate ?? 0) > 0
     }
+
+    /// The film was playing when the viewer brought it back. On the iPhone it
+    /// was playing at the restore and paused by the time the window had closed
+    /// (the walk's trace), a pause none of the app's code makes.
+    @ObservationIgnored private var playingAtRestore = false
 
     /// The window closed. True when the film is back on screen; false when
     /// its X ended it.
@@ -135,7 +141,13 @@ final class FloatingPlayer {
         guard held?.model === model else { return true }
         held = nil
         model.floating = false
-        return shown?.model === model
+        let back = shown?.model === model
+        // Brought back playing: it plays on, as the window showed it.
+        if back, PlayerLayout.resumesAfterRestore(playingAtRestore: playingAtRestore, playingNow: model.player.rate > 0) {
+            model.player.play()
+        }
+        playingAtRestore = false
+        return back
     }
 
     /// Another film starting, or the profile's screens leaving, closes the window.
