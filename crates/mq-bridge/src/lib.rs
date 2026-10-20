@@ -156,6 +156,9 @@ enum Request {
         /// for deletion.
         #[serde(default, rename = "move")]
         move_link: bool,
+        /// This device's form: `phone`, `tablet`, `tv`, `computer` or `web`.
+        #[serde(default)]
+        form: Option<String>,
     },
     /// The sign-in providers a relay offers: `{providers}` (empty: no
     /// sign-in there, only the pairing and recovery doors). Reads nothing
@@ -231,13 +234,27 @@ enum Request {
         id: u64,
         record: Box<SyncConfig>,
     },
-    /// Joins the account a recovery kit belongs to as a new device; the
-    /// reply is its keystore record.
+    /// Saves a passkey as a way into the account: `prf` is its 32-byte PRF
+    /// output (base64url), `label` the row's words. Replies `{kit, record}`.
+    SavePasskey {
+        id: u64,
+        record: Box<SyncConfig>,
+        prf: String,
+        label: String,
+    },
+    /// Joins the account a recovery kit or a passkey (`prf`, base64url)
+    /// opens as a new device; the reply is its keystore record, with `via`
+    /// (`kit` or `passkey`) beside the record's own fields.
     Recover {
         id: u64,
         server: String,
-        kit: String,
+        #[serde(default)]
+        kit: Option<String>,
+        #[serde(default)]
+        prf: Option<String>,
         name: String,
+        #[serde(default)]
+        form: Option<String>,
     },
     /// The account's members, fingerprint and epoch.
     SyncDevices {
@@ -613,6 +630,10 @@ pub struct Session {
     /// When the app last went to the background (wall clock, ms: a
     /// monotonic clock stops while the device sleeps).
     background_ms: Option<u64>,
+    /// The link to the app stays on this machine or is encrypted (FFI, a
+    /// loopback socket). A passkey's PRF output is a key: it never comes
+    /// over a plain link from another machine.
+    private_link: bool,
     /// Tests only: where `addonCatalog` reads its lists instead of Cinemeta.
     /// No request can set it, so an app cannot point the lists elsewhere.
     #[cfg(test)]
@@ -630,10 +651,19 @@ impl Session {
     /// owner), locked when that profile has a PIN: a cold start or a
     /// reconnect never resumes a protected profile.
     pub fn new(core: Core, out: Output) -> Self {
+        Self::over(core, out, true)
+    }
+
+    /// A session over a link that is private (it stays on this machine, or
+    /// is encrypted) or not; on a plain link from another machine
+    /// `savePasskey` and `recover {prf}` answer `plainLink`.
+    pub fn over(core: Core, out: Output, private_link: bool) -> Self {
         // Subscribed before the profile is chosen: a removal after this
         // reaches the watcher, one before it is in the list `start` reads.
         let changes = core.library().subscribe();
-        Self::start(core.active(), changes, out)
+        let mut session = Self::start(core.active(), changes, out);
+        session.private_link = private_link;
+        session
     }
 
     fn start(core: Core, changes: broadcast::Receiver<Vec<Table>>, out: Output) -> Self {
@@ -668,6 +698,7 @@ impl Session {
             next_sub: 1,
             watcher,
             background_ms: None,
+            private_link: true,
             #[cfg(test)]
             catalog_source: None,
         }
@@ -685,6 +716,19 @@ impl Session {
 
     fn core(&self) -> Core {
         lock(&self.shared).core.clone()
+    }
+
+    /// A passkey's PRF output as sent: refused over a plain link from
+    /// another machine (it is a key), and unless it is 32 bytes.
+    fn prf(&self, text: &str) -> Result<[u8; 32], Failure> {
+        if !self.private_link {
+            return Err(Failure::coded(
+                "plainLink",
+                "a passkey does not travel an unencrypted link; use the app on this device",
+            ));
+        }
+        mq_sync::pair::read_prf(text)
+            .ok_or_else(|| Failure::from("prf is 32 bytes as base64url".to_owned()))
     }
 
     pub async fn handle_text(&mut self, text: &str) {
@@ -762,6 +806,7 @@ impl Session {
                 name,
                 ticket,
                 move_link,
+                form,
             } => {
                 self.spawn(id, async move {
                     let made = mq_sync::create_account_with(
@@ -771,6 +816,7 @@ impl Session {
                         &name,
                         ticket.as_deref(),
                         move_link,
+                        form.as_deref(),
                     )
                     .await;
                     // Not joined: a new account still gets the recommended
@@ -922,18 +968,61 @@ impl Session {
                         .map(|(kit, id, record)| json!({ "kit": kit, "id": id, "record": record }))
                 });
             }
+            Request::SavePasskey {
+                id,
+                record,
+                prf,
+                label,
+            } => {
+                let prf = match self.prf(&prf) {
+                    Ok(prf) => prf,
+                    Err(refused) => return send_answer(&self.out, json!(id), Err(refused)),
+                };
+                self.spawn(id, async move {
+                    let _gate = core.sync_gate().await;
+                    let (library, http, clock) = (core.library(), core.http(), core.clock());
+                    mq_sync::pair::save_passkey(library, http, &record, clock, &prf, &label)
+                        .await
+                        .map(|(kit, record)| json!({ "kit": kit, "record": record }))
+                });
+            }
             Request::Recover {
                 id,
                 server,
                 kit,
+                prf,
                 name,
+                form,
             } => {
+                let way = match (kit, prf) {
+                    (Some(kit), None) => mq_sync::pair::Recovery::Kit(kit),
+                    (None, Some(prf)) => match self.prf(&prf) {
+                        Ok(prf) => mq_sync::pair::Recovery::Passkey(prf),
+                        Err(refused) => return send_answer(&self.out, json!(id), Err(refused)),
+                    },
+                    _ => {
+                        let refused =
+                            Failure::from("recover takes a kit or a passkey's prf".to_owned());
+                        return send_answer(&self.out, json!(id), Err(refused));
+                    }
+                };
                 self.spawn(id, async move {
-                    let joined = mq_sync::pair::recover(core.http(), &server, &kit, &name).await;
+                    let joined = mq_sync::pair::recover_with(
+                        core.http(),
+                        &server,
+                        way,
+                        &name,
+                        form.as_deref(),
+                    )
+                    .await;
                     if joined.is_ok() {
                         core.joined_sync_account();
                     }
-                    answer(joined)
+                    // The record as before, with the way in beside its fields.
+                    let (record, via) = joined?;
+                    let mut answer = to_value(&record).map_err(Failure::from)?;
+                    answer["via"] = to_value(&via).map_err(Failure::from)?;
+                    Ok::<_, Failure>(answer)
                 });
             }
             Request::SyncDevices { id, record } => {
@@ -1530,7 +1619,9 @@ impl Session {
             }
             "pairing" => {
                 let name = param(params, "name").unwrap_or_else(|_| "New device".into());
-                let pairing = PairingView::open(&core, &param(params, "server")?, &name);
+                let form = param(params, "form").ok();
+                let pairing =
+                    PairingView::open(&core, &param(params, "server")?, &name, form.as_deref());
                 let (snapshot, updates) = pairing.subscribe();
                 let forward = tokio::spawn(forward(sub, updates, out, fence));
                 (View::Pairing(pairing), to_value(&snapshot)?, forward)

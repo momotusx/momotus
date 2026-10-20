@@ -57,14 +57,15 @@ pub struct PairingView {
 }
 
 impl PairingView {
-    /// `name` is how other devices of the account will see this one.
-    pub fn open(core: &Core, server: &str, name: &str) -> Self {
+    /// `name` is how other devices of the account will see this one, `form`
+    /// what it is (`phone`, `tablet`, `tv`, `computer`, `web`).
+    pub fn open(core: &Core, server: &str, name: &str, form: Option<&str>) -> Self {
         let snapshot = SharedObservable::new(PairingSnapshot::Starting);
         let (decide, decision) = oneshot::channel();
         let task = tokio::spawn(run(
             core.clone(),
             server.to_owned(),
-            name.to_owned(),
+            [name.to_owned(), form.unwrap_or_default().to_owned()],
             snapshot.clone(),
             decision,
         ));
@@ -124,10 +125,11 @@ impl Drop for PairingView {
 async fn run(
     core: Core,
     server: String,
-    name: String,
+    [name, form]: [String; 2],
     snapshot: SharedObservable<PairingSnapshot>,
     decision: oneshot::Receiver<bool>,
 ) {
+    let form = Some(form.as_str()).filter(|f| !f.is_empty());
     let fail = |reason: String| PairingSnapshot::Failed { reason };
     let end = |state: PairingSnapshot| drop(snapshot.set(state));
     let request = match start_pairing(core.http(), &server).await {
@@ -159,7 +161,7 @@ async fn run(
         code: offer.code.clone(),
     });
     match decision.await {
-        Ok(true) => match request.claim(core.http(), offer, &name).await {
+        Ok(true) => match request.claim_as(core.http(), offer, &name, form).await {
             Ok(record) => {
                 core.joined_sync_account();
                 end(PairingSnapshot::Joined {

@@ -789,7 +789,7 @@ async fn joining_a_sync_account_ends_the_defaults_step() {
     // An addons view open through the join drops `fresh` at once.
     let view = mq_runtime::views::addons::AddonsView::open(&core_b);
     assert!(view.snapshot().fresh);
-    let pairing = PairingView::open(&core_b, &server, "TV");
+    let pairing = PairingView::open(&core_b, &server, "TV", Some("tv"));
     let until = |want: fn(&PairingSnapshot) -> bool| {
         let pairing = &pairing;
         async move {
@@ -908,6 +908,92 @@ async fn flaky_proxy(target: String) -> String {
     let url = format!("http://{}", listener.local_addr().unwrap());
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     url
+}
+
+/// Passkeys over the protocol (plans/accounts.md 3.1): saved from a PRF
+/// output, opened again by `recover {prf}`, whose record carries `via`.
+/// Over a plain link from another machine neither is taken: the output is
+/// a key.
+#[tokio::test]
+async fn passkeys_over_the_protocol() {
+    use base64::Engine as _;
+    let dir = std::env::temp_dir().join(format!("mq-bridge-passkey-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let app = mq_sync_server::router(&dir.join("relay.sqlite"), Default::default()).unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+    let session = |private: bool| {
+        let (tx, rx) = Output::channel();
+        (
+            Session::over(Core::temporary("default").unwrap(), tx, private),
+            rx,
+        )
+    };
+    async fn ask(
+        s: &mut Session,
+        rx: &mut mpsc::UnboundedReceiver<Outgoing>,
+        request: Value,
+    ) -> Value {
+        let id = request["id"].as_u64().unwrap();
+        s.handle_text(&request.to_string()).await;
+        reply_to(rx, id).await
+    }
+    let prf = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([5u8; 32]);
+    let (mut phone, mut phone_rx) = session(true);
+    let made = ask(
+        &mut phone,
+        &mut phone_rx,
+        json!({"id": 1, "op": "createSyncAccount", "server": server, "name": "Phone", "form": "phone"}),
+    )
+    .await;
+    let record = made["result"].clone();
+    let saved = ask(
+        &mut phone,
+        &mut phone_rx,
+        json!({"id": 2, "op": "savePasskey", "record": record, "prf": prf, "label": "Passkey, saved on the phone"}),
+    )
+    .await;
+    assert!(saved["result"]["kit"].is_string(), "{saved}");
+    let record = saved["result"]["record"].clone();
+    let (mut laptop, mut laptop_rx) = session(true);
+    let back = ask(
+        &mut laptop,
+        &mut laptop_rx,
+        json!({"id": 1, "op": "recover", "server": server, "prf": prf, "name": "Laptop", "form": "computer"}),
+    )
+    .await;
+    assert_eq!(back["result"]["via"], "passkey", "{back}");
+    assert!(back["result"]["deviceToken"].is_string());
+    let devices = ask(
+        &mut phone,
+        &mut phone_rx,
+        json!({"id": 3, "op": "syncDevices", "record": record}),
+    )
+    .await;
+    let members = devices["result"]["members"].as_array().unwrap();
+    let kit = members.iter().find(|m| m["kit"] == true).unwrap();
+    assert_eq!(kit["passkey"], true, "{kit}");
+    assert_eq!(kit["name"], "Passkey, saved on the phone");
+    let joined = members.iter().find(|m| m["viaPasskey"] == true).unwrap();
+    assert_eq!(joined["form"], "computer", "{joined}");
+
+    let (mut far, mut far_rx) = session(false);
+    for request in [
+        json!({"id": 1, "op": "savePasskey", "record": record, "prf": prf, "label": "x"}),
+        json!({"id": 2, "op": "recover", "server": server, "prf": prf, "name": "x"}),
+    ] {
+        let refused = ask(&mut far, &mut far_rx, request).await;
+        assert_eq!(refused["code"], "plainLink", "{refused}");
+    }
+    let both = ask(
+        &mut laptop,
+        &mut laptop_rx,
+        json!({"id": 2, "op": "recover", "server": server, "prf": prf, "kit": "AAAA", "name": "x"}),
+    )
+    .await;
+    assert_eq!(both["ok"], false, "a kit or a passkey, not both");
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// A native sign-in whose token request was lost on the way (no definite

@@ -50,9 +50,24 @@ async fn ws(
         // Another site's page in the user's browser: no session for it.
         return StatusCode::FORBIDDEN.into_response();
     }
+    // The page reached this socket by a loopback name: the link stays on
+    // this machine. Any other name came through something else (a
+    // forwarded port), plain ws: no passkey output travels it.
+    let host = headers.get(header::HOST).and_then(|v| v.to_str().ok());
+    let private = host.is_some_and(loopback_authority);
     upgrade
-        .on_upgrade(move |socket| serve_socket(socket, core))
+        .on_upgrade(move |socket| serve_socket(socket, core, private))
         .into_response()
+}
+
+/// `localhost` or a loopback address, with or without a port.
+fn loopback_authority(authority: &str) -> bool {
+    let name = match authority.strip_prefix('[') {
+        Some(rest) => rest.split(']').next().unwrap_or_default(),
+        None => authority.split(':').next().unwrap_or_default(),
+    };
+    name.eq_ignore_ascii_case("localhost")
+        || name.parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback())
 }
 
 /// A browser page may open the socket only from a loopback origin (this
@@ -70,15 +85,10 @@ fn origin_allowed(origin: Option<&str>) -> bool {
         // `null` (a file or a sandboxed frame) and anything else.
         return false;
     };
-    let name = match authority.strip_prefix('[') {
-        Some(rest) => rest.split(']').next().unwrap_or_default(),
-        None => authority.split(':').next().unwrap_or_default(),
-    };
-    name.eq_ignore_ascii_case("localhost")
-        || name.parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback())
+    loopback_authority(authority)
 }
 
-async fn serve_socket(socket: WebSocket, core: Core) {
+async fn serve_socket(socket: WebSocket, core: Core, private: bool) {
     let (mut sink, mut stream) = socket.split();
     let (tx, mut rx) = Output::channel();
     let writer = tokio::spawn(async move {
@@ -100,7 +110,7 @@ async fn serve_socket(socket: WebSocket, core: Core) {
             drop(held);
         }
     });
-    let mut session = Session::new(core, tx);
+    let mut session = Session::over(core, tx, private);
     while let Some(Ok(message)) = stream.next().await {
         if let Message::Text(text) = message {
             session.handle_text(&text).await;
@@ -142,5 +152,21 @@ mod tests {
         // evil.example now resolves to 127.0.0.1: its page sends its own
         // name as Origin and as Host.
         assert!(!origin_allowed(Some("http://evil.example:7777")));
+    }
+
+    #[test]
+    fn a_socket_reached_by_another_name_is_not_a_private_link() {
+        use super::loopback_authority;
+        for private in [
+            "127.0.0.1:7777",
+            "localhost:7777",
+            "[::1]:7777",
+            "LOCALHOST",
+        ] {
+            assert!(loopback_authority(private), "{private}");
+        }
+        for plain in ["192.168.1.5:7777", "marquee.lan:7777", "relay.example", ""] {
+            assert!(!loopback_authority(plain), "{plain}");
+        }
     }
 }
