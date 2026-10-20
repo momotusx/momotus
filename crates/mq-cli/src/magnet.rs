@@ -206,6 +206,9 @@ async fn run(
     o: MagnetOptions,
 ) -> Result<Value, String> {
     let started = Instant::now();
+    // A folder given is kept for the next run (a relaunch); a temporary
+    // one goes after this run.
+    let keep_data = o.data_dir.is_some();
     let http = HttpClient::new(ClientConfig::default()).map_err(|e| e.to_string())?;
     let local: Vec<std::net::IpAddr> = o.peer.iter().map(|p| p.ip()).collect();
     let config = EngineConfig {
@@ -316,7 +319,7 @@ async fn run(
     let dialed = engine.connections();
     // The lease's claim ends first: the engine keeps a claimed torrent.
     drop(lease);
-    let _ = engine.remove(t, false).await;
+    let _ = engine.remove(t, keep_data).await;
     Ok(json!({
         "event": "run",
         "file": info.path,
