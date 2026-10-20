@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Handler
 import android.os.StatFs
 import android.os.SystemClock
+import android.system.Os
 import android.util.Log
 import androidx.annotation.OptIn
 import androidx.media3.common.C
@@ -13,6 +14,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.PlaybackStatsListener
 import org.json.JSONObject
+import java.io.File
 
 /**
  * Debug builds only (the activity reads it for those), as Apple's `-MQWalkLog YES`: after a launch with
@@ -22,7 +24,9 @@ import org.json.JSONObject
  * - `stalls`, `stall_ms`: ExoPlayer's rebuffers after the first frame (a seek's wait is not one);
  * - `player_stalls`: the player's own count, here the same; `observed_bitrate` its mean bandwidth
  *   (bits/s) and `startup_ms` its join time, null while it has none;
- * - `free_bytes`: the free space of the app's data volume.
+ * - `free_bytes`: the free space of the app's data volume;
+ * - `allocated_bytes`: what the core's torrent folder takes on disk (holes not counted), the CLI's
+ *   `allocated_bytes`.
  */
 @OptIn(UnstableApi::class)
 class WalkLog private constructor(
@@ -56,6 +60,7 @@ class WalkLog private constructor(
         // Keys in Apple's order (sorted), so the two logs diff line for line.
         val row =
             JSONObject()
+                .put("allocated_bytes", allocatedBytes())
                 .put("free_bytes", StatFs(context.filesDir.path).availableBytes)
                 .put("kind", "playback")
                 .put("observed_bitrate", if (bandwidth == C.LENGTH_UNSET) JSONObject.NULL else bandwidth)
@@ -67,6 +72,12 @@ class WalkLog private constructor(
                 .put("t_ms", SystemClock.elapsedRealtime() - opened)
         Log.i("walk", "walk $row")
     }
+
+    private fun allocatedBytes() =
+        File(context.filesDir, "marquee/torrents")
+            .walk()
+            .filter { it.isFile }
+            .sumOf { runCatching { Os.stat(it.path).st_blocks * 512 }.getOrDefault(0L) }
 
     companion object {
         @Volatile

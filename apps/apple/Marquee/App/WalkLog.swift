@@ -10,7 +10,9 @@ import os
 ///   counts mpv's paused-for-cache; a seek's wait counts too);
 /// - `player_stalls`, `observed_bitrate` (bits/s), `startup_ms`: the player's
 ///   own access log, null where it has none;
-/// - `free_bytes`: the volume's free space for important use (null on tvOS).
+/// - `free_bytes`: the volume's free space for important use (null on tvOS);
+/// - `allocated_bytes`: what the torrent folder takes on disk (holes not
+///   counted), the CLI's `allocated_bytes`.
 @MainActor
 final class WalkLog {
     static var on: Bool { UserDefaults.standard.bool(forKey: "MQWalkLog") }
@@ -61,6 +63,7 @@ final class WalkLog {
         let counted = events.map(\.numberOfStalls).filter { $0 >= 0 }
         let position = player.currentTime().seconds
         let row: [String: Any] = [
+            "allocated_bytes": allocatedBytes(),
             "kind": "playback",
             "t_ms": ms(now - opened),
             "position_ms": position.isFinite ? Int(position * 1000) : 0,
@@ -75,6 +78,14 @@ final class WalkLog {
               let json = String(data: data, encoding: .utf8) else { return }
         FileHandle.standardError.write(Data("walk \(json)\n".utf8))
         coreLog.notice("walk \(json, privacy: .public)")
+    }
+
+    private func allocatedBytes() -> Int {
+        let folder = CoreClient.dataDirectory().appending(path: "torrents", directoryHint: .isDirectory)
+        let keys: Set<URLResourceKey> = [.totalFileAllocatedSizeKey]
+        let files = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: Array(keys))?.allObjects ?? []
+        return files.compactMap { ($0 as? URL).flatMap { try? $0.resourceValues(forKeys: keys).totalFileAllocatedSize } }
+            .reduce(0, +)
     }
 
     private func ms(_ duration: Duration) -> Int {
