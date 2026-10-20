@@ -170,19 +170,47 @@ test("phone: a labelled Close closes the palette and takes its history entry wit
   await context.close();
 });
 
-test("phone: a result opened from the palette takes its entry, so Back returns to the screen", async ({ browser }) => {
+test("phone: Back from a result returns to the results, Back again to the screen", async ({ browser }) => {
   const { context, page } = await open(browser, "phone", "/");
   await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
-  const before = await page.evaluate(() => history.length);
   await openFromNav(page, "phone");
   await page.locator('[data-f="search:input"]').fill("thrones");
   await page.locator(".hit").first().tap({ timeout: 30_000 });
   await expect(page).toHaveURL(/\/title\//);
-  // One step over the screen, not two: the title replaced the palette's entry.
-  expect(await page.evaluate(() => history.length)).toBe(before + 1);
+  await expect(page.locator(".palette-layer")).toHaveCount(0);
+  // The title went over the palette: Back opens it again on its results.
   await page.goBack();
   await expect.poll(() => new URL(page.url()).pathname).toBe("/");
+  await expect(page.locator(".palette-layer .palette")).toBeVisible();
+  await expect(page.locator('[data-f="search:input"]')).toHaveValue("thrones");
+  await expect(page.locator(".palette-layer .hit").first()).toBeVisible({ timeout: 30_000 });
+  expect(await onPaletteEntry(page)).toBe(true);
+  // Back again closes it and stays on the screen under it.
+  await page.goBack();
   await expect(page.locator(".palette-layer")).toHaveCount(0);
+  expect(new URL(page.url()).pathname).toBe("/");
   expect(await onPaletteEntry(page)).toBe(false);
+  await context.close();
+});
+
+test("tv: Back from a result reopens the palette on the result that was opened", async ({ browser }) => {
+  const { context, page } = await open(browser, "tv", "/");
+  await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+  await openFromNav(page, "tv");
+  await page.keyboard.type("thrones");
+  await expect(page.locator(".hit").first()).toBeVisible({ timeout: 30_000 });
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
+  await expect.poll(() => focused(page)).toMatch(/^hit:/);
+  const opened = await focused(page);
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/title\//);
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".palette-layer .palette")).toBeVisible();
+  await expect.poll(() => focused(page), { timeout: 10_000 }).toBe(opened);
+  // Back once more closes it, focus on the navigation's Search.
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".palette-layer")).toHaveCount(0);
+  await expect.poll(() => focused(page)).toBe("nav:/search");
   await context.close();
 });

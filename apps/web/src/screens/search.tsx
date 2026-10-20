@@ -40,13 +40,30 @@ export const searchOpen = open;
 let opener: HTMLElement | null = null;
 
 // The palette is a history entry on the page's address, so the browser's
-// Back closes it instead of leaving the page under it.
+// Back closes it instead of leaving the page under it. A result opens over
+// that entry, so Back from the title lands on it and the palette opens again
+// on its results, the opened result focused (as Apple TV and Stremio do).
 type Entry = { _palette?: boolean; _depth?: number } | null;
 const onPaletteEntry = () => !!(history.state as Entry)?._palette;
+const here = () => location.pathname + location.search;
+// The page the palette is over.
+let paletteAt = "";
+// Opened again by Back: the remembered result takes the focus, not the field.
+let reopened = false;
 // Registered before the app's own popstate listeners (this module loads
-// first): leaving the palette's entry is not a screen's Back.
+// first): leaving the palette's entry for its page is not a screen's Back.
 window.addEventListener("popstate", (e) => {
-  if (!open() || onPaletteEntry()) return;
+  if (onPaletteEntry()) {
+    if (!open()) {
+      reopened = true;
+      paletteAt = here();
+      setOpen(true);
+    }
+    return;
+  }
+  if (!open()) return;
+  // Forward to another page: that page's own navigation.
+  if (here() !== paletteAt) return void finish(false);
   e.stopImmediatePropagation();
   finish(true);
 });
@@ -56,6 +73,7 @@ if (onPaletteEntry()) history.replaceState({ ...(history.state as object), _pale
 export function openSearch() {
   opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   history.pushState({ ...(history.state as object), _palette: true, _depth: historyDepth() + 1 }, "");
+  paletteAt = here();
   setOpen(true);
 }
 
@@ -67,12 +85,12 @@ export function closeSearch() {
   history.back();
 }
 
-/** A new screen took the palette's place (a result replaces its entry, or
- * any other navigation): close without Back, clear the mark the new entry
- * may have inherited, and let the new screen place focus. */
-export function leaveSearch() {
-  if (!open()) return;
-  if (onPaletteEntry()) history.replaceState({ ...(history.state as object), _palette: undefined }, "");
+/** The route moved to `to` (the router's path and query, read before it
+ * writes its history entry): another page (a result opened over the palette,
+ * or any other navigation) closes it without Back and lets the new screen
+ * place focus; Back that landed on the palette's own page keeps it open. */
+export function leaveSearch(to: string) {
+  if (!open() || to === paletteAt) return;
   finish(false);
 }
 
@@ -144,7 +162,9 @@ function SearchPanel(props: { dialog?: boolean }) {
 
   let input!: HTMLInputElement;
   onMount(() => {
-    if (props.dialog) queueMicrotask(() => focusEl(input));
+    // Opened again by Back: the shell restores the result that was opened.
+    if (props.dialog && !reopened) queueMicrotask(() => focusEl(input));
+    reopened = false;
   });
 
   return (
@@ -239,7 +259,7 @@ function SearchPanel(props: { dialog?: boolean }) {
                         </div>
                       </Match>
                       <Match when={true}>
-                        <For each={scoped(row)}>{(t) => <Hit tile={t} fkey={`hit:${row.rowId}:${t.id}`} onOpen={remember} replace={props.dialog} />}</For>
+                        <For each={scoped(row)}>{(t) => <Hit tile={t} fkey={`hit:${row.rowId}:${t.id}`} onOpen={remember} />}</For>
                       </Match>
                     </Switch>
                   </section>
@@ -255,12 +275,12 @@ function SearchPanel(props: { dialog?: boolean }) {
 }
 
 /** A result: a small poster, the name, then "Movie · 2021 · ★ 8.0". */
-/** From the palette a result takes the palette's history entry, so Back
- * from the title returns to the page, not to a closed palette. */
-function Hit(props: { tile: Tile; fkey: string; onOpen: () => void; replace?: boolean }) {
+/** A result opens over the palette's history entry: Back from the title
+ * returns to the results. */
+function Hit(props: { tile: Tile; fkey: string; onOpen: () => void }) {
   const t = () => props.tile;
   return (
-    <A class="hit" href={titlePath(t().kind, t().id)} replace={props.replace} data-f={props.fkey} onClick={() => props.onOpen()}>
+    <A class="hit" href={titlePath(t().kind, t().id)} data-f={props.fkey} onClick={() => props.onOpen()}>
       {/* No poster, or not yet: a film mark on the surface, never squeezed words. */}
       <span class="hit-art" aria-hidden="true">
         <Film class="hit-ph" />

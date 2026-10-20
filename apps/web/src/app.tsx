@@ -200,7 +200,7 @@ function Shell(props: RouteSectionProps) {
       () => {
         setScrolled(false);
         // A new screen (a result was opened, or Back) leaves the palette.
-        leaveSearch();
+        leaveSearch(location.pathname + location.search);
         const wasBack = takeBack();
         // Touch has no cursor to place; remotes and keyboards do.
         if (form() !== "phone") restoreSoon(wasBack);
