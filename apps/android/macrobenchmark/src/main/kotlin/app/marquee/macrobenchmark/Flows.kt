@@ -17,6 +17,27 @@ fun MacrobenchmarkScope.openHome() {
     device.wait(Until.hasObject(By.textContains("Popular")), 20_000)
 }
 
+/** The title a start opens on (Sintel: free, and Cinemeta has it), as the launch extra names it. */
+const val TITLE = "movie:tt1727587"
+
+/** A start straight onto [TITLE]'s page (debug and benchmark builds read the extra), until its details show. */
+fun MacrobenchmarkScope.openTitle() {
+    startActivityAndWait { it.putExtra("title", TITLE) }
+    device.wait(Until.hasObject(By.descStartsWith("IMDb")), 20_000)
+}
+
+/**
+ * A fresh install opens on onboarding: Start fresh with the recommended addons and Start fast, as a new viewer
+ * does, so later starts open on Home. Nothing when Home is already there.
+ */
+fun MacrobenchmarkScope.onboardIfAsked() {
+    val fresh = device.wait(Until.findObject(By.text("Start fresh")), 8_000) ?: return
+    fresh.click()
+    device.wait(Until.findObject(By.text("Continue")), 10_000)?.click()
+    device.wait(Until.findObject(By.text("Start fast")), 10_000)?.click()
+    device.wait(Until.hasObject(By.textContains("Popular")), 30_000)
+}
+
 /** One thumb swipe over the middle of the screen, [up] towards the top (the list moves down). */
 private fun MacrobenchmarkScope.swipe(up: Boolean) {
     val x = device.displayWidth / 2

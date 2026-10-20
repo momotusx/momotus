@@ -1,9 +1,11 @@
 plugins {
     alias(libs.plugins.android.test)
+    alias(libs.plugins.androidx.baselineprofile)
 }
 
 // Startup, Home scroll and playback start on a device or emulator, and the baseline profile generator.
-// Run on one device: ANDROID_SERIAL=<serial> ./gradlew :macrobenchmark:connectedBenchmarkAndroidTest
+// Benchmarks: ANDROID_SERIAL=<serial> ./gradlew :macrobenchmark:connectedBenchmarkReleaseAndroidTest
+// Profile: ANDROID_SERIAL=<serial> ./gradlew :app:generateBaselineProfile
 android {
     namespace = "app.marquee.macrobenchmark"
     compileSdk = 37
@@ -17,25 +19,17 @@ android {
         testInstrumentationRunnerArguments["androidx.benchmark.suppressErrors"] = "EMULATOR"
     }
 
-    buildTypes {
-        create("benchmark") {
-            isDebuggable = true
-            signingConfig = signingConfigs.getByName("debug")
-            matchingFallbacks += "release"
-        }
-    }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
 
     targetProjectPath = ":app"
-    experimentalProperties["android.experimental.self-instrumenting"] = true
 }
 
-androidComponents {
-    beforeVariants(selector().all()) { it.enable = it.buildType == "benchmark" }
+// The connected emulator or device records the profile (no managed device: the core is arm64 only).
+baselineProfile {
+    useConnectedDevices = true
 }
 
 dependencies {

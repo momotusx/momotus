@@ -7,8 +7,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The baseline profile: start, Home, its scroll and a title page. The rules land in this test's
- * additional output (`*-baseline-prof.txt`); copy them to app/src/main/baseline-prof.txt.
+ * The baseline profile: a start to Home and its scroll, then a start onto a title page. The plugin writes the
+ * rules to app/src/main/generated/baselineProfiles (`scripts/gw.sh :app:generateBaselineProfile`).
  */
 @RunWith(AndroidJUnit4::class)
 class BaselineProfileGenerator {
@@ -20,7 +20,10 @@ class BaselineProfileGenerator {
         rule.collect(packageName = PACKAGE, includeInStartupProfile = true) {
             pressHome()
             startActivityAndWait()
+            onboardIfAsked()
             openHome()
             scrollHome()
+            killProcess()
+            openTitle()
         }
 }

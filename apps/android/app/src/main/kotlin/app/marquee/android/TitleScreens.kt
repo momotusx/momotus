@@ -1,5 +1,6 @@
 package app.marquee.android
 
+import androidx.activity.compose.ReportDrawnWhen
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
@@ -93,6 +94,8 @@ fun TitleScreen(
         )
     val header = holder.view.header
     val name = header?.details?.name
+    // Fully drawn once the details show, when a start opens on a title page.
+    ReportDrawnWhen { name != null }
     val videoId = header?.playTarget?.videoId
     // The line under Play is the recommended version of what Play starts, so open it early.
     val playKey = if (videoId != null && name != null) keyFor(route.kind, videoId, name) else null

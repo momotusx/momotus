@@ -1,6 +1,9 @@
+import com.android.build.api.variant.BuildConfigField
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.androidx.baselineprofile)
 }
 
 android {
@@ -25,19 +28,14 @@ android {
             // Local release builds only; store signing is a release-process decision.
             signingConfig = signingConfigs.getByName("debug")
         }
-        // What :macrobenchmark measures: release code (R8, no debugging), profileable from the shell.
-        create("benchmark") {
-            initWith(getByName("release"))
-            signingConfig = signingConfigs.getByName("debug")
-            matchingFallbacks += "release"
-            proguardFiles("benchmark-rules.pro")
-        }
     }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    buildFeatures { buildConfig = true }
 
     packaging {
         jniLibs { useLegacyPackaging = false }
@@ -52,12 +50,30 @@ android {
     sourceSets {
         // The recorded protocol traces double as the bridge benchmark input in debug builds.
         getByName("debug").assets.directories.add("../core/src/test/resources")
-        // The benchmark build is the release build: no debug screens or fakes.
-        getByName("benchmark").kotlin.directories.add("src/release/kotlin")
+    }
+}
+
+// The baseline profile (plans/m6-android.md P9): :macrobenchmark records it on a connected device with
+// `scripts/gw.sh :app:generateBaselineProfile`, never during a build, into src/main/generated/baselineProfiles.
+// The plugin's benchmarkRelease (measured) and nonMinifiedRelease (recorded) are release builds, never shipped.
+baselineProfile {
+    automaticGenerationDuringBuild = false
+    saveInSrc = true
+    mergeIntoMain = true
+}
+
+// The plugin's release copies take the release source set (no debug screens or fakes), and say they are
+// benchmark builds: only they and debug builds open a title from a launch extra.
+androidComponents {
+    onVariants { variant ->
+        val benchmark = variant.buildType == "benchmarkRelease" || variant.buildType == "nonMinifiedRelease"
+        variant.buildConfigFields?.put("BENCHMARK", BuildConfigField("boolean", "$benchmark", "a benchmark build"))
+        if (benchmark) variant.sources.kotlin?.addStaticSourceDirectory("src/release/kotlin")
     }
 }
 
 dependencies {
+    baselineProfile(project(":macrobenchmark"))
     implementation(project(":core"))
     implementation(project(":design"))
     implementation(project(":player"))

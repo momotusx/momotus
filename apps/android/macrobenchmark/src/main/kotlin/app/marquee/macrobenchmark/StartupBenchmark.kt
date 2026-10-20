@@ -11,29 +11,56 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Cold start to the first frame (the start picker on a device with two profiles), 10 runs. With no
- * compilation, and with the baseline profile the APK carries (none before it was generated).
+ * Cold start to Home with its first rows, and to a title page with its details, 10 runs each: time to the
+ * first frame (TTID) and to the app's fully drawn report there (TTFD). With no compilation (as before the
+ * profile), and with the baseline profile the APK carries required.
  */
 @RunWith(AndroidJUnit4::class)
 class StartupBenchmark {
     @get:Rule
     val rule = MacrobenchmarkRule()
 
-    private fun cold(mode: CompilationMode) =
-        rule.measureRepeated(
-            packageName = PACKAGE,
-            metrics = listOf(StartupTimingMetric()),
-            iterations = 10,
-            startupMode = StartupMode.COLD,
-            compilationMode = mode,
-        ) {
+    private fun cold(
+        mode: CompilationMode,
+        title: Boolean,
+    ) = rule.measureRepeated(
+        packageName = PACKAGE,
+        metrics = listOf(StartupTimingMetric()),
+        iterations = 10,
+        startupMode = StartupMode.COLD,
+        compilationMode = mode,
+        setupBlock = {
+            // The first run of a fresh install goes through onboarding once, outside the measure.
+            if (!onboarded) {
+                startActivityAndWait()
+                onboardIfAsked()
+                killProcess()
+                onboarded = true
+            }
             pressHome()
+        },
+    ) {
+        if (title) {
+            openTitle()
+        } else {
             startActivityAndWait()
+            openHome()
         }
+    }
 
     @Test
-    fun coldNoCompilation() = cold(CompilationMode.None())
+    fun homeNoCompilation() = cold(CompilationMode.None(), title = false)
 
     @Test
-    fun coldBaselineProfile() = cold(CompilationMode.Partial(BaselineProfileMode.UseIfAvailable))
+    fun homeBaselineProfile() = cold(CompilationMode.Partial(BaselineProfileMode.Require), title = false)
+
+    @Test
+    fun titleNoCompilation() = cold(CompilationMode.None(), title = true)
+
+    @Test
+    fun titleBaselineProfile() = cold(CompilationMode.Partial(BaselineProfileMode.Require), title = true)
+
+    private companion object {
+        var onboarded = false
+    }
 }

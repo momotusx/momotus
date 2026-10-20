@@ -1,6 +1,7 @@
 package app.marquee.android
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.ReportDrawnWhen
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -265,6 +266,8 @@ private fun AppNav(
                     }
                     entry<Route.StreamQuestion> { StreamQuestionScreen(session, onDone = ::arrive) }
                     entry<Route.Home> {
+                        // Fully drawn once the first rows show: the start's end for the system and the benchmarks.
+                        ReportDrawnWhen { app.home.rows.isNotEmpty() }
                         // An empty Home asks once whether catalogs exist and are all hidden.
                         val empty = app.home.status == ViewStatus.Open && app.home.rows.isEmpty()
                         val rowsHidden by produceState(false, empty) {
