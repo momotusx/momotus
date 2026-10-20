@@ -264,6 +264,7 @@ Mutations SR1 to SR7.
   - An HTTP scrape looks a name up once: reqwest reads the kept addresses.
   - The slow-tracker test answers in 270 ms, about 200 ms inside the budget.
 - **The kids_play flake, "input address stream exhausted".** librqbit asks each peer for metadata once. The test swarm gives one peer, the loopback seeder, with the DHT and trackers off, so one failed exchange ends the add. The app never sees this error: its DHT and tracker streams do not end. The error now carries the last peer's cause (`a_magnet_whose_peers_all_failed_says_why`). One run in 55 failed, naming it: the seeder reset the connection before answering the handshake. 200 runs with librqbit's debug lines never failed, so the seeder's reason is still open; no retry was added to the fixture.
+  - Hypothesis, not verified: the leecher connects before the seeder's torrent is live, and the logging's slower timing hides the window. Two things in the code weigh against it: `check_incoming_connection` waits up to 5 s for a torrent still initializing, and a close after the handshake is read would reach the leecher as end of stream, not a reset. A reset fits a close before the handshake is read. Next step: log the seeder's refusal reason at `info` in the fork, then loop again.
 
 ## Review answers: engine round 4 (2026-10-20)
 
