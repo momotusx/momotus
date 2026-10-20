@@ -108,6 +108,8 @@ pub(crate) struct Snapshot {
     pub received_bytes: u64,
     /// Microseconds from adapter start to the first peer unchoking us.
     pub unchoked_us: Option<u64>,
+    /// Bytes of pieces verified again after they had verified and left.
+    pub refetched_bytes: u64,
 }
 
 /// The capacity sample covers the adapter's first 30 s.
@@ -130,6 +132,9 @@ pub(crate) struct Translator {
     next_peer: PeerId,
     sent: HashMap<(PeerId, BlockIdx), u64>,
     have: Vec<bool>,
+    /// Pieces that verified at least once, for `refetched_bytes`.
+    verified_once: Vec<bool>,
+    refetched_bytes: u64,
     demands: HashMap<DemandId, Demand>,
     now_us: u64,
     ready_us: Option<u64>,
@@ -221,6 +226,8 @@ impl Translator {
             next_peer: 0,
             sent: HashMap::new(),
             have: vec![false; num_pieces as usize],
+            verified_once: vec![false; num_pieces as usize],
+            refetched_bytes: 0,
             demands: HashMap::new(),
             now_us: 0,
             ready_us: None,
@@ -301,6 +308,7 @@ impl Translator {
             sample_busy_us: self.sample_busy_us,
             received_bytes: self.received_bytes,
             unchoked_us: self.unchoked_us,
+            refetched_bytes: self.refetched_bytes,
         }
     }
 
@@ -445,7 +453,16 @@ impl Translator {
                 self.feed(Event::BlockReceived { peer: id, block })
             }
             ExtEvent::PieceChecked { piece, ok } => {
-                if let Some(h) = self.have.get_mut(piece as usize) {
+                let p = piece as usize;
+                if ok && !self.have.get(p).copied().unwrap_or(true) {
+                    if self.verified_once[p] {
+                        let total = self.files.last().map_or(0, |&(o, l)| o + l);
+                        let start = u64::from(piece) * self.piece_len;
+                        self.refetched_bytes += self.piece_len.min(total - start);
+                    }
+                    self.verified_once[p] = true;
+                }
+                if let Some(h) = self.have.get_mut(p) {
                     *h = ok;
                 }
                 let out = self.feed(if ok {
@@ -901,6 +918,28 @@ mod tests {
         let s = tr.snapshot();
         assert_eq!(s.sample_bytes, 0);
         assert_eq!(s.received_bytes, 16 * KIB);
+    }
+
+    /// A piece verified again after it had verified and left counts in
+    /// `refetched_bytes`, at its own length (the last piece is short); a
+    /// repeated report while it is held, or a first verify after a
+    /// failure, does not.
+    #[test]
+    fn a_piece_verified_again_after_it_left_counts_as_refetched() {
+        let mut tr = Translator::new(256 * 1024, &[4000 * KIB], Config::standard(), true);
+        let check = |tr: &mut Translator, piece, ok| {
+            tr.on_ext(ExtEvent::PieceChecked { piece, ok });
+        };
+        check(&mut tr, 2, false);
+        check(&mut tr, 2, true);
+        check(&mut tr, 2, true);
+        check(&mut tr, 15, true);
+        assert_eq!(tr.snapshot().refetched_bytes, 0);
+        for piece in [2, 15] {
+            check(&mut tr, piece, false);
+            check(&mut tr, piece, true);
+        }
+        assert_eq!(tr.snapshot().refetched_bytes, 256 * KIB + 160 * KIB);
     }
 
     /// The stall rule's inputs: every payload block counts at once, before

@@ -116,6 +116,24 @@ enum Command {
         /// the address policy allows it and the DHT stays off.
         #[arg(long)]
         peer: Option<std::net::SocketAddr>,
+        /// No player: timed reads at 25, 50 and 75%, the whole file, then
+        /// 64 MiB back at 10%, all through the loopback, each whole piece
+        /// checked against the torrent's hashes.
+        #[arg(long, conflicts_with = "bytes")]
+        walk: bool,
+        /// The walk's whole read, in bytes per second (default: as fast as
+        /// the bytes come).
+        #[arg(long, requires = "walk")]
+        walk_rate: Option<u64>,
+        /// The walk's whole read starts at this byte offset (a resume).
+        #[arg(long, requires = "walk")]
+        resume_at: Option<u64>,
+        /// The engine's disk budget in bytes (default: the engine's).
+        #[arg(long)]
+        cache_budget: Option<u64>,
+        /// The session's download limit in bytes per second.
+        #[arg(long)]
+        download_limit: Option<u32>,
     },
     /// Scrape info hashes on a fresh engine (the app's first scrape) and
     /// report each tracker's stages.
@@ -206,6 +224,11 @@ async fn main() {
         data_dir,
         no_upload,
         peer,
+        walk,
+        walk_rate,
+        resume_at,
+        cache_budget,
+        download_limit,
     } = cli.command
     {
         let options = magnet::MagnetOptions {
@@ -218,6 +241,11 @@ async fn main() {
             data_dir,
             upload: !no_upload,
             peer,
+            walk,
+            walk_rate,
+            resume_at,
+            cache_budget,
+            download_limit,
         };
         match magnet::play_magnet(&magnet, options).await {
             Ok(run) => emit(run),

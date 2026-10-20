@@ -14,6 +14,7 @@
 //! ```
 
 mod adapter;
+mod check;
 mod pick;
 mod reader;
 mod scrape;
@@ -21,6 +22,7 @@ mod scrape;
 pub mod test_hooks;
 
 pub use adapter::PeerTally;
+pub use check::PieceCheck;
 /// The fork itself, for tools and tests (creating a torrent to seed).
 pub use librqbit;
 pub use pick::FileHint;
@@ -292,6 +294,8 @@ pub struct TorrentStats {
     pub cancels: u64,
     pub hedges: u64,
     pub dup_bytes: u64,
+    /// Bytes of pieces verified again after they had verified and left.
+    pub refetched_bytes: u64,
     pub snubs: u64,
     pub seeks: u64,
     /// Ranges open on the torrent, each one scheduler demand.
@@ -724,6 +728,18 @@ impl Engine {
         Ok(self.torrent(h)?.files.clone())
     }
 
+    /// The piece hashes over `file`, to check the bytes a reader got.
+    pub fn piece_check(&self, h: TorrentHandle, file: usize) -> Result<PieceCheck> {
+        let t = self.torrent(h)?;
+        let meta = librqbit::torrent_from_bytes(&t.torrent_bytes)
+            .map_err(|e| anyhow::anyhow!("torrent bytes: {e}"))?;
+        let hashes = meta.info.data.pieces.as_ref().as_chunks::<20>().0.to_vec();
+        let len = t.files.get(file).ok_or(EngineError::NoFile)?.len;
+        let start = t.files[..file].iter().map(|f| f.len).sum();
+        let total = t.files.iter().map(|f| f.len).sum();
+        Ok(PieceCheck::new(t.piece_len, start, len, total, hashes))
+    }
+
     /// Picks the file to play for `profile` and starts the torrent on it (or
     /// adds it to the running torrent's wanted files). With DWH nothing
     /// beyond the readahead budget downloads unless a reader asks. `Held`
@@ -928,6 +944,7 @@ impl Engine {
         s.ready_ms = snap.ready_us.map(|us| us / 1000);
         (s.sample_bytes, s.sample_busy_ms) = (snap.sample_bytes, snap.sample_busy_us / 1000);
         s.received_bytes = snap.received_bytes;
+        s.refetched_bytes = snap.refetched_bytes;
         s.unchoked_ms = snap.unchoked_us.map(|us| us / 1000);
         s.dwh = l.dwh;
         if let Some(d) = snap.dwh {

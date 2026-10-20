@@ -2,10 +2,13 @@
 //! a timing per stage. Players and the byte probe both read through the
 //! loopback URL, so the numbers include the HTTP leg.
 
-use std::path::PathBuf;
+use std::os::unix::fs::MetadataExt;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use mq_engine::{Engine, EngineConfig, FileHint};
+use mq_engine::{Engine, EngineConfig, FileHint, PieceCheck};
 use mq_http::{ClientConfig, HttpClient, Priority, RequestOptions};
 use mq_server::{StreamServer, Upstream};
 use serde_json::{Value, json};
@@ -30,6 +33,13 @@ pub struct MagnetOptions {
     pub upload: bool,
     /// A peer to dial, allowed by the policy; the DHT stays off with it.
     pub peer: Option<std::net::SocketAddr>,
+    /// No player: the walk (`walk`), its whole read's rate in bytes per
+    /// second, and the offset that read starts at.
+    pub walk: bool,
+    pub walk_rate: Option<u64>,
+    pub resume_at: Option<u64>,
+    pub cache_budget: Option<u64>,
+    pub download_limit: Option<u32>,
 }
 
 const SEEKS: [f64; 3] = [25.0, 50.0, 75.0];
@@ -78,9 +88,8 @@ fn parse_magnet(input: &str) -> Result<(String, Vec<String>), String> {
     Ok((hash.ok_or("magnet without urn:btih")?, trackers))
 }
 
-/// Time to the first body byte and to `want` bytes of `bytes=offset-`.
-async fn timed_read(http: &HttpClient, url: &str, offset: u64, want: u64) -> Value {
-    let opts = RequestOptions {
+fn read_options() -> RequestOptions {
+    RequestOptions {
         priority: Priority::Playback,
         timeout: READY_TIMEOUT,
         // A torrent read may wait long for its first piece: the header wait
@@ -88,7 +97,115 @@ async fn timed_read(http: &HttpClient, url: &str, offset: u64, want: u64) -> Val
         hop_headers: Some(READY_TIMEOUT),
         allow_private: true,
         ..Default::default()
+    }
+}
+
+/// Bytes allocated under `dir`: blocks, so a hole counts nothing.
+fn allocated(dir: &Path) -> u64 {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return 0;
     };
+    entries
+        .flatten()
+        .map(|e| match e.metadata() {
+            Ok(m) if m.is_dir() => allocated(&e.path()),
+            Ok(m) => m.blocks() * 512,
+            Err(_) => 0,
+        })
+        .sum()
+}
+
+/// Nearest-rank percentile.
+fn percentile(values: &[u64], p: f64) -> Option<u64> {
+    let mut v = values.to_vec();
+    v.sort_unstable();
+    let rank = (p * v.len() as f64).ceil() as usize;
+    v.get(rank.max(1) - 1).copied()
+}
+
+/// `key` of each object in the array `list`.
+fn each(list: Option<&Value>, key: &str) -> Vec<u64> {
+    list.and_then(Value::as_array)
+        .map(|l| l.iter().filter_map(|v| v[key].as_u64()).collect())
+        .unwrap_or_default()
+}
+
+/// `want` bytes of `bytes=offset-` through the loopback, at most `rate`
+/// bytes per second when set, each whole piece checked. A stall is a wait
+/// of over 1 s for the next bytes after the first.
+async fn read_checked(
+    http: &HttpClient,
+    url: &str,
+    (offset, want): (u64, u64),
+    rate: Option<u64>,
+    check: &mut PieceCheck,
+) -> Value {
+    check.seek(offset);
+    let started = Instant::now();
+    let mut response = match http
+        .stream(url, Some(format!("bytes={offset}-")), &read_options())
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => return json!({ "offset": offset, "error": e.to_string() }),
+    };
+    let (mut got, mut first, mut stalls, mut stall_ms) = (0u64, None, 0u32, 0u64);
+    while got < want {
+        if let Some(rate) = rate.filter(|r| *r > 0) {
+            let due = Duration::from_secs_f64(got as f64 / rate as f64);
+            if let Some(wait) = due.checked_sub(started.elapsed()) {
+                tokio::time::sleep(wait).await;
+            }
+        }
+        let asked = Instant::now();
+        let Ok(Some(Ok(chunk))) = tokio::time::timeout(READY_TIMEOUT, response.next_chunk()).await
+        else {
+            break;
+        };
+        let waited = ms(asked);
+        if first.is_some() && waited > 1000 {
+            stalls += 1;
+            stall_ms += waited;
+        }
+        let take = chunk.len().min((want - got) as usize);
+        check.feed(&chunk[..take]);
+        got += take as u64;
+        first.get_or_insert_with(|| ms(started));
+    }
+    json!({
+        "offset": offset, "bytes": got, "first_byte_ms": first,
+        "ms": (got >= want).then(|| ms(started)), "stalls": stalls, "stall_ms": stall_ms,
+    })
+}
+
+/// `--walk`: reads at 25, 50 and 75% (4 MiB each), the whole file from
+/// `from` at `rate`, then 64 MiB back at 10%.
+async fn walk(
+    http: &HttpClient,
+    url: &str,
+    len: u64,
+    (from, rate): (u64, Option<u64>),
+    mut check: PieceCheck,
+) -> Value {
+    let at = |pct: f64| (len as f64 * pct / 100.0) as u64;
+    let mut forward = Vec::new();
+    for pct in SEEKS {
+        let span = (at(pct), (4 * MIB).min(len - at(pct)));
+        forward.push(read_checked(http, url, span, None, &mut check).await);
+    }
+    let from = from.min(len);
+    let whole = read_checked(http, url, (from, len - from), rate, &mut check).await;
+    let back = (at(10.0), (64 * MIB).min(len - at(10.0)));
+    let back = read_checked(http, url, back, None, &mut check).await;
+    json!({
+        "forward": forward, "whole": whole, "back": [back],
+        "checked": check.checked, "wrong": check.wrong,
+    })
+}
+
+/// Time to the first body byte and to `want` bytes of `bytes=offset-`.
+async fn timed_read(http: &HttpClient, url: &str, offset: u64, want: u64) -> Value {
+    let opts = read_options();
     let started = Instant::now();
     let mut response = match http
         .stream(url, Some(format!("bytes={offset}-")), &opts)
@@ -211,13 +328,28 @@ async fn run(
     let keep_data = o.data_dir.is_some();
     let http = HttpClient::new(ClientConfig::default()).map_err(|e| e.to_string())?;
     let local: Vec<std::net::IpAddr> = o.peer.iter().map(|p| p.ip()).collect();
-    let config = EngineConfig {
+    let mut config = EngineConfig {
         dwh: !o.stock,
         upload: o.upload,
         discovery: o.peer.is_none(),
         ..EngineConfig::new(dir, http.torrent_scope(&local))
     };
+    if let Some(bytes) = o.cache_budget {
+        config.cache_budget_bytes = bytes;
+    }
+    config.limits.download_bps = o.download_limit.and_then(std::num::NonZeroU32::new);
     let engine = Engine::start(config).await.map_err(|e| e.to_string())?;
+    // The data folder's allocated bytes, sampled every 250 ms.
+    let max_allocated = Arc::new(AtomicU64::new(0));
+    let sampler = tokio::spawn({
+        let (dir, max) = (dir.to_owned(), Arc::clone(&max_allocated));
+        async move {
+            loop {
+                max.fetch_max(allocated(&dir), Ordering::Relaxed);
+                tokio::time::sleep(Duration::from_millis(250)).await;
+            }
+        }
+    });
     let peers: Vec<std::net::SocketAddr> = o.peer.into_iter().collect();
     let t = tokio::time::timeout(METADATA_TIMEOUT, engine.add_magnet(hash, trackers, &peers))
         .await
@@ -297,6 +429,10 @@ async fn run(
             seeks.push(seek);
         }
         json!({ "seeks": seeks })
+    } else if o.walk {
+        let check = engine.piece_check(t, file).map_err(|e| e.to_string())?;
+        let span = (o.resume_at.unwrap_or(0), o.walk_rate);
+        walk(&http, &url, info.len, span, check).await
     } else {
         let options = PlayOptions {
             headless: o.headless,
@@ -317,6 +453,20 @@ async fn run(
     let first = first.await.unwrap_or_default();
     let stats = engine.stats(t).await.map_err(|e| e.to_string())?;
     let dialed = engine.connections();
+    sampler.abort();
+    let allocated_bytes = allocated(dir);
+    let max_allocated_bytes = max_allocated.load(Ordering::Relaxed).max(allocated_bytes);
+    // Seeks: the walk's time to first byte, or mpv's to its next frame.
+    let (forward, back) = if o.walk {
+        (
+            each(played.get("forward"), "first_byte_ms"),
+            each(played.get("back"), "first_byte_ms"),
+        )
+    } else {
+        (each(played.get("seeks"), "ms"), Vec::new())
+    };
+    let walked = played.get("whole");
+    let stalls = walked.unwrap_or(&played);
     // The lease's claim ends first: the engine keeps a claimed torrent.
     drop(lease);
     let _ = engine.remove(t, keep_data).await;
@@ -342,6 +492,21 @@ async fn run(
         "cancels": stats.cancels,
         "hedges": stats.hedges,
         "dup_bytes": stats.dup_bytes,
+        "refetched_bytes": stats.refetched_bytes,
+        "max_allocated_bytes": max_allocated_bytes,
+        "allocated_bytes": allocated_bytes,
+        "seek_forward_p50_ms": percentile(&forward, 0.5),
+        "seek_forward_p90_ms": percentile(&forward, 0.9),
+        "seek_back_p50_ms": percentile(&back, 0.5),
+        "seek_back_p90_ms": percentile(&back, 0.9),
+        "stalls": stalls.get("stalls"),
+        "stall_ms": stalls.get("stall_ms"),
+        "walk": o.walk.then(|| json!({
+            "rate": o.walk_rate, "from": o.resume_at.unwrap_or(0),
+            "bytes": walked.and_then(|w| w.get("bytes")), "ms": walked.and_then(|w| w.get("ms")),
+            "back": played.get("back"), "forward": played.get("forward"),
+            "checked": played.get("checked"), "wrong": played.get("wrong"),
+        })),
         "total_ms": ms(started),
         "peak_rss_bytes": peak_rss_bytes(),
     }))
@@ -364,5 +529,15 @@ mod tests {
         );
         assert_eq!(parse_magnet("abc").unwrap().0, "abc");
         assert!(parse_magnet("magnet:?dn=x").is_err());
+    }
+
+    #[test]
+    fn nearest_rank_percentiles() {
+        assert_eq!(percentile(&[], 0.5), None);
+        assert_eq!(percentile(&[7], 0.9), Some(7));
+        let v = [50, 10, 40, 20, 30, 100, 90, 80, 70, 60];
+        assert_eq!(percentile(&v, 0.5), Some(50));
+        assert_eq!(percentile(&v, 0.9), Some(90));
+        assert_eq!(percentile(&v[..3], 0.5), Some(40));
     }
 }

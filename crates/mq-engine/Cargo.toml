@@ -19,6 +19,8 @@ mq-relparse = { path = "../mq-relparse" }
 # The address policy every peer must pass (plans/c27-torrent-policy.md).
 mq-http = { path = "../mq-http" }
 anyhow = "1"
+# A reader's piece check (check.rs): librqbit's own SHA-1, on ring.
+sha1w = { package = "librqbit-sha1-wrapper", version = "9.0.1", default-features = false, features = ["sha1-ring"] }
 # Tracker scrape (scrape.rs): both already built for librqbit.
 librqbit-bencode = "9.0.1"
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
