@@ -4,9 +4,10 @@
 
 import type { Page } from "@playwright/test";
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BBB_ID } from "./source";
 
@@ -33,7 +34,12 @@ export const GOT = { id: "tt0944947", resume: "tt0944947:2:3" };
 export const SHOTS = process.env.SHOTS_DIR ?? "test-results/shots";
 
 const repo = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");
-const targetDir = process.env.CARGO_TARGET_DIR ?? join(homedir(), ".cargo-targets/marquee-web");
+// This checkout's own target dir unless CARGO_TARGET_DIR names one: cargo
+// gives workspace crates the same artifact names in every checkout, so a
+// shared one would run another checkout's build (the repository rules). The
+// name says which checkout; the hash keeps two of the same name apart.
+const checkout = `${basename(repo)}-${createHash("sha256").update(repo).digest("hex").slice(0, 8)}`;
+const targetDir = process.env.CARGO_TARGET_DIR ?? join(homedir(), `.cargo-targets/marquee-e2e-${checkout}`);
 
 /** A binary to test. MQ_BRIDGE_BIN (or MQ_SYNC_SERVER_BIN) names one
  * explicitly; otherwise this checkout's sources are always built first (a
