@@ -125,6 +125,8 @@ class VersionsCopyTest {
             VersionsCopy.reason(Reason.ReadyNow, VersionStatus.Ready("Real-Debrid")),
         )
         assertEquals("Ready now", VersionsCopy.reason(Reason.ReadyNow))
+        // A film replayed and an episode after the last one alike (walk EW-F1).
+        assertEquals("Same release as last time", VersionsCopy.reason(Reason.SameReleaseAsLast))
         assertEquals(
             // The four the web names, and the words for a group from a newer core.
             listOf("Best quality", "Smaller and faster", "Other languages", "Needs download", "Other versions"),

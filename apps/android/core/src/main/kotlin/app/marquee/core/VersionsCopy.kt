@@ -59,7 +59,7 @@ object VersionsCopy {
             }
 
             Reason.SameReleaseAsLast -> {
-                "Same release as the last episode"
+                "Same release as last time"
             }
 
             Reason.YourLanguage -> {

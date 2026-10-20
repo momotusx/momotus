@@ -23,6 +23,8 @@ test("reasons read as plain sentences", () => {
   expect(reasonText("readyNow", { kind: "ready", service: "Real-Debrid" })).toBe("Ready now, cached on Real-Debrid");
   expect(reasonText("readyNow", { kind: "direct" })).toBe("Ready now");
   expect(reasonText("smallerFaster", { kind: "direct" })).toBe("Smaller and faster to start");
+  // A film replayed and an episode after the last one alike (Android walk EW-F1).
+  expect(reasonText("sameReleaseAsLast", { kind: "direct" })).toBe("Same release as last time");
 });
 
 test("status always has a word", () => {

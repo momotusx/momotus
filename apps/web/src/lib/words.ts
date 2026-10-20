@@ -30,7 +30,7 @@ export function reasonText(r: Reason, status: VersionStatus): string {
     case "matchesScreen":
       return "Matches your screen";
     case "sameReleaseAsLast":
-      return "Same release as the last episode";
+      return "Same release as last time";
     case "yourLanguage":
       return "In your language";
     case "smallerFaster":

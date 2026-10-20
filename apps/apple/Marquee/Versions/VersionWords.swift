@@ -51,7 +51,7 @@ enum VersionWords {
             if case .ready(let service?)? = status { "Ready now, cached on \(service)" } else { "Ready now" }
         case "playsDirectly": "Plays directly on this device"
         case "matchesScreen": "Matches your screen"
-        case "sameReleaseAsLast": "Same release as the last episode"
+        case "sameReleaseAsLast": "Same release as last time"
         case "yourLanguage": "In your language"
         case "smallerFaster": "Smaller and faster to start"
         default: reason
