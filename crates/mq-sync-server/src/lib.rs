@@ -15,6 +15,10 @@
 //! entries members sign, which the relay checks with the same rules devices
 //! use before storing them, and copies to a journal file so restoring the
 //! database alone never loses one.
+//!
+//! A deleted account leaves only its id in `gone`, in the database and in the
+//! journal, so no crash, restore or replay brings it back: its routes answer
+//! 410 `accountGone`.
 // ponytail: database calls run on the async workers under one lock; move
 // them to spawn_blocking when one relay serves many busy accounts.
 
@@ -22,7 +26,7 @@ use axum::extract::Path as UrlPath;
 use axum::extract::{ConnectInfo, DefaultBodyLimit, Query, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post, put};
+use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as B64;
@@ -40,7 +44,7 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::io::Write as _;
 use std::net::{IpAddr, SocketAddr};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -59,7 +63,7 @@ const TOKEN_SKEW_MS: u64 = 5 * 60 * 1000;
 /// Tokens a member may hold from signed requests; more revoke the oldest.
 const FRESH_TOKENS: i64 = 3;
 /// The database layout this build writes; an older one is refused.
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -101,6 +105,8 @@ struct AppState {
     /// Lines of every accepted roster entry; written after the database
     /// commits, under the database lock, so its order is the table's.
     journal: Arc<Mutex<std::fs::File>>,
+    /// Where the journal lives, for the rewrite after a deletion.
+    journal_path: Arc<PathBuf>,
     /// A journal write failed: no roster write is taken until a restart
     /// writes the journal again from the table, so it never has a gap.
     journal_failed: Arc<AtomicBool>,
@@ -119,10 +125,12 @@ pub fn router(db: &Path, config: Config) -> Result<Router, String> {
     let conn = Connection::open(db).map_err(|e| e.to_string())?;
     let (conn, generation, generation_since_ms, relay_id) =
         open_database(conn, &config).map_err(|e| e.to_string())?;
-    let journal = open_journal(&db.with_extension("roster.jsonl"), &conn)?;
+    let journal_path = db.with_extension("roster.jsonl");
+    let journal = open_journal(&journal_path, &conn)?;
     let state = AppState {
         db: Arc::new(Mutex::new(conn)),
         journal: Arc::new(Mutex::new(journal)),
+        journal_path: Arc::new(journal_path),
         journal_failed: Arc::default(),
         config: Arc::new(config),
         generation: Arc::new(generation),
@@ -134,6 +142,7 @@ pub fn router(db: &Path, config: Config) -> Result<Router, String> {
     Ok(Router::new()
         .route("/v1/relay", get(relay_info))
         .route("/v1/accounts", post(create_account))
+        .route("/v1/account", delete(delete_account))
         .route("/v1/tokens", post(fresh_token))
         .route("/v1/roster", get(read_roster).post(append_roster))
         .route("/v1/roster/replay", post(replay_roster))
@@ -149,6 +158,7 @@ pub fn router(db: &Path, config: Config) -> Result<Router, String> {
 
 const SCHEMA: &str = "
 PRAGMA journal_mode = WAL;
+PRAGMA secure_delete = ON;
 CREATE TABLE IF NOT EXISTS meta (
     key    TEXT PRIMARY KEY,
     value  TEXT NOT NULL
@@ -206,6 +216,10 @@ CREATE TABLE IF NOT EXISTS recovery (
 CREATE TABLE IF NOT EXISTS token_nonce (
     nonce       BLOB PRIMARY KEY,
     expires_ms  INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS gone (
+    account     TEXT PRIMARY KEY,
+    deleted_ms  INTEGER NOT NULL
 );
 ";
 
@@ -265,18 +279,29 @@ fn open_database(conn: Connection, config: &Config) -> rusqlite::Result<Opened> 
     Ok((conn, generation, since, relay_id))
 }
 
+/// One journal line: a roster entry, or an account deleted for good.
 #[derive(Serialize, Deserialize)]
-struct JournalLine {
-    account: Id,
-    entry: Entry,
+#[serde(untagged)]
+enum JournalLine {
+    Entry {
+        account: Id,
+        entry: Entry,
+    },
+    Gone {
+        gone: Id,
+        #[serde(rename = "deletedMs")]
+        deleted_ms: u64,
+    },
 }
 
-/// Opens the roster journal and makes it and the table agree: entries the
-/// database lost are taken from the journal, then the journal is written
-/// again from the table, whole and in order. So a torn last line, and lines
-/// a crash or a failed write skipped (at the end or in the middle), are back
-/// before the relay takes a write. A line that conflicts with the table, or
-/// does not continue it, stops the relay.
+/// Opens the roster journal and makes it and the table agree: accounts a
+/// `gone` line names are deleted from the database first (a restored backup
+/// may still hold them) and keep their tombstone; entries the database lost
+/// are taken from the journal, never for a gone account; then the journal is
+/// written again from the tables, whole and in order. So a torn last line,
+/// and lines a crash or a failed write skipped (at the end or in the
+/// middle), are back before the relay takes a write. A line that conflicts
+/// with the table, or does not continue it, stops the relay.
 // ponytail: rewrites every account's roster at each start; append only the
 // missing lines when journals grow large.
 fn open_journal(path: &Path, conn: &Connection) -> Result<std::fs::File, String> {
@@ -290,24 +315,32 @@ fn open_journal(path: &Path, conn: &Connection) -> Result<std::fs::File, String>
     for (n, line) in text.split_inclusive(|&b| b == b'\n').enumerate() {
         let parsed = serde_json::from_slice::<JournalLine>(line);
         match (line.ends_with(b"\n"), parsed) {
-            (true, Ok(parsed)) => lines.push(parsed),
+            (true, Ok(JournalLine::Entry { account, entry })) => lines.push((account, entry)),
+            (true, Ok(JournalLine::Gone { gone, deleted_ms })) => {
+                let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+                purge(&tx, &hex::encode(gone.0), deleted_ms).map_err(|e| e.to_string())?;
+                tx.commit().map_err(|e| e.to_string())?;
+            }
             // Torn while being written: the entry was never acknowledged.
             (false, _) => break,
             (true, Err(_)) => return Err(format!("roster journal line {} is damaged", n + 1)),
         }
     }
-    for line in &lines {
-        let body = line.entry.parse().map_err(|e| e.to_string())?;
+    for (account, entry) in &lines {
+        if is_gone(conn, account).map_err(|e| e.to_string())? {
+            continue;
+        }
+        let body = entry.parse().map_err(|e| e.to_string())?;
         let stored: Option<Vec<u8>> = conn
             .query_row(
                 "SELECT hash FROM roster WHERE account = ?1 AND seq = ?2",
-                params![hex::encode(line.account.0), body.seq as i64],
+                params![hex::encode(account.0), body.seq as i64],
                 |r| r.get(0),
             )
             .optional()
             .map_err(|e| e.to_string())?;
         match stored {
-            Some(hash) if hash == line.entry.hash().0 => {}
+            Some(hash) if hash == entry.hash().0 => {}
             Some(_) => {
                 return Err(format!(
                     "roster journal and database disagree at seq {}",
@@ -316,9 +349,9 @@ fn open_journal(path: &Path, conn: &Connection) -> Result<std::fs::File, String>
             }
             None => {
                 let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
-                let entry = std::slice::from_ref(&line.entry);
+                let entry = std::slice::from_ref(entry);
                 if let Err(refused) =
-                    append_entries(&tx, &line.account, entry, None).map_err(|e| e.to_string())?
+                    append_entries(&tx, account, entry, None).map_err(|e| e.to_string())?
                 {
                     return Err(format!("roster journal seq {}: {}", body.seq, refused.1));
                 }
@@ -326,35 +359,93 @@ fn open_journal(path: &Path, conn: &Connection) -> Result<std::fs::File, String>
             }
         }
     }
-    let all = (|| -> rusqlite::Result<Vec<(String, Entry)>> {
-        let mut stmt =
-            conn.prepare("SELECT account, body, sig FROM roster ORDER BY account, seq")?;
-        stmt.query_map([], |r| Ok((r.get(0)?, stored_entry(r.get(1)?, r.get(2)?))))?
-            .collect()
-    })()
-    .map_err(|e| e.to_string())?;
-    let temp = path.with_extension("jsonl.tmp");
-    let mut file = std::fs::File::create(&temp).map_err(fail)?;
-    for (account, entry) in &all {
-        let account = account_id(account).expect("stored account ids are hex");
-        write_line(&mut file, &account, entry).map_err(fail)?;
-    }
-    file.sync_all().map_err(fail)?;
-    std::fs::rename(&temp, path).map_err(fail)?;
-    std::fs::OpenOptions::new()
-        .append(true)
-        .open(path)
-        .map_err(fail)
+    rewrite_journal(path, conn).map_err(fail)
 }
 
-fn write_line(file: &mut std::fs::File, account: &Id, entry: &Entry) -> std::io::Result<()> {
-    let mut line = serde_json::to_vec(&JournalLine {
-        account: *account,
-        entry: entry.clone(),
-    })
-    .expect("journal lines serialize");
+/// Writes the journal again from the tables (every tombstone, then every
+/// roster entry in order) and returns a handle that appends to the new
+/// file: a temp file, fsync, rename, fsync of the directory.
+// ponytail: reads every account's roster under the lock; batch deletions
+// (one rewrite for many) when they get frequent.
+fn rewrite_journal(path: &Path, conn: &Connection) -> std::io::Result<std::fs::File> {
+    let tables = (|| -> rusqlite::Result<_> {
+        let mut gone = conn.prepare("SELECT account, deleted_ms FROM gone ORDER BY account")?;
+        let gone = gone
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let mut stmt =
+            conn.prepare("SELECT account, body, sig FROM roster ORDER BY account, seq")?;
+        let entries = stmt
+            .query_map([], |r| {
+                Ok((r.get::<_, String>(0)?, stored_entry(r.get(1)?, r.get(2)?)))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok((gone, entries))
+    })();
+    let (gone, entries) = tables.map_err(std::io::Error::other)?;
+    let id = |account: &str| account_id(account).expect("stored account ids are hex");
+    let temp = path.with_extension("jsonl.tmp");
+    let mut file = std::fs::File::create(&temp)?;
+    for (account, deleted_ms) in gone {
+        let line = JournalLine::Gone {
+            gone: id(&account),
+            deleted_ms: deleted_ms as u64,
+        };
+        write_line(&mut file, &line)?;
+    }
+    for (account, entry) in entries {
+        let account = id(&account);
+        write_line(&mut file, &JournalLine::Entry { account, entry })?;
+    }
+    file.sync_all()?;
+    std::fs::rename(&temp, path)?;
+    let dir = path.parent().filter(|d| !d.as_os_str().is_empty());
+    std::fs::File::open(dir.unwrap_or(Path::new(".")))?.sync_all()?;
+    std::fs::OpenOptions::new().append(true).open(path)
+}
+
+fn write_line(file: &mut std::fs::File, line: &JournalLine) -> std::io::Result<()> {
+    let mut line = serde_json::to_vec(line).expect("journal lines serialize");
     line.push(b'\n');
     file.write_all(&line)
+}
+
+fn is_gone(db: &Connection, account: &Id) -> rusqlite::Result<bool> {
+    db.query_row(
+        "SELECT 1 FROM gone WHERE account = ?1",
+        params![hex::encode(account.0)],
+        |_| Ok(()),
+    )
+    .optional()
+    .map(|found| found.is_some())
+}
+
+/// Deletes everything the relay holds for `account` (records, roster,
+/// recovery data, tokens, the pairings it filled) and keeps only its
+/// tombstone, inside the caller's transaction. An earlier tombstone keeps
+/// its date.
+fn purge(tx: &Connection, account: &str, deleted_ms: u64) -> rusqlite::Result<()> {
+    tx.execute(
+        "INSERT INTO gone (account, deleted_ms) VALUES (?1, ?2) ON CONFLICT(account) DO NOTHING",
+        params![account, deleted_ms as i64],
+    )?;
+    for table in ["record", "roster", "recovery", "device", "pairing"] {
+        tx.execute(
+            &format!("DELETE FROM {table} WHERE account = ?1"),
+            [account],
+        )?;
+    }
+    tx.execute("DELETE FROM account WHERE id = ?1", [account])?;
+    Ok(())
+}
+
+/// The answer for an account that was deleted.
+fn account_gone() -> Response {
+    (
+        StatusCode::GONE,
+        Json(json!({ "error": "this account was deleted", "code": "accountGone" })),
+    )
+        .into_response()
 }
 
 /// Writes accepted entries to the journal, durably, before anyone is told
@@ -367,7 +458,13 @@ fn journal(state: &AppState, account: &Id, entries: &[Entry]) -> std::io::Result
     let mut file = state.journal.lock().unwrap_or_else(|p| p.into_inner());
     let written = entries
         .iter()
-        .try_for_each(|entry| write_line(&mut file, account, entry))
+        .try_for_each(|entry| {
+            let line = JournalLine::Entry {
+                account: *account,
+                entry: entry.clone(),
+            };
+            write_line(&mut file, &line)
+        })
         .and_then(|()| file.sync_data());
     if written.is_err() {
         state.journal_failed.store(true, Ordering::Relaxed);
@@ -498,6 +595,9 @@ async fn create_account(
     }
     let created = (|| -> rusqlite::Result<Result<String, Response>> {
         let tx = db.transaction()?;
+        if is_gone(&tx, &body.account)? {
+            return Ok(Err(account_gone()));
+        }
         if account_epoch(&tx, &body.account).optional()?.is_some() {
             return Ok(Err(error(
                 StatusCode::CONFLICT,
@@ -539,6 +639,40 @@ async fn create_account(
 fn journal_error(e: std::io::Error) -> Response {
     tracing::error!("roster journal: {e}");
     error(StatusCode::INTERNAL_SERVER_ERROR, "storage error")
+}
+
+/// Deletes the token's account now: everything goes in one transaction that
+/// keeps only the tombstone, then the journal is written again without the
+/// account's lines and with its `gone` line, and the append handle moves to
+/// the new file. Every device of the account then gets 410 `accountGone`.
+async fn delete_account(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let mut db = lock(&state);
+    let auth = match active(authorize(&db, &headers)) {
+        Ok(auth) => auth,
+        Err(refusal) => return *refusal,
+    };
+    if let Some(stopped) = journal_stopped(&state) {
+        return stopped;
+    }
+    let deleted = (|| {
+        let tx = db.transaction()?;
+        purge(&tx, &hex::encode(auth.account.0), state.now_ms())?;
+        tx.commit()
+    })();
+    if let Err(e) = deleted {
+        return storage_error("delete account", e);
+    }
+    let mut file = state.journal.lock().unwrap_or_else(|p| p.into_inner());
+    match rewrite_journal(&state.journal_path, &db) {
+        Ok(new) => {
+            *file = new;
+            Json(json!({})).into_response()
+        }
+        Err(e) => {
+            state.journal_failed.store(true, Ordering::Relaxed);
+            journal_error(e)
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -920,6 +1054,11 @@ async fn replay_roster(
     if let Some(stopped) = journal_stopped(&state) {
         return stopped;
     }
+    match is_gone(&db, &request.account) {
+        Ok(true) => return account_gone(),
+        Ok(false) => {}
+        Err(e) => return storage_error("replay roster", e),
+    }
     let exists: rusqlite::Result<Option<i64>> = db
         .query_row(
             "SELECT 1 FROM account WHERE id = ?1",
@@ -969,6 +1108,11 @@ async fn fresh_token(
         return refused();
     }
     let mut db = lock(&state);
+    match is_gone(&db, &request.account) {
+        Ok(true) => return account_gone(),
+        Ok(false) => {}
+        Err(e) => return storage_error("fresh token", e),
+    }
     let granted = (|| -> rusqlite::Result<Option<String>> {
         let tx = db.transaction()?;
         let entries = account_entries(&tx, &request.account)?;
@@ -1684,6 +1828,7 @@ mod tests {
             db: Arc::new(Mutex::new(conn)),
             // Open for reading only: every journal write fails.
             journal: Arc::new(Mutex::new(std::fs::File::open(&path).unwrap())),
+            journal_path: Arc::new(path.clone()),
             journal_failed: Arc::default(),
             config: Arc::new(Config::default()),
             generation: Arc::new(generation),
