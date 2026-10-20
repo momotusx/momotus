@@ -693,6 +693,34 @@ async fn a_torrent_playback_sends_its_rate_to_the_engine() {
     );
 }
 
+/// A torrent file larger than the room on a device under the window's
+/// floor (plans/streaming-window.md 2.1) fails with "this device is full"
+/// before its start is asked for; with room for it, it plays whole.
+#[cfg(feature = "torrent")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_torrent_on_a_full_device_is_refused_and_one_that_fits_plays_whole() {
+    let (s, t, _owner, kid, found) = torrent_kid().await;
+    kid.set_punches(true);
+    kid.set_free_bytes(mq_engine::RESERVE_BYTES + 1024 * 1024);
+    let view = PlaybackView::open(&kid, found.clone(), target("movie", "tt1", "tt1"));
+    until("the playback failed", || {
+        view.snapshot().phase == PlaybackPhase::Failed
+    })
+    .await;
+    let attempts = view.snapshot().attempts;
+    assert!(
+        attempts.iter().any(|a| a.error == "this device is full"),
+        "{attempts:?}"
+    );
+    assert!(s.leecher.stats(t).await.is_err(), "the torrent went");
+    let (s, t, _owner, kid, found) = torrent_kid().await;
+    kid.set_punches(true);
+    kid.set_free_bytes(mq_engine::RESERVE_BYTES + 64 * 1024 * 1024);
+    let view = PlaybackView::open(&kid, found, target("movie", "tt1", "tt1"));
+    ready(&view).await;
+    assert_eq!(s.leecher.stats(t).await.unwrap().window_bytes, None);
+}
+
 /// Whether `url` serves its first bytes within 10 s.
 #[cfg(feature = "torrent")]
 async fn serves(url: &str) -> bool {

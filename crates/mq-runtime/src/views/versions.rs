@@ -586,6 +586,11 @@ impl VersionsView {
         };
         let eligible = eligible(core, &path);
         let facts = &params.facts;
+        #[cfg(feature = "torrent")]
+        let (window, (reclaimable_bytes, committed_bytes)) =
+            (core.windows_ok(), core.room_counts());
+        #[cfg(not(feature = "torrent"))]
+        let (window, (reclaimable_bytes, committed_bytes)) = (false, (None, 0));
         let conditions = Conditions {
             runtime_s: facts.runtime_s,
             title_year: facts.title_year,
@@ -603,6 +608,9 @@ impl VersionsView {
             did_not_play: crate::speed::did_not_play(core.library(), mq_library::hlc::now_ms()),
             wrong_file: crate::speed::wrong_file(core.library(), mq_library::hlc::now_ms()),
             containers: crate::speed::containers(core.library()),
+            window,
+            reclaimable_bytes,
+            committed_bytes,
         };
         let item_id = item_id.map_or_else(
             || {

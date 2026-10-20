@@ -2571,6 +2571,7 @@ name = "mq-engine"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "libc",
  "librqbit",
  "librqbit-bencode",
  "librqbit-sha1-wrapper",
@@ -2707,7 +2708,6 @@ dependencies = [
  "futures-util",
  "getrandom 0.3.4",
  "imbl",
- "libc",
  "mq-addons",
  "mq-debrid",
  "mq-engine",
@@ -2762,6 +2762,7 @@ dependencies = [
 name = "mq-streams"
 version = "0.1.0"
 dependencies = [
+ "mq-engine-sched",
  "mq-protocol",
  "mq-relparse",
  "serde",

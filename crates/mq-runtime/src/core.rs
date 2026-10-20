@@ -127,6 +127,13 @@ struct Inner {
     free_bytes: std::sync::OnceLock<u64>,
     /// Tests: live seeders answered instead of the trackers'.
     live_seeders: std::sync::Mutex<Option<FakeSeeders>>,
+    /// The torrent folder's volume punches holes (plans/streaming-window.md
+    /// 2.6), probed when the engine starts.
+    #[cfg(feature = "torrent")]
+    punches: std::sync::OnceLock<bool>,
+    /// Walk builds: the window override (plans/streaming-window.md 4).
+    #[cfg_attr(not(feature = "torrent"), allow(dead_code))]
+    walk: Option<Walk>,
     /// TurkceAltyazi.org, read on this device: its caches and its one
     /// request at a time.
     turkcealtyazi: std::sync::OnceLock<Arc<mq_turkcealtyazi::Site>>,
@@ -209,7 +216,27 @@ impl Core {
         std::fs::create_dir_all(&config.data_dir)?;
         let device = Device::open(&config.data_dir, config.device_id)?;
         let torrents = config.data_dir.join("torrents");
-        Ok(Self::with_device(device, &config.profile_id, torrents)?.active())
+        let walk = Walk::read(&config.data_dir);
+        let core = Self::with_device(device, &config.profile_id, torrents, walk)?.active();
+        if let Some(walk) = walk {
+            walk.watch(core.inner.torrent_dir.clone());
+        }
+        // The probe before the first rank (plans/streaming-window.md 2.6),
+        // off the opening thread.
+        #[cfg(feature = "torrent")]
+        {
+            let inner = Arc::downgrade(&core.inner);
+            std::thread::spawn(move || {
+                let Some(inner) = inner.upgrade() else {
+                    return;
+                };
+                let _ = std::fs::create_dir_all(&inner.torrent_dir);
+                let punches = mq_engine::librqbit::punch_supported(&inner.torrent_dir);
+                let _ = inner.punches.set(punches);
+                tracing::info!(punches, "torrent folder probed");
+            });
+        }
+        Ok(core)
     }
 
     /// A core over a throwaway database, for tests and the CLI. `profile` is
@@ -217,7 +244,7 @@ impl Core {
     pub fn temporary(profile: &str) -> Result<Self, CoreError> {
         let torrents = std::env::temp_dir().join(format!("mq-torrents-{}", std::process::id()));
         let device = Device::new(Library::temporary()?, 1)?;
-        let core = Self::with_device(device, profile, torrents)?;
+        let core = Self::with_device(device, profile, torrents, None)?;
         // A throwaway core never asks real trackers: no swarm has a live
         // count unless a test gives one.
         core.set_live_seeders(HashMap::new());
@@ -231,6 +258,7 @@ impl Core {
         device: Arc<Device>,
         profile: &str,
         torrent_dir: PathBuf,
+        walk: Option<Walk>,
     ) -> Result<Self, CoreError> {
         // Build the release-name rule table off the UI path, so the first
         // stream list does not pay for it.
@@ -254,6 +282,9 @@ impl Core {
                 free_bytes: std::sync::OnceLock::new(),
                 live_seeders: std::sync::Mutex::default(),
                 turkcealtyazi: std::sync::OnceLock::new(),
+                #[cfg(feature = "torrent")]
+                punches: std::sync::OnceLock::new(),
+                walk,
             }),
             profile: profile.into(),
         })
@@ -421,7 +452,7 @@ impl Core {
             while !dir.exists() {
                 dir = dir.parent()?;
             }
-            free_space(dir)
+            mq_engine::free_space(dir)
         }
         #[cfg(not(all(unix, feature = "torrent")))]
         None
@@ -556,12 +587,60 @@ impl Core {
             .inner
             .engine
             .get_or_try_init(|| async {
-                mq_engine::Engine::start(self.engine_config())
+                let engine = mq_engine::Engine::start(self.engine_config())
                     .await
-                    .map_err(|e| CoreError::Torrent(e.to_string()))
+                    .map_err(|e| CoreError::Torrent(e.to_string()))?;
+                // The probe, once per launch, unless core open ran it
+                // (2.6).
+                if self.inner.punches.get().is_none() {
+                    let dir = self.inner.torrent_dir.clone();
+                    let punches = tokio::task::spawn_blocking(move || {
+                        mq_engine::librqbit::punch_supported(&dir)
+                    })
+                    .await
+                    .unwrap_or(false);
+                    let _ = self.inner.punches.set(punches);
+                }
+                Ok::<_, CoreError>(engine)
             })
             .await?;
         Ok(engine.clone())
+    }
+
+    /// A torrent playback may play in a window (plans/streaming-window.md
+    /// 2.6): the torrent folder's volume punches holes, and the engine runs
+    /// DWH with upload off (as the app's always does).
+    #[cfg(feature = "torrent")]
+    pub(crate) fn windows_ok(&self) -> bool {
+        self.inner.punches.get().copied().unwrap_or(false)
+    }
+
+    /// `R` and `C` for the ranking (plans/streaming-window.md 3.1): the
+    /// engine's last count, or before it starts every torrent folder (none
+    /// is in use) and no window.
+    #[cfg(feature = "torrent")]
+    pub(crate) fn room_counts(&self) -> (Option<u64>, u64) {
+        match self.inner.engine.get() {
+            Some(engine) => {
+                let (r, c) = engine.counted();
+                (Some(r), c)
+            }
+            None => (Some(mq_engine::reclaimable(&self.inner.torrent_dir)), 0),
+        }
+    }
+
+    /// Tests: the probe's answer, before the engine starts.
+    #[cfg(feature = "torrent")]
+    #[doc(hidden)]
+    pub fn set_punches(&self, punches: bool) {
+        let _ = self.inner.punches.set(punches);
+    }
+
+    /// Walk builds: the window every torrent playback gets
+    /// (plans/streaming-window.md 4).
+    #[cfg(feature = "torrent")]
+    pub(crate) fn walk_window(&self) -> Option<u64> {
+        self.inner.walk.and_then(|w| w.window)
     }
 
     /// How the app's engine runs. No exception for a LAN or an addon's host:
@@ -1317,27 +1396,87 @@ fn meta_failure(name: &str, error: &AddonError) -> String {
     }
 }
 
-/// `f_bavail x f_frsize` of the file system holding `dir`.
-#[cfg(all(unix, feature = "torrent"))]
-fn free_space(dir: &Path) -> Option<u64> {
-    use std::os::unix::ffi::OsStrExt;
-    let path = std::ffi::CString::new(dir.as_os_str().as_bytes()).ok()?;
-    let mut stat = std::mem::MaybeUninit::<libc::statvfs>::uninit();
-    // SAFETY: `path` is NUL terminated and `stat` is a buffer statvfs
-    // fills when it returns 0.
-    if unsafe { libc::statvfs(path.as_ptr(), stat.as_mut_ptr()) } != 0 {
-        return None;
+/// The walk-only setting (plans/streaming-window.md 4): debug builds read
+/// `walk-window` in the data folder, one or two numbers: the window `W` in
+/// bytes for every torrent playback (0 for none, a file that fits then
+/// plays whole), and the watchdog's free-space line (700 MB with a window,
+/// 480 MB without). Release builds never read it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Walk {
+    window: Option<u64>,
+    line: u64,
+}
+
+impl Walk {
+    fn read(data_dir: &Path) -> Option<Self> {
+        if !cfg!(debug_assertions) {
+            return None;
+        }
+        let text = std::fs::read_to_string(data_dir.join("walk-window")).ok()?;
+        Self::parse(&text)
     }
-    // SAFETY: statvfs returned 0, so it wrote `stat`.
-    let stat = unsafe { stat.assume_init() };
-    #[allow(clippy::unnecessary_cast)]
-    Some(stat.f_bavail as u64 * stat.f_frsize as u64)
+
+    fn parse(text: &str) -> Option<Self> {
+        let mut n = text.split_whitespace().map(str::parse::<u64>);
+        let window = Some(n.next()?.ok()?).filter(|&w| w > 0);
+        let line = match n.next() {
+            Some(line) => line.ok()?,
+            None if window.is_some() => 700_000_000,
+            None => 480_000_000,
+        };
+        Some(Self { window, line })
+    }
+
+    /// The watchdog: every second the free space where torrents are kept,
+    /// logged; under the line the process stops, playback and engine with
+    /// it (our writes never take free space under the 512 MiB reserve).
+    fn watch(self, torrent_dir: PathBuf) {
+        tracing::info!(window = ?self.window, line = self.line, "walk setting");
+        std::thread::spawn(move || {
+            loop {
+                let mut dir = torrent_dir.as_path();
+                while !dir.exists() {
+                    match dir.parent() {
+                        Some(up) => dir = up,
+                        None => break,
+                    }
+                }
+                #[cfg(feature = "torrent")]
+                if let Some(free) = mq_engine::free_space(dir) {
+                    tracing::info!(free, "walk free space");
+                    if free < self.line {
+                        tracing::error!(free, line = self.line, "walk watchdog: stopping");
+                        std::process::exit(86);
+                    }
+                }
+                std::thread::sleep(Duration::from_secs(1));
+            }
+        });
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use mq_http::HttpError;
+
+    /// The walk-only setting: a window and an optional line; no window is
+    /// 0; anything else is no setting.
+    #[test]
+    fn the_walk_setting_reads_a_window_and_a_line() {
+        let walk = |w, line| Some(Walk { window: w, line });
+        assert_eq!(
+            Walk::parse("157286400\n"),
+            walk(Some(157_286_400), 700_000_000)
+        );
+        assert_eq!(Walk::parse("0"), walk(None, 480_000_000));
+        assert_eq!(
+            Walk::parse("200000000 650000000"),
+            walk(Some(200_000_000), 650_000_000)
+        );
+        assert_eq!(Walk::parse(""), None);
+        assert_eq!(Walk::parse("x"), None);
+    }
 
     #[cfg(feature = "torrent")]
     #[test]

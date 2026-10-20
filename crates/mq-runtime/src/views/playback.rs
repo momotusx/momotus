@@ -371,6 +371,9 @@ struct State {
     /// gives the engine its exact rate (`report_duration`).
     #[cfg(feature = "torrent")]
     rate_of: Option<(mq_engine::TorrentHandle, usize, u64)>,
+    /// The player's last reported pause, sent to the engine on a change.
+    #[cfg(feature = "torrent")]
+    paused: bool,
 }
 
 pub struct PlaybackView {
@@ -443,6 +446,8 @@ impl State {
             torrents: Vec::new(),
             #[cfg(feature = "torrent")]
             rate_of: None,
+            #[cfg(feature = "torrent")]
+            paused: false,
         }
     }
 }
@@ -856,6 +861,20 @@ impl PlaybackView {
             }
             s.last = Some((position_ms, duration_ms));
             s.dirty = true;
+            #[cfg(feature = "torrent")]
+            if s.paused != paused {
+                s.paused = paused;
+                // A paused window keeps filling its readahead
+                // (plans/streaming-window.md 2.3).
+                if let Some((torrent, ..)) = s.rate_of {
+                    let core = self.core.clone();
+                    tokio::spawn(async move {
+                        if let Ok(engine) = core.torrent_engine().await {
+                            let _ = engine.set_paused(torrent, paused).await;
+                        }
+                    });
+                }
+            }
             s.saved_at.is_none_or(|t| t.elapsed() >= SAVE_EVERY)
         };
         if due {
@@ -1707,6 +1726,10 @@ async fn open_torrent(
     let by_episode = matches!(hint, FileHint::Episode { .. });
     let started = async {
         let file = engine.select_file(torrent, profile, &hint).await?;
+        let len = engine.files(torrent)?.get(file).map_or(0, |f| f.len);
+        let rate = guessed_rate(stream, len, by_episode || target.episode.is_some());
+        let resume_ms = lock(state).snapshot.resume_ms;
+        open_window(core, &engine, torrent, file, len, rate, resume_ms).await?;
         let reader = claim.open_reader(file).await?;
         let info = reader.file().clone();
         // The file the addon pointed at must be the one listed (3.4).
@@ -1792,26 +1815,64 @@ async fn open_torrent(
     Err(failed)
 }
 
-/// A torrent file's rate in bytes per second before the player reports its
-/// duration (plans/streaming-window.md 2.2): the larger of a rate for its
-/// resolution and quality (720p and under 5 Mbit/s, 1080p 10, a 1080p remux
-/// 30, 2160p 40, a 2160p remux 60) and its size over 3 h for a film, 1 h for
-/// an episode.
-#[cfg(any(test, feature = "torrent"))]
-#[cfg_attr(not(feature = "torrent"), allow(dead_code))]
-fn guessed_rate(stream: &ParsedStream, len: u64, episode: bool) -> u64 {
-    let r = &stream.release;
-    let remux = r.quality == mq_relparse::Quality::Remux;
-    let mbps: u64 = match (r.resolution.height(), remux) {
-        (h, true) if h >= 2160 => 60,
-        (h, false) if h >= 2160 => 40,
-        (h, true) if h >= 1080 => 30,
-        (h, false) if h >= 1080 => 10,
-        _ => 5,
+/// Plays `file` in a window when it does not fit (plans/streaming-window.md
+/// 2.1: its size is above `room = free + R - C - reserve`), or in a walk
+/// build's override window; else it plays whole. A volume that cannot
+/// punch holes plays whole, as today.
+#[cfg(feature = "torrent")]
+async fn open_window(
+    core: &Core,
+    engine: &mq_engine::Engine,
+    torrent: mq_engine::TorrentHandle,
+    file: usize,
+    len: u64,
+    rate: u64,
+    resume_ms: Option<u64>,
+) -> Result<(), mq_engine::EngineError> {
+    let walk = core.walk_window();
+    if !core.windows_ok() {
+        if walk.is_some() {
+            tracing::warn!("walk window: this volume cannot punch holes");
+        }
+        return Ok(());
+    }
+    let Some(free) = core.free_bytes() else {
+        return Ok(());
     };
-    let by_size = len / if episode { 3600 } else { 3 * 3600 };
-    (mbps * 1_000_000 / 8).max(by_size)
+    let p2p = core.speed(crate::speed::Kind::P2p).mbps;
+    let inputs = mq_engine::WindowInputs {
+        free,
+        reclaimable: engine.reclaimable().await,
+        committed: engine.committed(Some(torrent)).await,
+        bitrate: rate,
+        piece_len: u64::from(engine.piece_len(torrent)?),
+        fill: (f64::from(p2p) * 125_000.0) as u64,
+    };
+    if walk.is_none() && len <= inputs.room() {
+        return Ok(());
+    }
+    let mut plan = mq_engine::window_plan(engine.device_class(), inputs)?;
+    if let Some(w) = walk {
+        plan = plan.within(w).ok_or(mq_engine::EngineError::DeviceFull)?;
+    }
+    tracing::info!(
+        budget = plan.budget,
+        free,
+        room = inputs.room(),
+        walk = ?walk,
+        "torrent window"
+    );
+    let window = mq_engine::Window {
+        plan,
+        bitrate: rate,
+        metered: core.network() == crate::speed::Network::Cellular,
+        resume_at: resume_ms.map(|ms| ms * rate / 1000),
+    };
+    engine.window(torrent, file, window).await
 }
+
+#[cfg(any(test, feature = "torrent"))]
+use mq_streams::guessed_rate;
 
 /// How a torrent's start went.
 #[cfg(any(test, feature = "torrent"))]
