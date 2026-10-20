@@ -126,7 +126,7 @@ struct Inner {
     /// Tests: the free space read instead of the disk's.
     free_bytes: std::sync::OnceLock<u64>,
     /// Tests: live seeders answered instead of the trackers'.
-    live_seeders: std::sync::Mutex<Option<HashMap<String, u32>>>,
+    live_seeders: std::sync::Mutex<Option<FakeSeeders>>,
     /// TurkceAltyazi.org, read on this device: its caches and its one
     /// request at a time.
     turkcealtyazi: std::sync::OnceLock<Arc<mq_turkcealtyazi::Site>>,
@@ -422,10 +422,19 @@ impl Core {
     /// opening a view.
     #[doc(hidden)]
     pub fn set_live_seeders(&self, counts: HashMap<String, u32>) {
-        *self.fake_seeders() = Some(counts);
+        *self.fake_seeders() = Some(FakeSeeders { counts, misses: 0 });
     }
 
-    fn fake_seeders(&self) -> std::sync::MutexGuard<'_, Option<HashMap<String, u32>>> {
+    /// Tests: the next `times` asks of the fake counts answer nothing, as
+    /// a cold first scrape does.
+    #[doc(hidden)]
+    pub fn miss_live_seeders(&self, times: u32) {
+        if let Some(fake) = self.fake_seeders().as_mut() {
+            fake.misses = times;
+        }
+    }
+
+    fn fake_seeders(&self) -> std::sync::MutexGuard<'_, Option<FakeSeeders>> {
         self.inner
             .live_seeders
             .lock()
@@ -441,8 +450,15 @@ impl Core {
     /// trackers) as their trackers count them now, within about a second;
     /// `None` where none answered, and for every one without the engine.
     pub async fn live_seeders(&self, torrents: &[(String, Vec<String>)]) -> Vec<Option<u32>> {
-        if let Some(fake) = self.fake_seeders().as_ref() {
-            return torrents.iter().map(|(h, _)| fake.get(h).copied()).collect();
+        if let Some(fake) = self.fake_seeders().as_mut() {
+            if fake.misses > 0 {
+                fake.misses -= 1;
+                return vec![None; torrents.len()];
+            }
+            return torrents
+                .iter()
+                .map(|(h, _)| fake.counts.get(h).copied())
+                .collect();
         }
         #[cfg(feature = "torrent")]
         if let Ok(engine) = self.torrent_engine().await {
@@ -1181,6 +1197,13 @@ impl CacheStore for LibraryCache {
     fn generation(&self) -> u64 {
         self.0.removals()
     }
+}
+
+/// Tests: live seeders answered instead of the trackers'.
+struct FakeSeeders {
+    counts: HashMap<String, u32>,
+    /// Asks still to answer with nothing.
+    misses: u32,
 }
 
 /// No answer came at all: no connection (no network, no route, a name that

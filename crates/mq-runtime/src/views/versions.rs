@@ -1169,6 +1169,12 @@ fn cache_asks(
     asks
 }
 
+/// How long one scrape may take, the engine's first start included; the
+/// counts never hold `done`.
+const LIVE_WAIT: Duration = Duration::from_secs(10);
+/// The pause before asking again when no tracker answered at all.
+const LIVE_RETRY: Duration = Duration::from_secs(1);
+
 /// Swarms asked at most per answer: one UDP scrape packet.
 // ponytail: an addon's first 70 swarms, in its order; rank first and ask
 // the top ones if an addon lists more and the live ones sit past 70.
@@ -1206,10 +1212,18 @@ fn live_asks(
 /// no trackers of its own: the default ones answer zero for a swarm they
 /// do not track, which says nothing about one that lives on the DHT.
 async fn live_check(core: Core, swarms: Vec<(String, Vec<String>)>) -> Side {
-    let counts = tokio::time::timeout(SIDE_WAIT, core.live_seeders(&swarms)).await;
-    let Ok(counts) = counts else {
-        return Side::Live(Vec::new());
+    let ask = || async {
+        let counts = tokio::time::timeout(LIVE_WAIT, core.live_seeders(&swarms)).await;
+        counts.unwrap_or_else(|_| vec![None; swarms.len()])
     };
+    // A cold first scrape (the engine starting, tracker names not resolved
+    // yet) can come back with no answer at all: ask once more a moment
+    // later (Android walk EW-1, the first open after an install).
+    let mut counts = ask().await;
+    if counts.iter().all(Option::is_none) {
+        tokio::time::sleep(LIVE_RETRY).await;
+        counts = ask().await;
+    }
     Side::Live(
         swarms
             .into_iter()
@@ -1382,6 +1396,16 @@ fn rerank(s: &mut State, ranking: &Ranking) {
     s.ranked = rank(s.streams.clone(), &input);
     if !s.frozen {
         s.recommended = s.ranked.best().cloned();
+    } else if let Some(pick) = &s.recommended {
+        // Frozen: the pick stays, its facts (live seeders, line) follow,
+        // as long as its row still leads with the same source.
+        let same = |r: &&RankedRow| {
+            let (a, b) = (&r.stream, &pick.stream);
+            (&a.key, &a.addon_url, &a.service) == (&b.key, &b.addon_url, &b.service)
+        };
+        if let Some(row) = s.ranked.rows.iter().find(same) {
+            s.recommended = Some(row.clone());
+        }
     }
 }
 

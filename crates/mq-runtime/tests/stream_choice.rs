@@ -886,6 +886,49 @@ async fn a_version_this_device_could_not_decode_is_not_tried_first_again() {
     assert_eq!(row.line, mq_streams::ReasonLine::DidNotPlay);
 }
 
+/// Android walk EW-1: the first Versions open after an install kept the
+/// addon's numbers. A cold first scrape that answers nothing is asked again
+/// a moment later; its counts then reach the rows and, in a frozen view,
+/// the pick's own facts, while the pick stays.
+#[tokio::test]
+async fn a_cold_first_scrape_is_asked_again_and_reaches_a_frozen_pick() {
+    let server = Server::start(vec![
+        route("GET", "/stream/series/tt1%3A1%3A1.json", 200, &torrents()),
+        route("GET", "/meta/series/tt1.json", 200, &meta()),
+    ])
+    .await;
+    let core = core_with(&server);
+    core.set_debrid_keys(&[(StoreId::RealDebrid, "rd".into())]);
+    core.set_live_seeders(std::collections::HashMap::from([(HASH_A.to_owned(), 37)]));
+    core.miss_live_seeders(1);
+    let view = VersionsView::open(&core, params(TitleFacts::default()));
+    until("done", || view.snapshot().done).await;
+    let seeds = |r: &mq_runtime::VersionRow| match r.status {
+        mq_runtime::VersionStatus::Torrent { seeds } => seeds,
+        _ => panic!("a torrent row: {r:?}"),
+    };
+    let pick = view.snapshot().recommended.unwrap();
+    assert_eq!(pick.release_name, "Show.S01E01.1080p.WEB-DL.x264-AAA");
+    assert_eq!(
+        seeds(&pick),
+        Some(900),
+        "the addon's number until the counts come"
+    );
+    view.freeze();
+    let counted = || {
+        view.snapshot()
+            .recommended
+            .is_some_and(|p| seeds(&p) == Some(37))
+    };
+    until("the second scrape's counts", counted).await;
+    let pick = view.snapshot().recommended.unwrap();
+    assert_eq!(
+        pick.release_name, "Show.S01E01.1080p.WEB-DL.x264-AAA",
+        "frozen: the pick stays"
+    );
+    assert_eq!(pick.line, mq_streams::ReasonLine::Few { seeders: 37 });
+}
+
 /// After a restart the core reads the network the app last reported, not
 /// "other", until the app reports one again.
 #[tokio::test]
