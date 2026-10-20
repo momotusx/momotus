@@ -181,8 +181,11 @@ impl Library {
     }
 
     /// A throwaway database in the temp directory, removed on drop. Used by
-    /// tests and the CLI; WAL needs a real file for concurrent readers.
+    /// tests and the CLI; WAL needs a real file for concurrent readers. The
+    /// first one in a process also clears what ended processes left behind.
     pub fn temporary() -> Result<Self, LibraryError> {
+        static SWEPT: std::sync::Once = std::sync::Once::new();
+        SWEPT.call_once(|| sweep_temporaries(&std::env::temp_dir()));
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
         let path =
@@ -743,6 +746,52 @@ fn install_hooks(conn: &Connection, touched: Arc<Mutex<Vec<Table>>>) -> rusqlite
     }))?;
     conn.rollback_hook(Some(move || lock(&touched).clear()))?;
     Ok(())
+}
+
+/// Removes the temporary libraries (`mq-library-<pid>-<n>.sqlite` and its
+/// `-wal` and `-shm`) in `dir` whose process has ended. A library that
+/// is never dropped (a test that forgets a view holding its core, a run
+/// that was killed) keeps its files until the process ends; one day of test
+/// runs left 6,145 of them, 877 MB. Another live process's files stay.
+#[doc(hidden)]
+pub fn sweep_temporaries(dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let me = std::process::id();
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let pid = name
+            .to_str()
+            .and_then(|n| n.strip_prefix("mq-library-"))
+            .and_then(|rest| rest.split('-').next())
+            .and_then(|pid| pid.parse::<u32>().ok());
+        if let Some(pid) = pid
+            && pid != me
+            && !alive(pid)
+        {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+}
+
+/// The process `pid` exists (one we may not signal counts as existing).
+#[cfg(unix)]
+fn alive(pid: u32) -> bool {
+    let Ok(pid) = libc::pid_t::try_from(pid) else {
+        return true;
+    };
+    // Signal 0 checks the process without signalling it.
+    // SAFETY: kill with signal 0 has no effect on the process.
+    let gone = unsafe { libc::kill(pid, 0) } == -1
+        && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH);
+    !gone
+}
+
+/// Elsewhere nothing is swept.
+#[cfg(not(unix))]
+fn alive(_pid: u32) -> bool {
+    true
 }
 
 impl Drop for Library {

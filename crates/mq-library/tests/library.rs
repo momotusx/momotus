@@ -225,3 +225,61 @@ fn library_lists_added_titles_with_their_newest_progress() {
     assert_eq!(entries[0].last_watched_ms, Some(9));
     assert_eq!((entries[0].position_ms, entries[0].duration_ms), (20, 100));
 }
+
+/// Run by `a_leaked_library_of_an_ended_process_is_swept` in a child
+/// process: a library that is never dropped, as a test that forgets a view
+/// holding its core leaves one.
+#[test]
+#[ignore = "a child process of the sweep test"]
+fn leak_a_temporary_library() {
+    std::mem::forget(Library::temporary().unwrap());
+}
+
+/// A leaked temporary library keeps its files after its process ends; the
+/// next process's first temporary library removes them. Files of a live
+/// process, and this process's own, stay.
+#[test]
+fn a_leaked_library_of_an_ended_process_is_swept() {
+    // A directory of its own, so no other process's files are touched.
+    let dir = std::env::temp_dir().join(format!("mq-sweep-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let files = |pid: u32| -> Vec<std::path::PathBuf> {
+        let prefix = format!("mq-library-{pid}-");
+        std::fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .filter(|e| e.file_name().to_string_lossy().starts_with(&prefix))
+            .map(|e| e.path())
+            .collect()
+    };
+    let me = std::env::current_exe().unwrap();
+    let mut child = std::process::Command::new(&me)
+        .args(["--exact", "leak_a_temporary_library", "--ignored"])
+        .env("TMPDIR", &dir)
+        .stdout(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let ended = child.id();
+    assert!(child.wait().unwrap().success());
+    assert!(!files(ended).is_empty(), "the leaking case left its files");
+
+    let mut live = std::process::Command::new("sleep")
+        .arg("30")
+        .spawn()
+        .unwrap();
+    let mine = dir.join(format!("mq-library-{}-999999.sqlite", std::process::id()));
+    let theirs = dir.join(format!("mq-library-{}-0.sqlite", live.id()));
+    std::fs::write(&mine, b"").unwrap();
+    std::fs::write(&theirs, b"").unwrap();
+
+    mq_library::sweep_temporaries(&dir);
+    assert!(files(ended).is_empty(), "swept: {:?}", files(ended));
+    assert!(
+        mine.exists() && theirs.exists(),
+        "live processes keep theirs"
+    );
+
+    live.kill().unwrap();
+    live.wait().unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+}

@@ -2642,6 +2642,7 @@ dependencies = [
 name = "mq-library"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "rusqlite",
  "rusqlite_migration",
  "serde",
