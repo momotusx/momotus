@@ -39,7 +39,8 @@ export default function Discover() {
             <h2>Nothing to browse yet</h2>
             <p>{defaultsWords.emptyDiscover}</p>
             <div class="acts">
-              <A class="btn primary" href="/welcome" data-f="discover:setup" data-autofocus>
+              {/* The recommended addons to switch on, not the first-run doors. */}
+              <A class="btn primary" href="/welcome?step=2&review=1" data-f="discover:setup" data-autofocus>
                 <Wrench aria-hidden />
                 Set up Marquee
               </A>

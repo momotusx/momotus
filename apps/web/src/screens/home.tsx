@@ -193,7 +193,8 @@ export default function Home() {
             <h2>Home fills up from your addons</h2>
             <p>{defaultsWords.emptyHome}</p>
             <div class="acts">
-              <A class="btn primary" href="/welcome" data-f="home:setup" data-autofocus>
+              {/* Past first run: the recommended addons to switch, not the first-run doors. */}
+              <A class="btn primary" href={addons.state.data?.fresh ? "/welcome" : "/welcome?step=2&review=1"} data-f="home:setup" data-autofocus>
                 <Wrench aria-hidden />
                 Set up Marquee
               </A>

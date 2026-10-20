@@ -190,7 +190,7 @@ export function Row(props: { row: HomeRow; autofocus: boolean; root: () => Eleme
                 </p>
                 <p class="why">{props.row.state.state === "failed" ? props.row.state.reason : ""}</p>
               </div>
-              <A class="btn" href="/welcome" data-f={`fix:${id()}`}>
+              <A class="btn" href="/welcome?step=3" data-f={`fix:${id()}`}>
                 <Wrench aria-hidden />
                 Run setup check
               </A>

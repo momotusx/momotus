@@ -435,3 +435,15 @@ test("desktop: Library keeps the viewer's filter and sort on Back", async ({ bro
   await expect(page.locator('[data-f="lib-sort:name"]')).toHaveClass(/\bon\b/, { timeout: 10_000 });
   await context.close();
 });
+
+test("desktop: Setup check on a page that does not exist opens the setup check, not the first-run doors", async ({ browser }) => {
+  const { context, page, go } = await open(browser, "desktop", "/no-such-page");
+  await go();
+  const setup = page.locator('[data-f="stub:setup"]');
+  await expect(setup).toBeVisible({ timeout: 30_000 });
+  await expect(setup).toHaveAttribute("href", "/welcome?step=3");
+  await setup.click();
+  await expect(page).toHaveURL(/\/welcome\?step=3/);
+  await expect(page.locator('[data-f="welcome:stremio"]')).toHaveCount(0);
+  await context.close();
+});

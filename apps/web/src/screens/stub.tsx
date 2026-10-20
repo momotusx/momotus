@@ -15,7 +15,7 @@ export function Stub(props: { title: string; text: string; children?: JSX.Elemen
             <House aria-hidden />
             Back to Home
           </A>
-          <A class="btn" href="/welcome" data-f="stub:setup">
+          <A class="btn" href="/welcome?step=3" data-f="stub:setup">
             <Wrench aria-hidden />
             Setup check
           </A>
