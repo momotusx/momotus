@@ -227,3 +227,109 @@ async fn discover_follows_addon_changes() {
         "{empty:?}"
     );
 }
+
+/// A paging catalog whose every page fails once, then answers: the first
+/// page has tt0 to tt2, `skip=3` has tt3, `skip=4` nothing. Records paths.
+async fn flaky_addon() -> (AddonRow, Arc<Mutex<Vec<String>>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let asked = Arc::new(Mutex::new(Vec::<String>::new()));
+    let log = asked.clone();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let mut buf = [0u8; 2048];
+            let n = socket.read(&mut buf).await.unwrap_or(0);
+            let head = String::from_utf8_lossy(&buf[..n]).into_owned();
+            let path = head
+                .split_whitespace()
+                .nth(1)
+                .unwrap_or_default()
+                .to_owned();
+            let again = log.lock().unwrap().contains(&path);
+            log.lock().unwrap().push(path.clone());
+            let ids: Vec<u32> = if path.contains("skip=4") {
+                vec![]
+            } else if path.contains("skip=3") {
+                vec![3]
+            } else {
+                vec![0, 1, 2]
+            };
+            let metas: Vec<_> = ids
+                .iter()
+                .map(|i| serde_json::json!({"id": format!("tt{i}"), "type": "movie", "name": format!("M{i}")}))
+                .collect();
+            let body = serde_json::json!({ "metas": metas }).to_string();
+            let status = if again || path.contains("skip=4") {
+                "200 OK"
+            } else {
+                "500 Internal Server Error"
+            };
+            let reply = format!(
+                "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = socket.write_all(reply.as_bytes()).await;
+        }
+    });
+    let manifest = serde_json::json!({
+        "id": "flaky", "version": "1.0.0", "name": "Flaky", "types": ["movie"], "resources": ["catalog"],
+        "catalogs": [{"type": "movie", "id": "top", "name": "Popular", "extra": [{"name": "skip"}]}]
+    });
+    let row = AddonRow {
+        transport_url: format!("http://{addr}/manifest.json"),
+        manifest_json: manifest.to_string(),
+        position: 0,
+        enabled: true,
+        allow_private: true,
+    };
+    (row, asked)
+}
+
+/// Web journey review r3 P3-4: a failed page, and a failed catalog, are
+/// asked again by `load_more`; the items already shown stay.
+#[tokio::test]
+async fn a_failed_page_is_asked_again() {
+    let core = Core::temporary("p").unwrap();
+    let (addon, asked) = flaky_addon().await;
+    core.library()
+        .set_addons(core.profile(), &[addon], &core.hlc())
+        .unwrap();
+    let view = DiscoverView::open(&core);
+    let failed = |s: &mq_runtime::DiscoverSnapshot| matches!(&s.state, DiscoverState::Failed { reason } if !reason.is_empty());
+    until(&view, failed).await;
+    assert!(view.snapshot().items.is_empty(), "the catalog failed");
+    view.load_more();
+    until(&view, |s| s.state == DiscoverState::Ready).await;
+    assert_eq!(ids(&view), ["tt0", "tt1", "tt2"]);
+    view.load_more();
+    until(&view, failed).await;
+    assert_eq!(
+        ids(&view),
+        ["tt0", "tt1", "tt2"],
+        "a failed page keeps the items"
+    );
+    view.load_more();
+    until(&view, |s| s.state == DiscoverState::Ready).await;
+    assert_eq!(ids(&view), ["tt0", "tt1", "tt2", "tt3"]);
+    view.load_more();
+    until(&view, |s| s.state == DiscoverState::End).await;
+    view.load_more();
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let asked: Vec<String> = asked
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|p| p.rsplit('/').next().unwrap_or_default().to_owned())
+        .collect();
+    assert_eq!(
+        asked,
+        [
+            "top.json",
+            "top.json",
+            "skip=3.json",
+            "skip=3.json",
+            "skip=4.json"
+        ],
+        "the end asks nothing more"
+    );
+}

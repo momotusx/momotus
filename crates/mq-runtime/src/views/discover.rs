@@ -48,6 +48,8 @@ pub enum DiscoverState {
     Ready,
     /// The catalog has nothing more.
     End,
+    /// The last page asked failed; `items` keeps what came before (none
+    /// when the first page failed). `loadMore` asks that page again.
     Failed {
         reason: String,
     },
@@ -171,7 +173,8 @@ impl DiscoverView {
         self.inner.select(kind, catalog, genre);
     }
 
-    /// Loads the next page when the catalog has more and none is loading.
+    /// Loads the next page when the catalog has more and none is loading,
+    /// or asks a failed page again.
     pub fn load_more(&self) {
         self.inner.load_more();
     }
@@ -292,7 +295,12 @@ impl Inner {
     fn load_more(&self) {
         {
             let mut s = lock(&self.state);
-            if s.snapshot.state != DiscoverState::Ready {
+            // A failed page is asked again, the catalog itself when its
+            // first page failed (web journey review r3 P3-4).
+            if !matches!(
+                s.snapshot.state,
+                DiscoverState::Ready | DiscoverState::Failed { .. }
+            ) {
                 return;
             }
             s.snapshot.state = DiscoverState::Loading;
