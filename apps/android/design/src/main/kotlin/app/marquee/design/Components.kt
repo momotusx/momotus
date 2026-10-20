@@ -206,6 +206,8 @@ fun Chip(
     focusRequester: FocusRequester? = null,
     onFocusChange: ((Boolean) -> Unit)? = null,
     switch: Boolean = false,
+    /** A quieter word after the label: the addon a catalog comes from, as on the web and Apple TV. */
+    detail: String? = null,
 ) {
     val tv = Marquee.form == Form.Tv
     val colors = Marquee.colors
@@ -250,13 +252,23 @@ fun Chip(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (selected) MqIcon(Icons.Check, tint = colors.onPrimary, size = if (tv) 24.dp else 16.dp)
+                val ink = if (selected) colors.onPrimary else colors.muted
                 MqText(
                     label,
                     role = TextRole.Callout,
-                    color = if (selected) colors.onPrimary else colors.muted,
+                    color = ink,
                     weight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                     maxLines = 1,
                 )
+                if (detail != null) {
+                    MqText(
+                        detail,
+                        role = TextRole.Callout,
+                        color = ink.copy(alpha = 0.7f),
+                        weight = FontWeight.Normal,
+                        maxLines = 1,
+                    )
+                }
             }
         }
     }

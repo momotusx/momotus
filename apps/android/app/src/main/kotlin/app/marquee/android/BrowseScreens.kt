@@ -157,6 +157,8 @@ internal fun <T> ChipRow(
     choices: List<Pair<T, String>>,
     selected: T,
     side: Dp = Marquee.safe.side,
+    /** A quieter word after a chip's label (a catalog's addon). */
+    detail: (T) -> String? = { null },
     onSelect: (T) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
@@ -168,7 +170,7 @@ internal fun <T> ChipRow(
         ) {
             // By value: two addons can each have a "Popular" catalog of one kind, and a repeated key throws.
             items(choices, key = { it.first.toString() }) { (value, name) ->
-                Chip(name, selected = value == selected, onClick = { onSelect(value) })
+                Chip(name, selected = value == selected, onClick = { onSelect(value) }, detail = detail(value))
             }
         }
     }
@@ -462,9 +464,15 @@ fun DiscoverScreen(
                     }
                 }
                 full("catalogs") {
-                    ChipRow("Catalog", snapshot.catalogs.map { it.id to it.name }, snapshot.catalog, 0.dp) { catalog ->
-                        if (catalog != null) view.select(catalog = catalog)
-                    }
+                    // Each with its addon, as on the web and Apple TV: names drop a leading addon name (the core).
+                    val sources = snapshot.catalogs.associate { it.id to it.source }
+                    ChipRow(
+                        "Catalog",
+                        snapshot.catalogs.map { it.id to it.name },
+                        snapshot.catalog,
+                        0.dp,
+                        detail = { sources[it] },
+                    ) { catalog -> if (catalog != null) view.select(catalog = catalog) }
                 }
                 if (snapshot.genres.isNotEmpty()) {
                     full("genres") {
@@ -475,7 +483,9 @@ fun DiscoverScreen(
                         }
                     }
                 }
-                val catalogName = snapshot.catalogs.firstOrNull { it.id == snapshot.catalog }?.name ?: "this catalog"
+                val catalogName =
+                    snapshot.catalogs.firstOrNull { it.id == snapshot.catalog }?.let { "${it.name} from ${it.source}" }
+                        ?: "this catalog"
                 val state = snapshot.state
                 when {
                     snapshot.genreRequired && snapshot.genre == null -> {

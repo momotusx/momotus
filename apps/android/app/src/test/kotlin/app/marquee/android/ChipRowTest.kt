@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
@@ -38,5 +39,18 @@ class ChipRowTest {
         chips.assertCountEquals(2)
         chips[1].performClick()
         compose.runOnIdle { assertEquals("tmdb|movie|tmdb.top", picked) }
+    }
+
+    @Test
+    fun `a catalog chip names its addon after its own name`() {
+        val sources = mapOf("cinemeta|movie|top" to "Cinemeta", "tmdb|movie|tmdb.top" to "The Movie Database Addon")
+        compose.setContent {
+            MarqueeTheme(Form.Phone) {
+                val choices = listOf("cinemeta|movie|top" to "Popular", "tmdb|movie|tmdb.top" to "Popular")
+                ChipRow("Catalog", choices, "cinemeta|movie|top", detail = { sources[it] }) {}
+            }
+        }
+        compose.onNodeWithText("Cinemeta").assertExists()
+        compose.onNodeWithText("The Movie Database Addon").assertExists()
     }
 }
