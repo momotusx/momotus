@@ -528,7 +528,8 @@ struct PlayerControls: View {
         return PlayerLayout.subtitleValue(
             picked: model.subtitle.map(SubtitleMenu.heading) ?? file,
             found: (model.playback?.subtitles.count ?? 0) + model.textTracks.count,
-            pending: model.playback?.subtitlesPending == true
+            pending: model.playback?.subtitlesPending == true,
+            ready: model.playback?.phase == "ready"
         )
     }
 

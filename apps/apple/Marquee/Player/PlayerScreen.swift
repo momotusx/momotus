@@ -89,19 +89,6 @@ struct PlayerScreen: View {
                 .accessibilityAction { touched(toggle: false) }
                 .accessibilityHidden(controls)
             #endif
-            if let text = model.subtitleText {
-                GeometryReader { geo in
-                    let place = subtitlePlace(geo.size)
-                    // Its foot stays put; a larger caption style or a second line grows upward.
-                    SubtitleLine(text: text, size: model.subtitleSize)
-                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { subtitleBox = $0 }
-                        .scaleEffect(place.scale, anchor: .bottom)
-                        .frame(width: geo.size.width, height: max(place.foot, 0), alignment: .bottom)
-                }
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
-                .animation(Theme.Motion.panel, value: controls)
-            }
             StatusOverlay(
                 model: model, back: close, chooseVersion: model.versions == nil ? nil : { showVersions = true },
                 overControls: phoneControls
@@ -126,6 +113,21 @@ struct PlayerScreen: View {
                     .padding(Theme.Space.m)
                     .allowsHitTesting(false)
                     .transition(.opacity)
+            }
+            // Over the controls and their scrim, so a line never reads dimmed with
+            // them up (the iPhone walk, round 3); the rules keep it off their buttons.
+            if let text = model.subtitleText, model.playback?.phase != "failed" {
+                GeometryReader { geo in
+                    let place = subtitlePlace(geo.size)
+                    // Its foot stays put; a larger caption style or a second line grows upward.
+                    SubtitleLine(text: text, size: model.subtitleSize)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { subtitleBox = $0 }
+                        .scaleEffect(place.scale, anchor: .bottom)
+                        .frame(width: geo.size.width, height: max(place.foot, 0), alignment: .bottom)
+                }
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+                .animation(Theme.Motion.panel, value: controls)
             }
             if let status = model.subtitleStatus, model.playback?.phase != "failed" {
                 // Why the picked subtitles did not load, for a few seconds, clear of Skip at the other corner.

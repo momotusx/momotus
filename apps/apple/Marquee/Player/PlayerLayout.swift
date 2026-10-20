@@ -188,10 +188,14 @@ enum PlayerLayout {
         (canChoose ? [.choose] : []) + [.retry, .back]
     }
 
-    static func subtitleValue(picked: String?, found: Int, pending: Bool) -> (text: String, searching: Bool) {
-        let searching = pending && found > 0
+    /// The Subtitles value. The core asks the subtitle addons once it has a
+    /// stream (`ready`); before that it has not asked yet, so the value says
+    /// Searching, never None found (the iPhone walk, round 3).
+    static func subtitleValue(picked: String?, found: Int, pending: Bool, ready: Bool) -> (text: String, searching: Bool) {
+        let asking = pending || !ready
+        let searching = asking && found > 0
         if let picked { return (picked, searching) }
-        if found == 0 { return (pending ? "Searching" : "None found", false) }
+        if found == 0 { return (asking ? "Searching" : "None found", false) }
         return ("Off, \(found) found", searching)
     }
 
