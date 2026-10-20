@@ -42,6 +42,11 @@ pub struct ChunkTracker {
     // Quick to retrieve stats, that MUST be in sync with the BFs
     // above (have/selected).
     hns: HaveNeededSelected,
+
+    // Marquee fork (plans/streaming-window.md 2.5): pieces an eviction
+    // round gated and has not released; their chunk bits stay set until it
+    // does, whatever else requeues pieces.
+    evicting: BF,
 }
 
 #[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
@@ -172,6 +177,9 @@ impl ChunkTracker {
         let mut ct = Self {
             chunk_status: compute_chunk_have_status(&lengths, have_pieces.as_slice())
                 .context("error computing chunk status")?,
+            evicting: BF::from_boxed_slice(
+                vec![0u8; lengths.piece_bitfield_bytes()].into_boxed_slice(),
+            ),
             queue_pieces: needed_pieces,
             selected: selected_pieces,
             lengths,
@@ -259,6 +267,8 @@ impl ChunkTracker {
             .get(index.get() as usize)
             .map(|r| *r)
             .unwrap_or_default()
+            // Marquee fork: an eviction round releases its own pieces.
+            || self.evicting[index.get_usize()]
         {
             return;
         }
@@ -298,6 +308,83 @@ impl ChunkTracker {
 
     pub fn get_remaining_bytes(&self) -> u64 {
         self.hns.needed_bytes
+    }
+
+    /// Marquee fork (plans/streaming-window.md 2.5, step 1): a verified
+    /// piece is no longer claimed, in memory. Its chunk bits stay set, so a
+    /// late block for it is dropped. Returns its length.
+    pub(crate) fn gate_verified(&mut self, idx: ValidPieceIndex, file_infos: &FileInfos) -> u64 {
+        let id = idx.get_usize();
+        self.have.as_slice_mut().set(id, false);
+        let len = u64::from(self.lengths.piece_length(idx));
+        self.hns.have_bytes -= len;
+        if self.selected[id] {
+            self.hns.needed_bytes += len;
+        }
+        self.file_bytes(idx, file_infos, false);
+        self.evicting.set(id, true);
+        len
+    }
+
+    /// Marquee fork: a gated verified piece claimed again, none of its
+    /// bytes having gone. Returns its length.
+    pub(crate) fn restore_verified(&mut self, idx: ValidPieceIndex, file_infos: &FileInfos) -> u64 {
+        let id = idx.get_usize();
+        self.have.as_slice_mut().set(id, true);
+        let len = u64::from(self.lengths.piece_length(idx));
+        self.hns.have_bytes += len;
+        if self.selected[id] {
+            self.hns.needed_bytes -= len;
+        }
+        self.file_bytes(idx, file_infos, true);
+        self.evicting.set(id, false);
+        len
+    }
+
+    fn file_bytes(&mut self, idx: ValidPieceIndex, file_infos: &FileInfos, add: bool) {
+        for (slot, fi) in self.per_file_bytes.iter_mut().zip(file_infos.iter()) {
+            if !fi.piece_range.contains(&idx.get()) {
+                continue;
+            }
+            let n = self
+                .lengths
+                .size_of_piece_in_file(idx.get(), fi.offset_in_torrent, fi.len);
+            *slot = if add {
+                *slot + n
+            } else {
+                slot.saturating_sub(n)
+            };
+        }
+    }
+
+    /// Marquee fork (2.5, an orphan): a piece partly written and not
+    /// verified gets every chunk bit, so stale blocks for it are dropped.
+    /// `false` when it is not one: nothing written (nothing to free), or
+    /// every bit already set (its hash may be running).
+    pub(crate) fn gate_orphan(&mut self, idx: ValidPieceIndex) -> bool {
+        let id = idx.get_usize();
+        let range = self.lengths.chunk_range(idx);
+        let Some(bits) = self.chunk_status.get_mut(range) else {
+            return false;
+        };
+        if self.have.as_slice()[id] || bits.not_any() || bits.all() {
+            return false;
+        }
+        bits.fill(true);
+        self.evicting.set(id, true);
+        true
+    }
+
+    /// Marquee fork (2.5, step 4): a gated piece's chunk bits cleared, and
+    /// queued again when selected.
+    pub(crate) fn release_evicted(&mut self, idx: ValidPieceIndex) {
+        let id = idx.get_usize();
+        if let Some(s) = self.chunk_status.get_mut(self.lengths.chunk_range(idx)) {
+            s.fill(false);
+        }
+        self.queue_pieces
+            .set(id, self.selected[id] && !self.have.as_slice()[id]);
+        self.evicting.set(id, false);
     }
 
     // return true if the whole piece is marked downloaded

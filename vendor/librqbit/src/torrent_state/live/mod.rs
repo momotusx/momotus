@@ -39,6 +39,8 @@
 // > so don't lock them both at the same time at all, or at the worst lock them in the
 // > same order (peers one first, then the global one).
 
+// Marquee fork (plans/streaming-window.md 2.5).
+pub mod evict;
 pub mod ext;
 pub mod peer;
 pub mod peers;
@@ -676,6 +678,12 @@ impl TorrentStateLive {
     }
     pub(crate) fn file_ops(&self) -> FileOps<'_> {
         FileOps::new(&self.metadata.info, &*self.files, &self.metadata.file_infos)
+    }
+
+    /// Marquee fork (plans/streaming-window.md 2.5): a piece's lock. Its
+    /// write side is only ever tried, under the torrent write lock.
+    pub(crate) fn piece_lock(&self, piece: ValidPieceIndex) -> &RwLock<()> {
+        &self.per_piece_locks[piece.get_usize()]
     }
 
     pub(crate) fn lock_read(

@@ -33,6 +33,7 @@ pub mod middleware;
 use std::{
     any::{Any, TypeId},
     io::IoSlice,
+    ops::Range,
     path::Path,
 };
 
@@ -168,6 +169,14 @@ pub trait TorrentStorage: Send + Sync {
     fn on_piece_completed(&self, _piece_index: ValidPieceIndex) -> anyhow::Result<()> {
         Ok(())
     }
+
+    /// Marquee fork (plans/streaming-window.md 2.5): frees the whole
+    /// filesystem blocks inside `offset..offset + len` of a file, which
+    /// keeps its length, and returns the range freed (empty when no whole
+    /// block fits). A storage that cannot free space says so with an error.
+    fn punch(&self, _file_id: usize, _offset: u64, _len: u64) -> anyhow::Result<Range<u64>> {
+        anyhow::bail!("this storage cannot punch holes")
+    }
 }
 
 impl<U: TorrentStorage + ?Sized> TorrentStorage for Box<U> {
@@ -205,5 +214,9 @@ impl<U: TorrentStorage + ?Sized> TorrentStorage for Box<U> {
 
     fn on_piece_completed(&self, piece_id: ValidPieceIndex) -> anyhow::Result<()> {
         (**self).on_piece_completed(piece_id)
+    }
+
+    fn punch(&self, file_id: usize, offset: u64, len: u64) -> anyhow::Result<Range<u64>> {
+        (**self).punch(file_id, offset, len)
     }
 }

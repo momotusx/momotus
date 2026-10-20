@@ -108,7 +108,6 @@ impl OurFileExt for File {
 
 #[derive(Default, Debug)]
 struct OpenedFileLocked {
-    #[allow(unused)]
     path: PathBuf,
     fd: Option<File>,
     #[cfg(windows)]
@@ -163,6 +162,14 @@ impl OpenedFile {
         RwLockReadGuard::try_map(self.file.read(), |f| f.as_ref())
             .ok()
             .ok_or(Error::FsFileIsNone)
+    }
+
+    /// Marquee fork (plans/streaming-window.md 2.5): see
+    /// [`crate::storage::TorrentStorage::punch`].
+    pub fn punch(&self, offset: u64, len: u64) -> anyhow::Result<std::ops::Range<u64>> {
+        let g = self.file.read();
+        let f = g.fd.as_ref().ok_or(Error::FsFileIsNone)?;
+        Ok(super::punch::punch_file(f, &g.path, offset, len)?)
     }
 
     #[allow(dead_code)]

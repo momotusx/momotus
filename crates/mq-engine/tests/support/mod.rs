@@ -16,7 +16,56 @@ pub struct Swarm {
     pub info_hash: String,
     pub seeder_addr: SocketAddr,
     pub movie: Vec<u8>,
+    /// The leecher's data folder, and the torrent (the window tests).
+    #[allow(dead_code)]
+    pub leech_dir: std::path::PathBuf,
+    #[allow(dead_code)]
+    pub torrent: Vec<u8>,
     _dirs: (tempfile::TempDir, tempfile::TempDir),
+}
+
+/// One more seeder of a swarm's torrent, on `127.0.0.1`.
+#[allow(dead_code)] // only the window tests use it
+pub struct Seeder {
+    pub _engine: Engine,
+    pub addr: SocketAddr,
+    _dir: tempfile::TempDir,
+}
+
+#[allow(dead_code)]
+impl Swarm {
+    /// Another seeder with the same data, for several peers at once.
+    pub async fn another_seeder(&self) -> Seeder {
+        let dir = tempfile::tempdir().unwrap();
+        let data = dir.path().join("engine").join(&self.info_hash);
+        std::fs::create_dir_all(&data).unwrap();
+        let from = self._dirs.0.path().join("engine").join(&self.info_hash);
+        for e in std::fs::read_dir(&from).unwrap().flatten() {
+            std::fs::copy(e.path(), data.join(e.file_name())).unwrap();
+        }
+        let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+        let ip: IpAddr = Ipv4Addr::LOCALHOST.into();
+        let config = EngineConfig {
+            discovery: false,
+            ..EngineConfig::new(dir.path().join("engine"), http.torrent_scope(&[ip]))
+        };
+        let engine = Engine::start(config).await.unwrap();
+        let t = engine
+            .add_torrent_bytes(self.torrent.clone(), &[])
+            .await
+            .unwrap();
+        engine
+            .select_file(t, "default", &FileHint::Largest)
+            .await
+            .unwrap();
+        wait_complete(&engine, t).await;
+        let addr = SocketAddr::new(ip, engine.listen_addr().unwrap().port());
+        Seeder {
+            _engine: engine,
+            addr,
+            _dir: dir,
+        }
+    }
 }
 
 /// The swarm on `127.0.0.1`, which both engines' policies allow.
@@ -119,6 +168,8 @@ async fn swarm_of(
         info_hash,
         seeder_addr: SocketAddr::new(ip, port),
         movie,
+        leech_dir: leech_dir.path().to_owned(),
+        torrent: created.as_bytes().unwrap().to_vec(),
         _dirs: (seed_dir, leech_dir),
     }
 }

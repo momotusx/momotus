@@ -313,7 +313,7 @@ impl Scheduler {
                     self.check_ready(out);
                 }
             }
-            Event::PieceFailed { piece } => {
+            Event::PieceFailed { piece } | Event::PieceEvicted { piece } => {
                 if piece < self.geo.num_pieces() {
                     self.verified.set(piece, false);
                     for b in self.geo.piece_blocks(piece) {

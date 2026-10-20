@@ -473,6 +473,12 @@ impl Translator {
                 self.check_ready_stock();
                 out
             }
+            ExtEvent::PieceEvicted { piece } => {
+                if let Some(h) = self.have.get_mut(piece as usize) {
+                    *h = false;
+                }
+                self.feed(Event::PieceEvicted { piece })
+            }
         }
     }
 

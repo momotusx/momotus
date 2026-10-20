@@ -392,6 +392,11 @@ pub enum Event {
     PieceFailed {
         piece: PieceIdx,
     },
+    /// The piece left the disk (plans/streaming-window.md 2.5): its blocks
+    /// are needed again, as after `PieceFailed`, with no failure.
+    PieceEvicted {
+        piece: PieceIdx,
+    },
     /// Where `file` keeps the container index a player reads before its
     /// first frame (README 12); it replaces the fixed tail as urgent work
     /// and in readiness.

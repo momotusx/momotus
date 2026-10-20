@@ -191,6 +191,34 @@ impl TorrentStateInitializing {
         Some(hp)
     }
 
+    /// Marquee fork: the files' allocated bytes are under an eighth of the
+    /// selected files' length.
+    fn sparse_folder(&self) -> bool {
+        let selected = |idx: usize| self.only_files.as_ref().is_none_or(|o| o.contains(&idx));
+        let (mut held, mut wanted) = (0u64, 0u64);
+        for (idx, fi) in self.metadata.file_infos.iter().enumerate() {
+            if fi.attrs.padding {
+                continue;
+            }
+            if selected(idx) {
+                wanted += fi.len;
+            }
+            let path = self
+                .shared
+                .options
+                .output_folder
+                .join(&fi.relative_filename);
+            held += match std::fs::metadata(path) {
+                #[cfg(unix)]
+                Ok(m) => std::os::unix::fs::MetadataExt::blocks(&m) * 512,
+                #[cfg(not(unix))]
+                Ok(m) => m.len(),
+                Err(_) => 0,
+            };
+        }
+        held < wanted / 8
+    }
+
     pub async fn check(&self) -> anyhow::Result<TorrentStatePaused> {
         let id: TorrentIdOrHash = self.shared.info_hash.into();
         let bitv_factory = self
@@ -234,6 +262,21 @@ impl TorrentStateInitializing {
 
         let have_pieces = match have_pieces {
             Some(h) => h,
+            // Marquee fork (plans/streaming-window.md 2.5): no bitfield, and
+            // the files hold under an eighth of their selected length (a
+            // streaming window's sparse folder, or nothing yet). Nothing is
+            // claimed, instead of hashing every hole: a full check of a
+            // 40 GB sparse file reads it all to find a few hundred MB.
+            None if self.sparse_folder() => {
+                info!("no bitfield and a sparse folder: nothing claimed, no full check");
+                let none = BF::from_boxed_slice(
+                    vec![0u8; self.metadata.lengths().piece_bitfield_bytes()].into_boxed_slice(),
+                );
+                bitv_factory
+                    .store_initial_check(id, none)
+                    .await
+                    .context("error storing an empty bitfield")?
+            }
             None => {
                 info!("Doing initial checksum validation, this might take a while...");
                 let have_pieces = self

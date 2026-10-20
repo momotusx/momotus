@@ -291,7 +291,7 @@ impl Sched for RqbitLike {
                     self.fill(owner, out);
                 }
             }
-            Event::PieceFailed { piece } => {
+            Event::PieceFailed { piece } | Event::PieceEvicted { piece } => {
                 for b in self.geo.piece_blocks(piece) {
                     self.received.set(b, false);
                 }
@@ -603,7 +603,7 @@ impl Sched for StremioLike {
                 self.unreserve(peer, block);
             }
             Event::PieceVerified { piece } => self.verified.set(piece, true),
-            Event::PieceFailed { piece } => {
+            Event::PieceFailed { piece } | Event::PieceEvicted { piece } => {
                 self.verified.set(piece, false);
                 for b in self.geo.piece_blocks(piece) {
                     self.received.set(b, false);

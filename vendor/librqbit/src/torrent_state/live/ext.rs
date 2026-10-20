@@ -67,6 +67,12 @@ pub enum ExtEvent {
         piece: u32,
         ok: bool,
     },
+    /// A piece left the disk (verified or partly written,
+    /// plans/streaming-window.md 2.5): every block of it is needed again.
+    /// Sent before any later `PieceChecked` of it.
+    PieceEvicted {
+        piece: u32,
+    },
 }
 
 impl TorrentStateLive {

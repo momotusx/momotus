@@ -40,6 +40,25 @@ pub fn hold_evictions(engine: &Engine) -> Arc<Hold> {
     hold_in(&engine.inner.evict_hold)
 }
 
+/// Asks `peer` for one block of `piece` outside the scheduler, as a late
+/// or stale request would land (plans/streaming-window.md phase 1). `false`
+/// when the torrent is not live or the peer is not connected.
+pub async fn request_block(
+    engine: &Engine,
+    h: crate::TorrentHandle,
+    peer: std::net::SocketAddr,
+    (piece, begin, len): (u32, u32, u32),
+) -> bool {
+    let Ok(t) = engine.torrent(h) else {
+        return false;
+    };
+    let live = t.live.lock().await;
+    let Some(state) = live.as_ref().and_then(|l| l.managed.live()) else {
+        return false;
+    };
+    state.ext_request(peer, piece, begin, len)
+}
+
 pub(crate) async fn wait(engine: &Engine) {
     pass(&engine.inner.hold).await;
 }

@@ -184,18 +184,43 @@ impl AsyncRead for FileStream {
 
         // if the piece is not there, register to wake when it is
         // check if we have the piece for real
-        let have = poll_try_io!(self.torrent.with_chunk_tracker(|ct| {
-            let have = ct.get_have_pieces().as_slice()[current.id.get() as usize];
-            if !have {
-                self.streams
-                    .register_waker(self.stream_id, cx.waker().clone());
+        //
+        // Marquee fork (plans/streaming-window.md 2.5): on a live torrent the
+        // piece's read lock is taken under the torrent read lock that saw
+        // `have`, and held over the read below, so an eviction round skips a
+        // piece being read, and a read after the round's first step sees
+        // the piece gone and waits. A paused torrent evicts nothing.
+        let live = self.torrent.live();
+        let _piece = match &live {
+            Some(live) => {
+                let g = live.lock_read("stream_have");
+                let have = poll_try_io!(g.get_chunks()).is_piece_have(current.id);
+                if !have {
+                    self.streams
+                        .register_waker(self.stream_id, cx.waker().clone());
+                    debug!(stream_id = self.stream_id, file_id = self.file_id, piece_id = %current.id, "poll pending, not have");
+                    return Poll::Pending;
+                }
+                let piece = live.piece_lock(current.id).read();
+                drop(g);
+                Some(piece)
             }
-            have
-        }));
-        if !have {
-            debug!(stream_id = self.stream_id, file_id = self.file_id, piece_id = %current.id, "poll pending, not have");
-            return Poll::Pending;
-        }
+            None => {
+                let have = poll_try_io!(self.torrent.with_chunk_tracker(|ct| {
+                    let have = ct.get_have_pieces().as_slice()[current.id.get() as usize];
+                    if !have {
+                        self.streams
+                            .register_waker(self.stream_id, cx.waker().clone());
+                    }
+                    have
+                }));
+                if !have {
+                    debug!(stream_id = self.stream_id, file_id = self.file_id, piece_id = %current.id, "poll pending, not have");
+                    return Poll::Pending;
+                }
+                None
+            }
+        };
 
         // actually stream the piece
         let buf = tbuf.initialize_unfilled();
@@ -212,6 +237,11 @@ impl AsyncRead for FileStream {
         let start = Instant::now();
         poll_try_io!(poll_try_io!(self.torrent.shared.spawner.block_in_place(
             || {
+                #[cfg(feature = "sync-log")]
+                crate::sync_log::pass(
+                    &self.torrent.shared.options.output_folder,
+                    crate::sync_log::Point::Read,
+                );
                 self.torrent.with_storage_and_file(
                     self.file_id,
                     |files, _fi| {

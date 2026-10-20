@@ -404,6 +404,11 @@ pub(crate) struct Torrent {
     hold: Mutex<Holds>,
     readers: AtomicUsize,
     last_used: Mutex<Instant>,
+    /// Held across an eviction round (plans/streaming-window.md 2.4).
+    /// Every path that pauses or removes the torrent takes it after
+    /// `live`, and a round never takes `live` while it holds it, so rounds
+    /// and pauses never overlap.
+    keeper: tokio::sync::Mutex<()>,
 }
 
 impl Torrent {
@@ -704,6 +709,7 @@ impl Engine {
             hold: Mutex::default(),
             readers: AtomicUsize::new(0),
             last_used: Mutex::new(Instant::now()),
+            keeper: tokio::sync::Mutex::new(()),
         });
         let mut torrents = lock(&self.inner.torrents);
         if let Some((&h, _)) = torrents
@@ -998,7 +1004,9 @@ impl Engine {
             let aside = tokio::fs::rename(&t.dir, &trash).await.is_ok();
             Some(if aside { trash } else { t.dir.clone() })
         };
-        if let Some(l) = t.live.lock().await.take() {
+        let mut live = t.live.lock().await;
+        let _round = t.keeper.lock().await;
+        if let Some(l) = live.take() {
             self.inner
                 .session
                 .delete(l.managed.id().into(), false)
@@ -1045,10 +1053,31 @@ impl Engine {
             return Ok(true);
         }
         if let Some(l) = live.as_ref().filter(|l| !l.managed.is_paused()) {
+            let _round = t.keeper.lock().await;
             self.inner.session.pause(&l.managed).await?;
             let _ = l.msgs.send(adapter::Msg::Stopped);
         }
         Ok(true)
+    }
+
+    /// One eviction round over `pieces` of `h` (plans/streaming-window.md
+    /// 2.5): verified pieces and partly written ones leave the disk, busy
+    /// ones are skipped. A torrent that is not live skips them all.
+    pub async fn evict_pieces(
+        &self,
+        h: TorrentHandle,
+        pieces: &[u32],
+    ) -> Result<librqbit::Evicted> {
+        let t = self.torrent(h)?;
+        let managed = t.live.lock().await.as_ref().map(|l| l.managed.clone());
+        let Some(managed) = managed else {
+            return Ok(librqbit::Evicted {
+                skipped: pieces.to_vec(),
+                ..Default::default()
+            });
+        };
+        let _round = t.keeper.lock().await;
+        Ok(managed.evict_pieces(pieces).await?)
     }
 
     /// Lifts `profile`'s hold of `h` for an authorization read at
@@ -1266,6 +1295,7 @@ async fn maintenance(inner: std::sync::Weak<Inner>) {
             }
             let live = t.live.lock().await;
             if let Some(l) = live.as_ref().filter(|l| !l.managed.is_paused()) {
+                let _round = t.keeper.lock().await;
                 if let Err(e) = engine.inner.session.pause(&l.managed).await {
                     tracing::warn!("pausing idle torrent: {e:#}");
                 }

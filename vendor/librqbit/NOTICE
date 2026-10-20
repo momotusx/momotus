@@ -72,3 +72,22 @@ Marquee changes (each changed spot carries a "Marquee fork" comment):
 - src/torrent_state/initializing.rs: a full check's result is stored only
   after the data it claims is synced.
 - src/torrent_state/live/mod.rs: a pause flushes the bitfield.
+- src/torrent_state/live/evict.rs (new), src/chunk_tracker.rs,
+  src/piece_tracker.rs, src/torrent_state/live/mod.rs, src/lib.rs: eviction
+  rounds for a streaming window (plans/streaming-window.md 2.5): pieces are
+  gated in memory, unclaimed on disk, punched with no lock and released,
+  with `ExtEvent::PieceEvicted` sent inside the release lock.
+- src/storage/mod.rs, src/storage/filesystem/{fs.rs,opened_file.rs,
+  punch.rs (new),mod.rs}, Cargo.toml (libc): `TorrentStorage::punch`
+  (forwarded through `Box`), APFS `F_PUNCHHOLE` and Linux or Android
+  `fallocate` rounded inward to whole blocks, and `punch_supported`.
+- src/bitv.rs: the flusher answers `flush_acked` after the fsync of a write
+  that holds the snapshot, or with the step that failed; with `sync-log`,
+  fsynced bitfields and punches are logged, and tests can hold a round, a
+  stream read or a bitfield fsync, and make a step fail.
+- src/torrent_state/streaming.rs: a stream takes its piece's read lock
+  under the torrent read lock that saw the piece, and holds it over the
+  read.
+- src/torrent_state/initializing.rs: with no bitfield and files holding
+  under an eighth of their selected length, nothing is claimed and no full
+  check runs.

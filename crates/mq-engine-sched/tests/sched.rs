@@ -135,7 +135,7 @@ impl Harness {
                     self.received.set(b, true);
                 }
             }
-            Event::PieceFailed { piece } => {
+            Event::PieceFailed { piece } | Event::PieceEvicted { piece } => {
                 self.verified.set(*piece, false);
                 for b in self.geo.piece_blocks(*piece) {
                     self.received.set(b, false);

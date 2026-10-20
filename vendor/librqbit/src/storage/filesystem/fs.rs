@@ -91,6 +91,11 @@ impl TorrentStorage for FilesystemStorage {
         Ok(std::fs::remove_file(self.output_folder.join(filename))?)
     }
 
+    fn punch(&self, file_id: usize, offset: u64, len: u64) -> anyhow::Result<std::ops::Range<u64>> {
+        let f = self.opened_files.get(file_id).context("no such file")?;
+        f.punch(offset, len)
+    }
+
     fn ensure_file_length(&self, file_id: usize, len: u64) -> anyhow::Result<()> {
         let f = &self.opened_files.get(file_id).context("no such file")?;
         #[cfg(windows)]

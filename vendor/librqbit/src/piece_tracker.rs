@@ -97,6 +97,12 @@ impl PieceTracker {
         &self.chunks
     }
 
+    /// Marquee fork (plans/streaming-window.md 2.5): an eviction round's
+    /// access.
+    pub(crate) fn chunks_mut(&mut self) -> &mut ChunkTracker {
+        &mut self.chunks
+    }
+
     /// Consume the PieceTracker, requeuing any in-flight pieces.
     ///
     /// This is used when pausing a torrent - any pieces that were being downloaded

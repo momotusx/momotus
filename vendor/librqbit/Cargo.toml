@@ -215,6 +215,10 @@ version = "9.0.1"
 version = "0.7"
 features = ["export-metrics"]
 
+# Marquee fork: punching holes (src/storage/filesystem/punch.rs).
+[dependencies.libc]
+version = "0.2.191"
+
 [dependencies.lru]
 version = "0.18"
 optional = true

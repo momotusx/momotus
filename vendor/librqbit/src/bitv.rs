@@ -19,25 +19,145 @@ pub trait BitV: Send + Sync {
     /// Marquee fork (engine review r4, P1-1): the torrent's data files, each
     /// with its pieces, synced before a write that claims a new piece in it.
     fn sync_data_of(&mut self, _files: Vec<(PathBuf, Range<usize>)>) {}
+    /// Marquee fork (plans/streaming-window.md 2.5): writes the bitfield as
+    /// it is now and answers once that write and its fsync are done, or
+    /// with the step that failed. In memory there is nothing to write.
+    fn flush_acked(&mut self) -> FlushAck {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let _ = tx.send(Ok(()));
+        rx
+    }
 }
 
 pub type BoxBitV = Box<dyn BitV>;
 
+/// Marquee fork: the answer to [`BitV::flush_acked`]. A dead flusher drops
+/// the sender, so the receiver errs.
+pub type FlushAck = tokio::sync::oneshot::Receiver<Result<(), String>>;
+
 struct DiskFlushRequest {
     snapshot: BitBox<u8, Msb0>,
+    /// Marquee fork: answered after the fsync of a write that includes this
+    /// snapshot (a later one merged with it holds it too).
+    acks: Vec<tokio::sync::oneshot::Sender<Result<(), String>>>,
 }
 
 /// Marquee fork (engine review r5, P3-3): what happened to which file, in
 /// order, for tests: a data file synced, or a bitfield written with how
-/// many pieces it claims. Each test reads its own folder's events.
+/// many pieces it claims. Each test reads its own folder's events. Also
+/// the points where a test holds an eviction round, a stream's read or a
+/// bitfield's fsync, and the steps it makes fail (plans/streaming-window.md
+/// phase 1), each for files under one folder.
 #[cfg(feature = "sync-log")]
 pub mod sync_log {
+    use std::ops::Range;
     use std::path::{Path, PathBuf};
+    use std::sync::{Arc, Condvar, Mutex};
 
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub enum Event {
         DataSynced(PathBuf),
-        HaveWritten { path: PathBuf, claimed: usize },
+        HaveWritten {
+            path: PathBuf,
+            claimed: usize,
+        },
+        /// A bitfield write was fsynced: its bytes.
+        HaveSynced {
+            path: PathBuf,
+            pieces: Vec<u8>,
+        },
+        /// Bytes of a data file were punched out.
+        Punched {
+            path: PathBuf,
+            range: Range<u64>,
+        },
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum Point {
+        /// A stream holds its piece's read lock, before its read.
+        Read,
+        /// An eviction round after each step: gated, acknowledged, punched,
+        /// released.
+        Gated,
+        Acked,
+        Punched,
+        Released,
+        /// A bitfield write, before its fsync.
+        Fsync,
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum Fail {
+        DataSync,
+        HaveWrite,
+        HaveFsync,
+        Punch,
+    }
+
+    #[derive(Default)]
+    pub struct Hold {
+        /// (reached, open)
+        state: Mutex<(bool, bool)>,
+        cv: Condvar,
+    }
+
+    impl Hold {
+        /// Something stopped here.
+        pub fn reached(&self) -> bool {
+            self.state.lock().unwrap_or_else(|e| e.into_inner()).0
+        }
+
+        /// Lets every held step, and every later one, go on.
+        pub fn open(&self) {
+            self.state.lock().unwrap_or_else(|e| e.into_inner()).1 = true;
+            self.cv.notify_all();
+        }
+    }
+
+    type Holds = Vec<(PathBuf, Point, Arc<Hold>)>;
+    static HOLDS: Mutex<Holds> = Mutex::new(Vec::new());
+    static FAILS: Mutex<Vec<(PathBuf, Fail, usize)>> = Mutex::new(Vec::new());
+
+    /// Stops every step at `point` for a file under `dir` until
+    /// [`Hold::open`].
+    pub fn hold(dir: &Path, point: Point) -> Arc<Hold> {
+        let h = Arc::new(Hold::default());
+        let mut holds = HOLDS.lock().unwrap_or_else(|e| e.into_inner());
+        holds.push((dir.to_owned(), point, h.clone()));
+        h
+    }
+
+    /// The next `times` steps `step` for a file under `dir` fail.
+    pub fn fail(dir: &Path, step: Fail, times: usize) {
+        let mut fails = FAILS.lock().unwrap_or_else(|e| e.into_inner());
+        fails.push((dir.to_owned(), step, times));
+    }
+
+    /// Blocks while a hold for `path` at `point` is closed.
+    pub(crate) fn pass(path: &Path, point: Point) {
+        let hold = HOLDS
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .find(|(d, p, _)| *p == point && path.starts_with(d))
+            .map(|(_, _, h)| h.clone());
+        if let Some(h) = hold {
+            let mut s = h.state.lock().unwrap_or_else(|e| e.into_inner());
+            s.0 = true;
+            while !s.1 {
+                s = h.cv.wait(s).unwrap_or_else(|e| e.into_inner());
+            }
+        }
+    }
+
+    /// Whether this `step` for `path` is one a test made fail.
+    pub(crate) fn failing(path: &Path, step: Fail) -> bool {
+        let mut fails = FAILS.lock().unwrap_or_else(|e| e.into_inner());
+        let hit = fails
+            .iter_mut()
+            .find(|(d, s, n)| *s == step && *n > 0 && path.starts_with(d));
+        hit.map(|(_, _, n)| *n -= 1).is_some()
     }
 
     static LOG: std::sync::Mutex<Vec<Event>> = std::sync::Mutex::new(Vec::new());
@@ -52,7 +172,10 @@ pub mod sync_log {
             .unwrap_or_else(|e| e.into_inner())
             .iter()
             .filter(|e| match e {
-                Event::DataSynced(p) | Event::HaveWritten { path: p, .. } => p.starts_with(dir),
+                Event::DataSynced(p)
+                | Event::HaveWritten { path: p, .. }
+                | Event::HaveSynced { path: p, .. }
+                | Event::Punched { path: p, .. } => p.starts_with(dir),
             })
             .cloned()
             .collect()
@@ -144,6 +267,7 @@ impl Drop for DiskBackedBitV {
             .flush_tx
             .send(DiskFlushRequest {
                 snapshot: self.bv.clone(),
+                acks: Vec::new(),
             })
             .is_err()
         {
@@ -191,29 +315,49 @@ impl DiskBackedBitV {
                     let Some(mut req) = rx.recv().await else {
                         break;
                     };
+                    // Marquee fork: every merged request is answered.
+                    let mut acks = std::mem::take(&mut req.acks);
                     while let Ok(r) = rx.try_recv() {
                         req = r;
+                        acks.append(&mut req.acks);
                     }
+                    let answer = |acks: Vec<_>, r: Result<(), String>| {
+                        for a in acks {
+                            let _: Result<(), _> = tokio::sync::oneshot::Sender::send(a, r.clone());
+                        }
+                    };
 
                     // Marquee fork (engine review r4, P1-1): the data first.
                     if let Err(e) = spawner
-                        .block_in_place_with_semaphore(|| to_sync.lock().sync_data(&req.snapshot))
+                        .block_in_place_with_semaphore(|| {
+                            #[cfg(feature = "sync-log")]
+                            if sync_log::failing(&filename, sync_log::Fail::DataSync) {
+                                return Err(std::io::Error::other("injected"));
+                            }
+                            to_sync.lock().sync_data(&req.snapshot)
+                        })
                         .await
                     {
                         tracing::error!(
                             ?filename,
                             "torrent data did not sync, bitv not written: {e:#}"
                         );
+                        answer(acks, Err(format!("data sync: {e}")));
                         continue;
                     }
 
                     if let Err(e) = spawner
                         .block_in_place_with_semaphore(|| {
+                            #[cfg(feature = "sync-log")]
+                            if sync_log::failing(&filename, sync_log::Fail::HaveWrite) {
+                                anyhow::bail!("injected");
+                            }
                             flushed.pwrite_all(0, req.snapshot.as_raw_slice())
                         })
                         .await
                     {
                         tracing::error!(?filename, "error writing to bitv: {e:#}");
+                        answer(acks, Err(format!("bitfield write: {e:#}")));
                         if let Err(e) = tokio::fs::remove_file(&filename).await {
                             tracing::error!(?filename, "error removing bitv: {e:#}");
                         }
@@ -222,11 +366,28 @@ impl DiskBackedBitV {
                     log_written(&filename, req.snapshot.count_ones());
 
                     if let Err(e) = spawner
-                        .block_in_place_with_semaphore(|| flushed.sync_all())
+                        .block_in_place_with_semaphore(|| {
+                            #[cfg(feature = "sync-log")]
+                            {
+                                sync_log::pass(&filename, sync_log::Point::Fsync);
+                                if sync_log::failing(&filename, sync_log::Fail::HaveFsync) {
+                                    return Err(std::io::Error::other("injected"));
+                                }
+                            }
+                            flushed.sync_all()
+                        })
                         .await
                     {
                         tracing::error!(?filename, "error fsyncing bitv: {e:#}");
+                        answer(acks, Err(format!("bitfield fsync: {e}")));
+                        continue;
                     }
+                    #[cfg(feature = "sync-log")]
+                    sync_log::push(sync_log::Event::HaveSynced {
+                        path: filename.clone(),
+                        pieces: req.snapshot.as_raw_slice().to_vec(),
+                    });
+                    answer(acks, Ok(()));
                 }
 
                 Ok::<_, anyhow::Error>(())
@@ -286,8 +447,18 @@ impl BitV for DiskBackedBitV {
     fn flush(&mut self, _flush_async: bool) -> anyhow::Result<()> {
         let req = DiskFlushRequest {
             snapshot: self.bv.clone(),
+            acks: Vec::new(),
         };
         self.flush_tx.send(req).context("flusher task is dead")
+    }
+
+    fn flush_acked(&mut self) -> FlushAck {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let _ = self.flush_tx.send(DiskFlushRequest {
+            snapshot: self.bv.clone(),
+            acks: vec![tx],
+        });
+        rx
     }
 
     fn into_dyn(self) -> Box<dyn BitV> {
@@ -314,6 +485,10 @@ impl BitV for Box<dyn BitV> {
 
     fn sync_data_of(&mut self, files: Vec<(PathBuf, Range<usize>)>) {
         (**self).sync_data_of(files)
+    }
+
+    fn flush_acked(&mut self) -> FlushAck {
+        (**self).flush_acked()
     }
 
     fn into_dyn(self) -> Box<dyn BitV> {
