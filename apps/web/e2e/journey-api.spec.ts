@@ -99,9 +99,9 @@ type Sent = { id?: number; op?: string; view?: string; event?: string; sub?: num
 
 /** A page on this spec's core; `sent` is what it asked, in order, and
  * `fake` may answer a message at the socket instead of the core (a reply's
- * `ok` and `result` or `error`). */
+ * `ok` and `result` or `error`), or hold it with null. */
 type Reply = { ok: true; result: unknown } | { ok: false; error: string };
-async function page(browser: Browser, viewport = { width: 1440, height: 900 }, fake?: (m: Sent) => Reply | undefined) {
+async function page(browser: Browser, viewport = { width: 1440, height: 900 }, fake?: (m: Sent) => Reply | null | undefined) {
   const sent: Sent[] = [];
   const context = await browser.newContext({ viewport, colorScheme: "dark", baseURL: `http://127.0.0.1:${PORTS.vite}` });
   // Every player starts muted.
@@ -124,6 +124,7 @@ async function page(browser: Browser, viewport = { width: 1440, height: 900 }, f
       const msg = JSON.parse(String(m)) as Sent;
       sent.push(msg);
       const answer = fake?.(msg);
+      if (answer === null) return;
       if (answer !== undefined) return ws.send(JSON.stringify({ id: msg.id, ...answer }));
       if (upstream.readyState === WebSocket.OPEN) upstream.send(String(m));
       else early.push(String(m));
@@ -471,4 +472,36 @@ test("a trailer pauses and plays from the bar and the remote's play key", async 
   await expect(toggle).toHaveText("Pause");
   await expect.poll(got).toEqual(["pauseVideo", "playVideo"]);
   await context.close();
+});
+
+test("screen readers: each page is named, the title has its heading, episodes say their number", async ({ browser }) => {
+  const { context, page: p } = await page(browser);
+  await p.goto("/library?form=desktop");
+  await expect(p).toHaveTitle("Library · Marquee", { timeout: 30_000 });
+  await p.goto("/title/series/mqj2?form=desktop");
+  await expect(p).toHaveTitle("Journey Finished · Marquee", { timeout: 30_000 });
+  await expect(p.getByRole("heading", { level: 1 })).toHaveText("Journey Finished");
+  // The season's episodes are the panel its tab controls; each says its number.
+  await expect(p.locator('[role="tab"][aria-selected="true"]')).toHaveAttribute("aria-controls", "season-episodes");
+  await expect(p.locator('#season-episodes[role="tabpanel"]')).toBeVisible();
+  await expect(p.getByRole("link", { name: /^Episode 2, Chapter 2/ })).toBeVisible();
+  await p.goto("/title/series/mqj2/versions/mqj2:1:1?form=desktop");
+  await expect(p).toHaveTitle(/^Versions · .+ · Marquee$/, { timeout: 30_000 });
+  await context.close();
+});
+
+test("before the core answers, the wordmark shows, never a blank screen", async ({ browser }) => {
+  // The core never says who is watching on this page.
+  const { context, page: p } = await page(browser, undefined, (m) => (m.op === "subscribe" && m.view === "profiles" ? null : undefined));
+  await p.goto("/?form=desktop");
+  const mark = p.locator(".boot.brand");
+  await expect(mark).toHaveText("Marquee");
+  await expect(mark).toHaveAttribute("role", "status");
+  await context.close();
+  // Once it has, the app replaces it.
+  const { context: next, page: q } = await page(browser);
+  await q.goto("/library?form=desktop");
+  await expect(q.locator("h1")).toHaveText("Library", { timeout: 30_000 });
+  await expect(q.locator(".boot")).toHaveCount(0);
+  await next.close();
 });

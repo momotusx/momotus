@@ -60,13 +60,15 @@ export function Logo(props: { src: string | null | undefined; name: string; clas
       when={props.src && !broken() && trimmed() !== null}
       fallback={props.level === 2 ? <h2 class={`logo-text ${props.class ?? ""}`}>{props.name}</h2> : <h1 class={`logo-text ${props.class ?? ""}`}>{props.name}</h1>}
     >
+      {/* The page keeps its heading for screen readers when the name is a picture. */}
+      {props.level === 2 ? <h2 class="sr">{props.name}</h2> : <h1 class="sr">{props.name}</h1>}
       {/* While the cut runs the box holds its place, hidden: an image with no
           source would show its alt text and a broken-image mark. */}
       <img
         class={`logo ${props.class ?? ""}`}
         classList={{ pending: trimmed() === undefined }}
         src={trimmed() ?? undefined}
-        alt={props.name}
+        alt=""
         decoding="async"
         // Its shape, so the CSS can size every logo to one area (a stacked
         // logo as tall as it needs, a wide one as low).

@@ -9,7 +9,9 @@
     <title>Marquee</title>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- The wordmark until the app draws (main.tsx clears it), styled here
+         since the stylesheets come with the script. -->
+    <div id="root"><div class="boot" style="position:fixed;inset:0;display:grid;place-items:center;background:#06090E;color:#FFFFFF;font:700 32px/1 system-ui,sans-serif;letter-spacing:-0.02em">Marquee</div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

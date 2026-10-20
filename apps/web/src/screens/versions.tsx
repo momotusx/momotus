@@ -16,7 +16,7 @@ import Sparkles from "lucide-solid/icons/sparkles";
 import TriangleAlert from "lucide-solid/icons/triangle-alert";
 import Undo2 from "lucide-solid/icons/undo-2";
 import UserRoundX from "lucide-solid/icons/user-round-x";
-import { createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { Backdrop } from "../components/art";
 import { KeyedPage } from "../components/keyed-page";
@@ -128,6 +128,10 @@ const subLine = (r: VersionRow) => [languages(r) || null, r.failoverCount > 0 ? 
 function VersionsPage(props: { kind: string; id: string; videoId: string; retry: () => void }) {
   const navigate = useNavigate();
   const ctx = videoContext(props.kind, props.id, props.videoId);
+  createEffect(() => {
+    const name = ctx.label() ?? ctx.details()?.name;
+    if (name) document.title = `Versions · ${name} · Marquee`;
+  });
   const snap = (): VersionsSnapshot | null => ctx.versions()?.state.data ?? null;
   // Phone: a tap opens the row (its details and Play); elsewhere it plays.
   const [opened, setOpened] = createSignal<string | null>(null);

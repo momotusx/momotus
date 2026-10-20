@@ -50,6 +50,10 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
   const header = () => view.state.header;
   const d = () => header()?.details ?? null;
   const target = () => header()?.playTarget ?? null;
+  createEffect(() => {
+    const name = d()?.name;
+    if (name) document.title = `${name} · Marquee`;
+  });
   const series = () => props.kind !== "movie" && (header()?.seasons.length ?? 0) > 0;
   const [trailerOpen, setTrailerOpen] = createSignal(false);
   const [synOpen, setSynOpen] = createSignal(false);
@@ -439,6 +443,7 @@ function Episodes(props: { view: TitleView; kind: string; id: string; runtime: n
               <button
                 class="tab"
                 role="tab"
+                aria-controls="season-episodes"
                 aria-selected={header()?.selectedSeason === s}
                 classList={{ on: header()?.selectedSeason === s }}
                 data-f={`season:${s}`}
@@ -450,7 +455,7 @@ function Episodes(props: { view: TitleView; kind: string; id: string; runtime: n
           </For>
         </div>
       </header>
-      <ol class="toc" data-vscroll data-fgroup="episodes">
+      <ol class="toc" id="season-episodes" role="tabpanel" aria-label={seasonName(header()?.selectedSeason ?? 1)} data-vscroll data-fgroup="episodes">
         <For each={props.view.state.episodes}>
           {(e) => {
             const [broken, setBroken] = createSignal(false);
@@ -488,6 +493,8 @@ function Episodes(props: { view: TitleView; kind: string; id: string; runtime: n
                   </Show>
                 </span>
                 <span class="ep-text">
+                  {/* The number is on the picture, hidden from screen readers: said here. */}
+                  <span class="sr">Episode {e.episode}, </span>
                   <span class="ep-t">{e.title || episodeLabel(e.season, e.episode)}</span>
                   <span class="ep-r num">{left(e)}</span>
                   <Show when={e.overview}>

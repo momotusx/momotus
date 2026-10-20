@@ -12,6 +12,8 @@ test("remote flow: Home, Title, seasons, Versions and Back restore focus", async
 
   // Continue Watching is the first row and takes the initial focus.
   await expect(page.locator(`[data-f="${cw(BBB_ID)}"]`)).toBeVisible();
+  // The hero's buttons name the title they act on.
+  await expect(page.locator('[data-f="hero:details"]')).toHaveAttribute("aria-label", /^Details for \S/);
   await expect.poll(() => focused(page)).toBe(cw(BBB_ID));
   await expect(page.locator(".row").nth(1).locator(".tile").first()).toBeVisible();
 
@@ -27,7 +29,9 @@ test("remote flow: Home, Title, seasons, Versions and Back restore focus", async
 
   // Real Game of Thrones data from Cinemeta, resuming where the seed left off.
   await expect(page).toHaveURL(/\/title\/series\/tt0944947/);
-  await expect(page.locator(".title-logo")).toHaveAttribute("alt", "Game of Thrones");
+  // The logo is the picture; the page's heading still says the name.
+  await expect(page.locator("img.title-logo")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Game of Thrones");
   await expect(page.locator(".info .meta .rate")).toHaveAttribute("aria-label", /^IMDb \d/);
   await expect(page.locator('[data-f="title:play"]')).toContainText("Resume S2:E3");
   await expect(page.locator('[data-f="season:2"]')).toHaveAttribute("aria-selected", "true");

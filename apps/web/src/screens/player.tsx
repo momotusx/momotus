@@ -89,6 +89,10 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     goBack();
   };
   const ctx = videoContext(props.kind, props.id, props.videoId, props.binge);
+  createEffect(() => {
+    const name = ctx.details()?.name;
+    if (name) document.title = `${name} · Marquee`;
+  });
   const prefs = prefsView();
   const versions = () => ctx.versions()?.state.data ?? null;
 

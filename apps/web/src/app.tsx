@@ -199,6 +199,13 @@ function Shell(props: RouteSectionProps) {
       () => location.pathname,
       () => {
         setScrolled(false);
+        // The tab and history name the screen; a title, Versions and the
+        // player name their title themselves once it is known.
+        const path = location.pathname;
+        if (!path.startsWith("/title/") && !path.startsWith("/play/")) {
+          const named = destinations.find((d) => d.path === section(path));
+          document.title = named ? `${named.label} · Marquee` : "Marquee";
+        }
         // A new screen (a result was opened, or Back) leaves the palette.
         leaveSearch(location.pathname + location.search);
         const wasBack = takeBack();
@@ -214,7 +221,14 @@ function Shell(props: RouteSectionProps) {
     <div class="app" ref={watchScroll}>
       {/* A lost core takes the profile with it: nothing shows until a reload starts the next one. */}
       <Show when={link() !== "closed"}>
-        <Show when={profiles()} fallback={<Show when={profilesFailed()}>{(r) => <p class="banner bad">{r()}</p>}</Show>}>
+        <Show
+          when={profiles()}
+          fallback={
+            <Show when={profilesFailed()} fallback={<div class="boot brand" role="status" aria-label="Marquee is starting">Marquee</div>}>
+              {(r) => <p class="banner bad">{r()}</p>}
+            </Show>
+          }
+        >
           <Show when={gateOpen()} fallback={<Picker mode={profiles()?.locked ? "locked" : "start"} />}>
             <Show when={!foreign()}>
             <Show when={nav() && form() !== "phone"}>

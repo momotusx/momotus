@@ -150,7 +150,7 @@ export default function Home() {
                 <div class="acts">
                   <Show when={playHref(h().tile)}>
                     {(href) => (
-                      <A class="btn primary" href={href()} data-f="hero:play" data-autofocus={hasContinue() ? undefined : ""}>
+                      <A class="btn primary" href={href()} data-f="hero:play" aria-label={`Play ${h().tile.name}`} data-autofocus={hasContinue() ? undefined : ""}>
                         <Play aria-hidden class="fill" />
                         Play
                       </A>
@@ -160,6 +160,7 @@ export default function Home() {
                     class="rbtn"
                     href={titlePath(h().tile.kind, h().tile.id)}
                     data-f="hero:details"
+                    aria-label={`Details for ${h().tile.name}`}
                     data-autofocus={hasContinue() || playHref(h().tile) ? undefined : ""}
                   >
                     <span class="ring">

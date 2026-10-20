@@ -133,6 +133,8 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 .topnav { position: absolute; left: 50%; top: var(--nav-top); z-index: 10; transform: translateX(-50%); display: flex; align-items: center; gap: 6px;
   height: var(--nav-h); padding: 0 10px 0 28px; border-radius: var(--radius-pill); }
 .brand { display: inline-flex; align-items: center; gap: 12px; font: var(--weight-display) 32px / 1 var(--font-display); letter-spacing: var(--tracking-display); margin-right: 18px; }
+/* Before the core has answered: the wordmark alone, centered. */
+.boot.brand { position: fixed; inset: 0; display: grid; place-items: center; margin: 0; }
 .brand::before { content: ""; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); }
 .topnav .sep { width: 2px; height: 32px; margin: 0 10px; border-radius: 1px; background: var(--line-strong); }
 .nav { display: inline-flex; align-items: center; gap: 12px; height: 54px; padding: 0 24px; border-radius: var(--radius-pill);

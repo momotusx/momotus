@@ -11,4 +11,8 @@ import { startFitting } from "./form";
 // before the new screen asks whether to restore focus.
 window.addEventListener("popstate", markBack);
 startFitting();
-render(() => <App />, document.getElementById("root") as HTMLElement);
+const root = document.getElementById("root") as HTMLElement;
+// The page's own wordmark (index.html) gives way to the app's, which stays
+// until the core has said who is watching.
+root.replaceChildren();
+render(() => <App />, root);
