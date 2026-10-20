@@ -1,0 +1,98 @@
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"summary","source":"imdb suggestion, cold (one curl per query)","queries":30,"found":29,"first":29,"p50_ms":327,"p90_ms":742,"max_ms":1639}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"summary","source":"imdb suggestion, CDN-warm rerun","queries":30,"found":29,"first":29,"p50_ms":179,"p90_ms":394,"max_ms":1342}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"summary","source":"trakt search/movie,show, no token","queries":30,"found":29,"first":25,"p50_ms":260,"p90_ms":394,"max_ms":736}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"summary","source":"cinemeta search, slower of movie and series catalogs","queries":30,"found":26,"first":25,"p50_ms":1356,"p90_ms":3431,"max_ms":5246,"note":"first is rank 1 within its own type row"}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"summary","source":"imdb suggestion burst","requests":60,"parallel":10,"seconds":5.2,"statuses":{"200":60},"p50_ms":586,"p90_ms":953}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"summary","source":"cinemeta meta for the 30 wanted ids","answered":30,"cold_p50_ms":132,"cold_p90_ms":739,"cold_max_ms":6992,"warm_p50_ms":105,"warm_p90_ms":188,"note":"one meta answers 307 to cinemeta-live.strem.io"}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"summary","source":"wikidata wbsearchentities","result":"429 on the first anonymous request"}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"simulation","source":"first tile on screen","today":15,"imdb_name_matches":25,"trakt_name_matches":24,"imdb_name_or_first_hit":27,"trakt_name_or_first_hit":28,"of":30}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"Sintel","class":"exact","rank":1,"ms":224}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"Up","class":"exact","rank":1,"ms":108}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"Dune","class":"exact","rank":1,"ms":109}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"Heat","class":"exact","rank":1,"ms":183}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"Her","class":"exact","rank":1,"ms":322}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"Big Buck Bunny","class":"exact","rank":1,"ms":547}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"Tears of Steel","class":"exact","rank":1,"ms":742}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"Severance","class":"exact","rank":1,"ms":259}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"Breaking Bad","class":"exact","rank":1,"ms":278}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"The Office","class":"exact","rank":1,"ms":308}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"interst","class":"prefix","rank":1,"ms":385}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"breaking b","class":"prefix","rank":1,"ms":424}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"game of thr","class":"prefix","rank":1,"ms":1544}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"oppenh","class":"prefix","rank":1,"ms":1639}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"the godf","class":"prefix","rank":1,"ms":555}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"succes","class":"prefix","rank":1,"ms":547}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"Amélie","class":"non-English","rank":1,"ms":241}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"Le fabuleux destin d'Amélie Poulain","class":"non-English","rank":1,"ms":605}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"La casa de papel","class":"non-English","rank":1,"ms":326}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"Gisaengchung","class":"non-English","rank":1,"ms":738}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"Kış Uykusu","class":"non-English","rank":1,"ms":591}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"Das Boot","class":"non-English","rank":1,"ms":194}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"Attack on Titan","class":"anime","rank":1,"ms":600}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"Shingeki no Kyojin","class":"anime","rank":1,"ms":194}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"Spirited Away","class":"anime","rank":1,"ms":130}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"Frieren","class":"anime","rank":1,"ms":327}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"intersteller","class":"typo","rank":1,"ms":243}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"brekaing bad","class":"typo","rank":1,"ms":703}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"godfater","class":"typo","rank":1,"ms":724}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"imdb","query":"sintell","class":"typo","rank":null,"ms":847}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"Sintel","class":"exact","rank":1,"ms":465}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"Up","class":"exact","rank":2,"ms":394}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"Dune","class":"exact","rank":2,"ms":294}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"Heat","class":"exact","rank":1,"ms":249}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"Her","class":"exact","rank":2,"ms":252}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"Big Buck Bunny","class":"exact","rank":1,"ms":218}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"Tears of Steel","class":"exact","rank":1,"ms":350}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"Severance","class":"exact","rank":2,"ms":233}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"Breaking Bad","class":"exact","rank":1,"ms":228}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"The Office","class":"exact","rank":1,"ms":258}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"interst","class":"prefix","rank":1,"ms":266}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"breaking b","class":"prefix","rank":1,"ms":304}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"game of thr","class":"prefix","rank":1,"ms":293}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"oppenh","class":"prefix","rank":1,"ms":253}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"the godf","class":"prefix","rank":1,"ms":736}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"succes","class":"prefix","rank":null,"ms":259}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"Amélie","class":"non-English","rank":1,"ms":234}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"Le fabuleux destin d'Amélie Poulain","class":"non-English","rank":1,"ms":275}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"La casa de papel","class":"non-English","rank":1,"ms":255}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"Gisaengchung","class":"non-English","rank":1,"ms":213}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"Kış Uykusu","class":"non-English","rank":1,"ms":429}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"Das Boot","class":"non-English","rank":1,"ms":264}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"Attack on Titan","class":"anime","rank":1,"ms":312}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"Shingeki no Kyojin","class":"anime","rank":1,"ms":279}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"Spirited Away","class":"anime","rank":1,"ms":236}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"Frieren","class":"anime","rank":1,"ms":254}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"intersteller","class":"typo","rank":1,"ms":260}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"brekaing bad","class":"typo","rank":1,"ms":231}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"godfater","class":"typo","rank":1,"ms":268}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"trakt","query":"sintell","class":"typo","rank":1,"ms":349}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"Sintel","class":"exact","rank":null,"ms":210}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"Up","class":"exact","rank":5,"ms":5049}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"Dune","class":"exact","rank":1,"ms":1123}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"Heat","class":"exact","rank":1,"ms":1800}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"Her","class":"exact","rank":1,"ms":2540}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"Big Buck Bunny","class":"exact","rank":null,"ms":1217}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"Tears of Steel","class":"exact","rank":null,"ms":1204}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"Severance","class":"exact","rank":1,"ms":1298}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"Breaking Bad","class":"exact","rank":1,"ms":1227}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"The Office","class":"exact","rank":1,"ms":740}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"interst","class":"prefix","rank":1,"ms":4961}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"breaking b","class":"prefix","rank":1,"ms":175}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"game of thr","class":"prefix","rank":1,"ms":1960}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"oppenh","class":"prefix","rank":1,"ms":1329}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"the godf","class":"prefix","rank":1,"ms":1230}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"succes","class":"prefix","rank":1,"ms":1356}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"Amélie","class":"non-English","rank":1,"ms":5246}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"Le fabuleux destin d'Amélie Poulain","class":"non-English","rank":1,"ms":2885}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"La casa de papel","class":"non-English","rank":1,"ms":1877}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"Gisaengchung","class":"non-English","rank":1,"ms":976}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"Kış Uykusu","class":"non-English","rank":1,"ms":1545}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"Das Boot","class":"non-English","rank":1,"ms":1173}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"Attack on Titan","class":"anime","rank":1,"ms":186}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"Shingeki no Kyojin","class":"anime","rank":1,"ms":3431}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"Spirited Away","class":"anime","rank":1,"ms":2149}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"Frieren","class":"anime","rank":1,"ms":1115}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"intersteller","class":"typo","rank":1,"ms":1691}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"brekaing bad","class":"typo","rank":1,"ms":1575}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"godfater","class":"typo","rank":1,"ms":2419}
+{"date":"2026-10-20","milestone":"M13","host":"this Mac (home broadband, Istanbul)","kind":"query","source":"cinemeta","query":"sintell","class":"typo","rank":null,"ms":1983}
