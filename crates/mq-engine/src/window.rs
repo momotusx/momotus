@@ -200,6 +200,7 @@ pub(crate) async fn keep(engine: Weak<Inner>, h: TorrentHandle, t: Arc<Torrent>)
         if pieces.is_empty() {
             continue;
         }
+        t.rounds.fetch_add(1, Ordering::Relaxed);
         match engine.evict_pieces(h, &pieces).await {
             Ok(r) if r.error.is_none() => failed.clear(),
             Ok(r) => failed.extend(r.error),

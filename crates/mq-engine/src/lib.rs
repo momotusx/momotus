@@ -335,6 +335,8 @@ pub struct TorrentStats {
     /// What the scheduler counts as held: verified pieces and open ones at
     /// full size (a window's only).
     pub held_bytes: Option<u64>,
+    /// Eviction rounds the keeper ran for the window.
+    pub evict_rounds: u64,
 }
 
 /// A windowed playback (plans/streaming-window.md 2.1): its plan, the
@@ -460,6 +462,8 @@ pub(crate) struct Torrent {
     player_paused: std::sync::atomic::AtomicBool,
     /// A whole file's readahead stopped under the reserve (2.4).
     starved: std::sync::atomic::AtomicBool,
+    /// Rounds the keeper ran.
+    rounds: AtomicU64,
 }
 
 impl Torrent {
@@ -774,6 +778,7 @@ impl Engine {
             ended: Mutex::new(None),
             player_paused: Default::default(),
             starved: Default::default(),
+            rounds: AtomicU64::new(0),
         });
         let mut torrents = lock(&self.inner.torrents);
         if let Some((&h, _)) = torrents
@@ -1025,6 +1030,7 @@ impl Engine {
         (s.bytes_per_s, s.readahead_bytes) = (snap.rate.map(|r| r.1), snap.rate.map(|r| r.2));
         s.window_bytes = lock(&t.window).map(|w| w.plan.budget);
         s.held_bytes = snap.held_bytes;
+        s.evict_rounds = t.rounds.load(Ordering::Relaxed);
         s.refetched_bytes = snap.refetched_bytes;
         s.unchoked_ms = snap.unchoked_us.map(|us| us / 1000);
         s.dwh = l.dwh;

@@ -174,6 +174,7 @@ async fn a_window_never_holds_more_than_its_budget() {
         Some(plan().ahead),
         "the window's readahead"
     );
+    assert!(s.evict_rounds > 0, "the keeper's rounds are counted");
     // The head's piece and the tail (the index) are still there.
     let last = s.pieces_total - 1;
     for p in [0, last - 1, last] {
