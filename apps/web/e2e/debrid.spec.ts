@@ -35,7 +35,13 @@ test("debrid: a key connects, is counted, can be replaced and disconnects", asyn
   await expect(page.locator('[data-f="settings:debrid"]')).toContainText("1 debrid service in use.");
 
   await page.locator('[data-f="settings:debrid"]').click();
-  await page.locator('[data-f="debrid:premiumize:disconnect"]').click();
+  // Two presses: the first only asks, and the account stays.
+  const disconnect = page.locator('[data-f="debrid:premiumize:disconnect"]');
+  await disconnect.click();
+  await expect(disconnect).toHaveText("Press again to disconnect");
+  await page.waitForTimeout(300);
+  await expect(card.locator(".dcard-head .st")).toHaveText("Connected");
+  await disconnect.click();
   await expect(card.getByText("Disconnected")).toBeVisible();
   await expect(page.locator('[data-f="debrid:premiumize:field"]')).toBeVisible();
   expect(console.filter((line) => line.includes(KEY))).toEqual([]);

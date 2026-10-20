@@ -105,9 +105,22 @@ function Card(props: {
       setBusy(false);
     }
   };
+  // Two presses, as Remove on an addon: a stray OK on a remote must not drop
+  // an account this browser cannot bring back.
+  const [confirm, setConfirm] = createSignal(false);
+  let confirmTimer: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(confirmTimer));
   const disconnect = async () => {
     const a = props.account;
     if (!a || busy()) return;
+    if (!confirm()) {
+      setConfirm(true);
+      clearTimeout(confirmTimer);
+      confirmTimer = setTimeout(() => setConfirm(false), 4000);
+      return;
+    }
+    clearTimeout(confirmTimer);
+    setConfirm(false);
     setBusy(true);
     try {
       await debridStore.disconnect(a.service, a.generation);
@@ -157,9 +170,16 @@ function Card(props: {
                 {byCode() ? "Use a key instead" : "Replace the key"}
               </button>
             </Show>
-            <button class="btn" data-f={`debrid:${id()}:disconnect`} aria-label={`Disconnect ${props.service.name}`} aria-disabled={busy()} onClick={() => void disconnect()}>
+            <button
+              class="btn"
+              classList={{ danger: confirm() }}
+              data-f={`debrid:${id()}:disconnect`}
+              aria-label={confirm() ? `Press again to disconnect ${props.service.name}` : `Disconnect ${props.service.name}`}
+              aria-disabled={busy()}
+              onClick={() => void disconnect()}
+            >
               <Trash aria-hidden />
-              Disconnect
+              {confirm() ? "Press again to disconnect" : "Disconnect"}
             </button>
           </Show>
         </div>
