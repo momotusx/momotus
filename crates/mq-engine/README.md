@@ -250,7 +250,7 @@ Mutations SR1 to SR7.
 
 ## Review answers: engine round 3 (2026-10-20)
 
-`plans/reviews/engine-2026-10-20-r3.md`, 8/10. Each answer has a test that fails on revert and a mutation row (`bench/m13/mutations.jsonl`); P3-9 (iOS backup) is the Apple app's.
+`plans/reviews/engine-2026-10-20-r3.md`, 8/10. Each rule below has a test that fails on revert and a mutation row (E3A to E3N in `bench/m13/mutations.jsonl`); the doc fixes (P3-5) and the test margin (P3-8) are no rules. P3-9 (iOS backup) is the Apple app's.
 
 - **P2-1, the early settle.** Gone: the ranking's start tiers sit at 5, `min_seeders` (50 by default) and four times that, so only the most any tracker counts ranks right. A scrape ends when every tracker asked has answered or failed, or at the 1 s budget.
 - **P2-2, a relaunch hashing its whole file.** Measured first (`bench/m13/relaunch-resume.jsonl`, Sintel 720p, 143 MB, its head on disk): a relaunch reached Ready 251 to 264 ms after the file was chosen, the check hashing about 0.55 GB/s (a 4 GB file: about 7 s, extrapolated). The librqbit fork now keeps each torrent's have-bitfield in `<data_dir>/<info hash>.have`, beside its folder (never in it: a torrent may name a file anything). A relaunch checks a sample of the pieces it had: Ready after 1 to 11 ms. The file goes with its folder on removal and eviction. `mq play-magnet --data-dir` now keeps the data, so two runs on one folder are a relaunch.
