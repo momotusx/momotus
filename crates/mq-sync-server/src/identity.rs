@@ -16,8 +16,8 @@
 
 use crate::jwt::{self, Jwk, JwkSet, Jwt};
 use crate::{
-    APPLE_NOTICES, AUTH, AppState, active, authorize, client, error, journal_deletion, limited,
-    lock, random, same, storage_error, token_hash,
+    APPLE_NOTICES, AUTH, AppState, active, authorize, client, client_limited, error,
+    journal_deletion, limited, lock, random, relay_limited, same, storage_error, token_hash,
 };
 use axum::extract::Path as UrlPath;
 use axum::extract::{ConnectInfo, Query, State};
@@ -165,11 +165,34 @@ fn facebook_dialog() -> String {
 /// path serve keys and mint any identity.
 fn secure(what: &str, address: &str) -> Result<(), String> {
     let url = url::Url::parse(address).map_err(|_| format!("{what} is not a URL: {address}"))?;
-    let local = url.host_str().is_some_and(mq_http::is_private_host);
     match url.scheme() {
         "https" => Ok(()),
-        "http" if local => Ok(()),
+        "http" if is_local(&url) => Ok(()),
         _ => Err(format!("{what} must be https: {address}")),
+    }
+}
+
+fn is_local(url: &url::Url) -> bool {
+    url.host_str().is_some_and(mq_http::is_private_host)
+}
+
+/// An endpoint a discovery document names: by its issuer's rule, not its
+/// own. Only an issuer on this machine's network (the mock) may name plain
+/// http or private addresses; a public issuer's endpoints are https on
+/// public hosts, so a hostile document cannot aim the relay inward.
+fn discovered(issuer: &str, endpoint: &str) -> Result<(), String> {
+    let local_issuer = url::Url::parse(issuer).is_ok_and(|u| is_local(&u));
+    if local_issuer {
+        return secure("a discovered endpoint", endpoint);
+    }
+    let url = url::Url::parse(endpoint)
+        .map_err(|_| format!("a discovered endpoint is not a URL: {endpoint}"))?;
+    if url.scheme() == "https" && !is_local(&url) {
+        Ok(())
+    } else {
+        Err(format!(
+            "a public issuer's endpoint must be https on a public host: {endpoint}"
+        ))
     }
 }
 
@@ -326,6 +349,21 @@ impl Identity {
         }
     }
 
+    /// A stored provider name as the apps see it: the route id `/v1/relay`
+    /// lists (`apple`, `google`, `facebook`, an OpenID entry's `id`), never
+    /// an issuer URL; `oidc` for an OpenID provider no longer configured.
+    pub(crate) fn display(&self, stored: &str) -> String {
+        match stored.strip_prefix("oidc:") {
+            Some(issuer) => self
+                .file
+                .oidc
+                .iter()
+                .find(|o| o.issuer == issuer)
+                .map_or_else(|| "oidc".to_owned(), |o| o.id.clone()),
+            None => stored.to_owned(),
+        }
+    }
+
     /// `HMAC-SHA256(identity key, provider || 0x00 || sub)`.
     fn subject(&self, provider: &str, sub: &str) -> Vec<u8> {
         let mut mac = Hmac::<Sha256>::new_from_slice(&self.key).expect("any key length");
@@ -463,7 +501,7 @@ impl Identity {
             found.revocation_endpoint.as_deref(),
         ];
         for endpoint in endpoints.into_iter().flatten() {
-            secure("a discovered endpoint", endpoint)?;
+            discovered(issuer, endpoint)?;
         }
         self.discovery
             .lock()
@@ -1097,7 +1135,7 @@ async fn callback(state: &AppState, provider: &str, back: Returned) -> Response 
     let failed = |why: &str| {
         let db = lock(state);
         let _ = db.execute(
-            "DELETE FROM auth_flow WHERE id_hash = ?1",
+            "DELETE FROM auth_flow WHERE id_hash = ?1 AND code_hash IS NULL",
             params![sha(&flow)],
         );
         fragment(&format!("error={why}"))
@@ -1489,7 +1527,14 @@ pub(crate) async fn links(State(state): State<AppState>, headers: HeaderMap) -> 
         .collect()
     })();
     match rows {
-        Ok(links) => Json(json!({ "links": links })).into_response(),
+        Ok(mut links) => {
+            if let Some(id) = state.identity.as_deref() {
+                for link in &mut links {
+                    link.provider = id.display(&link.provider);
+                }
+            }
+            Json(json!({ "links": links })).into_response()
+        }
         Err(e) => storage_error("links", e),
     }
 }
@@ -1772,7 +1817,7 @@ pub(crate) async fn apple_notification(
     let Some(apple) = id.file.apple.as_ref() else {
         return error(StatusCode::NOT_FOUND, "no Apple sign-in here");
     };
-    if limited(&state, client(&state, peer, &headers), APPLE_NOTICES) {
+    if client_limited(&state, client(&state, peer, &headers), APPLE_NOTICES) {
         return busy();
     }
     let now = state.now_ms();
@@ -1782,6 +1827,10 @@ pub(crate) async fn apple_notification(
         let key = id.key_for(&disc.jwks_uri, jwt.kid(), now).await?;
         if !jwt.verifies(&key) {
             return Err("signature".to_owned());
+        }
+        // Signed by Apple: only now does it count against the relay-wide budget.
+        if relay_limited(&state, APPLE_NOTICES) {
+            return Err("busy".to_owned());
         }
         let claims = jwt.claims();
         let audiences: Vec<String> = std::iter::once(apple.services_id.clone())
@@ -1843,6 +1892,7 @@ pub(crate) async fn apple_notification(
             }
             Json(json!({})).into_response()
         }
+        Err(why) if why == "busy" => busy(),
         Err(why) => {
             tracing::warn!("Apple notification refused: {why}");
             error(StatusCode::BAD_REQUEST, "not a notification from Apple")
@@ -1866,4 +1916,38 @@ pub(crate) fn expire(db: &Connection, now: u64) -> rusqlite::Result<()> {
         params![now.saturating_sub(SIGNUP_WINDOW_MS) as i64],
     )?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_public_issuer_names_only_public_https_endpoints() {
+        let public = "https://accounts.example.com";
+        assert!(discovered(public, "https://keys.example.com/jwks").is_ok());
+        for inward in [
+            "http://keys.example.com/jwks",
+            "https://169.254.169.254/latest",
+            "https://127.0.0.1/jwks",
+            "http://10.0.0.5/token",
+        ] {
+            assert!(discovered(public, inward).is_err(), "{inward}");
+        }
+        // The mock on loopback may name its own plain http endpoints.
+        assert!(discovered("http://127.0.0.1:8790", "http://127.0.0.1:8790/jwks").is_ok());
+    }
+
+    #[test]
+    fn providers_read_as_their_route_ids() {
+        let file: IdentityFile = serde_json::from_value(json!({
+            "key": "1".repeat(64),
+            "oidc": [{ "id": "corp", "issuer": "https://id.corp.example", "clientId": "c", "clientSecret": "s" }],
+        }))
+        .unwrap();
+        let id = Identity::new(file, "relay.example").unwrap();
+        assert_eq!(id.display("oidc:https://id.corp.example"), "corp");
+        assert_eq!(id.display("oidc:https://gone.example"), "oidc");
+        assert_eq!(id.display("apple"), "apple");
+    }
 }

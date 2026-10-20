@@ -273,6 +273,14 @@ impl Device {
         }
     }
 
+    /// A key rotation with nobody removed: the roster moves on.
+    async fn remove(&mut self) {
+        self.record =
+            mq_sync::remove_devices(&self.library, &http(), &self.record, &self.clock, vec![])
+                .await
+                .unwrap();
+    }
+
     async fn cancel_deletion(&self, unlink: bool) {
         mq_sync::identity::cancel_deletion(
             &self.library,
@@ -321,7 +329,7 @@ async fn a_brokered_sign_in_makes_an_account_and_finds_it_again() {
     assert_eq!(again.account, Some(phone.record.keys.account), "found");
     let links = phone.links().await;
     assert_eq!(links.len(), 1);
-    assert_eq!(links[0].provider, format!("oidc:{}", relay.mock.url));
+    assert_eq!(links[0].provider, "mock", "the route id, never the issuer");
     // Nothing of the provider is kept: no subject in the clear.
     let subject: Vec<u8> = relay
         .sql()
@@ -969,7 +977,7 @@ async fn a_scheduled_deletion_shows_can_be_cancelled_and_runs_when_due() {
     // The device that did not ask hears it at its next sync, and who asked.
     let shown = Some(ScheduledDeletion {
         due_ms: due,
-        provider: Some(format!("oidc:{}", relay.mock.url)),
+        provider: Some("mock".into()),
     });
     assert_eq!(tv.sync().await.deletion, shown);
     assert_eq!(phone.sync().await.deletion, shown);
@@ -1082,6 +1090,43 @@ async fn cancel_and_unlink_drops_only_this_accounts_link() {
         "the new account keeps its link"
     );
     assert_eq!(relay.count("deletion"), 0);
+}
+
+/// Forged notices from many addresses, each under its own budget, do not
+/// spend the relay-wide one: only notices whose signature checked count,
+/// so Apple's own still lands.
+#[tokio::test]
+async fn forged_notices_from_many_addresses_leave_room_for_apple() {
+    let relay = Relay::with(|c| c.trust_proxy = true).await;
+    Device::create(&relay, &relay.sign_in("apple", "apple-1").await, false)
+        .await
+        .unwrap();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let notice = json!({
+        "iss": relay.mock.url, "aud": "apple-web", "iat": now,
+        "events": json!({ "type": "consent-revoked", "sub": "apple-1", "event_time": now }).to_string(),
+    });
+    let post = |from: String, payload: String| {
+        let url = format!("{}/v1/auth/apple/notifications", relay.url);
+        async move {
+            let headers = vec![("x-forwarded-for".to_owned(), from)];
+            status(
+                http()
+                    .post_json(&url, &json!({ "payload": payload }), &raw(headers))
+                    .await,
+            )
+        }
+    };
+    for i in 0..70 {
+        let forged = relay.mock.sign_forged(notice.clone());
+        assert_eq!(post(format!("203.0.113.{i}"), forged).await, 400);
+    }
+    let apple = relay.mock.sign(notice);
+    assert_eq!(post("17.0.0.1".into(), apple).await, 200);
+    assert_eq!(relay.count("identity"), 0);
 }
 
 /// Apple's notification route: a budget of its own, Apple's keys fetched
@@ -1242,7 +1287,86 @@ async fn start_up_checks_the_public_host_and_provider_addresses() {
     assert!(elsewhere.contains("publicUrl"), "{elsewhere}");
     let plain = start(|f| f["google"]["issuer"] = json!("http://accounts.example.com")).unwrap();
     assert!(plain.contains("https"), "{plain}");
+    let graph = start(|f| f["facebook"]["graph"] = json!("http://graph.example.com")).unwrap();
+    assert!(graph.contains("https"), "{graph}");
     let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A discovery document must name the issuer it was asked for: the mock
+/// reached as `localhost` answers for `127.0.0.1`, and nothing starts.
+#[tokio::test]
+async fn discovery_naming_another_issuer_is_refused() {
+    let mock = Mock::start(0).await;
+    let key = mock_oidc::apple_key_pem();
+    let mut file = identity_json(&mock, "http://127.0.0.1:1", KEY, &key);
+    file["oidc"] = json!([{
+        "id": "renamed", "issuer": mock.url.replace("127.0.0.1", "localhost"),
+        "clientId": "marquee", "clientSecret": "ms",
+    }]);
+    let relay = Relay::on(
+        mock,
+        key,
+        fresh_dir().join("relay.sqlite"),
+        Arc::default(),
+        |c| c.identity = Some(serde_json::from_value(file).unwrap()),
+    )
+    .await;
+    let refused = start_brokered(&http(), &relay.url, "renamed", "marquee://auth", false)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(
+            refused,
+            SyncError::Http(HttpError::Status { status: 502, .. })
+        ),
+        "{refused:?}"
+    );
+}
+
+/// A device stuck on a fork (the relay was restored and another device
+/// rotated there) still cancels a deletion: the call needs its token, not
+/// an agreed roster, as `deleteAccount` does.
+#[tokio::test]
+async fn a_device_stuck_on_a_fork_can_cancel_a_deletion() {
+    let relay = Relay::new().await;
+    let mut phone = Device::create(&relay, &relay.sign_in("mock", "alice").await, false)
+        .await
+        .unwrap();
+    let mut tv = phone.pair().await;
+    tv.sync().await;
+    phone.sync().await;
+    let snapshot = relay.db.with_file_name("before.sqlite");
+    relay
+        .sql()
+        .execute("VACUUM INTO ?1", [snapshot.to_str().unwrap()])
+        .unwrap();
+    phone.remove().await;
+    // Restored without its journal: the relay lost the phone's rotation.
+    let db = fresh_dir().join("relay.sqlite");
+    std::fs::rename(&snapshot, &db).unwrap();
+    let restored = Relay::on(
+        relay.mock.clone(),
+        relay.apple_key.clone(),
+        db,
+        Arc::default(),
+        |c| c.new_generation = true,
+    )
+    .await;
+    for device in [&mut phone, &mut tv] {
+        device.record.server = restored.url.clone();
+    }
+    tv.remove().await;
+    let fork = sync_once(&phone.library, &http(), &phone.record, &phone.clock)
+        .await
+        .unwrap_err();
+    assert!(matches!(fork, SyncError::Fork), "{fork:?}");
+    ask_deletion(&restored, restored.sign_in("mock", "alice").await).await;
+    assert_eq!(restored.count("deletion"), 1);
+    phone.cancel_deletion(true).await;
+    assert_eq!(
+        (restored.count("deletion"), restored.count("identity")),
+        (0, 0)
+    );
 }
 
 /// Without an identity file: no sign-in routes, no providers.

@@ -1826,7 +1826,7 @@ async fn push(
             server_ms,
             epoch,
             roster: head,
-            deletion: deletion_due(&tx, &auth.account)?,
+            deletion: deletion_due(&state, &tx, &auth.account)?,
         };
         for record in &request.records {
             let r = match check(record, server_ms) {
@@ -1998,7 +1998,7 @@ async fn pull(
             head as u64,
             epoch,
             roster,
-            deletion_due(&db, &auth.account)?,
+            deletion_due(&state, &db, &auth.account)?,
         ))
     })();
     match rows {
@@ -2067,21 +2067,33 @@ const TOKENS: (usize, u32, u32) = (3, 20, 2000);
 /// Sign-in `start`, `take`, `token` and the deletion page's request, apart
 /// from pairings (a TV polls pairing `take` every 2 s, unlimited).
 const AUTH: (usize, u32, u32) = (4, 30, 3000);
-/// Apple's server-to-server notifications: Apple sends a few a day.
+/// Apple's server-to-server notifications: Apple sends a few a day. The
+/// per-address budget applies first; the relay-wide one counts only notices
+/// whose signature checked, so a flood from many addresses cannot crowd out
+/// Apple's own.
 pub(crate) const APPLE_NOTICES: (usize, u32, u32) = (5, 10, 60);
 
 /// The account's scheduled deletion, if one waits, with the provider of the
-/// identity that asked (none for a Start over, or once that link is gone).
-fn deletion_due(db: &Connection, account: &Id) -> rusqlite::Result<Option<ScheduledDeletion>> {
+/// identity that asked (none for a Start over, or once that link is gone),
+/// named as the apps name it.
+fn deletion_due(
+    state: &AppState,
+    db: &Connection,
+    account: &Id,
+) -> rusqlite::Result<Option<ScheduledDeletion>> {
     db.query_row(
         "SELECT d.due_ms, i.provider FROM deletion d \
          LEFT JOIN identity i ON i.link = d.link AND i.account = d.account \
          WHERE d.account = ?1",
         params![hex::encode(account.0)],
         |r| {
+            let provider: Option<String> = r.get(1)?;
             Ok(ScheduledDeletion {
                 due_ms: r.get::<_, i64>(0)? as u64,
-                provider: r.get(1)?,
+                provider: provider.map(|p| match state.identity.as_deref() {
+                    Some(id) => id.display(&p),
+                    None => p,
+                }),
             })
         },
     )
@@ -2096,11 +2108,18 @@ fn spend(slot: &mut (u64, u32), now: u64, cap: u32) -> bool {
     slot.1 > cap
 }
 
-/// Whether `client` is over its budget (or the relay over its own).
-fn limited(
+/// Whether `client` is over its budget (or the relay over its own). A
+/// client over its own budget does not spend the relay's, so one flooding
+/// address cannot block everyone else.
+fn limited(state: &AppState, client: IpAddr, slot: (usize, u32, u32)) -> bool {
+    client_limited(state, client, slot) || relay_limited(state, slot)
+}
+
+/// The client's own budget alone.
+pub(crate) fn client_limited(
     state: &AppState,
     client: IpAddr,
-    (which, per_client, global): (usize, u32, u32),
+    (which, per_client, _): (usize, u32, u32),
 ) -> bool {
     // Relay time, as every other window here (tests move it).
     let now = state.now_ms();
@@ -2110,13 +2129,19 @@ fn limited(
             .per_client
             .retain(|_, (start, _)| now < *start + 60_000);
     }
-    // A client over its own budget does not spend the relay's, so one
-    // flooding address cannot block everyone else.
     spend(
         limits.per_client.entry((which, client)).or_default(),
         now,
         per_client,
-    ) || spend(&mut limits.global[which], now, global)
+    )
+}
+
+/// The relay-wide budget alone: for requests shown genuine first, so
+/// strangers cannot spend it (Apple's notices).
+pub(crate) fn relay_limited(state: &AppState, (which, _, global): (usize, u32, u32)) -> bool {
+    let now = state.now_ms();
+    let mut limits = state.limits.lock().unwrap_or_else(|p| p.into_inner());
+    spend(&mut limits.global[which], now, global)
 }
 
 /// The caller's address for rate limits: the peer, or the last
