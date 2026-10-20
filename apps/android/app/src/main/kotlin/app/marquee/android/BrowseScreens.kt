@@ -166,7 +166,8 @@ internal fun <T> ChipRow(
             contentPadding = PaddingValues(horizontal = side),
             horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
         ) {
-            items(choices, key = { it.second }) { (value, name) ->
+            // By value: two addons can each have a "Popular" catalog of one kind, and a repeated key throws.
+            items(choices, key = { it.first.toString() }) { (value, name) ->
                 Chip(name, selected = value == selected, onClick = { onSelect(value) })
             }
         }
