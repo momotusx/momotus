@@ -235,8 +235,11 @@ test.describe("Versions", () => {
     expect(ask).toMatchObject({ kind: "series", videoId: GOT.resume, network: "other" });
     expect(ask.runtime).toMatch(/\d+ min/);
     expect(ask.releaseInfo).toMatch(/^\d{4}/);
-    // The header is the core's conditions, in words.
-    await expect(page.locator(".vstate .device")).toHaveText(/^This TV: (4K|1080p|720p|SD)( HDR)?, this network, speed not measured yet$/);
+    // The header is the core's conditions, in words. An HTTP playback that
+    // ran 30 s on this shared core (shots.spec) measures the line.
+    await expect(page.locator(".vstate .device")).toHaveText(
+      /^This TV: (4K|1080p|720p|SD)( HDR)?, (this network, speed not measured yet|about \d+ Mbit\/s on this network)$/,
+    );
   });
 
   test("TV: a focused row shows its line's details under it, with the tone icon", async ({ browser }) => {
