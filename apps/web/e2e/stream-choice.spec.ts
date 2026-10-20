@@ -228,6 +228,15 @@ test.describe("Versions", () => {
   }
 
   test("the view is asked with the title's facts and the network, and says what it read", async ({ browser }) => {
+    // An HTTP playback that ran 30 s on this shared core (shots.spec) has
+    // measured the line: "Measure again" first, so the header reads the
+    // estimate whatever ran before.
+    const c = new Client();
+    try {
+      await c.req("resetSpeed");
+    } finally {
+      c.close();
+    }
     const page = await device(browser, "tv", PORTS.bridge);
     await page.goto(path("tv"));
     await firstRow(page);
@@ -235,11 +244,8 @@ test.describe("Versions", () => {
     expect(ask).toMatchObject({ kind: "series", videoId: GOT.resume, network: "other" });
     expect(ask.runtime).toMatch(/\d+ min/);
     expect(ask.releaseInfo).toMatch(/^\d{4}/);
-    // The header is the core's conditions, in words. An HTTP playback that
-    // ran 30 s on this shared core (shots.spec) measures the line.
-    await expect(page.locator(".vstate .device")).toHaveText(
-      /^This TV: (4K|1080p|720p|SD)( HDR)?, (this network, speed not measured yet|about \d+ Mbit\/s on this network)$/,
-    );
+    // The header is the core's conditions, in words.
+    await expect(page.locator(".vstate .device")).toHaveText(/^This TV: (4K|1080p|720p|SD)( HDR)?, this network, speed not measured yet$/);
   });
 
   test("TV: a focused row shows its line's details under it, with the tone icon", async ({ browser }) => {
