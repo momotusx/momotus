@@ -108,7 +108,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         videoId: props.videoId,
         name: ctx.details()?.name,
         poster: ctx.details()?.poster ?? undefined,
-        season: ctx.ref?.season,
+        season: ctx.ref?.season ?? undefined,
         episode: ctx.ref?.episode,
       }),
     );
@@ -753,7 +753,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                   <A class="pa" href={titlePath(props.kind, props.id)} data-f="player:episodes">
                     <ListVideo aria-hidden />
                     <b>Episodes</b>
-                    <small>{seasonName(r().season)}</small>
+                    <small>{r().season === null ? "" : seasonName(r().season as number)}</small>
                   </A>
                 )}
               </Show>

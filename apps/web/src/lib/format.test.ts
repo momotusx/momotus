@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { bytes, clock, groupFailures, parseVideo, playPath, releaseParts, runtimeMinutes } from "./format";
+import { bytes, clock, episodeLabel, groupFailures, parseVideo, playPath, releaseParts, runtimeMinutes } from "./format";
 
 test("bytes are 1024-based, as addons print sizes", () => {
   expect(bytes(5368709120)).toBe("5 GB");
@@ -16,8 +16,12 @@ test("clock", () => {
 });
 
 test("video ids", () => {
-  expect(parseVideo("tt0944947:2:3")).toEqual({ id: "tt0944947", season: 2, episode: 3 });
-  expect(parseVideo("tt0111161")).toBeNull();
+  expect(parseVideo("tt0944947", "tt0944947:2:3")).toEqual({ season: 2, episode: 3 });
+  expect(parseVideo("tt0111161", "tt0111161")).toBeNull();
+  // Anime Kitsu: the title's id has a colon; what follows it is the episode.
+  expect(parseVideo("kitsu:44042", "kitsu:44042:5")).toEqual({ season: null, episode: 5 });
+  expect(episodeLabel(null, 5)).toBe("E5");
+  expect(episodeLabel(2, 3)).toBe("S2:E3");
   expect(playPath("series", "tt0944947", "tt0944947:2:3")).toBe("/play/series/tt0944947/tt0944947:2:3");
 });
 

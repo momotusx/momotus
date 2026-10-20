@@ -19,19 +19,29 @@ export function clock(seconds: number): string {
   return h ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
 }
 
+/** An episode: its season when the id names one (`kitsu:44042:5` names none). */
 export interface VideoRef {
-  id: string;
-  season: number;
+  season: number | null;
   episode: number;
 }
 
-/** Stremio series video ids are `<id>:<season>:<episode>`; anything else is a movie. */
-export function parseVideo(videoId: string): VideoRef | null {
-  const m = /^(.+):(\d+):(\d+)$/.exec(videoId);
-  return m ? { id: m[1] as string, season: Number(m[2]), episode: Number(m[3]) } : null;
+/** Season and episode from what follows the title's own id in a video id,
+ * the core's rule (mq-runtime versions.rs `episode`): `tt0944947:2:3` is S2
+ * E3, `kitsu:44042:5` (the title `kitsu:44042`) is episode 5 with no season.
+ * Anything else is a movie (`null`). */
+export function parseVideo(id: string, videoId: string): VideoRef | null {
+  if (!videoId.startsWith(id)) return null;
+  const numbers = videoId
+    .slice(id.length)
+    .split(":")
+    .filter((p) => /^\d+$/.test(p))
+    .map(Number);
+  if (numbers.length === 2) return { season: numbers[0] as number, episode: numbers[1] as number };
+  if (numbers.length === 1) return { season: null, episode: numbers[0] as number };
+  return null;
 }
 
-export const episodeLabel = (season: number, episode: number) => `S${season}:E${episode}`;
+export const episodeLabel = (season: number | null, episode: number) => (season === null ? `E${episode}` : `S${season}:E${episode}`);
 
 // Ids keep their colons ("tt0944947:1:1"): they are valid in a path segment.
 const seg = (s: string) => encodeURIComponent(s).replace(/%3A/gi, ":");

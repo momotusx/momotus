@@ -20,7 +20,7 @@ import type { Episode } from "../core/generated/Episode";
 import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
 import { focusEl, remember } from "../focus/dom";
 import { form } from "../form";
-import { bytes, clock, decoded, episodeLabel, pct, playPath, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
+import { bytes, clock, decoded, episodeLabel, parseVideo, pct, playPath, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
 import { blockedWords, choiceWords, kindLabel, qualityText, statusText } from "../lib/words";
 import "./title.css";
 
@@ -57,13 +57,13 @@ function TitlePage(props: { kind: string; id: string }) {
     const t = target();
     const name = d()?.name;
     if (!t || !name) return null;
-    const ref = /^(.+):(\d+):(\d+)$/.exec(t.videoId);
+    const ref = parseVideo(props.id, t.videoId);
     return versionsView({
       kind: props.kind,
       videoId: t.videoId,
       title: name,
-      season: ref ? Number(ref[2]) : undefined,
-      episode: ref ? Number(ref[3]) : undefined,
+      season: ref?.season ?? undefined,
+      episode: ref?.episode,
     });
   });
 

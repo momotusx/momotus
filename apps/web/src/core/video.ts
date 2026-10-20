@@ -7,12 +7,13 @@ import { titleView, versionsView } from "./client";
 
 export function videoContext(kind: string, id: string, videoId: string, bingeGroup?: string) {
   const title = titleView(kind, id);
-  const ref = parseVideo(videoId);
+  const ref = parseVideo(id, videoId);
   // Keep the title view on this video's season so its episode name is known.
   createEffect(() => {
     const h = title.state.header;
-    if (ref && h && h.selectedSeason !== ref.season && h.seasons.includes(ref.season)) {
-      void title.command({ type: "selectSeason", season: ref.season });
+    const season = ref?.season;
+    if (season != null && h && h.selectedSeason !== season && h.seasons.includes(season)) {
+      void title.command({ type: "selectSeason", season });
     }
   });
   const details = () => title.state.header?.details ?? null;
@@ -22,12 +23,12 @@ export function videoContext(kind: string, id: string, videoId: string, bingeGro
     if (!d?.name) return null;
     // What the title and episode say now; the view opens once per video, so
     // facts that arrive later are the core's to read from the meta.
-    const season = ref ? title.state.episodes.filter((e) => e.season === ref.season).length : 0;
+    const season = ref?.season != null ? title.state.episodes.filter((e) => e.season === ref.season).length : 0;
     return versionsView({
       kind,
       videoId,
       title: d.name,
-      season: ref?.season,
+      season: ref?.season ?? undefined,
       episode: ref?.episode,
       bingeGroup,
       runtime: d.runtime ?? undefined,
