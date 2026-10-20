@@ -170,7 +170,12 @@ Mutations SR1 to SR7.
   - Mutations BD1 to BD5, ST1 to ST6 and CP1 to CP4: all caught.
   - Without the bound, every path's test overflowed its stack and aborted, the DHT one inside its tokio worker.
 - **Live:** Big Buck Bunny a9df29de now scrapes 0 seeders and 40 leechers from all 8 default trackers in 724 ms. Torrentio lists 28.
-- **Still open:** the P3 items marked "now" below, for the next engine turn.
+- **P3 "now" items:** built, each with a test. Mutation rows NC1, NC2, SY1, CL1, CI1 and CI2 are in `bench/m13/mutations.jsonl`.
+  - Network change: `Engine::network_changed`, called from `Core::on_network_changed`, plus a second resolve once every kept address is quiet.
+  - The SYN recheck: the test fills a one-slot uTP listener, lets a SYN wait, refuses its source, then frees the slot.
+  - The claim lock: claims count under the torrents lock, and eviction checks again under it. The test uses a `test-hooks` barrier between the eviction's two checks.
+  - `container_index`: checked offsets, and a 64 MiB bound past `mdat`.
+  - The deterministic tests replace the "no deterministic test" notes below.
 
 **P1-1, nesting depth: fixed in the parser, once.**
 - **Where.** Every bencode parse in the engine goes through `librqbit-bencode`'s `BencodeDeserializer`:
