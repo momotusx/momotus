@@ -1620,6 +1620,8 @@ data class VersionsSnapshot(
     val failedAddons: List<String> = emptyList(),
     val done: Boolean,
     val frozen: Boolean,
+    /** Every listed version is a swarm the engine would fetch whose trackers count one seeder or none: almost nobody is sharing this title right now, so say so before Play. Its attempt gives up after the first 30 s window. */
+    val nobodySharing: Boolean,
 )
 
 @Serializable

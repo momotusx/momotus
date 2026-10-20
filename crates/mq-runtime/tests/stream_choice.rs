@@ -914,6 +914,7 @@ async fn a_cold_first_scrape_is_asked_again_and_reaches_a_frozen_pick() {
         Some(900),
         "the addon's number until the counts come"
     );
+    assert!(view.counting(), "the second ask is on the way");
     view.freeze();
     let counted = || {
         view.snapshot()
@@ -927,6 +928,43 @@ async fn a_cold_first_scrape_is_asked_again_and_reaches_a_frozen_pick() {
         "frozen: the pick stays"
     );
     assert_eq!(pick.line, mq_streams::ReasonLine::Few { seeders: 37 });
+    until("the asks to end", || !view.counting()).await;
+}
+
+/// When every version is a swarm whose trackers count one seeder or none,
+/// Versions says so before Play and the attempt gives up after the first
+/// 30 s window instead of 60 s (race 2: Big Buck Bunny waited 60 s with
+/// every row at 0 or 1). One healthy version clears it.
+#[cfg(feature = "torrent")]
+#[tokio::test]
+async fn almost_nobody_sharing_is_said_before_play() {
+    let open = |live: [(&'static str, u32); 2]| async move {
+        let server = Server::start(vec![
+            route("GET", "/stream/series/tt1%3A1%3A1.json", 200, &torrents()),
+            route("GET", "/meta/series/tt1.json", 200, &meta()),
+        ])
+        .await;
+        let core = core_with(&server);
+        core.set_live_seeders(live.map(|(h, n)| (h.to_owned(), n)).into());
+        let view = VersionsView::open(&core, params(TitleFacts::default()));
+        until("the live counts", || {
+            view.snapshot().done && !view.counting()
+        })
+        .await;
+        let key = view.snapshot().recommended.unwrap().key;
+        let target = mq_runtime::PlayTarget::default();
+        let playback =
+            mq_runtime::PlaybackView::open_picked(&core, view.pick(&key), target, &view.plays());
+        (server, view, playback)
+    };
+    let (_server, view, playback) = open([(HASH_A, 1), (HASH_B, 1)]).await;
+    assert!(view.snapshot().nobody_sharing, "{:?}", view.snapshot());
+    assert_eq!(playback.start_deadline(), Duration::from_secs(30));
+    drop((playback, view));
+
+    let (_server, view, playback) = open([(HASH_A, 1), (HASH_B, 12)]).await;
+    assert!(!view.snapshot().nobody_sharing, "one healthy version");
+    assert_eq!(playback.start_deadline(), Duration::from_secs(60));
 }
 
 /// After a restart the core reads the network the app last reported, not

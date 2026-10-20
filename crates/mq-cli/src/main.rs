@@ -502,9 +502,14 @@ async fn play(
     })
     .await;
     let versions_ms = ms(started.elapsed());
-    // Live seeders rank the rows about a second after `done` (two on a
-    // cold first scrape); a viewer reads the list for longer than that.
-    tokio::time::sleep(LIVE_SETTLE).await;
+    // The race reads Versions once the live seeder counts landed (about a
+    // second after `done`, two after a cold first scrape), as a viewer
+    // reading the list sees them.
+    until(Duration::from_secs(15), || {
+        (!versions.counting()).then_some(())
+    })
+    .await;
+    let counted_ms = ms(started.elapsed());
     let snapshot = versions.snapshot();
     let key = match arm {
         Arm::Recommended => snapshot.recommended.as_ref().map(|r| r.key.clone()),
@@ -523,7 +528,8 @@ async fn play(
         "pick": { "quality": pick.quality, "via": pick.via, "release": pick.release_name,
                   "reasons": pick.reasons, "failover": pick.failover_count,
                   "line": pick.line, "sizeBytes": pick.size_bytes, "bitrateMbps": pick.bitrate_mbps },
-        "versionsMs": versions_ms, "ms": ms(started.elapsed()),
+        "versionsMs": versions_ms, "countedMs": counted_ms, "nobodySharing": snapshot.nobody_sharing,
+        "ms": ms(started.elapsed()),
     }));
 
     let opened = Instant::now();
@@ -568,7 +574,8 @@ async fn play(
             "stalls": played["stalls"], "stallMs": played["stall_ms"], "attempts": attempts.len(),
             "failures": attempts.iter().map(|a| a.error.clone()).collect::<Vec<_>>(),
             "played": snap.key, "moved": snap.trying.as_ref().map(|t| &t.key),
-            "versionsMs": versions_ms, "ok": first_frame.is_some(),
+            "versionsMs": versions_ms, "countedMs": counted_ms,
+            "nobodySharing": snapshot.nobody_sharing, "ok": first_frame.is_some(),
         })
     };
     let Some(ready) = ready else {
@@ -634,9 +641,6 @@ async fn play(
     emit(json!({ "event": "done", "played": played, "total_ms": ms(started.elapsed()) }));
     Ok(())
 }
-
-/// How long the race reads Versions after `done` before it plays.
-const LIVE_SETTLE: Duration = Duration::from_millis(2500);
 
 /// Polls `f` every 10 ms until it returns a value or `within` passes.
 async fn until<T>(within: Duration, f: impl Fn() -> Option<T>) -> Option<T> {

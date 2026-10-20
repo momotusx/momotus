@@ -111,6 +111,11 @@ pub struct VersionsSnapshot {
     pub failed_addons: Vec<String>,
     pub done: bool,
     pub frozen: bool,
+    /// Every listed version is a swarm the engine would fetch whose
+    /// trackers count one seeder or none: almost nobody is sharing this
+    /// title right now, so say so before Play. Its attempt gives up after
+    /// the first 30 s window.
+    pub nobody_sharing: bool,
 }
 
 /// What the ranking read for this view, for the header "This TV: 4K HDR,
@@ -213,6 +218,8 @@ struct State {
     done: bool,
     /// The pick's debrid link was warmed (once per view).
     prefetched: bool,
+    /// Live seeder asks still on the way.
+    counting: usize,
 }
 
 pub struct VersionsView {
@@ -283,6 +290,14 @@ impl PickHandle {
     /// The pick was the recommendation.
     pub fn recommended(&self) -> bool {
         self.recommended
+    }
+
+    /// Almost nobody is sharing any version of the title right now (the
+    /// view's `nobody_sharing`, read now). False once the view is gone.
+    pub fn nobody_sharing(&self) -> bool {
+        self.state
+            .upgrade()
+            .is_some_and(|state| nobody_sharing(&lock(&state)))
     }
 
     /// The version the ranking picks after the row keys `tried`: the first
@@ -588,6 +603,7 @@ impl VersionsView {
             failed: Vec::new(),
             done: eligible.is_empty(),
             prefetched: false,
+            counting: 0,
         }));
         let snapshot = SharedObservable::new(render(&lock(&state)));
         let mut tasks = JoinSet::new();
@@ -640,6 +656,7 @@ impl VersionsView {
             failed: Vec::new(),
             done: false,
             prefetched: true,
+            counting: 0,
         };
         Self {
             core: core.clone(),
@@ -697,6 +714,12 @@ impl VersionsView {
         state.frozen = true;
         maybe_prefetch(&self.core, &mut state, self.episode);
         self.snapshot.set(render(&state));
+    }
+
+    /// Live seeder counts are still on the way: the rows may rank again
+    /// when they land.
+    pub fn counting(&self) -> bool {
+        lock(&self.state).counting > 0
     }
 
     /// The playlist formats the device plays, for `PlaybackView::open_for`.
@@ -949,6 +972,7 @@ async fn collect(
             }
             Some(joined) = live.join_next() => {
                 let mut s = lock(&state);
+                s.counting = s.counting.saturating_sub(1);
                 if let Ok(found) = joined {
                     found.apply(&mut s);
                 }
@@ -1011,6 +1035,7 @@ async fn collect(
                 let swarms = live_asks(&core, &parsed, &mut s.scraped);
                 if !swarms.is_empty() {
                     live.spawn(live_check(core.clone(), swarms));
+                    s.counting += 1;
                 }
                 s.streams.extend(parsed);
                 s.pending.retain(|(url, _)| *url != transport_url);
@@ -1462,7 +1487,19 @@ fn render(s: &State) -> VersionsSnapshot {
         failed_addons: names(&s.failed),
         done: s.done,
         frozen: s.frozen,
+        nobody_sharing: nobody_sharing(s),
     }
+}
+
+/// Every listed version is a swarm the engine would fetch, and its
+/// trackers count one seeder or none. A version without a live count, or
+/// one a service or a link serves, can still start.
+fn nobody_sharing(s: &State) -> bool {
+    let dead = |r: &RankedRow| {
+        r.class == SourceClass::Swarm
+            && info_hash(&r.stream).is_some_and(|h| s.live.get(&h).is_some_and(|n| *n <= 1))
+    };
+    !s.ranked.rows.is_empty() && s.ranked.rows.iter().all(dead)
 }
 
 fn row_dto(r: &RankedRow) -> VersionRow {

@@ -53,6 +53,7 @@ class VersionsCopyTest {
         failedAddons = failed,
         done = done,
         frozen = false,
+        nobodySharing = false,
     )
 
     @Test

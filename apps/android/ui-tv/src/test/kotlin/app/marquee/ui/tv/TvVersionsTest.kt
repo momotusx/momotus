@@ -141,6 +141,7 @@ class TvVersionsTest {
         hidden = HiddenSummary(blocked?.count ?: 0),
         done = true,
         frozen = false,
+        nobodySharing = false,
     )
 
     private val played = mutableListOf<String>()

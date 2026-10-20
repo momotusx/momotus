@@ -209,6 +209,13 @@ class StreamChoiceCopyTest {
                         put("networks", buildJsonObject { for ((n, v) in NETWORKS) put(n.wire, v) })
                     },
                 )
+                put(
+                    "nobodySharing",
+                    buildJsonObject {
+                        put("text", NOBODY_SHARING)
+                        put("details", NOBODY_SHARING_DETAILS)
+                    },
+                )
             }
         }
 

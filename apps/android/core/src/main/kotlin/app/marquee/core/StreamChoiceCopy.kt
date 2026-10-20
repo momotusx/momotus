@@ -247,6 +247,10 @@ object StreamChoiceCopy {
     const val MEASURE_AGAIN = "Measure again"
     const val MEASURING = "Measuring at the next playback"
 
+    /** The Versions state `nobodySharing`, on the list and the recommended card. */
+    const val NOBODY_SHARING = "Almost nobody is sharing this right now"
+    const val NOBODY_SHARING_DETAILS = "Every version has one seeder or none at the moment, so it may not start."
+
     const val HEADER = "{device}: {conditions}"
     val DEVICES = mapOf("tv" to "this TV", "desktop" to "this computer", "phone" to "this phone")
     val SCREENS = mapOf(2160 to "4K", 1080 to "1080p", 720 to "720p", 480 to "SD")

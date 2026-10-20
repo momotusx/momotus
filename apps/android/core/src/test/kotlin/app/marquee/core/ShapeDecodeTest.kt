@@ -70,7 +70,7 @@ class ShapeDecodeTest {
                       "via":"Y","releaseName":"D","languages":[],"reasons":["playsDirectly"],"group":"needsDownload","failoverCount":0,
                       ${VersionsFixtures.ROW_JSON}}],
                    "hidden":{"count":5,"byReason":[["wrongTitle",3],["tooLarge",2]]},
-                   "pendingAddons":["Slow"],"slowAddons":[],"failedAddons":["Broken"],"done":false,"frozen":true,
+                   "pendingAddons":["Slow"],"slowAddons":[],"failedAddons":["Broken"],"done":false,"frozen":true,"nobodySharing":false,
                    ${VersionsFixtures.SNAPSHOT_JSON}}""",
             )
         assertEquals(18_253_611_008L, snapshot.recommended?.sizeBytes)

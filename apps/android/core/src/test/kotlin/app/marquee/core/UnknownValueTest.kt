@@ -17,7 +17,7 @@ class UnknownValueTest {
     // The recorded Versions update (traces/versions-playback.jsonl), with a newer core's values in it:
     // two new hide reasons, a new group and a new reason on the recommended row.
     private val snapshot =
-        """{"done":true,"failedAddons":[],"frozen":false,""" +
+        """{"done":true,"failedAddons":[],"frozen":false,"nobodySharing":false,""" +
             """"conditions":{"account":false,"engine":false,"freeBytes":null,"hdr":true,""" +
             """"http":{"mbps":15,"samples":0},"minSeeders":50,"network":"other","p2p":{"mbps":10,"samples":0},""" +
             """"runtimeMin":null,"screenClass":2160,"sizeLimitBytes":5368709120},"blocked":null,"note":null,""" +

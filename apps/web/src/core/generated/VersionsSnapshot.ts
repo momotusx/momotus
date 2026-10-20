@@ -19,4 +19,11 @@ blocked: BlockedVersions | null,
 /**
  * The one-time note when a pick taught Marquee something (3.9).
  */
-note: LearnedNote | null, recommended: VersionRow | null, rows: Array<VersionRow>, hidden: HiddenSummary, pendingAddons: Array<string>, slowAddons: Array<string>, failedAddons: Array<string>, done: boolean, frozen: boolean, };
+note: LearnedNote | null, recommended: VersionRow | null, rows: Array<VersionRow>, hidden: HiddenSummary, pendingAddons: Array<string>, slowAddons: Array<string>, failedAddons: Array<string>, done: boolean, frozen: boolean, 
+/**
+ * Every listed version is a swarm the engine would fetch whose
+ * trackers count one seeder or none: almost nobody is sharing this
+ * title right now, so say so before Play. Its attempt gives up after
+ * the first 30 s window.
+ */
+nobodySharing: boolean, };

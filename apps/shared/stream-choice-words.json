@@ -310,5 +310,9 @@
       "cellular": "mobile data",
       "other": "this network"
     }
+  },
+  "nobodySharing": {
+    "text": "Almost nobody is sharing this right now",
+    "details": "Every version has one seeder or none at the moment, so it may not start."
   }
 }

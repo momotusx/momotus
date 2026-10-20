@@ -10,7 +10,8 @@
  * Race 2 (plans/m13-stream-choice.md 6.4) adds live seeders, the moov start
  * rule, the early cut, moving on and uTP: the recommended arm plays as the
  * apps play a pick, Torrentio's first as a plain client. Rows carry `race`;
- * race 1's rows have none.
+ * race 1's rows have none. From race 3 the arms read Versions once the live
+ * counts landed, not a fixed 2.5 s after `done`.
  */
 
 import { appendFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -30,7 +31,7 @@ const TORRENTIO =
   "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/manifest.json";
 const ARMS = ["recommended", "first", "first", "recommended"] as const;
 const SECONDS = 120;
-const RACE = 2;
+const RACE = 3;
 
 type Json = Record<string, any>;
 
@@ -91,6 +92,8 @@ function race(mq: string, builtFrom: string) {
         played: result.played ?? null,
         moved: result.moved ?? null,
         versionsMs: result.versionsMs ?? null,
+        countedMs: result.countedMs ?? null,
+        nobodySharing: result.nobodySharing ?? null,
         ok: result.ok === true,
         error: result.ok ? null : failure,
         wallMs: Date.now() - started,

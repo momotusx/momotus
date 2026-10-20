@@ -173,6 +173,7 @@ class TitleCopyTest {
         failedAddons = emptyList(),
         done = done,
         frozen = false,
+        nobodySharing = false,
     )
 
     @Test

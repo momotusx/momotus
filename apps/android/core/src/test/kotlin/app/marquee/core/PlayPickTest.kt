@@ -47,6 +47,7 @@ class PlayPickTest {
         failedAddons = emptyList(),
         done = done,
         frozen = frozen,
+        nobodySharing = false,
     )
 
     @Test

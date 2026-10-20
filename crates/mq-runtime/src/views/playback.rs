@@ -553,6 +553,13 @@ impl PlaybackView {
         may_cut_early(&lock(&self.state))
     }
 
+    /// Tests: how long a torrent's start would be given now.
+    #[doc(hidden)]
+    #[cfg(feature = "torrent")]
+    pub fn start_deadline(&self) -> Duration {
+        start_rule(&lock(&self.state)).1
+    }
+
     /// A kids policy refused the target at open.
     pub fn denied(&self) -> bool {
         self.denied
@@ -1300,6 +1307,20 @@ async fn shows_picture(
 /// The recommendation moves on by itself at most this many times.
 const HOPS: u8 = 2;
 
+/// How a torrent's start is judged: whether a swarm that falls short may be
+/// cut at its first window, and the deadline. When almost nobody is sharing
+/// any version of the title, the attempt gives up after that first window
+/// rather than waiting the full deadline; never after "Try again".
+#[cfg(feature = "torrent")]
+fn start_rule(s: &State) -> (bool, Duration) {
+    let hopeless = !s.patient && s.pick.as_ref().is_some_and(|p| p.nobody_sharing());
+    if hopeless {
+        (true, STALL.first)
+    } else {
+        (may_cut_early(s), TORRENT_READY_TIMEOUT)
+    }
+}
+
 /// A swarm that falls short may be cut at its first window when something
 /// else can play instead: another source of this version, or, for the
 /// recommendation with moves left, the version the ranking picks next.
@@ -1531,8 +1552,8 @@ async fn open_torrent(
                 unchoked: s.unchoked_ms.is_some(),
             })
         };
-        let others = may_cut_early(&lock(state));
-        let ready = watch_start(head.ready(), progress, STALL, others, TORRENT_READY_TIMEOUT).await;
+        let (others, deadline) = start_rule(&lock(state));
+        let ready = watch_start(head.ready(), progress, STALL, others, deadline).await;
         Ok::<_, mq_engine::EngineError>((file, info, ready))
     };
     let failed = match started.await {
