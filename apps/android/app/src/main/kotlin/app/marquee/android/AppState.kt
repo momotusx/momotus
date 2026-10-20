@@ -112,7 +112,11 @@ class AppState(
             // Never a blank screen for good: past the limit Home opens, and says why if the core is silent.
             val decided =
                 withTimeoutOrNull(START_WAIT_MS) { decide() } ?: Start.Home.also {
-                    CoreLog.w("start: no decision in $START_WAIT_MS ms at \"$step\", opening Home")
+                    // The core's state then tells a slow open (still starting, no open time) from a missed change.
+                    CoreLog.w(
+                        "start: no decision in $START_WAIT_MS ms at \"$step\" (core ${session.health}, " +
+                            "open ${session.openMillis} ms), opening Home",
+                    )
                 }
             // A switch or a lock meanwhile (a lock at start) already chose Home for the next profile.
             if (!sentHome) start = decided

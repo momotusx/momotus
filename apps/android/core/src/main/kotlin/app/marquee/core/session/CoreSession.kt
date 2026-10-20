@@ -151,6 +151,8 @@ class CoreSession(
         thread(name = "marquee-boot") {
             try {
                 val started = System.nanoTime()
+                // Each step's time, so a slow start says which one waited.
+                CoreLog.d("core opening")
                 val deaths = client.epoch
                 // The dead core holds the database and its runtime; drop it before opening a new one.
                 core?.close()
@@ -170,13 +172,16 @@ class CoreSession(
                         logFilter = if (debuggable) "debug" else null,
                     )
                 core = opened
+                val native = (System.nanoTime() - started) / 1_000_000
                 // Pushes from a revived `debrid` view wait for this core's restore.
                 debridAccounts.pause()
                 client.attach { text -> opened.send(text) }
                 // Accounts come back before anything may play (plans/c10-handoff.md, phase 3a).
                 runBlocking { debridAccounts.opened { debrid.snapshot?.pending } }
                 openMillis = (System.nanoTime() - started) / 1_000_000
-                CoreLog.d("core open $openMillis ms, version ${opened.version()}")
+                CoreLog.d(
+                    "core open $openMillis ms (native open $native ms, then accounts), version ${opened.version()}",
+                )
                 // A core that died again while this one was opening keeps the state its death set.
                 if (client.epoch == deaths) health = CoreHealth.Running
                 ready.complete(Unit)
