@@ -19,8 +19,17 @@
 //! A deleted account leaves only its id in `gone`, in the database and in the
 //! journal, so no crash, restore or replay brings it back: its routes answer
 //! 410 `accountGone`.
+//!
+//! With an identity file (`identity`), people sign in with Apple, Google,
+//! Facebook or an OpenID provider; the identity only finds the account, and
+//! sign-up then needs a ticket from such a sign-in (or the invite).
 // ponytail: database calls run on the async workers under one lock; move
 // them to spawn_blocking when one relay serves many busy accounts.
+
+mod identity;
+mod jwt;
+
+pub use identity::IdentityFile;
 
 use axum::extract::Path as UrlPath;
 use axum::extract::{ConnectInfo, DefaultBodyLimit, Query, State};
@@ -31,11 +40,12 @@ use axum::{Json, Router};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as B64;
 use mq_library::hlc::{Hlc, now_ms};
-use mq_sync::roster::{Entry, Hex, Id, Kind, Role, Roster, RosterError};
+use mq_sync::roster::{Entry, Hex, Id, Kind, Role, Roster, RosterError, TokenRequest};
 use mq_sync::wire::{
-    AccountRequest, AccountResponse, AppendRequest, Behind, MAX_BODY, MAX_CLOCK_AHEAD_MS, MIN_BODY,
-    PAGE, PullResponse, PushRequest, PushResponse, ROSTER_PAGE, Redeemed, Refusal, Rejected,
-    RelayInfo, ReplayRequest, RosterHead, RosterPage, TokenGrant, WireRecord,
+    AccountRequest, AccountResponse, AppendRequest, Behind, DeleteRequest, MAX_BODY,
+    MAX_CLOCK_AHEAD_MS, MIN_BODY, PAGE, PullResponse, PushRequest, PushResponse, ROSTER_PAGE,
+    Redeemed, Refusal, Rejected, RelayInfo, ReplayRequest, RosterHead, RosterPage, TokenGrant,
+    WireRecord,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -84,6 +94,12 @@ pub struct Config {
     /// the port). Signed token requests must name it, so a request signed
     /// for another relay's host is refused. `None` takes any host.
     pub public_host: Option<String>,
+    /// Sign-in with Apple, Google, Facebook or OpenID providers; needs
+    /// `public_host` (nonces and callbacks are bound to it).
+    pub identity: Option<IdentityFile>,
+    /// How often due deletions run and expired sign-in rows go (an hour;
+    /// tests shorten it).
+    pub housekeeping_every: std::time::Duration,
 }
 
 impl Default for Config {
@@ -95,6 +111,8 @@ impl Default for Config {
             clock_offset_ms: Arc::default(),
             trust_proxy: false,
             public_host: None,
+            identity: None,
+            housekeeping_every: std::time::Duration::from_secs(3600),
         }
     }
 }
@@ -117,16 +135,34 @@ struct AppState {
     /// Rate limits for the endpoints that need no token.
     limits: Arc<Mutex<Limits>>,
     clock: Arc<Mutex<ClockWatch>>,
+    /// Sign-in, when the relay has an identity file.
+    identity: Option<Arc<identity::Identity>>,
+    /// Accounts each client address created by replay in the grace hour.
+    grace_created: Arc<Mutex<HashMap<IpAddr, u32>>>,
 }
 
 /// Opens (or creates) the relay database at `db` and its roster journal
-/// next to it, and returns the HTTP routes.
+/// next to it, and returns the HTTP routes. With an identity file, its key
+/// must be the one the database was made with.
 pub fn router(db: &Path, config: Config) -> Result<Router, String> {
     let conn = Connection::open(db).map_err(|e| e.to_string())?;
     let (conn, generation, generation_since_ms, relay_id) =
         open_database(conn, &config).map_err(|e| e.to_string())?;
+    let identity = match &config.identity {
+        Some(file) => {
+            let host = config
+                .public_host
+                .as_deref()
+                .ok_or("an identity file needs the relay's public host")?;
+            let identity = identity::Identity::new(file.clone(), host)?;
+            check_identity_key(&conn, &identity.fingerprint())?;
+            Some(Arc::new(identity))
+        }
+        None => None,
+    };
     let journal_path = db.with_extension("roster.jsonl");
     let journal = open_journal(&journal_path, &conn)?;
+    let every = config.housekeeping_every;
     let state = AppState {
         db: Arc::new(Mutex::new(conn)),
         journal: Arc::new(Mutex::new(journal)),
@@ -138,8 +174,13 @@ pub fn router(db: &Path, config: Config) -> Result<Router, String> {
         relay_id,
         limits: Arc::default(),
         clock: Arc::default(),
+        identity,
+        grace_created: Arc::default(),
     };
-    Ok(Router::new()
+    if tokio::runtime::Handle::try_current().is_ok() {
+        tokio::spawn(housekeeping(state.clone(), every));
+    }
+    let mut routes = Router::new()
         .route("/v1/relay", get(relay_info))
         .route("/v1/accounts", post(create_account))
         .route("/v1/account", delete(delete_account))
@@ -151,9 +192,100 @@ pub fn router(db: &Path, config: Config) -> Result<Router, String> {
         .route("/v1/pairings", post(open_pairing))
         .route("/v1/pairings/{id}", put(fill_pairing))
         .route("/v1/pairings/{id}/take", post(take_pairing))
-        .route("/v1/recovery/redeem", post(redeem_kit))
+        .route("/v1/recovery/redeem", post(redeem_kit));
+    if state.identity.is_some() {
+        use identity::*;
+        routes = routes
+            .route("/v1/auth/{provider}/start", post(start).options(preflight))
+            .route(
+                "/v1/auth/{provider}/callback",
+                get(callback_get).post(callback_post),
+            )
+            .route("/v1/auth/take", post(take).options(preflight))
+            .route("/v1/auth/token", post(native))
+            .route("/v1/auth/apple/notifications", post(apple_notification))
+            .route("/v1/identity", get(links).post(link))
+            .route("/v1/identity/{link}", delete(unlink))
+            .route(
+                "/v1/account/delete-request",
+                post(delete_request)
+                    .delete(identity::cancel_deletion)
+                    .options(preflight),
+            );
+    }
+    Ok(routes
         .layer(DefaultBodyLimit::max(MAX_REQUEST))
         .with_state(state))
+}
+
+/// The database keeps the identity key's fingerprint: another key would
+/// turn every user into a new one, so the relay does not start on it.
+fn check_identity_key(db: &Connection, fingerprint: &str) -> Result<(), String> {
+    let stored: Option<String> = db
+        .query_row(
+            "SELECT value FROM meta WHERE key = 'identity_key'",
+            [],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+    match stored {
+        Some(stored) if stored != fingerprint => Err(
+            "the identity key is not the one this database was made with; restore its identity file"
+                .into(),
+        ),
+        Some(_) => Ok(()),
+        None => db
+            .execute(
+                "INSERT INTO meta (key, value) VALUES ('identity_key', ?1)",
+                params![fingerprint],
+            )
+            .map(drop)
+            .map_err(|e| e.to_string()),
+    }
+}
+
+/// Every `every`: deletions that came due run (one batch, one journal
+/// rewrite) and sign-in rows past their time go.
+async fn housekeeping(state: AppState, every: std::time::Duration) {
+    let mut tick = tokio::time::interval(every);
+    tick.tick().await;
+    loop {
+        tick.tick().await;
+        run_due(&state);
+    }
+}
+
+fn run_due(state: &AppState) {
+    let now = state.now_ms();
+    let mut db = lock(state);
+    if let Err(e) = identity::expire(&db, now) {
+        tracing::warn!("expire sign-in rows: {e}");
+    }
+    if journal_stopped(state).is_some() {
+        return;
+    }
+    let ran = (|| -> rusqlite::Result<Vec<Id>> {
+        let tx = db.transaction()?;
+        let due: Vec<String> = {
+            let mut stmt = tx.prepare("SELECT account FROM deletion WHERE due_ms <= ?1")?;
+            stmt.query_map(params![now as i64], |r| r.get(0))?
+                .collect::<rusqlite::Result<_>>()?
+        };
+        for account in &due {
+            purge(&tx, account, now)?;
+        }
+        tx.commit()?;
+        Ok(due.iter().filter_map(|a| account_id(a)).collect())
+    })();
+    match ran {
+        Ok(due) if due.is_empty() => {}
+        Ok(due) => {
+            tracing::info!("{} scheduled deletions ran", due.len());
+            rewrite_after_deletion(state, &db, &due, now);
+        }
+        Err(e) => tracing::error!("scheduled deletions: {e}"),
+    }
 }
 
 const SCHEMA: &str = "
@@ -222,6 +354,50 @@ CREATE TABLE IF NOT EXISTS gone (
     account     TEXT PRIMARY KEY,
     deleted_ms  INTEGER NOT NULL
 );
+-- Sign-in (plans/accounts.md 2.1): a keyed hash of each identity, never
+-- the provider's subject, email or name.
+CREATE TABLE IF NOT EXISTS identity (
+    link        INTEGER PRIMARY KEY,
+    provider    TEXT NOT NULL,
+    subject     BLOB NOT NULL,
+    account     TEXT NOT NULL,
+    created_ms  INTEGER NOT NULL,
+    UNIQUE (provider, subject)
+);
+CREATE INDEX IF NOT EXISTS identity_account ON identity (account);
+CREATE TABLE IF NOT EXISTS signups (
+    subject  BLOB NOT NULL,
+    at_ms    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS signups_subject ON signups (subject, at_ms);
+CREATE TABLE IF NOT EXISTS auth_flow (
+    id_hash        BLOB PRIMARY KEY,
+    provider       TEXT NOT NULL,
+    purpose        TEXT NOT NULL,
+    verifier_hash  BLOB NOT NULL,
+    nonce          TEXT NOT NULL,
+    return_to      TEXT,
+    client         TEXT NOT NULL,
+    created_ms     INTEGER NOT NULL,
+    code_hash      BLOB,
+    verified       TEXT
+);
+CREATE TABLE IF NOT EXISTS ticket (
+    hash        BLOB PRIMARY KEY,
+    provider    TEXT NOT NULL,
+    subject     BLOB NOT NULL,
+    expires_ms  INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS receipt (
+    hash        BLOB PRIMARY KEY,
+    link        INTEGER,
+    expires_ms  INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS deletion (
+    account  TEXT PRIMARY KEY,
+    due_ms   INTEGER NOT NULL,
+    link     INTEGER
+);
 ";
 
 type Opened = (Connection, String, u64, Id);
@@ -280,7 +456,8 @@ fn open_database(conn: Connection, config: &Config) -> rusqlite::Result<Opened> 
     Ok((conn, generation, since, relay_id))
 }
 
-/// One journal line: a roster entry, or an account deleted for good.
+/// One journal line: a roster entry, an account deleted for good, or a
+/// deletion scheduled (or, with no date, cancelled), so a restore keeps it.
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]
 enum JournalLine {
@@ -292,6 +469,13 @@ enum JournalLine {
         gone: Id,
         #[serde(rename = "deletedMs")]
         deleted_ms: u64,
+    },
+    Deletion {
+        deletion: Id,
+        #[serde(rename = "dueMs")]
+        due_ms: Option<u64>,
+        #[serde(default)]
+        link: Option<i64>,
     },
 }
 
@@ -326,6 +510,28 @@ fn open_journal(path: &Path, conn: &Connection) -> Result<std::fs::File, String>
                     purge(&tx, &hex::encode(gone.0), deleted_ms).map_err(|e| e.to_string())?;
                     tx.commit().map_err(|e| e.to_string())?;
                 }
+            }
+            // In order, the last line of an account wins: a restored backup
+            // gets back what was scheduled or cancelled after it.
+            (
+                true,
+                Ok(JournalLine::Deletion {
+                    deletion,
+                    due_ms,
+                    link,
+                }),
+            ) => {
+                let account = hex::encode(deletion.0);
+                let applied = match due_ms {
+                    Some(due) => conn.execute(
+                        "INSERT INTO deletion (account, due_ms, link) SELECT ?1, ?2, ?3
+                         WHERE NOT EXISTS (SELECT 1 FROM gone WHERE account = ?1)
+                         ON CONFLICT(account) DO UPDATE SET due_ms = excluded.due_ms, link = excluded.link",
+                        params![account, due as i64, link],
+                    ),
+                    None => conn.execute("DELETE FROM deletion WHERE account = ?1", params![account]),
+                };
+                applied.map_err(|e| e.to_string())?;
             }
             // Torn while being written: the entry was never acknowledged.
             (false, _) => break,
@@ -368,17 +574,24 @@ fn open_journal(path: &Path, conn: &Connection) -> Result<std::fs::File, String>
     rewrite_journal(path, conn).map_err(fail)
 }
 
-/// Writes the journal again from the tables (every tombstone, then every
-/// roster entry in order) and returns a handle that appends to the new
-/// file: a temp file, fsync, rename, fsync of the directory.
-// ponytail: reads every account's roster under the lock; batch deletions
-// (one rewrite for many) when they get frequent.
+/// Writes the journal again from the tables (every tombstone, every
+/// scheduled deletion, then every roster entry in order) and returns a
+/// handle that appends to the new file: a temp file, fsync, rename, fsync
+/// of the directory.
+// ponytail: reads every account's roster under the lock; scheduled
+// deletions already run in one batch with one rewrite.
 fn rewrite_journal(path: &Path, conn: &Connection) -> std::io::Result<std::fs::File> {
+    type Due = (String, i64, Option<i64>);
     let tables = (|| -> rusqlite::Result<_> {
         let mut gone = conn.prepare("SELECT account, deleted_ms FROM gone ORDER BY account")?;
         let gone = gone
             .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?
             .collect::<rusqlite::Result<Vec<_>>>()?;
+        let mut due =
+            conn.prepare("SELECT account, due_ms, link FROM deletion ORDER BY account")?;
+        let due = due
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+            .collect::<rusqlite::Result<Vec<Due>>>()?;
         let mut stmt =
             conn.prepare("SELECT account, body, sig FROM roster ORDER BY account, seq")?;
         let entries = stmt
@@ -386,9 +599,9 @@ fn rewrite_journal(path: &Path, conn: &Connection) -> std::io::Result<std::fs::F
                 Ok((r.get::<_, String>(0)?, stored_entry(r.get(1)?, r.get(2)?)))
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
-        Ok((gone, entries))
+        Ok((gone, due, entries))
     })();
-    let (gone, entries) = tables.map_err(std::io::Error::other)?;
+    let (gone, due, entries) = tables.map_err(std::io::Error::other)?;
     let id = |account: &str| account_id(account).expect("stored account ids are hex");
     let temp = path.with_extension("jsonl.tmp");
     let mut file = std::fs::File::create(&temp)?;
@@ -396,6 +609,14 @@ fn rewrite_journal(path: &Path, conn: &Connection) -> std::io::Result<std::fs::F
         let line = JournalLine::Gone {
             gone: id(&account),
             deleted_ms: deleted_ms as u64,
+        };
+        write_line(&mut file, &line)?;
+    }
+    for (account, due_ms, link) in due {
+        let line = JournalLine::Deletion {
+            deletion: id(&account),
+            due_ms: Some(due_ms as u64),
+            link,
         };
         write_line(&mut file, &line)?;
     }
@@ -431,15 +652,21 @@ fn is_gone(db: &Connection, account: &Id) -> rusqlite::Result<bool> {
 }
 
 /// Deletes everything the relay holds for `account` (records, roster,
-/// recovery data, tokens, the pairings it filled) and keeps only its
-/// tombstone, inside the caller's transaction. An earlier tombstone keeps
-/// its date.
+/// recovery data, tokens, the pairings it filled, identity links and their
+/// receipts, a scheduled deletion) and keeps only its tombstone, inside the
+/// caller's transaction. An earlier tombstone keeps its date.
 fn purge(tx: &Connection, account: &str, deleted_ms: u64) -> rusqlite::Result<()> {
     tx.execute(
         "INSERT INTO gone (account, deleted_ms) VALUES (?1, ?2) ON CONFLICT(account) DO NOTHING",
         params![account, deleted_ms as i64],
     )?;
-    for table in ["record", "roster", "recovery", "device", "pairing"] {
+    tx.execute(
+        "DELETE FROM receipt WHERE link IN (SELECT link FROM identity WHERE account = ?1)",
+        [account],
+    )?;
+    for table in [
+        "record", "roster", "recovery", "device", "pairing", "identity", "deletion",
+    ] {
         tx.execute(
             &format!("DELETE FROM {table} WHERE account = ?1"),
             [account],
@@ -447,6 +674,52 @@ fn purge(tx: &Connection, account: &str, deleted_ms: u64) -> rusqlite::Result<()
     }
     tx.execute("DELETE FROM account WHERE id = ?1", [account])?;
     Ok(())
+}
+
+/// Journals a scheduled deletion (`due`), or its cancellation (`None`),
+/// durably before the answer; a failure stops roster writes as for entries.
+fn journal_deletion(
+    state: &AppState,
+    account: &Id,
+    due: Option<u64>,
+    link: Option<i64>,
+) -> std::io::Result<()> {
+    let mut file = state.journal.lock().unwrap_or_else(|p| p.into_inner());
+    let line = JournalLine::Deletion {
+        deletion: *account,
+        due_ms: due,
+        link,
+    };
+    let written = write_line(&mut file, &line).and_then(|()| file.sync_data());
+    if written.is_err() {
+        state.journal_failed.store(true, Ordering::Relaxed);
+    }
+    written
+}
+
+/// After deletions committed: the journal written again without their
+/// lines, the append handle on the new file. A failed rewrite leaves the
+/// deletions standing (the next start writes the journal from the tables):
+/// roster writes stop until then, and the old journal gets each `gone`
+/// line, so a backup restored before that start cannot bring them back.
+fn rewrite_after_deletion(state: &AppState, db: &Connection, gone: &[Id], now: u64) {
+    let mut file = state.journal.lock().unwrap_or_else(|p| p.into_inner());
+    match rewrite_journal(&state.journal_path, db) {
+        Ok(new) => *file = new,
+        Err(e) => {
+            tracing::error!("roster journal rewrite after a deletion: {e}");
+            state.journal_failed.store(true, Ordering::Relaxed);
+            for account in gone {
+                let line = JournalLine::Gone {
+                    gone: *account,
+                    deleted_ms: now,
+                };
+                if let Err(e) = write_line(&mut file, &line).and_then(|()| file.sync_data()) {
+                    tracing::error!("roster journal gone line: {e}");
+                }
+            }
+        }
+    }
 }
 
 /// The answer for an account that was deleted.
@@ -563,8 +836,54 @@ async fn relay_info(State(state): State<AppState>) -> Response {
         generation: state.generation.to_string(),
         generation_since_ms: state.generation_since_ms,
         server_ms: state.now_ms(),
+        providers: state
+            .identity
+            .as_deref()
+            .map(identity::Identity::providers)
+            .unwrap_or_default(),
     })
     .into_response()
+}
+
+/// Accounts one client address may create by replay in the grace hour.
+const GRACE_CREATIONS: u32 = 20;
+
+/// Whether a replayed genesis may create its account. Without sign-in, as
+/// for `/v1/accounts` (the invite, when one is set). With it, sign-up needs
+/// a ticket, so a replay creates only with the invite, or within the hour
+/// after a restore (`new_generation`), when devices give back what the
+/// backup lost, at most 20 per client address.
+fn may_replay_create(state: &AppState, headers: &HeaderMap, address: IpAddr) -> bool {
+    if state.identity.is_none() {
+        return invited(state, headers);
+    }
+    if invite_matches(state, headers) {
+        return true;
+    }
+    let grace = state.generation_since_ms != 0
+        && state.now_ms() < state.generation_since_ms + 60 * 60 * 1000;
+    if !grace {
+        return false;
+    }
+    let mut created = state
+        .grace_created
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let count = created.entry(address).or_default();
+    *count += 1;
+    *count <= GRACE_CREATIONS
+}
+
+/// The invite, configured and given: false when none is configured (unlike
+/// `invited`, which then lets anyone in). Relays with sign-in go by this.
+fn invite_matches(state: &AppState, headers: &HeaderMap) -> bool {
+    state.config.invite.as_ref().is_some_and(|invite| {
+        let given = headers
+            .get("x-invite")
+            .map(|v| v.as_bytes())
+            .unwrap_or_default();
+        same(given, invite.as_bytes())
+    })
 }
 
 fn invited(state: &AppState, headers: &HeaderMap) -> bool {
@@ -581,13 +900,29 @@ fn invited(state: &AppState, headers: &HeaderMap) -> bool {
 /// device the genesis lists. Once only: the genesis is no secret (anyone
 /// who saw the roster holds it), so a device that lost the answer signs
 /// for a token like any member.
+///
+/// With sign-in, creating needs a ticket (or the invite itself): the
+/// ticket's identity is linked to the new account and counted as a sign-up
+/// (at most 3 in 30 days). An identity linked elsewhere is refused unless
+/// `move` (Start over): its link moves here and the old account is
+/// scheduled for deletion. The ticket is used only once the account is made.
 async fn create_account(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(request): Json<AccountRequest>,
 ) -> Response {
-    if !invited(&state, &headers) {
-        return error(StatusCode::FORBIDDEN, "an invite is required");
+    let signs_in = state.identity.is_some();
+    let ticket = request.ticket.as_deref().filter(|_| signs_in);
+    let invite = match signs_in {
+        true => invite_matches(&state, &headers),
+        false => invited(&state, &headers),
+    };
+    if !invite && ticket.is_none() {
+        let why = match signs_in {
+            true => "a sign-in or an invite is required",
+            false => "an invite is required",
+        };
+        return error(StatusCode::FORBIDDEN, why);
     }
     let body = match request.entry.parse() {
         Ok(body) => body,
@@ -599,11 +934,13 @@ async fn create_account(
             "an account starts with its genesis",
         );
     };
+    let now = state.now_ms();
     let mut db = lock(&state);
     if let Some(stopped) = journal_stopped(&state) {
         return stopped;
     }
-    let created = (|| -> rusqlite::Result<Result<String, Response>> {
+    type Made = (String, Option<(Id, u64)>);
+    let created = (|| -> rusqlite::Result<Result<Made, Response>> {
         let tx = db.transaction()?;
         if is_gone(&tx, &body.account)? {
             return Ok(Err(account_gone()));
@@ -613,6 +950,13 @@ async fn create_account(
                 StatusCode::CONFLICT,
                 "this account already exists",
             )));
+        }
+        let mut scheduled = None;
+        if let Some(ticket) = ticket {
+            match signed_up(&tx, ticket, &body.account, request.move_link, now)? {
+                Ok(old) => scheduled = old,
+                Err(refused) => return Ok(Err(refused)),
+            }
         }
         if let Err(refused) = append_entries(
             &tx,
@@ -630,20 +974,84 @@ async fn create_account(
             false,
         )?;
         tx.commit()?;
-        Ok(Ok(token))
+        Ok(Ok((token, scheduled)))
     })();
     match created {
-        Ok(Ok(token)) => match journal(&state, &body.account, &[request.entry]) {
-            Ok(()) => Json(AccountResponse {
-                account: hex::encode(body.account.0),
-                device_token: token,
-            })
-            .into_response(),
-            Err(e) => journal_error(e),
-        },
+        Ok(Ok((token, scheduled))) => {
+            let journaled =
+                journal(&state, &body.account, &[request.entry]).and_then(|()| match scheduled {
+                    Some((old, due)) => journal_deletion(&state, &old, Some(due), None),
+                    None => Ok(()),
+                });
+            match journaled {
+                Ok(()) => Json(AccountResponse {
+                    account: hex::encode(body.account.0),
+                    device_token: token,
+                })
+                .into_response(),
+                Err(e) => journal_error(e),
+            }
+        }
         Ok(Err(refused)) => refused,
         Err(e) => storage_error("create account", e),
     }
+}
+
+/// A sign-up with a ticket, inside the creating transaction: the identity
+/// linked to `account`, the sign-up counted, the ticket used. With `move`,
+/// an identity linked elsewhere comes here and the old account waits 7 days
+/// for its deletion: that account and its date.
+fn signed_up(
+    tx: &Connection,
+    ticket: &str,
+    account: &Id,
+    move_link: bool,
+    now: u64,
+) -> rusqlite::Result<Result<Option<(Id, u64)>, Response>> {
+    let Some((provider, subject)) = identity::ticket(tx, ticket, now, false)? else {
+        return Ok(Err(identity::ticket_refused()));
+    };
+    if identity::signups(tx, &subject, now)? >= identity::SIGNUP_CAP {
+        return Ok(Err(identity::coded(
+            StatusCode::TOO_MANY_REQUESTS,
+            "signupLimit",
+            "this identity made several accounts lately",
+        )));
+    }
+    let new = hex::encode(account.0);
+    let mut scheduled = None;
+    match identity::identity_link(tx, &provider, &subject)? {
+        Some(_) if !move_link => return Ok(Err(identity::linked_elsewhere())),
+        Some((link, old)) => {
+            tx.execute(
+                "UPDATE identity SET account = ?2, created_ms = ?3 WHERE link = ?1",
+                params![link, new, now as i64],
+            )?;
+            tx.execute(
+                "INSERT INTO deletion (account, due_ms, link) VALUES (?1, ?2, NULL)
+                 ON CONFLICT(account) DO NOTHING",
+                params![old, (now + identity::DELETION_WAIT_MS) as i64],
+            )?;
+            let due: i64 = tx.query_row(
+                "SELECT due_ms FROM deletion WHERE account = ?1",
+                params![old],
+                |r| r.get(0),
+            )?;
+            scheduled = account_id(&old).map(|old| (old, due as u64));
+        }
+        None => {
+            tx.execute(
+                "INSERT INTO identity (provider, subject, account, created_ms) VALUES (?1, ?2, ?3, ?4)",
+                params![provider, subject, new, now as i64],
+            )?;
+        }
+    }
+    tx.execute(
+        "INSERT INTO signups (subject, at_ms) VALUES (?1, ?2)",
+        params![subject, now as i64],
+    )?;
+    identity::ticket(tx, ticket, now, true)?;
+    Ok(Ok(scheduled))
 }
 
 fn journal_error(e: std::io::Error) -> Response {
@@ -661,7 +1069,17 @@ fn journal_error(e: std::io::Error) -> Response {
 /// tombstone included), and until then roster writes stop and the old
 /// journal gets the `gone` line, so a backup restored before that restart
 /// cannot bring the account back.
-async fn delete_account(State(state): State<AppState>, headers: HeaderMap) -> Response {
+///
+/// A token alone deletes nothing: the request is signed by the device key
+/// of the token's own member, a current device of the account, for this
+/// relay and host, near the relay's time, its nonce used once. An Apple
+/// revoke's receipt may come with it.
+async fn delete_account(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(asked): Json<DeleteRequest>,
+) -> Response {
+    let now = state.now_ms();
     let mut db = lock(&state);
     let auth = match active(authorize(&db, &headers)) {
         Ok(auth) => auth,
@@ -670,35 +1088,89 @@ async fn delete_account(State(state): State<AppState>, headers: HeaderMap) -> Re
     if let Some(stopped) = journal_stopped(&state) {
         return stopped;
     }
-    let now = state.now_ms();
-    let deleted = (|| {
+    let account = hex::encode(auth.account.0);
+    let deleted = (|| -> rusqlite::Result<Result<(), Response>> {
         let tx = db.transaction()?;
-        purge(&tx, &hex::encode(auth.account.0), now)?;
-        tx.commit()
+        if !signed_delete(&tx, &state, &auth, &asked.request, &asked.sig, now)? {
+            return Ok(Err(error(
+                StatusCode::FORBIDDEN,
+                "the deletion is not signed by this device",
+            )));
+        }
+        let apple: Vec<i64> = {
+            let mut stmt =
+                tx.prepare("SELECT link FROM identity WHERE account = ?1 AND provider = 'apple'")?;
+            stmt.query_map(params![account], |r| r.get(0))?
+                .collect::<rusqlite::Result<_>>()?
+        };
+        if let Some(refused) = identity::check_receipt(&tx, asked.receipt.as_deref(), &apple, now)?
+        {
+            return Ok(Err(refused));
+        }
+        if asked.receipt.is_none() && !apple.is_empty() {
+            tracing::info!("an account with an Apple link was deleted without a revoke receipt");
+        }
+        purge(&tx, &account, now)?;
+        tx.commit()?;
+        Ok(Ok(()))
     })();
-    if let Err(e) = deleted {
-        return storage_error("delete account", e);
+    match deleted {
+        Ok(Ok(())) => {}
+        Ok(Err(refused)) => return refused,
+        Err(e) => return storage_error("delete account", e),
     }
     // `secure_delete` overwrites the database file only: the log goes too.
     if let Err(e) = db.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(())) {
         tracing::warn!("checkpoint after a deletion: {e}");
     }
-    let mut file = state.journal.lock().unwrap_or_else(|p| p.into_inner());
-    match rewrite_journal(&state.journal_path, &db) {
-        Ok(new) => *file = new,
-        Err(e) => {
-            tracing::error!("roster journal rewrite after a deletion: {e}");
-            state.journal_failed.store(true, Ordering::Relaxed);
-            let line = JournalLine::Gone {
-                gone: auth.account,
-                deleted_ms: now,
-            };
-            if let Err(e) = write_line(&mut file, &line).and_then(|()| file.sync_data()) {
-                tracing::error!("roster journal gone line: {e}");
-            }
-        }
-    }
+    rewrite_after_deletion(&state, &db, &[auth.account], now);
     Json(json!({})).into_response()
+}
+
+/// Whether `request` is a deletion signed by the token's own member, a
+/// current device of its account, for this relay and its host, near the
+/// relay's time, with a nonce not used before (it is used now).
+fn signed_delete(
+    tx: &Connection,
+    state: &AppState,
+    auth: &Auth,
+    request: &TokenRequest,
+    sig: &Hex<64>,
+    now: u64,
+) -> rusqlite::Result<bool> {
+    let host = state.config.public_host.as_ref();
+    let member: Option<Option<Vec<u8>>> = tx
+        .query_row(
+            "SELECT member_id FROM device WHERE token_hash = ?1",
+            params![auth.token],
+            |r| r.get(0),
+        )
+        .optional()?;
+    if request.relay_id != state.relay_id
+        || request.account != auth.account
+        || request.at_ms.abs_diff(now) > TOKEN_SKEW_MS
+        || host.is_some_and(|host| *host != request.host)
+        || member.flatten().as_deref() != Some(&request.member.0[..])
+    {
+        return Ok(false);
+    }
+    let roster = load_roster(tx, &auth.account)?;
+    let keys = match roster.members().get(&request.member) {
+        Some(m) if m.role == Role::Device => m.keys,
+        _ => return Ok(false),
+    };
+    if !request.verifies_delete(&keys, sig) {
+        return Ok(false);
+    }
+    tx.execute(
+        "DELETE FROM token_nonce WHERE expires_ms < ?1",
+        params![now as i64],
+    )?;
+    let fresh = tx.execute(
+        "INSERT INTO token_nonce (nonce, expires_ms) VALUES (?1, ?2) ON CONFLICT(nonce) DO NOTHING",
+        params![request.nonce.0.to_vec(), (now + 2 * TOKEN_SKEW_MS) as i64],
+    )? == 1;
+    Ok(fresh)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -1096,7 +1568,7 @@ async fn replay_roster(
         .optional();
     match exists {
         // Replaying an account from its genesis creates it.
-        Ok(None) if !invited(&state, &headers) => {
+        Ok(None) if !may_replay_create(&state, &headers, client(&state, peer, &headers)) => {
             return error(StatusCode::FORBIDDEN, "an invite is required");
         }
         Ok(_) => {}
@@ -1317,6 +1789,7 @@ async fn push(
             server_ms,
             epoch,
             roster: head,
+            deletion_due_ms: deletion_due(&tx, &auth.account)?,
         };
         for record in &request.records {
             let r = match check(record, server_ms) {
@@ -1449,7 +1922,7 @@ async fn pull(
     };
     let account = hex::encode(auth.account.0);
     let limit = query.limit.unwrap_or(PAGE).clamp(1, PAGE);
-    type Rows = (Vec<WireRecord>, u64, u32, Option<RosterHead>);
+    type Rows = (Vec<WireRecord>, u64, u32, Option<RosterHead>, Option<u64>);
     let rows = (|| -> rusqlite::Result<Rows> {
         let head: i64 = db.query_row(
             "SELECT seq FROM account WHERE id = ?1",
@@ -1477,10 +1950,16 @@ async fn pull(
                 },
             )?
             .collect::<rusqlite::Result<Vec<_>>>()?;
-        Ok((records, head as u64, epoch, roster))
+        Ok((
+            records,
+            head as u64,
+            epoch,
+            roster,
+            deletion_due(&db, &auth.account)?,
+        ))
     })();
     match rows {
-        Ok((mut records, head, epoch, roster)) => {
+        Ok((mut records, head, epoch, roster, deletion_due_ms)) => {
             let more = records.len() > limit;
             records.truncate(limit);
             let last = records.last().map_or(query.after, |r| r.seq);
@@ -1493,6 +1972,7 @@ async fn pull(
                 server_ms,
                 epoch,
                 roster,
+                deletion_due_ms,
             })
             .into_response()
         }
@@ -1534,13 +2014,27 @@ impl ClockWatch {
 #[derive(Default)]
 pub(crate) struct Limits {
     per_client: HashMap<(usize, IpAddr), (u64, u32)>,
-    global: [(u64, u32); 4],
+    global: [(u64, u32); 5],
 }
 
 const OPEN_PAIRING: (usize, u32, u32) = (0, 20, 2000);
 const REDEEM_KIT: (usize, u32, u32) = (1, 10, 600);
 const REPLAY: (usize, u32, u32) = (2, 20, 2000);
 const TOKENS: (usize, u32, u32) = (3, 20, 2000);
+/// Sign-in `start`, `take`, `token` and the deletion page's request, apart
+/// from pairings (a TV polls pairing `take` every 2 s, unlimited).
+const AUTH: (usize, u32, u32) = (4, 30, 3000);
+
+/// When the account's scheduled deletion is due, if one is.
+fn deletion_due(db: &Connection, account: &Id) -> rusqlite::Result<Option<u64>> {
+    db.query_row(
+        "SELECT due_ms FROM deletion WHERE account = ?1",
+        params![hex::encode(account.0)],
+        |r| r.get::<_, i64>(0),
+    )
+    .optional()
+    .map(|due| due.map(|d| d as u64))
+}
 
 fn spend(slot: &mut (u64, u32), now: u64, cap: u32) -> bool {
     if now >= slot.0 + 60_000 {
@@ -1864,6 +2358,8 @@ mod tests {
             relay_id,
             limits: Arc::default(),
             clock: Arc::default(),
+            identity: None,
+            grace_created: Arc::default(),
         };
         let create = || {
             let (entry, _) =
@@ -1871,7 +2367,11 @@ mod tests {
             create_account(
                 State(state.clone()),
                 HeaderMap::new(),
-                Json(AccountRequest { entry }),
+                Json(AccountRequest {
+                    entry,
+                    ticket: None,
+                    move_link: false,
+                }),
             )
         };
         let first = create().await.status();
@@ -1909,14 +2409,20 @@ mod tests {
             relay_id,
             limits: Arc::default(),
             clock: Arc::default(),
+            identity: None,
+            grace_created: Arc::default(),
         };
-        let genesis =
-            || Roster::genesis_entry(&MemberSecret::generate(), Hex(random()), "a", now_ms()).0;
+        let member = MemberSecret::generate();
+        let genesis = || Roster::genesis_entry(&member, Hex(random()), "a", now_ms()).0;
         let create = |entry| {
             create_account(
                 State(state.clone()),
                 HeaderMap::new(),
-                Json(AccountRequest { entry }),
+                Json(AccountRequest {
+                    entry,
+                    ticket: None,
+                    move_link: false,
+                }),
             )
         };
         let entry = genesis();
@@ -1935,8 +2441,16 @@ mod tests {
             format!("Bearer {token}").parse().unwrap(),
         );
 
+        let request = TokenRequest::new(state.relay_id, account, member.id(), now_ms(), "any");
+        let asked = DeleteRequest {
+            sig: member.sign_delete(&request),
+            request,
+            receipt: None,
+        };
         assert_eq!(
-            delete_account(State(state.clone()), headers).await.status(),
+            delete_account(State(state.clone()), headers, Json(asked))
+                .await
+                .status(),
             StatusCode::OK
         );
         assert!(is_gone(&lock(&state), &account).unwrap());

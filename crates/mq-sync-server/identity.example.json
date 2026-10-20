@@ -1,0 +1,29 @@
+{
+  "key": "replace with 64 hex digits from a secure random source, kept with the database backup",
+  "publicUrl": "https://sync.example.org",
+  "linkHost": "link.example.org",
+  "apple": {
+    "teamId": "TEAMID1234",
+    "keyId": "KEYID12345",
+    "key": "-----BEGIN PRIVATE KEY-----\nthe Sign in with Apple key (.p8)\n-----END PRIVATE KEY-----",
+    "servicesId": "org.example.marquee.signin",
+    "bundleIds": ["org.example.marquee", "org.example.marquee.mac", "org.example.marquee.tv"]
+  },
+  "google": {
+    "webClientId": "web client id.apps.googleusercontent.com",
+    "webClientSecret": "web client secret",
+    "clientIds": ["android client id.apps.googleusercontent.com", "ios client id.apps.googleusercontent.com"]
+  },
+  "facebook": {
+    "appId": "app id",
+    "appSecret": "app secret"
+  },
+  "oidc": [
+    {
+      "id": "mock",
+      "issuer": "http://127.0.0.1:8790",
+      "clientId": "marquee",
+      "clientSecret": "mock secret"
+    }
+  ]
+}

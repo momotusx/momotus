@@ -27,6 +27,7 @@ use std::collections::{BTreeMap, BTreeSet};
 const ROSTER: &[u8] = b"marquee/roster/v1\0";
 const SPONSOR: &[u8] = b"marquee/sponsor/v1\0";
 const TOKEN: &[u8] = b"marquee/token/v1\0";
+const DELETE: &[u8] = b"marquee/delete/v1\0";
 const NAME_INFO: &[u8] = b"marquee/name/v1";
 const EPOCH_INFO: &[u8] = b"marquee/epoch/v1";
 const CHAIN_INFO: &[u8] = b"marquee/chain/v1";
@@ -206,6 +207,12 @@ impl MemberSecret {
     pub fn sign_token(&self, request: &TokenRequest) -> Hex<64> {
         self.sign(TOKEN, &request.message())
     }
+
+    /// Asks a relay to delete the account, as this member: the same fields
+    /// as a token request, under a purpose of its own.
+    pub fn sign_delete(&self, request: &TokenRequest) -> Hex<64> {
+        self.sign(DELETE, &request.message())
+    }
 }
 
 /// A member's request for a fresh token, signed with its device key. The
@@ -252,6 +259,11 @@ impl TokenRequest {
     /// Whether `sig` is this request signed by the member with `keys`.
     pub fn verifies(&self, keys: &MemberKeys, sig: &Hex<64>) -> bool {
         keys.id() == self.member && keys.verifies(TOKEN, &self.message(), sig)
+    }
+
+    /// Whether `sig` is this request signed as a deletion by the member.
+    pub fn verifies_delete(&self, keys: &MemberKeys, sig: &Hex<64>) -> bool {
+        keys.id() == self.member && keys.verifies(DELETE, &self.message(), sig)
     }
 }
 

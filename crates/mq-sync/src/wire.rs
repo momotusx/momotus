@@ -91,6 +91,10 @@ pub struct RelayInfo {
     /// restored).
     pub generation_since_ms: u64,
     pub server_ms: u64,
+    /// The sign-in providers this relay brokers (`/v1/auth/{provider}`),
+    /// none without an identity file.
+    #[serde(default)]
+    pub providers: Vec<String>,
 }
 
 /// A fresh token for a member, signed with its device key.
@@ -100,10 +104,139 @@ pub struct TokenGrant {
     pub sig: crate::roster::Hex<64>,
 }
 
-/// A new account: its genesis entry.
+/// A new account: its genesis entry. On a relay with sign-in, a ticket
+/// (or the invite) is needed; the ticket's identity is linked to it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccountRequest {
     pub entry: Entry,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ticket: Option<String>,
+    /// Start over: the identity's link moves here, and the account it
+    /// pointed to is scheduled for deletion.
+    #[serde(default, rename = "move", skip_serializing_if = "std::ops::Not::not")]
+    pub move_link: bool,
+}
+
+/// Deletes the account now: the active token, and this request signed by
+/// the device key (`MemberSecret::sign_delete`), so a token alone deletes
+/// nothing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteRequest {
+    pub request: TokenRequest,
+    pub sig: crate::roster::Hex<64>,
+    /// An Apple revocation's receipt, when the account has an Apple link.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receipt: Option<String>,
+}
+
+/// Opens a sign-in or revoke flow at `/v1/auth/{provider}/start`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartRequest {
+    /// Lowercase hex SHA-256 of the verifier the device keeps.
+    pub verifier_hash: String,
+    /// `signin` or `revoke` (Apple only).
+    pub purpose: String,
+    /// Where a brokered flow comes back to (on the relay's allowlist).
+    #[serde(default, rename = "return", skip_serializing_if = "Option::is_none")]
+    pub return_to: Option<String>,
+    /// A native sheet signs in: the answer carries the nonce, no URL.
+    #[serde(default)]
+    pub native: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartResponse {
+    pub flow: String,
+    /// Brokered: the provider page to open.
+    #[serde(default)]
+    pub url: Option<String>,
+    /// Native: the relay's nonce (base64url); the sheet gets `nonce_for`.
+    #[serde(default)]
+    pub nonce: Option<String>,
+}
+
+/// Collects a brokered flow's result, once: the verifier and the one-time
+/// code from the return fragment.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TakeRequest {
+    pub flow: String,
+    pub verifier: String,
+    pub code: String,
+}
+
+/// A native sheet's ID token for a flow.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeToken {
+    pub flow: String,
+    pub verifier: String,
+    pub id_token: String,
+    /// Apple: a fresh authorization code, for a revoke.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authorization_code: Option<String>,
+}
+
+/// What a finished flow gives: a ticket for the identity (10 minutes, one
+/// use) and the account it signs in to, when linked; a revoke also gives
+/// its receipt.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Taken {
+    pub ticket: String,
+    #[serde(default)]
+    pub account: Option<Id>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receipt: Option<String>,
+}
+
+/// An identity linked to the account. No subject, email or name: the
+/// provider and when.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub struct IdentityLink {
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub link: i64,
+    pub provider: String,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub created_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LinkRequest {
+    pub ticket: String,
+    #[serde(default, rename = "move")]
+    pub move_link: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct UnlinkRequest {
+    #[serde(default)]
+    pub receipt: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CancelDeletion {
+    /// Also remove the identity link that asked.
+    #[serde(default)]
+    pub unlink: bool,
+}
+
+/// The nonce a provider sheet gets for a relay's flow: lowercase hex of
+/// SHA-256(relay nonce bytes || 0x00 || host), `host` being the relay host
+/// the app is configured with. A relay that forwards another relay's flow
+/// cannot make the claim match there.
+pub fn nonce_for(relay_nonce: &[u8], host: &str) -> String {
+    use sha2::{Digest, Sha256};
+    hex::encode(Sha256::digest(
+        [relay_nonce, &[0], host.as_bytes()].concat(),
+    ))
 }
 
 /// What redeeming a kit gives: a pending token and the kit's member id.
@@ -130,6 +263,9 @@ pub struct PushResponse {
     /// checks them before it counts its records as sent.
     pub epoch: u32,
     pub roster: Option<RosterHead>,
+    /// When a deletion of the account is scheduled (from the web page).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deletion_due_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -180,6 +316,9 @@ pub struct PullResponse {
     pub epoch: u32,
     #[serde(default)]
     pub roster: Option<RosterHead>,
+    /// When a deletion of the account is scheduled (from the web page).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deletion_due_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -188,4 +327,30 @@ pub struct AccountResponse {
     pub account: String,
     /// Bearer token for this device. The relay keeps only its SHA-256.
     pub device_token: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use base64::Engine as _;
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64URL;
+
+    /// The relay and every app compute the provider nonce the same way: the
+    /// shared vectors (made with openssl, not this code) say how.
+    #[test]
+    fn the_host_bound_nonce_matches_the_shared_vectors() {
+        let vectors: serde_json::Value =
+            serde_json::from_str(include_str!("../../../apps/shared/passkey-vectors.json"))
+                .unwrap();
+        let cases = vectors["nonce"].as_array().unwrap();
+        assert_eq!(cases.len(), 3);
+        for case in cases {
+            let relay = B64URL.decode(case["relayNonce"].as_str().unwrap()).unwrap();
+            let host = case["host"].as_str().unwrap();
+            assert_eq!(
+                super::nonce_for(&relay, host),
+                case["nonce"].as_str().unwrap(),
+                "{host}"
+            );
+        }
+    }
 }
