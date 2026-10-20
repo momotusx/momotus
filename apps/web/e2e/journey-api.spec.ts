@@ -20,19 +20,25 @@ import type { HomeUpdate } from "../src/core/generated/HomeUpdate";
 
 let core: { proc: ChildProcess; data: string } | null = null;
 let addon: Server | null = null;
+let late: Server | null = null;
 let media: Server | null = null;
 
 const AIRED = "2020-01-01T00:00:00.000Z";
 const LATER = "2099-01-01T00:00:00.000Z";
 const SRT = "1\n00:00:01,000 --> 00:00:30,000\nA line\n";
 
-/** Its own titles: "mqj1" (S1:E2 not out), "mqj2" (two episodes out), the film "mqjm". */
+/** Its own titles: "mqj1" (S1:E2 not out), "mqj2" (two episodes out), the
+ * film "mqjm", and "mqjv", a film with five 1080p versions of release groups
+ * of their own (the pick, then one Versions group of four, three shown until
+ * "Show all"). */
+const MANY = ["A", "B", "C", "D", "E"].map((g) => `Journey.Versions.2008.1080p.WEB.VP9-GRP${g}.webm`);
 function journeyAddon(film: string): Promise<Server> {
   const episode = (series: string, n: number, released: string) => ({ id: `${series}:1:${n}`, title: `Chapter ${n}`, season: 1, episode: n, released });
   const metas: Record<string, object> = {
     "/meta/series/mqj1.json": { id: "mqj1", type: "series", name: "Journey Waiting", description: "A synopsis comes first on the page.", videos: [episode("mqj1", 1, AIRED), episode("mqj1", 2, LATER)] },
     "/meta/series/mqj2.json": { id: "mqj2", type: "series", name: "Journey Finished", videos: [episode("mqj2", 1, AIRED), episode("mqj2", 2, AIRED)] },
     "/meta/movie/mqjm.json": { id: "mqjm", type: "movie", name: "Journey Film", releaseInfo: "2008", trailerStreams: [{ title: "Journey Film", ytId: "jrnyTrailer1" }] },
+    "/meta/movie/mqjv.json": { id: "mqjv", type: "movie", name: "Journey Versions", releaseInfo: "2008" },
   };
   const server = createServer((req, res) => {
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -46,6 +52,21 @@ function journeyAddon(film: string): Promise<Server> {
     }
     const meta = metas[url];
     if (meta) return json({ meta });
+    if (url === "/stream/movie/mqjv.json") {
+      // Each at an address of its own (a version is known by its address), all the same film.
+      return json({ streams: MANY.map((file) => ({ name: "Journey Fixture", title: file, url: `${base}/v/${file}`, behaviorHints: { filename: file } })) });
+    }
+    if (url.startsWith("/v/")) {
+      res.writeHead(302, { location: film });
+      return res.end();
+    }
+    // An episode's file names its episode, or the core would hide it as another one.
+    const episode = /^\/stream\/series\/(mqj\d):1:(\d)\.json$/.exec(decodeURIComponent(url));
+    if (episode) {
+      const name = episode[1] === "mqj2" ? "Journey.Finished" : "Journey.Waiting";
+      const filename = `${name}.S01E0${episode[2]}.720p.WEB.VP9.webm`;
+      return json({ streams: [{ name: "Journey Fixture\n720p", title: filename, url: film, behaviorHints: { filename }, subtitles: [{ id: "j1", lang: "eng", url: `${base}/j1.srt` }] }] });
+    }
     if (url.startsWith("/stream/")) {
       return json({
         streams: [{ name: "Journey Fixture\n240p", url: film, behaviorHints: { filename: NAME }, subtitles: [{ id: "j1", lang: "eng", url: `${base}/j1.srt` }] }],
@@ -72,6 +93,30 @@ async function markWatched(c: Client, kind: string, id: string, videoIds: string
 
 const film = { kind: "movie", itemId: "mqjm", videoId: "mqjm", title: "Journey Film", via: "Journey Fixture" };
 
+/** A subtitle addon that answers 5 s late with one German file, as a slow
+ * subtitle addon does while the Subtitles panel is open. */
+function lateSubs(): Promise<Server> {
+  const server = createServer((req, res) => {
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const json = (body: unknown) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(body));
+    };
+    const url = req.url ?? "";
+    if (url === "/manifest.json") {
+      return json({ id: "dev.marquee.late-subs", version: "1.0.0", name: "Late Subs", resources: ["subtitles"], types: ["movie", "series"], idPrefixes: ["mqj"], catalogs: [] });
+    }
+    if (url.startsWith("/subtitles/")) return void setTimeout(() => json({ subtitles: [{ id: "late-de", lang: "ger", url: `${base}/de.srt` }] }), 5000);
+    if (url === "/de.srt") {
+      res.writeHead(200, { "content-type": "text/plain" });
+      return res.end(SRT);
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server)));
+}
+
 test.beforeAll(async () => {
   await ensureMedia();
   media = await startSource(0);
@@ -80,6 +125,8 @@ test.beforeAll(async () => {
   const c = new Client(`ws://127.0.0.1:${JOURNEY_PORT}/ws`);
   try {
     await c.req("installAddon", { url: `http://127.0.0.1:${(addon.address() as AddressInfo).port}/manifest.json` });
+    late = await lateSubs();
+    await c.req("installAddon", { url: `http://127.0.0.1:${(late.address() as AddressInfo).port}/manifest.json` });
     // An earlier picker's code: the core and the new picker both read "eng" as English.
     await c.req("setPrefs", { patch: { defaultsSeen: 1, subtitleLanguages: ["eng"] } });
     await markWatched(c, "series", "mqj1", ["mqj1:1:1"]);
@@ -92,6 +139,7 @@ test.beforeAll(async () => {
 test.afterAll(() => {
   if (core) cleanup(core.proc, core.data);
   addon?.close();
+  late?.close();
   media?.close();
 });
 
@@ -103,6 +151,9 @@ type Sent = { id?: number; op?: string; view?: string; event?: string; sub?: num
 type Reply = { ok: true; result: unknown } | { ok: false; error: string };
 async function page(browser: Browser, viewport = { width: 1440, height: 900 }, fake?: (m: Sent) => Reply | null | undefined) {
   const sent: Sent[] = [];
+  // What the core sent the page, and a way to send it more as if from the core.
+  const received: { id?: number; sub?: number; result?: { sub?: number; snapshot?: unknown }; updates?: unknown[] }[] = [];
+  let toPage: ((text: string) => void) | null = null;
   const context = await browser.newContext({ viewport, colorScheme: "dark", baseURL: `http://127.0.0.1:${PORTS.vite}` });
   // Every player starts muted.
   await context.addInitScript(() => {
@@ -118,8 +169,12 @@ async function page(browser: Browser, viewport = { width: 1440, height: 900 }, f
     upstream.addEventListener("open", () => {
       for (const m of early.splice(0)) upstream.send(m);
     });
-    upstream.addEventListener("message", (e) => ws.send(String(e.data)));
+    upstream.addEventListener("message", (e) => {
+      received.push(JSON.parse(String(e.data)));
+      ws.send(String(e.data));
+    });
     upstream.addEventListener("close", () => ws.close());
+    toPage = (text) => ws.send(text);
     ws.onMessage((m) => {
       const msg = JSON.parse(String(m)) as Sent;
       sent.push(msg);
@@ -131,8 +186,22 @@ async function page(browser: Browser, viewport = { width: 1440, height: 900 }, f
     });
     ws.onClose(() => upstream.close());
   });
-  return { context, page: await context.newPage(), sent };
+  /** A view's latest snapshot as the core sent it, and a push of `next` to the page as an update of it. */
+  const view = (name: string) => {
+    const asked = [...sent].reverse().find((m) => m.op === "subscribe" && m.view === name);
+    const reply = received.find((m) => m.id === asked?.id && m.result?.sub !== undefined);
+    const sub = reply?.result?.sub;
+    const updates = received.filter((m) => m.sub === sub && m.updates?.length);
+    const latest = updates.length ? updates[updates.length - 1]?.updates?.at(-1) : reply?.result?.snapshot;
+    return { latest, push: (next: unknown) => toPage?.(JSON.stringify({ sub, updates: [next] })) };
+  };
+  return { context, page: await context.newPage(), sent, view };
 }
+
+const focusedKey = (p: Page) => p.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? null);
+/** Marks the focused element, to tell it from a rebuilt one with the same key. */
+const markFocused = (p: Page) => p.evaluate(() => ((document.activeElement as HTMLElement).dataset.mark = "kept"));
+const focusedIsMarked = (p: Page) => p.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.mark === "kept");
 
 async function prefs() {
   const c = new Client(`ws://127.0.0.1:${JOURNEY_PORT}/ws`);
@@ -250,8 +319,13 @@ test("the language pickers search every language the core knows", async ({ brows
   await expect(p.locator('[data-fgroup="pref-subs"] .lang-all .chip')).toHaveCount(1);
   await brazil.click();
   await expect(brazil).toHaveAttribute("aria-checked", "true");
-  // Chosen languages lead the row in the order they were turned on.
-  await expect(p.locator('[data-fgroup="pref-subs"] .chips-track > .chip').nth(1)).toHaveAttribute("data-f", "pref-subs:pt-BR");
+  // The common languages keep their places; a chosen one from the long list
+  // joins the row after them, and each chosen one shows its rank.
+  const row = p.locator('[data-fgroup="pref-subs"] .chips-track > .chip');
+  await expect(row.nth(0)).toHaveAttribute("data-f", "pref-subs:en");
+  await expect(row.nth(8)).toHaveAttribute("data-f", "pref-subs:pt-BR");
+  await expect(english.locator(".chip-rank")).toHaveText("1");
+  await expect(p.locator('[data-f="pref-subs:pt-BR"] .chip-rank')).toHaveText("2");
   await expect.poll(async () => (await prefs()).subtitleLanguages).toEqual(["eng", "pt-BR"]);
   // Turning English off takes the old code out too.
   await english.click();
@@ -283,6 +357,12 @@ test("Continue Watching: the tile's remove button off TV, the title page on TV",
     await slot.hover();
     const remove = slot.locator(".tile-x");
     await expect(remove).toHaveAttribute("aria-label", "Remove Journey Film from Continue Watching");
+    // It reaches every synced device, so the first press only asks.
+    await remove.click();
+    await expect(remove).toHaveText("Press again to remove");
+    await p.waitForTimeout(500);
+    await expect(tile).toBeVisible();
+    expect(await home.ids()).toContain("mqjm");
     await remove.click();
     await expect(tile).toHaveCount(0);
     // The core dropped it, not just this page.
@@ -295,9 +375,12 @@ test("Continue Watching: the tile's remove button off TV, the title page on TV",
   {
     const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
     await p.goto("/?form=tv");
-    await expect(p.locator('[data-f="tile:home:continue-watching:mqjm"]')).toBeVisible({ timeout: 30_000 });
+    const tile = p.locator('[data-f="tile:home:continue-watching:mqjm"]');
+    await expect(tile).toBeVisible({ timeout: 30_000 });
     await expect(p.locator(".tile-x")).toHaveCount(0);
-    await p.goto("/title/movie/mqjm?form=tv");
+    // From Home's tile to the title page, by remote.
+    await tile.focus();
+    await p.keyboard.press("Enter");
     const remove = p.locator('[data-f="title:uncontinue"]');
     await expect(remove).toBeVisible({ timeout: 30_000 });
     await remove.focus();
@@ -306,6 +389,11 @@ test("Continue Watching: the tile's remove button off TV, the title page on TV",
     await expect.poll(home.ids).not.toContain("mqjm");
     // Focus never falls to the page.
     await expect.poll(() => p.evaluate(() => document.activeElement !== document.body)).toBe(true);
+    // Back to Home, where the tile it remembers is gone: the focus lands on
+    // the screen at once, never on nothing for seconds.
+    await p.keyboard.press("Escape");
+    await expect(p).toHaveURL(/127\.0\.0\.1:\d+\/(\?.*)?$/);
+    await expect.poll(() => p.evaluate(() => document.activeElement !== document.body && !!document.activeElement), { timeout: 1500 }).toBe(true);
     await context.close();
   }
   home.close();
@@ -515,5 +603,237 @@ test("Search with no addon that can search says so, with the way to one", async 
   await expect(p.getByText(/No matches/)).toHaveCount(0);
   await p.locator('[data-f="search:addons"]').click();
   await expect(p).toHaveURL(/\/recommended-addons/);
+  await context.close();
+});
+
+test("the Continue Watching button says when the core refused", async ({ browser }) => {
+  await seedFilm(200_000);
+  const { context, page: p } = await page(browser, undefined, (m) => (m.op === "removeFromContinue" ? { ok: false, error: "network: connection refused" } : undefined));
+  await p.goto("/?form=desktop");
+  const tile = p.locator('[data-f="tile:home:continue-watching:mqjm"]');
+  await expect(tile).toBeVisible({ timeout: 30_000 });
+  const slot = p.locator(".tile-slot", { has: tile });
+  await slot.hover();
+  const remove = slot.locator(".tile-x");
+  await remove.click();
+  await remove.click();
+  await expect(remove).toHaveText("Not removed, try again");
+  await expect(tile).toBeVisible();
+  await context.close();
+});
+
+test("TV: a focused element rebuilt by live data keeps the focus; one gone hands it to its neighbour", async ({ browser }) => {
+  const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
+  await p.goto("/settings?form=tv");
+  const chip = p.locator('[data-f="pref-subsize:large"]');
+  await expect(chip).toBeVisible({ timeout: 30_000 });
+  await chip.focus();
+  // A copy with the same key takes its place, as a list rebuilt from new data does.
+  await p.evaluate(() => {
+    const el = document.activeElement as HTMLElement;
+    el.replaceWith(el.cloneNode(true));
+  });
+  await expect.poll(() => focusedKey(p)).toBe("pref-subsize:large");
+  // The remote goes on from there.
+  await p.keyboard.press("ArrowRight");
+  await expect.poll(() => focusedKey(p)).toBe("pref-subsize:extraLarge");
+  // Gone for good: the nearest chip of its row, not the top of Settings.
+  await p.evaluate(() => (document.activeElement as HTMLElement).remove());
+  await expect.poll(() => focusedKey(p)).toBe("pref-subsize:large");
+  await context.close();
+});
+
+test("TV: OK on a language chip keeps the focus on that chip, numbered by its rank", async ({ browser }) => {
+  const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
+  await p.goto("/settings?form=tv");
+  const spanish = p.locator('[data-f="pref-subs:es"]');
+  await expect(spanish).toBeVisible({ timeout: 30_000 });
+  await spanish.focus();
+  await markFocused(p);
+  const before = await p.locator('[data-fgroup="pref-subs"] .chips-track > .chip').evaluateAll((els) => els.map((e) => e.getAttribute("data-f")));
+  await p.keyboard.press("Enter");
+  await expect(spanish).toHaveAttribute("aria-checked", "true");
+  // The same chip, in the same place, now with its rank.
+  expect(await focusedKey(p)).toBe("pref-subs:es");
+  expect(await focusedIsMarked(p)).toBe(true);
+  const rank = (await prefs()).subtitleLanguages.length;
+  await expect(spanish.locator(".chip-rank")).toHaveText(String(rank));
+  expect(await p.locator('[data-fgroup="pref-subs"] .chips-track > .chip').evaluateAll((els) => els.map((e) => e.getAttribute("data-f")))).toEqual(before);
+  await p.keyboard.press("Enter");
+  await expect(spanish).toHaveAttribute("aria-checked", "false");
+  expect(await focusedKey(p)).toBe("pref-subs:es");
+  expect(await focusedIsMarked(p)).toBe(true);
+  await context.close();
+});
+
+test("TV: a late subtitle addon leaves the remote on the subtitle it was on", async ({ browser }) => {
+  const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
+  await p.goto("/play/movie/mqjm/mqjm?form=tv");
+  await expect(p.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
+  await p.locator('[data-f="player:subs"]').focus();
+  await p.keyboard.press("Enter");
+  await expect.poll(() => focusedKey(p)).toBe("sub:off");
+  await expect(p.locator(".sub-lang .opt").first()).toBeVisible({ timeout: 30_000 });
+  // German is still on its way (the Late Subs addon answers 5 s in).
+  await expect(p.locator('.sub-lang[aria-label="German"]')).toHaveCount(0);
+  await p.keyboard.press("ArrowDown");
+  await expect.poll(() => focusedKey(p)).toMatch(/^sub:http/);
+  const on = await focusedKey(p);
+  await markFocused(p);
+  await expect(p.locator('.sub-lang[aria-label="German"]')).toHaveCount(1, { timeout: 15_000 });
+  await p.waitForTimeout(300);
+  expect(await focusedKey(p)).toBe(on);
+  expect(await focusedIsMarked(p)).toBe(true);
+  await context.close();
+});
+
+test("desktop: full screen, the level and mute carry on to the next episode; F and a double click", async ({ browser }) => {
+  const c = new Client(`ws://127.0.0.1:${JOURNEY_PORT}/ws`);
+  await c.req("setPrefs", { patch: { autoplayNext: false } }).finally(() => c.close());
+  const { context, page: p } = await page(browser);
+  await p.goto("/play/series/mqj2/mqj2:1:1?form=desktop");
+  await expect(p.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
+  await startIfPaused(p);
+  const full = () => p.evaluate(() => !!document.fullscreenElement);
+  // F in and out; a double click on the picture in.
+  await p.keyboard.press("f");
+  await expect.poll(full).toBe(true);
+  await p.keyboard.press("f");
+  await expect.poll(full).toBe(false);
+  await p.mouse.move(700, 300);
+  await p.mouse.dblclick(700, 300);
+  await expect.poll(full).toBe(true);
+  // Lower, then muted.
+  await p.mouse.move(700, 320);
+  await p.locator('[data-f="player:volume"]').evaluate((el) => {
+    (el as HTMLInputElement).value = "30";
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await p.locator('[data-f="player:mute"]').click();
+  // The next episode from Up next, near the end.
+  await p.evaluate(() => {
+    const v = document.querySelector("video");
+    if (v) v.currentTime = v.duration - 12;
+  });
+  await p.locator('[data-f="next:play"]').click({ timeout: 30_000 });
+  await expect(p).toHaveURL(/mqj2:1:2/);
+  await expect(p.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
+  expect(await full()).toBe(true);
+  await expect(p.locator('[data-f="player:volume"]')).toHaveValue("30");
+  await expect(p.locator('[data-f="player:mute"]')).toHaveAttribute("aria-pressed", "true");
+  // Leaving the play leaves full screen.
+  await p.locator('[data-f="player:leave"]').click();
+  await expect(p).toHaveURL(/\/title\/series\/mqj2/);
+  await expect.poll(full).toBe(false);
+  await context.close();
+});
+
+test("the next episode card says Back, naming the title only when Back goes there", async ({ browser }) => {
+  const { context, page: p } = await page(browser);
+  await p.goto("/play/series/mqj2/mqj2:1:1?form=desktop");
+  await expect(p.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
+  await startIfPaused(p);
+  await p.evaluate(() => {
+    const v = document.querySelector("video");
+    if (v) v.currentTime = v.duration - 1;
+  });
+  await expect(p.locator('[data-f="end:next"]')).toBeVisible({ timeout: 30_000 });
+  await expect(p.locator('[data-f="end:back"]')).toHaveText("Back");
+  await context.close();
+});
+
+test("Episodes from a play opened on Versions keeps the title once in history", async ({ browser }) => {
+  const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
+  await p.goto("/title/series/mqj2?form=tv");
+  const versions = p.locator('[data-f="title:versions"]');
+  await expect(versions).toBeVisible({ timeout: 30_000 });
+  const depth = () => p.evaluate(() => (history.state as { _depth?: number } | null)?._depth ?? -1);
+  const atTitle = await depth();
+  await versions.focus();
+  await p.keyboard.press("Enter");
+  await expect(p).toHaveURL(/\/versions\//);
+  await expect(p.locator('[data-f="versions:play"]')).toBeVisible({ timeout: 30_000 });
+  await p.locator('[data-f="versions:play"]').focus();
+  await p.keyboard.press("Enter");
+  await expect(p).toHaveURL(/\/play\//);
+  await expect(p.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
+  await p.keyboard.press("ArrowUp");
+  await p.locator('[data-f="player:episodes"]').focus();
+  await p.keyboard.press("Enter");
+  await expect(p).toHaveURL(/\/title\/series\/mqj2(\?|$)/);
+  // Back past Versions to the title's own entry, not a second one over it.
+  await expect.poll(depth).toBe(atTitle);
+  await context.close();
+});
+
+test("Start over leaves the history entry once the play has started", async ({ browser }) => {
+  await seedFilm(240_000);
+  const { context, page: p } = await page(browser);
+  await p.goto("/title/movie/mqjm?form=desktop");
+  await p.locator('[data-f="title:startover"]').click({ timeout: 30_000 });
+  await expect(p).toHaveURL(/\/play\/movie\/mqjm\/mqjm$/);
+  expect(await p.evaluate(() => (history.state as { startOver?: boolean } | null)?.startOver)).toBe(true);
+  await startIfPaused(p);
+  // A reload or Forward from here resumes, it does not start over again.
+  await expect.poll(() => p.evaluate(() => (history.state as { startOver?: boolean } | null)?.startOver ?? null), { timeout: 30_000 }).toBe(null);
+  await context.close();
+});
+
+test("TV: Versions keeps an opened group on Back, and the focused row when better rows arrive", async ({ browser }) => {
+  const { context, page: p, view } = await page(browser, { width: 1920, height: 1080 });
+  await p.goto("/title/movie/mqjv/versions/mqjv?form=tv");
+  await expect(p.locator(".vrow")).toHaveCount(3, { timeout: 30_000 });
+  await expect(p.locator(".vstate .live")).toHaveCount(0, { timeout: 30_000 });
+  // Show all 4, play the fourth, Back: the group is still open, on that row.
+  const fold = p.locator('[data-f^="fold:"]');
+  await fold.focus();
+  await p.keyboard.press("Enter");
+  await expect(p.locator(".vrow")).toHaveCount(4);
+  const fourth = await p.locator(".vrow").nth(3).getAttribute("data-f");
+  await p.locator(".vrow").nth(3).focus();
+  await p.keyboard.press("Enter");
+  await expect(p).toHaveURL(/\/play\//);
+  await expect(p.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
+  await p.keyboard.press("Escape");
+  await expect(p).toHaveURL(/\/versions\//);
+  await expect.poll(() => focusedKey(p), { timeout: 2000 }).toBe(fourth);
+  // Show the best 3 again; the remote on the third row.
+  await fold.focus();
+  await p.keyboard.press("Enter");
+  await expect(p.locator(".vrow")).toHaveCount(3);
+  await p.locator(".vrow").nth(2).focus();
+  const third = await focusedKey(p);
+  await markFocused(p);
+  await p.waitForTimeout(500);
+  // Two better rows arrive at the top of that group: the focused row is now
+  // fifth, and stays listed and focused.
+  type Snap = { rows: { key: string; group: string; release?: unknown }[] };
+  const snap = view("versions").latest as Snap;
+  const first = snap.rows[0];
+  if (!first) throw new Error("no rows");
+  view("versions").push({ ...snap, rows: [{ ...first, key: `${first.key}-new1` }, { ...first, key: `${first.key}-new2` }, ...snap.rows] });
+  await expect(p.locator(`[data-f="v:${first.key}-new1"]`)).toHaveCount(1);
+  expect(await focusedKey(p)).toBe(third);
+  expect(await focusedIsMarked(p)).toBe(true);
+  await context.close();
+});
+
+test("the player, Calendar and Search say why they could not open in plain words, the core's text behind Details", async ({ browser }) => {
+  const raw = "network: error sending request for url (http://127.0.0.1:9/x): Connection refused (os error 61)";
+  const plain = "It could not be reached. Check the connection, then try again.";
+  const { context, page: p } = await page(browser, undefined, (m) =>
+    m.op === "subscribe" && (m.view === "versions" || m.view === "calendar" || m.view === "search") ? { ok: false, error: raw } : undefined,
+  );
+  await p.goto("/play/movie/mqjm/mqjm?form=desktop");
+  const card = p.locator(".endcard");
+  await expect(card.locator(".st")).toHaveText("Versions could not be loaded", { timeout: 30_000 });
+  await expect(card.locator(".end-detail")).toHaveText(plain);
+  await expect(card.locator(".why-raw code")).toHaveText(raw);
+  await p.goto("/calendar?form=desktop");
+  await expect(p.locator(".cal-problem")).toContainText("The calendar could not open.", { timeout: 30_000 });
+  await expect(p.locator(".cal-problem")).toContainText(plain);
+  await p.goto("/search?form=desktop");
+  await expect(p.locator(".palette-body")).toContainText("Search could not open.", { timeout: 30_000 });
+  await expect(p.locator(".palette-body")).toContainText(plain);
   await context.close();
 });

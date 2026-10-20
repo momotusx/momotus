@@ -14,6 +14,7 @@ import Star from "lucide-solid/icons/star";
 import X from "lucide-solid/icons/x";
 import { createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
 import { Poster } from "../components/art";
+import { Why } from "../components/why";
 import { liveView } from "../core/client";
 import { searchIds } from "../lib/ids";
 import type { HomeRow } from "../core/generated/HomeRow";
@@ -208,8 +209,9 @@ function SearchPanel(props: { dialog?: boolean }) {
           <Match when={view.state.status.state === "failed"}>
             <p class="st bad palette-note">
               <i class="dot" />
-              Search could not open: {(view.state.status as { reason: string }).reason}
+              Search could not open.
             </p>
+            <Why class="palette-note" reason={(view.state.status as { reason: string }).reason} />
           </Match>
           <Match when={!searching()}>
             <Show when={s()?.recent.length} fallback={<p class="palette-note">Type a title. Results come from every addon with a search catalog.</p>}>
@@ -270,7 +272,9 @@ function SearchPanel(props: { dialog?: boolean }) {
                         </div>
                       </Match>
                       <Match when={true}>
-                        <For each={scoped(row)}>{(t) => <Hit tile={t} fkey={`hit:${row.rowId}:${t.id}`} onOpen={remember} />}</For>
+                        {/* Keyed by the title alone (the core shows each title once): one
+                            that moves up into Top results keeps the focus. */}
+                        <For each={scoped(row)}>{(t) => <Hit tile={t} fkey={`hit:${t.id}`} onOpen={remember} />}</For>
                       </Match>
                     </Switch>
                   </section>

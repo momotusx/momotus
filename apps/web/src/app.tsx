@@ -202,6 +202,9 @@ function Shell(props: RouteSectionProps) {
         // The tab and history name the screen; a title, Versions and the
         // player name their title themselves once it is known.
         const path = location.pathname;
+        // Full screen is for the play: the next episode or version keeps it,
+        // any other screen ends it.
+        if (!path.startsWith("/play/") && document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
         if (!path.startsWith("/title/") && !path.startsWith("/play/")) {
           const named = destinations.find((d) => d.path === section(path));
           document.title = named ? `${named.label} · Marquee` : "Marquee";

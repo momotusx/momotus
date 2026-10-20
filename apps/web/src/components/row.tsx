@@ -64,7 +64,7 @@ export function TileCard(props: {
   /** Continue Watching: a 16:9 still with the logo, Apple TV Up Next style. */
   wide?: boolean;
   /** A remove button on the tile (Continue Watching off TV; TV removes from the title page). */
-  onRemove?: () => void;
+  onRemove?: () => Promise<unknown>;
 }) {
   // Two lines under the art: the name, then the core's caption (Continue
   // Watching, Library) or the year.
@@ -125,17 +125,37 @@ export function TileCard(props: {
     </A>
   );
   if (!slotted) return card;
+  // Removing reaches every synced device, so it asks once ("Press again to
+  // remove", 4 s, as Remove on an addon) and says when the core refused.
+  const [ask, setAsk] = createSignal<"idle" | "confirm" | "failed">("idle");
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(timer));
+  const settle = (state: "confirm" | "failed") => {
+    setAsk(state);
+    clearTimeout(timer);
+    timer = setTimeout(() => setAsk("idle"), 4000);
+  };
+  const press = () => {
+    if (ask() !== "confirm") return settle("confirm");
+    clearTimeout(timer);
+    setAsk("idle");
+    props.onRemove?.().catch(() => settle("failed"));
+  };
   return (
     <div class="tile-slot" style={{ width: `${props.w}px`, ...props.style }}>
       {card}
       <button
         class="tile-x"
+        classList={{ asking: ask() === "confirm", failed: ask() === "failed" }}
         data-index={props.index}
-        aria-label={`Remove ${props.tile.name} from Continue Watching`}
+        aria-label={ask() === "confirm" ? `Press again to remove ${props.tile.name} from Continue Watching` : `Remove ${props.tile.name} from Continue Watching`}
         title="Remove from Continue Watching"
-        onClick={() => props.onRemove?.()}
+        onClick={press}
       >
-        <X aria-hidden />
+        <Switch fallback={<X aria-hidden />}>
+          <Match when={ask() === "confirm"}>Press again to remove</Match>
+          <Match when={ask() === "failed"}>Not removed, try again</Match>
+        </Switch>
       </button>
     </div>
   );
@@ -269,7 +289,7 @@ export function Row(props: { row: HomeRow; autofocus: boolean; root: () => Eleme
                           onOpen={props.onOpen}
                           eager
                           wide={wide()}
-                          onRemove={wide() && form() !== "tv" ? () => void removeFromContinue(tile().id).catch(() => undefined) : undefined}
+                          onRemove={wide() && form() !== "tv" ? () => removeFromContinue(tile().id) : undefined}
                         />
                       )}
                     </Show>

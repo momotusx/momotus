@@ -11,6 +11,7 @@ import { type Candidate, type Direction, pick } from "./spatial";
 const SEL = "[data-f]";
 const memory = new Map<string, string>(); // group -> key
 const screens = new Map<string, string>(); // path -> last key
+const screenGroups = new Map<string, string | undefined>(); // path -> that key's group
 const content = new Map<string, string>(); // path -> last key outside the rail
 
 const path = () => location.pathname;
@@ -40,6 +41,9 @@ export function autoFocusSoon(find: () => HTMLElement | null | undefined) {
 }
 
 let recovering = false;
+// The element that had the focus last, where it was: when live data takes
+// it away, the focus goes to its rebuilt self or its nearest neighbour.
+let last: { path: string; key: string; group: string | undefined; x: number; y: number } | null = null;
 let backHandler: (() => void) | null = null;
 /** The app's one Back: in-app history first, else the screen's parent. */
 export const goBack = () => backHandler?.();
@@ -178,7 +182,9 @@ export function forgetFocus() {
   cancelRestore();
   memory.clear();
   screens.clear();
+  screenGroups.clear();
   content.clear();
+  last = null;
 }
 
 /** Makes `key` the member a group restores to (for example the selected tab). */
@@ -201,16 +207,40 @@ export function restore(back: boolean, asked = inputs) {
   cancelRestore();
   if (!mayAutoFocus() || inputs !== asked) return;
   const want = back ? screens.get(path()) : undefined;
+  const wantGroup = back ? screenGroups.get(path()) : undefined;
   const started = performance.now();
+  let holding = false;
   const attempt = () => {
     if (inputs !== asked) return true;
     const late = performance.now() - started > 4000;
+    // A stand-in holds the focus already: past the wait it stays.
+    if (late && holding) return true;
     const el = want && !late ? byKey(want) : initialIfMarked(late);
     if (!el) return false;
     focusEl(el);
     return true;
   };
   if (attempt()) return;
+  // The remembered element may be gone for good (a collapsed group, a removed
+  // tile): the focus never waits on nothing. A moment in, a member of its
+  // group stands in (one on screen, without scrolling the page under it),
+  // else the screen's first focus; the remembered one still wins if it comes.
+  const hold = setTimeout(() => {
+    const active = document.activeElement;
+    if (inputs !== asked || (active && active !== document.body && active.isConnected)) return;
+    const members = candidates().filter((el) => wantGroup !== undefined && groupOf(el) === wantGroup);
+    const onScreen = members.find((el) => {
+      const r = el.getBoundingClientRect();
+      return r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth;
+    });
+    const el = onScreen ?? members[0] ?? initialIfMarked(true);
+    if (!el) return;
+    holding = true;
+    recovering = true;
+    el.focus({ preventScroll: !!onScreen || members.length > 0 });
+    if (!members.length) reveal(el);
+    recovering = false;
+  }, 300);
   const observer = new MutationObserver(() => {
     if (attempt()) cancelRestore();
   });
@@ -222,7 +252,39 @@ export function restore(back: boolean, asked = inputs) {
   stopRestore = () => {
     observer.disconnect();
     clearTimeout(timer);
+    clearTimeout(hold);
   };
+}
+
+/** Where a lost focus goes: the element with the key that had it (live data
+ * rebuilt it: a chip, a subtitle track, a search hit that moved rows),
+ * else the nearest member of its group (it left the list), else the
+ * screen's first focus. */
+function replacement(): HTMLElement | null {
+  const was = last;
+  if (was && was.path === path()) {
+    const all = candidates();
+    const same = all.find((el) => el.dataset.f === was.key);
+    if (same) return same;
+    const near = nearest(
+      all.filter((el) => was.group !== undefined && groupOf(el) === was.group),
+      was.x,
+      was.y,
+    );
+    if (near) return near;
+  }
+  return initialIfMarked(true);
+}
+
+function nearest(els: HTMLElement[], x: number, y: number): HTMLElement | null {
+  let best: HTMLElement | null = null;
+  let distance = Infinity;
+  for (const el of els) {
+    const r = el.getBoundingClientRect();
+    const d = Math.hypot(r.left + r.width / 2 - x, r.top + r.height / 2 - y);
+    if (d < distance) [best, distance] = [el, d];
+  }
+  return best;
 }
 
 /** Before data arrives, only an explicit autofocus target counts. */
@@ -267,29 +329,33 @@ export function installFocus(onBack: () => void) {
     },
     { capture: true },
   );
-  // Live data can replace the focused element (Play becomes "Add a source"
-  // once every addon answered). Focus then falls to the page; on a remote that
-  // is a dead end, so it goes to the screen's autofocus target, else its
-  // first element.
+  // Live data can replace the focused element (a chip rebuilt, a row that
+  // moved, Play becoming "Add a source" once every addon answered). Focus
+  // then falls to the page; on a remote that is a dead end, so it goes to
+  // the element with the same key, else its nearest neighbour, else the
+  // screen's autofocus target (`replacement`).
   // This stopgap focus is not a choice the viewer made, so it is not
   // remembered: Back still restores what they had.
   new MutationObserver(() => {
     const active = document.activeElement;
     if (!mayAutoFocus() || (active && active !== document.body && active.isConnected)) return;
-    const el = initialIfMarked(true);
+    const el = replacement();
     if (!el) return;
     recovering = true;
     focusEl(el);
     recovering = false;
   }).observe(document.body, { childList: true, subtree: true });
   document.addEventListener("focusin", (e) => {
-    if (recovering) return;
     const el = e.target as HTMLElement;
     const key = el.dataset?.f;
     if (!key) return;
     const group = groupOf(el);
+    const r = el.getBoundingClientRect();
+    last = { path: path(), key, group, x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    if (recovering) return;
     if (group) memory.set(group, key);
     screens.set(path(), key);
+    screenGroups.set(path(), group);
     if (group !== "rail") content.set(path(), key);
   });
   document.addEventListener("pointerdown", cancelRestore, { capture: true });

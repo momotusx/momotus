@@ -99,6 +99,8 @@ test("desktop: the scope pill steps through the kinds the results hold", async (
   await openFromNav(page, "desktop");
   await page.locator('[data-f="search:input"]').fill("thrones");
   await expect(page.locator(".hit").first()).toBeVisible({ timeout: 30_000 });
+  // A hit is known by its title alone, whichever row it sits in.
+  expect(await page.locator(".hit").first().getAttribute("data-f")).toMatch(/^hit:[^:]+$/);
   const scope = page.locator('[data-f="search:scope"]');
   const kinds = async () => [...new Set((await page.locator(".hit-meta").allInnerTexts()).map((t) => t.split("·")[0]?.trim()))];
   await expect(scope).toHaveText("All");

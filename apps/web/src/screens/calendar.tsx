@@ -9,6 +9,7 @@ import LoaderCircle from "lucide-solid/icons/loader-circle";
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { liveView } from "../core/client";
 import { calendarIds } from "../lib/ids";
+import { Why } from "../components/why";
 import { cameBack } from "../history";
 import type { CalendarDay } from "../core/generated/CalendarDay";
 import type { CalendarItem } from "../core/generated/CalendarItem";
@@ -120,16 +121,26 @@ export default function CalendarScreen() {
           </p>
         </Show>
         <Show when={view.state.status.state === "failed"}>
-          <p class="st bad" role="status">
-            <i class="dot" />
-            {(view.state.status as { reason: string }).reason}
-          </p>
+          <div class="cal-problem" role="status">
+            <p class="st bad">
+              <i class="dot" />
+              The calendar could not open.
+            </p>
+            <Why class="cal-note" reason={(view.state.status as { reason: string }).reason} />
+          </div>
         </Show>
+        {/* The series by name; what each addon answered stays behind Details. */}
         <Show when={s()?.failed.length}>
           <p class="st bad cal-note">
             <i class="dot" />
-            Could not load {s()?.failed.map((f) => (f.reason ? `${f.name} (${f.reason})` : f.name)).join(", ")}.
+            Could not load {s()?.failed.map((f) => f.name).join(", ")}.
           </p>
+          <Show when={s()?.failed.some((f) => f.reason)}>
+            <details class="why-raw cal-note">
+              <summary>Details</summary>
+              <code>{s()?.failed.filter((f) => f.reason).map((f) => `${f.name}: ${f.reason}`).join("; ")}</code>
+            </details>
+          </Show>
         </Show>
         <Show when={s()?.noSchedule.length}>
           <p class="cal-note">No air dates known for {s()?.noSchedule.map((f) => f.name).join(", ")}.</p>

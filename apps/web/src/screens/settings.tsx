@@ -48,11 +48,12 @@ const allLanguages = () =>
     throw e;
   }));
 
-/** A language picker (subtitles; audio with `audio`): the chosen languages
- * first in their order (the first one wins), then the common ones, and
- * every language the core knows behind "More languages", with a search.
- * Subtitles store the core's tag as is, audio the part before "-" ("pt" for
- * "pt-BR"). */
+/** A language picker (subtitles; audio with `audio`): the common languages,
+ * then the other chosen ones, each chosen one numbered by its rank (the
+ * first one wins), and every language the core knows behind "More
+ * languages", with a search. Chips keep their place and their element when
+ * one is picked, so a remote's focus stays on it. Subtitles store the core's
+ * tag as is, audio the part before "-" ("pt" for "pt-BR"). */
 export function LanguagePicker(props: { label: string; help?: string; group: string; chosen: string[]; audio?: boolean; onChange: (next: string[]) => void }) {
   const [all, setAll] = createSignal<LanguageChoice[] | null>(null);
   const [failed, setFailed] = createSignal<string | null>(null);
@@ -63,8 +64,16 @@ export function LanguagePicker(props: { label: string; help?: string; group: str
   const norm = (v: string) => codeOf(LEGACY[v.toLowerCase()] ?? v);
   const chosen = () => props.chosen.map(norm);
   const nameOf = (code: string) => all()?.find((l) => l.code === code)?.name ?? languageName(code);
-  const item = (code: string) => ({ value: code, label: nameOf(code) });
-  const shown = () => [...new Set([...chosen(), ...QUICK])].map(item);
+  // One object per language, so `For` keeps each chip's element.
+  const items = new Map<string, { value: string; label: string }>();
+  const item = (code: string) => {
+    const label = nameOf(code);
+    let it = items.get(code);
+    if (it?.label !== label) items.set(code, (it = { value: code, label }));
+    return it;
+  };
+  const shown = () => [...new Set([...QUICK.map(codeOf), ...chosen()])].map(item);
+  const rank = (code: string) => chosen().indexOf(code) + 1;
   const options = () => {
     const q = query().trim().toLowerCase();
     const codes = [...new Set((all() ?? []).map((l) => codeOf(l.code)))];
@@ -83,6 +92,7 @@ export function LanguagePicker(props: { label: string; help?: string; group: str
       group={props.group}
       items={shown()}
       isOn={isOn}
+      rank={rank}
       onPick={pick}
       extra={
         <>
@@ -109,7 +119,7 @@ export function LanguagePicker(props: { label: string; help?: string; group: str
                 <p class="note small">No language is called "{query().trim()}".</p>
               </Show>
               <div class="lang-all">
-                <For each={options()}>{(o) => <ChoiceChip group={`${props.group}-all`} item={o} on={isOn(o.value)} multi onPick={pick} />}</For>
+                <For each={options()}>{(o) => <ChoiceChip group={`${props.group}-all`} item={o} on={isOn(o.value)} rank={rank(o.value)} multi onPick={pick} />}</For>
               </div>
             </div>
           </Show>
@@ -119,7 +129,7 @@ export function LanguagePicker(props: { label: string; help?: string; group: str
   );
 }
 
-function ChoiceChip<T>(props: { group: string; item: { value: T; label: string }; on: boolean; multi?: boolean; autofocus?: boolean; onPick: (v: T) => void }) {
+function ChoiceChip<T>(props: { group: string; item: { value: T; label: string }; on: boolean; rank?: number; multi?: boolean; autofocus?: boolean; onPick: (v: T) => void }) {
   return (
     <button
       class="chip"
@@ -131,7 +141,9 @@ function ChoiceChip<T>(props: { group: string; item: { value: T; label: string }
       onClick={() => props.onPick(props.item.value)}
     >
       <Show when={props.on}>
-        <Check aria-hidden class="chip-check" />
+        <Show when={props.rank} fallback={<Check aria-hidden class="chip-check" />}>
+          {(n) => <b class="chip-rank num">{n()}</b>}
+        </Show>
       </Show>
       {props.item.label}
     </button>
@@ -145,6 +157,8 @@ export function Choice<T>(props: {
   group: string;
   items: { value: T; label: string }[];
   isOn: (v: T) => boolean;
+  /** A chosen item's rank (1 first), shown in place of the check. */
+  rank?: (v: T) => number;
   onPick: (v: T) => void;
   autofocus?: boolean;
   multi?: boolean;
@@ -166,6 +180,7 @@ export function Choice<T>(props: {
               group={props.group}
               item={item}
               on={props.isOn(item.value)}
+              rank={props.rank?.(item.value)}
               multi={props.multi}
               autofocus={props.autofocus && i() === 0}
               onPick={props.onPick}
@@ -341,7 +356,7 @@ export default function SettingsScreen() {
                 onPick={(v) => patch({ autoplayNext: v })}
               />
             </div>
-            <p class="note small">Languages are listed in the order you turn them on; the first one wins.</p>
+            <p class="note small">The numbers are the order you turned languages on; number 1 wins.</p>
           </section>
         )}
       </Show>

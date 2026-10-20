@@ -116,6 +116,11 @@
 @media (hover: none) { .tile-x { opacity: 1; } }
 @media (hover: hover) { [data-form="desktop"] .tile-slot:hover .tile-x { transform: translateY(-8px); } }
 [data-form="phone"] .tile-x { opacity: 1; top: 6px; right: 6px; width: 32px; height: 32px; }
+/* Asking, or refused: the button says it in words, over the still. */
+.tile-x.asking, .tile-x.failed { width: auto; padding: 0 14px; border-radius: 18px; opacity: 1; font: 600 15px / 1 var(--font-text); white-space: nowrap; }
+.tile-x.asking { background: var(--text); color: var(--bg); }
+.tile-x.failed { background: var(--bad); color: var(--text); }
+[data-form="phone"] .tile-x.asking, [data-form="phone"] .tile-x.failed { width: auto; font-size: 12px; padding: 0 10px; }
 [data-form="phone"] .tile-x svg { width: 18px; height: 18px; }
 /* Progress: a thin accent line on a dark strip at the art's foot, so it
  * reads on any picture. */

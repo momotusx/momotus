@@ -93,9 +93,12 @@ test("plays a direct source through the core's stream server", async ({ page }) 
   await expect.poll(() => focused(page)).toBe("player:subs");
   await page.keyboard.press("Enter");
   await expect.poll(() => focused(page)).toBe("sub:off");
-  await expect(page.locator('[data-f="sub:0"]')).toBeVisible({ timeout: 30_000 });
+  // Options go by their file's address, so a late addon never renames them.
+  const first = page.locator(".sub-lang .opt").first();
+  await expect(first).toBeVisible({ timeout: 30_000 });
   await page.keyboard.press("ArrowDown");
-  await expect.poll(() => focused(page)).toBe("sub:0");
+  await expect.poll(() => focused(page)).toBe(await first.getAttribute("data-f"));
+  expect(await first.getAttribute("data-f")).toMatch(/^sub:http/);
   await page.keyboard.press("Enter");
   // Big Buck Bunny has almost no dialogue, so any cue proves the track loaded.
   await expect

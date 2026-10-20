@@ -29,7 +29,9 @@ import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
 import { videoContext } from "../core/video";
 import { goBack } from "../focus/dom";
 import { form } from "../form";
-import { bytes, decoded, playPath, playState, releaseParts } from "../lib/format";
+import { bytes, decoded, playPath, playState, releaseParts, titlePath } from "../lib/format";
+import { entryFrom } from "../history";
+import { onProfileReset } from "../core/profiles";
 import {
   blockedWords,
   choiceWords,
@@ -52,6 +54,10 @@ import {
 import "./versions.css";
 
 const SHOWN = 3;
+// The groups the viewer opened ("Show all"), per video: Back from a play
+// finds the row it opened still listed.
+const expandedFor = new Map<string, Set<Group>>();
+onProfileReset(() => expandedFor.clear());
 
 export default function Versions() {
   const params = useParams();
@@ -152,8 +158,15 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
     void op("undoLearned", { screenClass: n.screenClass, choice: n.choice }).catch(() => setUndone(false));
   };
   const pick = () => snap()?.recommended ?? null;
-  const [open, setOpen] = createSignal<Set<Group>>(new Set());
-  const play = (key: string) => navigate(playPath(props.kind, props.id, props.videoId), { state: playState(key) });
+  const video = `${props.kind}/${props.id}/${props.videoId}`;
+  const [open, setOpen] = createSignal<Set<Group>>(expandedFor.get(video) ?? new Set());
+  // The row the remote is on: a collapsed group shows at least down to it,
+  // so a better row arriving above never pushes it off the page.
+  const [focusedRow, setFocusedRow] = createSignal<string | null>(null);
+  // A play opened here knows whether Versions came from the title page, so
+  // its Episodes goes back to that one title entry (player.tsx).
+  const play = (key: string) =>
+    navigate(playPath(props.kind, props.id, props.videoId), { state: { ...playState(key), viaTitle: entryFrom() === titlePath(props.kind, props.id) } });
 
   // The pick under the cursor never changes once the user starts moving.
   const freeze = () => {
@@ -180,6 +193,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
     if (next.has(g)) next.delete(g);
     else next.add(g);
     setOpen(next);
+    expandedFor.set(video, next);
   };
   const progress = () => {
     const s = snap();
@@ -232,7 +246,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
         <Match when={ctx.failure() ?? (ctx.versions()?.state.status.state === "failed" ? ((ctx.versions()?.state.status as { reason?: string }).reason ?? "") : null)}>
           {(reason) => (
             <section class="vempty problem">
-              <h2>{ctx.failure() ? nextVersion.titleNotOpened : "Versions could not be loaded"}</h2>
+              <h2>{ctx.failure() ? nextVersion.titleNotOpened : nextVersion.listNotLoaded}</h2>
               <Why reason={reason()} />
               <div class="acts">
                 <button class="btn primary" data-f="versions:retry" data-autofocus onClick={() => props.retry()}>
@@ -390,12 +404,27 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
               <span>Status</span>
               <span>Via</span>
             </div>
-            <div class="alist" data-vscroll data-fgroup="alts">
+            <div
+              class="alist"
+              data-vscroll
+              data-fgroup="alts"
+              onFocusIn={(e) => {
+                const f = (e.target as HTMLElement).dataset.f;
+                setFocusedRow(f?.startsWith("v:") ? f.slice(2) : null);
+              }}
+              onFocusOut={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocusedRow(null);
+              }}
+            >
               <For each={groupOrder}>
                 {(g) => {
                   const rows = createMemo(() => rowsOf(g));
                   const expanded = () => open().has(g);
-                  const shown = () => (expanded() ? rows() : rows().slice(0, SHOWN));
+                  const shown = () => {
+                    if (expanded()) return rows();
+                    const at = rows().findIndex((r) => r.key === focusedRow());
+                    return rows().slice(0, Math.max(SHOWN, at + 1));
+                  };
                   return (
                     <Show when={rows().length > 0}>
                     <section class="vgroup" data-row>

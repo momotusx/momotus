@@ -206,6 +206,8 @@ export const nextVersion = {
   notOpened: "This version could not be opened",
   /** The player's and Versions' card when the title's details could not be read. */
   titleNotOpened: "This title could not be opened",
+  /** The player's and Versions' card when the list of versions could not be read. */
+  listNotLoaded: "Versions could not be loaded",
   tryingAgain: "Trying again",
   /** A version picked by hand, waiting for Versions to list it (as Android). */
   finding: "Finding this version",

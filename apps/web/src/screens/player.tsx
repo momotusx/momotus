@@ -22,6 +22,7 @@ import Volume2 from "lucide-solid/icons/volume-2";
 import VolumeX from "lucide-solid/icons/volume-x";
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from "solid-js";
 import { Backdrop } from "../components/art";
+import { Why } from "../components/why";
 import { KeyedPage } from "../components/keyed-page";
 import { TraktMark } from "../components/trakt-mark";
 import { liveView, prefsView, serverMoves } from "../core/client";
@@ -32,7 +33,7 @@ import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
 import { videoContext } from "../core/video";
 import { autoFocusSoon, goBack } from "../focus/dom";
 import { form } from "../form";
-import { entryFrom } from "../history";
+import { entryFrom, historyBase, historyDepth, markBack } from "../history";
 import { createVideoEngine } from "../player/video-engine";
 import { loadedSource, type Retry, sourceStart, TRYING_AGAIN_MS, tryingAgain } from "../lib/failover";
 import { bytes, clock, decoded, delayText, startsText, episodeLabel, groupFailures, playPath, playState, seasonName, titlePath, versionsPath } from "../lib/format";
@@ -47,6 +48,9 @@ const PROGRESS_MS = 5000;
 const NEXT_AT = 20;
 const SKIP: Record<SegmentKind, string> = { intro: "Skip intro", recap: "Skip recap", credits: "Skip credits", preview: "Skip preview" };
 
+// The viewer's sound for this app run: one episode's level and mute are the next one's.
+const sound = { volume: 100, muted: false };
+
 export default function Player() {
   const params = useParams();
   const [query] = useSearchParams();
@@ -57,6 +61,8 @@ export default function Player() {
   };
   // "Start over" on the title page: this play starts at the beginning.
   const startOver = () => (location.state as { startOver?: unknown } | null)?.startOver === true;
+  // Opened on Versions that was opened on the title page.
+  const viaTitle = () => (location.state as { viaTitle?: unknown } | null)?.viaTitle === true;
   // Try again on a title that could not be opened: the page opens anew.
   const [attempt, setAttempt] = createSignal(0);
   return (
@@ -68,6 +74,7 @@ export default function Player() {
         videoId: decoded(params.videoId),
         chosen: chosen(),
         startOver: startOver(),
+        viaTitle: viaTitle(),
         binge: typeof query.binge === "string" ? query.binge : undefined,
         retry: () => setAttempt((n) => n + 1),
       })}
@@ -76,7 +83,7 @@ export default function Player() {
   );
 }
 
-function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: string | null; startOver: boolean; binge?: string; retry: () => void }) {
+function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: string | null; startOver: boolean; viaTitle: boolean; binge?: string; retry: () => void }) {
   const navigate = useNavigate();
   // The page this play was opened from, read when needed: the router renders
   // a route before it writes its history entry. Leaving the play for that
@@ -88,7 +95,21 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     e.preventDefault();
     goBack();
   };
+  // Episodes: the title, once in history. A play opened on this title's
+  // Versions, itself opened on the title, goes back past Versions.
+  const toTitle = (e: MouseEvent) => {
+    if (entryFrom() !== versionsPath(props.kind, props.id, props.videoId) || !props.viaTitle || historyDepth() - 2 < historyBase()) {
+      leaveFor(titlePath(props.kind, props.id))(e);
+      return;
+    }
+    e.preventDefault();
+    markBack();
+    history.go(-2);
+  };
   const ctx = videoContext(props.kind, props.id, props.videoId, props.binge);
+  // Back goes where the viewer came from: it names the title only when that
+  // is the title page.
+  const backWords = () => (entryFrom() === titlePath(props.kind, props.id) ? `Back to ${ctx.details()?.name ?? "the title"}` : "Back");
   createEffect(() => {
     const name = ctx.details()?.name;
     if (name) document.title = `${name} · Marquee`;
@@ -141,7 +162,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         poster: ctx.details()?.poster ?? undefined,
         season: ctx.ref?.season ?? undefined,
         episode: ctx.ref?.episode,
-      }),
+      }, false, "url"),
     );
   });
   const snap = () => playback()?.state.data ?? null;
@@ -198,7 +219,12 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     },
     onEnded: () => onEnded(),
     onError: (why) => void playback()?.command(loaded.failOver(why)),
-    onLoaded: () => sendDuration(),
+    onLoaded: () => {
+      sendDuration();
+      // Started over: from now on this entry resumes (a reload, Forward).
+      if (props.startOver && (history.state as { startOver?: boolean } | null)?.startOver)
+        history.replaceState({ ...(history.state as object), startOver: undefined }, "");
+    },
     onSubtitleError: (lang) => setSubError(`Could not load ${languageName(lang)} subtitles from the core`),
   });
   const { time, duration, paused, buffered, started, rate } = engine;
@@ -210,19 +236,21 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     engine.setSubtitleDelay(next);
   };
   // A desktop has no volume keys of its own here: a mute button and a level,
-  // and full screen (with Back in the header on a desktop and a phone).
-  const [volume, setVolumeLevel] = createSignal(100);
-  const [muted, setMuted] = createSignal(false);
-  createEffect(() => engine.setVolume(muted() ? 0 : volume()));
+  // and full screen (with Back in the header on a desktop and a phone). The
+  // level and mute carry on to the next episode (`sound`); full screen stays
+  // through the next episode or version and ends with the play (app.tsx).
+  const [volume, setVolumeLevel] = createSignal(sound.volume);
+  const [muted, setMuted] = createSignal(sound.muted);
+  createEffect(() => {
+    sound.volume = volume();
+    sound.muted = muted();
+    engine.setVolume(muted() ? 0 : volume());
+  });
   const [full, setFull] = createSignal(!!document.fullscreenElement);
   onMount(() => {
     const changed = () => setFull(!!document.fullscreenElement);
     document.addEventListener("fullscreenchange", changed);
-    onCleanup(() => {
-      document.removeEventListener("fullscreenchange", changed);
-      // Full screen was for the film: leaving it leaves full screen too.
-      if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
-    });
+    onCleanup(() => document.removeEventListener("fullscreenchange", changed));
   });
   const toggleFull = () => void (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => undefined);
   // Paused by the viewer (not before the first frame, not at the end card).
@@ -278,6 +306,13 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
           toggle();
           return;
         }
+        // F, as on YouTube and Netflix: full screen in and out (a desktop).
+        if ((e.key === "f" || e.key === "F") && form() === "desktop") {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          toggleFull();
+          return;
+        }
         // Controls hidden: Left and Right skip 10 s and bring the controls up,
         // as a click on the Apple TV remote's edge does.
         if (!osd() && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
@@ -325,6 +360,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   };
   // Whether the pointer press under way only woke the controls.
   let woke = false;
+  // A click on a control or a card, not on the picture.
+  const onControls = (e: MouseEvent) => !!(e.target as Element).closest("button, a, input, [role=slider], aside, .endcard, .skip-wrap, .next, .osd");
   const seek = (delta: number) => {
     if (!duration()) return;
     engine.seek(Math.min(Math.max(0, engine.position() + delta), duration() - 0.5));
@@ -558,7 +595,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     const t = titleError();
     if (t) return { tone: "bad", text: nextVersion.titleNotOpened, detail: t, busy: false };
     const v = ctx.versions();
-    if (v?.state.status.state === "failed") return { tone: "bad", text: (v.state.status as { reason: string }).reason, busy: false };
+    if (v?.state.status.state === "failed") return { tone: "bad", text: nextVersion.listNotLoaded, detail: (v.state.status as { reason: string }).reason, busy: false };
     // The playback could not open (a version no longer listed): a card with
     // the error under it, as Apple's, never a spinner.
     const open = openError();
@@ -603,8 +640,14 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         // With the controls up, a click on the picture plays or pauses (a
         // mouse; a touch screen shows and hides the controls).
         if (woke || form() !== "desktop" || !started()) return;
-        if ((e.target as Element).closest("button, a, input, [role=slider], aside, .endcard, .skip-wrap, .next, .osd")) return;
+        if (onControls(e)) return;
         toggle();
+      }}
+      // A double click on the picture: full screen in and out (its two
+      // clicks played and paused, so the play goes on as it was).
+      onDblClick={(e) => {
+        if (form() !== "desktop" || onControls(e)) return;
+        toggleFull();
       }}
     >
       <Backdrop src={ctx.details()?.background} class="player-bd" dim />
@@ -650,7 +693,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                   <CircleAlert aria-hidden />
                   {s().text}
                 </p>
-                <Show when={s().detail}>{(d) => <p class="end-detail">{d()}</p>}</Show>
+                <Show when={s().detail}>{(d) => <Why class="end-detail" reason={d()} />}</Show>
                 <Show when={s().note}>
                   {(n) => (
                     <p class="end-detail end-note" role="status">
@@ -731,7 +774,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                         only when that is the title page. */}
                     <button class="btn primary big" data-f="end:back" data-autofocus onClick={goBack}>
                       <ArrowLeft aria-hidden />
-                      {entryFrom() === titlePath(props.kind, props.id) ? `Back to ${ctx.details()?.name ?? "the title"}` : "Back"}
+                      {backWords()}
                     </button>
                     <button class="btn big" data-f="end:again" onClick={playAgain}>
                       <RotateCcw aria-hidden />
@@ -758,7 +801,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                     </button>
                     <button class="btn big" data-f="end:back" onClick={goBack}>
                       <ArrowLeft aria-hidden />
-                      Back to {ctx.details()?.name ?? "the title"}
+                      {backWords()}
                     </button>
                   </div>
                 </>
@@ -894,7 +937,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
               </button>
               <Show when={ctx.ref}>
                 {(r) => (
-                  <A class="pa" href={titlePath(props.kind, props.id)} replace on:click={leaveFor(titlePath(props.kind, props.id))} data-f="player:episodes">
+                  <A class="pa" href={titlePath(props.kind, props.id)} replace on:click={toTitle} data-f="player:episodes">
                     <ListVideo aria-hidden />
                     <b>Episodes</b>
                     <small>{r().season === null ? "" : seasonName(r().season as number)}</small>
@@ -984,14 +1027,19 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
               </Show>
               Off
             </button>
-            {/* One section per language, preferred first, as the core orders them. */}
-            <For each={byLanguage(snap()?.subtitles ?? [])}>
-              {(section) => (
-                <section class="sub-lang" aria-label={section.name}>
-                  <h3>{section.name}</h3>
-                  <For each={section.tracks}>
-                    {({ track: t, index }) => (
-                      <button class="opt" classList={{ on: track()?.url === t.url }} data-f={`sub:${index}`} onClick={() => chooseSubtitle(t)}>
+            {/* One section per language, preferred first, as the core orders
+                them. Sections go by language tag and tracks by URL, so a late
+                subtitle addon adds to the list without rebuilding the option
+                a remote is on. */}
+            <For each={byLanguage(snap()?.subtitles ?? []).map((s) => s.language)}>
+              {(language) => {
+                const tracks = () => (snap()?.subtitles ?? []).filter((t) => t.language === language);
+                return (
+                <section class="sub-lang" aria-label={tracks()[0]?.languageName}>
+                  <h3>{tracks()[0]?.languageName}</h3>
+                  <For each={tracks()}>
+                    {(t) => (
+                      <button class="opt" classList={{ on: track()?.url === t.url }} data-f={`sub:${t.url}`} onClick={() => chooseSubtitle(t)}>
                         <Show when={track()?.url === t.url}>
                           <Check aria-hidden class="opt-check" />
                         </Show>
@@ -1003,7 +1051,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                     )}
                   </For>
                 </section>
-              )}
+                );
+              }}
             </For>
             <Show when={fileSubs().length}>
               <p class="opt-note">In the file</p>
