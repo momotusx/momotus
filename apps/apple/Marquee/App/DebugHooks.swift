@@ -21,6 +21,12 @@ enum DebugHooks {
     /// `-MQAutoPlay YES` presses Play on the title page once a version is picked.
     static var autoPlay: Bool { UserDefaults.standard.bool(forKey: "MQAutoPlay") }
 
+    /// `-MQPickRow 2` plays the Versions page's second row once, as a hand
+    /// pick (a row's own Play, not the recommendation), once the list is done:
+    /// a TV walk has no remote to press it.
+    static var pickRow: Int { UserDefaults.standard.integer(forKey: "MQPickRow") }
+    @MainActor static var pickRowTaken = false
+
     /// `-MQSeekTo 575` starts the first playback of the process there instead of its resume point, once.
     @MainActor static func takeSeek() -> Double? {
         guard !seekTaken, UserDefaults.standard.object(forKey: "MQSeekTo") != nil else { return nil }

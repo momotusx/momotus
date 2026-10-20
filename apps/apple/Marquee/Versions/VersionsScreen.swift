@@ -42,6 +42,9 @@ struct VersionsScreen: View {
         .background(Theme.Palette.bg)
         .topScrim()
         .onAppear(perform: model.freeze)
+        #if DEBUG
+        .onChange(of: snapshot, initial: true) { pickRowForWalk() }
+        #endif
         .defaultFocus($pickFocused, true)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .navigationDestination(item: $playing) { route in
@@ -254,6 +257,17 @@ struct VersionsScreen: View {
             }
         }
     }
+
+    #if DEBUG
+    /// `-MQPickRow N`: row N of the done list, once, as a hand pick.
+    private func pickRowForWalk() {
+        let rows = groups.flatMap(\.1)
+        let n = DebugHooks.pickRow
+        guard !DebugHooks.pickRowTaken, n > 0, snapshot?.done == true, rows.count >= n, playing == nil else { return }
+        DebugHooks.pickRowTaken = true
+        playing = model.play(rows[n - 1].key)
+    }
+    #endif
 
     /// Rows by intent group, in the design's order, empty groups left out;
     /// blocked versions once the user asked to see them.
