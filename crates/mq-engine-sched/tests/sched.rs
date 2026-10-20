@@ -1109,6 +1109,20 @@ fn a_seek_has_a_grace_in_a_window_only() {
     assert_eq!(readahead_pieces(&whole).len(), 4, "the preset at once");
 }
 
+/// r, second half: a player that reads in bounded chunks (the loopback
+/// gives every range an end; here 4 MiB) on a file that fits gets today's
+/// windows, its readahead included, chunk after chunk.
+#[test]
+fn bounded_chunks_on_a_file_that_fits_get_todays_windows() {
+    let g = Geometry::new(64 * KIB as u32, &[16 * MIB]).unwrap();
+    let mut h = Harness::new(g, small_cfg());
+    for (demand, start) in [(1, 0), (2, 4 * MIB), (3, 8 * MIB)] {
+        open(&mut h, demand, 0, start, Some(start + 4 * MIB));
+        assert_eq!(readahead_pieces(&h).len(), 4, "chunk at {start}");
+        h.send(Event::RangeClosed { demand });
+    }
+}
+
 /// With no reader a stopped window keeps no readahead, a paused one does
 /// (2.3); a file that is not windowed keeps its anchor warm as before.
 #[test]
