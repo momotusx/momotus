@@ -700,3 +700,32 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     // A Mac window: no safe area, as before.
     #expect(PlayerLayout.subtitleFoot(screenHeight: 900, pictureHeight: 900, safeBottom: 0, controlsShown: false, controlsHeight: 200) == 860)
 }
+
+@Test func aSubtitleAndThePhoneControlsNeverOverlap() {
+    // iPhone 17; the foot block (capsule, 6 pt, the actions row, the foot gap) is 85 pt over the safe area.
+    let block: CGFloat = PhoneFrame.barHeight + 6 + 36 + PhoneFrame.bottomGap
+    let shapes: [(height: CGFloat, safeBottom: CGFloat, picture: CGFloat)] = [(402, 21, 402), (874, 34, 226)]
+    for shape in shapes {
+        let scrubberTop = shape.height - shape.safeBottom - block
+        let transport = (shape.height / 2 - PhoneFrame.transportHalfHeight)...(shape.height / 2 + PhoneFrame.transportHalfHeight)
+        for size in SubtitleSize.allCases {
+            for lines in [1, 2] {
+                // The drawn line's box at full size: its lines (20 pt on the phone at the system caption size) and 6 pt above and below.
+                let box = CGFloat(lines) * (20 * CaptionStyle.factor(size) * 1.2) + 12
+                let placed = PhoneFrame.subtitle(screenHeight: shape.height, pictureHeight: shape.picture, scrubberTop: scrubberTop, boxHeight: box)
+                let top = placed.foot - box * placed.scale
+                #expect(top >= transport.upperBound, "\(shape.height) \(size) \(lines) lines meets the transport")
+                #expect(placed.foot <= scrubberTop - PhoneFrame.subtitleGap, "\(shape.height) \(size) \(lines) lines meets the scrubber")
+                #expect(placed.scale > 0 && placed.scale <= 1)
+            }
+        }
+    }
+    // Across, the foot sits 8 pt over the capsule; one Medium line keeps its size.
+    let across = PhoneFrame.subtitle(screenHeight: 402, pictureHeight: 402, scrubberTop: 296, boxHeight: 36)
+    #expect(across.foot == 288)
+    #expect(across.scale == 1)
+    // Upright, at the picture's foot; two Medium lines just over the transport take 85%.
+    let upright = PhoneFrame.subtitle(screenHeight: 874, pictureHeight: 226, scrubberTop: 755, boxHeight: 60)
+    #expect(upright.foot == 534)
+    #expect(upright.scale == PhoneFrame.subtitleShrink)
+}

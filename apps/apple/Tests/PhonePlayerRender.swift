@@ -133,18 +133,20 @@ private struct PhoneSketch: View {
         }
     }
 
-    /// The Large subtitle, its foot where the app's rule puts it with the controls up.
+    /// The Large subtitle where the app's rule puts it with the controls up,
+    /// at the size it takes there (its box: two 25 pt lines and 6 pt above and below).
     private var subtitle: some View {
-        let bottom = PlayerLayout.subtitleFoot(
-            screenHeight: size.height, pictureHeight: picture.height, safeBottom: safe.bottom,
-            controlsShown: true, controlsHeight: blockHeight)
+        let place = PhoneFrame.subtitle(
+            screenHeight: size.height, pictureHeight: picture.height,
+            scrubberTop: size.height - safe.bottom - blockHeight, boxHeight: 2 * 25 * 1.2 + 12)
         return Text("Diese Klinge birgt eine\nfinstere Vergangenheit.")
             .font(.system(size: 25, weight: .semibold))
             .multilineTextAlignment(.center)
             .shadow(color: .black, radius: 0.7)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .frame(width: size.width, height: bottom - 10, alignment: .bottom)
+            .scaleEffect(place.scale, anchor: .bottom)
+            .frame(width: size.width, height: place.foot, alignment: .bottom)
             .frame(width: size.width, height: size.height, alignment: .top)
     }
 }

@@ -24,6 +24,8 @@ struct PlayerScreen: View {
     @State private var controlsHeight: CGFloat = 200
     /// The safe area's foot (the home indicator), which the drawn subtitles keep clear of.
     @State private var safeBottom: CGFloat = 0
+    /// The drawn subtitle's box at full size, for the phone's rule.
+    @State private var subtitleBox: CGFloat = 0
     #if os(iOS)
     @State private var pip = PictureInPicture()
     @Environment(FloatingPlayer.self) private var floating
@@ -86,14 +88,12 @@ struct PlayerScreen: View {
             #endif
             if let text = model.subtitleText {
                 GeometryReader { geo in
-                    // The bottom of the picture as fitted on screen, kept clear of the
-                    // controls' foot block and the safe area: never the screen's top.
-                    let bottom = PlayerLayout.subtitleFoot(
-                        screenHeight: geo.size.height, pictureHeight: fittedHeight(geo.size), safeBottom: safeBottom,
-                        controlsShown: controlsShown, controlsHeight: controlsHeight)
+                    let place = subtitlePlace(geo.size)
                     // Its foot stays put; a larger caption style or a second line grows upward.
                     SubtitleLine(text: text, size: model.subtitleSize)
-                        .frame(width: geo.size.width, height: max(bottom - 10, 0), alignment: .bottom)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { subtitleBox = $0 }
+                        .scaleEffect(place.scale, anchor: .bottom)
+                        .frame(width: geo.size.width, height: max(place.foot, 0), alignment: .bottom)
                 }
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
@@ -291,6 +291,23 @@ struct PlayerScreen: View {
     /// The OSD is on screen: not hidden, and no failure or end card in its place.
     private var controlsShown: Bool {
         controls && model.playback?.phase != "failed" && !model.showEndCard
+    }
+
+    /// Where the drawn subtitle's box ends and how large it draws: on the
+    /// iPhone with the controls up clear of the scrubber and the transport
+    /// (`PhoneFrame.subtitle`), else at the picture's foot over the controls.
+    private func subtitlePlace(_ size: CGSize) -> (foot: CGFloat, scale: CGFloat) {
+        #if os(iOS)
+        if controlsShown, UIDevice.current.userInterfaceIdiom == .phone {
+            return PhoneFrame.subtitle(
+                screenHeight: size.height, pictureHeight: fittedHeight(size),
+                scrubberTop: size.height - safeBottom - controlsHeight, boxHeight: subtitleBox)
+        }
+        #endif
+        let foot = PlayerLayout.subtitleFoot(
+            screenHeight: size.height, pictureHeight: fittedHeight(size), safeBottom: safeBottom,
+            controlsShown: controlsShown, controlsHeight: controlsHeight)
+        return (foot - 10, 1)
     }
 
     /// Height of the picture fitted into `size`, or the full height before it is known.

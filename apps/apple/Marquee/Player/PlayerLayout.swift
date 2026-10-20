@@ -280,3 +280,28 @@ extension PlayerLayout {
         return min(pictureFoot, screenHeight - clear)
     }
 }
+
+extension PhoneFrame {
+    /// Half the transport's height (the play circle), and the room a subtitle
+    /// keeps from it.
+    static let transportHalfHeight: CGFloat = 34
+    static let subtitleClearance: CGFloat = 4
+    /// A subtitle's foot over the scrubber's capsule.
+    static let subtitleGap: CGFloat = 8
+    /// The size a subtitle takes while it would meet the transport.
+    static let subtitleShrink: CGFloat = 0.85
+
+    /// A drawn subtitle on the iPhone while the controls show: its box's foot
+    /// 8 pt over the scrubber's capsule, or at the picture's foot when that is
+    /// higher (upright); at 85% while its box would meet the transport's,
+    /// smaller still if 85% does not clear it, so a subtitle and a control
+    /// never overlap. `boxHeight` is the subtitle's box at full size.
+    static func subtitle(screenHeight: CGFloat, pictureHeight: CGFloat, scrubberTop: CGFloat, boxHeight: CGFloat) -> (foot: CGFloat, scale: CGFloat) {
+        let pictureFoot = (screenHeight + pictureHeight) / 2 - 16
+        let foot = min(pictureFoot, scrubberTop - subtitleGap)
+        let room = foot - (screenHeight / 2 + transportHalfHeight + subtitleClearance)
+        guard boxHeight > room else { return (foot, 1) }
+        if boxHeight * subtitleShrink <= room { return (foot, subtitleShrink) }
+        return (foot, max(room, 0) / boxHeight)
+    }
+}
