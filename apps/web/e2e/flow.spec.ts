@@ -270,7 +270,7 @@ test("no dead ends: Add a source when nothing plays, a card when nothing plays i
   await expect(page).toHaveURL(/\/title\/movie\/tt43718175/);
 });
 
-test("a movie ends on a card: Back to the title, or Play again", async ({ page }) => {
+test("a movie ends on a card: Back, or Play again", async ({ page }) => {
   await page.goto(`/play/movie/${BBB_ID}/${BBB_ID}?form=tv`);
   await expect(page.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
   await startIfPaused(page);
@@ -285,7 +285,7 @@ test("a movie ends on a card: Back to the title, or Play again", async ({ page }
     await expect(card).toBeVisible({ timeout: 15_000 });
     await expect(card.locator("h2")).toHaveText("Big Buck Bunny");
     await expect.poll(() => focused(page)).toBe("end:back");
-    await expect(page.locator('[data-f="end:back"]')).toHaveText("Back to Big Buck Bunny");
+    await expect(page.locator('[data-f="end:back"]')).toHaveText("Back");
     await expect(page.locator(".osd")).toHaveCount(0);
     await page.keyboard.press("ArrowRight");
     await expect.poll(() => focused(page)).toBe("end:again");

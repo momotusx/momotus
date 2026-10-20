@@ -53,9 +53,18 @@ for (const name of ["pushState", "replaceState"] as const) {
   history[name] = (state: unknown, unused: string, url?: string | URL | null) => {
     const fields = (state ?? {}) as Record<string, unknown>;
     const owner = shown() ?? (fields._profile as string | undefined);
-    native({ ...fields, _profile: owner }, unused, url);
+    // The page this entry was opened from (`_from`): a push records the page
+    // being left; a replace keeps what the entry had, since Back still goes there.
+    const from = name === "pushState" ? location.pathname : (fields._from ?? entryFrom());
+    native({ ...fields, _profile: owner, _from: from }, unused, url);
     setEntryOwner(owner);
   };
+}
+
+/** The path of the page this history entry was opened from in the app, or null. */
+export function entryFrom(): string | null {
+  const from = (history.state as { _from?: unknown } | null)?._from;
+  return typeof from === "string" ? from : null;
 }
 // Registered before the router's own listener, so it runs first: an entry of
 // another profile reached with the browser's Back or Forward becomes Home

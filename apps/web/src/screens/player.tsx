@@ -25,6 +25,7 @@ import type { SegmentKind } from "../core/generated/SegmentKind";
 import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
 import { videoContext } from "../core/video";
 import { autoFocusSoon, goBack } from "../focus/dom";
+import { entryFrom } from "../history";
 import { createVideoEngine } from "../player/video-engine";
 import { loadedSource, type Retry, sourceStart, TRYING_AGAIN_MS, tryingAgain } from "../lib/failover";
 import { bytes, clock, decoded, episodeLabel, groupFailures, playPath, playState, seasonName, titlePath, versionsPath } from "../lib/format";
@@ -64,6 +65,16 @@ export default function Player() {
 
 function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: string | null; binge?: string }) {
   const navigate = useNavigate();
+  // The page this play was opened from, read when needed: the router renders
+  // a route before it writes its history entry. Leaving the play for that
+  // same page (Versions, or the title for Episodes) goes back to it; any
+  // other page replaces the play in history. Either way Back from the next
+  // play never reopens this one.
+  const leaveFor = (path: string) => (e: MouseEvent) => {
+    if (entryFrom() !== path) return;
+    e.preventDefault();
+    goBack();
+  };
   const ctx = videoContext(props.kind, props.id, props.videoId, props.binge);
   const prefs = prefsView();
   const versions = () => ctx.versions()?.state.data ?? null;
@@ -461,6 +472,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       class="btn big"
       classList={{ primary: !snap()?.offer && !failed() }}
       href={versionsPath(props.kind, props.id, props.videoId)}
+      replace
+      on:click={leaveFor(versionsPath(props.kind, props.id, props.videoId))}
       data-f="player:versions"
       data-autofocus={snap()?.offer || failed() ? undefined : ""}
     >
@@ -624,9 +637,11 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                   <p class="kicker">Finished</p>
                   <h2>{ctx.details()?.name}</h2>
                   <div class="acts">
+                    {/* Back goes where the viewer came from: it names the title
+                        only when that is the title page. */}
                     <button class="btn primary big" data-f="end:back" data-autofocus onClick={goBack}>
                       <ArrowLeft aria-hidden />
-                      Back to {ctx.details()?.name ?? "the title"}
+                      {entryFrom() === titlePath(props.kind, props.id) ? `Back to ${ctx.details()?.name ?? "the title"}` : "Back"}
                     </button>
                     <button class="btn big" data-f="end:again" onClick={playAgain}>
                       <RotateCcw aria-hidden />
@@ -738,7 +753,15 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                   </Show>
                 </small>
               </button>
-              <A class="pa" href={versionsPath(props.kind, props.id, props.videoId)} data-f="player:versionsact">
+              {/* Leaving for Versions or Episodes replaces this play in history:
+                  Back from the next play goes to Versions, then the title, never to this one. */}
+              <A
+                class="pa"
+                href={versionsPath(props.kind, props.id, props.videoId)}
+                replace
+                on:click={leaveFor(versionsPath(props.kind, props.id, props.videoId))}
+                data-f="player:versionsact"
+              >
                 <Layers aria-hidden />
                 <b>Versions</b>
                 <small>{playing() ? qualityCell(playing()?.quality ?? "") : ""}</small>
@@ -750,7 +773,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
               </button>
               <Show when={ctx.ref}>
                 {(r) => (
-                  <A class="pa" href={titlePath(props.kind, props.id)} data-f="player:episodes">
+                  <A class="pa" href={titlePath(props.kind, props.id)} replace on:click={leaveFor(titlePath(props.kind, props.id))} data-f="player:episodes">
                     <ListVideo aria-hidden />
                     <b>Episodes</b>
                     <small>{r().season === null ? "" : seasonName(r().season as number)}</small>
@@ -801,7 +824,13 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
               </For>
             </Show>
             <p class="opt-note">Other languages come with other versions.</p>
-            <A class="opt" href={versionsPath(props.kind, props.id, props.videoId)} data-f="audio:versions">
+            <A
+              class="opt"
+              href={versionsPath(props.kind, props.id, props.videoId)}
+              replace
+              on:click={leaveFor(versionsPath(props.kind, props.id, props.videoId))}
+              data-f="audio:versions"
+            >
               <b>Choose a version</b>
               <span>{versions()?.rows.length ? `${versions()?.rows.length} more listed` : "See what is listed"}</span>
             </A>

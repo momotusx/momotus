@@ -143,7 +143,7 @@ const SCREENS: Screen[] = [
     },
   },
   {
-    // The movie's end: the card with Back to the title and Play again.
+    // The movie's end: the card with Back and Play again.
     name: "player-end",
     path: `/play/movie/${BBB_ID}/${BBB_ID}`,
     ready: async (page) => {
