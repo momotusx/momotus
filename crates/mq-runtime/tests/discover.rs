@@ -50,7 +50,8 @@ async fn addon() -> (AddonRow, Arc<Mutex<Vec<String>>>) {
         "catalogs": [
             {"type": "movie", "id": "top", "name": "Popular",
              "extra": [{"name": "genre", "options": ["Action", "Drama"]}, {"name": "skip"}]},
-            {"type": "movie", "id": "new", "name": "New",
+            // A name that starts with its addon's ("Cat"), which the list shows beside it.
+            {"type": "movie", "id": "new", "name": "Cat: New",
              "extra": [{"name": "genre", "isRequired": true, "options": ["2026", "2025"]}]},
             {"type": "movie", "id": "find", "extra": [{"name": "search", "isRequired": true}]},
             {"type": "series", "id": "feed", "extra": [{"name": "lastVideosIds", "isRequired": true}]}

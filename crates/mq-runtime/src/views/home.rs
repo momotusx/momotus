@@ -532,7 +532,93 @@ fn row_title(slot: &CatalogSlot) -> String {
         .find(|c| c.id == slot.path.id && c.r#type == slot.path.r#type)
         .and_then(|c| c.name.clone())
         .unwrap_or_else(|| slot.path.id.clone());
-    format!("{name} {}", type_label(&slot.path.r#type))
+    catalog_title(&name, &slot.path.r#type, &slot.addon.manifest.name)
+}
+
+/// A row's title: the catalog's name and the kind it lists ("Popular Movies"). The row names its addon
+/// beside the title, so a name that starts with the addon's name ("trakt - Popular movies" from Trakt Tv)
+/// drops that start, and a kind the name already says, or a custom kind that only repeats the addon's name
+/// (Trakt Tv's type "trakt"), is not added. A known kind stays even when the addon's name holds it (The
+/// Movie Database Addon's "Popular Movies").
+fn catalog_title(name: &str, kind: &str, source: &str) -> String {
+    let name = without_source(name, source);
+    let label = type_label(kind);
+    let custom = label == kind;
+    if has_words(&name, label) || (custom && has_words(source, label)) {
+        name
+    } else {
+        format!("{name} {label}")
+    }
+}
+
+/// The hero's caption: "#1 in Popular Movies on Cinemeta", and only "#1 in" a title that names its addon
+/// already, so the addon is never said twice.
+fn hero_reason(title: &str, source: &str) -> String {
+    let own = source_words(source);
+    if !own.is_empty() && own.iter().all(|w| words(title).contains(w)) {
+        format!("#1 in {title}")
+    } else {
+        format!("#1 in {title} on {source}")
+    }
+}
+
+/// Lowercase words of letters and digits.
+fn words(text: &str) -> Vec<String> {
+    text.split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .map(str::to_lowercase)
+        .collect()
+}
+
+/// The words that name an addon: its name less the generic ones ("Trakt Tv" is "trakt").
+fn source_words(source: &str) -> Vec<String> {
+    const GENERIC: [&str; 7] = [
+        "tv", "addon", "catalog", "catalogs", "stremio", "the", "for",
+    ];
+    words(source)
+        .into_iter()
+        .filter(|w| !GENERIC.contains(&w.as_str()))
+        .collect()
+}
+
+/// Whether every word of `part` is in `text`, a plural matching its singular ("Random Movie" says "Movies").
+fn has_words(text: &str, part: &str) -> bool {
+    let stem = |w: &String| w.strip_suffix('s').unwrap_or(w).to_owned();
+    let text: Vec<String> = words(text).iter().map(stem).collect();
+    let part = words(part);
+    !part.is_empty() && part.iter().all(|w| text.contains(&stem(w)))
+}
+
+/// A catalog's `name` without a leading addon name and its separator ("trakt - ", "Trakt: ", "Game Cinema
+/// \u{2014} "), for a list that names the addon beside it (Home rows, Discover's catalogs). The addon's full
+/// name is tried first ("Trakt Tv - Popular"), then its own words ("trakt - Popular"); the name stays as it
+/// is unless what is left starts with a letter or digit ("Trakt's Picks", "Trakt.tv Popular").
+pub(crate) fn without_source(name: &str, source: &str) -> String {
+    [words(source), source_words(source)]
+        .iter()
+        .find_map(|own| past_words(name, own))
+        .unwrap_or_else(|| name.to_owned())
+}
+
+/// What follows `own` and one separator at the start of `name`, when it starts with a letter or digit.
+fn past_words(name: &str, own: &[String]) -> Option<String> {
+    if own.is_empty() {
+        return None;
+    }
+    let mut rest = name.trim_start();
+    for word in own {
+        let head = rest.get(..word.len())?;
+        let after = &rest[word.len()..];
+        if head.to_lowercase() != *word || after.starts_with(char::is_alphanumeric) {
+            return None;
+        }
+        rest = after.trim_start();
+    }
+    let rest = rest
+        .trim_start_matches(['-', ':', '|', '\u{b7}', '\u{2013}', '\u{2014}'])
+        .trim();
+    rest.starts_with(char::is_alphanumeric)
+        .then(|| rest.to_owned())
 }
 
 pub(crate) fn type_label(kind: &str) -> &str {
@@ -701,7 +787,7 @@ fn maybe_pick_hero(rows: &Mutex<ObservableVector<HomeRow>>, header: &SharedObser
             let blurb = tile.blurb.clone().unwrap_or_default();
             Some(Hero {
                 tile: tile.clone(),
-                reason: format!("#1 in {} on {}", row.title, row.source),
+                reason: hero_reason(&row.title, &row.source),
                 description: blurb.description,
                 genres: blurb.genres,
                 runtime: blurb.runtime,
@@ -1017,4 +1103,160 @@ fn imdb_rating(p: &mq_protocol::MetaItemPreview) -> Option<String> {
         .iter()
         .find(|l| l.category.eq_ignore_ascii_case("imdb"))
         .map(|l| l.name.clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{catalog_title, hero_reason, without_source};
+
+    #[test]
+    fn a_row_title_names_the_catalog_and_its_kind() {
+        assert_eq!(
+            catalog_title("Popular", "movie", "Cinemeta"),
+            "Popular Movies"
+        );
+        assert_eq!(
+            hero_reason("Popular Movies", "Cinemeta"),
+            "#1 in Popular Movies on Cinemeta"
+        );
+        assert_eq!(catalog_title("Top", "series", "Cinemeta"), "Top Series");
+    }
+
+    #[test]
+    fn a_catalog_that_names_its_addon_does_not_say_it_twice() {
+        // Trakt Tv's catalogs are "trakt - Popular movies" of the custom type "trakt" (the Fire TV walk's
+        // "#1 IN TRAKT - POPULAR MOVIES TRAKT ON TRAKT TV").
+        let title = catalog_title("trakt - Popular movies", "trakt", "Trakt Tv");
+        assert_eq!(title, "Popular movies");
+        assert_eq!(
+            hero_reason(&title, "Trakt Tv"),
+            "#1 in Popular movies on Trakt Tv"
+        );
+        assert_eq!(
+            catalog_title("Trakt: Trending", "movie", "Trakt Tv"),
+            "Trending Movies"
+        );
+        // A title that still names the addon is not followed by it.
+        assert_eq!(
+            hero_reason("Trakt Trending", "Trakt Tv"),
+            "#1 in Trakt Trending"
+        );
+        // Game Cinema's catalogs (community.json) part the addon from the name with an em dash.
+        let title = catalog_title("Game Cinema \u{2014} New This Week", "movie", "Game Cinema");
+        assert_eq!(title, "New This Week Movies");
+        assert_eq!(
+            hero_reason(&title, "Game Cinema"),
+            "#1 in New This Week Movies on Game Cinema"
+        );
+        assert_eq!(
+            catalog_title("Game Cinema \u{2014} Most Watched", "movie", "Game Cinema"),
+            "Most Watched Movies"
+        );
+        assert_eq!(
+            catalog_title("Game Cinema \u{2014} Series", "series", "Game Cinema"),
+            "Series"
+        );
+        assert_eq!(
+            catalog_title("Trakt \u{2013} Trending", "movie", "Trakt Tv"),
+            "Trending Movies"
+        );
+        // The addon's full name, generic words and all, goes before its own words do.
+        assert_eq!(
+            catalog_title("Trakt Tv - Popular", "movie", "Trakt Tv"),
+            "Popular Movies"
+        );
+    }
+
+    #[test]
+    fn a_kind_the_name_says_in_the_singular_is_not_added() {
+        assert_eq!(
+            catalog_title("Random Movie", "movie", "Random Movie"),
+            "Random Movie"
+        );
+        assert_eq!(
+            catalog_title("Top Series", "series", "Cinemeta"),
+            "Top Series"
+        );
+        // A known kind is said even when the addon's name holds it.
+        assert_eq!(
+            catalog_title("Year", "movie", "The Movie Database Addon"),
+            "Year Movies"
+        );
+        assert_eq!(
+            catalog_title("Kitsu Trending", "anime", "Anime Kitsu"),
+            "Kitsu Trending Anime"
+        );
+    }
+
+    #[test]
+    fn every_fixture_catalog_keeps_its_first_word() {
+        // The 160 catalogs of the addon catalog fixtures: a name that starts with a word keeps one at its start.
+        for f in ["official", "community"] {
+            let path = format!(
+                "{}/tests/fixtures/addon_catalog/{f}.json",
+                env!("CARGO_MANIFEST_DIR")
+            );
+            let doc: serde_json::Value =
+                serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+            for addon in doc["addons"].as_array().unwrap() {
+                let source = addon["manifest"]["name"].as_str().unwrap();
+                for c in addon["manifest"]["catalogs"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                {
+                    let kind = c["type"].as_str().unwrap();
+                    let name = c["name"]
+                        .as_str()
+                        .unwrap_or_else(|| c["id"].as_str().unwrap());
+                    for title in [
+                        catalog_title(name, kind, source),
+                        without_source(name, source),
+                    ] {
+                        assert!(
+                            !name.starts_with(char::is_alphanumeric)
+                                || title.starts_with(char::is_alphanumeric),
+                            "{source}: {name:?} became {title:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_name_that_goes_on_past_the_addon_without_a_word_stays_whole() {
+        assert_eq!(
+            catalog_title("Trakt's Picks", "movie", "Trakt Tv"),
+            "Trakt's Picks Movies"
+        );
+        assert_eq!(
+            catalog_title("Trakt.tv Popular", "movie", "Trakt Tv"),
+            "Trakt.tv Popular Movies"
+        );
+        assert_eq!(
+            catalog_title("Trakt - ...", "movie", "Trakt Tv"),
+            "Trakt - ... Movies"
+        );
+        // Not only ASCII: the addon's name in other capitals.
+        assert_eq!(
+            catalog_title(
+                "\u{041a}\u{0418}\u{041d}\u{041e} - \u{041d}\u{043e}\u{0432}\u{0438}\u{043d}\u{043a}\u{0438}",
+                "movie",
+                "\u{041a}\u{0438}\u{043d}\u{043e}"
+            ),
+            "\u{041d}\u{043e}\u{0432}\u{0438}\u{043d}\u{043a}\u{0438} Movies"
+        );
+    }
+
+    #[test]
+    fn a_name_that_is_only_the_addon_or_shares_a_prefix_stays() {
+        assert_eq!(catalog_title("Trakt", "movie", "Trakt Tv"), "Trakt Movies");
+        assert_eq!(
+            catalog_title("Traktor hits", "movie", "Trakt Tv"),
+            "Traktor hits Movies"
+        );
+        assert_eq!(catalog_title("Top", "movie", "TV"), "Top Movies");
+        assert_eq!(hero_reason("Top Movies", "TV"), "#1 in Top Movies on TV");
+    }
 }

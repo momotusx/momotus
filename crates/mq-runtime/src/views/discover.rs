@@ -4,7 +4,7 @@
 use crate::Core;
 use crate::live::{FRAME, coalesce};
 use crate::views::addons_changed;
-use crate::views::home::{Tile, tile_from_preview, type_label};
+use crate::views::home::{Tile, tile_from_preview, type_label, without_source};
 use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
 use mq_addons::InstalledAddon;
@@ -346,7 +346,10 @@ fn browsable(addons: &[InstalledAddon]) -> Vec<Catalog> {
                 Some(Catalog {
                     choice: CatalogChoice {
                         id: format!("{}|{}|{}", addon.id(), c.r#type, c.id),
-                        name: c.name.clone().unwrap_or_else(|| c.id.clone()),
+                        name: without_source(
+                            c.name.as_deref().unwrap_or(&c.id),
+                            &addon.manifest.name,
+                        ),
                         source: addon.manifest.name.clone(),
                     },
                     addon: addon.clone(),
