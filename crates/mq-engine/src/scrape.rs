@@ -195,17 +195,24 @@ impl Scraper {
                 let Ok(url) = mq_http::Url::parse(&t) else {
                     return;
                 };
-                let addrs = addresses(&reach, &url).await;
+                let (addrs, _) = addresses(&reach, &url).await;
                 if url.scheme() == "udp"
                     && !addrs.is_empty()
                     && kept_conn(&reach, url.as_str(), &addrs).is_none()
                 {
-                    let _ = connect(&reach, url.as_str(), &addrs).await;
+                    let _ = connect(&reach, url.as_str(), &addrs, false).await;
                 }
             });
         }
         let all = async { while set.join_next().await.is_some() {} };
         let _ = tokio::time::timeout(WARM_BUDGET, all).await;
+    }
+
+    /// Drops every tracker's kept addresses and connection id: after a
+    /// network change they may lead nowhere (Wi-Fi to an IPv6-only network,
+    /// say), and a connection id belongs to the address it was made from.
+    pub fn forget_trackers(&self) {
+        lock(&self.reach.trackers).clear();
     }
 
     /// Each tracker's stages in the last call that asked any.
@@ -378,27 +385,30 @@ fn id(hash: &str) -> Option<[u8; 20]> {
     (hash.len() == 40).then_some(out)
 }
 
-/// The tracker's addresses, IPv4 first: a literal must pass the scope; a
-/// name resolves through it (only permitted answers come back) and is kept
-/// for `ADDRESS_KEEP`, each kept address checked again on use, since the
-/// policy follows the network.
-async fn addresses(reach: &Reach, url: &mq_http::Url) -> Vec<SocketAddr> {
+/// The tracker's addresses, IPv4 first, and whether they came from the
+/// keep: a literal must pass the scope; a name resolves through it (only
+/// permitted answers come back) and is kept for `ADDRESS_KEEP`, each kept
+/// address checked again on use, since the policy follows the network.
+async fn addresses(reach: &Reach, url: &mq_http::Url) -> (Vec<SocketAddr>, bool) {
     let Some(port) = url.port() else {
-        return Vec::new();
+        return (Vec::new(), false);
     };
     if let Some(ip) = literal(url) {
-        return if reach.scope.permits(ip) {
-            vec![SocketAddr::new(ip, port)]
-        } else {
-            Vec::new()
-        };
+        let permitted = reach.scope.permits(ip);
+        return (
+            permitted
+                .then(|| SocketAddr::new(ip, port))
+                .into_iter()
+                .collect(),
+            false,
+        );
     }
     let key = url.as_str();
     let kept = lock(&reach.trackers).get(key).and_then(|k| k.addrs.clone());
     if let Some((at, addrs)) = kept {
         // A name that did not resolve is not looked up again for a while.
         if addrs.is_empty() && at.elapsed() < FAILED_KEEP {
-            return Vec::new();
+            return (Vec::new(), false);
         }
         if at.elapsed() < ADDRESS_KEEP {
             let still: Vec<SocketAddr> = addrs
@@ -406,7 +416,7 @@ async fn addresses(reach: &Reach, url: &mq_http::Url) -> Vec<SocketAddr> {
                 .filter(|a| reach.scope.permits(a.ip()))
                 .collect();
             if !still.is_empty() {
-                return still;
+                return (still, true);
             }
         }
     }
@@ -414,7 +424,7 @@ async fn addresses(reach: &Reach, url: &mq_http::Url) -> Vec<SocketAddr> {
         .host_str()
         .and_then(|h| reqwest::dns::Name::from_str(h).ok())
     else {
-        return Vec::new();
+        return (Vec::new(), false);
     };
     let mut addrs: Vec<SocketAddr> = match reach.scope.resolver().resolve(name).await {
         Ok(found) => found.map(|a| SocketAddr::new(a.ip(), port)).collect(),
@@ -425,7 +435,7 @@ async fn addresses(reach: &Reach, url: &mq_http::Url) -> Vec<SocketAddr> {
         .entry(key.to_owned())
         .or_default()
         .addrs = Some((Instant::now(), addrs.clone()));
-    addrs
+    (addrs, false)
 }
 
 /// The tracker's kept connection id while it stands, with the address it
@@ -446,12 +456,14 @@ async fn bind(to: SocketAddr) -> Option<UdpSocket> {
 }
 
 /// BEP 15 connect to each of `addrs` in turn (half a second each while
-/// another is left): the socket, the address that answered and its
-/// connection id, which is kept for `CONNECTION_KEEP`.
+/// another is left; a quarter each, the last too, for `kept` addresses,
+/// which leaves time to resolve again): the socket, the address that
+/// answered and its connection id, which is kept for `CONNECTION_KEEP`.
 async fn connect(
     reach: &Reach,
     key: &str,
     addrs: &[SocketAddr],
+    kept: bool,
 ) -> Option<(UdpSocket, SocketAddr, u64)> {
     for (i, &to) in addrs.iter().enumerate() {
         let Some(socket) = bind(to).await else {
@@ -461,7 +473,11 @@ async fn connect(
         let mut packet = PROTOCOL_ID.to_be_bytes().to_vec();
         packet.extend(0u32.to_be_bytes());
         packet.extend(t.to_be_bytes());
-        let slice = (i + 1 < addrs.len()).then_some(2 * RESEND);
+        let slice = if kept {
+            Some(RESEND)
+        } else {
+            (i + 1 < addrs.len()).then_some(2 * RESEND)
+        };
         let Some(answer) = exchange(&socket, to, &packet, 0, t, slice).await else {
             continue;
         };
@@ -491,14 +507,15 @@ fn literal(url: &mq_http::Url) -> Option<IpAddr> {
 /// BEP 15: a connect (skipped while a kept connection id stands), then one
 /// scrape per 70 hashes, each answer taken only from the tracker's own
 /// address with the transaction id asked. A kept id the tracker no longer
-/// takes is dropped and the connect made again.
+/// takes is dropped and the connect made again; when every kept address is
+/// quiet, the name is resolved once more (the network may have moved).
 async fn udp(
     reach: &Reach,
     url: &mq_http::Url,
     ids: &[[u8; 20]],
     trace: &Trace,
 ) -> Option<Vec<SwarmCount>> {
-    let addrs = addresses(reach, url).await;
+    let (mut addrs, mut kept) = addresses(reach, url).await;
     if addrs.is_empty() {
         return trace.fail("refused or not resolved");
     }
@@ -512,8 +529,19 @@ async fn udp(
                 Some(socket) => (socket, to, conn),
                 None => return trace.fail("no socket"),
             },
-            None => match connect(reach, key, &addrs).await {
+            None => match connect(reach, key, &addrs, kept).await {
                 Some(found) => found,
+                None if kept => {
+                    if let Some(k) = lock(&reach.trackers).get_mut(key) {
+                        *k = Kept::default();
+                    }
+                    let (fresh, _) = addresses(reach, url).await;
+                    if fresh.is_empty() || fresh == addrs {
+                        return trace.fail("connect not sent or not received");
+                    }
+                    (addrs, kept) = (fresh, false);
+                    continue;
+                }
                 None => return trace.fail("connect not sent or not received"),
             },
         };
@@ -964,8 +992,11 @@ mod tests {
 
     struct Fake {
         url: String,
+        port: u16,
         seen: Arc<AtomicUsize>,
         id: Arc<AtomicU64>,
+        /// Set, it answers nothing more.
+        quiet: Arc<std::sync::atomic::AtomicBool>,
     }
 
     /// A BEP 15 tracker on `ip`, named `host` in its URL, counting `seeders`
@@ -973,14 +1004,23 @@ mod tests {
     /// on another connection id than its current one with an error, and
     /// counts every datagram.
     fn fake(ip: IpAddr, host: &str, seeders: u32, lose: usize) -> Fake {
-        let socket = std::net::UdpSocket::bind((ip, 0)).unwrap();
+        fake_at(ip, 0, host, seeders, lose)
+    }
+
+    /// As `fake`, on `port` (0: any free one).
+    fn fake_at(ip: IpAddr, port: u16, host: &str, seeders: u32, lose: usize) -> Fake {
+        let socket = std::net::UdpSocket::bind((ip, port)).unwrap();
         let port = socket.local_addr().unwrap().port();
         let (seen, id) = (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicU64::new(7)));
-        let (got, current) = (seen.clone(), id.clone());
+        let quiet = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let (got, current, hushed) = (seen.clone(), id.clone(), quiet.clone());
         std::thread::spawn(move || {
             let mut buf = [0u8; 2048];
             while let Ok((n, from)) = socket.recv_from(&mut buf) {
-                if got.fetch_add(1, Ordering::SeqCst) < lose || n < 16 {
+                if got.fetch_add(1, Ordering::SeqCst) < lose
+                    || n < 16
+                    || hushed.load(Ordering::SeqCst)
+                {
                     continue;
                 }
                 let id = current.load(Ordering::SeqCst);
@@ -1001,9 +1041,51 @@ mod tests {
         });
         Fake {
             url: format!("udp://{host}:{port}/announce"),
+            port,
             seen,
             id,
+            quiet,
         }
+    }
+
+    /// After a network change the kept addresses and connection ids go:
+    /// the next scrape resolves and connects afresh (engine review r1, P3).
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_network_change_forgets_the_kept_trackers() {
+        let s = loopback_scraper();
+        let f = fake(V4, "change.scrape.test", 3, 0);
+        let slow = Duration::from_millis(300);
+        mq_http::test_dns::set_slow("change.scrape.test", &[V4], slow);
+        s.warm(&[f.url.as_str()]).await;
+        s.forget_trackers();
+        let (count, took) = one(&s, &f.url, H1).await;
+        assert_eq!(count, Some(3));
+        assert!(
+            took >= slow,
+            "the kept address outlived the change: {took:?}"
+        );
+        assert!(
+            !s.last()[0].reused,
+            "the kept connection id outlived the change"
+        );
+    }
+
+    /// Every kept address quiet: the name is resolved once more within the
+    /// same scrape, and the tracker found where it moved (engine review r1,
+    /// P3: an IPv6-only network after Wi-Fi, with no change reported).
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_tracker_whose_kept_address_went_quiet_is_resolved_again() {
+        let s = loopback_scraper();
+        let old = fake(V4, "moved.scrape.test", 4, 0);
+        mq_http::test_dns::set("moved.scrape.test", &[V4]);
+        assert_eq!(one(&s, &old.url, H1).await.0, Some(4));
+        let v6: IpAddr = "::1".parse().unwrap();
+        let new = fake_at(v6, old.port, "moved.scrape.test", 9, 0);
+        old.quiet.store(true, Ordering::SeqCst);
+        mq_http::test_dns::set("moved.scrape.test", &[v6]);
+        let (count, took) = one(&s, &new.url, H2).await;
+        assert_eq!(count, Some(9), "the quiet kept address was not given up");
+        assert!(took < BUDGET, "{took:?}");
     }
 
     /// A scraper that may reach the loopback addresses these tests use.

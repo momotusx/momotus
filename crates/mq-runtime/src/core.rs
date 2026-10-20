@@ -362,10 +362,15 @@ impl Core {
     }
 
     /// The device's network changed: connections pooled on the old one are
-    /// dropped (each would hold a request until its timeout). `network` is
-    /// its type, when the app knows it.
+    /// dropped (each would hold a request until its timeout), and so are the
+    /// trackers the engine kept addresses and ids for. `network` is its type,
+    /// when the app knows it.
     pub fn on_network_changed(&self, network: Option<crate::speed::Network>) {
         self.http().network_changed();
+        #[cfg(feature = "torrent")]
+        if let Some(engine) = self.inner.engine.get() {
+            engine.network_changed();
+        }
         if let Some(network) = network {
             self.set_network(network);
         }

@@ -549,6 +549,13 @@ impl Engine {
         }
     }
 
+    /// The device's network changed (the apps say so): trackers' kept
+    /// addresses and connection ids are dropped, so the next scrape resolves
+    /// and connects afresh.
+    pub fn network_changed(&self) {
+        self.inner.scraper.forget_trackers();
+    }
+
     /// Each tracker's stages in the last scrape that asked any (diagnosis:
     /// `mq scrape`, bench/m13/cold-scrape.jsonl).
     pub fn last_scrape(&self) -> Vec<TrackerTrace> {
