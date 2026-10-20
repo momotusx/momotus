@@ -92,6 +92,14 @@ enum SyncWords {
     static let leaveHereText = "This device forgets the account without telling the sync server, which lists it until another device removes it. Your library stays here, and you can pair this device again."
     static let leftHere = "This device no longer syncs. The sync server still lists it until another device removes it; you can pair it again."
     static let wrongRecord = "This device does not hold this sync account any more, so there is nothing to stop syncing here. Forget it on this device to clear it."
+    // Delete the account
+    static let deleteTitle = "Delete account"
+    static let deleteText = "Deletes your account from the sync service for all your devices. Each device keeps its own copy of your library."
+    static let deleteButton = "Delete account"
+    static let deleteAsk = "Your profiles, library, progress and settings are deleted from the sync service. This device keeps its own copy."
+    static let deleting = "Deleting"
+    static let accountGone = "Your Marquee account was deleted. Your library stays on this device."
+    static let ok = "OK"
     static let forgetHere = "Forget it on this device"
     static let forgetHereText = "This device deletes the account's key from its Keychain. Your library stays here."
     static let keyUnreadable = "This device cannot read its sync key from the Keychain right now, so it cannot tell whether it syncs. Try again in a moment; if it keeps failing, restart the device."
@@ -173,6 +181,7 @@ enum SyncWords {
     static let authDiffer = "end the approval of a device"
     static let authServerList = "keep syncing with the sync server's device list"
     static let authLeave = "stop syncing on this device"
+    static let authDelete = "delete your sync account"
 
     /// Fills `{name}` in a sync line.
     static func named(_ line: String, _ name: String) -> String {
@@ -245,7 +254,7 @@ enum SyncWords {
 /// 403 when starting is an invite, a 404 on a kit an unknown kit, a 404 on a
 /// code a used one).
 enum SyncAction: Equatable, Sendable {
-    case round, start, recover, approve, devices, kit, remove, lost, leave, differ, compare, serverList
+    case round, start, recover, approve, devices, kit, remove, lost, leave, delete, differ, compare, serverList
 }
 
 /// A sync failure in plain words; `code` names the ones with a fix.
@@ -269,6 +278,7 @@ struct SyncProblem: Equatable {
     var words: String {
         switch code {
         case "dropped": return "This device was removed from your sync account. Your library stays here as local data."
+        case "accountGone": return SyncWords.accountGone
         case "fork": return "The sync server lists different devices than this device knows. Compare the lists to keep syncing."
         case "rosterChanged": return SyncWords.forkChanged
         case "wrongRecord": return SyncWords.wrongRecord
@@ -304,6 +314,7 @@ struct SyncProblem: Equatable {
         case .kit: "No kit was made."
         case .remove, .lost: "Nothing was removed."
         case .leave: "This device still syncs."
+        case .delete: "Nothing was deleted."
         case .differ: "The approval is still open."
         case .compare: "The lists could not be compared."
         case .start, .recover: "This device did not join."
@@ -433,6 +444,12 @@ enum SyncRules {
         case askAgain
         /// No lock, and the op is more than ending access: nothing can confirm it.
         case refuse
+    }
+
+    /// The codes after which this device forgets the account (its library
+    /// stays): it was removed, or the account was deleted.
+    static func forgets(_ code: String?) -> Bool {
+        code == "dropped" || code == "accountGone"
     }
 
     /// With a lock the OS prompt; without one, stopping syncing (it only ends

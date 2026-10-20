@@ -155,7 +155,7 @@ private func report(_ changes: [String: Any] = [:]) throws -> SyncReport {
     }
 
     @Test func everyCodeHasPlainWords() {
-        for code in ["dropped", "fork", "wrongRelay", "relayBehind", "notJoined", "unsent", "insecure", "storage", "unconfirmed", "noPasscode", "rosterChanged", "wrongRecord"] {
+        for code in ["dropped", "accountGone", "fork", "wrongRelay", "relayBehind", "notJoined", "unsent", "insecure", "storage", "unconfirmed", "noPasscode", "rosterChanged", "wrongRecord"] {
             let words = SyncProblem(code: code, message: "raw").words
             // No protocol name in the words ("storage" is a plain word there).
             #expect(words != "raw" && (code == "storage" || !words.contains(code)), "\(code)")
@@ -163,6 +163,17 @@ private func report(_ changes: [String: Any] = [:]) throws -> SyncReport {
         // An error with a code wins over the action's own reading.
         #expect(SyncProblem(code: "dropped", message: "http status 404", action: .approve).words.hasPrefix("This device was removed"))
         #expect(SyncProblem(CoreError("x", code: "unsent"), action: .leave).code == "unsent")
+    }
+
+    @Test func aDeletedAccountIsForgottenHereAndSaidPlainly() {
+        // Removed or deleted: this device forgets the account and keeps its library; a fork does not.
+        #expect(SyncRules.forgets("dropped") && SyncRules.forgets("accountGone"))
+        #expect(!SyncRules.forgets("fork") && !SyncRules.forgets(nil))
+        #expect(SyncProblem(code: "accountGone", message: "this account was deleted").words == "Your Marquee account was deleted. Your library stays on this device.")
+        // Whichever call heard it, the words are the same.
+        #expect(SyncProblem(code: "accountGone", message: "x", action: .delete).words == W.accountGone)
+        #expect(SyncProblem(code: nil, message: "http status 502", action: .delete).words.hasPrefix("Nothing was deleted."))
+        #expect(W.deleteAsk == "Your profiles, library, progress and settings are deleted from the sync service. This device keeps its own copy.")
     }
 
     @Test func everyReportFactIsSaid() throws {

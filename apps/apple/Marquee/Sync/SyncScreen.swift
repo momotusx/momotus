@@ -5,7 +5,8 @@ private typealias W = SyncWords
 /// Devices and sync (plans/m7-sync.md): not joined, the three ways in (pair,
 /// start an account, use a kit); joined, this device's state with every fact
 /// of the last round and the 12 characters to compare, the devices with
-/// Remove and Report lost, Add a device, Make a recovery kit, and stopping.
+/// Remove and Report lost, Add a device, Make a recovery kit, stopping, and
+/// deleting the account.
 struct SyncScreen: View {
     @Environment(SyncModel.self) private var sync
     @Environment(\.metrics) private var metrics
@@ -38,7 +39,12 @@ private struct NotJoined: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
-            if let problem = sync.problem {
+            if let problem = sync.problem, problem.code == "accountGone" {
+                // Deleted on another device: said once, and OK puts it away.
+                Said(tone: .warn, text: problem.words)
+                Button(W.ok) { sync.dismissGone() }
+                    .buttonStyle(PillButtonStyle(prominent: true))
+            } else if let problem = sync.problem {
                 Said(tone: .bad, text: problem.words)
             } else if let notice = sync.notice {
                 Said(tone: .ok, text: notice)
@@ -96,6 +102,7 @@ private struct JoinedSync: View {
             devices
             links
             LeaveSync()
+            DeleteSync()
         }
         .task { await load() }
         // A new warning is said once; a round that repeats it says nothing.
@@ -461,6 +468,47 @@ private struct LeaveSync: View {
             // Not for edits that wait or a prompt the user cancelled.
             refused = problem.code != "unsent" && problem.code != "unconfirmed" && problem.code != "noPasscode"
             self.error = problem.words
+        }
+    }
+}
+
+/// Delete the account for every device: one confirmation that names what
+/// goes (on a TV it is the second ask, as for Remove), then the OS prompt.
+private struct DeleteSync: View {
+    @Environment(SyncModel.self) private var sync
+    @State private var asking = false
+    @State private var error: String?
+    @State private var busy = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            Text(W.deleteTitle).display(Theme.type.title2).foregroundStyle(Theme.Palette.text).accessibilityAddTraits(.isHeader)
+            Text(W.deleteText)
+                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .foregroundStyle(Theme.Palette.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            if let error { Said(tone: .bad, text: error) }
+            Button { asking = true } label: { Label(busy ? W.deleting : W.deleteButton, glyph: "trash") }
+                .buttonStyle(DestructiveTextStyle())
+                .disabled(busy)
+        }
+        .confirmationDialog(W.deleteTitle + "?", isPresented: $asking, titleVisibility: .visible) {
+            Button(W.deleteButton, role: .destructive) { Task { await delete() } }
+            Button(W.cancel, role: .cancel) {}
+        } message: {
+            Text(W.deleteAsk)
+        }
+    }
+
+    private func delete() async {
+        guard !busy else { return }
+        busy = true
+        defer { busy = false }
+        error = nil
+        do {
+            try await sync.deleteAccount()
+        } catch {
+            self.error = SyncProblem(error, action: .delete).words
         }
     }
 }

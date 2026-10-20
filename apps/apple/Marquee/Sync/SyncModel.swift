@@ -401,6 +401,23 @@ final class SyncModel {
         notice = SyncWords.leftHere
     }
 
+    /// Deletes the account on the sync server for every device, after the
+    /// OS prompt (the page asked once first, naming what goes). Once the
+    /// server confirmed, this device forgets it as after a sign-out; the
+    /// library stays.
+    func deleteAccount() async throws {
+        try await confirmOwner(SyncWords.authDelete)
+        let _: JSONValue = try await withRecord("deleteAccount") { _ in nil }
+        forget()
+        problem = nil
+        notice = SyncWords.accountGone
+    }
+
+    /// OK on "Your Marquee account was deleted", heard from the sync server.
+    func dismissGone() {
+        if problem?.code == "accountGone" { problem = nil }
+    }
+
     /// After `fork`: the sync server's device list, as the compare page showed
     /// it (`head`), without the devices the user ticked. A list that moved since
     /// is refused with `rosterChanged`.
@@ -434,8 +451,8 @@ final class SyncModel {
     // MARK: The record
 
     /// Runs one op on the record, in turn. A record in the answer is stored
-    /// before the next op runs; `dropped` (this device was removed) forgets
-    /// the account here.
+    /// before the next op runs; `dropped` (this device was removed) and
+    /// `accountGone` (the account was deleted) forget the account here.
     private func withRecord<R: Decodable & Sendable>(
         _ op: String, _ fields: [String: any Sendable] = [:], record recordIn: @escaping @Sendable (R) -> JSONValue?
     ) async throws -> R {
@@ -450,8 +467,8 @@ final class SyncModel {
                     throw CoreError("the record was not stored", code: "storage")
                 }
                 return result
-            } catch let error as CoreError where mine == account && (error.code == "dropped" || error.code == "fork") {
-                if error.code == "dropped" { forget() }
+            } catch let error as CoreError where mine == account && (SyncRules.forgets(error.code) || error.code == "fork") {
+                if SyncRules.forgets(error.code) { forget() }
                 problem = SyncProblem(error, action: .round)
                 throw error
             }
