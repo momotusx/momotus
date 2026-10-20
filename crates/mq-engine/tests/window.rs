@@ -710,6 +710,14 @@ async fn an_orphan_is_never_claimed_over_a_hole() {
     assert_eq!(r.evicted, [3]);
     assert!(r.error.is_some() && r.punched_bytes == 0);
     assert!(l.piece_matches(3).await, "piece 3 fetched again");
+
+    // An orphan in a round whose bitfield write fails: no punch is tried,
+    // the verified piece is claimed again, the orphan still released.
+    l.request(2, 0..8).await;
+    sync_log::fail(l.root(), Fail::DataSync, 1);
+    let r = l.evict(&[2, 8]).await;
+    assert_eq!((r.evicted, r.kept), (vec![2], vec![8]));
+    assert!(l.piece_matches(2).await, "piece 2 fetched again");
 }
 
 /// n. A pause during a round's bitfield write or its punch waits for the
