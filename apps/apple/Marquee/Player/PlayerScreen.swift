@@ -286,10 +286,9 @@ private struct SkipButton: View {
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 10) {
-            // A white pill with an accent edge.
+            // A white pill: the ring shows only with focus, as on every pill.
             Button(action: skip) { Label(segment.label, glyph: "skip-forward") }
                 .buttonStyle(PillButtonStyle(prominent: true))
-                .overlay { Capsule().strokeBorder(Theme.Palette.accent, lineWidth: 2).allowsHitTesting(false) }
                 .focused($focused)
             Text("Skip data: \(segment.source)")
                 .font(.text(Theme.type.caption, relativeTo: .caption))
