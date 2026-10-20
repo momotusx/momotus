@@ -484,6 +484,8 @@ private struct DeleteSync: View {
     @State private var busy = false
     #if os(tvOS)
     @FocusState private var cancelFocused: Bool
+    /// The row's own button: Cancel hands the focus back to it (the tvOS walk, ADT-F1).
+    @FocusState private var rowFocused: Bool
     #endif
 
     var body: some View {
@@ -516,7 +518,15 @@ private struct DeleteSync: View {
             Button { asking = true } label: { Label(busy ? W.deleting : W.deleteButton, glyph: "trash") }
                 .buttonStyle(DestructiveTextStyle())
                 .disabled(busy || isTV && asking)
+                #if os(tvOS)
+                .focused($rowFocused)
+                #endif
         }
+        #if os(tvOS)
+        // Disabled while the step shows, the row cannot take the focus in the
+        // same update that closes it: it takes it once it is enabled again.
+        .onChange(of: asking) { _, now in if !now { rowFocused = true } }
+        #endif
         #if !os(tvOS)
         .confirmationDialog(W.deleteTitle + "?", isPresented: $asking, titleVisibility: .visible) {
             Button(W.deleteButton, role: .destructive) { Task { await delete() } }
