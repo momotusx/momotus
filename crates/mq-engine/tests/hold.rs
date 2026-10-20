@@ -263,6 +263,11 @@ async fn the_disk_budget_never_evicts_a_claimed_torrent() {
             engine.stats(t).await.is_ok(),
             "a claimed torrent was evicted"
         );
+        // Its folder is no leftover either (engine review r3, P3-4).
+        assert!(
+            dir.path().join(&s.info_hash).exists(),
+            "a claimed torrent's folder went as a leftover"
+        );
 
         drop(claim);
         for _ in 0..30 {
@@ -334,7 +339,9 @@ async fn a_claim_during_an_eviction_keeps_the_torrent() {
 
 /// Torrent folders an earlier launch left count against the disk budget
 /// from the start, the least recently changed first; a folder that is no
-/// torrent's stays (engine review r2, P2-4: they were never evicted).
+/// torrent's stays (engine review r2, P2-4: they were never evicted). A
+/// torrent folder an interrupted round set aside goes, a set-aside name
+/// that is no torrent's stays (engine review r3, P3-2).
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_disk_budget_evicts_what_earlier_launches_left() {
     let dir = tempfile::tempdir().unwrap();
@@ -342,6 +349,11 @@ async fn the_disk_budget_evicts_what_earlier_launches_left() {
     let newer = dir.path().join("2".repeat(40));
     let other = dir.path().join("notes");
     let now = std::time::SystemTime::now();
+    let trash = dir.path().join(format!("{}.evicted", "3".repeat(40)));
+    let not_trash = dir.path().join("notes.evicted");
+    for folder in [&trash, &not_trash] {
+        std::fs::create_dir_all(folder).unwrap();
+    }
     for (folder, age) in [(&older, 7200), (&newer, 3600), (&other, 9000)] {
         std::fs::create_dir_all(folder).unwrap();
         let file = folder.join("movie.mkv");
@@ -371,5 +383,16 @@ async fn the_disk_budget_evicts_what_earlier_launches_left() {
     assert!(!older.exists(), "the older leftover stayed");
     assert!(newer.exists(), "the newer leftover went too");
     assert!(other.exists(), "a folder that is no torrent's went");
+    for _ in 0..40 {
+        if !trash.exists() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert!(!trash.exists(), "a set-aside torrent folder stayed");
+    assert!(
+        not_trash.exists(),
+        "a set-aside name that is no torrent's went"
+    );
     drop(engine);
 }

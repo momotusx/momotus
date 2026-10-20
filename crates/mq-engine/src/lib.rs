@@ -232,6 +232,10 @@ pub enum EngineError {
     /// [`Engine::remove`] left it: a playback still claims it.
     #[error("another playback still uses the torrent")]
     Claimed,
+    /// Another engine holds `data_dir` (its `.lock`): two engines on one
+    /// folder would evict each other's data.
+    #[error("the torrent data folder is in use by another engine")]
+    DataInUse,
     #[error("torrent: {0:#}")]
     Torrent(#[from] anyhow::Error),
     #[error("io: {0}")]
@@ -346,6 +350,12 @@ struct Inner {
     torrents: Mutex<HashMap<TorrentHandle, Arc<Torrent>>>,
     next: AtomicU64,
     next_demand: AtomicU64,
+    /// `data_dir/.lock`, held while this engine lives (engine review r3,
+    /// P3-3).
+    _lock: std::fs::File,
+    /// One eviction round at a time: overlapping rounds each counted what
+    /// the other was deleting and evicted too much (engine review r3, P3-2).
+    evicting: tokio::sync::Mutex<()>,
     #[cfg(feature = "test-hooks")]
     hold: Mutex<Option<Arc<test_hooks::Hold>>>,
     #[cfg(feature = "test-hooks")]
@@ -471,6 +481,10 @@ impl Engine {
     /// inbound TCP listener, PEX, IPv6 dual stack.
     pub async fn start(cfg: EngineConfig) -> Result<Self> {
         std::fs::create_dir_all(&cfg.data_dir)?;
+        let lock_file = std::fs::File::create(cfg.data_dir.join(".lock"))?;
+        if lock_file.try_lock().is_err() {
+            return Err(EngineError::DataInUse);
+        }
         let scopes = Scopes::new(&cfg.policy);
         let opts = session_options(&cfg, &scopes);
         let session = Session::new_with_opts(cfg.data_dir.clone(), opts).await?;
@@ -484,6 +498,8 @@ impl Engine {
                 torrents: Mutex::default(),
                 next: AtomicU64::new(1),
                 next_demand: AtomicU64::new(1),
+                _lock: lock_file,
+                evicting: tokio::sync::Mutex::new(()),
                 #[cfg(feature = "test-hooks")]
                 hold: Mutex::default(),
                 #[cfg(feature = "test-hooks")]
@@ -1019,17 +1035,35 @@ impl Engine {
     /// count too and go first, the oldest first: they were used before
     /// anything this launch (engine review r2, P2-4).
     async fn enforce_budget(&self, keep: Option<TorrentHandle>) {
+        let _round = self.inner.evicting.lock().await;
         let all: Vec<(TorrentHandle, Arc<Torrent>)> = lock(&self.inner.torrents)
             .iter()
             .map(|(h, t)| (*h, t.clone()))
             .collect();
-        let mut used: Vec<(Instant, TorrentHandle, u64)> = all
+        // Sizes, dates and the folder listing walk the disk: off the
+        // runtime workers, which the app has two of (engine review r3,
+        // P3-2).
+        let dirs: Vec<(Instant, TorrentHandle, PathBuf)> = all
             .iter()
-            .map(|(h, t)| (*lock(&t.last_used), *h, allocated(&t.dir)))
+            .map(|(h, t)| (*lock(&t.last_used), *h, t.dir.clone()))
             .collect();
+        let data_dir = self.inner.cfg.data_dir.clone();
+        let scan = tokio::task::spawn_blocking(move || {
+            let held: Vec<&Path> = dirs.iter().map(|d| d.2.as_path()).collect();
+            let (left, trash) = leftovers(&data_dir, &held);
+            let used: Vec<(Instant, TorrentHandle, u64)> = dirs
+                .iter()
+                .map(|(at, h, dir)| (*at, *h, allocated(dir)))
+                .collect();
+            (used, left, trash)
+        });
+        let Ok((mut used, left, trash)) = scan.await else {
+            return;
+        };
+        for dir in trash {
+            let _ = tokio::fs::remove_dir_all(dir).await;
+        }
         let mut total: u64 = used.iter().map(|u| u.2).sum();
-        let held: Vec<&Path> = all.iter().map(|(_, t)| t.dir.as_path()).collect();
-        let left = leftovers(&self.inner.cfg.data_dir, &held);
         total += left.iter().map(|l| l.2).sum::<u64>();
         for (_, dir, bytes) in left {
             if total <= self.inner.cfg.cache_budget_bytes {
@@ -1087,34 +1121,41 @@ impl Engine {
 /// The ending of a torrent folder on its way out.
 const SET_ASIDE: &str = "evicted";
 
+/// A leftover: when a file in it last changed, the folder, its allocated
+/// size.
+type Leftover = (std::time::SystemTime, PathBuf, u64);
+
 /// Torrent folders in `data_dir` no torrent of this launch holds (named by
-/// an info hash, not in `held`), the least recently changed first: when a
-/// file in it last changed, and its allocated size. Folders an interrupted
-/// eviction set aside are deleted on the way.
-fn leftovers(data_dir: &Path, held: &[&Path]) -> Vec<(std::time::SystemTime, PathBuf, u64)> {
+/// an info hash, not in `held`), the least recently changed first; and
+/// the folders an interrupted round set aside (`<info hash>.evicted`
+/// only: the CLI's data folder can be any folder). Blocking: walks the
+/// disk.
+fn leftovers(data_dir: &Path, held: &[&Path]) -> (Vec<Leftover>, Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(data_dir) else {
-        return Vec::new();
+        return (Vec::new(), Vec::new());
     };
-    let mut left = Vec::new();
+    let is_hash = |n: &str| n.len() == 40 && n.bytes().all(|b| b.is_ascii_hexdigit());
+    let (mut left, mut trash) = (Vec::new(), Vec::new());
     for e in entries.flatten() {
         let path = e.path();
         if !e.metadata().is_ok_and(|m| m.is_dir()) {
             continue;
         }
-        if path.extension().is_some_and(|x| x == SET_ASIDE) {
-            let _ = std::fs::remove_dir_all(&path);
-            continue;
-        }
         let name = e.file_name();
-        let hash = name
-            .to_str()
-            .is_some_and(|n| n.len() == 40 && n.bytes().all(|b| b.is_ascii_hexdigit()));
-        if hash && !held.contains(&path.as_path()) {
-            left.push((last_change(&path), path.clone(), allocated(&path)));
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        match name.strip_suffix(&format!(".{SET_ASIDE}")) {
+            Some(stem) if is_hash(stem) => trash.push(path),
+            Some(_) => {}
+            None if is_hash(name) && !held.contains(&path.as_path()) => {
+                left.push((last_change(&path), path.clone(), allocated(&path)));
+            }
+            None => {}
         }
     }
     left.sort_by_key(|l| l.0);
-    left
+    (left, trash)
 }
 
 /// When a file under `dir` last changed (the epoch when none can be read).
@@ -1292,5 +1333,74 @@ mod tests {
             assert!(!opts.disable_trackers, "trackers run either way");
             assert_eq!(opts.dht.is_some(), discovery);
         }
+    }
+
+    fn config(dir: &Path, budget: u64) -> EngineConfig {
+        let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+        EngineConfig {
+            discovery: false,
+            cache_budget_bytes: budget,
+            ..EngineConfig::new(dir, http.torrent_scope(&[]))
+        }
+    }
+
+    /// Two engines on one folder would evict each other's data: the second
+    /// is refused while the first lives (engine review r3, P3-3).
+    #[tokio::test]
+    async fn two_engines_never_share_a_data_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        let first = Engine::start(config(dir.path(), u64::MAX)).await.unwrap();
+        assert!(matches!(
+            Engine::start(config(dir.path(), u64::MAX)).await,
+            Err(EngineError::DataInUse)
+        ));
+        drop(first);
+        // Its first maintenance round may still hold it a moment.
+        let mut again = Engine::start(config(dir.path(), u64::MAX)).await;
+        for _ in 0..40 {
+            if again.is_ok() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            again = Engine::start(config(dir.path(), u64::MAX)).await;
+        }
+        assert!(again.is_ok(), "the folder stayed locked");
+    }
+
+    /// A round waits for the one running (engine review r3, P3-2: two at
+    /// once each counted what the other was deleting and evicted the newest
+    /// leftover too).
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn eviction_rounds_run_one_at_a_time() {
+        let dir = tempfile::tempdir().unwrap();
+        // One leftover fits, two do not.
+        let engine = Engine::start(config(dir.path(), 3 << 19)).await.unwrap();
+        let running = engine.inner.evicting.lock().await;
+        let (older, newer) = (
+            dir.path().join("1".repeat(40)),
+            dir.path().join("2".repeat(40)),
+        );
+        let now = std::time::SystemTime::now();
+        for (folder, age) in [(&older, 7200), (&newer, 3600)] {
+            std::fs::create_dir_all(folder).unwrap();
+            let file = folder.join("movie.mkv");
+            std::fs::write(&file, vec![7u8; 1 << 20]).unwrap();
+            std::fs::File::options()
+                .write(true)
+                .open(&file)
+                .unwrap()
+                .set_modified(now - Duration::from_secs(age))
+                .unwrap();
+        }
+        let next = tokio::spawn({
+            let engine = engine.clone();
+            async move { engine.enforce_budget(None).await }
+        });
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert!(older.exists(), "a round ran beside the running one");
+        drop(running);
+        next.await.unwrap();
+        assert!(!older.exists(), "the older leftover stayed");
+        assert!(newer.exists(), "the newer leftover went too");
     }
 }
