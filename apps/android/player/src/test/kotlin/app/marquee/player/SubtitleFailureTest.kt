@@ -389,6 +389,67 @@ class SubtitleFailureTest {
         controller.release()
     }
 
+    /** The renderer's error for a decoder that did not start, with how it supports the file. */
+    private fun decoderDidNotStart(support: Int) =
+        ExoPlaybackException.createForRenderer(
+            IllegalStateException("decoder init"),
+            "MediaCodecVideoRenderer",
+            0,
+            Format.Builder().setSampleMimeType(MimeTypes.VIDEO_H264).build(),
+            support,
+            false,
+            PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+        )
+
+    @Test
+    fun `a decoder that did not start for a file past it is decode, for a file it takes other`() {
+        val (player, controller) = open()
+        player.fail(decoderDidNotStart(C.FORMAT_EXCEEDS_CAPABILITIES))
+        until("the failure goes to the core") { failOvers().size == 1 }
+        assertEquals(
+            "decode",
+            failOvers()
+                .last()["command"]!!
+                .jsonObject["kind"]
+                ?.jsonPrimitive
+                ?.content,
+        )
+        // The core's next source of the same play: the decoder is busy this time.
+        push(snapshot(url = "http://127.0.0.1:7780/video2.mp4"))
+        until("the next source loads") { player.items.size == 2 }
+        player.fail(decoderDidNotStart(C.FORMAT_HANDLED))
+        until("the second failure goes to the core") { failOvers().size == 2 }
+        assertEquals(
+            "other",
+            failOvers()
+                .last()["command"]!!
+                .jsonObject["kind"]
+                ?.jsonPrimitive
+                ?.content,
+        )
+        controller.release()
+    }
+
+    @Test
+    fun `a Try again the core took says Trying again, also when the play fails again at once`() {
+        val (_, controller) = open()
+        push(snapshot(phase = "failed"))
+        until("the playback failed") { controller.stage == PlaybackController.Stage.Failed }
+        controller.retry()
+        until("retry goes to the core") { commands("retry").size == 1 }
+        // The core took it and the play failed again at once: only the count tells the snapshots apart.
+        push(snapshot(phase = "failed", extra = "\"retries\":1,"))
+        until("the card says so") { controller.tryingAgain }
+        assertEquals(PlaybackController.Stage.Failed, controller.stage)
+        until("for a moment only") { !controller.tryingAgain }
+        // A Try again whose play starts over says it while the core resolves.
+        controller.retry()
+        push(snapshot(phase = "resolving", extra = "\"retries\":2,"))
+        until("the play starts over") { controller.stage == PlaybackController.Stage.Opening }
+        assertEquals(TRYING_AGAIN, controller.status)
+        controller.release()
+    }
+
     @Test
     fun `a failed play offers Try again, which sends retry and opens again`() {
         val (_, controller) = open()

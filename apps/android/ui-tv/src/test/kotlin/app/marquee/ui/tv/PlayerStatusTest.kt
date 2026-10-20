@@ -29,6 +29,7 @@ class PlayerStatusTest {
     private fun show(
         offer: OtherVersion?,
         retry: Boolean = false,
+        tryingAgain: Boolean = false,
     ): MutableList<String> {
         val events = mutableListOf<String>()
         val focus = FocusRequester()
@@ -46,6 +47,7 @@ class PlayerStatusTest {
                     offer = offer,
                     onOffer = { events += "offer:$it" },
                     onRetry = if (retry) ({ events += "retry" }) else null,
+                    tryingAgain = tryingAgain,
                 )
             }
         }
@@ -88,6 +90,13 @@ class PlayerStatusTest {
         compose.onNodeWithText("Play 720p BluRay").assertIsFocused()
         compose.onNodeWithText("Try again").performClick()
         assertEquals(listOf("retry"), events)
+    }
+
+    @Test
+    fun `a Try again that failed again at once says Trying again on the card`() {
+        show(null, retry = true, tryingAgain = true)
+        compose.onAllNodesWithText("Trying again").assertCountEquals(1)
+        compose.onNodeWithText("Try again").assertIsFocused()
     }
 
     @Test

@@ -1,5 +1,6 @@
 package app.marquee.player
 
+import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.util.Util
 import androidx.media3.datasource.HttpDataSource
@@ -171,6 +172,15 @@ fun ranPastEnd(
 fun failedHeadline(offered: Boolean): String =
     if (offered) "This version could not be played" else "None of the sources could be played"
 
+/** What the player says while the core plays the same versions again (Try again). */
+const val TRYING_AGAIN = "Trying again"
+
+/** Whether the core took a Try again since [seen] (the count of the last snapshot; null before the first one). */
+fun retriedSince(
+    seen: Int?,
+    retries: Int,
+): Boolean = seen != null && retries > seen
+
 /** What failed, as `failOver` reports it: the core words it for the attempt list. */
 enum class FailureKind(
     val wire: String,
@@ -207,10 +217,15 @@ fun statusWords(status: Int): String {
     return "$words ($status)"
 }
 
-/** Sorts a Media3 error code into what failed, with a sentence a viewer can read. */
+/**
+ * Sorts a Media3 error code into what failed, with a sentence a viewer can read. [formatSupport] is the
+ * renderer's support for the file when a renderer raised it (`ExoPlaybackException.rendererFormatSupport`):
+ * a decoder that did not start counts against the file only when the file is past this decoder.
+ */
 fun classifyFailure(
     code: Int,
     httpStatus: Int?,
+    formatSupport: Int? = null,
 ): Failure =
     when (code) {
         PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> {
@@ -256,9 +271,18 @@ fun classifyFailure(
             Failure(FailureKind.Decode, "This device cannot decode the video")
         }
 
-        // A decoder that did not start, could not be asked or was taken back by the system (another app
-        // holds it): the moment, not the file.
-        PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+        // A decoder that did not start for a file past it (Sintel's trailer as 8K H.264, walk NV-W1) is decode;
+        // for a file it handles, the decoder was busy (plans/reviews/stream-runtime-2026-10-20-r2.md P1-1).
+        PlaybackException.ERROR_CODE_DECODER_INIT_FAILED -> {
+            if (formatSupport != null && formatSupport != C.FORMAT_HANDLED) {
+                Failure(FailureKind.Decode, "This device cannot decode the video")
+            } else {
+                Failure(FailureKind.Other, "The video decoder is busy or could not start")
+            }
+        }
+
+        // A decoder that could not be asked or was taken back by the system (another app holds it): the
+        // moment, not the file.
         PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED,
         PlaybackException.ERROR_CODE_DECODING_RESOURCES_RECLAIMED,
         -> {

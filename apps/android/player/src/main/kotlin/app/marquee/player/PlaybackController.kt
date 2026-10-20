@@ -18,6 +18,7 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
 import androidx.media3.datasource.HttpDataSource
+import androidx.media3.exoplayer.ExoPlaybackException
 import app.marquee.core.client.CoreLog
 import app.marquee.core.model.Attempt
 import app.marquee.core.model.NextEpisode
@@ -89,6 +90,14 @@ class PlaybackController(
     /** The core's play failed: the failure card offers Try again ([retry]). */
     var retryable by mutableStateOf(false)
         private set
+
+    /** The core took a Try again and the play failed again at once: the card says so for a moment. */
+    var tryingAgain by mutableStateOf(false)
+        private set
+
+    /** The core's count of Try again taken (`PlaybackSnapshot.retries`), from the first snapshot on. */
+    private var retriesSeen: Int? = null
+    private var tryingAgainJob: Job? = null
 
     var positionMs by mutableLongStateOf(0L)
         private set
@@ -286,6 +295,10 @@ class PlaybackController(
         trakt = s.trakt
         offer = s.offer
         retryable = s.phase == PlaybackPhase.Failed
+        // A Try again the core took since the last snapshot, even when the play then failed again at once
+        // and the snapshot is otherwise the one before (code review 2026-10-20 r2 P3-6).
+        val retried = retriedSince(retriesSeen, s.retries)
+        retriesSeen = s.retries
         // While a source is being found its list is still to come: not "None found".
         subtitlesPending = s.subtitlesPending || s.phase == PlaybackPhase.Resolving
         snapshotSubs = s.subtitles
@@ -324,6 +337,8 @@ class PlaybackController(
                     status = "Trying the next version: ${trying.label}"
                     // The Versions button names the version being tried.
                     playingKey = trying.key
+                } else if (retried) {
+                    status = TRYING_AGAIN
                 } else if (handlingFailure) {
                     val last = s.attempts.lastOrNull()
                     status =
@@ -339,6 +354,7 @@ class PlaybackController(
                 stage = Stage.Failed
                 problem = failedHeadline(offered = s.offer != null)
                 status = null
+                if (retried) sayTriedAgain()
             }
 
             // A phase from a newer core: keep what plays until a known phase comes.
@@ -401,6 +417,17 @@ class PlaybackController(
                         .build()
                 },
             ).build()
+
+    /** The card's "Trying again" for a moment, when the core took a Try again and the play failed again at once. */
+    private fun sayTriedAgain() {
+        tryingAgain = true
+        tryingAgainJob?.cancel()
+        tryingAgainJob =
+            scope.launch {
+                delay(TRYING_AGAIN_MS)
+                tryingAgain = false
+            }
+    }
 
     /** A line for a few seconds (a source change), shown over the picture. */
     private fun announce(line: String) {
@@ -488,8 +515,13 @@ class PlaybackController(
             return
         }
         val cause = error.cause as? HttpDataSource.InvalidResponseCodeException
-        val failure = classifyFailure(error.errorCode, cause?.responseCode)
-        CoreLog.w("playback error ${error.errorCodeName}: ${failure.message}")
+        // How the renderer that raised it supports the file: past the decoder, a decoder that did not start is decode.
+        val support =
+            (error as? ExoPlaybackException)
+                ?.takeIf { it.type == ExoPlaybackException.TYPE_RENDERER }
+                ?.rendererFormatSupport
+        val failure = classifyFailure(error.errorCode, cause?.responseCode, support)
+        CoreLog.w("playback error ${error.errorCodeName} (format support ${support ?: "none"}): ${failure.message}")
         failOver(playback, failure)
     }
 
@@ -893,6 +925,7 @@ class PlaybackController(
         released = true
         ticker?.cancel()
         noticeJob?.cancel()
+        tryingAgainJob?.cancel()
         player.removeListener(listener)
         view?.close()
         view = null
@@ -902,6 +935,7 @@ class PlaybackController(
         const val TICK_MS = 500L
         const val REPORT_MS = 5_000L
         const val NOTICE_MS = 4_000L
+        const val TRYING_AGAIN_MS = 1_500L
         const val LATE = "late:"
     }
 }

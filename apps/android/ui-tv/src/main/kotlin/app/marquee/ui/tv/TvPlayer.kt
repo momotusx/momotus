@@ -370,6 +370,7 @@ fun TvPlayer(
                 offer = controller.offer,
                 onOffer = onOffer,
                 onRetry = if (controller.retryable) controller::retry else null,
+                tryingAgain = controller.tryingAgain,
             )
         }
         // A notice while the buffer fills keeps the mark in the middle.

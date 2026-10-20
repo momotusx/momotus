@@ -13,6 +13,24 @@ import kotlin.test.assertTrue
 
 class PlayerLogicTest {
     @Test
+    fun `a Try again counts from the first snapshot on`() {
+        assertEquals(false, retriedSince(seen = null, retries = 3))
+        assertEquals(true, retriedSince(seen = 0, retries = 1))
+        assertEquals(false, retriedSince(seen = 1, retries = 1))
+    }
+
+    @Test
+    fun `a decoder that did not start counts against the file only when the file is past it`() {
+        val init = PlaybackException.ERROR_CODE_DECODER_INIT_FAILED
+        // Sintel's trailer as 8K H.264 (walk NV-W1): past this device's decoders.
+        assertEquals("decode", classifyFailure(init, null, C.FORMAT_EXCEEDS_CAPABILITIES).kind.wire)
+        assertEquals("decode", classifyFailure(init, null, C.FORMAT_UNSUPPORTED_SUBTYPE).kind.wire)
+        // A file this decoder takes: it was busy, the moment and not the file.
+        assertEquals("other", classifyFailure(init, null, C.FORMAT_HANDLED).kind.wire)
+        assertEquals("other", classifyFailure(init, null).kind.wire)
+    }
+
+    @Test
     fun `the failure headline says one version failed when another is offered, else every source`() {
         assertEquals("This version could not be played", failedHeadline(offered = true))
         assertEquals("None of the sources could be played", failedHeadline(offered = false))

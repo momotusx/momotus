@@ -313,6 +313,8 @@ fun PlayerStatus(
     onOffer: (String) -> Unit = {},
     /** "Try again" when the core's play failed: after Play {offer}, else first. */
     onRetry: (() -> Unit)? = null,
+    /** The core took a Try again and the play failed again at once: "Trying again" under the headline, a moment. */
+    tryingAgain: Boolean = false,
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
@@ -324,6 +326,15 @@ fun PlayerStatus(
             ) {
                 MqIcon(Icons.CircleAlert, tint = colors.bad, size = if (tv) 36.dp else 22.dp)
                 MqText(problem ?: "Playback stopped", role = TextRole.Headline, weight = FontWeight.Medium)
+            }
+            if (tryingAgain) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Spinner(size = if (tv) 22.dp else 16.dp)
+                    MqText(TRYING_AGAIN, role = TextRole.Callout, color = colors.muted)
+                }
             }
             // The history takes what is left above the recovery row and scrolls past that (on TV with
             // Up and Down once it overflows), so many long failures never push the way out off screen.

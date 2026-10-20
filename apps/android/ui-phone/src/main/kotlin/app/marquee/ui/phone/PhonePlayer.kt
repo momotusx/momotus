@@ -260,6 +260,7 @@ fun PhonePlayer(
                     offer = controller.offer,
                     onOffer = onOffer,
                     onRetry = if (controller.retryable) controller::retry else null,
+                    tryingAgain = controller.tryingAgain,
                     onBack = onBack,
                     focus = remember { FocusRequester() },
                     modifier =
