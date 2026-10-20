@@ -184,6 +184,69 @@ async fn a_finished_file_with_upload_off_is_never_announced_complete() {
     assert!(!last.contains("event=completed"), "{last}");
 }
 
+/// A torrent that goes tells every tracker that took its announce
+/// (`stopped`), so a viewer who left is no longer in the swarm's counts
+/// (engine review r3, P3-6). Its have-bitfield goes with its data.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_removed_torrent_announces_stopped() {
+    let s = support::swarm(true).await;
+    let body = b"d8:intervali60e5:peers0:e";
+    let mut answer = format!(
+        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    )
+    .into_bytes();
+    answer.extend(body);
+    let tracker = support::HttpTracker::start(answer, false);
+    let dir = tempfile::tempdir().unwrap();
+    let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+    let local = [
+        Ipv4Addr::LOCALHOST.into(),
+        std::net::Ipv6Addr::LOCALHOST.into(),
+    ];
+    let engine = Engine::start(mq_engine::EngineConfig {
+        discovery: false,
+        upload: false,
+        ..mq_engine::EngineConfig::new(dir.path(), http.torrent_scope(&local))
+    })
+    .await
+    .unwrap();
+    let t = engine
+        .add_magnet(
+            &s.info_hash,
+            std::slice::from_ref(&tracker.url),
+            &[s.seeder_addr],
+        )
+        .await
+        .unwrap();
+    let movie = engine
+        .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
+        .await
+        .unwrap();
+    read_range(&engine, t, movie, 0, 1 << 20).await;
+    let have = dir.path().join(format!("{}.have", s.info_hash));
+    assert!(have.exists(), "no have-bitfield beside the data");
+    // The metadata fetch announced and may have stopped too: every request
+    // so far is in before the count.
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    let stopped = |lines: Vec<String>| lines.iter().filter(|l| l.contains("event=stopped")).count();
+    let before = stopped(tracker.request_lines());
+    assert!(tracker.requests() >= 1, "never announced");
+    engine.remove(t, false).await.unwrap();
+    for _ in 0..30 {
+        if stopped(tracker.request_lines()) > before {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert!(
+        stopped(tracker.request_lines()) > before,
+        "no stopped announce: {:?}",
+        tracker.request_lines()
+    );
+    assert!(!have.exists(), "the have-bitfield outlived the data");
+}
+
 /// The time from an engine's start to a torrent's first range, which waits
 /// for the torrent's check. The engine before on `dir` may still be going
 /// (its last maintenance round holds the folder's lock).

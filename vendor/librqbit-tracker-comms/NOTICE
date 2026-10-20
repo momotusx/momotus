@@ -26,3 +26,6 @@ the torrent address policy (plans/c27-torrent-policy.md, appendix A.1):
   from the address its request went to.
 - src/tracker_comms.rs: under the policy an HTTP tracker's answer is read up
   to 256 KiB, never to its end.
+- src/tracker_comms.rs: when the tracker stream is dropped (the torrent
+  paused or removed), every tracker that took an announce hears `stopped`
+  (HTTP and UDP), within 5 s.

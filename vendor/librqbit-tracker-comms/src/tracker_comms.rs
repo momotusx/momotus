@@ -32,6 +32,10 @@ use librqbit_core::hash_id::Id20;
 /// answer with a few hundred compact peers is a few KiB.
 const MAX_HTTP_ANSWER: usize = 256 * 1024;
 
+/// Marquee fork (engine review r3, P3-6): how long the `stopped` announces
+/// of a dropped stream may take.
+const STOPPED_BUDGET: Duration = Duration::from_secs(5);
+
 pub struct TrackerComms {
     info_hash: Id20,
     peer_id: Id20,
@@ -44,6 +48,35 @@ pub struct TrackerComms {
     key: u32,
     // Marquee fork (C27): the UDP client's policy, for HTTP literals.
     policy: Option<Policy>,
+    // Marquee fork (engine review r3, P3-6): the trackers an announce
+    // reached, told `stopped` when the stream goes.
+    announced: std::sync::Mutex<Announced>,
+}
+
+#[derive(Default)]
+struct Announced {
+    http: HashSet<Url>,
+    udp: HashSet<SocketAddr>,
+}
+
+/// Marquee fork (engine review r3, P3-6): when the stream goes (the torrent
+/// paused or removed), every tracker that took an announce hears `stopped`,
+/// so a viewer who left is no longer counted in the swarm.
+struct StopOnDrop {
+    comms: Arc<TrackerComms>,
+    udp: UdpTrackerClient,
+}
+
+impl Drop for StopOnDrop {
+    fn drop(&mut self) {
+        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+            return;
+        };
+        let (comms, udp) = (self.comms.clone(), self.udp.clone());
+        runtime.spawn(async move {
+            let _ = tokio::time::timeout(STOPPED_BUDGET, comms.announce_stopped(&udp)).await;
+        });
+    }
 }
 
 #[derive(Default)]
@@ -203,7 +236,12 @@ impl TrackerComms {
                 reqwest_client,
                 key: rand::random(),
                 policy: udp_client.policy().cloned(),
+                announced: Default::default(),
             });
+            let _stopped = StopOnDrop {
+                comms: comms.clone(),
+                udp: udp_client.clone(),
+            };
             let mut futures = FuturesUnordered::new();
             for tracker in trackers {
                 futures.push(comms.add_tracker(tracker, &udp_client))
@@ -359,6 +397,9 @@ impl TrackerComms {
                 e.into_kind()
             })?
             .0;
+        if let Ok(mut a) = self.announced.lock() {
+            a.http.insert(tracker_url.clone());
+        }
 
         for peer in response.iter_peers() {
             self.tx.send(peer).await?;
@@ -411,7 +452,7 @@ impl TrackerComms {
             match addrs {
                 UdpTrackerResolveResult::One(addr) => {
                     match self
-                        .tracker_one_request_udp(addr, &client)
+                        .tracker_one_request_udp(addr, &client, None)
                         .instrument(trace_span!("udp request", ?addr))
                         .await
                     {
@@ -423,9 +464,9 @@ impl TrackerComms {
                 }
                 UdpTrackerResolveResult::Two(v4, v6) => {
                     let (r4, r6) = tokio::join!(
-                        self.tracker_one_request_udp(v4.into(), &client)
+                        self.tracker_one_request_udp(v4.into(), &client, None)
                             .instrument(trace_span!("udp request", addr=?v4)),
-                        self.tracker_one_request_udp(v6.into(), &client)
+                        self.tracker_one_request_udp(v6.into(), &client, None)
                             .instrument(trace_span!("udp request", addr=?v6))
                     );
                     sleep_interval = Some(
@@ -443,6 +484,7 @@ impl TrackerComms {
         &self,
         addr: SocketAddr,
         client: &UdpTrackerClient,
+        event: Option<u32>,
     ) -> anyhow::Result<Duration> {
         use tracker_comms_udp::*;
 
@@ -453,7 +495,7 @@ impl TrackerComms {
             downloaded: stats.downloaded_bytes,
             left: stats.get_left_to_download_bytes(),
             uploaded: stats.uploaded_bytes,
-            event: match stats.torrent_state {
+            event: event.unwrap_or(match stats.torrent_state {
                 TrackerCommsStatsState::None => EVENT_NONE,
                 TrackerCommsStatsState::Initializing => EVENT_STARTED,
                 TrackerCommsStatsState::Paused => EVENT_STOPPED,
@@ -464,7 +506,7 @@ impl TrackerComms {
                         EVENT_STARTED
                     }
                 }
-            },
+            }),
             key: self.key,
             port: self.announce_port,
         };
@@ -472,6 +514,9 @@ impl TrackerComms {
         match client.announce(addr, request).await {
             Ok(response) => {
                 trace!(len = response.addrs.len(), "received announce response");
+                if let Ok(mut a) = self.announced.lock() {
+                    a.udp.insert(addr);
+                }
                 for addr in response.addrs {
                     self.tx.send(addr).await.context("rx closed")?;
                 }
@@ -484,5 +529,38 @@ impl TrackerComms {
                 Err(e)
             }
         }
+    }
+
+    /// Marquee fork (engine review r3, P3-6): `stopped` to every tracker an
+    /// announce reached, all at once. Peers in the answers go nowhere (the
+    /// stream is gone).
+    async fn announce_stopped(&self, udp: &UdpTrackerClient) {
+        let (http, udp_addrs): (Vec<Url>, Vec<SocketAddr>) = match self.announced.lock() {
+            Ok(a) => (
+                a.http.iter().cloned().collect(),
+                a.udp.iter().copied().collect(),
+            ),
+            Err(_) => return,
+        };
+        let mut asks = FuturesUnordered::new();
+        for url in &http {
+            asks.push(
+                async move {
+                    let stopped = Some(tracker_comms_http::TrackerRequestEvent::Stopped);
+                    let _ = self.tracker_one_request_http(url, stopped).await;
+                }
+                .boxed(),
+            );
+        }
+        for addr in udp_addrs {
+            asks.push(
+                async move {
+                    let stopped = Some(tracker_comms_udp::EVENT_STOPPED);
+                    let _ = self.tracker_one_request_udp(addr, udp, stopped).await;
+                }
+                .boxed(),
+            );
+        }
+        while asks.next().await.is_some() {}
     }
 }
