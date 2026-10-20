@@ -78,6 +78,7 @@ import app.marquee.player.nextSpeed
 import app.marquee.player.seekStepMs
 import app.marquee.player.speedText
 import app.marquee.player.subtitlesDetail
+import app.marquee.player.subtitlesStillListing
 import app.marquee.player.upNextDue
 import kotlinx.coroutines.flow.collectLatest
 import java.util.Date
@@ -579,6 +580,7 @@ private fun Controls(
                             controller.subtitlesDetail(),
                             onSubtitles,
                             focusRequester = subtitlesAction,
+                            busy = controller.subtitlesStillListing(),
                         )
                         ActionButton(Icons.Layers, "Versions", controller.versionLabel, onVersions)
                         ActionButton(

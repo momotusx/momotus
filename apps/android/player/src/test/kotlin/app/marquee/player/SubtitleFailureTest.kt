@@ -410,14 +410,22 @@ class SubtitleFailureTest {
     }
 
     @Test
-    fun `Subtitles says Searching while the core lists, and the count once the core says the listing is done`() {
-        // Tracks arrive while slower sources are still asked: the core says pending until all answered.
-        val (_, controller) = open(snapshot(subtitles = listOf(subtitle, other), pending = true))
-        until("the list is heard") { controller.text.size == 3 }
+    fun `Subtitles counts what is in while the core lists, with a mark that goes when the listing is done`() {
+        // Nothing in yet: Searching, no mark.
+        val (_, controller) = open(snapshot(subtitles = emptyList(), pending = true))
+        until("the snapshot is heard") { controller.subtitlesPending }
         assertEquals("Searching", controller.subtitlesDetail())
+        assertFalse(controller.subtitlesStillListing())
+        // Tracks in while slower sources are still asked: the count, with the mark.
+        push(snapshot(subtitles = listOf(subtitle, other), pending = true))
+        until("the list is heard") { controller.text.size == 3 }
+        assertEquals("Off, 2 found", controller.subtitlesDetail())
+        assertTrue(controller.subtitlesStillListing())
+        // The core says the listing is done: the mark goes.
         push(snapshot(subtitles = listOf(subtitle, other), pending = false))
         until("the end of the listing is heard") { !controller.subtitlesPending }
         assertEquals("Off, 2 found", controller.subtitlesDetail())
+        assertFalse(controller.subtitlesStillListing())
         controller.release()
     }
 

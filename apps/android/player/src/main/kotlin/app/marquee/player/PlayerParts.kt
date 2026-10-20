@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -565,7 +566,10 @@ fun Scrim(
     )
 }
 
-/** An action of the OSD: icon, bold name, and a small line under it (what is chosen now). */
+/**
+ * An action of the OSD: icon, bold name, and a small line under it (what is chosen now). [busy] puts a small
+ * turning mark beside that line while more is still on the way (subtitles from slower sources).
+ */
 @Composable
 fun ActionButton(
     icon: ImageVector,
@@ -574,6 +578,7 @@ fun ActionButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
+    busy: Boolean = false,
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
@@ -582,8 +587,9 @@ fun ActionButton(
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .marqueeFocus(Marquee.radius.m, scale = 1.04f)
             .clip(RoundedCornerShape(Marquee.radius.m))
-            .semantics { contentDescription = listOfNotNull(label, detail).joinToString(", ") }
-            .focusClickable(onClick, Role.Button)
+            .semantics {
+                contentDescription = listOfNotNull(label, detail, BUSY_WORDS.takeIf { busy }).joinToString(", ")
+            }.focusClickable(onClick, Role.Button)
             // Wide enough to touch (48 dp on a phone), and short enough that five fit beside the transport on TV.
             .widthIn(min = if (tv) 128.dp else 48.dp, max = if (tv) 190.dp else 150.dp)
             // Side padding keeps neighbours apart when a phone's row is full and scrolls.
@@ -593,9 +599,20 @@ fun ActionButton(
     ) {
         MqIcon(icon, tint = colors.text, size = if (tv) 32.dp else 20.dp)
         MqText(label, role = TextRole.Callout, weight = FontWeight.SemiBold, maxLines = 1)
-        detail?.let { MqText(it, role = TextRole.Caption, color = colors.muted, maxLines = 1) }
+        detail?.let {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                MqText(it, role = TextRole.Caption, color = colors.muted, maxLines = 1)
+                if (busy) Spinner(Modifier.testTag(BUSY_TAG), size = if (tv) 14.dp else 10.dp)
+            }
+        }
     }
 }
+
+/** Read out after an action's line while more is on the way. */
+const val BUSY_WORDS = "still searching"
+
+/** The turning mark beside an action's line, for tests. */
+const val BUSY_TAG = "action-busy"
 
 private const val SHORT_PHONE_DP = 420
 

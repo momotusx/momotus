@@ -27,6 +27,15 @@ const val IN_THE_FILE = "In the file"
 /** What the Subtitles action says under its name: the chosen language, or how many were found ("None found" for zero). */
 fun PlaybackController.subtitlesDetail(): String = subtitlesDetail(text, subtitlesPending)
 
+/** The core still lists, but tracks are in: the count shows with a small searching mark until the listing is done. */
+fun PlaybackController.subtitlesStillListing(): Boolean = subtitlesStillListing(text, subtitlesPending)
+
+internal fun subtitlesStillListing(
+    rows: List<TrackChoice>,
+    pending: Boolean,
+): Boolean = pending && rows.size > 1
+
+/** "Searching" only while nothing is in: the viewer does not wait for the slowest source. */
 internal fun subtitlesDetail(
     rows: List<TrackChoice>,
     pending: Boolean,
@@ -35,7 +44,7 @@ internal fun subtitlesDetail(
     val chosen = rows.firstOrNull { it.selected && it.id != TRACK_OFF }
     // A core track says its language ("Portuguese (Brazil)"), a track in the file its own name.
     return chosen?.let { it.section?.takeIf { s -> s != IN_THE_FILE } ?: it.name }
-        ?: if (pending) {
+        ?: if (pending && found == 0) {
             "Searching"
         } else if (found == 0) {
             "None found"

@@ -75,6 +75,7 @@ import app.marquee.player.nextSpeed
 import app.marquee.player.scrubTo
 import app.marquee.player.speedText
 import app.marquee.player.subtitlesDetail
+import app.marquee.player.subtitlesStillListing
 import app.marquee.player.upNextDue
 import kotlinx.coroutines.flow.collectLatest
 import kotlin.math.ceil
@@ -552,7 +553,13 @@ private fun Actions(
         if (controller.audio.isNotEmpty()) {
             ActionButton(Icons.Volume2, "Audio", controller.audioDetail(), onAudio)
         }
-        ActionButton(Icons.Captions, "Subtitles", controller.subtitlesDetail(), onSubtitles)
+        ActionButton(
+            Icons.Captions,
+            "Subtitles",
+            controller.subtitlesDetail(),
+            onSubtitles,
+            busy = controller.subtitlesStillListing(),
+        )
         ActionButton(Icons.Layers, "Versions", controller.versionLabel, onVersions)
         ActionButton(Icons.Gauge, "Speed", speedText(controller.speed), {
             onTouch()
