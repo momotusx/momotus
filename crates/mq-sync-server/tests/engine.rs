@@ -250,7 +250,7 @@ async fn lying_relay(genesis: Entry) -> String {
                         })
                         .collect(),
                     server_ms: FAR,
-                    deletion_due_ms: None,
+                    deletion: None,
                 })
             }),
         )
@@ -266,7 +266,7 @@ async fn lying_relay(genesis: Entry) -> String {
                     server_ms: FAR,
                     epoch: 0,
                     roster: Some(head),
-                    deletion_due_ms: None,
+                    deletion: None,
                 })
             }),
         );
@@ -586,7 +586,7 @@ async fn a_pull_naming_another_roster_at_the_head_is_a_fork() {
                         seq: 0,
                         hash: Hex([3; 32]),
                     }),
-                    deletion_due_ms: None,
+                    deletion: None,
                 })
             }),
         );
@@ -665,7 +665,7 @@ async fn a_push_answered_for_another_roster_is_a_lasting_fork() {
                         seq: 0,
                         hash: Hex([3; 32]),
                     }),
-                    deletion_due_ms: None,
+                    deletion: None,
                 })
             }),
         );

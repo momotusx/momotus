@@ -44,8 +44,8 @@ use mq_sync::roster::{Entry, Hex, Id, Kind, Role, Roster, RosterError, TokenRequ
 use mq_sync::wire::{
     AccountRequest, AccountResponse, AppendRequest, Behind, DeleteRequest, MAX_BODY,
     MAX_CLOCK_AHEAD_MS, MIN_BODY, PAGE, PullResponse, PushRequest, PushResponse, ROSTER_PAGE,
-    Redeemed, Refusal, Rejected, RelayInfo, ReplayRequest, RosterHead, RosterPage, TokenGrant,
-    WireRecord,
+    Redeemed, Refusal, Rejected, RelayInfo, ReplayRequest, RosterHead, RosterPage,
+    ScheduledDeletion, TokenGrant, WireRecord,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -145,6 +145,9 @@ struct AppState {
 /// next to it, and returns the HTTP routes. With an identity file, its key
 /// must be the one the database was made with.
 pub fn router(db: &Path, config: Config) -> Result<Router, String> {
+    if let Some(host) = &config.public_host {
+        check_public_host(host)?;
+    }
     let conn = Connection::open(db).map_err(|e| e.to_string())?;
     let (conn, generation, generation_since_ms, relay_id) =
         open_database(conn, &config).map_err(|e| e.to_string())?;
@@ -218,6 +221,26 @@ pub fn router(db: &Path, config: Config) -> Result<Router, String> {
         .with_state(state))
 }
 
+/// `--public-host` as devices compare it with their relay address (the URL's
+/// host: lowercase, no scheme, port or path). Anything else would refuse
+/// every token, nonce and return without saying why.
+fn check_public_host(host: &str) -> Result<(), String> {
+    let parsed = url::Url::parse(&format!("https://{host}/")).ok();
+    let plain = parsed.as_ref().is_some_and(|u| {
+        u.host_str() == Some(host)
+            && u.port().is_none()
+            && u.path() == "/"
+            && u.username().is_empty()
+    });
+    if plain {
+        Ok(())
+    } else {
+        Err(format!(
+            "--public-host {host:?} must be the relay's host as devices write it: lowercase, without scheme, port or path"
+        ))
+    }
+}
+
 /// The database keeps the identity key's fingerprint: another key would
 /// turn every user into a new one, so the relay does not start on it.
 fn check_identity_key(db: &Connection, fingerprint: &str) -> Result<(), String> {
@@ -256,6 +279,14 @@ async fn housekeeping(state: AppState, every: std::time::Duration) {
     }
 }
 
+/// After a deletion: `secure_delete` overwrites the database file only, so
+/// the write-ahead log is emptied too.
+fn checkpoint(db: &Connection) {
+    if let Err(e) = db.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(())) {
+        tracing::warn!("checkpoint after a deletion: {e}");
+    }
+}
+
 fn run_due(state: &AppState) {
     let now = state.now_ms();
     let mut db = lock(state);
@@ -282,6 +313,7 @@ fn run_due(state: &AppState) {
         Ok(due) if due.is_empty() => {}
         Ok(due) => {
             tracing::info!("{} scheduled deletions ran", due.len());
+            checkpoint(&db);
             rewrite_after_deletion(state, &db, &due, now);
         }
         Err(e) => tracing::error!("scheduled deletions: {e}"),
@@ -862,13 +894,15 @@ fn may_replay_create(state: &AppState, headers: &HeaderMap, address: IpAddr) -> 
     }
     let grace = state.generation_since_ms != 0
         && state.now_ms() < state.generation_since_ms + 60 * 60 * 1000;
-    if !grace {
-        return false;
-    }
     let mut created = state
         .grace_created
         .lock()
         .unwrap_or_else(|p| p.into_inner());
+    if !grace {
+        // The hour is over: its counts go with it.
+        created.clear();
+        return false;
+    }
     let count = created.entry(address).or_default();
     *count += 1;
     *count <= GRACE_CREATIONS
@@ -1027,6 +1061,12 @@ fn signed_up(
                 "UPDATE identity SET account = ?2, created_ms = ?3 WHERE link = ?1",
                 params![link, new, now as i64],
             )?;
+            // A deletion that link asked for on the old account no longer
+            // names it: "Cancel and unlink" there must not reach the new one.
+            tx.execute(
+                "UPDATE deletion SET link = NULL WHERE link = ?1",
+                params![link],
+            )?;
             tx.execute(
                 "INSERT INTO deletion (account, due_ms, link) VALUES (?1, ?2, NULL)
                  ON CONFLICT(account) DO NOTHING",
@@ -1119,10 +1159,7 @@ async fn delete_account(
         Ok(Err(refused)) => return refused,
         Err(e) => return storage_error("delete account", e),
     }
-    // `secure_delete` overwrites the database file only: the log goes too.
-    if let Err(e) = db.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(())) {
-        tracing::warn!("checkpoint after a deletion: {e}");
-    }
+    checkpoint(&db);
     rewrite_after_deletion(&state, &db, &[auth.account], now);
     Json(json!({})).into_response()
 }
@@ -1789,7 +1826,7 @@ async fn push(
             server_ms,
             epoch,
             roster: head,
-            deletion_due_ms: deletion_due(&tx, &auth.account)?,
+            deletion: deletion_due(&tx, &auth.account)?,
         };
         for record in &request.records {
             let r = match check(record, server_ms) {
@@ -1922,7 +1959,13 @@ async fn pull(
     };
     let account = hex::encode(auth.account.0);
     let limit = query.limit.unwrap_or(PAGE).clamp(1, PAGE);
-    type Rows = (Vec<WireRecord>, u64, u32, Option<RosterHead>, Option<u64>);
+    type Rows = (
+        Vec<WireRecord>,
+        u64,
+        u32,
+        Option<RosterHead>,
+        Option<ScheduledDeletion>,
+    );
     let rows = (|| -> rusqlite::Result<Rows> {
         let head: i64 = db.query_row(
             "SELECT seq FROM account WHERE id = ?1",
@@ -1959,7 +2002,7 @@ async fn pull(
         ))
     })();
     match rows {
-        Ok((mut records, head, epoch, roster, deletion_due_ms)) => {
+        Ok((mut records, head, epoch, roster, deletion)) => {
             let more = records.len() > limit;
             records.truncate(limit);
             let last = records.last().map_or(query.after, |r| r.seq);
@@ -1972,7 +2015,7 @@ async fn pull(
                 server_ms,
                 epoch,
                 roster,
-                deletion_due_ms,
+                deletion,
             })
             .into_response()
         }
@@ -2014,7 +2057,7 @@ impl ClockWatch {
 #[derive(Default)]
 pub(crate) struct Limits {
     per_client: HashMap<(usize, IpAddr), (u64, u32)>,
-    global: [(u64, u32); 5],
+    global: [(u64, u32); 6],
 }
 
 const OPEN_PAIRING: (usize, u32, u32) = (0, 20, 2000);
@@ -2024,16 +2067,25 @@ const TOKENS: (usize, u32, u32) = (3, 20, 2000);
 /// Sign-in `start`, `take`, `token` and the deletion page's request, apart
 /// from pairings (a TV polls pairing `take` every 2 s, unlimited).
 const AUTH: (usize, u32, u32) = (4, 30, 3000);
+/// Apple's server-to-server notifications: Apple sends a few a day.
+pub(crate) const APPLE_NOTICES: (usize, u32, u32) = (5, 10, 60);
 
-/// When the account's scheduled deletion is due, if one is.
-fn deletion_due(db: &Connection, account: &Id) -> rusqlite::Result<Option<u64>> {
+/// The account's scheduled deletion, if one waits, with the provider of the
+/// identity that asked (none for a Start over, or once that link is gone).
+fn deletion_due(db: &Connection, account: &Id) -> rusqlite::Result<Option<ScheduledDeletion>> {
     db.query_row(
-        "SELECT due_ms FROM deletion WHERE account = ?1",
+        "SELECT d.due_ms, i.provider FROM deletion d \
+         LEFT JOIN identity i ON i.link = d.link AND i.account = d.account \
+         WHERE d.account = ?1",
         params![hex::encode(account.0)],
-        |r| r.get::<_, i64>(0),
+        |r| {
+            Ok(ScheduledDeletion {
+                due_ms: r.get::<_, i64>(0)? as u64,
+                provider: r.get(1)?,
+            })
+        },
     )
     .optional()
-    .map(|due| due.map(|d| d as u64))
 }
 
 fn spend(slot: &mut (u64, u32), now: u64, cap: u32) -> bool {
@@ -2050,7 +2102,8 @@ fn limited(
     client: IpAddr,
     (which, per_client, global): (usize, u32, u32),
 ) -> bool {
-    let now = now_ms();
+    // Relay time, as every other window here (tests move it).
+    let now = state.now_ms();
     let mut limits = state.limits.lock().unwrap_or_else(|p| p.into_inner());
     if limits.per_client.len() > 50_000 {
         limits

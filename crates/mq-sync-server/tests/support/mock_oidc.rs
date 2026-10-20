@@ -29,6 +29,8 @@ use std::sync::{Arc, Mutex};
 pub enum Next {
     /// The user signs in as this subject.
     Pick(String),
+    /// As `Pick`, but the ID token carries another nonce than the flow's.
+    WrongNonce(String),
     /// The user cancels: the relay gets `error=access_denied`.
     Cancel,
     /// The page never answers.
@@ -225,6 +227,45 @@ impl Mock {
         ec_key(&kid).sign(&claims)
     }
 
+    /// The current key's kid.
+    pub fn kid(&self) -> String {
+        self.with(|s| s.keys[0].kid().to_owned())
+    }
+
+    /// The current key as the JWKS publishes it.
+    pub fn public_jwk(&self) -> Value {
+        self.with(|s| s.keys[0].jwk())
+    }
+
+    /// The current (ES256) key's signature of `input`.
+    pub fn ec_signature(&self, input: &[u8]) -> Vec<u8> {
+        self.with(|s| match &s.keys[0] {
+            Key::Ec { pair, .. } => pair
+                .sign(&SystemRandom::new(), input)
+                .expect("sign")
+                .as_ref()
+                .to_vec(),
+            Key::Rsa { .. } => unreachable!("the current key is EC"),
+        })
+    }
+
+    /// A token with this header, signed by `sign` over its signing input:
+    /// the alg-confusion and unknown-kid cases.
+    pub fn sign_with(
+        &self,
+        header: Value,
+        claims: &Value,
+        sign: impl FnOnce(&[u8]) -> Vec<u8>,
+    ) -> String {
+        let signed = format!(
+            "{}.{}",
+            B64URL.encode(header.to_string()),
+            B64URL.encode(claims.to_string())
+        );
+        let sig = sign(signed.as_bytes());
+        format!("{signed}.{}", B64URL.encode(sig))
+    }
+
     /// A new current key under a new kid, published from now on.
     pub fn rotate(&self, kid: &str) {
         self.with(|s| s.keys.insert(0, ec_key(kid)));
@@ -362,14 +403,19 @@ async fn authorize(State(mock): State<Mock>, Query(q): Query<Authorize>) -> Resp
             )],
         )
             .into_response(),
-        Next::Pick(sub) => {
+        Next::Pick(_) | Next::WrongNonce(_) => {
+            let (sub, nonce) = match next {
+                Next::WrongNonce(sub) => (sub, Some("not the flow's nonce".to_owned())),
+                Next::Pick(sub) => (sub, q.nonce.clone().filter(|n| !n.is_empty())),
+                _ => unreachable!(),
+            };
             let code = random();
             mock.with(|s| {
                 s.codes.insert(
                     code.clone(),
                     Grant {
                         sub,
-                        nonce: q.nonce.clone().filter(|n| !n.is_empty()),
+                        nonce,
                         client_id: q.client_id.clone(),
                     },
                 )

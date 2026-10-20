@@ -16,8 +16,8 @@
 
 use crate::jwt::{self, Jwk, JwkSet, Jwt};
 use crate::{
-    AUTH, AppState, active, authorize, client, error, journal_deletion, limited, lock, random,
-    same, storage_error, token_hash,
+    APPLE_NOTICES, AUTH, AppState, active, authorize, client, error, journal_deletion, limited,
+    lock, random, same, storage_error, token_hash,
 };
 use axum::extract::Path as UrlPath;
 use axum::extract::{ConnectInfo, Query, State};
@@ -52,8 +52,17 @@ pub(crate) const SIGNUP_CAP: i64 = 3;
 pub(crate) const SIGNUP_WINDOW_MS: u64 = 30 * 24 * 60 * 60 * 1000;
 /// A deletion asked for from the web page waits this long, shown on every device.
 pub(crate) const DELETION_WAIT_MS: u64 = 7 * 24 * 60 * 60 * 1000;
+/// A flow past its time is kept this much longer, emptied, so a late
+/// return or take hears that it expired rather than that it never was.
+const EXPIRED_KEPT_MS: u64 = 10 * 60 * 1000;
 const MAX_FLOWS: i64 = 100_000;
 const FLOWS_PER_CLIENT: i64 = 20;
+/// A provider's key set is fetched at most this often: a token naming an
+/// unknown key fetches nothing more inside it.
+const REFETCH_MS: u64 = 60 * 1000;
+/// Apple's notifications older than this are refused (a captured one
+/// replayed later would drop a link the user made again).
+const NOTICE_MAX_AGE_S: u64 = 24 * 60 * 60;
 
 const APPLE_ISSUER: &str = "https://appleid.apple.com";
 const GOOGLE_ISSUER: &str = "https://accounts.google.com";
@@ -151,6 +160,19 @@ fn facebook_dialog() -> String {
     "https://www.facebook.com/v21.0/dialog/oauth".into()
 }
 
+/// A provider or relay address: https, or plain http only on this machine's
+/// network (the mock). An `http://` issuer elsewhere would let anyone on the
+/// path serve keys and mint any identity.
+fn secure(what: &str, address: &str) -> Result<(), String> {
+    let url = url::Url::parse(address).map_err(|_| format!("{what} is not a URL: {address}"))?;
+    let local = url.host_str().is_some_and(mq_http::is_private_host);
+    match url.scheme() {
+        "https" => Ok(()),
+        "http" if local => Ok(()),
+        _ => Err(format!("{what} must be https: {address}")),
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Kind {
     Apple,
@@ -161,6 +183,7 @@ enum Kind {
 
 #[derive(Clone, Deserialize)]
 struct Discovery {
+    issuer: String,
     authorization_endpoint: String,
     token_endpoint: String,
     jwks_uri: String,
@@ -171,6 +194,8 @@ struct Discovery {
 struct CachedKeys {
     keys: Vec<Jwk>,
     until_ms: u64,
+    /// When the set was last asked for, answered or not.
+    fetched_ms: u64,
 }
 
 /// What the callback or the token route learned: whose identity, and what
@@ -209,11 +234,42 @@ impl Identity {
             .public_url
             .clone()
             .unwrap_or_else(|| format!("https://{public_host}"));
+        let public_url = public_url.trim_end_matches('/').to_owned();
+        // Callbacks and nonces name one relay: the one devices know.
+        let named = url::Url::parse(&public_url).ok();
+        if named.as_ref().and_then(|u| u.host_str()) != Some(public_host) {
+            return Err(format!(
+                "publicUrl's host must be the public host {public_host}"
+            ));
+        }
+        let f = &file;
+        let addresses = [
+            Some(("publicUrl", public_url.as_str())),
+            f.apple
+                .as_ref()
+                .map(|a| ("the Apple issuer", a.issuer.as_str())),
+            f.google
+                .as_ref()
+                .map(|g| ("the Google issuer", g.issuer.as_str())),
+            f.facebook
+                .as_ref()
+                .map(|fb| ("Facebook's graph", fb.graph.as_str())),
+            f.facebook
+                .as_ref()
+                .map(|fb| ("Facebook's dialog", fb.dialog.as_str())),
+        ];
+        let oidc = f
+            .oidc
+            .iter()
+            .map(|o| ("an OpenID issuer", o.issuer.as_str()));
+        for (what, address) in addresses.into_iter().flatten().chain(oidc) {
+            secure(what, address)?;
+        }
         Ok(Self {
             key,
             apple_key,
             public_host: public_host.to_owned(),
-            public_url: public_url.trim_end_matches('/').to_owned(),
+            public_url,
             http: HttpClient::new(Default::default()).map_err(|e| e.to_string())?,
             discovery: Mutex::default(),
             jwks: Mutex::default(),
@@ -396,6 +452,19 @@ impl Identity {
             .await
             .and_then(|r| r.json())
             .map_err(|e| format!("discovery: {}", e.kind()))?;
+        // OpenID Discovery 4.3: the document names the issuer it was asked for.
+        if found.issuer != issuer {
+            return Err("discovery: another issuer".into());
+        }
+        let endpoints = [
+            Some(found.authorization_endpoint.as_str()),
+            Some(found.token_endpoint.as_str()),
+            Some(found.jwks_uri.as_str()),
+            found.revocation_endpoint.as_deref(),
+        ];
+        for endpoint in endpoints.into_iter().flatten() {
+            secure("a discovered endpoint", endpoint)?;
+        }
         self.discovery
             .lock()
             .unwrap_or_else(|p| p.into_inner())
@@ -404,16 +473,32 @@ impl Identity {
     }
 
     /// The key a token names, from the JWKS cached per `Cache-Control`; an
-    /// unknown `kid` fetches the set once more (a provider rotated its keys).
-    async fn key_for(&self, uri: &str, kid: Option<&str>) -> Result<Jwk, String> {
-        let now = now_ms();
+    /// unknown `kid` fetches the set once more (a provider rotated its keys),
+    /// but never twice within `REFETCH_MS`: tokens anyone can send must not
+    /// make the relay call the provider at will. `now` is relay time.
+    async fn key_for(&self, uri: &str, kid: Option<&str>, now: u64) -> Result<Jwk, String> {
         {
-            let cache = self.jwks.lock().unwrap_or_else(|p| p.into_inner());
-            if let Some(cached) = cache.get(uri).filter(|c| c.until_ms > now)
-                && let Some(key) = jwt::find(&cached.keys, kid)
-            {
-                return Ok(key.clone());
+            let mut cache = self.jwks.lock().unwrap_or_else(|p| p.into_inner());
+            if let Some(cached) = cache.get(uri) {
+                let recent = now < cached.fetched_ms + REFETCH_MS;
+                if cached.until_ms > now || recent {
+                    if let Some(key) = jwt::find(&cached.keys, kid) {
+                        return Ok(key.clone());
+                    }
+                    if recent {
+                        return Err("unknown key, the set was fetched just now".into());
+                    }
+                }
             }
+            // Marked before the fetch, so requests meanwhile do not fetch too.
+            cache
+                .entry(uri.to_owned())
+                .and_modify(|c| c.fetched_ms = now)
+                .or_insert(CachedKeys {
+                    keys: Vec::new(),
+                    until_ms: 0,
+                    fetched_ms: now,
+                });
         }
         let response = self
             .http
@@ -436,13 +521,15 @@ impl Identity {
             CachedKeys {
                 keys: set.keys,
                 until_ms: now + max_age * 1000,
+                fetched_ms: now,
             },
         );
         key.ok_or_else(|| "unknown key".into())
     }
 
     /// Checks an ID token of `kind` and returns its subject. Its times go by
-    /// the machine's clock, as the provider minted it.
+    /// the machine's clock, as the provider minted it; `now` (relay time)
+    /// paces the key fetches.
     async fn verify(
         &self,
         kind: Kind,
@@ -453,12 +540,18 @@ impl Identity {
     ) -> Result<String, String> {
         let disc = self.discover(kind).await?;
         let jwt = Jwt::parse(token).ok_or("not a JWT")?;
-        let key = self.key_for(&disc.jwks_uri, jwt.kid()).await?;
+        let key = self.key_for(&disc.jwks_uri, jwt.kid(), now).await?;
         if !jwt.verifies(&key) {
             return Err("signature".into());
         }
-        jwt::check_claims(jwt.claims(), &self.issuers(kind), audiences, nonce, now)
-            .map_err(str::to_owned)
+        jwt::check_claims(
+            jwt.claims(),
+            &self.issuers(kind),
+            audiences,
+            nonce,
+            now_ms(),
+        )
+        .map_err(str::to_owned)
     }
 
     /// The provider page of a brokered flow.
@@ -630,6 +723,66 @@ pub(crate) fn coded(status: StatusCode, code: &str, words: &str) -> Response {
     (status, Json(json!({ "error": words, "code": code }))).into_response()
 }
 
+/// A sign-in budget spent: the apps say to try again in a minute.
+fn busy() -> Response {
+    coded(
+        StatusCode::TOO_MANY_REQUESTS,
+        "busy",
+        "too many sign-in requests; try again in a minute",
+    )
+}
+
+/// A flow that is over, or not ours to finish (the user may have
+/// abandoned it, or it expired long ago).
+fn refused() -> Response {
+    error(StatusCode::NOT_FOUND, "no such sign-in")
+}
+
+/// The browser reached a sign-in that is not open (finished already, or
+/// unknown here): a page that sends the user back, not a bare error.
+fn closed_page() -> Response {
+    const PAGE: &str = "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\">\
+        <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
+        <title>Sign-in closed</title>\
+        <body style=\"margin:0;min-height:100vh;display:grid;place-items:center;\
+        background:#000;color:#f5f5f7;font:17px/1.5 system-ui,sans-serif;text-align:center\">\
+        <main style=\"padding:24px;max-width:28em\"><h1 style=\"font-size:28px;font-weight:600\">\
+        This sign-in is no longer open</h1><p>Go back to the app and sign in again from there.</p>\
+        </main></body></html>";
+    (
+        StatusCode::BAD_REQUEST,
+        [
+            (header::CONTENT_TYPE, "text/html; charset=utf-8"),
+            (
+                header::CONTENT_SECURITY_POLICY,
+                "default-src 'none'; style-src 'unsafe-inline'",
+            ),
+            (header::CACHE_CONTROL, "no-store"),
+        ],
+        PAGE,
+    )
+        .into_response()
+}
+
+fn is_open(row: &FlowRow, now: u64) -> bool {
+    (row.created_ms as u64) + FLOW_MS > now
+}
+
+/// Open flows past their time are emptied (their client address, code and
+/// result go) and kept `EXPIRED_KEPT_MS` more to say so; then they go.
+fn sweep_flows(db: &Connection, now: u64) -> rusqlite::Result<()> {
+    db.execute(
+        "DELETE FROM auth_flow WHERE created_ms <= ?1",
+        params![now.saturating_sub(FLOW_MS + EXPIRED_KEPT_MS) as i64],
+    )?;
+    db.execute(
+        "UPDATE auth_flow SET client = '', code_hash = NULL, verified = NULL
+         WHERE created_ms <= ?1 AND client <> ''",
+        params![now.saturating_sub(FLOW_MS) as i64],
+    )?;
+    Ok(())
+}
+
 fn identity(state: &AppState) -> Result<&Identity, Response> {
     state
         .identity
@@ -785,10 +938,7 @@ async fn start_flow(
     let id = identity(state)?;
     let address = client(state, peer, headers);
     if limited(state, address, AUTH) {
-        return Err(error(
-            StatusCode::TOO_MANY_REQUESTS,
-            "too many sign-in requests",
-        ));
+        return Err(busy());
     }
     let kind = id
         .kind(provider)
@@ -839,11 +989,12 @@ async fn start_flow(
     let now = state.now_ms();
     let db = lock(state);
     let open = (|| -> rusqlite::Result<(i64, i64)> {
-        db.execute(
-            "DELETE FROM auth_flow WHERE created_ms <= ?1",
-            params![now.saturating_sub(FLOW_MS) as i64],
+        sweep_flows(&db, now)?;
+        let all = db.query_row(
+            "SELECT COUNT(*) FROM auth_flow WHERE client <> ''",
+            [],
+            |r| r.get(0),
         )?;
-        let all = db.query_row("SELECT COUNT(*) FROM auth_flow", [], |r| r.get(0))?;
         let mine = db.query_row(
             "SELECT COUNT(*) FROM auth_flow WHERE client = ?1",
             params![address.to_string()],
@@ -853,10 +1004,7 @@ async fn start_flow(
     })()
     .map_err(|e| storage_error("start sign-in", e))?;
     if open.0 >= MAX_FLOWS || open.1 >= FLOWS_PER_CLIENT {
-        return Err(error(
-            StatusCode::TOO_MANY_REQUESTS,
-            "too many sign-ins open",
-        ));
+        return Err(busy());
     }
     db.execute(
         "INSERT INTO auth_flow (id_hash, provider, purpose, verifier_hash, nonce, return_to, client, created_ms)
@@ -876,6 +1024,7 @@ async fn start_flow(
     let native = url.is_none();
     Ok(Json(StartResponse {
         flow,
+        expires_ms: now + FLOW_MS,
         url,
         nonce: native.then_some(nonce),
     })
@@ -921,7 +1070,7 @@ async fn callback(state: &AppState, provider: &str, back: Returned) -> Response 
         return error(StatusCode::NOT_FOUND, "this relay has no sign-in");
     };
     let Some(flow) = back.state else {
-        return error(StatusCode::BAD_REQUEST, "no state");
+        return closed_page();
     };
     let now = state.now_ms();
     let row = {
@@ -929,20 +1078,22 @@ async fn callback(state: &AppState, provider: &str, back: Returned) -> Response 
         flow_row(&db, &flow)
     };
     let row = match row {
-        Ok(Some(row))
-            if row.provider == provider
-                && row.code_hash.is_none()
-                && row.return_to.is_some()
-                && (row.created_ms as u64) + FLOW_MS > now =>
-        {
-            row
-        }
-        Ok(_) => return error(StatusCode::BAD_REQUEST, "no such sign-in"),
+        Ok(Some(row)) if row.provider == provider && row.return_to.is_some() => row,
+        Ok(_) => return closed_page(),
         Err(e) => return storage_error("sign-in callback", e),
     };
     let to = row.return_to.clone().unwrap_or_default();
     let fragment =
         |rest: &str| redirect(&format!("{to}#flow={flow}&{rest}&relay={}", id.public_host));
+    // Past its time: the app hears it and says to sign in again.
+    if !is_open(&row, now) {
+        return fragment("error=expired");
+    }
+    // A callback completes a flow once; a second one (a reload) has no
+    // return to make, the first already went.
+    if row.code_hash.is_some() {
+        return closed_page();
+    }
     let failed = |why: &str| {
         let db = lock(state);
         let _ = db.execute(
@@ -954,10 +1105,11 @@ async fn callback(state: &AppState, provider: &str, back: Returned) -> Response 
     let (Some(code), None) = (back.code, back.error) else {
         return failed("cancelled");
     };
-    let kind = id
-        .kind(provider)
-        .expect("a flow names a configured provider");
-    let verified = verify_code(id, kind, provider, &row, &code).await;
+    // The provider left the identity file since the flow began.
+    let Some(kind) = id.kind(provider) else {
+        return failed("refused");
+    };
+    let verified = verify_code(id, kind, provider, &row, &code, now).await;
     let (name, sub, tokens) = match verified {
         Ok(v) => v,
         Err(why) => {
@@ -985,7 +1137,7 @@ async fn callback(state: &AppState, provider: &str, back: Returned) -> Response 
     };
     let one_time = fresh();
     let db = lock(state);
-    let stored = (|| -> rusqlite::Result<()> {
+    let stored = (|| -> rusqlite::Result<bool> {
         if let Some(receipt) = &receipt {
             keep_receipt(&db, &name, &subject, receipt, now)?;
         }
@@ -994,18 +1146,21 @@ async fn callback(state: &AppState, provider: &str, back: Returned) -> Response 
             subject: hex::encode(&subject),
             receipt: receipt.clone(),
         };
-        db.execute(
-            "UPDATE auth_flow SET code_hash = ?2, verified = ?3 WHERE id_hash = ?1",
+        // Two callbacks raced over the provider exchange: the first stores.
+        let stored = db.execute(
+            "UPDATE auth_flow SET code_hash = ?2, verified = ?3
+             WHERE id_hash = ?1 AND code_hash IS NULL AND client <> ''",
             params![
                 sha(&flow),
                 sha(&one_time),
                 serde_json::to_string(&verified).expect("plain")
             ],
         )?;
-        Ok(())
+        Ok(stored == 1)
     })();
     match stored {
-        Ok(()) => fragment(&format!("code={one_time}")),
+        Ok(true) => fragment(&format!("code={one_time}")),
+        Ok(false) => closed_page(),
         Err(e) => storage_error("sign-in callback", e),
     }
 }
@@ -1018,6 +1173,7 @@ async fn verify_code(
     provider: &str,
     row: &FlowRow,
     code: &str,
+    now: u64,
 ) -> Result<(String, String, Value), String> {
     let client = id.brokered_client(kind)?;
     let audience = vec![client.0.clone()];
@@ -1044,7 +1200,7 @@ async fn verify_code(
                 token,
                 &audience,
                 &nonce_for(&nonce, &id.public_host),
-                now_ms(),
+                now,
             )
             .await?
         }
@@ -1102,23 +1258,22 @@ pub(crate) async fn take(
     let answer = (|| {
         identity(&state)?;
         if limited(&state, client(&state, peer, &headers), AUTH) {
-            return Err(error(
-                StatusCode::TOO_MANY_REQUESTS,
-                "too many sign-in requests",
-            ));
+            return Err(busy());
         }
         let now = state.now_ms();
-        let refused = || error(StatusCode::NOT_FOUND, "no such sign-in");
         let db = lock(&state);
         let row = flow_row(&db, &request.flow)
             .map_err(|e| storage_error("take sign-in", e))?
             .ok_or_else(refused)?;
-        let fits = same(&row.verifier_hash, &sha(&request.verifier))
+        let mine = same(&row.verifier_hash, &sha(&request.verifier));
+        if mine && !is_open(&row, now) {
+            return Err(ticket_refused());
+        }
+        let fits = mine
             && row
                 .code_hash
                 .as_deref()
-                .is_some_and(|c| same(c, &sha(&request.code)))
-            && (row.created_ms as u64) + FLOW_MS > now;
+                .is_some_and(|c| same(c, &sha(&request.code)));
         let verified: Verified = row
             .verified
             .as_deref()
@@ -1153,24 +1308,25 @@ pub(crate) async fn native(
         Err(r) => return r,
     };
     if limited(&state, client(&state, peer, &headers), AUTH) {
-        return error(StatusCode::TOO_MANY_REQUESTS, "too many sign-in requests");
+        return busy();
     }
     let now = state.now_ms();
-    let refused = || error(StatusCode::NOT_FOUND, "no such sign-in");
     let row = match flow_row(&lock(&state), &request.flow) {
         Ok(Some(row))
-            if row.return_to.is_none()
-                && same(&row.verifier_hash, &sha(&request.verifier))
-                && (row.created_ms as u64) + FLOW_MS > now =>
+            if row.return_to.is_none() && same(&row.verifier_hash, &sha(&request.verifier)) =>
         {
             row
         }
         Ok(_) => return refused(),
         Err(e) => return storage_error("native sign-in", e),
     };
-    let kind = id
-        .kind(&row.provider)
-        .expect("a flow names a configured provider");
+    if !is_open(&row, now) {
+        return ticket_refused();
+    }
+    // The provider left the identity file since the flow began.
+    let Some(kind) = id.kind(&row.provider) else {
+        return refused();
+    };
     let Ok(nonce) = B64URL.decode(&row.nonce) else {
         return refused();
     };
@@ -1181,7 +1337,7 @@ pub(crate) async fn native(
             &request.id_token,
             &audiences,
             &nonce_for(&nonce, &id.public_host),
-            now_ms(),
+            now,
         )
         .await
     {
@@ -1204,14 +1360,35 @@ pub(crate) async fn native(
                         .map(str::to_owned)
                 })
                 .unwrap_or_default();
-            let revoked = async {
+            let exchanged = async {
                 let secret = id.apple_secret(&client_id)?;
-                let tokens = id
-                    .exchange(kind, (client_id.clone(), secret), code, "")
-                    .await?;
-                id.apple_revoke(&client_id, &tokens).await
+                id.exchange(kind, (client_id.clone(), secret), code, "")
+                    .await
             };
-            match revoked.await {
+            let tokens = match exchanged.await {
+                Ok(tokens) => tokens,
+                Err(why) => {
+                    tracing::warn!("Apple revoke: {why}");
+                    return error(StatusCode::BAD_GATEWAY, "Apple did not take the revocation");
+                }
+            };
+            // The code must be the signed-in identity's: Apple's answer
+            // (over TLS, from the token endpoint) names whose it is.
+            let whose = tokens
+                .get("id_token")
+                .and_then(Value::as_str)
+                .and_then(Jwt::parse)
+                .and_then(|t| {
+                    t.claims()
+                        .get("sub")
+                        .and_then(Value::as_str)
+                        .map(str::to_owned)
+                });
+            if whose.as_deref() != Some(sub.as_str()) {
+                tracing::warn!("Apple revoke: the code is another identity's");
+                return error(StatusCode::FORBIDDEN, "the sign-in did not check");
+            }
+            match id.apple_revoke(&client_id, &tokens).await {
                 Ok(()) => Some(fresh()),
                 Err(why) => {
                     tracing::warn!("Apple revoke: {why}");
@@ -1368,9 +1545,10 @@ pub(crate) async fn link(
     }
 }
 
-/// Unlinks by link id. A receipt is optional: when it is sent it must be
-/// this link's; an Apple link unlinked without one is logged (its revoke
-/// failed or could not run, and the user chose to go on).
+/// Unlinks by link id; a link this account does not hold is already gone.
+/// A receipt is optional: when it is sent it must be this link's; an Apple
+/// link unlinked without one is logged (its revoke failed or could not
+/// run, and the user chose to go on).
 pub(crate) async fn unlink(
     State(state): State<AppState>,
     UrlPath(link): UrlPath<i64>,
@@ -1393,8 +1571,10 @@ pub(crate) async fn unlink(
                 |r| r.get(0),
             )
             .optional()?;
+        // Not this account's (any more): nothing to do, as a retry after a
+        // lost answer expects.
         let Some(provider) = provider else {
-            return Ok(Err(error(StatusCode::NOT_FOUND, "no such link")));
+            return Ok(Ok(()));
         };
         if let Some(refused) = check_receipt(&tx, receipt.as_deref(), &[link], now)? {
             return Ok(Err(refused));
@@ -1468,10 +1648,7 @@ pub(crate) async fn delete_request(
     let answer = (|| {
         identity(&state)?;
         if limited(&state, client(&state, peer, &headers), AUTH) {
-            return Err(error(
-                StatusCode::TOO_MANY_REQUESTS,
-                "too many sign-in requests",
-            ));
+            return Err(busy());
         }
         let now = state.now_ms();
         let mut db = lock(&state);
@@ -1552,8 +1729,13 @@ pub(crate) async fn cancel_deletion(
             return Ok(false);
         };
         tx.execute("DELETE FROM deletion WHERE account = ?1", params![account])?;
+        // Only this account's: a link id from a journal line can name
+        // another account's link after a restore.
         if let (true, Some(link)) = (unlink, link) {
-            tx.execute("DELETE FROM identity WHERE link = ?1", params![link])?;
+            tx.execute(
+                "DELETE FROM identity WHERE link = ?1 AND account = ?2",
+                params![link, account],
+            )?;
         }
         tx.commit()?;
         Ok(true)
@@ -1576,9 +1758,12 @@ pub(crate) struct Notification {
 }
 
 /// `consent-revoked` and `account-deleted` drop that Apple identity's link.
-/// Signed by Apple; idempotent.
+/// Signed by Apple, at most a day old; idempotent. Anyone can post here, so
+/// it has a budget of its own and fetches Apple's keys as rarely as tokens do.
 pub(crate) async fn apple_notification(
     State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Json(note): Json<Notification>,
 ) -> Response {
     let Ok(id) = identity(&state) else {
@@ -1587,10 +1772,14 @@ pub(crate) async fn apple_notification(
     let Some(apple) = id.file.apple.as_ref() else {
         return error(StatusCode::NOT_FOUND, "no Apple sign-in here");
     };
+    if limited(&state, client(&state, peer, &headers), APPLE_NOTICES) {
+        return busy();
+    }
+    let now = state.now_ms();
     let checked = async {
         let disc = id.discover(Kind::Apple).await?;
         let jwt = Jwt::parse(&note.payload).ok_or("not a JWT")?;
-        let key = id.key_for(&disc.jwks_uri, jwt.kid()).await?;
+        let key = id.key_for(&disc.jwks_uri, jwt.kid(), now).await?;
         if !jwt.verifies(&key) {
             return Err("signature".to_owned());
         }
@@ -1605,6 +1794,13 @@ pub(crate) async fn apple_notification(
             .is_some_and(|a| audiences.iter().any(|x| x == a));
         if !(iss && aud) {
             return Err("issuer or audience".to_owned());
+        }
+        // Apple's time, on the machine's clock: a captured notice replayed
+        // later must not drop a link made again since.
+        let issued = claims.get("iat").and_then(Value::as_u64).ok_or("no iat")?;
+        let age = (now_ms() / 1000).saturating_sub(issued);
+        if age > NOTICE_MAX_AGE_S || issued > now_ms() / 1000 + 60 {
+            return Err("too old".to_owned());
         }
         let events: Value = claims
             .get("events")
@@ -1656,10 +1852,7 @@ pub(crate) async fn apple_notification(
 
 /// Sign-in rows past their time go.
 pub(crate) fn expire(db: &Connection, now: u64) -> rusqlite::Result<()> {
-    db.execute(
-        "DELETE FROM auth_flow WHERE created_ms <= ?1",
-        params![now.saturating_sub(FLOW_MS) as i64],
-    )?;
+    sweep_flows(db, now)?;
     db.execute(
         "DELETE FROM ticket WHERE expires_ms <= ?1",
         params![now as i64],

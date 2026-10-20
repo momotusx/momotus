@@ -15,9 +15,12 @@ use mq_http::{ClientConfig, HttpClient, HttpError, RequestOptions};
 use mq_library::Library;
 use mq_library::hlc::HlcClock;
 use mq_sync::identity::{start_brokered, start_native};
+use mq_sync::pair::{approve_pairing, start_pairing};
 use mq_sync::roster::{Hex, MemberSecret, Roster};
-use mq_sync::wire::{ReplayRequest, StartRequest, StartResponse, Taken, nonce_for};
-use mq_sync::{SyncConfig, SyncError, create_account_with};
+use mq_sync::wire::{
+    ReplayRequest, ScheduledDeletion, StartRequest, StartResponse, Taken, nonce_for,
+};
+use mq_sync::{SyncConfig, SyncError, SyncReport, create_account_with, sync_once};
 use mq_sync_server::{Config, IdentityFile, router};
 use serde_json::{Value, json};
 use std::path::PathBuf;
@@ -53,7 +56,11 @@ fn fresh_dir() -> PathBuf {
 
 /// The identity file for a relay at `relay` whose every provider is the mock.
 fn identity(mock: &Mock, relay: &str, key: &str, apple_key: &str) -> IdentityFile {
-    serde_json::from_value(json!({
+    serde_json::from_value(identity_json(mock, relay, key, apple_key)).unwrap()
+}
+
+fn identity_json(mock: &Mock, relay: &str, key: &str, apple_key: &str) -> Value {
+    json!({
         "key": key,
         "publicUrl": relay,
         "linkHost": "link.example",
@@ -67,8 +74,7 @@ fn identity(mock: &Mock, relay: &str, key: &str, apple_key: &str) -> IdentityFil
         },
         "facebook": { "appId": "fb-app", "appSecret": "fs", "graph": mock.url, "dialog": format!("{}/authorize", mock.url) },
         "oidc": [{ "id": "mock", "issuer": mock.url, "clientId": "marquee", "clientSecret": "ms" }],
-    }))
-    .unwrap()
+    })
 }
 
 struct Relay {
@@ -234,6 +240,66 @@ impl Device {
         .await
         .map(drop)
     }
+
+    /// Syncs until the record settles, storing it as an app does.
+    async fn sync(&mut self) -> SyncReport {
+        loop {
+            let report = sync_once(&self.library, &http(), &self.record, &self.clock)
+                .await
+                .unwrap();
+            if let Some(record) = report.record.clone() {
+                self.record = record;
+            }
+            if !report.again {
+                return report;
+            }
+        }
+    }
+
+    /// A second device joins by pairing.
+    async fn pair(&mut self) -> Device {
+        let tv = start_pairing(&http(), &self.record.server).await.unwrap();
+        let (code, record) =
+            approve_pairing(&self.library, &http(), &self.record, &self.clock, &tv.qr)
+                .await
+                .unwrap();
+        self.record = record;
+        let offer = tv.poll(&http()).await.unwrap().expect("offer");
+        assert_eq!(offer.code, code);
+        Device {
+            record: tv.claim(&http(), offer, "TV").await.unwrap(),
+            library: Library::temporary().unwrap(),
+            clock: HlcClock::new(2),
+        }
+    }
+
+    async fn cancel_deletion(&self, unlink: bool) {
+        mq_sync::identity::cancel_deletion(
+            &self.library,
+            &http(),
+            &self.record,
+            &self.clock,
+            unlink,
+        )
+        .await
+        .unwrap();
+    }
+}
+
+/// The deletion page's request with a sign-in's ticket: when it is due.
+async fn ask_deletion(relay: &Relay, taken: Taken) -> u64 {
+    http()
+        .post_json(
+            &format!("{}/v1/account/delete-request", relay.url),
+            &json!({ "ticket": taken.ticket }),
+            &raw(vec![]),
+        )
+        .await
+        .unwrap()
+        .json::<Value>()
+        .unwrap()["dueMs"]
+        .as_u64()
+        .unwrap()
 }
 
 fn status(answer: Result<mq_http::Response, HttpError>) -> u16 {
@@ -273,6 +339,15 @@ async fn a_brokered_sign_in_makes_an_account_and_finds_it_again() {
         .await
         .unwrap_err();
     assert!(matches!(err, SyncError::Cancelled), "{err:?}");
+    // The provider's ID token names another nonce than the flow's.
+    relay.mock.next(Next::WrongNonce("alice".into()));
+    let flow = start_brokered(&http(), &relay.url, "mock", "marquee://auth", false)
+        .await
+        .unwrap();
+    let fragment = browse(&flow.url).await;
+    assert!(fragment.contains("error=refused"), "{fragment}");
+    let err = flow.finish(&http(), &fragment).await.unwrap_err();
+    assert!(matches!(err, SyncError::SignInRefused), "{err:?}");
 }
 
 /// The fragment's code and the starter's verifier together, once: a browser
@@ -309,17 +384,73 @@ async fn a_flow_needs_its_verifier_and_its_code_once() {
     let elsewhere = fragment.replace("relay=127.0.0.1", "relay=evil.example");
     assert!(matches!(
         flow.finish(&http(), &elsewhere).await,
-        Err(SyncError::WrongRelay)
+        Err(SyncError::OtherRelay)
     ));
     let another = fragment.replace(&field("flow"), "another-flow");
     assert!(matches!(
         flow.finish(&http(), &another).await,
         Err(SyncError::WrongFlow)
     ));
+    assert!(flow.owns(&fragment));
+    assert!(!flow.owns(&elsewhere) && !flow.owns(&another));
     let taken = flow.finish(&http(), &fragment).await.unwrap();
     assert!(!taken.ticket.is_empty());
     let twice = flow.finish(&http(), &fragment).await.unwrap_err();
     assert!(matches!(twice, SyncError::SignInRefused), "{twice:?}");
+}
+
+/// A flow past its time says so: the late callback sends the app back with
+/// `expired`, and a take or a native token hears `ticketExpired`. A
+/// callback the relay cannot finish (done already, unknown) shows a page
+/// that sends the user back to the app; a finished flow is finished once.
+#[tokio::test]
+async fn an_expired_flow_says_so_and_a_callback_completes_once() {
+    let relay = Relay::new().await;
+    relay.mock.next(Next::Pick("alice".into()));
+    let late = start_brokered(&http(), &relay.url, "mock", "marquee://auth", false)
+        .await
+        .unwrap();
+    let native = start_native(&http(), &relay.url, "mock", false)
+        .await
+        .unwrap();
+    assert!(late.expires_ms > 9 * 60 * 1000 && native.expires_ms >= late.expires_ms);
+    relay.later(11 * 60 * 1000);
+    let fragment = browse(&late.url).await;
+    assert!(fragment.contains("error=expired"), "{fragment}");
+    let expired = late.finish(&http(), &fragment).await.unwrap_err();
+    assert!(matches!(expired, SyncError::TicketExpired), "{expired:?}");
+    let token = relay
+        .mock
+        .sign(relay.mock.claims("marquee", "alice", &native.nonce));
+    let expired = native.finish(&http(), &token, None).await.unwrap_err();
+    assert!(matches!(expired, SyncError::TicketExpired), "{expired:?}");
+
+    // Finished once: a second callback for the same flow is a page, not a return.
+    relay.mock.next(Next::Pick("alice".into()));
+    let flow = start_brokered(&http(), &relay.url, "mock", "marquee://auth", false)
+        .await
+        .unwrap();
+    let browser = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+    let provider = browser.get(&flow.url).send().await.unwrap();
+    let callback = provider.headers()["location"].to_str().unwrap().to_owned();
+    let first = browser.get(&callback).send().await.unwrap();
+    assert_eq!(first.status(), 303);
+    let again = browser.get(&callback).send().await.unwrap();
+    assert_eq!(again.status(), 400);
+    let page = again.text().await.unwrap();
+    assert!(page.contains("Go back to the app"), "{page}");
+    let unknown = browser
+        .get(format!(
+            "{}/v1/auth/mock/callback?state=nope&code=x",
+            relay.url
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert!(unknown.text().await.unwrap().contains("Go back to the app"));
 }
 
 /// A relay forwarding another relay's flow cannot make the nonce match:
@@ -398,6 +529,47 @@ async fn id_tokens_that_do_not_check_are_refused() {
     }
     let forged = check(|_| {}, |m, c| m.sign_forged(c)).await.unwrap_err();
     assert!(matches!(forged, SyncError::SignInRefused), "{forged:?}");
+    // Algorithms the key does not name: none, HMAC keyed with the published
+    // key, RS256 named over the EC key.
+    for (what, sign) in [
+        (
+            "none",
+            (|m: &Mock, c: Value| {
+                m.sign_with(json!({ "alg": "none", "kid": m.kid() }), &c, |_| vec![])
+            }) as fn(&Mock, Value) -> String,
+        ),
+        ("HS256", |m, c| {
+            m.sign_with(json!({ "alg": "HS256", "kid": m.kid() }), &c, |input| {
+                use hmac::{Hmac, KeyInit, Mac};
+                let key = m.public_jwk().to_string();
+                let mut mac = Hmac::<sha2::Sha256>::new_from_slice(key.as_bytes()).unwrap();
+                mac.update(input);
+                mac.finalize().into_bytes().to_vec()
+            })
+        }),
+        ("RS256 over EC", |m, c| {
+            m.sign_with(json!({ "alg": "RS256", "kid": m.kid() }), &c, |input| {
+                m.ec_signature(input)
+            })
+        }),
+        ("ES256 as in the key", |m, c| {
+            m.sign_with(json!({ "alg": "ES256", "kid": m.kid() }), &c, |input| {
+                m.ec_signature(input)
+            })
+        }),
+    ] {
+        let answer = check(|_| {}, sign).await;
+        if what == "ES256 as in the key" {
+            assert!(answer.is_ok(), "{what}: the control case checks");
+        } else {
+            let refused = answer.unwrap_err();
+            assert!(
+                matches!(refused, SyncError::SignInRefused),
+                "{what}: {refused:?}"
+            );
+        }
+    }
+    relay.later(61 * 1000);
     // RS256 checks too, with the RSA key the JWKS publishes.
     check(|_| {}, |m, c| m.sign_rsa(c)).await.unwrap();
     // A token in an audience list is one of ours.
@@ -414,6 +586,13 @@ async fn id_tokens_that_do_not_check_are_refused() {
     );
     check(|_| {}, es).await.unwrap();
     assert_eq!(m.jwks_fetches(), fetched + 1, "then cached");
+    // Rotated again within the minute: an unknown key fetches nothing yet.
+    m.rotate("ec-3");
+    check(|_| {}, es).await.unwrap_err();
+    assert_eq!(m.jwks_fetches(), fetched + 1, "no fetch within the minute");
+    relay.later(61 * 1000);
+    check(|_| {}, es).await.unwrap();
+    assert_eq!(m.jwks_fetches(), fetched + 2);
 }
 
 /// Google signs with either spelling of its issuer: one identity, one row.
@@ -614,14 +793,9 @@ async fn unlinking_and_apple_revocation_receipts() {
         .await
         .map(drop)
     }
-    let not_theirs = unlink(&other, mock, None).await.unwrap_err();
-    assert!(
-        matches!(
-            not_theirs,
-            SyncError::Http(HttpError::Status { status: 404, .. })
-        ),
-        "{not_theirs:?}"
-    );
+    // Another account's link is not that account's to drop: nothing changes.
+    unlink(&other, mock, None).await.unwrap();
+    assert_eq!(phone.links().await.len(), 2);
 
     // Brokered revoke: the Services ID's secret, a receipt for the Apple link.
     relay.mock.next(Next::Pick("apple-1".into()));
@@ -658,6 +832,8 @@ async fn unlinking_and_apple_revocation_receipts() {
     unlink(&phone, apple, Some(&receipt)).await.unwrap();
     unlink(&phone, mock, None).await.unwrap();
     assert!(phone.links().await.is_empty());
+    // Unlinked already (a retry after a lost answer): done.
+    unlink(&phone, mock, None).await.unwrap();
 
     // Native revoke: the token's bundle id is the code's client.
     let flow = start_native(&http(), &relay.url, "apple", true)
@@ -671,6 +847,26 @@ async fn unlinking_and_apple_revocation_receipts() {
     assert!(native.receipt.is_some());
     assert_eq!(claims(&secret_for("app.tv"))["sub"], "app.tv");
     assert_eq!(relay.mock.revoked().len(), 2);
+    // A token for one identity with a code for another: no receipt.
+    let flow = start_native(&http(), &relay.url, "apple", true)
+        .await
+        .unwrap();
+    let token = relay
+        .mock
+        .sign(relay.mock.claims("app.tv", "apple-1", &flow.nonce));
+    let code = relay.mock.native_code("apple-2", "app.tv");
+    let mixed = flow.finish(&http(), &token, Some(&code)).await.unwrap_err();
+    assert!(matches!(mixed, SyncError::SignInRefused), "{mixed:?}");
+    assert_eq!(relay.mock.revoked().len(), 2);
+
+    // An Apple link unlinked without a receipt (the revoke could not run).
+    phone
+        .link(&relay.sign_in("apple", "apple-1").await, false)
+        .await
+        .unwrap();
+    let apple = phone.links().await[0].link;
+    unlink(&phone, apple, None).await.unwrap();
+    assert!(phone.links().await.is_empty());
     let _ = &relay.apple_key;
 }
 
@@ -736,63 +932,55 @@ async fn a_fresh_genesis_replayed_on_a_sign_in_relay_is_refused() {
         |c| c.new_generation = true,
     )
     .await;
-    assert_eq!(replay(restored.url.clone(), None).await, 200);
-    restored.later(61 * 60 * 1000);
+    for _ in 0..20 {
+        assert_eq!(replay(restored.url.clone(), None).await, 200);
+    }
+    // The 21st from one address in the hour (past the minute's rate budget).
+    restored.later(61 * 1000);
+    assert_eq!(
+        replay(restored.url.clone(), None).await,
+        403,
+        "20 per address"
+    );
+    restored.later(60 * 60 * 1000);
     assert_eq!(replay(restored.url.clone(), None).await, 403);
     std::mem::forget(restored);
 }
 
 /// From the deletion page: a ticket schedules the deletion 7 days out, a
-/// second request keeps the date, every pull and push says when, a cancel
-/// with `unlink` drops the link that asked; scheduled again, it runs when due.
+/// second request keeps the date, every device's sync reports it with the
+/// provider that asked, a cancel with `unlink` drops the link that asked;
+/// scheduled again, it runs when due.
 #[tokio::test]
 async fn a_scheduled_deletion_shows_can_be_cancelled_and_runs_when_due() {
     let relay = Relay::with(|c| c.housekeeping_every = std::time::Duration::from_millis(50)).await;
-    let phone = Device::create(&relay, &relay.sign_in("mock", "alice").await, false)
+    let mut phone = Device::create(&relay, &relay.sign_in("mock", "alice").await, false)
         .await
         .unwrap();
-    let ask = |taken: Taken| {
-        let url = format!("{}/v1/account/delete-request", relay.url);
-        async move {
-            http()
-                .post_json(&url, &json!({ "ticket": taken.ticket }), &raw(vec![]))
-                .await
-                .unwrap()
-                .json::<Value>()
-                .unwrap()["dueMs"]
-                .as_u64()
-                .unwrap()
-        }
-    };
-    let due = ask(relay.sign_in("mock", "alice").await).await;
+    let mut tv = phone.pair().await;
+    assert_eq!(tv.sync().await.deletion, None);
+    let due = ask_deletion(&relay, relay.sign_in("mock", "alice").await).await;
     relay.later(DAY_MS);
     assert_eq!(
-        ask(relay.sign_in("mock", "alice").await).await,
+        ask_deletion(&relay, relay.sign_in("mock", "alice").await).await,
         due,
         "the first date stays"
     );
-    let pull: Value = http()
-        .get(
-            &format!("{}/v1/pull", relay.url),
-            &bearer(&phone.record.device_token),
-        )
-        .await
-        .unwrap()
-        .json()
-        .unwrap();
-    assert_eq!(pull["deletionDueMs"].as_u64(), Some(due));
-    mq_sync::identity::cancel_deletion(&phone.library, &http(), &phone.record, &phone.clock, true)
-        .await
-        .unwrap();
+    // The device that did not ask hears it at its next sync, and who asked.
+    let shown = Some(ScheduledDeletion {
+        due_ms: due,
+        provider: Some(format!("oidc:{}", relay.mock.url)),
+    });
+    assert_eq!(tv.sync().await.deletion, shown);
+    assert_eq!(phone.sync().await.deletion, shown);
+    tv.cancel_deletion(true).await;
     assert_eq!((relay.count("deletion"), relay.count("identity")), (0, 0));
+    assert_eq!(phone.sync().await.deletion, None);
     phone
         .link(&relay.sign_in("mock", "alice").await, false)
         .await
         .unwrap();
-    ask(relay.sign_in("mock", "alice").await).await;
-    // The journal keeps it: a database restored alone still has it.
-    let journal = std::fs::read_to_string(relay.db.with_extension("roster.jsonl")).unwrap();
-    assert!(journal.contains("\"deletion\""), "{journal}");
+    ask_deletion(&relay, relay.sign_in("mock", "alice").await).await;
     relay.later(8 * DAY_MS);
     for _ in 0..100 {
         if relay.count("gone") == 1 {
@@ -808,6 +996,159 @@ async fn a_scheduled_deletion_shows_can_be_cancelled_and_runs_when_due() {
         ),
         (1, 0, 0)
     );
+}
+
+/// The journal keeps deletions: a database restored from before the request
+/// gets the deletion back, and one restored from before a cancel loses it.
+#[tokio::test]
+async fn a_restored_database_gets_its_deletion_lines_back() {
+    let relay = Relay::new().await;
+    let phone = Device::create(&relay, &relay.sign_in("mock", "alice").await, false)
+        .await
+        .unwrap();
+    let journal = relay.db.with_extension("roster.jsonl");
+    // A backup of the database file alone, taken now.
+    let backup = |name: &str| {
+        let path = relay.db.with_file_name(name);
+        relay
+            .sql()
+            .execute("VACUUM INTO ?1", [path.to_str().unwrap()])
+            .unwrap();
+        path
+    };
+    // That backup restored in a directory of its own, the journal beside it.
+    let restore = |backup: PathBuf| {
+        let db = fresh_dir().join("relay.sqlite");
+        std::fs::rename(&backup, &db).unwrap();
+        std::fs::copy(&journal, db.with_extension("roster.jsonl")).unwrap();
+        let (mock, key) = (relay.mock.clone(), relay.apple_key.clone());
+        async move { Relay::on(mock, key, db, Arc::default(), |c| c.new_generation = true).await }
+    };
+    let before_request = backup("before-request.sqlite");
+    let due = ask_deletion(&relay, relay.sign_in("mock", "alice").await).await;
+    let restored = restore(before_request).await;
+    let back: i64 = restored
+        .sql()
+        .query_row("SELECT due_ms FROM deletion", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(back as u64, due, "the request came back from the journal");
+    drop(restored);
+    let before_cancel = backup("before-cancel.sqlite");
+    phone.cancel_deletion(false).await;
+    let restored = restore(before_cancel).await;
+    assert_eq!(restored.count("deletion"), 0, "the cancel line removed it");
+}
+
+/// A link a deletion row names is only ever this account's to drop: a
+/// Start over moves the link and clears it from the old account's deletion,
+/// and "Cancel and unlink" never reaches another account's link (a
+/// restored journal line can name a link id given to someone else since).
+#[tokio::test]
+async fn cancel_and_unlink_drops_only_this_accounts_link() {
+    let relay = Relay::new().await;
+    let mut old = Device::create(&relay, &relay.sign_in("mock", "alice").await, false)
+        .await
+        .unwrap();
+    ask_deletion(&relay, relay.sign_in("mock", "alice").await).await;
+    let fresh = Device::create(&relay, &relay.sign_in("mock", "alice").await, true)
+        .await
+        .unwrap();
+    let account = |d: &Device| hex::encode(d.record.keys.account.0);
+    let named: Option<i64> = relay
+        .sql()
+        .query_row(
+            "SELECT link FROM deletion WHERE account = ?1",
+            [account(&old)],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(named, None, "the moved link left the old deletion");
+    // The old account's devices see the deletion; no provider asked for it now.
+    let shown = old.sync().await.deletion.expect("shown on the old account");
+    assert_eq!(shown.provider, None);
+    // As a restored journal line could: the deletion names the new account's link.
+    relay
+        .sql()
+        .execute(
+            "UPDATE deletion SET link = (SELECT link FROM identity WHERE account = ?2)
+             WHERE account = ?1",
+            [account(&old), account(&fresh)],
+        )
+        .unwrap();
+    old.cancel_deletion(true).await;
+    assert_eq!(
+        fresh.links().await.len(),
+        1,
+        "the new account keeps its link"
+    );
+    assert_eq!(relay.count("deletion"), 0);
+}
+
+/// Apple's notification route: a budget of its own, Apple's keys fetched
+/// at most once a minute however many unknown keys are named, and a notice
+/// older than a day refused.
+#[tokio::test]
+async fn apple_notifications_are_bounded() {
+    let relay = Relay::new().await;
+    Device::create(&relay, &relay.sign_in("apple", "apple-1").await, false)
+        .await
+        .unwrap();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let m = &relay.mock;
+    let notice = |iat: u64| {
+        json!({
+            "iss": m.url, "aud": "apple-web", "iat": iat,
+            "events": json!({ "type": "consent-revoked", "sub": "apple-1", "event_time": iat }).to_string(),
+        })
+    };
+    let post = |payload: String| {
+        let url = format!("{}/v1/auth/apple/notifications", relay.url);
+        async move {
+            status(
+                http()
+                    .post_json(&url, &json!({ "payload": payload }), &raw(vec![]))
+                    .await,
+            )
+        }
+    };
+    let unknown = || {
+        let kid = hex::encode(rand_bytes());
+        m.sign_with(json!({ "alg": "ES256", "kid": kid }), &notice(now), |i| {
+            m.ec_signature(i)
+        })
+    };
+    let fetched = m.jwks_fetches();
+    for _ in 0..9 {
+        assert_eq!(post(unknown()).await, 400);
+    }
+    assert_eq!(
+        m.jwks_fetches(),
+        fetched,
+        "keys fetched at sign-in serve the minute"
+    );
+    relay.later(61 * 1000);
+    for _ in 0..9 {
+        assert_eq!(post(unknown()).await, 400);
+    }
+    assert_eq!(m.jwks_fetches(), fetched + 1, "one fetch for the minute");
+    // Its own budget: 10 a minute from one address.
+    assert_eq!(post(unknown()).await, 400);
+    assert_eq!(post(unknown()).await, 429);
+    relay.later(61 * 1000);
+    let old = m.sign(notice(now - 2 * 24 * 60 * 60));
+    assert_eq!(post(old).await, 400, "older than a day");
+    assert_eq!(relay.count("identity"), 1);
+    assert_eq!(post(m.sign(notice(now))).await, 200);
+    assert_eq!(relay.count("identity"), 0);
+}
+
+fn rand_bytes() -> [u8; 8] {
+    let mut b = [0u8; 8];
+    getrandom::fill(&mut b).unwrap();
+    b
 }
 
 /// CORS: the link host's origin exactly, on `start`, `take` and
@@ -862,6 +1203,46 @@ async fn another_identity_key_refuses_to_start() {
     };
     let refused = router(&relay.db, config).err().unwrap();
     assert!(refused.contains("identity key"), "{refused}");
+}
+
+/// Start-up refuses a public host devices cannot match (capitals, a port,
+/// a scheme, a path), a `publicUrl` on another host, and a provider address
+/// that is not https off this machine's network.
+#[tokio::test]
+async fn start_up_checks_the_public_host_and_provider_addresses() {
+    let dir = fresh_dir();
+    let db = dir.join("relay.sqlite");
+    for host in [
+        "Relay.example",
+        "relay.example:8443",
+        "https://relay.example",
+        "relay.example/x",
+    ] {
+        let config = Config {
+            public_host: Some(host.into()),
+            ..Config::default()
+        };
+        let refused = router(&db, config).err().unwrap();
+        assert!(refused.contains("--public-host"), "{host}: {refused}");
+    }
+    let mock = Mock::start(0).await;
+    let key = mock_oidc::apple_key_pem();
+    let start = |change: fn(&mut Value)| {
+        let mut file = identity_json(&mock, "http://127.0.0.1:1", KEY, &key);
+        change(&mut file);
+        let config = Config {
+            public_host: Some("127.0.0.1".into()),
+            identity: Some(serde_json::from_value(file).unwrap()),
+            ..Config::default()
+        };
+        router(&db, config).err()
+    };
+    assert_eq!(start(|_| {}), None, "the mock on loopback is fine");
+    let elsewhere = start(|f| f["publicUrl"] = json!("https://other.example")).unwrap();
+    assert!(elsewhere.contains("publicUrl"), "{elsewhere}");
+    let plain = start(|f| f["google"]["issuer"] = json!("http://accounts.example.com")).unwrap();
+    assert!(plain.contains("https"), "{plain}");
+    let _ = std::fs::remove_dir_all(dir);
 }
 
 /// Without an identity file: no sign-in routes, no providers.
@@ -978,13 +1359,8 @@ async fn returns_are_allowlisted_and_open_flows_capped() {
     let capped = start_native(&http(), &relay.url, "mock", false)
         .await
         .unwrap_err();
-    assert!(
-        matches!(
-            capped,
-            SyncError::Http(HttpError::Status { status: 429, .. })
-        ),
-        "{capped:?}"
-    );
+    assert!(matches!(capped, SyncError::Busy), "{capped:?}");
+    assert_eq!(capped.code(), Some("busy"));
 }
 
 /// Deleting needs the device key's signature, not the token alone.
@@ -1001,8 +1377,8 @@ async fn a_token_alone_deletes_nothing() {
         .unwrap()
         .json()
         .unwrap();
-    let send = |request: TokenRequest, signer: &MemberSecret| {
-        let body = json!({ "request": request, "sig": signer.sign_delete(&request) });
+    let send = |request: &TokenRequest, sig: Hex<64>| {
+        let body = json!({ "request": request, "sig": sig });
         let url = format!("{}/v1/account", relay.url);
         let options = bearer(&phone.record.device_token);
         async move {
@@ -1029,29 +1405,27 @@ async fn a_token_alone_deletes_nothing() {
         )
     };
     // Signed by a key that is not this device's.
-    assert_eq!(
-        send(request(info.server_ms), &MemberSecret::generate()).await,
-        403
-    );
-    // As a token request (another purpose): refused.
-    let token_sig = json!({ "request": request(info.server_ms), "sig": me.sign_token(&request(info.server_ms)) });
-    let answer = http()
-        .request(
-            mq_http::Method::DELETE,
-            &format!("{}/v1/account", relay.url),
-            Some(mq_http::Body::Json(token_sig)),
-            &bearer(&phone.record.device_token),
-        )
-        .await;
-    assert_eq!(status(answer), 403);
+    let asked = request(info.server_ms);
+    let stranger = MemberSecret::generate();
+    assert_eq!(send(&asked, stranger.sign_delete(&asked)).await, 403);
     // Too far from the relay's time.
-    assert_eq!(
-        send(request(info.server_ms - 60 * 60 * 1000), &me).await,
-        403
-    );
-    assert_eq!(relay.count("account"), 1);
-    mq_sync::delete_account(&phone.library, &http(), &phone.record, &phone.clock, None)
-        .await
+    let stale = request(info.server_ms - 60 * 60 * 1000);
+    assert_eq!(send(&stale, me.sign_delete(&stale)).await, 403);
+    // A body whose nonce the relay already took (a replay): refused.
+    let replayed = request(info.server_ms);
+    relay
+        .sql()
+        .execute(
+            "INSERT INTO token_nonce (nonce, expires_ms) VALUES (?1, ?2)",
+            rusqlite::params![replayed.nonce.0.to_vec(), i64::MAX],
+        )
         .unwrap();
+    assert_eq!(send(&replayed, me.sign_delete(&replayed)).await, 403);
+    // This very request, signed by this device as a token request (devices
+    // make those every day): another purpose, refused.
+    assert_eq!(send(&asked, me.sign_token(&asked)).await, 403);
+    assert_eq!(relay.count("account"), 1);
+    // The same request signed for deleting: deleted.
+    assert_eq!(send(&asked, me.sign_delete(&asked)).await, 200);
     assert_eq!((relay.count("account"), relay.count("identity")), (0, 0));
 }

@@ -17,13 +17,5 @@
   "facebook": {
     "appId": "app id",
     "appSecret": "app secret"
-  },
-  "oidc": [
-    {
-      "id": "mock",
-      "issuer": "http://127.0.0.1:8790",
-      "clientId": "marquee",
-      "clientSecret": "mock secret"
-    }
-  ]
+  }
 }
