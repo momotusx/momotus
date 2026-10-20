@@ -377,6 +377,7 @@ fun TvPlayer(
                     },
                 tryingAgain = controller.tryingAgain,
                 detail = controller.openError,
+                cannotOpen = controller.openError != null,
             )
         }
         // A notice while the buffer fills keeps the mark in the middle.

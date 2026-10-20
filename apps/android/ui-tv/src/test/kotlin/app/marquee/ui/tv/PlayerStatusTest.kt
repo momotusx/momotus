@@ -33,6 +33,7 @@ class PlayerStatusTest {
         tryingAgain: Boolean = false,
         problem: String = "This version could not be played",
         detail: String? = null,
+        cannotOpen: Boolean = false,
     ): MutableList<String> {
         val events = mutableListOf<String>()
         val focus = FocusRequester()
@@ -52,6 +53,7 @@ class PlayerStatusTest {
                     onRetry = if (retry) ({ events += "retry" }) else null,
                     tryingAgain = tryingAgain,
                     detail = detail,
+                    cannotOpen = cannotOpen,
                 )
             }
         }
@@ -104,12 +106,20 @@ class PlayerStatusTest {
     }
 
     @Test
-    fun `a version that could not be opened says so with the reason, and Try again first and focused`() {
-        val events = show(null, retry = true, problem = CANNOT_OPEN, detail = "that version is no longer listed")
+    fun `a version that could not be opened says so with the reason, Choose a version first and focused`() {
+        val events =
+            show(
+                null,
+                retry = true,
+                problem = CANNOT_OPEN,
+                detail = "that version is no longer listed",
+                cannotOpen = true,
+            )
         compose.onNodeWithText("This version could not be opened").assertExists()
         compose.onNodeWithText("that version is no longer listed").assertExists()
-        assertEquals(listOf("Try again", "Choose a version", "Back"), order())
-        compose.onNodeWithText("Try again").assertIsFocused()
+        // Try again opens the same key to the same answer: another version is the way on.
+        assertEquals(listOf("Choose a version", "Try again", "Back"), order())
+        compose.onNodeWithText("Choose a version").assertIsFocused()
         compose.onNodeWithText("Try again").performClick()
         assertEquals(listOf("retry"), events)
     }

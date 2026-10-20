@@ -267,6 +267,7 @@ fun PhonePlayer(
                         },
                     tryingAgain = controller.tryingAgain,
                     detail = controller.openError,
+                    cannotOpen = controller.openError != null,
                     onBack = onBack,
                     focus = remember { FocusRequester() },
                     modifier =

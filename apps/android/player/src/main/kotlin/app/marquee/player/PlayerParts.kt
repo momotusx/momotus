@@ -311,12 +311,14 @@ fun PlayerStatus(
     /** The core's next version after a version picked by hand failed: the first way on, "Play {label}". */
     offer: OtherVersion? = null,
     onOffer: (String) -> Unit = {},
-    /** "Try again" when the core's play failed: after Play {offer}, else first. */
+    /** "Try again": after Play {offer}, after Choose a version when the version could not be opened, else first. */
     onRetry: (() -> Unit)? = null,
     /** The core took a Try again and the play failed again at once: "Trying again" under the headline, a moment. */
     tryingAgain: Boolean = false,
     /** Why the version could not be opened, under the headline. */
     detail: String? = null,
+    /** The core could not open the version: Choose a version comes first, Try again second. */
+    cannotOpen: Boolean = false,
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
@@ -387,6 +389,12 @@ fun PlayerStatus(
                     )
                     onRetry?.let { SecondaryButton("Try again", it, icon = Icons.RefreshCw) }
                     SecondaryButton("Choose a version", onVersions, icon = Icons.Layers)
+                } else if (onRetry != null && cannotOpen) {
+                    // A version the core could not open is mostly one no longer listed, which Try again opens
+                    // to the same answer: another version is the way on, and Try again (it helps after a
+                    // reconnect) comes second (review 2026-10-20 r4 P3-6, as on the web and Apple).
+                    PrimaryButton("Choose a version", onVersions, icon = Icons.Layers, focusRequester = focus)
+                    SecondaryButton("Try again", onRetry, icon = Icons.RefreshCw)
                 } else if (onRetry != null) {
                     PrimaryButton("Try again", onRetry, icon = Icons.RefreshCw, focusRequester = focus)
                     SecondaryButton("Choose a version", onVersions, icon = Icons.Layers)
