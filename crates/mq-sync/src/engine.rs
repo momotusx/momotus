@@ -261,12 +261,15 @@ pub(crate) fn code_of(body: &[u8]) -> Option<String> {
 }
 
 impl SyncError {
-    /// No definite answer came (the network, the relay's own trouble, its
-    /// budget): the same call may succeed later.
+    /// No definite answer came (the network, a timeout, the relay's own
+    /// trouble, its budget): the same call may succeed later. A body that
+    /// did not decode or was too large came after a 2xx: the relay acted.
     pub fn transient(&self) -> bool {
         match self {
             SyncError::Http(HttpError::Status { status, .. }) => *status >= 500,
-            SyncError::Http(_) | SyncError::Busy => true,
+            SyncError::Http(HttpError::Network(_) | HttpError::Timeout(_)) | SyncError::Busy => {
+                true
+            }
             _ => false,
         }
     }
@@ -1980,7 +1983,7 @@ pub async fn use_server_roster(
 
 #[cfg(test)]
 mod tests {
-    use super::index;
+    use super::*;
 
     #[test]
     fn a_seq_past_usize_is_past_every_entry() {
@@ -1990,5 +1993,31 @@ mod tests {
         assert!(index(past) > 1);
         #[cfg(target_pointer_width = "32")]
         assert_eq!(index(past), usize::MAX);
+    }
+
+    #[test]
+    fn only_an_answer_that_never_came_is_transient() {
+        let status = |status| {
+            SyncError::Http(HttpError::Status {
+                status,
+                body: Default::default(),
+                retry_after: None,
+            })
+        };
+        let again = [
+            SyncError::Http(HttpError::Network("reset".into())),
+            SyncError::Http(HttpError::Timeout(std::time::Duration::from_secs(1))),
+            status(502),
+            SyncError::Busy,
+        ];
+        assert!(again.iter().all(SyncError::transient));
+        // After a 2xx the relay acted: a body that did not decode, or a refusal.
+        let done = [
+            SyncError::Http(HttpError::Decode("eof".into())),
+            SyncError::Http(HttpError::TooLarge { limit: 1 }),
+            status(404),
+            SyncError::SignInRefused,
+        ];
+        assert!(!done.iter().any(SyncError::transient));
     }
 }
