@@ -13,6 +13,12 @@ import kotlin.test.assertTrue
 
 class PlayerLogicTest {
     @Test
+    fun `the failure headline says one version failed when another is offered, else every source`() {
+        assertEquals("This version could not be played", failedHeadline(offered = true))
+        assertEquals("None of the sources could be played", failedHeadline(offered = false))
+    }
+
+    @Test
     fun `nothing is reported before a frame was shown or while the length is unknown`() {
         assertNull(progressReport(firstFrame = false, positionMs = 5_000, durationMs = 60_000))
         assertNull(progressReport(firstFrame = true, positionMs = 5_000, durationMs = C.TIME_UNSET))

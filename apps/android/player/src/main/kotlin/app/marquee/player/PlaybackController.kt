@@ -313,6 +313,11 @@ class PlaybackController(
             }
 
             PlaybackPhase.Resolving -> {
+                // The core starts this play over (Try again): the failure card goes.
+                if (stage == Stage.Failed) {
+                    stage = Stage.Opening
+                    problem = null
+                }
                 // The core moved on to the ranking's next version by itself: say which.
                 val trying = s.trying
                 if (trying != null) {
@@ -332,7 +337,7 @@ class PlaybackController(
                 player.clearMediaItems()
                 loadedUrl = null
                 stage = Stage.Failed
-                problem = "None of the sources could be played"
+                problem = failedHeadline(offered = s.offer != null)
                 status = null
             }
 
@@ -612,15 +617,15 @@ class PlaybackController(
 
     // What the viewer does
 
-    /** "Try again": the core plays the same versions again from its first pick; what failed may be the moment. */
+    /**
+     * "Try again": the core plays the same versions again from its first pick; what failed may be the moment.
+     * The card stays until the core says it starts over ([PlaybackPhase.Resolving]): a source that fails again
+     * at once leaves the core's snapshot as it was, and the card must not go away for good. A press while the
+     * core already starts over does nothing there.
+     */
     fun retry() {
-        val playback = view ?: return
         if (!retryable || released) return
-        retryable = false
-        problem = null
-        status = null
-        stage = Stage.Opening
-        playback.retryPlay()
+        view?.retryPlay()
     }
 
     fun togglePlay() {

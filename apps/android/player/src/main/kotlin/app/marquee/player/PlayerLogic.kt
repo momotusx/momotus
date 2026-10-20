@@ -164,6 +164,13 @@ fun ranPastEnd(
     sideLoaded: Boolean,
 ): Boolean = sideLoaded && durationMs > 0 && positionMs >= durationMs + OVERRUN_MS
 
+/**
+ * The failure card's headline: when the core offers another version, only this one failed; otherwise every
+ * source did. The same words on the web and Apple.
+ */
+fun failedHeadline(offered: Boolean): String =
+    if (offered) "This version could not be played" else "None of the sources could be played"
+
 /** What failed, as `failOver` reports it: the core words it for the attempt list. */
 enum class FailureKind(
     val wire: String,

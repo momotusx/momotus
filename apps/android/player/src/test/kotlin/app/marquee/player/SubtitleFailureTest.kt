@@ -396,14 +396,18 @@ class SubtitleFailureTest {
         push(snapshot(phase = "failed"))
         until("the playback failed") { controller.stage == PlaybackController.Stage.Failed }
         assertTrue(controller.retryable)
+        assertEquals("None of the sources could be played", controller.problem)
         controller.retry()
         until("retry goes to the core") { commands("retry").size == 1 }
-        assertEquals(PlaybackController.Stage.Opening, controller.stage)
-        assertEquals(false, controller.retryable)
-        // Pressed again before the core answers: nothing more goes out.
-        controller.retry()
+        // A source that fails again at once leaves the core's snapshot as it was: the card and Try again stay.
         runFor(200)
-        assertEquals(1, commands("retry").size)
+        assertEquals(PlaybackController.Stage.Failed, controller.stage)
+        assertTrue(controller.retryable)
+        // The core starts over: the card goes.
+        push(snapshot(phase = "resolving"))
+        until("the play starts over") { controller.stage == PlaybackController.Stage.Opening }
+        assertEquals(null, controller.problem)
+        assertEquals(false, controller.retryable)
         controller.release()
     }
 
@@ -424,6 +428,7 @@ class SubtitleFailureTest {
         push(snapshot(phase = "failed", extra = "\"offer\":{\"key\":\"k3\",\"label\":\"720p BluRay\"},"))
         until("the playback failed") { controller.stage == PlaybackController.Stage.Failed }
         assertEquals(OtherVersion("k3", "720p BluRay"), controller.offer)
+        assertEquals("This version could not be played", controller.problem)
         controller.release()
     }
 
