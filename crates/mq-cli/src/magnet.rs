@@ -604,6 +604,7 @@ async fn run(
         "window": window_row,
         "held_bytes": stats.held_bytes,
         "evict_rounds": stats.evict_rounds,
+        "sched_seeks": stats.seeks,
         "max_allocated_bytes": max_allocated_bytes,
         "allocated_bytes": allocated_bytes,
         "seek_forward_p50_ms": percentile(&forward, 0.5),
