@@ -32,7 +32,7 @@ function journeyAddon(film: string): Promise<Server> {
   const metas: Record<string, object> = {
     "/meta/series/mqj1.json": { id: "mqj1", type: "series", name: "Journey Waiting", description: "A synopsis comes first on the page.", videos: [episode("mqj1", 1, AIRED), episode("mqj1", 2, LATER)] },
     "/meta/series/mqj2.json": { id: "mqj2", type: "series", name: "Journey Finished", videos: [episode("mqj2", 1, AIRED), episode("mqj2", 2, AIRED)] },
-    "/meta/movie/mqjm.json": { id: "mqjm", type: "movie", name: "Journey Film", releaseInfo: "2008" },
+    "/meta/movie/mqjm.json": { id: "mqjm", type: "movie", name: "Journey Film", releaseInfo: "2008", trailerStreams: [{ title: "Journey Film", ytId: "jrnyTrailer1" }] },
   };
   const server = createServer((req, res) => {
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -442,5 +442,33 @@ test("a raw reason reads in plain words, the core's text behind Details", async 
   await expect(problem.locator(".why-raw code")).toBeHidden();
   await problem.locator(".why-raw summary").click();
   await expect(problem.locator(".why-raw code")).toHaveText(raw);
+  await context.close();
+});
+
+test("a trailer pauses and plays from the bar and the remote's play key", async ({ browser }) => {
+  const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
+  // A stand-in for YouTube's player that tells the page each command it got.
+  await p.route("https://www.youtube-nocookie.com/embed/**", (route) =>
+    route.fulfill({ contentType: "text/html", body: "<script>addEventListener('message', (e) => parent.postMessage({ got: e.data }, '*'));</script>" }),
+  );
+  await p.addInitScript(() => {
+    const w = window as unknown as { got: string[] };
+    w.got = [];
+    addEventListener("message", (e) => e.data?.got && w.got.push(JSON.parse(e.data.got).func));
+  });
+  await p.goto("/title/movie/mqjm?form=tv");
+  await p.locator('[data-f="title:trailer"]').focus({ timeout: 30_000 });
+  await p.keyboard.press("Enter");
+  const toggle = p.locator('[data-f="trailer:toggle"]');
+  await expect(toggle).toHaveText("Pause");
+  await expect(p.locator(".trailer iframe")).toHaveAttribute("src", /enablejsapi=1/);
+  const got = () => p.evaluate(() => (window as unknown as { got: string[] }).got);
+  await toggle.focus();
+  await p.keyboard.press("Enter");
+  await expect(toggle).toHaveText("Play");
+  await expect.poll(got).toEqual(["pauseVideo"]);
+  await p.keyboard.press("MediaPlayPause");
+  await expect(toggle).toHaveText("Pause");
+  await expect.poll(got).toEqual(["pauseVideo", "playVideo"]);
   await context.close();
 });

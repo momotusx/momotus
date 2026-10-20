@@ -1,23 +1,43 @@
 /** A title's trailer over the page: the YouTube privacy-enhanced player,
  * with focus kept on our own buttons so a remote's Back always reaches us.
- * Back or Escape closes it. */
+ * Back or Escape closes it; Pause on the bar, a remote's play/pause key, K
+ * and Space pause and play it through YouTube's player API. */
 
+import Pause from "lucide-solid/icons/pause";
+import Play from "lucide-solid/icons/play";
 import X from "lucide-solid/icons/x";
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import type { Trailer } from "../core/generated/Trailer";
 import { focusEl } from "../focus/dom";
 
 const BACK = new Set(["Escape", "Backspace", "GoBack", "BrowserBack"]);
+const YOUTUBE = "https://www.youtube-nocookie.com";
+const PLAY_KEYS = new Set(["MediaPlayPause", "MediaPlay", "MediaPause", "k", "K", " "]);
 
 export function TrailerOverlay(props: { trailers: Trailer[]; onClose: () => void }) {
   const [index, setIndex] = createSignal(0);
   const current = () => props.trailers[index()] ?? props.trailers[0];
+  // It starts playing (autoplay); each press asks the player for the other state.
+  const [playing, setPlaying] = createSignal(true);
+  let frame: HTMLIFrameElement | undefined;
+  const toggle = () => {
+    const next = !playing();
+    frame?.contentWindow?.postMessage(JSON.stringify({ event: "command", func: next ? "playVideo" : "pauseVideo", args: [] }), YOUTUBE);
+    setPlaying(next);
+  };
   onMount(() => {
     const onKey = (e: KeyboardEvent) => {
       if (BACK.has(e.key) || e.keyCode === 10009 || e.keyCode === 461) {
         e.preventDefault();
         e.stopImmediatePropagation();
         props.onClose();
+        return;
+      }
+      // Space on one of the bar's buttons stays that button's press.
+      if (PLAY_KEYS.has(e.key) && !(e.key === " " && (e.target as Element | null)?.closest?.("button"))) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        toggle();
       }
     };
     window.addEventListener("keydown", onKey, { capture: true });
@@ -33,7 +53,11 @@ export function TrailerOverlay(props: { trailers: Trailer[]; onClose: () => void
         <Show when={current()} keyed>
           {(t) => (
             <iframe
-              src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(t.youtubeId)}?autoplay=1&rel=0&playsinline=1`}
+              ref={(el) => {
+                frame = el;
+                setPlaying(true);
+              }}
+              src={`${YOUTUBE}/embed/${encodeURIComponent(t.youtubeId)}?autoplay=1&rel=0&playsinline=1&enablejsapi=1&origin=${encodeURIComponent(location.origin)}`}
               title={`Trailer: ${t.title}`}
               allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
               referrerpolicy="strict-origin-when-cross-origin"
@@ -58,6 +82,12 @@ export function TrailerOverlay(props: { trailers: Trailer[]; onClose: () => void
             </For>
           </div>
         </Show>
+        <button class="btn" data-f="trailer:toggle" onClick={toggle}>
+          <Show when={playing()} fallback={<Play aria-hidden class="fill" />}>
+            <Pause aria-hidden class="fill" />
+          </Show>
+          {playing() ? "Pause" : "Play"}
+        </button>
         <button class="btn" data-f="trailer:close" onClick={props.onClose}>
           <X aria-hidden />
           Close

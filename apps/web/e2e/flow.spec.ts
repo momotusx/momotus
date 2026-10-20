@@ -201,8 +201,12 @@ test("movie page: trailer overlay and Mark watched by remote", async ({ page }) 
   // The page behind is out of reach while the trailer is open.
   await expect(page.locator(".title-main")).toHaveAttribute("inert", /.*/);
   await page.keyboard.press("ArrowUp");
-  await page.keyboard.press("ArrowLeft");
   await expect.poll(() => focused(page)).toBe("trailer:close");
+  // Left reaches Pause on the bar, and nothing above it.
+  await page.keyboard.press("ArrowLeft");
+  await expect.poll(() => focused(page)).toBe("trailer:toggle");
+  await page.keyboard.press("ArrowUp");
+  await expect.poll(() => focused(page)).toBe("trailer:toggle");
   // Back closes it and focus returns to the button.
   await page.keyboard.press("Escape");
   await expect(page.locator(".trailer")).toHaveCount(0);
