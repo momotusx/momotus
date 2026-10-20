@@ -467,12 +467,25 @@ test("Calendar: days in order, today's day first, an episode opens its season", 
   await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
   await expect.poll(() => sent.some((t) => t.includes(`"today":"${today}"`))).toBe(true);
 
-  // Selecting opens the title on that episode's season.
+  // Another card than today's first, then select: the title on that episode's season.
+  const firstKey = await focused(page);
+  await page.keyboard.press("ArrowDown");
+  if ((await focused(page)) === firstKey) await page.keyboard.press("ArrowUp");
+  const opened = await focused(page);
+  expect(opened).not.toBe(firstKey);
   const season = await card.evaluate((a) => /season=(\d+)/.exec(a.getAttribute("href") ?? "")?.[1] ?? "");
   expect(season).not.toBe("");
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(new RegExp(`/title/series/[^?]+\\?season=${season}`));
   await expect(page.locator(`[data-f="season:${season}"]`)).toHaveAttribute("aria-selected", "true", { timeout: 30_000 });
+
+  // Back lands on the card that opened it and stays there while the schedule loads again.
+  await page.keyboard.press("Escape");
+  await expect(page).toHaveURL(/\/calendar/);
+  await expect.poll(() => focused(page), { timeout: 30_000 }).toBe(opened);
+  await expect(page.locator(".cal-head .st.warn")).toHaveCount(0, { timeout: 60_000 });
+  await page.waitForTimeout(1000);
+  expect(await focused(page)).toBe(opened);
 });
 
 test("Calendar sends the new date at local midnight", async ({ page }) => {

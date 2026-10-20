@@ -3,7 +3,8 @@ import "@fontsource/ibm-plex-mono/latin-400.css";
 import "./theme/tokens.css";
 import "./theme/app.css";
 import { render } from "solid-js/web";
-import { App, markBack } from "./app";
+import { App } from "./app";
+import { markBack } from "./history";
 import { startFitting } from "./form";
 
 // Registered before the router's own listener so a browser Back is known

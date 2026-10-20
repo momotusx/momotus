@@ -8,6 +8,21 @@
 
 import { createSignal } from "solid-js";
 
+// Back (the app's own or the browser's) is under way: the screen it lands on
+// restores the viewer's focus instead of placing its own first focus.
+let wentBack = false;
+export const markBack = () => {
+  wentBack = true;
+};
+/** While the screen Back lands on is created: whether it was reached by Back. */
+export const cameBack = () => wentBack;
+/** The shell, once the new screen is in: reads and clears the mark. */
+export function takeBack(): boolean {
+  const was = wentBack;
+  wentBack = false;
+  return was;
+}
+
 export const historyDepth = () => (history.state as { _depth?: number } | null)?._depth ?? 0;
 
 // Kept for the tab, so a reload does not reopen the old profile's entries.

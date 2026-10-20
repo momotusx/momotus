@@ -15,7 +15,7 @@ import "./core/trakt";
 import { gateOpen, profiles, profilesFailed } from "./core/profiles";
 import { installFocus, restoreSoon } from "./focus/dom";
 import { form } from "./form";
-import { entryOwner, historyBase, historyDepth, resetHistoryBase, stampEntriesWith } from "./history";
+import { entryOwner, historyBase, historyDepth, markBack, resetHistoryBase, stampEntriesWith, takeBack } from "./history";
 import Addons from "./screens/addons";
 import FindAddons from "./screens/find-addons";
 import CalendarScreen from "./screens/calendar";
@@ -64,11 +64,6 @@ export function parentOf(path: string): string | null {
   return path === "/" ? null : "/";
 }
 
-
-let wentBack = false;
-export const markBack = () => {
-  wentBack = true;
-};
 
 /** Search opens as a palette over the screen you are on; its route stays for
  * deep links (and is where the palette lives when you are already there). */
@@ -206,8 +201,7 @@ function Shell(props: RouteSectionProps) {
         setScrolled(false);
         // A new screen (a result was opened, or Back) leaves the palette.
         leaveSearch();
-        const wasBack = wentBack;
-        wentBack = false;
+        const wasBack = takeBack();
         // Touch has no cursor to place; remotes and keyboards do.
         if (form() !== "phone") restoreSoon(wasBack);
       },

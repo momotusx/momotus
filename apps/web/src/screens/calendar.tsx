@@ -9,6 +9,7 @@ import LoaderCircle from "lucide-solid/icons/loader-circle";
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { liveView } from "../core/client";
 import { calendarIds } from "../lib/ids";
+import { cameBack } from "../history";
 import type { CalendarDay } from "../core/generated/CalendarDay";
 import type { CalendarItem } from "../core/generated/CalendarItem";
 import type { CalendarSnapshot } from "../core/generated/CalendarSnapshot";
@@ -72,9 +73,11 @@ export default function CalendarScreen() {
 
   // The first day on or after today sits at the top with its first episode
   // focused. Series keep arriving while the schedule loads and add days above
-  // it, so it is placed again on every update until the viewer acts.
+  // it, so it is placed again on every update until the viewer acts. Back
+  // from a title lands on the card that opened it (the shell restores it),
+  // never on today's.
   const target = () => s()?.days.find((d) => d.date >= (s()?.today ?? sent)) ?? null;
-  const [acted, setActed] = createSignal(false);
+  const [acted, setActed] = createSignal(cameBack());
   onMount(() => {
     const stop = () => setActed(true);
     const events = ["keydown", "pointerdown", "wheel", "touchstart"] as const;
