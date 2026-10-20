@@ -37,6 +37,8 @@ struct OnboardingScreen: View {
     @FocusState private var onContinue: Bool
     /// The question enters on Start fast, the default.
     @FocusState private var onFast: Bool
+    /// The setup check opens on Done, its way on (the tvOS walk, ATV-F3).
+    @FocusState private var onDone: Bool
     @Environment(\.metrics) private var metrics
     @Environment(SyncModel.self) private var sync
 
@@ -263,10 +265,12 @@ struct OnboardingScreen: View {
                     Button("Back") { step = .defaults }.buttonStyle(PillButtonStyle())
                     Spacer()
                     Button("Done", action: close).buttonStyle(PillButtonStyle(prominent: true))
+                        .focused($onDone)
                 }
                 .padding(.top, Theme.Space.s)
             }
         }
+        .defaultFocus($onDone, true)
     }
 
     private func stepHeading(_ title: String, _ text: String) -> some View {

@@ -555,9 +555,14 @@ private struct PlayBlock: View {
                                 }
                             }
                         }
+                        .lineLimit(wide ? 1 : nil)
                         .frame(minWidth: wide ? 160 : nil, maxWidth: wide ? nil : .infinity)
                     }
                     .buttonStyle(PillButtonStyle(prominent: true))
+                    // One line sized to its words where there is room for it (TV, Mac,
+                    // iPad): the pill itself, not only its words, keeps its width, so
+                    // "Resume 13 min left" never breaks or spills (the tvOS walk, ATV-F2).
+                    .fixedSize(horizontal: wide, vertical: false)
                     .focused(focus)
                     // The reason shows right under it. Never off while starting: a TV moves
                     // focus off a disabled button, and `play(fromStart:)` ignores a second press.
@@ -569,6 +574,7 @@ private struct PlayBlock: View {
                                 .frame(maxWidth: wide || !typeSize.isAccessibilitySize ? nil : .infinity)
                         }
                         .buttonStyle(PillButtonStyle())
+                        .fixedSize(horizontal: wide, vertical: false)
                         .disabled(failure != nil)
                     }
                 }
