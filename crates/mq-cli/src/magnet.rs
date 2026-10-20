@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use mq_engine::{Engine, EngineConfig, FileHint, PieceCheck};
+use mq_engine::{Engine, EngineConfig, FileHint, PieceCheck, TorrentHandle};
 use mq_http::{ClientConfig, HttpClient, Priority, RequestOptions};
 use mq_server::{StreamServer, Upstream};
 use serde_json::{Value, json};
@@ -192,11 +192,30 @@ async fn read_checked(
     })
 }
 
+/// The torrent's verified and received bytes each second, into `out`,
+/// until aborted.
+async fn swarm_rate(engine: Engine, t: TorrentHandle, out: Arc<std::sync::Mutex<Vec<(u64, u64)>>>) {
+    let mut last = None;
+    loop {
+        if let Ok(s) = engine.stats(t).await {
+            let now = (s.downloaded_bytes, s.received_bytes);
+            if let Some((v, r)) = last {
+                let mut out = out.lock().unwrap_or_else(|e| e.into_inner());
+                out.push((now.0.saturating_sub(v), now.1.saturating_sub(r)));
+            }
+            last = Some(now);
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+}
+
 /// `--walk`: reads at 25, 50 and 75% (4 MiB each), the whole file from
-/// `from` at `rate` (for at most `stop`), then 64 MiB back at 10%.
+/// `from` at `rate` (for at most `stop`), then 64 MiB back at 10%. During
+/// the whole read the swarm's rate is sampled each second: what the engine
+/// verified and what it received.
 async fn walk(
-    http: &HttpClient,
-    url: &str,
+    (http, url): (&HttpClient, &str),
+    (engine, t): (&Engine, TorrentHandle),
     len: u64,
     (from, rate, stop): (u64, Option<u64>, Option<Duration>),
     mut check: PieceCheck,
@@ -208,12 +227,26 @@ async fn walk(
         forward.push(read_checked(http, url, span, (None, None), &mut check).await);
     }
     let from = from.min(len);
+    let rates = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sampler = tokio::spawn(swarm_rate(engine.clone(), t, Arc::clone(&rates)));
     let whole = read_checked(http, url, (from, len - from), (rate, stop), &mut check).await;
+    sampler.abort();
+    let rates = rates.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let verified: Vec<u64> = rates.iter().map(|r| r.0).collect();
+    let mean = |v: &[u64]| (!v.is_empty()).then(|| v.iter().sum::<u64>() / v.len() as u64);
+    let received: Vec<u64> = rates.iter().map(|r| r.1).collect();
     let back = (at(10.0), (64 * MIB).min(len - at(10.0)));
     let back = read_checked(http, url, back, (None, None), &mut check).await;
     json!({
         "forward": forward, "whole": whole, "back": [back],
         "checked": check.checked, "wrong": check.wrong,
+        "swarm": {
+            "secs": rates.len(),
+            "verified_p10_bytes_per_s": percentile(&verified, 0.1),
+            "verified_p50_bytes_per_s": percentile(&verified, 0.5),
+            "verified_mean_bytes_per_s": mean(&verified),
+            "received_mean_bytes_per_s": mean(&received),
+        },
     })
 }
 
@@ -446,7 +479,7 @@ async fn run(
     } else if o.walk {
         let check = engine.piece_check(t, file).map_err(|e| e.to_string())?;
         let span = (o.resume_at.unwrap_or(0), o.walk_rate, o.walk_for);
-        walk(&http, &url, info.len, span, check).await
+        walk((&http, &url), (&engine, t), info.len, span, check).await
     } else {
         let options = PlayOptions {
             headless: o.headless,
@@ -491,6 +524,7 @@ async fn run(
             "fill_p50_bytes_per_s": walked.and_then(|w| w.get("fill_p50_bytes_per_s")),
             "back": played.get("back"), "forward": played.get("forward"),
             "checked": played.get("checked"), "wrong": played.get("wrong"),
+            "swarm": played.get("swarm"),
         })
     });
     // The lease's claim ends first: the engine keeps a claimed torrent.
