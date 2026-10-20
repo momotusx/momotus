@@ -25,7 +25,8 @@ let media: Server | null = null;
 
 const AIRED = "2020-01-01T00:00:00.000Z";
 const LATER = "2099-01-01T00:00:00.000Z";
-const SRT = "1\n00:00:01,000 --> 00:00:30,000\nA line\n";
+// Two lines, so a placement is checked against the tallest common case.
+const SRT = "1\n00:00:01,000 --> 00:00:30,000\nA line\nand the line under it\n";
 
 /** Its own titles: "mqj1" (S1:E2 not out), "mqj2" (two episodes out), the
  * film "mqjm", and "mqjv", a film with five 1080p versions of release groups
@@ -1193,82 +1194,98 @@ test("TV: a focused chip gone after the page scrolled hands the focus to its nea
   await context.close();
 });
 
-test("phone player, portrait and landscape: transport centred, scrubber then options at the foot, the line inside the picture and clear of the controls", async ({ browser }) => {
+test("phone player, portrait and landscape: transport centred, scrubber then options at the foot, subtitles placed clear of every control", async ({ browser }) => {
+  // The largest text, and a cue of two lines: the hardest case for a phone.
   const c = new Client(`ws://127.0.0.1:${JOURNEY_PORT}/ws`);
-  await c.req("setPrefs", { patch: { subtitleLanguages: ["eng"] } }).finally(() => c.close());
-  for (const size of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
-    const { context, page: p } = await page(browser, size);
-    await p.goto("/play/movie/mqjm/mqjm?form=phone");
-    await expect(p.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
-    await startIfPaused(p);
-    // A line on screen (the English file's first, from 1 s to 30 s).
-    await p.evaluate(() => {
-      const v = document.querySelector("video");
-      if (v) v.currentTime = 2;
-    });
-    await expect.poll(() => p.evaluate(() => document.querySelector("video")?.textTracks[0]?.activeCues?.length ?? 0), { timeout: 30_000 }).toBeGreaterThan(0);
-    // The controls up, by a tap on the picture.
-    await p.mouse.click(size.width / 2, size.height / 3);
-    await expect(p.locator(".player-scr")).not.toHaveClass(/idle/);
-    await p.waitForTimeout(400);
-    const box = (sel: string) => p.locator(sel).first().evaluate((el) => el.getBoundingClientRect().toJSON() as DOMRect);
-    const [transport, scrub, options] = [await box(".transport"), await box(".tl"), await box(".pacts")];
-    // The transport in the middle of the screen.
-    expect(Math.abs(transport.left + transport.width / 2 - size.width / 2)).toBeLessThan(3);
-    expect(Math.abs(transport.top + transport.height / 2 - size.height / 2)).toBeLessThan(3);
-    // At the foot: the scrubber, then the options row under it, above the safe area.
-    expect(transport.bottom).toBeLessThan(scrub.top);
-    expect(scrub.bottom).toBeLessThanOrEqual(options.top);
-    expect(options.bottom).toBeLessThanOrEqual(size.height - 8);
-    expect(size.height - options.bottom).toBeLessThan(40);
-    // The line and the picture it belongs to (the film is letterboxed in portrait).
-    const cue = () =>
-      p.evaluate(() => {
-        const v = document.querySelector("video") as HTMLVideoElement;
-        const c = v.textTracks[0]?.activeCues?.[0] as VTTCue | undefined;
-        const box = v.getBoundingClientRect();
-        const scale = Math.min(box.width / v.videoWidth, box.height / v.videoHeight);
-        const band = (box.height - v.videoHeight * scale) / 2;
-        const foot = c && !c.snapToLines ? box.top + ((c.line as number) / 100) * box.height : c ? box.bottom : null;
-        return c ? { snap: c.snapToLines, line: c.line, align: c.lineAlign, foot, pictureTop: box.top + band, pictureBottom: box.bottom - band } : null;
+  await c.req("setPrefs", { patch: { subtitleLanguages: ["eng"], subtitleSize: "extraLarge" } }).finally(() => c.close());
+  try {
+    for (const size of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
+      const { context, page: p } = await page(browser, size);
+      await p.goto("/play/movie/mqjm/mqjm?form=phone");
+      await expect(p.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
+      await startIfPaused(p);
+      // The line on screen (the English file's first, from 1 s to 30 s).
+      await p.evaluate(() => {
+        const v = document.querySelector("video");
+        if (v) v.currentTime = 2;
       });
-    const portrait = size.height > size.width;
-    if (portrait) {
-      // The picture ends above the controls: the line stays inside it, at its foot.
-      await expect.poll(async () => (await cue())?.snap).toBe(false);
-      const c = await cue();
-      expect(c?.foot ?? 0).toBeLessThanOrEqual(c?.pictureBottom ?? 0);
-      expect(c?.foot ?? 0).toBeGreaterThan((c?.pictureBottom ?? 0) - 40);
-      expect(c?.foot ?? 0).toBeLessThan(scrub.top);
-    } else {
-      // The controls cover the picture: the line ends just above them.
-      await expect.poll(async () => (await cue())?.snap).toBe(false);
-      const c = await cue();
-      expect(c?.align).toBe("end");
-      expect(c?.foot ?? 0).toBeLessThanOrEqual(scrub.top);
-      expect(c?.foot ?? 0).toBeGreaterThan(scrub.top - 40);
-      // The title beside Back on one line; the options between the bar's ends.
-      const [back, title, bar] = [await box(".pback"), await box(".ptitle h1"), await box(".scrub")];
-      expect(Math.abs(back.top + back.height / 2 - (title.top + title.height / 2))).toBeLessThan(4);
-      expect(title.left).toBeGreaterThan(back.right);
-      const first = await box(".pacts .pa:first-child");
-      const last = await box(".pacts .pa:last-child");
-      expect(first.left).toBeGreaterThanOrEqual(bar.left - 2);
-      expect(last.right).toBeLessThanOrEqual(bar.right + 2);
+      await expect.poll(() => p.evaluate(() => document.querySelector("video")?.textTracks[0]?.activeCues?.length ?? 0), { timeout: 30_000 }).toBeGreaterThan(0);
+      // The controls up, by a tap on the picture.
+      await p.mouse.click(size.width / 2, size.height / 3);
+      await expect(p.locator(".player-scr")).not.toHaveClass(/idle/);
+      await p.waitForTimeout(400);
+      const box = (sel: string) => p.locator(sel).first().evaluate((el) => el.getBoundingClientRect().toJSON() as DOMRect);
+      const [transport, scrub, options] = [await box(".transport"), await box(".tl"), await box(".pacts")];
+      // The transport in the middle of the screen.
+      expect(Math.abs(transport.left + transport.width / 2 - size.width / 2)).toBeLessThan(3);
+      expect(Math.abs(transport.top + transport.height / 2 - size.height / 2)).toBeLessThan(3);
+      // At the foot: the scrubber, then the options row under it, above the safe area.
+      expect(transport.bottom).toBeLessThan(scrub.top);
+      expect(scrub.bottom).toBeLessThanOrEqual(options.top);
+      expect(options.bottom).toBeLessThanOrEqual(size.height - 8);
+      expect(size.height - options.bottom).toBeLessThan(40);
+      // A phone draws its lines itself (the track runs hidden): their box,
+      // their size, and the picture they belong to.
+      expect(await p.evaluate(() => document.querySelector("video")?.textTracks[0]?.mode)).toBe("hidden");
+      const cue = () =>
+        p.evaluate(() => {
+          const el = document.querySelector<HTMLElement>(".cues");
+          const v = document.querySelector("video") as HTMLVideoElement;
+          if (!el) return null;
+          const r = el.getBoundingClientRect();
+          const box = v.getBoundingClientRect();
+          const scale = Math.min(box.width / v.videoWidth, box.height / v.videoHeight);
+          const band = (box.height - v.videoHeight * scale) / 2;
+          const span = el.querySelector("span") as HTMLElement;
+          return { top: r.top, bottom: r.bottom, lines: el.querySelectorAll("span").length, font: parseFloat(getComputedStyle(span).fontSize), pictureBottom: box.bottom - band, foot: box.bottom };
+        });
+      const clear = (c: { top: number; bottom: number } | null, b: DOMRect) => !!c && (c.bottom <= b.top || c.top >= b.bottom);
+      const portrait = size.height > size.width;
+      if (portrait) {
+        // The band under the picture holds the two lines: drawn there at full
+        // size, 8 to 16 px under the picture, clear of the scrubber.
+        await expect.poll(async () => ((await cue())?.top ?? 0) - ((await cue())?.pictureBottom ?? 0)).toBeGreaterThanOrEqual(8);
+        const c = await cue();
+        expect(c?.lines).toBe(2);
+        expect((c?.top ?? 0) - (c?.pictureBottom ?? 0)).toBeLessThanOrEqual(16);
+        expect(c?.font).toBe(24);
+        expect(c?.bottom ?? Infinity).toBeLessThanOrEqual(scrub.top);
+        expect(clear(c, transport)).toBe(true);
+      } else {
+        // The controls cover the picture: the foot 8 px over the scrubber, and
+        // two large lines that would meet the transport drawn at 85%.
+        await expect.poll(async () => (await cue())?.font).toBeCloseTo(20.4, 1);
+        const track = await box(".scrub");
+        await expect.poll(async () => track.top - ((await cue())?.bottom ?? 0)).toBeGreaterThanOrEqual(6);
+        const c = await cue();
+        expect(track.top - (c?.bottom ?? 0)).toBeLessThanOrEqual(14);
+        expect(clear(c, transport)).toBe(true);
+        // The title beside Back on one line; the options between the bar's ends.
+        const [back, title, bar] = [await box(".pback"), await box(".ptitle h1"), await box(".scrub")];
+        expect(Math.abs(back.top + back.height / 2 - (title.top + title.height / 2))).toBeLessThan(4);
+        expect(title.left).toBeGreaterThan(back.right);
+        const first = await box(".pacts .pa:first-child");
+        const last = await box(".pacts .pa:last-child");
+        expect(first.left).toBeGreaterThanOrEqual(bar.left - 2);
+        expect(last.right).toBeLessThanOrEqual(bar.right + 2);
+      }
+      await p.screenshot({ path: `${SHOTS}/phone-player-${size.width}x${size.height}.png` });
+      // Controls hidden: portrait keeps the lines in the band; landscape takes
+      // them back to the foot, full size.
+      await expect(p.locator(".player-scr")).toHaveClass(/idle/, { timeout: 10_000 });
+      if (portrait) {
+        const c = await cue();
+        expect((c?.top ?? 0) - (c?.pictureBottom ?? 0)).toBeGreaterThanOrEqual(8);
+        expect((c?.top ?? 0) - (c?.pictureBottom ?? 0)).toBeLessThanOrEqual(16);
+      } else {
+        await expect.poll(async () => (await cue())?.font).toBe(24);
+        const c = await cue();
+        expect((c?.foot ?? 0) - (c?.bottom ?? 0)).toBeLessThanOrEqual(30);
+      }
+      await context.close();
     }
-    await p.screenshot({ path: `${SHOTS}/phone-player-${size.width}x${size.height}.png` });
-    // Controls hidden: the line at the picture's own foot (in portrait inside
-    // the picture, in landscape the screen's foot, where the picture ends).
-    await expect(p.locator(".player-scr")).toHaveClass(/idle/, { timeout: 10_000 });
-    if (portrait) {
-      await expect.poll(async () => (await cue())?.snap).toBe(false);
-      const c = await cue();
-      expect(c?.foot ?? 0).toBeLessThanOrEqual(c?.pictureBottom ?? 0);
-      expect(c?.foot ?? 0).toBeGreaterThan((c?.pictureBottom ?? 0) - 40);
-    } else {
-      await expect.poll(async () => (await cue())?.line).toBe("auto");
-      expect((await cue())?.snap).toBe(true);
-    }
-    await context.close();
+  } finally {
+    const r = new Client(`ws://127.0.0.1:${JOURNEY_PORT}/ws`);
+    await r.req("setPrefs", { patch: { subtitleSize: "medium" } }).finally(() => r.close());
   }
 });
