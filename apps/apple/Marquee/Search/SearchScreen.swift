@@ -56,6 +56,14 @@ struct SearchScreen: View {
         .onDisappear { if !query.trimmingCharacters(in: .whitespaces).isEmpty { search.command(["type": "remember"]) } }
         // The keyboard opens on the first visit, not over the results on the way back from a title.
         .onAppear { if query.isEmpty { fieldFocused = true } }
+        #if DEBUG
+        .task {
+            // After the view opened and the launch's addons installed.
+            guard query.isEmpty, let typed = DebugHooks.search else { return }
+            try? await Task.sleep(for: .seconds(8))
+            query = typed
+        }
+        #endif
         // Cmd-F on the Mac: the cursor goes in the field every time.
         .onChange(of: searchRequest) { fieldFocused = true }
         // Out of sight the field lets go, so typing elsewhere never lands in it;

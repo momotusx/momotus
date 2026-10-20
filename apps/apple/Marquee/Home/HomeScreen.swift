@@ -67,6 +67,11 @@ struct HomeScreen: View {
         .onGeometryChange(for: CGSize.self) { $0.size } action: { (width, height) = ($0.width, $0.height) }
         #if DEBUG
         .onAppear { if DebugHooks.takeOnboarding() { onboarding = true } }
+        .task {
+            guard DebugHooks.retryRowsAfter > 0 else { return }
+            try? await Task.sleep(for: .seconds(DebugHooks.retryRowsAfter))
+            for row in model.rows { if case .failed = row.state { model.retry(row) } }
+        }
         #endif
         .navigationDestination(isPresented: $showProfiles) { ProfilePicker(mode: .push, core: core) }
         .navigationDestination(item: $playing) { route in

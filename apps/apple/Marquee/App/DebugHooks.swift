@@ -18,6 +18,14 @@ enum DebugHooks {
     /// `-MQMute YES`: every player starts muted, so a walk never makes a sound.
     static var mute: Bool { UserDefaults.standard.bool(forKey: "MQMute") }
 
+    /// `-MQSearch Sintel` types that query into Search when it first shows: a
+    /// walk whose window is out of reach of accessibility (another Space).
+    static var search: String? { UserDefaults.standard.string(forKey: "MQSearch") }
+
+    /// `-MQRetryRowsAfter 20`: that many seconds after Home opens, each failed
+    /// row takes its own Try again once, as a press would.
+    static var retryRowsAfter: Int { UserDefaults.standard.integer(forKey: "MQRetryRowsAfter") }
+
     /// `-MQAutoPlay YES` presses Play on the title page once a version is picked.
     static var autoPlay: Bool { UserDefaults.standard.bool(forKey: "MQAutoPlay") }
 
