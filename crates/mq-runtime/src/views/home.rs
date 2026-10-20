@@ -327,6 +327,15 @@ pub struct HomeCatalog {
 }
 
 impl Core {
+    /// "Remove from Continue Watching": the title leaves Continue Watching
+    /// and Next Up on every synced device until it is played again (journey
+    /// reviews 2026-10-20, web P2-10, Apple P2-3, Android P2-1).
+    pub fn remove_from_continue(&self, item_id: &str) -> Result<(), CoreError> {
+        self.library()
+            .dismiss(self.profile(), item_id, self.clock())?;
+        Ok(())
+    }
+
     /// Hides or shows one Home row. Only `homeRows.hidden` is written, and
     /// ids of catalogs that are gone stay in it.
     pub fn set_home_row_hidden(

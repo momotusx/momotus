@@ -165,6 +165,53 @@ async fn continue_watching_appears_live_at_the_top() {
     assert!((tile.progress.unwrap() - 0.2).abs() < 1e-4);
 }
 
+/// Journey reviews 2026-10-20 (web P2-10, Apple P2-3, Android P2-1):
+/// "Remove from Continue Watching" takes the tile off live; playing the
+/// title again brings it back.
+#[tokio::test]
+async fn a_title_removed_from_continue_watching_leaves_the_row_live() {
+    let core = Core::temporary("p").unwrap();
+    let view = HomeView::open(&core);
+    let (snapshot, mut updates) = view.subscribe();
+    let mut mirror = snapshot.rows.clone();
+    let play = |position_ms| {
+        let progress = ProgressRow {
+            video_id: "tt1",
+            item_id: "tt1",
+            position_ms,
+            duration_ms: 3_000_000,
+            updated_ms: position_ms,
+        };
+        core.library()
+            .set_progress("p", progress, &core.hlc())
+            .unwrap();
+    };
+    play(600_000);
+    continue_shown(&mut mirror, &mut updates, true).await;
+    core.remove_from_continue("tt1").unwrap();
+    continue_shown(&mut mirror, &mut updates, false).await;
+    play(700_000);
+    continue_shown(&mut mirror, &mut updates, true).await;
+}
+
+/// Waits up to 3 s for the Continue Watching row to be there or not.
+async fn continue_shown(
+    mirror: &mut Vec<HomeRow>,
+    updates: &mut (impl futures_util::Stream<Item = Vec<HomeUpdate>> + Unpin),
+    want: bool,
+) {
+    let shown = |rows: &[HomeRow]| rows.iter().any(|r| r.row_id == CONTINUE_ROW_ID);
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+    while shown(mirror) != want && tokio::time::Instant::now() < deadline {
+        if let Ok(Some(batch)) =
+            tokio::time::timeout(Duration::from_millis(200), updates.next()).await
+        {
+            apply(mirror, batch);
+        }
+    }
+    assert_eq!(shown(mirror), want);
+}
+
 #[tokio::test]
 #[ignore = "network"]
 async fn real_cinemeta_home() {

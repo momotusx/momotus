@@ -223,11 +223,18 @@ const MANIFEST_DEADLINE: Duration = Duration::from_secs(10);
 struct Shared {
     http: HttpClient,
     playbacks: Mutex<HashMap<String, Arc<Playback>>>,
-    addr: SocketAddr,
+    /// Moves only when `revive` cannot get the old port back.
+    addr: Mutex<SocketAddr>,
     logos: std::sync::OnceLock<&'static [Logo]>,
     /// One per server: as on every other route, a page cannot probe for
     /// the server without it.
     logo_token: String,
+}
+
+impl Shared {
+    fn addr(&self) -> SocketAddr {
+        *lock(&self.addr)
+    }
 }
 
 /// A bundled image the apps show, such as a default addon's logo.
@@ -241,6 +248,10 @@ pub struct StreamServer {
     shared: Arc<Shared>,
     /// Stops accepting and closes every connection, keep-alive ones too.
     shutdown: CancellationToken,
+    app: Router,
+    /// The accept loop on the current listener; none once it was closed
+    /// and could not be bound again.
+    accepting: tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 impl StreamServer {
@@ -250,7 +261,7 @@ impl StreamServer {
         let shared = Arc::new(Shared {
             http,
             playbacks: Mutex::default(),
-            addr: listener.local_addr()?,
+            addr: Mutex::new(listener.local_addr()?),
             logos: std::sync::OnceLock::new(),
             logo_token: new_token(),
         });
@@ -270,17 +281,45 @@ impl StreamServer {
             ))
             .with_state(shared.clone());
         let shutdown = CancellationToken::new();
-        let stop = shutdown.clone().cancelled_owned();
-        let listener = Loopback {
-            tcp: listener,
-            shutdown: shutdown.clone(),
-        };
-        tokio::spawn(async move {
-            let _ = axum::serve(listener, app)
-                .with_graceful_shutdown(stop)
+        let accepting = accept(app.clone(), listener, shutdown.clone());
+        Ok(Self {
+            shared,
+            shutdown,
+            app,
+            accepting: tokio::sync::Mutex::new(Some(accepting)),
+        })
+    }
+
+    /// Binds again when the system took the listener: iOS and tvOS reclaim
+    /// the listening sockets of a suspended app (Apple TN2277;
+    /// plans/architecture.md 4.3). The same port first, so the URLs handed
+    /// out keep working; another one when it is taken. True when the
+    /// address moved: a player must open its URL again.
+    pub async fn revive(&self) -> std::io::Result<bool> {
+        let mut accepting = self.accepting.lock().await;
+        let addr = self.shared.addr();
+        let reached =
+            tokio::time::timeout(Duration::from_secs(1), tokio::net::TcpStream::connect(addr))
                 .await;
-        });
-        Ok(Self { shared, shutdown })
+        if matches!(reached, Ok(Ok(_))) {
+            return Ok(false);
+        }
+        close(&mut accepting).await;
+        let tcp = match tokio::net::TcpListener::bind(addr).await {
+            Ok(tcp) => tcp,
+            Err(_) => tokio::net::TcpListener::bind(("127.0.0.1", 0)).await?,
+        };
+        let now = tcp.local_addr()?;
+        *lock(&self.shared.addr) = now;
+        *accepting = Some(accept(self.app.clone(), tcp, self.shutdown.clone()));
+        tracing::info!(moved = now != addr, "stream server bound again");
+        Ok(now != addr)
+    }
+
+    /// Tests: the listener goes, as when the system takes it.
+    #[doc(hidden)]
+    pub async fn close_listener(&self) {
+        close(&mut *self.accepting.lock().await).await;
     }
 
     /// A playback that serves at once, with no check of its origin: for the
@@ -454,7 +493,7 @@ impl StreamServer {
             });
         }
         let url = Url::parse(&listed).map_err(|_| UNREADABLE_PLAYLIST.to_owned())?;
-        let core = format!("http://{}/", self.shared.addr);
+        let core = format!("http://{}/", self.shared.addr());
         let hls = Arc::new(Hls {
             url,
             kind,
@@ -517,7 +556,7 @@ impl StreamServer {
         format: Option<Format>,
     ) -> Lease {
         lock(&self.shared.playbacks).insert(token.clone(), playback.clone());
-        let url = format!("http://{}/s/{token}/{name}", self.shared.addr);
+        let url = format!("http://{}/s/{token}/{name}", self.shared.addr());
         Lease {
             url,
             format,
@@ -541,7 +580,7 @@ impl StreamServer {
     pub fn logo_url(&self, key: &str) -> Option<String> {
         let known = self.shared.logos.get()?.iter().any(|l| l.key == key);
         known.then(|| {
-            let port = self.shared.addr.port();
+            let port = self.shared.addr().port();
             format!(
                 "http://127.0.0.1:{port}/logo/{}/{key}",
                 self.shared.logo_token
@@ -550,7 +589,7 @@ impl StreamServer {
     }
 
     pub fn addr(&self) -> SocketAddr {
-        self.shared.addr
+        self.shared.addr()
     }
 }
 
@@ -569,6 +608,31 @@ impl Drop for StreamServer {
 /// The server's listener. Its connections fail every read and write once
 /// the server is dropped, so a player that stopped reading cannot keep a
 /// connection task, or graceful shutdown, waiting.
+/// Ends the accept loop; its listener is closed once this returns.
+async fn close(accepting: &mut Option<tokio::task::JoinHandle<()>>) {
+    if let Some(task) = accepting.take() {
+        task.abort();
+        let _ = task.await;
+    }
+}
+
+/// Serves `app` on `tcp` until the server stops or `revive` replaces the
+/// listener (dropping this task closes only the listener: connections run
+/// on their own tasks).
+fn accept(
+    app: Router,
+    tcp: tokio::net::TcpListener,
+    shutdown: CancellationToken,
+) -> tokio::task::JoinHandle<()> {
+    let stop = shutdown.clone().cancelled_owned();
+    let listener = Loopback { tcp, shutdown };
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, app)
+            .with_graceful_shutdown(stop)
+            .await;
+    })
+}
+
 struct Loopback {
     tcp: tokio::net::TcpListener,
     shutdown: CancellationToken,
@@ -683,7 +747,7 @@ impl Lease {
     pub fn subtitles(&self) -> SubtitleSlot {
         SubtitleSlot {
             playback: Arc::downgrade(&self.playback),
-            base: format!("http://{}/sub/{}", self.shared.addr, self.token),
+            base: format!("http://{}/sub/{}", self.shared.addr(), self.token),
         }
     }
 
@@ -907,7 +971,7 @@ async fn only_loopback(
     request: Request<Body>,
     next: Next,
 ) -> Response {
-    let port = shared.addr.port();
+    let port = shared.addr().port();
     let ours = |h: &str| h == format!("127.0.0.1:{port}") || h == format!("localhost:{port}");
     // Exactly one: with two, a front end and this check could read
     // different ones.
@@ -967,7 +1031,7 @@ async fn serve_subtitle(
     };
     let track = format!(
         "http://{}/sub/{token}/{id}/{}.vtt",
-        shared.addr,
+        shared.addr(),
         sanitize(&subtitle.lang)
     );
     let read =

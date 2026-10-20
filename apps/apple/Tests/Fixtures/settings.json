@@ -24,5 +24,6 @@
   "quality": "best",
   "sizeLimitBytes": 5368709120
  },
- "subtitleLanguages": []
+ "subtitleLanguages": [],
+ "subtitleSize": "medium"
 }

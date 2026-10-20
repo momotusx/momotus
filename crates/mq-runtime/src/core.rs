@@ -361,6 +361,23 @@ impl Core {
         self.addons().forget_memory();
     }
 
+    /// Back in the foreground: a stream server whose listener the system
+    /// took while the app was suspended binds again (journey review
+    /// 2026-10-20, Apple P1-1), so later sources and Try again play. True
+    /// when its address moved: URLs handed out before are dead.
+    pub async fn on_foreground(&self) -> bool {
+        let Some(server) = self.inner.server.get() else {
+            return false;
+        };
+        match server.revive().await {
+            Ok(moved) => moved,
+            Err(e) => {
+                tracing::warn!("stream server not bound again: {e}");
+                false
+            }
+        }
+    }
+
     /// The device's network changed: connections pooled on the old one are
     /// dropped (each would hold a request until its timeout), and so are the
     /// trackers the engine kept addresses and ids for. `network` is its type,

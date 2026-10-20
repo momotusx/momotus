@@ -146,6 +146,44 @@ fn rewatch_shows_in_continue_watching() {
     assert_eq!(done(&lib), ["tt1:1:1"]);
 }
 
+/// Journey reviews 2026-10-20 (web P2-10, Apple P2-3, Android P2-1): a
+/// title taken off Continue Watching or Next Up stays off until it is
+/// played again; an older progress register arriving late does not bring
+/// it back.
+#[test]
+fn a_dismissed_title_stays_off_until_it_is_played_again() {
+    let lib = Library::temporary().unwrap();
+    lib.upsert_item("p", &item("tt1", "Show One"), true, "0001")
+        .unwrap();
+    lib.upsert_item("p", &item("tt2", "Show Two"), true, "0001")
+        .unwrap();
+    lib.set_progress("p", progress("tt1:1:1", "tt1", 300, 1000, 10), "0002")
+        .unwrap();
+    // Finished: a Next Up candidate.
+    lib.set_progress("p", progress("tt2:1:1", "tt2", 990, 1000, 20), "0003")
+        .unwrap();
+    let rows = |lib: &Library| -> (Vec<String>, Vec<String>) {
+        let ids =
+            |rows: Vec<mq_library::ContinueItem>| rows.into_iter().map(|r| r.item_id).collect();
+        (
+            ids(lib.continue_watching("p", 10).unwrap()),
+            ids(lib.finished_series("p", 10).unwrap()),
+        )
+    };
+    assert_eq!(rows(&lib), (vec!["tt1".into()], vec!["tt2".into()]));
+    lib.dismiss("p", "tt1", "0004").unwrap();
+    lib.dismiss("p", "tt2", "0005").unwrap();
+    assert_eq!(rows(&lib), (vec![], vec![]));
+    lib.set_progress("p", progress("tt1:1:2", "tt1", 100, 1000, 50), "0003a")
+        .unwrap();
+    assert_eq!(rows(&lib), (vec![], vec![]), "an older register stays off");
+    lib.set_progress("p", progress("tt1:1:2", "tt1", 200, 1000, 60), "0006")
+        .unwrap();
+    lib.set_progress("p", progress("tt2:1:2", "tt2", 100, 1000, 70), "0007")
+        .unwrap();
+    assert_eq!(rows(&lib), (vec!["tt2".into(), "tt1".into()], vec![]));
+}
+
 #[tokio::test]
 async fn one_notification_per_transaction_with_touched_tables() {
     let lib = Library::temporary().unwrap();

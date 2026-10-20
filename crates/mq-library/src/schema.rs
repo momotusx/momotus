@@ -12,6 +12,7 @@ pub(crate) fn migrations() -> Migrations<'static> {
         M::up(V8),
         M::up(V9),
         M::up(V10),
+        M::up(V11),
     ])
 }
 
@@ -307,6 +308,19 @@ END;
 CREATE TRIGGER access_gen_allowed_delete AFTER DELETE ON allowed BEGIN
     UPDATE device_state SET value = CAST(value AS INTEGER) + 1 WHERE key = 'access_generation';
 END;
+"#;
+
+/// Titles taken off Continue Watching and Next Up (journey reviews
+/// 2026-10-20): one register per title (coll 11), its hlc the moment of the
+/// removal. A progress register of the title newer than it shows the title
+/// again.
+const V11: &str = r#"
+CREATE TABLE dismissed (
+    profile_id  TEXT NOT NULL,
+    item_id     TEXT NOT NULL,
+    hlc         TEXT NOT NULL,
+    PRIMARY KEY (profile_id, item_id)
+);
 "#;
 
 #[cfg(test)]

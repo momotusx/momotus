@@ -27,6 +27,9 @@ pub struct Prefs {
     /// Subtitle languages as addons name them (usually ISO 639-2, "eng"),
     /// most wanted first. Matching tracks are listed first.
     pub subtitle_languages: Vec<String>,
+    /// How big subtitles show, on every device of the profile (journey
+    /// reviews 2026-10-20). The delay stays per play, in the apps.
+    pub subtitle_size: SubtitleSize,
     /// Start the next episode when one ends.
     pub autoplay_next: bool,
     /// Which addon catalogs Home shows, and in what order.
@@ -39,6 +42,22 @@ pub struct Prefs {
     /// Raised by "Forget what was learned"; a counter stamped with an older
     /// epoch reads as zero.
     pub learned_epoch: u32,
+}
+
+/// Subtitle text size, each app mapping it to its player's scale.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub enum SubtitleSize {
+    Small,
+    #[default]
+    Medium,
+    Large,
+    ExtraLarge,
 }
 
 /// Home rows the user hid or moved, by row id (`<addonId>:<type>:<catalogId>`).
@@ -62,6 +81,7 @@ impl Default for Prefs {
         Self {
             streams: StreamPrefs::default(),
             subtitle_languages: Vec::new(),
+            subtitle_size: SubtitleSize::default(),
             autoplay_next: true,
             home_rows: HomeRows::default(),
             defaults_seen: 0,

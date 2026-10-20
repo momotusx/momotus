@@ -6,8 +6,15 @@ import type { TitleState } from "./TitleState";
 export type TitleHeader = { state: TitleState, details: TitleDetails | null, inLibrary: boolean, seasons: Array<number>, selectedSeason: number | null, 
 /**
  * Episode (or the movie itself) the primary button resumes or starts.
+ * None while the next episode is not out yet (see `next_airs`).
  */
 playTarget: PlayTarget | null, 
+/**
+ * The day the next episode comes out ("YYYY-MM-DD", as
+ * `Episode::released`) when it is not out yet: there is no play target,
+ * and the page says "Next episode airs <date>".
+ */
+nextAirs: string | null, 
 /**
  * A movie the user watched (episodes carry their own flag); toggled
  * with `setWatched` on the movie's id.

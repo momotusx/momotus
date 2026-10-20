@@ -4,6 +4,7 @@
 
 use crate::Core;
 use crate::live::{FRAME, ListDiff, coalesce};
+use crate::views::playback::{aired, following};
 use eyeball::SharedObservable;
 use eyeball_im::ObservableVector;
 use futures_util::{Stream, StreamExt};
@@ -13,7 +14,7 @@ use serde::Serialize;
 use std::collections::HashSet;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
-use stremio_core::types::resource::StreamSource;
+use stremio_core::types::resource::{SeriesInfo, StreamSource, Video};
 use tokio::task::JoinSet;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -84,7 +85,12 @@ pub struct TitleHeader {
     pub seasons: Vec<u32>,
     pub selected_season: Option<u32>,
     /// Episode (or the movie itself) the primary button resumes or starts.
+    /// None while the next episode is not out yet (see `next_airs`).
     pub play_target: Option<PlayTarget>,
+    /// The day the next episode comes out ("YYYY-MM-DD", as
+    /// `Episode::released`) when it is not out yet: there is no play target,
+    /// and the page says "Next episode airs <date>".
+    pub next_airs: Option<String>,
     /// A movie the user watched (episodes carry their own flag); toggled
     /// with `setWatched` on the movie's id.
     pub watched: bool,
@@ -186,6 +192,7 @@ impl TitleView {
             seasons: Vec::new(),
             selected_season: None,
             play_target: None,
+            next_airs: None,
             watched: false,
         });
         let mut view = Self {
@@ -431,7 +438,8 @@ impl Ctx {
             })
             .collect();
 
-        let play_target = play_target(&meta, &self.kind, resume, &watched);
+        let now = mq_library::hlc::now_ms() as i64;
+        let (play_target, next_airs) = play_target(&meta, &self.kind, resume, &watched, now);
         let mut details = details(&meta, source);
         if self.kids {
             // A trailer is a YouTube hand-off: it leaves the app.
@@ -444,6 +452,7 @@ impl Ctx {
             seasons,
             selected_season: season,
             play_target,
+            next_airs,
             watched: self.kind == "movie" && watched.contains(&self.id),
         };
         if self.header.get() != header {
@@ -464,47 +473,104 @@ fn season_of(meta: &MetaItem, video_id: &str) -> Option<u32> {
         .and_then(|v| v.series_info.as_ref().map(|s| s.season))
 }
 
-/// Resume the most recent unfinished video; otherwise the first unwatched
-/// regular episode; for movies, the movie itself ("Play again" once watched).
+/// What the primary button plays, and the day the next episode comes out
+/// when it is not out yet. Resume the most recent unfinished video. A movie
+/// is the movie itself ("Play again" once watched). A series goes on from
+/// the episode after the one played last (Home's Next Up reads the same),
+/// else after the furthest one watched (marks from Trakt or by hand), else
+/// from its first episode; an episode not out yet is never the target, and
+/// a series watched to its last episode starts again from its first.
 fn play_target(
     meta: &MetaItem,
     kind: &str,
     resume: Option<(String, i64, i64)>,
     watched: &HashSet<String>,
-) -> Option<PlayTarget> {
-    if let Some((video_id, position, duration)) = resume
-        && position > 0
-        && (duration == 0 || (position as f64) < duration as f64 * mq_library::FINISHED_RATIO)
+    now_ms: i64,
+) -> (Option<PlayTarget>, Option<String>) {
+    let start = |video: &Video, label: String| PlayTarget {
+        video_id: video.id.clone(),
+        label,
+        resume_ms: None,
+        left_ms: None,
+    };
+    let finished = |position: i64, duration: i64| {
+        duration > 0 && position as f64 >= duration as f64 * mq_library::FINISHED_RATIO
+    };
+    if let Some((video_id, position, duration)) = &resume
+        && *position > 0
+        && !finished(*position, *duration)
     {
         let label =
-            episode_label(meta, &video_id).map_or("Resume".to_owned(), |e| format!("Resume {e}"));
-        return Some(PlayTarget {
-            video_id,
+            episode_label(meta, video_id).map_or("Resume".to_owned(), |e| format!("Resume {e}"));
+        let target = PlayTarget {
+            video_id: video_id.clone(),
             label,
-            resume_ms: Some(position),
-            left_ms: left(position, duration),
-        });
+            resume_ms: Some(*position),
+            left_ms: left(*position, *duration),
+        };
+        return (Some(target), None);
     }
     if kind == "movie" || meta.videos.is_empty() {
         let again = watched.contains(&meta.preview.id);
-        return Some(PlayTarget {
+        let target = PlayTarget {
             video_id: meta.preview.id.clone(),
             label: if again { "Play again" } else { "Play" }.into(),
             resume_ms: None,
             left_ms: None,
-        });
+        };
+        return (Some(target), None);
     }
-    let next = meta
+    let episodes = in_order(meta);
+    let Some(&(first, _)) = episodes.first() else {
+        return (None, None);
+    };
+    let play = |video: &Video| start(video, format!("Play {}", label_of(video)));
+    let known = |id: &str| episodes.iter().any(|(v, _)| v.id == id);
+    // The one played last, unless it was opened and left at once.
+    let played = resume.filter(|(id, position, duration)| {
+        known(id) && (watched.contains(id) || finished(*position, *duration))
+    });
+    let anchor = played.map(|(id, ..)| id).or_else(|| {
+        episodes
+            .iter()
+            .rev()
+            .find(|(v, _)| watched.contains(&v.id))
+            .map(|(v, _)| v.id.clone())
+    });
+    let next = match &anchor {
+        Some(id) => following(meta, id).map(|(v, _)| v),
+        None => Some(first),
+    };
+    match next {
+        Some(video) if aired(video, now_ms) => (Some(play(video)), None),
+        Some(video) => (None, video.released.map(|d| d.date_naive().to_string())),
+        None => {
+            let label = format!("Play again from {}", label_of(first));
+            (Some(start(first, label)), None)
+        }
+    }
+}
+
+/// The regular episodes in season and episode order; every episode for a
+/// series that has only specials.
+fn in_order(meta: &MetaItem) -> Vec<(&Video, &SeriesInfo)> {
+    let mut episodes: Vec<_> = meta
         .videos
         .iter()
-        .filter(|v| v.series_info.as_ref().is_some_and(|s| s.season > 0))
-        .find(|v| !watched.contains(&v.id))?;
-    Some(PlayTarget {
-        video_id: next.id.clone(),
-        label: episode_label(meta, &next.id).map_or("Play".to_owned(), |e| format!("Play {e}")),
-        resume_ms: None,
-        left_ms: None,
-    })
+        .filter_map(|v| Some((v, v.series_info.as_ref()?)))
+        .collect();
+    if episodes.iter().any(|(_, s)| s.season > 0) {
+        episodes.retain(|(_, s)| s.season > 0);
+    }
+    episodes.sort_by_key(|(_, s)| (s.season, s.episode));
+    episodes
+}
+
+fn label_of(video: &Video) -> String {
+    video
+        .series_info
+        .as_ref()
+        .map_or_else(String::new, |s| format!("S{}:E{}", s.season, s.episode))
 }
 
 /// The rest of a started file; `None` before it starts or without a duration.
@@ -558,5 +624,128 @@ fn details(meta: &MetaItem, source: &str) -> TitleDetails {
                 _ => None,
             })
             .collect(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// S1:E1 to E4 out, and E5 out only `later` (else no E5); a special.
+    fn show(e5: Option<&str>) -> MetaItem {
+        let ep = |s: u32, e: u32, released: &str| {
+            serde_json::json!({"id": format!("tt9:{s}:{e}"), "title": format!("E{e}"),
+                               "season": s, "episode": e, "released": released})
+        };
+        let mut videos = vec![
+            ep(1, 3, "2020-01-15T00:00:00Z"),
+            ep(0, 1, "2019-12-01T00:00:00Z"),
+            ep(1, 1, "2020-01-01T00:00:00Z"),
+            ep(1, 2, "2020-01-08T00:00:00Z"),
+            ep(1, 4, "2020-01-22T00:00:00Z"),
+        ];
+        videos.extend(e5.map(|d| ep(1, 5, d)));
+        serde_json::from_value(serde_json::json!(
+            {"id": "tt9", "type": "series", "name": "Show", "videos": videos}
+        ))
+        .unwrap()
+    }
+
+    const NOW: i64 = 1_700_000_000_000;
+    const LATER: &str = "2099-01-01T00:00:00Z";
+
+    fn watched(eps: &[u32]) -> HashSet<String> {
+        eps.iter().map(|e| format!("tt9:1:{e}")).collect()
+    }
+
+    fn played(e: u32, position: i64) -> Option<(String, i64, i64)> {
+        Some((format!("tt9:1:{e}"), position, 3000))
+    }
+
+    fn target(
+        meta: &MetaItem,
+        resume: Option<(String, i64, i64)>,
+        seen: &[u32],
+    ) -> (String, String) {
+        let (target, airs) = play_target(meta, "series", resume, &watched(seen), NOW);
+        assert_eq!(airs, None);
+        let t = target.expect("a target");
+        (t.video_id, t.label)
+    }
+
+    /// Journey reviews 2026-10-20 (web P2-1 B): the episode after the one
+    /// played last, as Next Up says, not the first unwatched.
+    #[test]
+    fn play_goes_on_after_the_episode_played_last() {
+        let meta = show(None);
+        assert_eq!(
+            target(&meta, played(3, 2900), &[1, 3]),
+            ("tt9:1:4".into(), "Play S1:E4".into())
+        );
+        // Marked watched after it was played: position 0.
+        assert_eq!(target(&meta, played(2, 0), &[1, 2]).1, "Play S1:E3");
+        // A rewatch goes on from where it is, not after the furthest mark.
+        assert_eq!(
+            target(&meta, played(2, 3000), &[1, 2, 3, 4]).1,
+            "Play S1:E3"
+        );
+        // Marks alone (Trakt, by hand): after the furthest one.
+        assert_eq!(target(&meta, None, &[1, 3]).1, "Play S1:E4");
+        assert_eq!(target(&meta, None, &[]).1, "Play S1:E1");
+        assert_eq!(target(&meta, played(2, 1000), &[1]).1, "Resume S1:E2");
+    }
+
+    /// Web P2-1 A: an episode not out yet is never the target; the page
+    /// says when it airs.
+    #[test]
+    fn an_episode_not_out_yet_is_no_target() {
+        let meta = show(Some(LATER));
+        let (target, airs) = play_target(&meta, "series", played(4, 3000), &watched(&[4]), NOW);
+        assert_eq!(target, None);
+        assert_eq!(airs.as_deref(), Some("2099-01-01"));
+        // Nothing out yet at all.
+        let (target, airs) = play_target(&meta, "series", None, &HashSet::new(), 0);
+        assert_eq!((target, airs.as_deref()), (None, Some("2020-01-01")));
+    }
+
+    /// Web P2-2, Apple P2-1: a series watched to its end plays again from
+    /// its first episode instead of offering nothing; so does one of
+    /// specials only.
+    #[test]
+    fn a_series_watched_to_the_end_plays_again_from_the_start() {
+        let meta = show(None);
+        assert_eq!(
+            target(&meta, None, &[1, 2, 3, 4]),
+            ("tt9:1:1".into(), "Play again from S1:E1".into())
+        );
+        assert_eq!(
+            target(&meta, played(4, 3000), &[4]).1,
+            "Play again from S1:E1"
+        );
+        let specials: MetaItem = serde_json::from_value(serde_json::json!({
+        "id": "tt8", "type": "series", "name": "Specials", "videos": [
+            {"id": "tt8:0:1", "title": "A", "season": 0, "episode": 1},
+            {"id": "tt8:0:2", "title": "B", "season": 0, "episode": 2}
+        ]}))
+        .unwrap();
+        let seen: HashSet<String> = ["tt8:0:1", "tt8:0:2"].map(String::from).into();
+        let (target, _) = play_target(&specials, "series", None, &seen, NOW);
+        assert_eq!(target.unwrap().label, "Play again from S0:E1");
+    }
+
+    /// Next Up stops at an episode not out yet: one after it with no date
+    /// is not out either.
+    #[test]
+    fn next_up_stops_at_an_episode_not_out_yet() {
+        let mut meta = show(Some(LATER));
+        meta.videos.push(
+            serde_json::from_value(serde_json::json!(
+                {"id": "tt9:1:6", "title": "E6", "season": 1, "episode": 6}
+            ))
+            .unwrap(),
+        );
+        assert_eq!(crate::views::playback::next_after(&meta, "tt9:1:4"), None);
+        let next = crate::views::playback::next_after(&meta, "tt9:1:3").unwrap();
+        assert_eq!(next.video_id, "tt9:1:4");
     }
 }

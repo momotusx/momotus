@@ -3220,3 +3220,26 @@ async fn file_origin(path: std::path::PathBuf) -> String {
     });
     format!("http://{addr}/movie.mp4")
 }
+
+/// Journey review 2026-10-20 (Apple P1-1): iOS and tvOS take back the
+/// listening socket of a suspended app. `revive` binds again on the same
+/// port, so a URL handed out before plays again; a live listener is left
+/// alone.
+#[tokio::test]
+async fn a_listener_the_system_took_is_bound_again_on_its_port() {
+    let data = file(100);
+    let (server, lease, _seen, http) = serve(&data, Behaviour::default()).await;
+    assert_eq!(range(&http, &lease.url, 0, 10).await, data[..10]);
+    assert!(!server.revive().await.unwrap(), "a live listener stays");
+    let addr = server.addr();
+    server.close_listener().await;
+    assert!(
+        TcpStream::connect(addr).await.is_err(),
+        "the listener is gone"
+    );
+    assert!(!server.revive().await.unwrap(), "back on its port");
+    assert_eq!(server.addr(), addr);
+    // A new connection: a pooled one outlives its listener.
+    let fresh = HttpClient::new(ClientConfig::default()).unwrap();
+    assert_eq!(range(&fresh, &lease.url, 10, 10).await, data[10..20]);
+}

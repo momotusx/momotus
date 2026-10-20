@@ -1,3 +1,4 @@
+use mq_runtime::views::settings::SubtitleSize;
 use mq_runtime::{Core, SettingsView};
 use mq_streams::QualityPref;
 use serde_json::json;
@@ -34,6 +35,22 @@ async fn patches_merge_per_field_and_the_view_follows() {
     assert!(core.set_prefs(&json!({"nope": 1})).is_err());
     assert!(core.set_prefs(&json!({"autoplayNext": "yes"})).is_err());
     assert_eq!(core.prefs(), prefs, "rejected patches change nothing");
+}
+
+/// Journey reviews 2026-10-20: the subtitle size is a synced preference,
+/// medium until set; a size this version does not know is refused.
+#[tokio::test]
+async fn the_subtitle_size_is_a_preference() {
+    let core = Core::temporary("p").unwrap();
+    assert_eq!(core.prefs().subtitle_size, SubtitleSize::Medium);
+    let prefs = core
+        .set_prefs(&json!({"subtitleSize": "extraLarge"}))
+        .unwrap();
+    assert_eq!(prefs.subtitle_size, SubtitleSize::ExtraLarge);
+    assert_eq!(core.prefs().subtitle_size, SubtitleSize::ExtraLarge);
+    assert!(core.set_prefs(&json!({"subtitleSize": "huge"})).is_err());
+    let stored = core.library().settings("p").unwrap();
+    assert!(stored.contains(&("subtitleSize".into(), "\"extraLarge\"".into())));
 }
 
 #[tokio::test]

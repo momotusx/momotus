@@ -25,10 +25,12 @@ pub mod coll {
     pub const PROFILE_ACCESS: u8 = 9;
     /// One title of a kids profile's allowlist.
     pub const ALLOWED: u8 = 10;
+    /// A title taken off Continue Watching and Next Up.
+    pub const DISMISSED: u8 = 11;
 }
 
 /// Every collection this build reads and writes, in export order.
-const ALL: [u8; 11] = [
+const ALL: [u8; 12] = [
     coll::PROFILES,
     coll::ADDONS,
     coll::ITEMS,
@@ -40,6 +42,7 @@ const ALL: [u8; 11] = [
     coll::PROFILE_GONE,
     coll::PROFILE_ACCESS,
     coll::ALLOWED,
+    coll::DISMISSED,
 ];
 
 /// Separates the parts of a register key; ids never contain it.
@@ -92,7 +95,7 @@ pub(crate) fn refuse_gone(c: &Connection, profile: &str) -> rusqlite::Result<()>
 }
 
 /// Every row a profile has on this device, except its gone register.
-pub(crate) const PROFILE_TABLES: [&str; 16] = [
+pub(crate) const PROFILE_TABLES: [&str; 17] = [
     "profile_lock",
     "profile_access",
     "allowed",
@@ -102,6 +105,7 @@ pub(crate) const PROFILE_TABLES: [&str; 16] = [
     "progress",
     "watched",
     "stream_memory",
+    "dismissed",
     "settings",
     "search_history",
     "tracker_account",
@@ -289,6 +293,13 @@ struct MemoryValue {
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct DismissedValue {
+    profile: String,
+    item_id: String,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct SettingValue {
     profile: String,
     key: String,
@@ -365,7 +376,7 @@ impl Library {
                    UNION ALL SELECT MAX(hlc) FROM watched UNION ALL SELECT MAX(hlc) FROM settings
                    UNION ALL SELECT MAX(hlc) FROM stream_memory UNION ALL SELECT MAX(hlc) FROM profile_lock
                    UNION ALL SELECT MAX(hlc) FROM profile_gone UNION ALL SELECT MAX(hlc) FROM profile_access
-                   UNION ALL SELECT MAX(hlc) FROM allowed)",
+                   UNION ALL SELECT MAX(hlc) FROM allowed UNION ALL SELECT MAX(hlc) FROM dismissed)",
                 [],
                 |r| r.get(0),
             )
@@ -421,6 +432,7 @@ impl Library {
                    UNION ALL SELECT 8, profile_id FROM profile_gone
                    UNION ALL SELECT 9, profile_id FROM profile_access
                    UNION ALL SELECT 10, profile_id || char(31) || item_id FROM allowed
+                   UNION ALL SELECT 11, profile_id || char(31) || item_id FROM dismissed
                  ) AS r
                  WHERE NOT EXISTS (SELECT 1 FROM sync_outbox o WHERE o.coll = r.coll AND o.key = r.key)",
             )
@@ -657,6 +669,10 @@ fn export(c: &Connection, coll: u8, filter: Filter<'_>) -> rusqlite::Result<Vec<
             "SELECT profile_id, item_id, binge_group, stream_json, hlc FROM stream_memory",
             "profile_id || char(31) || item_id",
         ),
+        coll::DISMISSED => (
+            "SELECT profile_id, item_id, hlc FROM dismissed",
+            "profile_id || char(31) || item_id",
+        ),
         _ => return Ok(Vec::new()),
     };
     let (query, values): (String, Vec<Box<dyn rusqlite::ToSql>>) = match filter {
@@ -812,6 +828,16 @@ fn export(c: &Connection, coll: u8, filter: Filter<'_>) -> rusqlite::Result<Vec<
                 };
                 let k = key(&[&value.profile, &value.item_id]);
                 Ok(record(coll, k, &value, r.get(4)?))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?,
+        coll::DISMISSED => stmt
+            .query_map(args, |r| {
+                let value = DismissedValue {
+                    profile: r.get(0)?,
+                    item_id: r.get(1)?,
+                };
+                let k = key(&[&value.profile, &value.item_id]);
+                Ok(record(coll, k, &value, r.get(2)?))
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?,
         _ => stmt
@@ -987,6 +1013,11 @@ fn apply_one(c: &Connection, r: &SyncRecord) -> Result<usize, ApplyError> {
                 hlc,
             )?
         }
+        coll::DISMISSED => {
+            let v: DismissedValue = serde_json::from_value(value)?;
+            same_key(r, &[&v.profile, &v.item_id])?;
+            sql::set_dismissed(c, &v.profile, &v.item_id, hlc)?
+        }
         // A collection from a newer app version.
         _ => 0,
     })
@@ -1007,6 +1038,7 @@ fn tables(coll: u8) -> &'static [(&'static str, &'static str)] {
         coll::PROFILE_GONE => &[("profile_gone", "profile_id")],
         coll::PROFILE_ACCESS => &[("profile_access", "profile_id")],
         coll::ALLOWED => &[("allowed", "profile_id || char(31) || item_id")],
+        coll::DISMISSED => &[("dismissed", "profile_id || char(31) || item_id")],
         _ => &[],
     }
 }
@@ -1348,6 +1380,20 @@ pub(crate) mod sql {
                binge_group = excluded.binge_group, stream_json = excluded.stream_json, hlc = excluded.hlc
              WHERE excluded.hlc > stream_memory.hlc",
             params![profile, item_id, binge_group, stream_json, hlc],
+        )
+    }
+
+    pub fn set_dismissed(
+        c: &Connection,
+        profile: &str,
+        item_id: &str,
+        hlc: &str,
+    ) -> rusqlite::Result<usize> {
+        c.execute(
+            "INSERT INTO dismissed (profile_id, item_id, hlc) VALUES (?1, ?2, ?3)
+             ON CONFLICT(profile_id, item_id) DO UPDATE SET hlc = excluded.hlc
+             WHERE excluded.hlc > dismissed.hlc",
+            params![profile, item_id, hlc],
         )
     }
 

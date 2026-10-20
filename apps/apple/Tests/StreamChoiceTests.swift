@@ -20,7 +20,7 @@ private func learned(size: Int = 0, height: Int = 0, ready: Int = 0, hdr: Int = 
 private let streams = #"{"quality": "balanced", "maxHeight": null, "maxSizeBytes": null, "languages": [], "avoid": [], "sizeLimitBytes": 5368709120, "minSeeders": 50, "hdr": true, "preferReady": true, "learn": true}"#
 
 private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int = 0, streams: String = streams) throws -> Prefs {
-    let json = #"{"streams": \#(streams), "subtitleLanguages": [], "autoplayNext": true, "defaultsSeen": 1, "#
+    let json = #"{"streams": \#(streams), "subtitleLanguages": [], "subtitleSize": "medium", "autoplayNext": true, "defaultsSeen": 1, "#
         + #""learned": {"uhd": \#(uhd), "fhd": \#(fhd), "hd": \#(learned()), "sd": \#(learned())}, "learnedEpoch": \#(epoch)}"#
     return try JSONDecoder().decode(Prefs.self, from: Data(json.utf8))
 }

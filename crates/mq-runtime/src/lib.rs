@@ -6,7 +6,7 @@
 mod core;
 mod debrid;
 pub mod defaults;
-mod languages;
+pub mod languages;
 pub mod learn;
 pub mod live;
 mod profiles;

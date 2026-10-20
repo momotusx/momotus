@@ -2,6 +2,7 @@
 import type { HomeRows } from "./HomeRows";
 import type { LearnedByClass } from "./LearnedByClass";
 import type { StreamPrefs } from "./StreamPrefs";
+import type { SubtitleSize } from "./SubtitleSize";
 
 export type Prefs = { streams: StreamPrefs, 
 /**
@@ -9,6 +10,11 @@ export type Prefs = { streams: StreamPrefs,
  * most wanted first. Matching tracks are listed first.
  */
 subtitleLanguages: Array<string>, 
+/**
+ * How big subtitles show, on every device of the profile (journey
+ * reviews 2026-10-20). The delay stays per play, in the apps.
+ */
+subtitleSize: SubtitleSize, 
 /**
  * Start the next episode when one ends.
  */

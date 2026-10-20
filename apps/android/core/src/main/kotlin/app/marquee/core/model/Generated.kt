@@ -624,6 +624,13 @@ data class KindCount(
     val count: Int,
 )
 
+/** A language for the settings pickers (journey reviews 2026-10-20, web P2-11, Android P2-4): `code` is the tag the core reads it by, `name` its English name. */
+@Serializable
+data class LanguageChoice(
+    val code: String,
+    val name: String,
+)
+
 /** The counters of one screen class, each in -5..5. A counter stamped with an older epoch than the profile's reads as zero. */
 @Serializable
 data class Learned(
@@ -925,6 +932,8 @@ data class Prefs(
     val streams: StreamPrefs,
     /** Subtitle languages as addons name them (usually ISO 639-2, "eng"), most wanted first. Matching tracks are listed first. */
     val subtitleLanguages: List<String> = emptyList(),
+    /** How big subtitles show, on every device of the profile (journey reviews 2026-10-20). The delay stays per play, in the apps. */
+    val subtitleSize: SubtitleSize = SubtitleSize.Medium,
     /** Start the next episode when one ends. */
     val autoplayNext: Boolean,
     /** Which addon catalogs Home shows, and in what order. */
@@ -1266,6 +1275,23 @@ enum class SubtitleProblem(
     object Serializer : FallbackEnumSerializer<SubtitleProblem>("SubtitleProblem", SubtitleProblem.entries, SubtitleProblem::wire, Unknown)
 }
 
+/** Subtitle text size, each app mapping it to its player's scale. */
+@Serializable(with = SubtitleSize.Serializer::class)
+enum class SubtitleSize(
+    val wire: String,
+) {
+    Small("small"),
+    Medium("medium"),
+    Large("large"),
+    ExtraLarge("extraLarge"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<SubtitleSize>("SubtitleSize", SubtitleSize.entries, SubtitleSize::wire, Unknown)
+}
+
 @Serializable
 data class SubtitleTrack(
     val url: String,
@@ -1366,8 +1392,10 @@ data class TitleHeader(
     val inLibrary: Boolean,
     val seasons: List<Int> = emptyList(),
     val selectedSeason: Int? = null,
-    /** Episode (or the movie itself) the primary button resumes or starts. */
+    /** Episode (or the movie itself) the primary button resumes or starts. None while the next episode is not out yet (see `next_airs`). */
     val playTarget: PlayTarget? = null,
+    /** The day the next episode comes out ("YYYY-MM-DD", as `Episode::released`) when it is not out yet: there is no play target, and the page says "Next episode airs <date>". */
+    val nextAirs: String? = null,
     /** A movie the user watched (episodes carry their own flag); toggled with `setWatched` on the movie's id. */
     val watched: Boolean,
 )

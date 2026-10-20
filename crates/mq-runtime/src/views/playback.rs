@@ -2687,28 +2687,12 @@ async fn next_episode(core: &Core, target: &PlayTarget) -> Option<NextEpisode> {
 }
 
 /// The released episode after `video_id` in `meta`, shared with Home's
-/// Next Up.
+/// Next Up. An episode not out yet ends the search: the ones after it are
+/// not out either, whatever their dates say.
 pub(crate) fn next_after(meta: &mq_protocol::MetaItem, video_id: &str) -> Option<NextEpisode> {
-    let current = meta
-        .videos
-        .iter()
-        .find(|v| v.id == video_id)?
-        .series_info
-        .clone()?;
     let now = mq_library::hlc::now_ms() as i64;
-    let mut episodes: Vec<_> = meta
-        .videos
-        .iter()
-        .filter_map(|v| Some((v, v.series_info.clone()?)))
-        .filter(|(_, s)| s.season > 0 || current.season == 0)
-        .collect();
-    episodes.sort_by_key(|(_, s)| (s.season, s.episode));
-    episodes
-        .into_iter()
-        .find(|(v, s)| {
-            (s.season, s.episode) > (current.season, current.episode)
-                && v.released.is_none_or(|r| r.timestamp_millis() <= now)
-        })
+    following(meta, video_id)
+        .filter(|(v, _)| aired(v, now))
         .map(|(v, s)| NextEpisode {
             video_id: v.id.clone(),
             title: v.title.clone(),
@@ -2716,6 +2700,37 @@ pub(crate) fn next_after(meta: &mq_protocol::MetaItem, video_id: &str) -> Option
             episode: s.episode,
             thumbnail: v.thumbnail.clone(),
         })
+}
+
+/// The episode after `video_id` in season and episode order, out or not,
+/// skipping specials (season 0) unless a special is the current one. Shared
+/// by Next Up, the player's Up Next and the title page's Play.
+pub(crate) fn following<'a>(
+    meta: &'a mq_protocol::MetaItem,
+    video_id: &str,
+) -> Option<(
+    &'a stremio_core::types::resource::Video,
+    &'a stremio_core::types::resource::SeriesInfo,
+)> {
+    let current = meta
+        .videos
+        .iter()
+        .find(|v| v.id == video_id)?
+        .series_info
+        .clone()?;
+    meta.videos
+        .iter()
+        .filter_map(|v| Some((v, v.series_info.as_ref()?)))
+        .filter(|(_, s)| s.season > 0 || current.season == 0)
+        .filter(|(_, s)| (s.season, s.episode) > (current.season, current.episode))
+        .min_by_key(|(_, s)| (s.season, s.episode))
+}
+
+/// Out by `now_ms`: no date counts as out.
+pub(crate) fn aired(video: &stremio_core::types::resource::Video, now_ms: i64) -> bool {
+    video
+        .released
+        .is_none_or(|r| r.timestamp_millis() <= now_ms)
 }
 
 /// Keeps the stream that started playing for this title, so Versions for its

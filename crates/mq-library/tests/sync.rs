@@ -517,3 +517,33 @@ mod freshness {
         assert_ne!(lib.addon_list_hlc("p").unwrap().unwrap(), first);
     }
 }
+
+/// A removal from Continue Watching is a register like the others: it
+/// reaches the other device, and a play there brings the title back here.
+#[test]
+fn a_removal_from_continue_watching_syncs_both_ways() {
+    let a = Library::temporary().unwrap();
+    let b = Library::temporary().unwrap();
+    let p = |pos| ProgressRow {
+        video_id: "tt1",
+        item_id: "tt1",
+        position_ms: pos,
+        duration_ms: 100,
+        updated_ms: pos,
+    };
+    let shown = |lib: &Library| !lib.continue_watching("p", 10).unwrap().is_empty();
+    a.set_progress("p", p(10), &hlc(10, 1)).unwrap();
+    b.apply(&all(&a)).unwrap();
+    assert!(shown(&b));
+    a.dismiss("p", "tt1", &hlc(20, 1)).unwrap();
+    assert_eq!(b.apply(&all(&a)).unwrap(), 1);
+    assert_eq!(b.apply(&all(&a)).unwrap(), 0, "idempotent");
+    assert!(!shown(&b));
+    assert!(
+        all(&b).iter().any(|r| r.coll == coll::DISMISSED),
+        "exported for the next device"
+    );
+    b.set_progress("p", p(30), &hlc(30, 2)).unwrap();
+    a.apply(&all(&b)).unwrap();
+    assert!(shown(&a));
+}

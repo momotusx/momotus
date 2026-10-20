@@ -10,7 +10,8 @@
 //! "createSyncAccount" | "syncNow" | "approvePairing" | "createRecoveryKit" | "recover" |
 //! "syncDevices" | "lostPreview" | "removeDevice" | "reportLost" | "signOut" | "cancelPairing" |
 //! "forkPreview" | "useServerRoster" | "createProfile" | "updateProfile" | "deleteProfile" |
-//! "setPin" | "switchProfile" | "unlockProfile" | "lockSession",
+//! "setPin" | "switchProfile" | "unlockProfile" | "lockSession" | "removeFromContinue" |
+//! "languages",
 //! ...}`.
 //! Views: home, search, discover, library, title, versions, playback, addons, addonCatalog,
 //! import, settings, pairing, profiles, debrid, debridLogin.
@@ -270,6 +271,18 @@ enum Request {
     Ping {
         id: u64,
     },
+    /// "Remove from Continue Watching": the title leaves Continue Watching
+    /// and Next Up until it is played again. Replies `{}`.
+    RemoveFromContinue {
+        id: u64,
+        #[serde(rename = "itemId")]
+        item_id: String,
+    },
+    /// Every language the core knows, for the language pickers. Replies
+    /// `[{code, name}]`.
+    Languages {
+        id: u64,
+    },
     /// Every Home catalog in Home's order, hidden ones included, for the
     /// "Customize Home" screen.
     HomeCatalogs {
@@ -514,6 +527,9 @@ pub struct Session {
     out: Output,
     next_sub: u64,
     watcher: JoinHandle<()>,
+    /// When the app last went to the background (wall clock, ms: a
+    /// monotonic clock stops while the device sleeps).
+    background_ms: Option<u64>,
     /// Tests only: where `addonCatalog` reads its lists instead of Cinemeta.
     /// No request can set it, so an app cannot point the lists elsewhere.
     #[cfg(test)]
@@ -567,6 +583,7 @@ impl Session {
             out,
             next_sub: 1,
             watcher,
+            background_ms: None,
             #[cfg(test)]
             catalog_source: None,
         }
@@ -785,6 +802,13 @@ impl Session {
                 });
             }
             Request::Ping { id } => self.reply(json!(id), Ok(json!({}))),
+            Request::RemoveFromContinue { id, item_id } => {
+                let result = core.remove_from_continue(&item_id);
+                self.reply(json!(id), done(result));
+            }
+            Request::Languages { id } => {
+                self.reply(json!(id), Ok(json!(mq_runtime::languages::all())));
+            }
             Request::SetTrakt { id, record } => {
                 self.spawn_fenced(id, async move {
                     core.set_trakt(record).await.map_err(trakt_failure)?;
@@ -823,9 +847,32 @@ impl Session {
             }
             // Replies once running scrobbles are paused, or after 4 s.
             Request::Lifecycle { id, event, .. } if event == "background" => {
+                self.background_ms = Some(mq_library::hlc::now_ms());
                 self.spawn(id, async move {
                     let _ = tokio::time::timeout(TRAKT_FLUSH, core.trakt_background()).await;
                     Ok::<_, Failure>(json!({}))
+                });
+            }
+            // Locks a PIN profile that was away too long, then checks the
+            // stream server (it can take a second) and replies `{serverMoved}`.
+            Request::Lifecycle { id, event, .. } if event == "foreground" => {
+                refresh_addons(&core);
+                core.trakt_foreground();
+                let away = self
+                    .background_ms
+                    .take()
+                    .map(|at| mq_library::hlc::now_ms().saturating_sub(at));
+                if away.is_some_and(|ms| ms > AWAY_LOCK.as_millis() as u64) && core.has_pin() {
+                    let mut shared = lock(&self.shared);
+                    if !shared.locked {
+                        let closed = shared.transition(core.clone(), true);
+                        drop(shared);
+                        drop(closed);
+                    }
+                }
+                self.spawn(id, async move {
+                    let moved = core.on_foreground().await;
+                    Ok::<_, Failure>(json!({ "serverMoved": moved }))
                 });
             }
             Request::Lifecycle { id, event, network } => {
@@ -836,11 +883,6 @@ impl Session {
                     }
                     "networkChanged" => {
                         core.on_network_changed(network);
-                        Ok(json!({}))
-                    }
-                    "foreground" => {
-                        refresh_addons(&core);
-                        core.trakt_foreground();
                         Ok(json!({}))
                     }
                     other => Err(format!("unknown lifecycle event: {other}")),
@@ -1565,6 +1607,9 @@ async fn run<E: Into<Failure> + Send + 'static>(
 
 /// How long `lifecycle background` waits for scrobbles to be paused.
 const TRAKT_FLUSH: std::time::Duration = std::time::Duration::from_secs(4);
+/// A PIN profile away longer than this locks on its return (journey review
+/// 2026-10-20, Android P2-8).
+const AWAY_LOCK: std::time::Duration = std::time::Duration::from_secs(30 * 60);
 
 /// A Trakt op's failure: code `notConfigured` when this build has no Trakt
 /// app.
@@ -1884,6 +1929,33 @@ mod lifecycle {
             .handle_text(&json!({"id": 2, "op": "lifecycle", "event": "sleep"}).to_string())
             .await;
         assert_eq!(rx.recv().await.unwrap().json()["ok"], false);
+    }
+
+    /// Journey review 2026-10-20 (Android P2-8): a PIN profile back after
+    /// more than 30 minutes away is locked; a short trip away is not.
+    #[tokio::test]
+    async fn a_pin_profile_away_for_half_an_hour_locks() {
+        let core = Core::temporary(mq_library::OWNER).unwrap();
+        core.set_pin(mq_library::OWNER, Some("1357"), None)
+            .await
+            .unwrap();
+        let (tx, mut rx) = Output::channel();
+        let mut session = Session::new(core, tx);
+        let unlock = json!({"id": 1, "op": "unlockProfile", "pin": "1357"});
+        session.handle_text(&unlock.to_string()).await;
+        assert_eq!(rx.recv().await.unwrap().json()["ok"], true);
+        for (minutes, want) in [(5, false), (31, true)] {
+            let background = json!({"id": 2, "op": "lifecycle", "event": "background"});
+            session.handle_text(&background.to_string()).await;
+            assert_eq!(rx.recv().await.unwrap().json()["ok"], true);
+            let at = session.background_ms.unwrap();
+            session.background_ms = Some(at - minutes * 60_000);
+            let foreground = json!({"id": 3, "op": "lifecycle", "event": "foreground"});
+            session.handle_text(&foreground.to_string()).await;
+            let reply = rx.recv().await.unwrap().json();
+            assert_eq!(reply["result"]["serverMoved"], false, "{minutes}");
+            assert_eq!(lock(&session.shared).locked, want, "{minutes} minutes away");
+        }
     }
 }
 

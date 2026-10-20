@@ -1,6 +1,7 @@
 //! Subtitle languages as people read them (plans/m13-subtitle-languages.md):
 //! one tag and one English name for whatever code an addon sends.
 
+use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
@@ -217,6 +218,33 @@ pub(crate) fn language(code: &str) -> Language {
     }
 }
 
+/// A language for the settings pickers (journey reviews 2026-10-20, web
+/// P2-11, Android P2-4): `code` is the tag the core reads it by, `name`
+/// its English name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+pub struct LanguageChoice {
+    pub code: String,
+    pub name: String,
+}
+
+/// Every language the core knows (OpenSubtitles' list), by English name.
+pub fn all() -> Vec<LanguageChoice> {
+    let mut all: Vec<LanguageChoice> = OPENSUBTITLES
+        .iter()
+        .map(|&(_, tag, name)| LanguageChoice {
+            code: tag.to_owned(),
+            name: name.to_owned(),
+        })
+        .collect();
+    all.sort_by(|a, b| a.name.cmp(&b.name));
+    all
+}
+
 /// The language without its region or script: `pt` for `pt-BR`.
 pub(crate) fn primary(tag: &str) -> &str {
     tag.split('-').next().unwrap_or(tag)
@@ -269,6 +297,25 @@ mod tests {
         assert_eq!(read("fr-CA"), ("fr-CA".into(), "French (CA)".into()));
         assert_eq!(read("xx"), ("xx".into(), "xx".into()));
         assert_eq!(read(""), ("und".into(), "Unknown language".into()));
+    }
+
+    /// The pickers list every language the core reads, once each, by name,
+    /// and each code reads back as itself.
+    #[test]
+    fn the_pickers_list_every_known_language() {
+        let all = all();
+        assert_eq!(all.len(), OPENSUBTITLES.len());
+        assert!(all.windows(2).all(|w| w[0].name < w[1].name));
+        for choice in &all {
+            assert_eq!(
+                read(&choice.code),
+                (choice.code.clone(), choice.name.clone())
+            );
+        }
+        let names: Vec<&str> = all.iter().map(|l| l.name.as_str()).collect();
+        for name in ["Arabic", "Dutch", "Korean", "Polish", "Russian"] {
+            assert!(names.contains(&name), "{name}");
+        }
     }
 
     #[test]

@@ -230,6 +230,8 @@ struct Prefs: Decodable, Hashable, Sendable {
     let streams: StreamPrefs
     /// Subtitle languages as addons name them (usually ISO 639-2, "eng"), most wanted first.
     let subtitleLanguages: [String]
+    /// How big subtitles show, on every device of the profile; the delay stays per play.
+    let subtitleSize: SubtitleSize
     /// Start the next episode when one ends.
     let autoplayNext: Bool
     /// The default addons version this profile was last offered.
@@ -238,6 +240,17 @@ struct Prefs: Decodable, Hashable, Sendable {
     let learned: LearnedByClass
     /// Counters stamped below it read as zero: "Forget what was learned".
     let learnedEpoch: Int
+}
+
+enum SubtitleSize: String, Codable, Hashable, Sendable {
+    case small, medium, large, extraLarge
+}
+
+/// One entry of the `languages` op, for the language pickers: `code` goes into
+/// `subtitleLanguages` as is; audio (`streams.languages`) takes the part before "-".
+struct LanguageChoice: Decodable, Hashable, Sendable {
+    let code: String
+    let name: String
 }
 
 struct LearnedByClass: Decodable, Hashable, Sendable {

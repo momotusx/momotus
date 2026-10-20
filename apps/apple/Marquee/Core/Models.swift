@@ -194,8 +194,12 @@ struct TitleHeader: Decodable, Hashable, Sendable {
     let inLibrary: Bool
     let seasons: [Int]
     let selectedSeason: Int?
-    /// Episode (or the movie itself) the primary button resumes or starts.
+    /// Episode (or the movie itself) the primary button resumes or starts;
+    /// nil while the next episode is not out yet (see `nextAirs`).
     let playTarget: PlayTarget?
+    /// The day the next episode comes out ("YYYY-MM-DD", as `Episode.released`)
+    /// when it is not out yet: say "Next episode airs <date>" instead of Play.
+    let nextAirs: String?
     /// A movie the user watched (episodes carry their own flag); toggled with
     /// `setWatched` on the movie's id.
     let watched: Bool

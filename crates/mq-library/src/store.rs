@@ -84,7 +84,8 @@ impl Table {
             "profiles" | "profile_lock" | "profile_gone" => Table::Profiles,
             "addons" => Table::Addons,
             "library_items" => Table::LibraryItems,
-            "progress" => Table::Progress,
+            // A removal from Continue Watching shows where progress does.
+            "progress" | "dismissed" => Table::Progress,
             "watched" => Table::Watched,
             "stream_memory" => Table::StreamMemory,
             "settings" => Table::Settings,
@@ -549,6 +550,23 @@ impl Library {
         })
     }
 
+    /// Takes a title off Continue Watching and Next Up until a newer
+    /// progress register of it arrives: one played again here or on
+    /// another device shows it again.
+    pub fn dismiss<'a>(
+        &self,
+        profile: &str,
+        item_id: &str,
+        stamp: impl Into<Stamp<'a>>,
+    ) -> Result<(), LibraryError> {
+        let stamp = stamp.into();
+        self.write(|c| {
+            local(c, coll::DISMISSED, &[profile, item_id], &stamp, |h| {
+                sql::set_dismissed(c, profile, item_id, h)
+            })
+        })
+    }
+
     /// Most recent unfinished video per title, newest first.
     pub fn continue_watching(
         &self,
@@ -596,6 +614,9 @@ impl Library {
                  LEFT JOIN watched w ON w.profile_id = p.profile_id AND w.video_id = p.video_id
                  WHERE p.profile_id = ?1
                    AND {condition}
+                   AND NOT EXISTS (SELECT 1 FROM dismissed d
+                                   WHERE d.profile_id = p.profile_id AND d.item_id = p.item_id
+                                     AND d.hlc > p.hlc)
                    AND p.video_id = (SELECT q.video_id FROM progress q
                                      WHERE q.profile_id = p.profile_id AND q.item_id = p.item_id
                                      ORDER BY q.updated_ms DESC, q.video_id DESC LIMIT 1)
