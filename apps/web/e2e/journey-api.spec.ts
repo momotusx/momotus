@@ -359,3 +359,19 @@ test("a screen that could not open offers Try again, focused, which opens it ane
   await expect(p.locator("h2", { hasText: "Import could not start" })).toHaveCount(0, { timeout: 30_000 });
   await context.close();
 });
+
+test("Layout: Automatic follows the device; a chosen form is kept", async ({ browser }) => {
+  const { context, page: p } = await page(browser);
+  await p.goto("/settings?form=tv");
+  const auto = p.locator('[data-f="dev-form:null"]');
+  await expect(p.locator('[data-f="dev-form:tv"]')).toHaveAttribute("aria-checked", "true", { timeout: 30_000 });
+  await expect(auto).toHaveAttribute("aria-checked", "false");
+  await auto.click();
+  await expect(auto).toHaveAttribute("aria-checked", "true");
+  // A 1440 wide window is a desktop by detection, and stays automatic.
+  await expect(p.locator("html")).toHaveAttribute("data-form", "desktop");
+  await p.goto("/settings");
+  await expect(p.locator('[data-f="dev-form:null"]')).toHaveAttribute("aria-checked", "true", { timeout: 30_000 });
+  expect(await p.evaluate(() => localStorage.getItem("mq.form"))).toBeNull();
+  await context.close();
+});

@@ -42,7 +42,9 @@ function detect(): Form {
 
 let pin = forced();
 const [form, setForm] = createSignal<Form>(pin ?? detect());
-export { form };
+// The form chosen for this device, or null for Automatic (detected).
+const [pinned, setPinned] = createSignal<Form | null>(pin);
+export { form, pinned };
 
 /** Lets Settings switch the form factor for this device. */
 export function chooseForm(next: Form | null) {
@@ -53,6 +55,7 @@ export function chooseForm(next: Form | null) {
     // Not persisted; still applies now.
   }
   pin = next;
+  setPinned(next);
   fit();
 }
 

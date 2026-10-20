@@ -18,7 +18,7 @@ import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import type { LanguageChoice } from "../core/generated/LanguageChoice";
 import type { Prefs } from "../core/generated/Prefs";
 import type { SubtitleSize } from "../core/generated/SubtitleSize";
-import { chooseForm, type Form, form } from "../form";
+import { chooseForm, type Form, pinned } from "../form";
 import { defaultsWords } from "../lib/defaults";
 import { choiceSummary, choiceWords, findAddons, languageName, syncSummary, syncWords, turkceAltyaziCredit } from "../lib/words";
 import * as sync from "../core/sync";
@@ -353,11 +353,12 @@ export default function SettingsScreen() {
             label="Layout"
             group="dev-form"
             items={[
+              { value: null, label: "Automatic" },
               { value: "tv", label: "TV" },
               { value: "desktop", label: "Desktop" },
               { value: "phone", label: "Phone" },
             ]}
-            isOn={(v) => form() === v}
+            isOn={(v) => pinned() === v}
             onPick={(v) => chooseForm(v)}
           />
         </div>
