@@ -17,7 +17,7 @@ use crate::seal::{AccountKey, SealError};
 use crate::wire::{
     AccountRequest, AccountResponse, AppendRequest, MAX_CLOCK_AHEAD_MS, PAGE, PullResponse,
     PushRequest, PushResponse, Refusal, RelayInfo, ReplayRequest, RosterHead, RosterPage,
-    TokenGrant, WireRecord,
+    ScheduledDeletion, TokenGrant, WireRecord,
 };
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as B64;
@@ -150,6 +150,9 @@ pub struct SyncReport {
     pub record: Option<SyncConfig>,
     /// Sync again right away (the record changed, nothing was published).
     pub again: bool,
+    /// The account's deletion waits for this time (D14): show it with
+    /// Cancel on every device. From the round's last relay answer.
+    pub deletion: Option<ScheduledDeletion>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -213,8 +216,15 @@ pub enum SyncError {
     SignInRefused,
     #[error("this sign-in was started elsewhere")]
     WrongFlow,
+    /// A sign-in's return names another relay than the one it started at
+    /// (unlike `WrongRelay`: not the relay this device joined).
+    #[error("this sign-in came back from another relay")]
+    OtherRelay,
     #[error("this receipt is not for this link")]
     ReceiptRefused,
+    /// The relay's sign-in budget for this address is spent for the minute.
+    #[error("too many sign-in requests; try again in a minute")]
+    Busy,
 }
 
 /// The relay's coded answers map in one place. Only the relay's own 410
@@ -235,6 +245,7 @@ impl From<HttpError> for SyncError {
             (429, Some("signupLimit")) => SyncError::SignupLimit,
             (403, Some("ticketExpired")) => SyncError::TicketExpired,
             (403, Some("receiptRefused")) => SyncError::ReceiptRefused,
+            (429, Some("busy")) => SyncError::Busy,
             _ => SyncError::Http(e),
         }
     }
@@ -250,6 +261,16 @@ pub(crate) fn code_of(body: &[u8]) -> Option<String> {
 }
 
 impl SyncError {
+    /// No definite answer came (the network, the relay's own trouble, its
+    /// budget): the same call may succeed later.
+    pub fn transient(&self) -> bool {
+        match self {
+            SyncError::Http(HttpError::Status { status, .. }) => *status >= 500,
+            SyncError::Http(_) | SyncError::Busy => true,
+            _ => false,
+        }
+    }
+
     /// A stable name for the errors an app acts on (rather than only shows).
     pub fn code(&self) -> Option<&'static str> {
         Some(match self {
@@ -269,7 +290,9 @@ impl SyncError {
             SyncError::Cancelled => "cancelled",
             SyncError::SignInRefused => "signInRefused",
             SyncError::WrongFlow => "wrongFlow",
+            SyncError::OtherRelay => "otherRelay",
             SyncError::ReceiptRefused => "receiptRefused",
+            SyncError::Busy => "busy",
             _ => return None,
         })
     }
@@ -432,7 +455,11 @@ pub(crate) async fn relay_info(http: &HttpClient, server: &str) -> Result<RelayI
 /// joined: the record's relay id (once known), pinned to the host. One relay
 /// id, one host: a relay answering with another relay's id cannot borrow
 /// what this device signs or sends for that one.
-fn pinned(library: &Library, config: &SyncConfig, info: &RelayInfo) -> Result<(), SyncError> {
+pub(crate) fn pinned(
+    library: &Library,
+    config: &SyncConfig,
+    info: &RelayInfo,
+) -> Result<(), SyncError> {
     if config.relay_id != Id::default() && config.relay_id != info.relay_id {
         return Err(SyncError::WrongRelay);
     }
@@ -1127,6 +1154,7 @@ impl<'a> Session<'a> {
             };
             observe_server(self.clock, response.server_ms);
             report.clock_gap_ms = self.clock.wall_now() as i64 - response.server_ms as i64;
+            report.deletion = response.deletion.clone();
             report.pushed += response.accepted;
             report.stale += response.stale;
             // The relay holds a newer version of these, which this device may
@@ -1249,6 +1277,7 @@ impl<'a> Session<'a> {
                 .json()?;
             observe_server(self.clock, page.server_ms);
             report.clock_gap_ms = self.clock.wall_now() as i64 - page.server_ms as i64;
+            report.deletion = page.deletion.clone();
             let known = self.library.sync_state(GENERATION)?.unwrap_or_default();
             let restored = page.head < after || (!known.is_empty() && known != page.generation);
             if restored && !started_over {

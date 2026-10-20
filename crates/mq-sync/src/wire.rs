@@ -145,10 +145,31 @@ pub struct StartRequest {
     pub native: bool,
 }
 
+/// A deletion of the account that waits (D14): every device shows it with
+/// Cancel. `provider` names the identity that asked from the web page
+/// ("Someone signed in with your Google account..."); none for a Start over
+/// or when that link is gone.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub struct ScheduledDeletion {
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub due_ms: u64,
+    #[serde(default)]
+    pub provider: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StartResponse {
     pub flow: String,
+    /// When the flow stops being open (relay time).
+    #[serde(default)]
+    pub expires_ms: u64,
     /// Brokered: the provider page to open.
     #[serde(default)]
     pub url: Option<String>,
@@ -263,9 +284,9 @@ pub struct PushResponse {
     /// checks them before it counts its records as sent.
     pub epoch: u32,
     pub roster: Option<RosterHead>,
-    /// When a deletion of the account is scheduled (from the web page).
+    /// A deletion of the account scheduled from the web page or a Start over.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub deletion_due_ms: Option<u64>,
+    pub deletion: Option<ScheduledDeletion>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -316,9 +337,9 @@ pub struct PullResponse {
     pub epoch: u32,
     #[serde(default)]
     pub roster: Option<RosterHead>,
-    /// When a deletion of the account is scheduled (from the web page).
+    /// A deletion of the account scheduled from the web page or a Start over.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub deletion_due_ms: Option<u64>,
+    pub deletion: Option<ScheduledDeletion>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
