@@ -53,8 +53,8 @@ class SecretRecordStore(
  * Every op on the record runs in turn (one at a time, in the order asked) in [scope], the app's, never
  * a page's: leaving a page cannot cancel an op between the core's answer and storing its record. A
  * record that comes back is kept only if it is not older than the one stored (`revision`). Rounds run
- * in one worker: asking while a round runs keeps one more for after it. `dropped` forgets the account
- * here; `fork` stays a problem until the user takes the server's list.
+ * in one worker: asking while a round runs keeps one more for after it. `dropped` and `accountGone`
+ * forget the account here; `fork` stays a problem until the user takes the server's list.
  */
 open class SyncAccount(
     private val ops: CoreOps,
@@ -477,6 +477,25 @@ open class SyncAccount(
                 leftHere = false
             }.await()
 
+    /**
+     * Deletes the account on the sync server for every device. Once the server confirmed, this device
+     * forgets it as after [signOut] (the library stays) and says the account was deleted, with OK.
+     */
+    suspend fun deleteAccount() =
+        scope
+            .async {
+                // All of it in the app's scope: Back while the core answers still forgets the account here.
+                withRecord("deleteAccount", { ops.deleteAccount(it) }) { null }
+                forget()
+                problem = Problem(GONE, SyncCopy.ACCOUNT_GONE)
+                leftHere = false
+            }.await()
+
+    /** OK on "Your Marquee account was deleted": the line goes. */
+    fun dismissGone() {
+        if (problem?.code == GONE) problem = null
+    }
+
     /** After `fork`: both device lists, read only, for the user to compare. */
     suspend fun forkPreview(): ForkPreview = withRecord("forkPreview", { ops.forkPreview(it) }) { null }
 
@@ -537,9 +556,9 @@ open class SyncAccount(
                         }
                         result
                     } catch (e: CoreError) {
-                        if (account == mine && (e.code == "dropped" || e.code == "fork")) {
+                        if (account == mine && (e.code == "dropped" || e.code == GONE || e.code == "fork")) {
                             CoreLog.w("sync $name: ${e.code}")
-                            if (e.code == "dropped") forget()
+                            if (e.code != "fork") forget()
                             problem = problemOf(e, SyncCopy.Action.Round)
                         }
                         throw e
@@ -601,6 +620,9 @@ open class SyncAccount(
 
     companion object {
         private const val ROUNDS = 5
+
+        /** The account was deleted, here or on another device. */
+        const val GONE = "accountGone"
 
         /** How long a made kit's letters stay in memory after its page is left, before it counts as unseen. */
         const val KIT_HOLD_MS = 5 * 60_000L

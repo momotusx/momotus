@@ -359,7 +359,7 @@ internal fun CoroutineScope.refocus(vararg targets: FocusRequester) {
 /**
  * Devices and sync: not joined, the three ways in (pair, start an account, use a kit); joined, this
  * device's state with every fact of the last round and the 12 characters to compare, the devices with
- * Remove and Report lost, Add a device, Make a recovery kit, and stopping.
+ * Remove and Report lost, Add a device, Make a recovery kit, stopping, and deleting the account.
  */
 @Composable
 fun SyncScreen(
@@ -387,7 +387,15 @@ fun SyncScreen(
                     sync.leftHere -> MqText(SyncCopy.LEFT_HERE, role = TextRole.Callout)
                     left -> StatusWord(SyncCopy.LEFT, Status.Ok)
                 }
-                sync.problem?.let { Said(it.words, Status.Bad) }
+                sync.problem?.let { problem ->
+                    // Deleted, here or on another device: said once, and OK puts it away.
+                    if (problem.code == SyncAccount.GONE) {
+                        Said(problem.words, Status.Warn)
+                        SecondaryButton(SyncCopy.OK, { sync.dismissGone() }, focusRequester = stepFocus())
+                    } else {
+                        Said(problem.words, Status.Bad)
+                    }
+                }
             }
             item(key = "pair") { LinkRow(Icons.QrCode, SyncCopy.PAIR_TITLE, SyncCopy.PAIR_TEXT, onPair) }
             item(key = "start") { LinkRow(Icons.Plus, SyncCopy.START_TITLE, SyncCopy.START_TEXT, { onJoin(false) }) }
@@ -422,8 +430,11 @@ private fun LazyListScope.joined(
     } else {
         item(key = "kit") { LinkRow(Icons.KeyRound, SyncCopy.KIT_TITLE, SyncCopy.KIT_TEXT, onKit) }
     }
-    // A stuck device's way out is in the state card; a plain stop would only fail again.
-    if (!sync.stuck) block("leave") { Leave(sync, onLeft) }
+    // A stuck device's way out is in the state card; a plain stop (or a delete) would only fail again.
+    if (!sync.stuck) {
+        block("leave") { Leave(sync, onLeft) }
+        block("delete") { DeleteAccount(sync) }
+    }
 }
 
 /** This device: the state, every fact of the last round, Sync now and a fix, and the 12 characters. */
@@ -826,6 +837,79 @@ private fun Leave(
     }
     // The state card offers it already when a round said why.
     if (unreachable && !sync.stuck) LeaveHere(sync)
+}
+
+/**
+ * Delete the account for every device: one ask that names what goes, then who is there (a TV with no
+ * screen lock asks a second time, as for Remove). This device keeps its library; the page then says so.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DeleteAccount(sync: SyncController) {
+    val tv = Marquee.form == Form.Tv
+    val scope = rememberCoroutineScope()
+    val owner = rememberOwnerCheck()
+    var asking by remember { mutableStateOf(false) }
+    var again by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val deleteFocus = remember { FocusRequester() }
+    val delete: suspend () -> Unit = {
+        busy = true
+        try {
+            sync.deleteAccount()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            error = wordsOf(e, Action.Delete)
+        } finally {
+            busy = false
+        }
+    }
+    Kicker(SyncCopy.DELETE_TITLE, side = 0.dp)
+    MqText(SyncCopy.DELETE_TEXT, role = TextRole.Callout, color = Marquee.colors.muted)
+    error?.let { Said(it, Status.Bad) }
+    when {
+        again -> {
+            AskAgain(SyncCopy.DELETE_BUTTON, onYes = {
+                again = false
+                scope.launch { delete() }
+            }, onCancel = {
+                again = false
+                asking = false
+                scope.refocus(deleteFocus)
+            })
+        }
+
+        asking -> {
+            MqText(SyncCopy.DELETE_ASK, role = TextRole.Callout)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+            ) {
+                SecondaryButton(SyncCopy.DELETE_BUTTON, {
+                    if (busy) return@SecondaryButton
+                    error = null
+                    scope.launch {
+                        guarded(owner, tv, SyncCopy.AUTH_DELETE, askAgain = { again = true }) { delete() }
+                            ?.let { error = it }
+                    }
+                }, icon = Icons.Trash, busy = busy)
+                // A remote lands on Cancel: two presses never delete the account.
+                SecondaryButton(SyncCopy.CANCEL, {
+                    asking = false
+                    scope.refocus(deleteFocus)
+                }, focusRequester = stepFocus())
+            }
+        }
+
+        else -> {
+            SecondaryButton(SyncCopy.DELETE_BUTTON, {
+                error = null
+                asking = true
+            }, icon = Icons.Trash, focusRequester = deleteFocus)
+        }
+    }
 }
 
 /**

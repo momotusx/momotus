@@ -208,6 +208,49 @@ class SyncAccountTest {
         }
 
     @Test
+    fun `accountGone forgets the account here and says so until OK`() =
+        runBlocking {
+            val store = Store(record(1))
+            val sync = account(store)
+            sync.startRounds()
+            answers["syncNow"] = { fail("accountGone", "this account was deleted") }
+            sync.request()
+            until("forgotten") { !sync.joined }
+            assertNull(store.held)
+            assertEquals(SyncAccount.GONE, sync.problem?.code)
+            assertEquals("Your Marquee account was deleted. Your library stays on this device.", sync.problem?.words)
+            sync.dismissGone()
+            assertNull(sync.problem)
+        }
+
+    @Test
+    fun `deleting the account sends the record, forgets it once confirmed, and keeps it when refused`() =
+        runBlocking {
+            val store = Store(record(3))
+            val sync = account(store)
+            answers["deleteAccount"] = { fail(null, "http status 502") }
+            assertFailsWith<CoreError> { sync.deleteAccount() }
+            assertTrue(sync.joined)
+            assertEquals(3, store.held.revision())
+            assertEquals(
+                "The sync server did not answer. Try again in a moment.",
+                SyncAccount.problemOf(CoreError("http status 502"), SyncCopy.Action.Delete).words,
+            )
+            var sent: JsonObject? = null
+            answers["deleteAccount"] = { msg ->
+                sent = msg
+                ok("{}")
+            }
+            sync.deleteAccount()
+            assertEquals(3, sent!!.getValue("record").jsonObject.revision())
+            assertFalse(sync.joined)
+            assertNull(store.held)
+            assertEquals(SyncAccount.GONE, sync.problem?.code)
+            sync.dismissGone()
+            assertNull(sync.problem)
+        }
+
+    @Test
     fun `an answer from before a join is not stored over the new account`() =
         runBlocking {
             val store = Store(record(9, account = "old"))

@@ -99,6 +99,19 @@ object SyncCopy {
         "This device no longer syncs. The sync server still lists it until another device removes it; you can " +
             "pair it again."
 
+    // Delete the account
+    const val DELETE_TITLE = "Delete account"
+    const val DELETE_TEXT =
+        "Deletes your account from the sync service for all your devices. Each device keeps its own copy of your " +
+            "library."
+    const val DELETE_BUTTON = "Delete account"
+    const val DELETE_ASK =
+        "Your profiles, library, progress and settings are deleted from the sync service. This device keeps its " +
+            "own copy."
+    const val DELETING = "Deleting"
+    const val ACCOUNT_GONE = "Your Marquee account was deleted. Your library stays on this device."
+    const val OK = "OK"
+
     // Add a device
     const val ADD_LEDE =
         "On the new device, open Settings, then Devices and sync, then Pair this device. It shows a code."
@@ -223,6 +236,7 @@ object SyncCopy {
     const val AUTH_DIFFER = "End the approval of a device"
     const val AUTH_SERVER_LIST = "Keep syncing with the sync server's device list"
     const val AUTH_LEAVE = "Stop syncing on this device"
+    const val AUTH_DELETE = "Delete your sync account"
     const val DISMISS = "Dismiss"
 
     /** The last read of the device list failed: what shows may be from before. */
@@ -327,7 +341,7 @@ object SyncCopy {
      * Where a sync failure happened: some answers mean something only there (a 403 when starting is an
      * invite, a 404 on a kit an unknown kit, a 404 on a code a used one).
      */
-    enum class Action { Round, Start, Recover, Approve, Devices, Kit, Remove, Lost, Leave, Compare, ServerList }
+    enum class Action { Round, Start, Recover, Approve, Devices, Kit, Remove, Lost, Leave, Delete, Compare, ServerList }
 
     /**
      * A sync failure in plain words; [code] names the ones with a fix. The core's own sentences are
@@ -341,6 +355,10 @@ object SyncCopy {
         when (code) {
             "dropped" -> {
                 return "This device was removed from your sync account. Your library stays here as local data."
+            }
+
+            "accountGone" -> {
+                return ACCOUNT_GONE
             }
 
             "fork" -> {

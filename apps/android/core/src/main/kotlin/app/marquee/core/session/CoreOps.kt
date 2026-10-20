@@ -403,6 +403,15 @@ class CoreOps(
         )
     }
 
+    /**
+     * Deletes the account on the sync server for every device, once the server confirmed; this device then
+     * forgets it as after [signOut] (the library stays) and the caller deletes its stored record. Put behind
+     * the OS re-authentication prompt.
+     */
+    suspend fun deleteAccount(record: SyncRecord) {
+        client.request("deleteAccount", mapOf("record" to record))
+    }
+
     // Trakt (plans/m7-trakt.md section 3): the record is the profile's, from the keystore; the core keeps it in
     // memory only. Refused with `locked` while the session is locked, and `notConfigured` in a build without Trakt.
 
