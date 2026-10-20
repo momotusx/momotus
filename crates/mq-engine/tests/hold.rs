@@ -331,3 +331,45 @@ async fn a_claim_during_an_eviction_keeps_the_torrent() {
         .await
         .expect("finished in time");
 }
+
+/// Torrent folders an earlier launch left count against the disk budget
+/// from the start, the least recently changed first; a folder that is no
+/// torrent's stays (engine review r2, P2-4: they were never evicted).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_disk_budget_evicts_what_earlier_launches_left() {
+    let dir = tempfile::tempdir().unwrap();
+    let older = dir.path().join("1".repeat(40));
+    let newer = dir.path().join("2".repeat(40));
+    let other = dir.path().join("notes");
+    let now = std::time::SystemTime::now();
+    for (folder, age) in [(&older, 7200), (&newer, 3600), (&other, 9000)] {
+        std::fs::create_dir_all(folder).unwrap();
+        let file = folder.join("movie.mkv");
+        std::fs::write(&file, vec![7u8; 1 << 20]).unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(&file)
+            .unwrap()
+            .set_modified(now - Duration::from_secs(age))
+            .unwrap();
+    }
+    let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+    let engine = Engine::start(EngineConfig {
+        discovery: false,
+        // One leftover fits, two do not.
+        cache_budget_bytes: 3 << 19,
+        ..EngineConfig::new(dir.path(), http.torrent_scope(&[]))
+    })
+    .await
+    .unwrap();
+    for _ in 0..40 {
+        if !older.exists() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert!(!older.exists(), "the older leftover stayed");
+    assert!(newer.exists(), "the newer leftover went too");
+    assert!(other.exists(), "a folder that is no torrent's went");
+    drop(engine);
+}

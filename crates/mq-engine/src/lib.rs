@@ -1014,7 +1014,9 @@ impl Engine {
 
     /// Deletes whole idle torrents, least recently used first, until the
     /// allocated size fits the budget. `keep`, a torrent with a range open
-    /// and a claimed one are never deleted.
+    /// and a claimed one are never deleted. Folders an earlier launch left
+    /// count too and go first, the oldest first: they were used before
+    /// anything this launch (engine review r2, P2-4).
     async fn enforce_budget(&self, keep: Option<TorrentHandle>) {
         let all: Vec<(TorrentHandle, Arc<Torrent>)> = lock(&self.inner.torrents)
             .iter()
@@ -1025,6 +1027,18 @@ impl Engine {
             .map(|(h, t)| (*lock(&t.last_used), *h, allocated(&t.dir)))
             .collect();
         let mut total: u64 = used.iter().map(|u| u.2).sum();
+        let held: Vec<&Path> = all.iter().map(|(_, t)| t.dir.as_path()).collect();
+        let left = leftovers(&self.inner.cfg.data_dir, &held);
+        total += left.iter().map(|l| l.2).sum::<u64>();
+        for (_, dir, bytes) in left {
+            if total <= self.inner.cfg.cache_budget_bytes {
+                break;
+            }
+            if let Some(trash) = self.set_aside(&dir) {
+                let _ = tokio::fs::remove_dir_all(&trash).await;
+                total -= bytes;
+            }
+        }
         used.sort_unstable_by_key(|u| u.0);
         for (_, h, bytes) in used {
             if total <= self.inner.cfg.cache_budget_bytes {
@@ -1054,12 +1068,82 @@ impl Engine {
             }
         }
     }
+
+    /// Moves a folder an earlier launch left out of the way under the
+    /// torrents lock, unless a torrent of this launch took it up since: an
+    /// add of the same info hash then never writes into data being deleted.
+    fn set_aside(&self, dir: &Path) -> Option<PathBuf> {
+        let torrents = lock(&self.inner.torrents);
+        if torrents.values().any(|t| t.dir == dir) {
+            return None;
+        }
+        let trash = dir.with_extension(SET_ASIDE);
+        std::fs::rename(dir, &trash).ok()?;
+        Some(trash)
+    }
 }
 
-/// Keep-warm expiry and the disk budget, every few seconds.
+/// The ending of a torrent folder on its way out.
+const SET_ASIDE: &str = "evicted";
+
+/// Torrent folders in `data_dir` no torrent of this launch holds (named by
+/// an info hash, not in `held`), the least recently changed first: when a
+/// file in it last changed, and its allocated size. Folders an interrupted
+/// eviction set aside are deleted on the way.
+fn leftovers(data_dir: &Path, held: &[&Path]) -> Vec<(std::time::SystemTime, PathBuf, u64)> {
+    let Ok(entries) = std::fs::read_dir(data_dir) else {
+        return Vec::new();
+    };
+    let mut left = Vec::new();
+    for e in entries.flatten() {
+        let path = e.path();
+        if !e.metadata().is_ok_and(|m| m.is_dir()) {
+            continue;
+        }
+        if path.extension().is_some_and(|x| x == SET_ASIDE) {
+            let _ = std::fs::remove_dir_all(&path);
+            continue;
+        }
+        let name = e.file_name();
+        let hash = name
+            .to_str()
+            .is_some_and(|n| n.len() == 40 && n.bytes().all(|b| b.is_ascii_hexdigit()));
+        if hash && !held.contains(&path.as_path()) {
+            left.push((last_change(&path), path.clone(), allocated(&path)));
+        }
+    }
+    left.sort_by_key(|l| l.0);
+    left
+}
+
+/// When a file under `dir` last changed (the epoch when none can be read).
+fn last_change(dir: &Path) -> std::time::SystemTime {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return std::time::SystemTime::UNIX_EPOCH;
+    };
+    entries
+        .flatten()
+        .filter_map(|e| {
+            let m = e.metadata().ok()?;
+            if m.is_dir() {
+                Some(last_change(&e.path()))
+            } else {
+                m.modified().ok()
+            }
+        })
+        .max()
+        .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+}
+
+/// Keep-warm expiry and the disk budget, at start (what earlier launches
+/// left) and every few seconds after.
 async fn maintenance(inner: std::sync::Weak<Inner>) {
+    let mut first = true;
     loop {
-        tokio::time::sleep(MAINTENANCE_EVERY).await;
+        if !first {
+            tokio::time::sleep(MAINTENANCE_EVERY).await;
+        }
+        first = false;
         let Some(inner) = inner.upgrade() else {
             return;
         };
