@@ -16,6 +16,22 @@ export const markBack = () => {
 };
 /** While the screen Back lands on is created: whether it was reached by Back. */
 export const cameBack = () => wentBack;
+// A page Back lands on gives way to this one (`backThenReplace`).
+let afterBack: string | null = null;
+/** Back one entry, and the page there gives way to `to`: one entry where
+ * two would stack (the player's Versions after autoplay moved on). */
+export function backThenReplace(to: string) {
+  afterBack = to;
+  markBack();
+  history.back();
+}
+/** The shell, as Back lands: the page to put in its place, once. */
+export function takeAfterBack(): string | null {
+  const to = afterBack;
+  afterBack = null;
+  return to;
+}
+
 /** The shell, once the new screen is in: reads and clears the mark. */
 export function takeBack(): boolean {
   const was = wentBack;

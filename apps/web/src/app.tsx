@@ -15,7 +15,7 @@ import "./core/trakt";
 import { gateOpen, profiles, profilesFailed } from "./core/profiles";
 import { installFocus, restoreSoon } from "./focus/dom";
 import { form } from "./form";
-import { entryOwner, historyBase, historyDepth, markBack, resetHistoryBase, stampEntriesWith, takeBack } from "./history";
+import { entryOwner, historyBase, historyDepth, markBack, resetHistoryBase, stampEntriesWith, takeAfterBack, takeBack } from "./history";
 import Addons from "./screens/addons";
 import FindAddons from "./screens/find-addons";
 import CalendarScreen from "./screens/calendar";
@@ -198,6 +198,8 @@ function Shell(props: RouteSectionProps) {
     on(
       () => location.pathname,
       () => {
+        const then = takeAfterBack();
+        if (then) return navigate(then, { replace: true });
         setScrolled(false);
         // The tab and history name the screen; a title, Versions and the
         // player name their title themselves once it is known.

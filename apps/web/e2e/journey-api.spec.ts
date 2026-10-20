@@ -384,6 +384,11 @@ test("Continue Watching: the tile's remove button off TV, the title page on TV",
     const remove = p.locator('[data-f="title:uncontinue"]');
     await expect(remove).toBeVisible({ timeout: 30_000 });
     await remove.focus();
+    // It reaches every synced device: the first OK only asks.
+    await p.keyboard.press("Enter");
+    await expect(remove).toContainText("Press again to remove");
+    await p.waitForTimeout(500);
+    expect(await home.ids()).toContain("mqjm");
     await p.keyboard.press("Enter");
     await expect(remove).toHaveCount(0);
     await expect.poll(home.ids).not.toContain("mqjm");
@@ -871,7 +876,7 @@ async function flakyCatalog() {
     if (req.url?.startsWith("/catalog/movie/jpicks")) {
       asked += 1;
       if (asked === 1) return json(500, { error: "busy" });
-      return json(200, { metas: [{ id: "mqjm", type: "movie", name: "Journey Film" }] });
+      return void setTimeout(() => json(200, { metas: [{ id: "mqjm", type: "movie", name: "Journey Film" }] }), 1500);
     }
     res.writeHead(404);
     res.end();
@@ -893,10 +898,16 @@ test("Home: Try again on a failed row asks that one catalog again, not all of Ho
     await expect(row.locator(".row-msg")).toContainText("It had an error on its side (500).");
     const opened = () => sent.filter((m) => m.op === "subscribe" && m.view === "home").length;
     const before = opened();
-    // By remote: the row's Try again.
+    // By remote: the row's Try again. The focus stays on it while the row
+    // asks again ("Trying again"), then goes to the row's first title.
     await retry.focus();
+    const key = await focusedKey(p);
     await p.keyboard.press("Enter");
+    await expect(retry).toHaveText("Trying again");
+    await expect(retry).toHaveAttribute("aria-disabled", "true");
+    expect(await focusedKey(p)).toBe(key);
     await expect(row.locator(".tile")).toHaveCount(1, { timeout: 30_000 });
+    await expect.poll(() => focusedKey(p)).toMatch(/^tile:home:.*jpicks.*:mqjm$/);
     expect(sent.filter((m) => m.op === "command" && m.command?.type === "retryRow").map((m) => m.command?.rowId)).toEqual([expect.stringContaining("jpicks")]);
     // That catalog was asked once more; Home was not opened again.
     expect(flaky.asked()).toBe(2);
@@ -906,5 +917,233 @@ test("Home: Try again on a failed row asks that one catalog again, not all of Ho
     await c.req("removeAddon", { url: flaky.url }).catch(() => undefined);
     c.close();
     flaky.close();
+  }
+});
+
+test("TV: Remove on the title page says when the core refused", async ({ browser }) => {
+  await seedFilm(210_000);
+  const { context, page: p } = await page(browser, { width: 1920, height: 1080 }, (m) => (m.op === "removeFromContinue" ? { ok: false, error: "network: connection refused" } : undefined));
+  await p.goto("/title/movie/mqjm?form=tv");
+  const remove = p.locator('[data-f="title:uncontinue"]');
+  await expect(remove).toBeVisible({ timeout: 30_000 });
+  await remove.focus();
+  await p.keyboard.press("Enter");
+  await p.keyboard.press("Enter");
+  await expect(remove).toContainText("Not removed, try again");
+  await context.close();
+});
+
+test("TV: Back after the remembered title left the list lands in its place, not at the top", async ({ browser }) => {
+  // Four titles in the library, the third one opened and taken out of it.
+  const c = new Client(`ws://127.0.0.1:${JOURNEY_PORT}/ws`);
+  try {
+    for (const [kind, id] of [["series", "mqj1"], ["series", "mqj2"], ["movie", "mqjm"], ["movie", "mqjv"]] as const) {
+      const title = await c.subscribe<{ header?: Header }>("title", { kind, id });
+      await until(`details for ${id}`, () => (c.header<Header>(title.sub) ?? title.now().header)?.state.state === "ready");
+      await c.command(title.sub, { type: "setInLibrary", value: true });
+      await c.req("unsubscribe", { sub: title.sub });
+    }
+  } finally {
+    c.close();
+  }
+  const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
+  await p.goto("/library?form=tv");
+  const tiles = p.locator('[data-fgroup="grid:library"] [data-f^="g:library:"]');
+  await expect(tiles).toHaveCount(4, { timeout: 30_000 });
+  const third = tiles.nth(2);
+  const gone = await third.getAttribute("data-f");
+  const next = await tiles.nth(3).getAttribute("data-f");
+  await third.focus();
+  await p.keyboard.press("Enter");
+  await expect(p).toHaveURL(/\/title\//);
+  const library = p.locator('[data-f="title:library"]');
+  await expect(library).toHaveAttribute("aria-pressed", "true", { timeout: 30_000 });
+  await library.focus();
+  await p.keyboard.press("Enter");
+  await expect(library).toHaveAttribute("aria-pressed", "false");
+  await p.keyboard.press("Escape");
+  await expect(p).toHaveURL(/\/library/);
+  await expect(tiles).toHaveCount(3);
+  // The title that took its place has the focus, not the top of Library.
+  await expect.poll(() => focusedKey(p), { timeout: 3000 }).toBe(next);
+  expect(next).not.toBe(gone);
+  await context.close();
+});
+
+test("one title entry in history after autoplay too: Episodes and Versions from the next episode", async ({ browser }) => {
+  const c = new Client(`ws://127.0.0.1:${JOURNEY_PORT}/ws`);
+  await c.req("setPrefs", { patch: { autoplayNext: true } }).finally(() => c.close());
+  const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
+  const depth = () => p.evaluate(() => (history.state as { _depth?: number } | null)?._depth ?? -1);
+  // The first episode's Versions from its row on the title page, its play,
+  // and autoplay on to the second episode.
+  const toNextEpisode = async () => {
+    await p.goto("/title/series/mqj2?form=tv");
+    const episode = p.locator('[data-f="ep:mqj2:1:1"]');
+    await expect(episode).toBeVisible({ timeout: 30_000 });
+    const atTitle = await depth();
+    // Right from the episode reaches its Choose a version.
+    await episode.focus();
+    await p.keyboard.press("ArrowRight");
+    await expect.poll(() => focusedKey(p)).toBe("epv:mqj2:1:1");
+    await p.keyboard.press("Enter");
+    await expect(p).toHaveURL(/\/versions\/mqj2:1:1/);
+    await expect(p.locator('[data-f="versions:play"]')).toBeVisible({ timeout: 30_000 });
+    await p.locator('[data-f="versions:play"]').focus();
+    await p.keyboard.press("Enter");
+    await expect(p).toHaveURL(/mqj2:1:1/);
+    await expect(p.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
+    await startIfPaused(p);
+    // The episode ends; autoplay opens the next one in its place.
+    await p.evaluate(() => {
+      const v = document.querySelector("video");
+      if (v) v.currentTime = v.duration - 0.5;
+    });
+    await expect(p).toHaveURL(/mqj2:1:2/, { timeout: 30_000 });
+    await expect(p.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
+    return atTitle;
+  };
+  // Episodes: back to the title's own entry.
+  let atTitle = await toNextEpisode();
+  await p.keyboard.press("ArrowUp");
+  await p.locator('[data-f="player:episodes"]').focus();
+  await p.keyboard.press("Enter");
+  await expect(p).toHaveURL(/\/title\/series\/mqj2(\?|$)/);
+  await expect.poll(depth).toBe(atTitle);
+  // Versions: this episode's, in place of the first one's.
+  atTitle = await toNextEpisode();
+  await p.keyboard.press("ArrowUp");
+  await p.locator('[data-f="player:versionsact"]').focus();
+  await p.keyboard.press("Enter");
+  await expect(p).toHaveURL(/\/versions\/mqj2:1:2/);
+  await expect.poll(depth).toBe(atTitle + 1);
+  await context.close();
+});
+
+test("TV: Up and Down on an addon keep the remote on that addon", async ({ browser }) => {
+  const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
+  await p.goto("/addons?form=tv");
+  const names = () => p.locator(".addon h2").evaluateAll((els) => els.map((e) => e.childNodes[0]?.textContent?.trim()));
+  await expect(p.locator('[data-f="addon:1:up"]')).toBeVisible({ timeout: 30_000 });
+  const before = await names();
+  await p.locator('[data-f="addon:1:up"]').focus();
+  await p.keyboard.press("Enter");
+  await expect.poll(names).toEqual([before[1], before[0], ...before.slice(2)]);
+  // The focus moved up with it: OK again would move it, not the other one.
+  await expect.poll(() => focusedKey(p)).toBe("addon:0:up");
+  await p.locator('[data-f="addon:0:down"]').focus();
+  await p.keyboard.press("Enter");
+  await expect.poll(names).toEqual(before);
+  await expect.poll(() => focusedKey(p)).toBe("addon:1:down");
+  await context.close();
+});
+
+test("TV: closing Search leaves the page where it was scrolled", async ({ browser }) => {
+  const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
+  await p.goto("/settings?form=tv");
+  const far = p.locator('[data-f="pref-subsize:large"]');
+  await expect(far).toBeVisible({ timeout: 30_000 });
+  await far.focus();
+  await p.keyboard.press("ArrowRight");
+  const scrolled = () => p.evaluate(() => document.querySelector(".settings-page")?.scrollTop ?? document.scrollingElement?.scrollTop ?? 0);
+  await expect.poll(scrolled).toBeGreaterThan(100);
+  const at = await scrolled();
+  await p.locator('[data-f="nav:/search"]').focus();
+  await p.keyboard.press("Enter");
+  await expect(p.locator(".palette-layer .palette")).toBeVisible();
+  await p.keyboard.press("Escape");
+  await expect(p.locator(".palette-layer")).toHaveCount(0);
+  await expect.poll(() => focusedKey(p)).toBe("nav:/search");
+  await p.waitForTimeout(500);
+  expect(await scrolled()).toBe(at);
+  await context.close();
+});
+
+test("TV: Up Next waits while a panel is open", async ({ browser }) => {
+  const c = new Client(`ws://127.0.0.1:${JOURNEY_PORT}/ws`);
+  await c.req("setPrefs", { patch: { autoplayNext: false } }).finally(() => c.close());
+  const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
+  await p.goto("/play/series/mqj2/mqj2:1:1?form=tv");
+  await expect(p.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
+  await startIfPaused(p);
+  await p.locator('[data-f="player:subs"]').focus();
+  await p.keyboard.press("Enter");
+  await expect.poll(() => focusedKey(p)).toBe("sub:off");
+  // The credits start with the Subtitles panel open.
+  await p.evaluate(() => {
+    const v = document.querySelector("video");
+    if (v) v.currentTime = v.duration - 15;
+  });
+  await p.waitForTimeout(1500);
+  await expect(p.locator(".next")).toHaveCount(0);
+  expect(await focusedKey(p)).toMatch(/^sub:/);
+  // Closed, Up Next comes.
+  await p.keyboard.press("Escape");
+  await expect(p.locator(".next")).toBeVisible({ timeout: 10_000 });
+  await context.close();
+});
+
+/** A Discover catalog that pages: its first answer fails, then 30 titles;
+ * the next page fails once, then 10 more; then nothing. */
+async function shelfCatalog() {
+  const asked = new Map<number, number>();
+  const server = createServer((req, res) => {
+    const json = (status: number, body: unknown) => {
+      res.writeHead(status, { "content-type": "application/json" });
+      res.end(JSON.stringify(body));
+    };
+    const url = decodeURIComponent(req.url ?? "");
+    if (url === "/manifest.json") {
+      const catalogs = [{ type: "movie", id: "jshelf", name: "Journey Shelf", extra: [{ name: "skip" }] }];
+      return json(200, { id: "dev.marquee.shelf", version: "1.0.0", name: "Journey Shelf", resources: ["catalog"], types: ["movie"], idPrefixes: ["mqjs"], catalogs });
+    }
+    if (url.startsWith("/catalog/movie/jshelf")) {
+      const skip = Number(/skip=(\d+)/.exec(url)?.[1] ?? 0);
+      const n = (asked.get(skip) ?? 0) + 1;
+      asked.set(skip, n);
+      if ((skip === 0 || skip === 30) && n === 1) return json(500, { error: "busy" });
+      const count = skip === 0 ? 30 : skip === 30 ? 10 : 0;
+      const metas = Array.from({ length: count }, (_, i) => ({ id: `mqjs${skip + i}`, type: "movie", name: `Shelf Title ${skip + i}` }));
+      return void setTimeout(() => json(200, { metas }), 800);
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  await new Promise<void>((ok) => server.listen(0, "127.0.0.1", () => ok()));
+  return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/manifest.json`, close: () => server.close() };
+}
+
+test("Discover: Try again asks a failed catalog, and a failed page, again", async ({ browser }) => {
+  const shelf = await shelfCatalog();
+  const c = new Client(`ws://127.0.0.1:${JOURNEY_PORT}/ws`);
+  try {
+    await c.req("installAddon", { url: shelf.url });
+    const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
+    await p.goto("/discover?form=tv");
+    const tiles = p.locator('[data-f^="g:discover:"]');
+    // The catalog failed: Try again, by remote, keeps the focus while it asks.
+    const first = p.locator('[data-f="discover:retry-catalog"]');
+    await expect(first).toBeVisible({ timeout: 30_000 });
+    await first.focus();
+    await p.keyboard.press("Enter");
+    await expect(first).toHaveText("Trying again");
+    // Still there while the catalog loads again (it answers 0.8 s in).
+    await p.waitForTimeout(400);
+    await expect(first).toHaveText("Trying again");
+    expect(await focusedKey(p)).toBe("discover:retry-catalog");
+    await expect(tiles).toHaveCount(30, { timeout: 30_000 });
+    // The next page fails: Try again in the footer asks that page again.
+    await p.locator(".sentinel").scrollIntoViewIfNeeded();
+    const more = p.locator('[data-f="discover:retry-more"]');
+    await expect(more).toBeVisible({ timeout: 30_000 });
+    await expect(p.locator(".grid-foot")).toContainText("Could not load more.");
+    await more.focus();
+    await p.keyboard.press("Enter");
+    await expect(tiles).toHaveCount(40, { timeout: 30_000 });
+    await context.close();
+  } finally {
+    await c.req("removeAddon", { url: shelf.url }).catch(() => undefined);
+    c.close();
+    shelf.close();
   }
 });

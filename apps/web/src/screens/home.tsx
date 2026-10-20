@@ -219,7 +219,7 @@ export default function Home() {
               <For each={home.rows}>
                 {(row, i) => (
                   <>
-                    <Row row={row} autofocus={i() === 0 && row.rowId === CONTINUE_ROW} root={page} onRetry={(rowId) => void retryHomeRow(rowId)?.catch(() => undefined)} />
+                    <Row row={row} autofocus={i() === 0 && row.rowId === CONTINUE_ROW} root={page} onRetry={retryHomeRow} />
                     <Show when={i() === 0 && row.rowId === CONTINUE_ROW}>
                       <DefaultsCard />
                     </Show>

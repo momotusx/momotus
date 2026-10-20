@@ -11,6 +11,7 @@ import { type Candidate, type Direction, pick } from "./spatial";
 const SEL = "[data-f]";
 const memory = new Map<string, string>(); // group -> key
 const screens = new Map<string, string>(); // path -> last key
+const spots = new Map<string, { group: string; index: number }>(); // path -> that key's group and place in it
 const content = new Map<string, string>(); // path -> last key outside the rail
 
 const path = () => location.pathname;
@@ -181,6 +182,7 @@ export function forgetFocus() {
   cancelRestore();
   memory.clear();
   screens.clear();
+  spots.clear();
   content.clear();
   last = null;
 }
@@ -191,6 +193,8 @@ export function remember(group: string, key: string) {
 }
 
 let stopRestore: (() => void) | null = null;
+// How long Back waits for the remembered element before taking its place's.
+const NEAR_AFTER_MS = 800;
 
 export function cancelRestore() {
   stopRestore?.();
@@ -205,6 +209,7 @@ export function restore(back: boolean, asked = inputs) {
   cancelRestore();
   if (!mayAutoFocus() || inputs !== asked) return;
   const want = back ? screens.get(path()) : undefined;
+  const spot = back ? spots.get(path()) : undefined;
   const started = performance.now();
   const attempt = () => {
     if (inputs !== asked) return true;
@@ -215,6 +220,19 @@ export function restore(back: boolean, asked = inputs) {
     return true;
   };
   if (attempt()) return;
+  // The remembered element is gone (a title removed from the list, a row
+  // folded): once its group is back without it, the focus goes to the member
+  // in its place, near where the viewer was, not to the top of the screen.
+  const near = spot
+    ? setTimeout(() => {
+        if (inputs !== asked || (want && byKey(want))) return;
+        const members = candidates().filter((el) => groupOf(el) === spot.group);
+        const el = members[Math.min(spot.index, members.length - 1)];
+        if (!el) return;
+        focusEl(el);
+        cancelRestore();
+      }, NEAR_AFTER_MS)
+    : undefined;
   const observer = new MutationObserver(() => {
     if (attempt()) cancelRestore();
   });
@@ -226,6 +244,7 @@ export function restore(back: boolean, asked = inputs) {
   stopRestore = () => {
     observer.disconnect();
     clearTimeout(timer);
+    clearTimeout(near);
   };
 }
 
@@ -328,6 +347,8 @@ export function installFocus(onBack: () => void) {
     if (recovering) return;
     if (group) memory.set(group, key);
     screens.set(path(), key);
+    if (group) spots.set(path(), { group, index: candidates().filter((c) => groupOf(c) === group).indexOf(el) });
+    else spots.delete(path());
     if (group !== "rail") content.set(path(), key);
   });
   document.addEventListener("pointerdown", cancelRestore, { capture: true });

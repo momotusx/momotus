@@ -11,6 +11,7 @@ import { isTokenInLink, liveView, op, reasonOf } from "../core/client";
 import type { AddonInfo } from "../core/generated/AddonInfo";
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import { form } from "../form";
+import { autoFocus } from "../focus/dom";
 import { addonHost, findAddons, kindLabel, providesText, tokenInLink } from "../lib/words";
 import "./browse.css";
 import "./settings.css";
@@ -100,6 +101,12 @@ function AddonRow(props: { addon: AddonInfo; index: number; count: number }) {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const run = (name: string, fields: Record<string, unknown>) =>
     op(name, { url: a().url, ...fields }).catch((e) => setError(reasonOf(e)));
+  // Up or Down: the rows keep their places and show the list in its new
+  // order, so the remote follows the addon to the same button on its new row.
+  const move = (to: number, button: "up" | "down") =>
+    op("moveAddon", { url: a().url, to })
+      .then(() => autoFocus(document.querySelector<HTMLElement>(`[data-f="addon:${to}:${button}"]`)))
+      .catch((e) => setError(reasonOf(e)));
   const remove = () => {
     if (!confirm()) {
       setConfirm(true);
@@ -152,7 +159,7 @@ function AddonRow(props: { addon: AddonInfo; index: number; count: number }) {
           <Power aria-hidden />
           {a().enabled ? "On" : "Off"}
         </button>
-        <button class="btn" data-f={`addon:${props.index}:up`} aria-disabled={props.index === 0} onClick={() => props.index > 0 && void run("moveAddon", { to: props.index - 1 })}>
+        <button class="btn" data-f={`addon:${props.index}:up`} aria-disabled={props.index === 0} onClick={() => props.index > 0 && void move(props.index - 1, "up")}>
           <ArrowUp aria-hidden />
           Up
         </button>
@@ -160,7 +167,7 @@ function AddonRow(props: { addon: AddonInfo; index: number; count: number }) {
           class="btn"
           data-f={`addon:${props.index}:down`}
           aria-disabled={props.index === props.count - 1}
-          onClick={() => props.index < props.count - 1 && void run("moveAddon", { to: props.index + 1 })}
+          onClick={() => props.index < props.count - 1 && void move(props.index + 1, "down")}
         >
           <ArrowDown aria-hidden />
           Down

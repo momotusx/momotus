@@ -12,7 +12,7 @@ import History from "lucide-solid/icons/rotate-ccw-clock";
 import SearchIcon from "lucide-solid/icons/search";
 import Star from "lucide-solid/icons/star";
 import X from "lucide-solid/icons/x";
-import { createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
 import { Poster } from "../components/art";
 import { Why } from "../components/why";
 import { liveView } from "../core/client";
@@ -36,6 +36,8 @@ onProfileReset(() => {
 });
 
 const [open, setOpen] = createSignal(false);
+/** The core's "Top results" row. */
+const TOP = "top";
 /** The palette is over the page. */
 export const searchOpen = open;
 let opener: HTMLElement | null = null;
@@ -99,7 +101,9 @@ function finish(refocus: boolean) {
   setOpen(false);
   const back = opener?.isConnected ? opener : document.querySelector<HTMLElement>('[data-f="nav:/search"]');
   opener = null;
-  if (refocus && back && mayAutoFocus()) queueMicrotask(() => focusEl(back));
+  // At once, while the page is no longer inert: a focus left lost until a
+  // microtask would go to the page's first focus first, scrolling it to the top.
+  if (refocus && back && mayAutoFocus()) focusEl(back);
 }
 
 /** The palette over the screen: Back, the scrim or a result closes it. */
@@ -144,6 +148,19 @@ function SearchPanel(props: { dialog?: boolean }) {
   if (lastQuery) queueMicrotask(() => send(lastQuery));
   const searching = () => text().trim().length > 0;
   const rows = () => s()?.rows ?? [];
+  // "Top results" (the core's row "top") holds its place for the query it
+  // came with: a loading row, a short answer, or none at all (Trakt failed or
+  // found nothing, and the core drops the row) keeps the height of three
+  // hits, so the rows under the viewer's thumb do not move.
+  const [topFor, setTopFor] = createSignal<string | null>(null);
+  createEffect(() => {
+    const snap = s();
+    if (snap?.rows.some((r) => r.rowId === TOP)) setTopFor(snap.query);
+  });
+  const topGone = () => {
+    const snap = s();
+    return !!snap && snap.query === text() && topFor() === snap.query && !snap.rows.some((r) => r.rowId === TOP);
+  };
   const loading = () => rows().some((r) => r.state.state === "loading" || r.state.state === "slow");
   // The scope pill steps through the kinds the results hold (All, Movie, Series).
   const kinds = createMemo(() => [...new Set(rows().flatMap((r) => r.tiles.map((t) => t.kind)))]);
@@ -245,38 +262,53 @@ function SearchPanel(props: { dialog?: boolean }) {
             <p class="palette-note">No matches for "{text()}" in your catalogs.</p>
           </Match>
           <Match when={true}>
+            <Show when={topGone() && !current()}>
+              <section class="hits top" aria-label="Top results">
+                <h3 class="hits-head">
+                  <span class="kicker">Top results</span>
+                  <span class="hits-src">Trakt</span>
+                </h3>
+                <div class="hits-body">
+                  <p class="palette-note">No top results for this search.</p>
+                </div>
+              </section>
+            </Show>
             <For each={rows()}>
               {(row) => (
                 <Show when={!current() || scoped(row).length > 0}>
-                  <section class="hits" aria-label={`${row.title}, ${row.source}`}>
+                  <section class="hits" classList={{ top: row.rowId === TOP }} aria-label={`${row.title}, ${row.source}`}>
                     <h3 class="hits-head">
                       <span class="kicker">{row.title}</span>
                       <span class="hits-src">{row.source}</span>
                     </h3>
-                    <Switch>
-                      <Match when={row.state.state === "failed" && row.tiles.length === 0}>
-                        <p class="st bad palette-note">
-                          <i class="dot" />
-                          {row.source} could not search {row.title}. {row.state.state === "failed" ? problemWords(row.state.reason).text : ""}
-                        </p>
-                      </Match>
-                      <Match when={row.tiles.length === 0}>
-                        <Show when={row.state.state === "slow"}>
-                          <p class="st warn palette-note">
+                    <div class="hits-body">
+                      <Switch>
+                        <Match when={row.state.state === "failed" && row.tiles.length === 0}>
+                          <p class="st bad palette-note">
                             <i class="dot" />
-                            {row.source} is slow to answer, still trying
+                            {row.source} could not search {row.title}. {row.state.state === "failed" ? problemWords(row.state.reason).text : ""}
                           </p>
-                        </Show>
-                        <div class="hit-wait" aria-hidden="true">
-                          <For each={[0, 1, 2]}>{() => <div class="skel hit-skel" />}</For>
-                        </div>
-                      </Match>
-                      <Match when={true}>
-                        {/* Keyed by the title alone (the core shows each title once): one
-                            that moves up into Top results keeps the focus. */}
-                        <For each={scoped(row)}>{(t) => <Hit tile={t} fkey={`hit:${t.id}`} onOpen={remember} />}</For>
-                      </Match>
-                    </Switch>
+                        </Match>
+                        <Match when={row.tiles.length === 0}>
+                          <Show when={row.state.state === "slow"}>
+                            <p class="st warn palette-note">
+                              <i class="dot" />
+                              {row.source} is slow to answer, still trying
+                            </p>
+                          </Show>
+                          <div class="hit-wait" aria-hidden="true">
+                            <For each={[0, 1, 2]}>{() => <div class="skel hit-skel" />}</For>
+                          </div>
+                        </Match>
+                        <Match when={true}>
+                          {/* Keyed by row and title: Top results may repeat a title a
+                              row below shows, and one key on two hits sends the
+                              remote back up to the first. The core keeps its rows
+                              as first shown, so a hit never changes rows. */}
+                          <For each={scoped(row)}>{(t) => <Hit tile={t} fkey={`hit:${row.rowId}:${t.id}`} onOpen={remember} />}</For>
+                        </Match>
+                      </Switch>
+                    </div>
                   </section>
                 </Show>
               )}

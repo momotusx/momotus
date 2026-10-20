@@ -2,7 +2,7 @@ import { A } from "@solidjs/router";
 import Puzzle from "lucide-solid/icons/puzzle";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Wrench from "lucide-solid/icons/wrench";
-import { createSignal, Match, Show, Switch } from "solid-js";
+import { createEffect, createSignal, Match, on, Show, Switch } from "solid-js";
 import { Chips, Grid, SkeletonGrid } from "../components/grid";
 import { Why } from "../components/why";
 import { discoverView } from "../core/client";
@@ -36,6 +36,22 @@ function DiscoverPage(props: { retry: () => void }) {
   const select = (c: { kind?: string; catalog?: string; genre?: string | null }) => void view.command({ type: "select", ...c });
   const catalogName = () => d()?.catalogs.find((c) => c.id === d()?.catalog)?.name ?? "this catalog";
   const loadMore = () => d()?.state.state === "ready" && void view.command({ type: "loadMore" });
+  // Try again after a failed page (or a failed catalog): loadMore asks that
+  // page again. Its button stays, reading "Trying again", until the answer,
+  // so the remote keeps its place.
+  const [retrying, setRetrying] = createSignal(false);
+  createEffect(on(() => d()?.state.state, (st) => st !== "loading" && setRetrying(false), { defer: true }));
+  const retry = () => {
+    if (retrying()) return;
+    setRetrying(true);
+    view.command({ type: "loadMore" }).catch(() => setRetrying(false));
+  };
+  const retryButton = (key: string) => (
+    <button class="btn" data-f={key} aria-disabled={retrying()} onClick={retry}>
+      <RefreshCw aria-hidden />
+      {retrying() ? "Trying again" : "Try again"}
+    </button>
+  );
 
   return (
     <main class="browse page" data-vscroll ref={attach} onScroll={(e) => (pageScroll.top = e.currentTarget.scrollTop)}>
@@ -101,14 +117,19 @@ function DiscoverPage(props: { retry: () => void }) {
                 <Match when={s().genreRequired && !s().genre}>
                   <p class="note">{catalogName()} only answers for one genre at a time. Pick a genre above.</p>
                 </Match>
+                <Match when={s().items.length === 0 && (s().state.state === "failed" || retrying())}>
+                  <div class="discover-fail">
+                    <p class="note" classList={{ bad: !retrying() }}>
+                      <i class="dot" />
+                      {retrying()
+                        ? `Asking for ${catalogName()} again.`
+                        : `${catalogName()} could not load. ${problemWords((s().state as { reason: string }).reason).text}`}
+                    </p>
+                    {retryButton("discover:retry-catalog")}
+                  </div>
+                </Match>
                 <Match when={s().items.length === 0 && s().state.state === "loading"}>
                   <SkeletonGrid />
-                </Match>
-                <Match when={s().items.length === 0 && s().state.state === "failed"}>
-                  <p class="note bad">
-                    <i class="dot" />
-                    {catalogName()} could not load. {problemWords((s().state as { reason: string }).reason).text}
-                  </p>
                 </Match>
                 <Match when={s().items.length === 0}>
                   <p class="note">Nothing in {catalogName()} for this choice.</p>
@@ -119,14 +140,17 @@ function DiscoverPage(props: { retry: () => void }) {
                     scope="discover"
                     onNearEnd={loadMore}
                     footer={
-                      <p class="grid-foot st" classList={{ warn: s().state.state === "loading", bad: s().state.state === "failed" }}>
-                        <i class="dot" />
-                        <Switch fallback={`${s().items.length} titles`}>
-                          <Match when={s().state.state === "loading"}>Loading more</Match>
-                          <Match when={s().state.state === "end"}>{`All ${s().items.length} titles in ${catalogName()}`}</Match>
-                          <Match when={s().state.state === "failed"}>{`Could not load more. ${problemWords((s().state as { reason: string }).reason).text}`}</Match>
-                        </Switch>
-                      </p>
+                      <div class="grid-foot-row">
+                        <p class="grid-foot st" classList={{ warn: s().state.state === "loading", bad: s().state.state === "failed" }}>
+                          <i class="dot" />
+                          <Switch fallback={`${s().items.length} titles`}>
+                            <Match when={s().state.state === "loading"}>Loading more</Match>
+                            <Match when={s().state.state === "end"}>{`All ${s().items.length} titles in ${catalogName()}`}</Match>
+                            <Match when={s().state.state === "failed"}>{`Could not load more. ${problemWords((s().state as { reason: string }).reason).text}`}</Match>
+                          </Switch>
+                        </p>
+                        <Show when={s().state.state === "failed" || retrying()}>{retryButton("discover:retry-more")}</Show>
+                      </div>
                     }
                   />
                 </Match>

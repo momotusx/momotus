@@ -29,6 +29,8 @@ export const LANGS_PORT = 17812 + shift;
 export const NEXT_PORT = 17813 + shift;
 /** The journey API spec's own: a core with a local addon's series, one episode not out yet. */
 export const JOURNEY_PORT = 17814 + shift;
+/** The Search Top results spec's own: a core whose Trakt is a local fake. */
+export const SEARCH_TOP_PORT = 17815 + shift;
 export const GOT = { id: "tt0944947", resume: "tt0944947:2:3" };
 /** Where every spec writes its shots: SHOTS_DIR, else the run's own ignored
  * output. The committed set in e2e/shots/ changes only when a run is asked

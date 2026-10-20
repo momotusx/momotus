@@ -4,11 +4,12 @@
 
 import { A } from "@solidjs/router";
 import CircleAlert from "lucide-solid/icons/circle-alert";
+import LoaderCircle from "lucide-solid/icons/loader-circle";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Star from "lucide-solid/icons/star";
 import Wrench from "lucide-solid/icons/wrench";
 import X from "lucide-solid/icons/x";
-import { createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { Poster } from "./art";
 import { Why } from "./why";
 import type { HomeRow } from "../core/generated/HomeRow";
@@ -126,22 +127,7 @@ export function TileCard(props: {
     </A>
   );
   if (!slotted) return card;
-  // Removing reaches every synced device, so it asks once ("Press again to
-  // remove", 4 s, as Remove on an addon) and says when the core refused.
-  const [ask, setAsk] = createSignal<"idle" | "confirm" | "failed">("idle");
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  onCleanup(() => clearTimeout(timer));
-  const settle = (state: "confirm" | "failed") => {
-    setAsk(state);
-    clearTimeout(timer);
-    timer = setTimeout(() => setAsk("idle"), 4000);
-  };
-  const press = () => {
-    if (ask() !== "confirm") return settle("confirm");
-    clearTimeout(timer);
-    setAsk("idle");
-    props.onRemove?.().catch(() => settle("failed"));
-  };
+  const { ask, press } = askOnce(() => props.onRemove?.() ?? Promise.resolve());
   return (
     <div class="tile-slot" style={{ width: `${props.w}px`, ...props.style }}>
       {card}
@@ -162,12 +148,33 @@ export function TileCard(props: {
   );
 }
 
+/** Removing from Continue Watching reaches every synced device, so it asks
+ * once ("Press again to remove", 4 s, as Remove on an addon) and says when
+ * the core refused: the X on a tile and TV's button on the title page. */
+export function askOnce(act: () => Promise<unknown>) {
+  const [ask, setAsk] = createSignal<"idle" | "confirm" | "failed">("idle");
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(timer));
+  const settle = (state: "confirm" | "failed") => {
+    setAsk(state);
+    clearTimeout(timer);
+    timer = setTimeout(() => setAsk("idle"), 4000);
+  };
+  const press = () => {
+    if (ask() !== "confirm") return settle("confirm");
+    clearTimeout(timer);
+    setAsk("idle");
+    act().catch(() => settle("failed"));
+  };
+  return { ask, press };
+}
+
 /** "Remove from Continue Watching": the core drops the title from Continue
  * Watching and Next Up on every synced device until it is played again, and
  * Home's row updates from the core. */
 export const removeFromContinue = (itemId: string) => op("removeFromContinue", { itemId });
 
-export function Row(props: { row: HomeRow; autofocus: boolean; root: () => Element | null; onOpen?: () => void; scope?: string; onRetry?: (rowId: string) => unknown }) {
+export function Row(props: { row: HomeRow; autofocus: boolean; root: () => Element | null; onOpen?: () => void; scope?: string; onRetry?: (rowId: string) => Promise<unknown> | undefined }) {
   let section!: HTMLElement;
   let track: HTMLDivElement | undefined;
   const m = metrics;
@@ -212,6 +219,9 @@ export function Row(props: { row: HomeRow; autofocus: boolean; root: () => Eleme
 
   const ready = () => props.row.tiles.length > 0;
   const state = () => props.row.state.state;
+  // A Try again under way: until the row answers or fails again.
+  const [retrying, setRetrying] = createSignal(false);
+  createEffect(on(state, (s) => s !== "loading" && s !== "slow" && setRetrying(false), { defer: true }));
 
   return (
     <section class="row" data-row data-fgroup={`row:${id()}`} ref={section} aria-label={props.row.title}>
@@ -230,21 +240,38 @@ export function Row(props: { row: HomeRow; autofocus: boolean; root: () => Eleme
       </header>
       <div class="row-body" style={{ height: `${bodyHeight()}px` }}>
         <Switch>
-          <Match when={props.row.state.state === "failed" && !ready()}>
+          {/* While a Try again runs, the message and its button stay (the
+              button reads "Trying again"), so the remote keeps its place; the
+              tiles that come take the focus from it, a new failure gives it
+              back its words. */}
+          <Match when={(props.row.state.state === "failed" || retrying()) && !ready()}>
             <div class="row-msg">
-              <CircleAlert aria-hidden class="row-msg-icon bad-ico" />
+              <Show when={retrying()} fallback={<CircleAlert aria-hidden class="row-msg-icon bad-ico" />}>
+                <LoaderCircle aria-hidden class="row-msg-icon spin" />
+              </Show>
               <div>
                 <p>
-                  {props.row.source} could not load {props.row.title}.
+                  {retrying() ? `Asking ${props.row.source} for ${props.row.title} again.` : `${props.row.source} could not load ${props.row.title}.`}
                 </p>
-                <Why class="why" reason={props.row.state.state === "failed" ? props.row.state.reason : ""} />
+                <Show when={!retrying() && props.row.state.state === "failed"}>
+                  <Why class="why" reason={props.row.state.state === "failed" ? props.row.state.reason : ""} />
+                </Show>
               </div>
               <div class="row-acts">
                 <Show when={props.onRetry}>
                   {(retry) => (
-                    <button class="btn" data-f={`retry:${id()}`} onClick={() => retry()(props.row.rowId)}>
+                    <button
+                      class="btn"
+                      data-f={`retry:${id()}`}
+                      aria-disabled={retrying()}
+                      onClick={() => {
+                        if (retrying()) return;
+                        setRetrying(true);
+                        Promise.resolve(retry()(props.row.rowId)).catch(() => setRetrying(false));
+                      }}
+                    >
                       <RefreshCw aria-hidden />
-                      Try again
+                      {retrying() ? "Trying again" : "Try again"}
                     </button>
                   )}
                 </Show>

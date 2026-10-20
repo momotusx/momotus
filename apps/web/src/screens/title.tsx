@@ -18,7 +18,7 @@ import { createEffect, createMemo, createSignal, For, type JSX, Match, Show, Swi
 import { Backdrop, Logo } from "../components/art";
 import { KeyedPage } from "../components/keyed-page";
 import { Why } from "../components/why";
-import { CONTINUE_ROW, removeFromContinue } from "../components/row";
+import { askOnce, CONTINUE_ROW, removeFromContinue } from "../components/row";
 import { separators } from "../components/separators";
 import { TrailerOverlay } from "../components/trailer";
 import { homeView, type TitleView, titleView, versionsView } from "../core/client";
@@ -50,6 +50,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
   const header = () => view.state.header;
   const d = () => header()?.details ?? null;
   const target = () => header()?.playTarget ?? null;
+  const uncontinue = askOnce(() => removeFromContinue(props.id));
   createEffect(() => {
     const name = d()?.name;
     if (name) document.title = `${name} · Marquee`;
@@ -275,9 +276,11 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                   {/* TV has no remove button on its tiles: the title page carries it
                       while the title is in Continue Watching (or Next Up). */}
                   <Show when={form() === "tv" && inContinue(props.id)}>
-                    <button class="btn" data-f="title:uncontinue" onClick={() => void removeFromContinue(props.id).catch(() => undefined)}>
+                    <button class="btn" classList={{ danger: uncontinue.ask() !== "idle" }} data-f="title:uncontinue" onClick={uncontinue.press}>
                       <CircleX aria-hidden />
-                      <span class="long">Remove from Continue Watching</span>
+                      <span class="long">
+                        {uncontinue.ask() === "confirm" ? "Press again to remove" : uncontinue.ask() === "failed" ? "Not removed, try again" : "Remove from Continue Watching"}
+                      </span>
                     </button>
                   </Show>
                 </div>

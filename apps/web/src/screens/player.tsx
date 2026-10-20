@@ -33,7 +33,7 @@ import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
 import { videoContext } from "../core/video";
 import { autoFocusSoon, goBack } from "../focus/dom";
 import { form } from "../form";
-import { entryFrom, historyBase, historyDepth, markBack } from "../history";
+import { backThenReplace, entryFrom, historyBase, historyDepth, markBack } from "../history";
 import { createVideoEngine } from "../player/video-engine";
 import { loadedSource, type Retry, sourceStart, TRYING_AGAIN_MS, tryingAgain } from "../lib/failover";
 import { bytes, clock, decoded, delayText, startsText, episodeLabel, groupFailures, playPath, playState, seasonName, titlePath, versionsPath } from "../lib/format";
@@ -95,10 +95,13 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     e.preventDefault();
     goBack();
   };
+  // This entry came from a Versions page of this title (this video's, or an
+  // earlier episode's or version's before autoplay or a move on replaced it).
+  const fromVersions = () => !!entryFrom()?.startsWith(`${titlePath(props.kind, props.id)}/versions/`);
   // Episodes: the title, once in history. A play opened on this title's
   // Versions, itself opened on the title, goes back past Versions.
   const toTitle = (e: MouseEvent) => {
-    if (entryFrom() !== versionsPath(props.kind, props.id, props.videoId) || !props.viaTitle || historyDepth() - 2 < historyBase()) {
+    if (!fromVersions() || !props.viaTitle || historyDepth() - 2 < historyBase()) {
       leaveFor(titlePath(props.kind, props.id))(e);
       return;
     }
@@ -106,6 +109,17 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     markBack();
     history.go(-2);
   };
+  // Versions: this video's. When the play came from an earlier episode's
+  // Versions (autoplay moved on), that entry gives way to this one.
+  const toVersions = (e: MouseEvent) => {
+    const here = versionsPath(props.kind, props.id, props.videoId);
+    if (entryFrom() === here || !fromVersions()) return leaveFor(here)(e);
+    e.preventDefault();
+    backThenReplace(here);
+  };
+  // What a play that replaces this one keeps from it (autoplay, Up Next, a
+  // move on to another version): that it was opened on Versions via the title.
+  const carried = () => ({ viaTitle: props.viaTitle });
   const ctx = videoContext(props.kind, props.id, props.videoId, props.binge);
   // Back goes where the viewer came from: it names the title only when that
   // is the title page.
@@ -479,7 +493,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   // Up Next: from the release-matched credits start when the core knows it,
   // else the last NEXT_AT seconds, or at once after Skip credits.
   const showNext = () => {
-    if (!next() || duration() <= 60 || ended()) return false;
+    // A panel open (Subtitles during the credits): Up Next waits, as Skip does.
+    if (!next() || duration() <= 60 || ended() || panel()) return false;
     const skipped = skippedAt();
     if (skipped !== null && time() * 1000 >= skipped) return true;
     const at = snap()?.nextAtMs;
@@ -509,7 +524,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   // Another version of this video (the failure card's offer): a new play at
   // its own address, on the same Versions view (same binge group).
   const playKey = (key: string) =>
-    navigate(`${playPath(props.kind, props.id, props.videoId)}${props.binge ? `?binge=${encodeURIComponent(props.binge)}` : ""}`, { replace: true, state: playState(key) });
+    navigate(`${playPath(props.kind, props.id, props.videoId)}${props.binge ? `?binge=${encodeURIComponent(props.binge)}` : ""}`, { replace: true, state: { ...playState(key), ...carried() } });
   // Up Next takes focus when it appears, like Skip buttons on other players.
   createEffect(
     on(showNext, (shown, was) => {
@@ -536,7 +551,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   const onEnded = () => {
     report();
     const href = nextHref();
-    if (href && prefs.state.data?.autoplayNext) navigate(href, { replace: true });
+    if (href && prefs.state.data?.autoplayNext) navigate(href, { replace: true, state: carried() });
     else {
       setOsd(false);
       setEnded(true);
@@ -583,7 +598,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       classList={{ primary: !snap()?.offer && !failed() }}
       href={versionsPath(props.kind, props.id, props.videoId)}
       replace
-      on:click={leaveFor(versionsPath(props.kind, props.id, props.videoId))}
+      on:click={toVersions}
       data-f="player:versions"
       data-autofocus={snap()?.offer || failed() ? undefined : ""}
     >
@@ -791,7 +806,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                     {episodeLabel(n().season, n().episode)} {n().title}
                   </h2>
                   <div class="acts">
-                    <A class="btn primary big" href={nextHref() ?? "#"} replace data-f="end:next" data-autofocus>
+                    <A class="btn primary big" href={nextHref() ?? "#"} replace state={carried()} data-f="end:next" data-autofocus>
                       <SkipForward aria-hidden />
                       Next episode
                     </A>
@@ -923,7 +938,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                 class="pa"
                 href={versionsPath(props.kind, props.id, props.videoId)}
                 replace
-                on:click={leaveFor(versionsPath(props.kind, props.id, props.videoId))}
+                on:click={toVersions}
                 data-f="player:versionsact"
               >
                 <Layers aria-hidden />
@@ -992,7 +1007,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
               class="opt"
               href={versionsPath(props.kind, props.id, props.videoId)}
               replace
-              on:click={leaveFor(versionsPath(props.kind, props.id, props.videoId))}
+              on:click={toVersions}
               data-f="audio:versions"
             >
               <b>Choose a version</b>
@@ -1104,7 +1119,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                   <p class="num">{startsText(remaining())}</p>
                 </Match>
               </Switch>
-              <A class="btn primary" href={nextHref() ?? "#"} replace data-f="next:play">
+              <A class="btn primary" href={nextHref() ?? "#"} replace state={carried()} data-f="next:play">
                 <SkipForward aria-hidden />
                 Play now
               </A>

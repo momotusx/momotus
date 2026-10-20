@@ -47,6 +47,9 @@
 .palette-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 22px; margin: 0 -28px -28px; padding: 6px 28px 28px; }
 .palette-body [data-f] { scroll-margin: 16px 0 24px; }
 .hits { display: flex; flex-direction: column; gap: 4px; }
+/* Top results keeps the height of three hits (and its heading) for its query. */
+.hits-body { display: flex; flex-direction: column; gap: 4px; }
+.hits.top .hits-body { min-height: calc(3 * 116px + 2 * 8px); }
 .hits-head { display: flex; align-items: baseline; gap: 14px; padding: 0 14px 6px; font: inherit; }
 .hits-src { font: 500 var(--type-caption) / 1 var(--font-text); color: var(--dim); }
 .hit { display: flex; align-items: center; gap: 22px; padding: 10px 14px; border-radius: var(--radius-card); transform-origin: center; }
@@ -96,6 +99,7 @@
 [data-form="phone"] .hit-meta { gap: 6px; font-size: 13px; }
 [data-form="phone"] .hit-chev { width: 18px; height: 18px; }
 [data-form="phone"] .hit-skel { height: 72px; }
+[data-form="phone"] .hits.top .hits-body { min-height: calc(3 * 72px + 2 * 8px); }
 [data-form="phone"] .palette-note { padding: 2px 6px; font-size: 15px; }
 [data-form="phone"] .palette .recent { gap: 10px; padding: 0 6px; }
 

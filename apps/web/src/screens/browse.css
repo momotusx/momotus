@@ -39,6 +39,10 @@
 .grid { display: grid; gap: 48px 32px; padding: 34px; margin: -34px; justify-content: space-between; }
 .grid > .tile { position: relative; }
 .grid-foot { margin-top: 40px; font: 500 var(--type-caption) var(--font-text); color: var(--muted); }
+/* A failed page or catalog: its words, then Try again beside them. */
+.grid-foot-row, .discover-fail { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px; }
+.grid-foot-row .grid-foot { margin: 0; }
+.grid-foot-row { margin-top: 40px; }
 .sentinel { height: 1px; }
 .note { font: 400 var(--type-body) / 1.4 var(--font-text); color: var(--muted); max-width: 1100px; }
 .note.bad { display: flex; align-items: center; gap: 14px; color: var(--text); }
