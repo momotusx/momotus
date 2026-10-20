@@ -219,8 +219,9 @@ async fn a_torrent_the_check_finds_cached_is_ready_before_done() {
 
 /// Live seeders (C21 scrape): a swarm's count from its trackers stands
 /// over the addon's number. A listed 900 its own trackers count at 0 may
-/// not start; a zero from the default trackers alone (the stream named
-/// none) and a swarm no tracker answered for keep the addon's number.
+/// not start; a swarm no answer told anything about keeps the addon's
+/// number (the engine gives none for a default tracker's 0/0: its test
+/// `an_answer_counts_from_an_own_tracker_or_with_peers`).
 #[tokio::test]
 async fn live_seeders_stand_over_the_addons_number() {
     const HASH_C: &str = "cccccccccccccccccccccccccccccccccccccccc";
@@ -245,7 +246,8 @@ async fn live_seeders_stand_over_the_addons_number() {
     .await;
     let core = core_with(&server);
     core.set_debrid_keys(&[(StoreId::RealDebrid, "rd".into())]);
-    let live = [(HASH_A.to_owned(), 0), (HASH_B.to_owned(), 0)];
+    // HASH_B: no count, as for a default tracker's 0/0.
+    let live = [(HASH_A.to_owned(), 0)];
     core.set_live_seeders(std::collections::HashMap::from(live));
     let view = VersionsView::open(&core, params(TitleFacts::default()));
     // `done` does not wait for the counts; they rank the rows when they come.
@@ -271,7 +273,7 @@ async fn live_seeders_stand_over_the_addons_number() {
         mq_runtime::VersionStatus::Torrent { seeds } => seeds,
         _ => panic!("a torrent row: {r:?}"),
     };
-    assert_eq!(seeds(&best), Some(100), "a zero from the defaults alone");
+    assert_eq!(seeds(&best), Some(100), "no count: the addon's number");
     let row = |name: &str| {
         s.rows
             .iter()

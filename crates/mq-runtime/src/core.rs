@@ -448,7 +448,8 @@ impl Core {
 
     /// The seeders of `torrents` (lowercase info hash, the stream's
     /// trackers) as their trackers count them now, within about a second;
-    /// `None` where none answered, and for every one without the engine.
+    /// `None` where no answer told anything (`Engine::scrape`: a default
+    /// tracker's 0/0 does not), and for every one without the engine.
     pub async fn live_seeders(&self, torrents: &[(String, Vec<String>)]) -> Vec<Option<u32>> {
         if let Some(fake) = self.fake_seeders().as_mut() {
             if fake.misses > 0 {

@@ -1232,10 +1232,11 @@ fn live_asks(
     asks
 }
 
-/// One scrape of the trackers, within 3 s. A swarm no tracker answered
-/// for keeps the addon's number, and so does a zero when the stream named
-/// no trackers of its own: the default ones answer zero for a swarm they
-/// do not track, which says nothing about one that lives on the DHT.
+/// One scrape of the trackers, within 3 s. A swarm no answer told anything
+/// about keeps the addon's number: the engine gives no count for a default
+/// tracker's 0/0, the answer for a swarm it does not track, and gives a
+/// zero that a tracker counting leechers, or the stream's own tracker,
+/// reported (`Engine::scrape`).
 async fn live_check(core: Core, swarms: Vec<(String, Vec<String>)>) -> Side {
     let ask = || async {
         let counts = tokio::time::timeout(LIVE_WAIT, core.live_seeders(&swarms)).await;
@@ -1253,11 +1254,7 @@ async fn live_check(core: Core, swarms: Vec<(String, Vec<String>)>) -> Side {
         swarms
             .into_iter()
             .zip(counts)
-            .filter_map(|((hash, trackers), n)| {
-                let own = trackers.iter().any(|t| t.contains("://"));
-                let n = n?;
-                (n > 0 || own).then_some((hash, n))
-            })
+            .filter_map(|((hash, _), n)| Some((hash, n?)))
             .collect(),
     )
 }
