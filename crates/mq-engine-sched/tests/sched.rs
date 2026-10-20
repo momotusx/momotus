@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use mq_engine_sched::{
     Action, BLOCK, Bitfield, BlockIdx, Class, Config, DemandId, Event, FileIndex, Geometry, PeerId,
-    PieceIdx, Scheduler,
+    PieceIdx, Scheduler, Window,
 };
 use proptest::prelude::*;
 
@@ -891,6 +891,358 @@ fn readahead_prefers_rare_pieces() {
     assert_eq!(h.geo.piece_of(first.1), 7, "rarest readahead piece first");
 }
 
+/// File order (plans/streaming-window.md 2.2, phase 2 test s): readahead
+/// runs by offset, a piece only one connected peer holds first; held by
+/// two or by three is the same.
+#[test]
+fn readahead_runs_in_file_order_a_lone_piece_first() {
+    let g = Geometry::new(64 * KIB as u32, &[8 * MIB]).unwrap();
+    let cfg = Config {
+        max_depth: 16,
+        min_depth: 16,
+        ..small_cfg()
+    };
+    let mut h = Harness::new(g, cfg);
+    let n = h.geo.num_pieces();
+    // Piece 7 only peer 1 holds; piece 8 peers 1 and 3; the rest all three.
+    let mut lacks_7_8 = Bitfield::full(n);
+    lacks_7_8.set(7, false);
+    lacks_7_8.set(8, false);
+    let mut lacks_7 = Bitfield::full(n);
+    lacks_7.set(7, false);
+    for (peer, have) in [(1, Bitfield::full(n)), (2, lacks_7_8), (3, lacks_7)] {
+        h.send(Event::PeerConnected {
+            peer,
+            have,
+            reqq: 250,
+        });
+    }
+    for piece in (0..5).chain([127]) {
+        h.send(Event::PieceVerified { piece });
+    }
+    open(&mut h, 1, 0, 0, None);
+    let acts = h.send(Event::PeerUnchoked { peer: 1 });
+    let mut order: Vec<PieceIdx> = requests(&acts)
+        .iter()
+        .map(|r| h.geo.piece_of(r.1))
+        .collect();
+    order.dedup();
+    assert_eq!(order, [7, 5, 6, 8], "a lone piece, then file order");
+}
+
+fn window(file: usize) -> Window {
+    Window {
+        file,
+        budget: u64::MAX / 2,
+        slack: 0,
+        behind: 128 * KIB,
+        ramp_floor: 128 * KIB,
+        open_floor: 256 * KIB,
+        open_cap: 256 * KIB,
+    }
+}
+
+fn readahead_pieces(h: &Harness) -> Vec<PieceIdx> {
+    (0..h.geo.num_pieces())
+        .filter(|&p| h.s.class_of(p) == Some(Class::Readahead))
+        .collect()
+}
+
+fn open(h: &mut Harness, demand: DemandId, file: usize, start: u64, end_hint: Option<u64>) {
+    h.send(Event::RangeOpened {
+        demand,
+        file,
+        start,
+        end_hint,
+    });
+}
+
+/// A probe (its end within its blocking window: a hash range, a resume's
+/// head) never takes the focus: the player read keeps its windows, the
+/// probe fetches only its blocking window, and with only probes left the
+/// anchor stays warm (plans/streaming-window.md 2.3, phase 2 test e).
+#[test]
+fn a_probe_never_takes_the_focus() {
+    let g = Geometry::new(64 * KIB as u32, &[8 * MIB]).unwrap();
+    let mut h = Harness::new(g, small_cfg());
+    // Piece 64: blocking 64, critical 65..67, playback 67..69, readahead 69..73.
+    open(&mut h, 1, 0, 4 * MIB, None);
+    let ahead = readahead_pieces(&h);
+    assert_eq!(ahead, [69, 70, 71, 72]);
+    open(&mut h, 2, 0, 0, Some(64 * KIB));
+    assert_eq!(h.s.class_of(0), Some(Class::Blocking));
+    assert_eq!(
+        h.s.class_of(1),
+        None,
+        "nothing past the probe's blocking window"
+    );
+    assert_eq!(h.s.class_of(65), Some(Class::Critical));
+    assert_eq!(readahead_pieces(&h), ahead);
+    h.send(Event::RangeClosed { demand: 1 });
+    assert_eq!(
+        h.s.class_of(64),
+        Some(Class::Playback),
+        "the anchor is warm"
+    );
+    assert_eq!(h.s.class_of(1), None);
+}
+
+/// At a resume the anchor sits at the resume point (2.3, 2.8): with only
+/// probes open its window is kept and warm and nothing is evictable; a
+/// player's header read at the head leaves it kept; once a read opens near
+/// it, it is an ordinary focus.
+#[test]
+fn a_seeded_anchor_keeps_the_resume_window_until_a_read_opens_near_it() {
+    let g = Geometry::new(64 * KIB as u32, &[8 * MIB]).unwrap();
+    let mut h = Harness::new(g, small_cfg());
+    h.s.set_window(Some(window(0)));
+    h.s.seed_anchor(0, 4 * MIB);
+    for piece in 0..128 {
+        h.send(Event::PieceVerified { piece });
+    }
+    open(&mut h, 1, 0, 0, Some(64 * KIB));
+    // Pinned head 0 and tail 127; the anchor's [pos - B, playback end).
+    let kept = h.s.kept();
+    let kept_now: Vec<PieceIdx> = (0..128).filter(|&p| kept.get(p)).collect();
+    assert_eq!(kept_now, [0, 62, 63, 64, 65, 66, 67, 68, 127]);
+    assert!(h.s.evictable(u64::MAX).is_empty(), "no player read yet");
+    // The player's header read at byte 0, past its grace.
+    open(&mut h, 2, 0, 0, None);
+    h.tick(6_000);
+    assert!(
+        (62..69).all(|p| h.s.kept().get(p)),
+        "still the resume window"
+    );
+    assert!(!h.s.evictable(u64::MAX).is_empty());
+    // A read at the resume point ends the seeded anchor: after it moves on
+    // and its grace ends, the old window is no longer kept.
+    open(&mut h, 3, 0, 4 * MIB, None);
+    h.send(Event::RangeClosed { demand: 2 });
+    open(&mut h, 4, 0, 6 * MIB, None);
+    h.send(Event::RangeClosed { demand: 3 });
+    h.tick(6_000);
+    assert!(!(62..69).any(|p| h.s.kept().get(p)));
+}
+
+/// The keeper's order (2.4): other files' pieces first, then the windowed
+/// file's verified pieces behind the read (farthest back first), then those
+/// beyond the kept set (farthest first); never a kept piece.
+#[test]
+fn evictable_follows_the_keeper_order() {
+    // File 0: pieces 0..16; file 1 (windowed): 16..144.
+    let g = Geometry::new(64 * KIB as u32, &[MIB, 8 * MIB]).unwrap();
+    let mut h = Harness::new(g, small_cfg());
+    h.s.set_window(Some(window(1)));
+    let verified: Vec<PieceIdx> = (0..21).chain(78..88).chain(100..103).chain([143]).collect();
+    for &piece in &verified {
+        h.send(Event::PieceVerified { piece });
+    }
+    // File 1 byte 4 MiB is piece 80: kept 78..87 (B, blocking, critical,
+    // playback and the ramp's floor) plus the pinned 16 and 143.
+    open(&mut h, 1, 1, 4 * MIB, None);
+    let kept = h.s.kept();
+    assert!((78..87).all(|p| kept.get(p)) && !kept.get(77) && !kept.get(87));
+    let want: Vec<PieceIdx> = (0..16).chain(17..21).chain([102, 101, 100, 87]).collect();
+    assert_eq!(h.s.evictable(u64::MAX), want);
+    // Enough for three pieces: the first three.
+    assert_eq!(h.s.evictable(3 * 64 * KIB), [0, 1, 2]);
+    assert_eq!(h.s.held_bytes(), verified.len() as u64 * 64 * KIB);
+}
+
+/// The ramp (2.2, phase 2 test u): after a seek the readahead is the floor,
+/// it grows by twice the bytes read up to the file's readahead, a new range
+/// within a piece of the read position keeps it, and a jump starts again at
+/// the floor.
+#[test]
+fn the_ramp_grows_with_the_bytes_read() {
+    let g = Geometry::new(64 * KIB as u32, &[16 * MIB]).unwrap();
+    let mut h = Harness::new(g, small_cfg());
+    h.s.set_window(Some(window(0)));
+    h.s.set_readahead(0, MIB);
+    open(&mut h, 1, 0, 0, None);
+    assert_eq!(readahead_pieces(&h).len(), 2, "the floor");
+    h.send(Event::RangeAdvanced {
+        demand: 1,
+        pos: 256 * KIB,
+    });
+    assert_eq!(readahead_pieces(&h).len(), 8, "twice the bytes read");
+    h.send(Event::RangeAdvanced {
+        demand: 1,
+        pos: MIB,
+    });
+    assert_eq!(readahead_pieces(&h).len(), 16, "the cap");
+    h.send(Event::RangeClosed { demand: 1 });
+    open(&mut h, 2, 0, MIB + 32 * KIB, None);
+    assert_eq!(readahead_pieces(&h).len(), 16, "the run goes on");
+    open(&mut h, 3, 0, 8 * MIB, None);
+    h.tick(6_000);
+    assert_eq!(readahead_pieces(&h).len(), 2, "a seek starts again");
+}
+
+/// A seek's grace in a window (2.3, phase 2 test r): for 5 s the new focus
+/// has no readahead and the previous one keeps `[pos - B, playback end)`;
+/// then the readahead comes back and the old window is free. A file that
+/// is not windowed has no grace.
+#[test]
+fn a_seek_has_a_grace_in_a_window_only() {
+    let g = Geometry::new(64 * KIB as u32, &[16 * MIB]).unwrap();
+    let mut h = Harness::new(g.clone(), small_cfg());
+    h.s.set_window(Some(window(0)));
+    open(&mut h, 1, 0, 0, None);
+    h.send(Event::RangeAdvanced {
+        demand: 1,
+        pos: 2 * MIB,
+    });
+    open(&mut h, 2, 0, 8 * MIB, None);
+    h.send(Event::RangeClosed { demand: 1 });
+    assert!(readahead_pieces(&h).is_empty(), "no readahead in the grace");
+    // The previous focus at piece 32: 30..37 kept.
+    assert!((30..37).all(|p| h.s.kept().get(p)));
+    h.tick(4_000);
+    assert!(readahead_pieces(&h).is_empty());
+    h.tick(1_500);
+    assert!(!readahead_pieces(&h).is_empty());
+    assert!(!(30..37).any(|p| h.s.kept().get(p)));
+    let mut whole = Harness::new(g, small_cfg());
+    open(&mut whole, 1, 0, 0, None);
+    open(&mut whole, 2, 0, 8 * MIB, None);
+    assert_eq!(readahead_pieces(&whole).len(), 4, "the preset at once");
+}
+
+/// With no reader a stopped window keeps no readahead, a paused one does
+/// (2.3); a file that is not windowed keeps its anchor warm as before.
+#[test]
+fn a_paused_window_keeps_its_readahead_and_a_stopped_one_does_not() {
+    let g = Geometry::new(64 * KIB as u32, &[8 * MIB]).unwrap();
+    let mut h = Harness::new(g, small_cfg());
+    h.s.set_window(Some(window(0)));
+    open(&mut h, 1, 0, 4 * MIB, None);
+    h.send(Event::RangeClosed { demand: 1 });
+    assert!(readahead_pieces(&h).is_empty());
+    assert_eq!(h.s.class_of(64), Some(Class::Playback));
+    h.s.set_paused(true);
+    h.tick(1);
+    assert_eq!(readahead_pieces(&h), [69, 70, 71, 72]);
+    assert!(h.s.kept().get(72));
+    h.s.set_paused(false);
+    h.tick(1);
+    assert!(readahead_pieces(&h).is_empty());
+    assert!(!h.s.kept().get(72));
+}
+
+/// The open-pieces limit (2.2, phase 2 test t): in a window, readahead
+/// pieces partly received at once stay within `clamp(2 s × fill, floor,
+/// cap)`, here 4 pieces; a verified one makes room for the next. A file
+/// that is not windowed has no limit.
+#[test]
+fn readahead_pieces_open_at_once_stay_within_the_limit() {
+    let g = Geometry::new(64 * KIB as u32, &[16 * MIB]).unwrap();
+    let cfg = Config {
+        max_depth: 256,
+        min_depth: 256,
+        readahead_bytes: 2 * MIB,
+        ..small_cfg()
+    };
+    let open_ra = |h: &Harness| -> Vec<PieceIdx> {
+        let mut v: Vec<PieceIdx> = h
+            .out
+            .iter()
+            .map(|&(b, _)| h.geo.piece_of(b))
+            .filter(|&p| h.s.class_of(p) == Some(Class::Readahead))
+            .collect();
+        v.dedup();
+        v
+    };
+    let mut h = Harness::new(g.clone(), cfg.clone());
+    h.s.set_window(Some(window(0)));
+    h.s.set_readahead(0, 2 * MIB);
+    open(&mut h, 1, 0, 0, None);
+    h.send(Event::RangeAdvanced {
+        demand: 1,
+        pos: 4 * MIB,
+    });
+    h.peer(1, 10 * MIB);
+    let first = open_ra(&h);
+    assert_eq!(first.len(), 4, "{first:?}");
+    let blocks: Vec<BlockIdx> = h.geo.piece_blocks(first[0]).collect();
+    for b in blocks {
+        h.deliver(1, b);
+    }
+    let next = open_ra(&h);
+    assert_eq!(next.len(), 4, "{next:?}");
+    assert!(!next.contains(&first[0]));
+    // A faster fill opens more, up to the cap: 2 s at 10 MiB/s is over 16
+    // pieces' 1 MiB.
+    let mut quick = Harness::new(g.clone(), cfg.clone());
+    quick.s.set_window(Some(Window {
+        open_cap: MIB,
+        ..window(0)
+    }));
+    quick.s.set_readahead(0, 2 * MIB);
+    open(&mut quick, 1, 0, 0, None);
+    quick.send(Event::RangeAdvanced {
+        demand: 1,
+        pos: 4 * MIB,
+    });
+    quick.peer(1, 10 * MIB);
+    assert_eq!(open_ra(&quick).len(), 16);
+    let mut whole = Harness::new(g, cfg);
+    whole.s.set_readahead(0, 2 * MIB);
+    open(&mut whole, 1, 0, 4 * MIB, None);
+    whole.peer(1, 10 * MIB);
+    assert!(open_ra(&whole).len() > 4);
+}
+
+/// The window's budget (2.4): no piece outside the urgent windows starts
+/// past it, the keeper is due past `budget - slack / 2` and evicts down to
+/// `budget - slack`, farthest back first; a trim keeps the pinned pieces
+/// and the region around the read.
+#[test]
+fn the_budget_bounds_what_starts_and_the_keeper_brings_it_down() {
+    const P: u64 = 64 * KIB;
+    let g = Geometry::new(P as u32, &[16 * MIB]).unwrap();
+    let cfg = Config {
+        max_depth: 256,
+        min_depth: 256,
+        ..small_cfg()
+    };
+    let mut h = Harness::new(g, cfg);
+    h.s.set_window(Some(Window {
+        budget: 20 * P,
+        slack: 4 * P,
+        open_floor: 64 * MIB,
+        open_cap: 64 * MIB,
+        ..window(0)
+    }));
+    h.s.set_readahead(0, 4 * MIB);
+    for piece in 2..11 {
+        h.send(Event::PieceVerified { piece });
+    }
+    open(&mut h, 1, 0, 0, None);
+    h.send(Event::RangeAdvanced {
+        demand: 1,
+        pos: 4 * MIB,
+    });
+    h.peer(1, 10 * MIB);
+    // 9 held, the urgent 64..67 and 255, then playback and readahead up to
+    // 20 pieces in all.
+    assert_eq!(h.s.held_bytes(), 20 * P);
+    let started: BTreeSet<PieceIdx> = h.out.iter().map(|&(b, _)| h.geo.piece_of(b)).collect();
+    assert_eq!(started.len(), 11, "{started:?}");
+    assert!(h.s.keeper_due());
+    assert_eq!(h.s.to_evict(), [2, 3, 4, 5]);
+    for piece in 2..6 {
+        h.send(Event::PieceEvicted { piece });
+    }
+    // The room fills again with readahead, and the next round is due.
+    assert_eq!(h.s.held_bytes(), 20 * P);
+    let started: BTreeSet<PieceIdx> = h.out.iter().map(|&(b, _)| h.geo.piece_of(b)).collect();
+    assert_eq!(started.len(), 15, "{started:?}");
+    assert_eq!(h.s.to_evict(), [6, 7, 8, 9]);
+    let trim = h.s.trimmable(2 * P);
+    assert_eq!(trim, (6..11).collect::<Vec<_>>());
+}
+
 // ---- property tests ----
 
 #[derive(Clone, Debug)]
@@ -1056,7 +1408,9 @@ fn run(geo: &Geometry, cfg: &Config, ops: &[Op]) -> Harness {
                     start,
                     end_hint,
                 });
-                // The focused demand gets its blocking and critical windows.
+                // The focused demand gets its blocking and critical windows;
+                // a probe (its end within its blocking window) only its
+                // blocking one (plans/streaming-window.md 2.3).
                 let f = geo.files()[file];
                 let b_end = (start + cfg.blocking_bytes)
                     .min(end_hint.unwrap_or(f.len).min(f.len))
@@ -1065,7 +1419,12 @@ fn run(geo: &Geometry, cfg: &Config, ops: &[Op]) -> Harness {
                 let crit = cfg
                     .critical_min_bytes
                     .max(cfg.critical_secs * cfg.default_bitrate);
-                let end = (b_end + crit).min(f.len);
+                let probe = end_hint.is_some_and(|e| e <= start + cfg.blocking_bytes);
+                let end = if probe {
+                    b_end
+                } else {
+                    (b_end + crit).min(f.len)
+                };
                 for p in geo.pieces_in(f.offset + start, f.offset + end) {
                     let c = h.s.class_of(p);
                     assert!(

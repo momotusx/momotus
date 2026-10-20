@@ -3,7 +3,7 @@ use std::ops::Range;
 
 use crate::{
     Action, BLOCK, Bitfield, BlockIdx, Class, Config, DemandId, Event, FileIndex, Geometry, PeerId,
-    PieceIdx, Stats,
+    PieceIdx, Stats, Window,
 };
 
 const US: u64 = 1_000_000;
@@ -12,6 +12,8 @@ const US: u64 = 1_000_000;
 const MIN_RATE: u64 = 1024;
 /// Request latency samples kept for the p90 hedge threshold.
 const LATENCY_SAMPLES: usize = 128;
+/// A seek's grace in a window (plans/streaming-window.md 2.3).
+const GRACE_US: u64 = 5 * US;
 
 #[derive(Clone, Copy)]
 struct Req {
@@ -46,6 +48,11 @@ struct Demand {
     pos: u64,
     seq: u64,
     ready: bool,
+    /// Where the run of reads this one continues began (the ramp).
+    run_start: u64,
+    /// Its end lies within its blocking window (a hash range, a resume's
+    /// head): it never takes the focus or moves the anchor (2.3).
+    probe: bool,
 }
 
 /// Window bounds in torrent byte offsets.
@@ -98,6 +105,24 @@ pub struct Scheduler {
     hedge_log: VecDeque<(u64, u64)>,
     hedge_in_window: u64,
     stats: Stats,
+    window: Option<Window>,
+    /// A seeded resume anchor: kept until a player read opens near it.
+    resume: Option<(usize, u64)>,
+    /// A player read opened since the window began; until then nothing is
+    /// evictable.
+    player_read: bool,
+    /// A seek's grace: until this time the previous focus keeps
+    /// `[pos − B, playback end)` and the new focus has no readahead.
+    grace: Option<(u64, usize, u64)>,
+    /// The focused read's file, position and run start: a new range within
+    /// a piece of the position continues its run.
+    last_run: Option<(usize, u64, u64)>,
+    /// The player is paused: the anchor keeps its readahead.
+    paused: bool,
+    /// Readahead pieces started under the open-pieces limit.
+    ra_open: Vec<PieceIdx>,
+    /// `held_bytes` at the start of a fill, kept up as pieces start.
+    held: u64,
 }
 
 impl Scheduler {
@@ -139,6 +164,40 @@ impl Scheduler {
             hedge_log: VecDeque::new(),
             hedge_in_window: 0,
             stats: Stats::default(),
+            window: None,
+            resume: None,
+            player_read: false,
+            grace: None,
+            last_run: None,
+            paused: false,
+            ra_open: Vec::new(),
+            held: 0,
+        }
+    }
+
+    /// Windows a file (plans/streaming-window.md 2.2), or ends windowing.
+    pub fn set_window(&mut self, window: Option<Window>) {
+        self.window = window.filter(|w| w.file < self.geo.files().len());
+        self.player_read = false;
+        self.grace = None;
+        self.dirty = true;
+    }
+
+    /// The playback resumes at file byte `pos`: the anchor sits there, and
+    /// its window stays kept until a player read opens near it (2.3, 2.8).
+    pub fn seed_anchor(&mut self, file: usize, pos: u64) {
+        if file < self.geo.files().len() {
+            self.anchor = Some((file, pos));
+            self.resume = Some((file, pos));
+            self.dirty = true;
+        }
+    }
+
+    /// With no reader, a paused player's anchor keeps its readahead (2.3).
+    pub fn set_paused(&mut self, paused: bool) {
+        if self.paused != paused {
+            self.paused = paused;
+            self.dirty = true;
         }
     }
 
@@ -192,6 +251,10 @@ impl Scheduler {
         match ev {
             Event::Tick { now_us } => {
                 self.now = self.now.max(now_us);
+                if self.grace.is_some_and(|g| self.now >= g.0) {
+                    self.grace = None;
+                    self.dirty = true;
+                }
                 let due = self
                     .last_periodic
                     .is_none_or(|t| self.now >= t + self.cfg.tick_ms * 1000);
@@ -210,6 +273,34 @@ impl Scheduler {
                 };
                 let start = start.min(f.len);
                 self.demands.retain(|d| d.id != demand);
+                let probe =
+                    end_hint.is_some_and(|e| e <= start.saturating_add(self.cfg.blocking_bytes));
+                let piece = u64::from(self.geo.piece_len());
+                let near = |(f2, p): (usize, u64)| f2 == file && start.abs_diff(p) <= piece;
+                let run_start = match self.last_run {
+                    Some((f2, p, from)) if near((f2, p)) => from,
+                    _ => start,
+                };
+                if !probe {
+                    self.player_read = true;
+                    // A seek in a window: the previous focus (or the anchor)
+                    // keeps its window for a moment (2.3).
+                    let prev = self.focus().map(|d| (d.file, d.pos)).or(self.anchor);
+                    if self.window.is_some()
+                        && let Some(prev) = prev.filter(|&p| !near(p))
+                    {
+                        self.grace = Some((self.now + GRACE_US, prev.0, prev.1));
+                    }
+                    if let Some((f2, p)) = self.resume {
+                        let behind = self.window.map_or(0, |w| w.behind);
+                        if f2 == file && start + behind >= p && start <= p + self.readahead[file] {
+                            self.resume = None;
+                        }
+                    }
+                    // A new reader means the old play position may be stale.
+                    self.play_pos[file] = None;
+                    self.anchor = None;
+                }
                 self.next_seq += 1;
                 self.demands.push(Demand {
                     id: demand,
@@ -219,10 +310,9 @@ impl Scheduler {
                     pos: start,
                     seq: self.next_seq,
                     ready: false,
+                    run_start,
+                    probe,
                 });
-                // A new reader means the old play position may be stale.
-                self.play_pos[file] = None;
-                self.anchor = None;
                 self.dirty = true;
                 self.check_ready(out);
             }
@@ -236,14 +326,22 @@ impl Scheduler {
                 d.pos = pos.min(flen).max(old);
                 let off = self.geo.files()[d.file].offset;
                 let moved = self.geo.piece_at(off + old) != self.geo.piece_at(off + d.pos);
+                let run = (d.file, d.pos, d.run_start);
+                if self.focus().is_some_and(|f| f.id == demand) {
+                    self.last_run = Some(run);
+                }
                 if moved || self.focus_key() != before {
                     self.dirty = true;
                 }
             }
             Event::RangeClosed { demand } => {
                 if let Some(i) = self.demands.iter().position(|d| d.id == demand) {
+                    let focused = self.focus().is_some_and(|f| f.id == demand);
                     let d = self.demands.remove(i);
-                    if self.demands.is_empty() {
+                    if focused {
+                        self.last_run = Some((d.file, d.pos, d.run_start));
+                    }
+                    if !d.probe && self.focus().is_none() {
                         self.anchor = Some((d.file, d.pos));
                     }
                     self.dirty = true;
@@ -317,6 +415,9 @@ impl Scheduler {
             Event::PieceVerified { piece } => {
                 if piece < self.geo.num_pieces() {
                     self.verified.set(piece, true);
+                    // A verified piece frees a slot under the open-pieces
+                    // limit: fill now, not at the next block.
+                    self.fill_all |= self.window.is_some();
                     for b in self.geo.piece_blocks(piece) {
                         self.mark_received(b);
                         for o in self.holders.get(&b).cloned().unwrap_or_default() {
@@ -531,8 +632,213 @@ impl Scheduler {
         }
     }
 
+    /// The newest read that is not a probe.
     fn focus(&self) -> Option<&Demand> {
-        self.demands.iter().max_by_key(|d| d.seq)
+        self.demands
+            .iter()
+            .filter(|d| !d.probe)
+            .max_by_key(|d| d.seq)
+    }
+
+    /// Where the focused read's readahead ends: the file's readahead, or in
+    /// a window the ramp's, and none during a seek's grace (2.2, 2.3).
+    fn readahead_end(&self, d: &Demand, w: &Windows) -> u64 {
+        let f = self.geo.files()[d.file];
+        let ahead = match self.window {
+            Some(win) if win.file == d.file => {
+                let cap = self.readahead[d.file];
+                if self.grace.is_some() {
+                    0
+                } else {
+                    (2 * (d.pos - d.run_start)).clamp(win.ramp_floor.min(cap), cap)
+                }
+            }
+            _ => self.readahead[d.file],
+        };
+        (w.playback_end + ahead).min(f.offset + f.len)
+    }
+
+    /// Readahead pieces that may be open at once (2.2): `clamp(2 s × the
+    /// fill rate, floor, cap)` in pieces, in a window.
+    fn open_limit(&self) -> Option<usize> {
+        let win = self.window?;
+        let fill: u64 = self
+            .peers
+            .values()
+            .filter(|p| !p.choked)
+            .map(|p| self.rate_of(p))
+            .sum();
+        let bytes = (2 * fill).clamp(win.open_floor, win.open_cap.max(win.open_floor));
+        Some((bytes / u64::from(self.geo.piece_len())).max(1) as usize)
+    }
+
+    /// Pieces the keeper never evicts (plans/streaming-window.md 2.3): the
+    /// windowed file's head blocking window and index; the focused read's
+    /// `[pos − B, readahead end)`; in a grace the previous focus's
+    /// `[pos − B, playback end)`; a seeded resume anchor's the same until a
+    /// player read opens near it; every other read's blocking window; and
+    /// with no reader the anchor's `[pos − B, playback end)`, its readahead
+    /// too while paused. Every piece with no window.
+    pub fn kept(&self) -> Bitfield {
+        let n = self.geo.num_pieces();
+        let Some(win) = self.window else {
+            return Bitfield::full(n);
+        };
+        let mut kept = Bitfield::new(n);
+        let g = &self.geo;
+        let mut keep = |r: Range<PieceIdx>| {
+            for p in r {
+                kept.set(p, true);
+            }
+        };
+        let back = |file: usize, pos: u64| g.files()[file].offset + pos.saturating_sub(win.behind);
+        let head = self.windows(win.file, 0, None, None);
+        keep(g.pieces_in(head.blocking.0, head.blocking.1));
+        keep(self.index_pieces(win.file));
+        let focus = self.focus().map(|d| d.id);
+        for d in &self.demands {
+            let w = self.windows(d.file, d.pos, d.end, self.play_pos[d.file]);
+            if Some(d.id) == focus {
+                keep(g.pieces_in(back(d.file, d.pos), self.readahead_end(d, &w)));
+            } else {
+                keep(g.pieces_in(w.blocking.0, w.blocking.1));
+            }
+        }
+        for (file, pos) in self
+            .grace
+            .map(|g| (g.1, g.2))
+            .into_iter()
+            .chain(self.resume)
+        {
+            let w = self.windows(file, pos, None, None);
+            keep(g.pieces_in(back(file, pos), w.playback_end));
+        }
+        if focus.is_none()
+            && let Some((file, pos)) = self.anchor
+        {
+            let w = self.windows(file, pos, None, None);
+            let end = if self.paused {
+                w.readahead_end
+            } else {
+                w.playback_end
+            };
+            keep(g.pieces_in(back(file, pos), end));
+        }
+        kept
+    }
+
+    /// Bytes the torrent holds for the keeper (2.4): verified pieces, and
+    /// pieces partly received or requested, at full size.
+    pub fn held_bytes(&self) -> u64 {
+        (0..self.geo.num_pieces())
+            .filter(|&p| self.verified.get(p) || self.busy[p as usize] > 0)
+            .map(|p| u64::from(self.geo.piece_size(p)))
+            .sum()
+    }
+
+    /// The keeper is due (2.4): the torrent holds more than
+    /// `budget - slack / 2`.
+    pub fn keeper_due(&self) -> bool {
+        self.window
+            .is_some_and(|w| self.held_bytes() > w.budget.saturating_sub(w.slack / 2))
+    }
+
+    /// What the keeper evicts now: enough to bring the torrent down to
+    /// `budget - slack`, in [`Self::evictable`]'s order.
+    pub fn to_evict(&self) -> Vec<PieceIdx> {
+        let Some(w) = self.window else {
+            return Vec::new();
+        };
+        let target = w.budget.saturating_sub(w.slack);
+        self.evictable(self.held_bytes().saturating_sub(target))
+    }
+
+    /// When the playback ends (2.4): every piece held but the windowed
+    /// file's pinned head and index and `[pos - B, pos + ahead)` around the
+    /// last read position, verified or partly written with no request out.
+    pub fn trimmable(&self, ahead: u64) -> Vec<PieceIdx> {
+        let Some(win) = self.window else {
+            return Vec::new();
+        };
+        let g = &self.geo;
+        let f = g.files()[win.file];
+        let mut keep = Bitfield::new(g.num_pieces());
+        let mut set = |r: Range<PieceIdx>| {
+            for p in r {
+                keep.set(p, true);
+            }
+        };
+        let head = self.windows(win.file, 0, None, None);
+        set(g.pieces_in(head.blocking.0, head.blocking.1));
+        set(self.index_pieces(win.file));
+        let at = self
+            .focus()
+            .map(|d| (d.file, d.pos))
+            .or(self.anchor)
+            .filter(|&(file, _)| file == win.file)
+            .map(|(_, pos)| pos);
+        if let Some(pos) = at {
+            let from = f.offset + pos.saturating_sub(win.behind);
+            set(g.pieces_in(from, f.offset + pos.saturating_add(ahead).min(f.len)));
+        }
+        (0..g.num_pieces())
+            .filter(|&p| !keep.get(p))
+            .filter(|&p| {
+                self.verified.get(p)
+                    || (self.busy[p as usize] > 0
+                        && !g.piece_blocks(p).any(|b| self.holders.contains_key(&b)))
+            })
+            .collect()
+    }
+
+    /// Pieces to evict for at least `bytes` (2.4), in order: other files'
+    /// pieces; the windowed file's verified pieces behind the read,
+    /// farthest back first; those beyond it, farthest first; then its
+    /// partly written pieces with no request out. Never a kept piece, and
+    /// nothing before a player read opens.
+    pub fn evictable(&self, bytes: u64) -> Vec<PieceIdx> {
+        let Some(win) = self.window else {
+            return Vec::new();
+        };
+        if !self.player_read || bytes == 0 {
+            return Vec::new();
+        }
+        let kept = self.kept();
+        let f = self.geo.files()[win.file];
+        let file = self.geo.pieces_in(f.offset, f.offset + f.len);
+        let at = self
+            .focus()
+            .map(|d| (d.file, d.pos))
+            .or(self.anchor)
+            .filter(|&(file, _)| file == win.file)
+            .map_or(file.start, |(_, pos)| self.geo.piece_at(f.offset + pos));
+        let orphan = |p: PieceIdx| {
+            !self.verified.get(p)
+                && self.busy[p as usize] > 0
+                && !self
+                    .geo
+                    .piece_blocks(p)
+                    .any(|b| self.holders.contains_key(&b))
+        };
+        let out = |p: PieceIdx| !kept.get(p);
+        let verified = |p: PieceIdx| out(p) && self.verified.get(p);
+        let others = (0..self.geo.num_pieces())
+            .filter(|p| !file.contains(p))
+            .filter(|&p| out(p) && (self.verified.get(p) || orphan(p)));
+        let behind = (file.start..at).filter(|&p| verified(p));
+        let beyond = (at..file.end).rev().filter(|&p| verified(p));
+        let orphans = file.clone().filter(|&p| out(p) && orphan(p));
+        let mut freed = 0;
+        others
+            .chain(behind)
+            .chain(beyond)
+            .chain(orphans)
+            .take_while(|&p| {
+                let more = freed < bytes;
+                freed += u64::from(self.geo.piece_size(p));
+                more
+            })
+            .collect()
     }
 
     /// Urgent piece span of the focused demand: what a rebuild depends on.
@@ -572,7 +878,7 @@ impl Scheduler {
             critical.push((g.pieces_in(w.blocking.1, w.critical_end), now_at, rate));
             spans.push((g.pieces_in(w.critical_end, w.playback_end), Class::Playback));
             spans.push((
-                g.pieces_in(w.playback_end, w.readahead_end),
+                g.pieces_in(w.playback_end, self.readahead_end(d, &w)),
                 Class::Readahead,
             ));
             // A first read in the container index zone: the player comes back
@@ -587,17 +893,20 @@ impl Scheduler {
             }
         }
         spans.extend(critical.iter().map(|c| (c.0.clone(), Class::Critical)));
-        if self.demands.is_empty()
+        if self.focus().is_none()
             && let Some((file, pos)) = self.anchor
         {
-            // No reader left: keep the last position's windows warm, non-urgent.
+            // No reader left: keep the last position's windows warm,
+            // non-urgent; a window's readahead only while paused (2.3).
             let w = self.windows(file, pos, None, None);
             let g = &self.geo;
             spans.push((g.pieces_in(w.blocking.0, w.playback_end), Class::Playback));
-            spans.push((
-                g.pieces_in(w.playback_end, w.readahead_end),
-                Class::Readahead,
-            ));
+            if self.paused || self.window.is_none_or(|win| win.file != file) {
+                spans.push((
+                    g.pieces_in(w.playback_end, w.readahead_end),
+                    Class::Readahead,
+                ));
+            }
         }
 
         let mut marked = Vec::new();
@@ -629,8 +938,10 @@ impl Scheduler {
             (class[p as usize], theirs, p)
         });
         playback.sort_unstable();
-        // Readahead: rarest first, then offset (swarm friendly).
-        readahead.sort_unstable_by_key(|&p| (self.avail[p as usize], p));
+        // Readahead in file order, a piece only one peer holds first
+        // (plans/streaming-window.md 2.2: we upload nothing, so rarity
+        // helps no peer, and the minutes ahead become one run).
+        readahead.sort_unstable_by_key(|&p| (self.avail[p as usize] > 1, p));
         playback.extend(readahead);
         // Deadlines: blocking and tail are due now; a critical piece is due
         // when playback reaches it, minus the safety margin.
@@ -941,6 +1252,11 @@ impl Scheduler {
         }
         let cands = self.eligible();
         self.assign_urgent(cands.clone(), out);
+        // ponytail: a scan of every piece per fill, an incremental count if
+        // torrents of 100k pieces show up.
+        if self.window.is_some() {
+            self.held = self.held_bytes();
+        }
         for id in fill {
             self.fill_peer(id, &cands, out);
         }
@@ -1005,6 +1321,7 @@ impl Scheduler {
                 }
             }
         }
+        let limit = self.open_limit();
         let mut advancing = true;
         let mut i = self.normal_cursor;
         while i < self.normal.len() && room > 0 {
@@ -1018,9 +1335,33 @@ impl Scheduler {
                 continue;
             }
             advancing = false;
-            if self.peers[&id].have.get(piece) {
-                room = self.take_blocks(id, piece, room, out);
+            if !self.peers[&id].have.get(piece) {
+                continue;
             }
+            // Past the window's budget no new piece starts; the keeper
+            // makes room (2.4).
+            if let Some(w) = self.window
+                && self.busy[piece as usize] == 0
+            {
+                let size = u64::from(self.geo.piece_size(piece));
+                if self.held + size > w.budget {
+                    continue;
+                }
+                self.held += size;
+            }
+            if let Some(limit) = limit
+                && self.busy[piece as usize] == 0
+                && self.class[piece as usize] == Some(Class::Readahead)
+            {
+                let (busy, verified) = (&self.busy, &self.verified);
+                self.ra_open
+                    .retain(|&p| busy[p as usize] > 0 && !verified.get(p));
+                if self.ra_open.len() >= limit {
+                    continue;
+                }
+                self.ra_open.push(piece);
+            }
+            room = self.take_blocks(id, piece, room, out);
         }
     }
 

@@ -9,8 +9,10 @@
 //! See the crate README for the algorithm, its sources and the simulator
 //! results.
 
+mod plan;
 mod sched;
 
+pub use plan::{RESERVE_BYTES, WindowInputs, WindowPlan, window_plan};
 pub use sched::Scheduler;
 
 use std::ops::Range;
@@ -437,6 +439,30 @@ pub enum Action {
     Ready {
         demand: DemandId,
     },
+}
+
+/// A windowed file (plans/streaming-window.md 2.2, 2.3): the torrent holds
+/// only part of it, and [`Scheduler::kept`] and [`Scheduler::evictable`]
+/// say which part.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Window {
+    pub file: usize,
+    /// What the torrent may hold (`W`): no piece outside the urgent windows
+    /// starts past it.
+    pub budget: u64,
+    /// The keeper's slack (`h`): it is due past `budget - slack / 2` and
+    /// evicts down to `budget - slack`.
+    pub slack: u64,
+    /// Bytes kept behind the focused read (`B`).
+    pub behind: u64,
+    /// The ramp's floor: the focused read's readahead is
+    /// `clamp(2 × bytes read since its last seek, floor, the file's
+    /// readahead)`.
+    pub ramp_floor: u64,
+    /// Readahead pieces partly received at once, counted at full size, stay
+    /// within `clamp(2 s × the fill rate, open_floor, open_cap)`.
+    pub open_floor: u64,
+    pub open_cap: u64,
 }
 
 /// Priority class of a wanted piece, most urgent first.
