@@ -71,6 +71,7 @@ import app.marquee.core.views.SearchView
 import app.marquee.core.views.ViewStatus
 import app.marquee.design.Chip
 import app.marquee.design.Eyebrow
+import app.marquee.design.FieldInput
 import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.Marquee
@@ -311,26 +312,17 @@ internal fun SearchField(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         MqIcon(Icons.Search, tint = colors.muted)
-        BasicTextField(
-            value = text,
-            onValueChange = onText,
-            singleLine = true,
+        // On a TV a button until it is selected, as every field: Fire TV's keyboard would take the D-pad.
+        FieldInput(
+            text,
+            onText,
+            label = "Search titles",
+            placeholder = "Search titles",
             textStyle = TextStyle(color = colors.text, fontSize = Marquee.type.body, fontFamily = MarqueeFonts.text),
-            cursorBrush = SolidColor(colors.accent),
+            onFocus = { focused = it },
+            modifier = Modifier.weight(1f),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
-            modifier =
-                Modifier
-                    .weight(1f)
-                    .dpadExits()
-                    .onFocusChanged { focused = it.isFocused }
-                    .semantics { contentDescription = "Search titles" },
-            decorationBox = { inner ->
-                Box(contentAlignment = Alignment.CenterStart) {
-                    if (text.isEmpty()) MqText("Search titles", color = colors.dim, maxLines = 1)
-                    inner()
-                }
-            },
         )
     }
 }

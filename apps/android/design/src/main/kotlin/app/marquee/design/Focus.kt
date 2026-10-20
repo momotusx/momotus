@@ -197,7 +197,8 @@ private val PRESS_VEIL = Color(0x33808080)
 @Composable
 fun Modifier.focusClickable(
     onClick: () -> Unit,
-    role: Role = Role.Button,
+    // Null for a node that says what it is itself (a field's button reads as an edit box).
+    role: Role? = Role.Button,
     enabled: Boolean = true,
     onLongClick: (() -> Unit)? = null,
     longClickLabel: String? = null,
