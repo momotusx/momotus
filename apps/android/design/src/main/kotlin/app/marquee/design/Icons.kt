@@ -767,6 +767,16 @@ object Icons {
         )
     }
 
+    val UserRoundX: ImageVector by lazy {
+        strokeIcon(
+            "user-round-x",
+        "m16.5 16.5 5 5",
+        "M2 21a8 8 0 0 1 11.531-7.18",
+        "m21.5 16.5-5 5",
+        "M5 8a5 5 0 1 0 10 0a5 5 0 1 0 -10 0z",
+        )
+    }
+
     val Users: ImageVector by lazy {
         strokeIcon(
             "users",

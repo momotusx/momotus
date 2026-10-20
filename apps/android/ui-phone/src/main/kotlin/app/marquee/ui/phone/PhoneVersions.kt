@@ -33,10 +33,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.collapse
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.expand
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
@@ -164,6 +166,9 @@ fun PhoneVersions(
                 }
             }
         }
+        if (snapshot?.nobodySharing == true) {
+            item(key = "nobody") { GlassBar(Modifier.padding(bottom = Marquee.space.xs)) { NobodySharing() } }
+        }
         snapshot?.note?.let { note -> item(key = "note") { LearnedLine(note, onUndo) } }
         for (group in Group.entries) {
             val rows = groups[group].orEmpty()
@@ -277,6 +282,8 @@ private fun Pick(
                     maxLines = 3,
                     fontFamily = FontFamily.Monospace,
                 )
+                // Said when it comes, before Play.
+                if (snapshot.nobodySharing) NobodySharing(Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                 PrimaryButton(
                     label = "Play this version",
                     icon = PlayFilled,
@@ -369,6 +376,26 @@ private fun Blocked(
         secondaryIcon = if (shown) Icons.EyeOff else Icons.Eye,
         modifier = Modifier.padding(0.dp),
     )
+}
+
+/**
+ * The core's `nobodySharing`: every version is a swarm with one seeder or none right now, said right before
+ * Play on the card and over the list, as on the web.
+ */
+@Composable
+private fun NobodySharing(modifier: Modifier = Modifier) {
+    val colors = Marquee.colors
+    Row(
+        modifier.semantics(mergeDescendants = true) {},
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        MqIcon(Icons.UserRoundX, tint = colors.warn, size = 20.dp)
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            MqText(StreamChoiceCopy.NOBODY_SHARING, role = TextRole.Callout, weight = FontWeight.SemiBold, maxLines = 2)
+            MqText(StreamChoiceCopy.NOBODY_SHARING_DETAILS, role = TextRole.Caption, color = colors.muted, maxLines = 3)
+        }
+    }
 }
 
 /** The one-time note of what the picks taught (3.9), until Undo. */

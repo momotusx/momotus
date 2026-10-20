@@ -9,6 +9,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
 import app.marquee.core.model.BlockedReason
@@ -50,6 +51,7 @@ import org.robolectric.annotation.Config
 import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /** The Versions screen on a phone with the core's stream choice (plans/m13-stream-choice.md 3.7, 3.9, 3.11). */
 @RunWith(RobolectricTestRunner::class)
@@ -115,6 +117,7 @@ class PhoneVersionsTest {
         rows: List<VersionRow> = emptyList(),
         blocked: BlockedVersions? = null,
         note: LearnedNote? = null,
+        nobodySharing: Boolean = false,
     ) = VersionsSnapshot(
         conditions =
             VersionsConditions(
@@ -134,7 +137,7 @@ class PhoneVersionsTest {
         hidden = HiddenSummary(blocked?.count ?: 0),
         done = true,
         frozen = false,
-        nobodySharing = false,
+        nobodySharing = nobodySharing,
     )
 
     private val played = mutableListOf<String>()
@@ -227,5 +230,23 @@ class PhoneVersionsTest {
         compose.waitUntil(120_000) { undone.isNotEmpty() }
         assertEquals(listOf(note), undone)
         compose.onAllNodesWithText("Undo").assertCountEquals(0)
+    }
+
+    @Test
+    fun `almost nobody sharing shows right before Play and over the list`() {
+        show(snapshot(row("best", ReasonLine.Few(1)), listOf(row("a", ReasonLine.Few(0))), nobodySharing = true))
+        // On the card and over the list, each with its details line.
+        compose.onAllNodesWithText(StreamChoiceCopy.NOBODY_SHARING).assertCountEquals(2)
+        compose.onAllNodesWithText(StreamChoiceCopy.NOBODY_SHARING_DETAILS).assertCountEquals(2)
+        // The card's line comes right before Play: above it, and nothing else between them.
+        val lines = compose.onAllNodesWithText(StreamChoiceCopy.NOBODY_SHARING_DETAILS).fetchSemanticsNodes()
+        val play =
+            compose
+                .onAllNodesWithText("Play this version")
+                .fetchSemanticsNodes()
+                .first()
+                .boundsInRoot
+        val card = lines.map { it.boundsInRoot }.filter { it.bottom <= play.top }.maxByOrNull { it.bottom }
+        assertTrue(card != null && play.top - card.bottom < 48, "the line sits right over Play")
     }
 }

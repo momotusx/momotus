@@ -96,6 +96,7 @@ export const ICONS = [
   "undo-2",
   "unlink",
   "user-pen",
+  "user-round-x",
   "users",
   "volume-2",
   "wifi-off",
