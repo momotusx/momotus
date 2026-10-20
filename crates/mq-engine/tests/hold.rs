@@ -280,3 +280,54 @@ async fn the_disk_budget_never_evicts_a_claimed_torrent() {
         .await
         .expect("finished in time");
 }
+
+/// A claim that lands while the disk budget is about to evict the torrent
+/// keeps it (engine review r1, P3): the eviction stops after its first
+/// check (the test hook), the torrent is claimed, then it goes on, and the
+/// check under the torrents lock sees the claim.
+#[cfg(feature = "test-hooks")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_claim_during_an_eviction_keeps_the_torrent() {
+    let s = support::swarm(true).await;
+    let run = async {
+        let dir = tempfile::tempdir().unwrap();
+        let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+        let ip = std::net::Ipv4Addr::LOCALHOST.into();
+        let engine = Engine::start(EngineConfig {
+            discovery: false,
+            cache_budget_bytes: 1,
+            ..EngineConfig::new(dir.path(), http.torrent_scope(&[ip]))
+        })
+        .await
+        .unwrap();
+        // No round stops before the range closes: the file is read, or has
+        // no bytes yet.
+        let evicting = mq_engine::test_hooks::hold_evictions(&engine);
+        let t = engine
+            .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+            .await
+            .unwrap();
+        let movie = engine
+            .select_file(t, OWNER, &FileHint::Name("movie.mkv".into()))
+            .await
+            .unwrap();
+        assert_eq!(
+            read(&engine, t, OWNER, movie).await.unwrap(),
+            s.movie[..64 * 1024]
+        );
+        tokio::time::timeout(Duration::from_secs(15), evicting.reached())
+            .await
+            .expect("no eviction round came");
+        let claim = engine.claim(t, OWNER).unwrap();
+        evicting.open();
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert!(
+            engine.stats(t).await.is_ok(),
+            "a torrent claimed during its eviction was removed"
+        );
+        drop(claim);
+    };
+    tokio::time::timeout(Duration::from_secs(60), run)
+        .await
+        .expect("finished in time");
+}

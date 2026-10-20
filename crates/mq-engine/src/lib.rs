@@ -348,6 +348,8 @@ struct Inner {
     next_demand: AtomicU64,
     #[cfg(feature = "test-hooks")]
     hold: Mutex<Option<Arc<test_hooks::Hold>>>,
+    #[cfg(feature = "test-hooks")]
+    evict_hold: Mutex<Option<Arc<test_hooks::Hold>>>,
 }
 
 pub(crate) struct Torrent {
@@ -484,6 +486,8 @@ impl Engine {
                 next_demand: AtomicU64::new(1),
                 #[cfg(feature = "test-hooks")]
                 hold: Mutex::default(),
+                #[cfg(feature = "test-hooks")]
+                evict_hold: Mutex::default(),
             }),
         };
         tokio::spawn(maintenance(Arc::downgrade(&engine.inner)));
@@ -778,11 +782,19 @@ impl Engine {
     /// Marks `profile`'s live use of `h` until the claim (every clone of
     /// it) drops.
     pub fn claim(&self, h: TorrentHandle, profile: &str) -> Result<Claim> {
-        let torrent = self.torrent(h)?;
+        // Counted under the torrents lock, the one `remove` and the disk
+        // budget check claims under before they take a torrent out: a claim
+        // never lands on a torrent already on its way out (engine review r1).
+        let torrents = lock(&self.inner.torrents);
+        let torrent = torrents
+            .get(&h)
+            .cloned()
+            .ok_or(EngineError::UnknownTorrent)?;
         *lock(&torrent.hold)
             .claims
             .entry(profile.to_owned())
             .or_default() += 1;
+        drop(torrents);
         Ok(Claim(Arc::new(ClaimInner {
             engine: self.clone(),
             handle: h,
@@ -1020,7 +1032,17 @@ impl Engine {
             {
                 continue;
             }
-            lock(&self.inner.torrents).remove(&h);
+            #[cfg(feature = "test-hooks")]
+            test_hooks::wait_eviction(self).await;
+            {
+                // Again under the lock a claim counts under: one may have
+                // come since the check above (engine review r1).
+                let mut torrents = lock(&self.inner.torrents);
+                if t.readers.load(Ordering::Relaxed) > 0 || t.claimed() {
+                    continue;
+                }
+                torrents.remove(&h);
+            }
             match self.drop_torrent(t, false).await {
                 Ok(()) => total -= bytes,
                 Err(e) => tracing::warn!("evicting {}: {e}", t.info_hash),
