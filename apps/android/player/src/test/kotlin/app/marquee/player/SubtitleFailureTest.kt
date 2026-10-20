@@ -88,7 +88,8 @@ class SubtitleFailureTest {
         phase: String = "ready",
         extra: String = "",
         url: String = video,
-    ) = """{"phase":"$phase","url":"$url","key":"k1","attempt":1,"manifest":false,"subtitlesPending":false,""" +
+        pending: Boolean = false,
+    ) = """{"phase":"$phase","url":"$url","key":"k1","attempt":1,"manifest":false,"subtitlesPending":$pending,""" +
         """"trakt":"off","subtitleNotes":$notes,$extra"subtitles":[""" +
         subtitles.joinToString(",") {
             """{"url":"$it","lang":"tur","source":"${if (it == subtitle) "SubSense" else "OpenSubtitles v3"}",""" +
@@ -405,6 +406,18 @@ class SubtitleFailureTest {
         push(snapshot(phase = "failed", extra = "\"offer\":{\"key\":\"k3\",\"label\":\"720p BluRay\"},"))
         until("the playback failed") { controller.stage == PlaybackController.Stage.Failed }
         assertEquals(OtherVersion("k3", "720p BluRay"), controller.offer)
+        controller.release()
+    }
+
+    @Test
+    fun `Subtitles says Searching while the core lists, and the count once the core says the listing is done`() {
+        // Tracks arrive while slower sources are still asked: the core says pending until all answered.
+        val (_, controller) = open(snapshot(subtitles = listOf(subtitle, other), pending = true))
+        until("the list is heard") { controller.text.size == 3 }
+        assertEquals("Searching", controller.subtitlesDetail())
+        push(snapshot(subtitles = listOf(subtitle, other), pending = false))
+        until("the end of the listing is heard") { !controller.subtitlesPending }
+        assertEquals("Off, 2 found", controller.subtitlesDetail())
         controller.release()
     }
 
