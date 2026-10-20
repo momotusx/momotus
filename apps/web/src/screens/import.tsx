@@ -33,6 +33,10 @@ function Attempt(props: { onRetry: () => void; welcome: boolean }) {
         <section class="problem">
           <h2>Import could not start</h2>
           <p>{(view.state.status as { reason: string }).reason}</p>
+          <button class="btn primary" data-f="import:retry" data-autofocus onClick={props.onRetry}>
+            <RefreshCw aria-hidden />
+            Try again
+          </button>
         </section>
       </Match>
       <Match when={s()?.phase === "waitingForLink" && (s() as Extract<ImportSnapshot, { phase: "waitingForLink" }>)}>

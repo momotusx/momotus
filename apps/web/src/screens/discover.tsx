@@ -1,7 +1,8 @@
 import { A } from "@solidjs/router";
 import Puzzle from "lucide-solid/icons/puzzle";
+import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Wrench from "lucide-solid/icons/wrench";
-import { Match, Show, Switch } from "solid-js";
+import { createSignal, Match, Show, Switch } from "solid-js";
 import { Chips, Grid, SkeletonGrid } from "../components/grid";
 import { discoverView } from "../core/client";
 import { onProfileReset } from "../core/profiles";
@@ -15,6 +16,16 @@ onProfileReset(() => {
 });
 
 export default function Discover() {
+  // Try again on Discover that could not open: a new view, as the page anew.
+  const [attempt, setAttempt] = createSignal(0);
+  return (
+    <Show when={attempt() + 1} keyed>
+      <DiscoverPage retry={() => setAttempt((n) => n + 1)} />
+    </Show>
+  );
+}
+
+function DiscoverPage(props: { retry: () => void }) {
   const view = discoverView();
   const attach = (el: HTMLElement) => {
     if (pageScroll.top) queueMicrotask(() => el.scrollTo({ top: pageScroll.top }));
@@ -32,6 +43,10 @@ export default function Discover() {
           <section class="problem">
             <h2>Discover could not open</h2>
             <p>{(view.state.status as { reason: string }).reason}</p>
+            <button class="btn primary" data-f="discover:retry" data-autofocus onClick={() => props.retry()}>
+              <RefreshCw aria-hidden />
+              Try again
+            </button>
           </section>
         </Match>
         <Match when={d() && d()?.kinds.length === 0}>

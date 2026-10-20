@@ -257,11 +257,15 @@ test("no dead ends: Add a source when nothing plays, a card when nothing plays i
   await expect(add).toHaveText("Add a source", { timeout: 60_000 });
   await expect(page.locator('[data-f="title:play"]')).toHaveCount(0);
   await expect.poll(() => focused(page)).toBe("title:addsource");
-  await expect(page.locator(".vline")).toContainText("No playable version found");
+  // One wording for it on the title page and in the player.
+  const none = "No playable version found";
+  const why = "None of your addons found a stream for this. A source addon finds them; add one in Addons.";
+  await expect(page.locator(".vline")).toContainText(`${none}. ${why}`);
 
   // Straight into the player: a centered card offers a version or Back.
   await page.goto("/play/movie/tt43718175/tt43718175?form=tv");
-  await expect(page.locator(".endcard")).toContainText("No playable version found", { timeout: 60_000 });
+  await expect(page.locator(".endcard .st")).toHaveText(none, { timeout: 60_000 });
+  await expect(page.locator(".endcard .end-detail")).toHaveText(why);
   await expect.poll(() => focused(page)).toBe("player:versions");
   await expect(page.locator('[data-f="player:versions"]')).toHaveText("Choose a version");
   await page.keyboard.press("ArrowRight");

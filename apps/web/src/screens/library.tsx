@@ -1,6 +1,7 @@
 import { A } from "@solidjs/router";
 import Compass from "lucide-solid/icons/compass";
-import { Match, Switch } from "solid-js";
+import RefreshCw from "lucide-solid/icons/refresh-cw";
+import { createSignal, Match, Show, Switch } from "solid-js";
 import { Chips, Grid, SkeletonGrid } from "../components/grid";
 import { libraryView } from "../core/client";
 import { onProfileReset } from "../core/profiles";
@@ -20,6 +21,16 @@ onProfileReset(() => {
 });
 
 export default function Library() {
+  // Try again on a library that could not open: a new view, as the page anew.
+  const [attempt, setAttempt] = createSignal(0);
+  return (
+    <Show when={attempt() + 1} keyed>
+      <LibraryPage retry={() => setAttempt((n) => n + 1)} />
+    </Show>
+  );
+}
+
+function LibraryPage(props: { retry: () => void }) {
   const view = libraryView();
   const attach = (el: HTMLElement) => {
     if (pageScroll.top) queueMicrotask(() => el.scrollTo({ top: pageScroll.top }));
@@ -35,6 +46,10 @@ export default function Library() {
           <section class="problem">
             <h2>Your library could not open</h2>
             <p>{(view.state.status as { reason: string }).reason}</p>
+            <button class="btn primary" data-f="library:retry" data-autofocus onClick={() => props.retry()}>
+              <RefreshCw aria-hidden />
+              Try again
+            </button>
           </section>
         </Match>
         <Match when={l() && total() === 0}>

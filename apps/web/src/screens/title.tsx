@@ -12,6 +12,7 @@ import Star from "lucide-solid/icons/star";
 import Film from "lucide-solid/icons/film";
 import Layers from "lucide-solid/icons/layers";
 import Play from "lucide-solid/icons/play";
+import RefreshCw from "lucide-solid/icons/refresh-cw";
 import { createEffect, createMemo, createSignal, For, type JSX, Match, Show, Switch } from "solid-js";
 import { Backdrop, Logo } from "../components/art";
 import { KeyedPage } from "../components/keyed-page";
@@ -24,19 +25,25 @@ import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
 import { focusEl, remember } from "../focus/dom";
 import { form } from "../form";
 import { airDate, bytes, clock, decoded, episodeLabel, parseVideo, pct, playPath, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
-import { blockedWords, choiceWords, kindLabel, qualityText, statusText } from "../lib/words";
+import { blockedWords, choiceWords, kindLabel, noVersionWords, qualityText, statusText } from "../lib/words";
 import "./title.css";
 
 export default function Title() {
   const params = useParams();
+  // Try again on a title that could not be opened: the page anew.
+  const [attempt, setAttempt] = createSignal(0);
   return (
-    <KeyedPage address={`${params.kind}/${params.id}`} read={() => ({ kind: decoded(params.kind), id: decoded(params.id) })} page={TitlePage} />
+    <KeyedPage
+      address={`${params.kind}/${params.id}/${attempt()}`}
+      read={() => ({ kind: decoded(params.kind), id: decoded(params.id), retry: () => setAttempt((n) => n + 1) })}
+      page={TitlePage}
+    />
   );
 }
 
 const released = (e: Episode) => !e.released || new Date(e.released).getTime() <= Date.now();
 
-function TitlePage(props: { kind: string; id: string }) {
+function TitlePage(props: { kind: string; id: string; retry: () => void }) {
   const view = titleView(props.kind, props.id);
   const header = () => view.state.header;
   const d = () => header()?.details ?? null;
@@ -98,9 +105,15 @@ function TitlePage(props: { kind: string; id: string }) {
               <CircleAlert aria-hidden class="problem-icon" />
               <h2>This title could not be opened</h2>
               <p>{failure(view)}</p>
-              <A class="btn primary" href="/addons" data-f="title:addons" data-autofocus>
-                Check addons
-              </A>
+              <div class="problem-acts">
+                <button class="btn primary" data-f="title:retry" data-autofocus onClick={() => props.retry()}>
+                  <RefreshCw aria-hidden />
+                  Try again
+                </button>
+                <A class="btn" href="/addons" data-f="title:addons">
+                  Check addons
+                </A>
+              </div>
             </div>
           </section>
         </Match>
@@ -362,7 +375,7 @@ function VersionLine(props: { snap: VersionsSnapshot | null }) {
             <i class="dot" />
             {props.snap?.blocked
               ? blockedWords(props.snap.blocked.reason, props.snap.blocked.count).text
-              : "No playable version found. A source is an addon that finds a playable stream for a title."}
+              : `${noVersionWords.title}. ${noVersionWords.detail}`}
           </span>
         </p>
       </Match>
@@ -431,9 +444,8 @@ function Episodes(props: { view: TitleView; kind: string; id: string; runtime: n
           {(e) => {
             const [broken, setBroken] = createSignal(false);
             const still = () => (!broken() && e.thumbnail) || props.art;
-            return (
-            <li class="ep" classList={{ seen: e.watched, now: e.progress !== null, later: !released(e) }}>
-              <A class="ep-main" href={playPath(props.kind, props.id, e.videoId)} data-f={`ep:${e.videoId}`}>
+            const card = () => (
+              <>
                 {/* A card: the still with its number, then the title, the time
                     and two lines of synopsis. */}
                 <span class="ep-still" aria-hidden="true">
@@ -471,25 +483,43 @@ function Episodes(props: { view: TitleView; kind: string; id: string; runtime: n
                     <span class="ep-ov">{e.overview}</span>
                   </Show>
                 </span>
-              </A>
-              {/* The row plays this episode; choosing its version or marking
-                  it watched are the secondary actions beside it. */}
-              <div class="ep-acts" data-fentry data-fowner={`ep:${e.videoId}`}>
-                <A class="ep-act" href={versionsPath(props.kind, props.id, e.videoId)} data-f={`epv:${e.videoId}`} aria-label={`Choose a version of ${episodeLabel(e.season, e.episode)}`}>
-                  <Layers aria-hidden />
-                  {/* A phone shows the icon in a circle; the word stays for screen readers. */}
-                  <span classList={{ sr: form() === "phone" }}>Choose a version</span>
+              </>
+            );
+            return (
+            <li class="ep" classList={{ seen: e.watched, now: e.progress !== null, later: !released(e) }}>
+              {/* An episode not out yet is a plain row with its day: nothing
+                  to play, no version to choose. Reachable on TV, so the
+                  remote can read it. */}
+              <Show
+                when={released(e)}
+                fallback={
+                  <div class="ep-main" data-f={`ep:${e.videoId}`} tabindex="-1" aria-disabled="true">
+                    {card()}
+                  </div>
+                }
+              >
+                <A class="ep-main" href={playPath(props.kind, props.id, e.videoId)} data-f={`ep:${e.videoId}`}>
+                  {card()}
                 </A>
-                <button
-                  class="ep-act"
-                  data-f={`mark:${e.videoId}`}
-                  aria-pressed={e.watched}
-                  onClick={() => props.view.command({ type: "setWatched", videoId: e.videoId, value: !e.watched })}
-                >
-                  <Check aria-hidden />
-                  <span classList={{ sr: form() === "phone" }}>{e.watched ? "Watched" : "Mark as watched"}</span>
-                </button>
-              </div>
+                {/* The row plays this episode; choosing its version or marking
+                    it watched are the secondary actions beside it. */}
+                <div class="ep-acts" data-fentry data-fowner={`ep:${e.videoId}`}>
+                  <A class="ep-act" href={versionsPath(props.kind, props.id, e.videoId)} data-f={`epv:${e.videoId}`} aria-label={`Choose a version of ${episodeLabel(e.season, e.episode)}`}>
+                    <Layers aria-hidden />
+                    {/* A phone shows the icon in a circle; the word stays for screen readers. */}
+                    <span classList={{ sr: form() === "phone" }}>Choose a version</span>
+                  </A>
+                  <button
+                    class="ep-act"
+                    data-f={`mark:${e.videoId}`}
+                    aria-pressed={e.watched}
+                    onClick={() => props.view.command({ type: "setWatched", videoId: e.videoId, value: !e.watched })}
+                  >
+                    <Check aria-hidden />
+                    <span classList={{ sr: form() === "phone" }}>{e.watched ? "Watched" : "Mark as watched"}</span>
+                  </button>
+                </div>
+              </Show>
             </li>
             );
           }}

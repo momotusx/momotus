@@ -41,9 +41,11 @@ import {
   learnedNote,
   lineWords,
   nextVersion,
+  noVersionWords,
   qualityCell,
   qualityText,
   reasonText,
+  slowWords,
   statusText,
 } from "../lib/words";
 import "./versions.css";
@@ -179,7 +181,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
     if (ctx.failure()) return { tone: "bad", text: "Could not be opened" };
     if (!s) return { tone: "idle", text: "Opening" };
     if (s.pendingAddons.length) return { tone: "warn live", text: `Asking ${s.pendingAddons.join(", ")}` };
-    if (s.slowAddons.length) return { tone: "warn", text: `${s.slowAddons.join(", ")} is slow, still waiting` };
+    if (s.slowAddons.length) return { tone: "warn", text: slowWords(s.slowAddons) };
     if (s.failedAddons.length) return { tone: "bad", text: `${s.failedAddons.join(", ")} did not answer` };
     // Blocked: what was found, none of it listed (the card says why).
     if (s.blocked) return { tone: "warn", text: counted("versions", s.blocked.count) };
@@ -242,9 +244,9 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
         </Match>
         <Match when={snap()?.done && !pick() && (snap()?.rows.length ?? 0) === 0 && !blocked()}>
           <section class="vempty problem">
-            <h2>No playable version found</h2>
+            <h2>{noVersionWords.title}</h2>
             <p>
-              <Show when={(snap()?.hidden.count ?? 0) > 0} fallback="None of your addons returned a stream for this video. A source addon finds playable streams; add one in Addons.">
+              <Show when={(snap()?.hidden.count ?? 0) > 0} fallback={noVersionWords.detail}>
                 Every result was hidden: {hiddenSummary(snap()?.hidden ?? { count: 0, byReason: [] })}.
               </Show>
             </p>
@@ -274,7 +276,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
                     const w = () => blockedWords(b().reason, b().count);
                     return (
                       <div class="blocked">
-                        <h2>No playable version found</h2>
+                        <h2>{noVersionWords.title}</h2>
                         <p>{w().text}</p>
                         <Show
                           when={b().reason === "needsAccount"}

@@ -35,9 +35,9 @@ import { form } from "../form";
 import { entryFrom } from "../history";
 import { createVideoEngine } from "../player/video-engine";
 import { loadedSource, type Retry, sourceStart, TRYING_AGAIN_MS, tryingAgain } from "../lib/failover";
-import { bytes, clock, decoded, delayText, episodeLabel, groupFailures, playPath, playState, seasonName, titlePath, versionsPath } from "../lib/format";
+import { bytes, clock, decoded, delayText, startsText, episodeLabel, groupFailures, playPath, playState, seasonName, titlePath, versionsPath } from "../lib/format";
 import { byLanguage, offSummary, trackDetail } from "../lib/subtitles";
-import { blockedWords, languageName, nextVersion, qualityCell, qualityText, restartLine, subtitleNote } from "../lib/words";
+import { blockedWords, languageName, nextVersion, noVersionWords, qualityCell, qualityText, restartLine, subtitleNote } from "../lib/words";
 import "./player.css";
 
 const SPEEDS = [1, 1.25, 1.5, 2, 0.75];
@@ -545,7 +545,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     if (props.chosen && !key()) return { tone: "warn", text: nextVersion.finding, busy: true };
     const vs = versions();
     if (vs?.blocked) return { tone: "bad", text: blockedWords(vs.blocked.reason, vs.blocked.count).text, busy: false };
-    if (vs?.done && !vs.recommended && !vs.rows.length) return { tone: "bad", text: "No playable version found", busy: false };
+    if (vs?.done && !vs.recommended && !vs.rows.length) return { tone: "bad", text: noVersionWords.title, detail: noVersionWords.detail, busy: false };
     if (vs?.pendingAddons.length) return { tone: "warn", text: `Asking ${vs.pendingAddons.join(", ")} for versions`, busy: true };
     return { tone: "warn", text: ctx.details() ? "Choosing the best version" : "Opening", busy: true };
   };
@@ -1007,7 +1007,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
               </h3>
               <Switch>
                 <Match when={prefs.state.data?.autoplayNext}>
-                  <p class="num">Starts in {Math.ceil(remaining())}</p>
+                  <p class="num">{startsText(remaining())}</p>
                 </Match>
               </Switch>
               <A class="btn primary" href={nextHref() ?? "#"} replace data-f="next:play">

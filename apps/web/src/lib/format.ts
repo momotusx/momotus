@@ -112,3 +112,7 @@ export const airDate = (released: string) =>
 
 /** The subtitle delay: "0.5 s later", "1.0 s earlier", or "In step" at none. */
 export const delayText = (sec: number) => (sec === 0 ? "In step" : `${Math.abs(sec).toFixed(1)} s ${sec > 0 ? "later" : "earlier"}`);
+
+/** When the next episode starts on its own: at the end of this one, then
+ * counted down over the last 15 s ("Starts in 12 s"). */
+export const startsText = (leftSec: number) => (leftSec > 15 ? "Starts when this ends" : `Starts in ${Math.max(0, Math.ceil(leftSec))} s`);

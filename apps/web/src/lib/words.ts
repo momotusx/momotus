@@ -738,3 +738,12 @@ export function choiceSummary(p: Pick<StreamPrefs, "sizeLimitBytes" | "minSeeder
 /** `displayHeight` to the core's screen class (3.3): an iPhone (1179 lines)
  * and a 1440 phone are 1080. */
 export const screenClass = (lines: number) => (lines >= 2000 ? 2160 : lines >= 1000 ? 1080 : lines >= 700 ? 720 : 480);
+
+/** No addon found a stream: one wording on the title page, Versions and the player. */
+export const noVersionWords = {
+  title: "No playable version found",
+  detail: "None of your addons found a stream for this. A source addon finds them; add one in Addons.",
+};
+
+/** Addons still answering past their time: "Torrentio is slow", "Torrentio, Comet are slow". */
+export const slowWords = (names: string[]) => `${names.join(", ")} ${names.length > 1 ? "are" : "is"} slow, still waiting`;

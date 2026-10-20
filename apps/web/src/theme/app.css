@@ -171,6 +171,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 
 /* Explained empty and failed states */
 .problem { display: flex; flex-direction: column; align-items: flex-start; gap: 18px; max-width: 1100px; }
+.problem-acts { display: flex; flex-wrap: wrap; gap: 12px; }
 .problem h2 { font-size: var(--type-title2); line-height: 1.1; }
 .problem p { color: var(--muted); font-size: var(--type-callout); line-height: 1.4; }
 

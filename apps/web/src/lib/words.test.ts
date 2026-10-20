@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { addonHost, hiddenSummary, nextVersion, languageName, pairingProblem, plainAddress, reasonText, restartLine, serverHost, statusText, subtitleNote } from "./words";
+import { addonHost, hiddenSummary, nextVersion, languageName, pairingProblem, plainAddress, reasonText, restartLine, serverHost, slowWords, statusText, subtitleNote } from "./words";
 import shared from "../../../shared/stream-choice-words.json";
 import type { Learned } from "../core/generated/Learned";
 import type { ReasonLine } from "../core/generated/ReasonLine";
@@ -198,4 +198,9 @@ test("the next version, tried or offered, by its label", () => {
   // The headline never says nothing played while it offers another version.
   expect(nextVersion.failed(true)).toBe("This version could not be played");
   expect(nextVersion.failed(false)).toBe("None of the sources could be played");
+});
+
+test("slow addons agree in number", () => {
+  expect(slowWords(["Torrentio"])).toBe("Torrentio is slow, still waiting");
+  expect(slowWords(["Torrentio", "Comet"])).toBe("Torrentio, Comet are slow, still waiting");
 });

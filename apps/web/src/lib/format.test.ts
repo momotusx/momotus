@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { airDate, bytes, clock, delayText, episodeLabel, groupFailures, parseVideo, playPath, releaseParts, runtimeMinutes } from "./format";
+import { airDate, bytes, clock, delayText, startsText, episodeLabel, groupFailures, parseVideo, playPath, releaseParts, runtimeMinutes } from "./format";
 
 test("bytes are 1024-based, as addons print sizes", () => {
   expect(bytes(5368709120)).toBe("5 GB");
@@ -67,4 +67,12 @@ test("the subtitle delay says which way", () => {
   expect(delayText(0)).toBe("In step");
   expect(delayText(0.5)).toBe("0.5 s later");
   expect(delayText(-1)).toBe("1.0 s earlier");
+});
+
+test("Up Next waits for the end, then counts the last 15 s", () => {
+  expect(startsText(287)).toBe("Starts when this ends");
+  expect(startsText(15.2)).toBe("Starts when this ends");
+  expect(startsText(15)).toBe("Starts in 15 s");
+  expect(startsText(11.3)).toBe("Starts in 12 s");
+  expect(startsText(-0.5)).toBe("Starts in 0 s");
 });

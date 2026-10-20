@@ -98,8 +98,10 @@ test.afterAll(() => {
 type Sent = { id?: number; op?: string; view?: string; event?: string; sub?: number };
 
 /** A page on this spec's core; `sent` is what it asked, in order, and
- * `fake` may answer a message at the socket instead of the core. */
-async function page(browser: Browser, viewport = { width: 1440, height: 900 }, fake?: (m: Sent) => unknown) {
+ * `fake` may answer a message at the socket instead of the core (a reply's
+ * `ok` and `result` or `error`). */
+type Reply = { ok: true; result: unknown } | { ok: false; error: string };
+async function page(browser: Browser, viewport = { width: 1440, height: 900 }, fake?: (m: Sent) => Reply | undefined) {
   const sent: Sent[] = [];
   const context = await browser.newContext({ viewport, colorScheme: "dark", baseURL: `http://127.0.0.1:${PORTS.vite}` });
   // Every player starts muted.
@@ -122,7 +124,7 @@ async function page(browser: Browser, viewport = { width: 1440, height: 900 }, f
       const msg = JSON.parse(String(m)) as Sent;
       sent.push(msg);
       const answer = fake?.(msg);
-      if (answer !== undefined) return ws.send(JSON.stringify({ id: msg.id, ok: true, result: answer }));
+      if (answer !== undefined) return ws.send(JSON.stringify({ id: msg.id, ...answer }));
       if (upstream.readyState === WebSocket.OPEN) upstream.send(String(m));
       else early.push(String(m));
     });
@@ -180,6 +182,12 @@ test("an episode not out yet: its day stands where Play was", async ({ browser }
     // No episode to play, so no versions to look for either.
     await expect(p.locator('[data-f="title:versions"]')).toHaveCount(0);
     await expect(p.locator(".vline")).toHaveCount(0);
+    // The episode itself is a plain row with its day: no play link, no versions.
+    const later = p.locator('[data-f="ep:mqj1:1:2"]');
+    await expect(later).toContainText("Airs Jan 1, 2099");
+    expect(await later.evaluate((el) => el.tagName)).toBe("DIV");
+    await expect(p.locator('[data-f="epv:mqj1:1:2"]')).toHaveCount(0);
+    await expect(p.locator('[data-f="ep:mqj1:1:1"]')).toHaveAttribute("href", "/play/series/mqj1/mqj1:1:1");
     // On TV focus goes to the first action, not to the synopsis above it.
     if (form === "tv") await expect(p.locator('[data-f="title:library"]')).toBeFocused();
     await context.close();
@@ -303,7 +311,7 @@ test("Continue Watching: the tile's remove button off TV, the title page on TV",
 });
 
 test("back in front after the stream server moved: the playback opens again", async ({ browser }) => {
-  const { context, page: p, sent } = await page(browser, undefined, (m) => (m.op === "lifecycle" && m.event === "foreground" ? { serverMoved: true } : undefined));
+  const { context, page: p, sent } = await page(browser, undefined, (m) => (m.op === "lifecycle" && m.event === "foreground" ? { ok: true, result: { serverMoved: true } } : undefined));
   await openPlayer(p);
   const opens = () => sent.filter((m) => m.op === "subscribe" && m.view === "playback").length;
   expect(opens()).toBe(1);
@@ -318,5 +326,36 @@ test("back in front after the stream server moved: the playback opens again", as
   await visibility(false);
   await expect.poll(opens).toBe(2);
   await expect.poll(() => p.evaluate(() => (document.querySelector("video")?.readyState ?? 0) >= 1), { timeout: 30_000 }).toBe(true);
+  await context.close();
+});
+
+test("a screen that could not open offers Try again, focused, which opens it anew", async ({ browser }) => {
+  // Each view is refused once at the socket, as a core that did not answer.
+  const refused = new Set<string>();
+  const { context, page: p } = await page(browser, { width: 1920, height: 1080 }, (m) => {
+    if (m.op !== "subscribe" || !m.view || refused.has(m.view) || !["title", "library", "discover", "import"].includes(m.view)) return undefined;
+    refused.add(m.view);
+    return { ok: false, error: "the core did not answer" };
+  });
+  const screens = [
+    { path: "/title/series/mqj2", key: "title:retry", opened: '[data-f="title:play"]' },
+    { path: "/library", key: "library:retry", opened: '[data-f="library:discover"]' },
+    { path: "/discover", key: "discover:retry", opened: "text=Nothing to browse yet" },
+  ];
+  for (const s of screens) {
+    await p.goto(`${s.path}?form=tv`);
+    const retry = p.locator(`[data-f="${s.key}"]`);
+    await expect(retry).toBeVisible({ timeout: 30_000 });
+    await expect(retry).toBeFocused();
+    await p.keyboard.press("Enter");
+    await expect(p.locator(s.opened).first()).toBeVisible({ timeout: 30_000 });
+    await expect(retry).toHaveCount(0);
+  }
+  // Import: the second try asks the core again.
+  await p.goto("/import?form=tv");
+  const retry = p.locator('[data-f="import:retry"]');
+  await expect(retry).toBeFocused({ timeout: 30_000 });
+  await p.keyboard.press("Enter");
+  await expect(p.locator("h2", { hasText: "Import could not start" })).toHaveCount(0, { timeout: 30_000 });
   await context.close();
 });
