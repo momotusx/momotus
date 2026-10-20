@@ -514,6 +514,14 @@ sealed interface HomeUpdate {
     ) : HomeUpdate
 }
 
+/** An identity linked to the account. No subject, email or name: the provider and when. */
+@Serializable
+data class IdentityLink(
+    val link: Long,
+    val provider: String,
+    val createdMs: Long,
+)
+
 @Serializable
 @JsonClassDiscriminator("phase")
 sealed interface ImportSnapshot {
@@ -1163,6 +1171,13 @@ sealed interface RowState {
     ) : RowState
 }
 
+/** A deletion of the account that waits (D14): every device shows it with Cancel. `provider` names the identity that asked from the web page ("Someone signed in with your Google account..."); none for a Start over or when that link is gone. */
+@Serializable
+data class ScheduledDeletion(
+    val dueMs: Long,
+    val provider: String? = null,
+)
+
 @Serializable
 data class SearchSnapshot(
     val query: String,
@@ -1198,6 +1213,67 @@ enum class SegmentKind(
     ;
 
     object Serializer : FallbackEnumSerializer<SegmentKind>("SegmentKind", SegmentKind.entries, SegmentKind::wire, Unknown)
+}
+
+@Serializable
+@JsonClassDiscriminator("phase")
+sealed interface SignInSnapshot {
+    @Serializable
+    @SerialName("starting")
+    data object Starting : SignInSnapshot
+
+    @Serializable
+    @SerialName("browser")
+    data class Browser(
+        val url: String,
+        val expiresMs: Long,
+    ) : SignInSnapshot {
+        // Holds keys or a token: never printed.
+        override fun toString() = "Browser(url=hidden, expiresMs=$expiresMs)"
+    }
+
+    @Serializable
+    @SerialName("waiting")
+    data object Waiting : SignInSnapshot
+
+    @Serializable
+    @SerialName("found")
+    data class Found(
+        val ticket: String,
+        val account: String,
+    ) : SignInSnapshot {
+        // Holds keys or a token: never printed.
+        override fun toString() = "Found(ticket=hidden, account=hidden)"
+    }
+
+    @Serializable
+    @SerialName("new")
+    data class New(
+        val ticket: String,
+    ) : SignInSnapshot {
+        // Holds keys or a token: never printed.
+        override fun toString() = "New(ticket=hidden)"
+    }
+
+    @Serializable
+    @SerialName("receipt")
+    data class Receipt(
+        val receipt: String,
+        val ticket: String,
+        val account: String? = null,
+    ) : SignInSnapshot {
+        // Holds keys or a token: never printed.
+        override fun toString() = "Receipt(receipt=hidden, ticket=hidden, account=$account)"
+    }
+
+    @Serializable
+    @SerialName("failed")
+    data class Failed(
+        val code: String,
+    ) : SignInSnapshot {
+        // Holds keys or a token: never printed.
+        override fun toString() = "Failed(code=hidden)"
+    }
 }
 
 /** How a stream starts (plans/m13-stream-choice.md 3.2). */
@@ -1350,9 +1426,11 @@ data class SyncReport(
     val record: SyncRecord? = null,
     /** Sync again right away (the record changed, nothing was published). */
     val again: Boolean,
+    /** The account's deletion waits for this time (D14): show it with Cancel on every device. From the round's last relay answer. */
+    val deletion: ScheduledDeletion? = null,
 ) {
     // Holds keys or a token: never printed.
-    override fun toString() = "SyncReport(pushed=$pushed, stale=$stale, refused=$refused, waiting=$waiting, pulled=$pulled, applied=$applied, unreadable=$unreadable, newer=$newer, parked=$parked, oldEpochWrites=$oldEpochWrites, clockGapMs=$clockGapMs, rotationWaitMs=$rotationWaitMs, blocked=$blocked, fingerprint=$fingerprint, record=${record?.let { "hidden" }}, again=$again)"
+    override fun toString() = "SyncReport(pushed=$pushed, stale=$stale, refused=$refused, waiting=$waiting, pulled=$pulled, applied=$applied, unreadable=$unreadable, newer=$newer, parked=$parked, oldEpochWrites=$oldEpochWrites, clockGapMs=$clockGapMs, rotationWaitMs=$rotationWaitMs, blocked=$blocked, fingerprint=$fingerprint, record=${record?.let { "hidden" }}, again=$again, deletion=$deletion)"
 }
 
 @Serializable

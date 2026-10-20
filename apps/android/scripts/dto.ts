@@ -37,6 +37,10 @@ const LONG = new Set([
   "attempt",
   "sinceMs",
   "lastOkMs",
+  // Accounts: a scheduled deletion, identity links (the relay's row id).
+  "dueMs",
+  "createdMs",
+  "link",
   // M13 stream choice.
   "limitBytes",
   "atMs",
@@ -298,7 +302,7 @@ function params(owner: string, fields: Field[], indent: string): string {
 }
 
 /** Tagged unions whose string fields are keys, tokens or secrets: printed as hidden. */
-const SECRET_UNIONS = new Set(["DebridCredential"]);
+const SECRET_UNIONS = new Set(["DebridCredential", "SignInSnapshot"]);
 
 const isRecord = (t: TypeIr): boolean =>
   (t.k === "ref" && (t.name === "SyncRecord" || t.name === "KeystoreRecord")) || (t.k === "nullable" && isRecord(t.of));
