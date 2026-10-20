@@ -215,6 +215,8 @@ test("tv: paused, the picture dims and the title says what it is", async ({ brow
   await go();
   const toggle = page.locator('[data-f="player:toggle"]');
   await expect(toggle).toBeVisible({ timeout: 30_000 });
+  // A remote has Back of its own: no on-screen Back, full screen or volume.
+  await expect(page.locator('[data-f="player:leave"], [data-f="player:fullscreen"], [data-f="player:mute"]')).toHaveCount(0);
   await page.waitForFunction(() => (document.querySelector("video")?.readyState ?? 0) >= 2);
   if ((await toggle.getAttribute("aria-label")) === "Play") await toggle.press("Enter");
   await expect(toggle).toHaveAttribute("aria-label", "Pause");
@@ -303,4 +305,52 @@ test("phone: a meta line that wraps never ends or starts a line with a dot", asy
   expect(at.lines).toBeGreaterThan(1);
   expect(at.stray).toEqual([]);
   await context.close();
+});
+
+test("desktop and phone players say Back on screen; a desktop adds volume and full screen", async ({ browser }) => {
+  for (const form of ["desktop", "phone"] as const) {
+    const { context, page, go } = await open(browser, form, `/play/movie/tt1254207/tt1254207`);
+    // Full screen asked for is counted; a headless page cannot enter it.
+    await page.addInitScript(() => {
+      const w = window as unknown as { fullAsked: number };
+      w.fullAsked = 0;
+      Element.prototype.requestFullscreen = () => {
+        w.fullAsked++;
+        return Promise.resolve();
+      };
+    });
+    await go();
+    const back = page.locator('[data-f="player:leave"]');
+    await expect(back).toBeVisible({ timeout: 30_000 });
+    await expect(back).toHaveAttribute("aria-label", "Back");
+    await page.waitForFunction(() => (document.querySelector("video")?.readyState ?? 0) >= 1, null, { timeout: 30_000 });
+    await page.evaluate(() => {
+      const v = document.querySelector("video");
+      if (v) v.muted = true;
+    });
+    const volume = () => page.evaluate(() => document.querySelector("video")?.volume ?? -1);
+    if (form === "desktop") {
+      const mute = page.locator('[data-f="player:mute"]');
+      await mute.dispatchEvent("click");
+      await expect.poll(volume).toBe(0);
+      await expect(mute).toHaveAttribute("aria-label", "Unmute");
+      await mute.dispatchEvent("click");
+      await expect.poll(volume).toBe(1);
+      await page.locator('[data-f="player:volume"]').evaluate((el) => {
+        (el as HTMLInputElement).value = "30";
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      await expect.poll(volume).toBeCloseTo(0.3, 2);
+      await page.locator('[data-f="player:fullscreen"]').dispatchEvent("click");
+      await expect.poll(() => page.evaluate(() => (window as unknown as { fullAsked: number }).fullAsked)).toBe(1);
+    } else {
+      await expect(page.locator('[data-f="player:fullscreen"], [data-f="player:mute"], [data-f="player:volume"]')).toHaveCount(0);
+    }
+    await page.mouse.move(400, 300);
+    await page.screenshot({ path: `${SHOT}/player-controls-${form}.jpg`, type: "jpeg", quality: 80 });
+    // Back with no history in this tab: the title, the player's parent.
+    await back.dispatchEvent("click");
+    await expect(page).toHaveURL(/\/title\/movie\/tt1254207/);
+    await context.close();
+  }
 });

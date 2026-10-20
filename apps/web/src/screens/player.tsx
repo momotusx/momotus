@@ -9,11 +9,15 @@ import Layers from "lucide-solid/icons/layers";
 import ListVideo from "lucide-solid/icons/list-video";
 import LoaderCircle from "lucide-solid/icons/loader-circle";
 import Pause from "lucide-solid/icons/pause";
+import Maximize from "lucide-solid/icons/maximize";
+import Minimize from "lucide-solid/icons/minimize";
 import Play from "lucide-solid/icons/play";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import RotateCcw from "lucide-solid/icons/rotate-ccw";
 import RotateCw from "lucide-solid/icons/rotate-cw";
 import SkipForward from "lucide-solid/icons/skip-forward";
+import Volume2 from "lucide-solid/icons/volume-2";
+import VolumeX from "lucide-solid/icons/volume-x";
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from "solid-js";
 import { Backdrop } from "../components/art";
 import { KeyedPage } from "../components/keyed-page";
@@ -25,6 +29,7 @@ import type { SegmentKind } from "../core/generated/SegmentKind";
 import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
 import { videoContext } from "../core/video";
 import { autoFocusSoon, goBack } from "../focus/dom";
+import { form } from "../form";
 import { entryFrom } from "../history";
 import { createVideoEngine } from "../player/video-engine";
 import { loadedSource, type Retry, sourceStart, TRYING_AGAIN_MS, tryingAgain } from "../lib/failover";
@@ -179,6 +184,22 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     onSubtitleError: (lang) => setSubError(`Could not load ${languageName(lang)} subtitles from the core`),
   });
   const { time, duration, paused, buffered, started, rate } = engine;
+  // A desktop has no volume keys of its own here: a mute button and a level,
+  // and full screen (with Back in the header on a desktop and a phone).
+  const [volume, setVolumeLevel] = createSignal(100);
+  const [muted, setMuted] = createSignal(false);
+  createEffect(() => engine.setVolume(muted() ? 0 : volume()));
+  const [full, setFull] = createSignal(!!document.fullscreenElement);
+  onMount(() => {
+    const changed = () => setFull(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", changed);
+    onCleanup(() => {
+      document.removeEventListener("fullscreenchange", changed);
+      // Full screen was for the film: leaving it leaves full screen too.
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+    });
+  });
+  const toggleFull = () => void (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => undefined);
   // Paused by the viewer (not before the first frame, not at the end card).
   const pausedNow = () => started() && paused() && !ended();
 
@@ -532,6 +553,12 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       <div class="osd-bot" />
 
       <header class="ptitle">
+        {/* A remote has Back; a desktop and a phone have it here, in every state. */}
+        <Show when={form() !== "tv"}>
+          <button class="pback" data-f="player:leave" aria-label="Back" onClick={goBack}>
+            <ArrowLeft aria-hidden />
+          </button>
+        </Show>
         <h1>{ctx.details()?.name ?? ""}</h1>
         <Show when={ctx.label()}>{(l) => <p>{l()}</p>}</Show>
         <Show when={pausedNow() && (ctx.episode()?.overview ?? ctx.details()?.description)}>{(t) => <p class="psyn">{t()}</p>}</Show>
@@ -717,6 +744,34 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
             <span class="num">-{clock(remaining())}</span>
           </div>
           <div class="ctl">
+            <Show when={form() === "desktop"}>
+              <div class="pdesk">
+                <button class="picon" data-f="player:mute" aria-label={muted() ? "Unmute" : "Mute"} aria-pressed={muted()} onClick={() => setMuted(!muted())}>
+                  <Show when={muted() || volume() === 0} fallback={<Volume2 aria-hidden />}>
+                    <VolumeX aria-hidden />
+                  </Show>
+                </button>
+                <input
+                  class="pvol"
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={volume()}
+                  aria-label="Volume"
+                  data-f="player:volume"
+                  onInput={(e) => {
+                    setVolumeLevel(Number(e.currentTarget.value));
+                    setMuted(false);
+                  }}
+                />
+                <button class="picon" data-f="player:fullscreen" aria-label={full() ? "Exit full screen" : "Full screen"} onClick={toggleFull}>
+                  <Show when={full()} fallback={<Maximize aria-hidden />}>
+                    <Minimize aria-hidden />
+                  </Show>
+                </button>
+              </div>
+            </Show>
             <div class="transport">
               <button class="round" data-f="player:back10" aria-label="Back 10 seconds" onClick={() => seek(-10)}>
                 <RotateCcw aria-hidden />
