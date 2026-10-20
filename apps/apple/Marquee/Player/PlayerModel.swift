@@ -117,6 +117,9 @@ final class PlayerModel {
     @ObservationIgnored private var running: (id: [String], task: Task<Void, Never>)?
     /// The next load stays paused: the source opened again after a server move.
     @ObservationIgnored private var holdPause = false
+    /// The file's audio and subtitle picks, chosen again on the item that
+    /// replaces this one after a server move.
+    @ObservationIgnored private var carriedTracks: (audio: Int?, text: Int?)?
 
     init(route: PlayRoute, versions: VersionsModel?, core: CoreClient) {
         self.route = route
@@ -176,6 +179,8 @@ final class PlayerModel {
             audioGroup = group
             audioTracks = Self.names(group.options, one: "Default", many: "Track")
             audioTrack = item.currentMediaSelection.selectedMediaOption(in: group).flatMap { group.options.firstIndex(of: $0) }
+            if let index = carriedTracks?.audio { selectAudio(index) }
+            carriedTracks?.audio = nil
         }
         Task { [weak self] in
             guard let group = try? await asset.loadMediaSelectionGroup(for: .legible),
@@ -186,6 +191,8 @@ final class PlayerModel {
             (textGroup, textOptions) = (group, options)
             textTracks = Self.names(options, one: "Subtitles", many: "Subtitles")
             textTrack = item.currentMediaSelection.selectedMediaOption(in: group).flatMap { options.firstIndex(of: $0) }
+            if let index = carriedTracks?.text { selectText(index) }
+            carriedTracks?.text = nil
             #if DEBUG
             if let index = DebugHooks.textTrack { selectText(index) }
             #endif
@@ -374,6 +381,11 @@ final class PlayerModel {
     func serverMoved() {
         guard loadedURL != nil else { return }
         holdPause = !playing
+        // The picks stay (review apple-journey P3-5): the file's audio and
+        // subtitle tracks are chosen again once the new item has them, and the
+        // addon track, its cues and its timing are kept.
+        carriedTracks = (audioTrack, textTrack)
+        choices.reopened()
         reopen()
     }
 
@@ -501,6 +513,11 @@ final class PlayerModel {
         let step = choices.subtitleStep(attempt: snapshot.attempt, auto: snapshot.autoSubtitle, tracks: snapshot.subtitles)
         if step.drop { selectSubtitle(nil) }
         if let track = step.turnOn { selectSubtitle(track) }
+        // After a server move the same addon track has a new URL: it stays on,
+        // its cues and timing kept, and the menu marks it.
+        if let shown = subtitle, !snapshot.subtitles.contains(shown), let same = SubtitleMenu.same(shown, in: snapshot.subtitles) {
+            subtitle = same
+        }
         switch snapshot.phase {
         case "ready":
             guard let url = snapshot.url, url != loadedURL else { return }

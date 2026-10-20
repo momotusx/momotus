@@ -643,3 +643,21 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     #expect(CaptionStyle.relativeFontSize(.large) == 125)
     #expect(CaptionStyle.relativeFontSize(.extraLarge) == 150)
 }
+
+@MainActor @Test func aServerMoveKeepsTheSubtitlePicks() {
+    let old = SubtitleTrack(url: "http://127.0.0.1:52011/sub/t/1.vtt", lang: "ger", label: "Sintel.de", source: "OpenSubtitles", forced: false, hearingImpaired: false)
+    let other = SubtitleTrack(url: "http://127.0.0.1:61022/sub/u/2.vtt", lang: "spa", label: "Sintel.es", source: "OpenSubtitles", forced: false, hearingImpaired: false)
+    let moved = SubtitleTrack(url: "http://127.0.0.1:61022/sub/u/1.vtt", lang: "ger", label: "Sintel.de", source: "OpenSubtitles", forced: false, hearingImpaired: false)
+    // The same track on the new address: everything but its URL.
+    #expect(SubtitleMenu.same(old, in: [other, moved]) == moved)
+    #expect(SubtitleMenu.same(old, in: [other]) == nil)
+    // The viewer's pick on source 1; the view opens again on the moved server
+    // and numbers its source 2: nothing is dropped, and the start subtitle
+    // does not come back over the pick.
+    let choices = PlayChoices()
+    _ = choices.source(1)
+    choices.chose(old)
+    choices.reopened()
+    #expect(choices.subtitleStep(attempt: 2, auto: other.url, tracks: [other, moved]).drop == false)
+    #expect(choices.startSubtitle(other.url, tracks: [other, moved]) == nil)
+}

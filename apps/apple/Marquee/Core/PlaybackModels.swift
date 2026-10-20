@@ -410,6 +410,15 @@ enum SubtitleMenu {
         let tracks: [SubtitleTrack]
     }
 
+    /// The same track in a new list after the view opened again on another
+    /// address: everything but its URL matches.
+    static func same(_ track: SubtitleTrack, in tracks: [SubtitleTrack]) -> SubtitleTrack? {
+        tracks.first {
+            $0.lang == track.lang && $0.label == track.label && $0.source == track.source && $0.forced == track.forced
+                && $0.hearingImpaired == track.hearingImpaired && $0.language == track.language && $0.name == track.name
+        }
+    }
+
     static func groups(_ tracks: [SubtitleTrack], preferred: [String]) -> (top: [Group], other: [Group]) {
         var order: [String] = []
         var byLanguage: [String: [SubtitleTrack]] = [:]
@@ -524,6 +533,14 @@ struct NextEpisode: Decodable, Hashable, Sendable {
     /// Try again on the failure card: the same versions from the first.
     func retry() {
         send?(["type": "retry"])
+    }
+
+    /// The view opened again because the stream server moved (review
+    /// apple-journey P3-5): the same source on a new address, so its next
+    /// attempt number drops no subtitle and the start subtitle does not come
+    /// back over the viewer's choice.
+    func reopened() {
+        attempt = nil
     }
 
     /// Another episode or version: its own start subtitle applies.
