@@ -113,7 +113,7 @@ struct VersionsScreen: View {
 
     @ViewBuilder private var pick: some View {
         if let best = snapshot?.recommended {
-            PickCard(row: best, nobodySharing: snapshot?.nobodySharing == true, play: { playing = model.play(best.key) }, focus: $pickFocused)
+            PickCard(row: best, nobodySharing: notePlace == .card, play: { playing = model.play(best.key) }, focus: $pickFocused)
         } else if let blocked = snapshot?.blocked, let words = StreamChoice.blockedWords(blocked) {
             // Every addon answered and the hidden rows say why: the way on, as one action.
             VStack(alignment: .leading, spacing: 10) {
@@ -176,7 +176,7 @@ struct VersionsScreen: View {
 
     private var table: some View {
         VStack(alignment: .leading, spacing: 14) {
-            if snapshot?.nobodySharing == true {
+            if notePlace == .list {
                 NobodySharingLine()
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
@@ -268,6 +268,11 @@ struct VersionsScreen: View {
         playing = model.play(rows[n - 1].key)
     }
     #endif
+
+    /// Where "Almost nobody is sharing" shows, once per screen.
+    private var notePlace: StreamChoice.NotePlace? {
+        StreamChoice.nobodySharingPlace(snapshot?.nobodySharing, hasRecommended: snapshot?.recommended != nil)
+    }
 
     /// Rows by intent group, in the design's order, empty groups left out;
     /// blocked versions once the user asked to see them.

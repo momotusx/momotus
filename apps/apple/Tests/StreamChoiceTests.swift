@@ -223,3 +223,12 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
     #expect(!StreamChoice.shouldFreeze(open: true, frozen: true))
     #expect(!StreamChoice.shouldFreeze(open: false, frozen: false))
 }
+
+@Test func almostNobodySharingShowsOncePerScreen() {
+    // On the recommended card right before Play when there is one, never also over the list.
+    #expect(StreamChoice.nobodySharingPlace(true, hasRecommended: true) == .card)
+    // No card (every version blocked or hidden): over the list.
+    #expect(StreamChoice.nobodySharingPlace(true, hasRecommended: false) == .list)
+    #expect(StreamChoice.nobodySharingPlace(false, hasRecommended: true) == nil)
+    #expect(StreamChoice.nobodySharingPlace(nil, hasRecommended: false) == nil)
+}

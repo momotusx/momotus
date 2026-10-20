@@ -198,6 +198,16 @@ enum StreamChoice {
         open && frozen != true
     }
 
+    enum NotePlace: Equatable { case card, list }
+
+    /// "Almost nobody is sharing" shows once per Versions screen: on the
+    /// recommended card right before Play, or over the list when there is no
+    /// card (plans/m13-stream-choice.md).
+    static func nobodySharingPlace(_ nobodySharing: Bool?, hasRecommended: Bool) -> NotePlace? {
+        guard nobodySharing == true else { return nil }
+        return hasRecommended ? .card : .list
+    }
+
     /// 1024-based, as addons print sizes: one decimal under 100 GB with a
     /// trailing .0 dropped, whole numbers from 100 GB, MB under 1 GB.
     static func bytes(_ n: Int64) -> String {
