@@ -5,6 +5,7 @@ import android.view.accessibility.CaptioningManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -14,6 +15,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.Player
 import androidx.media3.common.text.CueGroup
@@ -39,6 +43,8 @@ fun PlayerVideo(
     player: Player,
     modifier: Modifier = Modifier,
     subtitleSize: SubtitleSize = SubtitleSize.Medium,
+    /** While the controls show: their height, so the subtitles sit just above them, never under or over them. */
+    subtitleLift: Dp = 0.dp,
 ) {
     Box(modifier.background(Color.Black)) {
         ContentFrame(
@@ -47,7 +53,11 @@ fun PlayerVideo(
             surfaceType = SURFACE_TYPE_SURFACE_VIEW,
             contentScale = ContentScale.Fit,
         )
-        Subtitles(player, subtitleScale(subtitleSize), Modifier.fillMaxSize())
+        Subtitles(
+            player,
+            subtitleScale(subtitleSize),
+            Modifier.fillMaxSize().padding(bottom = subtitleLift).testTag(SUBTITLES_TAG),
+        )
     }
 }
 
@@ -101,3 +111,6 @@ private fun captionScale(context: Context): Float {
     val captions = context.getSystemService(CaptioningManager::class.java) ?: return 1f
     return if (captions.isEnabled) captions.fontScale else 1f
 }
+
+/** The subtitles' area, for tests of where they sit. */
+const val SUBTITLES_TAG = "subtitles"

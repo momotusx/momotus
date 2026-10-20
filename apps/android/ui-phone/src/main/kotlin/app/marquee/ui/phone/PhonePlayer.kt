@@ -42,6 +42,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -216,7 +217,13 @@ fun PhonePlayer(
                 )
             },
     ) {
-        PlayerVideo(controller.player, Modifier.fillMaxSize(), controller.subtitleSize)
+        // While the controls show, the subtitles sit just above them, at the foot as ever.
+        PlayerVideo(
+            controller.player,
+            Modifier.fillMaxSize(),
+            controller.subtitleSize,
+            subtitleLift = if (showControls) controlsHeight else 0.dp,
+        )
 
         // Scrims: edge to edge, 120 dp at the top (60% black) and 200 dp at the foot (72%).
         AnimatedVisibility(
@@ -557,9 +564,9 @@ private fun Transport(
 }
 
 /**
- * Audio, Subtitles, Versions, Speed, then Episodes (the design audit's order for every platform).
- * Spread across the width when they fit; past it (a small phone, a large font, long track names)
- * the row scrolls, so no action is squeezed under its 48 dp target.
+ * Audio, Subtitles, Versions, Speed, then Episodes (the design audit's order for every platform), as one
+ * group in the middle under the bar, never spread edge to edge on a wide phone; past the width (a small
+ * phone, a large font, long track names) the row scrolls, so no action is squeezed under its 48 dp target.
  */
 @Composable
 private fun Actions(
@@ -572,27 +579,30 @@ private fun Actions(
     modifier: Modifier = Modifier,
 ) {
     val scroll = rememberScrollState()
-    // A fade at the end says the row goes on when the later actions are out of sight.
-    Row(
-        modifier.endFade(scroll.canScrollForward).horizontalScroll(scroll),
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        if (controller.audio.isNotEmpty()) {
-            ActionButton(Icons.Volume2, "Audio", controller.audioDetail(), onAudio)
+    // The group sits in the middle of its width (the scroll is as wide as the actions, up to that width);
+    // a fade at the end says the row goes on when the later actions are out of sight.
+    Box(modifier, contentAlignment = Alignment.Center) {
+        Row(
+            Modifier.endFade(scroll.canScrollForward).horizontalScroll(scroll).testTag(ACTIONS_TAG),
+            horizontalArrangement = Arrangement.spacedBy(ACTION_GAP),
+        ) {
+            if (controller.audio.isNotEmpty()) {
+                ActionButton(Icons.Volume2, "Audio", controller.audioDetail(), onAudio)
+            }
+            ActionButton(
+                Icons.Captions,
+                "Subtitles",
+                controller.subtitlesDetail(),
+                onSubtitles,
+                busy = controller.subtitlesStillListing(),
+            )
+            ActionButton(Icons.Layers, "Versions", controller.versionLabel, onVersions)
+            ActionButton(Icons.Gauge, "Speed", speedText(controller.speed), {
+                onTouch()
+                controller.changeSpeed(nextSpeed(controller.speed))
+            })
+            onEpisodes?.let { ActionButton(Icons.ListVideo, "Episodes", null, it) }
         }
-        ActionButton(
-            Icons.Captions,
-            "Subtitles",
-            controller.subtitlesDetail(),
-            onSubtitles,
-            busy = controller.subtitlesStillListing(),
-        )
-        ActionButton(Icons.Layers, "Versions", controller.versionLabel, onVersions)
-        ActionButton(Icons.Gauge, "Speed", speedText(controller.speed), {
-            onTouch()
-            controller.changeSpeed(nextSpeed(controller.speed))
-        })
-        onEpisodes?.let { ActionButton(Icons.ListVideo, "Episodes", null, it) }
     }
 }
 
@@ -602,6 +612,12 @@ private fun Actions(
  * place above the scrubber, as on the web.
  */
 private val SHORT_HEIGHT = 360.dp
+
+/** Between two actions of the options row: a group, not a spread. */
+private val ACTION_GAP = 28.dp
+
+/** The options row, for tests of the layout. */
+internal const val ACTIONS_TAG = "player-actions"
 
 /** Below this window height Up Next and the controls do not show together. */
 private val UP_NEXT_ROOM = 420.dp
