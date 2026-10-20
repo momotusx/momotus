@@ -1333,20 +1333,24 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn the_same_addresses_in_another_order_are_not_new() {
         let s = loopback_scraper();
+        // Two addresses of one family (a lookup puts IPv4 first and keeps
+        // the order within a family): 127.0.0.1 reached as an IPv6 mapped
+        // address, and ::1.
+        let mapped: IpAddr = "::ffff:127.0.0.1".parse().unwrap();
         let v6: IpAddr = "::1".parse().unwrap();
         // 50 ms answers: a second connect would be sent before the first
         // one's answer.
         let late = Duration::from_millis(50);
         let a = fake_at(V4, 0, "order.scrape.test", 4, 0, late);
         let b = fake_at(v6, a.port, "order.scrape.test", 9, 0, Duration::ZERO);
-        mq_http::test_dns::set("order.scrape.test", &[V4, v6]);
+        mq_http::test_dns::set("order.scrape.test", &[mapped, v6]);
         assert_eq!(one(&s, &a.url, H1).await.0, Some(4));
         assert_eq!(b.seen.load(Ordering::SeqCst), 0);
         // The tracker restarts (its kept id is refused, so the next call
         // connects again, with a lookup alongside), and the name lists the
         // same two addresses reversed.
         a.id.store(8, Ordering::SeqCst);
-        mq_http::test_dns::set("order.scrape.test", &[v6, V4]);
+        mq_http::test_dns::set("order.scrape.test", &[v6, mapped]);
         assert_eq!(one(&s, &a.url, H2).await.0, Some(4));
         assert_eq!(
             b.seen.load(Ordering::SeqCst),
