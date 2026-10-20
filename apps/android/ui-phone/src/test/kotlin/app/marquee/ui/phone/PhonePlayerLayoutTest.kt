@@ -19,9 +19,9 @@ import app.marquee.core.model.SegmentKind
 import app.marquee.core.model.SubtitleSize
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
+import app.marquee.player.CUE_FLOOR
 import app.marquee.player.CUE_LINE
 import app.marquee.player.CUE_LINES
-import app.marquee.player.CUE_SHRINK
 import app.marquee.player.PlaybackController
 import app.marquee.player.SUBTITLES_TAG
 import app.marquee.player.subtitleScale
@@ -41,12 +41,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * The phone player's layout on a wide, low phone in landscape (the owner's rule): the transport in the middle
- * over the bar, the options row under the bar as one group (never spread edge to edge), and the subtitles at
- * the foot, lifted between the controls and the title bar while the controls show, never over a control.
+ * The phone player's layout in landscape (the owner's rule, as on the iPhone and the web): the transport in the
+ * middle of the screen, the bar and the options row (one group, never spread edge to edge) at the foot, and the
+ * subtitles 8 dp over the bar while the controls show, smaller (down to 75%) when they would meet the transport.
+ * 540 dp tall: Robolectric's fonts set the controls taller than a phone's (178 dp against about 124 on the Pixel).
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [36], qualifiers = "w900dp-h396dp")
+@Config(sdk = [36], qualifiers = "w960dp-h540dp")
 class PhonePlayerLayoutTest {
     @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()
@@ -157,8 +158,13 @@ class PhonePlayerLayoutTest {
         val transport = bounds("Back 10 seconds")
         val bar = bounds("Position")
         val actions = compose.onNodeWithTag(ACTIONS_TAG).fetchSemanticsNode().boundsInRoot
-        assertTrue(transport.bottom <= bar.top, "the transport sits over the bar")
+        assertTrue(transport.bottom <= bar.top, "the transport sits over the bar: $transport, $bar, $root")
+        // In the middle of the screen, as on the iPhone and the web; the bar and the options at the foot.
+        val play = bounds("Pause")
+        assertTrue(abs(play.center.y - root.center.y) < 2f, "the transport is in the middle: ${play.center.y}")
+        assertTrue(abs(play.center.x - root.center.x) < 2f, "and centred across: ${play.center.x}")
         assertTrue(bar.bottom <= actions.top, "the options row sits under the bar")
+        assertTrue(root.bottom - actions.bottom < 40f, "the bar and the options keep to the foot: ${actions.bottom}")
         assertTrue(
             actions.width < root.width * 0.6f,
             "the options are a group, not spread across ${root.width}: ${actions.width}",
@@ -176,14 +182,15 @@ class PhonePlayerLayoutTest {
         player.say("Who are you, and what are you doing here")
         compose.waitForIdle()
         val shown = cues()
-        val transport = bounds("Back 10 seconds")
-        assertTrue(shown.foot <= transport.top, "over the controls: ${shown.foot} against ${transport.top}")
-        assertEquals(full(SubtitleSize.Medium), shown.text, "two lines at Medium fit: full size")
+        val bar = bounds("Position")
+        assertTrue(shown.foot <= bar.top - 8f + 0.5f, "8 dp over the bar: ${shown.foot} against ${bar.top}")
+        assertTrue(shown.foot >= bar.top - 8f - 0.5f, "just over it, not higher: ${shown.foot}")
+        assertEquals(full(SubtitleSize.Medium), shown.text, "one line fits under the transport: full size")
         assertEquals(0f to root.width, shown.left to shown.right, "nothing in the corner: the whole width")
         // A cue with no line of its own (as SubRip has it) is lifted the same way.
         player.say("Who are you, and what are you doing here", line = Cue.DIMEN_UNSET)
         compose.waitForIdle()
-        assertTrue(cues().foot <= transport.top, "with no line, over the controls too: ${cues().foot}")
+        assertTrue(cues().foot <= bar.top - 8f + 0.5f, "with no line, over the bar too: ${cues().foot}")
         // The controls hide while it plays: the subtitles go back to the foot, at full size.
         player.say("Who are you, and what are you doing here")
         controlsHidden()
@@ -193,24 +200,16 @@ class PhonePlayerLayoutTest {
     }
 
     @Test
-    fun `two lines at the largest size never meet a control, at 85% while the controls show`() {
+    fun `two lines at the largest size shrink under the transport, down to 75%, while the controls show`() {
         playing(SubtitleSize.ExtraLarge)
-        player.say("Who are you, and what are you doing here")
+        player.say("Who are you, and what are you doing here\nwith a sword and a dragon's tooth")
         compose.waitForIdle()
         val shown = cues()
-        val transport = bounds("Back 10 seconds")
-        val over =
-            listOf(
-                bounds("Back").bottom,
-                bounds("Picture in picture").bottom,
-                compose
-                    .onNodeWithText("Sintel")
-                    .fetchSemanticsNode()
-                    .boundsInRoot.bottom,
-            ).max()
-        assertTrue(shown.foot <= transport.top, "over the transport: ${shown.foot} against ${transport.top}")
-        assertTrue(shown.top >= over, "under the title bar: two lines reach ${shown.top}, its controls end at $over")
-        assertEquals(full(SubtitleSize.ExtraLarge) * CUE_SHRINK, shown.text, 1e-6f, "at 85%")
+        val bar = bounds("Position")
+        assertTrue(shown.foot <= bar.top - 8f + 0.5f, "8 dp over the bar: ${shown.foot} against ${bar.top}")
+        // Between the bar and the transport in the middle of a 540 dp screen there is room for neither 100% nor
+        // 85%: the cues draw at the floor.
+        assertEquals(full(SubtitleSize.ExtraLarge) * CUE_FLOOR, shown.text, 1e-6f, "at 75%")
         controlsHidden()
         assertEquals(full(SubtitleSize.ExtraLarge), cues().text, "back to full size once the controls hide")
     }
@@ -233,8 +232,8 @@ class PhonePlayerLayoutTest {
         val shown = cues()
         assertTrue(shown.right <= skip(), "clear of Skip: the lines end at ${shown.right}, Skip starts at ${skip()}")
         assertTrue(abs((shown.left + shown.right) / 2 - root.center.x) < 1f, "centred: ${shown.left} to ${shown.right}")
-        // Two lines kept to 78% of the width wrap into three, which do not fit at full size on this phone.
-        assertEquals(full(SubtitleSize.Medium) * CUE_SHRINK, shown.text, 1e-6f, "three lines at 85%")
+        // One line, still one in 78% of the width: full size.
+        assertEquals(full(SubtitleSize.Medium), shown.text, "at full size")
         controlsHidden()
         val hidden = cues()
         assertTrue(hidden.right <= skip(), "clear of Skip at the foot: ${hidden.right} against ${skip()}")

@@ -50,7 +50,7 @@ fun PlayerVideo(
     subtitleSize: SubtitleSize = SubtitleSize.Medium,
     /** While the controls show: their height, so the subtitles sit just above them, never under or over them. */
     subtitleLift: Dp = 0.dp,
-    /** While the controls show: the foot of the title bar's controls, which the subtitles keep clear of. */
+    /** While the controls show: the foot of the controls over the subtitles (the transport), which they keep clear of. */
     subtitleCeiling: Dp = 0.dp,
     /** A control in the bottom corner (Skip, Up Next), in px: the subtitles' lines keep clear of it. */
     subtitleCorner: Rect? = null,
@@ -62,6 +62,18 @@ fun PlayerVideo(
             surfaceType = SURFACE_TYPE_SURFACE_VIEW,
             contentScale = ContentScale.Fit,
         )
+        // The cues on screen: the frame is set for the lines they take.
+        var cues by remember(player) { mutableStateOf(player.currentCues.cues) }
+        DisposableEffect(player) {
+            val listener =
+                object : Player.Listener {
+                    override fun onCues(cueGroup: CueGroup) {
+                        cues = cueGroup.cues
+                    }
+                }
+            player.addListener(listener)
+            onDispose { player.removeListener(listener) }
+        }
         // The system caption size (as setUserDefaultTextSize reads it) times the profile's size.
         val text =
             SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * captionScale(LocalContext.current) * subtitleScale(subtitleSize)
@@ -85,11 +97,12 @@ fun PlayerVideo(
                         ceiling = if (subtitleCeiling > 0.dp) (subtitleCeiling + CUE_CLEARANCE).toPx() else 0f,
                         text = text,
                         corner = subtitleCorner?.let { Rect(it.left - gap, it.top - gap, it.right, it.bottom) },
+                        lines = { span -> cueLines(cues, text * height, span) },
                     )
                 }
             }
         // The view keeps the whole picture area, so the cues keep their size and a picture cue (PGS) its shape.
-        Subtitles(player, frame, lifted = subtitleLift > 0.dp, Modifier.fillMaxSize().testTag(SUBTITLES_TAG))
+        Subtitles(cues, frame, lifted = subtitleLift > 0.dp, Modifier.fillMaxSize().testTag(SUBTITLES_TAG))
     }
 }
 
@@ -105,12 +118,11 @@ data class CueFrame(
 )
 
 /**
- * Cues without a line of their own (most subtitles) with their foot at [foot] (px from the top) and their size
- * [text] (a fraction of [height]). While two lines there would reach above [ceiling], they draw at 85%, or smaller
- * still when 85% does not clear it, so a subtitle and a control never overlap; the iPhone keeps the same rule.
- * Beside a control in the bottom corner ([corner], px), the lines keep left of it: centred on the screen while that
- * leaves them half its width, else centred in the room left of it; two lines kept narrower wrap into more, and the
- * size is set for those.
+ * Cues set from the foot (most subtitles) with their foot at [foot] (px from the top) and their size [text] (a
+ * fraction of [height]). While the [lines] they take there would reach above [ceiling], they draw at 85%, or smaller
+ * still when 85% does not clear it, down to 75%, so a subtitle meets a control only past that; the iPhone keeps the
+ * same rule. Beside a control in the bottom corner ([corner], px), the lines keep left of it: centred on the screen
+ * while that leaves them half its width, else centred in the room left of it, and [lines] counts the wrapping.
  */
 fun cueFrame(
     height: Float,
@@ -119,6 +131,8 @@ fun cueFrame(
     ceiling: Float,
     text: Float,
     corner: Rect? = null,
+    /** The lines the cues on screen take in a span this many px wide, at full size. */
+    lines: (span: Float) -> Int = { CUE_LINES },
 ): CueFrame {
     // A corner control beside two lines at the foot (not wholly under or over them) narrows the lines first.
     val twoLines = CUE_LINES * CUE_LINE * text * height
@@ -130,20 +144,38 @@ fun cueFrame(
             centred >= CUE_MIN_WIDTH -> centred to 0.5f
             else -> left / width to left / width / 2
         }
-    // Two lines of the whole width, kept to a narrower span, wrap into more.
-    val box = ceil(CUE_LINES / span) * CUE_LINE * text * height
+    val box = lines(span * width) * CUE_LINE * text * height
     val room = foot - ceiling
     val scale =
         when {
             box <= room -> 1f
             box * CUE_SHRINK <= room -> CUE_SHRINK
-            else -> max(room, 0f) / box
+            else -> max(room / box, CUE_FLOOR)
         }
     return CueFrame(1f - foot / height, text * scale, span, center)
 }
 
-/** The lines the rule makes room for: two, the most a subtitle usually has. */
+/** The lines the corner rule makes room for, and the rule's budget when the cues are not known: two. */
 const val CUE_LINES = 2
+
+/** The smallest cues draw while the controls show: past it a long subtitle reaches the transport, still readable. */
+const val CUE_FLOOR = 0.75f
+
+/**
+ * The lines [cues] set from the foot take at [textPx] in [spanPx]: each of their own lines, wrapped at about half
+ * the text size a character. ponytail: an average glyph width for the default typeface, not a measured layout.
+ */
+internal fun cueLines(
+    cues: List<Cue>,
+    textPx: Float,
+    spanPx: Float,
+): Int =
+    cues.filter { linesOverFoot(it) != null }.sumOf { cue ->
+        cue.text?.lines()?.sumOf { line -> max(1, ceil(line.length * CHAR_WIDTH * textPx / spanPx).toInt()) } ?: 0
+    }
+
+/** A character's width on average, of the text size. */
+private const val CHAR_WIDTH = 0.5f
 
 /**
  * A cue line's height for its text size: the default typeface's top to bottom as the cue's layout keeps it
@@ -175,12 +207,11 @@ fun subtitleScale(size: SubtitleSize): Float =
 
 @Composable
 private fun Subtitles(
-    player: Player,
+    cues: List<Cue>,
     frame: CueFrame,
     lifted: Boolean,
     modifier: Modifier,
 ) {
-    var cues by remember(player) { mutableStateOf(player.currentCues.cues) }
     AndroidView(
         factory = { context -> SubtitleView(context).also { it.setUserDefaultStyle() } },
         update = {
@@ -189,16 +220,6 @@ private fun Subtitles(
         },
         modifier = modifier,
     )
-    DisposableEffect(player) {
-        val listener =
-            object : Player.Listener {
-                override fun onCues(cueGroup: CueGroup) {
-                    cues = cueGroup.cues
-                }
-            }
-        player.addListener(listener)
-        onDispose { player.removeListener(listener) }
-    }
 }
 
 /**

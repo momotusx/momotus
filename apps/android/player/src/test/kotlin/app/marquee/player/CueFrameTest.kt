@@ -115,11 +115,41 @@ class CueFrameTest {
     }
 
     @Test
-    fun `two lines kept beside a wide card wrap into four, and the size is set for four`() {
+    fun `lines kept beside a wide card are counted as they wrap there, and the size is set for them`() {
         val upNext = Rect(left = 520f, top = 150f, right = 884f, bottom = 320f)
         // Room for two lines (50 px) but not for four (100 px), nor for four at 85%.
-        val frame = cueFrame(height = 400f, width = 900f, foot = foot, ceiling = 220f, text = text, corner = upNext)
+        val frame =
+            cueFrame(
+                height = 400f,
+                width = 900f,
+                foot = foot,
+                ceiling = 220f,
+                text = text,
+                corner = upNext,
+                lines = { span -> if (span < 900f) 4 else 2 },
+            )
         assertEquals(520f / 900f, frame.width, 1e-6f)
         assertEquals(text * 80f / 100f, frame.text, 1e-6f)
+    }
+
+    @Test
+    fun `a cue's lines are its own, each wrapped at about half the text size a character`() {
+        val long = Cue.Builder().setText("x".repeat(84) + "\nshort").build()
+        assertEquals(2, cueLines(listOf(long), textPx = 20f, spanPx = 900f))
+        assertEquals(3, cueLines(listOf(long), textPx = 20f, spanPx = 520f))
+        val picture = Cue.Builder().setBitmap(Bitmap.createBitmap(4, 2, Bitmap.Config.ARGB_8888)).build()
+        assertEquals(0, cueLines(listOf(picture), textPx = 20f, spanPx = 900f))
+    }
+
+    @Test
+    fun `cues that would meet the transport draw at 85%, smaller to clear it, never under 75%`() {
+        fun scale(room: Float) =
+            cueFrame(height = 400f, width = 900f, foot = 300f, ceiling = 300f - room, text = 0.1f, lines = { 2 }).text /
+                0.1f
+        // Two lines at 0.1 of 400 px: a box of 100 px.
+        assertEquals(1f, scale(100f), 1e-6f)
+        assertEquals(CUE_SHRINK, scale(90f), 1e-6f)
+        assertEquals(0.8f, scale(80f), 1e-6f)
+        assertEquals(CUE_FLOOR, scale(10f), 1e-6f)
     }
 }

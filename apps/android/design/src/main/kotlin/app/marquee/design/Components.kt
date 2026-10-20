@@ -411,8 +411,8 @@ fun Modifier.describe(text: String): Modifier = semantics { contentDescription =
 fun Spinner(
     modifier: Modifier = Modifier,
     size: Dp = if (LocalForm.current == Form.Tv) 40.dp else 28.dp,
+    color: Color = Marquee.colors.text,
 ) {
-    val color = Marquee.colors.text
     val turn =
         rememberInfiniteTransition(label = "spinner").animateFloat(
             initialValue = 0f,
@@ -578,6 +578,8 @@ fun RoundButton(
     badge: String? = null,
     /** What a screen reader says, when the visible label needs its target ("Remove Torrentio"). */
     spoken: String = label,
+    /** Waiting (a player filling its buffer): the spinner turns in the circle in place of the icon. */
+    busy: Boolean = false,
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
@@ -617,8 +619,12 @@ fun RoundButton(
                 }.focusClickable(onClick, Role.Button, enabled, onLongClick, longClickLabel),
             contentAlignment = Alignment.Center,
         ) {
-            MqIcon(icon, tint = if (lit) colors.onPrimary else colors.text, size = glyph)
-            if (badge != null) {
+            if (busy) {
+                Spinner(size = glyph, color = if (lit) colors.onPrimary else colors.text)
+            } else {
+                MqIcon(icon, tint = if (lit) colors.onPrimary else colors.text, size = glyph)
+            }
+            if (badge != null && !busy) {
                 // The label already says the seconds; the badge is only for the eye. A third of the
                 // glyph, so it sits inside the arrow as on the web rather than over it.
                 BasicText(

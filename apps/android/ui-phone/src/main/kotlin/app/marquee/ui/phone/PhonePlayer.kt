@@ -131,6 +131,8 @@ fun PhonePlayer(
     var controlsHeight by remember { mutableStateOf(200.dp) }
     // The foot of the title bar's controls (Back, the title, Picture in picture): the subtitles keep under it.
     var titleFoot by remember { mutableStateOf(0.dp) }
+    // The foot of the transport in the middle of the screen: the subtitles keep under it while it shows.
+    var transportFoot by remember { mutableStateOf(0.dp) }
     // Skip or Up Next in the bottom corner, as last laid out: the subtitles' lines keep clear of it.
     var corner by remember { mutableStateOf<Rect?>(null) }
     val live = stage == Stage.Playing || stage == Stage.Paused || stage == Stage.Buffering || stage == Stage.Ended
@@ -233,7 +235,7 @@ fun PhonePlayer(
             Modifier.fillMaxSize(),
             controller.subtitleSize,
             subtitleLift = if (showControls) controlsHeight else 0.dp,
-            subtitleCeiling = if (showControls) titleFoot else 0.dp,
+            subtitleCeiling = if (showControls) maxOf(titleFoot, transportFoot) else 0.dp,
             subtitleCorner = corner.takeIf { showSkip || showNextCard },
         )
 
@@ -316,7 +318,10 @@ fun PhonePlayer(
                 )
             }
             // A notice while the buffer fills keeps the mark in the middle.
-            if (stage == Stage.Buffering && controller.status == null) Spinner(Modifier.align(Alignment.Center))
+            // With the controls up the spinner turns in the Play circle instead (the transport is in the middle).
+            if (stage == Stage.Buffering && controller.status == null && !showControls) {
+                Spinner(Modifier.align(Alignment.Center))
+            }
         }
 
         AnimatedVisibility(
@@ -347,6 +352,25 @@ fun PhonePlayer(
                         },
                 )
             }
+        }
+        // The transport in the middle of the screen, as on the iPhone and the web; the bar and the options
+        // keep to the foot.
+        AnimatedVisibility(
+            visible = showControls,
+            modifier = Modifier.align(Alignment.Center),
+            enter = fadeIn(),
+            exit = fadeOut(),
+        ) {
+            Transport(
+                controller,
+                controller.offersPause,
+                waiting = stage == Stage.Buffering,
+                onTouch = { wake++ },
+                modifier =
+                    Modifier.onGloballyPositioned {
+                        transportFoot = with(density) { it.boundsInRoot().bottom.toDp() }
+                    },
+            )
         }
 
         if (!inPip) {
@@ -463,13 +487,6 @@ private fun Controls(
     modifier: Modifier = Modifier,
 ) {
     var dragging by remember { mutableStateOf<Long?>(null) }
-    val playing = controller.offersPause
-    // The window's real height: the configuration's leaves out the system bars the player hides.
-    val short =
-        with(LocalDensity.current) {
-            LocalWindowInfo.current.containerSize.height
-                .toDp()
-        } < SHORT_HEIGHT
     Column(
         modifier
             .fillMaxWidth()
@@ -478,9 +495,6 @@ private fun Controls(
             .padding(bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        // A short screen puts the transport beside the actions, so the controls stay low and clear of
-        // the title and the status line; a tall one keeps it just above the bar.
-        if (!short) Transport(controller, playing, onTouch, Modifier.fillMaxWidth())
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             MqText(clockText(dragging ?: controller.positionMs), role = TextRole.Caption)
             Scrubber(
@@ -520,25 +534,16 @@ private fun Controls(
                 role = TextRole.Caption,
             )
         }
-        if (short) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Transport(controller, playing, onTouch)
-                Actions(controller, onAudio, onSubtitles, onVersions, onEpisodes, onTouch, Modifier.weight(1f))
-            }
-        } else {
-            Actions(controller, onAudio, onSubtitles, onVersions, onEpisodes, onTouch, Modifier.fillMaxWidth())
-        }
+        Actions(controller, onAudio, onSubtitles, onVersions, onEpisodes, onTouch, Modifier.fillMaxWidth())
     }
 }
 
-/** Back 10 seconds, play or pause, forward 10 seconds. */
+/** Back 10 seconds, play or pause, forward 10 seconds; while [waiting], the spinner turns in the Play circle. */
 @Composable
 private fun Transport(
     controller: PlaybackController,
     playing: Boolean,
+    waiting: Boolean,
     onTouch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -564,6 +569,7 @@ private fun Transport(
                 controller.togglePlay()
             },
             main = true,
+            busy = waiting,
         )
         RoundButton(
             Icons.RotateCw,
@@ -619,13 +625,6 @@ private fun Actions(
         }
     }
 }
-
-/**
- * Below this height (a 320 dp class phone in the landscape player) the transport joins the actions'
- * row, so the controls stay clear of the title and the status line; from 360 dp it keeps its centered
- * place above the scrubber, as on the web.
- */
-private val SHORT_HEIGHT = 360.dp
 
 /** Between two actions of the options row: a group, not a spread. */
 private val ACTION_GAP = 28.dp
