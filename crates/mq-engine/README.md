@@ -220,8 +220,8 @@ Mutations SR1 to SR7.
   - `Engine::network_changed` clears the scraper's kept addresses and ids, and `Core::on_network_changed` calls it when the engine runs.
   - A scrape whose kept addresses all fail resolves once more within the same call.
   - Test: a kept address that stops answering, and a fresh resolve that points elsewhere, still counts.
-- **A refused SYN answered later.** `match_syn_with_accept` (vendored uTP) checks the source again, so a SYN cached while the streams were full is dropped if the policy refuses it by then. No deterministic test: it needs a full stream table and a policy refresh in between. The check sits next to the one in `on_recv` and goes through the same closure.
-- **A claim on a removed torrent.** `claim` counts under the torrents lock, and `enforce_budget` checks claims and readers again under that lock before it removes. That is the order `remove` already uses. No deterministic test (a race window).
+- **A refused SYN answered later.** `match_syn_with_accept` (vendored uTP) checks the source again, so a SYN cached while the streams were full is dropped if the policy refuses it by then. Test: `a_waiting_utp_syn_is_checked_again_when_a_slot_frees` (tests/policy.rs), a one-slot listener.
+- **A claim on a removed torrent.** `claim` counts under the torrents lock, and `enforce_budget` checks claims and readers again under that lock before it removes. That is the order `remove` already uses. Test: `a_claim_during_an_eviction_keeps_the_torrent` (tests/hold.rs, the `test-hooks` eviction barrier).
 - **`container_index` overflow and stretched index.**
   - `checked_add` throughout.
   - An index past `mdat` larger than 64 MiB falls back to the fixed tail. That bounds the review's second `mdat` case, which the 4 KiB head cannot see.
@@ -233,6 +233,21 @@ Mutations SR1 to SR7.
 - **Ready's fixed 60 s (or 30 s) deadline against a large `moov`.** That deadline is the runtime's (playback.rs), so the stream agent owns it. The engine can report index bytes arriving if the runtime wants to extend the deadline on progress.
 - **The relabel scan for every client.** That is in mq-server, whose request does not say what the client is. Capping the prefetch breaks Apple's large `moov` relabel. The owner of the server path decides between a client hint and a cap.
 
+## Review answers: engine round 2 (2026-10-20)
+
+`plans/reviews/engine-2026-10-20-r2.md`, 7/10. All five P2s and the P3s, each with a test that fails on revert and a mutation row (`bench/m13/mutations.jsonl`).
+
+- **P2-1, a kept tracker given up after 250 ms.** A kept address whose connection id lapsed gets the full connect schedule again. A fresh lookup runs alongside it, and its addresses are tried at once when they differ; the first answer wins.
+- **P2-2, an early count under the ranking's floor.** A hash settles early only at 5 seeders, the ranking's `FEW_SEEDERS` (rank.rs). Under it the scrape waits for every tracker asked, or the budget.
+- **P2-3, playback magnets.** `magnet_uri` puts the defaults first, then at most 16 of the stream's own trackers.
+- **P2-4, folders from earlier launches.** Every eviction round counts them against the budget, oldest first, before anything live. The first round runs at engine start. A folder is renamed aside under the torrents lock before it is deleted, so an add of the same hash never writes into it.
+- **P2-5, our own leecher zeroing a swarm.** A default tracker's zero counts only with 3 or more leechers. The ceiling and the upgrade (the scrape's completed count) are in a ponytail comment.
+- **P3s:**
+  - HTTP trackers' dead names wait 60 s, like UDP.
+  - The dedupe stops at 16 sources.
+  - With upload off, a finished file announces `left` of at least 1 and never `completed`.
+  - The README lines above are corrected.
+
 ## Disk used while measuring
 
 The engine target directory (`$HOME/.cargo-targets/marquee-engine`, release profile only during the runs) stayed at 1.3 GB; torrent data lived in a per-run temporary folder deleted after each run (largest: 571 MB for a stock Tears of Steel run).
@@ -242,7 +257,7 @@ The engine target directory (`$HOME/.cargo-targets/marquee-engine`, release prof
 - **Peers that ignore CANCEL.** Traces on the Big Buck Bunny swarm showed slow peers delivering every readahead block we cancelled at a seek, seconds later. The scheduler now ignores those stale blocks as proof of life (`mq-engine-sched` deviation table), which in back-to-back single runs took the first seek's first byte from 7.8 s to 1.4 s, but right after a seek DWH still sees those peers' queues as empty and gives them urgent blocks that sit behind the stale ones until the 1 s stall rule moves them. A per-peer "ignores CANCEL" flag that leaves such queues alone on a seek was tried and left out: a simulator run showed worse seeks (healthy 256 KiB seek p50 1.79 s against 0.69 s; that run used a target directory shared with other worktrees, so the number is indicative only), because the simulated peers honor CANCEL and the one or two in-flight blocks that still arrive were enough to flag them; it was never measured on a real swarm. Next step: decide it on the share of cancelled blocks that still arrive, not on a count.
 - **Cold-start fan-out.** Before the first rate samples every peer has the same estimate, so the first urgent blocks spread round-robin over fast and very slow peers alike; Ready then waits on hedges and the stall release.
 - **Size.** The engine adds 4.84 MB to the stripped arm64 `libmarquee_core.so` (10.40 to 15.23 MB, budget 12 MB; `bench/torrent/size.jsonl`). About 0.7 MB is aws-lc, a second crypto library that librqbit's `rust-tls` feature brings for reqwest TLS and SHA-1 next to the ring provider `mq-http` already ships; moving both to ring is the first cut. UPnP's XML and charset stack is about 0.3 MB.
-- **Not yet built:** curated tracker list, persisted peers per info hash, next-episode preload, NAT-PMP, BEP 6 fast extension (reject messages), a PEX-based connect burst, configurable device class and budget from the apps (`Core` uses `Standard` and 4 GiB today).
+- **Not yet built:** curated tracker list, persisted peers per info hash, next-episode preload, NAT-PMP, BEP 6 fast extension (reject messages), a PEX-based connect burst, configurable device class and budget from the apps (`Core` uses `Standard` and at most 6 GiB today).
 - **Keep-warm pause and LRU eviction** are exercised only by hand; a test needs a clock seam in `maintenance`.
 - **Hash failure** in drive mode disconnects the peer that delivered the last block (upstream behavior), although other peers may have sent the bad block.
 - **Advisory ignore.** `deny.toml` ignores RUSTSEC-2026-0293 (ringbuf 0.4.8 through librqbit-utp 0.7.0): the bug needs an element whose `Drop` panics, and librqbit-utp's only ring buffer holds `u8`. Remove it when librqbit-utp moves to ringbuf 0.5.2.
