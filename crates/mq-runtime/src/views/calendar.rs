@@ -412,6 +412,15 @@ fn render(core: &Core, today: NaiveDate, series: &HashMap<String, Series>) -> Ca
             &b.video_id,
         ))
     });
+    // After today a series shows its first episode of a day only: a binge
+    // drop, or a placeholder date for episodes with none yet (Kitsu dates
+    // Pokemon's episodes 155 to 200 one day), reads as one entry. Today and
+    // the past are as they aired.
+    let today_text = today.to_string();
+    let mut first_of_day = HashSet::new();
+    items.retain(|i| {
+        i.date <= today_text || first_of_day.insert((i.date.clone(), i.item_id.clone()))
+    });
     let mut days: Vec<CalendarDay> = Vec::new();
     for item in items {
         match days.last_mut() {

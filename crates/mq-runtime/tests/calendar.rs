@@ -18,7 +18,26 @@ const SHOW: &str = r#"{"meta":{"id":"tt1","type":"series","name":"Show","videos"
 const UNDATED: &str = r#"{"meta":{"id":"tt2","type":"series","name":"Undated Show","videos":[
   {"id":"tt2:1:1","title":"Pilot","season":1,"episode":1}]}}"#;
 
-/// A meta addon: tt1 and tt2 answer after `delay`, anything else is a 404.
+/// Kitsu's shape for Pokemon: two episodes a past day, one today, and 46
+/// on one future day (a placeholder date for episodes with none yet).
+static DROP: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+    let ep = |e: u32, day: &str| {
+        format!(
+            r#"{{"id":"tt4:1:{e}","title":"E{e}","season":1,"episode":{e},"released":"{day}T05:00:00.000Z"}}"#
+        )
+    };
+    let videos: Vec<String> = [(1, "2026-10-10"), (2, "2026-10-10"), (3, "2026-10-17")]
+        .into_iter()
+        .map(|(e, day)| ep(e, day))
+        .chain((4..=49).map(|e| ep(e, "2026-10-30")))
+        .collect();
+    format!(
+        r#"{{"meta":{{"id":"tt4","type":"series","name":"Drop","videos":[{}]}}}}"#,
+        videos.join(",")
+    )
+});
+
+/// A meta addon: tt1, tt2 and tt4 answer after `delay`, anything else is a 404.
 async fn meta_addon(delay: Duration) -> AddonRow {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -35,6 +54,8 @@ async fn meta_addon(delay: Duration) -> AddonRow {
                     Some(SHOW)
                 } else if line.contains("/meta/series/tt2.json") {
                     Some(UNDATED)
+                } else if line.contains("/meta/series/tt4.json") {
+                    Some(DROP.as_str())
                 } else {
                     None
                 };
@@ -228,6 +249,27 @@ async fn failed_and_unscheduled_series_are_told_apart() {
     );
     assert!(s.failed[0].reason.is_some());
     assert_eq!(s.series, 3, "loaded, undated and failed series all count");
+}
+
+/// A future day shows a series' first episode only, so Kitsu's placeholder
+/// date for 46 Pokemon episodes is one entry; today and past days keep
+/// every episode they had.
+#[tokio::test]
+async fn a_series_shows_one_episode_on_a_future_day() {
+    let core = setup(Duration::ZERO, &[("tt4", "Drop")]).await;
+    let view = CalendarView::open(&core, parse_day("2026-10-17").unwrap());
+    let s = settled(&view, |s| !s.days.is_empty()).await;
+    assert_eq!(
+        layout(&s),
+        [
+            (
+                "2026-10-10".to_string(),
+                vec!["tt4:1:1".to_string(), "tt4:1:2".to_string()]
+            ),
+            ("2026-10-17".into(), vec!["tt4:1:3".into()]),
+            ("2026-10-30".into(), vec!["tt4:1:4".into()]),
+        ]
+    );
 }
 
 /// Kitsu's answer for an anime: a series meta with season 1 episodes, one
