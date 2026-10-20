@@ -1092,6 +1092,42 @@ async fn a_rate_set_before_the_start_reaches_the_scheduler() {
     .await;
 }
 
+/// The download limit holds DWH's reads (the live rows' line limit): the
+/// 5 MiB video at 1 MiB/s takes at least 3 s past the limiter's 1 MiB burst,
+/// where the loopback alone takes well under one.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_download_limit_holds_dwh_reads() {
+    let s = support::swarm(true).await;
+    let root = tempfile::tempdir().unwrap();
+    let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+    let mut config = mq_engine::EngineConfig {
+        discovery: false,
+        upload: false,
+        ..mq_engine::EngineConfig::new(
+            root.path(),
+            http.torrent_scope(&[std::net::Ipv4Addr::LOCALHOST.into()]),
+        )
+    };
+    config.limits.download_bps = std::num::NonZeroU32::new(1 << 20);
+    let engine = Engine::start(config).await.unwrap();
+    let t = engine
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let movie = engine
+        .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
+        .await
+        .unwrap();
+    let started = Instant::now();
+    let reader = engine.open_reader(t, "default", movie).await.unwrap();
+    let mut range = reader.range(0, None).await.unwrap();
+    let mut got = Vec::new();
+    within(60, range.read_to_end(&mut got)).await.unwrap();
+    assert!(got == s.movie);
+    let took = started.elapsed();
+    assert!(took >= Duration::from_secs(3), "read in {took:?}");
+}
+
 async fn engine_on(dir: &Path) -> Engine {
     engine_with(dir, true).await
 }

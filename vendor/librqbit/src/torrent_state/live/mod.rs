@@ -1093,10 +1093,22 @@ impl PeerConnectionHandler for &'_ PeerHandler {
             Message::Choke => self.on_i_am_choked(),
             Message::Unchoke => self.on_i_am_unchoked(),
             Message::Interested => self.on_peer_interested(),
-            Message::Piece(piece) => self
-                .on_received_piece(piece)
-                .await
-                .context("on_received_piece")?,
+            Message::Piece(piece) => {
+                // Marquee fork (ext_sched): with the scheduler driving, no
+                // request takes the download limit's path, so the limit holds
+                // the read of each block instead and the line runs at it.
+                if self.state.ext_drives()
+                    && let Some(len) = u32::try_from(piece.len()).ok().and_then(NonZeroU32::new)
+                {
+                    self.state.ratelimits.prepare_for_download(len).await?;
+                    if let Some(session) = self.state.torrent().session.upgrade() {
+                        session.ratelimits.prepare_for_download(len).await?;
+                    }
+                }
+                self.on_received_piece(piece)
+                    .await
+                    .context("on_received_piece")?
+            }
             Message::KeepAlive => {
                 trace!("keepalive received");
             }
