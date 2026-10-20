@@ -176,7 +176,16 @@ pub async fn play_url(url: &str, options: PlayOptions) -> Result<Value, String> 
         let quit = json!({ "command": ["quit"] }).to_string() + "\n";
         let _ = write.write_all(quit.as_bytes()).await;
     }
-    let _ = child.wait().await;
+    // mpv's quit waits for its IPC client, which spins on writing events
+    // nobody reads any more once the socket's buffer is full: close the
+    // socket, then kill an mpv that still has not gone.
+    drop((lines, write));
+    if tokio::time::timeout(Duration::from_secs(5), child.wait())
+        .await
+        .is_err()
+    {
+        let _ = child.kill().await;
+    }
     let _ = std::fs::remove_file(&socket);
     Ok(json!({
         "event": "played",
