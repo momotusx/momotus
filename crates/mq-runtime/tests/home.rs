@@ -2,6 +2,8 @@ use futures_util::StreamExt;
 use mq_library::{AddonRow, LibraryItemRow, ProgressRow};
 use mq_runtime::views::home::{CONTINUE_ROW_ID, HomeRow};
 use mq_runtime::{Core, HomeUpdate, HomeView, RowState};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -915,4 +917,105 @@ async fn live_kitsu_next_up_and_calendar() {
         Some(format!("Next: S{}:E{}", next_info.season, next_info.episode).as_str())
     );
     assert!(!listed.is_empty(), "the series is in the calendar");
+}
+
+/// A catalog addon answering its requests with `statuses` in turn (the
+/// last one again after that), with `METAS` on 200; counts its requests.
+async fn flaky_addon(id: &str, statuses: &'static [u16]) -> (AddonRow, Arc<AtomicUsize>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let asked = Arc::new(AtomicUsize::new(0));
+    let count = asked.clone();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let n = count.fetch_add(1, Ordering::SeqCst);
+            let status = statuses[n.min(statuses.len() - 1)];
+            tokio::spawn(async move {
+                let mut buf = [0u8; 2048];
+                let _ = socket.read(&mut buf).await;
+                let body = if status == 200 { METAS } else { "{}" };
+                let resp = format!(
+                    "HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(resp.as_bytes()).await;
+            });
+        }
+    });
+    let manifest = serde_json::json!({
+        "id": id, "version": "1.0.0", "name": format!("{id} addon"),
+        "types": ["movie"], "resources": ["catalog"],
+        "catalogs": [{"type": "movie", "id": "top", "name": "Popular"}]
+    });
+    let row = AddonRow {
+        transport_url: format!("http://{addr}/manifest.json"),
+        manifest_json: manifest.to_string(),
+        position: 0,
+        enabled: true,
+        allow_private: true,
+    };
+    (row, asked)
+}
+
+fn row(view: &HomeView, id: &str) -> HomeRow {
+    view.snapshot()
+        .rows
+        .into_iter()
+        .find(|r| r.row_id == id)
+        .unwrap()
+}
+
+/// Waits up to 3 s for row `id` to meet `done`.
+async fn row_until(view: &HomeView, id: &str, done: impl Fn(&HomeRow) -> bool) {
+    for _ in 0..300 {
+        if done(&row(view, id)) {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("{:?}", row(view, id));
+}
+
+/// Apple journey review r2 P3-8: Try again on one failed row asks only
+/// that catalog again; the row shows loading, then fails again or fills.
+#[tokio::test]
+async fn retrying_a_row_asks_only_its_catalog() {
+    let core = Core::temporary("p").unwrap();
+    let (flaky, flaky_asked) = flaky_addon("flaky", &[500, 500, 200]).await;
+    let (steady, steady_asked) = flaky_addon("steady", &[200]).await;
+    let mut addons = [flaky, steady];
+    addons[1].position = 1;
+    core.library()
+        .set_addons("p", &addons, &core.hlc())
+        .unwrap();
+    let view = HomeView::open(&core);
+    // Row ids are `<addon>@<install tag>:<type>:<catalog>`.
+    let id_of = |addon: &str| {
+        let prefix = format!("{addon}@");
+        view.snapshot()
+            .rows
+            .into_iter()
+            .find(|r| r.row_id.starts_with(&prefix))
+            .unwrap()
+            .row_id
+    };
+    let (flaky_id, steady_id) = (id_of("flaky"), id_of("steady"));
+    let failed = |r: &HomeRow| matches!(r.state, RowState::Failed { .. });
+    row_until(&view, &flaky_id, failed).await;
+    row_until(&view, &steady_id, |r| r.state == RowState::Ready).await;
+    assert!(view.retry_row(&flaky_id));
+    assert_eq!(row(&view, &flaky_id).state, RowState::Loading);
+    row_until(&view, &flaky_id, failed).await;
+    assert!(view.retry_row(&flaky_id));
+    assert_eq!(row(&view, &flaky_id).state, RowState::Loading);
+    row_until(&view, &flaky_id, |r| r.state == RowState::Ready).await;
+    assert_eq!(row(&view, &flaky_id).tiles.len(), 2);
+    assert_eq!(flaky_asked.load(Ordering::SeqCst), 3);
+    assert_eq!(
+        steady_asked.load(Ordering::SeqCst),
+        1,
+        "the other row is not asked"
+    );
+    assert!(!view.retry_row(CONTINUE_ROW_ID));
+    assert!(!view.retry_row("gone:movie:top"));
 }

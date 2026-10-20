@@ -1414,6 +1414,12 @@ impl Session {
                 library.set_sort(sort);
             }
             (View::Search(search), "setQuery") => search.set_query(&param(command, "query")?),
+            (View::Home { _view: home }, "retryRow") => {
+                let row_id = param(command, "rowId")?;
+                if !home.retry_row(&row_id) {
+                    return Err(format!("no Home row {row_id}"));
+                }
+            }
             (View::Search(search), "remember") => search.remember().map_err(|e| e.to_string())?,
             (View::Playback(playback), "progress") => {
                 let ms = |key: &str| {

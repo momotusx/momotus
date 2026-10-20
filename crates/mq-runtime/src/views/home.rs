@@ -143,9 +143,12 @@ struct CatalogSlot {
 
 /// A live Home screen. Dropping it cancels all of its work.
 pub struct HomeView {
+    core: Core,
     rows: Arc<Mutex<ObservableVector<HomeRow>>>,
     header: SharedObservable<HomeHeader>,
     _tasks: JoinSet<()>,
+    /// Rows loading again (`retry_row`).
+    retries: Mutex<JoinSet<()>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -201,10 +204,35 @@ impl HomeView {
             header.clone(),
         ));
         Self {
+            core: core.clone(),
             rows,
             header,
             _tasks: tasks,
+            retries: Mutex::default(),
         }
+    }
+
+    /// "Try again" on one catalog row (Apple journey review r2 P3-8): only
+    /// that catalog is asked again. The row shows loading, then the answer;
+    /// a retry that fails leaves the row failed. False when no shown
+    /// catalog row has this id.
+    pub fn retry_row(&self, row_id: &str) -> bool {
+        let Some(slot) = board(&self.core).into_iter().find(|s| s.row_id == row_id) else {
+            return false;
+        };
+        update_row(&self.rows, row_id, |row| {
+            row.state = RowState::Loading;
+            row.tiles.clear();
+        });
+        let mut retries = lock(&self.retries);
+        while retries.try_join_next().is_some() {}
+        retries.spawn(load_catalogs(
+            self.core.clone(),
+            vec![slot],
+            self.rows.clone(),
+            self.header.clone(),
+        ));
+        true
     }
 
     pub fn snapshot(&self) -> HomeSnapshot {
