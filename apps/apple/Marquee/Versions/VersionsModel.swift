@@ -41,7 +41,6 @@ struct PlayTargetInfo: Hashable, Sendable {
 final class VersionsModel {
     let target: PlayTargetInfo
     @ObservationIgnored private let record: LiveRecord<VersionsSnapshot>
-    @ObservationIgnored private var frozen = false
 
     /// `bingeGroup`: the playing stream's, so the next episode keeps its release line.
     init(target: PlayTargetInfo, core: CoreClient, bingeGroup: String? = nil) {
@@ -69,8 +68,7 @@ final class VersionsModel {
 
     /// Pins the recommended pick so late results never swap it under the user.
     func freeze() {
-        guard sub != nil, !frozen else { return }
-        frozen = true
+        guard StreamChoice.shouldFreeze(open: sub != nil, frozen: snapshot?.frozen) else { return }
         record.command(["type": "freeze"])
     }
 

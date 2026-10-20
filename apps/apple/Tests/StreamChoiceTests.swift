@@ -214,3 +214,12 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
     #expect(StreamChoice.resolutionPicked(1080, maxHeight: 1080))
     #expect(!StreamChoice.resolutionPicked(720, maxHeight: 1080))
 }
+
+@Test func versionsPinsItsPickAgainAfterTheCoreLetsOneGo() {
+    // Open, and the core has not pinned yet (or let a failed pick go): pin.
+    #expect(StreamChoice.shouldFreeze(open: true, frozen: nil))
+    #expect(StreamChoice.shouldFreeze(open: true, frozen: false))
+    // Already pinned, or not open: nothing to send.
+    #expect(!StreamChoice.shouldFreeze(open: true, frozen: true))
+    #expect(!StreamChoice.shouldFreeze(open: false, frozen: false))
+}

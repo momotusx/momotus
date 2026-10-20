@@ -480,3 +480,43 @@ struct NextEpisode: Decodable, Hashable, Sendable {
     let episode: Int
     let thumbnail: String?
 }
+
+/// What one play tells the core of the viewer, and whether the core's start
+/// subtitle still applies (plans/m13-subtitle-languages.md 6). The player
+/// owns one and starts it over for each episode and version.
+@MainActor final class PlayChoices {
+    /// Sends a playback command; set once the playback view is open.
+    var send: ((_ command: [String: any Sendable]) -> Void)?
+    /// A subtitle was picked in this play (by the viewer, or the start
+    /// subtitle once): the start subtitle no longer applies.
+    private(set) var subtitleSettled = false
+
+    /// The start subtitle to turn on now, once, as if picked, sending nothing.
+    func startSubtitle(_ auto: String?, tracks: [SubtitleTrack]) -> SubtitleTrack? {
+        guard let track = SubtitleMenu.autoPick(auto, settled: subtitleSettled, tracks: tracks) else { return nil }
+        subtitleSettled = true
+        return track
+    }
+
+    /// The viewer's pick from the menu, or Off (nil): it wins for the rest of
+    /// the play, and the core remembers it for the title.
+    func chose(_ track: SubtitleTrack?) {
+        subtitleSettled = true
+        send?(["type": "subtitleChosen", "url": track?.url ?? NSNull()])
+    }
+
+    /// One of the file's own tracks: the viewer's pick, which the core does not know of.
+    func choseInFile() {
+        subtitleSettled = true
+    }
+
+    /// Try again on the failure card: the same versions from the first.
+    func retry() {
+        send?(["type": "retry"])
+    }
+
+    /// Another episode or version: its own start subtitle applies.
+    func newPlay() {
+        subtitleSettled = false
+    }
+}

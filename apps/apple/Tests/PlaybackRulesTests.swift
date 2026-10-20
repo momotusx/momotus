@@ -400,3 +400,69 @@ private func phase(_ phase: String, _ extra: String = "") throws -> PlaybackSnap
     #expect(PlayerLayout.failureHeadline(offer: true) == "This version could not be played")
     #expect(PlayerLayout.failureHeadline(offer: false) == "None of the sources could be played")
 }
+
+@MainActor @Test func tryAgainAndSubtitlePicksSendTheirCommands() {
+    let choices = PlayChoices()
+    var sent: [[String: any Sendable]] = []
+    choices.send = { sent.append($0) }
+    let turkish = sub(1, "tur", "tr", "Turkish", "TurkceAltyazi.org", source: "TurkceAltyazi.org")
+    choices.retry()
+    choices.chose(turkish)
+    choices.chose(nil)
+    #expect(sent.count == 3)
+    #expect(sent[0]["type"] as? String == "retry")
+    #expect(sent[1]["type"] as? String == "subtitleChosen" && sent[1]["url"] as? String == turkish.url)
+    // Off is sent too, as a null url, so the title remembers it.
+    #expect(sent[2]["type"] as? String == "subtitleChosen" && sent[2]["url"] is NSNull)
+    // A track in the file settles the play and sends nothing.
+    choices.choseInFile()
+    #expect(sent.count == 3)
+}
+
+@MainActor @Test func anotherEpisodeOrVersionGetsItsStartSubtitleAgain() {
+    let choices = PlayChoices()
+    let turkish = sub(1, "tur", "tr", "Turkish", "TurkceAltyazi.org", source: "TurkceAltyazi.org")
+    #expect(choices.startSubtitle(turkish.url, tracks: [turkish]) == turkish)
+    // Once per play.
+    #expect(choices.startSubtitle(turkish.url, tracks: [turkish]) == nil)
+    // The next episode (or Play {offer}) starts over.
+    choices.newPlay()
+    #expect(choices.startSubtitle(turkish.url, tracks: [turkish]) == turkish)
+    // A pick in that play still wins over its start subtitle.
+    choices.newPlay()
+    choices.chose(nil)
+    #expect(choices.startSubtitle(turkish.url, tracks: [turkish]) == nil)
+}
+
+@Test func theOverlaySaysWhatIsHappening() {
+    #expect(PlayerLayout.status(phase: "failed", cannotOpen: false, firstFrameShown: true, waiting: false) == .failed)
+    // A view that could not open gets a card, not a spinner with the error as its line.
+    #expect(PlayerLayout.status(phase: nil, cannotOpen: true, firstFrameShown: false, waiting: false) == .cannotOpen)
+    // Try again after a frame was shown: the play starts over, and says so.
+    #expect(PlayerLayout.status(phase: "resolving", cannotOpen: false, firstFrameShown: true, waiting: false) == .waiting(words: true))
+    #expect(PlayerLayout.status(phase: "ready", cannotOpen: false, firstFrameShown: false, waiting: false) == .waiting(words: true))
+    // A stall mid-play: the spinner alone.
+    #expect(PlayerLayout.status(phase: "ready", cannotOpen: false, firstFrameShown: true, waiting: true) == .waiting(words: false))
+    #expect(PlayerLayout.status(phase: "ready", cannotOpen: false, firstFrameShown: true, waiting: false) == PlayerStatus.none)
+}
+
+@Test func theFailureCardSaysChooseAVersionAsTheOtherApps() {
+    #expect(PlayerLayout.failureLabel(.choose, offer: nil) == "Choose a version")
+    #expect(PlayerLayout.failureLabel(.offer, offer: "SD WEB") == "Play SD WEB")
+    #expect(PlayerLayout.failureLabel(.retry, offer: nil) == "Try again")
+    #expect(PlayerLayout.failureLabel(.back, offer: nil) == "Back")
+}
+
+@Test func anAcceptedTryAgainSaysSoEvenWhenItFailsAgainAtOnce() throws {
+    // retries rose within the view: Try again was taken.
+    #expect(PlayerLayout.retryRose(old: 0, new: 1))
+    #expect(!PlayerLayout.retryRose(old: 1, new: 1))
+    // A view's first snapshot, or an older core without the field: nothing to say.
+    #expect(!PlayerLayout.retryRose(old: nil, new: 2))
+    #expect(!PlayerLayout.retryRose(old: 1, new: nil))
+    // The refailed snapshot reads as failed again; Trying again shows over it for a moment.
+    #expect(PlayerLayout.status(phase: "failed", cannotOpen: false, firstFrameShown: true, waiting: false, tryingAgain: true) == .waiting(words: true))
+    #expect(PlayerLayout.waitingWords(try phase("failed"), notice: nil, tryingAgain: true) == "Trying again")
+    #expect(try phase("failed", #","retries":2"#).retries == 2)
+    #expect(try phase("failed").retries == nil)
+}

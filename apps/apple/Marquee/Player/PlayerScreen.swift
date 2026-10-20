@@ -345,76 +345,91 @@ private struct StatusOverlay: View {
     /// The way on takes focus when the failure shows, so a remote is on it.
     @FocusState private var primary: Bool
 
-    @ViewBuilder private var actions: some View {
-        let order = PlayerLayout.failureActions(offer: model.playback?.offer != nil, canChoose: chooseVersion != nil)
+    /// The card's actions, the first the way on with focus. A view that could
+    /// not open has no offer, and its Try again opens it again.
+    @ViewBuilder private func actions(cannotOpen: Bool) -> some View {
+        let order = PlayerLayout.failureActions(
+            offer: !cannotOpen && model.playback?.offer != nil, canChoose: chooseVersion != nil)
         ForEach(order, id: \.self) { action in
             if action == order.first {
-                // The way on takes focus, so a remote is on it.
-                button(action).buttonStyle(PillButtonStyle(prominent: true)).fixedSize().focused($primary)
+                button(action, cannotOpen: cannotOpen).buttonStyle(PillButtonStyle(prominent: true)).fixedSize().focused($primary)
             } else {
-                button(action).buttonStyle(PillButtonStyle()).fixedSize()
+                button(action, cannotOpen: cannotOpen).buttonStyle(PillButtonStyle()).fixedSize()
             }
         }
     }
 
-    private func button(_ action: FailureAction) -> Button<Text> {
-        switch action {
-        case .offer: Button("Play \(model.playback?.offer?.label ?? "the next version")") {
-            if let key = model.playback?.offer?.key { model.switchVersion(key) }
+    private func button(_ action: FailureAction, cannotOpen: Bool) -> Button<Text> {
+        let label = PlayerLayout.failureLabel(action, offer: model.playback?.offer?.label)
+        return switch action {
+        case .offer: Button(label) { if let key = model.playback?.offer?.key { model.switchVersion(key) } }
+        case .retry: Button(label) { if cannotOpen { model.reopen() } else { model.retry() } }
+        case .choose: Button(label) { chooseVersion?() }
+        case .back: Button(label, action: back)
         }
-        case .retry: Button("Try again", action: model.retry)
-        case .choose: Button("Choose another version") { chooseVersion?() }
-        case .back: Button("Back", action: back)
+    }
+
+    /// A headline, one line per reason, and the actions.
+    private func card(_ headline: String, lines: [String], cannotOpen: Bool) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            Text(headline)
+                .display(Theme.type.title1)
+            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                Label(line, glyph: "circle-x")
+                    .font(.text(Theme.type.body))
+                    .foregroundStyle(Theme.Palette.muted)
+            }
+            // Side by side when they fit, else stacked with the way on first.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Theme.Space.s) { actions(cannotOpen: cannotOpen) }
+                VStack(alignment: .leading, spacing: 10) { actions(cannotOpen: cannotOpen) }
+            }
+            .padding(.top, 8)
         }
+        .foregroundStyle(Theme.Palette.text)
+        .padding(Theme.Space.l)
+        .frame(maxWidth: 640, alignment: .leading)
+        .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true)
+        .padding(.horizontal, Theme.Space.m)
+        .onAppear { primary = true }
+    }
+
+    private var waitingWords: some View {
+        Text(PlayerLayout.waitingWords(model.playback, notice: model.notice, tryingAgain: model.tryingAgain))
+            .font(.text(Theme.type.callout, relativeTo: .callout))
+            .foregroundStyle(.white.opacity(0.8))
     }
 
     var body: some View {
-        if model.playback?.phase == "failed" {
-            VStack(alignment: .leading, spacing: Theme.Space.s) {
-                Text(PlayerLayout.failureHeadline(offer: model.playback?.offer != nil))
-                    .display(Theme.type.title1)
-                ForEach(FailedSources.group(model.playback?.attempts ?? []), id: \.key) { failed in
-                    Label("\(failed.via): \(failed.words)", glyph: "circle-x")
-                        .font(.text(Theme.type.body))
-                        .foregroundStyle(Theme.Palette.muted)
+        let status = PlayerLayout.status(
+            phase: model.playback?.phase, cannotOpen: model.openError != nil,
+            firstFrameShown: model.firstFrameMs != nil, waiting: model.waiting, tryingAgain: model.tryingAgain)
+        switch status {
+        case .failed:
+            card(PlayerLayout.failureHeadline(offer: model.playback?.offer != nil),
+                 lines: FailedSources.group(model.playback?.attempts ?? []).map { "\($0.via): \($0.words)" },
+                 cannotOpen: false)
+        case .cannotOpen:
+            card(PlayerLayout.cannotOpenHeadline, lines: [model.openError ?? ""], cannotOpen: true)
+        case .waiting(let words):
+            if let overControls {
+                HStack(spacing: 10) {
+                    ProgressView().tint(.white)
+                    if words { waitingWords.lineLimit(1) }
                 }
-                // Side by side when they fit, else stacked with the way on first.
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: Theme.Space.s) { actions }
-                    VStack(alignment: .leading, spacing: 10) { actions }
+                .padding(.horizontal, Theme.Space.s)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .padding(.bottom, overControls)
+                .allowsHitTesting(false)
+            } else {
+                VStack(spacing: 14) {
+                    ProgressView().controlSize(.large).tint(.white)
+                    if words { waitingWords }
                 }
-                .padding(.top, 8)
+                .allowsHitTesting(false)
             }
-            .foregroundStyle(Theme.Palette.text)
-            .padding(Theme.Space.l)
-            .frame(maxWidth: 640, alignment: .leading)
-            .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true)
-            .padding(.horizontal, Theme.Space.m)
-            .onAppear { primary = true }
-        } else if model.firstFrameMs == nil || model.waiting, let overControls {
-            HStack(spacing: 10) {
-                ProgressView().tint(.white)
-                if model.firstFrameMs == nil {
-                    Text(PlayerLayout.waitingWords(model.playback, notice: model.notice))
-                        .font(.text(Theme.type.callout, relativeTo: .callout))
-                        .foregroundStyle(.white.opacity(0.8))
-                        .lineLimit(1)
-                }
-            }
-            .padding(.horizontal, Theme.Space.s)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-            .padding(.bottom, overControls)
-            .allowsHitTesting(false)
-        } else if model.firstFrameMs == nil || model.waiting {
-            VStack(spacing: 14) {
-                ProgressView().controlSize(.large).tint(.white)
-                if model.firstFrameMs == nil {
-                    Text(PlayerLayout.waitingWords(model.playback, notice: model.notice))
-                        .font(.text(Theme.type.callout, relativeTo: .callout))
-                        .foregroundStyle(.white.opacity(0.8))
-                }
-            }
-            .allowsHitTesting(false)
+        case .none:
+            EmptyView()
         }
     }
 }

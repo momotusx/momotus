@@ -5,6 +5,14 @@ import CoreGraphics
 /// the real window's, bars included, since the player hides them.
 enum FailureAction: Hashable { case offer, retry, choose, back }
 
+/// What the player shows over the picture, first match.
+enum PlayerStatus: Equatable {
+    case failed
+    case cannotOpen
+    case waiting(words: Bool)
+    case none
+}
+
 enum PlayerLayout {
     /// What a snapshot's subtitle notes do to the picked file, as the web
     /// does: only the picked file is fetched, so a note new to this snapshot
@@ -37,6 +45,40 @@ enum PlayerLayout {
     /// first), then the way to another version, then Back.
     /// The failure card's headline: with a version offered, only this one
     /// failed, so "None of the sources" would contradict Play {label} below it.
+    /// The overlay: the failure card, the card for a view that could not
+    /// open, the spinner (with its words until a frame shows, and whenever the
+    /// play starts over, a Try again after a frame), or nothing.
+    static func status(phase: String?, cannotOpen: Bool, firstFrameShown: Bool, waiting: Bool, tryingAgain: Bool = false) -> PlayerStatus {
+        // An accepted Try again shows for a moment over a play that failed again at once.
+        if tryingAgain { return .waiting(words: true) }
+        if phase == "failed" { return .failed }
+        if cannotOpen { return .cannotOpen }
+        if phase == "resolving" || !firstFrameShown { return .waiting(words: true) }
+        return waiting ? .waiting(words: false) : .none
+    }
+
+    static let cannotOpenHeadline = "This version could not be opened"
+
+    /// The core took a Try again: `retries` rose within one view. The first
+    /// snapshot of a view counts nothing (review r2 P3-6).
+    static func retryRose(old: Int?, new: Int?) -> Bool {
+        guard let old, let new else { return false }
+        return new > old
+    }
+
+    /// How long "Trying again" stays before what the core says next shows.
+    static let tryingAgainHold: Duration = .seconds(2)
+
+    /// The failure card's buttons, in the words the web and Android use.
+    static func failureLabel(_ action: FailureAction, offer: String?) -> String {
+        switch action {
+        case .offer: "Play \(offer ?? "the next version")"
+        case .retry: "Try again"
+        case .choose: "Choose a version"
+        case .back: "Back"
+        }
+    }
+
     static func failureHeadline(offer: Bool) -> String {
         offer ? "This version could not be played" : "None of the sources could be played"
     }
@@ -54,7 +96,8 @@ enum PlayerLayout {
 
     /// Under the spinner: the version the core moves on to while it resolves,
     /// else the player's own word on a failed source, else the plain wait.
-    static func waitingWords(_ playback: PlaybackSnapshot?, notice: String?) -> String {
+    static func waitingWords(_ playback: PlaybackSnapshot?, notice: String?, tryingAgain: Bool = false) -> String {
+        if tryingAgain { return "Trying again" }
         if playback?.phase == "resolving", let label = playback?.trying?.label {
             return "Trying the next version: \(label)"
         }

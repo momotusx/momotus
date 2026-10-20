@@ -72,9 +72,17 @@ final class PlayerModel {
     /// Bumped per URL so a late error from a dead source is ignored.
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var rendered = false
-    /// A subtitle was picked in this play (by the viewer, or the core's start
-    /// subtitle once): the start subtitle no longer applies.
-    @ObservationIgnored private var subtitleSettled = false
+    /// The viewer's choices in this play and the commands they send.
+    @ObservationIgnored private let choices = PlayChoices()
+    /// The playback view could not open: its error, shown on a card.
+    private(set) var openError: String?
+    /// Bumped by Try again on that card, so the view opens again.
+    private var opens = 0
+    /// The core took a Try again: "Trying again" shows for a moment, even
+    /// when the play fails again at once and the snapshot reads as before.
+    private(set) var tryingAgain = false
+    @ObservationIgnored private var lastRetries: Int?
+    @ObservationIgnored private var tryingAgainShown = 0
     /// The loaded source has shown a frame (`rendered` counts the first of the playback).
     @ObservationIgnored private var pictureShown = false
     /// Where the loaded source started, and since when it has played without a frame.
@@ -111,7 +119,7 @@ final class PlayerModel {
         observePlayer()
     }
 
-    var taskId: [String] { [route.key, "\(route.versionsSub)", "\(core.generation)"] }
+    var taskId: [String] { [route.key, "\(route.versionsSub)", "\(core.generation)", "\(opens)"] }
 
     var next: NextEpisode? { playback?.next }
 
@@ -137,7 +145,7 @@ final class PlayerModel {
     /// viewer's pick for this play, which the core does not know of.
     func selectText(_ index: Int) {
         guard let group = textGroup, textOptions.indices.contains(index) else { return }
-        subtitleSettled = true
+        choices.choseInFile()
         selectSubtitle(nil)
         player.currentItem?.select(textOptions[index], in: group)
         textTrack = index
@@ -244,6 +252,8 @@ final class PlayerModel {
         (loadedURL, rendered, firstFrameMs, playback, ended, nextCancelled, nextFailure, nextVersions) = (nil, false, nil, nil, false, false, nil, nil)
         (loadedAttempt, stoppedAt, pendingStart) = (nil, nil, nil)
         (position, duration, skippedAt) = (0, 0, nil)
+        // The next episode gets its own start subtitle.
+        choices.newPlay()
         selectSubtitle(nil)
     }
 
@@ -256,6 +266,9 @@ final class PlayerModel {
         nowPlaying.start(self)
         Task { await nowPlaying.loadArtwork(route.target.poster) }
         defer { if run == runs { stop() } }
+        openError = nil
+        // A new view counts its own Try again presses.
+        lastRetries = nil
         let target = route.target
         var params: [String: any Sendable] = [
             "versionsSub": route.versionsSub, "key": route.key, "kind": target.kind,
@@ -267,6 +280,8 @@ final class PlayerModel {
         do {
             let view = try await core.open("playback", params: params, as: (PlaybackSnapshot.self, PlaybackSnapshot.self))
             sub = view.sub
+            let core = core, opened = view.sub
+            choices.send = { command in Task { try? await core.command(opened, command) } }
             for await event in view.events {
                 switch event {
                 case .snapshot(let value): apply(value)
@@ -275,7 +290,7 @@ final class PlayerModel {
             }
         } catch is CancellationError {
         } catch {
-            notice = error.localizedDescription
+            openError = error.localizedDescription
         }
     }
 
@@ -286,6 +301,26 @@ final class PlayerModel {
         route = PlayRoute(versionsSub: route.versionsSub, key: key, target: route.target, tapped: .now)
         (loadedURL, rendered, firstFrameMs, playback) = (nil, false, nil, nil)
         (loadedAttempt, stoppedAt, pendingStart) = (nil, nil, nil)
+        // The old track's URL went with the old view: the new version starts
+        // with its own start subtitle.
+        choices.newPlay()
+        selectSubtitle(nil)
+    }
+
+    private func showTryingAgain() {
+        tryingAgain = true
+        tryingAgainShown += 1
+        let shown = tryingAgainShown
+        Task {
+            try? await Task.sleep(for: PlayerLayout.tryingAgainHold)
+            if shown == tryingAgainShown { tryingAgain = false }
+        }
+    }
+
+    /// Try again on the card for a view that could not open: open it again.
+    func reopen() {
+        openError = nil
+        opens += 1
     }
 
     func togglePlay() {
@@ -335,19 +370,15 @@ final class PlayerModel {
     /// The viewer's pick from the menu, or Off: it wins for the rest of the
     /// play, and the core remembers it for the title (`subtitleChosen`).
     func chooseSubtitle(_ track: SubtitleTrack?) {
-        subtitleSettled = true
+        choices.chose(track)
         selectSubtitle(track)
-        guard let sub else { return }
-        let url: any Sendable = track?.url ?? NSNull()
-        Task { try? await core.command(sub, ["type": "subtitleChosen", "url": url]) }
     }
 
     /// "Try again" on the failure card: the core starts the same versions
     /// again from the first, each with its full start time.
     func retry() {
         notice = nil
-        guard let sub else { return }
-        Task { try? await core.command(sub, ["type": "retry"]) }
+        choices.retry()
     }
 
     func selectSubtitle(_ track: SubtitleTrack?) {
@@ -385,9 +416,10 @@ final class PlayerModel {
             if trouble.off { selectSubtitle(nil) }
         }
         playback = snapshot
+        if PlayerLayout.retryRose(old: lastRetries, new: snapshot.retries) { showTryingAgain() }
+        lastRetries = snapshot.retries ?? lastRetries
         // The core's start subtitle, once, as if picked, sending nothing.
-        if let track = SubtitleMenu.autoPick(snapshot.autoSubtitle, settled: subtitleSettled, tracks: snapshot.subtitles) {
-            subtitleSettled = true
+        if let track = choices.startSubtitle(snapshot.autoSubtitle, tracks: snapshot.subtitles) {
             selectSubtitle(track)
         }
         switch snapshot.phase {

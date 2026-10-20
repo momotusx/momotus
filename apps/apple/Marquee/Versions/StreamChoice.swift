@@ -192,6 +192,12 @@ struct LearnedRow: Equatable {
 enum StreamChoice {
     static var words: StreamChoiceWords { .shared }
 
+    /// Versions pins its pick while the core says it is not pinned: the core
+    /// lets a failed pick go, and the page pins the new one (review r2 P3-4).
+    static func shouldFreeze(open: Bool, frozen: Bool?) -> Bool {
+        open && frozen != true
+    }
+
     /// 1024-based, as addons print sizes: one decimal under 100 GB with a
     /// trailing .0 dropped, whole numbers from 100 GB, MB under 1 GB.
     static func bytes(_ n: Int64) -> String {
