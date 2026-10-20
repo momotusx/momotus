@@ -1,6 +1,7 @@
 {
  "query": "thrones",
  "recent": [],
+ "searchable": 2,
  "rows": [
   {
    "rowId": "com.linvo.cinemeta:movie:top",

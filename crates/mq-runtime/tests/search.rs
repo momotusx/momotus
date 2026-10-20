@@ -425,3 +425,36 @@ async fn live_first_tile_over_thirty_queries() {
     );
     assert!(top_rows > 0, "no top row: is the build's Trakt app set?");
 }
+
+/// Waits up to 3 s for `done`.
+async fn until(view: &SearchView, done: impl Fn(&SearchSnapshot) -> bool) {
+    for _ in 0..300 {
+        if done(&view.snapshot()) {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("{:?}", view.snapshot());
+}
+
+/// Web journey review P3-10: an empty result says whether any installed
+/// addon can search, before and after a query, and follows an install.
+#[tokio::test]
+async fn the_snapshot_says_whether_any_addon_can_search() {
+    let core = Core::temporary("p").unwrap();
+    let view = SearchView::open(&core);
+    assert_eq!(view.snapshot().searchable, 0);
+    view.set_query("sintel");
+    until(&view, |s| s.query == "sintel").await;
+    assert_eq!(
+        (view.snapshot().searchable, view.snapshot().rows.len()),
+        (0, 0)
+    );
+    let (a, _) = search_addon("a", &[]).await;
+    core.library()
+        .set_addons(core.profile(), &[a], &core.hlc())
+        .unwrap();
+    until(&view, |s| s.searchable == 1 && s.rows.is_empty()).await;
+    view.set_query("");
+    assert_eq!(view.snapshot().searchable, 1, "known before typing");
+}

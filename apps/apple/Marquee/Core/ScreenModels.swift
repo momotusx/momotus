@@ -7,6 +7,9 @@ struct SearchSnapshot: Decodable, Hashable, Sendable {
     let rows: [HomeRow]
     /// Recent searches, newest first, for the empty state.
     let recent: [String]
+    /// The installed search catalogs a query goes to ("Top results" not counted). With none,
+    /// empty `rows` mean no installed addon can search, not "No matches". Always 0 for kids.
+    let searchable: Int
 }
 
 struct DiscoverSnapshot: Decodable, Hashable, Sendable {

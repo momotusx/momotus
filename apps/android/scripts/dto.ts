@@ -55,11 +55,13 @@ const DEFAULTED = new Map([
   ["SubtitleTrack.name", "\"\""],
   ["Prefs.defaultsSeen", "0"],
   ["PlaybackSnapshot.retries", "0"],
+  ["SearchSnapshot.searchable", "0"],
   ["Prefs.subtitleSize", "SubtitleSize.Medium"],
 ]);
 const INT = new Set([
   "overCount",
   "retries",
+  "searchable",
   "version",
   "defaultsSeen",
   "position",

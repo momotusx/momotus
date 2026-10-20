@@ -57,6 +57,11 @@ pub struct SearchSnapshot {
     pub rows: Vec<HomeRow>,
     /// Recent searches, newest first, for the empty state.
     pub recent: Vec<String>,
+    /// The installed search catalogs a query goes to ("Top results" not
+    /// counted). With none, empty `rows` mean no installed addon can
+    /// search, not that nothing matched (web journey review P3-10). Always
+    /// 0 for a kids profile, whose search reads its own list.
+    pub searchable: u32,
 }
 
 pub struct SearchView {
@@ -80,6 +85,7 @@ impl SearchView {
             query: String::new(),
             rows: Vec::new(),
             recent: recent(core),
+            searchable: searchable(core),
         });
         let task = Arc::default();
         let changes = core.library().subscribe();
@@ -125,6 +131,7 @@ impl SearchView {
                 query,
                 rows: Vec::new(),
                 recent: recent(&self.core),
+                searchable: searchable(&self.core),
             });
             return;
         }
@@ -172,8 +179,16 @@ async fn watch_addons(
         if !again {
             continue;
         }
-        let query = snapshot.get().query;
+        let shown = snapshot.get();
+        let query = shown.query.clone();
         if query.is_empty() {
+            let now = searchable(&core);
+            if shown.searchable != now {
+                snapshot.set(SearchSnapshot {
+                    searchable: now,
+                    ..shown
+                });
+            }
             continue;
         }
         let again = tokio::spawn(run(core.clone(), query, snapshot.clone()));
@@ -196,6 +211,16 @@ fn recent(core: &Core) -> Vec<String> {
     core.library()
         .recent_searches(core.profile(), RECENT)
         .unwrap_or_default()
+}
+
+/// How many installed search catalogs a query would go to; 0 for a kids
+/// profile.
+fn searchable(core: &Core) -> u32 {
+    if core.policy().kids() {
+        return 0;
+    }
+    // Any text: whether a catalog takes `search` does not hang on it.
+    search_slots(&core.installed_addons().unwrap_or_default(), "query").len() as u32
 }
 
 fn search_slots(addons: &[InstalledAddon], query: &str) -> Vec<Slot> {
@@ -234,6 +259,7 @@ async fn run(core: Core, query: String, snapshot: SharedObservable<SearchSnapsho
             rows: kids_matches(&core, &query),
             query,
             recent: Vec::new(),
+            searchable: 0,
         });
         return;
     }
@@ -248,6 +274,7 @@ async fn run(core: Core, query: String, snapshot: SharedObservable<SearchSnapsho
             query: query.clone(),
             rows: render(top.as_ref(), &slots, rows),
             recent: Vec::new(),
+            searchable: slots.len() as u32,
         })
     };
     publish(&top, &rows);

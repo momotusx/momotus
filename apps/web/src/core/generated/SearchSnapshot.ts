@@ -9,4 +9,11 @@ rows: Array<HomeRow>,
 /**
  * Recent searches, newest first, for the empty state.
  */
-recent: Array<string>, };
+recent: Array<string>, 
+/**
+ * The installed search catalogs a query goes to ("Top results" not
+ * counted). With none, empty `rows` mean no installed addon can
+ * search, not that nothing matched (web journey review P3-10). Always
+ * 0 for a kids profile, whose search reads its own list.
+ */
+searchable: number, };

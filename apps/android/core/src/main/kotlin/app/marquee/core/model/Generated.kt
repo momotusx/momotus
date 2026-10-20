@@ -1164,6 +1164,8 @@ data class SearchSnapshot(
     val rows: List<HomeRow> = emptyList(),
     /** Recent searches, newest first, for the empty state. */
     val recent: List<String> = emptyList(),
+    /** The installed search catalogs a query goes to ("Top results" not counted). With none, empty `rows` mean no installed addon can search, not that nothing matched (web journey review P3-10). Always 0 for a kids profile, whose search reads its own list. */
+    val searchable: Int = 0,
 )
 
 /** A stretch of the file a Skip button can jump over: `[startMs, endMs)`. */
