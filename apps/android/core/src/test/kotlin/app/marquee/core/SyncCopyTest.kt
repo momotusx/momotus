@@ -33,6 +33,7 @@ class SyncCopyTest {
             SyncCopy.problem(null, "http status 403", Action.Start),
         )
         assertEquals(SyncCopy.WRONG_KIT, SyncCopy.problem(null, "http status 404", Action.Recover))
+        assertEquals(SyncCopy.WRONG_KIT, SyncCopy.problem("kitUnknown", "opens no account", Action.Recover))
         assertEquals(
             "This code expired or was used already. Ask the new device for a new one.",
             SyncCopy.problem(null, "http status 410", Action.Approve),

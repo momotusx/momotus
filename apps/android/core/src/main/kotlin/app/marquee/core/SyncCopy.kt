@@ -388,6 +388,10 @@ object SyncCopy {
                 return "The sync server address must start with https."
             }
 
+            "kitUnknown" -> {
+                return WRONG_KIT
+            }
+
             // The app's own codes.
             "storage" -> {
                 return STORAGE
