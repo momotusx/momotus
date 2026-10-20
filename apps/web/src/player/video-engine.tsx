@@ -3,7 +3,7 @@
  * crossorigin, so both load directly. */
 
 import { createSignal, Show } from "solid-js";
-import { mediaFailure, pendingStart } from "../lib/failover";
+import { earlyFailure, mediaFailure, pendingStart } from "../lib/failover";
 import type { Engine, EngineEvents, Track } from "./engine";
 
 export function createVideoEngine(events: EngineEvents): Engine {
@@ -68,7 +68,12 @@ export function createVideoEngine(events: EngineEvents): Engine {
         setBuffered(out);
       }}
       onEnded={() => events.onEnded()}
-      onError={() => events.onError(mediaFailure(video.error))}
+      onError={() => {
+        const error = video.error;
+        // Before the metadata, the element cannot tell a failed fetch from a file it cannot read.
+        if (video.readyState >= HTMLMediaElement.HAVE_METADATA || !video.currentSrc) events.onError(mediaFailure(error));
+        else void earlyFailure(video.currentSrc, error).then(events.onError);
+      }}
     >
       <Show when={subtitle()} keyed>
         {(t) => <track kind="subtitles" src={t.url} srclang={t.lang} default onError={() => events.onSubtitleError(t.lang)} />}

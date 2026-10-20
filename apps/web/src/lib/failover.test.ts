@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { PlaybackSnapshot } from "../core/generated/PlaybackSnapshot";
-import { loadedSource, mediaFailure, pendingStart, sourceStart } from "./failover";
+import { earlyFailure, loadedSource, mediaFailure, pendingStart, sourceStart } from "./failover";
 
 test("a failover names the source the engine loaded, not the one the core moved to", () => {
   let snapshot = { attempt: 1 } as PlaybackSnapshot;
@@ -37,7 +37,8 @@ test("an HTTP status goes with its failure", () => {
 
 test("a video element's errors are sorted into what failed", () => {
   const error = (code: number) => ({ code, message: "MEDIA_ELEMENT_ERROR: Format error" });
-  expect(mediaFailure(error(4)).kind).toBe("decode");
+  // A source the element could not open is unreadable; only a decoder's failure is decode.
+  expect(mediaFailure(error(4)).kind).toBe("unreadable");
   expect(mediaFailure(error(3)).kind).toBe("decode");
   expect(mediaFailure(error(2)).kind).toBe("network");
   expect(mediaFailure(error(1))).toEqual({ kind: "other", error: "MEDIA_ELEMENT_ERROR: Format error" });
@@ -74,4 +75,16 @@ test("a seek before the metadata becomes the start, and none is pending after it
   expect(start.position(0)).toBe(1200);
   expect(start.take()).toBe(1200);
   expect(start.retarget(5)).toBe(false);
+});
+
+test("an error before the metadata asks the source: a failed fetch is never decode", async () => {
+  const error = { code: 4, message: "MEDIA_ELEMENT_ERROR: Format error" };
+  const answering = (status: number) => async () => new Response("x", { status, statusText: status === 404 ? "Not Found" : "" });
+  expect(await earlyFailure("http://127.0.0.1:1/s/t/f.mp4", error, answering(404))).toEqual({ kind: "http", status: 404, error: "Not Found" });
+  expect(await earlyFailure("http://127.0.0.1:1/s/t/f.mp4", error, answering(502))).toMatchObject({ kind: "http", status: 502 });
+  expect((await earlyFailure("u", error, async () => Promise.reject(new TypeError("Failed to fetch")))).kind).toBe("network");
+  const late = async () => Promise.reject(new DOMException("The operation timed out.", "TimeoutError"));
+  expect((await earlyFailure("u", error, late)).kind).toBe("timeout");
+  // The bytes came and still did not open: unreadable, never decode.
+  expect((await earlyFailure("u", error, answering(206))).kind).toBe("unreadable");
 });

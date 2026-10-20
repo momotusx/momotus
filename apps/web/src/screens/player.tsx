@@ -10,6 +10,7 @@ import ListVideo from "lucide-solid/icons/list-video";
 import LoaderCircle from "lucide-solid/icons/loader-circle";
 import Pause from "lucide-solid/icons/pause";
 import Play from "lucide-solid/icons/play";
+import RefreshCw from "lucide-solid/icons/refresh-cw";
 import RotateCcw from "lucide-solid/icons/rotate-ccw";
 import RotateCw from "lucide-solid/icons/rotate-cw";
 import SkipForward from "lucide-solid/icons/skip-forward";
@@ -96,6 +97,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     );
   });
   const snap = () => playback()?.state.data ?? null;
+  const failed = () => snap()?.phase === "failed";
   const url = () => (snap()?.phase === "ready" ? snap()?.url : null) ?? null;
   const playing = () => [...(versions()?.recommended ? [versions()?.recommended] : []), ...(versions()?.rows ?? [])].find((r) => r?.key === snap()?.key) ?? null;
 
@@ -491,12 +493,26 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                       </button>
                     )}
                   </Show>
+                  {/* This play again from its first pick (`retry`): what
+                      failed may be the moment, not the version. */}
+                  <Show when={failed()}>
+                    <button
+                      class="btn big"
+                      classList={{ primary: !snap()?.offer }}
+                      data-f="player:retry"
+                      data-autofocus={snap()?.offer ? undefined : ""}
+                      onClick={() => void playback()?.command({ type: "retry" })}
+                    >
+                      <RefreshCw aria-hidden />
+                      Try again
+                    </button>
+                  </Show>
                   <A
                     class="btn big"
-                    classList={{ primary: !snap()?.offer }}
+                    classList={{ primary: !snap()?.offer && !failed() }}
                     href={versionsPath(props.kind, props.id, props.videoId)}
                     data-f="player:versions"
-                    data-autofocus={snap()?.offer ? undefined : ""}
+                    data-autofocus={snap()?.offer || failed() ? undefined : ""}
                   >
                     <Layers aria-hidden />
                     Choose a version
