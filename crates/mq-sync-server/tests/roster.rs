@@ -1281,7 +1281,15 @@ async fn an_account_is_created_once() {
         let url = format!("{}/v1/accounts", relay.url);
         async move {
             http()
-                .post_json(&url, &mq_sync::wire::AccountRequest { entry }, &token(""))
+                .post_json(
+                    &url,
+                    &mq_sync::wire::AccountRequest {
+                        entry,
+                        ticket: None,
+                        move_link: false,
+                    },
+                    &token(""),
+                )
                 .await
         }
     };
@@ -1848,7 +1856,7 @@ impl Relay {
 
 impl Device {
     async fn delete_account(&self) {
-        mq_sync::delete_account(&self.library, &http(), &self.record, &self.clock)
+        mq_sync::delete_account(&self.library, &http(), &self.record, &self.clock, None)
             .await
             .unwrap();
     }
@@ -1904,7 +1912,7 @@ async fn a_deleted_account_is_gone_for_every_device() {
         server: lossy,
         ..phone.record.clone()
     };
-    let lost = mq_sync::delete_account(&phone.library, &http(), &through, &phone.clock).await;
+    let lost = mq_sync::delete_account(&phone.library, &http(), &through, &phone.clock, None).await;
     assert!(lost.is_err(), "{lost:?}");
     for table in [
         "account", "roster", "record", "recovery", "device", "pairing",
@@ -1934,7 +1942,11 @@ async fn a_deleted_account_is_gone_for_every_device() {
     let again = http()
         .post_json(
             &format!("{}/v1/accounts", relay.url),
-            &mq_sync::wire::AccountRequest { entry: genesis },
+            &mq_sync::wire::AccountRequest {
+                entry: genesis,
+                ticket: None,
+                move_link: false,
+            },
             &token(""),
         )
         .await;
@@ -1971,6 +1983,56 @@ async fn a_bare_410_from_elsewhere_is_no_deletion() {
     );
     phone.record.server = relay.url.clone();
     phone.sync().await;
+}
+
+/// Before the stored token goes out, the relay at the record's URL must be
+/// the one this device joined: another relay answering there (its own id)
+/// never sees an `Authorization` header.
+#[tokio::test]
+async fn a_delete_sends_no_token_to_another_relay() {
+    use axum::response::IntoResponse;
+    let relay = Relay::new().await;
+    let phone = Device::first(&relay).await;
+    let seen = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let saw = seen.clone();
+    let app = axum::Router::new()
+        .route(
+            "/v1/relay",
+            axum::routing::get(|| async {
+                axum::Json(mq_sync::wire::RelayInfo {
+                    relay_id: Hex([9; 16]),
+                    generation: "g".into(),
+                    generation_since_ms: 0,
+                    server_ms: now_ms(),
+                    providers: vec![],
+                })
+            }),
+        )
+        .fallback(move |request: axum::extract::Request| {
+            let saw = saw.clone();
+            async move {
+                if request.headers().contains_key("authorization") {
+                    saw.store(true, Ordering::Relaxed);
+                }
+                axum::http::StatusCode::OK.into_response()
+            }
+        });
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let other = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+    let elsewhere = SyncConfig {
+        server: other,
+        ..phone.record.clone()
+    };
+    let err = mq_sync::delete_account(&phone.library, &http(), &elsewhere, &phone.clock, None)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, SyncError::WrongRelay), "{err:?}");
+    assert!(
+        !seen.load(Ordering::Relaxed),
+        "no token went to the other relay"
+    );
+    assert_eq!(relay.count("account"), 1);
 }
 
 /// A device stuck on a fork (the relay was restored and another device

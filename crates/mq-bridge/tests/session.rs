@@ -837,3 +837,85 @@ async fn joining_a_sync_account_ends_the_defaults_step() {
     assert!(!core_c.addons_fresh(), "recovered");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[path = "../../mq-sync-server/tests/support/mock_oidc.rs"]
+mod mock_oidc;
+
+/// Sign-in over the protocol (plans/accounts.md 3.4), against the relay and
+/// its mock provider: a native sheet's token and the brokered `signIn`
+/// view each end in a ticket; the ticket makes an account linked to the
+/// identity, which the next sign-in finds. A flow this session did not
+/// start is refused.
+#[tokio::test]
+async fn sign_in_over_the_protocol() {
+    let mock = mock_oidc::Mock::start(0).await;
+    let dir = std::env::temp_dir().join(format!("mq-bridge-signin-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server = format!("http://{}", listener.local_addr().unwrap());
+    let identity: mq_sync_server::IdentityFile = serde_json::from_value(json!({
+        "key": "3".repeat(64),
+        "publicUrl": server,
+        "oidc": [{ "id": "mock", "issuer": mock.url, "clientId": "marquee", "clientSecret": "s" }],
+    }))
+    .unwrap();
+    let config = mq_sync_server::Config {
+        public_host: Some("127.0.0.1".into()),
+        identity: Some(identity),
+        ..Default::default()
+    };
+    let app = mq_sync_server::router(&dir.join("relay.sqlite"), config).unwrap();
+    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+
+    let (tx, mut rx) = Output::channel();
+    let mut s = Session::new(Core::temporary("default").unwrap(), tx);
+    let mut ask = async |request: Value| {
+        let id = request["id"].as_u64().unwrap();
+        s.handle_text(&request.to_string()).await;
+        reply_to(&mut rx, id).await
+    };
+    let started =
+        ask(json!({"id": 1, "op": "nativeSignInStart", "server": server, "provider": "mock"}))
+            .await;
+    let (flow, nonce) = (
+        &started["result"]["flow"],
+        started["result"]["nonce"].as_str().unwrap(),
+    );
+    let token = mock.sign(mock.claims("marquee", "alice", nonce));
+    let signed = ask(json!({"id": 2, "op": "nativeSignIn", "flow": flow, "idToken": token})).await;
+    assert_eq!(signed["result"]["phase"], "new", "{signed}");
+    let ticket = &signed["result"]["ticket"];
+    let made = ask(json!({"id": 3, "op": "createSyncAccount", "server": server, "name": "Phone", "ticket": ticket})).await;
+    let record = made["result"].clone();
+    let links = ask(json!({"id": 4, "op": "identities", "record": record})).await;
+    assert_eq!(
+        links["result"]["links"].as_array().map(Vec::len),
+        Some(1),
+        "{links}"
+    );
+    let refused = ask(json!({"id": 5, "op": "nativeSignIn", "flow": "nope", "idToken": "x"})).await;
+    assert_eq!(refused["code"], "wrongFlow", "{refused}");
+
+    mock.next(mock_oidc::Next::Pick("alice".into()));
+    let params = json!({"server": server, "provider": "mock", "return": "marquee://auth"});
+    s.handle_text(
+        &json!({"id": 6, "op": "subscribe", "view": "signIn", "params": params}).to_string(),
+    )
+    .await;
+    let sub = reply_to(&mut rx, 6).await["result"]["sub"]
+        .as_u64()
+        .unwrap();
+    let browser = push_until(&mut rx, sub, |u| u["phase"] == "browser").await;
+    let fragment = mock_oidc::browse(browser["url"].as_str().unwrap()).await;
+    s.handle_text(
+        &json!({"id": 7, "op": "command", "sub": sub, "command": {"type": "returned", "fragment": fragment}})
+            .to_string(),
+    )
+    .await;
+    let found = push_until(&mut rx, sub, |u| {
+        u["phase"] == "found" || u["phase"] == "failed"
+    })
+    .await;
+    assert_eq!(found["account"], record["keys"]["account"], "{found}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

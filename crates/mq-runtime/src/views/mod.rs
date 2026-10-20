@@ -11,6 +11,7 @@ pub mod playback;
 pub mod profiles;
 pub mod search;
 pub mod settings;
+pub mod sign_in;
 pub mod title;
 pub mod versions;
 

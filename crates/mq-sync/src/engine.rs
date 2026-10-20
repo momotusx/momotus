@@ -201,28 +201,52 @@ pub enum SyncError {
     RosterChanged,
     #[error("this account was deleted")]
     AccountGone,
+    #[error("this identity already signs in to another account")]
+    LinkedElsewhere,
+    #[error("this identity made several accounts lately; try again later")]
+    SignupLimit,
+    #[error("the sign-in expired; sign in again to finish")]
+    TicketExpired,
+    #[error("the sign-in was cancelled")]
+    Cancelled,
+    #[error("the sign-in did not check")]
+    SignInRefused,
+    #[error("this sign-in was started elsewhere")]
+    WrongFlow,
+    #[error("this receipt is not for this link")]
+    ReceiptRefused,
 }
 
-/// The relay answers 410 with code `accountGone` on every route that names a
-/// deleted account, so every call maps it in one place. Any other 410 (a
+/// The relay's coded answers map in one place. Only the relay's own 410
+/// with code `accountGone` means the account is gone; any other 410 (a
 /// proxy, a parked domain) is a plain failure: it never makes a device
 /// forget its account.
 impl From<HttpError> for SyncError {
     fn from(e: HttpError) -> Self {
-        match e {
-            HttpError::Status {
-                status: 410,
-                ref body,
-                ..
-            } if says_gone(body) => SyncError::AccountGone,
-            e => SyncError::Http(e),
+        let HttpError::Status {
+            status, ref body, ..
+        } = e
+        else {
+            return SyncError::Http(e);
+        };
+        match (status, code_of(body).as_deref()) {
+            (410, Some("accountGone")) => SyncError::AccountGone,
+            (409, Some("linkedElsewhere")) => SyncError::LinkedElsewhere,
+            (429, Some("signupLimit")) => SyncError::SignupLimit,
+            (403, Some("ticketExpired")) => SyncError::TicketExpired,
+            (403, Some("receiptRefused")) => SyncError::ReceiptRefused,
+            _ => SyncError::Http(e),
         }
     }
 }
 
-fn says_gone(body: &[u8]) -> bool {
+/// The `code` of a relay's JSON error body.
+pub(crate) fn code_of(body: &[u8]) -> Option<String> {
     serde_json::from_slice::<serde_json::Value>(body)
-        .is_ok_and(|v| v.get("code").and_then(|c| c.as_str()) == Some("accountGone"))
+        .ok()?
+        .get("code")?
+        .as_str()
+        .map(str::to_owned)
 }
 
 impl SyncError {
@@ -239,6 +263,13 @@ impl SyncError {
             SyncError::WrongRecord => "wrongRecord",
             SyncError::RosterChanged => "rosterChanged",
             SyncError::AccountGone => "accountGone",
+            SyncError::LinkedElsewhere => "linkedElsewhere",
+            SyncError::SignupLimit => "signupLimit",
+            SyncError::TicketExpired => "ticketExpired",
+            SyncError::Cancelled => "cancelled",
+            SyncError::SignInRefused => "signInRefused",
+            SyncError::WrongFlow => "wrongFlow",
+            SyncError::ReceiptRefused => "receiptRefused",
             _ => return None,
         })
     }
@@ -314,6 +345,22 @@ pub async fn create_account(
     invite: Option<&str>,
     name: &str,
 ) -> Result<SyncConfig, SyncError> {
+    create_account_with(http, server, invite, name, None, false).await
+}
+
+/// `create_account` on a relay with sign-in: the sign-in's `ticket` links
+/// its identity to the new account. `move_link` (Start over) takes the
+/// identity from the account it signs in to now, which is then scheduled
+/// for deletion. A retry after a lost answer finds the account made and
+/// signs for its token; the ticket was used once, by the first.
+pub async fn create_account_with(
+    http: &HttpClient,
+    server: &str,
+    invite: Option<&str>,
+    name: &str,
+    ticket: Option<&str>,
+    move_link: bool,
+) -> Result<SyncConfig, SyncError> {
     require_secure(server)?;
     let info = relay_info(http, server).await?;
     let member = MemberSecret::generate();
@@ -324,6 +371,8 @@ pub async fn create_account(
         .unwrap_or_default();
     let request = AccountRequest {
         entry: entry.clone(),
+        ticket: ticket.map(str::to_owned),
+        move_link,
     };
     let send = || async {
         http.post_json(&format!("{server}/v1/accounts"), &request, &options)
@@ -338,7 +387,13 @@ pub async fn create_account(
     };
     let device_token = match created {
         Ok(account) => account.device_token,
-        Err(HttpError::Status { status: 409, .. }) => {
+        // "This account already exists" carries no code; a coded 409
+        // (linked elsewhere) is the answer itself.
+        Err(HttpError::Status {
+            status: 409,
+            ref body,
+            ..
+        }) if code_of(body).is_none() => {
             let account = keys.account;
             signed_token(
                 http,
@@ -373,9 +428,25 @@ pub(crate) async fn relay_info(http: &HttpClient, server: &str) -> Result<RelayI
         .json()?)
 }
 
+/// Whether the relay answering at the record's URL is the one this device
+/// joined: the record's relay id (once known), pinned to the host. One relay
+/// id, one host: a relay answering with another relay's id cannot borrow
+/// what this device signs or sends for that one.
+fn pinned(library: &Library, config: &SyncConfig, info: &RelayInfo) -> Result<(), SyncError> {
+    if config.relay_id != Id::default() && config.relay_id != info.relay_id {
+        return Err(SyncError::WrongRelay);
+    }
+    let pin = format!("{RELAY_PIN}{}", hex::encode(info.relay_id.0));
+    let host = host(&config.server);
+    match library.sync_state(&pin)? {
+        Some(pinned) if !pinned.is_empty() && pinned != host => Err(SyncError::WrongRelay),
+        _ => Ok(library.set_sync_state(&pin, &host)?),
+    }
+}
+
 /// The relay's host, as relay pins and token requests name it (its port may
 /// change when a relay is moved or restored).
-fn host(server: &str) -> String {
+pub(crate) fn host(server: &str) -> String {
     url::Url::parse(server)
         .ok()
         .and_then(|u| u.host_str().map(str::to_owned))
@@ -605,19 +676,7 @@ impl<'a> Session<'a> {
         if record.relay_id == Id::default() {
             record.relay_id = info.relay_id;
         }
-        if record.relay_id != info.relay_id {
-            return Err(SyncError::WrongRelay);
-        }
-        // One relay id, one host: a relay answering with another relay's id
-        // cannot borrow what this device signs for that one.
-        let pin = format!("{RELAY_PIN}{}", hex::encode(info.relay_id.0));
-        let host = host(&config.server);
-        match library.sync_state(&pin)? {
-            Some(pinned) if !pinned.is_empty() && pinned != host => {
-                return Err(SyncError::WrongRelay);
-            }
-            _ => library.set_sync_state(&pin, &host)?,
-        }
+        pinned(library, config, &info)?;
         prepare(library, &info, &config.keys.account)?;
         Ok(Session {
             library,
@@ -639,11 +698,11 @@ impl<'a> Session<'a> {
         RosterHead { seq, hash }
     }
 
-    fn token(&self) -> &str {
+    pub(crate) fn token(&self) -> &str {
         &self.record.device_token
     }
 
-    fn server(&self) -> &str {
+    pub(crate) fn server(&self) -> &str {
         &self.record.server
     }
 
@@ -1604,33 +1663,57 @@ pub async fn sign_out(
 /// stays. The app deletes the keystore record.
 ///
 /// The relay needs only an active token, not an agreed roster, so the
-/// stored token goes first: a device stuck on a fork can still delete. Only
-/// a token the relay does not know (a restore lost it, or the account is
-/// gone) opens a session, which signs for a new one or hears `accountGone`.
+/// stored token goes first: a device stuck on a fork can still delete
+/// (while the relay still knows that token). Only a token the relay does
+/// not know (a restore lost it, or the account is gone) opens a session,
+/// which signs for a new one or hears `accountGone`. Before any token goes
+/// out, the relay must be the one this device joined (its id, pinned to the
+/// host), as for every other call. The request is signed by this device's
+/// key: a token alone deletes nothing. `receipt`: an Apple revoke's.
 pub async fn delete_account(
     library: &Library,
     http: &HttpClient,
     config: &SyncConfig,
     clock: &HlcClock,
+    receipt: Option<&str>,
 ) -> Result<(), SyncError> {
     require_secure(&config.server)?;
-    let delete = |token: String| async move {
-        http.request(
-            mq_http::Method::DELETE,
-            &format!("{}/v1/account", config.server),
-            None,
-            &options(&config.server, &token),
-        )
-        .await
-        .map_err(SyncError::from)
+    let info = relay_info(http, &config.server).await?;
+    pinned(library, config, &info)?;
+    let member = config.secret();
+    let delete = |token: String, at_ms: u64| {
+        let request = TokenRequest::new(
+            info.relay_id,
+            config.keys.account,
+            member.id(),
+            at_ms,
+            &host(&config.server),
+        );
+        let body = crate::wire::DeleteRequest {
+            sig: member.sign_delete(&request),
+            request,
+            receipt: receipt.map(str::to_owned),
+        };
+        async move {
+            http.request(
+                mq_http::Method::DELETE,
+                &format!("{}/v1/account", config.server),
+                Some(mq_http::Body::Json(
+                    serde_json::to_value(&body).expect("plain struct"),
+                )),
+                &options(&config.server, &token),
+            )
+            .await
+            .map_err(SyncError::from)
+        }
     };
-    let mut deleted = delete(config.device_token.clone()).await;
+    let mut deleted = delete(config.device_token.clone(), info.server_ms).await;
     if matches!(
         deleted,
         Err(SyncError::Http(HttpError::Status { status: 401, .. }))
     ) {
         deleted = match Session::open(library, http, config, clock).await {
-            Ok(session) => delete(session.token().to_owned()).await,
+            Ok(session) => delete(session.token().to_owned(), session.info.server_ms).await,
             Err(e) => Err(e),
         };
     }

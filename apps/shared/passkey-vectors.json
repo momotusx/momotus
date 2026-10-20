@@ -1,0 +1,20 @@
+{
+  "about": "Sign-in and passkey vectors (plans/accounts.md 2.4 and 3.1). nonce: the provider nonce for a relay's flow, lowercase hex of SHA-256(relayNonce bytes || 0x00 || UTF-8 host), relayNonce given as base64url without padding. The passkey contract's vectors come in phase 1b.",
+  "nonce": [
+    {
+      "relayNonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "host": "sync.example.org",
+      "nonce": "4ddb66d164368af17b9017ad40ee0e19f24e53385fa97bbbd01a505829b1bc46"
+    },
+    {
+      "relayNonce": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "host": "127.0.0.1",
+      "nonce": "594cde111e09b49646569683ffe2d354ad3e434ca75f7adc4057d85389f4a594"
+    },
+    {
+      "relayNonce": "__________________________________________8",
+      "host": "relay.example.com",
+      "nonce": "ab2cc419af6953e02e1d98d0705cda286f1571ffef87a12157115d18d7697189"
+    }
+  ]
+}

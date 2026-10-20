@@ -53,6 +53,7 @@ pub use views::playback::{
 pub use views::profiles::{ProfileInfo, ProfilesSnapshot, ProfilesView, SessionState};
 pub use views::search::{SearchSnapshot, SearchView};
 pub use views::settings::{HomeRows, Prefs, SettingsView};
+pub use views::sign_in::{SignInSnapshot, SignInView};
 pub use views::title::{Episode, TitleHeader, TitleUpdate, TitleView};
 pub use views::versions::{
     BlockedReason, BlockedVersions, Pick, PickHandle, TitleFacts, VersionRow, VersionStatus,

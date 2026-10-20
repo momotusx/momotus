@@ -30,8 +30,8 @@ use mq_runtime::{
     AddonCatalogView, AddonsView, CalendarView, Core, DebridLoginView, DebridRecord,
     DebridTombstone, DebridView, DiscoverView, HomeView, ImportView, LibrarySort, LibraryView,
     ListedError, ListedFailure, PairingView, PlayTarget, PlaybackView, ProfileError, ProfilesView,
-    SearchView, SessionState, SettingsView, StoreId, TitleFacts, TitleView, TraktLoginView,
-    TraktRecord, TraktView, VersionsParams, VersionsView,
+    SearchView, SessionState, SettingsView, SignInSnapshot, SignInView, StoreId, TitleFacts,
+    TitleView, TraktLoginView, TraktRecord, TraktView, VersionsParams, VersionsView,
 };
 use mq_streams::{DeviceCaps, StreamPrefs, Target};
 use mq_sync::SyncConfig;
@@ -149,6 +149,60 @@ enum Request {
         #[serde(default)]
         invite: Option<String>,
         name: String,
+        /// A sign-in's ticket: its identity is linked to the new account.
+        #[serde(default)]
+        ticket: Option<String>,
+        /// Start over: the identity moves here, its old account is scheduled
+        /// for deletion.
+        #[serde(default, rename = "move")]
+        move_link: bool,
+    },
+    /// Opens a native sheet's flow: `{flow, nonce}`, the nonce for the sheet.
+    NativeSignInStart {
+        id: u64,
+        server: String,
+        provider: String,
+        /// Apple's revoke (the answer then carries a receipt).
+        #[serde(default)]
+        revoke: bool,
+    },
+    /// The native sheet's ID token for `flow`: `found`, `new` or `receipt`.
+    NativeSignIn {
+        id: u64,
+        flow: String,
+        #[serde(rename = "idToken")]
+        id_token: String,
+        #[serde(default, rename = "authorizationCode")]
+        authorization_code: Option<String>,
+    },
+    /// The account's identity links: `{links, record}`.
+    Identities {
+        id: u64,
+        record: Box<SyncConfig>,
+    },
+    /// Links a sign-in's identity to this account: `{record}`.
+    LinkIdentity {
+        id: u64,
+        record: Box<SyncConfig>,
+        ticket: String,
+        #[serde(default, rename = "move")]
+        move_link: bool,
+    },
+    /// Unlinks by link id: `{record}`.
+    UnlinkIdentity {
+        id: u64,
+        record: Box<SyncConfig>,
+        link: i64,
+        #[serde(default)]
+        receipt: Option<String>,
+    },
+    /// Cancels a scheduled deletion; `unlink` also removes the identity that
+    /// asked for it: `{record}`.
+    CancelDeletion {
+        id: u64,
+        record: Box<SyncConfig>,
+        #[serde(default)]
+        unlink: bool,
     },
     /// One sync round. `record` is the keystore record; a reply carrying a
     /// new `record` must be stored, then sync again (`again`).
@@ -218,10 +272,13 @@ enum Request {
     /// Deletes the account on the sync server for every device; replies `{}`
     /// once the relay confirmed. This device forgets the account as after a
     /// sign-out (the library stays); the platform deletes the keystore record.
-    /// The owner profile only (`notOwner` otherwise).
+    /// The owner profile only (`notOwner` otherwise). `receipt`: an Apple
+    /// revoke's, when the account has an Apple link.
     DeleteAccount {
         id: u64,
         record: Box<SyncConfig>,
+        #[serde(default)]
+        receipt: Option<String>,
     },
     /// The digits on the new device differ: ends the approval of `qr` now
     /// with a key rotation (dropping the device if it joined). Replies the
@@ -428,6 +485,7 @@ enum View {
     Calendar(CalendarView),
     Discover(DiscoverView),
     Pairing(PairingView),
+    SignIn(SignInView),
     Settings { _view: SettingsView },
     Addons { _view: AddonsView },
     AddonCatalog(AddonCatalogView),
@@ -451,6 +509,7 @@ impl View {
             View::Calendar(_) => "calendar",
             View::Discover(_) => "discover",
             View::Pairing(_) => "pairing",
+            View::SignIn(_) => "signIn",
             View::Settings { .. } => "settings",
             View::Addons { .. } => "addons",
             View::AddonCatalog(_) => "addonCatalog",
@@ -485,6 +544,9 @@ struct Shared {
     subs: HashMap<u64, Subscription>,
     /// (active profile, locked) for the picker view.
     state: watch::Sender<SessionState>,
+    /// Native sign-in flows started and not yet finished, by flow id: their
+    /// verifiers stay here, in memory only.
+    native: HashMap<String, mq_sync::identity::NativeFlow>,
 }
 
 impl Shared {
@@ -578,6 +640,7 @@ impl Session {
             generation: 0,
             subs: HashMap::new(),
             state,
+            native: HashMap::new(),
         }));
         refresh_addons(&core);
         let watcher = tokio::spawn(watch_gone(
@@ -685,15 +748,109 @@ impl Session {
                 server,
                 invite,
                 name,
+                ticket,
+                move_link,
             } => {
                 self.spawn(id, async move {
-                    let made =
-                        mq_sync::create_account(core.http(), &server, invite.as_deref(), &name)
-                            .await;
+                    let made = mq_sync::create_account_with(
+                        core.http(),
+                        &server,
+                        invite.as_deref(),
+                        &name,
+                        ticket.as_deref(),
+                        move_link,
+                    )
+                    .await;
                     if made.is_ok() {
                         core.joined_sync_account();
                     }
                     answer(made)
+                });
+            }
+            Request::NativeSignInStart {
+                id,
+                server,
+                provider,
+                revoke,
+            } => {
+                let shared = self.shared.clone();
+                self.spawn(id, async move {
+                    let flow =
+                        mq_sync::identity::start_native(core.http(), &server, &provider, revoke)
+                            .await?;
+                    let answer = json!({ "flow": flow.flow, "nonce": flow.nonce });
+                    lock(&shared).native.insert(flow.flow.clone(), flow);
+                    Ok::<_, mq_sync::SyncError>(answer)
+                });
+            }
+            Request::NativeSignIn {
+                id,
+                flow,
+                id_token,
+                authorization_code,
+            } => {
+                let Some(native) = lock(&self.shared).native.remove(&flow) else {
+                    let refused = Failure::coded("wrongFlow", "this sign-in was not started here");
+                    send_answer(&self.out, json!(id), Err(refused));
+                    return;
+                };
+                self.spawn(id, async move {
+                    let taken = native
+                        .finish(core.http(), &id_token, authorization_code.as_deref())
+                        .await?;
+                    to_value(&SignInSnapshot::taken(taken)).map_err(Failure::from)
+                });
+            }
+            Request::Identities { id, record } => {
+                self.spawn(id, async move {
+                    let (library, http, clock) = (core.library(), core.http(), core.clock());
+                    let (links, record) =
+                        mq_sync::identity::identities(library, http, &record, clock).await?;
+                    Ok::<_, mq_sync::SyncError>(json!({ "links": links, "record": record }))
+                });
+            }
+            Request::LinkIdentity {
+                id,
+                record,
+                ticket,
+                move_link,
+            } => {
+                self.spawn(id, async move {
+                    let (library, http, clock) = (core.library(), core.http(), core.clock());
+                    let record = mq_sync::identity::link_identity(
+                        library, http, &record, clock, &ticket, move_link,
+                    )
+                    .await?;
+                    Ok::<_, mq_sync::SyncError>(json!({ "record": record }))
+                });
+            }
+            Request::UnlinkIdentity {
+                id,
+                record,
+                link,
+                receipt,
+            } => {
+                self.spawn(id, async move {
+                    let (library, http, clock) = (core.library(), core.http(), core.clock());
+                    let record = mq_sync::identity::unlink_identity(
+                        library,
+                        http,
+                        &record,
+                        clock,
+                        link,
+                        receipt.as_deref(),
+                    )
+                    .await?;
+                    Ok::<_, mq_sync::SyncError>(json!({ "record": record }))
+                });
+            }
+            Request::CancelDeletion { id, record, unlink } => {
+                self.spawn(id, async move {
+                    let (library, http, clock) = (core.library(), core.http(), core.clock());
+                    let record =
+                        mq_sync::identity::cancel_deletion(library, http, &record, clock, unlink)
+                            .await?;
+                    Ok::<_, mq_sync::SyncError>(json!({ "record": record }))
                 });
             }
             Request::SyncNow { id, record } => {
@@ -782,7 +939,11 @@ impl Session {
                         .map(|()| json!({}))
                 });
             }
-            Request::DeleteAccount { id, record } => {
+            Request::DeleteAccount {
+                id,
+                record,
+                receipt,
+            } => {
                 // The account holds every profile: only the owner deletes it.
                 if core.profile() != mq_library::OWNER {
                     let refused =
@@ -793,7 +954,7 @@ impl Session {
                 self.spawn(id, async move {
                     let _gate = core.sync_gate().await;
                     let (library, http, clock) = (core.library(), core.http(), core.clock());
-                    mq_sync::delete_account(library, http, &record, clock)
+                    mq_sync::delete_account(library, http, &record, clock, receipt.as_deref())
                         .await
                         .map(|()| json!({}))
                 });
@@ -1328,6 +1489,25 @@ impl Session {
                 let forward = tokio::spawn(forward(sub, updates, out, fence));
                 (View::Pairing(pairing), to_value(&snapshot)?, forward)
             }
+            // A brokered sign-in; `appleRevoke` is Apple's revoke flow, for
+            // surfaces without a native Apple sheet.
+            "signIn" | "appleRevoke" => {
+                let revoke = view == "appleRevoke";
+                let provider = match revoke {
+                    true => "apple".to_owned(),
+                    false => param(params, "provider")?,
+                };
+                let sign_in = SignInView::open(
+                    &core,
+                    &param(params, "server")?,
+                    &provider,
+                    &param(params, "return")?,
+                    revoke,
+                );
+                let (snapshot, updates) = sign_in.subscribe();
+                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                (View::SignIn(sign_in), to_value(&snapshot)?, forward)
+            }
             "discover" => {
                 let discover = DiscoverView::open(&core);
                 let (snapshot, updates) = discover.subscribe();
@@ -1416,6 +1596,7 @@ impl Session {
             (View::Discover(discover), "loadMore") => discover.load_more(),
             (View::Pairing(pairing), "confirm") => pairing.confirm(),
             (View::Pairing(pairing), "reject") => pairing.reject(),
+            (View::SignIn(sign_in), "returned") => sign_in.returned(&param(command, "fragment")?),
             (View::Calendar(calendar), "setToday") => {
                 let today = command
                     .get("today")

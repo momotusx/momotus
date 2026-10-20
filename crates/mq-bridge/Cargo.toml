@@ -32,3 +32,8 @@ tracing.workspace = true
 mq-http = { path = "../mq-http", features = ["test-dns"] }
 tokio-tungstenite = "0.28"
 mq-sync-server = { path = "../mq-sync-server" }
+# The relay's mock provider (mq-sync-server/tests/support/mock_oidc.rs).
+ring = "0.17"
+base64 = "0.22"
+url.workspace = true
+reqwest = { version = "0.13", default-features = false, features = ["form"] }
