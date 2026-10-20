@@ -248,6 +248,22 @@ Mutations SR1 to SR7.
   - With upload off, a finished file announces `left` of at least 1 and never `completed`.
   - The README lines above are corrected.
 
+## Review answers: engine round 3 (2026-10-20)
+
+`plans/reviews/engine-2026-10-20-r3.md`, 8/10. Each answer has a test that fails on revert and a mutation row (`bench/m13/mutations.jsonl`); P3-9 (iOS backup) is the Apple app's.
+
+- **P2-1, the early settle.** Gone: the ranking's start tiers sit at 5, `min_seeders` (50 by default) and four times that, so only the most any tracker counts ranks right. A scrape ends when every tracker asked has answered or failed, or at the 1 s budget.
+- **P2-2, a relaunch hashing its whole file.** Measured first (`bench/m13/relaunch-resume.jsonl`, Sintel 720p, 143 MB, its head on disk): a relaunch reached Ready 251 to 264 ms after the file was chosen, the check hashing about 0.55 GB/s (a 4 GB file: about 7 s, extrapolated). The librqbit fork now keeps each torrent's have-bitfield in `<data_dir>/<info hash>.have`, beside its folder (never in it: a torrent may name a file anything). A relaunch checks a sample of the pieces it had: Ready after 1 to 11 ms. The file goes with its folder on removal and eviction. `mq play-magnet --data-dir` now keeps the data, so two runs on one folder are a relaunch.
+- **P3s:**
+  - A failed lookup beside a kept address that answered stores nothing, and the two address lists compare as sets.
+  - One eviction round at a time (a `tokio::sync::Mutex`); the disk walks run on the blocking pool, and only `<info hash>.evicted` folders are cleaned up, with `tokio::fs`.
+  - `data_dir/.lock`: a second engine on a folder is refused (`EngineError::DataInUse`) while the first lives.
+  - The in-use guard and the `.evicted` cleanup have tests (hold.rs).
+  - The scrape docs say what the code does.
+  - A dropped tracker stream (the torrent paused or removed) sends `stopped` to every tracker that took an announce, so viewers who left are no longer counted.
+  - An HTTP scrape looks a name up once: reqwest reads the kept addresses.
+  - The slow-tracker test answers in 270 ms, about 200 ms inside the budget.
+
 ## Disk used while measuring
 
 The engine target directory (`$HOME/.cargo-targets/marquee-engine`, release profile only during the runs) stayed at 1.3 GB; torrent data lived in a per-run temporary folder deleted after each run (largest: 571 MB for a stock Tears of Steel run).
