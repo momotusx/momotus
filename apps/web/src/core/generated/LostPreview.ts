@@ -6,9 +6,21 @@ import type { DeviceKits } from "./DeviceKits";
  * (transitively) for the user to untick, the kits that go with all of
  * them, and the kits each of those devices made.
  */
-export type LostPreview = { devices: Array<string>, 
+export type LostPreview = { 
 /**
- * Every kit that goes when the lost device and all of `devices` go.
+ * Ticked to go with the lost device: those it vouched for, and every
+ * device that joined through a passkey. Never this device.
+ */
+devices: Array<string>, 
+/**
+ * Those of `devices` that joined through a passkey, newest first
+ * ("Joined with a passkey on <date>"): a stolen phone may hold any
+ * synced passkey.
+ */
+passkeyJoined: Array<string>, 
+/**
+ * Every kit that goes when the lost device and all of `devices` go,
+ * every passkey kit among them, whoever added it.
  */
 kits: Array<string>, 
 /**

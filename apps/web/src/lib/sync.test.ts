@@ -34,7 +34,20 @@ import {
   syncWords,
 } from "./words";
 
-const member = (id: string, o: Partial<MemberInfo> = {}): MemberInfo => ({ id, kit: false, name: id.toUpperCase(), sponsor: null, addedMs: 0, thisDevice: false, ...o });
+const member = (id: string, o: Partial<MemberInfo> = {}): MemberInfo => ({
+  id,
+  kit: false,
+  name: id.toUpperCase(),
+  sponsor: null,
+  addedMs: 0,
+  thisDevice: false,
+  passkey: false,
+  form: null,
+  viaPasskey: false,
+  lastUsedBy: null,
+  lastUsedMs: null,
+  ...o,
+});
 const quiet = { clockGapMs: 0, waiting: 0, parked: 0, oldEpochWrites: 0, rotationWaitMs: 0, blocked: null, refused: 0, unreadable: 0, newer: 0, again: false } as const;
 
 test("Delete account shows on the owner profile only", () => {

@@ -3,7 +3,11 @@
 /**
  * A member of the account as the devices screen shows it.
  */
-export type MemberInfo = { id: string, kit: boolean, name: string | null, 
+export type MemberInfo = { id: string, kit: boolean, 
+/**
+ * A device's name, or a kit's label.
+ */
+name: string | null, 
 /**
  * Who vouched for it.
  */
@@ -11,4 +15,21 @@ sponsor: string | null,
 /**
  * By the adding device's clock.
  */
-addedMs: number, thisDevice: boolean, };
+addedMs: number, thisDevice: boolean, 
+/**
+ * A kit made from a passkey (else a recovery kit).
+ */
+passkey: boolean, 
+/**
+ * A device's form (`phone`, `tablet`, `tv`, `computer`, `web`), when
+ * it said: only phones and tablets approve.
+ */
+form: string | null, 
+/**
+ * A device that joined through a passkey ("Joined with a passkey").
+ */
+viaPasskey: boolean, 
+/**
+ * A kit's newest device (gone or not) and when it joined: "Last used".
+ */
+lastUsedBy: string | null, lastUsedMs: number | null, };
