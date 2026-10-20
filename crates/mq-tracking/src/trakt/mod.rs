@@ -5,6 +5,7 @@
 pub mod api;
 pub mod auth;
 pub mod call;
+pub mod search;
 
 pub use api::{Answer, Api, Gate, Hosts};
 pub use auth::{Auth, AuthError, Bound, DeviceCode, Poll, Ticket, Tokens, TraktRecord};

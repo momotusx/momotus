@@ -6,6 +6,11 @@
 //!
 //! A kids profile's search asks no addon: it matches the query over its
 //! list's names, in one row (plans/m11-kids.md 4.6).
+//!
+//! Above the addon rows, "Top results" holds the titles Trakt names for the
+//! query, read through the installed meta addons (plans/search-quality.md):
+//! it finds what an addon's own search misses (Cinemeta leaves out shorts
+//! such as Sintel).
 
 use crate::Core;
 use crate::live::{FRAME, coalesce};
@@ -17,6 +22,7 @@ use futures_util::{Stream, StreamExt};
 use mq_addons::InstalledAddon;
 use mq_library::Table;
 use mq_protocol::{ResourcePath, ResourceResponse};
+use mq_tracking::trakt::search::Found;
 use serde::Serialize;
 use std::collections::HashSet;
 use std::pin::Pin;
@@ -30,6 +36,13 @@ const DEBOUNCE: Duration = Duration::from_millis(250);
 const SOFT_DEADLINE: Duration = Duration::from_millis(2500);
 const HARD_DEADLINE: Duration = Duration::from_secs(12);
 const RECENT: usize = 10;
+/// Trakt is asked once the text has rested this long (`DEBOUNCE` included).
+const TRAKT_SETTLE: Duration = Duration::from_millis(400);
+/// The shortest folded query Trakt is asked for.
+const TRAKT_MIN_CHARS: usize = 2;
+/// The most titles "Top results" leads with.
+const TOP_TILES: usize = 5;
+pub const TOP_ROW_ID: &str = "top";
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(
@@ -226,14 +239,20 @@ async fn run(core: Core, query: String, snapshot: SharedObservable<SearchSnapsho
     }
     let slots = search_slots(&core.installed_addons().unwrap_or_default(), &query);
     let mut rows: Vec<(RowState, Vec<Tile>)> = vec![(RowState::Loading, Vec::new()); slots.len()];
-    let publish = |rows: &[(RowState, Vec<Tile>)]| {
+    let key = fold(&query);
+    let mut top_pending = key.chars().count() >= TRAKT_MIN_CHARS && core.trakt_search_ready();
+    let mut top: Option<(RowState, Vec<Tile>)> =
+        top_pending.then(|| (RowState::Loading, Vec::new()));
+    let publish = |top: &Option<(RowState, Vec<Tile>)>, rows: &[(RowState, Vec<Tile>)]| {
         snapshot.set(SearchSnapshot {
             query: query.clone(),
-            rows: render(&slots, rows),
+            rows: render(top.as_ref(), &slots, rows),
             recent: Vec::new(),
         })
     };
-    publish(&rows);
+    publish(&top, &rows);
+    let top_work = tokio::time::timeout(HARD_DEADLINE, top_results(&core, &query, &key));
+    tokio::pin!(top_work);
     let mut calls = JoinSet::new();
     for (index, slot) in slots.iter().cloned().enumerate() {
         let client = core.addons().clone();
@@ -246,21 +265,85 @@ async fn run(core: Core, query: String, snapshot: SharedObservable<SearchSnapsho
     tokio::pin!(soft);
     let mut soft_fired = false;
     loop {
+        if calls.is_empty() && !top_pending {
+            break;
+        }
         tokio::select! {
-            joined = calls.join_next() => {
-                let Some(joined) = joined else { break };
+            Some(joined) = calls.join_next(), if !calls.is_empty() => {
                 let Ok((index, result)) = joined else { continue };
                 rows[index] = outcome(result, &query);
-                publish(&rows);
+                publish(&top, &rows);
+            }
+            found = &mut top_work, if top_pending => {
+                top_pending = false;
+                // A source that failed leaves the row out: search then
+                // looks as it does without it.
+                top = found.ok().flatten().map(|tiles| (RowState::Ready, tiles));
+                publish(&top, &rows);
             }
             _ = &mut soft, if !soft_fired => {
                 soft_fired = true;
-                for row in rows.iter_mut().filter(|r| r.0 == RowState::Loading) {
+                for row in rows.iter_mut().chain(top.as_mut()).filter(|r| r.0 == RowState::Loading) {
                     row.0 = RowState::Slow;
                 }
-                publish(&rows);
+                publish(&top, &rows);
             }
         }
+    }
+}
+
+/// "Top results": the titles Trakt names for the query, led as `lead`
+/// picks, each read through the installed meta addons (an id none of them
+/// knows is left out). None when Trakt gave nothing. Trakt is asked only
+/// once the text has rested `TRAKT_SETTLE`, unless memory holds a fresh
+/// answer.
+async fn top_results(core: &Core, query: &str, key: &str) -> Option<Vec<Tile>> {
+    let hits = match core.trakt_titles_held(key) {
+        Some(hits) => hits,
+        None => {
+            tokio::time::sleep(TRAKT_SETTLE.saturating_sub(DEBOUNCE)).await;
+            core.trakt_titles(query, key).await?
+        }
+    };
+    let metas = futures_util::future::join_all(
+        lead(&hits, key)
+            .into_iter()
+            .map(|hit| async move { core.fetch_meta(hit.kind, &hit.imdb_id).await }),
+    )
+    .await;
+    Some(
+        metas
+            .into_iter()
+            .filter_map(Result::ok)
+            .map(|(meta, _)| tile_from_preview(meta.preview))
+            .collect(),
+    )
+}
+
+/// What "Top results" leads with: the titles named exactly the query, then
+/// those whose name starts with it, in Trakt's order, at most `TOP_TILES`;
+/// with none of them, Trakt's first hit (a title typed in another language
+/// or misspelt).
+fn lead(hits: &[Found], key: &str) -> Vec<Found> {
+    let named = |exact: bool| {
+        hits.iter().filter(move |hit| {
+            let name = fold(&hit.title);
+            if exact {
+                name == key
+            } else {
+                name != key && name.starts_with(key)
+            }
+        })
+    };
+    let led: Vec<Found> = named(true)
+        .chain(named(false))
+        .take(TOP_TILES)
+        .cloned()
+        .collect();
+    if led.is_empty() {
+        hits.iter().take(1).cloned().collect()
+    } else {
+        led
     }
 }
 
@@ -291,11 +374,28 @@ fn outcome(
     }
 }
 
-/// Rows in slot order with titles already shown above removed; rows left
-/// with nothing are dropped.
-fn render(slots: &[Slot], rows: &[(RowState, Vec<Tile>)]) -> Vec<HomeRow> {
+/// "Top results" first, then the rows in slot order, with titles already
+/// shown above removed; rows left with nothing are dropped.
+fn render(
+    top: Option<&(RowState, Vec<Tile>)>,
+    slots: &[Slot],
+    rows: &[(RowState, Vec<Tile>)],
+) -> Vec<HomeRow> {
     let mut seen = HashSet::new();
-    slots
+    let top = top
+        .map(|(state, tiles)| HomeRow {
+            row_id: TOP_ROW_ID.into(),
+            title: "Top results".into(),
+            source: "Trakt".into(),
+            state: state.clone(),
+            tiles: tiles
+                .iter()
+                .filter(|t| seen.insert(t.id.clone()))
+                .cloned()
+                .collect(),
+        })
+        .filter(|row| !(row.state == RowState::Ready && row.tiles.is_empty()));
+    let addons: Vec<HomeRow> = slots
         .iter()
         .zip(rows)
         .filter_map(|(slot, (state, tiles))| {
@@ -315,7 +415,8 @@ fn render(slots: &[Slot], rows: &[(RowState, Vec<Tile>)]) -> Vec<HomeRow> {
                 tiles,
             })
         })
-        .collect()
+        .collect();
+    top.into_iter().chain(addons).collect()
 }
 
 /// The counted titles whose name or other names hold the folded query, a
@@ -352,10 +453,49 @@ fn kids_matches(core: &Core, query: &str) -> Vec<HomeRow> {
 }
 
 /// Lowercase letters and digits only, words joined by single spaces.
-fn fold(text: &str) -> String {
+pub(crate) fn fold(text: &str) -> String {
     text.to_lowercase()
         .split(|c: char| !c.is_alphanumeric())
         .filter(|w| !w.is_empty())
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hit(title: &str) -> Found {
+        Found {
+            kind: "movie",
+            imdb_id: format!("tt-{title}"),
+            title: title.into(),
+        }
+    }
+
+    fn titles(found: Vec<Found>) -> Vec<String> {
+        found.into_iter().map(|f| f.title).collect()
+    }
+
+    /// Exact names first, then names that start with the query, in Trakt's
+    /// order, at most five; with neither, Trakt's first hit alone.
+    #[test]
+    fn the_lead_is_exact_names_then_prefixes_else_the_first_hit() {
+        let hits = [
+            "Sintel Rising",
+            "Interstellar",
+            "Sintel",
+            "Sintel: 2",
+            "The Sintel",
+        ]
+        .map(hit);
+        assert_eq!(
+            titles(lead(&hits, "sintel")),
+            ["Sintel", "Sintel Rising", "Sintel: 2"]
+        );
+        assert_eq!(titles(lead(&hits, "money heist")), ["Sintel Rising"]);
+        assert!(lead(&[], "sintel").is_empty());
+        let many: Vec<Found> = (0..8).map(|i| hit(&format!("Dune {i}"))).collect();
+        assert_eq!(lead(&many, "dune").len(), TOP_TILES);
+    }
 }

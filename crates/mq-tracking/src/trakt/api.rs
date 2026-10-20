@@ -47,6 +47,13 @@ pub enum Answer {
     },
 }
 
+impl Answer {
+    /// Trakt asked to slow down (429, its own or Cloudflare's).
+    pub fn throttled(&self) -> bool {
+        matches!(self, Answer::Transient { reason, .. } if reason == "status 429")
+    }
+}
+
 impl std::fmt::Debug for Answer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -122,6 +129,13 @@ impl Api {
     pub async fn auth(&self, path: &str, body: &Value) -> Answer {
         let url = format!("{}{path}", self.hosts.auth);
         self.send(Method::POST, &url, Some(body), None).await
+    }
+
+    /// A read outside every account's pacing (title search). With a token
+    /// it counts against that user's limit, without one against the app's.
+    pub async fn read(&self, path: &str, token: Option<&str>) -> Answer {
+        let url = format!("{}{path}", self.hosts.api);
+        self.send(Method::GET, &url, None, token).await
     }
 
     pub async fn get(&self, gate: &Gate, path: &str, token: &str) -> Answer {
@@ -238,6 +252,25 @@ fn transient(reason: &str, retry_after: Option<Duration>) -> Answer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A 429 reads as throttled, with its wait; a 5xx is only transient.
+    #[test]
+    fn a_429_reads_as_throttled() {
+        let status = |status: u16| {
+            classify(Err(HttpError::Status {
+                status,
+                body: Default::default(),
+                retry_after: Some(Duration::from_secs(90)),
+            }))
+        };
+        assert!(status(429).throttled());
+        assert!(matches!(
+            status(429),
+            Answer::Transient { retry_after: Some(d), .. } if d == Duration::from_secs(90)
+        ));
+        assert!(!status(503).throttled());
+        assert!(!status(404).throttled());
+    }
 
     #[tokio::test(start_paused = true)]
     async fn writes_and_reads_keep_their_gaps() {

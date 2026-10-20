@@ -6,6 +6,7 @@ mod login;
 mod map;
 mod pull;
 mod scrobble;
+mod search;
 
 pub use login::{TraktLoginSnapshot, TraktLoginView};
 pub use pull::TraktReport;
@@ -150,6 +151,8 @@ pub(crate) struct Trakt {
     /// of another name is from a process that is gone.
     boot: String,
     sessions: AtomicU64,
+    /// Title search answers for the search page (`search.rs`).
+    search: Mutex<search::Memory>,
     /// Cancelled when the device's runtime goes: every worker, scheduler
     /// and sign-in ends, and the tokens leave memory with them.
     shutdown: CancellationToken,
@@ -222,6 +225,7 @@ impl Trakt {
             shutdown: CancellationToken::new(),
             boot: bytes.iter().map(|b| format!("{b:02x}")).collect(),
             sessions: AtomicU64::new(0),
+            search: Mutex::default(),
         })
     }
 

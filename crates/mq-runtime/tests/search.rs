@@ -1,7 +1,8 @@
 use mq_library::AddonRow;
-use mq_runtime::{Core, RowState, SearchView};
-use std::sync::Arc;
+use mq_runtime::views::search::{SearchSnapshot, TOP_ROW_ID};
+use mq_runtime::{Core, RowState, SearchView, TraktConfig, TraktHosts};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -143,4 +144,284 @@ async fn an_open_search_picks_up_a_new_addon() {
     }
     assert!(rows(2), "{:?}", view.snapshot());
     assert_eq!(view.snapshot().query, "sintel");
+}
+
+/// A search and meta addon: its search answers `ids` (named by `names`), its
+/// meta answers any id named there.
+async fn meta_addon(
+    ids: &'static [&'static str],
+    names: &'static [(&'static str, &'static str)],
+) -> AddonRow {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let name = |id: &str| {
+        names
+            .iter()
+            .find(|(i, _)| *i == id)
+            .map_or(id, |(_, n)| *n)
+            .to_owned()
+    };
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let mut buf = [0u8; 2048];
+            let n = socket.read(&mut buf).await.unwrap_or(0);
+            let head = String::from_utf8_lossy(&buf[..n]).into_owned();
+            let path = head
+                .split_whitespace()
+                .nth(1)
+                .unwrap_or_default()
+                .to_owned();
+            let body = if let Some(rest) = path.strip_prefix("/meta/") {
+                let id = rest
+                    .split('/')
+                    .nth(1)
+                    .unwrap_or_default()
+                    .trim_end_matches(".json");
+                serde_json::json!({"meta": {"id": id, "type": "movie", "name": name(id)}})
+            } else {
+                let metas: Vec<_> = ids
+                    .iter()
+                    .map(|id| serde_json::json!({"id": id, "type": "movie", "name": name(id)}))
+                    .collect();
+                serde_json::json!({ "metas": metas })
+            }
+            .to_string();
+            let reply = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = socket.write_all(reply.as_bytes()).await;
+        }
+    });
+    let manifest = serde_json::json!({
+        "id": "meta", "version": "1.0.0", "name": "Meta", "types": ["movie"],
+        "resources": ["catalog", "meta"], "idPrefixes": ["tt"],
+        "catalogs": [{"type": "movie", "id": "top", "extra": [{"name": "search", "isRequired": true}]}]
+    });
+    AddonRow {
+        transport_url: format!("http://{addr}/manifest.json"),
+        manifest_json: manifest.to_string(),
+        position: 0,
+        enabled: true,
+        allow_private: true,
+    }
+}
+
+/// A Trakt host answering every search with `status` and `body`; returns its
+/// base and the queries it was sent.
+async fn trakt(status: &'static str, body: &'static str) -> (String, Arc<Mutex<Vec<String>>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let queries = Arc::new(Mutex::new(Vec::new()));
+    let sent = queries.clone();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let mut buf = [0u8; 2048];
+            let n = socket.read(&mut buf).await.unwrap_or(0);
+            let head = String::from_utf8_lossy(&buf[..n]).into_owned();
+            let query = head
+                .split_whitespace()
+                .nth(1)
+                .and_then(|p| p.split("query=").nth(1))
+                .map(|q| q.split('&').next().unwrap_or_default().to_owned())
+                .unwrap_or_default();
+            sent.lock().unwrap().push(query);
+            let reply = format!(
+                "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = socket.write_all(reply.as_bytes()).await;
+        }
+    });
+    (base, queries)
+}
+
+fn with_trakt(core: &Core, base: &str) {
+    core.set_trakt_config(Some(TraktConfig {
+        client_id: "client".into(),
+        redirect_uri: "https://marquee.example/trakt".into(),
+        hosts: TraktHosts {
+            api: base.into(),
+            auth: base.into(),
+            local: true,
+        },
+    }));
+}
+
+const TRAKT_SINTEL: &str = r#"[
+  {"type":"movie","movie":{"title":"Sintel","year":2010,"ids":{"imdb":"tt1727587"}}},
+  {"type":"movie","movie":{"title":"Interstellar","year":2014,"ids":{"imdb":"tt0816692"}}}
+]"#;
+
+/// Waits until nothing is loading for `query` and `done` holds.
+async fn settled(
+    view: &SearchView,
+    query: &str,
+    done: impl Fn(&SearchSnapshot) -> bool,
+) -> SearchSnapshot {
+    for _ in 0..500 {
+        let s = view.snapshot();
+        if s.query == query
+            && !s.rows.is_empty()
+            && s.rows.iter().all(|r| r.state == RowState::Ready)
+            && done(&s)
+        {
+            return s;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("not settled: {:?}", view.snapshot());
+}
+
+/// plans/search-quality.md: "Top results" leads with the title Cinemeta's
+/// search misses, the addon row below does not repeat it, and Trakt hears
+/// only text that rested 400 ms and holds 2 or more characters.
+#[tokio::test]
+async fn top_results_lead_with_the_title_the_addons_miss() {
+    let core = Core::temporary("p").unwrap();
+    let addon = meta_addon(
+        &["tt2", "tt1727587"],
+        &[("tt1727587", "Sintel"), ("tt2", "Santee")],
+    )
+    .await;
+    core.library()
+        .set_addons(core.profile(), &[addon], &core.hlc())
+        .unwrap();
+    let (base, sent) = trakt("200 OK", TRAKT_SINTEL).await;
+    with_trakt(&core, &base);
+    let view = SearchView::open(&core);
+    view.set_query("s");
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    view.set_query("sin");
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    view.set_query("sintel");
+    let s = settled(&view, "sintel", |s| s.rows[0].row_id == TOP_ROW_ID).await;
+    assert_eq!(
+        *sent.lock().unwrap(),
+        ["sintel"],
+        "one character, and text that did not rest, are not sent"
+    );
+    assert_eq!(s.rows[0].title, "Top results");
+    let ids: Vec<Vec<&str>> = s
+        .rows
+        .iter()
+        .map(|r| r.tiles.iter().map(|t| t.id.as_str()).collect())
+        .collect();
+    assert_eq!(ids, vec![vec!["tt1727587"], vec!["tt2"]]);
+    assert_eq!(s.rows[0].tiles[0].name, "Sintel");
+}
+
+/// Trakt failing (500, 429) changes nothing on screen: no row, no failure.
+#[tokio::test]
+async fn a_failing_trakt_leaves_search_as_it_was() {
+    for status in ["500 Internal Server Error", "429 Too Many Requests"] {
+        let core = Core::temporary("p").unwrap();
+        let addon = meta_addon(&["tt2"], &[("tt2", "Santee")]).await;
+        core.library()
+            .set_addons(core.profile(), &[addon], &core.hlc())
+            .unwrap();
+        let (base, sent) = trakt(status, "{}").await;
+        with_trakt(&core, &base);
+        let view = SearchView::open(&core);
+        view.set_query("sintel");
+        let s = settled(&view, "sintel", |_| !sent.lock().unwrap().is_empty()).await;
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        let s2 = view.snapshot();
+        assert_eq!(s2, s, "{status}");
+        let rows: Vec<&str> = s.rows.iter().map(|r| r.row_id.as_str()).collect();
+        assert_eq!(rows, ["meta:movie:top"], "{status}");
+    }
+}
+
+/// The 30 queries of plans/search-quality.md, [kind, query, accepted ids].
+const QUERIES: [(&str, &str, &[&str]); 30] = [
+    ("exact", "Sintel", &["tt1727587"]),
+    ("exact", "Up", &["tt1049413"]),
+    ("exact", "Dune", &["tt1160419", "tt0087182"]),
+    ("exact", "Heat", &["tt0113277"]),
+    ("exact", "Her", &["tt1798709"]),
+    ("exact", "Big Buck Bunny", &["tt1254207"]),
+    ("exact", "Tears of Steel", &["tt2285752"]),
+    ("exact", "Severance", &["tt11280740"]),
+    ("exact", "Breaking Bad", &["tt0903747"]),
+    ("exact", "The Office", &["tt0386676", "tt0290978"]),
+    ("prefix", "interst", &["tt0816692"]),
+    ("prefix", "breaking b", &["tt0903747"]),
+    ("prefix", "game of thr", &["tt0944947"]),
+    ("prefix", "oppenh", &["tt15398776"]),
+    ("prefix", "the godf", &["tt0068646"]),
+    ("prefix", "succes", &["tt7660850"]),
+    ("non-English", "Amélie", &["tt0211915"]),
+    (
+        "non-English",
+        "Le fabuleux destin d'Amélie Poulain",
+        &["tt0211915"],
+    ),
+    ("non-English", "La casa de papel", &["tt6468322"]),
+    ("non-English", "Gisaengchung", &["tt6751668"]),
+    ("non-English", "Kış Uykusu", &["tt2758880"]),
+    ("non-English", "Das Boot", &["tt0082096"]),
+    ("anime", "Attack on Titan", &["tt2560140"]),
+    ("anime", "Shingeki no Kyojin", &["tt2560140"]),
+    ("anime", "Spirited Away", &["tt0245429"]),
+    ("anime", "Frieren", &["tt22248376"]),
+    ("typo", "intersteller", &["tt0816692"]),
+    ("typo", "brekaing bad", &["tt0903747"]),
+    ("typo", "godfater", &["tt0068646"]),
+    ("typo", "sintell", &["tt1727587"]),
+];
+
+/// Live: the 30 queries through the core with Cinemeta installed and the
+/// build's Trakt app; prints whether the first tile on screen is the wanted
+/// title, and how long each search took to settle. Build with
+/// MARQUEE_TRAKT_CLIENT_ID and MARQUEE_TRAKT_REDIRECT_URI set.
+#[tokio::test]
+#[ignore = "network and the build's Trakt app"]
+async fn live_first_tile_over_thirty_queries() {
+    let core = Core::temporary("p").unwrap();
+    core.install_addon("https://v3-cinemeta.strem.io/manifest.json")
+        .await
+        .unwrap();
+    let view = SearchView::open(&core);
+    let (mut right, mut top_rows, mut times) = (0, 0, Vec::new());
+    for (kind, query, want) in QUERIES {
+        let started = std::time::Instant::now();
+        view.set_query(query);
+        let mut s = view.snapshot();
+        for _ in 0..2000 {
+            s = view.snapshot();
+            let busy = s
+                .rows
+                .iter()
+                .any(|r| matches!(r.state, RowState::Loading | RowState::Slow));
+            if s.query == query && !s.rows.is_empty() && !busy {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        let ms = started.elapsed().as_millis() as u64;
+        let first = s.rows.first().and_then(|r| r.tiles.first());
+        let ok = first.is_some_and(|t| want.contains(&t.id.as_str()));
+        let top = s.rows.first().is_some_and(|r| r.row_id == TOP_ROW_ID);
+        right += usize::from(ok);
+        top_rows += usize::from(top);
+        times.push(ms);
+        eprintln!(
+            "{kind:12} {query:38} {ms:6} ms first {} {} (top row {top})",
+            if ok { "right" } else { "wrong" },
+            first.map_or("none".into(), |t| format!("{} {}", t.name, t.id))
+        );
+        view.set_query("");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    times.sort_unstable();
+    let p = |q: f64| times[((q * times.len() as f64).ceil() as usize).max(1) - 1];
+    println!(
+        "{}",
+        serde_json::json!({
+            "first_right": right, "of": QUERIES.len(), "top_row": top_rows,
+            "settled_p50_ms": p(0.5), "settled_p90_ms": p(0.9), "settled_max_ms": p(1.0)
+        })
+    );
+    assert!(top_rows > 0, "no top row: is the build's Trakt app set?");
 }
