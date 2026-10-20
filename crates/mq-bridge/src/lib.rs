@@ -1427,6 +1427,12 @@ impl Session {
                     .and_then(Value::as_bool)
                     .unwrap_or(false);
                 playback.report_progress(ms("positionMs")?, ms("durationMs")?, paused);
+                // A film playing on (Picture in Picture, audio behind a
+                // locked screen) is not time away (Apple journey review r2
+                // P2-A): each report while it plays restarts the away clock.
+                if !paused && self.background_ms.is_some() {
+                    self.background_ms = Some(mq_library::hlc::now_ms());
+                }
             }
             (View::Playback(playback), "duration") => {
                 let duration_ms = command
@@ -1929,6 +1935,49 @@ mod lifecycle {
             .handle_text(&json!({"id": 2, "op": "lifecycle", "event": "sleep"}).to_string())
             .await;
         assert_eq!(rx.recv().await.unwrap().json()["ok"], false);
+    }
+
+    /// Apple journey review r2 P2-A: forty minutes in the background with a
+    /// film playing (reports with `paused` false) is no time away; the same
+    /// with the film paused is, and locks.
+    #[tokio::test]
+    async fn a_film_playing_in_the_background_is_no_time_away() {
+        let core = Core::temporary(mq_library::OWNER).unwrap();
+        core.set_pin(mq_library::OWNER, Some("1357"), None)
+            .await
+            .unwrap();
+        let playback = PlaybackView::open(&core, Vec::new(), PlayTarget::default());
+        let (tx, mut rx) = Output::channel();
+        let mut session = Session::new(core, tx);
+        let unlock = json!({"id": 1, "op": "unlockProfile", "pin": "1357"});
+        session.handle_text(&unlock.to_string()).await;
+        assert_eq!(rx.recv().await.unwrap().json()["ok"], true);
+        lock(&session.shared).subs.insert(
+            7,
+            Subscription {
+                view: View::Playback(playback),
+                forward: tokio::spawn(async {}),
+            },
+        );
+        for (paused, locks) in [(false, false), (true, true)] {
+            let background = json!({"id": 2, "op": "lifecycle", "event": "background"});
+            session.handle_text(&background.to_string()).await;
+            assert_eq!(rx.recv().await.unwrap().json()["ok"], true);
+            let at = session.background_ms.unwrap();
+            session.background_ms = Some(at - 40 * 60_000);
+            let report = json!({"id": 3, "op": "command", "sub": 7, "command":
+                {"type": "progress", "positionMs": 60_000, "durationMs": 888_000, "paused": paused}});
+            session.handle_text(&report.to_string()).await;
+            assert_eq!(
+                rx.recv().await.unwrap().json()["ok"],
+                true,
+                "paused {paused}"
+            );
+            let foreground = json!({"id": 4, "op": "lifecycle", "event": "foreground"});
+            session.handle_text(&foreground.to_string()).await;
+            assert_eq!(rx.recv().await.unwrap().json()["ok"], true);
+            assert_eq!(lock(&session.shared).locked, locks, "paused {paused}");
+        }
     }
 
     /// Journey review 2026-10-20 (Android P2-8): a PIN profile back after
