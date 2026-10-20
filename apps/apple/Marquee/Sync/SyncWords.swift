@@ -287,6 +287,7 @@ struct SyncProblem: Equatable {
         case "notJoined": return "This device has not joined a sync account yet."
         case "unsent": return "Some changes have not been sent yet. Sync again first, or stop anyway and they stay only here."
         case "insecure": return "The sync server address must start with https."
+        case "kitUnknown": return SyncWords.wrongKit
         // The app's own: the Keychain kept a new record from it, so nothing is sent until it is stored.
         case "storage": return "This device could not store the sync account's key, so sync is paused. Free some storage, then sync again."
         case "unconfirmed":

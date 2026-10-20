@@ -13,11 +13,12 @@ import Testing
 }
 
 @Test func everySyncCodeHasPlainWords() {
-    for code in ["dropped", "fork", "wrongRelay", "relayBehind", "notJoined", "unsent", "insecure"] {
+    for code in ["dropped", "fork", "wrongRelay", "relayBehind", "notJoined", "unsent", "insecure", "kitUnknown"] {
         let words = SyncProblem(code: code, message: "raw").words
         #expect(words != "raw", "no words for \(code)")
         #expect(!words.contains(code), "\(code) leaks into the words")
     }
+    #expect(SyncProblem(code: "kitUnknown", message: "raw", action: .recover).words == SyncWords.wrongKit)
     // Anything else may name the server's address: it reads as no answer.
     #expect(SyncProblem(code: nil, message: "the relay said no").words.hasPrefix("The sync server did not answer"))
     // A transport error never shows its raw text and URL.
