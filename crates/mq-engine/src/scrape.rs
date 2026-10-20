@@ -30,8 +30,10 @@ pub struct TrackerTrace {
     pub tracker: String,
     /// The name resolved (UDP; an HTTP tracker resolves inside its request).
     pub resolved_ms: Option<u64>,
-    /// The BEP 15 connect answered.
+    /// The BEP 15 connect answered, or a kept connection id was taken.
     pub connected_ms: Option<u64>,
+    /// A kept BEP 15 connection id was used.
+    pub reused: bool,
     /// The counts came.
     pub answered_ms: Option<u64>,
     /// Why it gave up before the budget, when it did.
@@ -65,12 +67,39 @@ const PER_PACKET: usize = 70;
 /// An HTTP scrape answer larger than this is not a scrape answer.
 const MAX_ANSWER: usize = 64 * 1024;
 const PROTOCOL_ID: u64 = 0x41727101980;
+/// A BEP 15 datagram goes again after this long without its answer.
+const RESEND: Duration = Duration::from_millis(250);
+/// Sends of one BEP 15 datagram at most: the first and two more.
+const SENDS: u32 = 3;
+/// How long a tracker's resolved addresses stand (checked again on use).
+const ADDRESS_KEEP: Duration = Duration::from_secs(5 * 60);
+/// How long a BEP 15 connection id is used: BEP 15 lets a client use one
+/// for a minute.
+const CONNECTION_KEEP: Duration = Duration::from_secs(60);
+/// A warm-up gives up after this long.
+const WARM_BUDGET: Duration = Duration::from_secs(3);
 
 pub(crate) struct Scraper {
-    scope: AddressScope,
-    http: reqwest::Client,
+    reach: Reach,
     kept: Mutex<HashMap<String, (Instant, SwarmCount)>>,
     last: Mutex<Vec<TrackerTrace>>,
+}
+
+/// What a tracker call needs: the policy, the HTTP client, and what each
+/// tracker left from earlier calls.
+#[derive(Clone)]
+struct Reach {
+    scope: AddressScope,
+    http: reqwest::Client,
+    trackers: Arc<Mutex<HashMap<String, Kept>>>,
+}
+
+/// A tracker's resolved addresses and BEP 15 connection id, kept between
+/// calls so a later scrape skips the lookup and the connect.
+#[derive(Clone, Default)]
+struct Kept {
+    addrs: Option<(Instant, Vec<SocketAddr>)>,
+    conn: Option<(Instant, SocketAddr, u64)>,
 }
 
 impl Scraper {
@@ -86,11 +115,38 @@ impl Scraper {
             .build()
             .unwrap_or_default();
         Self {
-            scope,
-            http,
+            reach: Reach {
+                scope,
+                http,
+                trackers: Arc::default(),
+            },
             kept: Mutex::default(),
             last: Mutex::default(),
         }
+    }
+
+    /// Resolves `trackers` and makes each UDP one's BEP 15 connect, so a
+    /// scrape soon after costs one round trip (a title's page opened before
+    /// its versions are asked for).
+    pub async fn warm(&self, trackers: &[&str]) {
+        let mut set = JoinSet::new();
+        for t in trackers {
+            let (reach, t) = (self.reach.clone(), (*t).to_owned());
+            set.spawn(async move {
+                let Ok(url) = mq_http::Url::parse(&t) else {
+                    return;
+                };
+                let addrs = addresses(&reach, &url).await;
+                if url.scheme() == "udp"
+                    && !addrs.is_empty()
+                    && kept_conn(&reach, url.as_str(), &addrs).is_none()
+                {
+                    let _ = connect(&reach, url.as_str(), &addrs).await;
+                }
+            });
+        }
+        let all = async { while set.join_next().await.is_some() {} };
+        let _ = tokio::time::timeout(WARM_BUDGET, all).await;
     }
 
     /// Each tracker's stages in the last call that asked any.
@@ -137,7 +193,7 @@ impl Scraper {
         let mut asks = JoinSet::new();
         let mut traces = Vec::new();
         for (tracker, hashes) in by_tracker {
-            let (scope, http) = (self.scope.clone(), self.http.clone());
+            let reach = self.reach.clone();
             let trace = Trace {
                 t0: now,
                 to: Arc::new(Mutex::new(TrackerTrace {
@@ -147,7 +203,7 @@ impl Scraper {
             };
             traces.push(trace.to.clone());
             asks.spawn(async move {
-                let counts = ask(&scope, &http, &tracker, &hashes, &trace).await;
+                let counts = ask(&reach, &tracker, &hashes, &trace).await;
                 (tracker, counts)
             });
         }
@@ -199,8 +255,7 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 /// One tracker's counts for `hashes`; nothing when it is refused, silent or
 /// unreadable.
 async fn ask(
-    scope: &AddressScope,
-    http: &reqwest::Client,
+    reach: &Reach,
     tracker: &str,
     hashes: &[String],
     trace: &Trace,
@@ -217,8 +272,8 @@ async fn ask(
         return trace.fail("no hex info hash").unwrap_or_default();
     }
     let counts = match url.scheme() {
-        "udp" => udp(scope, &url, &ids, trace).await,
-        "http" | "https" => over_http(scope, http, &url, &ids, trace).await,
+        "udp" => udp(reach, &url, &ids, trace).await,
+        "http" | "https" => over_http(&reach.scope, &reach.http, &url, &ids, trace).await,
         _ => trace.fail("no scrape for this scheme"),
     };
     if counts.is_some() {
@@ -238,16 +293,100 @@ fn id(hash: &str) -> Option<[u8; 20]> {
     (hash.len() == 40).then_some(out)
 }
 
-/// The tracker's address: a literal must pass the scope, a name resolves
-/// through it (only permitted answers come back).
-async fn address(scope: &AddressScope, url: &mq_http::Url) -> Option<SocketAddr> {
-    let port = url.port()?;
+/// The tracker's addresses, IPv4 first: a literal must pass the scope; a
+/// name resolves through it (only permitted answers come back) and is kept
+/// for `ADDRESS_KEEP`, each kept address checked again on use, since the
+/// policy follows the network.
+async fn addresses(reach: &Reach, url: &mq_http::Url) -> Vec<SocketAddr> {
+    let Some(port) = url.port() else {
+        return Vec::new();
+    };
     if let Some(ip) = literal(url) {
-        return scope.permits(ip).then_some(SocketAddr::new(ip, port));
+        return if reach.scope.permits(ip) {
+            vec![SocketAddr::new(ip, port)]
+        } else {
+            Vec::new()
+        };
     }
-    let name = reqwest::dns::Name::from_str(url.host_str()?).ok()?;
-    let mut found = scope.resolver().resolve(name).await.ok()?;
-    found.next().map(|a| SocketAddr::new(a.ip(), port))
+    let key = url.as_str();
+    let kept = lock(&reach.trackers).get(key).and_then(|k| k.addrs.clone());
+    if let Some((at, addrs)) = kept
+        && at.elapsed() < ADDRESS_KEEP
+    {
+        let still: Vec<SocketAddr> = addrs
+            .into_iter()
+            .filter(|a| reach.scope.permits(a.ip()))
+            .collect();
+        if !still.is_empty() {
+            return still;
+        }
+    }
+    let Some(name) = url
+        .host_str()
+        .and_then(|h| reqwest::dns::Name::from_str(h).ok())
+    else {
+        return Vec::new();
+    };
+    let Ok(found) = reach.scope.resolver().resolve(name).await else {
+        return Vec::new();
+    };
+    let mut addrs: Vec<SocketAddr> = found.map(|a| SocketAddr::new(a.ip(), port)).collect();
+    addrs.sort_by_key(SocketAddr::is_ipv6);
+    lock(&reach.trackers)
+        .entry(key.to_owned())
+        .or_default()
+        .addrs = Some((Instant::now(), addrs.clone()));
+    addrs
+}
+
+/// The tracker's kept connection id while it stands, with the address it
+/// came from when that is still one of `addrs`.
+fn kept_conn(reach: &Reach, key: &str, addrs: &[SocketAddr]) -> Option<(SocketAddr, u64)> {
+    let kept = lock(&reach.trackers).get(key)?.conn?;
+    let (at, to, conn) = kept;
+    (at.elapsed() < CONNECTION_KEEP && addrs.contains(&to)).then_some((to, conn))
+}
+
+/// A UDP socket for `to`'s family.
+async fn bind(to: SocketAddr) -> Option<UdpSocket> {
+    let local: SocketAddr = match to {
+        SocketAddr::V4(_) => (std::net::Ipv4Addr::UNSPECIFIED, 0).into(),
+        SocketAddr::V6(_) => (std::net::Ipv6Addr::UNSPECIFIED, 0).into(),
+    };
+    UdpSocket::bind(local).await.ok()
+}
+
+/// BEP 15 connect to each of `addrs` in turn (half a second each while
+/// another is left): the socket, the address that answered and its
+/// connection id, which is kept for `CONNECTION_KEEP`.
+async fn connect(
+    reach: &Reach,
+    key: &str,
+    addrs: &[SocketAddr],
+) -> Option<(UdpSocket, SocketAddr, u64)> {
+    for (i, &to) in addrs.iter().enumerate() {
+        let Some(socket) = bind(to).await else {
+            continue;
+        };
+        let t = rand_u32();
+        let mut packet = PROTOCOL_ID.to_be_bytes().to_vec();
+        packet.extend(0u32.to_be_bytes());
+        packet.extend(t.to_be_bytes());
+        let slice = (i + 1 < addrs.len()).then_some(2 * RESEND);
+        let Some(answer) = exchange(&socket, to, &packet, 0, t, slice).await else {
+            continue;
+        };
+        let Some(conn) = answer.get(8..16).and_then(|b| b.try_into().ok()) else {
+            continue;
+        };
+        let conn = u64::from_be_bytes(conn);
+        lock(&reach.trackers)
+            .entry(key.to_owned())
+            .or_default()
+            .conn = Some((Instant::now(), to, conn));
+        return Some((socket, to, conn));
+    }
+    None
 }
 
 /// The URL's host when it is an address, not a name.
@@ -260,45 +399,70 @@ fn literal(url: &mq_http::Url) -> Option<IpAddr> {
     bare.parse().ok()
 }
 
-/// BEP 15: a connect, then one scrape per 70 hashes, each answer taken only
-/// from the tracker's own address with the transaction id asked.
+/// BEP 15: a connect (skipped while a kept connection id stands), then one
+/// scrape per 70 hashes, each answer taken only from the tracker's own
+/// address with the transaction id asked. A kept id the tracker no longer
+/// takes is dropped and the connect made again.
 async fn udp(
-    scope: &AddressScope,
+    reach: &Reach,
     url: &mq_http::Url,
     ids: &[[u8; 20]],
     trace: &Trace,
 ) -> Option<Vec<SwarmCount>> {
-    let Some(to) = address(scope, url).await else {
+    let addrs = addresses(reach, url).await;
+    if addrs.is_empty() {
         return trace.fail("refused or not resolved");
-    };
+    }
     lock(&trace.to).resolved_ms = trace.ms();
-    let local: SocketAddr = match to {
-        SocketAddr::V4(_) => (std::net::Ipv4Addr::UNSPECIFIED, 0).into(),
-        SocketAddr::V6(_) => (std::net::Ipv6Addr::UNSPECIFIED, 0).into(),
-    };
-    let Ok(socket) = UdpSocket::bind(local).await else {
-        return trace.fail("no socket");
-    };
-    let tid = || rand_u32();
-    let t = tid();
-    let mut connect = PROTOCOL_ID.to_be_bytes().to_vec();
-    connect.extend(0u32.to_be_bytes());
-    connect.extend(t.to_be_bytes());
-    let Some(answer) = exchange(&socket, to, &connect, 0, t).await else {
-        return trace.fail("connect not sent or not received");
-    };
-    lock(&trace.to).connected_ms = trace.ms();
-    let conn = u64::from_be_bytes(answer.get(8..16)?.try_into().ok()?);
+    let key = url.as_str();
+    let mut reuse = kept_conn(reach, key, &addrs);
+    loop {
+        let reused = reuse.is_some();
+        let (socket, to, conn) = match reuse.take() {
+            Some((to, conn)) => match bind(to).await {
+                Some(socket) => (socket, to, conn),
+                None => return trace.fail("no socket"),
+            },
+            None => match connect(reach, key, &addrs).await {
+                Some(found) => found,
+                None => return trace.fail("connect not sent or not received"),
+            },
+        };
+        {
+            let mut t = lock(&trace.to);
+            t.connected_ms = trace.ms();
+            t.reused = reused;
+        }
+        // A kept id gets half a second before a fresh connect.
+        let slice = reused.then_some(2 * RESEND);
+        match scrape_all(&socket, to, conn, ids, slice).await {
+            Some(counts) => return Some(counts),
+            None if reused => {
+                if let Some(k) = lock(&reach.trackers).get_mut(key) {
+                    k.conn = None;
+                }
+            }
+            None => return trace.fail("scrape not sent or not received"),
+        }
+    }
+}
+
+/// The scrapes for `ids` over connection `conn`, 70 hashes a datagram.
+async fn scrape_all(
+    socket: &UdpSocket,
+    to: SocketAddr,
+    conn: u64,
+    ids: &[[u8; 20]],
+    slice: Option<Duration>,
+) -> Option<Vec<SwarmCount>> {
     let mut out = Vec::with_capacity(ids.len());
     for chunk in ids.chunks(PER_PACKET) {
-        let t = tid();
+        let t = rand_u32();
         let mut scrape = conn.to_be_bytes().to_vec();
         scrape.extend(2u32.to_be_bytes());
         scrape.extend(t.to_be_bytes());
         chunk.iter().for_each(|h| scrape.extend(h));
-        let Some(answer) = exchange(&socket, to, &scrape, 2, t).await else {
-            return trace.fail("scrape not sent or not received");
-        };
+        let answer = exchange(socket, to, &scrape, 2, t, slice).await?;
         for i in 0..chunk.len() {
             let at = 8 + 12 * i;
             let seeders = u32::from_be_bytes(answer.get(at..at + 4)?.try_into().ok()?);
@@ -309,27 +473,53 @@ async fn udp(
     Some(out)
 }
 
-/// Sends `packet` to `to` and waits for its answer: `action` and `tid` as
-/// asked, from `to` itself (another source is ignored).
+/// Sends `packet` to `to`, again every `RESEND` up to `SENDS` times, and
+/// waits for its answer: `action` and `tid` as asked, from `to` itself
+/// (another source is ignored). The tracker's error answer (action 3), or
+/// `slice` passing, ends it with nothing; without a slice the caller's
+/// budget ends it.
 async fn exchange(
     socket: &UdpSocket,
     to: SocketAddr,
     packet: &[u8],
     action: u32,
     tid: u32,
+    slice: Option<Duration>,
 ) -> Option<Vec<u8>> {
-    socket.send_to(packet, to).await.ok()?;
+    let start = tokio::time::Instant::now();
+    let end = slice.map(|s| start + s);
     let mut buf = vec![0u8; 2048];
-    loop {
-        let (n, from) = socket.recv_from(&mut buf).await.ok()?;
-        let answer = &buf[..n];
-        if from == to
-            && answer.get(0..4) == Some(&action.to_be_bytes()[..])
-            && answer.get(4..8) == Some(&tid.to_be_bytes()[..])
-        {
-            return Some(answer.to_vec());
+    for sent in 1..=SENDS {
+        socket.send_to(packet, to).await.ok()?;
+        let resend = (sent < SENDS).then(|| start + RESEND * sent);
+        let wake = match (resend, end) {
+            (Some(r), Some(e)) => Some(r.min(e)),
+            (r, e) => r.or(e),
+        };
+        loop {
+            let got = match wake {
+                Some(w) => match tokio::time::timeout_at(w, socket.recv_from(&mut buf)).await {
+                    Ok(got) => got,
+                    Err(_) => break,
+                },
+                None => socket.recv_from(&mut buf).await,
+            };
+            let (n, from) = got.ok()?;
+            let answer = &buf[..n];
+            if from != to || answer.get(4..8) != Some(&tid.to_be_bytes()[..]) {
+                continue;
+            }
+            match answer.get(0..4) {
+                Some(a) if a == action.to_be_bytes() => return Some(answer.to_vec()),
+                Some(a) if a == 3u32.to_be_bytes() => return None,
+                _ => {}
+            }
+        }
+        if end.is_some_and(|e| tokio::time::Instant::now() >= e) {
+            return None;
         }
     }
+    None
 }
 
 fn rand_u32() -> u32 {
@@ -523,5 +713,147 @@ mod tests {
         let (count, took) = timed(&tracker(None), &tracker(Some(0))).await;
         assert_eq!(count, seeders(0));
         assert!(took >= BUDGET, "a default's zero settled it: {took:?}");
+    }
+
+    use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+
+    const H1: &str = "1111111111111111111111111111111111111111";
+    const H2: &str = "2222222222222222222222222222222222222222";
+    const V4: IpAddr = IpAddr::V4(std::net::Ipv4Addr::LOCALHOST);
+
+    struct Fake {
+        url: String,
+        seen: Arc<AtomicUsize>,
+        id: Arc<AtomicU64>,
+    }
+
+    /// A BEP 15 tracker on `ip`, named `host` in its URL, counting `seeders`
+    /// for every hash. It drops its first `lose` datagrams, answers a scrape
+    /// on another connection id than its current one with an error, and
+    /// counts every datagram.
+    fn fake(ip: IpAddr, host: &str, seeders: u32, lose: usize) -> Fake {
+        let socket = std::net::UdpSocket::bind((ip, 0)).unwrap();
+        let port = socket.local_addr().unwrap().port();
+        let (seen, id) = (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicU64::new(7)));
+        let (got, current) = (seen.clone(), id.clone());
+        std::thread::spawn(move || {
+            let mut buf = [0u8; 2048];
+            while let Ok((n, from)) = socket.recv_from(&mut buf) {
+                if got.fetch_add(1, Ordering::SeqCst) < lose || n < 16 {
+                    continue;
+                }
+                let id = current.load(Ordering::SeqCst);
+                let mut answer = buf[8..16].to_vec();
+                if buf[8..12] == 0u32.to_be_bytes() {
+                    answer.extend(id.to_be_bytes());
+                } else if buf[..8] != id.to_be_bytes() {
+                    answer[..4].copy_from_slice(&3u32.to_be_bytes());
+                    answer.extend(b"bad connection id");
+                } else {
+                    for _ in 0..(n - 16) / 20 {
+                        answer.extend(seeders.to_be_bytes());
+                        answer.extend([0u8; 8]);
+                    }
+                }
+                let _ = socket.send_to(&answer, from);
+            }
+        });
+        Fake {
+            url: format!("udp://{host}:{port}/announce"),
+            seen,
+            id,
+        }
+    }
+
+    /// A scraper that may reach the loopback addresses these tests use.
+    fn loopback_scraper() -> Scraper {
+        let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+        let allowed: [IpAddr; 3] = [V4, "::1".parse().unwrap(), "127.0.0.3".parse().unwrap()];
+        Scraper::new(http.torrent_scope(&allowed))
+    }
+
+    /// One hash's count from `url` alone, and how long it took.
+    async fn one(s: &Scraper, url: &str, hash: &str) -> (Option<u32>, Duration) {
+        let started = Instant::now();
+        let counts = s
+            .scrape(&[(hash.to_owned(), vec![url.to_owned()])], &[])
+            .await;
+        (counts[0].map(|c| c.seeders), started.elapsed())
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_lost_datagram_is_sent_again() {
+        let f = fake(V4, "127.0.0.1", 4, 1);
+        let (count, took) = one(&loopback_scraper(), &f.url, H1).await;
+        assert_eq!(count, Some(4), "no answer after a lost connect");
+        assert!(took >= RESEND, "answered before any resend: {took:?}");
+        assert_eq!(f.seen.load(Ordering::SeqCst), 3, "lost, sent again, scrape");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_kept_connection_id_saves_the_connect() {
+        let (f, s) = (fake(V4, "127.0.0.1", 4, 0), loopback_scraper());
+        assert_eq!(one(&s, &f.url, H1).await.0, Some(4));
+        assert_eq!(f.seen.load(Ordering::SeqCst), 2, "connect and scrape");
+        assert_eq!(one(&s, &f.url, H2).await.0, Some(4));
+        assert_eq!(
+            f.seen.load(Ordering::SeqCst),
+            3,
+            "the second scrape connected again"
+        );
+        assert!(s.last()[0].reused, "the trace says it was reused");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_connection_id_the_tracker_dropped_is_made_again() {
+        let (f, s) = (fake(V4, "127.0.0.1", 4, 0), loopback_scraper());
+        assert_eq!(one(&s, &f.url, H1).await.0, Some(4));
+        f.id.store(8, Ordering::SeqCst); // the tracker restarted
+        let (count, took) = one(&s, &f.url, H2).await;
+        assert_eq!(count, Some(4), "no count after the tracker's error");
+        assert!(took < RESEND, "waited out the error answer: {took:?}");
+        assert_eq!(
+            f.seen.load(Ordering::SeqCst),
+            5,
+            "refused scrape, connect, scrape"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn every_address_is_tried_ipv4_first() {
+        let s = loopback_scraper();
+        let f = fake(V4, "both.scrape.test", 4, 0);
+        mq_http::test_dns::set("both.scrape.test", &["::1".parse().unwrap(), V4]);
+        let (count, took) = one(&s, &f.url, H1).await;
+        assert_eq!(count, Some(4));
+        assert!(took < RESEND, "IPv6 tried before IPv4: {took:?}");
+        let f = fake(V4, "dead-first.scrape.test", 5, 0);
+        mq_http::test_dns::set(
+            "dead-first.scrape.test",
+            &["127.0.0.3".parse().unwrap(), V4],
+        );
+        assert_eq!(
+            one(&s, &f.url, H2).await.0,
+            Some(5),
+            "the second address untried"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_slow_resolver_is_paid_once_by_the_warm_up() {
+        let s = loopback_scraper();
+        let f = fake(V4, "slow.scrape.test", 6, 0);
+        let slow = Duration::from_millis(700);
+        mq_http::test_dns::set_slow("slow.scrape.test", &[V4], slow);
+        let started = Instant::now();
+        s.warm(&[f.url.as_str()]).await;
+        assert!(started.elapsed() >= slow, "the warm-up did not resolve");
+        let (count, took) = one(&s, &f.url, H1).await;
+        assert_eq!(count, Some(6));
+        assert!(
+            took < RESEND,
+            "the scrape resolved or connected again: {took:?}"
+        );
+        assert!(s.last()[0].reused, "the warm-up's connection id unused");
     }
 }

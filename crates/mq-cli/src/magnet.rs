@@ -120,11 +120,12 @@ async fn timed_read(http: &HttpClient, url: &str, offset: u64, want: u64) -> Val
 
 /// `mq scrape`: one scrape on a fresh engine, as the app's first: its own
 /// temporary folder, the production address policy, the DHT and default
-/// trackers on, `wait_ms` after the start. Per hash its count; per tracker
-/// the stages it reached and the one the budget cut.
-pub async fn scrape(hashes: &[String], wait_ms: u64) -> Result<Value, String> {
+/// trackers on, `wait_ms` after the start, the trackers warmed from the
+/// start with `warm` (a title's page opened first). Per hash its count; per
+/// tracker the stages it reached and the one the budget cut.
+pub async fn scrape(hashes: &[String], wait_ms: u64, warm: bool) -> Result<Value, String> {
     let dir = std::env::temp_dir().join(format!("mq-scrape-{}", std::process::id()));
-    let result = scrape_in(&dir, hashes, wait_ms).await;
+    let result = scrape_in(&dir, hashes, wait_ms, warm).await;
     let _ = std::fs::remove_dir_all(&dir);
     result
 }
@@ -133,6 +134,7 @@ async fn scrape_in(
     dir: &std::path::Path,
     hashes: &[String],
     wait_ms: u64,
+    warm: bool,
 ) -> Result<Value, String> {
     let http = HttpClient::new(ClientConfig::default()).map_err(|e| e.to_string())?;
     let started = Instant::now();
@@ -142,6 +144,10 @@ async fn scrape_in(
     };
     let engine = Engine::start(config).await.map_err(|e| e.to_string())?;
     let engine_start_ms = ms(started);
+    if warm {
+        let engine = engine.clone();
+        tokio::spawn(async move { engine.warm_trackers().await });
+    }
     tokio::time::sleep(Duration::from_millis(wait_ms)).await;
     let asked: Vec<(&str, &[String])> = hashes.iter().map(|h| (h.as_str(), &[][..])).collect();
     let at = Instant::now();
@@ -160,7 +166,7 @@ async fn scrape_in(
             };
             json!({
                 "tracker": t.tracker, "resolved_ms": t.resolved_ms,
-                "connected_ms": t.connected_ms, "answered_ms": t.answered_ms,
+                "connected_ms": t.connected_ms, "reused": t.reused, "answered_ms": t.answered_ms,
                 "failed": t.failed, "cut": cut,
             })
         })
@@ -169,6 +175,7 @@ async fn scrape_in(
         "event": "scrape",
         "engine_start_ms": engine_start_ms,
         "wait_ms": wait_ms,
+        "warm": warm,
         "scrape_ms": scrape_ms,
         "answered": counts.iter().filter(|c| c.is_some()).count(),
         "counts": hashes.iter().zip(&counts).map(|(h, c)| json!({

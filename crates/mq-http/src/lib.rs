@@ -487,6 +487,9 @@ impl std::error::Error for Blocked {}
 async fn lookup(name: &str) -> std::io::Result<Vec<SocketAddr>> {
     #[cfg(any(test, feature = "test-dns"))]
     if let Some(found) = test_dns::get(name) {
+        if let Some(delay) = test_dns::delay(name) {
+            tokio::time::sleep(delay).await;
+        }
         return Ok(found.into_iter().map(|ip| SocketAddr::new(ip, 0)).collect());
     }
     Ok(tokio::net::lookup_host((name, 0)).await?.collect())
@@ -509,6 +512,19 @@ pub mod test_dns {
     pub fn set(name: &str, addrs: &[IpAddr]) {
         let mut names = NAMES.lock().unwrap_or_else(|e| e.into_inner());
         names.insert(name.to_ascii_lowercase(), addrs.to_vec());
+    }
+
+    static SLOW: LazyLock<Mutex<HashMap<String, std::time::Duration>>> =
+        LazyLock::new(Default::default);
+
+    /// As `set`, each answer coming `delay` late (a cold device resolver).
+    pub fn set_slow(name: &str, addrs: &[IpAddr], delay: std::time::Duration) {
+        set(name, addrs);
+        lock(&SLOW).insert(name.to_ascii_lowercase(), delay);
+    }
+
+    pub(crate) fn delay(name: &str) -> Option<std::time::Duration> {
+        lock(&SLOW).get(&name.to_ascii_lowercase()).copied()
     }
 
     /// Every later `scoped()` call on `http` (or a handle of it) reads this

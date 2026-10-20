@@ -537,6 +537,16 @@ impl Engine {
         self.inner.scraper.scrape(&asked, defaults).await
     }
 
+    /// Readies the default trackers for a scrape soon after (a title's page
+    /// opened before its versions): names resolved and each UDP tracker's
+    /// BEP 15 connection id kept for a minute, so that scrape costs one
+    /// round trip. At most about 3 s; nothing without discovery.
+    pub async fn warm_trackers(&self) {
+        if self.inner.cfg.discovery {
+            self.inner.scraper.warm(&DEFAULT_TRACKERS).await;
+        }
+    }
+
     /// Each tracker's stages in the last scrape that asked any (diagnosis:
     /// `mq scrape`, bench/m13/cold-scrape.jsonl).
     pub fn last_scrape(&self) -> Vec<TrackerTrace> {

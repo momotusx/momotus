@@ -124,6 +124,9 @@ enum Command {
         /// Wait this long after the engine starts.
         #[arg(long, default_value_t = 0)]
         wait_ms: u64,
+        /// Warm the default trackers from the start (a title's page opened).
+        #[arg(long)]
+        warm: bool,
     },
     /// Probe an http(s) stream, play it in mpv and report time to first frame.
     PlayUrl {
@@ -222,8 +225,13 @@ async fn main() {
         }
         return;
     }
-    if let Command::Scrape { hashes, wait_ms } = &cli.command {
-        match magnet::scrape(hashes, *wait_ms).await {
+    if let Command::Scrape {
+        hashes,
+        wait_ms,
+        warm,
+    } = &cli.command
+    {
+        match magnet::scrape(hashes, *wait_ms, *warm).await {
             Ok(run) => emit(run),
             Err(e) => fail(&e),
         }
