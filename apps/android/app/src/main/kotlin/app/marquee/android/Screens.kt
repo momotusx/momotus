@@ -11,13 +11,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -27,8 +25,6 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.unit.dp
-import app.marquee.core.client.CoreError
 import app.marquee.core.route.Route
 import app.marquee.core.session.CoreHealth
 import app.marquee.core.session.CoreSession
@@ -36,14 +32,11 @@ import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.Marquee
 import app.marquee.design.MqText
-import app.marquee.design.PrimaryButton
 import app.marquee.design.Spinner
 import app.marquee.design.StateMessage
 import app.marquee.design.TextRole
 import app.marquee.design.focusSoon
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 /**
  * Puts focus on [requester] once the screen is laid out, for D-pad devices: tries once per frame

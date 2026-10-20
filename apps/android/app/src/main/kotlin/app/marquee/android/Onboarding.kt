@@ -27,8 +27,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -51,7 +49,6 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import app.marquee.core.DefaultsCopy
 import app.marquee.core.DefaultsStep
-import app.marquee.core.InstallCards
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.StreamChoiceSettings
 import app.marquee.core.model.DefaultAddonInfo
@@ -75,7 +72,6 @@ import app.marquee.design.SwitchRow
 import app.marquee.design.TextRole
 import app.marquee.design.focusClickable
 import app.marquee.design.marqueeFocus
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch

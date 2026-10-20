@@ -21,15 +21,17 @@ plugins {
     alias(libs.plugins.spotless)
 }
 
-// Format and lint: ktlint through Spotless. Generated sources are left alone.
+// Format and lint: ktlint through Spotless. Generated sources are left alone. ktlint's no-unused-imports
+// does not run here unless it is named: without this line spotlessCheck passed 19 files with dead imports.
+val ktlintRules = mapOf("ktlint_standard_no-unused-imports" to "enabled")
 spotless {
     kotlin {
         target("*/src/**/*.kt")
         targetExclude("**/generated/**", "**/model/Generated.kt", "**/design/Tokens.kt", "**/design/Icons.kt")
-        ktlint("1.8.0")
+        ktlint("1.8.0").editorConfigOverride(ktlintRules)
     }
     kotlinGradle {
         target("*.gradle.kts", "*/*.gradle.kts")
-        ktlint("1.8.0")
+        ktlint("1.8.0").editorConfigOverride(ktlintRules)
     }
 }

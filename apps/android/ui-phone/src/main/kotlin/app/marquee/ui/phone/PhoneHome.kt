@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -70,12 +69,10 @@ import app.marquee.design.PrimaryButton
 import app.marquee.design.RatingLine
 import app.marquee.design.RoundButton
 import app.marquee.design.RowHeader
-import app.marquee.design.SecondaryButton
 import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
 import app.marquee.design.TextRole
 import app.marquee.design.TileShape
-import app.marquee.design.Tokens
 import app.marquee.design.laneHeight
 import app.marquee.design.windowDp
 
