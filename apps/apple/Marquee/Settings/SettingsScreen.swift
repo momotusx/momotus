@@ -108,7 +108,7 @@ struct SettingsScreen: View {
                     SettingsRow(symbol: "monitor-check", title: "Setup check", detail: "Network, display, catalogs, sources and subtitles at a glance.")
                 }
                 .buttonStyle(.row)
-                section("Devices and sync").padding(.top, Theme.Space.s)
+                section("Account").padding(.top, Theme.Space.s)
                 NavigationLink {
                     SyncScreen()
                 } label: {

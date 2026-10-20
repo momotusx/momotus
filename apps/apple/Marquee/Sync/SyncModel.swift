@@ -91,6 +91,7 @@ final class SyncModel {
         self.defaults = defaults
         recovered = defaults.bool(forKey: "syncRecovered")
         kits = KitLedger(pending: defaults.stringArray(forKey: "syncPendingKits") ?? [])
+        if defaults.bool(forKey: Self.goneKey) { problem = SyncProblem(code: "accountGone", message: "") }
         if leftover {
             joined = false
             keyLeft = .earlierInstall
@@ -227,6 +228,7 @@ final class SyncModel {
         joinStored = stored
         joined = true
         notice = nil
+        defaults.set(false, forKey: Self.goneKey)
         self.recovered = recovered
         lastReport = nil
         lastSynced = nil
@@ -402,21 +404,27 @@ final class SyncModel {
     }
 
     /// Deletes the account on the sync server for every device, after the
-    /// OS prompt (the page asked once first, naming what goes). Once the
-    /// server confirmed, this device forgets it as after a sign-out; the
-    /// library stays.
+    /// OS prompt (the page asked once first, naming what goes). With no
+    /// passcode that ask was the step, as for leaving (D15): deleting ends
+    /// access and every library stays. Once the server confirmed, this
+    /// device forgets it as after a sign-out; the library stays.
     func deleteAccount() async throws {
-        try await confirmOwner(SyncWords.authDelete)
+        try await confirmOwner(SyncWords.authDelete, endsAccess: true, askedAgain: true)
         let _: JSONValue = try await withRecord("deleteAccount") { _ in nil }
         forget()
         problem = nil
         notice = SyncWords.accountGone
     }
 
-    /// OK on "Your Marquee account was deleted", heard from the sync server.
+    /// OK on "Your Marquee account was deleted", heard from the sync server:
+    /// the line goes, also from the next launch.
     func dismissGone() {
         if problem?.code == "accountGone" { problem = nil }
+        defaults.set(false, forKey: Self.goneKey)
     }
+
+    /// Set while "Your Marquee account was deleted" waits for its OK.
+    static let goneKey = "syncGone"
 
     /// After `fork`: the sync server's device list, as the compare page showed
     /// it (`head`), without the devices the user ticked. A list that moved since
@@ -470,6 +478,8 @@ final class SyncModel {
             } catch let error as CoreError where mine == account && (SyncRules.forgets(error.code) || error.code == "fork") {
                 if SyncRules.forgets(error.code) { forget() }
                 problem = SyncProblem(error, action: .round)
+                // Said again at the next launch until OK: nobody may have seen it yet.
+                if error.code == "accountGone" { defaults.set(true, forKey: Self.goneKey) }
                 throw error
             }
         }

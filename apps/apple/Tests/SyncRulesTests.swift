@@ -172,8 +172,23 @@ private func report(_ changes: [String: Any] = [:]) throws -> SyncReport {
         #expect(SyncProblem(code: "accountGone", message: "this account was deleted").words == "Your Marquee account was deleted. Your library stays on this device.")
         // Whichever call heard it, the words are the same.
         #expect(SyncProblem(code: "accountGone", message: "x", action: .delete).words == W.accountGone)
-        #expect(SyncProblem(code: nil, message: "http status 502", action: .delete).words.hasPrefix("Nothing was deleted."))
+        // The relay may have deleted it before the answer was lost: the words claim nothing.
+        #expect(SyncProblem(code: nil, message: "http status 502", action: .delete).words == "The deletion was not confirmed. The sync server did not answer. Try again in a moment.")
         #expect(W.deleteAsk == "Your profiles, library, progress and settings are deleted from the sync service. This device keeps its own copy.")
+    }
+
+    @Test func deleteAccountShowsOnTheOwnerProfileOnly() {
+        let profile = { (id: String, owner: Bool) in
+            ProfileInfo(id: id, name: id, avatar: "fox:amber", position: 0, hasPin: false, isOwner: owner, syncing: false)
+        }
+        let snapshot = { (active: String) in
+            ProfilesSnapshot(profiles: [profile("default", true), profile("kid", false)], active: active, locked: false, max: 6)
+        }
+        #expect(SyncRules.mayDeleteAccount(snapshot("default")))
+        #expect(!SyncRules.mayDeleteAccount(snapshot("kid")))
+        // Before the profiles arrive, or for a profile that is gone: not shown.
+        #expect(!SyncRules.mayDeleteAccount(nil))
+        #expect(!SyncRules.mayDeleteAccount(snapshot("nobody")))
     }
 
     @Test func everyReportFactIsSaid() throws {

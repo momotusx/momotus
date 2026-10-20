@@ -55,6 +55,19 @@ private let account = try! JSONDecoder().decode(JSONValue.self, from: Data(#"{"r
         #expect(sync.keyLeft == nil && keychain.held == nil)
     }
 
+    @Test func aDeletionHeardFromAnotherDeviceIsSaidAgainAtLaunchUntilOK() async throws {
+        let core = RealCore()
+        #expect(await core.ready())
+        let store = try defaults()
+        store.set(true, forKey: SyncModel.goneKey)
+        let sync = SyncModel(core: core.client, records: FakeKeychain().record, defaults: store)
+        #expect(sync.problem?.code == "accountGone" && !sync.joined)
+        #expect(sync.problem?.words == SyncWords.accountGone)
+        sync.dismissGone()
+        #expect(sync.problem == nil && !store.bool(forKey: SyncModel.goneKey))
+        #expect(SyncModel(core: core.client, records: FakeKeychain().record, defaults: store).problem == nil)
+    }
+
     @Test func aListThatCouldNotBeReadSaysItMayBeOutOfDate() async throws {
         let core = RealCore()
         #expect(await core.ready())

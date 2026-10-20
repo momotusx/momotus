@@ -2,7 +2,7 @@ import SwiftUI
 
 private typealias W = SyncWords
 
-/// Devices and sync (plans/m7-sync.md): not joined, the three ways in (pair,
+/// Account, the sync page (plans/m7-sync.md): not joined, the three ways in (pair,
 /// start an account, use a kit); joined, this device's state with every fact
 /// of the last round and the 12 characters to compare, the devices with
 /// Remove and Report lost, Add a device, Make a recovery kit, stopping, and
@@ -86,6 +86,7 @@ struct KeyUnreadable: View {
 
 private struct JoinedSync: View {
     @Environment(SyncModel.self) private var sync
+    @Environment(ProfileSession.self) private var profiles
     @Environment(\.metrics) private var metrics
     /// The list could not be fetched, in words.
     @State private var listError: String?
@@ -102,7 +103,7 @@ private struct JoinedSync: View {
             devices
             links
             LeaveSync()
-            DeleteSync()
+            if SyncRules.mayDeleteAccount(profiles.snapshot) { DeleteSync() }
         }
         .task { await load() }
         // A new warning is said once; a round that repeats it says nothing.
@@ -473,12 +474,17 @@ private struct LeaveSync: View {
 }
 
 /// Delete the account for every device: one confirmation that names what
-/// goes (on a TV it is the second ask, as for Remove), then the OS prompt.
+/// goes, then the OS prompt (none without a passcode, or on a TV: the
+/// confirmation is the step). On tvOS the confirmation is its own step with
+/// Cancel focused, as Leave's: one press never deletes the account.
 private struct DeleteSync: View {
     @Environment(SyncModel.self) private var sync
     @State private var asking = false
     @State private var error: String?
     @State private var busy = false
+    #if os(tvOS)
+    @FocusState private var cancelFocused: Bool
+    #endif
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
@@ -488,16 +494,43 @@ private struct DeleteSync: View {
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
             if let error { Said(tone: .bad, text: error) }
+            #if os(tvOS)
+            if asking {
+                Text(W.deleteAsk)
+                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .foregroundStyle(Theme.Palette.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                FlowRow(spacing: Theme.Space.xs) {
+                    Button(W.cancel) { asking = false }
+                        .buttonStyle(PillButtonStyle(prominent: true))
+                        .focused($cancelFocused)
+                    Button { Task { await delete() } } label: { Label(busy ? W.deleting : W.deleteButton, glyph: "trash") }
+                        .buttonStyle(DestructiveTextStyle())
+                        .disabled(busy)
+                }
+                .onAppear { cancelFocused = true }
+            }
+            #endif
             Button { asking = true } label: { Label(busy ? W.deleting : W.deleteButton, glyph: "trash") }
                 .buttonStyle(DestructiveTextStyle())
-                .disabled(busy)
+                .disabled(busy || isTV && asking)
         }
+        #if !os(tvOS)
         .confirmationDialog(W.deleteTitle + "?", isPresented: $asking, titleVisibility: .visible) {
             Button(W.deleteButton, role: .destructive) { Task { await delete() } }
             Button(W.cancel, role: .cancel) {}
         } message: {
             Text(W.deleteAsk)
         }
+        #endif
+    }
+
+    private var isTV: Bool {
+        #if os(tvOS)
+        true
+        #else
+        false
+        #endif
     }
 
     private func delete() async {

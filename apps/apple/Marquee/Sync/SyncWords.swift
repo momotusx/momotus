@@ -1,10 +1,10 @@
 import Foundation
 
-/// Devices and sync copy, as the web has it (apps/web/src/lib/words.ts,
+/// Account (the sync page) copy, as the web has it (apps/web/src/lib/words.ts,
 /// `syncWords`). No protocol words: a device list, not a roster; "the 12
 /// characters to compare", not a fingerprint.
 enum SyncWords {
-    static let title = "Devices and sync"
+    static let title = "Account"
     static let lede = "Sync keeps your library, progress, addons and settings the same on all your devices. The sync server stores them sealed and cannot read them."
     static let pairTitle = "Pair this device"
     static let pairText = "Show a code here and approve it on a device that already syncs."
@@ -111,7 +111,7 @@ enum SyncWords {
     static let offLine = "Keep your library, progress and addons the same on every device. Pair, start an account or use a recovery kit."
     static let onLine = "Devices, recovery kit, stopping."
     // Add a device
-    static let addLede = "On the new device, open Settings, then Devices and sync, then Pair this device. It shows a code."
+    static let addLede = "On the new device, open Settings, then Account, then Pair this device. It shows a code."
     static let addWarning = "Approve only a code on a screen in front of you. Whoever controls that screen gets your account."
     static let scan = "Scan the code"
     static let scanning = "Point the camera at the code on the other device."
@@ -209,7 +209,7 @@ enum SyncWords {
         return parts.isEmpty ? nil : "Since this device joined, \(parts.joined(separator: ", and "))."
     }
 
-    /// The Settings row under Devices and sync: what is wrong or waits
+    /// The Settings row under Account: what is wrong or waits
     /// first, then the time; never "Synced" over a warning.
     static func summary(joined: Bool, problem: String?, failed: String?, notes: [String], at: Date?) -> String {
         if let problem { return problem }
@@ -314,7 +314,8 @@ struct SyncProblem: Equatable {
         case .kit: "No kit was made."
         case .remove, .lost: "Nothing was removed."
         case .leave: "This device still syncs."
-        case .delete: "Nothing was deleted."
+        // The relay may have deleted it before its answer was lost: claim nothing.
+        case .delete: "The deletion was not confirmed."
         case .differ: "The approval is still open."
         case .compare: "The lists could not be compared."
         case .start, .recover: "This device did not join."
@@ -444,6 +445,12 @@ enum SyncRules {
         case askAgain
         /// No lock, and the op is more than ending access: nothing can confirm it.
         case refuse
+    }
+
+    /// Delete account shows on the owner profile only: the account holds
+    /// every profile (D15).
+    static func mayDeleteAccount(_ snapshot: ProfilesSnapshot?) -> Bool {
+        snapshot?.current?.isOwner == true
     }
 
     /// The codes after which this device forgets the account (its library
