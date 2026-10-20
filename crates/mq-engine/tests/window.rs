@@ -328,6 +328,7 @@ async fn rounds_under_readers_and_writers_never_serve_a_hole() {
     for r in readers {
         reads += within(90, r).await.unwrap();
     }
+    eprintln!("{rounds} rounds, {evicted} pieces evicted, {reads} reads");
     assert!(
         rounds > 100 && evicted > 50 && reads > 30,
         "{rounds} {evicted} {reads}"
