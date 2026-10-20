@@ -1,6 +1,9 @@
 import AVFoundation
 import Combine
 import Observation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// One playback: the core's playback view (resolve, failover, progress,
 /// subtitles) driving an AVPlayer on the loopback URL it hands out.
@@ -687,13 +690,25 @@ final class PlayerModel {
             .store(in: &bag)
     }
 
+    /// The app is in front (iOS, tvOS); a Mac window counts as on screen.
+    private var appOnScreen: Bool {
+        #if os(macOS)
+        true
+        #else
+        UIApplication.shared.applicationState == .active
+        #endif
+    }
+
     private func tick(_ time: CMTime) {
         guard time.isNumeric else { return }
         if let now = ticked(time: time.seconds, pending: pendingStart) { position = now }
+        let watched = PlayerLayout.pictureWatched(floating: floating, windowWatches: windowWatchesFrames(), onScreen: appOnScreen)
+        (loadStart, playingSince) = PlayerLayout.pictureClocks(
+            watched: watched, position: position, loadStart: loadStart, playingSince: playingSince, now: .now)
         if loadedURL != nil, PlayerLayout.pictureMissing(
             shown: pictureShown, advanced: position - loadStart,
             playingFor: playingSince.map { (ContinuousClock.now - $0) / .seconds(1) } ?? 0,
-            watched: !floating || windowWatchesFrames()
+            watched: watched
         ) {
             pictureFailed()
             return

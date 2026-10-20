@@ -50,6 +50,23 @@ enum PlayerLayout {
 
     static let pictureWait: Double = 4
 
+    /// Whether a frame watch looks at the picture now: in the Picture in
+    /// Picture window its own watch; on the page only while the app is on
+    /// screen. In the background a layer never shows a frame, so a source that
+    /// loaded there would fail as this version's own (the iPhone walk, round
+    /// 3: another app in front while Pioneer One loaded).
+    static func pictureWatched(floating: Bool, windowWatches: Bool, onScreen: Bool) -> Bool {
+        floating ? windowWatches : onScreen
+    }
+
+    /// Time with no watch never counts toward a missing picture: the clocks
+    /// start again from here, so a source needs 4 s in sight without a frame.
+    static func pictureClocks(
+        watched: Bool, position: Double, loadStart: Double, playingSince: ContinuousClock.Instant?, now: ContinuousClock.Instant
+    ) -> (loadStart: Double, playingSince: ContinuousClock.Instant?) {
+        watched ? (loadStart, playingSince) : (position, playingSince.map { _ in now })
+    }
+
     /// The Subtitles button: the picked track, else the count as soon as one
     /// is in, else Searching while the core still lists, else None found. The
     /// mark says more may come: it shows while the core lists and some are in.

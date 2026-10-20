@@ -265,6 +265,25 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
     #expect(PlayerLayout.pictureFailureKind(floating: true) != "decode")
 }
 
+@Test func aSourceThatLoadsOutOfSightWaitsForItsPicture() {
+    // On the page only while the app is in front; in the window only with its own watch.
+    #expect(PlayerLayout.pictureWatched(floating: false, windowWatches: false, onScreen: true))
+    #expect(!PlayerLayout.pictureWatched(floating: false, windowWatches: false, onScreen: false), "the background is no place for a verdict")
+    #expect(PlayerLayout.pictureWatched(floating: true, windowWatches: true, onScreen: false))
+    #expect(!PlayerLayout.pictureWatched(floating: true, windowWatches: false, onScreen: false))
+    // 30 s played in the background without a frame: back in front, the clocks start again.
+    let start = ContinuousClock.now
+    let away = PlayerLayout.pictureClocks(watched: false, position: 30, loadStart: 0, playingSince: start, now: start + .seconds(30))
+    #expect(away.loadStart == 30)
+    #expect(away.playingSince == start + .seconds(30))
+    #expect(!PlayerLayout.pictureMissing(shown: false, advanced: 31 - away.loadStart, playingFor: 1), "a verdict a second after coming back")
+    // In sight the clocks run on, and 4 s without a frame still fails the version.
+    let seen = PlayerLayout.pictureClocks(watched: true, position: 30, loadStart: 0, playingSince: start, now: start + .seconds(30))
+    #expect(seen.loadStart == 0 && seen.playingSince == start)
+    // Paused away: nothing starts playing.
+    #expect(PlayerLayout.pictureClocks(watched: false, position: 5, loadStart: 0, playingSince: nil, now: start).playingSince == nil)
+}
+
 @Test func focusShowsOnlyForKeyboardNavigation() {
     // A click focuses the page (the player takes the keyboard): no control rings for it.
     #expect(!FocusRule.shown(focused: true, keyboardNavigation: false))
