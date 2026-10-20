@@ -39,6 +39,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -126,6 +128,8 @@ fun PhonePlayer(
         } < UP_NEXT_ROOM
     // Measured from the controls; 200 dp until they have shown once.
     var controlsHeight by remember { mutableStateOf(200.dp) }
+    // The foot of the title bar's controls (Back, the title, Picture in picture): the subtitles keep under it.
+    var titleFoot by remember { mutableStateOf(0.dp) }
     val live = stage == Stage.Playing || stage == Stage.Paused || stage == Stage.Buffering || stage == Stage.Ended
     var osd by remember { mutableStateOf(true) }
     var wake by remember { mutableIntStateOf(0) }
@@ -217,12 +221,13 @@ fun PhonePlayer(
                 )
             },
     ) {
-        // While the controls show, the subtitles sit just above them, at the foot as ever.
+        // While the controls show, the subtitles sit between them and the title bar, at the foot as ever.
         PlayerVideo(
             controller.player,
             Modifier.fillMaxSize(),
             controller.subtitleSize,
             subtitleLift = if (showControls) controlsHeight else 0.dp,
+            subtitleCeiling = if (showControls) titleFoot else 0.dp,
         )
 
         // Scrims: edge to edge, 120 dp at the top (60% black) and 200 dp at the foot (72%).
@@ -234,7 +239,10 @@ fun PhonePlayer(
             Box(Modifier.fillMaxSize()) {
                 Scrim(top = true, height = 120.dp, peak = 0.85f)
                 Row(
-                    Modifier.windowInsetsPadding(WindowInsets.displayCutout).padding(16.dp),
+                    Modifier
+                        .windowInsetsPadding(WindowInsets.displayCutout)
+                        .padding(16.dp)
+                        .onGloballyPositioned { titleFoot = with(density) { it.boundsInRoot().bottom.toDp() } },
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
