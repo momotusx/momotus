@@ -13,6 +13,7 @@ import Film from "lucide-solid/icons/film";
 import Layers from "lucide-solid/icons/layers";
 import Play from "lucide-solid/icons/play";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
+import RotateCcw from "lucide-solid/icons/rotate-ccw";
 import { createEffect, createMemo, createSignal, For, type JSX, Match, Show, Switch } from "solid-js";
 import { Backdrop, Logo } from "../components/art";
 import { KeyedPage } from "../components/keyed-page";
@@ -201,6 +202,15 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                             <Show when={t().resumeMs}>
                               {(ms) => <small class="num">{resumeText(ms(), t().leftMs, runtimeMinutes(x().runtime))}</small>}
                             </Show>
+                          </A>
+                        )}
+                      </Show>
+                      {/* Part way in: the same video from its beginning. */}
+                      <Show when={target()?.resumeMs ? target() : null}>
+                        {(t) => (
+                          <A class="btn big again" href={playPath(props.kind, props.id, t().videoId)} state={{ startOver: true }} data-f="title:startover" aria-label="Start over">
+                            <RotateCcw aria-hidden />
+                            <span classList={{ sr: form() === "phone" }}>Start over</span>
                           </A>
                         )}
                       </Show>

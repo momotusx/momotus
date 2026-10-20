@@ -55,6 +55,8 @@ export default function Player() {
     const key = (location.state as { key?: unknown } | null)?.key;
     return typeof key === "string" ? key : null;
   };
+  // "Start over" on the title page: this play starts at the beginning.
+  const startOver = () => (location.state as { startOver?: unknown } | null)?.startOver === true;
   // Try again on a title that could not be opened: the page opens anew.
   const [attempt, setAttempt] = createSignal(0);
   return (
@@ -65,6 +67,7 @@ export default function Player() {
         id: decoded(params.id),
         videoId: decoded(params.videoId),
         chosen: chosen(),
+        startOver: startOver(),
         binge: typeof query.binge === "string" ? query.binge : undefined,
         retry: () => setAttempt((n) => n + 1),
       })}
@@ -73,7 +76,7 @@ export default function Player() {
   );
 }
 
-function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: string | null; binge?: string; retry: () => void }) {
+function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: string | null; startOver: boolean; binge?: string; retry: () => void }) {
   const navigate = useNavigate();
   // The page this play was opened from, read when needed: the router renders
   // a route before it writes its history entry. Leaving the play for that
@@ -261,6 +264,25 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       }
       // An end or no-version card owns the screen: keys work on it as usual.
       if (ended() || document.querySelector(".endcard")) return;
+      if (!panel() && !(e.target as Element | null)?.closest?.("input, textarea, select")) {
+        // Space and K play or pause from anywhere; Space on a focused control
+        // with the controls up stays that control's own press.
+        const onControl = (document.activeElement as Element | null)?.closest("button, a, [role=slider], input");
+        if (e.key === "k" || e.key === "K" || (e.key === " " && (!osd() || !onControl))) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          toggle();
+          return;
+        }
+        // Controls hidden: Left and Right skip 10 s and bring the controls up,
+        // as a click on the Apple TV remote's edge does.
+        if (!osd() && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          seek(e.key === "ArrowLeft" ? -10 : 10);
+          return;
+        }
+      }
       // Skip and Up Next stay on screen with the controls hidden: Enter on
       // them acts at once instead of only waking the controls.
       const onScreen = (document.activeElement as HTMLElement | null)?.closest(".skip-wrap, .next");
@@ -289,7 +311,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         return;
       }
       loaded.load();
-      engine.load(u, prev ? engine.position() : start.next((snap()?.resumeMs ?? 0) / 1000));
+      engine.load(u, prev ? engine.position() : start.next(props.startOver ? 0 : (snap()?.resumeMs ?? 0) / 1000));
     }),
   );
 
@@ -297,9 +319,17 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     engine.toggle();
     wake();
   };
+  // Whether the pointer press under way only woke the controls.
+  let woke = false;
   const seek = (delta: number) => {
     if (!duration()) return;
     engine.seek(Math.min(Math.max(0, engine.position() + delta), duration() - 0.5));
+    wake();
+  };
+  const seekAt = (e: PointerEvent & { currentTarget: HTMLElement }) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const at = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+    engine.seek(Math.min(at * duration(), duration() - 0.5));
     wake();
   };
   const cycleSpeed = () => engine.setRate(SPEEDS[(SPEEDS.indexOf(rate()) + 1) % SPEEDS.length] ?? 1);
@@ -559,10 +589,18 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       onPointerMove={wake}
       onPointerDown={(e) => {
         // While the controls are hidden, a click only brings them back.
-        if (!osd()) {
+        woke = !osd();
+        if (woke) {
           e.preventDefault();
           wake();
         }
+      }}
+      onClick={(e) => {
+        // With the controls up, a click on the picture plays or pauses (a
+        // mouse; a touch screen shows and hides the controls).
+        if (woke || form() !== "desktop" || !started()) return;
+        if ((e.target as Element).closest("button, a, input, [role=slider], aside, .endcard, .skip-wrap, .next, .osd")) return;
+        toggle();
       }}
     >
       <Backdrop src={ctx.details()?.background} class="player-bd" dim />
@@ -753,10 +791,13 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                   seek(e.key === "ArrowLeft" ? -10 : 10);
                 }
               }}
-              onClick={(e) => {
-                const r = e.currentTarget.getBoundingClientRect();
-                if (duration()) engine.seek(((e.clientX - r.left) / r.width) * duration());
+              // A press seeks there and a drag follows the pointer (mouse and touch).
+              onPointerDown={(e) => {
+                if (e.button !== 0 || !duration()) return;
+                e.currentTarget.setPointerCapture(e.pointerId);
+                seekAt(e);
               }}
+              onPointerMove={(e) => e.currentTarget.hasPointerCapture(e.pointerId) && seekAt(e)}
             >
               <For each={buffered()}>{([a, b]) => <i class="buf" style={{ left: pct(a), width: `calc(${pct(b)} - ${pct(a)})` }} />}</For>
               <i class="pos" style={{ width: pct(time()) }} />

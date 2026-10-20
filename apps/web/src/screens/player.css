@@ -50,7 +50,7 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 
 .osd { position: absolute; left: var(--safe-side); right: var(--safe-side); bottom: var(--safe-bottom); }
 .tl { display: flex; align-items: center; gap: 26px; font: 500 var(--type-callout) var(--font-text); }
-.scrub { position: relative; flex: 1; height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--text) 25%, transparent); cursor: pointer; }
+.scrub { position: relative; flex: 1; height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--text) 25%, transparent); cursor: pointer; touch-action: none; }
 .scrub i { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 4px; }
 .scrub .buf { background: color-mix(in srgb, var(--text) 42%, transparent); }
 .scrub .pos { background: var(--text); }

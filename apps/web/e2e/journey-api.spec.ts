@@ -375,3 +375,60 @@ test("Layout: Automatic follows the device; a chosen form is kept", async ({ bro
   expect(await p.evaluate(() => localStorage.getItem("mq.form"))).toBeNull();
   await context.close();
 });
+
+test("the player: Left and Right skip with the controls hidden, Space and K play or pause, a click and a drag", async ({ browser }) => {
+  const { context, page: p } = await page(browser);
+  await openPlayer(p);
+  const time = () => p.evaluate(() => document.querySelector("video")?.currentTime ?? 0);
+  const paused = () => p.evaluate(() => document.querySelector("video")?.paused ?? true);
+  await expect.poll(time, { timeout: 30_000 }).toBeGreaterThan(30);
+  // Controls hidden: Left skips back 10 s at once and brings them up.
+  await expect(p.locator(".player-scr")).toHaveClass(/idle/, { timeout: 10_000 });
+  const before = await time();
+  await p.keyboard.press("ArrowLeft");
+  await expect(p.locator(".player-scr")).not.toHaveClass(/idle/);
+  expect(await time()).toBeLessThan(before - 8);
+  await expect(p.locator(".player-scr")).toHaveClass(/idle/, { timeout: 10_000 });
+  const back = await time();
+  await p.keyboard.press("ArrowRight");
+  expect(await time()).toBeGreaterThan(back + 8);
+  // K, then Space with nothing focused, play and pause.
+  await p.keyboard.press("k");
+  await expect.poll(paused).toBe(true);
+  await p.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await p.keyboard.press(" ");
+  await expect.poll(paused).toBe(false);
+  // With the controls up, a click on the picture pauses.
+  await p.mouse.move(700, 300);
+  await expect(p.locator(".player-scr")).not.toHaveClass(/idle/);
+  await p.mouse.click(700, 300);
+  await expect.poll(paused).toBe(true);
+  // A drag on the bar follows the pointer: from a quarter to the middle.
+  const bar = await p.locator(".scrub").boundingBox();
+  if (!bar) throw new Error("no progress bar");
+  const total = await p.evaluate(() => document.querySelector("video")?.duration ?? 0);
+  const y = bar.y + bar.height / 2;
+  await p.mouse.move(bar.x + bar.width * 0.25, y);
+  await p.mouse.down();
+  await expect.poll(time).toBeLessThan(total * 0.3);
+  await p.mouse.move(bar.x + bar.width * 0.5, y, { steps: 8 });
+  await p.mouse.up();
+  await expect.poll(async () => Math.abs((await time()) - total * 0.5)).toBeLessThan(total * 0.03);
+  await context.close();
+});
+
+test("Start over beside Resume plays the same video from its beginning", async ({ browser }) => {
+  await seedFilm(240_000);
+  const { context, page: p } = await page(browser);
+  await p.goto("/title/movie/mqjm?form=desktop");
+  await expect(p.locator('[data-f="title:play"]')).toContainText("Resume", { timeout: 30_000 });
+  const again = p.locator('[data-f="title:startover"]');
+  await expect(again).toHaveText("Start over");
+  await again.click();
+  await expect(p).toHaveURL(/\/play\/movie\/mqjm\/mqjm$/);
+  await startIfPaused(p);
+  const time = () => p.evaluate(() => document.querySelector("video")?.currentTime ?? 0);
+  await expect.poll(time, { timeout: 30_000 }).toBeGreaterThan(0.5);
+  expect(await time()).toBeLessThan(30);
+  await context.close();
+});

@@ -78,10 +78,11 @@ test("plays a direct source through the core's stream server", async ({ page }) 
   expect(await page.locator(".pacts .pa b").allTextContents()).toEqual(["Audio", "Subtitles", "Versions", "Speed"]);
 
   // Subtitles from OpenSubtitles load into the video as a text track, all by
-  // remote: the first press only wakes the hidden controls.
+  // remote: the first press only wakes the hidden controls (Left and Right
+  // skip 10 s then, journey-api.spec).
   await page.waitForTimeout(4500);
   await expect(page.locator(".player-scr")).toHaveClass(/idle/);
-  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowUp");
   await expect(page.locator(".player-scr")).not.toHaveClass(/idle/);
   await expect.poll(() => focused(page)).toBe("player:toggle");
   for (let i = 0; i < 4 && (await focused(page)) !== "player:subs"; i++) await page.keyboard.press("ArrowRight");
