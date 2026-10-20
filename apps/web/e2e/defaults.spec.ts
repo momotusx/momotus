@@ -95,6 +95,23 @@ async function install(url: string) {
   }
 }
 
+/** The app's Back on Home goes nowhere: no welcome step shows, even for a
+ * moment (one that sends the profile on to Home again would hide it). */
+async function backStaysHome(page: Page) {
+  await page.evaluate(() => {
+    const w = window as unknown as { sawWelcome: boolean };
+    w.sawWelcome = false;
+    new MutationObserver(() => {
+      if (document.querySelector(".welcome")) w.sawWelcome = true;
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+  const at = page.url();
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(800);
+  expect(page.url()).toBe(at);
+  expect(await page.evaluate(() => (window as unknown as { sawWelcome: boolean }).sawWelcome)).toBe(false);
+}
+
 test("Start fresh: nothing installed before Continue, two switches turned off stay off", async ({ browser }) => {
   const page = await device(browser, "desktop");
   // A profile that never had a list opens at the welcome steps.
@@ -129,9 +146,7 @@ test("Start fresh: nothing installed before Continue, two switches turned off st
   // back into the setup check or the question.
   await page.locator('[data-f="welcome:home"]').click();
   await expect(page).toHaveURL(/127\.0\.0\.1:\d+\/(\?.*)?$/);
-  await page.keyboard.press("Escape");
-  await page.waitForTimeout(500);
-  await expect(page).toHaveURL(/127\.0\.0\.1:\d+\/(\?.*)?$/);
+  await backStaysHome(page);
 
   // Settings shows the same switches, the two still off.
   await page.goto("/recommended-addons?form=desktop");
@@ -163,9 +178,7 @@ test("Browse first passes the switches, then opens Home as the root", async ({ b
   // No question on the way: its defaults are Start fast's, and nothing is written.
   await page.locator('[data-f="welcome:next"]').click();
   await expect(page).toHaveURL(/127\.0\.0\.1:\d+\/(\?.*)?$/);
-  await page.keyboard.press("Escape");
-  await page.waitForTimeout(500);
-  await expect(page).toHaveURL(/127\.0\.0\.1:\d+\/(\?.*)?$/);
+  await backStaysHome(page);
   expect(Object.values(await states()).every((s) => s === "on")).toBe(true);
   expect(sent.some((m) => m.op === "setPrefs" && JSON.stringify(m).includes("streams"))).toBe(false);
   expect((await client.req<Prefs>("setPrefs", { patch: {} })).streams).toMatchObject({ sizeLimitBytes: 5 * 1024 ** 3, minSeeders: 50 });
@@ -365,6 +378,12 @@ test("an empty Home offers Set up Marquee alone, not the defaults card beside it
   await expect(page.locator('[data-f="home:setup"]')).toBeVisible({ timeout: 30_000 });
   await page.waitForTimeout(1500);
   await expect(page.locator(".defaults-card")).toHaveCount(0);
+  // Set up, then Continue: Home opens as the root, Back never returns to the step.
+  await page.locator('[data-f="home:setup"]').click();
+  await expect(page).toHaveURL(/step=2&review=1/);
+  await page.locator('[data-f="welcome:next"]').click();
+  await expect(page).toHaveURL(/127\.0\.0\.1:\d+\/(\?.*)?$/);
+  await backStaysHome(page);
 });
 
 test("the built-in TurkceAltyazi.org row says where it runs instead of a host", async ({ browser }) => {
