@@ -351,6 +351,19 @@ export function installFocus(onBack: () => void) {
     else spots.delete(path());
     if (group !== "rail") content.set(path(), key);
   });
+  // The focus is placed before `reveal` scrolls it into view: once a page or
+  // list has scrolled, the point the nearest-member step measures from is
+  // where the focused element is now.
+  document.addEventListener(
+    "scrollend",
+    () => {
+      const el = document.activeElement as HTMLElement | null;
+      if (!last || el?.dataset?.f !== last.key) return;
+      const r = el.getBoundingClientRect();
+      last = { ...last, x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    },
+    { capture: true },
+  );
   document.addEventListener("pointerdown", cancelRestore, { capture: true });
   window.addEventListener("keydown", (e) => {
     if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;

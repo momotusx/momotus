@@ -1155,3 +1155,40 @@ test("Discover: Try again asks a failed catalog, and a failed page, again", asyn
     shelf.close();
   }
 });
+
+test("TV: a focused chip gone after the page scrolled hands the focus to its nearest neighbour where it is now", async ({ browser }) => {
+  const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
+  await p.goto("/settings?form=tv");
+  const more = p.locator('[data-f="pref-subs:more"]');
+  await expect(more).toBeVisible({ timeout: 30_000 });
+  await more.focus();
+  await p.keyboard.press("Enter");
+  const chips = p.locator('[data-fgroup="pref-subs"] .lang-all .chip');
+  await expect(chips).toHaveCount(113);
+  // A chip in the middle of the 113, then the page scrolls under it.
+  await chips.nth(60).focus();
+  await p.keyboard.press("ArrowRight");
+  const page_ = () => p.evaluate(() => document.querySelector(".settings-page")?.scrollTop ?? 0);
+  const at = await page_();
+  await p.evaluate(() => document.querySelector(".settings-page")?.scrollBy(0, 320));
+  await expect.poll(page_).toBeGreaterThan(at + 200);
+  await p.waitForTimeout(300);
+  // It leaves the list: the chip nearest to where it is on screen now takes the focus.
+  const nearest = await p.evaluate(() => {
+    const gone = document.activeElement as HTMLElement;
+    const r = gone.getBoundingClientRect();
+    const [x, y] = [r.left + r.width / 2, r.top + r.height / 2];
+    const others = [...document.querySelectorAll<HTMLElement>('[data-fgroup="pref-subs"] [data-f]')].filter((el) => el !== gone);
+    gone.remove();
+    let best: HTMLElement | null = null;
+    let d = Infinity;
+    for (const el of others) {
+      const b = el.getBoundingClientRect();
+      const dd = Math.hypot(b.left + b.width / 2 - x, b.top + b.height / 2 - y);
+      if (dd < d) [best, d] = [el, dd];
+    }
+    return best?.dataset.f ?? null;
+  });
+  await expect.poll(() => focusedKey(p)).toBe(nearest);
+  await context.close();
+});
