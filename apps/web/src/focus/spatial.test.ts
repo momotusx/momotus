@@ -46,6 +46,27 @@ describe("pick", () => {
     expect(pick(at(all, "mark"), all, "left", none)).toBe("row");
   });
 
+  test("a lone button and a vertical list reach each other sideways; a row's end does not", () => {
+    // Versions on a TV: Play at the bottom of the card on the left, a short
+    // list of two rows high up on the right. Nothing lies beside either.
+    const all: Candidate<string>[] = [
+      { key: "play", rect: { left: 113, top: 729, width: 348, height: 75 } },
+      { key: "v1", group: "alts", rect: { left: 740, top: 348, width: 1100, height: 64 } },
+      { key: "v2", group: "alts", rect: { left: 740, top: 420, width: 1100, height: 64 } },
+    ];
+    const none = new Map<string, string>();
+    // The nearest row, by distance.
+    expect(pick(at(all, "play"), all, "right", none)).toBe("v2");
+    // From the list (stacked, not a row), Left goes back to Play, also from a
+    // focused row that grew a few pixels over its neighbour.
+    expect(pick(at(all, "v1"), all, "left", none)).toBe("play");
+    const grown = all.map((c) => (c.key === "v2" ? { ...c, rect: { left: 726, top: 410, width: 1128, height: 137 } } : c));
+    expect(pick(at(grown, "v2"), grown, "left", none)).toBe("play");
+    // A row's end still stops: a2 has b2 to its right, but only in another row.
+    const rows = grid();
+    expect(pick(at(rows, "a2"), rows, "right", none)).toBeNull();
+  });
+
   test("entering a row restores its remembered tile", () => {
     const all = grid();
     const memory = new Map([["b", "b2"]]);

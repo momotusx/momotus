@@ -86,9 +86,12 @@ const LATE = "Sintel.2010.1080p.WEB.VP9.webm";
 const GOOD = "Sintel.2010.720p.WEB.VP9.webm";
 const LINES: Record<string, string> = { [LATE]: "From the first version", [GOOD]: "From the second version" };
 let LATE_BODY: Buffer | undefined;
-// A second addon that answers for the second title only, and late: two
-// lower versions that join a list the viewer is already moving in.
-const SLOW = ["Sintel.2010.480p.WEB.VP9.webm", "Sintel.2010.360p.WEB.VP9.webm"];
+// A second addon that answers for the second title only, and late, once a
+// test turns it on: two 1080p versions of release groups of their own (so
+// each is its own row) that rank above the row the viewer is on, so they join
+// the list before it while the viewer is moving in it.
+const SLOW = ["Sintel.2010.1080p.WEB.VP9-SLOWA.webm", "Sintel.2010.1080p.WEB.VP9-SLOWB.webm"];
+let slowOn = false;
 
 function slowAddon(): Promise<Server> {
   const server = createServer((req, res) => {
@@ -97,7 +100,7 @@ function slowAddon(): Promise<Server> {
       res.writeHead(200, { "content-type": "application/json" });
       return res.end(JSON.stringify({ id: "dev.marquee.slow", version: "1.0.0", name: "Slow", resources: ["stream"], types: ["movie"], idPrefixes: ["tt"], catalogs: [] }));
     }
-    if (req.url === `/stream/movie/${SINTEL}.json`) {
+    if (req.url === `/stream/movie/${SINTEL}.json` && slowOn) {
       setTimeout(() => {
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ streams: SLOW.map((file) => ({ name: "Slow", title: file, url: `${base}/media/${file}`, behaviorHints: { filename: file } })) }));
@@ -465,8 +468,9 @@ test("moving on drops the old version's subtitle and turns on the new one's", as
   await context.close();
 });
 
-test("TV: the focus stays on the Versions row the viewer moved to when a late addon adds rows", async ({ browser }) => {
+test("TV: Right from Play reaches a short list, and the focus stays on its row when a late addon adds rows above it", async ({ browser }) => {
   // The TV canvas: the recommended card on the left, the list on its right.
+  slowOn = true;
   const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
   await p.goto(`/title/movie/${SINTEL}/versions/${SINTEL}?form=tv`);
   // The first addon answered (which of its versions is the pick depends on
@@ -475,17 +479,23 @@ test("TV: the focus stays on the Versions row the viewer moved to when a late ad
   await expect(p.locator(`[data-f="v:${slowKey(SLOW[0] ?? "")}"]`)).toHaveCount(0);
   const focused = () => p.evaluate(() => document.activeElement?.getAttribute("data-f") ?? null);
   await expect.poll(focused).toBe("versions:play");
-  // On a row of the list (as focus.spec reaches rows), and what it says.
-  await p.locator(".vrow").first().focus();
+  // Right from Play reaches the list, though it is short and high up on the
+  // right (the press also freezes the pick). And what the row says.
+  await p.keyboard.press("ArrowRight");
   await expect.poll(focused).toMatch(/^v:/);
   const row = await focused();
   const says = () => p.evaluate(() => document.activeElement?.querySelector(".rel")?.textContent ?? null);
   const before = await says();
-  // The slow addon answers: its rows join the list.
+  // The slow addon answers: its rows join the list, above the focused one.
   await expect(p.locator(`[data-f="v:${slowKey(SLOW[0] ?? "")}"]`)).toHaveCount(1, { timeout: 30_000 });
+  const order = await p.evaluate(() => [...document.querySelectorAll(".vrow")].map((e) => e.getAttribute("data-f")));
+  expect(order.indexOf(`v:${slowKey(SLOW[0] ?? "")}`)).toBeLessThan(order.indexOf(row ?? ""));
   // The focus is where the viewer put it, on the same release.
   expect(await focused()).toBe(row);
   expect(await says()).toBe(before);
+  // And Left from the list goes back to Play.
+  await p.keyboard.press("ArrowLeft");
+  await expect.poll(focused).toBe("versions:play");
   await context.close();
 });
 
