@@ -192,9 +192,9 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
     <div class="versions-scr">
       <Backdrop src={ctx.details()?.background} class="versions-bd" dim />
       <header class="vhead">
+        {/* Where it sits under its title, wherever the viewer came from
+            (Home, Search or Library). */}
         <nav class="crumbs" aria-label="Breadcrumb">
-          <span>Home</span>
-          <ChevronRight aria-hidden />
           <span>{ctx.details()?.name ?? "Title"}</span>
           <ChevronRight aria-hidden />
           <span class="here">Versions</span>
