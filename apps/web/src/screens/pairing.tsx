@@ -9,7 +9,7 @@ import { createEffect, createResource, createSignal, Match, on, onCleanup, Show,
 import { Qr } from "../components/qr";
 import { A } from "@solidjs/router";
 import { liveView, privateLink } from "../core/client";
-import { autoFocus } from "../focus/dom";
+import { autoFocusSoon } from "../focus/dom";
 import type { PairingSnapshot as Pairing } from "../core/generated/PairingSnapshot";
 import { form } from "../form";
 import * as sync from "../core/sync";
@@ -56,7 +56,7 @@ function Session(props: { server: string; name: string; onDone: () => void; onJo
   createEffect(
     on(
       () => p()?.phase ?? view.state.status.state,
-      () => queueMicrotask(() => autoFocus(document.querySelector<HTMLElement>("main :is(.confirm, .summary, .problem) [data-autofocus]"))),
+      () => autoFocusSoon(() => document.querySelector<HTMLElement>("main :is(.confirm, .summary, .problem) [data-autofocus]")),
     ),
   );
   return (

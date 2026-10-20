@@ -13,7 +13,7 @@ import { bridgeUrl, link } from "./core/client";
 import "./core/debrid";
 import "./core/trakt";
 import { gateOpen, profiles, profilesFailed } from "./core/profiles";
-import { installFocus, restore } from "./focus/dom";
+import { installFocus, restoreSoon } from "./focus/dom";
 import { form } from "./form";
 import { entryOwner, historyBase, historyDepth, resetHistoryBase, stampEntriesWith } from "./history";
 import Addons from "./screens/addons";
@@ -209,7 +209,7 @@ function Shell(props: RouteSectionProps) {
         const wasBack = wentBack;
         wentBack = false;
         // Touch has no cursor to place; remotes and keyboards do.
-        if (form() !== "phone") requestAnimationFrame(() => restore(wasBack));
+        if (form() !== "phone") restoreSoon(wasBack);
       },
     ),
   );

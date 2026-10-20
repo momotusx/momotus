@@ -13,7 +13,7 @@ import { op } from "../core/client";
 import type { ProfileInfo } from "../core/generated/ProfileInfo";
 import type { ProfilesSnapshot } from "../core/generated/ProfilesSnapshot";
 import { markChosen, profiles, switchProfile, unlockProfile } from "../core/profiles";
-import { autoFocus, goBack } from "../focus/dom";
+import { autoFocusSoon, goBack } from "../focus/dom";
 import { type AvatarColor, COLORS, formatAvatar, GLYPHS, type Glyph, nextAvatar, parseAvatar } from "../lib/avatar";
 import { profileProblem, waitText } from "../lib/profiles";
 import "./browse.css";
@@ -93,14 +93,14 @@ export function Keypad(props: { title: string; note?: string; onSubmit: (pin: st
     document.removeEventListener("visibilitychange", hide);
     setDigits("");
   });
-  onMount(() => queueMicrotask(() => autoFocus(root.querySelector<HTMLElement>('[data-f="pin:5"]'))));
+  onMount(() => autoFocusSoon(() => root.querySelector<HTMLElement>('[data-f="pin:5"]')));
   holdModal();
   // When a wait ends, the remote goes back to the digits.
   createEffect(
     on(waiting, (w, was) => {
       if (was && !w) {
         setSaid("You can try again.");
-        queueMicrotask(() => autoFocus(root.querySelector<HTMLElement>('[data-f="pin:5"]')));
+        autoFocusSoon(() => root.querySelector<HTMLElement>('[data-f="pin:5"]'));
       }
     }),
   );
@@ -126,7 +126,7 @@ export function Keypad(props: { title: string; note?: string; onSubmit: (pin: st
       setUntil(Date.now() + result.ms);
       setNow(Date.now());
       setSaid(`Too many tries. Try again in ${Math.ceil(result.ms / 60_000)} ${result.ms > 60_000 ? "minutes" : "minute"}.`);
-      queueMicrotask(() => autoFocus(root.querySelector<HTMLElement>('[data-f="pin:cancel"]')));
+      autoFocusSoon(() => root.querySelector<HTMLElement>('[data-f="pin:cancel"]'));
     } else if (result.kind === "problem") setSaid(result.text);
   };
   const press = (d: string) => {
@@ -333,7 +333,7 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
             onCancel={() => {
               const id = t().id;
               setTarget(null);
-              queueMicrotask(() => autoFocus(document.querySelector<HTMLElement>(`[data-f="profile:${id}"]`)));
+              autoFocusSoon(() => document.querySelector<HTMLElement>(`[data-f="profile:${id}"]`));
             }}
           />
         )}
@@ -496,7 +496,7 @@ export function EditProfile() {
             onUnreadable={() => {
               setFlow(null);
               setUnreadable(true);
-              queueMicrotask(() => autoFocus(document.querySelector<HTMLElement>('[data-f="pedit:pin:unreadable"]')));
+              autoFocusSoon(() => document.querySelector<HTMLElement>('[data-f="pedit:pin:unreadable"]'));
             }}
             onDone={(text) => {
               setFlow(null);

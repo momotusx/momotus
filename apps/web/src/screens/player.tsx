@@ -24,7 +24,7 @@ import type { Segment } from "../core/generated/Segment";
 import type { SegmentKind } from "../core/generated/SegmentKind";
 import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
 import { videoContext } from "../core/video";
-import { autoFocus, goBack } from "../focus/dom";
+import { autoFocusSoon, goBack } from "../focus/dom";
 import { createVideoEngine } from "../player/video-engine";
 import { loadedSource, type Retry, sourceStart, TRYING_AGAIN_MS, tryingAgain } from "../lib/failover";
 import { bytes, clock, decoded, episodeLabel, groupFailures, playPath, playState, seasonName, titlePath, versionsPath } from "../lib/format";
@@ -372,9 +372,9 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       () => (showSkip() ? `${segment()?.kind}:${segment()?.startMs}` : null),
       (now, was) => {
         if (now && now !== was) {
-          queueMicrotask(() => autoFocus(document.querySelector<HTMLElement>('[data-f="player:skip"]')));
+          autoFocusSoon(() => document.querySelector<HTMLElement>('[data-f="player:skip"]'));
         } else if (!now && was && !document.activeElement?.closest(".player-scr [data-f]")) {
-          queueMicrotask(() => autoFocus(document.querySelector<HTMLElement>('[data-f="player:toggle"]')));
+          autoFocusSoon(() => document.querySelector<HTMLElement>('[data-f="player:toggle"]'));
         }
       },
     ),
@@ -394,7 +394,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     on(showNext, (shown, was) => {
       if (shown && !was) {
         setOsd(true);
-        queueMicrotask(() => autoFocus(document.querySelector<HTMLElement>('[data-f="next:play"]')));
+        autoFocusSoon(() => document.querySelector<HTMLElement>('[data-f="next:play"]'));
       }
     }),
   );
@@ -407,7 +407,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         : was
           ? document.querySelector<HTMLElement>(`[data-f="player:${was}"]`)
           : null;
-      if (target) queueMicrotask(() => autoFocus(target));
+      if (target) autoFocusSoon(() => target);
     }),
   );
 
@@ -423,7 +423,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   };
   createEffect(
     on(ended, (e) => {
-      if (e) queueMicrotask(() => autoFocus(document.querySelector<HTMLElement>(".endcard [data-autofocus]")));
+      if (e) autoFocusSoon(() => document.querySelector<HTMLElement>(".endcard [data-autofocus]"));
     }),
   );
   const playAgain = () => {

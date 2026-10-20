@@ -20,7 +20,7 @@ import { displayCaps, link, liveView, op, ping, reasonOf } from "../core/client"
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import type { DefaultAddonInfo } from "../core/generated/DefaultAddonInfo";
 import type { DefaultAddons } from "../core/generated/DefaultAddons";
-import { autoFocus } from "../focus/dom";
+import { autoFocusSoon } from "../focus/dom";
 import { form } from "../form";
 import { afterContinue, catalogMissing, choicesFor, defaultsWords, grouped, switchable } from "../lib/defaults";
 import { choiceWords, findAddons, type Tone } from "../lib/words";
@@ -61,7 +61,7 @@ export default function Onboarding() {
   const [query, setQuery] = useSearchParams();
   const step = () => (query.step === "2" ? 2 : query.step === "3" ? 3 : query.step === "choice" ? "choice" : 1);
   // A new step puts focus on its first action (on a remote or after keys).
-  createEffect(on(step, () => queueMicrotask(() => autoFocus(document.querySelector<HTMLElement>(".welcome [data-autofocus]")))));
+  createEffect(on(step, () => autoFocusSoon(() => document.querySelector<HTMLElement>(".welcome [data-autofocus]"))));
   const { addons, defaults, error } = useDefaults();
   const fresh = () => addons.state.data?.fresh ?? true;
   const [note, setNote] = createSignal<{ tone: Tone; text: string } | null>(null);

@@ -165,6 +165,32 @@ test("Browse first passes the switches, then opens Home", async ({ browser }) =>
   expect((await client.req<Prefs>("setPrefs", { patch: {} })).streams).toMatchObject({ sizeLimitBytes: 5 * 1024 ** 3, minSeeders: 50 });
 });
 
+test("a TV's first press on Welcome is never undone by the screen's late first focus", async ({ browser }) => {
+  const page = await device(browser, "tv");
+  // The viewer presses Right the moment the first door has the focus: before
+  // the screen's own first focus, asked for when the route changed and run a
+  // frame later, has run. Under load that frame is late (the flake this
+  // replaces: focus jumped back to I use Stremio).
+  await page.addInitScript(() => {
+    let pressed = false;
+    document.addEventListener(
+      "focusin",
+      (e) => {
+        if (pressed || (e.target as HTMLElement).dataset?.f !== "welcome:stremio") return;
+        pressed = true;
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+      },
+      true,
+    );
+  });
+  await page.goto("/?form=tv");
+  await expect(page).toHaveURL(/\/welcome/);
+  await expect.poll(() => focused(page)).toBe("welcome:fresh");
+  // Frames later, the focus is still where the viewer put it.
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(done, 500)))));
+  expect(await focused(page)).toBe("welcome:fresh");
+});
+
 test("a TV does it with keys only: Continue first, a row toggles with select", async ({ browser }) => {
   const page = await device(browser, "tv");
   await page.goto("/?form=tv");

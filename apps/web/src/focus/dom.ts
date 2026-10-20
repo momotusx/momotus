@@ -19,10 +19,24 @@ const path = () => location.pathname;
 // Skip button taking focus) only on a remote or after keys. On pointer and
 // touch builds a ring nobody asked for reads as a glitch.
 let lastInput: "keys" | "pointer" | null = null;
+// Every key or pointer press, counted: a focus asked for before a press
+// never takes over the one the viewer moved since.
+let inputs = 0;
 export const mayAutoFocus = () => document.documentElement.dataset.form === "tv" || lastInput === "keys";
 /** Focuses `el` when focus may move by itself; see `mayAutoFocus`. */
 export function autoFocus(el: HTMLElement | null | undefined) {
   if (el && mayAutoFocus()) focusEl(el);
+}
+
+/** `autoFocus` once the screen has rendered (a microtask from now), unless
+ * the viewer pressed a key or pointed in between: a screen's first focus,
+ * or a card's, never takes over the focus the viewer already moved (on a
+ * slow core the page settles after the first press). */
+export function autoFocusSoon(find: () => HTMLElement | null | undefined) {
+  const asked = inputs;
+  queueMicrotask(() => {
+    if (inputs === asked) autoFocus(find());
+  });
 }
 
 let recovering = false;
@@ -180,13 +194,16 @@ export function cancelRestore() {
 }
 
 /** Focuses what this screen had last (after Back) or its autofocus target,
- * waiting for live data to render it. Any input cancels the wait. */
-export function restore(back: boolean) {
+ * waiting for live data to render it. A key or pointer press after it was
+ * asked for (`asked`, the input count then) ends it: the viewer's own move
+ * stands, even when the screen's first focus comes a frame late. */
+export function restore(back: boolean, asked = inputs) {
   cancelRestore();
-  if (!mayAutoFocus()) return;
+  if (!mayAutoFocus() || inputs !== asked) return;
   const want = back ? screens.get(path()) : undefined;
   const started = performance.now();
   const attempt = () => {
+    if (inputs !== asked) return true;
     const late = performance.now() - started > 4000;
     const el = want && !late ? byKey(want) : initialIfMarked(late);
     if (!el) return false;
@@ -225,10 +242,31 @@ export const isBackKey = (e: KeyboardEvent) =>
 const typing = (t: EventTarget | null) =>
   t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || (t instanceof HTMLElement && t.isContentEditable);
 
+/** `restore` on the next frame (the new screen has rendered by then),
+ * unless the viewer pressed something in between. */
+export function restoreSoon(back: boolean) {
+  const asked = inputs;
+  requestAnimationFrame(() => restore(back, asked));
+}
+
 export function installFocus(onBack: () => void) {
   backHandler = onBack;
-  window.addEventListener("keydown", () => (lastInput = "keys"), { capture: true });
-  window.addEventListener("pointerdown", () => (lastInput = "pointer"), { capture: true });
+  window.addEventListener(
+    "keydown",
+    () => {
+      lastInput = "keys";
+      inputs++;
+    },
+    { capture: true },
+  );
+  window.addEventListener(
+    "pointerdown",
+    () => {
+      lastInput = "pointer";
+      inputs++;
+    },
+    { capture: true },
+  );
   // Live data can replace the focused element (Play becomes "Add a source"
   // once every addon answered). Focus then falls to the page; on a remote that
   // is a dead end, so it goes to the screen's autofocus target, else its

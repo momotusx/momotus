@@ -27,7 +27,7 @@ import { createEffect, createMemo, createResource, createSignal, For, type JSX, 
 import { privateLink } from "../core/client";
 import type { MemberInfo } from "../core/generated/MemberInfo";
 import * as sync from "../core/sync";
-import { autoFocus } from "../focus/dom";
+import { autoFocusSoon } from "../focus/dom";
 import { form } from "../form";
 import {
   fingerprintGroups,
@@ -73,7 +73,7 @@ const codeOf = (e: unknown) => {
 const say = (e: unknown, step: SyncStep) => stepProblem(codeOf(e), e instanceof Error ? e.message : String(e), step);
 const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 /** After the page changed under it, focus goes to the step's own target (remote and keys only). */
-const focusSoon = (sel: string) => queueMicrotask(() => autoFocus(document.querySelector<HTMLElement>(sel)));
+const focusSoon = (sel: string) => autoFocusSoon(() => document.querySelector<HTMLElement>(sel));
 /** A code read character by character to a screen reader; the screen shows it as is. */
 const spelled = (text: string) => [...text.replace(/[\s-]/g, "")].join(" ");
 

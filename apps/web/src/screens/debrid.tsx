@@ -15,7 +15,7 @@ import { liveView, op, reasonOf } from "../core/client";
 import { debridAccounts, debridStore } from "../core/debrid";
 import type { DebridAccount } from "../core/generated/DebridAccount";
 import type { DebridLoginSnapshot } from "../core/generated/DebridLoginSnapshot";
-import { autoFocus } from "../focus/dom";
+import { autoFocusSoon } from "../focus/dom";
 import { form } from "../form";
 import { address, CODE_SERVICES, type DebridService, loginWords, SERVICES, signedIn, stateWords } from "../lib/debrid";
 import { waitText } from "../lib/profiles";
@@ -51,8 +51,7 @@ export default function Debrid() {
                 setSigningIn(null);
                 if (text) setSaid({ service: s.id, text, tone: "ok" });
                 // Focus goes back to the card that opened it: its sign-in, else its Disconnect.
-                queueMicrotask(() =>
-                  autoFocus(document.querySelector<HTMLElement>(`[data-f="debrid:${s.id}:code"], [data-f="debrid:${s.id}:disconnect"]`)),
+                autoFocusSoon(() => document.querySelector<HTMLElement>(`[data-f="debrid:${s.id}:code"], [data-f="debrid:${s.id}:disconnect"]`),
                 );
               }}
               onSaid={setSaid}
@@ -88,7 +87,7 @@ function Card(props: {
   // The button that opened the field is gone: focus goes to the field, not to the page's top.
   const openKey = () => {
     setKeyOpen(true);
-    queueMicrotask(() => autoFocus(document.querySelector<HTMLElement>(`[data-f="debrid:${id()}:field"]`)));
+    autoFocusSoon(() => document.querySelector<HTMLElement>(`[data-f="debrid:${id()}:field"]`));
   };
   const save = async (e: Event) => {
     e.preventDefault();
