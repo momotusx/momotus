@@ -265,6 +265,21 @@ Mutations SR1 to SR7.
   - The slow-tracker test answers in 270 ms, about 200 ms inside the budget.
 - **The kids_play flake, "input address stream exhausted".** librqbit asks each peer for metadata once. The test swarm gives one peer, the loopback seeder, with the DHT and trackers off, so one failed exchange ends the add. The app never sees this error: its DHT and tracker streams do not end. The error now carries the last peer's cause (`a_magnet_whose_peers_all_failed_says_why`). One run in 55 failed, naming it: the seeder reset the connection before answering the handshake. 200 runs with librqbit's debug lines never failed, so the seeder's reason is still open; no retry was added to the fixture.
 
+## Review answers: engine round 4 (2026-10-20)
+
+`plans/reviews/engine-2026-10-20-r4.md`, 8/10. Each rule has a test that fails on revert and a mutation row (E4A to E4H in `bench/m13/mutations.jsonl`).
+
+- **P1-1, a relaunch serving bytes the disk lost.** Three changes in the librqbit fork:
+  - The resume sample counts a wrong hash as broken, not only a read error. A lost write reads back as zeros, so the torrent goes to the full check and the piece is fetched again (`a_relaunch_fetches_a_piece_the_disk_lost`).
+  - A broken bitfield is cleared by info hash, so a full check cut short does not leave it for the next launch.
+  - A bitfield syncs the data files of the pieces it newly claims before each write, in the flusher and on drop, so it never claims a piece ahead of its data.
+  - Cost (`bench/m13/relaunch-resume.jsonl`): one data sync (F_FULLFSYNC) takes about 12 to 13 ms on this Mac, off the async workers, once per 16 MiB and on removal. A relaunch on Sintel reached Ready in 1 to 7 ms, against 1 to 11 ms in round 3 and 251 to 264 ms with the full check. Not measured on Android.
+- **P3s:**
+  - `select_file` runs its budget round before it holds the torrent for good, so it and an eviction round no longer wait on each other.
+  - Only a lock another engine holds is `DataInUse`; a filesystem with no lock support is an I/O error.
+  - A dropped engine cancels its session's tasks before its folder lock goes.
+  - The address-order scrape rule has a test, on two addresses of one family (a lookup puts IPv4 first).
+
 ## Disk used while measuring
 
 The engine target directory (`$HOME/.cargo-targets/marquee-engine`, release profile only during the runs) stayed at 1.3 GB; torrent data lived in a per-run temporary folder deleted after each run (largest: 571 MB for a stock Tears of Steel run).
