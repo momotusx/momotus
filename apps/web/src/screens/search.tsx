@@ -15,6 +15,7 @@ import X from "lucide-solid/icons/x";
 import { createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
 import { Poster } from "../components/art";
 import { liveView } from "../core/client";
+import { searchIds } from "../lib/ids";
 import type { HomeRow } from "../core/generated/HomeRow";
 import type { SearchSnapshot } from "../core/generated/SearchSnapshot";
 import type { Tile } from "../core/generated/Tile";
@@ -112,7 +113,7 @@ export default function Search() {
 }
 
 function SearchPanel(props: { dialog?: boolean }) {
-  const view = liveView<SearchSnapshot>("search");
+  const view = liveView<SearchSnapshot>("search", {}, false, "id", searchIds);
   const [text, setText] = createSignal(lastQuery);
   const [scope, setScope] = createSignal<string | null>(null);
   const s = () => view.state.data;

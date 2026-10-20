@@ -8,6 +8,7 @@ import Check from "lucide-solid/icons/check";
 import LoaderCircle from "lucide-solid/icons/loader-circle";
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { liveView } from "../core/client";
+import { calendarIds } from "../lib/ids";
 import type { CalendarDay } from "../core/generated/CalendarDay";
 import type { CalendarItem } from "../core/generated/CalendarItem";
 import type { CalendarSnapshot } from "../core/generated/CalendarSnapshot";
@@ -41,7 +42,7 @@ const itemKey = (it: CalendarItem) => `cal:${it.videoId}`;
 
 export default function CalendarScreen() {
   let sent = localDay();
-  const view = liveView<CalendarSnapshot>("calendar", { today: sent });
+  const view = liveView<CalendarSnapshot>("calendar", { today: sent }, false, "id", calendarIds);
   const s = () => view.state.data;
   const setToday = () => {
     sent = localDay();

@@ -112,15 +112,16 @@ const closeWhenOpen = (opening: Promise<Subscription | null>) =>
 
 /** Opens a record view (pushes are whole snapshots; the last one wins). It
  * closes with the calling component unless `keep` is set. Array items are
- * matched by `key` across pushes (`id` unless a view's items repeat it). */
-export function liveView<S>(view: string, params: Record<string, unknown> = {}, keep = false, key = "id"): LiveView<S> {
+ * matched by `key` across pushes (`id` unless a view's items repeat it);
+ * `ids` gives a snapshot whose lists have none their ids first (lib/ids.ts). */
+export function liveView<S>(view: string, params: Record<string, unknown> = {}, keep = false, key = "id", ids?: (s: S) => S): LiveView<S> {
   const [state, setState] = createStore<Live<S>>({ status: { state: "opening" }, data: null });
   const [sub, setSub] = createSignal<number | null>(null);
   // A command sent while the view opens (a query typed the moment the search
   // palette shows) waits for it, in order; once open, commands go at once.
   const commands = commandQueue<object>();
   let closing: Promise<void> | undefined;
-  const apply = (s: S) => setState("data", reconcile(s as never, { merge: true, key }));
+  const apply = (s: S) => setState("data", reconcile((ids ? ids(s) : s) as never, { merge: true, key }));
   const opening = bridge
     .subscribe<S, S>(view, params, {
       snapshot: (s) =>
