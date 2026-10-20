@@ -85,6 +85,53 @@ This one is mixed, and the numbers say why:
 
 **The app path**, once: a local addon (a manifest plus `stream/movie/tt1727587.json` returning Sintel's info hash, trackers and `behaviorHints.filename`) installed into `mq --data <dir>`, then `mq play movie tt1727587 --headless` with no debrid key. VersionsView picked the torrent row, PlaybackView resolved it through the engine (metadata plus Ready) in 5.4 s, the probe read 726 KB through the loopback, and mpv showed the first frame 0.47 s after it started.
 
+## The cold first scrape (plan, 2026-10-20)
+
+**Problem.** A fresh engine's first `Engine::scrape` sometimes answers nothing.
+- In walk EW-1 and race 2, two of four reads kept Torrentio's numbers.
+- The counts came about 3 s after the list, through the runtime's second ask (79b5ff5a).
+- The runtime starts the engine inside that first scrape, and every app session starts cold. So the first title a user opens ranks on stale numbers.
+
+**The wire on this Mac is not it.** A Python probe ran the scraper's stages: every tracker in parallel from one clock, `getaddrinfo` (what the policy resolver calls), the first address, one BEP 15 datagram per step, the BEP 48 HTTP scrape. Four free Blender hashes, cold then warm in one fresh process (`bench/m13/cold-scrape.jsonl`, `"source": "python probe"`).
+- DNS: 4 to 24 ms. The macOS cache may already have been warm; it cannot be flushed without sudo.
+- UDP connect: 70 to 340 ms. Scrape: another 70 to 340 ms.
+- On the cold pass 6 of 8 default trackers answered within 1 s, opentrackr in 153 ms. exodus and explodie were silent for 3 s on the cold pass; on the warm pass exodus and demonii were silent and explodie answered.
+- dler over HTTP took 0.6 s cold and 1.6 s warm.
+
+So a cold engine on this Mac should answer within its budget. Where it does not, the loss is in our own path.
+
+**Suspects in our path** (the measurement keeps or drops each):
+1. One datagram per BEP 15 step, never sent again. One lost connect or scrape loses that tracker for the whole call.
+2. The connect round trip is paid on every call, because connection ids are not kept. BEP 15: a client may reuse one for a minute.
+3. One wall clock covers resolve, connect, scrape and HTTP, so a slow resolve eats the scrape's time.
+4. Only the first resolved address is tried (`address`: `found.next()`). An AAAA answer first, on a network with no IPv6 route, is silence.
+5. Engine start work at the same moment: session start and DHT bootstrap lookups and datagrams.
+
+**Measurement** (cold engine, the CLI, free hashes only):
+- `mq scrape <hash>...` with a fresh `--data` dir per run. It starts the engine with the production policy and discovery on, as the app does, and scrapes at once.
+  - Per hash: the count and when it came.
+  - Per tracker, from the scraper's own report of that call: resolve, connect and scrape round trips, HTTP time, and the stage the deadline cut.
+- 5 cold runs.
+- 5 runs that scrape 3 s after engine start (separates suspect 5).
+- 5 runs on a resolver delayed by 300 ms in `mq-http` `test_dns` (a cold device resolver; test builds only).
+- Rows go to `bench/m13/cold-scrape.jsonl`.
+
+**Fix, chosen by those numbers** (candidates, smallest first):
+- Send each BEP 15 datagram again at 250 and 500 ms inside the budget (suspect 1).
+- Try every resolved address, IPv4 first (suspect 4).
+- Keep each tracker's address for 5 minutes, re-checked by the policy on use, and its connection id for 60 s. A later scrape then costs one round trip (suspect 2).
+- Warm the default trackers when a title's detail opens: resolve plus BEP 15 connect, through the same kept state. The runtime starts the engine inside the first scrape, so a warm-up at engine start alone runs at the same moment and buys nothing.
+- Budgets per stage instead of one wall clock (suspect 3), only if resolves are slow in the numbers.
+
+**Tests on loopback:**
+- A tracker behind a resolver delayed 700 ms still counts within the budget once warmed.
+- A kept connection id means the fake tracker sees one datagram per scrape, not two; an expired one connects again.
+- A dropped first datagram is sent again and answered.
+- An AAAA-only answer with no route falls back to an IPv4 address.
+- Each has mutation rows in `bench/m13/mutations.jsonl`.
+
+**Before and after:** the same cold CLI runs.
+
 ## Disk used while measuring
 
 The engine target directory (`$HOME/.cargo-targets/marquee-engine`, release profile only during the runs) stayed at 1.3 GB; torrent data lived in a per-run temporary folder deleted after each run (largest: 571 MB for a stock Tears of Steel run).
