@@ -253,7 +253,7 @@ fn claims(have: &[u8], p: u32) -> bool {
 /// a. A round skips a piece a reader is in, and the next round takes it.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_round_skips_a_piece_being_read() {
-    let l = leeched().await;
+    let l = std::sync::Arc::new(leeched().await);
     let hold = hold(&l.dir(), Point::Read);
     let reader = {
         let (engine, t, file, span) = (l.engine().clone(), l.t, l.file, l.span(5));
@@ -267,7 +267,19 @@ async fn a_round_skips_a_piece_being_read() {
         })
     };
     reached(&hold).await;
-    let r = within(10, l.evict(&[5, 6])).await;
+    let round = tokio::spawn({
+        let l = l.clone();
+        async move { l.evict(&[5, 6]).await }
+    });
+    let started = Instant::now();
+    while !round.is_finished() {
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "the round waits on the reader's piece"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let r = round.await.unwrap();
     assert_eq!((r.skipped, r.evicted), (vec![5], vec![6]));
     hold.open();
     let got = within(30, reader).await.unwrap();
@@ -334,6 +346,7 @@ async fn a_late_block_during_a_round_is_dropped() {
     l.request(8, 0..16).await;
     hold.open();
     assert_eq!(within(30, round).await.unwrap().evicted, [8]);
+    assert_eq!(l.have().await.0, 20, "piece 8 claimed over its hole");
     assert!(l.piece_matches(8).await, "piece 8 fetched again, not zeros");
 }
 
@@ -527,6 +540,7 @@ async fn allocated_falls_by_the_punched_blocks() {
 async fn an_orphan_is_never_claimed_over_a_hole() {
     let l = std::sync::Arc::new(chosen(1).await);
     l.request(8, 0..8).await;
+    let had = l.have().await.0;
     let hold = hold(&l.dir(), Point::Gated);
     let round = tokio::spawn({
         let l = l.clone();
@@ -536,6 +550,7 @@ async fn an_orphan_is_never_claimed_over_a_hole() {
     l.request(8, 8..16).await;
     hold.open();
     assert_eq!(within(30, round).await.unwrap().evicted, [8]);
+    assert_eq!(l.have().await.0, had, "piece 8 claimed over its hole");
     assert!(l.piece_matches(8).await, "piece 8 is not a hole");
 
     // Behind the read above, so its readahead left it alone.
