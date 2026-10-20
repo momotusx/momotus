@@ -333,3 +333,16 @@ private func phase(_ phase: String, _ extra: String = "") throws -> PlaybackSnap
     #expect(failed.offer?.key == "k3")
     #expect(failed.offer?.label == "1080p WEB")
 }
+
+@Test func theSubtitlesButtonCountsWhileTheCoreStillLists() {
+    // Nothing in yet: Searching, with no mark beside the word that says it.
+    #expect(PlayerLayout.subtitleValue(picked: nil, found: 0, pending: true) == ("Searching", false))
+    // One is enough to show the count; the mark stays while the core lists.
+    #expect(PlayerLayout.subtitleValue(picked: nil, found: 87, pending: true) == ("Off, 87 found", true))
+    // Done: the count alone, or None found.
+    #expect(PlayerLayout.subtitleValue(picked: nil, found: 87, pending: false) == ("Off, 87 found", false))
+    #expect(PlayerLayout.subtitleValue(picked: nil, found: 0, pending: false) == ("None found", false))
+    // A picked track keeps its name, with the mark while more may come.
+    #expect(PlayerLayout.subtitleValue(picked: "Turkish", found: 3, pending: true) == ("Turkish", true))
+    #expect(PlayerLayout.subtitleValue(picked: "Turkish", found: 3, pending: false) == ("Turkish", false))
+}

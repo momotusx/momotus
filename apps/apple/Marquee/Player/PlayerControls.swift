@@ -275,7 +275,7 @@ struct PlayerControls: View {
                 }
             }
             .focused($focus, equals: .audio)
-            menu("Subtitles", "captions", subtitleValue) {
+            menu("Subtitles", "captions", subtitleValue.text, searching: subtitleValue.searching) {
                 Button { model.selectSubtitle(nil); hold(false) } label: {
                     Choice(text: "Off", selected: model.subtitle == nil && model.textTrack == nil)
                 }
@@ -343,24 +343,32 @@ struct PlayerControls: View {
     /// hide (and close it) under the viewer's finger. Each pick ends the hold;
     /// iOS never calls the content's `onDisappear`, so a tap outside ends it
     /// at the next touch or at `PlayerLayout.menuHoldLimit`.
-    private func menu<Items: View>(_ title: String, _ symbol: String, _ value: String, @ViewBuilder items: () -> Items) -> some View {
+    private func menu<Items: View>(_ title: String, _ symbol: String, _ value: String, searching: Bool = false, @ViewBuilder items: () -> Items) -> some View {
         Menu {
             Group { items() }
                 .onAppear { hold(true) }
                 .onDisappear { hold(false) }
         } label: {
-            action(title, symbol, value)
+            action(title, symbol, value, searching: searching)
         }
     }
 
-    private func action(_ title: String, _ symbol: String, _ value: String) -> some View {
+    private func action(_ title: String, _ symbol: String, _ value: String, searching: Bool = false) -> some View {
         VStack(spacing: 3) {
             Glyph(symbol, size: 18)
             Text(title).font(.text(Theme.type.caption + 1, weight: .semibold, relativeTo: .caption))
-            // Capped: a long track name ("English Audio Description") must not widen the row without end.
-            Text(value).font(.text(Theme.type.caption, relativeTo: .caption)).foregroundStyle(.white.opacity(0.75))
-                .lineLimit(1)
-                .frame(maxWidth: metrics.wide ? 220 : 120)
+            HStack(spacing: 4) {
+                // Capped: a long track name ("English Audio Description") must not widen the row without end.
+                Text(value).font(.text(Theme.type.caption, relativeTo: .caption))
+                    .lineLimit(1)
+                // More may come: the core is still asking subtitle addons.
+                if searching {
+                    Glyph("loader-circle", size: Theme.type.caption, relativeTo: .caption)
+                        .accessibilityLabel("still searching")
+                }
+            }
+            .foregroundStyle(.white.opacity(0.75))
+            .frame(maxWidth: metrics.wide ? 220 : 120)
         }
         .foregroundStyle(.white)
         .accessibilityElement(children: .combine)
@@ -371,12 +379,13 @@ struct PlayerControls: View {
         model.audioTrack.flatMap { model.audioTracks.indices.contains($0) ? model.audioTracks[$0] : nil } ?? "Default"
     }
 
-    private var subtitleValue: String {
-        let found = (model.playback?.subtitles.count ?? 0) + model.textTracks.count
-        if let track = model.subtitle { return SubtitleMenu.heading(track) }
-        if let index = model.textTrack, model.textTracks.indices.contains(index) { return model.textTracks[index] }
-        if model.playback?.subtitlesPending == true && found == 0 { return "Looking" }
-        return found == 0 ? "None found" : "Off, \(found) found"
+    private var subtitleValue: (text: String, searching: Bool) {
+        let file = model.textTrack.flatMap { model.textTracks.indices.contains($0) ? model.textTracks[$0] : nil }
+        return PlayerLayout.subtitleValue(
+            picked: model.subtitle.map(SubtitleMenu.heading) ?? file,
+            found: (model.playback?.subtitles.count ?? 0) + model.textTracks.count,
+            pending: model.playback?.subtitlesPending == true
+        )
     }
 
     private func currentQuality(_ snapshot: VersionsSnapshot) -> String {

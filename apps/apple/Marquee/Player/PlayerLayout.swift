@@ -27,6 +27,16 @@ enum PlayerLayout {
 
     static let pictureWait: Double = 4
 
+    /// The Subtitles button: the picked track, else the count as soon as one
+    /// is in, else Searching while the core still lists, else None found. The
+    /// mark says more may come: it shows while the core lists and some are in.
+    static func subtitleValue(picked: String?, found: Int, pending: Bool) -> (text: String, searching: Bool) {
+        let searching = pending && found > 0
+        if let picked { return (picked, searching) }
+        if found == 0 { return (pending ? "Searching" : "None found", false) }
+        return ("Off, \(found) found", searching)
+    }
+
     /// Under the spinner: the version the core moves on to while it resolves,
     /// else the player's own word on a failed source, else the plain wait.
     static func waitingWords(_ playback: PlaybackSnapshot?, notice: String?) -> String {
