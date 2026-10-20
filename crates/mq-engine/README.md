@@ -158,6 +158,66 @@ So a cold engine on this Mac should answer within its budget. Where it does not,
 
 Mutations SR1 to SR7.
 
+## Review answers: engine round 1 (2026-10-20, plan)
+
+`plans/reviews/engine-2026-10-20-r1.md`, 6/10. The order of work is the coordinator's: P1s, then P2, then the P3s marked "now".
+
+**P1-1, nesting depth: fixed in the parser, once.**
+- **Where.** Every bencode parse in the engine goes through `librqbit-bencode`'s `BencodeDeserializer`:
+  - Scrape answers (`dyn_from_bytes`).
+  - Announce answers (tracker-comms).
+  - DHT messages, extended-protocol messages from peers, and `ut_metadata` info dicts (peer-protocol, core).
+  - Its only recursion is `deserialize_seq` and `deserialize_map` (`deserialize_any`, `ignored_any` and the raw-value path all end there).
+- **Fix.**
+  - Vendor `librqbit-bencode` 9.0.1 like the other librqbit crates (`[patch.crates-io]`, NOTICE, provenance row).
+  - Count depth in those two functions, and refuse past `MAX_DEPTH = 32` with a new `Error::TooDeep` before the visitor recurses.
+- **Why 32 rather than 16.** The same parser reads torrent metadata. A BEP 52 file tree nests one dict per directory, depth 5 plus the directory depth, so 16 would refuse a v2 torrent 12 directories deep.
+  - Trackers, scrapes, the DHT and peer messages need 3.
+  - 32 frames stay far below the stack the review measured to overflow (10,000 levels on 2 MiB).
+- **Tests** (10,000 and 100,000 levels, each must return an error and the test process must live):
+  - The parser itself: `dyn_from_bytes` and a typed `from_bytes`, unit tests in mq-engine.
+  - The scrape: an HTTP tracker on loopback answering the nested body.
+  - The announce: the same tracker answering an announce; the engine survives and still adds the torrent.
+  - The DHT: a datagram to a loopback DHT session; the session still answers a ping after it.
+- **Mutation rows:** the depth check removed, and the bound raised past 100,000.
+
+**P1-2, early settle on a zero: changed to the review's rule.**
+- **Rule.** A hash settles early only on an answer with 2 or more seeders, or once every tracker asked for it has answered or failed. Otherwise the scrape waits out the 1 s budget and keeps the maximum, as `Engine::scrape`'s doc says.
+- **Tracking.** A count of trackers still out per hash: a tracker's task ending, with counts or without, takes its hashes' counts down by one.
+- **Test.** `a_scrape_ends_once_each_hash_has_its_own_answer` (it asserts the old rule) becomes a test of the new one, case by case:
+  - An own 5 with a silent default ends early.
+  - An own 0 with a silent default waits the budget and gives 0.
+  - An own 0 with a default 7 ends early with 7.
+  - An own 0 and a default 0 both answered ends early with 0.
+  - An own 1 with a default that fails at once ends early with 1.
+- **Mutation rows:** settle on any answer again, and never count a failure as an answer.
+
+**P2, the fan-out: capped.**
+- **Per hash:** at most 16 own trackers after dedupe (`Engine::scrape`).
+- **Per call:** at most 24 trackers. The defaults always stay; the rest are the own trackers most hashes share, ties by first appearance. A hash whose own trackers all fall outside still goes to the defaults.
+- **Failed resolves** are kept for 60 s, so a dead name is not resolved again on every call. That is a shorter keep than the 5 minutes a good answer gets, because a cold resolver can fail once.
+- **`Reach::trackers`** is pruned of stale entries on every call.
+- **Test:** 40 unique trackers named in the test resolver; the resolver sees at most 24 lookups, and a second call within 60 s sees none for the failed ones.
+- **Mutation row:** the cap removed.
+
+**P3, now:**
+- **Kept tracker state after a network change.**
+  - `Engine::network_changed` clears the scraper's kept addresses and ids, and `Core::on_network_changed` calls it when the engine runs.
+  - A scrape whose kept addresses all fail resolves once more within the same call.
+  - Test: a kept address that stops answering, and a fresh resolve that points elsewhere, still counts.
+- **A refused SYN answered later.** `match_syn_with_accept` (vendored uTP) checks the source again, so a SYN cached while the streams were full is dropped if the policy refuses it by then. No deterministic test: it needs a full stream table and a policy refresh in between. The check sits next to the one in `on_recv` and goes through the same closure.
+- **A claim on a removed torrent.** `claim` counts under the torrents lock, and `enforce_budget` checks claims and readers again under that lock before it removes. That is the order `remove` already uses. No deterministic test (a race window).
+- **`container_index` overflow and stretched index.**
+  - `checked_add` throughout.
+  - An index past `mdat` larger than 64 MiB falls back to the fixed tail. That bounds the review's second `mdat` case, which the 4 KiB head cannot see.
+  - Unit rows for a largesize near `u64::MAX` and a 1 GiB index.
+- **clippy on mq-runtime alone, with and without the torrent feature**, after every change that touches it.
+
+**P3, not in this turn (owner or other agent):**
+- **`read_head` inline for up to 2 s.** The head is verified bytes on local disk, so a stall needs a stuck file read. It moves to a spawned task with the next adapter change.
+- **Ready's fixed 60 s (or 30 s) deadline against a large `moov`.** That deadline is the runtime's (playback.rs), so the stream agent owns it. The engine can report index bytes arriving if the runtime wants to extend the deadline on progress.
+- **The relabel scan for every client.** That is in mq-server, whose request does not say what the client is. Capping the prefetch breaks Apple's large `moov` relabel. The owner of the server path decides between a client hint and a cap.
+
 ## Disk used while measuring
 
 The engine target directory (`$HOME/.cargo-targets/marquee-engine`, release profile only during the runs) stayed at 1.3 GB; torrent data lived in a per-run temporary folder deleted after each run (largest: 571 MB for a stock Tears of Steel run).
