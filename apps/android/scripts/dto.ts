@@ -37,10 +37,11 @@ const LONG = new Set([
   "attempt",
   "sinceMs",
   "lastOkMs",
-  // Accounts: a scheduled deletion, identity links (the relay's row id).
+  // Accounts: a scheduled deletion, identity links (the relay's row id), a kit's last use.
   "dueMs",
   "createdMs",
   "link",
+  "lastUsedMs",
   // M13 stream choice.
   "limitBytes",
   "atMs",
@@ -64,6 +65,9 @@ const DEFAULTED = new Map([
   ["RankKey.covered", "0"],
   ["MayPause.smallSwarm", "false"],
   ["Prefs.subtitleSize", "SubtitleSize.Medium"],
+  // Accounts phase 1c: passkey kits and the devices that joined through one.
+  ["MemberInfo.passkey", "false"],
+  ["MemberInfo.viaPasskey", "false"],
 ]);
 const INT = new Set([
   "overCount",

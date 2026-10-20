@@ -758,8 +758,11 @@ sealed interface ListState {
 /** What reporting `lost` drops by default: the devices it vouched for (transitively) for the user to untick, the kits that go with all of them, and the kits each of those devices made. */
 @Serializable
 data class LostPreview(
+    /** Ticked to go with the lost device: those it vouched for, and every device that joined through a passkey. Never this device. */
     val devices: List<String> = emptyList(),
-    /** Every kit that goes when the lost device and all of `devices` go. */
+    /** Those of `devices` that joined through a passkey, newest first ("Joined with a passkey on <date>"): a stolen phone may hold any synced passkey. */
+    val passkeyJoined: List<String> = emptyList(),
+    /** Every kit that goes when the lost device and all of `devices` go, every passkey kit among them, whoever added it. */
     val kits: List<String> = emptyList(),
     /** The kits each of `devices` made: they stay with a device the user unticks, and go with it otherwise. */
     val deviceKits: List<DeviceKits> = emptyList(),
@@ -770,12 +773,22 @@ data class LostPreview(
 data class MemberInfo(
     val id: String,
     val kit: Boolean,
+    /** A device's name, or a kit's label. */
     val name: String? = null,
     /** Who vouched for it. */
     val sponsor: String? = null,
     /** By the adding device's clock. */
     val addedMs: Long,
     val thisDevice: Boolean,
+    /** A kit made from a passkey (else a recovery kit). */
+    val passkey: Boolean = false,
+    /** A device's form (`phone`, `tablet`, `tv`, `computer`, `web`), when it said: only phones and tablets approve. */
+    val form: String? = null,
+    /** A device that joined through a passkey ("Joined with a passkey"). */
+    val viaPasskey: Boolean = false,
+    /** A kit's newest device (gone or not) and when it joined: "Last used". */
+    val lastUsedBy: String? = null,
+    val lastUsedMs: Long? = null,
 )
 
 /** The network type the app reports. */
