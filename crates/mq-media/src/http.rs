@@ -102,7 +102,9 @@ impl HttpRangeReader {
         let from = usize::try_from(offset - at)
             .unwrap_or(usize::MAX)
             .min(body.len());
-        let to = from.saturating_add(len as usize).min(body.len());
+        let to = from
+            .saturating_add(usize::try_from(len).unwrap_or(usize::MAX))
+            .min(body.len());
         Ok(body.slice(from..to))
     }
 }

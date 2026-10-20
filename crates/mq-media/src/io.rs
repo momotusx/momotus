@@ -103,7 +103,7 @@ impl<'a> Src<'a> {
         }
         let reader = self.reader;
         let data = self.guard(reader.read_at(start, want)).await?;
-        let data = data.slice(..data.len().min(want as usize));
+        let data = data.slice(..data.len().min(usize::try_from(want).unwrap_or(usize::MAX)));
         self.bytes_read += data.len() as u64;
         self.blocks.insert("", start, &data);
         self.blocks.get("", off, len).filter(|b| !b.is_empty())

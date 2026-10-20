@@ -2145,6 +2145,20 @@ mod tests {
         assert_eq!(parse_range("bytes=100-", 100), None);
         assert_eq!(parse_range("bytes=20-10", 100), None);
         assert_eq!(parse_range("bytes=0-1,5-6", 100), None);
+        // Past 4 GiB (a 4K remux), as on a 32-bit TV stick: offsets stay u64 end to end.
+        let big = 9 * (1u64 << 30);
+        assert_eq!(
+            parse_range("bytes=5000000000-", big),
+            Some((5_000_000_000, big))
+        );
+        assert_eq!(
+            parse_range("bytes=5000000000-5000000099", big),
+            Some((5_000_000_000, 5_000_000_100))
+        );
+        assert_eq!(
+            parse_range("bytes=-4294967396", big),
+            Some((big - 4_294_967_396, big))
+        );
         assert_eq!(parse_range("items=0-1", 100), None);
     }
 

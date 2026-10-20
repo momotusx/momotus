@@ -1357,7 +1357,7 @@ async fn read_capped(
         .and_then(|v| v.trim().parse::<u64>().ok())
         .map(Duration::from_secs);
     if let Some(len) = response.content_length()
-        && len as usize > opts.max_bytes
+        && over_limit(len, opts.max_bytes)
     {
         return Err(HttpError::TooLarge {
             limit: opts.max_bytes,
@@ -1390,9 +1390,22 @@ async fn read_capped(
     })
 }
 
+/// A declared length past the limit. Compared as `u64`: on a 32-bit device `len as usize` would wrap a
+/// length above 4 GiB onto a small one that passes.
+fn over_limit(len: u64, max_bytes: usize) -> bool {
+    len > max_bytes as u64
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_length_past_4_gib_is_over_any_limit_on_any_width() {
+        assert!(over_limit((4 << 30) + 10, 8 * 1024 * 1024));
+        assert!(!over_limit(u64::from(u32::MAX), usize::MAX));
+        assert!(!over_limit(8 * 1024 * 1024, 8 * 1024 * 1024));
+    }
 
     #[tokio::test]
     async fn names_that_resolve_only_to_private_addresses_are_refused() {

@@ -608,6 +608,12 @@ pub(crate) async fn fetch_roster(
 }
 
 /// Builds a roster from entries, checking each.
+/// A roster seq as an index into this device's entries. A seq past `usize` (a relay's number above 4 Gi on a
+/// 32-bit device) is past every entry, so a lookup finds none; `as usize` would wrap it onto one it holds.
+fn index(seq: u64) -> usize {
+    usize::try_from(seq).unwrap_or(usize::MAX)
+}
+
 pub(crate) fn rebuild(entries: &[Entry]) -> Result<Roster, RosterError> {
     let mut roster = Roster::default();
     for entry in entries {
@@ -751,7 +757,7 @@ impl<'a> Session<'a> {
     /// at that seq.
     fn diverged(&self, relay: &RosterHead) -> bool {
         self.entries
-            .get(relay.seq as usize)
+            .get(index(relay.seq))
             .is_some_and(|held| held.hash() != relay.hash)
     }
 
@@ -851,7 +857,7 @@ impl<'a> Session<'a> {
             }
         }
         let checkpoint = self.record.checkpoint;
-        match self.entries.get(checkpoint.seq as usize) {
+        match self.entries.get(index(checkpoint.seq)) {
             Some(entry) if entry.hash() != checkpoint.hash => return Err(self.forked().await),
             Some(_) => {}
             None => return Err(SyncError::RelayBehind),
@@ -866,7 +872,7 @@ impl<'a> Session<'a> {
     /// ones it already has and appends the rest (no token needed: members
     /// signed them).
     async fn replay(&self, from: u64) -> Result<(), SyncError> {
-        let Some(entries) = self.entries.get(from as usize..).filter(|e| !e.is_empty()) else {
+        let Some(entries) = self.entries.get(index(from)..).filter(|e| !e.is_empty()) else {
             return Ok(());
         };
         self.http
@@ -1970,4 +1976,18 @@ pub async fn use_server_roster(
     let mut record = session.record.clone();
     record.revision = config.revision + 1;
     Ok(record)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::index;
+
+    #[test]
+    fn a_seq_past_usize_is_past_every_entry() {
+        assert_eq!(index(7), 7);
+        // On a 32-bit device `as usize` turned 2^32 + 1 into entry 1.
+        let past = (1u64 << 32) + 1;
+        assert_eq!(index(past), usize::try_from(past).unwrap_or(usize::MAX));
+        assert!(index(past) > 1);
+    }
 }
