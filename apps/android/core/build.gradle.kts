@@ -31,6 +31,27 @@ android {
     }
 }
 
+// A release or bundle build needs the core library of every ABI it ships: a split without one installs and dies
+// at load. scripts/build-core.sh writes them; debug builds may carry one ABI for a walk on one device.
+val coreLibs =
+    listOf("arm64-v8a", "armeabi-v7a").map {
+        layout.projectDirectory.file("src/main/jniLibs/$it/libmarquee_core.so").asFile
+    }
+val checkCoreLibs by tasks.registering {
+    val libs = coreLibs
+    doLast {
+        val missing = libs.filterNot { it.isFile }
+        if (missing.isNotEmpty()) {
+            throw GradleException(
+                "the core library is missing for ${missing.joinToString {
+                    it.parentFile.name
+                }}: run scripts/build-core.sh",
+            )
+        }
+    }
+}
+tasks.matching { it.name == "preReleaseBuild" }.configureEach { dependsOn(checkCoreLibs) }
+
 dependencies {
     // The aar variant carries libjnidispatch.so for Android.
     api(libs.jna) { artifact { type = "aar" } }

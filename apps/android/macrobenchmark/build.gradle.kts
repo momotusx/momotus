@@ -27,7 +27,7 @@ android {
     targetProjectPath = ":app"
 }
 
-// The connected emulator or device records the profile (no managed device: the core is arm64 only).
+// The connected emulator or device records the profile, with no managed device.
 baselineProfile {
     useConnectedDevices = true
 }

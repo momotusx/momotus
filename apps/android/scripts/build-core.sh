@@ -11,12 +11,14 @@
 # UniFFI version of the core, installed once:
 #   cargo install --path apps/android/tools/uniffi-bindgen --locked --target-dir <scratch>
 #
-# Usage: build-core.sh [arm64|armv7|dev]
-#   Both ABIs by default: phones are arm64, and many TV sticks (Fire TV, Chromecast with Google TV) run a
-#   32-bit userland (plans/m6-android.md D10). arm64 or armv7 builds one, for a walk on one device.
+# Usage: build-core.sh [arm64|armv7|dev [armv7]]
+#   Both ABIs by default: phones are arm64, and TV sticks such as the Fire TV Stick 4K run a 32-bit
+#   userland (plans/m6-android.md D10). arm64 or armv7 builds one, for a walk on one device; a release
+#   or bundle build then refuses until both are there (core/build.gradle.kts).
 #   dev turns debug assertions on, which compiles the bridge's dev hooks in (Trakt from a local fake on
-#   this machine, `MQ_DEV_TRAKT`, for emulator walks), in its own target dir, into src/debug/jniLibs:
-#   only debug builds of the app package it. The plain build has no debug assertions and so no hook.
+#   this machine, `MQ_DEV_TRAKT`, for walks), in its own target dir, into src/debug/jniLibs: only debug
+#   builds of the app package it. It builds arm64, or armv7 when named. The plain build has no debug
+#   assertions and so no hook.
 # MQ_FEATURES=torrent builds the torrent engine in (the `full` variant, never a store build); its
 # size is measured against its own budget (plans/core-backlog.md C11). Unset, the core has no engine.
 set -euo pipefail
@@ -38,20 +40,34 @@ ABIS=(-t arm64-v8a -t armeabi-v7a)
 TRIPLES=(aarch64-linux-android:arm64-v8a armv7-linux-androideabi:armeabi-v7a)
 DEV_ASSERTIONS=false
 LIBS=$OUT/jniLibs
+usage() {
+  echo "usage: build-core.sh [arm64|armv7|dev [armv7]]" >&2
+  exit 2
+}
+# One ABI only, for a walk on one device.
+one() {
+  case "$1" in
+    arm64)
+      ABIS=(-t arm64-v8a)
+      TRIPLES=(aarch64-linux-android:arm64-v8a)
+      ;;
+    armv7)
+      ABIS=(-t armeabi-v7a)
+      TRIPLES=(armv7-linux-androideabi:armeabi-v7a)
+      ;;
+    *) usage ;;
+  esac
+}
 case "${1:-}" in
-  arm64)
-    ABIS=(-t arm64-v8a)
-    TRIPLES=(aarch64-linux-android:arm64-v8a)
-    ;;
-  armv7)
-    ABIS=(-t armeabi-v7a)
-    TRIPLES=(armv7-linux-androideabi:armeabi-v7a)
-    ;;
+  "") ;;
+  arm64 | armv7) one "$1" ;;
   dev)
     DEV_ASSERTIONS=true
     TARGET=$TARGET-dev
     LIBS=$ROOT/apps/android/core/src/debug/jniLibs
+    one "${2:-arm64}"
     ;;
+  *) usage ;;
 esac
 
 cd "$ROOT"
@@ -69,11 +85,24 @@ CARGO_TARGET_DIR=$TARGET CARGO_INCREMENTAL=0 CARGO_PROFILE_RELEASE_STRIP=none AN
   cargo ndk "${ABIS[@]}" --platform 24 rustc --release -p mq-ffi -j 4 --crate-type cdylib \
   ${MQ_FEATURES:+--features "$MQ_FEATURES"}
 
-# The bindings read the first ABI's library: the UniFFI metadata is the same in each.
-UNSTRIPPED=$TARGET/${TRIPLES[0]%%:*}/release/libmarquee_core.so
+# The bindings come from the first ABI's library. Each further ABI's are generated too and must be the
+# same, so a `cfg(target_pointer_width)` that ever reached the FFI surface fails here, not on a device.
+bindings() {
+  uniffi-bindgen generate --library "$TARGET/$1/release/libmarquee_core.so" --language kotlin \
+    --config "$ROOT/apps/android/uniffi.toml" --out-dir "$2"
+}
 rm -rf "$OUT/generated"
-uniffi-bindgen generate --library "$UNSTRIPPED" --language kotlin \
-  --config "$ROOT/apps/android/uniffi.toml" --out-dir "$OUT/generated"
+bindings "${TRIPLES[0]%%:*}" "$OUT/generated"
+for pair in "${TRIPLES[@]:1}"; do
+  other=$(mktemp -d)
+  bindings "${pair%%:*}" "$other"
+  if ! diff -r -q "$OUT/generated" "$other" >/dev/null; then
+    echo "build-core.sh: the ${pair##*:} bindings differ from ${TRIPLES[0]##*:}'s" >&2
+    rm -rf "$other"
+    exit 1
+  fi
+  rm -rf "$other"
+done
 
 rm -rf "$LIBS"
 # A plain build drops a dev library left from before, which debug builds would otherwise package.
@@ -85,3 +114,6 @@ for pair in "${TRIPLES[@]}"; do
   "$STRIP" --strip-all -o "$LIBS/$abi/libmarquee_core.so" "$TARGET/$triple/release/libmarquee_core.so"
 done
 ls -l "$LIBS"/*/libmarquee_core.so
+if [ "${#TRIPLES[@]}" -lt 2 ] && [ "$DEV_ASSERTIONS" = false ]; then
+  echo "build-core.sh: only ${TRIPLES[0]##*:} built; a release or bundle build needs both ABIs" >&2
+fi

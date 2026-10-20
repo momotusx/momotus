@@ -1,10 +1,14 @@
 import com.android.build.api.variant.BuildConfigField
+import com.android.build.api.variant.FilterConfiguration
 
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.androidx.baselineprofile)
 }
+
+/** The last digit of a split APK's versionCode, by its ABI. */
+val abiCodes = mapOf("armeabi-v7a" to 1, "arm64-v8a" to 2)
 
 android {
     namespace = "app.marquee.android"
@@ -20,11 +24,15 @@ android {
     }
 
     // One APK per ABI, so a device installs only its own core library (a TV stick has little room):
-    // arm64-v8a for phones, armeabi-v7a for the many TV sticks with a 32-bit userland (plans/m6-android.md
-    // D10). A store bundle splits by ABI by itself.
+    // arm64-v8a for phones, armeabi-v7a for TV sticks with a 32-bit userland such as the Fire TV Stick 4K
+    // (plans/m6-android.md D10).
     splits {
         abi {
-            isEnable = true
+            // Off for a bundle build: AGP refuses several APK outputs there (issuetracker 402800800), and a
+            // bundle splits by ABI itself. It is off for the whole invocation, so `assembleRelease bundleRelease`
+            // together make one APK with both ABIs: run them apart. The bundle keeps the base versionCode (1)
+            // while the APKs are 11 and 12; settle one scheme before a store upload.
+            isEnable = gradle.startParameter.taskNames.none { it.contains("bundle", ignoreCase = true) }
             reset()
             include("arm64-v8a", "armeabi-v7a")
             isUniversalApk = false
@@ -59,7 +67,13 @@ android {
     }
 
     packaging {
-        jniLibs { useLegacyPackaging = false }
+        jniLibs {
+            useLegacyPackaging = false
+            // The ABIs Marquee ships (D10). splits.abi shapes the APKs only, so a bundle would otherwise carry
+            // the x86 libraries of JNA and graphics-path, and a store would offer x86 devices a build whose
+            // core library is missing.
+            excludes += listOf("**/x86/**", "**/x86_64/**")
+        }
     }
 
     lint {
@@ -90,6 +104,13 @@ androidComponents {
         val benchmark = variant.buildType == "benchmarkRelease" || variant.buildType == "nonMinifiedRelease"
         variant.buildConfigFields?.put("BENCHMARK", BuildConfigField("boolean", "$benchmark", "a benchmark build"))
         if (benchmark) variant.sources.kotlin?.addStaticSourceDirectory("src/release/kotlin")
+        // One versionCode per ABI APK, so two APKs of one release never share one (arm64 above armeabi-v7a,
+        // so a device that runs both takes arm64).
+        variant.outputs.forEach { output ->
+            val abi = output.filters.find { it.filterType == FilterConfiguration.FilterType.ABI }?.identifier
+            val digit = abiCodes[abi] ?: return@forEach
+            output.versionCode.set(output.versionCode.get() * 10 + digit)
+        }
     }
 }
 
