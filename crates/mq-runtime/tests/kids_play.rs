@@ -676,20 +676,28 @@ async fn a_torrent_playback_sends_its_rate_to_the_engine() {
     let (s, t, _owner, kid, found) = torrent_kid().await;
     let view = PlaybackView::open(&kid, found, target("movie", "tt1", "tt1"));
     ready(&view).await;
-    let rate = || async { s.leecher.stats(t).await.unwrap().bytes_per_s };
-    assert_eq!(rate().await, Some(1_250_000));
+    // The adapter takes a rate from its mailbox: its stats show it a moment
+    // after `set_rate` returns.
+    let leecher = &s.leecher;
+    let rate = |want: u64| async move {
+        let mut last = None;
+        for _ in 0..200 {
+            last = leecher.stats(t).await.unwrap().bytes_per_s;
+            if last == Some(want) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        last
+    };
+    assert_eq!(rate(1_250_000).await, Some(1_250_000));
     let key = view.snapshot().key.unwrap();
     view.report_duration(&key, 120_000);
     let exact = s.movie.len() as u64 * 1000 / 120_000;
-    for _ in 0..200 {
-        if rate().await == Some(exact) {
-            return;
-        }
-        tokio::time::sleep(Duration::from_millis(25)).await;
-    }
-    panic!(
-        "the player's duration never reached the engine: {:?}",
-        rate().await
+    assert_eq!(
+        rate(exact).await,
+        Some(exact),
+        "the player's duration never reached the engine"
     );
 }
 
