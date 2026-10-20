@@ -54,6 +54,13 @@ impl DeviceCaps {
             hvc1_only: false,
         }
     }
+
+    /// Whether the primary engine opens `container`, a file extension.
+    pub fn opens(&self, container: &str) -> bool {
+        self.containers
+            .iter()
+            .any(|known| known.eq_ignore_ascii_case(container))
+    }
 }
 
 #[cfg_attr(
@@ -182,6 +189,10 @@ pub struct Conditions {
     /// Digests (`target_digest`) of the stream keys whose torrent file was
     /// not the version listed, for the target it was played for.
     pub wrong_file: Vec<String>,
+    /// The container of the file each version opened here, by
+    /// `target_digest` for the target it opened for: it stands over the
+    /// listing's, which often names none.
+    pub containers: Vec<(String, String)>,
 }
 
 impl Default for Conditions {
@@ -213,6 +224,7 @@ impl Default for Conditions {
             no_picture: Vec::new(),
             did_not_play: Vec::new(),
             wrong_file: Vec::new(),
+            containers: Vec::new(),
         }
     }
 }

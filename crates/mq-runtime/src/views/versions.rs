@@ -274,8 +274,8 @@ pub struct PickHandle {
     core: Core,
     snapshot: SharedObservable<VersionsSnapshot>,
     recommended: bool,
-    /// The device's engine shows HEVC only from `hvc1` entries.
-    pub hvc1_only: bool,
+    /// The device the view ranked for.
+    pub caps: DeviceCaps,
 }
 
 impl PickHandle {
@@ -602,6 +602,7 @@ impl VersionsView {
             no_picture: crate::speed::no_picture(core.library()),
             did_not_play: crate::speed::did_not_play(core.library(), mq_library::hlc::now_ms()),
             wrong_file: crate::speed::wrong_file(core.library(), mq_library::hlc::now_ms()),
+            containers: crate::speed::containers(core.library()),
         };
         let item_id = item_id.map_or_else(
             || {
@@ -798,7 +799,7 @@ impl VersionsView {
             core: self.core.clone(),
             snapshot: self.snapshot.clone(),
             recommended,
-            hvc1_only: self.learning.caps.hvc1_only,
+            caps: self.learning.caps.clone(),
         };
         if recommended {
             s.recommendation_starting = true;
@@ -1507,6 +1508,7 @@ fn relearn(core: &Core, s: &mut State, failed: Option<&str>) {
     s.rank.no_picture = crate::speed::no_picture(lib);
     s.rank.did_not_play = crate::speed::did_not_play(lib, now);
     s.rank.wrong_file = crate::speed::wrong_file(lib, now);
+    s.rank.containers = crate::speed::containers(lib);
     let pick_failed = s
         .recommended
         .as_ref()

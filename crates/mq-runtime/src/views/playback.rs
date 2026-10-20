@@ -16,7 +16,7 @@ use mq_debrid::{ResolveRequest, Resolver, StoreId};
 use mq_library::{Authorization, FINISHED_RATIO, LibraryItemRow, Policy, ProgressRow};
 use mq_protocol::{ResourcePath, Source, decode_subtitles};
 use mq_server::{Format, Lease, SubtitleSlot, SubtitleTrouble, Upstream};
-use mq_streams::ParsedStream;
+use mq_streams::{DeviceCaps, ParsedStream};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -1185,7 +1185,7 @@ async fn resolve_next(
             return;
         }
     };
-    let hvc1_only = lock(&state).pick.as_ref().is_some_and(|p| p.hvc1_only);
+    let hvc1_only = lock(&state).pick.as_ref().is_some_and(|p| p.caps.hvc1_only);
     loop {
         let stream = {
             let mut s = lock(&state);
@@ -1579,6 +1579,10 @@ async fn open_source(
                     .map_err(|p2p| format!("{e}; peer to peer: {p2p}"));
             }
             let link = resolved?;
+            if let Some(why) = never_opens(core, stream, target, state, &link.filename) {
+                lock(state).version_failed = true;
+                return Err(why);
+            }
             // The provider's link, not the addon's: no install scope.
             (link.url, Vec::new(), Some(link.filename), link.size, None)
         }
@@ -1690,6 +1694,10 @@ async fn open_torrent(
         let info = reader.file().clone();
         // The file the addon pointed at must be the one listed (3.4).
         if let Some(why) = judge_file(core, stream, target, &info.path, info.len, by_episode) {
+            return Ok((file, info, Started::Wrong(why.into())));
+        }
+        // Before its start is asked for: nothing of it is fetched.
+        if let Some(why) = never_opens(core, stream, target, state, &info.path) {
             return Ok((file, info, Started::Wrong(why)));
         }
         let mut head = reader.range(0, None).await?;
@@ -1750,7 +1758,7 @@ async fn open_torrent(
         }
         Ok((_, _, Started::Wrong(why))) => {
             lock(state).version_failed = true;
-            why.to_owned()
+            why
         }
         Ok((_, _, Started::Ready(Err(e)))) | Err(e) => e.to_string(),
     };
@@ -1775,9 +1783,10 @@ enum Started<T> {
     Late {
         unchoked: bool,
     },
-    /// The file is not the one the version listed.
+    /// The file is not the one the version listed, or one the device
+    /// never opens.
     #[cfg_attr(test, allow(dead_code))]
-    Wrong(&'static str),
+    Wrong(String),
 }
 
 /// How long a swarm may take to send each `floor` of verified bytes: the
@@ -1879,6 +1888,34 @@ fn judge_file(
         crate::speed::record_wrong_file(core.library(), &stream.key, played_for, now);
     }
     Some(why)
+}
+
+/// Why a debrid or torrent file, named `path` once the service or the
+/// swarm says, never plays here: its container is one the device's player
+/// does not open and no second engine does (an MKV one on Apple). The
+/// version fails as its own before the player gets it; its container is
+/// kept, so the ranking hides it from then on. Not "did not play": the
+/// listing had not named the file.
+fn never_opens(
+    core: &Core,
+    stream: &ParsedStream,
+    target: &PlayTarget,
+    state: &Mutex<State>,
+    path: &str,
+) -> Option<String> {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    let container = mq_relparse::parse(name).container?;
+    let opens = |c: &DeviceCaps| c.has_fallback_engine || c.opens(&container);
+    if lock(state).pick.as_ref().is_none_or(|p| opens(&p.caps)) {
+        return None;
+    }
+    let played_for = (target.season, target.episode);
+    let now = mq_library::hlc::now_ms();
+    crate::speed::record_container(core.library(), &stream.key, played_for, &container, now);
+    Some(format!(
+        "This device cannot open {} files",
+        container.to_ascii_uppercase()
+    ))
 }
 
 /// Why the file a torrent opened is not the version listed (3.4): larger

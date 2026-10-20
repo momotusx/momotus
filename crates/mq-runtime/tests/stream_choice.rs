@@ -8,7 +8,7 @@ mod common;
 use common::{Server, route};
 use mq_library::AddonRow;
 use mq_runtime::{BlockedReason, Core, StoreId, TitleFacts, VersionsParams, VersionsView};
-use mq_streams::{DeviceCaps, SourceClass, StreamPrefs, Target};
+use mq_streams::{DeviceCaps, HideReason, SourceClass, StreamPrefs, Target};
 use std::time::{Duration, Instant};
 
 const HASH_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -725,6 +725,104 @@ async fn a_file_with_no_picture_here_does_not_start_and_ranks_last() {
     .await;
     assert_eq!(playback.snapshot().key.as_ref(), Some(bare));
     assert!(playback.snapshot().attempts.is_empty());
+}
+
+/// Pioneer One on an iPhone (journey walk AQD6): a torrent listed with no
+/// file name is an MKV file, on a device whose player opens no Matroska
+/// and has no second engine. Once the service names the file it fails as
+/// the version's own, its container in the words, before the player gets
+/// it, and nothing says it did not play: Versions hides it on that device
+/// from then on. A device that opens MKV keeps it.
+#[tokio::test]
+async fn a_file_the_device_never_opens_never_reaches_the_player() {
+    const FILE: &str = "/Show.S01E01.720p.x264-VODO.mkv";
+    let link = serde_json::json!({
+        "filename": &FILE[1..], "filesize": 1000, "download": format!("https://cdn.example{FILE}"),
+    });
+    let info = serde_json::json!({
+        "id": "RD1", "filename": "Show", "hash": HASH_A, "progress": 100, "status": "downloaded",
+        "files": [{ "id": 1, "path": FILE, "bytes": 1000, "selected": 1 }],
+        "links": ["https://real-debrid.com/d/AAA"],
+    });
+    let streams = serde_json::json!({ "streams": [
+        { "name": "Torrentio\n720p", "title": "Show S01E01 720p x264 VODO\n👤 6 💾 1.12 GB",
+          "infoHash": HASH_A },
+    ]});
+    let server = Server::start(vec![
+        route(
+            "GET",
+            "/stream/series/tt1%3A1%3A1.json",
+            200,
+            &streams.to_string(),
+        ),
+        route("GET", "/meta/series/tt1.json", 200, &meta()),
+        route(
+            "POST",
+            "/rest/1.0/torrents/addMagnet",
+            201,
+            r#"{"id":"RD1"}"#,
+        ),
+        route("GET", "/rest/1.0/torrents/info/RD1", 200, &info.to_string()),
+        route("POST", "/rest/1.0/unrestrict/link", 200, &link.to_string()),
+    ])
+    .await;
+    let core = core_with(&server);
+    core.set_debrid_origin(&server.base);
+    core.set_debrid_keys(&[(StoreId::RealDebrid, "rd".into())]);
+    let iphone = DeviceCaps {
+        containers: ["mp4", "m4v", "mov", "m3u8"].map(str::to_owned).to_vec(),
+        has_fallback_engine: false,
+        ..apple()
+    };
+    let unplayable = |view: &VersionsView| {
+        let s = view.snapshot();
+        let hidden = s.hidden.by_reason.contains(&(HideReason::Unplayable, 1));
+        s.recommended.is_none() && s.rows.is_empty() && hidden
+    };
+
+    let view = versions_for(&core, iphone.clone()).await;
+    let key = view
+        .snapshot()
+        .recommended
+        .expect("its container unstated")
+        .key;
+    let target = mq_runtime::PlayTarget {
+        kind: "series".into(),
+        item_id: "tt1".into(),
+        video_id: "tt1:1:1".into(),
+        season: Some(1),
+        episode: Some(1),
+        ..mq_runtime::PlayTarget::default()
+    };
+    let playback =
+        mq_runtime::PlaybackView::open_picked(&core, view.pick(&key), target, &view.plays());
+    let failed = || playback.snapshot().phase == mq_runtime::PlaybackPhase::Failed;
+    until("the version to fail", failed).await;
+    let s = playback.snapshot();
+    assert!(s.url.is_none());
+    assert_eq!(s.attempts.len(), 1, "{:?}", s.attempts);
+    assert_eq!(s.attempts[0].error, "This device cannot open MKV files");
+    assert_eq!(server.count("POST", "/rest/1.0/unrestrict/link"), 1);
+    assert!(
+        unplayable(&view),
+        "offered: {:?}",
+        view.snapshot().recommended.map(|r| r.line)
+    );
+    drop((playback, view));
+
+    let view = versions_for(&core, iphone).await;
+    assert!(
+        unplayable(&view),
+        "offered: {:?}",
+        view.snapshot().recommended.map(|r| r.line)
+    );
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    let row = view
+        .snapshot()
+        .recommended
+        .expect("offered where MKV opens");
+    assert_eq!(row.key, key);
+    assert_ne!(row.line, mq_streams::ReasonLine::DidNotPlay);
 }
 
 /// A version picked by hand that fails for a reason of its own does not

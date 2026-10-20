@@ -227,6 +227,9 @@ const DID_NOT_PLAY_KEY: &str = "did_not_play";
 /// A torrent's file that was not the version listed, for the target it
 /// was played for; kept as long as a decode failure.
 const WRONG_FILE_KEY: &str = "wrong_file";
+/// The container of the file a version opened, for the target it opened
+/// for, as `{target_digest}:{extension}`: a file does not change.
+const CONTAINERS_KEY: &str = "containers";
 /// How long a version the player could not decode stays demoted.
 // ponytail: 30 days, as a decoder rarely changes; a one-off decode error
 // demotes a version for that long, never hides it.
@@ -327,6 +330,27 @@ pub fn record_wrong_file(
 ) {
     let digest = target_digest(stream_key, season, episode);
     stamp(lib, WRONG_FILE_KEY, digest, DID_NOT_PLAY_FOR_MS, now_ms);
+}
+
+/// The containers of the files versions opened here, by `target_digest`.
+pub fn containers(lib: &Library) -> Vec<(String, String)> {
+    stamped(lib, CONTAINERS_KEY, u64::MAX, 0)
+        .into_iter()
+        .filter_map(|e| e.split_once(':').map(|(d, c)| (d.to_owned(), c.to_owned())))
+        .collect()
+}
+
+/// The file `stream_key` opened for an episode (`season`, `episode`) or a
+/// film is a `container` one (a lowercase extension).
+pub fn record_container(
+    lib: &Library,
+    stream_key: &str,
+    (season, episode): (Option<u32>, Option<u32>),
+    container: &str,
+    now_ms: u64,
+) {
+    let entry = format!("{}:{container}", target_digest(stream_key, season, episode));
+    stamp(lib, CONTAINERS_KEY, entry, u64::MAX, now_ms);
 }
 
 /// Lists written before digests kept raw stream keys: each becomes its

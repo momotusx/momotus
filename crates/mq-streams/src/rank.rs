@@ -152,7 +152,7 @@ fn gate_reason(s: &ParsedStream, input: &RankInput<'_>) -> Option<HideReason> {
     if input.kids.is_none() && wrong_title(s, input.target, input.conditions) {
         return Some(HideReason::WrongTitle);
     }
-    if playability(s, input.caps).is_none() {
+    if playability(s, input).is_none() {
         return Some(HideReason::Unplayable);
     }
     None
@@ -333,8 +333,8 @@ pub fn title_similarity(a: &str, b: &str) -> f32 {
     common as f32 / ta.len().min(tb.len()) as f32
 }
 
-fn playability(s: &ParsedStream, caps: &DeviceCaps) -> Option<Playability> {
-    let r = &s.release;
+fn playability(s: &ParsedStream, input: &RankInput<'_>) -> Option<Playability> {
+    let (r, caps) = (&s.release, input.caps);
     let codec_ok = match r.codec {
         VideoCodec::Unknown => true,
         VideoCodec::H265 if r.bit_depth == Some(10) => {
@@ -347,15 +347,11 @@ fn playability(s: &ParsedStream, caps: &DeviceCaps) -> Option<Playability> {
     let mut audio = r.audio.iter().filter(|a| **a != Audio::Atmos).peekable();
     let audio_ok = audio.peek().is_none()
         || audio.any(|a| caps.audio_decoders.contains(a) || caps.passthrough.contains(a));
-    let opens = |c: &str| {
-        caps.containers
-            .iter()
-            .any(|known| known.eq_ignore_ascii_case(c))
-    };
-    let container_ok = r.container.as_deref().is_none_or(opens);
+    let container = opened_as(s, input).or(r.container.as_deref());
+    let container_ok = container.is_none_or(|c| caps.opens(c));
     // A device that opens mkv opens what releases come in; one that does
     // not may not open an unstated container.
-    let unstated = r.container.is_none() && !opens("mkv");
+    let unstated = container.is_none() && !caps.opens("mkv");
     match (codec_ok && audio_ok && container_ok, hdr_ok) {
         (true, true) if unstated => Some(Playability::Unstated),
         (true, true) => Some(Playability::Native),
@@ -616,6 +612,19 @@ fn wrong_file(s: &ParsedStream, input: &RankInput<'_>) -> bool {
         .contains(&crate::target_digest(&s.key, season, episode))
 }
 
+/// The container of the file this version opened here for this target
+/// (Pioneer One on an iPhone: a torrent listed with no file name was an
+/// MKV one).
+fn opened_as<'a>(s: &ParsedStream, input: &'a RankInput<'_>) -> Option<&'a str> {
+    let (season, episode) = (input.target.season, input.target.episode);
+    let digest = crate::target_digest(&s.key, season, episode);
+    let opened = &input.conditions.containers;
+    opened
+        .iter()
+        .find(|(d, _)| *d == digest)
+        .map(|(_, c)| c.as_str())
+}
+
 /// This device's player could not decode this version last time.
 fn did_not_play(s: &ParsedStream, input: &RankInput<'_>) -> bool {
     input
@@ -672,7 +681,7 @@ fn score(stream: ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Sco
         playability: if fails_here {
             Playability::NeedsTranscode
         } else {
-            playability(s, input.caps).unwrap_or(Playability::NeedsTranscode)
+            playability(s, input).unwrap_or(Playability::NeedsTranscode)
         },
         viable: start > 0 && !fails_here,
         size_ok: size_ok(weight.size, class, input.prefs),
