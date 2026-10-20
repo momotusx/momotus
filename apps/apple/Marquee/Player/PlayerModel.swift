@@ -128,6 +128,10 @@ final class PlayerModel {
     /// The file's audio and subtitle picks, chosen again on the item that
     /// replaces this one after a server move.
     @ObservationIgnored private var carriedTracks: (audio: Int?, text: Int?)?
+    #if DEBUG
+    /// `-MQWalkLog YES`: the walk's once-a-second playback line.
+    @ObservationIgnored private var walkLog: WalkLog?
+    #endif
 
     init(route: PlayRoute, versions: VersionsModel?, core: CoreClient) {
         self.route = route
@@ -140,6 +144,7 @@ final class PlayerModel {
         // Walks never make a sound (`-MQMute YES`), and the log says so before anything plays.
         player.isMuted = DebugHooks.mute
         coreLog.notice("debug: player muted \(self.player.isMuted, privacy: .public)")
+        if WalkLog.on { walkLog = WalkLog(player: player) }
         #endif
         observePlayer()
     }
