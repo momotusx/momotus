@@ -366,6 +366,26 @@ struct Inner {
     evict_hold: Mutex<Option<Arc<test_hooks::Hold>>>,
 }
 
+/// The session's tasks hang off its token, each torrent's as a child: a
+/// dropped engine stops them before its folder lock goes, or a torrent
+/// held alive by its tracker stream (an `Arc<Session>`) would write into
+/// a folder the next engine owns (engine review r4, P3-3).
+impl Drop for Inner {
+    fn drop(&mut self) {
+        self.session.cancellation_token().cancel();
+    }
+}
+
+/// `data_dir/.lock` held by another engine is `DataInUse`; a filesystem
+/// with no lock support is an I/O error, not another engine (engine
+/// review r4, P3-2).
+fn lock_error(e: std::fs::TryLockError) -> EngineError {
+    match e {
+        std::fs::TryLockError::WouldBlock => EngineError::DataInUse,
+        std::fs::TryLockError::Error(e) => EngineError::Io(e),
+    }
+}
+
 pub(crate) struct Torrent {
     info_hash: String,
     torrent_bytes: Vec<u8>,
@@ -486,9 +506,7 @@ impl Engine {
     pub async fn start(cfg: EngineConfig) -> Result<Self> {
         std::fs::create_dir_all(&cfg.data_dir)?;
         let lock_file = std::fs::File::create(cfg.data_dir.join(".lock"))?;
-        if lock_file.try_lock().is_err() {
-            return Err(EngineError::DataInUse);
-        }
+        lock_file.try_lock().map_err(lock_error)?;
         let scopes = Scopes::new(&cfg.policy);
         let opts = session_options(&cfg, &scopes);
         let session = Session::new_with_opts(cfg.data_dir.clone(), opts).await?;
@@ -718,7 +736,18 @@ impl Engine {
     ) -> Result<usize> {
         let t = self.torrent(h)?;
         let idx = pick::pick(&t.files, hint).ok_or(EngineError::NoFile)?;
+        // The budget round runs before `live` is held for good: a round
+        // holds the round lock while it takes an evicted torrent's `live`
+        // (engine review r4, P3-1).
+        let starts = t.live.lock().await.is_none();
+        if starts {
+            self.enforce_budget(Some(h)).await;
+        }
         let mut live = t.live.lock().await;
+        // A round between the two may have evicted it.
+        if !lock(&self.inner.torrents).contains_key(&h) {
+            return Err(EngineError::UnknownTorrent);
+        }
         if lock(&t.hold).held(profile) {
             return Err(EngineError::Held);
         }
@@ -739,7 +768,6 @@ impl Engine {
             }
             return Ok(idx);
         }
-        self.enforce_budget(Some(h)).await;
         let (ext_tx, ext_rx) = mpsc::unbounded_channel();
         let lens: Vec<u64> = t.files.iter().map(|f| f.len).collect();
         let mut sched = self.inner.cfg.device_class.sched();
@@ -1353,6 +1381,21 @@ mod tests {
             cache_budget_bytes: budget,
             ..EngineConfig::new(dir, http.torrent_scope(&[]))
         }
+    }
+
+    /// Only a lock another engine holds is "in use"; a filesystem with no
+    /// lock support is an I/O error (engine review r4, P3-2).
+    #[test]
+    fn a_lock_error_is_in_use_only_when_another_engine_holds_it() {
+        assert!(matches!(
+            lock_error(std::fs::TryLockError::WouldBlock),
+            EngineError::DataInUse
+        ));
+        let unsupported = std::io::Error::other("no flock here");
+        assert!(matches!(
+            lock_error(std::fs::TryLockError::Error(unsupported)),
+            EngineError::Io(_)
+        ));
     }
 
     /// Two engines on one folder would evict each other's data: the second

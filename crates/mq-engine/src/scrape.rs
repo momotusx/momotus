@@ -1327,6 +1327,34 @@ mod tests {
         );
     }
 
+    /// The same addresses in another order are not new: a kept tracker whose
+    /// name now lists them reversed connects once, on the kept order, not a
+    /// second time on the reversed one (engine review r4, P3-4).
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn the_same_addresses_in_another_order_are_not_new() {
+        let s = loopback_scraper();
+        let v6: IpAddr = "::1".parse().unwrap();
+        // 50 ms answers: a second connect would be sent before the first
+        // one's answer.
+        let late = Duration::from_millis(50);
+        let a = fake_at(V4, 0, "order.scrape.test", 4, 0, late);
+        let b = fake_at(v6, a.port, "order.scrape.test", 9, 0, Duration::ZERO);
+        mq_http::test_dns::set("order.scrape.test", &[V4, v6]);
+        assert_eq!(one(&s, &a.url, H1).await.0, Some(4));
+        assert_eq!(b.seen.load(Ordering::SeqCst), 0);
+        // The tracker restarts (its kept id is refused, so the next call
+        // connects again, with a lookup alongside), and the name lists the
+        // same two addresses reversed.
+        a.id.store(8, Ordering::SeqCst);
+        mq_http::test_dns::set("order.scrape.test", &[v6, V4]);
+        assert_eq!(one(&s, &a.url, H2).await.0, Some(4));
+        assert_eq!(
+            b.seen.load(Ordering::SeqCst),
+            0,
+            "the reversed list was connected as new"
+        );
+    }
+
     /// A cold HTTP tracker's name is looked up once per scrape: the HTTP
     /// client resolves from the keep the scrape just filled (engine review
     /// r3, P3-7: it was looked up twice).

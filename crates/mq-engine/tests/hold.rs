@@ -337,6 +337,56 @@ async fn a_claim_during_an_eviction_keeps_the_torrent() {
         .expect("finished in time");
 }
 
+/// A selection and an eviction round never wait on each other: the round
+/// holds the round lock while it takes the evicted torrent's `live`, so
+/// `select_file` no longer holds `live` while it waits for the round (engine
+/// review r4, P3-1; the CLI selects before it claims). The round stops at
+/// the hook with the unclaimed torrent picked; the selection starts, then
+/// the round goes on.
+#[cfg(feature = "test-hooks")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_selection_never_waits_on_the_round_evicting_it() {
+    let s = support::swarm(true).await;
+    let run = async {
+        let dir = tempfile::tempdir().unwrap();
+        let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+        let ip = std::net::Ipv4Addr::LOCALHOST.into();
+        let engine = Engine::start(EngineConfig {
+            discovery: false,
+            cache_budget_bytes: 1,
+            ..EngineConfig::new(dir.path(), http.torrent_scope(&[ip]))
+        })
+        .await
+        .unwrap();
+        let evicting = mq_engine::test_hooks::hold_evictions(&engine);
+        let t = engine
+            .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+            .await
+            .unwrap();
+        // Bytes from an earlier run make it a candidate.
+        let folder = dir.path().join(&s.info_hash);
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(folder.join("earlier.bin"), vec![1u8; 64 << 10]).unwrap();
+        tokio::time::timeout(Duration::from_secs(15), evicting.reached())
+            .await
+            .expect("no eviction round came");
+        let select = tokio::spawn({
+            let engine = engine.clone();
+            async move { engine.select_file(t, OWNER, &FileHint::Largest).await }
+        });
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        evicting.open();
+        let done = tokio::time::timeout(Duration::from_secs(10), select).await;
+        assert!(
+            done.is_ok(),
+            "the selection and the round waited on each other"
+        );
+    };
+    tokio::time::timeout(Duration::from_secs(60), run)
+        .await
+        .expect("finished in time");
+}
+
 /// Torrent folders an earlier launch left count against the disk budget
 /// from the start, the least recently changed first; a folder that is no
 /// torrent's stays (engine review r2, P2-4: they were never evicted). An
