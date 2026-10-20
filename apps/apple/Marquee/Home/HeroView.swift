@@ -116,7 +116,8 @@ struct HeroView: View {
                         }
                     }
                     .buttonStyle(PillButtonStyle(prominent: true))
-                    .disabled(starting)
+                    // Never off while starting: a TV moves focus off a disabled button,
+                    // and `playHero` ignores a second press.
                     .modifier(StartFocus(scope: startScope))
                 }
                 NavigationLink(value: TitleRoute(tile)) {

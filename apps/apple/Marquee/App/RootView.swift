@@ -230,6 +230,8 @@ struct MainShell: View {
             // The Go menu and its keys, off while the player covers the places.
             .focusedSceneValue(\.places, immersion.active ? nil : OpenTabAction { select($0) })
             .focusedSceneValue(\.find, immersion.active ? nil : OpenTabAction { _ in
+                // A title open over Search goes first: the field is on Search's first page.
+                popToRoot(.search)
                 select(.search)
                 searchRequests += 1
             })

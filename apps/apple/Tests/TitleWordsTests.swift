@@ -91,3 +91,13 @@ import Testing
     #expect(removeFailedWords(name: "Sintel", reason: "The core did not answer")
         == "Sintel could not be removed from Continue Watching: The core did not answer")
 }
+
+@Test func aStartThatSettlesInAHiddenPlaceOpensNothing() {
+    // The viewer went to another place while the pick settled: no player opens out of sight.
+    #expect(SettledStart.of(picked: true, done: true, placeShown: false) == .nothing)
+    #expect(SettledStart.of(picked: false, done: false, placeShown: false) == .nothing)
+    // On screen: the pick plays; no version at all goes to Add a source; still answering, Versions.
+    #expect(SettledStart.of(picked: true, done: false, placeShown: true) == .play)
+    #expect(SettledStart.of(picked: false, done: true, placeShown: true) == .addSource)
+    #expect(SettledStart.of(picked: false, done: false, placeShown: true) == .versions)
+}

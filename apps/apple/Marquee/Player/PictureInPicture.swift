@@ -17,6 +17,13 @@ final class PictureInPicture {
     @ObservationIgnored private weak var waiting: AVPlayerLayer?
     /// The addon subtitle note was said for this film.
     @ObservationIgnored var told = false
+    /// The window's own watch of the first frame, on the layer it keeps: a
+    /// source loaded while the page is away (Up Next, a failover) still
+    /// reports its picture (review apple-journey r3 P1-1).
+    @ObservationIgnored private var frames: NSKeyValueObservation?
+    @ObservationIgnored var onFrame: (@MainActor () -> Void)?
+    /// A frame watch lives on the window's layer.
+    var watchesFrames: Bool { frames != nil }
 
     /// What the page does as the window starts, comes back and closes.
     func on(start: @escaping @MainActor () -> Void, restore: @escaping @MainActor () -> Void, stop: @escaping @MainActor () -> Void) {
@@ -42,6 +49,9 @@ final class PictureInPicture {
         observation = Self.watch(controller) { [weak self] possible in
             Task { @MainActor in self?.possible = possible }
         }
+        frames = Self.watchFrames(layer) { [weak self] in
+            Task { @MainActor in self?.onFrame?() }
+        }
     }
 
     func start() {
@@ -50,6 +60,13 @@ final class PictureInPicture {
 
     func stop() {
         controller?.stopPictureInPicture()
+    }
+
+    /// Made outside the main actor, as `watch`.
+    private nonisolated static func watchFrames(_ layer: AVPlayerLayer, _ shown: @escaping @Sendable () -> Void) -> NSKeyValueObservation {
+        layer.observe(\.isReadyForDisplay, options: [.initial, .new]) { layer, _ in
+            if layer.isReadyForDisplay { shown() }
+        }
     }
 
     /// Made outside the main actor: KVO calls back on the controller's queue.

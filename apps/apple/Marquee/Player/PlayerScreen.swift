@@ -26,6 +26,9 @@ struct PlayerScreen: View {
     @State private var safeBottom: CGFloat = 0
     /// The drawn subtitle's box at full size, for the phone's rule.
     @State private var subtitleBox: CGFloat = 0
+    /// Skip's and Up Next's measured heights, which the phone's subtitle keeps over.
+    @State private var skipHeight: CGFloat = 0
+    @State private var upNextHeight: CGFloat = 0
     #if os(iOS)
     @State private var pip = PictureInPicture()
     @Environment(FloatingPlayer.self) private var floating
@@ -101,7 +104,10 @@ struct PlayerScreen: View {
             }
             StatusOverlay(
                 model: model, back: close, chooseVersion: model.versions == nil ? nil : { showVersions = true },
-                overControls: PlayerLayout.statusOverControls(controlsShown: controlsShown, windowHeight: windowHeight, controlsHeight: controlsHeight)
+                overControls: phoneControls
+                    ? PlayerLayout.statusOverTransport(windowHeight: windowHeight, safeBottom: safeBottom)
+                    : PlayerLayout.statusOverControls(controlsShown: controlsShown, windowHeight: windowHeight, controlsHeight: controlsHeight),
+                spinnerInPlay: phoneControls
             )
             if controlsShown {
                 PlayerControls(model: model, versions: model.versions, back: close, hold: { open in
@@ -137,19 +143,21 @@ struct PlayerScreen: View {
                     .allowsHitTesting(false)
                     .transition(.opacity)
             }
-            if let segment = model.segment, model.playback?.phase != "failed", !model.showEndCard {
+            if skipShown, let segment = model.segment {
                 // Netflix places it bottom right on the controls' top line, and it
                 // stays there whether or not the controls show.
                 SkipButton(segment: segment, showSource: controls) { model.skip(segment) }
                     .id(segment)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { skipHeight = $0 }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                     .padding(.trailing, Theme.Space.m)
                     .padding(.bottom, PlayerLayout.overlayBottom(controlsShown: controlsShown, controlsHeight: controlsHeight))
                     .transition(.opacity)
             }
-            if PlayerLayout.showsUpNext(due: model.showNext, controlsShown: controlsShown, menuOpen: menuOpen, windowHeight: windowHeight) {
+            if upNextShown {
                 // Just over the measured controls while they show; on a short window it waits for them to hide.
                 UpNextCard(model: model, short: windowHeight > 0 && windowHeight < PlayerLayout.upNextRoom)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { upNextHeight = $0 }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                     .padding(.horizontal, Theme.Space.m)
                     .padding(.bottom, PlayerLayout.overlayBottom(controlsShown: controlsShown, controlsHeight: controlsHeight))
@@ -200,14 +208,14 @@ struct PlayerScreen: View {
         .onAppear {
             immersion.active = true
             #if os(iOS)
-            PlayerOrientation.enter()
+            PlayerOrientation.enter(across: PlayerLayout.opensAcross(lastAcross: model.lastAcross))
             float()
             #endif
         }
         .onDisappear {
             immersion.active = false
             #if os(iOS)
-            PlayerOrientation.leave()
+            if let across = PlayerOrientation.leave() { model.lastAcross = across }
             #endif
             // A film floating in Picture in Picture plays on with its page gone.
             if !model.floating { model.close() }
@@ -268,6 +276,9 @@ struct PlayerScreen: View {
     private func float() {
         let (model, pip, floating, sync, dismiss) = (self.model, self.pip, self.floating, self.sync, self.dismiss)
         floating.end(except: model)
+        // The window's layer reports first frames while the page is away.
+        pip.onFrame = { model.firstFrame() }
+        model.windowWatchesFrames = { pip.watchesFrames }
         pip.on(start: {
             floating.float(.init(model: model, pip: pip))
             dismiss()
@@ -288,6 +299,28 @@ struct PlayerScreen: View {
         #endif
     }
 
+    /// The iPhone's controls are up: the waiting spinner turns in their Play circle.
+    private var phoneControls: Bool {
+        #if os(iOS)
+        controlsShown && UIDevice.current.userInterfaceIdiom == .phone
+        #else
+        false
+        #endif
+    }
+
+    private var skipShown: Bool {
+        model.segment != nil && model.playback?.phase != "failed" && !model.showEndCard
+    }
+
+    private var upNextShown: Bool {
+        PlayerLayout.showsUpNext(due: model.showNext, controlsShown: controlsShown, menuOpen: menuOpen, windowHeight: windowHeight)
+    }
+
+    /// The taller of Skip and Up Next while one shows, both on the foot's right.
+    private var pillHeight: CGFloat? {
+        [skipShown ? skipHeight : nil, upNextShown ? upNextHeight : nil].compactMap { $0 }.max()
+    }
+
     /// The OSD is on screen: not hidden, and no failure or end card in its place.
     private var controlsShown: Bool {
         controls && model.playback?.phase != "failed" && !model.showEndCard
@@ -302,7 +335,8 @@ struct PlayerScreen: View {
         if UIDevice.current.userInterfaceIdiom == .phone {
             return PhoneFrame.subtitle(
                 screenHeight: size.height, pictureHeight: fittedHeight(size), safeBottom: safeBottom,
-                controlsShown: controlsShown, scrubberTop: size.height - safeBottom - controlsHeight, boxHeight: subtitleBox)
+                controlsShown: controlsShown, scrubberTop: size.height - safeBottom - controlsHeight, boxHeight: subtitleBox,
+                pillTop: pillHeight.map { size.height - safeBottom - PlayerLayout.overlayBottom(controlsShown: controlsShown, controlsHeight: controlsHeight) - $0 })
         }
         #endif
         let foot = PlayerLayout.subtitleFoot(
@@ -422,6 +456,8 @@ private struct StatusOverlay: View {
     /// Set when the shown controls reach the middle: the waiting status sits
     /// this far up, just over them (PlayerLayout.statusOverControls).
     var overControls: CGFloat?
+    /// The iPhone's controls are up: their Play circle shows the spinner, so only the words show here.
+    var spinnerInPlay = false
     /// The way on takes focus when the failure shows, so a remote is on it;
     /// after a Try again, Try again keeps it.
     @FocusState private var focus: FailureAction?
@@ -506,7 +542,7 @@ private struct StatusOverlay: View {
         case .waiting(let words):
             if let overControls {
                 HStack(spacing: 10) {
-                    ProgressView().tint(.white)
+                    if !spinnerInPlay { ProgressView().tint(.white) }
                     if words { waitingWords.lineLimit(1) }
                 }
                 .padding(.horizontal, Theme.Space.s)

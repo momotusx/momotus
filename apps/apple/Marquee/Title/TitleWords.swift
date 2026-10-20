@@ -135,3 +135,17 @@ func noPlayWords(hasEpisodes: Bool) -> String {
 func removeFailedWords(name: String, reason: String) -> String {
     "\(name) could not be removed from Continue Watching: \(reason)"
 }
+
+/// What a Play that waited for its pick does once the pick settles: nothing
+/// when its place went out of sight meanwhile (a player must never open in a
+/// hidden place, review apple-journey r3 P2-2); else play the pick, or Add a
+/// source with no version at all, or Versions while sources still answer.
+enum SettledStart: Equatable {
+    case play, addSource, versions, nothing
+
+    static func of(picked: Bool, done: Bool, placeShown: Bool) -> SettledStart {
+        guard placeShown else { return .nothing }
+        if picked { return .play }
+        return done ? .addSource : .versions
+    }
+}

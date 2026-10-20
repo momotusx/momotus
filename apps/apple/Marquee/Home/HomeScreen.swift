@@ -10,6 +10,9 @@ struct HomeScreen: View {
     @Environment(CoreClient.self) private var core
     @Environment(\.metrics) private var metrics
     @Environment(SyncModel.self) private var sync
+    @Environment(\.tabShown) private var shown
+    /// Home is on screen now: a hero start that settles later reads it.
+    @State private var placeShown = true
     @Environment(ProfileSession.self) private var profiles
     @State private var width: CGFloat = 0
     @State private var height: CGFloat = 0
@@ -65,6 +68,7 @@ struct HomeScreen: View {
         #endif
         .topScrim(underBar || model.needsSetup || model.allFailed)
         .onGeometryChange(for: CGSize.self) { $0.size } action: { (width, height) = ($0.width, $0.height) }
+        .onChange(of: shown, initial: true) { _, now in placeShown = now }
         #if DEBUG
         .onAppear { if DebugHooks.takeOnboarding() { onboarding = true } }
         .task {
@@ -135,12 +139,11 @@ struct HomeScreen: View {
         Task {
             let route = await versions.settledPick(tapped: tapped)
             starting = false
-            if let route {
-                playing = route
-            } else if versions.snapshot?.done == true {
-                showSources = true
-            } else {
-                showHeroVersions = true
+            switch SettledStart.of(picked: route != nil, done: versions.snapshot?.done == true, placeShown: placeShown) {
+            case .play: playing = route
+            case .addSource: showSources = true
+            case .versions: showHeroVersions = true
+            case .nothing: break
             }
         }
     }

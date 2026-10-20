@@ -113,6 +113,11 @@ final class PlayerModel {
     @ObservationIgnored private var publishedDuration: Double = 0
     /// Picture in Picture holds the film with its page gone: leaving the page keeps it playing.
     @ObservationIgnored var floating = false
+    /// The Picture in Picture window keeps a first-frame watch of its own.
+    @ObservationIgnored var windowWatchesFrames: @MainActor () -> Bool = { false }
+    /// iPhone: whether the player was across when its page last left (Versions
+    /// over it, Picture in Picture); nil before its first appear.
+    @ObservationIgnored var lastAcross: Bool?
     /// The run of the view and the task id it runs for, outliving a page while the film floats.
     @ObservationIgnored private var running: (id: [String], task: Task<Void, Never>)?
     /// The next load stays paused: the source opened again after a server move.
@@ -625,7 +630,7 @@ final class PlayerModel {
     /// The sound runs but no frame ever came: never a spinner over a running
     /// audio track. The core tries the next version, or says Try again.
     private func pictureFailed() {
-        fail(PlayerFailure(kind: "decode", error: "this version's picture cannot be shown on this device"),
+        fail(PlayerFailure(kind: PlayerLayout.pictureFailureKind(floating: floating), error: "this version's picture cannot be shown on this device"),
              notice: "This version's picture cannot be shown here, trying the next one")
     }
 
@@ -687,7 +692,8 @@ final class PlayerModel {
         if let now = ticked(time: time.seconds, pending: pendingStart) { position = now }
         if loadedURL != nil, PlayerLayout.pictureMissing(
             shown: pictureShown, advanced: position - loadStart,
-            playingFor: playingSince.map { (ContinuousClock.now - $0) / .seconds(1) } ?? 0
+            playingFor: playingSince.map { (ContinuousClock.now - $0) / .seconds(1) } ?? 0,
+            watched: !floating || windowWatchesFrames()
         ) {
             pictureFailed()
             return

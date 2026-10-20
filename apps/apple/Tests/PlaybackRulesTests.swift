@@ -117,11 +117,11 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
 @Test func aMenuHoldsTheControlsUntilAPickATouchOrItsLimit() {
     let opened = ContinuousClock.now
     #expect(PlayerLayout.menuHolds(openedAt: opened, now: opened))
-    // Reading a menu for half a minute keeps it, and the controls under it, open.
-    #expect(PlayerLayout.menuHolds(openedAt: opened, now: opened + .seconds(30)))
-    #expect(PlayerLayout.menuHolds(openedAt: opened, now: opened + .seconds(59)))
-    // Dismissed by a tap outside, which iOS does not report: the hold lets go.
-    #expect(!PlayerLayout.menuHolds(openedAt: opened, now: opened + .seconds(60)))
+    // Reading a menu, the last press 29 s ago, keeps it and the controls under it open.
+    #expect(PlayerLayout.menuHolds(openedAt: opened, now: opened + .seconds(15)))
+    #expect(PlayerLayout.menuHolds(openedAt: opened, now: opened + .seconds(29)))
+    // Dismissed by a tap outside, which iOS does not report: the hold lets go after half a minute.
+    #expect(!PlayerLayout.menuHolds(openedAt: opened, now: opened + .seconds(30)))
     // A pick or a touch cleared it.
     #expect(!PlayerLayout.menuHolds(openedAt: nil, now: opened))
 }
@@ -258,6 +258,11 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
     #expect(!PlayerLayout.pictureMissing(shown: false, advanced: 3, playingFor: 3))
     // A shown frame is never a missing picture, however long it plays.
     #expect(!PlayerLayout.pictureMissing(shown: true, advanced: 600, playingFor: 600))
+    // No frame watch (the page away, a window without its own): no verdict on the version.
+    #expect(!PlayerLayout.pictureMissing(shown: false, advanced: 30, playingFor: 30, watched: false))
+    // The version's own failure on the page; in the window it fails over without the device's record.
+    #expect(PlayerLayout.pictureFailureKind(floating: false) == "decode")
+    #expect(PlayerLayout.pictureFailureKind(floating: true) != "decode")
 }
 
 @Test func focusShowsOnlyForKeyboardNavigation() {
@@ -392,13 +397,23 @@ private func phase(_ phase: String, _ extra: String = "") throws -> PlaybackSnap
 }
 
 @Test func theWaitingLineSitsOverControlsThatReachTheMiddle() {
-    // A phone in landscape: the shown controls reach the middle, so the line sits just over them.
-    #expect(PlayerLayout.statusOverControls(controlsShown: true, windowHeight: 402, controlsHeight: 290) == 298)
+    // An iPad in a narrow window (the compact OSD, its transport and actions in the foot block):
+    // the shown controls reach the middle, so the line sits just over them.
+    #expect(PlayerLayout.statusOverControls(controlsShown: true, windowHeight: 600, controlsHeight: 290) == 298)
     // A Mac window: the controls stay low, the line stays centred.
     #expect(PlayerLayout.statusOverControls(controlsShown: true, windowHeight: 1000, controlsHeight: 200) == nil)
     // Controls hidden, or no height yet: centred.
-    #expect(PlayerLayout.statusOverControls(controlsShown: false, windowHeight: 402, controlsHeight: 290) == nil)
+    #expect(PlayerLayout.statusOverControls(controlsShown: false, windowHeight: 600, controlsHeight: 290) == nil)
     #expect(PlayerLayout.statusOverControls(controlsShown: true, windowHeight: 0, controlsHeight: 290) == nil)
+    // The iPhone's foot block (scrubber and actions, 85 pt) never reaches the middle: the transport
+    // is there instead, so the spinner turns in its Play circle and the words sit 8 pt over it.
+    #expect(PlayerLayout.statusOverControls(controlsShown: true, windowHeight: 402, controlsHeight: 85) == nil)
+    for (height, safeBottom) in [(CGFloat(402), CGFloat(21)), (874, 34)] {
+        let padding = PlayerLayout.statusOverTransport(windowHeight: height, safeBottom: safeBottom)
+        let wordsBottom = height - safeBottom - padding
+        #expect(wordsBottom == height / 2 - PhoneFrame.transportHalfHeight - 8, "\(height): the words' foot over the transport")
+    }
+    #expect(PlayerLayout.statusOverTransport(windowHeight: 402, safeBottom: 21) == 222)
 }
 
 @Test func theFailureHeadlineSaysOnlyThisVersionWhenAnotherIsOffered() {
@@ -672,6 +687,14 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     #expect(!PlayerLayout.resumesAfterRestore(playingAtRestore: true, playingNow: true))
 }
 
+@Test func thePhonePlayerTurnsAcrossOnAPlaysFirstAppearOnly() {
+    // A new play opens across.
+    #expect(PlayerLayout.opensAcross(lastAcross: nil))
+    // Back from Versions or the window: the way it was when its page left.
+    #expect(!PlayerLayout.opensAcross(lastAcross: false), "a viewer watching upright is turned across again")
+    #expect(PlayerLayout.opensAcross(lastAcross: true))
+}
+
 @Test func thePhonePlayerSitsWhereTheSystemPlayerDoes() {
     // Measured on the system player, iPhone 17 upright: 402 x 874, the safe
     // area 62 on top and 34 at the foot, none at the sides.
@@ -701,7 +724,7 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     #expect(PlayerLayout.subtitleFoot(screenHeight: 900, pictureHeight: 900, safeBottom: 0, controlsShown: false, controlsHeight: 200) == 860)
 }
 
-@Test func aSubtitleAndThePhoneControlsNeverOverlap() {
+@Test func aSubtitleClearsThePhoneControlsDownToItsFloor() {
     // iPhone 17; the foot block (capsule, 6 pt, the actions row, the foot gap) is 85 pt over the safe area.
     let block: CGFloat = PhoneFrame.barHeight + 6 + 36 + PhoneFrame.bottomGap
     let shapes: [(height: CGFloat, safeBottom: CGFloat, picture: CGFloat)] = [(402, 21, 402), (874, 34, 226)]
@@ -719,10 +742,11 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
                         controlsShown: shown, scrubberTop: scrubberTop, boxHeight: box)
                     let top = placed.foot - box * placed.scale
                     if shown {
-                        #expect(top >= transport.upperBound, "\(shape.height) \(size) \(lines) lines meets the transport")
+                        // Clear of the transport, unless it is already at its floor.
+                        #expect(top >= transport.upperBound || placed.scale == PhoneFrame.subtitleFloor, "\(shape.height) \(size) \(lines) lines meets the transport")
                         #expect(placed.foot <= scrubberTop - PhoneFrame.subtitleGap, "\(shape.height) \(size) \(lines) lines meets the scrubber")
                     }
-                    #expect(placed.scale > 0 && placed.scale <= 1)
+                    #expect(placed.scale >= PhoneFrame.subtitleFloor && placed.scale <= 1)
                     if shape.height > shape.picture * 2 {
                         // Upright, the black band under the picture holds it: just under the picture, full size.
                         #expect(placed.foot == pictureBottom + PhoneFrame.bandGap + box, "\(size) \(lines) lines not in the band")
@@ -746,4 +770,33 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     let tall = PhoneFrame.subtitle(screenHeight: 874, pictureHeight: 600, safeBottom: 34, controlsShown: false, scrubberTop: 755, boxHeight: 72)
     #expect(tall.foot == 711)
     #expect(tall.scale == 1)
+}
+
+@Test func aSubtitleNeverShrinksPastItsFloor() {
+    // The owner's iPhone 13 Pro across, the controls up: 43 pt between the transport and the capsule.
+    let twoExtraLarge = PhoneFrame.subtitle(screenHeight: 390, pictureHeight: 390, safeBottom: 21, controlsShown: true, scrubberTop: 284, boxHeight: 84)
+    #expect(twoExtraLarge.foot == 276)
+    #expect(twoExtraLarge.scale == PhoneFrame.subtitleFloor, "51% before the floor")
+    #expect(PhoneFrame.subtitleFloor == 0.75)
+    let oneMedium = PhoneFrame.subtitle(screenHeight: 390, pictureHeight: 390, safeBottom: 21, controlsShown: true, scrubberTop: 284, boxHeight: 36)
+    #expect(oneMedium.scale == 1)
+}
+
+@Test func skipAndUpNextKeepTheSubtitleOverThem() {
+    // Across, the controls hidden: Skip (64 pt, its foot at 357) lifts the line 8 pt over it.
+    let hidden = PhoneFrame.subtitle(screenHeight: 402, pictureHeight: 402, safeBottom: 21, controlsShown: false, scrubberTop: 296, boxHeight: 60, pillTop: 293)
+    #expect(hidden.foot == 285)
+    #expect(hidden.scale == 1)
+    #expect(PhoneFrame.subtitle(screenHeight: 402, pictureHeight: 402, safeBottom: 21, controlsShown: false, scrubberTop: 296, boxHeight: 60).foot == 347)
+    // Across, the controls up: over Skip it would meet the transport, so it stays on the capsule.
+    let shown = PhoneFrame.subtitle(screenHeight: 402, pictureHeight: 402, safeBottom: 21, controlsShown: true, scrubberTop: 296, boxHeight: 36, pillTop: 224)
+    #expect(shown.foot == 288)
+    #expect(shown.scale == 1)
+    // Upright with a tall picture and the controls up, the room is there: over Skip.
+    let tall = PhoneFrame.subtitle(screenHeight: 874, pictureHeight: 600, safeBottom: 34, controlsShown: true, scrubberTop: 755, boxHeight: 72, pillTop: 683)
+    #expect(tall.foot == 675)
+    #expect(tall.scale == 1)
+    // Upright in the band, Skip lower down changes nothing.
+    let band = PhoneFrame.subtitle(screenHeight: 874, pictureHeight: 226, safeBottom: 34, controlsShown: true, scrubberTop: 755, boxHeight: 60, pillTop: 683)
+    #expect(band.foot == 618)
 }

@@ -7,6 +7,9 @@ struct TitleScreen: View {
     let core: CoreClient
     @Environment(\.metrics) private var metrics
     @Environment(\.openURL) private var openURL
+    @Environment(\.tabShown) private var shown
+    /// The place is on screen now: a start that settles later reads it.
+    @State private var placeShown = true
     @Environment(SyncModel.self) private var sync
     @State private var width: CGFloat = 0
     @State private var height: CGFloat = 0
@@ -61,6 +64,7 @@ struct TitleScreen: View {
         }
         #endif
         .fullBleedTop()
+        .onChange(of: shown, initial: true) { _, now in placeShown = now }
         // At rest too: on a short or wide window the words can start under the bar before any scroll.
         .topScrim(underBar, atRest: true)
         .defaultFocus($primaryFocused, true)
@@ -120,13 +124,13 @@ struct TitleScreen: View {
         Task {
             var route = await versions.settledPick()
             startingPlay = false
-            if route != nil {
+            switch SettledStart.of(picked: route != nil, done: versions.snapshot?.done == true, placeShown: placeShown) {
+            case .play:
                 route?.fromStart = fromStart
                 playing = route
-            } else if versions.snapshot?.done == true {
-                showAddons = true
-            } else {
-                showVersions = true
+            case .addSource: showAddons = true
+            case .versions: showVersions = true
+            case .nothing: break
             }
         }
     }
@@ -172,6 +176,8 @@ struct TitleScreen: View {
         let route = await model.settledPick(tapped: tapped)
         guard starting == episode.videoId else { return }
         starting = nil
+        // Its place went out of sight meanwhile: no player opens there.
+        guard placeShown else { return }
         if let route {
             playing = route
         } else {
@@ -553,8 +559,9 @@ private struct PlayBlock: View {
                     }
                     .buttonStyle(PillButtonStyle(prominent: true))
                     .focused(focus)
-                    // The reason shows right under it.
-                    .disabled(failure != nil || starting)
+                    // The reason shows right under it. Never off while starting: a TV moves
+                    // focus off a disabled button, and `play(fromStart:)` ignores a second press.
+                    .disabled(failure != nil)
                     .accessibilityLabel(starting ? "Starting" : playWords)
                     if let resume = target?.resumeMs, resume > 0 {
                         Button { play(true) } label: {
@@ -562,7 +569,7 @@ private struct PlayBlock: View {
                                 .frame(maxWidth: wide || !typeSize.isAccessibilitySize ? nil : .infinity)
                         }
                         .buttonStyle(PillButtonStyle())
-                        .disabled(failure != nil || starting)
+                        .disabled(failure != nil)
                     }
                 }
             }

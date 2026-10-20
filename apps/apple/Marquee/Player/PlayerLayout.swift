@@ -31,9 +31,21 @@ enum PlayerLayout {
     /// The picture never came while the sound runs: AVFoundation plays an HEVC
     /// file tagged hev1 (and any track it cannot show) as audio over a black
     /// layer, with no error. More than 4 s of playhead or of playing without a
-    /// frame means this version's picture cannot be shown here.
-    static func pictureMissing(shown: Bool, advanced: Double, playingFor: Double) -> Bool {
-        !shown && (advanced > pictureWait || playingFor > pictureWait)
+    /// frame means this version's picture cannot be shown here. Only while
+    /// a frame watch looks (the page's view, or the Picture in Picture
+    /// window's layer): with none, a missing frame says nothing about the
+    /// version (review apple-journey r3 P1-1).
+    static func pictureMissing(shown: Bool, advanced: Double, playingFor: Double, watched: Bool = true) -> Bool {
+        watched && !shown && (advanced > pictureWait || playingFor > pictureWait)
+    }
+
+    /// The failure kind a missing picture reports. On the page it is the
+    /// version's own ("decode"), which the core keeps as did not play on this
+    /// device; in the Picture in Picture window it only moves to the next
+    /// version, as a window's frame says less about the device (review
+    /// apple-journey r3 P1-1).
+    static func pictureFailureKind(floating: Bool) -> String {
+        floating ? "picture" : "decode"
     }
 
     static let pictureWait: Double = 4
@@ -85,6 +97,13 @@ enum PlayerLayout {
         guard abs(delay) >= 0.05 else { return "On time" }
         let amount = String(format: "%g", abs(delay))
         return delay > 0 ? "\(amount) s later" : "\(amount) s earlier"
+    }
+
+    /// The phone player opens across on a play's first appear; back from
+    /// Versions or from the window it turns the way it was when it left, so a
+    /// viewer watching upright stays upright (review apple-journey r3 P3-6).
+    static func opensAcross(lastAcross: Bool?) -> Bool {
+        lastAcross ?? true
     }
 
     /// A film brought back from Picture in Picture while it played is playing
@@ -195,13 +214,14 @@ enum PlayerLayout {
         due && !menuOpen && (!controlsShown || windowHeight >= upNextRoom)
     }
 
-    /// The longest an open menu holds the controls up and Up Next back. Long
-    /// enough to read and choose in it: at 10 s an open menu went with the
-    /// hiding controls (the iPhone walk, round 2). iOS never says when a menu
-    /// closes, so one dismissed by a tap outside keeps the controls up this
-    /// long, unless the player is touched first.
+    /// The longest an open menu holds the controls up and Up Next back, from
+    /// its opening or the last press in it. Long enough to read and choose: at
+    /// 10 s an open menu went with the hiding controls (the iPhone walk, round
+    /// 2). iOS never says when a menu closes, so one dismissed by a tap outside
+    /// keeps the controls up this long, unless the player is touched first; a
+    /// minute held them over the film too long (review apple-journey r3 P3-1).
     // ponytail: a fixed cap; a UIKit menu with willEnd would end the hold exactly.
-    static let menuHoldLimit: Duration = .seconds(60)
+    static let menuHoldLimit: Duration = .seconds(30)
 
     /// An OSD menu holds from when it opens until a pick or the next touch
     /// clears `openedAt`. iOS never says when a menu closes, so one dismissed
@@ -228,6 +248,14 @@ enum PlayerLayout {
 
     /// Half the centred status: the large spinner, its gap and one line.
     static let statusHalfHeight: CGFloat = 48
+
+    /// The iPhone, the controls up: the spinner turns in the Play circle, as
+    /// the system player's does, and the words sit in one line 8 pt over the
+    /// transport in the screen's middle (review apple-journey r3 P2-1). The
+    /// words' bottom padding from the safe area's foot.
+    static func statusOverTransport(windowHeight: CGFloat, safeBottom: CGFloat) -> CGFloat {
+        windowHeight / 2 + PhoneFrame.transportHalfHeight + 8 - safeBottom
+    }
 }
 
 /// Seeking on the TV's position bar: 10 s a press, growing while the same
@@ -290,6 +318,10 @@ extension PhoneFrame {
     static let subtitleGap: CGFloat = 8
     /// The size a subtitle takes while it would meet the transport.
     static let subtitleShrink: CGFloat = 0.85
+    /// The smallest it ever draws: past it a long subtitle meets the
+    /// transport's gaps rather than turning unreadable (review apple-journey
+    /// r3 P3-2: two Extra Large lines drew at 42% on a 13 mini).
+    static let subtitleFloor: CGFloat = 0.75
 
     /// The gap between the picture's foot and a subtitle drawn in the black band under it.
     static let bandGap: CGFloat = 8
@@ -300,20 +332,27 @@ extension PhoneFrame {
     /// (upright). Else, with the controls up, the box's foot sits 8 pt over the
     /// scrubber's capsule or at the picture's foot when that is higher, at 85%
     /// while it would meet the transport and smaller still if 85% does not
-    /// clear it, so a subtitle and a control never overlap; with them hidden
-    /// it sits at the picture's foot. `boxHeight` is the box at full size.
-    static func subtitle(screenHeight: CGFloat, pictureHeight: CGFloat, safeBottom: CGFloat, controlsShown: Bool, scrubberTop: CGFloat, boxHeight: CGFloat) -> (foot: CGFloat, scale: CGFloat) {
+    /// clear it, down to 75%; with them hidden it sits at the picture's foot.
+    /// Skip or Up Next (`pillTop`, the pill's top) lifts the foot 8 pt over
+    /// the pill (review apple-journey r3 P3-3); with the controls up only when
+    /// the box at 75% still clears the transport there, else it stays on the
+    /// capsule and the pill covers its end while they show (a phone across).
+    /// `boxHeight` is the box at full size.
+    static func subtitle(screenHeight: CGFloat, pictureHeight: CGFloat, safeBottom: CGFloat, controlsShown: Bool, scrubberTop: CGFloat, boxHeight: CGFloat, pillTop: CGFloat? = nil) -> (foot: CGFloat, scale: CGFloat) {
         let pictureBottom = (screenHeight + pictureHeight) / 2
-        let limit = controlsShown ? scrubberTop - subtitleGap : screenHeight - max(40, safeBottom + 24)
-        if limit - pictureBottom >= boxHeight + bandGap {
+        let plain = controlsShown ? scrubberTop - subtitleGap : screenHeight - max(40, safeBottom + 24)
+        let overPill = pillTop.map { $0 - subtitleGap } ?? .infinity
+        if min(plain, overPill) - pictureBottom >= boxHeight + bandGap {
             return (pictureBottom + bandGap + boxHeight, 1)
         }
         let pictureFoot = pictureBottom - 16
-        guard controlsShown else { return (min(pictureFoot, limit) - 10, 1) }
-        let foot = min(pictureFoot, scrubberTop - subtitleGap)
-        let room = foot - (screenHeight / 2 + transportHalfHeight + subtitleClearance)
+        guard controlsShown else { return (min(min(pictureFoot, plain) - 10, overPill), 1) }
+        let clear = screenHeight / 2 + transportHalfHeight + subtitleClearance
+        let low = min(pictureFoot, plain)
+        let foot = overPill - boxHeight * subtitleFloor >= clear ? min(low, overPill) : low
+        let room = foot - clear
         guard boxHeight > room else { return (foot, 1) }
         if boxHeight * subtitleShrink <= room { return (foot, subtitleShrink) }
-        return (foot, max(room, 0) / boxHeight)
+        return (foot, max(room / boxHeight, subtitleFloor))
     }
 }

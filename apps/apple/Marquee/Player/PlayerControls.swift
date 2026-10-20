@@ -147,6 +147,15 @@ struct PlayerControls: View {
         }
     }
 
+    /// The film is starting or buffering (the status overlay's waiting).
+    private var waitingNow: Bool {
+        let status = PlayerLayout.status(
+            phase: model.playback?.phase, cannotOpen: model.openError != nil,
+            firstFrameShown: model.firstFrameMs != nil, waiting: model.waiting)
+        if case .waiting = status { return true }
+        return false
+    }
+
     private var endsAt: Date {
         .now.addingTimeInterval(max(0, model.duration - model.position) / Double(max(model.rate, 0.25)))
     }
@@ -299,10 +308,17 @@ struct PlayerControls: View {
                 .focused($focus, equals: .rewind)
                 .accessibilityLabel("Back 10 seconds")
             Button(action: model.togglePlay) {
-                Glyph(model.playing ? "pause-fill" : "play-fill", size: 26)
-                    .foregroundStyle(Theme.Palette.onPrimary)
-                    .frame(width: 68, height: 68)
-                    .background(Circle().fill(Theme.Palette.primary))
+                Group {
+                    // The iPhone: the waiting spinner turns in the circle, as the system player's does.
+                    if Self.phone, waitingNow {
+                        ProgressView().tint(Theme.Palette.onPrimary)
+                    } else {
+                        Glyph(model.playing ? "pause-fill" : "play-fill", size: 26)
+                    }
+                }
+                .foregroundStyle(Theme.Palette.onPrimary)
+                .frame(width: 68, height: 68)
+                .background(Circle().fill(Theme.Palette.primary))
             }
             .focused($focus, equals: .play)
             .accessibilityLabel(model.playing ? "Pause" : "Play")

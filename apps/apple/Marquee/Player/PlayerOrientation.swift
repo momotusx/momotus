@@ -10,17 +10,21 @@ enum PlayerOrientation {
     private(set) static var allowed: UIInterfaceOrientationMask = .all
     private static var before: UIInterfaceOrientation?
 
-    static func enter() {
+    /// `across`: turn across (a play's first appear), else upright.
+    static func enter(across: Bool) {
         guard UIDevice.current.userInterfaceIdiom == .phone, let scene else { return }
         // A second appear (back from Versions over the player) keeps the pages' first one.
         before = before ?? scene.effectiveGeometry.interfaceOrientation
-        turn(scene, allowing: .allButUpsideDown, to: .landscape)
+        turn(scene, allowing: .allButUpsideDown, to: across ? .landscape : .portrait)
     }
 
-    static func leave() {
-        guard UIDevice.current.userInterfaceIdiom == .phone, let scene, let before else { return }
+    /// Whether the player was across as it left, for its next appear; nil off the phone.
+    @discardableResult static func leave() -> Bool? {
+        guard UIDevice.current.userInterfaceIdiom == .phone, let scene, let before else { return nil }
+        let across = scene.effectiveGeometry.interfaceOrientation.isLandscape
         self.before = nil
         turn(scene, allowing: .all, to: before.isLandscape ? .landscape : .portrait)
+        return across
     }
 
     private static func turn(_ scene: UIWindowScene, allowing mask: UIInterfaceOrientationMask, to target: UIInterfaceOrientationMask) {
