@@ -218,6 +218,8 @@ test("tv: paused, the picture dims and the title says what it is", async ({ brow
   await page.waitForFunction(() => (document.querySelector("video")?.readyState ?? 0) >= 2);
   if ((await toggle.getAttribute("aria-label")) === "Play") await toggle.press("Enter");
   await expect(toggle).toHaveAttribute("aria-label", "Pause");
+  // The first frame played (the dim is for a pause after it, not before).
+  await expect(page.locator(".player-scr")).toHaveClass(/\bstarted\b/, { timeout: 30_000 });
   // Playing: no dim, no synopsis.
   await expect(page.locator(".player-scr")).not.toHaveClass(/\bpaused\b/);
   await toggle.press("Enter");
