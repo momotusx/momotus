@@ -18,6 +18,11 @@ enum DebugHooks {
     /// `-MQMute YES`: every player starts muted, so a walk never makes a sound.
     static var mute: Bool { UserDefaults.standard.bool(forKey: "MQMute") }
 
+    /// `-MQPlayUpright YES`: the phone player opens upright, as after a turn.
+    /// A walk on a phone lying flat: a turn set from a UI test goes back to
+    /// face up at once and the screen stays across.
+    static var playUpright: Bool { UserDefaults.standard.bool(forKey: "MQPlayUpright") }
+
     /// `-MQSearch Sintel` types that query into Search when it first shows: a
     /// walk whose window is out of reach of accessibility (another Space).
     static var search: String? { UserDefaults.standard.string(forKey: "MQSearch") }

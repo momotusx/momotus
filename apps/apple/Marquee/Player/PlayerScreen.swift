@@ -208,6 +208,9 @@ struct PlayerScreen: View {
         .onAppear {
             immersion.active = true
             #if os(iOS)
+            #if DEBUG
+            if DebugHooks.playUpright, model.lastAcross == nil { model.lastAcross = false }
+            #endif
             PlayerOrientation.enter(across: PlayerLayout.opensAcross(lastAcross: model.lastAcross))
             float()
             #endif
