@@ -29,7 +29,7 @@ import { createVideoEngine } from "../player/video-engine";
 import { loadedSource, type Retry, sourceStart, TRYING_AGAIN_MS, tryingAgain } from "../lib/failover";
 import { bytes, clock, decoded, episodeLabel, groupFailures, playPath, playState, seasonName, titlePath, versionsPath } from "../lib/format";
 import { byLanguage, offSummary, trackDetail } from "../lib/subtitles";
-import { blockedWords, languageName, nextVersion, qualityCell, qualityText, subtitleNote } from "../lib/words";
+import { blockedWords, languageName, nextVersion, qualityCell, qualityText, restartLine, subtitleNote } from "../lib/words";
 import "./player.css";
 
 const SPEEDS = [1, 1.25, 1.5, 2, 0.75];
@@ -91,7 +91,10 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     null,
   );
 
+  // Try again on a playback that could not open opens it once more.
+  const [opens, setOpens] = createSignal(0);
   const playback = createMemo(() => {
+    opens();
     const view = ctx.versions();
     const sub = view?.sub();
     const k = key();
@@ -112,6 +115,10 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   });
   const snap = () => playback()?.state.data ?? null;
   const failed = () => snap()?.phase === "failed";
+  const openError = () => {
+    const s = playback()?.state.status;
+    return s?.state === "failed" ? (s as { reason: string }).reason : null;
+  };
   // Try again as the core took it (`retries` rose): "Trying again" until the
   // play starts, and a moment at least (lib/failover.ts tryingAgain).
   const [retry, setRetry] = createSignal<Retry | null>(null);
@@ -267,19 +274,35 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     void playback()?.command({ type: "subtitleChosen", url: t?.url ?? null });
     pickSubtitle(t);
   };
+  // Notes already said, for the playing source (they clear with it).
+  let notesSeen = 0;
   // The core's start pick (`autoSubtitle`, plans/m13-subtitle-languages.md
   // 6): turned on once the list settles, unless the viewer chose already.
+  // A new version (the core moved on) first drops the old one's subtitle,
+  // which went with its source, so the new one's start pick applies; the
+  // core keeps the viewer's own choice for the title and carries it over.
+  // One effect, so the drop always comes before the pick.
+  let version: string | null = null;
   createEffect(() => {
-    const auto = snap()?.autoSubtitle;
+    const s = snap();
+    const k = s?.key ?? null;
+    if (k && version && k !== version) {
+      chose = false;
+      notesSeen = 0;
+      setSubError(null);
+      setTrack(null);
+      engine.setSubtitle(null);
+    }
+    if (k) version = k;
+    const auto = s?.autoSubtitle;
     if (!auto || chose || untrack(track)) return;
-    const t = snap()?.subtitles.find((s) => s.url === auto);
+    const t = s?.subtitles.find((x) => x.url === auto);
     if (t) showSubtitle(t);
   });
 
   // A file the core could not serve plays as an empty track and comes back
   // as a note. Only the picked track is fetched, so a new note is about it:
   // say so, and turn it off when it left the list.
-  let notesSeen = 0;
   createEffect(() => {
     const notes = snap()?.subtitleNotes ?? [];
     const fresh = notes.length > notesSeen ? notes[notes.length - 1] : undefined;
@@ -432,19 +455,20 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   // With no track on: what the core found so far, and whether it still asks.
   const subsOff = () => offSummary(snap()?.subtitles.length ?? 0, !!snap()?.subtitlesPending);
   const pct = (x: number) => `${duration() ? Math.min(100, (x / duration()) * 100) : 0}%`;
-  const status = (): { tone: string; text: string; busy: boolean } | null => {
+  const status = (): { tone: string; text: string; detail?: string; busy: boolean } | null => {
     const v = ctx.versions();
     if (v?.state.status.state === "failed") return { tone: "bad", text: (v.state.status as { reason: string }).reason, busy: false };
-    // The playback could not open (a version no longer listed): its reason, never a spinner.
-    const p = playback()?.state.status;
-    if (p?.state === "failed") return { tone: "bad", text: (p as { reason: string }).reason, busy: false };
+    // The playback could not open (a version no longer listed): a card with
+    // the error under it, as Apple's, never a spinner.
+    const open = openError();
+    if (open) return { tone: "bad", text: nextVersion.notOpened, detail: open, busy: false };
     const s = snap();
-    if (again()) return { tone: "warn", text: "Trying again", busy: true };
+    // Moving on (the recommendation failed for a reason of its own), or Try again.
+    const restart = restartLine(s, again());
+    if (restart) return { tone: "warn", text: restart, busy: true };
     if (s?.phase === "ready") return null;
     if (s?.phase === "failed") return { tone: "bad", text: nextVersion.failed(!!s.offer), busy: false };
     if (s?.phase === "resolving") {
-      // The recommendation failed for a reason of its own: the core moved on.
-      if (s.trying) return { tone: "warn", text: nextVersion.trying(s.trying.label), busy: true };
       const r = playing();
       return { tone: "warn", text: r ? `Starting ${qualityText(r.quality)}${r.sizeBytes ? `, ${bytes(r.sizeBytes)}` : ""} from ${r.via}` : "Starting", busy: true };
     }
@@ -506,6 +530,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                   <CircleAlert aria-hidden />
                   {s().text}
                 </p>
+                <Show when={s().detail}>{(d) => <p class="end-detail">{d()}</p>}</Show>
                 <Show when={snap()?.attempts.length}>
                   <ul class="attempts">
                     <For each={groupFailures(snap()?.attempts ?? [])}>
@@ -536,13 +561,13 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                   </Show>
                   {/* This play again from its first pick (`retry`): what
                       failed may be the moment, not the version. */}
-                  <Show when={failed()}>
+                  <Show when={failed() || openError()}>
                     <button
                       class="btn big"
                       classList={{ primary: !snap()?.offer }}
                       data-f="player:retry"
                       data-autofocus={snap()?.offer ? undefined : ""}
-                      onClick={() => void playback()?.command({ type: "retry" })}
+                      onClick={() => (openError() ? setOpens((n) => n + 1) : void playback()?.command({ type: "retry" }))}
                     >
                       <RefreshCw aria-hidden />
                       Try again
@@ -550,10 +575,10 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                   </Show>
                   <A
                     class="btn big"
-                    classList={{ primary: !snap()?.offer && !failed() }}
+                    classList={{ primary: !snap()?.offer && !failed() && !openError() }}
                     href={versionsPath(props.kind, props.id, props.videoId)}
                     data-f="player:versions"
-                    data-autofocus={snap()?.offer || failed() ? undefined : ""}
+                    data-autofocus={snap()?.offer || failed() || openError() ? undefined : ""}
                   >
                     <Layers aria-hidden />
                     Choose a version

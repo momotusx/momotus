@@ -22,11 +22,12 @@ let core: { proc: ChildProcess; data: string } | null = null;
 let addon: Server | null = null;
 let SCRAMBLED: Buffer | undefined;
 
-/** The film's first megabyte with every frame's bytes scrambled and its
- * structure kept: the metadata loads, then the decoder fails (the
- * element's MEDIA_ERR_DECODE). Walks the clusters' SimpleBlocks. */
-function undecodable(): Buffer {
-  const b = Buffer.from(readFileSync(BBB_FILE).subarray(0, 1 << 20));
+/** The film's first `bytes` with the frames of every cluster from `fromMs`
+ * on scrambled and its structure kept: the metadata loads, the frames
+ * before `fromMs` play, then the decoder fails (the element's
+ * MEDIA_ERR_DECODE). Walks the clusters' Timecode and SimpleBlocks. */
+function undecodable(fromMs = 0, bytes = 1 << 20): Buffer {
+  const b = Buffer.from(readFileSync(BBB_FILE).subarray(0, bytes));
   // An EBML size: its length from the leading bits, its value from the rest.
   const size = (at: number) => {
     let len = 1;
@@ -47,14 +48,20 @@ function undecodable(): Buffer {
     const s = size(at + 4);
     const end = s.unknown ? b.length : Math.min(b.length, at + 4 + s.len + s.value);
     let child = at + 4 + s.len;
+    // The cluster's Timecode (0xE7), in milliseconds at the default scale.
+    let clusterMs = 0;
     while (child < end - 4) {
       if (b[child] === 0x1f && b[child + 1] === 0x43 && b[child + 2] === 0xb6 && b[child + 3] === 0x75) break;
       const id = b[child];
       const il = idLength(child);
       const cs = size(child + il);
       const data = child + il + cs.len;
+      if (id === 0xe7) {
+        clusterMs = 0;
+        for (let i = 0; i < cs.value; i++) clusterMs = clusterMs * 256 + (b[data + i] ?? 0);
+      }
       // A SimpleBlock: track number (1), timecode (2), flags (1), then the frame.
-      if (id === 0xa3) {
+      if (id === 0xa3 && clusterMs >= fromMs) {
         for (let i = data + 4; i < Math.min(end, data + cs.value); i++) b[i] = (b[i] ?? 0) ^ 0x5a;
         blocks++;
       }
@@ -71,6 +78,13 @@ function undecodable(): Buffer {
 const BROKEN = ["Big.Buck.Bunny.2008.1080p.WEB.mp4", "Big.Buck.Bunny.2008.720p.WEB.VP9.webm"];
 const HEVC = fileURLToPath(new URL("fixtures/hevc-160x90.mp4", import.meta.url));
 const REAL = ["Big.Buck.Bunny.2008.480p.WEB.VP9.webm", "Big.Buck.Bunny.2008.360p.WEB.VP9.webm"];
+// A second title, each version with an English subtitle of its own: the best
+// plays a few seconds and then fails to decode; the next one plays.
+const SINTEL = "tt1727587";
+const LATE = "Sintel.2010.1080p.WEB.VP9.webm";
+const GOOD = "Sintel.2010.720p.WEB.VP9.webm";
+const LINES: Record<string, string> = { [LATE]: "From the first version", [GOOD]: "From the second version" };
+let LATE_BODY: Buffer | undefined;
 
 /** `path` with Range support, as a file host answers. */
 function ranges(req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse, path: string, type: string) {
@@ -101,7 +115,29 @@ function versions(): Promise<Server> {
       }, 400);
       return;
     }
+    if (req.url === `/stream/movie/${SINTEL}.json`) {
+      const stream = (file: string) => ({
+        name: "Next",
+        title: file,
+        url: `${base}/media/${file}`,
+        behaviorHints: { filename: file },
+        subtitles: [{ id: file, lang: "eng", url: `${base}/subs/${encodeURIComponent(file)}.srt` }],
+      });
+      res.writeHead(200, { "content-type": "application/json" });
+      return res.end(JSON.stringify({ streams: [LATE, GOOD].map(stream) }));
+    }
+    if (req.url?.startsWith("/subs/")) {
+      const of = decodeURIComponent(req.url.slice("/subs/".length).replace(/\.srt$/, ""));
+      res.writeHead(200, { "content-type": "text/plain" });
+      return res.end(`1\n00:00:00,000 --> 00:10:00,000\n${LINES[of] ?? "?"}\n`);
+    }
     const file = decodeURIComponent(req.url?.replace("/media/", "") ?? "");
+    if (file === LATE) {
+      const body = LATE_BODY ??= undecodable(6000, 3 << 20);
+      res.writeHead(200, { "content-type": "video/webm", "content-length": String(body.length) });
+      return res.end(body);
+    }
+    if (file === GOOD) return ranges(req, res, BBB_FILE, "video/webm");
     if (file === BROKEN[1]) {
       // Opens, then no frame decodes; slow to answer, so "Trying the next
       // version" stays long enough to be read.
@@ -135,7 +171,8 @@ test.beforeAll(async () => {
       }
     }
     await c.req("installAddon", { url: `http://127.0.0.1:${(addon.address() as AddressInfo).port}/manifest.json` });
-    await c.req("setPrefs", { patch: { defaultsSeen: 1 } });
+    // English subtitles turn on at start (only the second title has any).
+    await c.req("setPrefs", { patch: { defaultsSeen: 1, subtitleLanguages: ["eng"] } });
   } finally {
     c.close();
   }
@@ -146,7 +183,7 @@ test.afterAll(() => {
   addon?.close();
 });
 
-type Sent = { op?: string; command?: { type?: string; kind?: string; status?: number } };
+type Sent = { op?: string; view?: string; command?: { type?: string; kind?: string; status?: number } };
 
 async function page(browser: Browser) {
   // What the page asked the core, in order.
@@ -335,8 +372,8 @@ test("a reload after a hand pick plays that version once Versions lists it again
   await context.close();
 });
 
-test("a version no longer listed shows its reason, Choose a version and Back", async ({ browser }) => {
-  const { context, page: p } = await page(browser);
+test("a playback that cannot open says so with the error, Try again reopens it, then Choose a version and Back", async ({ browser }) => {
+  const { context, page: p, sent } = await page(browser);
   await p.goto(`/play/movie/${BBB_ID}/${BBB_ID}?form=tv`);
   await expect(p.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 60_000 });
   // An entry whose key the addon no longer lists, opened again.
@@ -344,10 +381,40 @@ test("a version no longer listed shows its reason, Choose a version and Back", a
   await p.reload();
   const card = p.locator(".endcard");
   await expect(card).toBeVisible({ timeout: 60_000 });
-  await expect(card.locator(".st")).toContainText("no longer listed");
-  await expect(card.locator(".acts > *")).toHaveCount(2);
-  await expect(card.locator(".acts > *").first()).toHaveAttribute("data-f", "player:versions");
-  await expect(card.locator(".acts > *").nth(1)).toHaveAttribute("data-f", "player:back");
-  await expect.poll(() => p.evaluate(() => document.activeElement?.getAttribute("data-f"))).toBe("player:versions");
+  // Apple's words: the headline, then what the core said under it.
+  await expect(card.locator(".st")).toHaveText("This version could not be opened");
+  await expect(card.locator(".end-detail")).toContainText("no longer listed");
+  const acts = card.locator(".acts > *");
+  await expect(acts).toHaveCount(3);
+  await expect(acts.nth(0)).toHaveAttribute("data-f", "player:retry");
+  await expect(acts.nth(1)).toHaveAttribute("data-f", "player:versions");
+  await expect(acts.nth(2)).toHaveAttribute("data-f", "player:back");
+  await expect.poll(() => p.evaluate(() => document.activeElement?.getAttribute("data-f"))).toBe("player:retry");
+  // Try again opens the playback once more; still not listed, the same card comes back.
+  const opens = () => sent.filter((m) => m.op === "subscribe" && m.view === "playback").length;
+  const before = opens();
+  await p.keyboard.press("Enter");
+  await expect.poll(opens).toBe(before + 1);
+  await expect(card.locator(".st")).toHaveText("This version could not be opened");
+  await context.close();
+});
+
+test("moving on drops the old version's subtitle and turns on the new one's", async ({ browser }) => {
+  const { context, page: p } = await page(browser);
+  await p.goto(`/play/movie/${SINTEL}/${SINTEL}?form=desktop`);
+  const cue = () => p.evaluate(() => {
+    const t = document.querySelector("video")?.textTracks[0];
+    return t && t.mode === "showing" ? (t.cues?.[0] as VTTCue | undefined)?.text ?? null : null;
+  });
+  await expect.poll(() => p.evaluate(() => !!document.querySelector("video")), { timeout: 30_000 }).toBe(true);
+  await mute(p);
+  // The best version plays, with its English subtitle on from the start.
+  await expect.poll(cue, { timeout: 60_000 }).toBe(LINES[LATE]);
+  // A few seconds in it fails to decode, and the core moves on.
+  await expect.poll(() => source(p), { timeout: 60_000 }).toContain(GOOD);
+  // The new version's own subtitle, not the old one's cues.
+  await expect.poll(cue, { timeout: 30_000 }).toBe(LINES[GOOD]);
+  await expect(p.locator("video track")).toHaveCount(1);
+  await expect.poll(() => playing(p), { timeout: 60_000 }).toBeGreaterThan(0.5);
   await context.close();
 });

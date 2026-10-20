@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { addonHost, hiddenSummary, nextVersion, languageName, pairingProblem, plainAddress, reasonText, serverHost, statusText, subtitleNote } from "./words";
+import { addonHost, hiddenSummary, nextVersion, languageName, pairingProblem, plainAddress, reasonText, restartLine, serverHost, statusText, subtitleNote } from "./words";
 import shared from "../../../shared/stream-choice-words.json";
 import type { Learned } from "../core/generated/Learned";
 import type { ReasonLine } from "../core/generated/ReasonLine";
@@ -187,6 +187,13 @@ test("a built-in source says where it runs instead of a host", () => {
 test("the next version, tried or offered, by its label", () => {
   expect(nextVersion.trying("1080p WEB")).toBe("Trying the next version: 1080p WEB");
   expect(nextVersion.play("4K Remux")).toBe("Play 4K Remux");
+  // A move on during Try again names the version it tries, as Android does.
+  const trying = { phase: "resolving", trying: { label: "720p WEB" } };
+  expect(restartLine(trying, true)).toBe("Trying the next version: 720p WEB");
+  expect(restartLine({ phase: "resolving", trying: null }, true)).toBe("Trying again");
+  expect(restartLine({ phase: "failed", trying: null }, true)).toBe("Trying again");
+  expect(restartLine({ phase: "resolving", trying: null }, false)).toBeNull();
+  expect(nextVersion.notOpened).toBe("This version could not be opened");
   // The headline never says nothing played while it offers another version.
   expect(nextVersion.failed(true)).toBe("This version could not be played");
   expect(nextVersion.failed(false)).toBe("None of the sources could be played");

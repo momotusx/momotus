@@ -202,7 +202,17 @@ export const nextVersion = {
   /** The failure card's headline: one version failed when the core offers
    * another (the card says Play {label}), else every source did. */
   failed: (offered: boolean) => (offered ? "This version could not be played" : "None of the sources could be played"),
+  /** The card when the playback view could not open at all (the error goes under it). */
+  notOpened: "This version could not be opened",
+  tryingAgain: "Trying again",
 };
+
+/** The busy line while a play starts over: a move on names the version it
+ * tries first (as Android does), then Try again's own words. */
+export function restartLine(s: { phase: string; trying: { label: string } | null } | null, again: boolean): string | null {
+  if (s?.phase === "resolving" && s.trying) return nextVersion.trying(s.trying.label);
+  return again ? nextVersion.tryingAgain : null;
+}
 
 export const tokenInLink = {
   warn: "This link carries a sign-in: a token or a key. Whoever has it uses that account. Install it only if it is yours.",
