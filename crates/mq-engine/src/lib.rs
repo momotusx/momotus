@@ -315,6 +315,10 @@ pub struct TorrentStats {
     /// [`Engine::pause_now`] holds it for some profile: none of that
     /// profile's ranges or file choices wakes it.
     pub held: bool,
+    /// The rate the live torrent's scheduler runs with (the last
+    /// [`Engine::set_rate`]): bytes per second, and the readahead it gave.
+    pub bytes_per_s: Option<u64>,
+    pub readahead_bytes: Option<u64>,
 }
 
 const KEEP_WARM: Duration = Duration::from_secs(60);
@@ -409,6 +413,8 @@ pub(crate) struct Torrent {
     /// `live`, and a round never takes `live` while it holds it, so rounds
     /// and pauses never overlap.
     keeper: tokio::sync::Mutex<()>,
+    /// The last rate set: file, bytes per second, readahead.
+    rate: Mutex<Option<(usize, u64, u64)>>,
 }
 
 impl Torrent {
@@ -710,6 +716,7 @@ impl Engine {
             readers: AtomicUsize::new(0),
             last_used: Mutex::new(Instant::now()),
             keeper: tokio::sync::Mutex::new(()),
+            rate: Mutex::new(None),
         });
         let mut torrents = lock(&self.inner.torrents);
         if let Some((&h, _)) = torrents
@@ -792,10 +799,7 @@ impl Engine {
         }
         let (ext_tx, ext_rx) = mpsc::unbounded_channel();
         let lens: Vec<u64> = t.files.iter().map(|f| f.len).collect();
-        let mut sched = self.inner.cfg.device_class.sched();
-        sched.readahead_bytes = sched
-            .readahead_bytes
-            .min(self.inner.cfg.cache_budget_bytes / 4);
+        let sched = self.sched_config();
         let iso_bmff = t.files.iter().map(|f| iso_bmff(&f.path)).collect();
         let tr = adapter::Translator::new(t.piece_len, &lens, sched, self.inner.cfg.dwh)
             .with_iso_bmff(iso_bmff);
@@ -819,6 +823,14 @@ impl Engine {
             .into_handle()
             .ok_or_else(|| anyhow::anyhow!("torrent was not added"))?;
         let (msgs, msg_rx) = mpsc::unbounded_channel();
+        // A rate set before the torrent went live.
+        if let Some((file, bytes_per_s, readahead)) = *lock(&t.rate) {
+            let _ = msgs.send(adapter::Msg::Rate {
+                file,
+                bytes_per_s,
+                readahead,
+            });
+        }
         let snapshot = Arc::default();
         tokio::spawn(adapter::run(
             managed.clone(),
@@ -950,6 +962,7 @@ impl Engine {
         s.ready_ms = snap.ready_us.map(|us| us / 1000);
         (s.sample_bytes, s.sample_busy_ms) = (snap.sample_bytes, snap.sample_busy_us / 1000);
         s.received_bytes = snap.received_bytes;
+        (s.bytes_per_s, s.readahead_bytes) = (snap.rate.map(|r| r.1), snap.rate.map(|r| r.2));
         s.refetched_bytes = snap.refetched_bytes;
         s.unchoked_ms = snap.unchoked_us.map(|us| us / 1000);
         s.dwh = l.dwh;
@@ -1058,6 +1071,47 @@ impl Engine {
             let _ = l.msgs.send(adapter::Msg::Stopped);
         }
         Ok(true)
+    }
+
+    /// The device's scheduler settings, its readahead within a quarter of
+    /// the disk budget.
+    fn sched_config(&self) -> SchedConfig {
+        let mut sched = self.inner.cfg.device_class.sched();
+        sched.readahead_bytes = sched
+            .readahead_bytes
+            .min(self.inner.cfg.cache_budget_bytes / 4);
+        sched
+    }
+
+    /// `file` of `h` plays at `bytes_per_s` (its size over the player's
+    /// duration, the meta runtime, or a guess from its resolution): the
+    /// scheduler's seconds become seconds of this file, and off a metered
+    /// network it keeps 120 s of it ahead (plans/streaming-window.md 2.2).
+    pub async fn set_rate(
+        &self,
+        h: TorrentHandle,
+        file: usize,
+        bytes_per_s: u64,
+        metered: bool,
+    ) -> Result<()> {
+        let t = self.torrent(h)?;
+        let sched = self.sched_config();
+        let readahead = readahead_for(
+            sched.readahead_bytes,
+            sched.playback_secs,
+            bytes_per_s,
+            metered,
+            self.inner.cfg.cache_budget_bytes,
+        );
+        *lock(&t.rate) = Some((file, bytes_per_s, readahead));
+        if let Some(l) = t.live.lock().await.as_ref() {
+            let _ = l.msgs.send(adapter::Msg::Rate {
+                file,
+                bytes_per_s,
+                readahead,
+            });
+        }
+        Ok(())
     }
 
     /// One eviction round over `pieces` of `h` (plans/streaming-window.md
@@ -1306,6 +1360,23 @@ async fn maintenance(inner: std::sync::Weak<Inner>) {
     }
 }
 
+/// Readahead past the playback window for a file that fits: the device's
+/// preset on a metered network, else enough for 120 s ahead in all at
+/// `bytes_per_s`, never under the preset and never over the idle budget.
+fn readahead_for(
+    preset: u64,
+    playback_secs: u64,
+    bytes_per_s: u64,
+    metered: bool,
+    budget: u64,
+) -> u64 {
+    if metered {
+        return preset;
+    }
+    let ahead = (120u64.saturating_sub(playback_secs)).saturating_mul(bytes_per_s);
+    ahead.max(preset).min(budget.max(preset))
+}
+
 /// Bytes actually allocated on disk (sparse files count what is written).
 fn allocated(dir: &Path) -> u64 {
     let Ok(entries) = std::fs::read_dir(dir) else {
@@ -1381,6 +1452,29 @@ fn percent_encode(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A file that fits keeps 120 s of itself ahead off a metered network
+    /// (the playback window's 30 s plus 90 s of readahead), never under the
+    /// preset and never over the idle budget; on a metered network, the
+    /// preset (plans/streaming-window.md 2.2, phase 2 test l).
+    #[test]
+    fn a_file_that_fits_keeps_120_s_ahead_off_cellular() {
+        const MIB: u64 = 1 << 20;
+        let preset = 128 * MIB;
+        let budget = 6 << 30;
+        // A 38.2 Mbit/s remux: 90 s of it is 430 MB.
+        let remux = 4_775_000;
+        assert_eq!(readahead_for(preset, 30, remux, false, budget), 90 * remux);
+        assert_eq!(readahead_for(preset, 30, remux, true, budget), preset);
+        // A 3 Mbit/s file: 90 s is 34 MB, under the preset.
+        assert_eq!(readahead_for(preset, 30, 375_000, false, budget), preset);
+        // A small idle budget caps it, never under the preset.
+        assert_eq!(
+            readahead_for(preset, 30, remux, false, 200 * MIB),
+            200 * MIB
+        );
+        assert_eq!(readahead_for(preset, 30, remux, false, 64 * MIB), preset);
+    }
 
     #[test]
     fn a_bare_info_hash_gets_the_default_trackers_once() {

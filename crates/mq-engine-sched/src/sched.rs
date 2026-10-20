@@ -63,6 +63,8 @@ pub struct Scheduler {
     now: u64,
     last_periodic: Option<u64>,
     bitrate: Vec<u64>,
+    /// Readahead past each file's playback window, in bytes.
+    readahead: Vec<u64>,
     play_pos: Vec<Option<u64>>,
     /// Each file's container index as the adapter knows it (file offsets).
     index: Vec<FileIndex>,
@@ -105,6 +107,7 @@ impl Scheduler {
         Self {
             avg_rate: cfg.initial_peer_rate,
             bitrate: vec![cfg.default_bitrate.max(1); files],
+            readahead: vec![cfg.readahead_bytes; files],
             play_pos: vec![None; files],
             index: vec![FileIndex::Tail; files],
             avail: vec![0; pieces as usize],
@@ -144,6 +147,16 @@ impl Scheduler {
     pub fn set_bitrate(&mut self, file: usize, bytes_per_s: u64) {
         if let Some(b) = self.bitrate.get_mut(file) {
             *b = bytes_per_s.max(1);
+            self.dirty = true;
+        }
+    }
+
+    /// Readahead of `file` past its playback window, in bytes (the
+    /// config's `readahead_bytes` until set): seconds of the file for one
+    /// that fits, the window's for a windowed one.
+    pub fn set_readahead(&mut self, file: usize, bytes: u64) {
+        if let Some(r) = self.readahead.get_mut(file) {
+            *r = bytes;
             self.dirty = true;
         }
     }
@@ -492,7 +505,7 @@ impl Scheduler {
         let lag = play.filter(|&p| p <= pos).map_or(0, |p| pos - p);
         let c_end = (b_end + crit.saturating_sub(lag)).min(f.len);
         let p_end = (b_end + crit + self.cfg.playback_secs * rate).min(f.len);
-        let r_end = (p_end + self.cfg.readahead_bytes).min(f.len);
+        let r_end = (p_end + self.readahead[file]).min(f.len);
         Windows {
             blocking: (f.offset + pos, f.offset + b_end),
             critical_end: f.offset + c_end,

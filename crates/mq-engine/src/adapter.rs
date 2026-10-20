@@ -38,6 +38,13 @@ pub(crate) enum Msg {
     },
     /// librqbit stopped the torrent (keep-alive expiry): every peer is gone.
     Stopped,
+    /// `file` plays at `bytes_per_s`, with `readahead` bytes past its
+    /// playback window (`Engine::set_rate`).
+    Rate {
+        file: usize,
+        bytes_per_s: u64,
+        readahead: u64,
+    },
     /// Every peer's tally, connected or gone (`Engine::peer_report`).
     Report(tokio::sync::oneshot::Sender<Vec<(SocketAddr, PeerTally)>>),
 }
@@ -110,6 +117,8 @@ pub(crate) struct Snapshot {
     pub unchoked_us: Option<u64>,
     /// Bytes of pieces verified again after they had verified and left.
     pub refetched_bytes: u64,
+    /// The scheduler's rate: file, bytes per second, readahead.
+    pub rate: Option<(usize, u64, u64)>,
 }
 
 /// The capacity sample covers the adapter's first 30 s.
@@ -135,6 +144,7 @@ pub(crate) struct Translator {
     /// Pieces that verified at least once, for `refetched_bytes`.
     verified_once: Vec<bool>,
     refetched_bytes: u64,
+    rate: Option<(usize, u64, u64)>,
     demands: HashMap<DemandId, Demand>,
     now_us: u64,
     ready_us: Option<u64>,
@@ -228,6 +238,7 @@ impl Translator {
             have: vec![false; num_pieces as usize],
             verified_once: vec![false; num_pieces as usize],
             refetched_bytes: 0,
+            rate: None,
             demands: HashMap::new(),
             now_us: 0,
             ready_us: None,
@@ -309,6 +320,7 @@ impl Translator {
             received_bytes: self.received_bytes,
             unchoked_us: self.unchoked_us,
             refetched_bytes: self.refetched_bytes,
+            rate: self.rate,
         }
     }
 
@@ -531,6 +543,20 @@ impl Translator {
             Msg::Report(tx) => {
                 let _ = tx.send(self.report());
                 Vec::new()
+            }
+            Msg::Rate {
+                file,
+                bytes_per_s,
+                readahead,
+            } => {
+                if let Some(s) = self.sched.as_mut() {
+                    s.set_bitrate(file, bytes_per_s);
+                    s.set_readahead(file, readahead);
+                    self.rate = Some((file, bytes_per_s, readahead));
+                }
+                self.feed(Event::Tick {
+                    now_us: self.now_us,
+                })
             }
         }
     }
@@ -924,6 +950,28 @@ mod tests {
         let s = tr.snapshot();
         assert_eq!(s.sample_bytes, 0);
         assert_eq!(s.received_bytes, 16 * KIB);
+    }
+
+    /// A rate from the engine reaches the scheduler: its playback window
+    /// becomes seconds of the file, its readahead the bytes given.
+    #[test]
+    fn a_rate_sets_the_scheduler_windows() {
+        let mut tr = Translator::new(256 * 1024, &[1 << 30], Config::standard(), true);
+        tr.tick(1_000);
+        open(&mut tr, 1, 0);
+        let class = |tr: &Translator, p| tr.sched.as_ref().unwrap().class_of(p);
+        // 10 Mbit/s default: playback ends at 1 + 4 + 37.5 MiB, readahead
+        // 128 MiB after it, before piece 700 (175 MiB).
+        assert_eq!(class(&tr, 700), None);
+        tr.on_msg(Msg::Rate {
+            file: 0,
+            bytes_per_s: 1 << 20,
+            readahead: 256 << 20,
+        });
+        // 1 MiB/s: playback ends at 35 MiB (piece 140), readahead to 291 MiB.
+        assert_eq!(class(&tr, 139), Some(mq_engine_sched::Class::Playback));
+        assert_eq!(class(&tr, 700), Some(mq_engine_sched::Class::Readahead));
+        assert_eq!(class(&tr, 1164), None);
     }
 
     /// A piece verified again after it had verified and left counts in

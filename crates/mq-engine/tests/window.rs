@@ -1067,6 +1067,31 @@ async fn a_round_that_outlives_a_pause_never_punches_the_resumed_torrent() {
     assert_eq!(l.have().await.0, 21);
 }
 
+/// Phase 2 (plans/streaming-window.md 2.2): a rate set before the torrent
+/// is live reaches its scheduler when it starts; the stats report what the
+/// scheduler runs with.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_rate_set_before_the_start_reaches_the_scheduler() {
+    let s = support::swarm(true).await;
+    let root = tempfile::tempdir().unwrap();
+    let engine = engine_on(root.path()).await;
+    let t = engine
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    engine.set_rate(t, 1, 1 << 20, true).await.unwrap();
+    assert_eq!(engine.stats(t).await.unwrap().bytes_per_s, None);
+    let movie = engine
+        .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
+        .await
+        .unwrap();
+    assert_eq!(movie, 1);
+    until("the scheduler's rate", || async {
+        engine.stats(t).await.unwrap().bytes_per_s == Some(1 << 20)
+    })
+    .await;
+}
+
 async fn engine_on(dir: &Path) -> Engine {
     engine_with(dir, true).await
 }

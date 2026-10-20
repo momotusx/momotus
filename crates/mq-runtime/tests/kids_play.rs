@@ -667,6 +667,32 @@ async fn a_stopped_playback_pauses_its_torrent_and_an_allow_plays_it_again() {
     assert!(!s.leecher.stats(t).await.unwrap().held);
 }
 
+/// A torrent playback sends its rate to the engine: a guess from the
+/// release at the start (1080p: 10 Mbit/s), then the file's size over the
+/// duration the player reports (plans/streaming-window.md 2.2).
+#[cfg(feature = "torrent")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_torrent_playback_sends_its_rate_to_the_engine() {
+    let (s, t, _owner, kid, found) = torrent_kid().await;
+    let view = PlaybackView::open(&kid, found, target("movie", "tt1", "tt1"));
+    ready(&view).await;
+    let rate = || async { s.leecher.stats(t).await.unwrap().bytes_per_s };
+    assert_eq!(rate().await, Some(1_250_000));
+    let key = view.snapshot().key.unwrap();
+    view.report_duration(&key, 120_000);
+    let exact = s.movie.len() as u64 * 1000 / 120_000;
+    for _ in 0..200 {
+        if rate().await == Some(exact) {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    panic!(
+        "the player's duration never reached the engine: {:?}",
+        rate().await
+    );
+}
+
 /// Whether `url` serves its first bytes within 10 s.
 #[cfg(feature = "torrent")]
 async fn serves(url: &str) -> bool {

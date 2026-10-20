@@ -41,6 +41,8 @@ pub struct MagnetOptions {
     pub resume_at: Option<u64>,
     pub cache_budget: Option<u64>,
     pub download_limit: Option<u32>,
+    /// The file's rate in bytes per second, for the engine.
+    pub rate: Option<u64>,
 }
 
 const SEEKS: [f64; 3] = [25.0, 50.0, 75.0];
@@ -411,6 +413,12 @@ async fn run(
         .await
         .map_err(|e| e.to_string())?;
     let selected = Instant::now();
+    if let Some(rate) = o.rate {
+        engine
+            .set_rate(t, file, rate, false)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
     let reader = engine
         .open_reader(t, CLI, file)
         .await
@@ -555,6 +563,8 @@ async fn run(
         "hedges": stats.hedges,
         "dup_bytes": stats.dup_bytes,
         "refetched_bytes": stats.refetched_bytes,
+        "rate_bytes_per_s": stats.bytes_per_s,
+        "readahead_bytes": stats.readahead_bytes,
         "max_allocated_bytes": max_allocated_bytes,
         "allocated_bytes": allocated_bytes,
         "seek_forward_p50_ms": percentile(&forward, 0.5),

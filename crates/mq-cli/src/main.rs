@@ -138,6 +138,11 @@ enum Command {
         /// The session's download limit in bytes per second.
         #[arg(long)]
         download_limit: Option<u32>,
+        /// The file's rate in bytes per second (its size over its duration),
+        /// as the app gives it: the scheduler's windows become seconds of
+        /// it and 120 s are kept ahead (default: none, the device preset).
+        #[arg(long)]
+        rate: Option<u64>,
     },
     /// Scrape info hashes on a fresh engine (the app's first scrape) and
     /// report each tracker's stages.
@@ -234,6 +239,7 @@ async fn main() {
         resume_at,
         cache_budget,
         download_limit,
+        rate,
     } = cli.command
     {
         let options = magnet::MagnetOptions {
@@ -252,6 +258,7 @@ async fn main() {
             resume_at,
             cache_budget,
             download_limit,
+            rate,
         };
         match magnet::play_magnet(&magnet, options).await {
             Ok(run) => emit(run),

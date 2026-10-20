@@ -367,6 +367,10 @@ struct State {
     /// answered: a policy closure pauses them all, a lease adopted or not.
     #[cfg(feature = "torrent")]
     torrents: Vec<mq_engine::TorrentHandle>,
+    /// The torrent file playing, and its length: the player's duration
+    /// gives the engine its exact rate (`report_duration`).
+    #[cfg(feature = "torrent")]
+    rate_of: Option<(mq_engine::TorrentHandle, usize, u64)>,
 }
 
 pub struct PlaybackView {
@@ -437,6 +441,8 @@ impl State {
             languages: Vec::new(),
             #[cfg(feature = "torrent")]
             torrents: Vec::new(),
+            #[cfg(feature = "torrent")]
+            rate_of: None,
         }
     }
 }
@@ -793,6 +799,17 @@ impl PlaybackView {
             {
                 return;
             }
+        }
+        #[cfg(feature = "torrent")]
+        if let Some((torrent, file, len)) = s.rate_of {
+            let core = self.core.clone();
+            let metered = core.network() == crate::speed::Network::Cellular;
+            tokio::spawn(async move {
+                if let Ok(engine) = core.torrent_engine().await {
+                    let rate = len * 1000 / duration_ms;
+                    let _ = engine.set_rate(torrent, file, rate, metered).await;
+                }
+            });
         }
         let lookup = (s.source, duration_ms);
         s.lookup = Some(lookup);
@@ -1723,6 +1740,12 @@ async fn open_torrent(
                 .unwrap_or(&info.path)
                 .to_owned();
             spawn_sample(core, torrent, info_hash, stream.seeders);
+            // Seconds of this file for the scheduler, until the player says
+            // how long it is (plans/streaming-window.md 2.2).
+            let metered = core.network() == crate::speed::Network::Cellular;
+            let rate = guessed_rate(stream, info.len, by_episode || target.episode.is_some());
+            let _ = engine.set_rate(torrent, file, rate, metered).await;
+            lock(state).rate_of = Some((torrent, file, info.len));
             let upstream = Upstream::Torrent { claim, file };
             return Ok((upstream, Some(name), Some(info.len)));
         }
@@ -1767,6 +1790,27 @@ async fn open_torrent(
     drop(claim);
     let _ = engine.remove(torrent, false).await;
     Err(failed)
+}
+
+/// A torrent file's rate in bytes per second before the player reports its
+/// duration (plans/streaming-window.md 2.2): the larger of a rate for its
+/// resolution and quality (720p and under 5 Mbit/s, 1080p 10, a 1080p remux
+/// 30, 2160p 40, a 2160p remux 60) and its size over 3 h for a film, 1 h for
+/// an episode.
+#[cfg(any(test, feature = "torrent"))]
+#[cfg_attr(not(feature = "torrent"), allow(dead_code))]
+fn guessed_rate(stream: &ParsedStream, len: u64, episode: bool) -> u64 {
+    let r = &stream.release;
+    let remux = r.quality == mq_relparse::Quality::Remux;
+    let mbps: u64 = match (r.resolution.height(), remux) {
+        (h, true) if h >= 2160 => 60,
+        (h, false) if h >= 2160 => 40,
+        (h, true) if h >= 1080 => 30,
+        (h, false) if h >= 1080 => 10,
+        _ => 5,
+    };
+    let by_size = len / if episode { 3600 } else { 3 * 3600 };
+    (mbps * 1_000_000 / 8).max(by_size)
 }
 
 /// How a torrent's start went.
@@ -2928,6 +2972,29 @@ mod tests {
             ["eeee"],
             "its own unchoke proves it"
         );
+    }
+
+    /// A torrent file's rate before the player's duration: its resolution
+    /// and quality, or its size over 3 h (a film) or 1 h (an episode),
+    /// whichever is larger (plans/streaming-window.md 2.2).
+    #[test]
+    fn a_torrent_rate_is_guessed_from_its_release_and_size() {
+        let named = |title: &str| {
+            stream(&format!(
+                r#"{{"name":"x","title":"{title}","infoHash":"{}"}}"#,
+                "a".repeat(40)
+            ))
+        };
+        let gib = 1u64 << 30;
+        let web = named("Film.2020.1080p.WEB-DL.x264-G");
+        assert_eq!(guessed_rate(&web, gib, false), 1_250_000);
+        let remux = named("Film.2020.2160p.UHD.BluRay.REMUX.HEVC-G");
+        assert_eq!(guessed_rate(&remux, gib, false), 7_500_000);
+        // 40 GiB over 3 h is 32 Mbit/s, over a 1080p's 10.
+        assert_eq!(guessed_rate(&web, 40 * gib, false), 40 * gib / 10_800);
+        // An episode: its size over 1 h.
+        assert_eq!(guessed_rate(&web, 8 * gib, true), 8 * gib / 3600);
+        assert_eq!(guessed_rate(&named("Film.2020.720p"), gib, false), 625_000);
     }
 
     /// Code review r1 P2-1: one capacity sample per torrent and network.

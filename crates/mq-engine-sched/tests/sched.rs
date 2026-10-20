@@ -814,6 +814,36 @@ fn silent_peer_is_snubbed_not_dropped() {
     assert!(h.s.outstanding(1) > 1, "payload lifts the snub");
 }
 
+/// The readahead is set per file (seconds of a file that fits, the
+/// window's for a windowed one), and the playback window follows the
+/// file's bitrate.
+#[test]
+fn readahead_and_bitrate_are_set_per_file() {
+    let g = Geometry::new(64 * KIB as u32, &[8 * MIB, 8 * MIB]).unwrap();
+    let mut h = Harness::new(g, small_cfg());
+    h.send(Event::RangeOpened {
+        demand: 1,
+        file: 0,
+        start: 0,
+        end_hint: None,
+    });
+    // Blocking 0, critical 1..3, playback 3..5, readahead 5..9.
+    assert_eq!(h.s.class_of(8), Some(Class::Readahead));
+    assert_eq!(h.s.class_of(9), None);
+    h.s.set_readahead(0, MIB);
+    h.s.set_readahead(1, 64 * KIB);
+    h.send(Event::Tick { now_us: 1 });
+    assert_eq!(h.s.class_of(20), Some(Class::Readahead));
+    assert_eq!(h.s.class_of(21), None);
+    // Twice the bitrate: playback 3..7 (8 s of 32 KiB/s at 64 KiB), the
+    // same readahead after it.
+    h.s.set_bitrate(0, 64 * KIB);
+    h.send(Event::Tick { now_us: 2 });
+    assert_eq!(h.s.class_of(6), Some(Class::Playback));
+    assert_eq!(h.s.class_of(22), Some(Class::Readahead));
+    assert_eq!(h.s.class_of(23), None);
+}
+
 #[test]
 fn readahead_prefers_rare_pieces() {
     let g = Geometry::new(64 * KIB as u32, &[8 * MIB]).unwrap();
