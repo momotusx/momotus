@@ -35,6 +35,8 @@ dependencies {
     api(libs.coil.compose)
     api(libs.coil.network.okhttp)
     implementation(libs.androidx.core.ktx)
+    // BackHandler: a TV field's Back on Android 16 and later, where predictive back sends no key event.
+    implementation(libs.androidx.activity.compose)
     // The QR encoder for codes shown on a TV (Apache 2.0); Android has none of its own.
     implementation(libs.zxing.core)
 

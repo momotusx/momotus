@@ -4,6 +4,8 @@ import android.content.Context
 import android.view.View
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.inputmethod.InputMethodManager
+import androidx.activity.OnBackPressedDispatcher
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +27,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -56,6 +59,7 @@ class TextFieldTest {
     val compose = createComposeRule()
 
     private lateinit var view: View
+    private var back: OnBackPressedDispatcher? = null
 
     /** What TalkBack is handed for the field's node. */
     private fun nodeInfo(): AccessibilityNodeInfo {
@@ -80,6 +84,7 @@ class TextFieldTest {
     ) {
         compose.setContent {
             view = LocalView.current
+            back = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
             MarqueeTheme(form) {
                 var text by remember { mutableStateOf(start) }
                 Column {
@@ -170,6 +175,53 @@ class TextFieldTest {
         assertTrue(info.isPassword)
         assertEquals("Addon link", info.contentDescription?.toString())
         assertFalse(info.text?.contains("SECRET") == true, "the secret reached TalkBack: ${info.text}")
+    }
+
+    @Test
+    fun `on a TV a back event in the editor makes it a button again and keeps the focus on it`() {
+        // Android 16 and later send predictive back as a back event, not KEYCODE_BACK: the BackHandler takes it.
+        field(Form.Tv)
+        selectField()
+        assertTrue(keyboardShown())
+        compose.runOnIdle { checkNotNull(back).onBackPressed() }
+        compose.waitForIdle()
+        val node = compose.onNodeWithContentDescription("Addon link")
+        node.assertIsFocused()
+        node.assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnImeAction))
+        assertFalse(keyboardShown(), "Back left the keyboard open")
+    }
+
+    /**
+     * The name TalkBack reads for the editor. Its node always has a child (its clip), so Compose drops its own
+     * description and TalkBack names it from its children, as it does a button: the label is such a child.
+     */
+    private fun editorLabel(): String? {
+        val label = compose.onNode(hasContentDescription("Addon link"), useUnmergedTree = true).fetchSemanticsNode()
+        val editor = checkNotNull(label.parent)
+        assertTrue(SemanticsProperties.EditableText in editor.config, "the label is not the editor's child")
+        var spoken: CharSequence? = null
+        compose.runOnIdle {
+            spoken =
+                view.accessibilityNodeProvider.createAccessibilityNodeInfo(label.id)?.contentDescription
+        }
+        return spoken?.toString()
+    }
+
+    @Test
+    fun `on a phone TalkBack hears the label of an empty field`() {
+        field(Form.Phone)
+        val info = nodeInfo()
+        assertEquals("android.widget.EditText", info.className)
+        assertTrue(info.isEditable)
+        assertEquals("Addon link", editorLabel())
+    }
+
+    @Test
+    fun `on a TV TalkBack hears the label of an empty field's editor`() {
+        field(Form.Tv)
+        selectField()
+        assertTrue(nodeInfo().isEditable)
+        assertEquals("Addon link", editorLabel())
     }
 
     @Test

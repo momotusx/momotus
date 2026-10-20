@@ -1,5 +1,6 @@
 package app.marquee.design
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -118,6 +119,12 @@ fun FieldInput(
     var backed by remember { mutableStateOf(false) }
     val input = remember { FocusRequester() }
     val button = remember { FocusRequester() }
+    // Back from the editor on a TV where it comes as a back event, not a key (Android 16 and later, predictive
+    // back; the player pairs the two the same way): the key handler below covers the older ones.
+    BackHandler(enabled = tv && editing) {
+        backed = true
+        editing = false
+    }
     LaunchedEffect(editing) {
         if (!tv) return@LaunchedEffect
         if (editing) {
@@ -159,44 +166,55 @@ fun FieldInput(
         }
         return
     }
-    BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
-        singleLine = true,
-        textStyle = textStyle,
-        cursorBrush = SolidColor(colors.accent),
-        keyboardOptions = keyboardOptions,
-        keyboardActions = keyboardActions,
-        visualTransformation = visualTransformation,
-        modifier =
-            modifier
-                .focusRequester(input)
-                .onPreviewKeyEvent {
-                    // On a TV, Back in the editor (a Fire TV keyboard closes on it and lets it through) makes the
-                    // field a button again with the focus kept on it; unhandled, Compose would move the focus out
-                    // of the page's section (FocusDirection.Exit), to the nav pill or a result.
-                    if (!tv || it.key != Key.Back) return@onPreviewKeyEvent false
-                    if (it.type == KeyEventType.KeyUp) {
-                        backed = true
-                        editing = false
-                    }
-                    true
-                }.dpadExits()
-                .onFocusChanged {
-                    onFocus(it.isFocused)
-                    // On a TV, leaving the editor (Up, Down, or Back closing the keyboard) makes it a button again.
-                    if (it.isFocused) {
-                        entered = true
-                    } else if (tv && entered) {
-                        entered = false
-                        editing = false
-                    }
-                }.semantics { contentDescription = label },
-        decorationBox = { inner ->
-            Box(contentAlignment = Alignment.CenterStart) {
-                if (value.isEmpty()) MqText(placeholder, color = colors.dim, maxLines = 1)
-                inner()
-            }
-        },
-    )
+    Box(modifier, contentAlignment = Alignment.CenterStart) {
+        // The placeholder sits beside the editor and is not read: TalkBack hears the label (below) instead.
+        if (value.isEmpty()) {
+            MqText(placeholder, color = colors.dim, maxLines = 1, modifier = Modifier.clearAndSetSemantics { })
+        }
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            textStyle = textStyle,
+            cursorBrush = SolidColor(colors.accent),
+            keyboardOptions = keyboardOptions,
+            keyboardActions = keyboardActions,
+            visualTransformation = visualTransformation,
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .focusRequester(input)
+                    .onPreviewKeyEvent {
+                        // On a TV, Back in the editor (a Fire TV keyboard closes on it and lets it through) makes
+                        // the field a button again with the focus kept on it; unhandled, Compose would move the
+                        // focus out of the page's section (FocusDirection.Exit), to the nav pill or a result.
+                        if (!tv || it.key != Key.Back) return@onPreviewKeyEvent false
+                        if (it.type == KeyEventType.KeyUp) {
+                            backed = true
+                            editing = false
+                        }
+                        true
+                    }.dpadExits()
+                    .onFocusChanged {
+                        onFocus(it.isFocused)
+                        // On a TV, leaving the editor (Up, Down, or Back closing the keyboard) makes it a button
+                        // again.
+                        if (it.isFocused) {
+                            entered = true
+                        } else if (tv && entered) {
+                            entered = false
+                            editing = false
+                        }
+                    },
+            decorationBox = { inner ->
+                Box {
+                    inner()
+                    // The label as a child of the editor: the editor node always has a child of its own (its
+                    // clip), and Compose then drops the node's description, so TalkBack takes the name from the
+                    // children, as it does a button's.
+                    Box(Modifier.matchParentSize().semantics { contentDescription = label })
+                }
+            },
+        )
+    }
 }
