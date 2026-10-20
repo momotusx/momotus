@@ -106,3 +106,10 @@ Marquee changes (each changed spot carries a "Marquee fork" comment):
   before the first gate and releases what is still gated; a punch refused
   before any work keeps its pieces; a bitfield only in memory answers an
   acknowledged flush with a failure, so nothing is punched.
+- src/storage/filesystem/opened_file.rs: 32-bit Android writes through the
+  portable `pwrite_all` path (std's pwrite64). Its off_t is 32 bits, so
+  nix's `pwritev` refused every offset past 2 GiB and the torrent stopped
+  on the first chunk written there. That path is a function of its own,
+  which the tests run on every target with a sparse write at 5 GiB.
+- Cargo.toml: a [patch.crates-io] table with the sibling forks, so this
+  crate's own tests build on their own as in the Marquee workspace.

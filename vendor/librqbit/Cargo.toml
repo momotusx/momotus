@@ -409,3 +409,13 @@ features = [
     "Win32_System_IO",
     "Win32_System_Ioctl",
 ]
+
+# Marquee fork: a build of this crate on its own (its tests on a 32-bit device) takes the same
+# sibling forks the Marquee workspace patches in (the root Cargo.toml).
+[patch.crates-io]
+librqbit-sha1-wrapper = { path = "../librqbit-sha1-wrapper" }
+librqbit-tracker-comms = { path = "../librqbit-tracker-comms" }
+librqbit-dht = { path = "../librqbit-dht" }
+librqbit-utp = { path = "../librqbit-utp" }
+librqbit-bencode = { path = "../librqbit-bencode" }
+librqbit-dualstack-sockets = { path = "../librqbit-dualstack-sockets" }

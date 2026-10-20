@@ -24,3 +24,6 @@
 /apps/android/core/src/main/generated/
 /apps/android/local.properties
 /apps/android/.kotlin/
+
+# A standalone build of a vendored crate (its own tests, the cast audit) writes its own lock file.
+/vendor/*/Cargo.lock
