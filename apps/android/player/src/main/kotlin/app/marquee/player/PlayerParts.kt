@@ -451,11 +451,10 @@ fun SkipButton(
         verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
     ) {
         MqText("Skip data: ${segment.source}", role = TextRole.Caption, color = Marquee.colors.muted, maxLines = 1)
-        // The white pill with an accent edge (design/DECISION.md v2, Player).
+        // A plain white pill: an accent edge that never goes away reads as focus stuck on it.
         PrimaryButton(
             skipLabel(segment.kind),
             onSkip,
-            Modifier.border(2.dp, Marquee.colors.accent, RoundedCornerShape(Marquee.radius.pill)),
             icon = Icons.SkipForward,
             focusRequester = focus,
             onFocusChange = onFocusChange,
