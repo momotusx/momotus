@@ -15,6 +15,7 @@ import RotateCw from "lucide-solid/icons/rotate-cw";
 import SkipForward from "lucide-solid/icons/skip-forward";
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from "solid-js";
 import { Backdrop } from "../components/art";
+import { KeyedPage } from "../components/keyed-page";
 import { TraktMark } from "../components/trakt-mark";
 import { liveView, prefsView } from "../core/client";
 import type { PlaybackSnapshot } from "../core/generated/PlaybackSnapshot";
@@ -41,15 +42,17 @@ export default function Player() {
   const params = useParams();
   const [query] = useSearchParams();
   return (
-    <Show when={`${params.kind}/${params.id}/${params.videoId}/${query.key ?? ""}`} keyed>
-      <PlayerPage
-        kind={decoded(params.kind)}
-        id={decoded(params.id)}
-        videoId={decoded(params.videoId)}
-        chosen={typeof query.key === "string" ? query.key : null}
-        binge={typeof query.binge === "string" ? query.binge : undefined}
-      />
-    </Show>
+    <KeyedPage
+      address={`${params.kind}/${params.id}/${params.videoId}/${query.key ?? ""}`}
+      read={() => ({
+        kind: decoded(params.kind),
+        id: decoded(params.id),
+        videoId: decoded(params.videoId),
+        chosen: typeof query.key === "string" ? query.key : null,
+        binge: typeof query.binge === "string" ? query.binge : undefined,
+      })}
+      page={PlayerPage}
+    />
   );
 }
 
@@ -71,10 +74,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       onCleanup(() => clearTimeout(t));
     }
   });
-  // The failure card's offer (`PlaybackSnapshot.offer`) plays here, from
-  // the same Versions view.
-  const [offered, setOffered] = createSignal<string | null>(null);
-  const key = createMemo<string | null>((prev) => offered() ?? prev ?? props.chosen ?? (settled() ? (versions()?.recommended?.key ?? null) : null), null);
+  const key = createMemo<string | null>((prev) => prev ?? props.chosen ?? (settled() ? (versions()?.recommended?.key ?? null) : null), null);
 
   const playback = createMemo(() => {
     const view = ctx.versions();
@@ -323,6 +323,10 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     const binge = snap()?.bingeGroup;
     return `${playPath(props.kind, props.id, n.videoId)}${binge ? `?binge=${encodeURIComponent(binge)}` : ""}`;
   };
+  // Another version of this video (the failure card's offer): a new play at
+  // its own address, on the same Versions view (same binge group).
+  const playKey = (key: string) =>
+    navigate(`${playPath(props.kind, props.id, props.videoId)}?${new URLSearchParams({ key, ...(props.binge ? { binge: props.binge } : {}) })}`, { replace: true });
   // Up Next takes focus when it appears, like Skip buttons on other players.
   createEffect(
     on(showNext, (shown, was) => {
@@ -478,7 +482,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                         class="btn primary big"
                         data-f="player:offer"
                         data-autofocus
-                        onClick={() => setOffered(o().key)}
+                        onClick={() => playKey(o().key)}
                       >
                         <Play aria-hidden />
                         {nextVersion.play(o().label)}

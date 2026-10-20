@@ -12,6 +12,7 @@ import Layers from "lucide-solid/icons/layers";
 import Play from "lucide-solid/icons/play";
 import { createEffect, createMemo, createSignal, For, type JSX, Match, Show, Switch } from "solid-js";
 import { Backdrop, Logo } from "../components/art";
+import { KeyedPage } from "../components/keyed-page";
 import { separators } from "../components/separators";
 import { TrailerOverlay } from "../components/trailer";
 import { type TitleView, titleView, versionsView } from "../core/client";
@@ -26,9 +27,7 @@ import "./title.css";
 export default function Title() {
   const params = useParams();
   return (
-    <Show when={`${params.kind}/${params.id}`} keyed>
-      <TitlePage kind={decoded(params.kind)} id={decoded(params.id)} />
-    </Show>
+    <KeyedPage address={`${params.kind}/${params.id}`} read={() => ({ kind: decoded(params.kind), id: decoded(params.id) })} page={TitlePage} />
   );
 }
 

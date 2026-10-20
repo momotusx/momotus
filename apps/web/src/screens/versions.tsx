@@ -17,6 +17,7 @@ import Undo2 from "lucide-solid/icons/undo-2";
 import { createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { Backdrop } from "../components/art";
+import { KeyedPage } from "../components/keyed-page";
 import { op } from "../core/client";
 import type { Group } from "../core/generated/Group";
 import type { ReasonLine } from "../core/generated/ReasonLine";
@@ -48,9 +49,11 @@ const SHOWN = 3;
 export default function Versions() {
   const params = useParams();
   return (
-    <Show when={`${params.kind}/${params.id}/${params.videoId}`} keyed>
-      <VersionsPage kind={decoded(params.kind)} id={decoded(params.id)} videoId={decoded(params.videoId)} />
-    </Show>
+    <KeyedPage
+      address={`${params.kind}/${params.id}/${params.videoId}`}
+      read={() => ({ kind: decoded(params.kind), id: decoded(params.id), videoId: decoded(params.videoId) })}
+      page={VersionsPage}
+    />
   );
 }
 
