@@ -333,7 +333,9 @@ export function versionsView(p: VersionsParams): LiveView<VersionsSnapshot> {
   const key = `${p.kind}|${p.videoId}|${p.bingeGroup ?? ""}`;
   if (versions?.key === key && versions.view.state.status.state !== "failed") return versions.view;
   versions?.view.close();
-  const view = liveView<VersionsSnapshot>("versions", { ...p, ...displayCaps(), network: networkType() }, true);
+  // Rows merge by their `key`, so a row keeps its element (and the focus) when
+  // a late addon or a re-rank moves it.
+  const view = liveView<VersionsSnapshot>("versions", { ...p, ...displayCaps(), network: networkType() }, true, "key");
   versions = { key, view };
   return view;
 }

@@ -15,7 +15,7 @@ import Sparkles from "lucide-solid/icons/sparkles";
 import TriangleAlert from "lucide-solid/icons/triangle-alert";
 import Undo2 from "lucide-solid/icons/undo-2";
 import UserRoundX from "lucide-solid/icons/user-round-x";
-import { createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
+import { createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { Backdrop } from "../components/art";
 import { KeyedPage } from "../components/keyed-page";
@@ -158,10 +158,11 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
     });
   });
 
-  const groups = () => {
-    const rows = (showBlocked() ? blocked()?.rows : snap()?.rows) ?? [];
-    return groupOrder.map((g) => ({ group: g, rows: rows.filter((r) => r.group === g) })).filter((g) => g.rows.length > 0);
-  };
+  // The rows listed now, and one group's of them. Sections come from the fixed
+  // group order, so a late addon or a re-rank never rebuilds them: the
+  // focused row keeps its element.
+  const listed = () => (showBlocked() ? blocked()?.rows : snap()?.rows) ?? [];
+  const rowsOf = (g: Group) => listed().filter((r) => r.group === g);
   const toggle = (g: Group) => {
     const next = new Set(open());
     if (next.has(g)) next.delete(g);
@@ -363,15 +364,17 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
               <span>Via</span>
             </div>
             <div class="alist" data-vscroll data-fgroup="alts">
-              <For each={groups()}>
+              <For each={groupOrder}>
                 {(g) => {
-                  const expanded = () => open().has(g.group);
-                  const shown = () => (expanded() ? g.rows : g.rows.slice(0, SHOWN));
+                  const rows = createMemo(() => rowsOf(g));
+                  const expanded = () => open().has(g);
+                  const shown = () => (expanded() ? rows() : rows().slice(0, SHOWN));
                   return (
+                    <Show when={rows().length > 0}>
                     <section class="vgroup" data-row>
                       <h3>
-                        {groupLabel[g.group]}
-                        <span class="num">{g.rows.length}</span>
+                        {groupLabel[g]}
+                        <span class="num">{rows().length}</span>
                       </h3>
                       <For each={shown()}>
                         {(r) => (
@@ -420,13 +423,14 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
                           </>
                         )}
                       </For>
-                      <Show when={g.rows.length > SHOWN}>
-                        <button class="fold" data-f={`fold:${g.group}`} aria-expanded={expanded()} onClick={() => toggle(g.group)}>
+                      <Show when={rows().length > SHOWN}>
+                        <button class="fold" data-f={`fold:${g}`} aria-expanded={expanded()} onClick={() => toggle(g)}>
                           <ChevronDown aria-hidden />
-                          {expanded() ? `Show the best ${SHOWN}` : `Show all ${g.rows.length}`}
+                          {expanded() ? `Show the best ${SHOWN}` : `Show all ${rows().length}`}
                         </button>
                       </Show>
                     </section>
+                    </Show>
                   );
                 }}
               </For>
@@ -437,7 +441,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string }) {
                   <span>{hiddenSummary(snap()?.hidden ?? { count: 0, byReason: [] })}</span>
                 </p>
               </Show>
-              <Show when={snap() && !snap()?.done && groups().length === 0}>
+              <Show when={snap() && !snap()?.done && listed().length === 0}>
                 <div class="alist-wait" aria-hidden="true">
                   <For each={[0, 1, 2, 3, 4]}>{() => <div class="skel" />}</For>
                 </div>

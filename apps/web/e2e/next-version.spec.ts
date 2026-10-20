@@ -20,6 +20,7 @@ import { BBB_FILE, BBB_ID, ensureMedia } from "./source";
 
 let core: { proc: ChildProcess; data: string } | null = null;
 let addon: Server | null = null;
+let slow: Server | null = null;
 let SCRAMBLED: Buffer | undefined;
 
 /** The film's first `bytes` with the frames of every cluster from `fromMs`
@@ -85,6 +86,35 @@ const LATE = "Sintel.2010.1080p.WEB.VP9.webm";
 const GOOD = "Sintel.2010.720p.WEB.VP9.webm";
 const LINES: Record<string, string> = { [LATE]: "From the first version", [GOOD]: "From the second version" };
 let LATE_BODY: Buffer | undefined;
+// A second addon that answers for the second title only, and late: two
+// lower versions that join a list the viewer is already moving in.
+const SLOW = ["Sintel.2010.480p.WEB.VP9.webm", "Sintel.2010.360p.WEB.VP9.webm"];
+
+function slowAddon(): Promise<Server> {
+  const server = createServer((req, res) => {
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    if (req.url === "/manifest.json") {
+      res.writeHead(200, { "content-type": "application/json" });
+      return res.end(JSON.stringify({ id: "dev.marquee.slow", version: "1.0.0", name: "Slow", resources: ["stream"], types: ["movie"], idPrefixes: ["tt"], catalogs: [] }));
+    }
+    if (req.url === `/stream/movie/${SINTEL}.json`) {
+      setTimeout(() => {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ streams: SLOW.map((file) => ({ name: "Slow", title: file, url: `${base}/media/${file}`, behaviorHints: { filename: file } })) }));
+      }, 4000);
+      return;
+    }
+    if (req.url?.startsWith("/stream/")) {
+      res.writeHead(200, { "content-type": "application/json" });
+      return res.end(JSON.stringify({ streams: [] }));
+    }
+    const file = decodeURIComponent(req.url?.replace("/media/", "") ?? "");
+    if (SLOW.includes(file)) return ranges(req, res, BBB_FILE, "video/webm");
+    res.writeHead(404);
+    res.end();
+  });
+  return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server)));
+}
 
 /** `path` with Range support, as a file host answers. */
 function ranges(req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse, path: string, type: string) {
@@ -171,6 +201,8 @@ test.beforeAll(async () => {
       }
     }
     await c.req("installAddon", { url: `http://127.0.0.1:${(addon.address() as AddressInfo).port}/manifest.json` });
+    slow = await slowAddon();
+    await c.req("installAddon", { url: `http://127.0.0.1:${(slow.address() as AddressInfo).port}/manifest.json` });
     // English subtitles turn on at start (only the second title has any).
     await c.req("setPrefs", { patch: { defaultsSeen: 1, subtitleLanguages: ["eng"] } });
   } finally {
@@ -181,14 +213,15 @@ test.beforeAll(async () => {
 test.afterAll(() => {
   if (core) cleanup(core.proc, core.data);
   addon?.close();
+  slow?.close();
 });
 
 type Sent = { op?: string; view?: string; command?: { type?: string; kind?: string; status?: number } };
 
-async function page(browser: Browser) {
+async function page(browser: Browser, viewport = { width: 1440, height: 900 }) {
   // What the page asked the core, in order.
   const sent: Sent[] = [];
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: "dark", baseURL: `http://127.0.0.1:${PORTS.vite}` });
+  const context = await browser.newContext({ viewport, colorScheme: "dark", baseURL: `http://127.0.0.1:${PORTS.vite}` });
   await context.routeWebSocket(/\/ws$/, (ws) => {
     const upstream = new WebSocket(`ws://127.0.0.1:${NEXT_PORT}/ws`);
     const early: string[] = [];
@@ -216,6 +249,7 @@ const mute = (p: import("@playwright/test").Page) =>
   });
 // The key the history entry carries for the player.
 const chosen = (p: import("@playwright/test").Page) => p.evaluate(() => (history.state as { key?: string } | null)?.key ?? null);
+const slowKey = (file: string) => `url:http://127.0.0.1:${(slow?.address() as AddressInfo).port}/media/${file}`;
 const keyOf = (file: string) => `url:http://127.0.0.1:${(addon?.address() as AddressInfo).port}/media/${file}`;
 
 test("the recommendation that cannot play here moves on and says so", async ({ browser }) => {
@@ -423,5 +457,29 @@ test("moving on drops the old version's subtitle and turns on the new one's", as
   await expect.poll(cue, { timeout: 30_000 }).toBe(LINES[GOOD]);
   await expect(p.locator("video track")).toHaveCount(1);
   await expect.poll(() => playing(p), { timeout: 60_000 }).toBeGreaterThan(0.5);
+  await context.close();
+});
+
+test("TV: the focus stays on the Versions row the viewer moved to when a late addon adds rows", async ({ browser }) => {
+  // The TV canvas: the recommended card on the left, the list on its right.
+  const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
+  await p.goto(`/title/movie/${SINTEL}/versions/${SINTEL}?form=tv`);
+  // The first addon answered (which of its versions is the pick depends on
+  // what this device already failed to play); the slow one has not.
+  await expect(p.locator(".vrow").first()).toBeVisible({ timeout: 30_000 });
+  await expect(p.locator(`[data-f="v:${slowKey(SLOW[0] ?? "")}"]`)).toHaveCount(0);
+  const focused = () => p.evaluate(() => document.activeElement?.getAttribute("data-f") ?? null);
+  await expect.poll(focused).toBe("versions:play");
+  // On a row of the list (as focus.spec reaches rows), and what it says.
+  await p.locator(".vrow").first().focus();
+  await expect.poll(focused).toMatch(/^v:/);
+  const row = await focused();
+  const says = () => p.evaluate(() => document.activeElement?.querySelector(".rel")?.textContent ?? null);
+  const before = await says();
+  // The slow addon answers: its rows join the list.
+  await expect(p.locator(`[data-f="v:${slowKey(SLOW[0] ?? "")}"]`)).toHaveCount(1, { timeout: 30_000 });
+  // The focus is where the viewer put it, on the same release.
+  expect(await focused()).toBe(row);
+  expect(await says()).toBe(before);
   await context.close();
 });
