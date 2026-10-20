@@ -418,6 +418,7 @@ final class PlayerModel {
         playback = snapshot
         if PlayerLayout.retryRose(old: lastRetries, new: snapshot.retries) { showTryingAgain() }
         lastRetries = snapshot.retries ?? lastRetries
+        tryingAgain = PlayerLayout.keepsTryingAgain(showing: tryingAgain, phase: snapshot.phase)
         // The core's start subtitle, once, as if picked, sending nothing.
         if let track = choices.startSubtitle(snapshot.autoSubtitle, tracks: snapshot.subtitles) {
             selectSubtitle(track)

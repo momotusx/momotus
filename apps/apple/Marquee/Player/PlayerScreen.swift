@@ -342,8 +342,10 @@ private struct StatusOverlay: View {
     /// Set when the shown controls reach the middle: the waiting status sits
     /// this far up, just over them (PlayerLayout.statusOverControls).
     var overControls: CGFloat?
-    /// The way on takes focus when the failure shows, so a remote is on it.
-    @FocusState private var primary: Bool
+    /// The way on takes focus when the failure shows, so a remote is on it;
+    /// after a Try again, Try again keeps it.
+    @FocusState private var focus: FailureAction?
+    @State private var retried = false
 
     /// The card's actions, the first the way on with focus. A view that could
     /// not open has no offer, and its Try again opens it again.
@@ -351,11 +353,10 @@ private struct StatusOverlay: View {
         let order = PlayerLayout.failureActions(
             offer: !cannotOpen && model.playback?.offer != nil, canChoose: chooseVersion != nil)
         ForEach(order, id: \.self) { action in
-            if action == order.first {
-                button(action, cannotOpen: cannotOpen).buttonStyle(PillButtonStyle(prominent: true)).fixedSize().focused($primary)
-            } else {
-                button(action, cannotOpen: cannotOpen).buttonStyle(PillButtonStyle()).fixedSize()
-            }
+            button(action, cannotOpen: cannotOpen)
+                .buttonStyle(PillButtonStyle(prominent: action == order.first))
+                .fixedSize()
+                .focused($focus, equals: action)
         }
     }
 
@@ -363,7 +364,10 @@ private struct StatusOverlay: View {
         let label = PlayerLayout.failureLabel(action, offer: model.playback?.offer?.label)
         return switch action {
         case .offer: Button(label) { if let key = model.playback?.offer?.key { model.switchVersion(key) } }
-        case .retry: Button(label) { if cannotOpen { model.reopen() } else { model.retry() } }
+        case .retry: Button(label) {
+            retried = true
+            if cannotOpen { model.reopen() } else { model.retry() }
+        }
         case .choose: Button(label) { chooseVersion?() }
         case .back: Button(label, action: back)
         }
@@ -374,6 +378,13 @@ private struct StatusOverlay: View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
             Text(headline)
                 .display(Theme.type.title1)
+            // A Try again that failed again at once: the card stays and says it tried.
+            if let note = PlayerLayout.failureNote(tryingAgain: model.tryingAgain) {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small).tint(Theme.Palette.text)
+                    Text(note).font(.text(Theme.type.body))
+                }
+            }
             ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
                 Label(line, glyph: "circle-x")
                     .font(.text(Theme.type.body))
@@ -391,7 +402,11 @@ private struct StatusOverlay: View {
         .frame(maxWidth: 640, alignment: .leading)
         .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true)
         .padding(.horizontal, Theme.Space.m)
-        .onAppear { primary = true }
+        .onAppear {
+            let order = PlayerLayout.failureActions(
+                offer: !cannotOpen && model.playback?.offer != nil, canChoose: chooseVersion != nil)
+            focus = PlayerLayout.failureFocus(order, retried: retried)
+        }
     }
 
     private var waitingWords: some View {
@@ -403,7 +418,7 @@ private struct StatusOverlay: View {
     var body: some View {
         let status = PlayerLayout.status(
             phase: model.playback?.phase, cannotOpen: model.openError != nil,
-            firstFrameShown: model.firstFrameMs != nil, waiting: model.waiting, tryingAgain: model.tryingAgain)
+            firstFrameShown: model.firstFrameMs != nil, waiting: model.waiting)
         switch status {
         case .failed:
             card(PlayerLayout.failureHeadline(offer: model.playback?.offer != nil),

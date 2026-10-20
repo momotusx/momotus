@@ -460,9 +460,18 @@ private func phase(_ phase: String, _ extra: String = "") throws -> PlaybackSnap
     // A view's first snapshot, or an older core without the field: nothing to say.
     #expect(!PlayerLayout.retryRose(old: nil, new: 2))
     #expect(!PlayerLayout.retryRose(old: 1, new: nil))
-    // The refailed snapshot reads as failed again; Trying again shows over it for a moment.
-    #expect(PlayerLayout.status(phase: "failed", cannotOpen: false, firstFrameShown: true, waiting: false, tryingAgain: true) == .waiting(words: true))
-    #expect(PlayerLayout.waitingWords(try phase("failed"), notice: nil, tryingAgain: true) == "Trying again")
+    // A refail keeps the card, with the line under its headline and Try again focused.
+    #expect(PlayerLayout.status(phase: "failed", cannotOpen: false, firstFrameShown: true, waiting: false) == .failed)
+    #expect(PlayerLayout.failureNote(tryingAgain: true) == "Trying again")
+    #expect(PlayerLayout.failureNote(tryingAgain: false) == nil)
+    #expect(PlayerLayout.failureFocus([.offer, .retry, .choose, .back], retried: true) == .retry)
+    #expect(PlayerLayout.failureFocus([.offer, .retry, .choose, .back], retried: false) == .offer)
+    // While the play resolves again, the spinner says it.
+    #expect(PlayerLayout.waitingWords(try phase("resolving"), notice: nil, tryingAgain: true) == "Trying again")
+    // At least 1.5 s, unless the play is ready first.
+    #expect(PlayerLayout.tryingAgainHold == .milliseconds(1500))
+    #expect(!PlayerLayout.keepsTryingAgain(showing: true, phase: "ready"))
+    #expect(PlayerLayout.keepsTryingAgain(showing: true, phase: "failed"))
     #expect(try phase("failed", #","retries":2"#).retries == 2)
     #expect(try phase("failed").retries == nil)
 }

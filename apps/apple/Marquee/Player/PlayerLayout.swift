@@ -48,9 +48,7 @@ enum PlayerLayout {
     /// The overlay: the failure card, the card for a view that could not
     /// open, the spinner (with its words until a frame shows, and whenever the
     /// play starts over, a Try again after a frame), or nothing.
-    static func status(phase: String?, cannotOpen: Bool, firstFrameShown: Bool, waiting: Bool, tryingAgain: Bool = false) -> PlayerStatus {
-        // An accepted Try again shows for a moment over a play that failed again at once.
-        if tryingAgain { return .waiting(words: true) }
+    static func status(phase: String?, cannotOpen: Bool, firstFrameShown: Bool, waiting: Bool) -> PlayerStatus {
         if phase == "failed" { return .failed }
         if cannotOpen { return .cannotOpen }
         if phase == "resolving" || !firstFrameShown { return .waiting(words: true) }
@@ -66,8 +64,25 @@ enum PlayerLayout {
         return new > old
     }
 
-    /// How long "Trying again" stays before what the core says next shows.
-    static let tryingAgainHold: Duration = .seconds(2)
+    /// "Trying again" holds at least this long after `retries` rises, as on
+    /// the web and Android, unless the play is ready first.
+    static let tryingAgainHold: Duration = .milliseconds(1500)
+
+    /// The line keeps showing until the hold ends or the play is ready.
+    static func keepsTryingAgain(showing: Bool, phase: String?) -> Bool {
+        showing && phase != "ready"
+    }
+
+    /// On a refail the card stays, with this line under its headline.
+    static func failureNote(tryingAgain: Bool) -> String? {
+        tryingAgain ? "Trying again" : nil
+    }
+
+    /// The action the card focuses as it shows: Try again again after the
+    /// viewer pressed it, else the way on, the first.
+    static func failureFocus(_ order: [FailureAction], retried: Bool) -> FailureAction? {
+        retried && order.contains(.retry) ? .retry : order.first
+    }
 
     /// The failure card's buttons, in the words the web and Android use.
     static func failureLabel(_ action: FailureAction, offer: String?) -> String {
