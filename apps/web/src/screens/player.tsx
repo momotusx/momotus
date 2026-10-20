@@ -260,18 +260,33 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     sound.muted = muted();
     engine.setVolume(muted() ? 0 : volume());
   });
-  // A phone: while the controls show, subtitles sit just above them, never
-  // under them; hidden, the lines go back to the foot of the picture.
+  // A phone: a line ends at the picture's own foot, inside it (in portrait
+  // the picture ends above a black band); where the controls cover the
+  // picture while they show (landscape), just above them instead. Never in
+  // the band, never under the controls, never at the top.
   const liftCues = () => {
+    const video = document.querySelector<HTMLVideoElement>(".player-scr video");
+    if (form() !== "phone" || !video) return engine.setSubtitleLift(0);
+    const box = video.getBoundingClientRect();
+    // The picture inside the element (object-fit: contain).
+    const scale = video.videoWidth && video.videoHeight ? Math.min(box.width / video.videoWidth, box.height / video.videoHeight) : 0;
+    const band = scale ? (box.height - video.videoHeight * scale) / 2 : 0;
+    const pictureFoot = box.bottom - band - (band > 0 ? 8 : 0);
     const bar = document.querySelector<HTMLElement>(".player-scr .osd");
-    const picture = document.querySelector<HTMLElement>(".player-scr video")?.getBoundingClientRect();
-    const up = form() === "phone" && osd() && !!bar && !ended();
-    engine.setSubtitleLift(up && bar && picture ? Math.max(0, picture.bottom - bar.getBoundingClientRect().top + 12) : 0);
+    const barTop = osd() && !ended() && bar ? bar.getBoundingClientRect().top - 12 : Infinity;
+    engine.setSubtitleLift(Math.max(0, box.bottom - Math.min(pictureFoot, barTop)));
   };
   createEffect(on([osd, ended, url], () => requestAnimationFrame(liftCues)));
   onMount(() => {
+    const video = engine.view as HTMLVideoElement;
     window.addEventListener("resize", liftCues);
-    onCleanup(() => window.removeEventListener("resize", liftCues));
+    video.addEventListener("loadedmetadata", liftCues);
+    video.addEventListener("resize", liftCues);
+    onCleanup(() => {
+      window.removeEventListener("resize", liftCues);
+      video.removeEventListener("loadedmetadata", liftCues);
+      video.removeEventListener("resize", liftCues);
+    });
   });
   const [full, setFull] = createSignal(!!document.fullscreenElement);
   onMount(() => {

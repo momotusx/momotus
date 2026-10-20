@@ -1193,7 +1193,7 @@ test("TV: a focused chip gone after the page scrolled hands the focus to its nea
   await context.close();
 });
 
-test("phone player, portrait and landscape: transport centred, scrubber then options at the foot, subtitles lifted above them", async ({ browser }) => {
+test("phone player, portrait and landscape: transport centred, scrubber then options at the foot, the line inside the picture and clear of the controls", async ({ browser }) => {
   const c = new Client(`ws://127.0.0.1:${JOURNEY_PORT}/ws`);
   await c.req("setPrefs", { patch: { subtitleLanguages: ["eng"] } }).finally(() => c.close());
   for (const size of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
@@ -1221,24 +1221,54 @@ test("phone player, portrait and landscape: transport centred, scrubber then opt
     expect(scrub.bottom).toBeLessThanOrEqual(options.top);
     expect(options.bottom).toBeLessThanOrEqual(size.height - 8);
     expect(size.height - options.bottom).toBeLessThan(40);
-    // The line sits just above the controls, never under them, never at the top.
+    // The line and the picture it belongs to (the film is letterboxed in portrait).
     const cue = () =>
       p.evaluate(() => {
         const v = document.querySelector("video") as HTMLVideoElement;
         const c = v.textTracks[0]?.activeCues?.[0] as VTTCue | undefined;
-        return c ? { snap: c.snapToLines, line: c.line, align: c.lineAlign, height: v.getBoundingClientRect().height } : null;
+        const box = v.getBoundingClientRect();
+        const scale = Math.min(box.width / v.videoWidth, box.height / v.videoHeight);
+        const band = (box.height - v.videoHeight * scale) / 2;
+        const foot = c && !c.snapToLines ? box.top + ((c.line as number) / 100) * box.height : c ? box.bottom : null;
+        return c ? { snap: c.snapToLines, line: c.line, align: c.lineAlign, foot, pictureTop: box.top + band, pictureBottom: box.bottom - band } : null;
       });
-    await expect.poll(async () => (await cue())?.snap).toBe(false);
-    const lifted = await cue();
-    const foot = ((lifted?.line as number) / 100) * (lifted?.height ?? 0);
-    expect(lifted?.align).toBe("end");
-    expect(foot).toBeLessThanOrEqual(scrub.top);
-    expect(foot).toBeGreaterThan(scrub.top - 40);
+    const portrait = size.height > size.width;
+    if (portrait) {
+      // The picture ends above the controls: the line stays inside it, at its foot.
+      await expect.poll(async () => (await cue())?.snap).toBe(false);
+      const c = await cue();
+      expect(c?.foot ?? 0).toBeLessThanOrEqual(c?.pictureBottom ?? 0);
+      expect(c?.foot ?? 0).toBeGreaterThan((c?.pictureBottom ?? 0) - 40);
+      expect(c?.foot ?? 0).toBeLessThan(scrub.top);
+    } else {
+      // The controls cover the picture: the line ends just above them.
+      await expect.poll(async () => (await cue())?.snap).toBe(false);
+      const c = await cue();
+      expect(c?.align).toBe("end");
+      expect(c?.foot ?? 0).toBeLessThanOrEqual(scrub.top);
+      expect(c?.foot ?? 0).toBeGreaterThan(scrub.top - 40);
+      // The title beside Back on one line; the options between the bar's ends.
+      const [back, title, bar] = [await box(".pback"), await box(".ptitle h1"), await box(".scrub")];
+      expect(Math.abs(back.top + back.height / 2 - (title.top + title.height / 2))).toBeLessThan(4);
+      expect(title.left).toBeGreaterThan(back.right);
+      const first = await box(".pacts .pa:first-child");
+      const last = await box(".pacts .pa:last-child");
+      expect(first.left).toBeGreaterThanOrEqual(bar.left - 2);
+      expect(last.right).toBeLessThanOrEqual(bar.right + 2);
+    }
     await p.screenshot({ path: `${SHOTS}/phone-player-${size.width}x${size.height}.png` });
-    // Controls hidden: the line goes back to the foot of the picture.
+    // Controls hidden: the line at the picture's own foot (in portrait inside
+    // the picture, in landscape the screen's foot, where the picture ends).
     await expect(p.locator(".player-scr")).toHaveClass(/idle/, { timeout: 10_000 });
-    await expect.poll(async () => (await cue())?.line).toBe("auto");
-    expect((await cue())?.snap).toBe(true);
+    if (portrait) {
+      await expect.poll(async () => (await cue())?.snap).toBe(false);
+      const c = await cue();
+      expect(c?.foot ?? 0).toBeLessThanOrEqual(c?.pictureBottom ?? 0);
+      expect(c?.foot ?? 0).toBeGreaterThan((c?.pictureBottom ?? 0) - 40);
+    } else {
+      await expect.poll(async () => (await cue())?.line).toBe("auto");
+      expect((await cue())?.snap).toBe(true);
+    }
     await context.close();
   }
 });

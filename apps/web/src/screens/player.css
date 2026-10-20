@@ -167,7 +167,20 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 [data-form="phone"] .osd-bot { height: 130px; }
 [data-form="phone"] .ptitle h1 { font-size: 22px; }
 [data-form="phone"] .ptitle p { font-size: 15px; margin-top: 2px; }
-[data-form="phone"] .ptitle { right: var(--safe-side); }
+[data-form="phone"] .ptitle { left: calc(var(--safe-side) + env(safe-area-inset-left)); right: calc(var(--safe-side) + env(safe-area-inset-right));
+  top: calc(var(--safe-top) + env(safe-area-inset-top)); }
+/* The time on each side of the bar keeps one width, so the bar's ends stay put. */
+[data-form="phone"] .tl .num { flex: none; width: 52px; }
+[data-form="phone"] .tl .num:last-child { text-align: right; }
+@media (orientation: landscape) {
+  /* The title beside Back on one line, as the Apple TV app; the options
+   * row between the bar's two ends, not out to the screen's edges. */
+  [data-form="phone"] .ptitle { display: grid; grid-template-columns: auto 1fr; column-gap: 14px; align-items: center; }
+  [data-form="phone"] .ptitle > * { grid-column: 2; }
+  [data-form="phone"] .ptitle > .pback { grid-column: 1; grid-row: 1; margin-bottom: 0; }
+  [data-form="phone"] .ptitle > h1 { grid-row: 1; }
+  [data-form="phone"] .pacts { padding: 0 62px; }
+}
 [data-form="phone"] .psyn { margin-top: 8px; font-size: 14px; -webkit-line-clamp: 2; }
 [data-form="phone"] .clock { display: none; }
 [data-form="phone"] .pstate { top: 140px; gap: 12px; }
