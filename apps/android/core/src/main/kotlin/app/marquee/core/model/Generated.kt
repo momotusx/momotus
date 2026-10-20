@@ -1005,6 +1005,8 @@ data class RankKey(
     val sustains: Boolean,
     /** How far the bitrate is over the row's speed (x = bitrate / speed): 3 when it sustains (x at most 0.7) or the bitrate is unknown, 2 when the speed covers it with no margin (x at most 1), 1 up to 1.5 times the speed, 0 beyond. Among rows that cannot keep up, the one that pauses least ranks first, before resolution (research R1). */
     val pace: Int = 3,
+    /** In pace band 0, the share of the bitrate the row's speed covers, in thousandths (1000 / x): the row least over its speed first, so a file 10 times over stays ahead of one 25 times over (race 3). 0 in the other bands, which `pace` orders. */
+    val covered: Int = 0,
     val playability: Playability,
     /** A torrent within 1.1 x the size limit; a ready file always is. */
     val sizeOk: Boolean,

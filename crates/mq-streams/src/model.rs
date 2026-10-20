@@ -384,6 +384,11 @@ pub struct RankKey {
     /// the speed, 0 beyond. Among rows that cannot keep up, the one that
     /// pauses least ranks first, before resolution (research R1).
     pub pace: u8,
+    /// In pace band 0, the share of the bitrate the row's speed covers, in
+    /// thousandths (1000 / x): the row least over its speed first, so a
+    /// file 10 times over stays ahead of one 25 times over (race 3). 0 in
+    /// the other bands, which `pace` orders.
+    pub covered: u16,
     pub playability: Playability,
     /// A torrent within 1.1 x the size limit; a ready file always is.
     pub size_ok: bool,

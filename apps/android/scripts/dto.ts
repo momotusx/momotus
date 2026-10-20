@@ -57,6 +57,7 @@ const DEFAULTED = new Map([
   ["PlaybackSnapshot.retries", "0"],
   ["SearchSnapshot.searchable", "0"],
   ["RankKey.pace", "3"],
+  ["RankKey.covered", "0"],
   ["MayPause.smallSwarm", "false"],
   ["Prefs.subtitleSize", "SubtitleSize.Medium"],
 ]);
@@ -65,6 +66,7 @@ const INT = new Set([
   "retries",
   "searchable",
   "pace",
+  "covered",
   "version",
   "defaultsSeen",
   "position",

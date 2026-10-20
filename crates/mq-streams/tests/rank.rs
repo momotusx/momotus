@@ -208,18 +208,19 @@ fn each_key_field_outranks_every_later_one() {
         year_ok: best(3),
         sustains: best(4),
         pace: if best(5) { 3 } else { 0 },
-        playability: if best(6) {
+        covered: if best(6) { 1000 } else { 0 },
+        playability: if best(7) {
             Playability::Native
         } else {
             Playability::NeedsTranscode
         },
-        size_ok: best(7),
-        start: if best(8) { 4 } else { 0 },
-        binge: best(9),
-        effective_height: if best(10) { 2160 } else { 0 },
-        within: if best(11) { 1000 } else { 0 },
+        size_ok: best(8),
+        start: if best(9) { 4 } else { 0 },
+        binge: best(10),
+        effective_height: if best(11) { 2160 } else { 0 },
+        within: if best(12) { 1000 } else { 0 },
     };
-    for i in 0..12 {
+    for i in 0..13 {
         assert!(
             compose(&|k| k == i) > compose(&|k| k > i),
             "field {i} must outrank every later field"
@@ -777,6 +778,40 @@ fn a_thin_swarm_is_judged_against_small_swarms_not_the_line() {
     // The healthy swarm is covered by the line with no margin.
     let healthy = row(&ranked, "Movie.2020.1080p.BluRay");
     assert_eq!(healthy.key.pace, 2, "x 0.72: covered, with no margin");
+}
+
+/// Race 3, Big Buck Bunny's shape: every swarm has 0 or 1 seeders, so each
+/// is judged against the 0.3 Mbit/s floor and all are in pace band 0. The
+/// 720p (2.9 Mbit/s, 10 times over) stays ahead of the 4K WEB-DL (7.4
+/// Mbit/s, 25 times over), where resolution used to decide.
+#[test]
+fn inside_pace_band_zero_the_row_least_over_its_speed_wins() {
+    let case = Case {
+        conditions: Conditions {
+            runtime_s: Some(10 * 60),
+            ..engine().clone()
+        },
+        ..Case::stick()
+    };
+    let ranked = case.rank(vec![
+        seeded(1, "Movie.2008.2160p.WEB-DL.x265-UTR", 0, 0.52),
+        seeded(2, "Movie.2008.720p.BluRay.x264-NhaNc3", 1, 0.2),
+    ]);
+    let (uhd, hd) = (
+        row(&ranked, "Movie.2008.2160p"),
+        row(&ranked, "Movie.2008.720p"),
+    );
+    assert_eq!((uhd.key.pace, hd.key.pace), (0, 0));
+    assert!(
+        hd.key.covered > uhd.key.covered,
+        "{:?} {:?}",
+        hd.key,
+        uhd.key
+    );
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2008.720p.BluRay.x264-NhaNc3"
+    );
 }
 
 /// The small-swarm prior scales per seeder (1.4 Mbit/s for the race's 18):

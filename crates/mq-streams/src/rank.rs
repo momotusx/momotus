@@ -492,8 +492,6 @@ fn thin_speed(c: &Conditions, seeders: u32) -> Speed {
 
 /// Research R1: how far `bitrate` is over `speed`, in bands (3 keeps up
 /// with the margin, 2 with none, 1 up to 1.5 times, 0 beyond).
-// ponytail: four bands; order by the ratio itself inside band 0 if a walk
-// ever shows a 16x pick against a 2x one.
 fn pace(bitrate: Option<f32>, speed: Option<f32>) -> u8 {
     let (Some(b), Some(s)) = (bitrate, speed) else {
         return 3;
@@ -507,6 +505,17 @@ fn pace(bitrate: Option<f32>, speed: Option<f32>) -> u8 {
         1
     } else {
         0
+    }
+}
+
+/// Inside pace band 0, 1000 / x: higher is less far over the row's speed
+/// (race 3: a 10x 720p over a 25x 4K file). 0 in the other bands.
+fn covered(bitrate: Option<f32>, speed: Option<f32>) -> u16 {
+    match (bitrate, speed) {
+        (Some(b), Some(s)) if pace(bitrate, speed) == 0 && b > 0.0 => {
+            (1000.0 * s / b).round().min(u16::MAX as f32) as u16
+        }
+        _ => 0,
     }
 }
 
@@ -659,6 +668,7 @@ fn score(stream: ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Sco
         year_ok: year_ok(s, input.conditions, input.target),
         sustains,
         pace: pace(bitrate, speed.map(|sp| sp.mbps)),
+        covered: covered(bitrate, speed.map(|sp| sp.mbps)),
         playability: if fails_here {
             Playability::NeedsTranscode
         } else {
