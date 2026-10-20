@@ -35,6 +35,12 @@ enum PlayerLayout {
     /// The failure card's actions, the first the primary: the core's next
     /// version when it offers one, then Try again (the same versions from the
     /// first), then the way to another version, then Back.
+    /// The failure card's headline: with a version offered, only this one
+    /// failed, so "None of the sources" would contradict Play {label} below it.
+    static func failureHeadline(offer: Bool) -> String {
+        offer ? "This version could not be played" : "None of the sources could be played"
+    }
+
     static func failureActions(offer: Bool, canChoose: Bool) -> [FailureAction] {
         (offer ? [.offer] : []) + [.retry] + (canChoose ? [.choose] : []) + [.back]
     }

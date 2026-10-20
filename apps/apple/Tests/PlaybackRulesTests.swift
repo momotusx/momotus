@@ -395,3 +395,8 @@ private func phase(_ phase: String, _ extra: String = "") throws -> PlaybackSnap
     #expect(PlayerLayout.statusOverControls(controlsShown: false, windowHeight: 402, controlsHeight: 290) == nil)
     #expect(PlayerLayout.statusOverControls(controlsShown: true, windowHeight: 0, controlsHeight: 290) == nil)
 }
+
+@Test func theFailureHeadlineSaysOnlyThisVersionWhenAnotherIsOffered() {
+    #expect(PlayerLayout.failureHeadline(offer: true) == "This version could not be played")
+    #expect(PlayerLayout.failureHeadline(offer: false) == "None of the sources could be played")
+}
