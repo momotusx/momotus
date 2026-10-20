@@ -346,3 +346,42 @@ private func phase(_ phase: String, _ extra: String = "") throws -> PlaybackSnap
     #expect(PlayerLayout.subtitleValue(picked: "Turkish", found: 3, pending: true) == ("Turkish", true))
     #expect(PlayerLayout.subtitleValue(picked: "Turkish", found: 3, pending: false) == ("Turkish", false))
 }
+
+@Test func theFailureCardOffersTheNextVersionThenTryAgain() {
+    #expect(PlayerLayout.failureActions(offer: true, canChoose: true) == [.offer, .retry, .choose, .back])
+    // No version offered: Try again is first, the one that takes focus.
+    #expect(PlayerLayout.failureActions(offer: false, canChoose: true) == [.retry, .choose, .back])
+    #expect(PlayerLayout.failureActions(offer: false, canChoose: false) == [.retry, .back])
+}
+
+@Test func onlyADecoderThatCannotDecodeTheFileCountsAsDecode() {
+    let busy = NSError(domain: AVFoundationErrorDomain, code: AVError.Code.decoderTemporarilyUnavailable.rawValue)
+    #expect(playerFailure(busy).kind == "other")
+    let cannot = NSError(domain: AVFoundationErrorDomain, code: AVError.Code.decodeFailed.rawValue)
+    #expect(playerFailure(cannot).kind == "decode")
+    #expect(playerFailure(NSError(domain: AVFoundationErrorDomain, code: AVError.Code.decoderNotFound.rawValue)).kind == "decode")
+}
+
+@Test func theStartSubtitleTurnsOnOnceUntilTheViewerPicks() throws {
+    let turkish = sub(1, "tur", "tr", "Turkish", "TurkceAltyazi.org", source: "TurkceAltyazi.org")
+    let english = sub(2, "eng", "en", "English", "OpenSubtitles v3")
+    #expect(SubtitleMenu.autoPick(turkish.url, settled: false, tracks: [english, turkish]) == turkish)
+    // The viewer picked (or the start subtitle already applied): nothing turns on.
+    #expect(SubtitleMenu.autoPick(turkish.url, settled: true, tracks: [english, turkish]) == nil)
+    // None from the core, or its track not listed yet.
+    #expect(SubtitleMenu.autoPick(nil, settled: false, tracks: [english]) == nil)
+    #expect(SubtitleMenu.autoPick(turkish.url, settled: false, tracks: [english]) == nil)
+    let auto = try phase("ready", #","autoSubtitle":"http://127.0.0.1:1/sub/1.vtt""#)
+    #expect(auto.autoSubtitle == "http://127.0.0.1:1/sub/1.vtt")
+    #expect(try phase("ready").autoSubtitle == nil)
+}
+
+@Test func withNoLanguagesSetTheDevicesAndEnglishGoOnTop() {
+    #expect(SubtitleMenu.preferred(subtitle: [], audio: [], device: "de") == ["de", "en"])
+    #expect(SubtitleMenu.preferred(subtitle: ["tur"], audio: ["en"], device: "de") == ["tur", "en"])
+    #expect(SubtitleMenu.preferred(subtitle: ["tur"], audio: [], device: nil) == ["tur", "en"])
+    // The iPhone walk's case: none set on an English device, English on top, the rest under Other languages.
+    let tracks = [sub(1, "eng", "en", "English", "OpenSubtitles v3"), sub(2, "ara", "ar", "Arabic", "OpenSubtitles v3")]
+    let groups = SubtitleMenu.groups(tracks, preferred: SubtitleMenu.preferred(subtitle: [], audio: [], device: "en"))
+    #expect(groups.top.map(\.language) == ["en"] && groups.other.map(\.language) == ["ar"])
+}

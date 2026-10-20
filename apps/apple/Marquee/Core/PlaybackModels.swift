@@ -192,6 +192,9 @@ struct PlaybackSnapshot: Decodable, Hashable, Sendable {
     /// On `failed`, after a version picked by hand: the ranking's next pick,
     /// opened with its key from the same Versions view (optional for older cores).
     let offer: OtherVersion?
+    /// The track the core turns on at start (plans/m13-subtitle-languages.md 6),
+    /// once the list has settled; nil for none (optional for older cores).
+    let autoSubtitle: String?
 
     var notes: [SubtitleNote] { subtitleNotes ?? [] }
 }
@@ -272,10 +275,11 @@ struct PlayerFailure: Equatable, Sendable {
 }
 
 /// AVFoundation's decode and format errors: the device cannot play the file.
+/// A decoder that is only busy now (decoderTemporarilyUnavailable) is other:
+/// it says nothing against the version.
 private let decodeErrors: Set<Int> = [
     AVError.Code.decodeFailed.rawValue,
     AVError.Code.decoderNotFound.rawValue,
-    AVError.Code.decoderTemporarilyUnavailable.rawValue,
     AVError.Code.fileFormatNotRecognized.rawValue,
 ]
 
@@ -417,6 +421,21 @@ enum SubtitleMenu {
         let top = all.filter { wanted.contains(base($0.language)) }
         // With none of the profile's languages found, every language is on top.
         return top.isEmpty ? (all, []) : (top, all.filter { !top.contains($0) })
+    }
+
+    /// The track to turn on at start: the core's `autoSubtitle`, once, while
+    /// the viewer has not picked anything in this play (a track, one in the
+    /// file, or Off), and only once the track is in the list.
+    static func autoPick(_ auto: String?, settled: Bool, tracks: [SubtitleTrack]) -> SubtitleTrack? {
+        guard !settled, let auto else { return nil }
+        return tracks.first { $0.url == auto }
+    }
+
+    /// The languages the menu puts on top, as the core orders the list: the
+    /// profile's subtitle languages, then its audio languages, else the
+    /// device's language and English (the languages the pick was ranked with).
+    static func preferred(subtitle: [String], audio: [String], device: String?) -> [String] {
+        subtitle + (audio.isEmpty ? [device, "en"].compactMap { $0 } : audio)
     }
 
     /// The group's heading and the Subtitles button's value.

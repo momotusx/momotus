@@ -72,6 +72,9 @@ final class PlayerModel {
     /// Bumped per URL so a late error from a dead source is ignored.
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var rendered = false
+    /// A subtitle was picked in this play (by the viewer, or the core's start
+    /// subtitle once): the start subtitle no longer applies.
+    @ObservationIgnored private var subtitleSettled = false
     /// The loaded source has shown a frame (`rendered` counts the first of the playback).
     @ObservationIgnored private var pictureShown = false
     /// Where the loaded source started, and since when it has played without a frame.
@@ -130,9 +133,11 @@ final class PlayerModel {
         audioTrack = index
     }
 
-    /// Turns one of the file's own subtitles on, in place of an addon's.
+    /// Turns one of the file's own subtitles on, in place of an addon's: the
+    /// viewer's pick for this play, which the core does not know of.
     func selectText(_ index: Int) {
         guard let group = textGroup, textOptions.indices.contains(index) else { return }
+        subtitleSettled = true
         selectSubtitle(nil)
         player.currentItem?.select(textOptions[index], in: group)
         textTrack = index
@@ -199,7 +204,13 @@ final class PlayerModel {
     /// The user's choice in Settings: start the next episode on its own.
     var autoplayNext: Bool { prefs.snapshot?.autoplayNext ?? true }
     /// The profile's subtitle languages, then its audio ones: the Subtitles menu's top groups.
-    var subtitleLanguages: [String] { (prefs.snapshot?.subtitleLanguages ?? []) + (prefs.snapshot?.streams.languages ?? []) }
+    var subtitleLanguages: [String] {
+        SubtitleMenu.preferred(
+            subtitle: prefs.snapshot?.subtitleLanguages ?? [],
+            audio: prefs.snapshot?.streams.languages ?? [],
+            device: Locale.current.language.languageCode?.identifier
+        )
+    }
 
     /// Whole seconds until the next episode starts on its own.
     var countdown: Int { max(0, Int((duration - position).rounded(.up))) }
@@ -321,6 +332,24 @@ final class PlayerModel {
         coreLog.notice("metric first_frame_ms=\(ms, privacy: .public) key=\(kind, privacy: .public)")
     }
 
+    /// The viewer's pick from the menu, or Off: it wins for the rest of the
+    /// play, and the core remembers it for the title (`subtitleChosen`).
+    func chooseSubtitle(_ track: SubtitleTrack?) {
+        subtitleSettled = true
+        selectSubtitle(track)
+        guard let sub else { return }
+        let url: any Sendable = track?.url ?? NSNull()
+        Task { try? await core.command(sub, ["type": "subtitleChosen", "url": url]) }
+    }
+
+    /// "Try again" on the failure card: the core starts the same versions
+    /// again from the first, each with its full start time.
+    func retry() {
+        notice = nil
+        guard let sub else { return }
+        Task { try? await core.command(sub, ["type": "retry"]) }
+    }
+
     func selectSubtitle(_ track: SubtitleTrack?) {
         subtitle = track
         cues = []
@@ -356,6 +385,11 @@ final class PlayerModel {
             if trouble.off { selectSubtitle(nil) }
         }
         playback = snapshot
+        // The core's start subtitle, once, as if picked, sending nothing.
+        if let track = SubtitleMenu.autoPick(snapshot.autoSubtitle, settled: subtitleSettled, tracks: snapshot.subtitles) {
+            subtitleSettled = true
+            selectSubtitle(track)
+        }
         switch snapshot.phase {
         case "ready":
             guard let url = snapshot.url, url != loadedURL else { return }

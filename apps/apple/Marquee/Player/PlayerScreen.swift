@@ -340,22 +340,25 @@ private struct StatusOverlay: View {
     @FocusState private var primary: Bool
 
     @ViewBuilder private var actions: some View {
-        if let offer = model.playback?.offer {
-            // The core's next version comes first; the others stay a step away.
-            Button("Play \(offer.label)") { model.switchVersion(offer.key) }
-                .buttonStyle(PillButtonStyle(prominent: true)).fixedSize()
-                .focused($primary)
-            if let chooseVersion {
-                Button("Choose another version", action: chooseVersion).buttonStyle(PillButtonStyle()).fixedSize()
+        let order = PlayerLayout.failureActions(offer: model.playback?.offer != nil, canChoose: chooseVersion != nil)
+        ForEach(order, id: \.self) { action in
+            if action == order.first {
+                // The way on takes focus, so a remote is on it.
+                button(action).buttonStyle(PillButtonStyle(prominent: true)).fixedSize().focused($primary)
+            } else {
+                button(action).buttonStyle(PillButtonStyle()).fixedSize()
             }
-            Button("Back", action: back).buttonStyle(PillButtonStyle()).fixedSize()
-        } else if let chooseVersion {
-            Button("Choose another version", action: chooseVersion).buttonStyle(PillButtonStyle(prominent: true)).fixedSize()
-                .focused($primary)
-            Button("Back", action: back).buttonStyle(PillButtonStyle()).fixedSize()
-        } else {
-            Button("Back", action: back).buttonStyle(PillButtonStyle(prominent: true))
-                .focused($primary)
+        }
+    }
+
+    private func button(_ action: FailureAction) -> Button<Text> {
+        switch action {
+        case .offer: Button("Play \(model.playback?.offer?.label ?? "the next version")") {
+            if let key = model.playback?.offer?.key { model.switchVersion(key) }
+        }
+        case .retry: Button("Try again", action: model.retry)
+        case .choose: Button("Choose another version") { chooseVersion?() }
+        case .back: Button("Back", action: back)
         }
     }
 

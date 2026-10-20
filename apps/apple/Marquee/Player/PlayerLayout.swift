@@ -3,6 +3,8 @@ import CoreGraphics
 /// Where the phone player puts its parts, as Android settled after three
 /// review rounds (plans/android-design-v2.md, slices 14 to 16). Heights are
 /// the real window's, bars included, since the player hides them.
+enum FailureAction: Hashable { case offer, retry, choose, back }
+
 enum PlayerLayout {
     /// What a snapshot's subtitle notes do to the picked file, as the web
     /// does: only the picked file is fetched, so a note new to this snapshot
@@ -30,6 +32,13 @@ enum PlayerLayout {
     /// The Subtitles button: the picked track, else the count as soon as one
     /// is in, else Searching while the core still lists, else None found. The
     /// mark says more may come: it shows while the core lists and some are in.
+    /// The failure card's actions, the first the primary: the core's next
+    /// version when it offers one, then Try again (the same versions from the
+    /// first), then the way to another version, then Back.
+    static func failureActions(offer: Bool, canChoose: Bool) -> [FailureAction] {
+        (offer ? [.offer] : []) + [.retry] + (canChoose ? [.choose] : []) + [.back]
+    }
+
     static func subtitleValue(picked: String?, found: Int, pending: Bool) -> (text: String, searching: Bool) {
         let searching = pending && found > 0
         if let picked { return (picked, searching) }

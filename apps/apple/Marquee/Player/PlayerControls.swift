@@ -276,7 +276,7 @@ struct PlayerControls: View {
             }
             .focused($focus, equals: .audio)
             menu("Subtitles", "captions", subtitleValue.text, searching: subtitleValue.searching) {
-                Button { model.selectSubtitle(nil); hold(false) } label: {
+                Button { model.chooseSubtitle(nil); hold(false) } label: {
                     Choice(text: "Off", selected: model.subtitle == nil && model.textTrack == nil)
                 }
                 // A submenu per language, the profile's on top (plans/m13-subtitle-languages.md 2).
@@ -330,7 +330,7 @@ struct PlayerControls: View {
     private func languageMenu(_ group: SubtitleMenu.Group) -> some View {
         Menu {
             ForEach(group.tracks) { track in
-                Button { model.selectSubtitle(track); hold(false) } label: {
+                Button { model.chooseSubtitle(track); hold(false) } label: {
                     Choice(text: SubtitleMenu.title(track), detail: SubtitleMenu.detail(track), selected: model.subtitle == track)
                 }
             }
