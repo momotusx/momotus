@@ -287,15 +287,9 @@ async fn a_frozen_pick_folded_into_another_row_still_plays() {
     }
     let snap = view.snapshot();
     assert_eq!(snap.recommended.unwrap().key, key, "the pick stays");
-    let led = snap
-        .rows
-        .iter()
-        .find(|r| r.key != key && r.failover_count == 1);
-    assert!(
-        led.is_some(),
-        "the later answer leads the row: {:?}",
-        snap.rows
-    );
+    // Shown once, as the pick: the row the later answer leads holds it
+    // (code review 2026-10-20 r2 P3-2).
+    assert!(snap.rows.is_empty(), "no second row: {:?}", snap.rows);
     let chain = view.candidates(&key);
     assert_eq!(chain.first().map(|c| c.key.clone()), Some(key.clone()));
     assert_eq!(chain.len(), 2, "its own source, then the row's");

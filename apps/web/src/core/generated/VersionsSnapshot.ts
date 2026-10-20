@@ -23,7 +23,8 @@ note: LearnedNote | null, recommended: VersionRow | null, rows: Array<VersionRow
 /**
  * Every listed version is a swarm the engine would fetch whose
  * trackers count one seeder or none: almost nobody is sharing this
- * title right now, so say so before Play. Its attempt gives up after
- * the first 30 s window.
+ * title right now, so say so before Play. Its attempt keeps the stall
+ * windows and the full deadline, but a swarm where no peer unchoked by
+ * the end of the first window (30 s) is let go then.
  */
 nobodySharing: boolean, };

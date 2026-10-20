@@ -841,6 +841,7 @@ async fn try_again_starts_the_pick_afresh() {
     playback.retry();
     let s = playback.snapshot();
     assert!(s.trying.is_none() && s.attempts.is_empty());
+    assert_eq!(s.retries, 1, "a retry that refails still differs");
     until("the retry to play", || playback.snapshot().url.is_some()).await;
     let s = playback.snapshot();
     let tried: Vec<&String> = s.attempts.iter().map(|a| &a.key).collect();
@@ -900,7 +901,10 @@ async fn a_decode_error_after_good_playback_is_not_kept() {
     let view = versions_for(&core, caps.clone()).await;
     let playback = play(&core, &view, &keys[0]);
     until("ready", || playback.snapshot().url.is_some()).await;
-    playback.report_progress(60_000, 600_000, false);
+    // A minute of playback, reported every 5 s from where it started.
+    for at in (0..=12).map(|i| 600_000 + i * 5_000) {
+        playback.report_progress(at, 3_600_000, false);
+    }
     playback.fail_over(None, Some("decode"), None, "decoder lost");
     let failed = || playback.snapshot().phase == mq_runtime::PlaybackPhase::Failed;
     until("the version to fail", failed).await;
@@ -910,6 +914,67 @@ async fn a_decode_error_after_good_playback_is_not_kept() {
     let view = versions_for(&core, caps).await;
     let s = view.snapshot();
     assert_eq!(s.recommended.unwrap().key, keys[0], "not kept");
+}
+
+/// Code review 2026-10-20 r2 P3-1: playback counts from the first position
+/// reported, in forward steps: a jump of a minute (a seek, or a source that
+/// started further on) is not playback, so a decode error after it still
+/// counts against the version.
+#[tokio::test]
+async fn a_jump_is_not_playback() {
+    let (core, _server, keys) = direct_rows(vec![
+        (
+            "Show.S01E01.1080p.WEB-DL.x264-ONE",
+            media_fixture("h264.mp4"),
+        ),
+        (
+            "Show.S01E01.720p.WEB-DL.x264-TWO",
+            media_fixture("h264.mp4"),
+        ),
+    ])
+    .await;
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    let playback = play(&core, &view, &keys[0]);
+    until("ready", || playback.snapshot().url.is_some()).await;
+    playback.report_progress(0, 3_600_000, false);
+    playback.report_progress(60_000, 3_600_000, false);
+    playback.fail_over(None, Some("decode"), None, "no frame");
+    until("the next version", || {
+        playback.snapshot().key.as_ref() == Some(&keys[1])
+    })
+    .await;
+    let row = view
+        .snapshot()
+        .rows
+        .into_iter()
+        .find(|r| r.key == keys[0])
+        .unwrap();
+    assert_eq!(row.line, mq_streams::ReasonLine::DidNotPlay);
+}
+
+/// Code review 2026-10-20 r2 P3-3: a torrent file that is not the version
+/// listed is kept like a file with no picture, and its version ranks below
+/// the ones that can start, read as "Did not play on this device".
+#[tokio::test]
+async fn a_wrong_file_is_kept_and_ranks_last() {
+    let (core, _server, keys) = direct_rows(vec![
+        (
+            "Show.S01E01.1080p.WEB-DL.x264-ONE",
+            media_fixture("h264.mp4"),
+        ),
+        (
+            "Show.S01E01.720p.WEB-DL.x264-TWO",
+            media_fixture("h264.mp4"),
+        ),
+    ])
+    .await;
+    let now = mq_library::hlc::now_ms();
+    mq_runtime::speed::record_wrong_file(core.library(), &keys[0], now);
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    let s = view.snapshot();
+    assert_eq!(s.recommended.unwrap().key, keys[1]);
+    let row = s.rows.iter().find(|r| r.key == keys[0]).unwrap();
+    assert_eq!(row.line, mq_streams::ReasonLine::DidNotPlay);
 }
 
 /// A swarm that falls short is cut at its first window when something else

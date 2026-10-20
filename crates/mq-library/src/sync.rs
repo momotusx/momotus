@@ -1227,7 +1227,7 @@ pub(crate) mod sql {
             // name streams those addons listed (digests of their keys).
             c.execute("DELETE FROM http_cache", [])?;
             c.execute(
-                "DELETE FROM device_state WHERE key IN ('no_picture', 'did_not_play')",
+                "DELETE FROM device_state WHERE key IN ('no_picture', 'did_not_play', 'wrong_file')",
                 [],
             )?;
         }

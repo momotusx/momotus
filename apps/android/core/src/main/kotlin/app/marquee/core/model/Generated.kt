@@ -903,10 +903,12 @@ data class PlaybackSnapshot(
     val nextAtMs: Long? = null,
     /** Trakt's side: `on` scrobbles, `unmapped` (Trakt cannot name it), `off`, `thisDeviceOff` (the profile uses Trakt, this device is not signed in). */
     val trakt: TraktPlayback,
-    /** The recommended version failed for a reason of its own (no picture on this device, a dead swarm, the wrong file) and the view moved on by itself to this one, the ranking's next pick, at most twice: "Trying the next version: {label}" while `phase` is `resolving`. */
+    /** The recommended version failed for a reason of its own (no picture on this device, a dead swarm, the wrong file) and the view moved on by itself to this one, the ranking's next pick, at most twice: "Trying the next version: {label}" while `phase` is `resolving`. Cleared once a source of it starts. */
     val trying: OtherVersion? = null,
     /** A version picked by hand failed for a reason of its own: the failure card offers this one, the ranking's next pick (open `playback` with its key from the same Versions subscription). */
     val offer: OtherVersion? = null,
+    /** "Try again" taken in this view: one more each time it is accepted, so a retry that fails again at once still differs from the failure before it (code review 2026-10-20 r2 P3-6). Show "Trying again". */
+    val retries: Int = 0,
 )
 
 @Serializable
@@ -1620,7 +1622,7 @@ data class VersionsSnapshot(
     val failedAddons: List<String> = emptyList(),
     val done: Boolean,
     val frozen: Boolean,
-    /** Every listed version is a swarm the engine would fetch whose trackers count one seeder or none: almost nobody is sharing this title right now, so say so before Play. Its attempt gives up after the first 30 s window. */
+    /** Every listed version is a swarm the engine would fetch whose trackers count one seeder or none: almost nobody is sharing this title right now, so say so before Play. Its attempt keeps the stall windows and the full deadline, but a swarm where no peer unchoked by the end of the first window (30 s) is let go then. */
     val nobodySharing: Boolean,
 )
 

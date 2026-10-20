@@ -591,7 +591,10 @@ impl VersionsView {
             dead_swarms: crate::speed::dead_swarms(core.library(), mq_library::hlc::now_ms()),
             limit_chosen: core.size_limit_chosen(),
             no_picture: crate::speed::no_picture(core.library()),
-            did_not_play: crate::speed::did_not_play(core.library(), mq_library::hlc::now_ms()),
+            did_not_play: crate::speed::did_not_play_here(
+                core.library(),
+                mq_library::hlc::now_ms(),
+            ),
         };
         let item_id = item_id.map_or_else(
             || {
@@ -1495,7 +1498,7 @@ fn relearn(core: &Core, s: &mut State, failed: Option<&str>) {
     let (lib, now) = (core.library(), mq_library::hlc::now_ms());
     s.rank.dead_swarms = crate::speed::dead_swarms(lib, now);
     s.rank.no_picture = crate::speed::no_picture(lib);
-    s.rank.did_not_play = crate::speed::did_not_play(lib, now);
+    s.rank.did_not_play = crate::speed::did_not_play_here(lib, now);
     let pick_failed = s
         .recommended
         .as_ref()
@@ -1533,11 +1536,18 @@ fn names(installs: &[(Url, String)]) -> Vec<String> {
 
 fn render(s: &State) -> VersionsSnapshot {
     let recommended_key = s.recommended.as_ref().map(|r| r.stream.key.clone());
+    // A row whose chain holds the pick is the pick's own row, folded or
+    // not: shown once, as the pick (code review 2026-10-20 r2 P3-2).
+    let holds_pick = |r: &&RankedRow| {
+        std::iter::once(&r.stream)
+            .chain(&r.failover)
+            .any(|st| Some(&st.key) == recommended_key.as_ref())
+    };
     let rows = s
         .ranked
         .rows
         .iter()
-        .filter(|r| Some(&r.stream.key) != recommended_key.as_ref())
+        .filter(|r| !holds_pick(r))
         .map(row_dto)
         .collect();
     let mut by_reason: Vec<(HideReason, u32)> = Vec::new();

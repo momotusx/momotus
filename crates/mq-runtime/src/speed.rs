@@ -208,6 +208,9 @@ const DEAD_KEY: &str = "dead_swarms";
 /// A file does not change: kept until the list is full.
 const NO_PICTURE_KEY: &str = "no_picture";
 const DID_NOT_PLAY_KEY: &str = "did_not_play";
+/// A torrent's file that is not the version listed: a fact of the torrent
+/// and its file index, kept until the list is full.
+const WRONG_FILE_KEY: &str = "wrong_file";
 /// How long a version the player could not decode stays demoted.
 // ponytail: 30 days, as a decoder rarely changes; a one-off decode error
 // demotes a version for that long, never hides it.
@@ -289,6 +292,32 @@ pub fn did_not_play(lib: &Library, now_ms: u64) -> Vec<String> {
 pub fn record_did_not_play(lib: &Library, stream_key: &str, now_ms: u64) {
     let digest = key_digest(stream_key);
     stamp(lib, DID_NOT_PLAY_KEY, digest, DID_NOT_PLAY_FOR_MS, now_ms);
+}
+
+/// Digests of the stream keys whose torrent file was not the version
+/// listed (code review 2026-10-20 r2 P3-3).
+pub fn wrong_file(lib: &Library) -> Vec<String> {
+    stamped(lib, WRONG_FILE_KEY, u64::MAX, 0)
+}
+
+/// The torrent file of `stream_key` is not the version it listed.
+pub fn record_wrong_file(lib: &Library, stream_key: &str, now_ms: u64) {
+    stamp(
+        lib,
+        WRONG_FILE_KEY,
+        key_digest(stream_key),
+        u64::MAX,
+        now_ms,
+    );
+}
+
+/// What this device found does not play here: the versions its player
+/// could not decode in the last 30 days, and the torrent files that were
+/// not the version listed. The ranking reads both as "Did not play".
+pub fn did_not_play_here(lib: &Library, now_ms: u64) -> Vec<String> {
+    let mut keys = did_not_play(lib, now_ms);
+    keys.extend(wrong_file(lib));
+    keys
 }
 
 /// Lists written before digests kept raw stream keys: each becomes its

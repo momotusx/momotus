@@ -87,7 +87,8 @@ trakt: TraktPlayback,
  * The recommended version failed for a reason of its own (no picture
  * on this device, a dead swarm, the wrong file) and the view moved on
  * by itself to this one, the ranking's next pick, at most twice: "Trying
- * the next version: {label}" while `phase` is `resolving`.
+ * the next version: {label}" while `phase` is `resolving`. Cleared once
+ * a source of it starts.
  */
 trying: OtherVersion | null, 
 /**
@@ -95,4 +96,10 @@ trying: OtherVersion | null,
  * card offers this one, the ranking's next pick (open `playback` with
  * its key from the same Versions subscription).
  */
-offer: OtherVersion | null, };
+offer: OtherVersion | null, 
+/**
+ * "Try again" taken in this view: one more each time it is accepted,
+ * so a retry that fails again at once still differs from the failure
+ * before it (code review 2026-10-20 r2 P3-6). Show "Trying again".
+ */
+retries: number, };

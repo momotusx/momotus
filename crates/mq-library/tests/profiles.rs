@@ -210,12 +210,13 @@ fn deleting_a_profile_purges_every_table_and_keeps_the_others() {
 fn deleting_a_profile_clears_the_version_lists() {
     let lib = Library::temporary().unwrap();
     lib.create_profile("x", "x", "", &hlc(1, 1)).unwrap();
-    for key in ["no_picture", "did_not_play", "network"] {
+    for key in ["no_picture", "did_not_play", "wrong_file", "network"] {
         lib.set_device_value(key, r#"{"h00":1}"#).unwrap();
     }
     lib.delete_profile("x", &hlc(2, 1)).unwrap();
-    assert_eq!(lib.device_value("no_picture").unwrap(), None);
-    assert_eq!(lib.device_value("did_not_play").unwrap(), None);
+    for key in ["no_picture", "did_not_play", "wrong_file"] {
+        assert_eq!(lib.device_value(key).unwrap(), None, "{key}");
+    }
     assert!(lib.device_value("network").unwrap().is_some(), "kept");
 }
 

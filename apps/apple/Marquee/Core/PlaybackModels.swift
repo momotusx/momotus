@@ -195,6 +195,10 @@ struct PlaybackSnapshot: Decodable, Hashable, Sendable {
     /// The track the core turns on at start (plans/m13-subtitle-languages.md 6),
     /// once the list has settled; nil for none (optional for older cores).
     let autoSubtitle: String?
+    /// Try again taken in this view, one more each time it is accepted: show
+    /// "Trying again" from it, so a retry that fails again at once still reads
+    /// as a new try (optional for older cores).
+    let retries: Int?
 
     var notes: [SubtitleNote] { subtitleNotes ?? [] }
 }

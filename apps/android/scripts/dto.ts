@@ -54,9 +54,11 @@ const DEFAULTED = new Map([
   ["SubtitleTrack.languageName", "\"\""],
   ["SubtitleTrack.name", "\"\""],
   ["Prefs.defaultsSeen", "0"],
+  ["PlaybackSnapshot.retries", "0"],
 ]);
 const INT = new Set([
   "overCount",
+  "retries",
   "version",
   "defaultsSeen",
   "position",

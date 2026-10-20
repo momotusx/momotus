@@ -127,6 +127,10 @@ pub struct PlaybackSnapshot {
     /// card offers this one, the ranking's next pick (open `playback` with
     /// its key from the same Versions subscription).
     pub offer: Option<OtherVersion>,
+    /// "Try again" taken in this view: one more each time it is accepted,
+    /// so a retry that fails again at once still differs from the failure
+    /// before it (code review 2026-10-20 r2 P3-6). Show "Trying again".
+    pub retries: u32,
 }
 
 /// A version the playback moved on to, or offers instead.
@@ -307,9 +311,15 @@ struct State {
     hops: u8,
     /// The pick's own chain, for "Try again" to start afresh.
     first: Vec<ParsedStream>,
-    /// The playing source got past where it started (a progress report):
-    /// a decode error after that is not the version's.
+    /// The playing source played `PLAYED_PAST_START`, counted from the
+    /// first position reported after it started: a decode error after that
+    /// is not the version's.
     progressed: bool,
+    /// The last position reported for the playing source, and how long it
+    /// has played since its first report (forward steps only: a seek or
+    /// a resume point is not playback, code review 2026-10-20 r2 P3-1).
+    reported_ms: Option<u64>,
+    played_ms: u64,
     /// The playing source's token: its URL and its subtitles' URLs live as
     /// long as it is kept here.
     lease: Option<Lease>,
@@ -394,6 +404,7 @@ impl State {
                 trakt: crate::trakt::TraktPlayback::Off,
                 trying: None,
                 offer: None,
+                retries: 0,
             },
             tried: candidates
                 .first()
@@ -406,6 +417,8 @@ impl State {
             version_failed: false,
             hops: 0,
             progressed: false,
+            reported_ms: None,
+            played_ms: 0,
             lease: None,
             run: 0,
             closed: false,
@@ -556,6 +569,7 @@ impl PlaybackView {
             s.snapshot.attempts.clear();
             s.snapshot.trying = None;
             s.snapshot.offer = None;
+            s.snapshot.retries += 1;
             self.snapshot.set(s.snapshot.clone());
         }
         self.spawn_resolve();
@@ -808,9 +822,14 @@ impl PlaybackView {
         }
         let due = {
             let mut s = lock(&self.state);
-            if position_ms
-                > s.snapshot.resume_ms.unwrap_or(0) + PLAYED_PAST_START.as_millis() as u64
+            if let Some(before) = s.reported_ms
+                && position_ms > before
+                && position_ms - before <= PLAYED_STEP.as_millis() as u64
             {
+                s.played_ms += position_ms - before;
+            }
+            s.reported_ms = Some(position_ms);
+            if s.played_ms >= PLAYED_PAST_START.as_millis() as u64 {
                 s.progressed = true;
             }
             s.last = Some((position_ms, duration_ms));
@@ -1008,6 +1027,8 @@ fn adopt(s: &mut State, run: u64, lease: Lease) -> bool {
     // 2026-10-20 P3: a later source failover is not a next version).
     s.version_failed = false;
     s.progressed = false;
+    s.reported_ms = None;
+    s.played_ms = 0;
     s.snapshot.trying = None;
     true
 }
@@ -1348,10 +1369,13 @@ async fn shows_picture(
     Err("This file's video shows no picture on this device".into())
 }
 
-/// A source that played this far past where it started played well: a
-/// decode error after it is not the version's (code review 2026-10-20
-/// P2-2). Apple reports a picture that never came within 4 s.
+/// A source that played this long since its first progress report played
+/// well: a decode error after it is not the version's (code review
+/// 2026-10-20 P2-2). Apple reports a picture that never came within 4 s.
 const PLAYED_PAST_START: Duration = Duration::from_secs(30);
+/// The apps report progress every few seconds; a larger step forward is a
+/// seek or a source that started further on, not playback.
+const PLAYED_STEP: Duration = Duration::from_secs(15);
 
 /// The recommendation moves on by itself at most this many times.
 const HOPS: u8 = 2;
@@ -1651,6 +1675,10 @@ async fn open_torrent(
         }
         Ok((_, _, Started::Wrong(why))) => {
             lock(state).version_failed = true;
+            // A fact of the torrent and its file index, as no picture is
+            // (code review 2026-10-20 r2 P3-3).
+            let now = mq_library::hlc::now_ms();
+            crate::speed::record_wrong_file(core.library(), &stream.key, now);
             why.to_owned()
         }
         Ok((_, _, Started::Ready(Err(e)))) | Err(e) => e.to_string(),
@@ -1708,8 +1736,9 @@ struct Progress {
 /// received payload must come within it (`first`, then `later`). A swarm
 /// that falls short is cut when `others` can play instead; otherwise, and
 /// with no unchoke at all, it gets until `deadline`, or `quiet` when no
-/// peer unchoked by then. Never cut while it progresses, the deadline
-/// included.
+/// peer unchoked by then. Past the deadline a swarm still in its window is
+/// kept only when nothing else can play, and never past three deadlines
+/// (code review 2026-10-20 r2 P2-1: a trickle must not hold the start).
 #[cfg(any(test, feature = "torrent"))]
 async fn watch_start<T, P, F>(
     ready: impl std::future::Future<Output = T>,
@@ -1737,7 +1766,8 @@ where
                 // Within its current window, a swarm is progressing.
                 let progressing = window.is_some_and(|(_, since, length)| now - since < length);
                 let silent = window.is_none() && quiet.is_some_and(|q| now - start >= q);
-                if silent || (now - start >= deadline && !progressing) {
+                let past = now - start >= deadline && (others || !progressing);
+                if silent || past || now - start >= 3 * deadline {
                     return Started::Late { unchoked: window.is_some() };
                 }
                 let Some(p) = progress().await else { continue };
@@ -2906,16 +2936,29 @@ mod tests {
         assert!((19..23).contains(&took.as_secs()), "{took:?}");
     }
 
-    /// A swarm that keeps sending is never cut, the deadline included (the
-    /// doc's promise, code review 2026-10-20 P1-1): a slow head that is ready
-    /// at 90 s plays, and a ready head wins at once.
+    /// A swarm that keeps sending and is the only thing that can play is
+    /// kept past the deadline: a slow head ready at 90 s plays. A ready
+    /// head wins at once.
     #[tokio::test(start_paused = true)]
-    async fn a_swarm_that_keeps_sending_is_never_cut() {
+    async fn a_swarm_that_keeps_sending_alone_is_kept_past_the_deadline() {
         let sending = |t| (t * 30 * KIB, 5);
-        let (started, took) = watch(Some(Duration::from_secs(90)), sending, true).await;
+        let (started, took) = watch(Some(Duration::from_secs(90)), sending, false).await;
         assert!(matches!(started, Started::Ready(())), "{took:?}");
         let (started, _) = watch(Some(Duration::from_secs(20)), |t| (t * 300 * KIB, 5), true).await;
         assert!(matches!(started, Started::Ready(())));
+    }
+
+    /// Code review 2026-10-20 r2 P2-1: a trickle never holds the start. With
+    /// another candidate it is cut at the deadline; alone, at three.
+    #[tokio::test(start_paused = true)]
+    async fn a_trickle_is_cut_at_the_deadline_or_three() {
+        let trickle = |t| (t * 30 * KIB, 5);
+        let (started, took) = watch(None, trickle, true).await;
+        assert!(matches!(started, Started::Late { unchoked: true }));
+        assert!((60..62).contains(&took.as_secs()), "{took:?}");
+        let (started, took) = watch(None, trickle, false).await;
+        assert!(matches!(started, Started::Late { unchoked: true }));
+        assert!((180..182).contains(&took.as_secs()), "{took:?}");
     }
 
     /// Almost nobody sharing: a swarm where no peer unchoked by 30 s is let
