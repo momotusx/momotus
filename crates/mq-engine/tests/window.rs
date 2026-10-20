@@ -619,17 +619,22 @@ async fn the_scheduler_hears_the_eviction_before_the_new_check() {
 }
 
 /// p. A sparse folder with no bitfield starts with nothing claimed, even a
-/// piece whose bytes are there, and with no full check.
+/// piece whose bytes are there, and with no full check. The video is
+/// 64 MiB: APFS fills a small sparse file's holes at its first write (a
+/// 5 MiB one became whole), a large one keeps them.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_sparse_folder_starts_with_nothing_claimed() {
-    let s = support::swarm(true).await;
+    let movie: Vec<u8> = (0..(64u32 << 20) + 12_345)
+        .map(|i| (i.wrapping_mul(2_654_435_761) >> 13) as u8)
+        .collect();
+    let s = support::swarm_movie("movie.mkv", movie).await;
     let dir = tempfile::tempdir().unwrap();
     let folder = dir.path().join(&s.info_hash);
     std::fs::create_dir_all(&folder).unwrap();
     std::fs::write(folder.join("a.nfo"), vec![b'n'; NFO as usize]).unwrap();
     let movie = std::fs::File::create(folder.join("movie.mkv")).unwrap();
     movie.set_len(s.movie.len() as u64).unwrap();
-    let (a, b) = (8 * PIECE - NFO, 9 * PIECE - NFO);
+    let (a, b) = (128 * PIECE - NFO, 129 * PIECE - NFO);
     std::os::unix::fs::FileExt::write_all_at(&movie, &s.movie[a as usize..b as usize], a).unwrap();
     drop(movie);
     let engine = engine_on(dir.path()).await;
@@ -646,8 +651,13 @@ async fn a_sparse_folder_starts_with_nothing_claimed() {
         std::fs::metadata(&have).is_ok_and(|m| m.len() > 0)
     })
     .await;
+    let held = std::fs::metadata(folder.join("movie.mkv"))
+        .unwrap()
+        .blocks()
+        * 512;
+    assert!(held < 8 << 20, "the video is sparse: {held} bytes held");
     let bits = std::fs::read(&have).unwrap();
-    assert!(!claims(&bits, 8), "piece 8 claimed: a full check ran");
+    assert!(!claims(&bits, 128), "piece 128 claimed: a full check ran");
     assert!(bits.iter().all(|b| *b == 0), "{bits:?}");
 }
 
