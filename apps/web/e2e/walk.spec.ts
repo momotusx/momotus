@@ -8,7 +8,7 @@
 
 import { appendFileSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { GOT, startIfPaused } from "./core";
+import { GOT, SHOTS, startIfPaused } from "./core";
 import { BBB_ID } from "./source";
 
 test.use({ launchOptions: { args: ["--mute-audio"] } });
@@ -19,7 +19,7 @@ const FORMS = {
   desktop: { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 },
   phone: { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
 };
-const OUT = process.env.SHOTS_DIR ?? "e2e/shots";
+const OUT = SHOTS;
 const cw = (id: string) => `[data-f="tile:home:continue-watching:${id}"]`;
 
 /** Presses, clicks or taps, as each form's viewer does. */

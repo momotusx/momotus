@@ -20,7 +20,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { encode } from "uqr";
-import { Client, PORTS, startBridge, startRelay, SYNC_PORTS } from "./core";
+import { Client, PORTS, SHOTS, startBridge, startRelay, SYNC_PORTS } from "./core";
 
 const SERVER = `http://127.0.0.1:${SYNC_PORTS.relay}`;
 const RELAY_FILES = ["relay.sqlite", "relay.sqlite-wal", "relay.sqlite-shm", "relay.roster.jsonl"];
@@ -213,7 +213,7 @@ const names = (page: Page) => page.locator(".sync-members h3").evaluateAll((hs) 
 const focused = (page: Page) => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? "");
 const shot = async (page: Page, name: string) => {
   await page.waitForTimeout(500);
-  await page.screenshot({ path: `e2e/shots/${name}.jpg`, type: "jpeg", quality: 80 });
+  await page.screenshot({ path: `${SHOTS}/${name}.jpg`, type: "jpeg", quality: 80 });
 };
 /** In-app navigation: a reload would drop the tab's sync record, as it does for a user. */
 const go = async (page: Page, path: string) => {

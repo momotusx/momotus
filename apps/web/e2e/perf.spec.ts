@@ -1,6 +1,7 @@
 /** Frame times while a remote scrolls Home, and key press to next frame.
  * Headless Chromium renders in software, so the bounds are loose; the
- * printed percentiles are the numbers to watch. */
+ * printed percentiles are the numbers to watch. The perf gate sets
+ * PERF_BENCH=1 to keep them in bench/m3/web-perf.jsonl. */
 
 import { appendFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -67,8 +68,10 @@ test("Home scrolls at frame rate under remote key repeat", async ({ page }) => {
   console.log(`perf ${JSON.stringify(result)}`);
   // Live checks are kept with their date (repo rule: bench/<milestone>/*.jsonl).
   const line = { date: new Date().toISOString(), check: "web-home-remote-scroll", browser: page.context().browser()?.version(), canvas: "tv 1920x1080", ...result };
-  mkdirSync(BENCH, { recursive: true });
-  appendFileSync(`${BENCH}/web-perf.jsonl`, `${JSON.stringify(line)}\n`);
+  if (process.env.PERF_BENCH) {
+    mkdirSync(BENCH, { recursive: true });
+    appendFileSync(`${BENCH}/web-perf.jsonl`, `${JSON.stringify(line)}\n`);
+  }
   test.info().annotations.push({ type: "perf", description: JSON.stringify(result) });
   expect(result.frameMs.p50).toBeLessThan(20);
   expect(result.keyToFrameMs.p95).toBeLessThan(50);

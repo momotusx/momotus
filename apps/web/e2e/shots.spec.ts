@@ -1,8 +1,8 @@
 /** Screenshots of every screen on live data, per form factor and theme,
- * written to e2e/shots/ as JPEG (quality 80) for review. */
+ * written to SHOTS (e2e/core.ts) as JPEG (quality 80) for review. */
 
 import { type BrowserContext, expect, type Page, test } from "@playwright/test";
-import { GOT, reseedBbb, startIfPaused } from "./core";
+import { GOT, reseedBbb, SHOTS, startIfPaused } from "./core";
 import { BBB_ID } from "./source";
 
 type Form = "tv" | "desktop" | "phone";
@@ -249,9 +249,8 @@ const SCREENS: Screen[] = [
   { name: "profile-edit", path: "/profiles/new", ready: visible(".pedit") },
 ];
 
-// SHOTS_DIR and SHOTS_PREFIX send a run elsewhere (a design audit's before
-// and after) without touching the committed set.
-const OUT = process.env.SHOTS_DIR ?? "e2e/shots";
+// SHOTS_PREFIX names a set (a design audit's before and after).
+const OUT = SHOTS;
 const PREFIX = process.env.SHOTS_PREFIX ?? "";
 
 

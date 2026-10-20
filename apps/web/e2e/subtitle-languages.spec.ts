@@ -10,7 +10,7 @@ import { type Browser, expect, test } from "@playwright/test";
 import type { ChildProcess } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { Client, cleanup, LANGS_PORT, PORTS, startBridge, startIfPaused } from "./core";
+import { Client, cleanup, LANGS_PORT, PORTS, SHOTS, startBridge, startIfPaused } from "./core";
 import { BBB_ID, ensureMedia, NAME, startSource } from "./source";
 
 let core: { proc: ChildProcess; data: string } | null = null;
@@ -160,7 +160,7 @@ test("the subtitle menu is one section per language, preferred first", async ({ 
   await expect(names("English")).toHaveText(["Many Subs", "Big.Buck.Bunny.2008.WEB"]);
   // "ger" and "deu" are one language, its two files numbered.
   await expect(names("German")).toHaveText(["Many Subs 1", "Many Subs 2"]);
-  await page.screenshot({ path: `${process.env.SHOTS_DIR ?? "e2e/shots"}/subtitle-languages-desktop.png` });
+  await page.screenshot({ path: `${SHOTS}/subtitle-languages-desktop.png` });
 
   // Picking one shows its language, as the core names it, on the
   // Subtitles button ("pob" is not "Brazilian Portuguese" here).

@@ -5,15 +5,15 @@
  * engine and no account, so a title only Torrentio lists is blocked). What
  * the core cannot reach here (nothing plays on this device, a learning note,
  * a measured speed) is put into its answers at the socket, and the writes
- * they lead to are checked as sent; playback is never opened. Shots go to e2e/shots/ at TV, desktop and
- * phone sizes. */
+ * they lead to are checked as sent; playback is never opened. Shots go to SHOTS (e2e/core.ts) at TV, desktop
+ * and phone sizes. */
 
 import { type Browser, type BrowserContext, expect, type Page, test } from "@playwright/test";
 import type { ChildProcess } from "node:child_process";
 import type { Prefs } from "../src/core/generated/Prefs";
 import type { StreamConditions } from "../src/core/generated/StreamConditions";
 import type { VersionsSnapshot } from "../src/core/generated/VersionsSnapshot";
-import { Client, cleanup, DEFAULTS_PORT, GOT, PORTS, startBridge } from "./core";
+import { Client, cleanup, DEFAULTS_PORT, GOT, PORTS, SHOTS, startBridge } from "./core";
 
 type Form = "tv" | "desktop" | "phone";
 const FORMS = {
@@ -21,7 +21,7 @@ const FORMS = {
   desktop: { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 },
   phone: { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
 };
-const OUT = process.env.SHOTS_DIR ?? "e2e/shots";
+const OUT = SHOTS;
 const GiB = 1024 ** 3;
 /** The Shawshank Redemption: only Torrentio lists it here. */
 const SHAWSHANK = "tt0111161";

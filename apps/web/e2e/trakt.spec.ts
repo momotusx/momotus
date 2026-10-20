@@ -10,7 +10,7 @@
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import type { ChildProcess } from "node:child_process";
 import { rmSync } from "node:fs";
-import { Client, PORTS, startBridge, TRAKT_PORTS } from "./core";
+import { Client, PORTS, SHOTS, startBridge, TRAKT_PORTS } from "./core";
 import { BBB_ID } from "./source";
 import { type FakeTrakt, startFakeTrakt, USER, USER_CODE } from "./trakt-fake";
 
@@ -97,7 +97,7 @@ const shot = async (p: Page, name: string) => {
   await p.waitForTimeout(400);
   const html = await p.content();
   for (const secret of fake.secrets) expect(html.includes(secret), `a token is on the page in ${name}`).toBe(false);
-  await p.screenshot({ path: `e2e/shots/${name}.jpg`, type: "jpeg", quality: 80 });
+  await p.screenshot({ path: `${SHOTS}/${name}.jpg`, type: "jpeg", quality: 80 });
 };
 
 const card = (p: Page) => p.locator(".trakt-card");

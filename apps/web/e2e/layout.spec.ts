@@ -1,5 +1,5 @@
 import { type Browser, expect, test } from "@playwright/test";
-import { GOT } from "./core";
+import { GOT, SHOTS } from "./core";
 
 /** Layout rules the design audit settled (design/audit-web-2026-10-19.md). */
 
@@ -149,7 +149,7 @@ for (const form of Object.keys(FORMS) as Form[]) {
 // Fifth pass (design/audit-web-2026-10-19.md): what still read below the bar
 // of the Apple TV app, Netflix and Infuse on the viewer's core flow.
 
-const SHOT = process.env.SHOTS_DIR ?? "e2e/shots";
+const SHOT = SHOTS;
 /** A logo of a given shape, served for every title's logo request. */
 const logoSvg = (w: number, h: number) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><rect width="${w}" height="${h}" rx="${Math.min(w, h) / 5}" fill="#e9e2d2"/></svg>`;

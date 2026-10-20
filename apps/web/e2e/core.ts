@@ -27,6 +27,10 @@ export const LANGS_PORT = 17812 + shift;
 /** The next version spec's own: a core whose first versions cannot play here. */
 export const NEXT_PORT = 17813 + shift;
 export const GOT = { id: "tt0944947", resume: "tt0944947:2:3" };
+/** Where every spec writes its shots: SHOTS_DIR, else the run's own ignored
+ * output. The committed set in e2e/shots/ changes only when a run is asked
+ * to (SHOTS_DIR=e2e/shots), so a plain run leaves the tree clean. */
+export const SHOTS = process.env.SHOTS_DIR ?? "test-results/shots";
 
 const repo = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");
 const targetDir = process.env.CARGO_TARGET_DIR ?? join(homedir(), ".cargo-targets/marquee-web");

@@ -6,14 +6,14 @@
  * pasted link that carries a sign-in is confirmed first. Stremio's sign-in
  * cannot run here, so the import view's answer is a finished import made up
  * at the socket, and the addon it brought is installed through the protocol;
- * everything else is the real core. Shots go to e2e/shots/ at desktop, phone
- * and TV sizes. */
+ * everything else is the real core. Shots go to SHOTS (e2e/core.ts) at
+ * desktop, phone and TV sizes. */
 
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import type { ChildProcess } from "node:child_process";
 import type { DefaultAddons } from "../src/core/generated/DefaultAddons";
 import type { Prefs } from "../src/core/generated/Prefs";
-import { Client, cleanup, DEFAULTS_PORT, PORTS, startBridge } from "./core";
+import { Client, cleanup, DEFAULTS_PORT, PORTS, SHOTS, startBridge } from "./core";
 
 type Form = "tv" | "desktop" | "phone";
 const FORMS = {
@@ -21,7 +21,7 @@ const FORMS = {
   desktop: { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 },
   phone: { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
 };
-const OUT = process.env.SHOTS_DIR ?? "e2e/shots";
+const OUT = SHOTS;
 const CINEMETA = "https://v3-cinemeta.strem.io/manifest.json";
 const IMPORT_SUB = 990_001;
 

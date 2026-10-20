@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { SHOTS } from "./core";
 
 // The live Official list (plans/m12-addon-discovery.md). The setup installed
 // Cinemeta and OpenSubtitles v3; WatchHub is not installed.
@@ -69,7 +70,7 @@ test("TV: a card is one focus stop, Back goes to the chips, and there is no Conf
   for (let i = 0; i < 4 && !/^fa:official:\d+$/.test((await focused(page)) ?? ""); i++) await page.keyboard.press("ArrowDown");
   await expect.poll(() => focused(page)).toMatch(/^fa:official:\d+$/);
   await page.waitForTimeout(400);
-  await page.screenshot({ path: "e2e/shots/find-addons-tv-focus.jpg", type: "jpeg", quality: 80 });
+  await page.screenshot({ path: `${SHOTS}/find-addons-tv-focus.jpg`, type: "jpeg", quality: 80 });
   await page.keyboard.press("Escape");
   await expect.poll(() => focused(page)).toBe("fa-lists:official");
   await expect(page).toHaveURL(/\/find-addons/);
