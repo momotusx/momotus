@@ -85,7 +85,7 @@ This one is mixed, and the numbers say why:
 
 **The app path**, once: a local addon (a manifest plus `stream/movie/tt1727587.json` returning Sintel's info hash, trackers and `behaviorHints.filename`) installed into `mq --data <dir>`, then `mq play movie tt1727587 --headless` with no debrid key. VersionsView picked the torrent row, PlaybackView resolved it through the engine (metadata plus Ready) in 5.4 s, the probe read 726 KB through the loopback, and mpv showed the first frame 0.47 s after it started.
 
-## The cold first scrape (plan, 2026-10-20)
+## The cold first scrape (2026-10-20)
 
 **Problem.** A fresh engine's first `Engine::scrape` sometimes answers nothing.
 - In walk EW-1 and race 2, two of four reads kept Torrentio's numbers.
@@ -131,6 +131,32 @@ So a cold engine on this Mac should answer within its budget. Where it does not,
 - Each has mutation rows in `bench/m13/mutations.jsonl`.
 
 **Before and after:** the same cold CLI runs.
+
+**Result (2026-10-20, `bench/m13/cold-scrape.jsonl`):** 10 rounds of `mq scrape` on four free hashes, the build order swapped after round 5. Every one of the 50 runs counted all four hashes.
+
+| Build | Case | Median | Max | Runs over 300 ms |
+|---|---|---|---|---|
+| before | cold | 159 ms | 218 ms | 0 |
+| before | late | 142 ms | 1001 ms | 1 |
+| after | cold | 140 ms | 394 ms | 3 |
+| after | late | 138 ms | 181 ms | 0 |
+| after | warm | 65 ms | 73 ms | 0 |
+
+"Cold" scrapes as the engine starts, "late" 3 s after it, "warm" 2 s after a warm-up from the start.
+
+- **Suspect 1 is real.** In 4 runs a burst lost the first datagram to several trackers at once.
+  - The "before" run lost opentrackr, torrent.eu.org and stealth for the whole call, ran its full second and kept only explodie's numbers.
+  - The three "after" runs sent again at 250 ms and answered by 394 ms.
+- **The others did not show on this Mac:**
+  - Resolves took 3 to 17 ms (suspect 3), and no tracker returned an IPv6 address (suspect 4).
+  - Cold and late scrapes cost the same (suspect 5).
+  - A device with a slow resolver or more loss leans harder on the kept state and the warm-up. A cold miss without them looks like the before run above.
+- **What was built:**
+  - Resends, every address with IPv4 first, kept addresses and connection ids (fix(engine) 089dc8d9).
+  - The warm-up when a title's page opens (feat(runtime)).
+  - With the warm-up, a scrape costs one round trip: 65 ms.
+
+Mutations SR1 to SR7.
 
 ## Disk used while measuring
 
