@@ -24,7 +24,7 @@ use mq_library::Table;
 use mq_protocol::{ResourcePath, ResourceResponse};
 use mq_tracking::trakt::search::Found;
 use serde::Serialize;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -269,10 +269,11 @@ async fn run(core: Core, query: String, snapshot: SharedObservable<SearchSnapsho
     let mut top_pending = key.chars().count() >= TRAKT_MIN_CHARS && core.trakt_search_ready();
     let mut top: Option<(RowState, Vec<Tile>)> =
         top_pending.then(|| (RowState::Loading, Vec::new()));
-    let publish = |top: &Option<(RowState, Vec<Tile>)>, rows: &[(RowState, Vec<Tile>)]| {
+    let mut shown = Shown::default();
+    let mut publish = |top: &Option<(RowState, Vec<Tile>)>, rows: &[(RowState, Vec<Tile>)]| {
         snapshot.set(SearchSnapshot {
             query: query.clone(),
-            rows: render(top.as_ref(), &slots, rows),
+            rows: render(top.as_ref(), &slots, rows, &mut shown),
             recent: Vec::new(),
             searchable: slots.len() as u32,
         })
@@ -401,49 +402,69 @@ fn outcome(
     }
 }
 
-/// "Top results" first, then the rows in slot order, with titles already
-/// shown above removed; rows left with nothing are dropped.
+/// "Top results" first, then the rows in slot order; a filled row shows
+/// what `Shown` gave it, and a filled row left with nothing is dropped.
 fn render(
     top: Option<&(RowState, Vec<Tile>)>,
     slots: &[Slot],
     rows: &[(RowState, Vec<Tile>)],
+    shown: &mut Shown,
 ) -> Vec<HomeRow> {
-    let mut seen = HashSet::new();
-    let top = top
-        .map(|(state, tiles)| HomeRow {
-            row_id: TOP_ROW_ID.into(),
-            title: "Top results".into(),
-            source: "Trakt".into(),
-            state: state.clone(),
-            tiles: tiles
-                .iter()
-                .filter(|t| seen.insert(t.id.clone()))
-                .cloned()
-                .collect(),
-        })
-        .filter(|row| !(row.state == RowState::Ready && row.tiles.is_empty()));
+    let mut row =
+        |row_id: &str, title: &str, source: &str, state: &RowState, tiles: &[Tile], dedupe| {
+            let tiles = match state {
+                RowState::Ready => shown.fill(row_id, tiles, dedupe),
+                _ => tiles.to_vec(),
+            };
+            (*state != RowState::Ready || !tiles.is_empty()).then(|| HomeRow {
+                row_id: row_id.into(),
+                title: title.into(),
+                source: source.into(),
+                state: state.clone(),
+                tiles,
+            })
+        };
+    let top =
+        top.and_then(|(state, tiles)| row(TOP_ROW_ID, "Top results", "Trakt", state, tiles, false));
     let addons: Vec<HomeRow> = slots
         .iter()
         .zip(rows)
         .filter_map(|(slot, (state, tiles))| {
-            let tiles: Vec<Tile> = tiles
-                .iter()
-                .filter(|t| seen.insert(t.id.clone()))
-                .cloned()
-                .collect();
-            if *state == RowState::Ready && tiles.is_empty() {
-                return None;
-            }
-            Some(HomeRow {
-                row_id: slot.row_id.clone(),
-                title: slot.title.clone(),
-                source: slot.addon.manifest.name.clone(),
-                state: state.clone(),
-                tiles,
-            })
+            let source = &slot.addon.manifest.name;
+            row(&slot.row_id, &slot.title, source, state, tiles, true)
         })
         .collect();
     top.into_iter().chain(addons).collect()
+}
+
+/// What each row showed once it filled, so the layout holds while the
+/// rest arrives (web journey review r2 P2-4): a title never leaves a row
+/// on screen, and a row that fills later leaves out the titles already
+/// shown. "Top results" keeps all of its own, so a title another row
+/// showed first stays there too.
+#[derive(Default)]
+struct Shown {
+    /// The titles on screen.
+    titles: HashSet<String>,
+    /// Each filled row's tiles as first shown, by row id.
+    rows: HashMap<String, Vec<Tile>>,
+}
+
+impl Shown {
+    fn fill(&mut self, row_id: &str, tiles: &[Tile], dedupe: bool) -> Vec<Tile> {
+        if let Some(shown) = self.rows.get(row_id) {
+            return shown.clone();
+        }
+        let mut own = HashSet::new();
+        let kept: Vec<Tile> = tiles
+            .iter()
+            .filter(|t| own.insert(t.id.clone()) && !(dedupe && self.titles.contains(&t.id)))
+            .cloned()
+            .collect();
+        self.titles.extend(kept.iter().map(|t| t.id.clone()));
+        self.rows.insert(row_id.to_owned(), kept.clone());
+        kept
+    }
 }
 
 /// The counted titles whose name or other names hold the folded query, a

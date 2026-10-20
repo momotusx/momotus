@@ -230,6 +230,64 @@ async fn failed_and_unscheduled_series_are_told_apart() {
     assert_eq!(s.series, 3, "loaded, undated and failed series all count");
 }
 
+/// Kitsu's answer for an anime: a series meta with season 1 episodes, one
+/// out today and one next week.
+const ANIME: &str = r#"{"meta":{"id":"kitsu:9","type":"series","name":"Frieren","videos":[
+  {"id":"kitsu:9:1","title":"Today","season":1,"episode":1,"released":"2026-10-17T05:00:00.000Z"},
+  {"id":"kitsu:9:2","title":"Next week","season":1,"episode":2,"released":"2026-10-24T05:00:00.000Z"}]}}"#;
+
+/// Web journey review P3-20: an anime in the library (Kitsu's kind and
+/// ids) is in the calendar like a series, read from the addon that answers
+/// for its kind.
+#[tokio::test]
+async fn an_anime_is_in_the_calendar() {
+    let core = Core::temporary("p").unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let mut buf = [0u8; 2048];
+            let _ = socket.read(&mut buf).await;
+            let resp = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{ANIME}",
+                ANIME.len()
+            );
+            let _ = socket.write_all(resp.as_bytes()).await;
+        }
+    });
+    let manifest = serde_json::json!({
+        "id": "kitsu", "version": "1.0.0", "name": "Kitsu",
+        "types": ["anime"], "resources": ["meta"], "catalogs": [], "idPrefixes": ["kitsu"]
+    });
+    let kitsu = AddonRow {
+        transport_url: format!("http://{addr}/manifest.json"),
+        manifest_json: manifest.to_string(),
+        position: 0,
+        enabled: true,
+        allow_private: true,
+    };
+    core.library()
+        .set_addons("p", &[kitsu], &core.hlc())
+        .unwrap();
+    let anime = LibraryItemRow {
+        kind: "anime".into(),
+        ..series("kitsu:9", "Frieren")
+    };
+    core.library()
+        .upsert_item("p", &anime, true, &core.hlc())
+        .unwrap();
+    let view = CalendarView::open(&core, parse_day("2026-10-17").unwrap());
+    let s = settled(&view, |s| !s.days.is_empty()).await;
+    assert_eq!(
+        layout(&s),
+        [
+            ("2026-10-17".to_string(), vec!["kitsu:9:1".to_string()]),
+            ("2026-10-24".into(), vec!["kitsu:9:2".into()]),
+        ]
+    );
+    assert_eq!(s.days[0].items[0].name, "Frieren");
+}
+
 /// Live: Cinemeta's popular series in the library, today's calendar.
 /// Run with `--ignored --nocapture`.
 #[tokio::test]

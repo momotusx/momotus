@@ -598,7 +598,7 @@ impl Library {
             "p.position_ms > 0 AND (p.duration_ms = 0 OR p.position_ms < p.duration_ms * ?2)";
         let condition = if finished {
             format!(
-                "COALESCE(i.kind, 'movie') = 'series'
+                "COALESCE(i.kind, 'movie') IN ('series', 'anime')
                    AND ((p.duration_ms > 0 AND p.position_ms >= p.duration_ms * ?2)
                         OR (COALESCE(w.watched, 0) = 1 AND NOT (p.hlc > w.hlc AND {partial})))"
             )

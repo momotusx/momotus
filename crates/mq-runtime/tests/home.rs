@@ -360,6 +360,65 @@ async fn a_finished_episode_leaves_its_next_one_in_continue_watching() {
     assert!(view.snapshot().header.hero.is_none());
 }
 
+/// Kitsu's answer for an anime: a series meta with season 1 episodes.
+const ANIME_META: &str = r#"{"meta":{"id":"kitsu:9","type":"series","name":"Frieren","videos":[
+  {"id":"kitsu:9:1","title":"The Journey's End","season":1,"episode":1,"released":"2023-09-29T14:00:00.000Z"},
+  {"id":"kitsu:9:2","title":"It Didn't Have to Be Magic","season":1,"episode":2,"released":"2023-09-29T14:00:00.000Z"}]}}"#;
+
+/// Web journey review P3-20: an anime (Kitsu's kind and ids) gets Next Up
+/// like a series, read from the addon that answers for its kind.
+#[tokio::test]
+async fn a_finished_anime_episode_leaves_its_next_one_in_continue_watching() {
+    let core = Core::temporary("p").unwrap();
+    let mut kitsu = catalog_addon("kitsu", Duration::ZERO, 200, ANIME_META).await;
+    kitsu.manifest_json = serde_json::json!({
+        "id": "kitsu", "version": "1.0.0", "name": "Kitsu",
+        "types": ["anime"], "resources": ["meta"], "catalogs": [], "idPrefixes": ["kitsu"]
+    })
+    .to_string();
+    core.library()
+        .set_addons("p", &[kitsu], &core.hlc())
+        .unwrap();
+    let anime = LibraryItemRow {
+        item_id: "kitsu:9".into(),
+        kind: "anime".into(),
+        name: "Frieren".into(),
+        poster: None,
+        poster_shape: None,
+        added_ms: 1,
+    };
+    core.library()
+        .upsert_item("p", &anime, true, &core.hlc())
+        .unwrap();
+    let progress = ProgressRow {
+        video_id: "kitsu:9:1",
+        item_id: "kitsu:9",
+        position_ms: 990,
+        duration_ms: 1000,
+        updated_ms: 5,
+    };
+    core.library()
+        .set_progress("p", progress, &core.hlc())
+        .unwrap();
+    let view = HomeView::open(&core);
+    let mut tile = None;
+    for _ in 0..200 {
+        tile = view
+            .snapshot()
+            .rows
+            .into_iter()
+            .find(|r| r.row_id == CONTINUE_ROW_ID)
+            .and_then(|r| r.tiles.into_iter().next());
+        if tile.is_some() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let tile = tile.expect("Next Up tile for the anime");
+    assert_eq!(tile.video_id.as_deref(), Some("kitsu:9:2"));
+    assert_eq!(tile.release_info.as_deref(), Some("Next: S1:E2"));
+}
+
 #[tokio::test]
 #[ignore = "network"]
 async fn real_cinemeta_next_up() {

@@ -110,6 +110,8 @@ enum Outcome {
 }
 
 struct Series {
+    /// `series` or `anime`: where its meta is asked for.
+    kind: String,
     name: String,
     poster: Option<String>,
     /// A fetch answer for an older generation is ignored.
@@ -261,7 +263,9 @@ impl Owner {
             .library(core.profile())
             .unwrap_or_default()
             .into_iter()
-            .filter(|e| e.item.kind == "series")
+            // Kitsu's anime have episodes and air dates too (web journey
+            // review P3-20).
+            .filter(|e| matches!(e.item.kind.as_str(), "series" | "anime"))
             .collect();
         entries.sort_by_key(|e| std::cmp::Reverse(e.last_watched_ms.unwrap_or(e.item.added_ms)));
         let mut seen = HashSet::new();
@@ -286,6 +290,7 @@ impl Owner {
                 self.series.insert(
                     id.clone(),
                     Series {
+                        kind: entry.item.kind,
                         name: entry.item.name,
                         poster: entry.item.poster,
                         generation: self.next_generation,
@@ -311,8 +316,9 @@ impl Owner {
                 continue;
             };
             let (core, generation) = (self.core.clone(), series.generation);
+            let kind = series.kind.clone();
             self.fetches.spawn(async move {
-                let outcome = match core.fetch_meta("series", &id).await {
+                let outcome = match core.fetch_meta(&kind, &id).await {
                     Ok((meta, _)) => Outcome::Ready(candidates(&meta)),
                     Err(reason) => Outcome::Failed(reason),
                 };

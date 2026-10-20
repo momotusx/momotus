@@ -835,7 +835,7 @@ async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) 
         .finished_series(core.profile(), read)
         .unwrap_or_default()
         .into_iter()
-        .filter(|done| shows(&policy, "series", &done.item_id, &done.video_id))
+        .filter(|done| shows(&policy, &done.kind, &done.item_id, &done.video_id))
         .take(ROW_TILES)
         .collect();
     // A new row shows at once from the library, so it never pushes the page
@@ -859,7 +859,8 @@ async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) 
         }))
         .await;
     let next_up = futures_util::future::join_all(finished.into_iter().map(|done| async move {
-        let (meta, _) = core.fetch_meta("series", &done.item_id).await.ok()?;
+        // A series or an anime (Kitsu's kind), read where its kind is.
+        let (meta, _) = core.fetch_meta(&done.kind, &done.item_id).await.ok()?;
         let next = next_after(&meta, &done.video_id)?;
         Some((done.updated_ms, tile_for_next(&meta, next)))
     }))

@@ -341,3 +341,28 @@ fn a_temporary_library_starts_empty_over_old_files() {
     drop(fresh);
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// Web journey review P3-20: an anime (Kitsu's kind) is a Next Up
+/// candidate like a series; a movie still is not.
+#[test]
+fn a_finished_anime_episode_is_a_next_up_candidate() {
+    let lib = Library::temporary().unwrap();
+    for (id, kind) in [("kitsu:9", "anime"), ("tt1", "movie")] {
+        let row = LibraryItemRow {
+            kind: kind.into(),
+            ..item(id, id)
+        };
+        lib.upsert_item("p", &row, true, "0001").unwrap();
+    }
+    lib.set_progress("p", progress("kitsu:9:1", "kitsu:9", 990, 1000, 10), "0002")
+        .unwrap();
+    lib.set_progress("p", progress("tt1", "tt1", 990, 1000, 20), "0003")
+        .unwrap();
+    let done: Vec<(String, String)> = lib
+        .finished_series("p", 10)
+        .unwrap()
+        .into_iter()
+        .map(|r| (r.item_id, r.kind))
+        .collect();
+    assert_eq!(done, [("kitsu:9".to_string(), "anime".to_string())]);
+}

@@ -151,6 +151,7 @@ async fn an_open_search_picks_up_a_new_addon() {
 async fn meta_addon(
     ids: &'static [&'static str],
     names: &'static [(&'static str, &'static str)],
+    search_delay: Duration,
 ) -> AddonRow {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -163,34 +164,37 @@ async fn meta_addon(
     };
     tokio::spawn(async move {
         while let Ok((mut socket, _)) = listener.accept().await {
-            let mut buf = [0u8; 2048];
-            let n = socket.read(&mut buf).await.unwrap_or(0);
-            let head = String::from_utf8_lossy(&buf[..n]).into_owned();
-            let path = head
-                .split_whitespace()
-                .nth(1)
-                .unwrap_or_default()
-                .to_owned();
-            let body = if let Some(rest) = path.strip_prefix("/meta/") {
-                let id = rest
-                    .split('/')
+            tokio::spawn(async move {
+                let mut buf = [0u8; 2048];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                let head = String::from_utf8_lossy(&buf[..n]).into_owned();
+                let path = head
+                    .split_whitespace()
                     .nth(1)
                     .unwrap_or_default()
-                    .trim_end_matches(".json");
-                serde_json::json!({"meta": {"id": id, "type": "movie", "name": name(id)}})
-            } else {
-                let metas: Vec<_> = ids
-                    .iter()
-                    .map(|id| serde_json::json!({"id": id, "type": "movie", "name": name(id)}))
-                    .collect();
-                serde_json::json!({ "metas": metas })
-            }
-            .to_string();
-            let reply = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                body.len()
-            );
-            let _ = socket.write_all(reply.as_bytes()).await;
+                    .to_owned();
+                let body = if let Some(rest) = path.strip_prefix("/meta/") {
+                    let id = rest
+                        .split('/')
+                        .nth(1)
+                        .unwrap_or_default()
+                        .trim_end_matches(".json");
+                    serde_json::json!({"meta": {"id": id, "type": "movie", "name": name(id)}})
+                } else {
+                    tokio::time::sleep(search_delay).await;
+                    let metas: Vec<_> = ids
+                        .iter()
+                        .map(|id| serde_json::json!({"id": id, "type": "movie", "name": name(id)}))
+                        .collect();
+                    serde_json::json!({ "metas": metas })
+                }
+                .to_string();
+                let reply = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(reply.as_bytes()).await;
+            });
         }
     });
     let manifest = serde_json::json!({
@@ -274,14 +278,15 @@ async fn settled(
 }
 
 /// plans/search-quality.md: "Top results" leads with the title Cinemeta's
-/// search misses, the addon row below does not repeat it, and Trakt hears
-/// only text that rested 400 ms and holds 2 or more characters.
+/// search misses, an addon row that fills after it does not repeat it, and
+/// Trakt hears only text that rested 400 ms and holds 2 or more characters.
 #[tokio::test]
 async fn top_results_lead_with_the_title_the_addons_miss() {
     let core = Core::temporary("p").unwrap();
     let addon = meta_addon(
         &["tt2", "tt1727587"],
         &[("tt1727587", "Sintel"), ("tt2", "Santee")],
+        Duration::from_millis(1500),
     )
     .await;
     core.library()
@@ -311,12 +316,81 @@ async fn top_results_lead_with_the_title_the_addons_miss() {
     assert_eq!(s.rows[0].tiles[0].name, "Sintel");
 }
 
+/// Web journey review r2 P2-4: the layout holds while Top results fills.
+/// Its row is there, loading, from the query's first snapshot on, and a
+/// title an addon row already shows stays in that row when Top results
+/// names it too.
+#[tokio::test]
+async fn a_title_on_screen_stays_when_top_results_fill() {
+    let core = Core::temporary("p").unwrap();
+    let addon = meta_addon(
+        &["tt2", "tt1727587"],
+        &[("tt1727587", "Sintel"), ("tt2", "Santee")],
+        Duration::ZERO,
+    )
+    .await;
+    core.library()
+        .set_addons(core.profile(), &[addon], &core.hlc())
+        .unwrap();
+    let (base, _) = trakt("200 OK", TRAKT_SINTEL).await;
+    with_trakt(&core, &base);
+    let view = SearchView::open(&core);
+    view.set_query("sintel");
+    let ids = |s: &SearchSnapshot| -> Vec<(String, Vec<String>)> {
+        s.rows
+            .iter()
+            .map(|r| {
+                (
+                    r.row_id.clone(),
+                    r.tiles.iter().map(|t| t.id.clone()).collect(),
+                )
+            })
+            .collect()
+    };
+    let mut seen = Vec::new();
+    for _ in 0..1000 {
+        let s = view.snapshot();
+        if s.query == "sintel" {
+            assert_eq!(s.rows[0].row_id, TOP_ROW_ID, "top first, from the start");
+            seen.push(ids(&s));
+            if s.rows.iter().all(|r| r.state == RowState::Ready) {
+                break;
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(2)).await;
+    }
+    let last = seen.last().cloned().unwrap();
+    let addon_row = |rows: &[(String, Vec<String>)]| {
+        rows.iter()
+            .find(|(id, tiles)| id != TOP_ROW_ID && !tiles.is_empty())
+            .map(|(_, tiles)| tiles.clone())
+    };
+    // The addon row filled before Top results did, and never changed.
+    let first_filled = seen.iter().find_map(|rows| addon_row(rows)).unwrap();
+    assert_eq!(first_filled, ["tt1727587", "tt2"]);
+    assert!(
+        seen.iter()
+            .filter_map(|rows| addon_row(rows))
+            .all(|t| t == first_filled)
+    );
+    assert_eq!(
+        last,
+        [
+            (TOP_ROW_ID.to_string(), vec!["tt1727587".to_string()]),
+            (
+                "meta:movie:top".into(),
+                vec!["tt1727587".into(), "tt2".into()]
+            ),
+        ]
+    );
+}
+
 /// Trakt failing (500, 429) changes nothing on screen: no row, no failure.
 #[tokio::test]
 async fn a_failing_trakt_leaves_search_as_it_was() {
     for status in ["500 Internal Server Error", "429 Too Many Requests"] {
         let core = Core::temporary("p").unwrap();
-        let addon = meta_addon(&["tt2"], &[("tt2", "Santee")]).await;
+        let addon = meta_addon(&["tt2"], &[("tt2", "Santee")], Duration::ZERO).await;
         core.library()
             .set_addons(core.profile(), &[addon], &core.hlc())
             .unwrap();
