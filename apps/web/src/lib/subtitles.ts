@@ -17,6 +17,14 @@ export function byLanguage(tracks: SubtitleTrack[]): LanguageSection[] {
   return sections;
 }
 
+/** The Subtitles button with no track on: the count as soon as one track is
+ * in, `searching` while the core still asks (`subtitlesPending`), and
+ * "Searching" only while none is in. */
+export function offSummary(found: number, pending: boolean): { text: string; searching: boolean } {
+  if (found) return { text: `Off, ${found} found`, searching: pending };
+  return { text: pending ? "Searching" : "None found", searching: false };
+}
+
 /** The line under a track's name: its source when the name does not
  * already say it, and what kind of file it is. */
 export function trackDetail(t: SubtitleTrack): string {

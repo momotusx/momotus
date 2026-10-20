@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
-import { byLanguage, trackDetail } from "./subtitles";
+import { byLanguage, offSummary, trackDetail } from "./subtitles";
 
 const track = (language: string, languageName: string, name: string, more: Partial<SubtitleTrack> = {}): SubtitleTrack => ({
   url: `http://127.0.0.1/sub/${language}/${name}`,
@@ -29,4 +29,11 @@ test("the detail line names the source only when the name does not", () => {
   expect(trackDetail(track("tr", "Turkish", "TOPAZ", { hearingImpaired: true }))).toBe("OpenSubtitles v3, For the hard of hearing");
   expect(trackDetail(track("en", "English", "OpenSubtitles v3 2"))).toBe("");
   expect(trackDetail(track("en", "English", "OpenSubtitles v3", { forced: true }))).toBe("Forced");
+});
+
+test("the Subtitles button counts what is in while the core still asks", () => {
+  expect(offSummary(87, true)).toEqual({ text: "Off, 87 found", searching: true });
+  expect(offSummary(87, false)).toEqual({ text: "Off, 87 found", searching: false });
+  expect(offSummary(0, true)).toEqual({ text: "Searching", searching: false });
+  expect(offSummary(0, false)).toEqual({ text: "None found", searching: false });
 });

@@ -27,7 +27,7 @@ import { autoFocus, goBack } from "../focus/dom";
 import { createVideoEngine } from "../player/video-engine";
 import { loadedSource, sourceStart } from "../lib/failover";
 import { bytes, clock, decoded, episodeLabel, groupFailures, playPath, seasonName, titlePath, versionsPath } from "../lib/format";
-import { byLanguage, trackDetail } from "../lib/subtitles";
+import { byLanguage, offSummary, trackDetail } from "../lib/subtitles";
 import { blockedWords, languageName, nextVersion, qualityCell, qualityText, subtitleNote } from "../lib/words";
 import "./player.css";
 
@@ -390,6 +390,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     engine.selectTrack("sub", id);
   };
 
+  // With no track on: what the core found so far, and whether it still asks.
+  const subsOff = () => offSummary(snap()?.subtitles.length ?? 0, !!snap()?.subtitlesPending);
   const pct = (x: number) => `${duration() ? Math.min(100, (x / duration()) * 100) : 0}%`;
   const status = (): { tone: string; text: string; busy: boolean } | null => {
     const v = ctx.versions();
@@ -628,13 +630,10 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                 <Captions aria-hidden />
                 <b>Subtitles</b>
                 <small>
-                  {track()
-                    ? (snap()?.subtitles.find((t) => t.url === track()?.url)?.languageName ?? languageName(track()?.lang ?? ""))
-                    : snap()?.subtitlesPending
-                      ? "Searching"
-                      : snap()?.subtitles.length
-                        ? `Off, ${snap()?.subtitles.length} found`
-                        : "None found"}
+                  {track() ? (snap()?.subtitles.find((t) => t.url === track()?.url)?.languageName ?? languageName(track()?.lang ?? "")) : subsOff().text}
+                  <Show when={!track() && subsOff().searching}>
+                    <LoaderCircle class="spin mark" role="img" aria-label="Still searching" />
+                  </Show>
                 </small>
               </button>
               <A class="pa" href={versionsPath(props.kind, props.id, props.videoId)} data-f="player:versionsact">

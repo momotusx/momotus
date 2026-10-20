@@ -4,7 +4,8 @@
  * profile that prefers Turkish. Off comes first, then Turkish, then the
  * browser's language, then the rest by name; files of one language are
  * told apart by name. Turkish turns on at start, until the viewer says
- * otherwise. */
+ * otherwise. While a slow subtitle addon is still asked, the Subtitles
+ * button counts what is in and marks the search. */
 
 import { type Browser, expect, test } from "@playwright/test";
 import type { ChildProcess } from "node:child_process";
@@ -43,6 +44,31 @@ function manySubs(film: string): Promise<Server> {
       });
     }
     if (req.url?.endsWith(".srt")) {
+      res.writeHead(200, { "content-type": "text/plain" });
+      return res.end(SRT);
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server)));
+}
+
+/** A subtitle addon that answers after `ms` with one English file. */
+function slowSubs(ms: number): Promise<Server> {
+  const server = createServer((req, res) => {
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    if (req.url === "/manifest.json") {
+      res.writeHead(200, { "content-type": "application/json" });
+      return res.end(JSON.stringify({ id: "dev.marquee.slow-subs", version: "1.0.0", name: "Slow Subs", resources: ["subtitles"], types: ["movie"], idPrefixes: ["tt"], catalogs: [] }));
+    }
+    if (req.url?.startsWith("/subtitles/")) {
+      setTimeout(() => {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ subtitles: [{ id: "slow-1", lang: "eng", url: `${base}/slow-1.srt` }] }));
+      }, ms);
+      return;
+    }
+    if (req.url === "/slow-1.srt") {
       res.writeHead(200, { "content-type": "text/plain" });
       return res.end(SRT);
     }
@@ -123,6 +149,33 @@ test("the profile's language turns on at start; Off wins and is remembered", asy
   await page.waitForTimeout(1000);
   await expect(summary).toHaveText(/^Off, \d+ found$/);
   await context.close();
+});
+
+// Second: the remembered choice is still Off, so nothing turns on by itself.
+test("while the core still asks, Subtitles counts what is in and marks the search", async ({ browser }) => {
+  const slow = await slowSubs(6000);
+  const c = new Client(`ws://127.0.0.1:${LANGS_PORT}/ws`);
+  const url = `http://127.0.0.1:${(slow.address() as AddressInfo).port}/manifest.json`;
+  await c.req("installAddon", { url });
+  try {
+    const { context, page, open } = await playerPage(browser);
+    await open();
+    const summary = page.locator('[data-f="player:subs"] small');
+    const mark = summary.locator("svg.mark");
+    // The stream's own tracks are in; the slow addon is still being asked.
+    await expect(summary).toHaveText(/^Off, \d+ found$/);
+    await expect(mark).toBeVisible();
+    await expect(mark).toHaveAttribute("aria-label", "Still searching");
+    const before = Number(/(\d+)/.exec((await summary.textContent()) ?? "")?.[1]);
+    // It answers: its track joins the count and the mark goes.
+    await expect(summary).toHaveText(`Off, ${before + 1} found`, { timeout: 30_000 });
+    await expect(mark).toHaveCount(0);
+    await context.close();
+  } finally {
+    await c.req("removeAddon", { url }).catch(() => undefined);
+    c.close();
+    slow.close();
+  }
 });
 
 test("the subtitle menu is one section per language, preferred first", async ({ browser }) => {

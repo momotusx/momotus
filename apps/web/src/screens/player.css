@@ -71,6 +71,8 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 .pa svg { width: 32px; height: 32px; }
 .pa b { font: 600 var(--type-callout) / 1.1 var(--font-text); }
 .pa small { font: 400 var(--type-caption) / 1.1 var(--font-text); color: var(--muted); white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+/* The core still asks for subtitles: a small spinner after the count. */
+.pa small svg.mark { width: 1em; height: 1em; margin-left: .35em; vertical-align: -.15em; }
 .pa:focus-visible, [data-form="tv"] .pa:focus { background: color-mix(in srgb, var(--text) 12%, transparent); transform: scale(var(--focus-scale-card)); }
 @media (hover: hover) { [data-form="desktop"] .pa:hover { background: color-mix(in srgb, var(--text) 8%, transparent); } }
 
