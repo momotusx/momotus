@@ -136,12 +136,14 @@ async fn wait_complete(engine: &Engine, t: TorrentHandle) {
 
 /// An HTTP tracker fixture on `[::1]`: every request gets `answer`, then the
 /// connection closes, or with `keep_alive` waits for the next request on
-/// it. Counts accepted connections and requests.
+/// it. Counts accepted connections and requests, and keeps each request's
+/// first line.
 #[allow(dead_code)] // only the tracker tests use it
 pub struct HttpTracker {
     pub url: String,
     connections: Arc<AtomicUsize>,
     requests: Arc<AtomicUsize>,
+    lines: Arc<std::sync::Mutex<Vec<String>>>,
 }
 
 #[allow(dead_code)]
@@ -151,11 +153,12 @@ impl HttpTracker {
         let url = format!("http://{}/announce", listener.local_addr().unwrap());
         let (connections, requests) =
             (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
-        let (c, r) = (connections.clone(), requests.clone());
+        let lines = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let (c, r, l) = (connections.clone(), requests.clone(), lines.clone());
         std::thread::spawn(move || {
             for mut stream in listener.incoming().flatten() {
                 c.fetch_add(1, Ordering::SeqCst);
-                let (r, answer) = (r.clone(), answer.clone());
+                let (r, l, answer) = (r.clone(), l.clone(), answer.clone());
                 std::thread::spawn(move || {
                     loop {
                         let mut head = Vec::new();
@@ -166,6 +169,10 @@ impl HttpTracker {
                                 Ok(n) => head.extend_from_slice(&buf[..n]),
                             }
                         }
+                        let first = head.split(|&b| b == b'\r').next().unwrap_or_default();
+                        l.lock()
+                            .unwrap()
+                            .push(String::from_utf8_lossy(first).into_owned());
                         r.fetch_add(1, Ordering::SeqCst);
                         if stream.write_all(&answer).is_err() || !keep_alive {
                             return;
@@ -178,6 +185,7 @@ impl HttpTracker {
             url,
             connections,
             requests,
+            lines,
         }
     }
 
@@ -187,5 +195,10 @@ impl HttpTracker {
 
     pub fn requests(&self) -> usize {
         self.requests.load(Ordering::SeqCst)
+    }
+
+    /// Every request's first line so far, in order.
+    pub fn request_lines(&self) -> Vec<String> {
+        self.lines.lock().unwrap().clone()
     }
 }

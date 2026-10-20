@@ -114,3 +114,71 @@ async fn a_second_file_choice_keeps_the_first_file_wanted() {
         .await
         .expect("finished in time");
 }
+
+/// With upload off a finished file is never announced as complete (engine
+/// review r2, P3-3): its `left` stays above 0, so trackers never list us as
+/// a seeder that serves nothing.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_finished_file_with_upload_off_is_never_announced_complete() {
+    let s = support::swarm(true).await;
+    // Every announce gets an interval of 1 s and no peers: the engine
+    // announces again every second.
+    let body = b"d8:intervali1e5:peers0:e";
+    let mut answer = format!(
+        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    )
+    .into_bytes();
+    answer.extend(body);
+    let tracker = support::HttpTracker::start(answer, false);
+    let dir = tempfile::tempdir().unwrap();
+    let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+    let local = [
+        Ipv4Addr::LOCALHOST.into(),
+        std::net::Ipv6Addr::LOCALHOST.into(),
+    ];
+    let engine = Engine::start(mq_engine::EngineConfig {
+        discovery: false,
+        upload: false,
+        ..mq_engine::EngineConfig::new(dir.path(), http.torrent_scope(&local))
+    })
+    .await
+    .unwrap();
+    let t = engine
+        .add_magnet(
+            &s.info_hash,
+            std::slice::from_ref(&tracker.url),
+            &[s.seeder_addr],
+        )
+        .await
+        .unwrap();
+    let movie = engine
+        .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
+        .await
+        .unwrap();
+    let whole = read_range(&engine, t, movie, 0, s.movie.len() as u64).await;
+    assert_eq!(whole, s.movie, "the whole file");
+    let seen = tracker.requests();
+    for _ in 0..60 {
+        if tracker.requests() >= seen + 2 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    let lines = tracker.request_lines();
+    assert!(
+        lines.len() >= seen + 2,
+        "no announce after the file finished: {lines:?}"
+    );
+    let last = lines.last().unwrap();
+    let left: u64 = last
+        .split(['?', '&', ' '])
+        .find_map(|kv| kv.strip_prefix("left="))
+        .and_then(|v| v.parse().ok())
+        .unwrap_or_else(|| panic!("no left in {last}"));
+    assert!(
+        left >= 1,
+        "a finished file announced left=0 with upload off: {last}"
+    );
+    assert!(!last.contains("event=completed"), "{last}");
+}

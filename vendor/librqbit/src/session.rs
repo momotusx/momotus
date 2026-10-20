@@ -1886,12 +1886,21 @@ impl tracker_comms::TorrentStatsProvider for PeerRxTorrentInfo {
             }
         };
         let stats = mt.stats();
+        #[allow(unused_mut)]
+        let mut downloaded = stats.progress_bytes;
+        // Marquee fork (engine review r2, P3-3): with upload off a finished
+        // file is never announced as complete (`left` stays above 0), or
+        // trackers would count us a seeder that serves nothing.
+        #[cfg(feature = "disable-upload")]
+        if self.session._disable_upload && stats.total_bytes > 0 {
+            downloaded = downloaded.min(stats.total_bytes - 1);
+        }
 
         use crate::torrent_state::stats::TorrentStatsState as TS;
         use tracker_comms::TrackerCommsStatsState as S;
 
         tracker_comms::TrackerCommsStats {
-            downloaded_bytes: stats.progress_bytes,
+            downloaded_bytes: downloaded,
             total_bytes: stats.total_bytes,
             uploaded_bytes: stats.uploaded_bytes,
             torrent_state: match stats.state {
