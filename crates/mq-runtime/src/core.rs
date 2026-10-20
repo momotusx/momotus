@@ -477,13 +477,13 @@ impl Core {
     /// first scrape"). Starts the engine. Nothing without it, and nothing
     /// for a core whose counts are given (tests).
     pub async fn warm_swarms(&self) {
-        if self.fake_seeders().is_some() {
-            return;
-        }
+        let given = self.fake_seeders().is_some();
         #[cfg(feature = "torrent")]
-        if let Ok(engine) = self.torrent_engine().await {
+        if !given && let Ok(engine) = self.torrent_engine().await {
             engine.warm_trackers().await;
         }
+        #[cfg(not(feature = "torrent"))]
+        let _ = given;
     }
 
     /// This device's connection and disk, for Settings.
