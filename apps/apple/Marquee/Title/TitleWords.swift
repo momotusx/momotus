@@ -116,3 +116,11 @@ func minutesLeft(ms: Int64) -> String {
 func airsLater(_ released: String?, now: Date = .now) -> Bool {
     releaseDate(released).map { $0 > now } ?? false
 }
+
+/// The title page's line in place of Play while the next episode is not out:
+/// "Next episode airs Oct 21", the day read in UTC as the episode list reads it.
+func nextAirsWords(_ day: String, locale: Locale = .current) -> String? {
+    guard let date = releaseDate(day) else { return nil }
+    let style = Date.FormatStyle(locale: locale, timeZone: TimeZone(identifier: "UTC") ?? .current).month(.abbreviated).day()
+    return "Next episode airs \(date.formatted(style))"
+}

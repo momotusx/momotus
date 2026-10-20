@@ -88,7 +88,7 @@ struct PlayerScreen: View {
                     let picture = fittedHeight(geo.size)
                     let bottom = min((geo.size.height + picture) / 2 - 16, geo.size.height - (controlsShown ? controlsHeight + 16 : 40))
                     // Its foot stays put; a larger caption style or a second line grows upward.
-                    SubtitleLine(text: text)
+                    SubtitleLine(text: text, size: model.subtitleSize)
                         .frame(width: geo.size.width, height: max(bottom - 10, 0), alignment: .bottom)
                 }
                 .ignoresSafeArea()
@@ -182,6 +182,8 @@ struct PlayerScreen: View {
         .onContinuousHover { _ in touched(toggle: false) }
         #endif
         .task(id: model.taskId) { await model.drive() }
+        // Back from the background on a new port: the source opens again where it was.
+        .onChange(of: core.serverMoves) { model.serverMoved() }
         .task { await autoHide() }
         // VoiceOver: a two-finger double tap plays or pauses; the scrub gesture leaves.
         #if !os(macOS)
@@ -367,12 +369,13 @@ private struct BareStyle: ButtonStyle {
 /// box so it reads on any picture.
 private struct SubtitleLine: View {
     let text: String
+    let size: SubtitleSize
 
     var body: some View {
         let style = CaptionStyle.current
-        let size = (Theme.type.headline + 3) * style.scale
+        let points = (Theme.type.headline + 3) * style.scale * CaptionStyle.factor(size)
         Text(text)
-            .font(style.face.map { .custom($0, size: size, relativeTo: .title3) } ?? .text(size, weight: .semibold, relativeTo: .title3))
+            .font(style.face.map { .custom($0, size: points, relativeTo: .title3) } ?? .text(points, weight: .semibold, relativeTo: .title3))
             .foregroundStyle(style.text)
             .modifier(CaptionEdge(edge: style.edge))
             .background(style.highlight)

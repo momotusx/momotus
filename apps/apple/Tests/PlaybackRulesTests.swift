@@ -588,3 +588,41 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     #expect(PlayerLayout.pipSubtitleNote(addonSubtitle: true, told: true) == nil)
     #expect(PlayerLayout.pipSubtitleNote(addonSubtitle: false, told: false) == nil)
 }
+
+@Test func subtitleTimingMovesTheCuesForThisPlay() {
+    let cues = WebVTT.parse("WEBVTT\n\n00:00:10.000 --> 00:00:12.000\nHello\n")
+    // Two seconds late in the file: two presses of Earlier show the line at 8 s.
+    let earlier = -2 * PlayerLayout.subtitleStep * 2
+    #expect(WebVTT.text(at: PlayerLayout.cueTime(position: 8.5, delay: earlier), in: cues) == "Hello")
+    #expect(WebVTT.text(at: PlayerLayout.cueTime(position: 8.5, delay: 0), in: cues) == nil)
+    // Later holds a line back.
+    #expect(WebVTT.text(at: PlayerLayout.cueTime(position: 10.5, delay: 1), in: cues) == nil)
+    #expect(PlayerLayout.delayWords(0) == "On time")
+    #expect(PlayerLayout.delayWords(1.5) == "1.5 s later")
+    #expect(PlayerLayout.delayWords(-0.5) == "0.5 s earlier")
+    #expect(PlayerLayout.delayWords(-2) == "2 s earlier")
+}
+
+@Test func theProfilesSubtitleSizeScalesTheDrawnLines() {
+    #expect(CaptionStyle.factor(.medium) == 1)
+    #expect(CaptionStyle.factor(.small) < 1)
+    #expect(CaptionStyle.factor(.large) > 1)
+    #expect(CaptionStyle.factor(.extraLarge) > CaptionStyle.factor(.large))
+    #expect(SubtitleSize.allCases.map(CaptionStyle.words) == ["Small", "Medium", "Large", "Extra large"])
+}
+
+@Test func theLanguagePickerSearchesTheCoresFullList() {
+    let all = [
+        LanguageChoice(code: "en", name: "English"), LanguageChoice(code: "zh-Hans", name: "Chinese (Simplified)"),
+        LanguageChoice(code: "zh-Hant", name: "Chinese (Traditional)"), LanguageChoice(code: "pt-BR", name: "Portuguese (Brazil)"),
+        LanguageChoice(code: "pt", name: "Portuguese"), LanguageChoice(code: "ar", name: "Arabic"),
+    ]
+    // Subtitles keep each tag.
+    #expect(LanguageChoice.rows(all, audio: false, query: "").map(\.code) == ["en", "zh-Hans", "zh-Hant", "pt-BR", "pt", "ar"])
+    // Audio takes the base code once, named without its script or region.
+    #expect(LanguageChoice.rows(all, audio: true, query: "").map(\.code) == ["en", "zh", "pt", "ar"])
+    #expect(LanguageChoice.rows(all, audio: true, query: "").map(\.name) == ["English", "Chinese", "Portuguese", "Arabic"])
+    // A search matches a name in part, or a code whole.
+    #expect(LanguageChoice.rows(all, audio: false, query: "chin").map(\.code) == ["zh-Hans", "zh-Hant"])
+    #expect(LanguageChoice.rows(all, audio: false, query: "AR").map(\.code) == ["ar"])
+}

@@ -31,6 +31,9 @@ final class CoreClient {
     private(set) var failure: String?
     /// Bumped when the core is opened again; views key their tasks on it.
     private(set) var generation = 0
+    /// Bumped when the stream server came back on another port: the URLs
+    /// handed out before are dead, and a player opens its source again.
+    private(set) var serverMoves = 0
 
     @ObservationIgnored private var router = CoreRouter()
     @ObservationIgnored private var core: MarqueeCore?
@@ -218,6 +221,14 @@ final class CoreClient {
         }
     }
 
+    /// `lifecycle foreground`, on every return to the front: the core binds its
+    /// stream server again when the system took the listener while the app
+    /// was suspended (review apple-journey P1-1).
+    func foreground() async {
+        guard let reply = try? await call("lifecycle", ["event": "foreground"], as: ForegroundReply.self) else { return }
+        if reply.moved { serverMoves += 1 }
+    }
+
     /// Tells the core about app and system events (`foreground`, `background`,
     /// `memoryPressure`, `networkChanged`).
     func lifecycle(_ event: String, _ fields: [String: any Sendable] = [:]) {
@@ -290,4 +301,11 @@ final class CoreClient {
         #endif
         return base.appending(path: Bundle.main.bundleIdentifier ?? "Marquee", directoryHint: .isDirectory)
     }
+}
+
+/// `lifecycle foreground`'s answer; an older core sends `{}`.
+struct ForegroundReply: Decodable, Sendable {
+    let serverMoved: Bool?
+
+    var moved: Bool { serverMoved == true }
 }

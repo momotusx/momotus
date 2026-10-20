@@ -242,7 +242,7 @@ struct Prefs: Decodable, Hashable, Sendable {
     let learnedEpoch: Int
 }
 
-enum SubtitleSize: String, Codable, Hashable, Sendable {
+enum SubtitleSize: String, Codable, Hashable, Sendable, CaseIterable {
     case small, medium, large, extraLarge
 }
 
@@ -251,6 +251,24 @@ enum SubtitleSize: String, Codable, Hashable, Sendable {
 struct LanguageChoice: Decodable, Hashable, Sendable {
     let code: String
     let name: String
+}
+
+extension LanguageChoice {
+    /// The picker's rows for a search: subtitles keep the core's tag, audio
+    /// takes the part before "-" once, named without its script or region
+    /// ("zh-Hans" and "zh-Hant" are one "zh", Chinese). A search matches a
+    /// name in part or a code whole.
+    static func rows(_ all: [LanguageChoice], audio: Bool, query: String) -> [LanguageChoice] {
+        var seen = Set<String>()
+        let wanted = query.trimmingCharacters(in: .whitespaces)
+        return all.compactMap { choice in
+            let code = audio ? String(choice.code.split(separator: "-").first ?? Substring(choice.code)) : choice.code
+            guard seen.insert(code).inserted else { return nil }
+            let name = audio ? (choice.name.components(separatedBy: " (").first ?? choice.name) : choice.name
+            guard wanted.isEmpty || name.localizedCaseInsensitiveContains(wanted) || code.caseInsensitiveCompare(wanted) == .orderedSame else { return nil }
+            return LanguageChoice(code: code, name: name)
+        }
+    }
 }
 
 struct LearnedByClass: Decodable, Hashable, Sendable {

@@ -25,6 +25,9 @@ final class PlayerModel {
     /// The picture's size, for placing subtitles on it rather than on the screen.
     private(set) var videoSize: CGSize = .zero
     private(set) var subtitle: SubtitleTrack?
+    /// Seconds the addon subtitles show later (negative: earlier), for this
+    /// play and this track: a new track starts on time.
+    var subtitleDelay: Double = 0
     private(set) var cues: [WebVTT.Cue] = []
     var rate: Float = 1 {
         // The Lock Screen extrapolates the playhead from the rate: it hears every change at once.
@@ -107,6 +110,8 @@ final class PlayerModel {
     @ObservationIgnored var floating = false
     /// The run of the view and the task id it runs for, outliving a page while the film floats.
     @ObservationIgnored private var running: (id: [String], task: Task<Void, Never>)?
+    /// The next load stays paused: the source opened again after a server move.
+    @ObservationIgnored private var holdPause = false
 
     init(route: PlayRoute, versions: VersionsModel?, core: CoreClient) {
         self.route = route
@@ -215,6 +220,8 @@ final class PlayerModel {
 
     /// The user's choice in Settings: start the next episode on its own.
     var autoplayNext: Bool { prefs.snapshot?.autoplayNext ?? true }
+    /// The profile's subtitle size, synced (`Prefs.subtitleSize`).
+    var subtitleSize: SubtitleSize { prefs.snapshot?.subtitleSize ?? .medium }
     /// The profile's subtitle languages, then its audio ones: the Subtitles menu's top groups.
     var subtitleLanguages: [String] {
         SubtitleMenu.preferred(
@@ -343,6 +350,15 @@ final class PlayerModel {
         }
     }
 
+    /// The core's stream server came back on another port while the app was
+    /// away, so the loaded URL is dead: the view opens again and its new URL
+    /// loads where this one was, paused if it was (review apple-journey P1-1).
+    func serverMoved() {
+        guard loadedURL != nil else { return }
+        holdPause = !playing
+        reopen()
+    }
+
     /// Try again on the card for a view that could not open: open it again.
     func reopen() {
         openError = nil
@@ -408,6 +424,7 @@ final class PlayerModel {
     }
 
     func selectSubtitle(_ track: SubtitleTrack?) {
+        if track != subtitle { subtitleDelay = 0 }
         subtitle = track
         cues = []
         if textTrack != nil, let group = textGroup, group.allowsEmptySelection {
@@ -421,7 +438,7 @@ final class PlayerModel {
         }
     }
 
-    var subtitleText: String? { WebVTT.text(at: position, in: cues) }
+    var subtitleText: String? { WebVTT.text(at: PlayerLayout.cueTime(position: position, delay: subtitleDelay), in: cues) }
 
     private func showSubtitleStatus(_ words: String) {
         subtitleStatus = words
@@ -542,7 +559,8 @@ final class PlayerModel {
             }
         }
         NowPlaying.activate()
-        player.play()
+        // A source opened again after the server moved keeps the viewer's pause.
+        if holdPause { holdPause = false } else { player.play() }
     }
 
     /// The player cannot play this source: stop it, then ask the core for the next.

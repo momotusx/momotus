@@ -73,3 +73,10 @@ import Testing
     #expect(!airsLater("2026-09-01", now: now))
     #expect(!airsLater(nil, now: now))
 }
+
+@Test func aSeriesWaitingForItsNextEpisodeSaysTheDay() {
+    let english = Locale(identifier: "en_US")
+    // The core's day, read in UTC: never the day before west of Greenwich.
+    #expect(nextAirsWords("2026-10-21", locale: english) == "Next episode airs Oct 21")
+    #expect(nextAirsWords("not a day", locale: english) == nil)
+}

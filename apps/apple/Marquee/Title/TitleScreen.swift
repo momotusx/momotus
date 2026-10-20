@@ -233,7 +233,7 @@ struct TitleScreen: View {
                     Synopsis(text: description, lines: 3)
                 }
                 PlayBlock(
-                    target: model.header?.playTarget, runtime: details.runtime, versions: versions?.snapshot,
+                    target: model.header?.playTarget, nextAirs: model.header?.nextAirs, runtime: details.runtime, versions: versions?.snapshot,
                     failure: versions?.failure, wide: metrics.wide,
                     play: { fromStart in
                         if var route = versions?.play() {
@@ -473,6 +473,8 @@ private struct Backdrop: View {
 /// becomes Add a source; while sources still answer, Play waits for the pick.
 private struct PlayBlock: View {
     let target: PlayTarget?
+    /// With no target, the day the next episode comes out.
+    let nextAirs: String?
     /// The title's runtime ("57 min"), so Resume says the time left.
     let runtime: String?
     let versions: VersionsSnapshot?
@@ -489,7 +491,12 @@ private struct PlayBlock: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if versions?.done == true, versions?.recommended == nil, versions?.blocked?.reason == "needsAccount" {
+            if target == nil, let airs = nextAirs.flatMap({ nextAirsWords($0) }) {
+                // Nothing to play yet: the day it comes, not a Play that finds nothing.
+                Label(airs, glyph: "calendar")
+                    .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                    .foregroundStyle(Theme.Palette.text)
+            } else if versions?.done == true, versions?.recommended == nil, versions?.blocked?.reason == "needsAccount" {
                 Button(action: addAccount) {
                     Label(StreamChoice.words.blocked.needsAccount.action, glyph: "key-round")
                         .frame(minWidth: wide ? 160 : nil, maxWidth: wide ? nil : .infinity)
@@ -536,7 +543,7 @@ private struct PlayBlock: View {
                 if let failure {
                     Label("Versions could not load: \(failure)", glyph: "triangle-alert")
                         .foregroundStyle(Theme.Palette.muted)
-                } else {
+                } else if target != nil {
                     VersionLine(versions: versions)
                 }
             }

@@ -177,3 +177,12 @@ private func playback(_ extra: String) throws -> PlaybackSnapshot {
     #expect(notes == [SubtitleNote(source: "TurkceAltyazi.org", problem: "blocked"), SubtitleNote(source: "Subs", problem: "somethingNew")])
     #expect(notes[1].words == "Subtitles from Subs did not load.")
 }
+
+@Test func foregroundSaysWhenTheStreamServerMoved() throws {
+    let decode = { (json: String) in try JSONDecoder().decode(ForegroundReply.self, from: Data(json.utf8)) }
+    // Moved: the URLs handed out before are dead, and the player opens its source again.
+    #expect(try decode(#"{"serverMoved": true}"#).moved)
+    #expect(try !decode(#"{"serverMoved": false}"#).moved)
+    // An older core answers {}: nothing moved.
+    #expect(try !decode("{}").moved)
+}

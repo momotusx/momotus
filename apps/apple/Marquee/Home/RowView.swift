@@ -7,6 +7,7 @@ struct RowView: View {
     /// TV: this row is Home's start; its first tile is the scope's default focus.
     var startScope: Namespace.ID?
     @Environment(\.metrics) private var metrics
+    @Environment(CoreClient.self) private var core
 
     var body: some View {
         VStack(alignment: .leading, spacing: metrics.wide ? 16 : 12) {
@@ -35,6 +36,16 @@ struct RowView: View {
         return row.rowId == "continue-watching" ? nil : row.source
     }
 
+    private func remove(_ itemId: String) {
+        Task {
+            do {
+                try await core.perform("removeFromContinue", ["itemId": itemId])
+            } catch {
+                coreLog.error("remove from continue watching: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
     private var strip: some View {
         ScrollView(.horizontal) {
             LazyHStack(alignment: .top, spacing: metrics.wide ? 20 : 12) {
@@ -48,6 +59,13 @@ struct RowView: View {
                         }
                     }
                     .buttonStyle(CardButtonStyle())
+                    // Continue Watching and Next Up: a title can leave the row (right click, long press,
+                    // a long press of select on TV) until it is played again, on every synced device.
+                    .contextMenu {
+                        if row.rowId == "continue-watching" {
+                            Button("Remove from Continue Watching", glyph: "x") { remove(tile.id) }
+                        }
+                    }
                     // TV: Home's start row enters on its first tile.
                     .modifier(StartFocus(scope: key == tiles.first?.key ? startScope : nil))
                 }

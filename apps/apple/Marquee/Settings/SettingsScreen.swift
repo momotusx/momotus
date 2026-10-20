@@ -192,6 +192,14 @@ struct SettingsScreen: View {
     private func playback(_ p: Prefs) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             subtitles(p)
+            NavigationLink {
+                LanguagePicker(title: "Subtitle languages", audio: false, core: core,
+                               isOn: { prefs.snapshot?.subtitleLanguages.contains(Language.subtitleCode($0)) ?? false }) { tag in
+                    set(["subtitleLanguages": toggled(prefs.snapshot?.subtitleLanguages ?? [], Language.subtitleCode(tag))])
+                }
+            } label: { Label("More languages", glyph: "search") }
+            .buttonStyle(.textLink)
+            subtitleSize(p)
             upNext(p)
             Text("Languages are listed in the order you turn them on; the first one wins.")
                 .font(.text(Theme.type.callout, relativeTo: .callout))
@@ -200,9 +208,17 @@ struct SettingsScreen: View {
     }
 
     private func subtitles(_ p: Prefs) -> ChipRow<String> {
-        let chips = Language.all.map { Chip(id: $0.subtitle, title: $0.name) }
+        let chips = Language.items(chosen: p.subtitleLanguages, subtitle: true).map { Chip(id: $0.0, title: $0.1) }
         return ChipRow(label: "Subtitles", chips: chips, isSelected: { p.subtitleLanguages.contains($0) }) { value in
             set(["subtitleLanguages": toggled(p.subtitleLanguages, value)])
+        }
+    }
+
+    /// On every device of the profile, over the system caption size.
+    private func subtitleSize(_ p: Prefs) -> ChipRow<SubtitleSize> {
+        let chips = SubtitleSize.allCases.map { Chip(id: $0, title: CaptionStyle.words($0)) }
+        return ChipRow(label: "Subtitle size", chips: chips, isSelected: { $0 == p.subtitleSize }) { value in
+            set(["subtitleSize": value.rawValue])
         }
     }
 
@@ -230,6 +246,20 @@ struct Language {
     let subtitle: String
 
     var name: String { Locale.current.localizedString(forLanguageCode: audio)?.capitalized ?? audio }
+
+    /// The eight common languages, then any other the profile chose from the
+    /// full list, so each chosen one shows and can be turned off.
+    static func items(chosen: [String], subtitle: Bool) -> [(String, String)] {
+        let common = all.map { (subtitle ? $0.subtitle : $0.audio, $0.name) }
+        let extra = chosen.filter { code in !common.contains { $0.0 == code } }
+        return common + extra.map { ($0, Locale.current.localizedString(forIdentifier: $0)?.capitalized ?? $0) }
+    }
+
+    /// A subtitle language from the full list as the profile keeps it: the
+    /// chips' code ("eng") for the eight, the core's tag for the rest.
+    static func subtitleCode(_ tag: String) -> String {
+        all.first { $0.audio == tag }?.subtitle ?? tag
+    }
 
     static let all = [
         Language(audio: "en", subtitle: "eng"), Language(audio: "tr", subtitle: "tur"),

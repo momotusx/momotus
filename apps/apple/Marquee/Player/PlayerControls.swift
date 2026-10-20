@@ -289,6 +289,23 @@ struct PlayerControls: View {
                         ForEach(groups.other, id: \.language) { languageMenu($0) }
                     }
                 }
+                // An addon track's timing, half a second a press, for this play;
+                // the menu stays open for the next press.
+                if model.subtitle != nil {
+                    Section("Timing: \(PlayerLayout.delayWords(model.subtitleDelay))") {
+                        Button { model.subtitleDelay -= PlayerLayout.subtitleStep } label: {
+                            Label("Earlier by 0.5 s", glyph: "chevron-left")
+                        }
+                        .keepsMenuOpen()
+                        Button { model.subtitleDelay += PlayerLayout.subtitleStep } label: {
+                            Label("Later by 0.5 s", glyph: "chevron-right")
+                        }
+                        .keepsMenuOpen()
+                        if model.subtitleDelay != 0 {
+                            Button { model.subtitleDelay = 0; hold(false) } label: { Label("Back on time", glyph: "rotate-ccw") }
+                        }
+                    }
+                }
                 if !model.textTracks.isEmpty {
                     Section("In the file") {
                         ForEach(Array(model.textTracks.enumerated()), id: \.offset) { index, name in
@@ -440,5 +457,17 @@ private struct Choice: View {
             Text(text)
             if let detail { Text(detail) }
         }
+    }
+}
+
+private extension View {
+    /// A menu item that leaves its menu open for the next press, where the
+    /// platform can (a Mac menu closes on every pick).
+    @ViewBuilder func keepsMenuOpen() -> some View {
+        #if os(macOS)
+        self
+        #else
+        menuActionDismissBehavior(.disabled)
+        #endif
     }
 }

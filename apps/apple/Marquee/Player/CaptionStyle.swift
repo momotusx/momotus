@@ -20,6 +20,26 @@ struct CaptionStyle {
     var radius: CGFloat
     var edge: MACaptionAppearanceTextEdgeStyle
 
+    /// The profile's subtitle size over the system caption size: each app
+    /// maps the core's four steps to its own player (plans/core-protocol.md).
+    static func factor(_ size: SubtitleSize) -> CGFloat {
+        switch size {
+        case .small: 0.8
+        case .medium: 1
+        case .large: 1.25
+        case .extraLarge: 1.5
+        }
+    }
+
+    static func words(_ size: SubtitleSize) -> String {
+        switch size {
+        case .small: "Small"
+        case .medium: "Medium"
+        case .large: "Large"
+        case .extraLarge: "Extra large"
+        }
+    }
+
     // ponytail: read on each new cue, no settings-change observer; a change made
     // while a cue is on screen shows from the next cue.
     static var current: CaptionStyle {

@@ -65,6 +65,22 @@ enum PlayerLayout {
         return !(host == "localhost" || host == "::1" || host == "[::1]" || host.hasPrefix("127."))
     }
 
+    /// Subtitle timing moves in half seconds, kept for the play (review
+    /// apple-journey P2-6).
+    static let subtitleStep = 0.5
+
+    /// Where the cues are read: a positive delay shows each line later.
+    static func cueTime(position: Double, delay: Double) -> Double {
+        position - delay
+    }
+
+    /// "On time", "1.5 s later", "0.5 s earlier".
+    static func delayWords(_ delay: Double) -> String {
+        guard abs(delay) >= 0.05 else { return "On time" }
+        let amount = String(format: "%g", abs(delay))
+        return delay > 0 ? "\(amount) s later" : "\(amount) s earlier"
+    }
+
     /// Picture in Picture shows the picture only: an addon's subtitles are
     /// drawn over the page, which has left. Said once per film.
     static func pipSubtitleNote(addonSubtitle: Bool, told: Bool) -> String? {
