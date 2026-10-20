@@ -239,8 +239,14 @@ struct MainShell: View {
         places.safeAreaInset(edge: .top, spacing: 0) {
             // Top-level places only, as on Android: a pushed page has no pill to wander into.
             if !immersion.active && !pageOver {
+                let away = TVTopBar.hidden(atHome: tab == .home, scrolledDown: homeScrolled)
                 TopNav(selection: tab, select: select, profiles: { showProfiles = true }).padding(.bottom, Theme.Space.m)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { navHeight = $0 }
+                    // Kept in the layout, so the page under it never jumps.
+                    .offset(y: away ? -navHeight : 0)
+                    .opacity(away ? 0 : 1)
+                    .disabled(away)
+                    .animation(Theme.Motion.panel, value: away)
             }
         }
         .modifier(FullScreen(isPresented: $showProfiles) {
@@ -305,6 +311,10 @@ struct MainShell: View {
                     .accessibilityHidden(item != tab)
                     #if os(tvOS)
                     .disabled(item != tab)
+                    // The whole place is one target for a move from the top bar: a
+                    // page whose rows sit left of the tab in focus is still reached by
+                    // Down (the tvOS walk, ATV-F1: Settings).
+                    .focusSection()
                     #endif
             }
         }

@@ -89,3 +89,12 @@ import Testing
     #expect(TVBack.step(atHome: true, scrolledDown: true) == .toTop)
     #expect(TVBack.step(atHome: true, scrolledDown: false) == .exit)
 }
+
+@Test func theTVTopBarStepsAwayOnceHomeIsInItsRows() {
+    // Home scrolled into its rows: the bar goes, off the first row's posters.
+    #expect(TVTopBar.hidden(atHome: true, scrolledDown: true))
+    // Home at its top (the hero): the bar is there to move up into.
+    #expect(!TVTopBar.hidden(atHome: true, scrolledDown: false))
+    // Another place keeps it, however Home was left.
+    #expect(!TVTopBar.hidden(atHome: false, scrolledDown: true))
+}

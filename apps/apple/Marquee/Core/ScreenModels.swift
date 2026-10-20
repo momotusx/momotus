@@ -229,6 +229,16 @@ enum TVBack: Equatable {
     }
 }
 
+/// tvOS: the top bar steps out of the way once Home is scrolled into its
+/// rows, as tvOS apps do, and comes back at the top (Up to the hero, or
+/// Menu): it no longer sits over the first row's posters (the tvOS walk,
+/// ATV-F4).
+enum TVTopBar {
+    static func hidden(atHome: Bool, scrolledDown: Bool) -> Bool {
+        atHome && scrolledDown
+    }
+}
+
 struct Prefs: Decodable, Hashable, Sendable {
     let streams: StreamPrefs
     /// Subtitle languages as addons name them (usually ISO 639-2, "eng"), most wanted first.
