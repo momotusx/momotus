@@ -425,7 +425,7 @@ export const syncWords = {
   leaveHereText: "This device forgets the account without telling the sync server, which lists it until another device removes it. Your library stays here, and you can pair this device again.",
   leftHere: "This device no longer syncs. The sync server still lists it until another device removes it; you can pair it again.",
   notRemembered: "Not remembered: the sync key lasts until this tab closes or reloads.",
-  lockedFirst: "This browser remembers a sync account. Unlock it or forget it on Account before joining another.",
+  lockedFirst: "This browser remembers a sync account. Unlock it or forget it on the Account page before joining another.",
   forkNone: "This device and the sync server list the same devices. There is nothing to compare.",
   locked: "This browser remembers your sync account, locked with a passkey.",
   unlock: "Unlock with your passkey",

@@ -426,7 +426,7 @@ test.describe.serial("sync across three devices", () => {
       // The page is up while the check is still out: nothing that starts an account shows.
       await expect(desk.locator("main h1")).toBeVisible();
       expect(await desk.locator(".qrbox, [data-f=\"sync-form:go\"], [data-f=\"pair:start\"]").count()).toBe(0);
-      await expect(desk.getByText("This browser remembers a sync account. Unlock it or forget it on Account before joining another.")).toBeVisible({ timeout: 10_000 });
+      await expect(desk.getByText("This browser remembers a sync account. Unlock it or forget it on the Account page before joining another.")).toBeVisible({ timeout: 10_000 });
       expect(asked.slice(from).filter((a) => a.port === SYNC_PORTS.a && a.view === "pairing")).toEqual([]);
     }
     // Storage that cannot be read at load may hold an account: /pair starts nothing and says why.
@@ -436,7 +436,7 @@ test.describe.serial("sync across three devices", () => {
     await expect(desk.getByText('This browser could not check whether it remembers a sync account, so nothing new starts here.')).toBeVisible();
     expect(await desk.locator(".qrbox").count()).toBe(0);
     expect(asked.slice(from).filter((a) => a.port === SYNC_PORTS.a && a.view === "pairing")).toEqual([]);
-    // The same on Account, with Check again in place of Unlock.
+    // The same on the Account page, with Check again in place of Unlock.
     await desk.evaluate(() => sessionStorage.setItem("mq.e2e.failIdb", "1"));
     from = asked.length;
     await desk.goto("/sync");
