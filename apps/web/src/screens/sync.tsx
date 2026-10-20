@@ -1,8 +1,8 @@
 /** Devices and sync (plans/m7-sync.md, plans/core-protocol.md): start an
  * account, join one with a recovery kit, see this device's state and the
  * others, add a device, make a kit, remove a device or report one lost,
- * compare device lists after the server changed, stop syncing, and remember
- * this browser with a passkey. The record lives in src/core/sync.ts; a kit
+ * compare device lists after the server changed, stop syncing, delete the
+ * account, and remember this browser with a passkey. The record lives in src/core/sync.ts; a kit
  * is shown once and kept nowhere. No key, token or kit reaches a log. */
 
 import { A, useNavigate, useParams, useSearchParams } from "@solidjs/router";
@@ -252,7 +252,20 @@ function NotJoined() {
   return (
     <>
       <StorageNote />
-      <Show when={sync.problem()}>{(p) => <Said tone="bad">{p().words}</Said>}</Show>
+      <Show when={sync.problem()}>
+        {(p) => (
+          <Show when={p().code === "accountGone"} fallback={<Said tone="bad">{p().words}</Said>}>
+            <section class="set">
+              <Said tone="warn">{p().words}</Said>
+              <div class="acts">
+                <button class="btn primary" data-f="sync:gone-ok" ref={() => focusSoon('[data-f="sync:gone-ok"]')} onClick={sync.clearProblem}>
+                  {w.ok}
+                </button>
+              </div>
+            </section>
+          </Show>
+        )}
+      </Show>
       {/* A leave whose cleanup failed tells one story, in the storage note. */}
       <Show when={!sync.problem() && sync.memoryProblem() !== w.leftKept && sync.notice()}>{(n) => <Said tone="ok">{n()}</Said>}</Show>
       <section class="set">
@@ -478,7 +491,66 @@ function Joined() {
 
       <Remember />
       <Leave />
+      <DeleteAccount />
     </>
+  );
+}
+
+/** Deletes the account for every device, after one confirmation that names what goes. */
+function DeleteAccount() {
+  const [asking, setAsking] = createSignal(false);
+  const [busy, setBusy] = createSignal(false);
+  const [error, setError] = createSignal<string | null>(null);
+  const ask = (on: boolean) => {
+    setAsking(on);
+    setError(null);
+    focusSoon(on ? '[data-f="sync:delete-cancel"]' : '[data-f="sync:delete"]');
+  };
+  const remove = async () => {
+    if (busy()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await sync.deleteAccount();
+    } catch (e) {
+      setError(say(e, "delete"));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section class="set">
+      <h2>{w.deleteTitle}</h2>
+      <p class="note small sync-lead">{w.deleteText}</p>
+      <Show when={error()}>{(e) => <Said tone="bad">{e()}</Said>}</Show>
+      <Show
+        when={asking()}
+        fallback={
+          <div class="acts">
+            <button class="btn" data-f="sync:delete" onClick={() => ask(true)}>
+              <Trash aria-hidden />
+              {w.deleteButton}
+            </button>
+          </div>
+        }
+      >
+        <div class="sync-ask" role="group" aria-label={w.deleteTitle}>
+          <p>{w.deleteAsk}</p>
+          <Show when={sync.remembered()}>
+            <p class="note small">{w.passkeyAsk}</p>
+          </Show>
+          <div class="acts">
+            <button class="btn danger" data-f="sync:delete-confirm" aria-busy={busy() || undefined} onClick={() => void remove()}>
+              <Trash aria-hidden />
+              {busy() ? w.deleting : w.deleteButton}
+            </button>
+            <button class="btn" data-f="sync:delete-cancel" onClick={() => ask(false)}>
+              {w.cancel}
+            </button>
+          </div>
+        </div>
+      </Show>
+    </section>
   );
 }
 

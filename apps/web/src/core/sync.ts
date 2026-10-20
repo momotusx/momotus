@@ -91,7 +91,8 @@ export async function saveAgain() {
 }
 
 /** Runs an op on the record, in turn. A record in the answer is stored at
- * once; `dropped` (this device was removed) forgets the account here. */
+ * once; `dropped` (this device was removed) and `accountGone` (the account
+ * was deleted) forget the account here. */
 function withRecord<T>(name: string, fields: Record<string, unknown>, recordIn: (result: T) => SyncRecord | null | undefined): Promise<T> {
   return inTurn(async () => {
     guardLink();
@@ -103,8 +104,8 @@ function withRecord<T>(name: string, fields: Record<string, unknown>, recordIn: 
       if (next && mine === account) await store(next);
       return result;
     } catch (e) {
-      if (mine === account && e instanceof BridgeError && (e.code === "dropped" || e.code === "fork")) {
-        if (e.code === "dropped") await forget();
+      if (mine === account && e instanceof BridgeError && (e.code === "dropped" || e.code === "accountGone" || e.code === "fork")) {
+        if (e.code !== "fork") await forget();
         setProblem(problemOf(e));
       }
       throw e;
@@ -339,6 +340,21 @@ export async function signOut(force: boolean, local = false) {
   setProblem(null);
   setNotice(local ? syncWords.leftHere : syncWords.left);
 }
+
+/** Deletes the account on the sync server for every device, once the passkey said yes; this
+ * browser then forgets it as after leaving, and the library stays. */
+export async function deleteAccount() {
+  const mine = account;
+  await gate();
+  await withRecord("deleteAccount", {}, () => null);
+  if (mine !== account) return;
+  await forget();
+  setProblem(null);
+  setNotice(syncWords.accountGone);
+}
+
+/** OK on the "account was deleted" line. */
+export const clearProblem = () => setProblem(null);
 
 /** Both sides of a different device list, read only. */
 export const forkPreview = () => withRecord<ForkPreview>("forkPreview", {}, () => null);

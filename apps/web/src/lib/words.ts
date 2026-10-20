@@ -330,6 +330,14 @@ export const syncWords = {
   leaveAnyway: "Stop anyway",
   syncAgain: "Sync again",
   left: "This device no longer syncs. Your library stays here.",
+  // Delete the account
+  deleteTitle: "Delete account",
+  deleteText: "Deletes your account from the sync service for all your devices. Each device keeps its own copy of your library.",
+  deleteButton: "Delete account",
+  deleteAsk: "Your profiles, library, progress and settings are deleted from the sync service. This device keeps its own copy.",
+  deleting: "Deleting",
+  accountGone: "Your Marquee account was deleted. Your library stays on this device.",
+  ok: "OK",
   // A different device list on the server
   useServer: "Compare device lists",
   forkTitle: "Compare device lists",
@@ -465,6 +473,8 @@ export function syncProblem(code: string | undefined, message: string): string {
   switch (code) {
     case "dropped":
       return "This device was removed from your sync account. Your library stays here as local data.";
+    case "accountGone":
+      return syncWords.accountGone;
     case "fork":
       return "The sync server lists different devices than this device knows. Compare the lists to keep syncing.";
     case "wrongRelay":
@@ -508,6 +518,7 @@ const notDone = {
   remove: "Nothing was removed.",
   lost: "Nothing was removed.",
   leave: "This device still syncs.",
+  delete: "Nothing was deleted.",
   serverList: "Nothing changed.",
   compare: "The lists could not be compared.",
   unlock: "Sync is still locked.",

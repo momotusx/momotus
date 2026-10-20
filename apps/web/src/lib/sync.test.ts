@@ -191,6 +191,10 @@ test("sync failures read by code and by action, and never show the server's addr
   // A passkey without PRF is not a server that did not answer.
   expect(syncProblem("noPrf", "this passkey has no PRF")).toBe(syncWords.noPrf);
   expect(syncProblem("rosterChanged", "x")).toBe(syncWords.forkChanged);
+  // A deleted account says so plainly, whichever call heard it; a delete that did not land says nothing went.
+  expect(syncProblem("accountGone", "this account was deleted")).toBe("Your Marquee account was deleted. Your library stays on this device.");
+  expect(stepProblem(undefined, "http status 502", "delete")).toStartWith("Nothing was deleted.");
+  expect(syncWords.deleteAsk).toBe("Your profiles, library, progress and settings are deleted from the sync service. This device keeps its own copy.");
   // Remembering fails in this browser's storage, never on the sync server.
   expect(stepProblem(undefined, "AbortError", "remember")).toBe(syncWords.storageFailed);
   expect(stepProblem("passkey", "x", "remember")).toBe("The passkey did not confirm it, so nothing changed.");

@@ -9,7 +9,8 @@
  * makes a kit; Living room TV joins with that kit; Desk reports Phone lost
  * and keeps the TV; Phone pairs again (once removed for digits that differ,
  * once rejected); a restored sync server shows Desk a different list, which
- * Desk compares before continuing; Desk removes the TV and stops syncing.
+ * Desk compares before continuing; Desk removes the TV and stops syncing; the
+ * TV hears its account was deleted, then deletes one of its own.
  * Every secret that crossed a socket is then looked for in storage, history,
  * the URL and the console. */
 
@@ -1078,6 +1079,45 @@ test.describe.serial("sync across three devices", () => {
     await tv.locator('[data-f="sync:forget-browser"]').click();
     await expect(tv.locator('[data-f="sync:pair"]')).toBeVisible();
     expect((await kept(tv)).text).not.toContain("credential");
+  });
+
+  test("the TV hears its account was deleted and says so once, then deletes one of its own with the remote", async () => {
+    const gone = tv.getByText("Your Marquee account was deleted. Your library stays on this device.");
+    const start = async () => {
+      await go(tv, "/sync/start");
+      await tv.locator('[data-f="sync-form:server"]').fill(SERVER);
+      await tv.locator('[data-f="sync-form:name"]').fill("Kitchen TV");
+      await tv.locator('[data-f="sync-form:go"]').click();
+      await expect(tv).toHaveURL(/\/sync$/);
+      await synced(tv);
+    };
+    const press = async (key: string) => {
+      await tv.locator(`[data-f="${key}"]`).focus();
+      await tv.keyboard.press("Enter");
+    };
+    await start();
+    // Another device deleted the account (here: the core's answer says so): this one forgets it,
+    // says so, and OK puts the line away.
+    failOnce.set(SYNC_PORTS.c, { op: "syncNow", code: "accountGone" });
+    await press("sync:now");
+    await expect(gone).toBeVisible();
+    await expect(tv.locator('[data-f="sync:pair"]')).toBeVisible();
+    await expect.poll(() => focused(tv)).toBe("sync:gone-ok");
+    await shot(tv, "sync-account-gone-tv");
+    await press("sync:gone-ok");
+    await expect(gone).toHaveCount(0);
+
+    // Deleting here, for real: one confirmation that names what goes, then the sync server deletes it.
+    await start();
+    const from = asked.length;
+    await press("sync:delete");
+    await expect(tv.locator(".sync-ask")).toContainText("Your profiles, library, progress and settings are deleted from the sync service. This device keeps its own copy.");
+    await expect.poll(() => focused(tv)).toBe("sync:delete-cancel");
+    await shot(tv, "sync-delete-ask-tv");
+    await press("sync:delete-confirm");
+    await expect(gone).toBeVisible();
+    await expect(tv.locator('[data-f="sync:pair"]')).toBeVisible();
+    expect(asked.slice(from).filter((a) => a.port === SYNC_PORTS.c && a.op === "deleteAccount")).toHaveLength(1);
   });
 
   test("nothing secret reaches storage, history, the URL or the console", async () => {
