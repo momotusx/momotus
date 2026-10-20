@@ -78,10 +78,11 @@ enum PlayerLayout {
         tryingAgain ? "Trying again" : nil
     }
 
-    /// The action the card focuses as it shows: Try again again after the
-    /// viewer pressed it, else the way on, the first.
-    static func failureFocus(_ order: [FailureAction], retried: Bool) -> FailureAction? {
-        retried && order.contains(.retry) ? .retry : order.first
+    /// The action the card focuses as it shows: Try again again once this
+    /// playback view took a Try again (`retries`, which starts over with each
+    /// episode, version and reopen), else the way on, the first.
+    static func failureFocus(_ order: [FailureAction], retries: Int?) -> FailureAction? {
+        (retries ?? 0) > 0 && order.contains(.retry) ? .retry : order.first
     }
 
     /// The failure card's buttons, in the words the web and Android use.

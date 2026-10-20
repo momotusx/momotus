@@ -248,12 +248,11 @@ final class PlayerModel {
         }
         // The new view must exist before the old one goes: the core copies candidates at subscribe.
         versions = model
-        route = pick
+        // The next episode gets its own start subtitle.
+        route = choices.nextEpisode(pick)
         (loadedURL, rendered, firstFrameMs, playback, ended, nextCancelled, nextFailure, nextVersions) = (nil, false, nil, nil, false, false, nil, nil)
         (loadedAttempt, stoppedAt, pendingStart) = (nil, nil, nil)
         (position, duration, skippedAt) = (0, 0, nil)
-        // The next episode gets its own start subtitle.
-        choices.newPlay()
         selectSubtitle(nil)
     }
 
@@ -280,8 +279,8 @@ final class PlayerModel {
         do {
             let view = try await core.open("playback", params: params, as: (PlaybackSnapshot.self, PlaybackSnapshot.self))
             sub = view.sub
-            let core = core, opened = view.sub
-            choices.send = { command in Task { try? await core.command(opened, command) } }
+            let core = core
+            choices.opened(sub: view.sub) { sub, command in Task { try? await core.command(sub, command) } }
             for await event in view.events {
                 switch event {
                 case .snapshot(let value): apply(value)
@@ -296,14 +295,13 @@ final class PlayerModel {
 
     /// Plays another version of the same video from where this one is.
     func switchVersion(_ key: String) {
-        guard key != route.key else { return }
+        // The old track's URL goes with the old view: the new version starts
+        // with its own start subtitle.
+        guard let next = choices.switchVersion(from: route, to: key) else { return }
         report()
-        route = PlayRoute(versionsSub: route.versionsSub, key: key, target: route.target, tapped: .now)
+        route = next
         (loadedURL, rendered, firstFrameMs, playback) = (nil, false, nil, nil)
         (loadedAttempt, stoppedAt, pendingStart) = (nil, nil, nil)
-        // The old track's URL went with the old view: the new version starts
-        // with its own start subtitle.
-        choices.newPlay()
         selectSubtitle(nil)
     }
 
@@ -420,6 +418,8 @@ final class PlayerModel {
         lastRetries = snapshot.retries ?? lastRetries
         tryingAgain = PlayerLayout.keepsTryingAgain(showing: tryingAgain, phase: snapshot.phase)
         // The core's start subtitle, once, as if picked, sending nothing.
+        // A move on to another source: the old start subtitle and its cues go.
+        if choices.source(snapshot.attempt) { selectSubtitle(nil) }
         if let track = choices.startSubtitle(snapshot.autoSubtitle, tracks: snapshot.subtitles) {
             selectSubtitle(track)
         }

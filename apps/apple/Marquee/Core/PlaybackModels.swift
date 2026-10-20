@@ -485,29 +485,40 @@ struct NextEpisode: Decodable, Hashable, Sendable {
 /// subtitle still applies (plans/m13-subtitle-languages.md 6). The player
 /// owns one and starts it over for each episode and version.
 @MainActor final class PlayChoices {
-    /// Sends a playback command; set once the playback view is open.
-    var send: ((_ command: [String: any Sendable]) -> Void)?
-    /// A subtitle was picked in this play (by the viewer, or the start
-    /// subtitle once): the start subtitle no longer applies.
-    private(set) var subtitleSettled = false
+    /// Sends a playback command to the view opened last (`opened`).
+    private(set) var send: ((_ command: [String: any Sendable]) -> Void)?
+    /// The viewer picked a track, one in the file, or Off: it wins for the play.
+    private(set) var viewerChose = false
+    /// The start subtitle turned on for the current source.
+    private var startApplied = false
+    /// The source the play is on: the snapshot's `attempt`.
+    private var attempt: Int64?
 
-    /// The start subtitle to turn on now, once, as if picked, sending nothing.
+    var subtitleSettled: Bool { viewerChose || startApplied }
+
+    /// The playback view `sub` opened: commands go to it, never to an older view.
+    func opened(sub: UInt64, deliver: @escaping (_ sub: UInt64, _ command: [String: any Sendable]) -> Void) {
+        send = { deliver(sub, $0) }
+    }
+
+    /// The start subtitle to turn on now, once per source, as if picked,
+    /// sending nothing; never over the viewer's own choice.
     func startSubtitle(_ auto: String?, tracks: [SubtitleTrack]) -> SubtitleTrack? {
         guard let track = SubtitleMenu.autoPick(auto, settled: subtitleSettled, tracks: tracks) else { return nil }
-        subtitleSettled = true
+        startApplied = true
         return track
     }
 
     /// The viewer's pick from the menu, or Off (nil): it wins for the rest of
     /// the play, and the core remembers it for the title.
     func chose(_ track: SubtitleTrack?) {
-        subtitleSettled = true
+        viewerChose = true
         send?(["type": "subtitleChosen", "url": track?.url ?? NSNull()])
     }
 
     /// One of the file's own tracks: the viewer's pick, which the core does not know of.
     func choseInFile() {
-        subtitleSettled = true
+        viewerChose = true
     }
 
     /// Try again on the failure card: the same versions from the first.
@@ -517,6 +528,76 @@ struct NextEpisode: Decodable, Hashable, Sendable {
 
     /// Another episode or version: its own start subtitle applies.
     func newPlay() {
-        subtitleSettled = false
+        (viewerChose, startApplied, attempt) = (false, false, nil)
     }
+
+    /// The snapshot's source. A move on to another source drops the start
+    /// pick, whose file was the old release's, so the new source's start
+    /// subtitle applies; the viewer's own choice stays. True when the shown
+    /// subtitle has to go.
+    func source(_ next: Int64?) -> Bool {
+        guard let next else { return false }
+        defer { attempt = next }
+        guard let attempt, next != attempt, !viewerChose else { return false }
+        startApplied = false
+        return true
+    }
+
+    /// Another version of the same video, on the same Versions view: the play
+    /// starts over. Nil for the version already playing.
+    func switchVersion(from route: PlayRoute, to key: String) -> PlayRoute? {
+        guard key != route.key else { return nil }
+        newPlay()
+        return PlayRoute(versionsSub: route.versionsSub, key: key, target: route.target, tapped: .now)
+    }
+
+    /// The next episode's pick: the play starts over.
+    func nextEpisode(_ pick: PlayRoute) -> PlayRoute {
+        newPlay()
+        return pick
+    }
+}
+
+/// What to find versions for: a movie, or one episode of a series.
+struct PlayTargetInfo: Hashable, Sendable {
+    let kind: String
+    /// The movie or series id.
+    let itemId: String
+    let videoId: String
+    /// The movie or series name, never an episode title: ranking uses it to
+    /// hide sources for other titles.
+    let title: String
+    let poster: String?
+    let season: Int?
+    let episode: Int?
+    let resumeMs: Int64?
+    /// What the title page knows, sent so the ranking need not wait for the meta.
+    var runtime: String?
+    var releaseInfo: String?
+    var released: String?
+    var episodesInSeason: Int?
+
+    /// `season` and `episode` when the caller knows them (the core's next
+    /// episode); else read from an id shaped "<series>:<season>:<episode>".
+    init(
+        kind: String, itemId: String, videoId: String, title: String, poster: String?, resumeMs: Int64?,
+        season: Int? = nil, episode: Int? = nil
+    ) {
+        (self.kind, self.itemId, self.videoId, self.title, self.poster, self.resumeMs) =
+            (kind, itemId, videoId, title, poster, resumeMs)
+        let parts = videoId.split(separator: ":")
+        let parsed = parts.count == 3 ? (Int(parts[1]), Int(parts[2])) : (nil, nil)
+        (self.season, self.episode) = (season ?? parsed.0, episode ?? parsed.1)
+    }
+}
+
+/// Opens a playback view for one version.
+struct PlayRoute: Hashable, Identifiable {
+    let versionsSub: UInt64
+    let key: String
+    let target: PlayTargetInfo
+    /// When the user asked to play, for time to first frame.
+    let tapped: ContinuousClock.Instant
+
+    var id: String { "\(versionsSub):\(key)" }
 }

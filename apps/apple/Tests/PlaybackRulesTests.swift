@@ -404,7 +404,7 @@ private func phase(_ phase: String, _ extra: String = "") throws -> PlaybackSnap
 @MainActor @Test func tryAgainAndSubtitlePicksSendTheirCommands() {
     let choices = PlayChoices()
     var sent: [[String: any Sendable]] = []
-    choices.send = { sent.append($0) }
+    choices.opened(sub: 7) { _, command in sent.append(command) }
     let turkish = sub(1, "tur", "tr", "Turkish", "TurkceAltyazi.org", source: "TurkceAltyazi.org")
     choices.retry()
     choices.chose(turkish)
@@ -464,8 +464,10 @@ private func phase(_ phase: String, _ extra: String = "") throws -> PlaybackSnap
     #expect(PlayerLayout.status(phase: "failed", cannotOpen: false, firstFrameShown: true, waiting: false) == .failed)
     #expect(PlayerLayout.failureNote(tryingAgain: true) == "Trying again")
     #expect(PlayerLayout.failureNote(tryingAgain: false) == nil)
-    #expect(PlayerLayout.failureFocus([.offer, .retry, .choose, .back], retried: true) == .retry)
-    #expect(PlayerLayout.failureFocus([.offer, .retry, .choose, .back], retried: false) == .offer)
+    #expect(PlayerLayout.failureFocus([.offer, .retry, .choose, .back], retries: 1) == .retry)
+    // A new playback view (episode, version, reopen) counts from none: the way on again.
+    #expect(PlayerLayout.failureFocus([.offer, .retry, .choose, .back], retries: 0) == .offer)
+    #expect(PlayerLayout.failureFocus([.offer, .retry, .choose, .back], retries: nil) == .offer)
     // While the play resolves again, the spinner says it.
     #expect(PlayerLayout.waitingWords(try phase("resolving"), notice: nil, tryingAgain: true) == "Trying again")
     // At least 1.5 s, unless the play is ready first.
@@ -474,4 +476,68 @@ private func phase(_ phase: String, _ extra: String = "") throws -> PlaybackSnap
     #expect(PlayerLayout.keepsTryingAgain(showing: true, phase: "failed"))
     #expect(try phase("failed", #","retries":2"#).retries == 2)
     #expect(try phase("failed").retries == nil)
+}
+
+private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
+    let target = PlayTargetInfo(kind: "movie", itemId: "tt1727587", videoId: "tt1727587", title: "Sintel", poster: nil, resumeMs: nil)
+    return PlayRoute(versionsSub: sub, key: key, target: target, tapped: .now)
+}
+
+@MainActor @Test func commandsGoToThePlaybackViewOpenedLast() {
+    let choices = PlayChoices()
+    var sent: [(UInt64, String)] = []
+    let deliver: (UInt64, [String: any Sendable]) -> Void = { sub, command in sent.append((sub, command["type"] as? String ?? "")) }
+    choices.opened(sub: 1, deliver: deliver)
+    choices.retry()
+    // Play {offer} or the next episode opens another view: its commands never reach the old one.
+    choices.opened(sub: 2, deliver: deliver)
+    choices.retry()
+    choices.chose(nil)
+    #expect(sent.map(\.0) == [1, 2, 2])
+    #expect(sent.map(\.1) == ["retry", "retry", "subtitleChosen"])
+}
+
+@MainActor @Test func switchingVersionOrEpisodeStartsThePlayOver() {
+    let choices = PlayChoices()
+    let turkish = sub(1, "tur", "tr", "Turkish", "TurkceAltyazi.org", source: "TurkceAltyazi.org")
+    #expect(choices.startSubtitle(turkish.url, tracks: [turkish]) == turkish)
+    // Play {offer}: a new route on the same Versions view, and the start subtitle applies again.
+    let next = choices.switchVersion(from: route("k1"), to: "k2")
+    #expect(next?.key == "k2" && next?.versionsSub == 3)
+    #expect(choices.startSubtitle(turkish.url, tracks: [turkish]) == turkish)
+    // The version already playing is no switch.
+    #expect(choices.switchVersion(from: route("k2"), to: "k2") == nil)
+    // The next episode: the viewer's Off in the last one does not carry over.
+    choices.chose(nil)
+    #expect(choices.nextEpisode(route("e2")).key == "e2")
+    #expect(choices.startSubtitle(turkish.url, tracks: [turkish]) == turkish)
+}
+
+@MainActor @Test func aMoveOnDropsTheOldStartSubtitleUnlessTheViewerChose() {
+    let choices = PlayChoices()
+    let old = sub(1, "tur", "tr", "Turkish", "TurkceAltyazi.org 4K", source: "TurkceAltyazi.org")
+    let new = sub(2, "tur", "tr", "Turkish", "TurkceAltyazi.org 1080p", source: "TurkceAltyazi.org")
+    #expect(!choices.source(1))
+    #expect(choices.startSubtitle(old.url, tracks: [old]) == old)
+    // The same source: nothing changes.
+    #expect(!choices.source(1))
+    // The core moved on: the old file goes and the new source's start subtitle turns on.
+    #expect(choices.source(2))
+    #expect(choices.startSubtitle(new.url, tracks: [new]) == new)
+    // The viewer's own pick stays across a move on, and no start subtitle replaces it.
+    choices.chose(new)
+    #expect(!choices.source(3))
+    #expect(choices.startSubtitle(old.url, tracks: [old]) == nil)
+}
+
+@Test func torrentDataIsLeftOutOfBackups() throws {
+    let data = FileManager.default.temporaryDirectory.appending(path: "mq-backup-\(UUID().uuidString)", directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: data) }
+    // The core's folder: \`torrents\` in the data directory.
+    let torrents = CoreClient.torrentDirectory(in: data)
+    #expect(torrents.lastPathComponent == "torrents" && torrents.deletingLastPathComponent().standardizedFileURL == data.standardizedFileURL)
+    CoreClient.excludeTorrentsFromBackup(dataDirectory: data)
+    let values = try torrents.resourceValues(forKeys: [.isExcludedFromBackupKey, .isDirectoryKey])
+    #expect(values.isDirectory == true)
+    #expect(values.isExcludedFromBackup == true)
 }

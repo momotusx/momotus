@@ -345,7 +345,6 @@ private struct StatusOverlay: View {
     /// The way on takes focus when the failure shows, so a remote is on it;
     /// after a Try again, Try again keeps it.
     @FocusState private var focus: FailureAction?
-    @State private var retried = false
 
     /// The card's actions, the first the way on with focus. A view that could
     /// not open has no offer, and its Try again opens it again.
@@ -364,10 +363,7 @@ private struct StatusOverlay: View {
         let label = PlayerLayout.failureLabel(action, offer: model.playback?.offer?.label)
         return switch action {
         case .offer: Button(label) { if let key = model.playback?.offer?.key { model.switchVersion(key) } }
-        case .retry: Button(label) {
-            retried = true
-            if cannotOpen { model.reopen() } else { model.retry() }
-        }
+        case .retry: Button(label) { if cannotOpen { model.reopen() } else { model.retry() } }
         case .choose: Button(label) { chooseVersion?() }
         case .back: Button(label, action: back)
         }
@@ -405,7 +401,7 @@ private struct StatusOverlay: View {
         .onAppear {
             let order = PlayerLayout.failureActions(
                 offer: !cannotOpen && model.playback?.offer != nil, canChoose: chooseVersion != nil)
-            focus = PlayerLayout.failureFocus(order, retried: retried)
+            focus = PlayerLayout.failureFocus(order, retries: model.playback?.retries)
         }
     }
 

@@ -1,39 +1,6 @@
 import Foundation
 import Observation
 
-/// What to find versions for: a movie, or one episode of a series.
-struct PlayTargetInfo: Hashable, Sendable {
-    let kind: String
-    /// The movie or series id.
-    let itemId: String
-    let videoId: String
-    /// The movie or series name, never an episode title: ranking uses it to
-    /// hide sources for other titles.
-    let title: String
-    let poster: String?
-    let season: Int?
-    let episode: Int?
-    let resumeMs: Int64?
-    /// What the title page knows, sent so the ranking need not wait for the meta.
-    var runtime: String?
-    var releaseInfo: String?
-    var released: String?
-    var episodesInSeason: Int?
-
-    /// `season` and `episode` when the caller knows them (the core's next
-    /// episode); else read from an id shaped "<series>:<season>:<episode>".
-    init(
-        kind: String, itemId: String, videoId: String, title: String, poster: String?, resumeMs: Int64?,
-        season: Int? = nil, episode: Int? = nil
-    ) {
-        (self.kind, self.itemId, self.videoId, self.title, self.poster, self.resumeMs) =
-            (kind, itemId, videoId, title, poster, resumeMs)
-        let parts = videoId.split(separator: ":")
-        let parsed = parts.count == 3 ? (Int(parts[1]), Int(parts[2])) : (nil, nil)
-        (self.season, self.episode) = (season ?? parsed.0, episode ?? parsed.1)
-    }
-}
-
 /// Live Versions view for one target. Whoever holds the model keeps the view
 /// open: the title page while it is in the stack, and the player while it
 /// plays, since the core copies candidates when playback subscribes.
@@ -95,15 +62,4 @@ final class VersionsModel {
         }
         return play(tapped: tapped)
     }
-}
-
-/// Opens a playback view for one version.
-struct PlayRoute: Hashable, Identifiable {
-    let versionsSub: UInt64
-    let key: String
-    let target: PlayTargetInfo
-    /// When the user asked to play, for time to first frame.
-    let tapped: ContinuousClock.Instant
-
-    var id: String { "\(versionsSub):\(key)" }
 }

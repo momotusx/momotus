@@ -43,6 +43,7 @@ final class CoreClient {
     /// Opens the core in the app's data directory; tests pass a directory of their own.
     init(directory: URL = CoreClient.dataDirectory()) {
         self.directory = directory
+        CoreClient.excludeTorrentsFromBackup(dataDirectory: directory)
         openCore()
     }
 
@@ -257,6 +258,23 @@ final class CoreClient {
         message["id"] = id
         message["op"] = op
         return String(decoding: try JSONSerialization.data(withJSONObject: message), as: UTF8.self)
+    }
+
+    /// Where the core keeps torrent data: `torrents` in its data directory
+    /// (mq-runtime `Core::open`), up to 6 GiB.
+    nonisolated static func torrentDirectory(in dataDirectory: URL) -> URL {
+        dataDirectory.appending(path: "torrents", directoryHint: .isDirectory)
+    }
+
+    /// Torrent data is a cache: made before the core opens and left out of
+    /// iCloud and Time Machine backups (engine review r3 P3-9). tvOS keeps the
+    /// whole data directory under Caches already.
+    nonisolated static func excludeTorrentsFromBackup(dataDirectory: URL) {
+        var folder = torrentDirectory(in: dataDirectory)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? folder.setResourceValues(values)
     }
 
     static func dataDirectory() -> URL {
