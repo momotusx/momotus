@@ -12,7 +12,10 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.media3.common.text.Cue
 import androidx.media3.ui.SubtitleView
+import app.marquee.core.model.Segment
+import app.marquee.core.model.SegmentKind
 import app.marquee.core.model.SubtitleSize
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
@@ -89,12 +92,17 @@ class PhonePlayerLayoutTest {
         compose.waitForIdle()
     }
 
-    /** Two lines of cues as the subtitle view will draw them: its own foot and text size, read from the view. */
+    /**
+     * Two lines of cues as the subtitle view will draw them: its own foot and text size, and the span its first
+     * cue's lines keep to (with the view's own padding beside the text), read from the view.
+     */
     private class Cues(
         val top: Float,
         val foot: Float,
         val text: Float,
         val bottom: Float,
+        val left: Float,
+        val right: Float,
     )
 
     private fun cues(): Cues {
@@ -110,10 +118,27 @@ class PhonePlayerLayoutTest {
                 .apply { isAccessible = true }
                 .getFloat(view)
         val height = view.height.toFloat()
+        val width = view.width.toFloat()
         val bottom = field("bottomPaddingFraction")
         val text = field("defaultTextSize")
         val foot = height * (1 - bottom)
-        return Cues(foot - CUE_LINES * CUE_LINE * text * height, foot, text, bottom)
+
+        @Suppress("UNCHECKED_CAST")
+        val cue =
+            (
+                SubtitleView::class.java
+                    .getDeclaredField("cues")
+                    .apply { isAccessible = true }
+                    .get(view) as List<Cue>
+            ).firstOrNull()
+        val side = text * height * TEXT_PADDING
+        val (left, right) =
+            if (cue == null || cue.size == Cue.DIMEN_UNSET) {
+                0f to width
+            } else {
+                width * (cue.position - cue.size / 2) - side to width * (cue.position + cue.size / 2) + side
+            }
+        return Cues(foot - CUE_LINES * CUE_LINE * text * height, foot, text, bottom, left, right)
     }
 
     /** The cues' size with the controls hidden: the system caption size (1 here) times the profile's. */
@@ -142,10 +167,13 @@ class PhonePlayerLayoutTest {
         val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
         val area = compose.onNodeWithTag(SUBTITLES_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         assertEquals(root, area, "the subtitles keep the whole picture area, so they keep their size")
+        player.say("Who are you, and what are you doing here")
+        compose.waitForIdle()
         val shown = cues()
         val transport = bounds("Back 10 seconds")
         assertTrue(shown.foot <= transport.top, "over the controls: ${shown.foot} against ${transport.top}")
         assertEquals(full(SubtitleSize.Medium), shown.text, "two lines at Medium fit: full size")
+        assertEquals(0f to root.width, shown.left to shown.right, "nothing in the corner: the whole width")
         // The controls hide while it plays: the subtitles go back to the foot, at full size.
         controlsHidden()
         val hidden = cues()
@@ -172,5 +200,34 @@ class PhonePlayerLayoutTest {
         assertEquals(full(SubtitleSize.ExtraLarge) * CUE_SHRINK, shown.text, 1e-6f, "at 85%")
         controlsHidden()
         assertEquals(full(SubtitleSize.ExtraLarge), cues().text, "back to full size once the controls hide")
+    }
+
+    @Test
+    fun `beside Skip the lines keep clear of it, centred, with the controls up or hidden`() {
+        controller.segments = listOf(Segment(SegmentKind.Intro, 0, 120_000, "TheIntroDB"))
+        playing()
+        player.say("Who are you, and what are you doing here")
+        compose.waitForIdle()
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+
+        fun skip() =
+            listOf("Skip intro", "Skip data: TheIntroDB").minOf {
+                compose
+                    .onNodeWithText(it)
+                    .fetchSemanticsNode()
+                    .boundsInRoot.left
+            }
+        val shown = cues()
+        assertTrue(shown.right <= skip(), "clear of Skip: the lines end at ${shown.right}, Skip starts at ${skip()}")
+        assertTrue(abs((shown.left + shown.right) / 2 - root.center.x) < 1f, "centred: ${shown.left} to ${shown.right}")
+        assertEquals(full(SubtitleSize.Medium), shown.text, "at full size")
+        controlsHidden()
+        val hidden = cues()
+        assertTrue(hidden.right <= skip(), "clear of Skip at the foot: ${hidden.right} against ${skip()}")
+    }
+
+    private companion object {
+        /** The subtitle view's room beside a cue's text, of its text size (SubtitlePainter's inner padding). */
+        const val TEXT_PADDING = 0.125f
     }
 }

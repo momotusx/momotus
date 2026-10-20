@@ -12,6 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -21,6 +22,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.Player
+import androidx.media3.common.text.Cue
 import androidx.media3.common.text.CueGroup
 import androidx.media3.ui.SubtitleView
 import androidx.media3.ui.compose.ContentFrame
@@ -47,8 +49,10 @@ fun PlayerVideo(
     subtitleSize: SubtitleSize = SubtitleSize.Medium,
     /** While the controls show: their height, so the subtitles sit just above them, never under or over them. */
     subtitleLift: Dp = 0.dp,
-    /** While the controls show: the foot of the controls at the top (the title bar), which the subtitles keep clear of. */
+    /** While the controls show: the foot of the title bar's controls, which the subtitles keep clear of. */
     subtitleCeiling: Dp = 0.dp,
+    /** A control in the bottom corner (Skip, Up Next), in px: the subtitles' lines keep clear of it. */
+    subtitleCorner: Rect? = null,
 ) {
     BoxWithConstraints(modifier.background(Color.Black)) {
         ContentFrame(
@@ -61,25 +65,26 @@ fun PlayerVideo(
         val text =
             SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * captionScale(LocalContext.current) * subtitleScale(subtitleSize)
         val height = if (constraints.hasBoundedHeight) constraints.maxHeight.toFloat() else 0f
+        val width = if (constraints.hasBoundedWidth) constraints.maxWidth.toFloat() else 0f
         val frame =
             with(LocalDensity.current) {
-                when {
-                    height <= 0f -> {
-                        CueFrame(SubtitleView.DEFAULT_BOTTOM_PADDING_FRACTION, text)
-                    }
-
-                    subtitleLift > 0.dp -> {
-                        cueFrame(
-                            height,
-                            height - (subtitleLift + CUE_GAP).toPx(),
-                            (subtitleCeiling + CUE_CLEARANCE).toPx(),
-                            text,
-                        )
-                    }
-
-                    else -> {
-                        cueFrame(height, height * (1 - SubtitleView.DEFAULT_BOTTOM_PADDING_FRACTION), 0f, text)
-                    }
+                val gap = CUE_GAP.toPx()
+                if (height <= 0f || width <= 0f) {
+                    CueFrame(SubtitleView.DEFAULT_BOTTOM_PADDING_FRACTION, text)
+                } else {
+                    cueFrame(
+                        height = height,
+                        width = width,
+                        foot =
+                            if (subtitleLift > 0.dp) {
+                                height - subtitleLift.toPx() - gap
+                            } else {
+                                height * (1 - SubtitleView.DEFAULT_BOTTOM_PADDING_FRACTION)
+                            },
+                        ceiling = if (subtitleCeiling > 0.dp) (subtitleCeiling + CUE_CLEARANCE).toPx() else 0f,
+                        text = text,
+                        corner = subtitleCorner?.let { Rect(it.left - gap, it.top - gap, it.right, it.bottom) },
+                    )
                 }
             }
         // The view keeps the whole picture area, so the cues keep their size and a picture cue (PGS) its shape.
@@ -87,22 +92,31 @@ fun PlayerVideo(
     }
 }
 
-/** Where cues without a position of their own sit and how big they draw, both as fractions of the picture area's height. */
+/**
+ * Where cues without a line of their own sit and how big they draw, as fractions of the picture area's height; and
+ * the width their lines keep to with its centre, as fractions of its width (1 and the middle: the whole width).
+ */
 data class CueFrame(
     val bottom: Float,
     val text: Float,
+    val width: Float = 1f,
+    val center: Float = 0.5f,
 )
 
 /**
- * Cues without a position of their own (most subtitles) with their foot at [foot] (px from the top) and their size
+ * Cues without a line of their own (most subtitles) with their foot at [foot] (px from the top) and their size
  * [text] (a fraction of [height]). While two lines there would reach above [ceiling], they draw at 85%, or smaller
  * still when 85% does not clear it, so a subtitle and a control never overlap; the iPhone keeps the same rule.
+ * Beside a control in the bottom corner ([corner], px), the lines keep left of it: centred on the screen while that
+ * leaves them half its width, else centred in the room left of it.
  */
 fun cueFrame(
     height: Float,
+    width: Float,
     foot: Float,
     ceiling: Float,
     text: Float,
+    corner: Rect? = null,
 ): CueFrame {
     val box = CUE_LINES * CUE_LINE * text * height
     val room = foot - ceiling
@@ -112,7 +126,14 @@ fun cueFrame(
             box * CUE_SHRINK <= room -> CUE_SHRINK
             else -> max(room, 0f) / box
         }
-    return CueFrame(bottom = 1f - foot / height, text = text * scale)
+    val bottom = 1f - foot / height
+    val drawn = text * scale
+    // No corner control, or one wholly under or over the two lines: the whole width.
+    if (corner == null || corner.top >= foot || corner.bottom <= foot - box * scale) return CueFrame(bottom, drawn)
+    val centred = 2 * corner.left / width - 1
+    if (centred >= CUE_MIN_WIDTH) return CueFrame(bottom, drawn, centred)
+    val left = max(corner.left, 0f) / width
+    return CueFrame(bottom, drawn, left, left / 2)
 }
 
 /** The lines the rule makes room for: two, the most a subtitle usually has. */
@@ -127,6 +148,9 @@ const val CUE_LINE = 1.25f
 
 /** The size cues draw at while they would meet a control. */
 const val CUE_SHRINK = 0.85f
+
+/** The least width, of the screen's, cues keep centred on it beside a corner control. */
+const val CUE_MIN_WIDTH = 0.5f
 
 /** Between the cues' foot and the controls under them. */
 private val CUE_GAP = 8.dp
@@ -149,33 +173,43 @@ private fun Subtitles(
     frame: CueFrame,
     modifier: Modifier,
 ) {
-    var view by remember { mutableStateOf<SubtitleView?>(null) }
+    var cues by remember(player) { mutableStateOf(player.currentCues.cues) }
     AndroidView(
-        factory = { context ->
-            SubtitleView(context).also {
-                it.setUserDefaultStyle()
-                view = it
-            }
-        },
+        factory = { context -> SubtitleView(context).also { it.setUserDefaultStyle() } },
         update = {
             it.setFractionalTextSize(frame.text)
             it.setBottomPaddingFraction(frame.bottom)
+            it.setCues(cues.map(frame::fit))
         },
         modifier = modifier,
     )
-    DisposableEffect(player, view) {
-        val target = view
+    DisposableEffect(player) {
         val listener =
             object : Player.Listener {
                 override fun onCues(cueGroup: CueGroup) {
-                    target?.setCues(cueGroup.cues)
+                    cues = cueGroup.cues
                 }
             }
-        target?.setCues(player.currentCues.cues)
         player.addListener(listener)
         onDispose { player.removeListener(listener) }
     }
 }
+
+/**
+ * A cue the frame lifts (text with no line of its own) kept to the frame's width; a picture cue (PGS) or a cue
+ * its file put on a line of its own stays as it is.
+ */
+private fun CueFrame.fit(cue: Cue): Cue =
+    if (width >= 1f || cue.bitmap != null || cue.line != Cue.DIMEN_UNSET) {
+        cue
+    } else {
+        cue
+            .buildUpon()
+            .setSize(if (cue.size == Cue.DIMEN_UNSET) width else minOf(cue.size, width))
+            .setPosition(center)
+            .setPositionAnchor(Cue.ANCHOR_TYPE_MIDDLE)
+            .build()
+    }
 
 /** The system caption text size, 1 when captions are off in the system settings (as SubtitleView reads it). */
 private fun captionScale(context: Context): Float {

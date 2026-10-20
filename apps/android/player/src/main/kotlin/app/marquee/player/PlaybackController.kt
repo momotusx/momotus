@@ -1,6 +1,7 @@
 package app.marquee.player
 
 import android.os.SystemClock
+import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -148,8 +149,8 @@ class PlaybackController(
         private set
 
     /** Skip segments the core found for the playing version (intro, recap, credits, preview); empty while unknown. */
+    @set:VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     var segments: List<Segment> by mutableStateOf(emptyList())
-        private set
 
     /** The position the core says the Up Next card is due (the credits start); null means the last seconds. */
     var nextAtMs: Long? by mutableStateOf(null)

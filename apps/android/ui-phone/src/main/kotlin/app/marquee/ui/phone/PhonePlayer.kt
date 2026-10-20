@@ -37,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
@@ -130,6 +131,8 @@ fun PhonePlayer(
     var controlsHeight by remember { mutableStateOf(200.dp) }
     // The foot of the title bar's controls (Back, the title, Picture in picture): the subtitles keep under it.
     var titleFoot by remember { mutableStateOf(0.dp) }
+    // Skip or Up Next in the bottom corner, as last laid out: the subtitles' lines keep clear of it.
+    var corner by remember { mutableStateOf<Rect?>(null) }
     val live = stage == Stage.Playing || stage == Stage.Paused || stage == Stage.Buffering || stage == Stage.Ended
     var osd by remember { mutableStateOf(true) }
     var wake by remember { mutableIntStateOf(0) }
@@ -158,6 +161,9 @@ fun PhonePlayer(
     }
     val showSkip =
         segment != null && !showNext && panel == null && !ended && !inPip && live && controller.status == null
+    // A short window has no room for the card above the controls (and a track panel needs the
+    // space): it waits until they hide, as they do on their timer while the episode plays.
+    val showNextCard = showNext && !ended && next != null && panel == null && (!showControls || !shortWindow)
 
     // Seconds to the end, once a second (the card's countdown), without recomposing on every tick.
     val secondsLeft by remember(controller) {
@@ -228,6 +234,7 @@ fun PhonePlayer(
             controller.subtitleSize,
             subtitleLift = if (showControls) controlsHeight else 0.dp,
             subtitleCeiling = if (showControls) titleFoot else 0.dp,
+            subtitleCorner = corner.takeIf { showSkip || showNextCard },
         )
 
         // Scrims: edge to edge, 120 dp at the top (60% black) and 200 dp at the foot (72%).
@@ -391,14 +398,12 @@ fun PhonePlayer(
                             Modifier
                                 .align(Alignment.BottomEnd)
                                 .windowInsetsPadding(WindowInsets.displayCutout)
-                                .padding(end = 16.dp, bottom = if (showControls) controlsHeight + 8.dp else 24.dp),
+                                .padding(end = 16.dp, bottom = if (showControls) controlsHeight + 8.dp else 24.dp)
+                                .onGloballyPositioned { corner = it.boundsInRoot() },
                     )
                 }
             }
-            // A short window has no room for the card above the controls (and a track panel needs the
-            // space): it waits until they hide, as they do on their timer while the episode plays.
-            val roomForNext = !showControls || !shortWindow
-            if (showNext && !ended && next != null && panel == null && roomForNext) {
+            if (showNextCard && next != null) {
                 UpNextCard(
                     next = next,
                     countdown = secondsLeft.takeIf { autoplayNext },
@@ -407,7 +412,8 @@ fun PhonePlayer(
                         Modifier
                             .align(Alignment.BottomEnd)
                             .windowInsetsPadding(WindowInsets.displayCutout)
-                            .padding(end = 16.dp, bottom = if (showControls) controlsHeight + 8.dp else 24.dp),
+                            .padding(end = 16.dp, bottom = if (showControls) controlsHeight + 8.dp else 24.dp)
+                            .onGloballyPositioned { corner = it.boundsInRoot() },
                 )
             }
             if (showEnd) {
