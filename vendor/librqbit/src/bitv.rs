@@ -1,10 +1,7 @@
 use std::{
     ops::Range,
-    path::PathBuf,
-    sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
-    },
+    path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use anyhow::Context;
@@ -30,25 +27,67 @@ struct DiskFlushRequest {
     snapshot: BitBox<u8, Msb0>,
 }
 
-/// Marquee fork (engine review r4, P1-1): data syncs made before a bitfield
-/// write, for tests.
-pub static DATA_SYNCS: AtomicU64 = AtomicU64::new(0);
+/// Marquee fork (engine review r5, P3-3): what happened to which file, in
+/// order, for tests: a data file synced, or a bitfield written with how
+/// many pieces it claims. Each test reads its own folder's events.
+#[cfg(feature = "sync-log")]
+pub mod sync_log {
+    use std::path::{Path, PathBuf};
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub enum Event {
+        DataSynced(PathBuf),
+        HaveWritten { path: PathBuf, claimed: usize },
+    }
+
+    static LOG: std::sync::Mutex<Vec<Event>> = std::sync::Mutex::new(Vec::new());
+
+    pub(crate) fn push(e: Event) {
+        LOG.lock().unwrap_or_else(|e| e.into_inner()).push(e);
+    }
+
+    /// Every event about a file under `dir`, in order.
+    pub fn under(dir: &Path) -> Vec<Event> {
+        LOG.lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .filter(|e| match e {
+                Event::DataSynced(p) | Event::HaveWritten { path: p, .. } => p.starts_with(dir),
+            })
+            .cloned()
+            .collect()
+    }
+}
+
+/// A bitfield claiming `claimed` pieces was written to `path`.
+pub(crate) fn log_written(_path: &Path, _claimed: usize) {
+    #[cfg(feature = "sync-log")]
+    sync_log::push(sync_log::Event::HaveWritten {
+        path: _path.to_owned(),
+        claimed: _claimed,
+    });
+}
 
 /// Marquee fork (engine review r4, P1-1): what a bitfield write makes
 /// durable first. Every piece in a snapshot was written before the
 /// snapshot was taken, so with its files synced first the bitfield never
 /// claims a piece the disk lost (a power cut after a flush).
 #[derive(Default)]
-struct Written {
+pub(crate) struct Written {
     files: Vec<(PathBuf, Range<usize>)>,
     /// The last state whose data was synced.
     last: Option<BitBox<u8, Msb0>>,
 }
 
 impl Written {
+    /// Nothing synced yet for `files`.
+    pub(crate) fn new(files: Vec<(PathBuf, Range<usize>)>) -> Self {
+        Self { files, last: None }
+    }
+
     /// Syncs every file with a piece `next` claims that the last state did
     /// not. Blocking.
-    fn sync_data(&mut self, next: &BitSlice<u8, Msb0>) -> std::io::Result<()> {
+    pub(crate) fn sync_data(&mut self, next: &BitSlice<u8, Msb0>) -> std::io::Result<()> {
         let last = self.last.as_deref();
         let new = |i: usize| {
             next.get(i).is_some_and(|b| *b) && !last.and_then(|l| l.get(i)).is_some_and(|b| *b)
@@ -57,12 +96,15 @@ impl Written {
             if !pieces.clone().any(&new) {
                 continue;
             }
-            match std::fs::File::open(path) {
+            // Write access: Windows flushes only a writable handle
+            // (engine review r5, P3-4). No create, no truncate.
+            match std::fs::OpenOptions::new().write(true).open(path) {
                 Ok(f) => f.sync_data()?,
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
                 Err(e) => return Err(e),
             }
-            DATA_SYNCS.fetch_add(1, Ordering::Relaxed);
+            #[cfg(feature = "sync-log")]
+            sync_log::push(sync_log::Event::DataSynced(path.clone()));
         }
         self.last = Some(next.to_bitvec().into_boxed_bitslice());
         Ok(())
@@ -78,6 +120,7 @@ pub struct DiskBackedBitV {
     /// Marquee fork (engine review r4, P1-1).
     written: Arc<parking_lot::Mutex<Written>>,
     spawner: BlockingSpawner,
+    filename: PathBuf,
 }
 
 impl Drop for DiskBackedBitV {
@@ -91,11 +134,10 @@ impl Drop for DiskBackedBitV {
             .spawner
             .block_in_place(|| self.written.lock().sync_data(&self.bv));
         match synced {
-            Ok(()) => {
-                if let Err(e) = self.file.pwrite_all(0, self.bv.as_raw_slice()) {
-                    tracing::warn!("error writing bitv on drop: {e:#}");
-                }
-            }
+            Ok(()) => match self.file.pwrite_all(0, self.bv.as_raw_slice()) {
+                Ok(()) => log_written(&self.filename, self.bv.count_ones()),
+                Err(e) => tracing::warn!("error writing bitv on drop: {e:#}"),
+            },
             Err(e) => tracing::warn!("bitv not written on drop, its data did not sync: {e:#}"),
         }
         if self
@@ -137,7 +179,8 @@ impl DiskBackedBitV {
             files: Vec::new(),
             last: Some(bv.clone()),
         }));
-        let (to_sync, own_spawner) = (written.clone(), spawner.clone());
+        let (to_sync, own_spawner, own_filename) =
+            (written.clone(), spawner.clone(), filename.clone());
 
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<DiskFlushRequest>();
         librqbit_core::spawn_utils::spawn(
@@ -176,6 +219,7 @@ impl DiskBackedBitV {
                         }
                         break;
                     }
+                    log_written(&filename, req.snapshot.count_ones());
 
                     if let Err(e) = spawner
                         .block_in_place_with_semaphore(|| flushed.sync_all())
@@ -194,6 +238,7 @@ impl DiskBackedBitV {
             file,
             written,
             spawner: own_spawner,
+            filename: own_filename,
         })
     }
 }

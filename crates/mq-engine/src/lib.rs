@@ -967,15 +967,28 @@ impl Engine {
     }
 
     async fn drop_torrent(&self, t: &Torrent, keep_data: bool) -> Result<()> {
+        // Data that goes is set aside first: the bitfield the session drops
+        // then finds no file to sync, so a removal or an eviction makes the
+        // disk write nothing it deletes a moment later (engine review r5,
+        // P3-1). A crash in between leaves a folder the next round deletes.
+        let gone = if keep_data {
+            None
+        } else {
+            let _ = tokio::fs::remove_file(t.dir.with_extension(HAVE)).await;
+            let trash = t.dir.with_extension(SET_ASIDE);
+            // One an interrupted round left (only ever ours).
+            let _ = tokio::fs::remove_dir_all(&trash).await;
+            let aside = tokio::fs::rename(&t.dir, &trash).await.is_ok();
+            Some(if aside { trash } else { t.dir.clone() })
+        };
         if let Some(l) = t.live.lock().await.take() {
             self.inner
                 .session
                 .delete(l.managed.id().into(), false)
                 .await?;
         }
-        if !keep_data {
-            let _ = tokio::fs::remove_file(t.dir.with_extension(HAVE)).await;
-            match tokio::fs::remove_dir_all(&t.dir).await {
+        if let Some(dir) = gone {
+            match tokio::fs::remove_dir_all(&dir).await {
                 Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e.into()),
                 _ => {}
             }

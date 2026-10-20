@@ -96,7 +96,10 @@ impl BitVFactory for FolderBitVFactory {
             DiskBackedBitV::new(filename.clone(), self.spawner.clone()).await
         };
         match stored.await {
-            Ok(bitv) => Ok(bitv.into_dyn()),
+            Ok(bitv) => {
+                crate::bitv::log_written(&filename, b.count_ones());
+                Ok(bitv.into_dyn())
+            }
             // A full disk costs the next launch a full check, not this play.
             Err(e) => {
                 tracing::warn!(?filename, "no fast resume for this torrent: {e:#}");

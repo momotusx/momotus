@@ -5,7 +5,6 @@ mod support;
 
 use std::net::Ipv4Addr;
 use std::path::Path;
-use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use mq_engine::{Engine, FileHint, TorrentHandle};
@@ -459,18 +458,16 @@ async fn a_removed_torrent_leaves_its_pieces_on_disk() {
         stats.pieces_have < stats.pieces_total && stats.downloaded_bytes < 16 << 20,
         "the file finished or 16 MiB came, which flushes on its own: {stats:?}"
     );
-    let synced = mq_engine::librqbit::DATA_SYNCS.load(Ordering::Relaxed);
+    let from = log_len(dir.path());
     engine.remove(t, true).await.unwrap();
     let have = std::fs::read(dir.path().join(format!("{}.have", s.info_hash))).unwrap();
     assert!(
         have.iter().any(|b| *b != 0),
         "no piece on disk after the removal: {have:?}"
     );
-    // Its data first (engine review r4, P1-1).
-    assert!(
-        mq_engine::librqbit::DATA_SYNCS.load(Ordering::Relaxed) > synced,
-        "the bitfield was written before its data synced"
-    );
+    // Its data first (engine review r4, P1-1), in this folder's own log
+    // (r5, P3-3).
+    assert_synced_before_claimed(dir.path(), from);
 }
 
 /// A magnet whose peers all failed says why the last one did (the fork
@@ -506,9 +503,9 @@ async fn a_magnet_whose_peers_all_failed_says_why() {
     );
 }
 
-/// The flusher syncs a finished file's data before its bitfield claims it:
-/// when the `.have` on disk says the file is whole, its data was synced
-/// (engine review r4, P1-1: the bitfield was fsynced, the data never).
+/// The flusher syncs a finished file's data before its bitfield claims it
+/// (engine review r4, P1-1: the bitfield was fsynced, the data never),
+/// read in this folder's own log (r5, P3-3).
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_finished_file_is_claimed_after_its_data_synced() {
     let s = support::swarm(true).await;
@@ -522,7 +519,7 @@ async fn a_finished_file_is_claimed_after_its_data_synced() {
         .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
         .await
         .unwrap();
-    let synced = mq_engine::librqbit::DATA_SYNCS.load(Ordering::Relaxed);
+    let from = log_len(dir.path());
     let whole = read_range(&engine, t, movie, 0, s.movie.len() as u64).await;
     assert_eq!(whole, s.movie);
     let path = dir.path().join(format!("{}.have", s.info_hash));
@@ -535,10 +532,7 @@ async fn a_finished_file_is_claimed_after_its_data_synced() {
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     assert!(claimed, "the finished file was never claimed on disk");
-    assert!(
-        mq_engine::librqbit::DATA_SYNCS.load(Ordering::Relaxed) > synced,
-        "the bitfield claimed the file before its data synced"
-    );
+    assert_synced_before_claimed(dir.path(), from);
 }
 
 /// A have-bitfield the data contradicts is cleared, by info hash, before
@@ -589,4 +583,185 @@ async fn a_contradicted_have_bitfield_is_cleared_at_once() {
         cleared,
         "the contradicted bitfield stayed through the check"
     );
+}
+
+/// Events in the fork's sync log for files under `dir` so far (none
+/// without the `test-hooks` feature, which turns the log on).
+fn log_len(dir: &Path) -> usize {
+    #[cfg(feature = "test-hooks")]
+    return mq_engine::librqbit::sync_log::under(dir).len();
+    #[cfg(not(feature = "test-hooks"))]
+    {
+        let _ = dir;
+        0
+    }
+}
+
+/// In the log for `dir` after its first `from` events, the movie's data
+/// synced before the first bitfield write that claims a piece. Checked only
+/// with the `test-hooks` feature.
+fn assert_synced_before_claimed(dir: &Path, from: usize) {
+    #[cfg(feature = "test-hooks")]
+    {
+        use mq_engine::librqbit::sync_log::Event;
+        let events = mq_engine::librqbit::sync_log::under(dir);
+        let events = &events[from.min(events.len())..];
+        let synced = events
+            .iter()
+            .position(|e| matches!(e, Event::DataSynced(p) if p.ends_with("movie.mkv")));
+        let claimed = events
+            .iter()
+            .position(|e| matches!(e, Event::HaveWritten { claimed, .. } if *claimed > 0));
+        assert!(
+            matches!((synced, claimed), (Some(s), Some(c)) if s < c),
+            "no data sync before the first claim: {events:?}"
+        );
+    }
+    #[cfg(not(feature = "test-hooks"))]
+    let _ = (dir, from);
+}
+
+/// An engine on `dir` with a 2 MiB readahead (an 8 MiB budget), the 24 MiB
+/// movie of `s` selected and its first MiB read: under 16 MiB arrives and
+/// the file does not finish, so nothing flushes on its own.
+async fn head_read(s: &support::Swarm, dir: &Path) -> (Engine, mq_engine::TorrentHandle) {
+    let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+    let engine = Engine::start(mq_engine::EngineConfig {
+        discovery: false,
+        cache_budget_bytes: 8 << 20,
+        ..mq_engine::EngineConfig::new(dir, http.torrent_scope(&[Ipv4Addr::LOCALHOST.into()]))
+    })
+    .await
+    .unwrap();
+    let t = engine
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let movie = engine
+        .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
+        .await
+        .unwrap();
+    read_range(&engine, t, movie, 0, 1 << 20).await;
+    let stats = engine.stats(t).await.unwrap();
+    assert!(
+        stats.pieces_have < stats.pieces_total && stats.downloaded_bytes < 16 << 20,
+        "the file finished or 16 MiB came, which flushes on its own: {stats:?}"
+    );
+    (engine, t)
+}
+
+/// A 24 MiB movie swarm.
+async fn big_swarm() -> support::Swarm {
+    let movie: Vec<u8> = (0..24u32 << 20)
+        .map(|i| (i.wrapping_mul(2_654_435_761) >> 13) as u8)
+        .collect();
+    support::swarm_movie("movie.mkv", movie).await
+}
+
+/// A removal sets the data aside before the session drops the torrent, so
+/// the bitfield finds no file to sync: the caller never waits for the disk
+/// to write what it deletes a moment later (engine review r5, P3-1).
+#[cfg(feature = "test-hooks")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_removal_syncs_no_data() {
+    use mq_engine::librqbit::sync_log::{Event, under};
+    let s = big_swarm().await;
+    let dir = tempfile::tempdir().unwrap();
+    let (engine, t) = head_read(&s, dir.path()).await;
+    let from = log_len(dir.path());
+    engine.remove(t, false).await.unwrap();
+    // The pause's flush runs on the flusher: give it time.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let synced: Vec<Event> = under(dir.path())[from..]
+        .iter()
+        .filter(|e| matches!(e, Event::DataSynced(_)))
+        .cloned()
+        .collect();
+    assert!(
+        synced.is_empty(),
+        "a removal synced data it deletes: {synced:?}"
+    );
+    assert!(!dir.path().join(&s.info_hash).exists(), "the data stayed");
+}
+
+/// A full check's result is stored only after the data it claims is synced
+/// (engine review r5, P3-2): here a relaunch with no bitfield checks the
+/// head the first run fetched.
+#[cfg(feature = "test-hooks")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_full_check_syncs_what_it_claims_before_storing_it() {
+    let s = support::swarm(true).await;
+    let dir = tempfile::tempdir().unwrap();
+    let first = engine_on(dir.path()).await;
+    let t = first
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let movie = first
+        .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
+        .await
+        .unwrap();
+    read_range(&first, t, movie, 0, 64 << 10).await;
+    first.remove(t, true).await.unwrap();
+    drop(first);
+    // The first engine's flusher writes its last state meanwhile.
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    std::fs::remove_file(dir.path().join(format!("{}.have", s.info_hash))).unwrap();
+    let from = log_len(dir.path());
+    let again = engine_on(dir.path()).await;
+    let t = again
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let movie = again
+        .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
+        .await
+        .unwrap();
+    // The range waits for the check.
+    let reader = again.open_reader(t, "default", movie).await.unwrap();
+    reader.range(0, Some(1)).await.unwrap();
+    assert_synced_before_claimed(dir.path(), from);
+}
+
+/// The data sync opens each file with write access: Windows flushes only a
+/// writable handle, so a read-only one failed every sync and no bitfield
+/// was written there (engine review r5, P3-4). A file this process may
+/// write but not read stands in for it on Unix.
+#[cfg(feature = "test-hooks")]
+#[tokio::test(flavor = "current_thread")]
+async fn a_data_sync_opens_the_file_for_writing() {
+    use std::os::unix::fs::PermissionsExt;
+    let s = big_swarm().await;
+    let dir = tempfile::tempdir().unwrap();
+    let (engine, t) = head_read(&s, dir.path()).await;
+    let file = find(&dir.path().join(&s.info_hash), "movie.mkv").expect("the movie file");
+    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o200)).unwrap();
+    let from = log_len(dir.path());
+    engine.remove(t, true).await.unwrap();
+    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600)).unwrap();
+    assert_synced_before_claimed(dir.path(), from);
+}
+
+/// A pause flushes the bitfield: the apps are killed, never closed, after
+/// their idle torrents pause, so claims waiting for the next 16 MiB were
+/// lost (engine review r5, P3-5). A hold pauses the torrent and the
+/// `.have` claims the head while the engine lives.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_paused_torrent_flushes_its_bitfield() {
+    let s = big_swarm().await;
+    let dir = tempfile::tempdir().unwrap();
+    let (engine, t) = head_read(&s, dir.path()).await;
+    let path = dir.path().join(format!("{}.have", s.info_hash));
+    let claims = || std::fs::read(&path).is_ok_and(|have| have.iter().any(|b| *b != 0));
+    assert!(!claims(), "claimed before the pause");
+    assert!(engine.pause_now(t, "kid", 1).await.unwrap());
+    let mut claimed = false;
+    for _ in 0..30 {
+        claimed = claims();
+        if claimed {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert!(claimed, "the pause left the claims in memory");
 }

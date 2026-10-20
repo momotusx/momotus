@@ -47,6 +47,9 @@ default-tls = [
     "librqbit-core/sha1-crypto-hash",
 ]
 disable-upload = []
+# Marquee fork (engine review r5, P3-3): the ordered log of data syncs and
+# bitfield writes, for tests.
+sync-log = []
 http-api = [
     "axum",
     "tower-http",

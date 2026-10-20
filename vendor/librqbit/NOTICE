@@ -65,3 +65,10 @@ Marquee changes (each changed spot carries a "Marquee fork" comment):
 - src/bitv.rs: a disk-backed bitfield syncs the data files of the pieces it
   newly claims before each write (the flusher's and the one on drop), so it
   never claims a piece the disk lost.
+- src/bitv.rs, src/bitv_factory.rs, src/lib.rs, Cargo.toml: the data sync
+  opens the file with write access (Windows flushes only such a handle);
+  with the `sync-log` feature, data syncs and bitfield writes are logged in
+  order for tests.
+- src/torrent_state/initializing.rs: a full check's result is stored only
+  after the data it claims is synced.
+- src/torrent_state/live/mod.rs: a pause flushes the bitfield.

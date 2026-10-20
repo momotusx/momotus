@@ -8,8 +8,9 @@ publish.workspace = true
 rust-version.workspace = true
 
 [features]
-# A barrier inside range setup, for tests of callers that cancel it.
-test-hooks = []
+# A barrier inside range setup, for tests of callers that cancel it; the
+# fork's ordered log of data syncs and bitfield writes.
+test-hooks = ["librqbit/sync-log"]
 
 [dependencies]
 librqbit = { path = "../../vendor/librqbit", default-features = false, features = ["rust-tls", "disable-upload"] }

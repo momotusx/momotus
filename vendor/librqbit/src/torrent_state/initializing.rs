@@ -214,6 +214,24 @@ impl TorrentStateInitializing {
 
         let have_pieces = self.validate_fastresume(&*bitv_factory, have_pieces).await;
 
+        // Marquee fork (engine review r4, P1-1): the data files, each with
+        // its pieces, which a bitfield syncs before it claims a new piece.
+        let files: Vec<(std::path::PathBuf, std::ops::Range<usize>)> = self
+            .metadata
+            .file_infos
+            .iter()
+            .filter(|fi| !fi.attrs.padding)
+            .map(|fi| {
+                (
+                    self.shared
+                        .options
+                        .output_folder
+                        .join(&fi.relative_filename),
+                    fi.piece_range_usize(),
+                )
+            })
+            .collect();
+
         let have_pieces = match have_pieces {
             Some(h) => h,
             None => {
@@ -226,10 +244,27 @@ impl TorrentStateInitializing {
                             .initial_check(&self.checked_bytes, &self.pause_requested)
                     })
                     .await?;
-                bitv_factory
-                    .store_initial_check(id, have_pieces)
-                    .await
-                    .context("error storing initial check bitfield")?
+                // Marquee fork (engine review r5, P3-2): the data the check
+                // found is synced before the bitfield that claims it is
+                // stored; the flusher counts that state as synced. Not
+                // stored when the sync fails: the next launch checks again.
+                let synced = self
+                    .shared
+                    .spawner
+                    .block_in_place_with_semaphore(|| {
+                        crate::bitv::Written::new(files.clone()).sync_data(&have_pieces)
+                    })
+                    .await;
+                match synced {
+                    Ok(()) => bitv_factory
+                        .store_initial_check(id, have_pieces)
+                        .await
+                        .context("error storing initial check bitfield")?,
+                    Err(e) => {
+                        warn!("data did not sync, the check is not stored: {e:#}");
+                        Box::new(have_pieces) as Box<dyn BitV>
+                    }
+                }
             }
         };
 
@@ -247,22 +282,7 @@ impl TorrentStateInitializing {
         // Marquee fork (engine review r4, P1-1): the bitfield syncs these
         // files before it claims a new piece in them.
         let mut have_pieces = have_pieces;
-        have_pieces.sync_data_of(
-            self.metadata
-                .file_infos
-                .iter()
-                .filter(|fi| !fi.attrs.padding)
-                .map(|fi| {
-                    (
-                        self.shared
-                            .options
-                            .output_folder
-                            .join(&fi.relative_filename),
-                        fi.piece_range_usize(),
-                    )
-                })
-                .collect(),
-        );
+        have_pieces.sync_data_of(files);
 
         let chunk_tracker = ChunkTracker::new(
             have_pieces.into_dyn(),

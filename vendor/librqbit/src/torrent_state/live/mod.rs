@@ -770,6 +770,10 @@ impl TorrentStateLive {
         self.cancellation_token.cancel();
 
         let mut g = self.lock_write("pause");
+        // Marquee fork (engine review r5, P3-5): the claims since the last
+        // flush, before the chunk tracker goes with the paused state: an
+        // app is killed, never closed, after its idle torrents pause.
+        g.try_flush_bitv(&self.shared, true);
 
         // It should be impossible to make a fatal error after pausing.
         g.fatal_errors_tx.take();
