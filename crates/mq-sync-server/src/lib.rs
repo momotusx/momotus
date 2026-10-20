@@ -1302,7 +1302,11 @@ struct Refused(StatusCode, String);
 
 impl Refused {
     fn into_response(self) -> Response {
-        error(self.0, &self.1)
+        match self.0 {
+            // Not 409, which a device reads as "the head moved" and retries.
+            StatusCode::UNPROCESSABLE_ENTITY => identity::coded(self.0, "kitTaken", &self.1),
+            status => error(status, &self.1),
+        }
     }
 }
 
@@ -1347,6 +1351,23 @@ fn append_entries(
             Ok(_) => return refuse(StatusCode::BAD_REQUEST, "entry for another account"),
             Err(e) => return refuse(StatusCode::BAD_REQUEST, &e.to_string()),
         };
+        // A kit's lookup is one account's: a passkey's lookup another
+        // account holds would answer redeems for that one.
+        if let Kind::AddKit(kit) = &body.kind {
+            let holder: Option<String> = tx
+                .query_row(
+                    "SELECT account FROM recovery WHERE lookup_hash = ?1",
+                    params![kit.lookup_hash.0.to_vec()],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            if holder.is_some_and(|h| h != hex::encode(account.0)) {
+                return refuse(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "this kit's lookup belongs to another account",
+                );
+            }
+        }
         if roster.head().is_some_and(|(seq, _)| body.seq <= seq) {
             let held: Option<Vec<u8>> = tx
                 .query_row(
@@ -2374,7 +2395,13 @@ async fn redeem_kit(
     if limited(&state, client(&state, peer, &headers), REDEEM_KIT) {
         return error(StatusCode::TOO_MANY_REQUESTS, "too many recovery attempts");
     }
-    let not_found = || error(StatusCode::NOT_FOUND, "no recovery data for that kit");
+    let not_found = || {
+        identity::coded(
+            StatusCode::NOT_FOUND,
+            "kitUnknown",
+            "no recovery data for that kit",
+        )
+    };
     let (Some(hash), Some(auth)) = (lookup_hash(&redeem.lookup), hex::decode(&redeem.auth).ok())
     else {
         return not_found();

@@ -212,6 +212,7 @@ impl Device {
             "Phone",
             Some(&taken.ticket),
             move_link,
+            Some("phone"),
         )
         .await?;
         Ok(Self {
@@ -682,9 +683,17 @@ async fn a_create_retried_after_a_lost_answer_signs_for_its_token() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let lossy = format!("http://{}", listener.local_addr().unwrap());
     tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
-    let record = create_account_with(&http(), &lossy, None, "Phone", Some(&taken.ticket), false)
-        .await
-        .unwrap();
+    let record = create_account_with(
+        &http(),
+        &lossy,
+        None,
+        "Phone",
+        Some(&taken.ticket),
+        false,
+        None,
+    )
+    .await
+    .unwrap();
     assert_eq!(
         (
             relay.count("account"),
