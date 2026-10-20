@@ -9,6 +9,12 @@ publish.workspace = true
 name = "mq-bridge"
 path = "src/main.rs"
 
+[features]
+# The built-in torrent engine. The dev bridge (apps/web/scripts/bridge.sh)
+# builds it in; the web e2e builds without it, so a run never touches
+# BitTorrent.
+torrent = ["mq-runtime/torrent"]
+
 [dependencies]
 mq-library = { path = "../mq-library" }
 mq-runtime = { path = "../mq-runtime" }

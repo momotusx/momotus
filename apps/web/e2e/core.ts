@@ -38,7 +38,8 @@ const targetDir = process.env.CARGO_TARGET_DIR ?? join(homedir(), ".cargo-target
 /** A binary to test. MQ_BRIDGE_BIN (or MQ_SYNC_SERVER_BIN) names one
  * explicitly; otherwise this checkout's sources are always built first (a
  * no-op build takes about a second), so a stale binary is never what the
- * tests run against. */
+ * tests run against. The bridge is built without its `torrent` feature (the
+ * dev bridge has it): a run never touches BitTorrent. */
 function binary(pkg: "mq-bridge" | "mq-sync-server", env: string): string {
   const explicit = process.env[env];
   if (explicit) {
