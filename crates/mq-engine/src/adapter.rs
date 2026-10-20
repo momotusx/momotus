@@ -150,6 +150,9 @@ pub(crate) struct Translator {
 /// box before `moov` or `mdat` sits here.
 const INDEX_HEAD: u64 = 4096;
 
+/// The largest `moov` taken after `mdat`: tens of MiB for a long 4K remux.
+const MAX_INDEX: u64 = 64 << 20;
+
 /// Where an MP4 or MOV file keeps the index a player reads before its first
 /// frame, from the file's first bytes: `[0, moov end)` when `moov` comes
 /// first, `[mdat end, file end)` when it follows `mdat`. `None` for any other
@@ -158,7 +161,9 @@ pub(crate) fn container_index(head: &[u8], len: u64) -> Option<(u64, u64)> {
     let mut pos = 0u64;
     for first in [true, false, false, false, false, false, false, false] {
         let at = usize::try_from(pos).ok()?;
-        let kind = head.get(at + 4..at + 8)?;
+        // A box size near u64::MAX puts `at` there: every offset is checked.
+        let field = |from: usize, to: usize| head.get(at.checked_add(from)?..at.checked_add(to)?);
+        let kind = field(4, 8)?;
         if first
             && !matches!(
                 kind,
@@ -167,15 +172,17 @@ pub(crate) fn container_index(head: &[u8], len: u64) -> Option<(u64, u64)> {
         {
             return None;
         }
-        let size = match u32::from_be_bytes(head.get(at..at + 4)?.try_into().ok()?) {
+        let size = match u32::from_be_bytes(field(0, 4)?.try_into().ok()?) {
             0 => len.checked_sub(pos)?,
-            1 => u64::from_be_bytes(head.get(at + 8..at + 16)?.try_into().ok()?),
+            1 => u64::from_be_bytes(field(8, 16)?.try_into().ok()?),
             n => u64::from(n),
         };
         let end = pos.checked_add(size).filter(|_| size >= 8)?;
         match kind {
             b"moov" => return Some((0, end.min(len))),
-            b"mdat" => return (end < len).then_some((end, len)),
+            // More than `MAX_INDEX` after `mdat` is not one `moov` (a second
+            // `mdat`, say, which the head cannot show): the fixed tail.
+            b"mdat" => return (end < len && len - end <= MAX_INDEX).then_some((end, len)),
             _ => pos = end,
         }
     }
@@ -1024,6 +1031,26 @@ mod tests {
         ];
         assert_eq!(container_index(&mkv, len), None);
         assert_eq!(container_index(&ftyp(&[]), len), None);
+    }
+
+    /// A head that would overflow an offset gives no index instead of a
+    /// panic, and more than 64 MiB after `mdat` is not taken for one `moov`
+    /// (engine review r1, P3).
+    #[test]
+    fn a_hostile_head_neither_panics_nor_stretches_the_index() {
+        // A `free` box whose largesize ends 6 bytes short of u64::MAX: the
+        // next box's fields lie past it.
+        let mut huge = header(1, b"free");
+        huge.extend((u64::MAX - 30).to_be_bytes());
+        assert_eq!(container_index(&ftyp(&huge), 8 << 20), None);
+        // A 16 MiB `mdat` in a 2 GiB file: nearly 2 GiB after it.
+        let mdat = header(16 << 20, b"mdat");
+        assert_eq!(container_index(&ftyp(&mdat), 2 << 30), None);
+        assert_eq!(
+            container_index(&ftyp(&mdat), (16 << 20) + (64 << 20) + 24),
+            Some((24 + (16 << 20), (16 << 20) + (64 << 20) + 24)),
+            "64 MiB after mdat is still the index"
+        );
     }
 
     /// An MP4-named file: nothing is ready while its head is out, the head
