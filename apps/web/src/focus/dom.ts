@@ -11,7 +11,6 @@ import { type Candidate, type Direction, pick } from "./spatial";
 const SEL = "[data-f]";
 const memory = new Map<string, string>(); // group -> key
 const screens = new Map<string, string>(); // path -> last key
-const screenGroups = new Map<string, string | undefined>(); // path -> that key's group
 const content = new Map<string, string>(); // path -> last key outside the rail
 
 const path = () => location.pathname;
@@ -182,7 +181,6 @@ export function forgetFocus() {
   cancelRestore();
   memory.clear();
   screens.clear();
-  screenGroups.clear();
   content.clear();
   last = null;
 }
@@ -207,40 +205,16 @@ export function restore(back: boolean, asked = inputs) {
   cancelRestore();
   if (!mayAutoFocus() || inputs !== asked) return;
   const want = back ? screens.get(path()) : undefined;
-  const wantGroup = back ? screenGroups.get(path()) : undefined;
   const started = performance.now();
-  let holding = false;
   const attempt = () => {
     if (inputs !== asked) return true;
     const late = performance.now() - started > 4000;
-    // A stand-in holds the focus already: past the wait it stays.
-    if (late && holding) return true;
     const el = want && !late ? byKey(want) : initialIfMarked(late);
     if (!el) return false;
     focusEl(el);
     return true;
   };
   if (attempt()) return;
-  // The remembered element may be gone for good (a collapsed group, a removed
-  // tile): the focus never waits on nothing. A moment in, a member of its
-  // group stands in (one on screen, without scrolling the page under it),
-  // else the screen's first focus; the remembered one still wins if it comes.
-  const hold = setTimeout(() => {
-    const active = document.activeElement;
-    if (inputs !== asked || (active && active !== document.body && active.isConnected)) return;
-    const members = candidates().filter((el) => wantGroup !== undefined && groupOf(el) === wantGroup);
-    const onScreen = members.find((el) => {
-      const r = el.getBoundingClientRect();
-      return r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth;
-    });
-    const el = onScreen ?? members[0] ?? initialIfMarked(true);
-    if (!el) return;
-    holding = true;
-    recovering = true;
-    el.focus({ preventScroll: !!onScreen || members.length > 0 });
-    if (!members.length) reveal(el);
-    recovering = false;
-  }, 300);
   const observer = new MutationObserver(() => {
     if (attempt()) cancelRestore();
   });
@@ -252,7 +226,6 @@ export function restore(back: boolean, asked = inputs) {
   stopRestore = () => {
     observer.disconnect();
     clearTimeout(timer);
-    clearTimeout(hold);
   };
 }
 
@@ -355,7 +328,6 @@ export function installFocus(onBack: () => void) {
     if (recovering) return;
     if (group) memory.set(group, key);
     screens.set(path(), key);
-    screenGroups.set(path(), group);
     if (group !== "rail") content.set(path(), key);
   });
   document.addEventListener("pointerdown", cancelRestore, { capture: true });

@@ -93,8 +93,8 @@ async function markWatched(c: Client, kind: string, id: string, videoIds: string
 
 const film = { kind: "movie", itemId: "mqjm", videoId: "mqjm", title: "Journey Film", via: "Journey Fixture" };
 
-/** A subtitle addon that answers 5 s late with one German file, as a slow
- * subtitle addon does while the Subtitles panel is open. */
+/** A subtitle addon that answers 5 s late with one Brazilian Portuguese file,
+ * as a slow subtitle addon does while the Subtitles panel is open. */
 function lateSubs(): Promise<Server> {
   const server = createServer((req, res) => {
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -106,8 +106,8 @@ function lateSubs(): Promise<Server> {
     if (url === "/manifest.json") {
       return json({ id: "dev.marquee.late-subs", version: "1.0.0", name: "Late Subs", resources: ["subtitles"], types: ["movie", "series"], idPrefixes: ["mqj"], catalogs: [] });
     }
-    if (url.startsWith("/subtitles/")) return void setTimeout(() => json({ subtitles: [{ id: "late-de", lang: "ger", url: `${base}/de.srt` }] }), 5000);
-    if (url === "/de.srt") {
+    if (url.startsWith("/subtitles/")) return void setTimeout(() => json({ subtitles: [{ id: "late-pob", lang: "pob", url: `${base}/pob.srt` }] }), 5000);
+    if (url === "/pob.srt") {
       res.writeHead(200, { "content-type": "text/plain" });
       return res.end(SRT);
     }
@@ -628,18 +628,22 @@ test("TV: a focused element rebuilt by live data keeps the focus; one gone hands
   const chip = p.locator('[data-f="pref-subsize:large"]');
   await expect(chip).toBeVisible({ timeout: 30_000 });
   await chip.focus();
-  // A copy with the same key takes its place, as a list rebuilt from new data does.
+  // A copy with the same key comes back at the end of the row (a list
+  // rebuilt in a new order, a title moved to another row): the focus follows
+  // the key there, not the chip that took its old place.
   await p.evaluate(() => {
     const el = document.activeElement as HTMLElement;
-    el.replaceWith(el.cloneNode(true));
+    const copy = el.cloneNode(true);
+    el.parentElement?.append(copy);
+    el.remove();
   });
   await expect.poll(() => focusedKey(p)).toBe("pref-subsize:large");
   // The remote goes on from there.
-  await p.keyboard.press("ArrowRight");
+  await p.keyboard.press("ArrowLeft");
   await expect.poll(() => focusedKey(p)).toBe("pref-subsize:extraLarge");
-  // Gone for good: the nearest chip of its row, not the top of Settings.
+  // Gone for good: a chip of its own row, not the top of Settings.
   await p.evaluate(() => (document.activeElement as HTMLElement).remove());
-  await expect.poll(() => focusedKey(p)).toBe("pref-subsize:large");
+  await expect.poll(() => focusedKey(p)).toMatch(/^pref-subsize:(medium|large)$/);
   await context.close();
 });
 
@@ -667,6 +671,10 @@ test("TV: OK on a language chip keeps the focus on that chip, numbered by its ra
 });
 
 test("TV: a late subtitle addon leaves the remote on the subtitle it was on", async ({ browser }) => {
+  // Brazilian Portuguese is the profile's first language: its late track
+  // lists above English, so the English option moves while the remote is on it.
+  const c = new Client(`ws://127.0.0.1:${JOURNEY_PORT}/ws`);
+  await c.req("setPrefs", { patch: { subtitleLanguages: ["pt-BR", "eng"] } }).finally(() => c.close());
   const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
   await p.goto("/play/movie/mqjm/mqjm?form=tv");
   await expect(p.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
@@ -674,13 +682,16 @@ test("TV: a late subtitle addon leaves the remote on the subtitle it was on", as
   await p.keyboard.press("Enter");
   await expect.poll(() => focusedKey(p)).toBe("sub:off");
   await expect(p.locator(".sub-lang .opt").first()).toBeVisible({ timeout: 30_000 });
-  // German is still on its way (the Late Subs addon answers 5 s in).
-  await expect(p.locator('.sub-lang[aria-label="German"]')).toHaveCount(0);
+  // Brazilian Portuguese is still on its way (the Late Subs addon answers 5 s in).
+  const late = p.locator('.sub-lang[aria-label="Portuguese (Brazil)"]');
+  await expect(late).toHaveCount(0);
   await p.keyboard.press("ArrowDown");
   await expect.poll(() => focusedKey(p)).toMatch(/^sub:http/);
   const on = await focusedKey(p);
   await markFocused(p);
-  await expect(p.locator('.sub-lang[aria-label="German"]')).toHaveCount(1, { timeout: 15_000 });
+  await expect(late).toHaveCount(1, { timeout: 15_000 });
+  // It lists first, above the English option the remote is on.
+  await expect(p.locator(".sub-lang").first()).toHaveAttribute("aria-label", "Portuguese (Brazil)");
   await p.waitForTimeout(300);
   expect(await focusedKey(p)).toBe(on);
   expect(await focusedIsMarked(p)).toBe(true);
