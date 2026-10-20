@@ -41,6 +41,9 @@
 :is([data-form="tv"], [data-form="desktop"]) .hero-body:has(.hero-logo[data-shape="tall"]) .hero-syn { -webkit-line-clamp: 2; }
 .acts { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 24px; }
 .hero-skel { display: grid; gap: 18px; width: 560px; }
+/* No hero to show and none coming: the rows start at the top. */
+.hero.closed { display: none; }
+[data-form="phone"] .hero.closed { display: block; height: 60px; background: none; box-shadow: none; }
 .hero-skel .skel { height: 110px; border-radius: var(--radius-m); }
 .hero-skel .skel + .skel { height: 72px; width: 360px; border-radius: var(--radius-pill); }
 

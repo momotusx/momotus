@@ -84,6 +84,10 @@ export default function Home() {
   const hasContinue = () => home.rows[0]?.rowId === CONTINUE_ROW;
   const empty = () => home.status.state === "open" && home.rows.length === 0;
   const hero = () => home.hero;
+  // Rows still on their way: only then is a missing hero still coming. When
+  // every row has answered and none gave a backdrop (offline, posters only),
+  // the hero closes instead of shimmering for good.
+  const waiting = () => home.status.state === "opening" || home.rows.some((r) => r.state.state === "loading" || r.state.state === "slow");
 
   const attach = (el: HTMLElement) => {
     setPage(el);
@@ -93,7 +97,7 @@ export default function Home() {
   return (
     <div class="home">
       <main class="page" data-vscroll ref={attach} onScroll={(e) => (pageScroll.top = e.currentTarget.scrollTop)}>
-        <section class="hero" data-reveal-top aria-label="Featured">
+        <section class="hero" classList={{ closed: !hero() && !waiting() }} data-reveal-top aria-label="Featured">
           <Backdrop src={hero()?.tile.background ?? null} class="hero-bd" />
           <Show when={form() === "phone"}>
             <header class="ph-top">
@@ -104,7 +108,7 @@ export default function Home() {
           <Show
             when={hero()}
             fallback={
-              <Show when={!empty() && home.status.state !== "failed"}>
+              <Show when={waiting()}>
                 <div class="hero-skel" aria-hidden="true">
                   <div class="skel" />
                   <div class="skel" />

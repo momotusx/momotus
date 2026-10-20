@@ -1,5 +1,5 @@
 import { type Browser, expect, test } from "@playwright/test";
-import { GOT, SHOTS } from "./core";
+import { GOT, PORTS, SHOTS } from "./core";
 
 /** Layout rules the design audit settled (design/audit-web-2026-10-19.md). */
 
@@ -353,4 +353,46 @@ test("desktop and phone players say Back on screen; a desktop adds volume and fu
     await expect(page).toHaveURL(/\/title\/movie\/tt1254207/);
     await context.close();
   }
+});
+
+test("tv: with no backdrop from any catalog, Home's hero closes once the rows have answered", async ({ browser }) => {
+  const [width, height, scale] = FORMS.tv;
+  const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: scale, reducedMotion: "reduce" });
+  // Catalogs that give no backdrop (posters only, or offline): the core's
+  // Home has no hero. Made up at the socket over the real Home.
+  await context.routeWebSocket(/\/ws$/, (ws) => {
+    const upstream = new WebSocket(`ws://127.0.0.1:${PORTS.bridge}/ws`);
+    const early: string[] = [];
+    const homes = new Set<number>();
+    const asked = new Set<number>();
+    upstream.addEventListener("open", () => {
+      for (const m of early.splice(0)) upstream.send(m);
+    });
+    upstream.addEventListener("message", (e) => {
+      const m = JSON.parse(String(e.data));
+      if (m.id !== undefined && asked.has(m.id) && m.ok) {
+        homes.add(m.result.sub);
+        m.result.snapshot.header.hero = null;
+      } else if (m.sub !== undefined && homes.has(m.sub) && Array.isArray(m.updates)) {
+        for (const u of m.updates) if (u.kind === "header") u.header.hero = null;
+      }
+      ws.send(JSON.stringify(m));
+    });
+    upstream.addEventListener("close", () => ws.close());
+    ws.onMessage((raw) => {
+      const m = JSON.parse(String(raw));
+      if (m.op === "subscribe" && m.view === "home") asked.add(m.id);
+      if (upstream.readyState === WebSocket.OPEN) upstream.send(String(raw));
+      else early.push(String(raw));
+    });
+    ws.onClose(() => upstream.close());
+  });
+  const page = await context.newPage();
+  await page.goto("/?form=tv");
+  // While a row is on its way the hero may still come; once every row has
+  // answered with no backdrop, the skeleton goes and the hero closes.
+  await expect(page.locator(".row").first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".hero-skel")).toHaveCount(0, { timeout: 60_000 });
+  await expect(page.locator(".hero")).toBeHidden();
+  await context.close();
 });
