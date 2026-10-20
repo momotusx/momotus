@@ -301,8 +301,13 @@ function params(owner: string, fields: Field[], indent: string): string {
     .join("\n");
 }
 
-/** Tagged unions whose string fields are keys, tokens or secrets: printed as hidden. */
-const SECRET_UNIONS = new Set(["DebridCredential", "SignInSnapshot"]);
+/** Tagged unions whose string fields are keys, tokens or secrets, printed as hidden: every
+ * string field (`*`), or the named ones. A sign-in's error code and account id print, so a log
+ * line still says what happened. */
+const SECRET_FIELDS = new Map([
+  ["DebridCredential", new Set(["*"])],
+  ["SignInSnapshot", new Set(["url", "ticket", "receipt"])],
+]);
 
 const isRecord = (t: TypeIr): boolean =>
   (t.k === "ref" && (t.name === "SyncRecord" || t.name === "KeystoreRecord")) || (t.k === "nullable" && isRecord(t.of));
@@ -311,8 +316,8 @@ const isRecord = (t: TypeIr): boolean =>
  * A class that carries the keystore record gets a `toString` that never prints it (it holds keys
  * and a token), whatever logs or crash reports a value ends up in. Other fields print as usual.
  */
-function redactingToString(className: string, fields: Field[], indent: string, secret = false): string | null {
-  const hidden = (f: Field) => isRecord(f.type) || (secret && f.type.k === "string");
+function redactingToString(className: string, fields: Field[], indent: string, secret = new Set<string>()): string | null {
+  const hidden = (f: Field) => isRecord(f.type) || (f.type.k === "string" && (secret.has("*") || secret.has(f.name)));
   if (!fields.some(hidden)) return null;
   const parts = fields.map((f) => {
     if (!hidden(f)) return `${f.name}=$${f.name}`;
@@ -346,7 +351,7 @@ function emit(d: Decl): string {
           if (v.fields.length === 0) {
             return `    @Serializable\n    @SerialName("${v.tag}")\n    data object ${cls} : ${d.name}`;
           }
-          const body = redactingToString(cls, v.fields, "        ", SECRET_UNIONS.has(d.name));
+          const body = redactingToString(cls, v.fields, "        ", SECRET_FIELDS.get(d.name));
           return `    @Serializable\n    @SerialName("${v.tag}")\n    data class ${cls}(\n${params(cls, v.fields, "        ")}\n    ) : ${d.name}${body ? ` {\n${body}\n    }` : ""}`;
         })
         .join("\n\n");

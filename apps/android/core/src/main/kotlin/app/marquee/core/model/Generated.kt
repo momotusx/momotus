@@ -1243,7 +1243,7 @@ sealed interface SignInSnapshot {
         val account: String,
     ) : SignInSnapshot {
         // Holds keys or a token: never printed.
-        override fun toString() = "Found(ticket=hidden, account=hidden)"
+        override fun toString() = "Found(ticket=hidden, account=$account)"
     }
 
     @Serializable
@@ -1270,10 +1270,7 @@ sealed interface SignInSnapshot {
     @SerialName("failed")
     data class Failed(
         val code: String,
-    ) : SignInSnapshot {
-        // Holds keys or a token: never printed.
-        override fun toString() = "Failed(code=hidden)"
-    }
+    ) : SignInSnapshot
 }
 
 /** How a stream starts (plans/m13-stream-choice.md 3.2). */
