@@ -24,6 +24,8 @@ pub enum ReadMetainfoResult<Rx> {
     ChannelClosed {
         #[allow(dead_code)]
         seen: HashSet<SocketAddr>,
+        /// Marquee fork: why the last peer asked failed.
+        last_error: Option<anyhow::Error>,
     },
 }
 
@@ -74,10 +76,11 @@ pub async fn read_metainfo_from_peer_receiver<A: Stream<Item = SocketAddr> + Unp
     }
 
     let mut addrs_completed = false;
+    let mut last_error = None;
 
     loop {
         if addrs_completed && unordered.is_empty() {
-            return ReadMetainfoResult::ChannelClosed { seen };
+            return ReadMetainfoResult::ChannelClosed { seen, last_error };
         }
 
         tokio::select! {
@@ -86,6 +89,7 @@ pub async fn read_metainfo_from_peer_receiver<A: Stream<Item = SocketAddr> + Unp
                     Some(Ok((info, info_bytes))) => return ReadMetainfoResult::Found { info, info_bytes, seen, rx: addrs },
                     Some(Err(e)) => {
                         debug!("{:#}", e);
+                        last_error = Some(e);
                     },
                     None => unreachable!()
                 }

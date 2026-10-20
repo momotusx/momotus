@@ -57,3 +57,5 @@ Marquee changes (each changed spot carries a "Marquee fork" comment):
   checks a sample of its pieces instead of hashing every file.
 - src/bitv.rs: a disk-backed bitfield is also written at once when it is
   dropped (no fsync), for a process that ends right after.
+- src/dht_utils.rs, src/session.rs: a magnet whose peers all failed says
+  why the last one did ("input address stream exhausted" carries it).

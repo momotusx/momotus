@@ -349,3 +349,36 @@ async fn a_removed_torrent_leaves_its_pieces_on_disk() {
         "no piece on disk after the removal: {have:?}"
     );
 }
+
+/// A magnet whose peers all failed says why the last one did (the fork
+/// carries its error): here a peer that drops every connection unanswered,
+/// as the kids_play seeder once did ("Connection reset by peer" while the
+/// handshake was read).
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_magnet_whose_peers_all_failed_says_why() {
+    let listener = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+    let peer = listener.local_addr().unwrap();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            drop(stream);
+        }
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+    let engine = Engine::start(mq_engine::EngineConfig {
+        discovery: false,
+        ..mq_engine::EngineConfig::new(
+            dir.path(),
+            http.torrent_scope(&[Ipv4Addr::LOCALHOST.into()]),
+        )
+    })
+    .await
+    .unwrap();
+    let hash = "0123456789abcdef0123456789abcdef01234567";
+    let err = engine.add_magnet(hash, &[], &[peer]).await.unwrap_err();
+    let err = format!("{err:?}");
+    assert!(
+        err.contains(&format!("error reading metainfo from {peer}")),
+        "the cause is missing: {err}"
+    );
+}

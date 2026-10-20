@@ -1790,8 +1790,13 @@ impl Session {
                     },
                 })
             }
-            ReadMetainfoResult::ChannelClosed { .. } => {
-                bail!("input address stream exhausted, no way to discover torrent metainfo")
+            ReadMetainfoResult::ChannelClosed { last_error, .. } => {
+                let exhausted =
+                    "input address stream exhausted, no way to discover torrent metainfo";
+                match last_error {
+                    Some(e) => Err(e.context(exhausted)),
+                    None => bail!(exhausted),
+                }
             }
         }
     }

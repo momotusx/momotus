@@ -263,6 +263,7 @@ Mutations SR1 to SR7.
   - A dropped tracker stream (the torrent paused or removed) sends `stopped` to every tracker that took an announce, so viewers who left are no longer counted.
   - An HTTP scrape looks a name up once: reqwest reads the kept addresses.
   - The slow-tracker test answers in 270 ms, about 200 ms inside the budget.
+- **The kids_play flake, "input address stream exhausted".** librqbit asks each peer for metadata once. The test swarm gives one peer, the loopback seeder, with the DHT and trackers off, so one failed exchange ends the add. The app never sees this error: its DHT and tracker streams do not end. The error now carries the last peer's cause (`a_magnet_whose_peers_all_failed_says_why`). One run in 55 failed, naming it: the seeder reset the connection before answering the handshake. 200 runs with librqbit's debug lines never failed, so the seeder's reason is still open; no retry was added to the fixture.
 
 ## Disk used while measuring
 
