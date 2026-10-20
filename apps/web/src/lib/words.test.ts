@@ -115,6 +115,13 @@ test("may pause says where its speed comes from", () => {
   expect(lineWords({ kind: "mayPause", needMbps: 79, haveMbps: 25, samples: 6, smallSwarm: false }).details).toContain("(measured from 6 playbacks)");
 });
 
+test("may pause on a small swarm says few people share it", () => {
+  const thin = lineWords({ kind: "mayPause", needMbps: 2.1, haveMbps: 1.7, samples: 0, smallSwarm: true });
+  expect(thin.text).toBe("May pause: only a few people are sharing it");
+  expect(thin.details).toBe("Needs about 2 Mbit/s; this connection gives about 2 (estimated)");
+  expect(lineWords({ kind: "mayPause", needMbps: 2.1, haveMbps: 1.7, samples: 0, smallSwarm: false }).text).toBe("May pause on this connection");
+});
+
 test("the blocked state counts the versions it found", () => {
   expect(blockedWords("needsAccount", 1).text).toStartWith("Marquee found 1 version. This version of the app");
   expect(blockedWords("nothingPlaysHere", 42)).toEqual({ text: "Found 42 versions, but none plays on this device.", action: "Show them" });

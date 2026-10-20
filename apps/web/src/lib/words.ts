@@ -638,10 +638,16 @@ const numbers = (l: ReasonLine): Fields => {
 
 /** A version's line: the tone, the default text, and the details shown on
  * focus (TV), hover (desktop) or tap (phone). A large file says "Larger
- * than the size you chose" when the user set the limit. */
+ * than the size you chose" when the user set the limit; a version that may
+ * pause because few people share it says so. */
 export function lineWords(l: ReasonLine): { tone: Exclude<Tone, "idle">; text: string; details: string } {
   const w = choice.lines[l.kind];
-  const text = l.kind === "large" && l.chosen && "textChosen" in w ? w.textChosen : w.text;
+  const text =
+    l.kind === "large" && l.chosen && "textChosen" in w
+      ? w.textChosen
+      : l.kind === "mayPause" && l.smallSwarm && "textSmallSwarm" in w
+        ? w.textSmallSwarm
+        : w.text;
   const f = numbers(l);
   const details = w.details.map((d) => part(d, f)).filter((d) => d !== null);
   return { tone: w.tone as Exclude<Tone, "idle">, text, details: capital(details.join(", ")) };

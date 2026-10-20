@@ -44,6 +44,7 @@
     "mayPause": {
       "tone": "warn",
       "text": "May pause on this connection",
+      "textSmallSwarm": "May pause: only a few people are sharing it",
       "details": [
         "Needs about {need} Mbit/s; this connection gives about {have} ({speedSource})"
       ]
