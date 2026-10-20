@@ -78,6 +78,17 @@ const ADDRESS_KEEP: Duration = Duration::from_secs(5 * 60);
 const CONNECTION_KEEP: Duration = Duration::from_secs(60);
 /// A warm-up gives up after this long.
 const WARM_BUDGET: Duration = Duration::from_secs(3);
+/// An answer with this many seeders settles its hash early. A tracker that
+/// does not track a hash answers zero (engine review r1, P1-2).
+const SETTLES: u32 = 2;
+/// A hash's own trackers asked at most, after dedupe.
+const MAX_OWN: usize = 16;
+/// Trackers asked in one call at most: each is a name lookup on the shared
+/// blocking pool (engine review r1, P2).
+const MAX_TRACKERS: usize = 24;
+/// How long a name that did not resolve stays unresolved. Shorter than
+/// `ADDRESS_KEEP`: a cold resolver can fail once.
+const FAILED_KEEP: Duration = Duration::from_secs(60);
 
 pub(crate) struct Scraper {
     reach: Reach,
@@ -98,8 +109,56 @@ struct Reach {
 /// calls so a later scrape skips the lookup and the connect.
 #[derive(Clone, Default)]
 struct Kept {
+    /// No addresses: the name did not resolve, kept for `FAILED_KEEP`.
     addrs: Option<(Instant, Vec<SocketAddr>)>,
     conn: Option<(Instant, SocketAddr, u64)>,
+}
+
+impl Kept {
+    /// Something still stands.
+    fn fresh(&self) -> bool {
+        let addrs = self.addrs.as_ref().is_some_and(|(at, a)| {
+            at.elapsed()
+                < if a.is_empty() {
+                    FAILED_KEEP
+                } else {
+                    ADDRESS_KEEP
+                }
+        });
+        let conn = self
+            .conn
+            .is_some_and(|(at, _, _)| at.elapsed() < CONNECTION_KEEP);
+        addrs || conn
+    }
+}
+
+/// At most `MAX_TRACKERS` trackers for one call: every default, then the
+/// trackers the most hashes share, the first named first on a tie.
+fn capped(
+    mut by_tracker: HashMap<String, Vec<String>>,
+    order: &[String],
+    defaults: &[&str],
+) -> HashMap<String, Vec<String>> {
+    if by_tracker.len() <= MAX_TRACKERS {
+        return by_tracker;
+    }
+    let mut rest: Vec<(usize, usize, &String)> = order
+        .iter()
+        .enumerate()
+        .filter(|(_, t)| !defaults.contains(&t.as_str()))
+        .map(|(i, t)| (by_tracker.get(t).map_or(0, Vec::len), i, t))
+        .collect();
+    rest.sort_by_key(|&(shared, first, _)| (std::cmp::Reverse(shared), first));
+    let room = MAX_TRACKERS.saturating_sub(by_tracker.len() - rest.len());
+    let dropped: Vec<String> = rest
+        .into_iter()
+        .skip(room)
+        .map(|(_, _, t)| t.clone())
+        .collect();
+    for t in dropped {
+        by_tracker.remove(&t);
+    }
+    by_tracker
 }
 
 impl Scraper {
@@ -154,11 +213,15 @@ impl Scraper {
         lock(&self.last).clone()
     }
 
-    /// One count per `(info hash, its own trackers)`, `None` when no tracker
-    /// answered for it in time. `defaults` are asked for every hash too.
-    /// It ends early once each hash has an answer from one of its own
-    /// trackers, or seeders from a default one: a default tracker that does
-    /// not know a hash answers zero, which settles nothing.
+    /// One count per `(info hash, its own trackers)`, `None` when no answer
+    /// told anything in time; `defaults` are asked for every hash too. An
+    /// answer tells something when it comes from one of the hash's own
+    /// trackers or counts any seeder or leecher: a tracker that does not
+    /// track a hash answers 0/0, while one that counts leechers knows the
+    /// swarm. A count is the answer with the most seeders, then leechers. A
+    /// hash settles early on `SETTLES` seeders, or once every tracker asked
+    /// for it has answered or failed. At most `MAX_OWN` own trackers per
+    /// hash and `MAX_TRACKERS` per call.
     pub async fn scrape(
         &self,
         torrents: &[(String, Vec<String>)],
@@ -167,7 +230,9 @@ impl Scraper {
         let now = Instant::now();
         let mut found: HashMap<String, SwarmCount> = HashMap::new();
         let mut by_tracker: HashMap<String, Vec<String>> = HashMap::new();
-        let mut waiting: HashMap<&str, &[String]> = HashMap::new();
+        let mut order: Vec<String> = Vec::new();
+        // Per hash asked, its own trackers.
+        let mut owners: HashMap<String, Vec<String>> = HashMap::new();
         {
             let kept = lock(&self.kept);
             for (hash, own) in torrents {
@@ -177,19 +242,31 @@ impl Scraper {
                     found.insert(hash.clone(), *count);
                     continue;
                 }
-                for t in own
-                    .iter()
-                    .map(String::as_str)
-                    .chain(defaults.iter().copied())
-                {
-                    let hashes = by_tracker.entry(t.to_owned()).or_default();
+                let mut mine: Vec<&str> = Vec::new();
+                for t in own.iter().map(String::as_str) {
+                    if mine.len() < MAX_OWN && !mine.contains(&t) {
+                        mine.push(t);
+                    }
+                }
+                owners.insert(hash.clone(), mine.iter().map(|t| (*t).to_owned()).collect());
+                for t in mine.into_iter().chain(defaults.iter().copied()) {
+                    let hashes = by_tracker.entry(t.to_owned()).or_insert_with(|| {
+                        order.push(t.to_owned());
+                        Vec::new()
+                    });
                     if !hashes.contains(hash) {
                         hashes.push(hash.clone());
                     }
-                    waiting.insert(hash.as_str(), own.as_slice());
                 }
             }
         }
+        let by_tracker = capped(by_tracker, &order, defaults);
+        // Per hash, the trackers still out.
+        let mut out: HashMap<String, usize> = HashMap::new();
+        for hash in by_tracker.values().flatten() {
+            *out.entry(hash.clone()).or_default() += 1;
+        }
+        lock(&self.reach.trackers).retain(|_, k| k.fresh());
         let mut asks = JoinSet::new();
         let mut traces = Vec::new();
         for (tracker, hashes) in by_tracker {
@@ -204,28 +281,36 @@ impl Scraper {
             traces.push(trace.to.clone());
             asks.spawn(async move {
                 let counts = ask(&reach, &tracker, &hashes, &trace).await;
-                (tracker, counts)
+                (tracker, hashes, counts)
             });
         }
         let deadline = tokio::time::Instant::now() + BUDGET;
         let mut fresh: HashMap<String, SwarmCount> = HashMap::new();
-        while !waiting.is_empty()
+        while !out.is_empty()
             && let Ok(Some(answer)) = tokio::time::timeout_at(deadline, asks.join_next()).await
         {
-            let Ok((tracker, counts)) = answer else {
+            let Ok((tracker, asked, counts)) = answer else {
                 continue;
             };
             for (hash, count) in counts {
-                let settles = count.seeders > 0
-                    || waiting
-                        .get(hash.as_str())
-                        .is_some_and(|own| own.contains(&tracker));
-                if settles {
-                    waiting.remove(hash.as_str());
+                let own = owners.get(&hash).is_some_and(|o| o.contains(&tracker));
+                if !own && count.seeders == 0 && count.leechers == 0 {
+                    continue; // a tracker that does not track it
+                }
+                if count.seeders >= SETTLES {
+                    out.remove(&hash);
                 }
                 let best = fresh.entry(hash).or_insert(count);
-                if count.seeders > best.seeders {
+                if (count.seeders, count.leechers) > (best.seeders, best.leechers) {
                     *best = count;
+                }
+            }
+            for hash in asked {
+                if let Some(n) = out.get_mut(&hash) {
+                    *n -= 1;
+                    if *n == 0 {
+                        out.remove(&hash);
+                    }
                 }
             }
         }
@@ -310,15 +395,19 @@ async fn addresses(reach: &Reach, url: &mq_http::Url) -> Vec<SocketAddr> {
     }
     let key = url.as_str();
     let kept = lock(&reach.trackers).get(key).and_then(|k| k.addrs.clone());
-    if let Some((at, addrs)) = kept
-        && at.elapsed() < ADDRESS_KEEP
-    {
-        let still: Vec<SocketAddr> = addrs
-            .into_iter()
-            .filter(|a| reach.scope.permits(a.ip()))
-            .collect();
-        if !still.is_empty() {
-            return still;
+    if let Some((at, addrs)) = kept {
+        // A name that did not resolve is not looked up again for a while.
+        if addrs.is_empty() && at.elapsed() < FAILED_KEEP {
+            return Vec::new();
+        }
+        if at.elapsed() < ADDRESS_KEEP {
+            let still: Vec<SocketAddr> = addrs
+                .into_iter()
+                .filter(|a| reach.scope.permits(a.ip()))
+                .collect();
+            if !still.is_empty() {
+                return still;
+            }
         }
     }
     let Some(name) = url
@@ -327,10 +416,10 @@ async fn addresses(reach: &Reach, url: &mq_http::Url) -> Vec<SocketAddr> {
     else {
         return Vec::new();
     };
-    let Ok(found) = reach.scope.resolver().resolve(name).await else {
-        return Vec::new();
+    let mut addrs: Vec<SocketAddr> = match reach.scope.resolver().resolve(name).await {
+        Ok(found) => found.map(|a| SocketAddr::new(a.ip(), port)).collect(),
+        Err(_) => Vec::new(),
     };
-    let mut addrs: Vec<SocketAddr> = found.map(|a| SocketAddr::new(a.ip(), port)).collect();
     addrs.sort_by_key(SocketAddr::is_ipv6);
     lock(&reach.trackers)
         .entry(key.to_owned())
@@ -629,6 +718,44 @@ mod tests {
         assert_eq!(url("http://t.example/a/b"), None);
     }
 
+    /// `n` lists, each in the one before.
+    fn nested(n: usize) -> Vec<u8> {
+        [vec![b'l'; n], vec![b'e'; n]].concat()
+    }
+
+    /// Every bencode parse goes through the vendored parser, which refuses
+    /// nesting past `MAX_DEPTH` before it recurses: 10,000 levels overflowed
+    /// a 2 MiB stack and aborted the process (engine review r1, P1-1). A
+    /// crash here kills the test binary.
+    #[test]
+    fn deep_nesting_is_refused_without_a_crash() {
+        use librqbit_bencode::{MAX_DEPTH, dyn_from_bytes};
+        let depth = MAX_DEPTH as usize;
+        assert!(
+            dyn_from_bytes::<Vec<u8>>(&nested(depth)).is_ok(),
+            "the bound itself parses"
+        );
+        assert!(
+            dyn_from_bytes::<Vec<u8>>(&nested(depth + 1)).is_err(),
+            "one past it"
+        );
+        for n in [10_000, 100_000] {
+            assert!(
+                dyn_from_bytes::<Vec<u8>>(&nested(n)).is_err(),
+                "{n} levels parsed"
+            );
+            let mut body = b"d5:filesd20:".to_vec();
+            body.extend([7u8; 20]);
+            body.extend(nested(n));
+            body.extend(b"ee");
+            assert_eq!(
+                files(&body, &[[7u8; 20]]),
+                None,
+                "{n} levels in a scrape answer"
+            );
+        }
+    }
+
     #[test]
     fn a_scrape_answer_reads_complete_and_incomplete() {
         let h = [7u8; 20];
@@ -653,26 +780,39 @@ mod tests {
         assert_eq!(files(b"not bencode", &[h]), None);
     }
 
-    /// A BEP 15 tracker on 127.0.0.1 counting `seeders` for every hash, or
-    /// (with `None`) one that keeps its socket and never answers.
+    /// A BEP 15 tracker on 127.0.0.1 counting `seeders` and no leechers for
+    /// every hash, or (with `None`) one that keeps its socket and never
+    /// answers.
     fn tracker(seeders: Option<u32>) -> String {
+        counting(seeders.map(|s| (s, 0)))
+    }
+
+    /// As `tracker`, counting `(seeders, leechers)`.
+    fn counting(answer: Option<(u32, u32)>) -> String {
+        counting_after(answer, Duration::ZERO)
+    }
+
+    /// As `counting`, each answer `delay` late.
+    fn counting_after(answer: Option<(u32, u32)>, delay: Duration) -> String {
         let socket = std::net::UdpSocket::bind((std::net::Ipv4Addr::LOCALHOST, 0)).unwrap();
         let url = format!("udp://{}/announce", socket.local_addr().unwrap());
         std::thread::spawn(move || {
             let mut buf = [0u8; 2048];
             while let Ok((n, from)) = socket.recv_from(&mut buf) {
-                let Some(seeders) = seeders.filter(|_| n >= 16) else {
+                let Some((seeders, leechers)) = answer.filter(|_| n >= 16) else {
                     continue;
                 };
-                let mut answer = buf[8..16].to_vec();
+                std::thread::sleep(delay);
+                let mut reply = buf[8..16].to_vec();
                 if buf[8..12] == 0u32.to_be_bytes() {
-                    answer.extend(7u64.to_be_bytes());
+                    reply.extend(7u64.to_be_bytes());
                 }
                 for _ in 0..(n - 16) / 20 {
-                    answer.extend(seeders.to_be_bytes());
-                    answer.extend([0u8; 8]);
+                    reply.extend(seeders.to_be_bytes());
+                    reply.extend(0u32.to_be_bytes()); // completed
+                    reply.extend(leechers.to_be_bytes());
                 }
-                let _ = socket.send_to(&answer, from);
+                let _ = socket.send_to(&reply, from);
             }
         });
         url
@@ -681,18 +821,51 @@ mod tests {
     /// The count for one hash with `own` trackers and `defaults`, and how
     /// long the scrape took.
     async fn timed(own: &str, defaults: &str) -> (Option<SwarmCount>, Duration) {
+        timed_with(&[own], &[defaults]).await
+    }
+
+    /// The count for one hash with `own` trackers and `defaults`, and how
+    /// long the scrape took.
+    async fn timed_with(own: &[&str], defaults: &[&str]) -> (Option<SwarmCount>, Duration) {
         let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
         let scraper = Scraper::new(http.torrent_scope(&[std::net::Ipv4Addr::LOCALHOST.into()]));
         let hash = "0123456789abcdef0123456789abcdef01234567".to_owned();
+        let own = own.iter().map(|t| (*t).to_owned()).collect();
         let started = Instant::now();
-        let counts = scraper
-            .scrape(&[(hash, vec![own.to_owned()])], &[defaults])
-            .await;
+        let counts = scraper.scrape(&[(hash, own)], defaults).await;
         (counts[0], started.elapsed())
     }
 
+    /// Which answers tell something: an own tracker's 0/0 (a dead swarm), a
+    /// default's leechers (it knows the swarm), not a default's 0/0 (it does
+    /// not track it); on equal seeders, more leechers (Apple walk NS1: Big
+    /// Buck Bunny's default trackers all answered 0 seeders, 32 to 37
+    /// leechers).
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn a_scrape_ends_once_each_hash_has_its_own_answer() {
+    async fn an_answer_counts_from_an_own_tracker_or_with_peers() {
+        let count = |seeders, leechers| Some(SwarmCount { seeders, leechers });
+        let (c, took) = timed_with(&[], &[counting(Some((0, 32))).as_str()]).await;
+        assert_eq!(c, count(0, 32), "a default's leechers");
+        assert!(
+            took < BUDGET / 2,
+            "every tracker in, still waiting: {took:?}"
+        );
+        let (c, _) = timed_with(&[], &[counting(Some((0, 0))).as_str()]).await;
+        assert_eq!(c, None, "a default's 0/0 counted");
+        let (c, _) = timed_with(&[counting(Some((0, 0))).as_str()], &[]).await;
+        assert_eq!(c, count(0, 0), "an own tracker's 0/0 dropped");
+        // The answer with more leechers comes second.
+        let later = counting_after(Some((1, 9)), Duration::from_millis(100));
+        let (c, _) = timed_with(&[counting(Some((1, 5))).as_str()], &[later.as_str()]).await;
+        assert_eq!(c, count(1, 9), "equal seeders, fewer leechers kept");
+    }
+
+    /// A hash settles early on 2 or more seeders, or once every tracker
+    /// asked has answered or failed; a zero alone waits for the rest, since
+    /// a tracker that does not track a hash answers zero (engine review r1,
+    /// P1-2: the old rule settled on any own answer, even a zero).
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_hash_settles_on_seeders_or_once_every_tracker_is_in() {
         let seeders = |n| {
             Some(SwarmCount {
                 seeders: n,
@@ -700,19 +873,72 @@ mod tests {
             })
         };
         let early = BUDGET / 2;
-        // Its own tracker's zero (a dead swarm) is an answer.
+        // A private address: the policy refuses it at once, a failure.
+        let refused = "udp://10.0.0.1:6969/announce";
+        let (count, took) = timed(&tracker(Some(5)), &tracker(None)).await;
+        assert_eq!(count, seeders(5));
+        assert!(
+            took < early,
+            "5 seeders waited for a silent tracker: {took:?}"
+        );
         let (count, took) = timed(&tracker(Some(0)), &tracker(None)).await;
         assert_eq!(count, seeders(0));
         assert!(
-            took < early,
-            "own answer in, a silent default waited for: {took:?}"
+            took >= BUDGET,
+            "a zero settled it with a tracker out: {took:?}"
         );
-        let (count, took) = timed(&tracker(None), &tracker(Some(5))).await;
-        assert_eq!(count, seeders(5));
-        assert!(took < early, "seeders from a default settle it: {took:?}");
-        let (count, took) = timed(&tracker(None), &tracker(Some(0))).await;
+        let (count, took) = timed(&tracker(Some(0)), &tracker(Some(7))).await;
+        assert_eq!(count, seeders(7), "the larger count lost");
+        assert!(took < early, "7 seeders did not settle it: {took:?}");
+        let (count, took) = timed(&tracker(Some(0)), &tracker(Some(0))).await;
         assert_eq!(count, seeders(0));
-        assert!(took >= BUDGET, "a default's zero settled it: {took:?}");
+        assert!(took < early, "both answered, still waiting: {took:?}");
+        let (count, took) = timed(&tracker(Some(1)), refused).await;
+        assert_eq!(count, seeders(1));
+        assert!(took < early, "a failed tracker was waited for: {took:?}");
+    }
+
+    /// At most 16 own trackers per hash and 24 per call, the shared ones
+    /// kept; a name that did not resolve is not looked up again within a
+    /// minute (engine review r1, P2: each lookup holds a thread of the
+    /// shared blocking pool).
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn the_trackers_asked_are_capped_and_failed_names_kept() {
+        let s = loopback_scraper();
+        let slow = Duration::from_millis(300);
+        let refused: IpAddr = "10.0.0.1".parse().unwrap();
+        let name = |i: usize| {
+            let host = format!("cap{i}.scrape.test");
+            mq_http::test_dns::set_slow(&host, &[refused], slow);
+            format!("udp://{host}:6969/announce")
+        };
+        let one = vec![(H1.to_owned(), (0..20).map(name).collect::<Vec<_>>())];
+        s.scrape(&one, &[]).await;
+        assert_eq!(s.last().len(), MAX_OWN, "own trackers of one hash");
+        // Shared by the last two hashes, first named 31st: kept for being
+        // shared, not for coming early.
+        let shared = name(99);
+        let many: Vec<(String, Vec<String>)> = (0..4)
+            .map(|h| {
+                let mut own: Vec<String> = (0..10).map(|i| name(100 + 10 * h + i)).collect();
+                if h >= 2 {
+                    own.push(shared.clone());
+                }
+                (format!("{h}{}", &H2[1..]), own)
+            })
+            .collect();
+        let started = Instant::now();
+        s.scrape(&many, &[]).await;
+        assert!(started.elapsed() >= slow, "the names were not looked up");
+        let asked: Vec<String> = s.last().into_iter().map(|t| t.tracker).collect();
+        assert_eq!(asked.len(), MAX_TRACKERS, "trackers in one call");
+        assert!(
+            asked.contains(&shared),
+            "the tracker every hash shares was dropped"
+        );
+        let started = Instant::now();
+        s.scrape(&many, &[]).await;
+        assert!(started.elapsed() < slow, "failed names looked up again");
     }
 
     use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};

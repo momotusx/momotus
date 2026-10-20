@@ -85,6 +85,39 @@ fn http_tracker(seeders: u32) -> support::HttpTracker {
     support::HttpTracker::start(answer, false)
 }
 
+/// An HTTP tracker on `[::1]` whose scrape answer is `body`.
+fn http_tracker_with(body: Vec<u8>) -> support::HttpTracker {
+    let mut answer = format!(
+        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    )
+    .into_bytes();
+    answer.extend(body);
+    support::HttpTracker::start(answer, false)
+}
+
+/// Engine review r1, P1-1: a scrape answer nested 10,000 deep reaches the
+/// parser, which refuses it; 100,000 levels (200 KB) is over the answer cap
+/// before any parse. Either way no count, and no crash (which would kill the
+/// test binary).
+#[tokio::test]
+async fn a_deeply_nested_scrape_answer_counts_nothing() {
+    let (engine, _dir) = engine(&LOOPBACK).await;
+    for n in [10_000, 100_000] {
+        let mut body = b"d5:filesd20:".to_vec();
+        body.extend(bytes(HASH));
+        body.extend(vec![b'l'; n]);
+        body.extend(vec![b'e'; n]);
+        body.extend(b"ee");
+        let tracker = http_tracker_with(body);
+        let sources = [tracker.url.clone()];
+        let hash = if n == 10_000 { HASH } else { OTHER };
+        let counts = engine.scrape(&[(hash, sources.as_slice())]).await;
+        assert_eq!(counts, [None], "{n} levels");
+        assert!(tracker.requests() >= 1, "{n}: never asked");
+    }
+}
+
 fn bytes(hash: &str) -> Vec<u8> {
     (0..20)
         .map(|i| u8::from_str_radix(&hash[2 * i..2 * i + 2], 16).unwrap())
@@ -95,7 +128,7 @@ fn bytes(hash: &str) -> Vec<u8> {
 /// the most seeders, and one UDP scrape carries every hash.
 #[tokio::test]
 async fn the_tracker_with_the_most_seeders_counts() {
-    let (udp, seen) = udp_tracker(7, 4, None);
+    let (udp, seen) = udp_tracker(1, 4, None);
     let http = http_tracker(12);
     let (engine, _dir) = engine(&LOOPBACK).await;
     let both = vec![format!("tracker:{udp}"), http.url.clone()];
@@ -104,7 +137,7 @@ async fn the_tracker_with_the_most_seeders_counts() {
         .scrape(&[(HASH, both.as_slice()), (OTHER, one.as_slice())])
         .await;
     let count = |seeders, leechers| Some(SwarmCount { seeders, leechers });
-    assert_eq!(got, vec![count(12, 2), count(7, 4)]);
+    assert_eq!(got, vec![count(12, 2), count(1, 4)]);
     assert_eq!(seen.load(Ordering::SeqCst), 2, "one connect, one scrape");
 }
 

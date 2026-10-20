@@ -506,3 +506,35 @@ async fn a_slow_seeder_start() {
         }
     }
 }
+
+/// One scrape on a fresh engine as the app runs it (the production policy,
+/// the default trackers, upload off) for the bare hashes in `MQ_SCRAPE`
+/// (comma separated; free titles only): the counts and each tracker's
+/// stages.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "real trackers"]
+async fn a_live_scrape() {
+    let hashes: Vec<String> = std::env::var("MQ_SCRAPE")
+        .expect("MQ_SCRAPE")
+        .split(',')
+        .map(str::to_owned)
+        .collect();
+    let dir = tempfile::tempdir().unwrap();
+    let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+    let engine = Engine::start(EngineConfig {
+        upload: false,
+        ..EngineConfig::new(dir.path(), http.torrent_scope(&[]))
+    })
+    .await
+    .unwrap();
+    let asked: Vec<(&str, &[String])> = hashes.iter().map(|h| (h.as_str(), &[][..])).collect();
+    let started = std::time::Instant::now();
+    let counts = engine.scrape(&asked).await;
+    println!(
+        "scrape_ms {} counts {counts:?}",
+        started.elapsed().as_millis()
+    );
+    for t in engine.last_scrape() {
+        println!("{t:?}");
+    }
+}
