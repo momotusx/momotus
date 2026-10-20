@@ -228,6 +228,17 @@ function SearchPanel(props: { dialog?: boolean }) {
               </section>
             </Show>
           </Match>
+          {/* No installed addon has a search catalog: nothing could match, so
+              the way on is an addon that searches (core `searchable`). */}
+          <Match when={s() && s()?.query === text() && !loading() && rows().length === 0 && s()?.searchable === 0}>
+            <div class="palette-note none-search">
+              <p>None of your addons can search.</p>
+              <A class="btn" href="/recommended-addons" data-f="search:addons">
+                Recommended addons
+                <ChevronRight aria-hidden />
+              </A>
+            </div>
+          </Match>
           <Match when={s() && s()?.query === text() && !loading() && rows().length === 0}>
             <p class="palette-note">No matches for "{text()}" in your catalogs.</p>
           </Match>

@@ -83,6 +83,16 @@ for (const form of Object.keys(FORMS) as Form[]) {
   });
 }
 
+test("desktop: a query nothing matches says No matches, the addons can search", async ({ browser }) => {
+  const { context, page } = await open(browser, "desktop", "/");
+  await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+  await openFromNav(page, "desktop");
+  await page.locator('[data-f="search:input"]').fill("zqxjvkwpqzv");
+  await expect(page.locator(".palette-layer .palette-note").last()).toHaveText('No matches for "zqxjvkwpqzv" in your catalogs.', { timeout: 30_000 });
+  await expect(page.locator(".none-search")).toHaveCount(0);
+  await context.close();
+});
+
 test("desktop: the scope pill steps through the kinds the results hold", async ({ browser }) => {
   const { context, page } = await open(browser, "desktop", "/");
   await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });

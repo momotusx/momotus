@@ -505,3 +505,15 @@ test("before the core answers, the wordmark shows, never a blank screen", async 
   await expect(q.locator(".boot")).toHaveCount(0);
   await next.close();
 });
+
+test("Search with no addon that can search says so, with the way to one", async ({ browser }) => {
+  // This core's only addon has no search catalog (core `searchable` is 0).
+  const { context, page: p } = await page(browser);
+  await p.goto("/search?form=desktop");
+  await p.locator('[data-f="search:input"]').fill("journey", { timeout: 30_000 });
+  await expect(p.locator(".none-search p")).toHaveText("None of your addons can search.", { timeout: 30_000 });
+  await expect(p.getByText(/No matches/)).toHaveCount(0);
+  await p.locator('[data-f="search:addons"]').click();
+  await expect(p).toHaveURL(/\/recommended-addons/);
+  await context.close();
+});
