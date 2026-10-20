@@ -1003,15 +1003,23 @@ async fn nodes_learned_from_answers_meet_the_policy() {
 // its bound, so a hostile answer cannot overflow the stack and abort the app.
 // A crash kills the test binary.
 
-/// `n` lists, each in the one before.
-fn nested(n: usize) -> Vec<u8> {
-    [vec![b'l'; n], vec![b'e'; n]].concat()
+/// A dictionary whose key `x` holds `n` lists, each in the one before, then
+/// `rest`. Typed parses expect a dictionary and skip an unknown key's value
+/// by walking it, so the nesting must sit under a key to be walked.
+fn nested(n: usize, rest: &[u8]) -> Vec<u8> {
+    [
+        b"d1:x".to_vec(),
+        vec![b'l'; n],
+        vec![b'e'; n],
+        rest.to_vec(),
+    ]
+    .concat()
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_deeply_nested_announce_answer_is_refused() {
     for n in [10_000, 100_000] {
-        let body = nested(n);
+        let body = nested(n, b"8:intervali1800e5:peers0:e");
         let mut answer = format!(
             "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
             body.len()
@@ -1043,13 +1051,13 @@ async fn a_deeply_nested_dht_message_is_refused() {
         dht_session(&[V4, V6], vec![bootstrap], &dir.path().join("dht.json")).await;
     let port = session.get_dht().unwrap().listen_addr().port();
     // macOS sends 9,216-byte datagrams by default; the DHT reads 16,384 bytes,
-    // so both sizes reach it as 16,384 levels, the deepest it can see.
+    // so both sizes reach it as about 16,380 levels, the deepest it can see.
     let socket = socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, None).unwrap();
     socket.set_send_buffer_size(1 << 17).unwrap();
     socket.bind(&SocketAddr::new(V4, 0).into()).unwrap();
     let asker = std::net::UdpSocket::from(socket);
     for n in [10_000, 32_000] {
-        asker.send_to(&nested(n), (V4, port)).unwrap();
+        asker.send_to(&nested(n, b"1:y1:qe"), (V4, port)).unwrap();
     }
     let mut ping = b"d1:ad2:id20:".to_vec();
     ping.extend([0x33; 20]);
