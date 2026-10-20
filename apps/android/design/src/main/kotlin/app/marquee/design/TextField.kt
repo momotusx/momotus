@@ -11,6 +11,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -18,6 +19,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
@@ -28,7 +31,8 @@ import androidx.compose.ui.unit.dp
 
 /**
  * A one-line field on a raised pill whose edge turns accent with focus (design/DECISION.md v2).
- * [label] is its spoken name, [placeholder] shows while it is empty; Up and Down leave it on a remote.
+ * [label] is its spoken name, [placeholder] shows while it is empty; Up and Down leave it on a remote, and
+ * select opens the keyboard there.
  */
 @Composable
 fun MqTextField(
@@ -44,6 +48,12 @@ fun MqTextField(
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
     var focused by remember { mutableStateOf(false) }
+    // On a TV the field is a button until it is selected: a TV's keyboard (Fire TV's) is a window over the
+    // page that takes the D-pad, so a field that opened it as focus passed would never let Down through.
+    var editing by remember { mutableStateOf(!tv) }
+    var entered by remember { mutableStateOf(false) }
+    val input = remember { FocusRequester() }
+    LaunchedEffect(editing) { if (tv && editing) input.requestFocus() }
     val shape = RoundedCornerShape(Marquee.radius.pill)
     Box(
         modifier
@@ -57,6 +67,23 @@ fun MqTextField(
             .padding(horizontal = if (tv) 24.dp else 16.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
+        if (!editing) {
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .onFocusChanged { focused = it.isFocused }
+                    .semantics { contentDescription = label }
+                    .focusClickable({ editing = true }),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                MqText(
+                    value.ifEmpty { placeholder },
+                    color = if (value.isEmpty()) colors.dim else colors.text,
+                    maxLines = 1,
+                )
+            }
+            return@Box
+        }
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
@@ -69,9 +96,18 @@ fun MqTextField(
             modifier =
                 Modifier
                     .fillMaxWidth()
+                    .focusRequester(input)
                     .dpadExits()
-                    .onFocusChanged { focused = it.isFocused }
-                    .semantics { contentDescription = label },
+                    .onFocusChanged {
+                        focused = it.isFocused
+                        // On a TV, leaving the field (Back closes the keyboard and moves on) makes it a button again.
+                        if (it.isFocused) {
+                            entered = true
+                        } else if (tv && entered) {
+                            entered = false
+                            editing = false
+                        }
+                    }.semantics { contentDescription = label },
             decorationBox = { inner ->
                 if (value.isEmpty()) MqText(placeholder, color = colors.dim, maxLines = 1)
                 inner()

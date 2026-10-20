@@ -70,6 +70,8 @@ class LanguagePickerTest {
     fun `on a TV the focus goes with the picked language to the chosen ones`() {
         var chosen by mutableStateOf(listOf("en"))
         compose.setContent { MarqueeTheme(Form.Tv) { Languages(chosen, { all }, { chosen = it }) } }
+        // On a TV the field is a button until selected: select opens it for typing.
+        compose.onNodeWithContentDescription("Find a language").performClick()
         compose.onNodeWithContentDescription("Find a language").performTextInput("pol")
         compose.onNodeWithText("Polish").performClick()
         compose.waitUntil(5_000) {
