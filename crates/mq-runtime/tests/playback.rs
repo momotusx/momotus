@@ -1279,3 +1279,69 @@ async fn settled_list(view: &PlaybackView) -> PlaybackSnapshot {
     })
     .await
 }
+
+/// Pixel journey walk PX8 (bench/m6/journey-walk.jsonl), in its order: a
+/// 51 s file played to its end, then three partial plays of the same
+/// video (two left by a force stop), then a 261 s file paused at 57.5 s.
+/// Continue Watching shows the film again, as the title page's Resume does
+/// (both read the same rule: progress newer than the watched mark).
+#[tokio::test]
+async fn a_partial_play_after_a_finish_is_in_continue_watching() {
+    let core = Core::temporary("p").unwrap();
+    let sintel = PlayTarget {
+        kind: "movie".into(),
+        item_id: "tt1727587".into(),
+        video_id: "tt1727587".into(),
+        name: Some("Sintel".into()),
+        poster: None,
+        season: None,
+        episode: None,
+    };
+    let play = |reports: &[(u64, u64, bool)]| {
+        let view = PlaybackView::open(&core, Vec::new(), sintel.clone());
+        for &(position, duration, paused) in reports {
+            view.report_progress(position, duration, paused);
+        }
+        view
+    };
+    let shown = || {
+        core.library()
+            .continue_watching("p", 20)
+            .unwrap()
+            .into_iter()
+            .map(|c| (c.video_id, c.position_ms))
+            .collect::<Vec<_>>()
+    };
+    drop(play(&[(10_000, 51_000, false), (51_000, 51_000, false)]));
+    assert_eq!(
+        core.library().watched_videos("p", "tt1727587").unwrap(),
+        ["tt1727587"]
+    );
+    assert!(shown().is_empty(), "finished");
+    // Force stops: the views are never closed.
+    std::mem::forget(play(&[(1_000, 51_000, false), (5_000, 51_000, true)]));
+    std::mem::forget(play(&[(8_000, 51_000, true)]));
+    drop(play(&[(15_000, 51_000, false)]));
+    drop(play(&[(30_000, 261_000, false), (57_500, 261_000, true)]));
+    // What the title page's Resume reads.
+    assert_eq!(
+        core.library().latest_progress("p", "tt1727587").unwrap(),
+        Some(("tt1727587".to_string(), 57_500, 261_000))
+    );
+    assert_eq!(shown(), [("tt1727587".to_string(), 57_500)]);
+    let home = mq_runtime::HomeView::open(&core);
+    let mut row = None;
+    for _ in 0..300 {
+        row = home
+            .snapshot()
+            .rows
+            .into_iter()
+            .find(|r| r.row_id == mq_runtime::views::home::CONTINUE_ROW_ID);
+        if row.is_some() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let row = row.expect("Home shows Continue Watching");
+    assert_eq!(row.tiles[0].video_id.as_deref(), Some("tt1727587"));
+}
