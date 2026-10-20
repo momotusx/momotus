@@ -19,6 +19,8 @@ final class HomeModel {
     /// First run and the "New recommended addons" card.
     let offer: DefaultsOffer
     @ObservationIgnored private let core: CoreClient
+    /// The open Home view, for its commands.
+    @ObservationIgnored private var sub: UInt64?
 
     init(core: CoreClient) {
         self.core = core
@@ -29,6 +31,21 @@ final class HomeModel {
         generation += 1
     }
 
+    /// One failed row's Try again: only its catalog is asked again (the row
+    /// turns loading, then answers or fails again), the rest of Home and the
+    /// focus stay. Without an open view, or if the core refuses, all of Home
+    /// opens again.
+    func retry(_ row: HomeRow) {
+        guard let sub else { return reload() }
+        Task {
+            do {
+                try await core.command(sub, row.retryCommand)
+            } catch {
+                reload()
+            }
+        }
+    }
+
     /// Restart key for the view's task: a retry or a reopened core.
     var taskId: [Int] { [generation, core.generation] }
 
@@ -36,6 +53,7 @@ final class HomeModel {
     func run() async {
         do {
             let view = try await core.open("home", as: (HomeSnapshot.self, HomeUpdate.self))
+            sub = view.sub
             for await event in view.events {
                 apply(event)
             }

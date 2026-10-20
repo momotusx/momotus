@@ -69,6 +69,11 @@ struct HomeRow: Decodable, Hashable, Sendable {
     let tiles: [Tile]
 }
 
+extension HomeRow {
+    /// The Home view's command for this row's Try again (core `retryRow`).
+    var retryCommand: [String: String] { ["type": "retryRow", "rowId": rowId] }
+}
+
 extension [HomeRow] {
     /// Every lane ended with nothing to show and at least one failed, as
     /// Android's `allFailed`: Home says it could not load, with one Try

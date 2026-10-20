@@ -57,3 +57,9 @@ private func row(_ state: RowState, _ tiles: String...) -> HomeRow {
     #expect(![row(.empty)].allFailed, "empty, not failed")
     #expect(![HomeRow]().allFailed)
 }
+
+@Test func oneFailedRowsTryAgainAsksForThatRowOnly() {
+    let row = HomeRow(rowId: "cinemeta/movie/top", title: "Popular Movies", source: "Cinemeta", state: .failed(reason: "timed out"), tiles: [])
+    // The core's retryRow on the open Home view, with the row's id as the snapshot gave it.
+    #expect(row.retryCommand == ["type": "retryRow", "rowId": "cinemeta/movie/top"])
+}
