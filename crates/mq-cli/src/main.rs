@@ -143,6 +143,11 @@ enum Command {
         /// it and 120 s are kept ahead (default: none, the device preset).
         #[arg(long)]
         rate: Option<u64>,
+        /// The walk-only window override in bytes (plans/streaming-window.md
+        /// 4): the torrent holds at most this much of the file, whatever
+        /// the free space.
+        #[arg(long, requires = "rate")]
+        window: Option<u64>,
     },
     /// Scrape info hashes on a fresh engine (the app's first scrape) and
     /// report each tracker's stages.
@@ -240,6 +245,7 @@ async fn main() {
         cache_budget,
         download_limit,
         rate,
+        window,
     } = cli.command
     {
         let options = magnet::MagnetOptions {
@@ -259,6 +265,7 @@ async fn main() {
             cache_budget,
             download_limit,
             rate,
+            window,
         };
         match magnet::play_magnet(&magnet, options).await {
             Ok(run) => emit(run),

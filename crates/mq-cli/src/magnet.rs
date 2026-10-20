@@ -43,7 +43,12 @@ pub struct MagnetOptions {
     pub download_limit: Option<u32>,
     /// The file's rate in bytes per second, for the engine.
     pub rate: Option<u64>,
+    /// The walk-only window override, in bytes.
+    pub window: Option<u64>,
 }
+
+/// The P2P speed the CLI plans a window with (the app's prior).
+const FILL_ESTIMATE: u64 = 5_000_000;
 
 const SEEKS: [f64; 3] = [25.0, 50.0, 75.0];
 const METADATA_TIMEOUT: Duration = Duration::from_secs(120);
@@ -419,6 +424,32 @@ async fn run(
             .await
             .map_err(|e| e.to_string())?;
     }
+    let mut window_row = None;
+    if let (Some(limit), Some(rate)) = (o.window, o.rate) {
+        let inputs = mq_engine::WindowInputs {
+            free: engine.free().unwrap_or(0),
+            reclaimable: engine.reclaimable().await,
+            committed: engine.committed(Some(t)).await,
+            bitrate: rate,
+            piece_len: u64::from(engine.piece_len(t).map_err(|e| e.to_string())?),
+            fill: FILL_ESTIMATE,
+        };
+        let plan = mq_engine::window_plan(engine.device_class(), inputs)
+            .and_then(|p| p.within(limit).ok_or(mq_engine::EngineError::DeviceFull))
+            .map_err(|e| e.to_string())?;
+        let w = mq_engine::Window {
+            plan,
+            bitrate: rate,
+            metered: false,
+            resume_at: o.resume_at,
+        };
+        engine.window(t, file, w).await.map_err(|e| e.to_string())?;
+        window_row = Some(json!({
+            "budget": plan.budget, "behind": plan.behind, "slack": plan.slack,
+            "ahead": plan.ahead, "floor": plan.floor, "free": inputs.free,
+            "room": inputs.room(),
+        }));
+    }
     let reader = engine
         .open_reader(t, CLI, file)
         .await
@@ -565,6 +596,8 @@ async fn run(
         "refetched_bytes": stats.refetched_bytes,
         "rate_bytes_per_s": stats.bytes_per_s,
         "readahead_bytes": stats.readahead_bytes,
+        "window": window_row,
+        "held_bytes": stats.held_bytes,
         "max_allocated_bytes": max_allocated_bytes,
         "allocated_bytes": allocated_bytes,
         "seek_forward_p50_ms": percentile(&forward, 0.5),
