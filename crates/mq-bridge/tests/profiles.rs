@@ -187,6 +187,17 @@ async fn every_permission_row_is_enforced_in_the_core() {
         .code(json!({"op": "deleteProfile", "profile": "default"}))
         .await;
     assert_eq!(code, "notOwner");
+    // The account holds every profile: refused before anything reaches a relay.
+    let record = json!({
+        "server": "https://relay.invalid", "deviceToken": "t", "member": "01".repeat(32),
+        "keys": {"v": 1, "account": "02".repeat(16), "genesis": "03".repeat(32), "epoch": 0,
+                 "ak": "04".repeat(32), "idKey": "05".repeat(32)},
+        "checkpoint": {"seq": 0, "hash": "06".repeat(32)}, "relayId": "07".repeat(16), "revision": 0,
+    });
+    let code = c
+        .code(json!({"op": "deleteAccount", "record": record}))
+        .await;
+    assert_eq!(code, "notOwner");
     c.ok(json!({"op": "updateProfile", "profile": kid, "name": "Me", "avatar": "cat:rose"}))
         .await;
 

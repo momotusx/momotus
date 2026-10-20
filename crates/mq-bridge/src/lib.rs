@@ -218,6 +218,7 @@ enum Request {
     /// Deletes the account on the sync server for every device; replies `{}`
     /// once the relay confirmed. This device forgets the account as after a
     /// sign-out (the library stays); the platform deletes the keystore record.
+    /// The owner profile only (`notOwner` otherwise).
     DeleteAccount {
         id: u64,
         record: Box<SyncConfig>,
@@ -782,6 +783,13 @@ impl Session {
                 });
             }
             Request::DeleteAccount { id, record } => {
+                // The account holds every profile: only the owner deletes it.
+                if core.profile() != mq_library::OWNER {
+                    let refused =
+                        Failure::coded("notOwner", "only the main profile can delete the account");
+                    send_answer(&self.out, json!(id), Err(refused));
+                    return;
+                }
                 self.spawn(id, async move {
                     let _gate = core.sync_gate().await;
                     let (library, http, clock) = (core.library(), core.http(), core.clock());

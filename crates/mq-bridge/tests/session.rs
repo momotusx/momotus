@@ -436,11 +436,19 @@ async fn sync_account_then_two_devices_share_preferences() {
     let left = next(&mut rx_a).await;
     assert_eq!(left["ok"], true, "{left}");
 
-    // Deleting answers once the relay confirmed; the account then answers
-    // `accountGone` to every sync.
+    // Only the owner profile deletes the account; this session runs as "p".
     a.handle_text(&json!({"id": 18, "op": "deleteAccount", "record": other}).to_string())
         .await;
-    let deleted = next(&mut rx_a).await;
+    let refused = next(&mut rx_a).await;
+    assert_eq!(refused["code"], "notOwner", "{refused}");
+    // The owner's answer comes once the relay confirmed; the account then
+    // answers `accountGone` to every sync.
+    let (tx_o, mut rx_o) = Output::channel();
+    let mut owner = Session::new(Core::temporary("default").unwrap(), tx_o);
+    owner
+        .handle_text(&json!({"id": 1, "op": "deleteAccount", "record": other}).to_string())
+        .await;
+    let deleted = next(&mut rx_o).await;
     assert_eq!(deleted["result"], json!({}), "{deleted}");
     a.handle_text(&json!({"id": 19, "op": "syncNow", "record": other}).to_string())
         .await;

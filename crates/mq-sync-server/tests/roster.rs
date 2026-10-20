@@ -237,6 +237,8 @@ impl Device {
 enum Fault {
     /// Answers 503 without passing it on.
     Refuse,
+    /// Answers a bare 410 without passing it on: a proxy's page, not the relay.
+    Gone,
     /// Passes it on, then answers 502: the relay acted, the device cannot
     /// tell.
     LoseAnswer,
@@ -266,6 +268,9 @@ async fn proxy(relay: &Relay, method: &'static str, path: &'static str, fault: F
             }
             if matches!(fault, Some(Fault::Refuse)) {
                 return (StatusCode::SERVICE_UNAVAILABLE, "refused").into_response();
+            }
+            if matches!(fault, Some(Fault::Gone)) {
+                return (StatusCode::GONE, "gone").into_response();
             }
             let headers = parts
                 .headers
@@ -1870,16 +1875,37 @@ fn assert_gone(err: SyncError) {
     assert_eq!(err.code(), Some("accountGone"));
 }
 
-/// Deleting leaves nothing but the tombstone. A device that never heard of
-/// it gets 401, replays its roster and gets 410: the replay creates nothing,
-/// and the device forgets the account but keeps its library. Its signed
-/// token request, the genesis sent again and a second delete all meet the
-/// tombstone.
+/// Deleting leaves nothing but the tombstone, a slot the account filled
+/// included. The first answer is lost, so the phone still holds the
+/// account; sent again, its token is unknown, its replay meets the tombstone
+/// and the delete counts as done. A device that never heard of it gets 401,
+/// replays its roster and gets 410: the replay creates nothing, and the
+/// device forgets the account but keeps its library. Its signed token
+/// request and the genesis sent again meet the tombstone too.
 #[tokio::test]
 async fn a_deleted_account_is_gone_for_every_device() {
     let relay = Relay::new().await;
-    let (phone, mut tv, genesis) = synced_pair(&relay).await;
-    phone.delete_account().await;
+    let (mut phone, mut tv, genesis) = synced_pair(&relay).await;
+    let joining = start_pairing(&http(), &relay.url).await.unwrap();
+    let (_, record) = approve_pairing(
+        &phone.library,
+        &http(),
+        &phone.record,
+        &phone.clock,
+        &joining.qr,
+    )
+    .await
+    .unwrap();
+    phone.record = record;
+    assert_eq!(relay.count("pairing"), 1, "a slot the phone filled");
+
+    let lossy = proxy(&relay, "DELETE", "/v1/account", Fault::LoseAnswer).await;
+    let through = SyncConfig {
+        server: lossy,
+        ..phone.record.clone()
+    };
+    let lost = mq_sync::delete_account(&phone.library, &http(), &through, &phone.clock).await;
+    assert!(lost.is_err(), "{lost:?}");
     for table in [
         "account", "roster", "record", "recovery", "device", "pairing",
     ] {
@@ -1887,6 +1913,8 @@ async fn a_deleted_account_is_gone_for_every_device() {
     }
     assert_eq!(relay.count("gone"), 1);
     let stored = hex::encode(phone.record.keys.genesis.0);
+    assert!(!phone.library.roster_entries(&stored).unwrap().is_empty());
+    phone.delete_account().await;
     assert!(
         phone.library.roster_entries(&stored).unwrap().is_empty(),
         "the deleting device forgot it"
@@ -1915,8 +1943,60 @@ async fn a_deleted_account_is_gone_for_every_device() {
         "{again:?}"
     );
     assert_eq!(relay.count("account"), 0);
-    // A delete whose answer was lost, sent again, is done.
+}
+
+/// Only the relay's own answer means the account is gone: a bare 410 (a
+/// proxy rule, a parked domain) is a plain failure, and the device keeps
+/// its account, its roster and its cursors.
+#[tokio::test]
+async fn a_bare_410_from_elsewhere_is_no_deletion() {
+    let relay = Relay::new().await;
+    let mut phone = Device::first(&relay).await;
+    phone.watch("v1", 10);
+    phone.sync().await;
+    let generation = phone.library.sync_state("relay_generation").unwrap();
+    let parked = proxy(&relay, "GET", "/v1/pull", Fault::Gone).await;
+    phone.record.server = parked;
+    let err = phone.round().await.unwrap_err();
+    assert!(
+        matches!(err, SyncError::Http(HttpError::Status { status: 410, .. })),
+        "{err:?}"
+    );
+    assert_eq!(err.code(), None);
+    let stored = hex::encode(phone.record.keys.genesis.0);
+    assert!(!phone.library.roster_entries(&stored).unwrap().is_empty());
+    assert_eq!(
+        phone.library.sync_state("relay_generation").unwrap(),
+        generation
+    );
+    phone.record.server = relay.url.clone();
+    phone.sync().await;
+}
+
+/// A device stuck on a fork (the relay was restored and another device
+/// rotated there) can still delete: the relay needs its token, not an
+/// agreed roster. The fork goes with the account, and the other device
+/// hears that it is gone.
+#[tokio::test]
+async fn a_device_stuck_on_a_fork_can_still_delete() {
+    let relay = Relay::new().await;
+    let mut phone = Device::first(&relay).await;
+    let mut tv = phone.pair(&relay, "TV").await;
+    tv.sync().await;
+    phone.sync().await;
+    let before = relay.snapshot();
+    phone.remove(vec![]).await;
+    let restored = relay.restored(&before, false).await;
+    for device in [&mut phone, &mut tv] {
+        device.record.server = restored.url.clone();
+    }
+    tv.remove(vec![]).await;
+    let err = phone.round().await.unwrap_err();
+    assert!(matches!(err, SyncError::Fork), "{err:?}");
     phone.delete_account().await;
+    assert_eq!(restored.count("account"), 0);
+    assert_eq!(phone.library.sync_state("fork").unwrap(), None);
+    assert_gone(tv.round().await.unwrap_err());
 }
 
 /// A device with no roster in its store has nothing to replay: the 410
@@ -1993,4 +2073,10 @@ async fn the_journal_keeps_recording_after_a_deletion() {
         "{journal}"
     );
     assert!(journal.lines().next().unwrap().contains("\"gone\""));
+    // Entry lines keep the shape every earlier journal has.
+    let entry = journal.lines().nth(1).unwrap();
+    assert!(
+        entry.starts_with("{\"account\":\"") && entry.contains(",\"entry\":{\"body\":\""),
+        "{entry}"
+    );
 }

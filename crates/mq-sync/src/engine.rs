@@ -172,7 +172,7 @@ pub enum Blocked {
 
 #[derive(Debug, thiserror::Error)]
 pub enum SyncError {
-    /// Any HTTP failure but 410, which is `AccountGone`.
+    /// Any HTTP failure but the relay's own `accountGone` answer.
     #[error(transparent)]
     Http(HttpError),
     #[error(transparent)]
@@ -203,15 +203,26 @@ pub enum SyncError {
     AccountGone,
 }
 
-/// The relay answers 410 on every route that names a deleted account, so
-/// every call maps it in one place.
+/// The relay answers 410 with code `accountGone` on every route that names a
+/// deleted account, so every call maps it in one place. Any other 410 (a
+/// proxy, a parked domain) is a plain failure: it never makes a device
+/// forget its account.
 impl From<HttpError> for SyncError {
     fn from(e: HttpError) -> Self {
         match e {
-            HttpError::Status { status: 410, .. } => SyncError::AccountGone,
+            HttpError::Status {
+                status: 410,
+                ref body,
+                ..
+            } if says_gone(body) => SyncError::AccountGone,
             e => SyncError::Http(e),
         }
     }
+}
+
+fn says_gone(body: &[u8]) -> bool {
+    serde_json::from_slice::<serde_json::Value>(body)
+        .is_ok_and(|v| v.get("code").and_then(|c| c.as_str()) == Some("accountGone"))
 }
 
 impl SyncError {
@@ -678,8 +689,18 @@ impl<'a> Session<'a> {
     }
 
     /// Reads the roster entries after this device's head from the relay,
-    /// checks each, and sends the relay any it lost.
+    /// checks each, and sends the relay any it lost. A deleted account
+    /// (`accountGone` from either replay or the token request): this device
+    /// forgets it as a removed one does, and the library stays.
     pub(crate) async fn catch_up(&mut self) -> Result<(), SyncError> {
+        let caught = self.read_roster().await;
+        if matches!(caught, Err(SyncError::AccountGone)) {
+            self.library.forget_sync()?;
+        }
+        caught
+    }
+
+    async fn read_roster(&mut self) -> Result<(), SyncError> {
         let mut refreshed = false;
         let mut replays = 0;
         let before = self.roster.head();
@@ -692,18 +713,11 @@ impl<'a> Session<'a> {
                 // may include this device's own joining, then ask for a
                 // fresh token as a member.
                 // A deleted account (its tokens went with it) answers 410
-                // there: this device forgets the account as a removed one
-                // does, and the library stays.
+                // `accountGone` there.
                 Err(SyncError::Http(HttpError::Status { status: 401, .. })) if !refreshed => {
                     refreshed = true;
-                    let back = match self.replay(0).await {
-                        Ok(()) => self.fresh_token().await,
-                        failed => failed,
-                    };
-                    if matches!(back, Err(SyncError::AccountGone)) {
-                        self.library.forget_sync()?;
-                    }
-                    back?;
+                    self.replay(0).await?;
+                    self.fresh_token().await?;
                     continue;
                 }
                 fetched => fetched?,
@@ -1588,25 +1602,39 @@ pub async fn sign_out(
 /// already gone counts, so a retry after a lost answer succeeds); this
 /// device then forgets the account as after a sign-out, and the library
 /// stays. The app deletes the keystore record.
+///
+/// The relay needs only an active token, not an agreed roster, so the
+/// stored token goes first: a device stuck on a fork can still delete. Only
+/// a token the relay does not know (a restore lost it, or the account is
+/// gone) opens a session, which signs for a new one or hears `accountGone`.
 pub async fn delete_account(
     library: &Library,
     http: &HttpClient,
     config: &SyncConfig,
     clock: &HlcClock,
 ) -> Result<(), SyncError> {
-    let session = match Session::open(library, http, config, clock).await {
-        Err(SyncError::AccountGone) => return Ok(()),
-        opened => opened?,
-    };
-    let deleted = http
-        .request(
+    require_secure(&config.server)?;
+    let delete = |token: String| async move {
+        http.request(
             mq_http::Method::DELETE,
-            &format!("{}/v1/account", session.server()),
+            &format!("{}/v1/account", config.server),
             None,
-            &options(session.server(), session.token()),
+            &options(&config.server, &token),
         )
-        .await;
-    match deleted.map_err(SyncError::from) {
+        .await
+        .map_err(SyncError::from)
+    };
+    let mut deleted = delete(config.device_token.clone()).await;
+    if matches!(
+        deleted,
+        Err(SyncError::Http(HttpError::Status { status: 401, .. }))
+    ) {
+        deleted = match Session::open(library, http, config, clock).await {
+            Ok(session) => delete(session.token().to_owned()).await,
+            Err(e) => Err(e),
+        };
+    }
+    match deleted {
         Ok(_) | Err(SyncError::AccountGone) => {}
         Err(e) => return Err(e),
     }

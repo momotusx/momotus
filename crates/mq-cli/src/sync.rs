@@ -20,11 +20,12 @@ fn id(text: &str) -> Result<Id, String> {
     serde_json::from_value(json!(text)).map_err(|_| format!("not a member id: {text}"))
 }
 
-/// A sync error as printed; a device the account dropped also forgets its
-/// record (the library stays, as an app's would).
+/// A sync error as printed; a device the account dropped, or whose account
+/// was deleted, also forgets its record (the library stays, as an app's
+/// would).
 fn failed(data: &Path) -> impl Fn(SyncError) -> String + '_ {
     move |e| {
-        if matches!(e, SyncError::Dropped) {
+        if matches!(e, SyncError::Dropped | SyncError::AccountGone) {
             let _ = std::fs::remove_file(data.join(KEY_FILE));
         }
         match e.code() {
