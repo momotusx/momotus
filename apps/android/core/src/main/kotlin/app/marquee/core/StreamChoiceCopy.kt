@@ -24,6 +24,8 @@ object StreamChoiceCopy {
         val details: List<String>,
         /** "Larger than the size you chose": the large line when the user set the limit. */
         val textChosen: String? = null,
+        /** "May pause: only a few people are sharing it": the mayPause line when the swarm is small. */
+        val textSmallSwarm: String? = null,
     )
 
     /** A line as shown: its tone, its default words and the details (empty when no part is known). */
@@ -101,6 +103,7 @@ object StreamChoiceCopy {
                     warn,
                     "May pause on this connection",
                     listOf("Needs about {need} Mbit/s; this connection gives about {have} ({speedSource})"),
+                    textSmallSwarm = "May pause: only a few people are sharing it",
                 ),
             "washedOut" to
                 LineWords(warn, "Colors may look washed out on this screen", listOf("HDR file, screen without HDR")),
@@ -376,12 +379,18 @@ object StreamChoiceCopy {
 
     /**
      * A version's line: the tone, the default text, and the details shown on focus (TV) or in the opened
-     * row (phone). A large file says "Larger than the size you chose" when the user set the limit.
+     * row (phone). A large file says "Larger than the size you chose" when the user set the limit; a version
+     * that may pause because few people share it says so.
      */
     fun line(l: ReasonLine): Line {
         val (kind, f) = fields(l)
         val w = LINES.getValue(kind)
-        val text = if (l is ReasonLine.Large && l.chosen) w.textChosen ?: w.text else w.text
+        val text =
+            when {
+                l is ReasonLine.Large && l.chosen -> w.textChosen ?: w.text
+                l is ReasonLine.MayPause && l.smallSwarm -> w.textSmallSwarm ?: w.text
+                else -> w.text
+            }
         return Line(w.tone, text, capital(w.details.mapNotNull { part(it, f) }.joinToString(", ")))
     }
 

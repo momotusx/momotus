@@ -111,6 +111,7 @@ class StreamChoiceCopyTest {
                                     put("tone", w.tone.name.lowercase())
                                     put("text", w.text)
                                     w.textChosen?.let { put("textChosen", it) }
+                                    w.textSmallSwarm?.let { put("textSmallSwarm", it) }
                                     put("details", JsonArray(w.details.map(::JsonPrimitive)))
                                 },
                             )
@@ -322,6 +323,14 @@ class StreamChoiceCopyTest {
             line(ReasonLine.MayPause(79f, 25f, 1)).details,
         )
         assertTrue(line(ReasonLine.MayPause(79f, 25f, 6)).details.contains("(measured from 6 playbacks)"))
+    }
+
+    @Test
+    fun `may pause on a small swarm says few people share it, and keeps the speed`() {
+        val small = line(ReasonLine.MayPause(31.6f, 17.5f, 0, smallSwarm = true))
+        assertEquals("May pause: only a few people are sharing it", small.text)
+        assertEquals("Needs about 32 Mbit/s; this connection gives about 18 (estimated)", small.details)
+        assertEquals("May pause on this connection", line(ReasonLine.MayPause(31.6f, 17.5f, 0)).text)
     }
 
     @Test
