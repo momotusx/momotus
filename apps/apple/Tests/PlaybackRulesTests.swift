@@ -117,9 +117,11 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
 @Test func aMenuHoldsTheControlsUntilAPickATouchOrItsLimit() {
     let opened = ContinuousClock.now
     #expect(PlayerLayout.menuHolds(openedAt: opened, now: opened))
-    #expect(PlayerLayout.menuHolds(openedAt: opened, now: opened + .seconds(9)))
+    // Reading a menu for half a minute keeps it, and the controls under it, open.
+    #expect(PlayerLayout.menuHolds(openedAt: opened, now: opened + .seconds(30)))
+    #expect(PlayerLayout.menuHolds(openedAt: opened, now: opened + .seconds(59)))
     // Dismissed by a tap outside, which iOS does not report: the hold lets go.
-    #expect(!PlayerLayout.menuHolds(openedAt: opened, now: opened + .seconds(10)))
+    #expect(!PlayerLayout.menuHolds(openedAt: opened, now: opened + .seconds(60)))
     // A pick or a touch cleared it.
     #expect(!PlayerLayout.menuHolds(openedAt: nil, now: opened))
 }

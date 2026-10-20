@@ -189,8 +189,13 @@ enum PlayerLayout {
         due && !menuOpen && (!controlsShown || windowHeight >= upNextRoom)
     }
 
-    /// The longest an open menu holds the controls up and Up Next back.
-    static let menuHoldLimit: Duration = .seconds(10)
+    /// The longest an open menu holds the controls up and Up Next back. Long
+    /// enough to read and choose in it: at 10 s an open menu went with the
+    /// hiding controls (the iPhone walk, round 2). iOS never says when a menu
+    /// closes, so one dismissed by a tap outside keeps the controls up this
+    /// long, unless the player is touched first.
+    // ponytail: a fixed cap; a UIKit menu with willEnd would end the hold exactly.
+    static let menuHoldLimit: Duration = .seconds(60)
 
     /// An OSD menu holds from when it opens until a pick or the next touch
     /// clears `openedAt`. iOS never says when a menu closes, so one dismissed

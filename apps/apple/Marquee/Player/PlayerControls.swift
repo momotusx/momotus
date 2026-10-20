@@ -291,6 +291,7 @@ struct PlayerControls: View {
                 if !groups.other.isEmpty {
                     Menu("Other languages") {
                         ForEach(groups.other, id: \.language) { languageMenu($0) }
+                            .onAppear { hold(true) }
                     }
                 }
                 // An addon track's timing, half a second a press, for this play;
@@ -362,6 +363,8 @@ struct PlayerControls: View {
                     Choice(text: SubtitleMenu.title(track), detail: SubtitleMenu.detail(track), selected: model.subtitle == track)
                 }
             }
+            // A submenu opened is the viewer still choosing: the hold starts again.
+            .onAppear { hold(true) }
         } label: {
             Choice(text: group.heading, selected: model.subtitle.map(group.tracks.contains) ?? false)
         }
