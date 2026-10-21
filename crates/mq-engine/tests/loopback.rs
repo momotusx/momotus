@@ -7,7 +7,7 @@ use std::net::Ipv4Addr;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use mq_engine::{Engine, FileHint, TorrentHandle};
+use mq_engine::{Cached, Engine, FileHint, TorrentHandle};
 use tokio::io::AsyncReadExt;
 
 async fn read_range(
@@ -770,4 +770,148 @@ async fn a_paused_torrent_flushes_its_bitfield() {
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     assert!(claimed, "the pause left the claims in memory");
+}
+
+/// The details of a torrent played here before stay beside its folder
+/// (plans/research/start-latency.md, cause 5): a later engine on the
+/// folder adds it with no peer, tracker or DHT to ask, so no ut_metadata,
+/// and `cached` knows it before any add.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_second_add_reads_the_kept_details_with_no_peer() {
+    let s = support::swarm(true).await;
+    let dir = tempfile::tempdir().unwrap();
+    let first = engine_on(dir.path()).await;
+    assert_eq!(first.cached(&s.info_hash, 1, 0).await, None, "kept early");
+    let t = first
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let files = first.files(t).unwrap();
+    let movie = first
+        .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
+        .await
+        .unwrap();
+    assert!(dir.path().join(format!("{}.torrent", s.info_hash)).exists());
+    first.remove(t, true).await.unwrap();
+    drop(first);
+    let again = engine_on(dir.path()).await;
+    let nothing = Some(Cached { ready: false });
+    assert_eq!(again.cached(&s.info_hash, movie, 0).await, nothing);
+    assert_eq!(
+        again.cached(&s.info_hash.to_uppercase(), movie, 0).await,
+        nothing
+    );
+    // Only the kept file can answer: with no source at all the magnet
+    // fails at once.
+    let t = again
+        .add_magnet(&s.info_hash, &[], &[])
+        .await
+        .expect("added from the kept details");
+    assert_eq!(again.files(t).unwrap(), files);
+    // A removal with the data takes the details too.
+    again.remove(t, false).await.unwrap();
+    assert!(!dir.path().join(format!("{}.torrent", s.info_hash)).exists());
+}
+
+/// Kept details cut short, or another torrent's, are not used: the add
+/// asks the peers, and the next file choice keeps the right ones.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn bad_kept_details_fall_back_to_the_peers() {
+    let s = support::swarm(true).await;
+    let dir = tempfile::tempdir().unwrap();
+    let kept = dir.path().join(format!("{}.torrent", s.info_hash));
+    let other = b"d4:infod6:lengthi1024e4:name5:x.mkv12:piece lengthi16384e6:pieces20:abcdefghijabcdefghijee";
+    let engine = engine_on(dir.path()).await;
+    for bad in [&s.torrent[..s.torrent.len() / 2], &other[..]] {
+        std::fs::write(&kept, bad).unwrap();
+        assert_eq!(engine.cached(&s.info_hash, 1, 0).await, None);
+        let no_peers = engine.add_magnet(&s.info_hash, &[], &[]).await;
+        assert!(no_peers.is_err(), "the bad file was used");
+    }
+    let t = engine
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    assert_eq!(engine.files(t).unwrap().len(), 2);
+    engine
+        .select_file(t, "default", &FileHint::Largest)
+        .await
+        .unwrap();
+    let meta = mq_engine::librqbit::torrent_from_bytes(&std::fs::read(&kept).unwrap())
+        .map(|m| m.info_hash.as_string())
+        .unwrap();
+    assert_eq!(meta, s.info_hash, "the right details replace the bad ones");
+}
+
+/// An MP4 of `len` bytes with its 200 KiB `moov` after `mdat`.
+fn mp4_moov_last(len: usize) -> Vec<u8> {
+    let moov = 200 << 10;
+    let mut v = vec![0, 0, 0, 24];
+    v.extend(b"ftypisom");
+    v.extend([0; 12]);
+    v.extend(((len - 24 - moov) as u32).to_be_bytes());
+    v.extend(b"mdat");
+    v.extend((v.len()..len - moov).map(|i| (i as u32).wrapping_mul(2_654_435_761) as u8));
+    v.extend((moov as u32).to_be_bytes());
+    v.extend(b"moov");
+    v.resize(len, 7);
+    v
+}
+
+/// A resume from what this device holds (plans/player-polish.md 2b): with
+/// the swarm gone, a later engine on the folder reaches Ready from the
+/// pieces kept, with no peer reachable. An MP4 that kept only what Ready
+/// waits on finds its index in its head on disk; a whole file plays to
+/// its end.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_kept_torrent_starts_with_no_peer_reachable() {
+    let mkv: Vec<u8> = (0..5 * 1024 * 1024 + 12_345u32)
+        .map(|i| (i.wrapping_mul(2_654_435_761) >> 13) as u8)
+        .collect();
+    for (name, movie, whole) in [
+        ("movie.mkv", mkv, true),
+        ("movie.mp4", mp4_moov_last(6 << 20), false),
+    ] {
+        let s = support::swarm_movie(name, movie.clone()).await;
+        let dir = tempfile::tempdir().unwrap();
+        let first = engine_on(dir.path()).await;
+        let t = first
+            .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+            .await
+            .unwrap();
+        let file = first
+            .select_file(t, "default", &FileHint::Name(name.into()))
+            .await
+            .unwrap();
+        if whole {
+            read_range(&first, t, file, 0, movie.len() as u64).await;
+        } else {
+            let reader = first.open_reader(t, "default", file).await.unwrap();
+            reader.range(0, None).await.unwrap().ready().await.unwrap();
+        }
+        first.remove(t, true).await.unwrap();
+        drop(first);
+        let hash = s.info_hash.clone();
+        drop(s);
+        let again = engine_on(dir.path()).await;
+        let ready = Some(Cached { ready: true });
+        assert_eq!(again.cached(&hash, file, 0).await, ready, "{name}");
+        let t = again.add_magnet(&hash, &[], &[]).await.unwrap();
+        again
+            .select_file(t, "default", &FileHint::Name(name.into()))
+            .await
+            .unwrap();
+        let reader = again.open_reader(t, "default", file).await.unwrap();
+        let mut range = reader.range(0, None).await.unwrap();
+        tokio::time::timeout(Duration::from_secs(10), range.ready())
+            .await
+            .expect("Ready with no peer")
+            .unwrap();
+        assert_eq!(again.stats(t).await.unwrap().peers, 0);
+        if whole {
+            let mut all = Vec::new();
+            range.read_to_end(&mut all).await.unwrap();
+            assert!(all == movie, "{name} differs");
+        }
+    }
 }

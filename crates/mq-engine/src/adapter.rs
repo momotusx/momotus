@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use librqbit::{ExtEvent, ManagedTorrent};
 use mq_engine_sched::{
     Action, Bitfield, BlockIdx, Config, DemandId, Event, FileIndex, Geometry, PeerId, Scheduler,
-    Stats,
+    StartBytes, Stats,
 };
 use tokio::sync::{mpsc, watch};
 
@@ -154,6 +154,8 @@ pub(crate) struct Snapshot {
     pub rate: Option<(usize, u64, u64)>,
     /// What a window's scheduler counts as held.
     pub held_bytes: Option<u64>,
+    /// What the focused range's Ready waits on (DWH only).
+    pub start: Option<StartBytes>,
 }
 
 /// The capacity sample covers the adapter's first 30 s.
@@ -364,6 +366,7 @@ impl Translator {
                 .as_ref()
                 .filter(|_| self.windowed)
                 .map(Scheduler::held_bytes),
+            start: self.sched.as_ref().and_then(Scheduler::start_bytes),
         }
     }
 
@@ -1092,6 +1095,11 @@ mod tests {
     fn a_rate_sets_the_scheduler_windows() {
         let mut tr = Translator::new(256 * 1024, &[1 << 30], Config::standard(), true);
         tr.tick(1_000);
+        // What Ready waits on is in (the head's 1 MiB, the 2 MiB tail): the
+        // range has all its windows.
+        for piece in (0..4).chain(4088..4096) {
+            tr.on_ext(ExtEvent::PieceChecked { piece, ok: true });
+        }
         open(&mut tr, 1, 0);
         let class = |tr: &Translator, p| tr.sched.as_ref().unwrap().class_of(p);
         // 10 Mbit/s default: playback ends at 1 + 4 + 37.5 MiB, readahead
@@ -1231,6 +1239,28 @@ mod tests {
         let mut b = size.to_be_bytes().to_vec();
         b.extend(kind);
         b
+    }
+
+    /// The loading screen's counters: what the newest range's Ready waits
+    /// on and how much of it is verified; an MP4's index is pending until
+    /// its head is read.
+    #[test]
+    fn the_snapshot_counts_what_ready_waits_on() {
+        let mut tr = translator(true).with_iso_bmff(vec![true]);
+        assert_eq!(tr.snapshot().start, None, "no range");
+        open(&mut tr, 1, 0);
+        // 1 MiB of head (pieces 0..4) and the 2 MiB tail (pieces 8..16).
+        let s = tr.snapshot().start.unwrap();
+        assert_eq!((s.need, s.have, s.index_pending), (3 << 20, 0, true));
+        tr.on_ext(ExtEvent::PieceChecked { piece: 0, ok: true });
+        assert_eq!(tr.snapshot().start.unwrap().have, 256 * KIB);
+        // The head says: a 300 KiB `moov` first, inside the blocking window.
+        tr.index_found(0, &ftyp(&header(300 << 10, b"moov")));
+        let s = tr.snapshot().start.unwrap();
+        assert_eq!(
+            (s.need, s.have, s.index_pending),
+            (1 << 20, 256 * KIB, false)
+        );
     }
 
     #[test]

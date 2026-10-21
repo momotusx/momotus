@@ -324,6 +324,15 @@ pub struct TorrentStats {
     pub received_bytes: u64,
     /// From `select_file` to the first peer unchoking us.
     pub unchoked_ms: Option<u64>,
+    /// What the newest range's Ready waits on, for a loading screen: the
+    /// bytes of its blocking window and its file's index in whole pieces,
+    /// and of those the verified ones; both 0 with no range open (or with
+    /// the stock picker). While an MP4's index is not known yet
+    /// (`start_index_pending`), `start_need` counts the fixed tail, and it
+    /// changes once the file's head says where the index is.
+    pub start_need: u64,
+    pub start_have: u64,
+    pub start_index_pending: bool,
     /// The torrent is paused (idle past its keep-warm minute, or held).
     pub paused: bool,
     /// [`Engine::pause_now`] holds it for some profile: none of that
@@ -340,6 +349,14 @@ pub struct TorrentStats {
     pub held_bytes: Option<u64>,
     /// Eviction rounds the keeper ran for the window.
     pub evict_rounds: u64,
+}
+
+/// What this device keeps of a torrent ([`Engine::cached`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Cached {
+    /// What a start at the asked offset waits on (its blocking window and
+    /// the file's index) is verified on disk: Ready needs no peer.
+    pub ready: bool,
 }
 
 /// A windowed playback (plans/streaming-window.md 2.1): its plan, the
@@ -703,7 +720,10 @@ impl Engine {
     /// Resolves metadata for an info hash (40 hex or 32 base32 characters).
     /// `trackers` may carry Stremio `sources` (`tracker:` prefixes are
     /// stripped, `dht:` entries are skipped since the DHT is always on).
-    /// Nothing downloads until [`Engine::select_file`].
+    /// A torrent played on this device before is read from the details
+    /// kept beside its folder, with no peer (an unreadable or mismatched
+    /// file falls back to the peers). Nothing downloads until
+    /// [`Engine::select_file`].
     pub async fn add_magnet(
         &self,
         info_hash: &str,
@@ -713,19 +733,25 @@ impl Engine {
         // Every add reads the interfaces again, as every playback open does.
         self.inner.cfg.policy.refresh();
         let hash = info_hash.trim();
-        let valid = (hash.len() == 40 && hash.bytes().all(|b| b.is_ascii_hexdigit()))
-            || (hash.len() == 32 && hash.bytes().all(|b| b.is_ascii_alphanumeric()));
-        if !valid {
-            return Err(EngineError::BadInfoHash);
-        }
+        let hex = hex_hash(hash).ok_or(EngineError::BadInfoHash)?;
         // Known already (a failover or a second view of the same torrent):
         // no second metadata round.
-        let lower = hash.to_ascii_lowercase();
         if let Some((&h, _)) = lock(&self.inner.torrents)
             .iter()
-            .find(|(_, t)| t.info_hash == lower)
+            .find(|(_, t)| t.info_hash == hex)
         {
             return Ok(h);
+        }
+        let kept = self.inner.cfg.data_dir.join(&hex).with_extension(TORRENT);
+        if let Some(bytes) = tokio::task::spawn_blocking(move || kept_torrent(&kept, &hex))
+            .await
+            .ok()
+            .flatten()
+        {
+            match self.add(AddTorrent::from_bytes(bytes), peers).await {
+                Ok(h) => return Ok(h),
+                Err(e) => tracing::warn!("{hash}: the kept details failed: {e:#}"),
+            }
         }
         let magnet = magnet_uri(hash, trackers, self.inner.cfg.discovery);
         self.add(AddTorrent::from_url(magnet), peers).await
@@ -755,19 +781,13 @@ impl Engine {
             return Err(anyhow::anyhow!("metadata resolution did not list the torrent").into());
         };
         let metadata_ms = started.elapsed().as_millis() as u64;
-        let files = list
-            .info
-            .iter_file_details()
-            .enumerate()
-            .map(|(idx, fd)| FileInfo {
-                idx,
-                path: fd.filename.iter_components().collect::<Vec<_>>().join("/"),
-                len: fd.len,
-            })
-            .collect();
+        let files = file_infos(&list.info);
         let info_hash = list.info_hash.as_string();
-        let mut peers = peers.to_vec();
-        peers.extend(list.seen_peers.iter().copied());
+        // The peer that sent the details comes first (the fork lists it
+        // first): it is the one known to answer (start-latency cause 6).
+        let mut seen = list.seen_peers.clone();
+        seen.extend(peers.iter().filter(|p| !list.seen_peers.contains(p)));
+        let peers = seen;
         let torrent = Arc::new(Torrent {
             dir: self.inner.cfg.data_dir.join(&info_hash),
             info_hash,
@@ -812,6 +832,38 @@ impl Engine {
 
     pub fn files(&self, h: TorrentHandle) -> Result<Vec<FileInfo>> {
         Ok(self.torrent(h)?.files.clone())
+    }
+
+    /// What this device holds for a start of `file` at byte `offset`, read
+    /// from the data folder alone: no torrent starts and nothing goes on
+    /// the network. `None` unless the torrent's details are kept (it was
+    /// played here before, or is loaded now), so its add needs no peer.
+    pub async fn cached(&self, info_hash: &str, file: usize, offset: u64) -> Option<Cached> {
+        let hex = hex_hash(info_hash.trim())?;
+        let loaded = lock(&self.inner.torrents)
+            .values()
+            .find(|t| t.info_hash == hex)
+            .cloned();
+        // A live torrent's own bitfield: its `.have` claims a piece only
+        // at the next flush. One busy starting answers from the file.
+        let live_have = loaded.as_ref().and_then(|t| {
+            let live = t.live.try_lock().ok()?;
+            live.as_ref()?.managed.ext_have_pieces()
+        });
+        let bytes = loaded.map(|t| t.torrent_bytes.clone());
+        let dir = self.inner.cfg.data_dir.join(&hex);
+        let sched = self.sched_config();
+        tokio::task::spawn_blocking(move || {
+            let bytes = bytes.or_else(|| kept_torrent(&dir.with_extension(TORRENT), &hex))?;
+            let have = live_have
+                .unwrap_or_else(|| std::fs::read(dir.with_extension(HAVE)).unwrap_or_default());
+            Some(Cached {
+                ready: ready_on_disk(&dir, &bytes, &have, sched, file, offset),
+            })
+        })
+        .await
+        .ok()
+        .flatten()
     }
 
     /// The piece hashes over `file`, to check the bytes a reader got.
@@ -884,6 +936,9 @@ impl Engine {
         let tr = adapter::Translator::new(t.piece_len, &lens, sched, self.inner.cfg.dwh)
             .with_iso_bmff(iso_bmff);
         let dwh = tr.drives();
+        // The details beside the `.have`, so the next start reads them with
+        // no peer (start-latency cause 5); they go with the folder.
+        keep_torrent(t.dir.with_extension(TORRENT), t.torrent_bytes.clone()).await;
         let opts = AddTorrentOptions {
             only_files: Some(vec![idx]),
             overwrite: true,
@@ -1049,6 +1104,9 @@ impl Engine {
         s.evict_rounds = t.rounds.load(Ordering::Relaxed);
         s.refetched_bytes = snap.refetched_bytes;
         s.unchoked_ms = snap.unchoked_us.map(|us| us / 1000);
+        let start = snap.start.unwrap_or_default();
+        (s.start_need, s.start_have, s.start_index_pending) =
+            (start.need, start.have, start.index_pending);
         s.dwh = l.dwh;
         if let Some(d) = snap.dwh {
             (
@@ -1095,6 +1153,7 @@ impl Engine {
             None
         } else {
             let _ = tokio::fs::remove_file(t.dir.with_extension(HAVE)).await;
+            let _ = tokio::fs::remove_file(t.dir.with_extension(TORRENT)).await;
             let trash = t.dir.with_extension(SET_ASIDE);
             // One an interrupted round left (only ever ours).
             let _ = tokio::fs::remove_dir_all(&trash).await;
@@ -1761,8 +1820,10 @@ impl Engine {
         }
         let trash = dir.with_extension(SET_ASIDE);
         std::fs::rename(dir, &trash).ok()?;
-        // Its pieces go with it: a later add of the hash checks afresh.
+        // Its pieces and details go with it: a later add of the hash checks
+        // and asks afresh.
         let _ = std::fs::rename(dir.with_extension(HAVE), trash.join(HAVE));
+        let _ = std::fs::rename(dir.with_extension(TORRENT), trash.join(TORRENT));
         Some(trash)
     }
 }
@@ -1773,6 +1834,99 @@ const SET_ASIDE: &str = "evicted";
 /// The ending of a torrent's have-bitfield, beside its folder (the
 /// librqbit fork's fast resume).
 const HAVE: &str = "have";
+
+/// The ending of a torrent's details (its `.torrent` file), beside its
+/// folder.
+const TORRENT: &str = "torrent";
+
+/// Lowercase hex of a v1 info hash given as 40 hex or 32 base32
+/// characters.
+fn hex_hash(hash: &str) -> Option<String> {
+    use std::str::FromStr;
+    let id = librqbit::dht::Id20::from_str(&hash.to_ascii_uppercase()).ok()?;
+    Some(id.as_string())
+}
+
+/// The details kept at `path` when they parse and are `hex`'s (a file cut
+/// short or another torrent's is no use). Blocking: reads the disk.
+fn kept_torrent(path: &Path, hex: &str) -> Option<Vec<u8>> {
+    let bytes = std::fs::read(path).ok()?;
+    match librqbit::torrent_from_bytes(&bytes) {
+        Ok(meta) if meta.info_hash.as_string() == hex => Some(bytes),
+        _ => {
+            tracing::warn!("{}: not the details of {hex}", path.display());
+            None
+        }
+    }
+}
+
+/// Whether a range of `file` opened at `offset` would be Ready from the
+/// pieces in `have` (a BEP 3 bitfield), by the adapter's own rule: the
+/// blocking window and the file's index, an MP4's found from its head on
+/// disk in `dir`. Blocking: reads the disk.
+fn ready_on_disk(
+    dir: &Path,
+    torrent: &[u8],
+    have: &[u8],
+    sched: SchedConfig,
+    file: usize,
+    offset: u64,
+) -> bool {
+    let Some((piece_len, files)) = librqbit::torrent_from_bytes(torrent)
+        .ok()
+        .and_then(|meta| meta.info.data.validate().ok())
+        .map(|info| (info.lengths().default_piece_length(), file_infos(&info)))
+    else {
+        return false;
+    };
+    let Some(path) = files.get(file).map(|f| dir.join(&f.path)) else {
+        return false;
+    };
+    let lens: Vec<u64> = files.iter().map(|f| f.len).collect();
+    let iso = files.iter().map(|f| iso_bmff(&f.path)).collect();
+    let mut tr = adapter::Translator::new(piece_len, &lens, sched, true).with_iso_bmff(iso);
+    tr.verified_bitfield(have);
+    let (ready, rx) = tokio::sync::watch::channel(false);
+    tr.on_msg(adapter::Msg::Open {
+        demand: 0,
+        file,
+        start: offset,
+        end: None,
+        ready,
+    });
+    if let Some((file, n)) = tr.index_wanted() {
+        use std::io::Read;
+        let mut head = vec![0u8; n as usize];
+        let read = std::fs::File::open(&path).and_then(|mut f| f.read_exact(&mut head));
+        tr.index_found(file, if read.is_ok() { &head } else { &[] });
+    }
+    *rx.borrow()
+}
+
+/// A torrent's files, paths `/` separated.
+fn file_infos<B: AsRef<[u8]>>(info: &librqbit::ValidatedTorrentMetaV1Info<B>) -> Vec<FileInfo> {
+    info.iter_file_details()
+        .enumerate()
+        .map(|(idx, fd)| FileInfo {
+            idx,
+            path: fd.filename.iter_components().collect::<Vec<_>>().join("/"),
+            len: fd.len,
+        })
+        .collect()
+}
+
+/// Writes a torrent's details to `path`, whole or not at all: a crash
+/// mid-write leaves the old file or none.
+async fn keep_torrent(path: PathBuf, bytes: Vec<u8>) {
+    let tmp = path.with_extension("torrent.tmp");
+    let kept = async {
+        tokio::fs::write(&tmp, &bytes).await?;
+        tokio::fs::rename(&tmp, &path).await
+    };
+    if let Err(e) = kept.await {
+        tracing::warn!("{}: details not kept: {e}", path.display());
+    }
+}
 
 /// A leftover: when a file in it last changed, the folder, its allocated
 /// size.
