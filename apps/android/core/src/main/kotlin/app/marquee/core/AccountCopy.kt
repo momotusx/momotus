@@ -47,6 +47,7 @@ object AccountCopy {
     const val TV_SIGN_IN = "Sign in with your phone"
     const val TV_SIGN_IN_HOW = "On your phone, open Marquee and tap Sign in another device"
     const val TV_WITHOUT_ACCOUNT = "Use without an account"
+    const val SWITCH_PROFILE = "Switch profile"
     const val SIGN_IN_ANOTHER = "Sign in another device"
     const val APPROVE_WARNING =
         "This screen will see your whole library and every profile. Only approve a screen you can see " +
@@ -171,6 +172,7 @@ object AccountCopy {
             "tvSignIn" to TV_SIGN_IN,
             "tvSignInHow" to TV_SIGN_IN_HOW,
             "tvWithoutAccount" to TV_WITHOUT_ACCOUNT,
+            "switchProfile" to SWITCH_PROFILE,
             "signInAnother" to SIGN_IN_ANOTHER,
             "approveWarning" to APPROVE_WARNING,
             "scanAgainHere" to SCAN_AGAIN_HERE,

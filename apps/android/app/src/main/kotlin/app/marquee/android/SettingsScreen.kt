@@ -52,6 +52,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import app.marquee.core.AccountCopy
 import app.marquee.core.AddonsCopy
 import app.marquee.core.DebridCopy
 import app.marquee.core.DefaultsCopy
@@ -251,7 +252,7 @@ fun SettingsScreen(
                             ProfileLinkRow(
                                 me,
                                 if (s.profiles.size > 1) {
-                                    "Switch profile"
+                                    AccountCopy.SWITCH_PROFILE
                                 } else {
                                     "Add a profile for someone else, or switch"
                                 },
