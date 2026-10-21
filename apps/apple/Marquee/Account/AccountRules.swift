@@ -188,6 +188,11 @@ enum AccountRules {
         return url.fragment(percentEncoded: true)
     }
 
+    /// Report lost's button names the count: "Remove 1 device", "Remove 4 devices".
+    static func reportLostButton(_ count: Int) -> String {
+        fill(count == 1 ? words.reportLostRemove[0] : words.reportLostRemove[1], ["n": "\(count)"])
+    }
+
     // MARK: Sign out (D13)
 
     /// "Remove your profiles and library from this device?": on by default,

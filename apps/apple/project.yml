@@ -157,6 +157,7 @@ targets:
       - path: Marquee/Account/AccountWords.swift
       - path: Marquee/Account/AccountRules.swift
       - path: Marquee/Account/PasskeyContract.swift
+      - path: Marquee/Account/AccountWipe.swift
       - path: Marquee/Versions/StreamChoice.swift
       - path: Marquee/Core/Models.swift
       - path: Marquee/Core/PlaybackModels.swift

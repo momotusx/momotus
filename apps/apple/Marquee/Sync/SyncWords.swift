@@ -183,6 +183,13 @@ enum SyncWords {
     static let authLeave = "stop syncing on this device"
     static let authDelete = "delete your sync account"
     static let authUnlink = "turn off a sign-in for your account"
+
+    // Account page pieces the shared words do not carry yet (plans/accounts.md 4.3)
+    static let signedInWith = "Signed in with"
+    static let linkAnother = "Link another"
+    static let unlink = "Unlink"
+    static let savePasskey = "Save a passkey here"
+    static let linkedOn = "Linked on {date}"
     static let authSignOut = "sign out and remove your library from this device"
 
     /// Fills `{name}` in a sync line.

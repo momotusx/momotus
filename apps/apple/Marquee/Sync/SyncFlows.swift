@@ -17,7 +17,13 @@ struct SyncJoinScreen: View {
     @Environment(SyncModel.self) private var sync
     @Environment(\.metrics) private var metrics
     @Environment(\.dismiss) private var dismiss
-    @State private var server = SyncJoinScreen.rememberedServer
+    @State private var server: String
+
+    /// `server`: the build's hosted relay, filled in from sign-in; else the last one used.
+    init(kit: Bool, server: String? = nil) {
+        self.kit = kit
+        _server = State(initialValue: server ?? SyncJoinScreen.rememberedServer)
+    }
     @State private var name = UserDefaults.standard.string(forKey: "syncName") ?? DeviceName.current
     /// The invite code, or the kit: it stays in this page only.
     @State private var extra = ""
@@ -163,6 +169,8 @@ struct SyncField: View {
 /// shows, say which sync server it joins through and approve it, then show
 /// the six digits the new device must show too. A TV says to use a phone.
 struct AddDeviceScreen: View {
+    /// Opened by the `/pair` link a phone camera followed: scan once more here (D6).
+    var fromLink = false
     @Environment(SyncModel.self) private var sync
     @Environment(\.metrics) private var metrics
     @Environment(\.dismiss) private var dismiss
@@ -182,7 +190,7 @@ struct AddDeviceScreen: View {
     var body: some View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
-                ScreenTitle(text: W.addTitle)
+                ScreenTitle(text: AccountWords.shared.signInAnother)
                 #if os(tvOS)
                 Elsewhere(glyph: "qr-code", title: W.tvOnly, text: W.tvAdd)
                 #else
@@ -215,28 +223,15 @@ struct AddDeviceScreen: View {
                 .font(.text(Theme.type.body))
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
+            if fromLink { Callout(glyph: "camera", text: AccountWords.shared.scanAgainHere) }
             Callout(glyph: "shield-alert", text: W.addWarning)
             #if os(iOS)
             Button { error = nil; scanning = true } label: { Label(W.scan, glyph: "camera") }
                 .buttonStyle(PillButtonStyle(prominent: true))
             #endif
-            SyncField(label: scanLabel, text: $code, prompt: W.pasteHint, typing: $typing, mono: true)
-            Button { take(code) } label: { Label(W.approve, glyph: "check") }
-                .buttonStyle(PillButtonStyle(prominent: !hasCamera))
-                .disabled(code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             if let error { Said(tone: .bad, text: error) }
         }
     }
-
-    private var hasCamera: Bool {
-        #if os(iOS)
-        true
-        #else
-        false
-        #endif
-    }
-
-    private var scanLabel: String { hasCamera ? W.pasteLabel : W.pasteOnly }
 
     /// A scanned or pasted code goes to the step that names its sync server first; never straight to approving.
     private func take(_ text: String) {
@@ -247,6 +242,7 @@ struct AddDeviceScreen: View {
         }
         typing = nil
         error = nil
+        announce(AccountWords.shared.codeFound)
         reviewing = trimmed
     }
 
@@ -261,6 +257,7 @@ struct AddDeviceScreen: View {
                 .font(.text(Theme.type.body))
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
+            Callout(glyph: "shield-alert", text: AccountWords.shared.approveWarning)
             if let error { Said(tone: .bad, text: error) }
             FlowRow(spacing: Theme.Space.xs) {
                 Button { approve(qr) } label: { Label(busy ? W.approving : W.approve, glyph: "check") }
@@ -766,8 +763,8 @@ struct ReportLostScreen: View {
         .background(Theme.Palette.bg)
         .topScrim()
         .task { await load() }
-        .confirmationDialog(W.lostButton(drop.count) + "?", isPresented: $confirming, titleVisibility: .visible) {
-            Button(W.lostButton(drop.count), role: .destructive) { report() }
+        .confirmationDialog(AccountRules.reportLostButton(drop.count) + "?", isPresented: $confirming, titleVisibility: .visible) {
+            Button(AccountRules.reportLostButton(drop.count), role: .destructive) { report() }
             Button(W.cancel, role: .cancel) {}
         } message: {
             Text(W.named(W.lostLede, name))
@@ -798,7 +795,7 @@ struct ReportLostScreen: View {
                     .font(.text(Theme.type.callout, relativeTo: .callout))
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
-                ForEach(rows) { row in tick(row) }
+                ForEach(rows) { row in tick(row, joined: joinedWithPasskey(row.id, preview, members)) }
             }
         }
         let kits = SyncRules.lostKitsGoing(preview, keep: keep)
@@ -811,15 +808,22 @@ struct ReportLostScreen: View {
                 #else
                 report()
                 #endif
-            } label: { Label(W.lostButton(drop.count), glyph: "shield-alert") }
+            } label: { Label(AccountRules.reportLostButton(drop.count), glyph: "shield-alert") }
                 .buttonStyle(DestructiveTextStyle())
                 .disabled(busy)
             Button(W.cancel) { dismiss() }.buttonStyle(PillButtonStyle())
         }
     }
 
+    /// "Joined with a passkey on <date>" for a device that joined through one:
+    /// a stolen phone may hold any synced passkey (plans/accounts.md 3.2).
+    private func joinedWithPasskey(_ id: String, _ preview: LostPreview, _ members: [MemberInfo]) -> String? {
+        guard preview.passkeyJoined.contains(id), let member = members.first(where: { $0.id == id }) else { return nil }
+        return AccountRules.fill(AccountWords.shared.joinedWithPasskey, ["date": AccountRules.date(member.addedMs)])
+    }
+
     /// One device that goes unless the user unticks it.
-    private func tick(_ row: SyncRules.LostRow) -> some View {
+    private func tick(_ row: SyncRules.LostRow, joined: String? = nil) -> some View {
         let going = !keep.contains(row.id)
         return Button {
             if going { keep.insert(row.id) } else { keep.remove(row.id) }
@@ -831,6 +835,11 @@ struct ReportLostScreen: View {
                     Text(row.detail)
                         .font(.text(Theme.type.callout, relativeTo: .callout))
                         .foregroundStyle(Theme.Palette.muted)
+                    if let joined {
+                        Text(joined)
+                            .font(.text(Theme.type.callout, relativeTo: .callout))
+                            .foregroundStyle(Theme.Palette.muted)
+                    }
                 }
                 Spacer(minLength: 0)
             }

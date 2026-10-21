@@ -16,19 +16,25 @@ final class AccountWipe {
 
     @ObservationIgnored private let core: CoreClient
     @ObservationIgnored private let sync: SyncModel
-    @ObservationIgnored private let trakt: TraktModel
-    @ObservationIgnored private let debrid: DebridSession
+    /// A profile's Trakt record goes (TraktModel.profileGone).
+    @ObservationIgnored private let traktGone: @MainActor (String) -> Void
+    /// The debrid accounts now, and their disconnect (tombstone first: DebridSession).
+    @ObservationIgnored private let debridAccounts: @MainActor () -> [DebridAccount]
+    @ObservationIgnored private let disconnect: @MainActor (DebridAccount) async throws -> Void
     @ObservationIgnored private let defaults: UserDefaults
 
     /// The flag kept from the first step to the wipe, and whether debrid goes too.
     static let pendingKey = "accountWipePending"
     static let debridKey = "accountWipeDebrid"
 
-    init(core: CoreClient, sync: SyncModel, trakt: TraktModel, debrid: DebridSession, defaults: UserDefaults = .standard) {
+    init(core: CoreClient, sync: SyncModel, traktGone: @escaping @MainActor (String) -> Void,
+         debridAccounts: @escaping @MainActor () -> [DebridAccount], disconnect: @escaping @MainActor (DebridAccount) async throws -> Void,
+         defaults: UserDefaults = .standard) {
         self.core = core
         self.sync = sync
-        self.trakt = trakt
-        self.debrid = debrid
+        self.traktGone = traktGone
+        self.debridAccounts = debridAccounts
+        self.disconnect = disconnect
         self.defaults = defaults
     }
 
@@ -70,10 +76,10 @@ final class AccountWipe {
         do {
             for profile in profiles {
                 try await core.perform("traktSignOut", ["profile": profile])
-                trakt.profileGone(profile)
+                traktGone(profile)
             }
             if disconnectDebrid {
-                for account in debrid.view.snapshot?.accounts ?? [] { try await debrid.disconnect(account) }
+                for account in debridAccounts() { try await disconnect(account) }
             }
             try await core.perform("signOut", ["wipe": true, "disconnectDebrid": disconnectDebrid])
             defaults.removeObject(forKey: Self.pendingKey)

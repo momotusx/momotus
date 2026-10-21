@@ -154,6 +154,11 @@ private func announcement(_ kind: String, member: String? = "m", by: String? = "
     #expect(AccountRules.returnedFragment(try #require(URL(string: "marquee://pair#flow=f"))) == nil)
 }
 
+@Test func reportLostNamesTheCount() {
+    #expect(AccountRules.reportLostButton(1) == "Remove 1 device")
+    #expect(AccountRules.reportLostButton(4) == "Remove 4 devices")
+}
+
 @Test func aTVAlwaysRemovesItsLibraryOnSignOut() {
     #expect(AccountRules.removesLibrary(asked: false, tv: true))
     #expect(AccountRules.removesLibrary(asked: true, tv: false))
@@ -189,4 +194,55 @@ private func announcement(_ kind: String, member: String? = "m", by: String? = "
     }
     let preview = try JSONDecoder().decode(LostPreview.self, from: Data(#"{"devices":["a"],"passkeyJoined":["a"],"kits":[],"deviceKits":[]}"#.utf8))
     #expect(preview.passkeyJoined == ["a"])
+}
+
+// Sign out with the wipe (D13), steps 2 and 3 on a real core: each profile's
+// Trakt record goes first, a stopped run keeps its flag, a restart finishes it.
+@Suite(.serialized) @MainActor struct AccountWipeTests {
+    @Test func removeHereSignsEachProfileOutOfTraktThenWipes() async throws {
+        let core = RealCore()
+        #expect(await core.ready())
+        let defaults = try #require(UserDefaults(suiteName: "mq-test-\(UUID().uuidString)"))
+        let sync = SyncModel(core: core.client, records: FakeKeychain().record, defaults: defaults)
+        let session = ProfileSession(core: core.client, sync: sync)
+        #expect(await eventually { session.snapshot != nil })
+        try await session.perform("createProfile", ["name": "Kid", "avatar": ProfileRules.formatAvatar(glyph: "cat", color: "teal")])
+        #expect(await eventually { session.snapshot?.profiles.count == 2 })
+        let profiles = try #require(session.snapshot?.profiles.map(\.id))
+        var gone: [String] = []
+        let wipe = AccountWipe(core: core.client, sync: sync, traktGone: { gone.append($0) },
+                               debridAccounts: { [] }, disconnect: { _ in }, defaults: defaults)
+
+        try await wipe.removeHere(profiles: profiles, disconnectDebrid: false)
+        #expect(gone == profiles)
+        #expect(!wipe.pending && wipe.problem == nil)
+        #expect(await eventually { session.snapshot?.profiles.map(\.id) == ["default"] })
+    }
+
+    @Test func aStoppedWipeKeepsItsFlagAndAResumeFinishesIt() async throws {
+        let core = RealCore()
+        #expect(await core.ready())
+        let defaults = try #require(UserDefaults(suiteName: "mq-test-\(UUID().uuidString)"))
+        let sync = SyncModel(core: core.client, records: FakeKeychain().record, defaults: defaults)
+        var fails = true
+        var disconnected: [String] = []
+        let account = DebridAccount(service: "realdebrid", generation: "g1", state: "ok")
+        let wipe = AccountWipe(core: core.client, sync: sync, traktGone: { _ in }, debridAccounts: { [account] },
+                               disconnect: {
+                                   if fails { throw CoreError("offline", code: "unreachable") }
+                                   disconnected.append($0.generation)
+                               }, defaults: defaults)
+
+        // Nothing pending: a resume does nothing.
+        await wipe.resume(profiles: ["default"])
+        #expect(disconnected.isEmpty)
+
+        await #expect(throws: CoreError.self) { try await wipe.removeHere(profiles: ["default"], disconnectDebrid: true) }
+        #expect(wipe.pending && wipe.problem != nil)
+        // The restart: the debrid choice was kept with the flag.
+        fails = false
+        await wipe.resume(profiles: ["default"])
+        #expect(disconnected == ["g1"])
+        #expect(!wipe.pending && wipe.problem == nil)
+    }
 }

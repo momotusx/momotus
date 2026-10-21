@@ -54,6 +54,22 @@ private struct NotJoined: View {
                 Button { sync.deleteKeyAgain() } label: { Label(W.retry, glyph: "refresh-cw") }
                     .buttonStyle(PillButtonStyle(prominent: true))
             }
+            // The build's hosted relay: sign in (a TV: with the phone), the library added to the account.
+            if let server = AccountServer.default {
+                #if os(tvOS)
+                NavigationLink {
+                    PairingScreen(core: core, autostart: server, heading: AccountWords.shared.tvSignIn, lede: AccountWords.shared.tvSignInHow)
+                } label: {
+                    SettingsRow(symbol: "qr-code", title: AccountWords.shared.tvSignIn, detail: AccountWords.shared.tvSignInHow)
+                }
+                .buttonStyle(.row)
+                #else
+                NavigationLink { LaterSignIn(server: server) } label: {
+                    SettingsRow(symbol: "door-open", title: AccountWords.shared.signInTitle, detail: AccountWords.shared.libraryAdded)
+                }
+                .buttonStyle(.row)
+                #endif
+            }
             NavigationLink { PairingScreen(core: core) } label: {
                 SettingsRow(symbol: "qr-code", title: W.pairTitle, detail: W.pairText)
             }
@@ -100,6 +116,7 @@ private struct JoinedSync: View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
             state
             kitCallouts
+            SignedInWith()
             devices
             links
             LeaveSync()
@@ -307,6 +324,12 @@ private struct JoinedSync: View {
                     Text(W.addedLine(kit: member.kit, addedMs: member.addedMs, by: SyncRules.sponsorName(member, in: members)))
                         .font(.text(Theme.type.callout, relativeTo: .callout))
                         .foregroundStyle(Theme.Palette.muted)
+                    ForEach(accountLines(member), id: \.self) { line in
+                        Text(line)
+                            .font(.text(Theme.type.callout, relativeTo: .callout))
+                            .foregroundStyle(Theme.Palette.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 .accessibilityElement(children: .combine)
             }
@@ -347,6 +370,20 @@ private struct JoinedSync: View {
         }
     }
 
+    /// A kit's "Last used", a device's "Joined with a passkey", and on this
+    /// phone or tablet the note to sign out before giving it away (3.2).
+    private func accountLines(_ member: MemberInfo) -> [String] {
+        var lines: [String] = []
+        if member.kit, let used = AccountRules.lastUsed(member, members: members) { lines.append(used) }
+        if !member.kit, member.viaPasskey {
+            lines.append(AccountRules.fill(AccountWords.shared.joinedWithPasskey, ["date": AccountRules.date(member.addedMs)]))
+        }
+        if member.thisDevice, member.form == "phone" || member.form == "tablet", members.contains(where: \.passkey) {
+            lines.append(AccountWords.shared.givingAway)
+        }
+        return lines
+    }
+
     private func memberName(_ member: MemberInfo) -> some View {
         Text(SyncRules.memberName(member))
             .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
@@ -381,10 +418,18 @@ private struct JoinedSync: View {
             #if os(tvOS)
             Elsewhere(glyph: "qr-code", title: W.addTitle, text: W.tvAdd)
             if mayMakeKit { Elsewhere(glyph: "key-round", title: W.kitTitle, text: W.tvKit) }
+            #elseif os(macOS)
+            Elsewhere(glyph: "qr-code", title: AccountWords.shared.signInAnother, text: AccountWords.shared.usePhoneToSignIn)
+            if mayMakeKit {
+                SavePasskeyRow()
+                NavigationLink { RecoveryKitScreen() } label: { SettingsRow(symbol: "key-round", title: W.kitTitle, detail: W.kitText) }
+                    .buttonStyle(.row)
+            }
             #else
-            NavigationLink { AddDeviceScreen() } label: { SettingsRow(symbol: "qr-code", title: W.addTitle, detail: W.addText) }
+            NavigationLink { AddDeviceScreen() } label: { SettingsRow(symbol: "qr-code", title: AccountWords.shared.signInAnother, detail: W.addText) }
                 .buttonStyle(.row)
             if mayMakeKit {
+                SavePasskeyRow()
                 NavigationLink { RecoveryKitScreen() } label: { SettingsRow(symbol: "key-round", title: W.kitTitle, detail: W.kitText) }
                     .buttonStyle(.row)
             }
@@ -396,6 +441,12 @@ private struct JoinedSync: View {
 /// Stop syncing: queued edits go first; with edits unsent, sync again or stop anyway.
 private struct LeaveSync: View {
     @Environment(SyncModel.self) private var sync
+    @Environment(AccountWipe.self) private var wipe
+    @Environment(ProfileSession.self) private var profiles
+    /// D13: the library goes too; on by default, always on a TV.
+    @State private var removeLibrary = true
+    /// And each debrid connection, ticked by default.
+    @State private var disconnectDebrid = true
     @State private var unsent = false
     /// The sync server would not or could not let it leave: stopping here only still works.
     @State private var refused = false
@@ -413,7 +464,24 @@ private struct LeaveSync: View {
             Text(W.leaveText)
                 .font(.text(Theme.type.callout, relativeTo: .callout))
                 .foregroundStyle(Theme.Palette.muted)
+            if owner {
+                #if !os(tvOS)
+                Toggle(AccountWords.shared.removeLibraryAsk, isOn: $removeLibrary)
+                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .foregroundStyle(Theme.Palette.text)
+                #else
+                Text(AccountWords.shared.removeLibraryAsk)
+                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .foregroundStyle(Theme.Palette.text)
+                #endif
+                if removes {
+                    Toggle(AccountWords.shared.removeLibraryDebrid, isOn: $disconnectDebrid)
+                        .font(.text(Theme.type.callout, relativeTo: .callout))
+                        .foregroundStyle(Theme.Palette.text)
+                }
+            }
             if let error { Said(tone: .bad, text: error) }
+            if let problem = wipe.problem { Said(tone: .bad, text: problem) }
             #if os(tvOS)
             if let force = again {
                 // Its own step, Cancel first: one press never stops syncing on a TV.
@@ -457,6 +525,19 @@ private struct LeaveSync: View {
         #endif
     }
 
+    /// The removal is the owner profile's only (D13); a TV always removes.
+    private var owner: Bool { SyncRules.mayDeleteAccount(profiles.snapshot) }
+
+    private var isTV: Bool {
+        #if os(tvOS)
+        true
+        #else
+        false
+        #endif
+    }
+
+    private var removes: Bool { owner && AccountRules.removesLibrary(asked: removeLibrary, tv: isTV) }
+
     private func leave(force: Bool, askedAgain: Bool = false) async {
         guard !busy else { return }
         busy = true
@@ -464,7 +545,12 @@ private struct LeaveSync: View {
         error = nil
         again = nil
         do {
-            try await sync.signOut(force: force, askedAgain: askedAgain)
+            if removes {
+                let ids = profiles.snapshot?.profiles.map(\.id) ?? []
+                try await wipe.signOutAndRemove(profiles: ids, disconnectDebrid: disconnectDebrid, force: force, askedAgain: askedAgain)
+            } else {
+                try await sync.signOut(force: force, askedAgain: askedAgain)
+            }
         } catch {
             let problem = SyncProblem(error, action: .leave)
             // No lock to ask with (or a TV): the page asks a second time.
@@ -486,6 +572,10 @@ private struct LeaveSync: View {
 /// Cancel focused, as Leave's: one press never deletes the account.
 private struct DeleteSync: View {
     @Environment(SyncModel.self) private var sync
+    /// Apple signs in to this account: its sheet re-authenticates the delete.
+    @State private var appleLinked = false
+    /// Apple's step failed: the next press deletes anyway, after the OS prompt.
+    @State private var anyway = false
     @State private var asking = false
     @State private var error: String?
     @State private var busy = false
@@ -522,7 +612,7 @@ private struct DeleteSync: View {
                 .onAppear { cancelFocused = true }
             }
             #endif
-            Button { asking = true } label: { Label(busy ? W.deleting : W.deleteButton, glyph: "trash") }
+            Button { asking = true } label: { Label(busy ? W.deleting : anyway ? AccountWords.shared.deleteAnyway : W.deleteButton, glyph: "trash") }
                 .buttonStyle(DestructiveTextStyle())
                 .disabled(busy || isTV && asking)
                 #if os(tvOS)
@@ -534,6 +624,8 @@ private struct DeleteSync: View {
         // same update that closes it: it takes it once it is enabled again.
         .onChange(of: asking) { _, now in if !now { rowFocused = true } }
         #endif
+        // Apple signs in to it: its sheet, not the OS prompt, re-authenticates.
+        .task { appleLinked = (try? await sync.identities())?.contains { $0.provider == "apple" } ?? false }
         #if !os(tvOS)
         .confirmationDialog(W.deleteTitle + "?", isPresented: $asking, titleVisibility: .visible) {
             Button(W.deleteButton, role: .destructive) { Task { await delete() } }
@@ -557,6 +649,20 @@ private struct DeleteSync: View {
         busy = true
         defer { busy = false }
         error = nil
+        #if !os(tvOS)
+        if appleLinked, !anyway {
+            do {
+                let receipt = try await AppleReauth.receipt(sync: sync)
+                try await sync.deleteAccount(receipt: receipt)
+            } catch {
+                if case SignInSheets.Failure.cancelled = error { return }
+                // Apple's step did not run: Delete anyway, behind the OS prompt.
+                anyway = true
+                self.error = SyncProblem(error, action: .delete).words
+            }
+            return
+        }
+        #endif
         do {
             try await sync.deleteAccount()
         } catch {
