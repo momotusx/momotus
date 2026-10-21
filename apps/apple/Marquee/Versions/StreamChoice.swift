@@ -307,7 +307,8 @@ enum StreamChoice {
     /// storage plays a torrent too big for its free space in a window.
     static func blockedWords(_ blocked: BlockedVersions, window: Bool = true) -> (text: String, action: String)? {
         guard let w = words.blocked.reason(blocked.reason) else { return nil }
-        let text = window ? w.text : w.textNoWindow ?? w.text
+        let text = (window ? w.text : w.textNoWindow ?? w.text)
+            .replacingOccurrences(of: "{versionsAre}", with: counted("versionsAre", blocked.count))
         return (text.replacingOccurrences(of: "{versions}", with: counted("versions", blocked.count)), w.action)
     }
 

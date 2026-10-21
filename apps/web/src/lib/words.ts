@@ -689,7 +689,7 @@ export function lineWords(l: ReasonLine): { tone: Exclude<Tone, "idle">; text: s
 export function blockedWords(reason: BlockedReason, count: number, window = true) {
   const w = choice.blocked[reason];
   const text = !window && "textNoWindow" in w ? w.textNoWindow : w.text;
-  return { text: text.replace("{versions}", counted("versions", count)), action: w.action };
+  return { text: text.replace("{versions}", counted("versions", count)).replace("{versionsAre}", counted("versionsAre", count)), action: w.action };
 }
 
 /** The recommended card's line: a version that plays in a window says so

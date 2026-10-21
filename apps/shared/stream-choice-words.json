@@ -3,7 +3,8 @@
   "plurals": {
     "seeders": ["{n} seeder", "{n} seeders"],
     "playbacks": ["{n} playback", "{n} playbacks"],
-    "versions": ["{n} version", "{n} versions"]
+    "versions": ["{n} version", "{n} versions"],
+    "versionsAre": ["{n} version is", "{n} versions are"]
   },
   "lines": {
     "copy": {
@@ -98,7 +99,7 @@
     },
     "noSpace": {
       "text": "Marquee found {versions}, but this device is nearly full, so none can play here.",
-      "textNoWindow": "Marquee found {versions}, too large for this storage.",
+      "textNoWindow": "{versionsAre} too large for this storage.",
       "action": "Show them"
     },
     "nothingPlaysHere": {

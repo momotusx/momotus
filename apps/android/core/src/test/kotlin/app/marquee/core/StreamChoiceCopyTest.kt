@@ -374,8 +374,12 @@ class StreamChoiceCopyTest {
     @Test
     fun `on a storage with no windows the blocked state says the versions are too large for it`() {
         assertEquals(
-            "Marquee found 3 versions, too large for this storage.",
+            "3 versions are too large for this storage.",
             StreamChoiceCopy.blocked(BlockedReason.NoSpace, 3, window = false)?.first,
+        )
+        assertEquals(
+            "1 version is too large for this storage.",
+            StreamChoiceCopy.blocked(BlockedReason.NoSpace, 1, window = false)?.first,
         )
         assertEquals(
             "Found 3 versions, but none plays on this device.",

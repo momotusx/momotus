@@ -133,7 +133,8 @@ test("a window says its minutes ahead, or on mobile data that it keeps a short s
 test("a hidden row with no room says so, or that it is too large for a storage with no windows", () => {
   expect(hiddenSummary({ count: 2, byReason: [["noSpace", 2]] })).toBe("2 have no room to play here, even a few minutes at a time");
   expect(hiddenSummary({ count: 3, byReason: [["noSpace", 1], ["tooLarge", 2]] }, false)).toBe("1 is too large for this storage, 2 are over your size limit");
-  expect(blockedWords("noSpace", 3, false).text).toBe("Marquee found 3 versions, too large for this storage.");
+  expect(blockedWords("noSpace", 3, false).text).toBe("3 versions are too large for this storage.");
+  expect(blockedWords("noSpace", 1, false).text).toBe("1 version is too large for this storage.");
   expect(blockedWords("nothingPlaysHere", 3, false).text).toBe("Found 3 versions, but none plays on this device.");
 });
 

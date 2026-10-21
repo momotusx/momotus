@@ -80,7 +80,9 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
     // A storage that plays no window: too large for it, whatever its free space.
     #expect(VersionWords.hidden(hidden, window: false) == "2 are too large for this storage, 1 is over your size limit")
     let blocked = try JSONDecoder().decode(BlockedVersions.self, from: Data(#"{"reason": "noSpace", "count": 3, "rows": []}"#.utf8))
-    #expect(StreamChoice.blockedWords(blocked, window: false)?.text == "Marquee found 3 versions, too large for this storage.")
+    #expect(StreamChoice.blockedWords(blocked, window: false)?.text == "3 versions are too large for this storage.")
+    let one = try JSONDecoder().decode(BlockedVersions.self, from: Data(#"{"reason": "noSpace", "count": 1, "rows": []}"#.utf8))
+    #expect(StreamChoice.blockedWords(one, window: false)?.text == "1 version is too large for this storage.")
     #expect(StreamChoice.blockedWords(blocked)?.text == "Marquee found 3 versions, but this device is nearly full, so none can play here.")
 }
 

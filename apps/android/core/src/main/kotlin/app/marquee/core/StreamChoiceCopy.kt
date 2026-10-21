@@ -75,6 +75,7 @@ object StreamChoiceCopy {
             "seeders" to ("{n} seeder" to "{n} seeders"),
             "playbacks" to ("{n} playback" to "{n} playbacks"),
             "versions" to ("{n} version" to "{n} versions"),
+            "versionsAre" to ("{n} version is" to "{n} versions are"),
         )
 
     val LINES =
@@ -149,7 +150,7 @@ object StreamChoiceCopy {
         )
 
     /** The no-room text on a storage that plays no window: too large for it, whatever its free space. */
-    const val NO_SPACE_NO_WINDOW = "Marquee found {versions}, too large for this storage."
+    const val NO_SPACE_NO_WINDOW = "{versionsAre} too large for this storage."
     const val SHOW_ROWS = "Show them"
 
     val LEARNED =
@@ -430,7 +431,9 @@ object StreamChoiceCopy {
     ): Pair<String, String>? =
         BLOCKED[reason]?.let { (text, action) ->
             val words = if (reason == BlockedReason.NoSpace && !window) NO_SPACE_NO_WINDOW else text
-            words.replace("{versions}", counted("versions", count)) to action
+            words
+                .replace("{versions}", counted("versions", count))
+                .replace("{versionsAre}", counted("versionsAre", count)) to action
         }
 
     /** The recommended card's line: a version that plays in a window says so under its reasons. */
