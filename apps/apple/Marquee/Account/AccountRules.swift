@@ -22,12 +22,7 @@ enum AccountRules {
     /// The relay's provider ids worded: Apple, Google and Facebook by name,
     /// any other (an OpenID entry) as the sync server gives it.
     static func providerName(_ id: String) -> String {
-        switch id {
-        case "apple": "Apple"
-        case "google": "Google"
-        case "facebook": "Facebook"
-        default: id
-        }
+        words.providerName[id] ?? id
     }
 
     /// "Apple Account", "Google account", "Facebook account", else "<id> sign-in".

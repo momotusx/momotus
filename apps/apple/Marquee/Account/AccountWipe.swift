@@ -2,79 +2,72 @@ import Foundation
 import Observation
 
 /// Sign out with "Remove your profiles and library from this device" (D13),
-/// in the three steps the core holds the app to, repeated after a restart
-/// until the wipe answers: (1) leave the account, (2) sign every profile out
-/// of Trakt and delete its record, and disconnect each debrid account when
-/// asked, (3) the wipe. The `accountGone` card's Remove from this device is
-/// steps 2 and 3. The owner profile's only (`notOwner` otherwise).
+/// in the three steps the core holds the app to: (1) leave the account,
+/// (2) sign every profile out of Trakt and delete its record, and disconnect
+/// each debrid account when asked, (3) the wipe. The core keeps the removal
+/// from before the leave goes out until the wipe answers (`signOut
+/// {removeAfter}`, the profiles view's `wipePending`; a failed leave or any
+/// join clears it), so a restart repeats steps 2 and 3. The `accountGone`
+/// card's Remove from this device records it without a leave, then the same.
+/// The owner profile's only (`notOwner` otherwise).
 @MainActor @Observable
 final class AccountWipe {
     /// A wipe runs now.
     private(set) var running = false
-    /// What stopped the last run, in words; the pending flag stays for the next.
+    /// What stopped the last run, in words; the core keeps the removal for the next.
     private(set) var problem: String?
 
     @ObservationIgnored private let core: CoreClient
     @ObservationIgnored private let sync: SyncModel
+    /// The removal the core holds (the profiles view's `wipePending`).
+    @ObservationIgnored private let wipePending: @MainActor () -> WipePending?
     /// A profile's Trakt record goes (TraktModel.profileGone).
     @ObservationIgnored private let traktGone: @MainActor (String) -> Void
     /// The debrid accounts now, and their disconnect (tombstone first: DebridSession).
     @ObservationIgnored private let debridAccounts: @MainActor () -> [DebridAccount]
     @ObservationIgnored private let disconnect: @MainActor (DebridAccount) async throws -> Void
-    @ObservationIgnored private let defaults: UserDefaults
 
-    /// The flag kept from the first step to the wipe, and whether debrid goes too.
-    static let pendingKey = "accountWipePending"
-    static let debridKey = "accountWipeDebrid"
-
-    init(core: CoreClient, sync: SyncModel, traktGone: @escaping @MainActor (String) -> Void,
-         debridAccounts: @escaping @MainActor () -> [DebridAccount], disconnect: @escaping @MainActor (DebridAccount) async throws -> Void,
-         defaults: UserDefaults = .standard) {
+    init(core: CoreClient, sync: SyncModel, wipePending: @escaping @MainActor () -> WipePending?,
+         traktGone: @escaping @MainActor (String) -> Void,
+         debridAccounts: @escaping @MainActor () -> [DebridAccount], disconnect: @escaping @MainActor (DebridAccount) async throws -> Void) {
         self.core = core
         self.sync = sync
+        self.wipePending = wipePending
         self.traktGone = traktGone
         self.debridAccounts = debridAccounts
         self.disconnect = disconnect
-        self.defaults = defaults
     }
 
-    /// A wipe was started and has not answered yet.
-    var pending: Bool { defaults.bool(forKey: Self.pendingKey) }
+    /// A removal was started and its wipe has not answered yet.
+    var pending: Bool { wipePending() != nil }
 
-    /// Sign out, then remove: step 1 behind the OS prompt, then 2 and 3.
+    /// Sign out, then remove: step 1 behind the OS prompt (the core records the removal first), then 2 and 3.
     func signOutAndRemove(profiles: [String], disconnectDebrid: Bool, force: Bool, askedAgain: Bool = false) async throws {
-        try await sync.signOut(force: force, askedAgain: askedAgain, quiet: true)
-        mark(disconnectDebrid: disconnectDebrid)
-        try await finish(profiles: profiles)
+        try await sync.signOut(force: force, askedAgain: askedAgain, removeAfter: disconnectDebrid)
+        try await finish(profiles: profiles, disconnectDebrid: disconnectDebrid)
     }
 
-    /// The account is gone already (another device deleted it): steps 2 and 3,
-    /// behind the same OS prompt as a sign-out.
+    /// The account is gone already (another device deleted it): behind the same
+    /// OS prompt as a sign-out, the removal recorded with no leave, then steps 2 and 3.
     func removeHere(profiles: [String], disconnectDebrid: Bool, askedAgain: Bool = false) async throws {
         try await sync.confirmRemoval(askedAgain: askedAgain)
-        mark(disconnectDebrid: disconnectDebrid)
-        try await finish(profiles: profiles)
+        try await core.perform("signOut", ["removeAfter": ["debrid": disconnectDebrid]])
+        try await finish(profiles: profiles, disconnectDebrid: disconnectDebrid)
     }
 
-    /// After a restart on the owner profile: the steps left, when one was pending.
+    /// At start, on the owner profile with no account here: the steps the core says are left.
     func resume(profiles: [String]) async {
-        guard pending, !sync.joined, !running else { return }
-        try? await finish(profiles: profiles)
-    }
-
-    private func mark(disconnectDebrid: Bool) {
-        defaults.set(true, forKey: Self.pendingKey)
-        defaults.set(disconnectDebrid, forKey: Self.debridKey)
+        guard let pending = wipePending(), !sync.joined, !running else { return }
+        try? await finish(profiles: profiles, disconnectDebrid: pending.debrid)
     }
 
     /// Steps 2 and 3. Each profile's Trakt sign-out comes before its record goes;
     /// each debrid account goes tombstone first; the wipe only confirms them.
-    private func finish(profiles: [String]) async throws {
+    private func finish(profiles: [String], disconnectDebrid: Bool) async throws {
         guard !running else { return }
         running = true
         problem = nil
         defer { running = false }
-        let disconnectDebrid = defaults.bool(forKey: Self.debridKey)
         do {
             for profile in profiles {
                 try await core.perform("traktSignOut", ["profile": profile])
@@ -84,11 +77,9 @@ final class AccountWipe {
                 for account in debridAccounts() { try await disconnect(account) }
             }
             try await core.perform("signOut", ["wipe": true, "disconnectDebrid": disconnectDebrid])
-            defaults.removeObject(forKey: Self.pendingKey)
-            defaults.removeObject(forKey: Self.debridKey)
         } catch {
             let code = (error as? CoreError)?.code ?? ""
-            problem = AccountRules.trouble(code)?.text ?? error.localizedDescription
+            problem = AccountRules.trouble(code)?.text ?? AccountWords.shared.wipeFailed
             throw error
         }
     }

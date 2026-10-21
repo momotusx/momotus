@@ -136,7 +136,8 @@ private struct JoinedSync: View {
             Button("\(W.remove) \(SyncRules.memberName(member))", role: .destructive) { Task { await remove(member) } }
             Button(W.cancel, role: .cancel) {}
         } message: { member in
-            Text(member.kit ? W.removeKitAsk : W.removeDeviceAsk(SyncRules.memberName(member), kits: SyncRules.kitsMade(by: member.id, in: members)))
+            Text(member.passkey ? AccountWords.shared.removePasskeyAsk
+                 : member.kit ? W.removeKitAsk : W.removeDeviceAsk(SyncRules.memberName(member), kits: SyncRules.kitsMade(by: member.id, in: members)))
         }
     }
 

@@ -29,12 +29,12 @@ struct SignedInWith: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
-            Text(SyncWords.signedInWith).display(Theme.type.title2).foregroundStyle(Theme.Palette.text).accessibilityAddTraits(.isHeader)
+            Text(words.signedInWith).display(Theme.type.title2).foregroundStyle(Theme.Palette.text).accessibilityAddTraits(.isHeader)
             if let error { Said(tone: .bad, text: error) }
             ForEach(links ?? []) { link in row(link) }
             #if !os(tvOS)
             if owner, !unlinked.isEmpty {
-                Text(SyncWords.linkAnother)
+                Text(words.linkAnother)
                     .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
                     .foregroundStyle(Theme.Palette.muted)
                 FlowRow(spacing: Theme.Space.xs) {
@@ -77,7 +77,7 @@ struct SignedInWith: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(AccountRules.providerAccount(link.provider))
                         .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
-                    Text(AccountRules.fill(SyncWords.linkedOn, ["date": AccountRules.date(link.createdMs)]))
+                    Text(AccountRules.fill(words.linkedOn, ["date": AccountRules.date(link.createdMs)]))
                         .font(.text(Theme.type.callout, relativeTo: .callout))
                         .foregroundStyle(Theme.Palette.muted)
                 }
@@ -86,14 +86,14 @@ struct SignedInWith: View {
             if owner {
                 // The only sign-in left: what signing in is without it (4.3).
                 if links?.count == 1 {
-                    Text(SyncWords.unlinkLast)
+                    Text(words.unlinkLast)
                         .font(.text(Theme.type.callout, relativeTo: .callout))
                         .foregroundStyle(Theme.Palette.muted)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.leading, 24 + Theme.Space.s)
                 }
                 FlowRow(spacing: Theme.Space.xs) {
-                    Button { Task { await unlink(link) } } label: { Label(SyncWords.unlink, glyph: "x") }
+                    Button { Task { await unlink(link) } } label: { Label(words.unlink, glyph: "x") }
                         .buttonStyle(PillButtonStyle())
                         .disabled(busy)
                     if anyway == link {
@@ -271,7 +271,7 @@ struct SavePasskeyRow: View {
         if PasskeyContract.relyingParty != nil {
             VStack(alignment: .leading, spacing: Theme.Space.xs) {
                 Button { Task { await save() } } label: {
-                    SettingsRow(symbol: "key-round", title: SyncWords.savePasskey, detail: "")
+                    SettingsRow(symbol: "key-round", title: AccountWords.shared.savePasskeyHere, detail: "")
                 }
                 .buttonStyle(.row)
                 .disabled(busy)

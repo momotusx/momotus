@@ -266,7 +266,7 @@ struct ProfileButton: View {
         if let me = profiles.snapshot?.current {
             if let signInAnother {
                 Menu {
-                    Button("Switch profile", action: action)
+                    Button(AccountWords.shared.switchProfile, action: action)
                     Button(AccountWords.shared.signInAnother, action: signInAnother)
                 } label: {
                     avatar(me)

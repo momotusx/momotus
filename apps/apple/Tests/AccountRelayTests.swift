@@ -8,7 +8,7 @@ import Testing
 // TEST_RUNNER_MARQUEE_SIGNIN_RELAY) and reports skipped without it. The auth
 // session's browser is played by URLSession, which follows the provider's
 // picker and stops at the return; the other sheets are scripted. The suite
-// signs in 13 times, 26 of the 30 sign-in calls a minute the relay allows one
+// signs in 14 times, 28 of the 30 sign-in calls a minute the relay allows one
 // address: start a run a minute after the last.
 
 private let relayAddress = ProcessInfo.processInfo.environment["MARQUEE_SIGNIN_RELAY"]
@@ -225,6 +225,38 @@ private func browse(_ url: String, as subject: String) async throws -> String {
         #expect(try await PasskeySave.here(sync: tablet, sheets: sheets.calls, userName: "Robin (Marquee)") == .alreadyHere)
         #expect(sheets.created == 1)
         withExtendedLifetime((phoneCore, tabletCore)) {}
+    }
+
+    @Test func aSignOutWithRemovalIsHeldByTheCoreUntilAJoin() async throws {
+        let relay = try #require(relayAddress)
+        let (phone, core) = try await account(relay, as: subject())
+        phone.ownerPrompt = { _ in true }
+        let prf = PasskeyContract.challenge()
+        try await phone.savePasskey(prf: prf, label: AccountRules.passkeyLabel(device: "Phone"))
+        // A device joined through the passkey, so it stays when the phone leaves (3.2).
+        let (tablet, tabletCore) = try await member()
+        try await tablet.recover(server: relay, prf: prf, name: "Tablet")
+        let session = ProfileSession(core: core.client, sync: phone)
+        #expect(await eventually { session.snapshot != nil })
+        try await session.perform("createProfile", ["name": "Kid", "avatar": ProfileRules.formatAvatar(glyph: "cat", color: "teal")])
+        #expect(await eventually { session.snapshot?.profiles.count == 2 })
+        let account = DebridAccount(service: "realdebrid", generation: "g1", state: "ok")
+        let wipe = AccountWipe(core: core.client, sync: phone, wipePending: { session.snapshot?.wipePending }, traktGone: { _ in },
+                               debridAccounts: { [account] }, disconnect: { _ in throw CoreError("offline", code: "unreachable") })
+
+        // Step 1 lands, step 2 stops: out of the account, and the core holds the removal.
+        await #expect(throws: CoreError.self) {
+            try await wipe.signOutAndRemove(profiles: ["default"], disconnectDebrid: true, force: true, askedAgain: true)
+        }
+        #expect(!phone.joined)
+        #expect(await eventually { session.snapshot?.wipePending == WipePending(debrid: true) })
+        // A join clears it: a later plain sign-out never finishes the old removal (A P2-1).
+        try await phone.recover(server: relay, prf: prf, name: "Phone")
+        #expect(await eventually { session.snapshot?.wipePending == nil })
+        try await phone.signOut(force: true, askedAgain: true)
+        await wipe.resume(profiles: ["default"])
+        #expect(session.snapshot?.profiles.count == 2 && session.snapshot?.wipePending == nil)
+        withExtendedLifetime((core, tabletCore)) {}
     }
 
     // MARK: Helpers

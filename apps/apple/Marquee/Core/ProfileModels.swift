@@ -11,8 +11,16 @@ struct ProfilesSnapshot: Decodable, Hashable, Sendable {
     let locked: Bool
     /// How many profiles `createProfile` allows.
     let max: Int
+    /// A sign-out that removes the library waits for its steps 2 and 3 (D13): the core holds it.
+    var wipePending: WipePending? = nil
 
     var current: ProfileInfo? { profiles.first { $0.id == active } }
+}
+
+/// The removal the core holds (`signOut {removeAfter}`) until its wipe answers.
+struct WipePending: Decodable, Hashable, Sendable {
+    /// The debrid accounts go too.
+    let debrid: Bool
 }
 
 struct ProfileInfo: Decodable, Hashable, Sendable, Identifiable {

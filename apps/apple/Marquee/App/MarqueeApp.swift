@@ -33,11 +33,12 @@ struct MarqueeApp: App {
         #endif
         let trakt = TraktModel(core: core)
         _trakt = State(initialValue: trakt)
-        _profiles = State(initialValue: ProfileSession(core: core, sync: sync, trakt: trakt))
+        let profiles = ProfileSession(core: core, sync: sync, trakt: trakt)
+        _profiles = State(initialValue: profiles)
         let debrid = DebridSession(core: core)
         _debrid = State(initialValue: debrid)
         _wipe = State(initialValue: AccountWipe(
-            core: core, sync: sync, traktGone: { trakt.profileGone($0) },
+            core: core, sync: sync, wipePending: { profiles.snapshot?.wipePending }, traktGone: { trakt.profileGone($0) },
             debridAccounts: { debrid.view.snapshot?.accounts ?? [] }, disconnect: { try await debrid.disconnect($0) }))
         #if DEBUG && os(macOS)
         DebugHooks.listenForSnapshots()
@@ -52,9 +53,9 @@ struct MarqueeApp: App {
         #endif
     }
 
-    /// D13's removal resumes on the owner, unlocked, after a restart between its steps.
+    /// D13's removal resumes on the owner, unlocked, when the core says one is left.
     private var wipeKey: String {
-        guard profiles.open, profiles.snapshot?.current?.isOwner == true else { return "" }
+        guard profiles.open, profiles.snapshot?.current?.isOwner == true, profiles.snapshot?.wipePending != nil else { return "" }
         return "\(core.generation)/\(profiles.snapshot?.active ?? "")"
     }
 

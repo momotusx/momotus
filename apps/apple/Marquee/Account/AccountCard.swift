@@ -13,6 +13,8 @@ struct AccountCard: View {
     @State private var error: String?
     /// Remove from this device with no lock to check with (a TV, no passcode): one more press.
     @State private var askAgain = false
+    /// "Not you? Remove this passkey" asks once what removing it does.
+    @State private var removingPasskey = false
 
     private var words: AccountWords { .shared }
     private var owner: Bool { profiles.snapshot?.current?.isOwner == true }
@@ -86,23 +88,38 @@ struct AccountCard: View {
             }
         case .announcement(let notice):
             Callout(glyph: AccountRules.isSecurityNotice(notice.kind) ? "shield-alert" : "info", text: AccountRules.text(notice, members: members))
-            FlowRow(spacing: Theme.Space.xs) {
-                if AccountRules.showsOK(notice, owner: owner) {
-                    Button(words.announceOk) { run { try await sync.ackAnnouncements([notice.id]) } }
+            if removingPasskey, let member = notice.member {
+                // A passkey nobody here added: what removing it does, then the OS prompt.
+                Text(words.removePasskeyAsk)
+                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .foregroundStyle(Theme.Palette.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                FlowRow(spacing: Theme.Space.xs) {
+                    Button(SyncWords.cancel) { removingPasskey = false }
                         .buttonStyle(PillButtonStyle(prominent: true))
-                }
-                // A passkey nobody here added: remove it at once.
-                if notice.kind == "passkey", owner, let member = notice.member {
-                    Button(words.announceNotYou) {
+                    Button(SyncWords.remove) {
                         run {
                             try await sync.removeDevice(member)
                             try await sync.ackAnnouncements([notice.id])
+                            removingPasskey = false
                         }
                     }
                     .buttonStyle(DestructiveTextStyle())
                 }
+                .disabled(busy)
+            } else {
+                FlowRow(spacing: Theme.Space.xs) {
+                    if AccountRules.showsOK(notice, owner: owner) {
+                        Button(words.announceOk) { run { try await sync.ackAnnouncements([notice.id]) } }
+                            .buttonStyle(PillButtonStyle(prominent: true))
+                    }
+                    if notice.kind == "passkey", owner, notice.member != nil {
+                        Button(words.announceNotYou) { removingPasskey = true }
+                            .buttonStyle(DestructiveTextStyle())
+                    }
+                }
+                .disabled(busy)
             }
-            .disabled(busy)
         case .secondWayIn:
             Button(action: openAccount) { Label(words.secondWayIn, glyph: "key-round") }
                 .buttonStyle(PillButtonStyle())

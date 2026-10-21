@@ -419,13 +419,17 @@ final class SyncModel {
     }
 
     /// Leaves the account. Without `force` the core refuses while edits are unsent.
-    /// `quiet`: the first step of a sign-out that also removes the library (D13): no notice, it goes on.
-    func signOut(force: Bool, askedAgain: Bool = false, quiet: Bool = false) async throws {
-        try await confirmOwner(quiet ? SyncWords.authSignOut : SyncWords.authLeave, endsAccess: true, askedAgain: askedAgain)
-        let _: JSONValue = try await withRecord("signOut", ["force": force]) { _ in nil }
+    /// `removeAfter`: the first step of a sign-out that also removes the library
+    /// (D13), with or without the debrid accounts: the core records the removal
+    /// before the leave goes out, and no notice is said, it goes on.
+    func signOut(force: Bool, askedAgain: Bool = false, removeAfter debrid: Bool? = nil) async throws {
+        try await confirmOwner(debrid != nil ? SyncWords.authSignOut : SyncWords.authLeave, endsAccess: true, askedAgain: askedAgain)
+        var fields: [String: any Sendable] = ["force": force]
+        if let debrid { fields["removeAfter"] = ["debrid": debrid] }
+        let _: JSONValue = try await withRecord("signOut", fields) { _ in nil }
         forget()
         problem = nil
-        notice = quiet ? nil : SyncWords.left
+        notice = debrid != nil ? nil : SyncWords.left
     }
 
     /// Stops syncing on this device only: nothing is sent and the sync server

@@ -31,6 +31,14 @@ private func announcement(_ kind: String, member: String? = "m", by: String? = "
     #expect(words.accountGoneActions == ["Sign in", "Remove from this device", "OK"])
     #expect(words.providerAccount["apple"] == "Apple Account")
     #expect(words.reportLostRemove.count == 2)
+    // The Account page's words, shared with the web: read from the file, never written here.
+    for (key, value) in [("signedInWith", words.signedInWith), ("linkAnother", words.linkAnother), ("unlink", words.unlink),
+                         ("linkedOn", words.linkedOn), ("savePasskeyHere", words.savePasskeyHere), ("unlinkLast", words.unlinkLast),
+                         ("removePasskeyAsk", words.removePasskeyAsk), ("switchProfile", words.switchProfile), ("wipeFailed", words.wipeFailed)] {
+        #expect(value == file[key] as? String, "\(key)")
+    }
+    #expect(AccountRules.providerName("google") == "Google")
+    #expect(AccountRules.providerName("mock") == "mock")
 }
 
 @Test func thePasskeyInputAndSaltAreTheVectorsFiles() throws {
@@ -213,21 +221,28 @@ private func announcement(_ kind: String, member: String? = "m", by: String? = "
 }
 
 // Sign out with the wipe (D13), steps 2 and 3 on a real core: each profile's
-// Trakt record goes first, a stopped run keeps its flag, a restart finishes it.
+// Trakt record goes first; the core holds the removal (`wipePending`) from
+// before the leave until the wipe, so a stopped run is finished after a restart.
 @Suite(.serialized) @MainActor struct AccountWipeTests {
-    @Test func removeHereSignsEachProfileOutOfTraktThenWipes() async throws {
+    /// A core with the app's model and its profiles view.
+    private func device() async throws -> (SyncModel, ProfileSession, RealCore) {
         let core = RealCore()
         #expect(await core.ready())
-        let defaults = try #require(UserDefaults(suiteName: "mq-test-\(UUID().uuidString)"))
-        let sync = SyncModel(core: core.client, records: FakeKeychain().record, defaults: defaults)
+        let sync = SyncModel(core: core.client, records: FakeKeychain().record,
+                             defaults: try #require(UserDefaults(suiteName: "mq-test-\(UUID().uuidString)")))
         let session = ProfileSession(core: core.client, sync: sync)
         #expect(await eventually { session.snapshot != nil })
+        return (sync, session, core)
+    }
+
+    @Test func removeHereSignsEachProfileOutOfTraktThenWipes() async throws {
+        let (sync, session, core) = try await device()
         try await session.perform("createProfile", ["name": "Kid", "avatar": ProfileRules.formatAvatar(glyph: "cat", color: "teal")])
         #expect(await eventually { session.snapshot?.profiles.count == 2 })
         let profiles = try #require(session.snapshot?.profiles.map(\.id))
         var gone: [String] = []
-        let wipe = AccountWipe(core: core.client, sync: sync, traktGone: { gone.append($0) },
-                               debridAccounts: { [] }, disconnect: { _ in }, defaults: defaults)
+        let wipe = AccountWipe(core: core.client, sync: sync, wipePending: { session.snapshot?.wipePending },
+                               traktGone: { gone.append($0) }, debridAccounts: { [] }, disconnect: { _ in })
         // Remove from this device asks the OS prompt first, as a sign-out does.
         var asked: [String] = []
         sync.ownerPrompt = { asked.append($0); return true }
@@ -235,51 +250,51 @@ private func announcement(_ kind: String, member: String? = "m", by: String? = "
         try await wipe.removeHere(profiles: profiles, disconnectDebrid: false)
         #expect(asked == [SyncWords.authRemoveHere])
         #expect(gone == profiles)
-        #expect(!wipe.pending && wipe.problem == nil)
-        #expect(await eventually { session.snapshot?.profiles.map(\.id) == ["default"] })
+        #expect(wipe.problem == nil)
+        #expect(await eventually { session.snapshot?.profiles.map(\.id) == ["default"] && session.snapshot?.wipePending == nil })
     }
 
-    @Test func aStoppedWipeKeepsItsFlagAndAResumeFinishesIt() async throws {
-        let core = RealCore()
-        #expect(await core.ready())
-        let defaults = try #require(UserDefaults(suiteName: "mq-test-\(UUID().uuidString)"))
-        let sync = SyncModel(core: core.client, records: FakeKeychain().record, defaults: defaults)
+    @Test func aStoppedRemovalIsHeldByTheCoreAndAResumeFinishesIt() async throws {
+        let (sync, session, core) = try await device()
+        sync.ownerPrompt = { _ in true }
         var fails = true
         var disconnected: [String] = []
-        sync.ownerPrompt = { _ in true }
         let account = DebridAccount(service: "realdebrid", generation: "g1", state: "ok")
-        let wipe = AccountWipe(core: core.client, sync: sync, traktGone: { _ in }, debridAccounts: { [account] },
-                               disconnect: {
-                                   if fails { throw CoreError("offline", code: "unreachable") }
-                                   disconnected.append($0.generation)
-                               }, defaults: defaults)
-
+        func model() -> AccountWipe {
+            AccountWipe(core: core.client, sync: sync, wipePending: { session.snapshot?.wipePending }, traktGone: { _ in },
+                        debridAccounts: { [account] }, disconnect: {
+                            if fails { throw CoreError("offline", code: "unreachable") }
+                            disconnected.append($0.generation)
+                        })
+        }
+        let first = model()
         // Nothing pending: a resume does nothing.
-        await wipe.resume(profiles: ["default"])
-        #expect(disconnected.isEmpty)
+        await first.resume(profiles: ["default"])
+        #expect(disconnected.isEmpty && !first.pending)
 
-        await #expect(throws: CoreError.self) { try await wipe.removeHere(profiles: ["default"], disconnectDebrid: true, askedAgain: true) }
-        #expect(wipe.pending && wipe.problem != nil)
-        // The restart: the debrid choice was kept with the flag.
+        await #expect(throws: CoreError.self) { try await first.removeHere(profiles: ["default"], disconnectDebrid: true, askedAgain: true) }
+        #expect(first.problem != nil)
+        // The core holds the removal, with its debrid choice.
+        #expect(await eventually { session.snapshot?.wipePending == WipePending(debrid: true) })
+        // A restart: a new model finishes it from the core's flag.
         fails = false
-        await wipe.resume(profiles: ["default"])
-        #expect(disconnected == ["g1"])
-        #expect(!wipe.pending && wipe.problem == nil)
+        let second = model()
+        await second.resume(profiles: ["default"])
+        #expect(disconnected == ["g1"] && second.problem == nil)
+        #expect(await eventually { session.snapshot?.wipePending == nil })
     }
 
     @Test func aDeclinedPromptRemovesNothing() async throws {
-        let core = RealCore()
-        #expect(await core.ready())
-        let defaults = try #require(UserDefaults(suiteName: "mq-test-\(UUID().uuidString)"))
-        let sync = SyncModel(core: core.client, records: FakeKeychain().record, defaults: defaults)
+        let (sync, session, core) = try await device()
         var gone: [String] = []
-        let wipe = AccountWipe(core: core.client, sync: sync, traktGone: { gone.append($0) },
-                               debridAccounts: { [] }, disconnect: { _ in }, defaults: defaults)
+        let wipe = AccountWipe(core: core.client, sync: sync, wipePending: { session.snapshot?.wipePending },
+                               traktGone: { gone.append($0) }, debridAccounts: { [] }, disconnect: { _ in })
         sync.ownerPrompt = { _ in false }
         // With a lock the prompt says no; without one the page asks a second time first.
         await #expect { try await wipe.removeHere(profiles: ["default"], disconnectDebrid: true) } throws: {
             ["unconfirmed", "noLockAsk"].contains(($0 as? CoreError)?.code)
         }
         #expect(gone.isEmpty && !wipe.pending)
+        withExtendedLifetime(core) {}
     }
 }
