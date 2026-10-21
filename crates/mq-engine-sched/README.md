@@ -32,7 +32,7 @@ for a in out.drain(..) {
 
 ## Algorithm
 
-1. **Demands.** Every open range is a demand. The newest is focused and gets all windows; older readers keep only their blocking window. If the focused read starts in the last `max(tail, size/64)` of the file (an MP4 `moov` or MKV Cues read), the head's blocking and critical windows are merged in, because the player reads the head next. When the last reader closes, its playback and readahead windows stay as non-urgent work (anchor).
+1. **Demands.** Every open range is a demand. The newest is focused and gets all windows once it is Ready; until then it asks for what Ready waits on and nothing more (its blocking window and the file's index), so fast peers are not kept on critical and readahead pieces while the last Ready block sits at a slow one (`plans/research/start-latency.md`, cause 2). Older readers keep only their blocking window. If the focused read starts in the last `max(tail, size/64)` of the file (an MP4 `moov` or MKV Cues read), the head's blocking and critical windows are merged in, because the player reads the head next. When the last reader closes, its playback and readahead windows stay as non-urgent work (anchor).
 2. **Classes**, most urgent first: blocking (`blocking_bytes` from the reader, never less than the piece under it), tail (last 2 MiB of each opened file), critical (`max(4 MiB, 3 s x bitrate)` minus what the player already buffered), playback (30 s x bitrate), readahead (budget per device class). A piece takes its most urgent class.
 3. **Deadlines.** Blocking and tail are due now; a critical piece is due at `now + (offset - play_pos) / bitrate - safety` (1 s). Urgent pieces are served in deadline order: the focused blocking window, then the tail, then older readers' blocking windows, then critical by offset.
 4. **Block-level fan-out** for urgent pieces (libtorrent's time-critical rule): each free block goes to the eligible peer with the lowest ETA, `max(rtt, queued / rate) + block / rate`, skipping choked and snubbed peers and the slowest 10%, until the best peer's queue exceeds 2 s. Blocks of one piece spread over many peers. When the chosen peer is full, the urgent block takes the slot of its newest non-urgent request ("urgent jumps the queue"). The slowest peers still take urgent pieces that nobody else has, so nothing starves.
@@ -42,12 +42,12 @@ for a in out.drain(..) {
 8. **Stall release**: once the hedge budget is spent, a peer that sent nothing for over 1 s plus its RTT while we wait on it gives its urgent blocks back to the fan-out (cancel and reassign), if another eligible peer has the piece.
 9. **Seek**: when the focused reader lands outside the previous urgent span, every queued request that is now readahead-only or unwanted is cancelled, so the per-peer FIFOs carry the new urgent blocks first.
 10. **Snub**: no payload for 10 s while we wait: depth 1, all but the oldest request cancelled, no urgent blocks. The first payload lifts it. Peers are never disconnected for being slow.
-11. **Readiness**: `Ready { demand }` once the demand's blocking window and its file's index are verified (served bytes are always verified bytes). The index is the fixed tail (`tail_bytes`) until the adapter sends `FileIndex`, see below.
+11. **Readiness**: `Ready { demand }` once the demand's blocking window and its file's index are verified (served bytes are always verified bytes). The index is the fixed tail (`tail_bytes`) until the adapter sends `FileIndex`, see below. `Scheduler::start_bytes` counts the focused read's Ready set in whole pieces and its verified part, for a loading screen.
 12. **Container index** (`Event::FileIndex { file, index }`): the bytes a player must read before it can show a frame, where the container puts them. It replaces the fixed tail for that file, both as urgent work (class Tail) and in readiness:
-    - **MP4 or MOV with `moov` first:** `[0, moov end)`. Ready waits for the whole `moov` and the file's tail is never asked for before Ready. On Tenzing (YTS) the `moov` is 5.07 MiB at the head: the fixed 1 MiB head plus 2 MiB tail made Ready 25 s before AVPlayer could show a frame.
+    - **MP4 or MOV with `moov` first:** `[0, moov end)`. Ready waits for the whole `moov`, and once the head says so the tail is asked for no more (what the pending index asked for, at most `tail_bytes`, may still arrive). On Tenzing (YTS) the `moov` is 5.07 MiB at the head: the fixed 1 MiB head plus 2 MiB tail made Ready 25 s before AVPlayer could show a frame.
     - **MP4 or MOV with `moov` after `mdat`:** `[mdat end, file end)`, the whole `moov` rather than a fixed 2 MiB.
     - **Matroska and anything else:** no `FileIndex`; the fixed tail stands (MKV `Cues` sit at the tail).
-    - **An MP4 or MOV whose head is not read yet:** `Pending`. Only the blocking window is urgent and Ready waits.
+    - **An MP4 or MOV whose head is not read yet:** `Pending`. The fixed tail is urgent meanwhile, where a `moov` written after `mdat` sits (start-latency cause 4: the head then no longer waits for its own arrival before the `moov` is asked for), and Ready waits.
 
     The adapter finds the index from the file's first verified bytes (the top-level boxes before `moov` or `mdat` all sit in the head), so it costs no extra fetch. The loopback server's `hev1` scan then reads a `moov` that is already verified.
 
@@ -118,29 +118,30 @@ Seconds, 200 seeded runs per row (3,600 runs), 5 seeks per run. "playable" is ti
 
 | swarm | piece | scheduler | playable p50 | p90 | p99 | seek p50 | p90 | p99 | capped start / seeks | rebuffer | dup bytes |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| healthy | 256 KiB | dwh | 3.35 | 4.33 | 5.50 | 0.69 | 2.08 | 2.55 | 0 / 0 | 0.8% | 0.18% |
+| healthy | 256 KiB | dwh | 3.76 | 5.42 | 10.34 | 0.64 | 1.33 | 1.69 | 0 / 0 | 4.2% | 0.20% |
 | healthy | 256 KiB | rqbit-like | 20.15 | 39.86 | 49.82 | 20.06 | 36.79 | 49.99 | 0 / 2 | 36.9% | 0.18% |
 | healthy | 256 KiB | stremio-like | 6.70 | 13.54 | 26.75 | 1.51 | 4.64 | 5.42 | 0 / 0 | 9.4% | 0.03% |
-| healthy | 4 MiB | dwh | 4.63 | 5.72 | 6.95 | 2.23 | 3.06 | 5.13 | 0 / 0 | 0.4% | 0.38% |
+| healthy | 4 MiB | dwh | 4.47 | 6.21 | 7.75 | 1.39 | 2.06 | 4.18 | 0 / 0 | 3.0% | 0.82% |
 | healthy | 4 MiB | rqbit-like | 64.47 | 101.98 | cap 120 | 32.71 | 58.76 | cap 60 | 10 / 89 | 17.4% | 0.01% |
 | healthy | 4 MiB | stremio-like | 11.76 | 19.61 | 29.57 | 2.48 | 5.43 | 6.53 | 0 / 0 | 5.6% | 0.03% |
-| healthy | 16 MiB | dwh | 8.27 | 9.25 | 10.99 | 4.14 | 6.26 | 8.32 | 0 / 0 | 2.0% | 0.57% |
+| healthy | 16 MiB | dwh | 7.66 | 8.48 | 10.99 | 3.27 | 5.16 | 7.23 | 0 / 0 | 5.3% | 0.78% |
 | healthy | 16 MiB | rqbit-like | cap 120 | cap 120 | cap 120 | cap 60 | cap 60 | cap 60 | 177 / 63 | 9.2% | 0.01% |
 | healthy | 16 MiB | stremio-like | 15.43 | 24.59 | 45.70 | 5.50 | 7.89 | 10.40 | 0 / 0 | 4.1% | 0.04% |
-| sparse | 256 KiB | dwh | 10.96 | 16.03 | 26.57 | 2.56 | 5.88 | 11.86 | 0 / 2 | 22.7% | 0.33% |
+| sparse | 256 KiB | dwh | 10.71 | 16.16 | 25.48 | 2.12 | 4.30 | 10.13 | 0 / 2 | 34.9% | 1.11% |
 | sparse | 256 KiB | rqbit-like | 31.93 | 65.47 | 104.53 | 23.43 | 47.25 | cap 60 | 0 / 33 | 40.3% | 0.21% |
 | sparse | 256 KiB | stremio-like | 16.77 | 29.17 | 45.37 | 7.79 | 14.05 | 33.70 | 0 / 4 | 35.2% | 0.04% |
-| sparse | 4 MiB | dwh | 15.85 | 30.07 | 54.07 | 7.25 | 17.63 | 42.10 | 0 / 5 | 27.9% | 0.43% |
+| sparse | 4 MiB | dwh | 15.29 | 29.55 | 52.38 | 6.61 | 17.47 | 41.16 | 0 / 4 | 41.9% | 0.81% |
 | sparse | 4 MiB | rqbit-like | 71.64 | cap 120 | cap 120 | 32.96 | cap 60 | cap 60 | 31 / 166 | 29.5% | 0.02% |
 | sparse | 4 MiB | stremio-like | 29.92 | 52.28 | 114.74 | 12.80 | 25.45 | 57.70 | 1 / 8 | 29.4% | 0.04% |
-| sparse | 16 MiB | dwh | 46.03 | 93.06 | cap 120 | 21.11 | 42.40 | cap 60 | 6 / 30 | 11.5% | 0.19% |
+| sparse | 16 MiB | dwh | 46.03 | 92.84 | cap 120 | 20.65 | 42.40 | cap 60 | 6 / 31 | 12.0% | 0.31% |
 | sparse | 16 MiB | rqbit-like | cap 120 | cap 120 | cap 120 | cap 60 | cap 60 | cap 60 | 185 / 51 | 8.2% | 0.02% |
 | sparse | 16 MiB | stremio-like | 61.63 | cap 120 | cap 120 | 26.21 | 48.66 | cap 60 | 21 / 47 | 11.3% | 0.06% |
 
 Reading it:
 
-- DWH is fastest in every cell and percentile, or tied where every scheduler hit the cap (sparse 16 MiB p99). Healthy swarm against the Stremio-like baseline: playable p90 is 68% lower at 256 KiB (4.33 vs 13.54 s), 71% at 4 MiB and 62% at 16 MiB; seek p90 is 55%, 44% and 21% lower. That clears the research/10 6.3 bar of "at least 30% better p90" everywhere except 16 MiB seeks.
-- 16 MiB pieces are where block-level fan-out matters most: whole-piece ownership (rqbit-like) never became playable in 177 of 200 healthy runs, while DWH's head piece arrives at close to link speed (p50 8.3 s for 32 MiB of head plus tail, peer ramp-up included).
-- DWH's duplicate bytes stay at 0.2% to 0.6% of payload, far under the 5% budget.
+- DWH is fastest in every cell and percentile for starts and seeks, or tied where every scheduler hit the cap (sparse 16 MiB p99). Healthy swarm against the Stremio-like baseline: playable p90 is 60% lower at 256 KiB (5.42 vs 13.54 s), 68% at 4 MiB and 66% at 16 MiB; seek p90 is 71%, 62% and 35% lower. That clears the research/10 6.3 bar of "at least 30% better p90" everywhere.
+- 16 MiB pieces are where block-level fan-out matters most: whole-piece ownership (rqbit-like) never became playable in 177 of 200 healthy runs, while DWH's head piece arrives at close to link speed (p50 7.7 s for 32 MiB of head plus tail, peer ramp-up included).
+- Asking for nothing but the Ready set until Ready (2026-10-21; before it, on the same simulator: healthy 256 KiB playable p50, p90, p99 3.35, 4.33, 5.50 s, seek 0.69, 2.08, 2.55 s, rebuffer 0.8%) moves part of the wait from the start to the playback: seeks got faster in every cell (healthy seek p90 2.08 to 1.33 s at 256 KiB, 3.06 to 2.06 s at 4 MiB), starts faster at 4 and 16 MiB pieces and slower at 256 KiB (p90 4.33 to 5.42 s), and rebuffer grew everywhere (healthy 0.8% to 4.2% at 256 KiB, sparse 27.9% to 41.9% at 4 MiB, now above the baselines' 29%), since the critical window starts only once the blocking window is in. Start, seeks and stalls together per run, p50: healthy 9.34 to 9.63 s at 256 KiB, 15.55 to 13.16 s at 4 MiB, 31.32 to 27.53 s at 16 MiB; sparse 33.28 to 35.32 s, 68.38 to 68.96 s, 163.88 to 162.61 s. The real swarms decide (plans/research/start-latency.md).
+- DWH's duplicate bytes stay at 0.2% to 1.1% of payload, far under the 5% budget.
 - The sparse profile is capacity-bound (aggregate peer upload is close to the 9.5 Mbit/s bitrate, and few peers hold each piece), so every scheduler rebuffers there; DWH still starts and seeks fastest.
 - The rqbit-like model is probably pessimistic: with 25 to 50 peers sharing the downlink, each 128-block FIFO is 10 s or more deep, so a seek waits behind it. The one real data point, the rqbit PR #702 baseline on a real 6.5 GB swarm, is seek first-byte p90 7.2 s. Treat its rows as the shape of the problem (FIFO depth, whole-piece ownership, no steal before a peer's first completed piece), not as a measurement.

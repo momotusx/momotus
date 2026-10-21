@@ -414,8 +414,8 @@ pub enum FileIndex {
     /// No index of its own: the last `tail_bytes` (Matroska `Cues`).
     #[default]
     Tail,
-    /// Not known yet (an MP4 whose head is still on its way): only the
-    /// blocking window is urgent, and readiness waits.
+    /// Not known yet (an MP4 whose head is still on its way): the fixed
+    /// tail is urgent meanwhile, and readiness waits.
     Pending,
     /// File bytes `[start, end)`: an MP4 `moov`, with what precedes it when
     /// it comes first.
@@ -480,6 +480,18 @@ impl Class {
     pub fn is_urgent(self) -> bool {
         self <= Class::Critical
     }
+}
+
+/// What a start waits on ([`Scheduler::start_bytes`]), in whole pieces.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct StartBytes {
+    /// The focused read's blocking window and its file's index.
+    pub need: u64,
+    /// Of `need`, the verified pieces.
+    pub have: u64,
+    /// The index is not known yet (an MP4 whose head is on its way):
+    /// `need` counts the fixed tail, and may change once it is.
+    pub index_pending: bool,
 }
 
 /// Counters for diagnostics and the simulator.

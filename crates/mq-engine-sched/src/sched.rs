@@ -3,7 +3,7 @@ use std::ops::Range;
 
 use crate::{
     Action, BLOCK, Bitfield, BlockIdx, Class, Config, DemandId, Event, FileIndex, Geometry, PeerId,
-    PieceIdx, Stats, Window,
+    PieceIdx, StartBytes, Stats, Window,
 };
 
 const US: u64 = 1_000_000;
@@ -663,7 +663,9 @@ impl Scheduler {
         }
     }
 
-    /// The pieces of `file`'s container index; none while it is pending.
+    /// The pieces of `file`'s container index; while it is pending, the
+    /// fixed tail, where an MP4 written before its `moov` keeps it
+    /// (plans/research/start-latency.md, cause 4).
     fn index_pieces(&self, file: usize) -> Range<PieceIdx> {
         let f = self.geo.files()[file];
         match self.index[file] {
@@ -672,7 +674,7 @@ impl Scheduler {
                 self.geo
                     .pieces_in(f.offset + start.min(end), f.offset + end)
             }
-            FileIndex::Tail if self.cfg.tail_bytes > 0 => {
+            FileIndex::Tail | FileIndex::Pending if self.cfg.tail_bytes > 0 => {
                 let tail = f.offset + f.len.saturating_sub(self.cfg.tail_bytes);
                 self.geo.pieces_in(tail, f.offset + f.len)
             }
@@ -1015,6 +1017,13 @@ impl Scheduler {
                 continue; // older readers keep only their blocking window
             }
             focus_blocking.push(blocking);
+            // Until it is Ready, the focused read asks for what Ready waits
+            // on and nothing more: fast peers otherwise fill critical and
+            // readahead pieces while the last head or index block sits at a
+            // slow one (plans/research/start-latency.md, cause 2).
+            if !d.ready {
+                continue;
+            }
             let g = &self.geo;
             let rate = self.bitrate[d.file];
             let now_at = f.offset + play.filter(|&p| p <= d.pos).unwrap_or(d.pos);
@@ -1166,20 +1175,45 @@ impl Scheduler {
             if d.ready {
                 continue;
             }
-            let w = self.windows(d.file, d.start, d.end, None);
             let ready = self.index[d.file] != FileIndex::Pending
-                && self
-                    .geo
-                    .pieces_in(w.blocking.0, w.blocking.1)
-                    .chain(self.index_pieces(d.file))
-                    .all(|p| self.verified.get(p));
+                && self.ready_set(d).all(|p| self.verified.get(p));
             if ready {
                 self.demands[i].ready = true;
+                // Its other windows follow at the next rebuild.
+                self.dirty = true;
                 out.push(Action::Ready {
                     demand: self.demands[i].id,
                 });
             }
         }
+    }
+
+    /// The pieces `d`'s Ready waits on: its blocking window from where it
+    /// opened, and its file's index.
+    fn ready_set(&self, d: &Demand) -> impl Iterator<Item = PieceIdx> {
+        let w = self.windows_core(d.file, d.start, d.end, None);
+        let blocking = self.geo.pieces_in(w.blocking.0, w.blocking.1);
+        blocking.chain(self.index_pieces(d.file))
+    }
+
+    /// The focused read's start, for a loading screen: the bytes of the
+    /// pieces its Ready waits on and of those verified; `None` with no
+    /// focused read.
+    pub fn start_bytes(&self) -> Option<StartBytes> {
+        let d = self.focus()?;
+        let mut pieces: Vec<PieceIdx> = self.ready_set(d).collect();
+        pieces.sort_unstable();
+        pieces.dedup();
+        let size = |&p: &PieceIdx| u64::from(self.geo.piece_size(p));
+        Some(StartBytes {
+            need: pieces.iter().map(size).sum(),
+            have: pieces
+                .iter()
+                .filter(|&&p| self.verified.get(p))
+                .map(size)
+                .sum(),
+            index_pending: self.index[d.file] == FileIndex::Pending,
+        })
     }
 
     // ---- peers ----

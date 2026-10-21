@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use mq_engine_sched::{
     Action, BLOCK, Bitfield, BlockIdx, Class, Config, DemandId, Event, FileIndex, Geometry,
-    HeldBytes, PeerId, PieceIdx, RESERVE_BYTES, Scheduler, Window, WindowInputs,
+    HeldBytes, PeerId, PieceIdx, RESERVE_BYTES, Scheduler, StartBytes, Window, WindowInputs,
 };
 use proptest::prelude::*;
 
@@ -304,6 +304,15 @@ impl Harness {
         }
         acts
     }
+
+    /// Verifies what a range of `file` opened at `start` waits on (its
+    /// blocking window and the file's index), so it is Ready as it opens
+    /// and gets its other windows.
+    fn ready_at(&mut self, file: usize, start: u64) {
+        for piece in self.blocking_pieces(file, start, None) {
+            self.send(Event::PieceVerified { piece });
+        }
+    }
 }
 
 fn requests(acts: &[Action]) -> Vec<(PeerId, BlockIdx)> {
@@ -506,6 +515,7 @@ fn urgent_blocks_of_one_piece_fan_out_across_peers() {
 fn focused_reader_gets_critical_window_and_older_keep_blocking() {
     let g = Geometry::new(256 * KIB as u32, &[256 * MIB]).unwrap();
     let mut h = Harness::new(g, Config::standard());
+    h.ready_at(0, 0);
     h.send(Event::RangeOpened {
         demand: 1,
         file: 0,
@@ -517,6 +527,7 @@ fn focused_reader_gets_critical_window_and_older_keep_blocking() {
     assert_eq!(h.s.class_of(4), Some(Class::Critical));
     assert_eq!(h.s.class_of(19), Some(Class::Critical));
     assert_eq!(h.s.class_of(20), Some(Class::Playback));
+    h.ready_at(0, 128 * MIB);
     h.send(Event::RangeOpened {
         demand: 2,
         file: 0,
@@ -541,6 +552,7 @@ fn focused_reader_gets_critical_window_and_older_keep_blocking() {
 fn play_position_shrinks_critical_window() {
     let g = Geometry::new(256 * KIB as u32, &[256 * MIB]).unwrap();
     let mut h = Harness::new(g, Config::standard());
+    h.ready_at(0, 0);
     h.send(Event::RangeOpened {
         demand: 1,
         file: 0,
@@ -566,6 +578,7 @@ fn play_position_shrinks_critical_window() {
 fn first_read_in_tail_zone_merges_head() {
     let g = Geometry::new(256 * KIB as u32, &[256 * MIB]).unwrap();
     let mut h = Harness::new(g, Config::standard());
+    h.ready_at(0, 256 * MIB - 100 * KIB);
     h.send(Event::RangeOpened {
         demand: 1,
         file: 0,
@@ -581,6 +594,7 @@ fn first_read_in_tail_zone_merges_head() {
 fn seek_cancels_stale_requests() {
     let g = Geometry::new(256 * KIB as u32, &[512 * MIB]).unwrap();
     let mut h = Harness::new(g, Config::standard());
+    h.ready_at(0, 0);
     h.peer(1, 4 * MIB);
     h.peer(2, 4 * MIB);
     let acts = h.send(Event::RangeOpened {
@@ -649,8 +663,9 @@ fn serve_until_ready(h: &mut Harness, demand: DemandId) -> Option<Vec<BlockIdx>>
 }
 
 /// An MP4 whose 5 MiB `moov` comes first (Tenzing's shape): while its
-/// index is pending only the head is asked for and nothing is ready; then
-/// Ready waits for the whole `moov`, and the file's tail is never asked for.
+/// index is pending the head and the fixed tail are asked for and nothing
+/// is ready; then Ready waits for the whole `moov`, and nothing more of the
+/// tail is asked for.
 #[test]
 fn moov_first_ready_waits_for_the_moov_and_never_the_tail() {
     let g = Geometry::new(64 * KIB as u32, &[8 * MIB]).unwrap();
@@ -667,7 +682,6 @@ fn moov_first_ready_waits_for_the_moov_and_never_the_tail() {
         end_hint: None,
     });
     let head: Vec<BlockIdx> = h.geo.piece_blocks(0).collect();
-    let mut asked: Vec<BlockIdx> = h.out.iter().map(|&(b, _)| b).collect();
     for b in head {
         let acts = h.deliver(1, b);
         assert!(
@@ -675,6 +689,7 @@ fn moov_first_ready_waits_for_the_moov_and_never_the_tail() {
             "ready while pending"
         );
     }
+    let from = h.log.len();
     h.send(Event::FileIndex {
         file: 0,
         index: FileIndex::At {
@@ -682,18 +697,125 @@ fn moov_first_ready_waits_for_the_moov_and_never_the_tail() {
             end: 5 * MIB,
         },
     });
-    asked.extend(serve_until_ready(&mut h, 1).expect("ready"));
+    serve_until_ready(&mut h, 1).expect("ready");
     let moov = h.geo.pieces_in(0, 5 * MIB);
     assert!(
         moov.clone().all(|p| h.verified.get(p)),
         "Ready before the moov"
     );
     let tail = h.geo.piece_at(8 * MIB - small_cfg().tail_bytes);
-    let late: Vec<_> = asked
-        .iter()
-        .filter(|&&b| h.geo.piece_of(b) >= tail)
+    let late: Vec<_> = requests(&h.log[from..])
+        .into_iter()
+        .filter(|&(_, b)| h.geo.piece_of(b) >= tail)
         .collect();
-    assert!(late.is_empty(), "tail asked before Ready: {late:?}");
+    assert!(
+        late.is_empty(),
+        "tail asked once the moov was known: {late:?}"
+    );
+}
+
+/// An MP4 whose head is on its way (cause 4 of
+/// plans/research/start-latency.md): its fixed tail is urgent at once,
+/// where a `moov` written after `mdat` sits, but nothing is ready until the
+/// head says where the index is; then a `moov` inside that tail is Ready at
+/// once.
+#[test]
+fn a_pending_index_fetches_the_tail_and_waits_for_the_head() {
+    let g = Geometry::new(64 * KIB as u32, &[8 * MIB]).unwrap();
+    let mut h = Harness::new(g, small_cfg());
+    h.peer(1, MIB);
+    h.send(Event::FileIndex {
+        file: 0,
+        index: FileIndex::Pending,
+    });
+    open(&mut h, 1, 0, 0, None);
+    assert_eq!(h.s.class_of(127), Some(Class::Tail));
+    assert!(
+        h.out.iter().any(|&(b, _)| h.geo.piece_of(b) == 127),
+        "the tail is not asked for"
+    );
+    for _ in 0..64 {
+        let Some(&(block, peer)) = h.out.iter().next() else {
+            break;
+        };
+        let acts = h.deliver(peer, block);
+        assert!(
+            !acts.contains(&Action::Ready { demand: 1 }),
+            "ready while pending"
+        );
+    }
+    assert!(h.verified.get(0) && h.verified.get(127));
+    let acts = h.send(Event::FileIndex {
+        file: 0,
+        index: FileIndex::At {
+            start: 8 * MIB - 40 * KIB,
+            end: 8 * MIB,
+        },
+    });
+    assert!(acts.contains(&Action::Ready { demand: 1 }));
+}
+
+/// Cause 2 of plans/research/start-latency.md: until the focused read is
+/// Ready, nothing outside what Ready waits on is asked for; then its
+/// critical window follows at once.
+#[test]
+fn before_ready_only_the_ready_set_is_asked_for() {
+    let g = Geometry::new(64 * KIB as u32, &[8 * MIB]).unwrap();
+    let mut h = Harness::new(g, small_cfg());
+    for p in 1..=3 {
+        h.peer(p, 4 * MIB);
+    }
+    open(&mut h, 1, 0, 0, None);
+    // Blocking 0, critical 1..3, tail 127.
+    assert_eq!(h.s.class_of(1), None);
+    let asked = serve_until_ready(&mut h, 1).expect("ready");
+    let outside: Vec<PieceIdx> = asked
+        .iter()
+        .map(|&b| h.geo.piece_of(b))
+        .filter(|&p| p != 0 && p != 127)
+        .collect();
+    assert!(outside.is_empty(), "asked before Ready: {outside:?}");
+    assert_eq!(h.s.class_of(1), Some(Class::Critical));
+    assert!(
+        h.out.iter().any(|&(b, _)| h.geo.piece_of(b) == 1),
+        "the critical window waits"
+    );
+}
+
+/// What a start waits on, for the loading screen: the focused read's
+/// blocking window and its file's index in whole pieces, the fixed tail
+/// while an MP4's index is pending, and the verified part of it.
+#[test]
+fn start_bytes_count_what_ready_waits_on() {
+    let g = Geometry::new(64 * KIB as u32, &[8 * MIB]).unwrap();
+    let mut h = Harness::new(g, small_cfg());
+    assert_eq!(h.s.start_bytes(), None, "no read");
+    h.send(Event::FileIndex {
+        file: 0,
+        index: FileIndex::Pending,
+    });
+    open(&mut h, 1, 0, 0, None);
+    let start = |need, have, index_pending| StartBytes {
+        need,
+        have,
+        index_pending,
+    };
+    // Piece 0 and the tail piece 127.
+    assert_eq!(h.s.start_bytes(), Some(start(128 * KIB, 0, true)));
+    h.send(Event::PieceVerified { piece: 0 });
+    assert_eq!(h.s.start_bytes(), Some(start(128 * KIB, 64 * KIB, true)));
+    // A 200 KiB `moov` first: pieces 0..4, the blocking window inside it.
+    h.send(Event::FileIndex {
+        file: 0,
+        index: FileIndex::At {
+            start: 0,
+            end: 200 * KIB,
+        },
+    });
+    assert_eq!(h.s.start_bytes(), Some(start(256 * KIB, 64 * KIB, false)));
+    // A probe never takes the focus.
+    open(&mut h, 2, 0, 4 * MIB, Some(4 * MIB + 1000));
+    assert_eq!(h.s.start_bytes(), Some(start(256 * KIB, 64 * KIB, false)));
 }
 
 /// An MP4 whose 5 MiB `moov` comes after `mdat`: Ready waits for all of it,
@@ -821,6 +943,7 @@ fn silent_peer_is_snubbed_not_dropped() {
 fn readahead_and_bitrate_are_set_per_file() {
     let g = Geometry::new(64 * KIB as u32, &[8 * MIB, 8 * MIB]).unwrap();
     let mut h = Harness::new(g, small_cfg());
+    h.ready_at(0, 0);
     h.send(Event::RangeOpened {
         demand: 1,
         file: 0,
@@ -864,6 +987,9 @@ fn readahead_prefers_rare_pieces() {
             reqq: 250,
         });
     }
+    for piece in (0..5).chain([127]) {
+        h.send(Event::PieceVerified { piece });
+    }
     h.send(Event::RangeOpened {
         demand: 1,
         file: 0,
@@ -873,9 +999,6 @@ fn readahead_prefers_rare_pieces() {
     // Blocking 0, critical 1..3, playback 3..5, readahead 5..9, tail 127.
     assert_eq!(h.s.class_of(5), Some(Class::Readahead));
     assert_eq!(h.s.class_of(7), Some(Class::Readahead));
-    for piece in (0..5).chain([127]) {
-        h.send(Event::PieceVerified { piece });
-    }
     h.send(Event::PeerConnected {
         peer: 1,
         have: Bitfield::full(n),
@@ -966,6 +1089,7 @@ fn a_probe_never_takes_the_focus() {
     let g = Geometry::new(64 * KIB as u32, &[8 * MIB]).unwrap();
     let mut h = Harness::new(g, small_cfg());
     // Piece 64: blocking 64, critical 65..67, playback 67..69, readahead 69..73.
+    h.ready_at(0, 4 * MIB);
     open(&mut h, 1, 0, 4 * MIB, None);
     let ahead = readahead_pieces(&h);
     assert_eq!(ahead, [69, 70, 71, 72]);
@@ -1059,6 +1183,7 @@ fn the_ramp_grows_with_the_bytes_read() {
     let mut h = Harness::new(g, small_cfg());
     h.s.set_window(Some(window(0)));
     h.s.set_readahead(0, MIB);
+    h.ready_at(0, 0);
     open(&mut h, 1, 0, 0, None);
     assert_eq!(readahead_pieces(&h).len(), 2, "the floor");
     h.send(Event::RangeAdvanced {
@@ -1072,8 +1197,10 @@ fn the_ramp_grows_with_the_bytes_read() {
     });
     assert_eq!(readahead_pieces(&h).len(), 16, "the cap");
     h.send(Event::RangeClosed { demand: 1 });
+    h.ready_at(0, MIB + 32 * KIB);
     open(&mut h, 2, 0, MIB + 32 * KIB, None);
     assert_eq!(readahead_pieces(&h).len(), 16, "the run goes on");
+    h.ready_at(0, 8 * MIB);
     open(&mut h, 3, 0, 8 * MIB, None);
     h.tick(6_000);
     assert_eq!(readahead_pieces(&h).len(), 2, "a seek starts again");
@@ -1088,11 +1215,13 @@ fn a_seek_has_a_grace_in_a_window_only() {
     let g = Geometry::new(64 * KIB as u32, &[16 * MIB]).unwrap();
     let mut h = Harness::new(g.clone(), small_cfg());
     h.s.set_window(Some(window(0)));
+    h.ready_at(0, 0);
     open(&mut h, 1, 0, 0, None);
     h.send(Event::RangeAdvanced {
         demand: 1,
         pos: 2 * MIB,
     });
+    h.ready_at(0, 8 * MIB);
     open(&mut h, 2, 0, 8 * MIB, None);
     h.send(Event::RangeClosed { demand: 1 });
     assert!(readahead_pieces(&h).is_empty(), "no readahead in the grace");
@@ -1105,6 +1234,7 @@ fn a_seek_has_a_grace_in_a_window_only() {
     assert!(!(30..37).any(|p| h.s.kept().get(p)));
     let mut whole = Harness::new(g, small_cfg());
     open(&mut whole, 1, 0, 0, None);
+    whole.ready_at(0, 8 * MIB);
     open(&mut whole, 2, 0, 8 * MIB, None);
     assert_eq!(readahead_pieces(&whole).len(), 4, "the preset at once");
 }
@@ -1117,6 +1247,7 @@ fn bounded_chunks_on_a_file_that_fits_get_todays_windows() {
     let g = Geometry::new(64 * KIB as u32, &[16 * MIB]).unwrap();
     let mut h = Harness::new(g, small_cfg());
     for (demand, start) in [(1, 0), (2, 4 * MIB), (3, 8 * MIB)] {
+        h.ready_at(0, start);
         open(&mut h, demand, 0, start, Some(start + 4 * MIB));
         assert_eq!(readahead_pieces(&h).len(), 4, "chunk at {start}");
         h.send(Event::RangeClosed { demand });
@@ -1170,6 +1301,7 @@ fn readahead_pieces_open_at_once_stay_within_the_limit() {
     let mut h = Harness::new(g.clone(), cfg.clone());
     h.s.set_window(Some(window(0)));
     h.s.set_readahead(0, 2 * MIB);
+    h.ready_at(0, 0);
     open(&mut h, 1, 0, 0, None);
     h.send(Event::RangeAdvanced {
         demand: 1,
@@ -1193,6 +1325,7 @@ fn readahead_pieces_open_at_once_stay_within_the_limit() {
         ..window(0)
     }));
     quick.s.set_readahead(0, 2 * MIB);
+    quick.ready_at(0, 0);
     open(&mut quick, 1, 0, 0, None);
     quick.send(Event::RangeAdvanced {
         demand: 1,
@@ -1202,6 +1335,7 @@ fn readahead_pieces_open_at_once_stay_within_the_limit() {
     assert_eq!(open_ra(&quick).len(), 16);
     let mut whole = Harness::new(g, cfg);
     whole.s.set_readahead(0, 2 * MIB);
+    whole.ready_at(0, 4 * MIB);
     open(&mut whole, 1, 0, 4 * MIB, None);
     whole.peer(1, 10 * MIB);
     assert!(open_ra(&whole).len() > 4);
@@ -1234,6 +1368,7 @@ fn the_budget_bounds_what_starts_and_the_keeper_brings_it_down() {
     for piece in 2..11 {
         h.send(Event::PieceVerified { piece });
     }
+    h.ready_at(0, 0);
     open(&mut h, 1, 0, 0, None);
     h.send(Event::RangeAdvanced {
         demand: 1,
@@ -1241,11 +1376,12 @@ fn the_budget_bounds_what_starts_and_the_keeper_brings_it_down() {
     });
     h.peer(1, 10 * MIB);
     // The cap: 20 pieces less 64 KiB blocking and 128 KiB critical (3
-    // pieces) and one more. 9 held, the urgent 64..67 and 255, then
-    // playback and readahead up to 16 pieces in all.
+    // pieces) and one more. 11 held (the Ready set 0 and 255 among them),
+    // the urgent 64..67, then playback and readahead up to 16 pieces in
+    // all.
     assert_eq!(h.s.held_bytes(), 16 * P);
     let started: BTreeSet<PieceIdx> = h.out.iter().map(|&(b, _)| h.geo.piece_of(b)).collect();
-    assert_eq!(started.len(), 7, "{started:?}");
+    assert_eq!(started.len(), 5, "{started:?}");
     assert!(h.s.keeper_due());
     assert_eq!(h.s.to_evict(), [2, 3, 4, 5]);
     for piece in 2..6 {
@@ -1254,14 +1390,20 @@ fn the_budget_bounds_what_starts_and_the_keeper_brings_it_down() {
     // The room fills again with readahead, and the next round is due.
     assert_eq!(h.s.held_bytes(), 16 * P);
     let started: BTreeSet<PieceIdx> = h.out.iter().map(|&(b, _)| h.geo.piece_of(b)).collect();
-    assert_eq!(started.len(), 11, "{started:?}");
+    assert_eq!(started.len(), 9, "{started:?}");
     assert_eq!(h.s.to_evict(), [6, 7, 8, 9]);
     let trim = h.s.trimmable(2 * P);
     assert_eq!(trim, (6..11).collect::<Vec<_>>());
     // A seek before the keeper's round: its urgent windows start past the
-    // cap and stay within the budget.
+    // cap and stay within the budget, its blocking piece first and its
+    // critical ones once that is in.
     open(&mut h, 2, 0, 12 * MIB, None);
-    let urgent = h.geo.pieces_in(12 * MIB, 12 * MIB + 192 * KIB);
+    let blocks: Vec<BlockIdx> = h.geo.piece_blocks(192).collect();
+    assert!(blocks.iter().all(|&b| h.out.contains(&(b, 1))));
+    for b in blocks {
+        h.deliver(1, b);
+    }
+    let urgent = h.geo.pieces_in(12 * MIB + 64 * KIB, 12 * MIB + 192 * KIB);
     assert!(
         urgent
             .clone()
@@ -1350,6 +1492,7 @@ fn an_older_range_that_reads_on_takes_the_focus_back() {
     let g = Geometry::new(64 * KIB as u32, &[64 * MIB]).unwrap();
     let mut h = Harness::new(g, small_cfg());
     h.s.set_window(Some(window(0)));
+    h.ready_at(0, 40 * MIB);
     open(&mut h, 1, 0, 40 * MIB, None);
     h.send(Event::RangeAdvanced {
         demand: 1,
@@ -1404,6 +1547,7 @@ fn a_shrunk_budget_takes_its_cut_off_the_farthest_readahead() {
         ..window(0)
     }));
     h.s.set_readahead(0, 4 * MIB);
+    h.ready_at(0, 0);
     open(&mut h, 1, 0, 0, None);
     h.send(Event::RangeAdvanced {
         demand: 1,
@@ -1505,6 +1649,7 @@ fn a_reopen_behind_the_run_start_keeps_the_ramp_sound() {
         pos: 8 * MIB + 20_000,
     });
     h.send(Event::RangeClosed { demand: 1 });
+    h.ready_at(0, 8 * MIB - 30_000);
     open(&mut h, 2, 0, 8 * MIB - 30_000, None);
     assert_eq!(readahead_pieces(&h).len(), 2, "the floor");
 }
@@ -1520,6 +1665,7 @@ fn an_idle_open_range_never_takes_the_focus_back() {
     let mut h = Harness::new(g, small_cfg());
     h.s.set_window(Some(window(0)));
     open(&mut h, 1, 0, 0, None);
+    h.ready_at(0, 40 * MIB);
     open(&mut h, 2, 0, 40 * MIB, None);
     h.tick(6_000);
     h.send(Event::RangeAdvanced {
@@ -1535,6 +1681,7 @@ fn an_idle_open_range_never_takes_the_focus_back() {
         Some(Class::Playback),
         "the anchor is warm"
     );
+    h.ready_at(0, 40 * MIB + 96 * KIB);
     open(&mut h, 3, 0, 40 * MIB + 96 * KIB, None);
     assert!(!readahead_pieces(&h).is_empty(), "no grace");
     assert_eq!(h.s.class_of(1), None);
@@ -1705,9 +1852,11 @@ fn run(geo: &Geometry, cfg: &Config, ops: &[Op]) -> Harness {
                     start,
                     end_hint,
                 });
-                // The focused demand gets its blocking and critical windows;
-                // a probe (its end within its blocking window) only its
-                // blocking one (plans/streaming-window.md 2.3).
+                // The focused demand gets its blocking and critical windows
+                // once it is Ready, and before that only what Ready waits
+                // on, so nothing is critical; a probe (its end within its
+                // blocking window) only its blocking one
+                // (plans/streaming-window.md 2.3).
                 let f = geo.files()[file];
                 let b_end = (start + cfg.blocking_bytes)
                     .min(end_hint.unwrap_or(f.len).min(f.len))
@@ -1717,7 +1866,8 @@ fn run(geo: &Geometry, cfg: &Config, ops: &[Op]) -> Harness {
                     .critical_min_bytes
                     .max(cfg.critical_secs * cfg.default_bitrate);
                 let probe = end_hint.is_some_and(|e| e <= start + cfg.blocking_bytes);
-                let end = if probe {
+                let ready = h.ready.contains(&demand.into());
+                let end = if probe || !ready {
                     b_end
                 } else {
                     (b_end + crit).min(f.len)
@@ -1728,6 +1878,15 @@ fn run(geo: &Geometry, cfg: &Config, ops: &[Op]) -> Harness {
                         c.is_some_and(Class::is_urgent),
                         "focused piece {p} is {c:?}"
                     );
+                }
+                if !probe && !ready {
+                    for p in 0..n {
+                        let c = h.s.class_of(p);
+                        assert!(
+                            c.is_none_or(|c| c < Class::Critical),
+                            "piece {p} is {c:?} before Ready"
+                        );
+                    }
                 }
             }
             Op::Advance { demand, kib } => {
