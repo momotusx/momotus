@@ -298,6 +298,49 @@ fn forgetting_sync_keeps_the_device_id_and_relay_pins() {
     assert!(lib.roster_entries("g").unwrap().is_empty());
 }
 
+/// A sign-out that removes the library (D13): every table is emptied, read
+/// from the file itself, but for this device's id and its relay pins.
+#[test]
+fn a_wipe_empties_every_table_but_the_device_id_and_relay_pins() {
+    let dir = std::env::temp_dir().join(format!("mq-library-wipe-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("library.sqlite");
+    let lib = Library::open(&path).unwrap();
+    lib.ensure_profile("p", "p", &hlc(1, 9)).unwrap();
+    lib.upsert_item("p", &item("tt1"), true, &hlc(2, 9))
+        .unwrap();
+    for key in ["device_id", "relay:07", "pull_seq"] {
+        lib.set_sync_state(key, "x").unwrap();
+    }
+    lib.add_roster_entry("g", 0, b"one", b"sig").unwrap();
+    lib.wipe().unwrap();
+
+    let file = rusqlite::Connection::open(&path).unwrap();
+    let tables: Vec<String> = file
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert!(tables.len() > 10, "{tables:?}");
+    let left: Vec<(String, i64)> = tables
+        .into_iter()
+        .map(|t| {
+            let rows = file
+                .query_row(&format!("SELECT count(*) FROM \"{t}\""), [], |r| r.get(0))
+                .unwrap();
+            (t, rows)
+        })
+        .filter(|(_, rows)| *rows > 0)
+        .collect();
+    assert_eq!(left, [("sync_state".to_owned(), 2)]);
+    assert_eq!(lib.sync_state("device_id").unwrap().as_deref(), Some("x"));
+    assert_eq!(lib.sync_state("relay:07").unwrap().as_deref(), Some("x"));
+    drop((file, lib));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 #[test]
 fn moving_a_sync_state_replaces_it_in_one_step() {
     let lib = Library::temporary().unwrap();
