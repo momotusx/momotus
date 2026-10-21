@@ -142,6 +142,10 @@ struct MainShell: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var typing = false
     @Environment(FloatingPlayer.self) private var floating
+    /// Sign in another device, from the quick action, the /pair link or the profile menu.
+    @State private var showScanner = false
+    @Environment(SyncModel.self) private var sync
+    @Environment(AccountWipe.self) private var wipe
     #endif
 
     init(core: CoreClient) {
@@ -213,6 +217,23 @@ struct MainShell: View {
             }
         }
         .animation(Theme.Motion.panel, value: floating.note)
+        // Sign in another device (plans/accounts.md 4.2): the scanner, or the Account page first.
+        .sheet(isPresented: $showScanner) {
+            NavigationStack {
+                if sync.joined { AddDeviceScreen(fromLink: AppRouter.shared.fromLink) } else { SyncScreen() }
+            }
+            .environment(sync)
+            .environment(profiles)
+            .environment(core)
+            .environment(wipe)
+            .environment(\.metrics, metrics)
+        }
+        .onChange(of: AppRouter.shared.scanRequests) { showScanner = true }
+        // A phone camera on a TV's code opens /pair here: the scanner, never the code in the link (D6).
+        .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+            guard let url = activity.webpageURL, AccountRules.opensScanner(url, linkHost: PasskeyContract.relyingParty) else { return }
+            AppRouter.shared.requestScan(fromLink: true)
+        }
         #elseif os(macOS)
         places
             .frame(maxWidth: .infinity, maxHeight: .infinity)

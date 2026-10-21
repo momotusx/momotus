@@ -257,27 +257,42 @@ struct ProfilePicker: View {
 /// phone, the end of the TV's top bar.
 struct ProfileButton: View {
     var size: CGFloat = 32
+    /// A phone in an account: the button is a menu with Sign in another device (plans/accounts.md 4.2).
+    var signInAnother: (() -> Void)? = nil
     let action: () -> Void
     @Environment(ProfileSession.self) private var profiles
 
     var body: some View {
         if let me = profiles.snapshot?.current {
-            Button(action: action) {
-                ProfileAvatar(me.avatar, name: me.name, size: size)
-                    .overlay(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous).strokeBorder(.white.opacity(0.3), lineWidth: 1))
-                    #if os(iOS)
-                    // A 44 pt target around the 32 pt avatar.
-                    .frame(minWidth: 44, minHeight: 44)
-                    .contentShape(Rectangle())
-                    #endif
+            if let signInAnother {
+                Menu {
+                    Button("Switch profile", action: action)
+                    Button(AccountWords.shared.signInAnother, action: signInAnother)
+                } label: {
+                    avatar(me)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Profile: \(me.name)")
+            } else {
+                Button(action: action) { avatar(me) }
+                #if os(tvOS)
+                .buttonStyle(NavLinkStyle(on: false))
+                #else
+                .buttonStyle(.plain)
+                #endif
+                .accessibilityLabel("Profile: \(me.name), switch profile")
             }
-            #if os(tvOS)
-            .buttonStyle(NavLinkStyle(on: false))
-            #else
-            .buttonStyle(.plain)
-            #endif
-            .accessibilityLabel("Profile: \(me.name), switch profile")
         }
+    }
+
+    private func avatar(_ me: ProfileInfo) -> some View {
+        ProfileAvatar(me.avatar, name: me.name, size: size)
+            .overlay(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous).strokeBorder(.white.opacity(0.3), lineWidth: 1))
+            #if os(iOS)
+            // A 44 pt target around the 32 pt avatar.
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
+            #endif
     }
 }
 

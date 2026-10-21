@@ -17,6 +17,8 @@ struct HomeScreen: View {
     @State private var width: CGFloat = 0
     @State private var height: CGFloat = 0
     @State private var onboarding = false
+    /// The account card's Sign in and second-way-in nudge.
+    @State private var showAccount = false
     @State private var showProfiles = false
     /// Rows have scrolled under the status bar.
     @State private var underBar = false
@@ -42,10 +44,13 @@ struct HomeScreen: View {
                     HeroView(hero: model.header.hero, height: heroHeight, startScope: start == .hero ? startScopeID : nil, play: playHero, starting: starting)
                         // Phone: the profile button sits at the header's top right.
                         .overlay(alignment: .topTrailing) {
-                            if !metrics.wide { ProfileButton { showProfiles = true }.padding(.trailing, 24).padding(.top, 10) }
+                            if !metrics.wide { ProfileButton(signInAnother: signInAnother) { showProfiles = true }.padding(.trailing, 24).padding(.top, 10) }
                         }
                         .padding(.top, cardTop)
                 }
+                // One account card, by priority (plans/accounts.md 4.3).
+                AccountCard { showAccount = true }
+                    .padding(.horizontal, metrics.gutter)
                 content
             }
             .padding(.bottom, Theme.Space.xl)
@@ -78,6 +83,7 @@ struct HomeScreen: View {
         }
         #endif
         .navigationDestination(isPresented: $showProfiles) { ProfilePicker(mode: .push, core: core) }
+        .navigationDestination(isPresented: $showAccount) { SyncScreen() }
         .navigationDestination(item: $playing) { route in
             PlayerScreen(route: route, versions: heroVersions, core: core)
         }
@@ -103,7 +109,18 @@ struct HomeScreen: View {
             }
             .environment(\.metrics, metrics)
             .environment(sync)
+            .environment(profiles)
+            .environment(core)
         })
+    }
+
+    /// The profile menu's Sign in another device: a phone in an account only (a Mac approves nothing).
+    private var signInAnother: (() -> Void)? {
+        #if os(iOS)
+        sync.joined ? { AppRouter.shared.requestScan() } : nil
+        #else
+        nil
+        #endif
     }
 
     @ViewBuilder private var content: some View {

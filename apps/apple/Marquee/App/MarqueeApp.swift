@@ -11,6 +11,7 @@ struct MarqueeApp: App {
     @State private var sync: SyncModel
     @State private var debrid: DebridSession
     @State private var trakt: TraktModel
+    @State private var wipe: AccountWipe
 
     init() {
         Fonts.register()
@@ -33,7 +34,11 @@ struct MarqueeApp: App {
         let trakt = TraktModel(core: core)
         _trakt = State(initialValue: trakt)
         _profiles = State(initialValue: ProfileSession(core: core, sync: sync, trakt: trakt))
-        _debrid = State(initialValue: DebridSession(core: core))
+        let debrid = DebridSession(core: core)
+        _debrid = State(initialValue: debrid)
+        _wipe = State(initialValue: AccountWipe(
+            core: core, sync: sync, traktGone: { trakt.profileGone($0) },
+            debridAccounts: { debrid.view.snapshot?.accounts ?? [] }, disconnect: { try await debrid.disconnect($0) }))
         #if DEBUG && os(macOS)
         DebugHooks.listenForSnapshots()
         #endif
@@ -45,6 +50,12 @@ struct MarqueeApp: App {
         // Said at launch, before anything can play: a walk checks it first.
         coreLog.notice("debug: players start \(DebugHooks.mute ? "muted" : "with sound", privacy: .public)")
         #endif
+    }
+
+    /// D13's removal resumes on the owner, unlocked, after a restart between its steps.
+    private var wipeKey: String {
+        guard profiles.open, profiles.snapshot?.current?.isOwner == true else { return "" }
+        return "\(core.generation)/\(profiles.snapshot?.active ?? "")"
     }
 
     /// Which profile's Trakt runs: none while the picker shows, a new one for every core.
@@ -71,6 +82,15 @@ struct MarqueeApp: App {
                 // The debrid accounts, on every core open before the app shows anything.
                 .task(id: core.generation) { await debrid.opened() }
                 .environment(trakt)
+                .environment(wipe)
+                .task(id: wipeKey) {
+                    guard !wipeKey.isEmpty else { return }
+                    await wipe.resume(profiles: profiles.snapshot?.profiles.map(\.id) ?? [])
+                }
+                #if os(iOS)
+                // Sign in another device on the home screen while this phone is in an account.
+                .onChange(of: sync.joined, initial: true) { _, joined in AppRouter.updateQuickAction(joined: joined) }
+                #endif
                 // The running profile's Trakt: its record, then its view, each time a profile
                 // opens (a start, an unlock, a switch, a new core); closed while none is open.
                 .task(id: traktKey) {

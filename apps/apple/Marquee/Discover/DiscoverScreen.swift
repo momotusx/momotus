@@ -10,6 +10,7 @@ struct DiscoverScreen: View {
     @Environment(\.metrics) private var metrics
     @Environment(SyncModel.self) private var sync
     private let core: CoreClient
+    @Environment(ProfileSession.self) private var profiles
     @State private var onboarding = false
 
     init(core: CoreClient) {
@@ -45,6 +46,8 @@ struct DiscoverScreen: View {
             }
             .environment(\.metrics, metrics)
             .environment(sync)
+            .environment(profiles)
+            .environment(core)
         })
     }
 
