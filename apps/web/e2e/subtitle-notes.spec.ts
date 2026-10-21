@@ -10,7 +10,7 @@ import type { ChildProcess } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Client, cleanup, NOTES_PORT, PORTS, startBridge, startIfPaused } from "./core";
-import { BBB_ID, ensureMedia, NAME, startSource } from "./source";
+import { BBB_ID, NAME, startSource } from "./source";
 
 const CINEMETA = "https://v3-cinemeta.strem.io/manifest.json";
 const GONE = "Flaky Subs did not answer. Try its subtitles again in a moment.";
@@ -62,7 +62,6 @@ function flakySubs(film: string): Promise<Server> {
 }
 
 test.beforeAll(async () => {
-  await ensureMedia();
   media = await startSource(0);
   addon = await flakySubs(`http://127.0.0.1:${(media.address() as AddressInfo).port}/media/${NAME}`);
   core = await startBridge(NOTES_PORT);

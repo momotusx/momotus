@@ -13,7 +13,7 @@ import type { ChildProcess } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Client, cleanup, JOURNEY_PORT, PORTS, SHOTS, startBridge, startIfPaused, until, watch } from "./core";
-import { ensureMedia, NAME, startSource } from "./source";
+import { NAME, startSource } from "./source";
 import { applyDiffs } from "../src/core/diff";
 import type { HomeRow } from "../src/core/generated/HomeRow";
 import type { HomeUpdate } from "../src/core/generated/HomeUpdate";
@@ -119,7 +119,6 @@ function lateSubs(): Promise<Server> {
 }
 
 test.beforeAll(async () => {
-  await ensureMedia();
   media = await startSource(0);
   addon = await journeyAddon(`http://127.0.0.1:${(media.address() as AddressInfo).port}/media/${NAME}`);
   core = await startBridge(JOURNEY_PORT);

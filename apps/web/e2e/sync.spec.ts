@@ -21,7 +21,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { encode } from "uqr";
-import { Client, PORTS, SHOTS, startBridge, startRelay, SYNC_PORTS } from "./core";
+import { BROWSER_ARGS, Client, PORTS, SHOTS, startBridge, startRelay, SYNC_PORTS } from "./core";
 
 const SERVER = `http://127.0.0.1:${SYNC_PORTS.relay}`;
 const RELAY_FILES = ["relay.sqlite", "relay.sqlite-wal", "relay.sqlite-shm", "relay.roster.jsonl"];
@@ -315,7 +315,7 @@ test.describe.serial("sync across three devices", () => {
     c.close();
     film("nothing to see yet");
     deskBrowser = await chromium.launch({
-      args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", `--use-file-for-fake-video-capture=${camera}`],
+      args: ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", `--use-file-for-fake-video-capture=${camera}`, ...BROWSER_ARGS],
     });
     // A passkey needs a host name: Desk opens Marquee on localhost.
     desk = await device(deskBrowser, SYNC_PORTS.a, "desktop", "localhost");

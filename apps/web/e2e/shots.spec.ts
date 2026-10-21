@@ -1,7 +1,7 @@
 /** Screenshots of every screen on live data, per form factor and theme,
  * written to SHOTS (e2e/core.ts) as JPEG (quality 80) for review. */
 
-import { type BrowserContext, expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import { GOT, reseedBbb, SHOTS, startIfPaused } from "./core";
 import { BBB_ID } from "./source";
 
@@ -56,6 +56,11 @@ const SCREENS: Screen[] = [
     name: "title-trailer",
     path: `/title/movie/${BBB_ID}`,
     ready: async (page) => {
+      // A stand-in for YouTube's player: the shot is of our overlay, and a run
+      // needs no third-party page (its scripts fail without their network).
+      await page.route("https://www.youtube-nocookie.com/embed/**", (route) =>
+        route.fulfill({ contentType: "text/html", body: '<body style="margin:0;background:#000;display:grid;place-items:center;height:100vh"><svg width="96" height="96" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="#fff"/></svg></body>' }),
+      );
       await visible('[data-f="title:trailer"]')(page);
       await page.locator('[data-f="title:trailer"]').focus();
       await page.keyboard.press("Enter");
@@ -253,29 +258,6 @@ const SCREENS: Screen[] = [
 const OUT = SHOTS;
 const PREFIX = process.env.SHOTS_PREFIX ?? "";
 
-
-// Each shot opens a fresh context, so artwork is fetched once here and
-// served to every context after that, instead of asking the image CDN for
-// the same posters dozens of times a minute.
-const art = new Map<string, { status: number; headers: Record<string, string>; body: Buffer }>();
-const ART = /^https:\/\/(images|episodes|live)\.metahub\.space\//;
-async function cacheArt(context: BrowserContext) {
-  await context.route(ART, async (route) => {
-    const url = route.request().url();
-    try {
-      let hit = art.get(url);
-      if (!hit) {
-        const r = await route.fetch();
-        hit = { status: r.status(), headers: r.headers(), body: await r.body() };
-        if (r.ok()) art.set(url, hit);
-      }
-      await route.fulfill(hit);
-    } catch {
-      // The shot finished and its context closed while this image was loading.
-    }
-  });
-}
-
 for (const form of Object.keys(FORMS) as Form[]) {
   for (const screen of SCREENS) {
     {
@@ -289,7 +271,6 @@ for (const form of Object.keys(FORMS) as Form[]) {
           isMobile: form === "phone",
           hasTouch: form === "phone",
         });
-        await cacheArt(context);
         const page = await context.newPage();
         const errors: string[] = [];
         page.on("pageerror", (e) => errors.push(e.message));

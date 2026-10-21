@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Client, cleanup, NEXT_PORT, PORTS, startBridge } from "./core";
-import { BBB_FILE, BBB_ID, ensureMedia } from "./source";
+import { BBB_ID, FILM_FILE } from "./source";
 
 let core: { proc: ChildProcess; data: string } | null = null;
 let addon: Server | null = null;
@@ -28,7 +28,7 @@ let SCRAMBLED: Buffer | undefined;
  * before `fromMs` play, then the decoder fails (the element's
  * MEDIA_ERR_DECODE). Walks the clusters' Timecode and SimpleBlocks. */
 function undecodable(fromMs = 0, bytes = 1 << 20): Buffer {
-  const b = Buffer.from(readFileSync(BBB_FILE).subarray(0, bytes));
+  const b = Buffer.from(readFileSync(FILM_FILE).subarray(0, bytes));
   // An EBML size: its length from the leading bits, its value from the rest.
   const size = (at: number) => {
     let len = 1;
@@ -112,7 +112,7 @@ function slowAddon(): Promise<Server> {
       return res.end(JSON.stringify({ streams: [] }));
     }
     const file = decodeURIComponent(req.url?.replace("/media/", "") ?? "");
-    if (SLOW.includes(file)) return ranges(req, res, BBB_FILE, "video/webm");
+    if (SLOW.includes(file)) return ranges(req, res, FILM_FILE, "video/webm");
     res.writeHead(404);
     res.end();
   });
@@ -170,7 +170,7 @@ function versions(): Promise<Server> {
       res.writeHead(200, { "content-type": "video/webm", "content-length": String(body.length) });
       return res.end(body);
     }
-    if (file === GOOD) return ranges(req, res, BBB_FILE, "video/webm");
+    if (file === GOOD) return ranges(req, res, FILM_FILE, "video/webm");
     if (file === BROKEN[1]) {
       // Opens, then no frame decodes; slow to answer, so "Trying the next
       // version" stays long enough to be read.
@@ -182,7 +182,7 @@ function versions(): Promise<Server> {
       return;
     }
     if (file === BROKEN[0]) return ranges(req, res, HEVC, "video/mp4");
-    if (REAL.includes(file)) return ranges(req, res, BBB_FILE, "video/webm");
+    if (REAL.includes(file)) return ranges(req, res, FILM_FILE, "video/webm");
     res.writeHead(404);
     res.end();
   });
@@ -190,7 +190,6 @@ function versions(): Promise<Server> {
 }
 
 test.beforeAll(async () => {
-  await ensureMedia();
   addon = await versions();
   core = await startBridge(NEXT_PORT);
   const c = new Client(`ws://127.0.0.1:${NEXT_PORT}/ws`);

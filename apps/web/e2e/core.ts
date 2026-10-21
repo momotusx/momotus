@@ -31,6 +31,16 @@ export const NEXT_PORT = 17813 + shift;
 export const JOURNEY_PORT = 17814 + shift;
 /** The Search Top results spec's own: a core whose Trakt is a local fake. */
 export const SEARCH_TOP_PORT = 17815 + shift;
+/** The browser's recorder (e2e/replay.ts): every name but this machine's resolves here. */
+export const BROWSER_PORTS = { https: 17816 + shift, http: 17817 + shift };
+/** Every browser a run launches takes these: each name but this machine's resolves to the browser's
+ * recorder, whose certificate it does not check, so pages load images and frames from the
+ * recording and a run needs the network only to record (none with MQ_E2E_OFFLINE=1). A spec that
+ * sets its own launch arguments adds these to them. */
+export const BROWSER_ARGS = [
+  `--host-resolver-rules=MAP *:443 127.0.0.1:${BROWSER_PORTS.https}, MAP *:80 127.0.0.1:${BROWSER_PORTS.http}, EXCLUDE localhost, EXCLUDE 127.0.0.1`,
+  "--ignore-certificate-errors",
+];
 export const GOT = { id: "tt0944947", resume: "tt0944947:2:3" };
 /** Where every spec writes its shots: SHOTS_DIR, else the run's own ignored
  * output. The committed set in e2e/shots/ changes only when a run is asked
@@ -67,13 +77,20 @@ function binary(pkg: "mq-bridge" | "mq-sync-server", env: string): string {
 
 export const bridgeBinary = () => binary("mq-bridge", "MQ_BRIDGE_BIN");
 
+/** With the network off (MQ_E2E_OFFLINE=1), a request that slipped past the recorder goes to a
+ * proxy that is not there and fails, instead of reaching the internet. */
+const NO_NETWORK = { HTTP_PROXY: "http://127.0.0.1:9", HTTPS_PROXY: "http://127.0.0.1:9", ALL_PROXY: "http://127.0.0.1:9", NO_PROXY: "127.0.0.1,localhost" };
+
 /** A core on `port` with a data directory of its own; `env` adds variables such as MQ_DEV_TRAKT. Skip
- * segments come from the source server's recorded answers, never a live service. */
+ * segments come from the source server's synthetic answers, and every request to a host off this
+ * machine from its recorder (e2e/replay.ts), never a live service once recorded. */
 export function startBridge(port = PORTS.bridge, env: Record<string, string> = {}): Promise<{ proc: ChildProcess; data: string }> {
   const data = mkdtempSync(join(tmpdir(), "mq-e2e-"));
-  const segments = `http://127.0.0.1:${PORTS.source}/segments`;
+  const local = `http://127.0.0.1:${PORTS.source}`;
+  const offline = process.env.MQ_E2E_OFFLINE === "1" ? NO_NETWORK : {};
+  const hooks = { MQ_DEV_SEGMENTS: `${local}/segments`, MQ_DEV_REPLAY: `${local}/replay`, ...offline };
   const proc = spawn(bridgeBinary(), [], {
-    env: { ...process.env, MQ_DEV_SEGMENTS: segments, ...env, MQ_DATA: data, MQ_BRIDGE_PORT: String(port) },
+    env: { ...process.env, ...hooks, ...env, MQ_DATA: data, MQ_BRIDGE_PORT: String(port) },
     stdio: ["ignore", "pipe", "inherit"],
   });
   return ready(proc, "bridge_ready", data);

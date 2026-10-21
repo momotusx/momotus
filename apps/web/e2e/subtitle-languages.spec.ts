@@ -12,7 +12,7 @@ import type { ChildProcess } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Client, cleanup, LANGS_PORT, PORTS, SHOTS, startBridge, startIfPaused } from "./core";
-import { BBB_ID, ensureMedia, NAME, startSource } from "./source";
+import { BBB_ID, NAME, startSource } from "./source";
 
 let core: { proc: ChildProcess; data: string } | null = null;
 let addon: Server | null = null;
@@ -79,7 +79,6 @@ function slowSubs(ms: number): Promise<Server> {
 }
 
 test.beforeAll(async () => {
-  await ensureMedia();
   media = await startSource(0);
   addon = await manySubs(`http://127.0.0.1:${(media.address() as AddressInfo).port}/media/${NAME}`);
   core = await startBridge(LANGS_PORT);

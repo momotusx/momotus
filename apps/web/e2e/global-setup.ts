@@ -1,12 +1,13 @@
 /** One fresh core per run: real addons installed through the protocol, then
  * two titles watched part way so Continue Watching has real progress. */
 
-import { BBB_ID, ensureMedia, startSource } from "./source";
-import { Client, cleanup, GOT, PORTS, startBridge, until, watch } from "./core";
+import { replayed, startBrowserRecorder } from "./replay";
+import { BBB_ID, startSource } from "./source";
+import { BROWSER_PORTS, Client, cleanup, GOT, PORTS, startBridge, until, watch } from "./core";
 
 export default async function globalSetup() {
-  await ensureMedia();
   const source = await startSource(PORTS.source);
+  const browser = await startBrowserRecorder(BROWSER_PORTS);
   const { proc, data } = await startBridge();
   const c = new Client();
   try {
@@ -60,11 +61,19 @@ export default async function globalSetup() {
     c.close();
     cleanup(proc, data);
     source.close();
+    for (const s of browser) s.close();
+    // What the recorder had to ask live hosts for, and what it could not serve offline.
+    console.log(`replay: ${replayed.asked} answer(s) asked live, ${replayed.missed.size} missing`);
+    for (const miss of replayed.missed) console.log(`replay missing: ${miss}`);
     throw e;
   }
   c.close();
   return async () => {
     cleanup(proc, data);
     source.close();
+    for (const s of browser) s.close();
+    // What the recorder had to ask live hosts for, and what it could not serve offline.
+    console.log(`replay: ${replayed.asked} answer(s) asked live, ${replayed.missed.size} missing`);
+    for (const miss of replayed.missed) console.log(`replay missing: ${miss}`);
   };
 }

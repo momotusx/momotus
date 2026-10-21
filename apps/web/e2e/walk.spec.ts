@@ -8,10 +8,10 @@
 
 import { appendFileSync } from "node:fs";
 import { type Browser, expect, type Page, test } from "@playwright/test";
-import { GOT, SHOTS, startIfPaused } from "./core";
+import { BROWSER_ARGS, GOT, SHOTS, startIfPaused } from "./core";
 import { BBB_ID } from "./source";
 
-test.use({ launchOptions: { args: ["--mute-audio"] } });
+test.use({ launchOptions: { args: ["--mute-audio", ...BROWSER_ARGS] } });
 
 type Form = "tv" | "desktop" | "phone";
 const FORMS = {
