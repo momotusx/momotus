@@ -372,6 +372,17 @@ class StreamChoiceCopyTest {
     }
 
     @Test
+    fun `a version this device holds the start of says so as its line, on its row and on the card`() {
+        val quick = ReasonLine.Quick(53, gib)
+        val held = VersionsFixtures.row(line = quick).copy(onDevice = "On this device")
+        val line = StreamChoiceCopy.rowLine(held)
+        assertEquals("On this device", line.text)
+        assertEquals(StreamChoiceCopy.line(quick).details, line.details, "the reason's details stay for focus")
+        assertEquals(line, StreamChoiceCopy.cardLine(held))
+        assertEquals(StreamChoiceCopy.line(quick), StreamChoiceCopy.rowLine(held.copy(onDevice = null)))
+    }
+
+    @Test
     fun `on a storage with no windows the blocked state says the versions are too large for it`() {
         assertEquals(
             "3 versions are too large for this storage.",

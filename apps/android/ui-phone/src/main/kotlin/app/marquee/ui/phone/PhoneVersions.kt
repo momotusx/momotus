@@ -446,7 +446,7 @@ private fun SourceRow(
     onPlay: (VersionRow) -> Unit,
 ) {
     val colors = Marquee.colors
-    val line = StreamChoiceCopy.line(row.line)
+    val line = StreamChoiceCopy.rowLine(row)
     val spoken =
         listOfNotNull(
             VersionsCopy.headline(row),

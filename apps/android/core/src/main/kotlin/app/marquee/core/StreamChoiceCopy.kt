@@ -436,8 +436,24 @@ object StreamChoiceCopy {
                 .replace("{versionsAre}", counted("versionsAre", count)) to action
         }
 
-    /** The recommended card's line: a version that plays in a window says so under its reasons. */
-    fun cardLine(row: VersionRow): Line? = (row.line as? ReasonLine.Buffer)?.let(::line)
+    /**
+     * A version row's line: the core's "On this device" where this device holds the start of the version last
+     * played (plans/player-polish.md 2b), with the line's details kept for focus; else its [line].
+     */
+    fun rowLine(row: VersionRow): Line {
+        val line = line(row.line)
+        return row.onDevice?.let { Line(VersionsCopy.Tone.Ok, it, line.details) } ?: line
+    }
+
+    /** The recommended card's line: "On this device", else a version that plays in a window says so under its reasons. */
+    fun cardLine(row: VersionRow): Line? =
+        if (row.onDevice !=
+            null
+        ) {
+            rowLine(row)
+        } else {
+            (row.line as? ReasonLine.Buffer)?.let(::line)
+        }
 
     /** The speed that decides here: HTTP with a streaming service account or without the engine, else the engine's. */
     fun speedFor(

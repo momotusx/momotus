@@ -588,7 +588,7 @@ private fun SourceRow(
     var focused by remember { mutableStateOf(false) }
     // The focused row turns white with dark words (focusPalette).
     val colors = focusPalette(focused)
-    val line = StreamChoiceCopy.line(row.line)
+    val line = StreamChoiceCopy.rowLine(row)
     val spoken =
         listOfNotNull(
             VersionsCopy.headline(row),
