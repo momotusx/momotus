@@ -4,8 +4,6 @@ import "./theme/tokens.css";
 import "./theme/app.css";
 import { render } from "solid-js/web";
 import words from "../../shared/account-words.json";
-import { markBack } from "./history";
-import { startFitting } from "./form";
 
 const root = document.getElementById("root") as HTMLElement;
 
@@ -22,11 +20,14 @@ if (location.pathname === "/auth") {
   root.textContent = words.returnClose;
   window.close();
 } else {
-  // Registered before the router's own listener so a browser Back is known
-  // before the new screen asks whether to restore focus.
-  window.addEventListener("popstate", markBack);
-  startFitting();
-  void import("./app").then(({ App }) => {
+  // The app first: loading it loads the router, which stamps this entry's depth, and only then
+  // history.ts, whose base reads that stamp (else Back from a first page leaves the app).
+  void import("./app").then(async ({ App }) => {
+    const [{ markBack }, { startFitting }] = await Promise.all([import("./history"), import("./form")]);
+    // Registered before the router's own listener so a browser Back is known
+    // before the new screen asks whether to restore focus.
+    window.addEventListener("popstate", markBack);
+    startFitting();
     // The page's own wordmark (index.html) gives way to the app's, which stays
     // until the core has said who is watching.
     root.replaceChildren();
