@@ -16,18 +16,20 @@ test("colors become ARGB integers, rgba keeps its alpha", () => {
 
 test("the output carries the values the design decision names", () => {
   const kotlin = generate(tokens());
-  expect(kotlin).toContain("accent = Color(0xFFE5372A)");
-  expect(kotlin).toContain("primary = Color(0xFFFFFFFF)");
+  expect(kotlin).toContain("accent = Color(0xFFFFFFFF)");
+  expect(kotlin).toContain("primary = Color(0xEBFFFFFF)");
+  expect(kotlin).toContain("key = Color(0xFF0A84FF)");
+  expect(kotlin).toContain("switchOn = Color(0xFF30D158)");
   expect(kotlin).toContain("body = 29.sp");
-  expect(kotlin).toContain("const val FOCUS_SCALE_CARD = 1.05f");
+  expect(kotlin).toContain("const val FOCUS_SCALE_CARD = 1.06f");
   expect(kotlin).toContain("val focusRing = 4.dp");
-  expect(kotlin).toContain("val focusHaloDark = 14.dp");
-  expect(kotlin).toContain("val focusHaloLight = 3.dp");
+  expect(kotlin).toContain("val focusHaloDark = 30.dp");
+  expect(kotlin).toContain("val focusHaloLight = 30.dp");
   expect(kotlin).toContain("const val FOCUS_MS = 180");
   expect(kotlin).toContain("CubicBezierEasing(0.22f, 1f, 0.36f, 1f)");
   expect(kotlin).toContain("poster = TileSize(112.dp, 168.dp)");
-  expect(kotlin).toContain("display = 800,");
-  expect(kotlin).toContain("label = 650,");
-  expect(kotlin).toContain("display = -0.035f,");
-  expect(kotlin).toContain("heading = -0.025f,");
+  expect(kotlin).toContain("display = 700,");
+  expect(kotlin).toContain("label = 600,");
+  expect(kotlin).toContain("display = -0.022f,");
+  expect(kotlin).toContain("heading = -0.019f,");
 });

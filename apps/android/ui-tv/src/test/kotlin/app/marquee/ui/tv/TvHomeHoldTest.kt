@@ -175,7 +175,10 @@ class TvHomeHoldTest {
         compose.waitForIdle()
         home.open()
         val deadline = System.currentTimeMillis() + 60_000
-        while (compose.onAllNodesWithText("Popular").fetchSemanticsNodes().isEmpty()) {
+        // Under a hero only the first row is on the first screen (the v3 tiles are taller), and a
+        // lazy list draws nothing below the screen: wait for that row then.
+        val drawn = if (hero == null) "Popular" else "Continue Watching"
+        while (compose.onAllNodesWithText(drawn).fetchSemanticsNodes().isEmpty()) {
             check(System.currentTimeMillis() < deadline) { "Home never drew its rows" }
             Snapshot.sendApplyNotifications()
             compose.waitForIdle()

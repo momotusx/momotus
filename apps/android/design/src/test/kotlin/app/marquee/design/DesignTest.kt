@@ -52,39 +52,59 @@ class DesignTest {
 
     @Test
     fun `every color token has the contrast the design decision names`() {
-        // design/DECISION.md v2: text 4.5:1 floors (accent 4.66:1 on bg), control edges 3:1.
+        // design/DECISION.md v3: text 4.5:1, control edges, glyphs and the keyboard ring 3:1.
         val dark = Tokens.dark
-        assertEquals(true, contrast(dark.text, dark.bg) > 15f)
-        assertEquals(true, contrast(dark.accent, dark.bg) >= 4.5f)
-        assertEquals(true, contrast(dark.muted, dark.surface) >= 4.5f)
-        assertEquals(true, contrast(dark.dim, dark.bg) >= 4.5f)
-        assertEquals(true, contrast(dark.onPrimary, dark.primary) >= 4.5f)
-        assertEquals(true, contrast(dark.control, dark.bg) >= 3f)
+        assertTrue(contrast(dark.text, dark.bg) >= 14f) // 14.51
+        assertTrue(contrast(dark.muted, dark.surface) >= 4.5f)
+        assertTrue(contrast(dark.dim, dark.bg) >= 4.5f)
+        assertTrue(contrast(dark.dim, dark.surface) >= 4.5f)
+        assertTrue(contrast(dark.onPrimary, dark.primary) >= 4.5f)
+        assertTrue(contrast(dark.onKey, dark.keyFill) >= 4.5f) // a sheet's primary, 4.70
+        // The key blue as text on the page, and as the keyboard ring on every surface.
+        assertTrue(contrast(dark.key, dark.bg) >= 4.5f) // 4.66
+        assertTrue(contrast(dark.key, dark.surface) >= 3f) // 3.82
+        assertTrue(contrast(dark.key, dark.raised) >= 3f) // 3.11
+        // The TV ring, white on the page.
+        assertTrue(contrast(dark.accent, dark.bg) >= 3f)
+        assertTrue(contrast(dark.switchOn, dark.surface) >= 3f) // 6.89
         // Dark only: the light palette mirrors the dark one.
         assertEquals(dark, Tokens.light)
     }
 
     @Test
-    fun `glass controls stay visible on any artwork`() {
-        // plans/android-design-v2.md 1.2: over art, the boundary is the fill against the art or the
-        // control edge against the fill, whichever is larger: 3:1 either way; text on it 4.5:1.
+    fun `the segmented control and the secondary pill carry their state in the label`() {
         val dark = Tokens.dark
-        for (art in listOf(Color.Black, Color(0xFF808080), Color.White)) {
-            val fill = dark.glassStrong.compositeOver(art)
-            val boundary = maxOf(contrast(fill, art), contrast(dark.control, fill))
-            assertEquals(true, boundary >= 3f, "boundary $boundary on $art")
-            assertEquals(true, contrast(dark.text, fill) >= 4.5f, "text on $art")
-        }
-        // The focus ring against the page.
-        assertEquals(true, contrast(dark.accent, dark.bg) >= 3f)
+        // Apple's segmented control (design/reference/apple-tv.md): the selected segment is `control`
+        // with a white label, the others a 64 percent label on the track. Selection is carried by
+        // the label's level and the fill, so the fill against the track (2.14:1) is not an edge
+        // that needs 3:1; the labels are text and need 4.5:1.
+        val track = Color(118, 118, 128).copy(alpha = 0.24f)
+        assertTrue(contrast(Color.White, dark.control) >= 4.5f) // 5.99
+        assertTrue(contrast(dark.dim, track) >= 4.5f) // 6.27
+        // A secondary is white on a 16 percent white fill, never a colored word: 10.30 on the page.
+        // Over artwork the ramps keep it at 4.5:1; that check lands with the backdrop piece.
+        assertTrue(contrast(Color.White, Color.White.copy(alpha = 0.16f)) >= 4.5f)
     }
 
+    @Test
+    fun `text on the strong glass reads on any artwork`() {
+        // v3 has no control edges: a glass panel over art is found by its contents, so the text on it
+        // must read on black, grey and white art alike.
+        val dark = Tokens.dark
+        for (art in listOf(Color.Black, Color(0xFF808080), Color.White)) {
+            assertTrue(contrast(dark.text, dark.glassStrong, art) >= 4.5f, "text on $art")
+        }
+    }
+
+    /** WCAG contrast of [fg] on [bg]: a translucent [bg] is first laid on [base], then [fg] on that. */
     private fun contrast(
-        a: Color,
-        b: Color,
+        fg: Color,
+        bg: Color,
+        base: Color = Tokens.dark.bg,
     ): Float {
-        val la = a.luminance() + 0.05f
-        val lb = b.luminance() + 0.05f
+        val back = bg.compositeOver(base)
+        val la = fg.compositeOver(back).luminance() + 0.05f
+        val lb = back.luminance() + 0.05f
         return maxOf(la, lb) / minOf(la, lb)
     }
 }

@@ -315,10 +315,10 @@ test("a pasted link that carries a sign-in is confirmed first, then sent again a
   await expect(page.locator(".install-state")).toContainText("carries a sign-in");
   const ack = page.locator('[data-f="install:ack"]');
   await expect(ack).toHaveText("It is mine, install");
-  // The risky choice is no white primary: glass with the warning's edge, and
-  // nothing on the screen is primary while the warning stands.
+  // The risky choice is no white primary: the plain secondary, its words
+  // carrying the risk, and nothing on the screen is primary while the warning stands.
   await expect(ack).not.toHaveClass(/\bprimary\b/);
-  expect(await ack.evaluate((b) => getComputedStyle(b).boxShadow)).toContain("rgb(245, 197, 24)");
+  expect(await ack.evaluate((b) => getComputedStyle(b).backgroundColor)).not.toBe("rgba(255, 255, 255, 0.92)");
   await expect(page.locator(".btn.primary")).toHaveCount(0);
   await shot(page, "addons-token", "desktop");
   await ack.click();

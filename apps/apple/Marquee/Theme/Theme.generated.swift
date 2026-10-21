@@ -4,36 +4,40 @@ import SwiftUI
 enum Theme {
     /// The one palette: Marquee is dark only.
     enum Palette {
-        static let bg = Color(RGBA(0.0235, 0.0353, 0.0549, 1))
-        static let surface = Color(RGBA(0.0471, 0.0667, 0.0941, 1))
-        static let raised = Color(RGBA(0.0784, 0.1059, 0.1412, 1))
-        static let glass = Color(RGBA(0.0510, 0.0706, 0.0980, 0.58))
-        static let glassStrong = Color(RGBA(0.0353, 0.0510, 0.0745, 0.84))
-        static let edge = Color(RGBA(0.8431, 0.9098, 1.0000, 0.13))
-        static let line = Color(RGBA(1.0000, 1.0000, 1.0000, 0.08))
-        static let lineStrong = Color(RGBA(1.0000, 1.0000, 1.0000, 0.16))
-        static let control = Color(RGBA(0.3843, 0.4157, 0.4510, 1))
-        static let text = Color(RGBA(1.0000, 1.0000, 1.0000, 1))
-        static let muted = Color(RGBA(0.8627, 0.8667, 0.8667, 1))
-        static let dim = Color(RGBA(0.6667, 0.6706, 0.6784, 1))
-        static let accent = Color(RGBA(0.8980, 0.2157, 0.1647, 1))
-        static let onAccent = Color(RGBA(1.0000, 1.0000, 1.0000, 1))
-        static let primary = Color(RGBA(1.0000, 1.0000, 1.0000, 1))
-        static let onPrimary = Color(RGBA(0.0392, 0.0392, 0.0471, 1))
-        static let star = Color(RGBA(0.9608, 0.7725, 0.0941, 1))
-        static let halo = Color(RGBA(0.0000, 0.0000, 0.0000, 0.62))
-        static let ok = Color(RGBA(0.4824, 0.8471, 0.5608, 1))
-        static let warn = Color(RGBA(0.9608, 0.7725, 0.0941, 1))
-        static let bad = Color(RGBA(1.0000, 0.4196, 0.3686, 1))
-        static let scrim = Color(RGBA(0.0235, 0.0353, 0.0549, 0.72))
-        static let avatarEmber = Color(RGBA(0.7843, 0.2157, 0.1765, 1))
-        static let avatarAmber = Color(RGBA(0.6588, 0.3725, 0.0549, 1))
-        static let avatarMoss = Color(RGBA(0.2471, 0.4902, 0.2275, 1))
-        static let avatarTeal = Color(RGBA(0.1216, 0.4784, 0.4549, 1))
-        static let avatarSky = Color(RGBA(0.1843, 0.4275, 0.7098, 1))
-        static let avatarPlum = Color(RGBA(0.4784, 0.2941, 0.6275, 1))
-        static let avatarRose = Color(RGBA(0.7059, 0.2745, 0.4314, 1))
-        static let avatarGraphite = Color(RGBA(0.3686, 0.4078, 0.4510, 1))
+        static let bg = Color(RGBA(0.1098, 0.1098, 0.1176, 1))
+        static let surface = Color(RGBA(0.1725, 0.1725, 0.1804, 1))
+        static let raised = Color(RGBA(0.2275, 0.2275, 0.2353, 1))
+        static let glass = Color(RGBA(0.1490, 0.1490, 0.1569, 0.6))
+        static let glassStrong = Color(RGBA(0.1176, 0.1176, 0.1255, 0.9))
+        static let edge = Color(RGBA(1.0000, 1.0000, 1.0000, 0.1))
+        static let line = Color(RGBA(1.0000, 1.0000, 1.0000, 0.1))
+        static let lineStrong = Color(RGBA(1.0000, 1.0000, 1.0000, 0.25))
+        static let control = Color(RGBA(0.3882, 0.3882, 0.4000, 1))
+        static let text = Color(RGBA(1.0000, 1.0000, 1.0000, 0.92))
+        static let muted = Color(RGBA(1.0000, 1.0000, 1.0000, 0.7))
+        static let dim = Color(RGBA(1.0000, 1.0000, 1.0000, 0.64))
+        static let accent = Color(RGBA(1.0000, 1.0000, 1.0000, 1))
+        static let onAccent = Color(RGBA(0.0000, 0.0000, 0.0000, 0.88))
+        static let primary = Color(RGBA(1.0000, 1.0000, 1.0000, 0.92))
+        static let onPrimary = Color(RGBA(0.0000, 0.0000, 0.0000, 0.88))
+        static let star = Color(RGBA(1.0000, 1.0000, 1.0000, 0.92))
+        static let halo = Color(RGBA(0.0000, 0.0000, 0.0000, 0.6))
+        static let ok = Color(RGBA(1.0000, 1.0000, 1.0000, 0.92))
+        static let warn = Color(RGBA(1.0000, 1.0000, 1.0000, 0.7))
+        static let bad = Color(RGBA(1.0000, 1.0000, 1.0000, 0.92))
+        static let scrim = Color(RGBA(0.0000, 0.0000, 0.0000, 0.45))
+        static let avatarEmber = Color(RGBA(0.3882, 0.3882, 0.4000, 1))
+        static let avatarAmber = Color(RGBA(0.3529, 0.3529, 0.3686, 1))
+        static let avatarMoss = Color(RGBA(0.3294, 0.3294, 0.3373, 1))
+        static let avatarTeal = Color(RGBA(0.2824, 0.2824, 0.2902, 1))
+        static let avatarSky = Color(RGBA(0.2980, 0.2980, 0.3137, 1))
+        static let avatarPlum = Color(RGBA(0.2667, 0.2667, 0.2745, 1))
+        static let avatarRose = Color(RGBA(0.2275, 0.2275, 0.2353, 1))
+        static let avatarGraphite = Color(RGBA(0.2118, 0.2118, 0.2196, 1))
+        static let key = Color(RGBA(0.0392, 0.5176, 1.0000, 1))
+        static let keyFill = Color(RGBA(0.0000, 0.4431, 0.8902, 1))
+        static let onKey = Color(RGBA(1.0000, 1.0000, 1.0000, 1))
+        static let switchOn = Color(RGBA(0.1882, 0.8196, 0.3451, 1))
     }
 
     struct TypeScale: Sendable {
@@ -57,7 +61,7 @@ enum Theme {
     }
 
     static let safeAreaTV = Insets(top: 60, bottom: 60, side: 80)
-    static let safeAreaPhone = Insets(top: 12, bottom: 12, side: 16)
+    static let safeAreaPhone = Insets(top: 12, bottom: 12, side: 20)
 
     #if os(tvOS)
     static let type = typeTV
@@ -80,17 +84,17 @@ enum Theme {
         static let s: CGFloat = 8
         static let m: CGFloat = 12
         static let card: CGFloat = 14
-        static let l: CGFloat = 18
-        static let hero: CGFloat = 22
+        static let l: CGFloat = 20
+        static let hero: CGFloat = 20
         static let pill: CGFloat = 999
     }
 
     enum Focus {
         static let ring: CGFloat = 4
         /// A soft dark halo this wide around the ring.
-        static let halo: CGFloat = 14
-        static let scaleCard: CGFloat = 1.05
-        static let scaleTile: CGFloat = 1.025
+        static let halo: CGFloat = 30
+        static let scaleCard: CGFloat = 1.06
+        static let scaleTile: CGFloat = 1.03
     }
 
     enum Motion {
@@ -99,23 +103,23 @@ enum Theme {
     }
 
     enum Poster {
-        static let tv = CGSize(width: 240, height: 360)
-        static let landscape = CGSize(width: 384, height: 216)
+        static let tv = CGSize(width: 217, height: 326)
+        static let landscape = CGSize(width: 410, height: 231)
     }
 
     /// Font weights, 100 to 900.
     enum Weight {
-        static let display: CGFloat = 800
-        static let heading: CGFloat = 800
-        static let label: CGFloat = 650
+        static let display: CGFloat = 700
+        static let heading: CGFloat = 700
+        static let label: CGFloat = 600
         static let body: CGFloat = 400
     }
 
     /// Letter spacing in em: multiply by the font size.
     enum Tracking {
-        static let display: CGFloat = -0.035
-        static let heading: CGFloat = -0.025
-        static let label: CGFloat = -0.01
+        static let display: CGFloat = -0.022
+        static let heading: CGFloat = -0.019
+        static let label: CGFloat = -0.011
     }
 
     enum Family {

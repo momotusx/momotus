@@ -124,8 +124,8 @@ for (const form of Object.keys(FORMS) as Form[]) {
       els.map((r) => ({ on: r.getAttribute("aria-checked") === "true", track: getComputedStyle(r.querySelector(".switch") as Element).backgroundColor })),
     );
     expect(tracks.some((t) => t.on)).toBe(true);
-    // On is a white track, off an empty one: the state reads without the word.
-    for (const t of tracks) expect(t.track).toBe(t.on ? "rgb(255, 255, 255)" : "rgba(0, 0, 0, 0)");
+    // On is the white primary track, off an empty one: the state reads without the word.
+    for (const t of tracks) expect(t.track).toBe(t.on ? "rgba(255, 255, 255, 0.92)" : "rgba(0, 0, 0, 0)");
     // Every row shows its mark: the logo, or the name's initial.
     const marks = await page.locator(".drow").evaluateAll((els) =>
       els.map((r) => ({ name: r.querySelector(".dtext b")?.textContent ?? "", mark: r.querySelector(".dlogo img") ? "logo" : (r.querySelector(".dlogo b")?.textContent ?? "") })),

@@ -10,13 +10,15 @@
 
 import { appendFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { argb } from "./tokens";
 
 const root = join(import.meta.dir, "../../..");
 const tokens = JSON.parse(readFileSync(join(root, "design/tokens.json"), "utf8"));
 type RGB = [number, number, number];
-const hex = (css: string): RGB => {
-  const n = parseInt(css.slice(1), 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+/** A token color (hex or rgba, through the generator's parser) as its channels and alpha. */
+const parse = (css: string): { rgb: RGB; alpha: number } => {
+  const n = parseInt(argb(css), 16);
+  return { rgb: [(n >> 16) & 255, (n >> 8) & 255, n & 255], alpha: ((n >>> 24) & 255) / 255 };
 };
 const over = (top: RGB, alpha: number, under: RGB): RGB => top.map((c, i) => c * alpha + (under[i] as number) * (1 - alpha)) as RGB;
 const lin = (c: number) => {
@@ -41,14 +43,14 @@ const alphaAt = (top: boolean, peak: number, at: number) => {
 };
 
 const dark = tokens.color.dark;
-const text = hex(dark.text);
-const muted = hex(dark.muted);
+const text = parse(dark.text);
+const muted = parse(dark.muted);
 const white: RGB = [255, 255, 255];
 const tv = tokens.safeArea.tv;
 const phone = tokens.safeArea.phone;
 
 // [where, scrim top?, peak, height dp, centre dp from its screen edge, colour, extra fill over the scrim]
-const cases: [string, boolean, number, number, number, RGB, number?][] = [
+const cases: [string, boolean, number, number, number, ReturnType<typeof parse>, number?][] = [
   // TV foot (380 dp, peak 0.85): bottom margin, then the 120 dp control row, a 34 dp gap, the bar.
   ["tv position bar clocks", false, 0.85, 380, tv.bottom + 120 + 34 + 11, text],
   ["tv action label", false, 0.85, 380, tv.bottom + 10 + 28 + 14, text],
@@ -72,8 +74,9 @@ const rows = cases.map(([where, top, peak, height, centre, fg, fill]) => {
   const at = top ? centre / height : 1 - centre / height;
   const alpha = alphaAt(top, peak, Math.min(1, Math.max(0, at)));
   let ground = over([0, 0, 0], alpha, white);
-  if (fill) ground = over(text, fill, ground);
-  return { date, phase: "P5", check: "player_text_contrast_worst_case_white_art", where, scrimAlpha: Math.round(alpha * 100) / 100, ratio: ratio(fg, ground) };
+  if (fill) ground = over(text.rgb, fill, ground);
+  // A translucent word is laid on the ground it sits on before it is measured.
+  return { date, phase: "P5", check: "player_text_contrast_worst_case_white_art", where, scrimAlpha: Math.round(alpha * 100) / 100, ratio: ratio(over(fg.rgb, fg.alpha, ground), ground) };
 });
 let failed = 0;
 for (const row of rows) {
