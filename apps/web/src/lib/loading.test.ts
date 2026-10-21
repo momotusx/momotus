@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
-import { bufferShare, loadingLines, START_AHEAD_S, startFill } from "./loading";
+import { bufferShare, loadingLines, START_AHEAD_S, STALL_AHEAD_S, startFill } from "./loading";
 
 test("the buffer's share: seconds ahead of the playhead over what the player wants", () => {
   expect(bufferShare([], 0)).toBe(0);
-  expect(bufferShare([[0, 1.5]], 0)).toBe(1.5 / START_AHEAD_S);
+  expect(bufferShare([[0, 0.5]], 0)).toBe(0.5 / START_AHEAD_S);
+  expect(bufferShare([[0, 1.5]], 0, STALL_AHEAD_S)).toBe(1.5 / STALL_AHEAD_S);
   expect(bufferShare([[0, 10]], 0)).toBe(1);
   // What counts is ahead of the playhead, not the whole range (a stall late in a range).
   expect(bufferShare([[0, 10]], 9, 3)).toBeCloseTo(1 / 3, 5);

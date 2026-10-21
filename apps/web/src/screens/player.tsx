@@ -38,7 +38,7 @@ import { SubtitlePicker } from "../player/subtitle-picker";
 import { createVideoEngine } from "../player/video-engine";
 import { loadedSource, type Retry, sourceStart, TRYING_AGAIN_MS, tryingAgain } from "../lib/failover";
 import { bytes, clock, decoded, delayText, startsText, episodeLabel, groupFailures, playPath, playState, seasonName, titlePath, versionsPath } from "../lib/format";
-import { bufferShare, loadingLines, startFill } from "../lib/loading";
+import { bufferShare, loadingLines, STALL_AHEAD_S, startFill } from "../lib/loading";
 import { offSummary, pickerLanguages } from "../lib/subtitles";
 import { blockedWords, languageName, nextVersion, noVersionWords, qualityCell, qualityText, restartLine, subtitleNote } from "../lib/words";
 import "./player.css";
@@ -764,8 +764,9 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     if (p != null) setCoreFill(p);
   });
   const fill = () => {
-    const share = url() ? bufferShare(buffered(), engine.position()) : 0;
-    return wait() === "stall" ? startFill(0, share) : startFill(coreFill(), share);
+    if (!url()) return startFill(coreFill(), 0);
+    if (wait() === "stall") return startFill(0, bufferShare(buffered(), engine.position(), STALL_AHEAD_S));
+    return startFill(coreFill(), bufferShare(buffered(), engine.position()));
   };
   const waitLines = () => (wait() === "stall" ? [] : loadingLines(status()?.text ?? startLine(), snap()?.start?.caption));
 
