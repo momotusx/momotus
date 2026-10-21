@@ -96,10 +96,8 @@ struct RowHeader: View {
     @Environment(\.metrics) private var metrics
 
     var body: some View {
-        HStack(spacing: metrics.wide ? 14 : 8) {
-            Capsule()
-                .fill(Theme.Palette.text)
-                .frame(width: metrics.wide ? 4 : 3, height: size * 1.05)
+        // The shelf title in the `title3` role, as Apple's shelves: no bar, no hairline, no All pill.
+        HStack(alignment: .firstTextBaseline, spacing: metrics.wide ? 14 : 8) {
             Text(title)
                 .display(size)
                 .foregroundStyle(Theme.Palette.text)
@@ -108,24 +106,20 @@ struct RowHeader: View {
                 .accessibilityAddTraits(.isHeader)
             if let subtitle {
                 Text(subtitle)
-                    .textFont(metrics.cardInfo + 1, weight: .medium, relativeTo: .callout)
+                    .textFont(metrics.cardInfo + 1, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.dim)
                     .lineLimit(1)
             }
-            Rectangle()
-                .fill(Theme.Palette.lineStrong)
-                .frame(height: 1)
-                .frame(minWidth: 12, maxWidth: .infinity)
-                .padding(.leading, 4)
-                .accessibilityHidden(true)
+            Spacer(minLength: 0)
         }
     }
 
+    /// `title3`: 38 on TV, 20 on a phone, and tv.apple.com's 17 on a wide screen.
     private var size: CGFloat {
         #if os(tvOS)
         return Theme.type.title3
         #else
-        return metrics.wide ? 24 : 19
+        return metrics.wide ? 17 : Theme.type.title3
         #endif
     }
 }
@@ -173,13 +167,11 @@ struct SkeletonRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: metrics.wide ? 16 : 12) {
-            HStack(spacing: metrics.wide ? 14 : 8) {
-                Capsule().fill(Theme.Palette.lineStrong).frame(width: metrics.wide ? 4 : 3, height: metrics.wide ? 25 : 20)
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Theme.Palette.surface)
-                    .frame(width: metrics.wide ? 220 : 150, height: metrics.wide ? 20 : 16)
-            }
-            .padding(.horizontal, metrics.gutter)
+            // The shelf title's place, then the posters' shapes.
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Theme.Palette.surface)
+                .frame(width: metrics.wide ? 220 : 150, height: metrics.wide ? 20 : 16)
+                .padding(.horizontal, metrics.gutter)
             SkeletonStrip()
         }
         .accessibilityElement(children: .ignore)

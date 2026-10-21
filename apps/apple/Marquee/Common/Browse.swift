@@ -7,7 +7,7 @@ struct Chip<ID: Hashable>: Identifiable {
     var detail: String?
 }
 
-/// "TYPE  Movies  Series": a small caps label and its chips. Wraps on wide
+/// "Show  Movies  Series": a plain label and its chips. Wraps on wide
 /// screens, scrolls sideways on phones.
 struct ChipRow<ID: Hashable>: View {
     let label: String
@@ -46,10 +46,9 @@ struct ChipRow<ID: Hashable>: View {
     }
 
     private var caption: some View {
-        Text(caps: label)
-            .textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
-            .tracking(1.6)
-            .foregroundStyle(Theme.Palette.muted)
+        Text(label)
+            .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
+            .foregroundStyle(Theme.Palette.dim)
     }
 
     @ViewBuilder private var buttons: some View {
@@ -60,7 +59,7 @@ struct ChipRow<ID: Hashable>: View {
                     if isSelected(chip.id) { Glyph("check", size: Theme.type.callout, relativeTo: .callout) }
                     Text(chip.title)
                     if let detail = chip.detail {
-                        Text(detail).fontWeight(.regular).opacity(chipDetailOpacity(selected: isSelected(chip.id)))
+                        Text(detail).fontWeight(.regular)
                     }
                 }
             }
@@ -77,7 +76,8 @@ private extension View {
     }
 }
 
-/// Selected chips are white with dark words; the rest are a faint white fill.
+/// The segmented control's chips: the selected one on `selected.fill` with white words and its
+/// check, the rest on the track grey (`ChipFill`). A fill, never an edge.
 struct ChipStyle: ButtonStyle {
     let selected: Bool
 
@@ -95,10 +95,10 @@ struct ChipStyle: ButtonStyle {
         var body: some View {
             configuration.label
                 .labelFont(Theme.type.callout, relativeTo: .callout)
-                .foregroundStyle(selected ? Theme.Palette.onPrimary : Theme.Palette.muted)
+                .foregroundStyle(selected ? Theme.Palette.text : Theme.Palette.muted)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(Capsule().fill(selected ? Theme.Palette.primary : .white.opacity(hovered ? 0.14 : 0.08)))
+                .background(Capsule().fill(selected ? Theme.Palette.selectedFill : track))
                 .contentShape(Capsule())
                 .pressVeil(Capsule(), pressed: configuration.isPressed)
                 .modifier(FocusRing(shape: Capsule(), active: focused))
@@ -107,6 +107,11 @@ struct ChipStyle: ButtonStyle {
                 #if !os(tvOS)
                 .onHover { hovered = $0 }
                 #endif
+        }
+
+        private var track: Color {
+            let t = ChipFill.track
+            return Color(red: t.r / 255, green: t.g / 255, blue: t.b / 255).opacity(hovered ? ChipFill.hover : ChipFill.rest)
         }
     }
 }
@@ -149,8 +154,8 @@ struct PosterGrid: View {
     }
 }
 
-/// Under card art: the name (700, accent while the card is lit), then the
-/// year or the core's caption, dim.
+/// Under card art: the name (600, never recolored by focus), then the year or
+/// the core's caption at 64 percent, regular.
 struct CardCaption: View {
     let name: String
     let info: String?
@@ -161,7 +166,7 @@ struct CardCaption: View {
             CardTitle(text: name, size: metrics.cardName)
             if let info, !info.isEmpty {
                 Text(info)
-                    .textFont(metrics.cardInfo, weight: .medium, relativeTo: .caption)
+                    .textFont(metrics.cardInfo, relativeTo: .caption)
                     .foregroundStyle(Theme.Palette.dim)
                     .lineLimit(1)
             }
