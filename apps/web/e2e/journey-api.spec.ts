@@ -309,9 +309,11 @@ test("subtitle size is the profile's; timing moves the cues for this play", asyn
 test("the language pickers search every language the core knows", async ({ browser }) => {
   const { context, page: p } = await page(browser);
   await p.goto("/settings?form=desktop");
-  // "eng" from an earlier picker reads as English, chosen.
+  // "eng" from an earlier picker reads as English, chosen, and first.
   const english = p.locator('[data-f="pref-subs:en"]');
   await expect(english).toHaveAttribute("aria-checked", "true", { timeout: 30_000 });
+  const first = p.locator('[data-fgroup="pref-subs"] > .kicker small');
+  await expect(first).toHaveText("English first");
   await p.locator('[data-f="pref-subs:more"]').click();
   await expect(p.locator('[data-fgroup="pref-subs"] .lang-all .chip')).toHaveCount(113);
   await p.locator('[data-f="pref-subs:search"]').fill("brazil");
@@ -330,6 +332,7 @@ test("the language pickers search every language the core knows", async ({ brows
   // Turning English off takes the old code out too.
   await english.click();
   await expect.poll(async () => (await prefs()).subtitleLanguages).toEqual(["pt-BR"]);
+  await expect(first).toHaveText("Portuguese (Brazil) first");
   await p.locator('[data-f="pref-subs:search"]').fill("klingon");
   await expect(p.locator('[data-fgroup="pref-subs"] .note')).toHaveText('No language is called "klingon".');
 
@@ -376,6 +379,32 @@ test("TV: a Continue Watching tile with no art lifts its art box on focus", asyn
   expect(lifted.transform).not.toBe(rest.transform);
   expect(lifted.ring).toBe(0);
   await context.close();
+});
+
+test("Settings > Playback: Subtitle language names the first language, at every size", async ({ browser }) => {
+  const set = async (subtitleLanguages: string[]) => {
+    const c = new Client(`ws://127.0.0.1:${JOURNEY_PORT}/ws`);
+    await c.req("setPrefs", { patch: { subtitleLanguages } }).finally(() => c.close());
+  };
+  await set(["tr", "eng"]);
+  const sizes = { tv: { width: 1920, height: 1080 }, desktop: { width: 1440, height: 900 }, phone: { width: 390, height: 844 } };
+  for (const [form, viewport] of Object.entries(sizes)) {
+    const { context, page: p } = await page(browser, viewport);
+    await p.goto(`/settings?form=${form}`);
+    const row = p.locator('[data-fgroup="pref-subs"]');
+    await expect(row.locator("> .kicker")).toContainText("Subtitle language", { timeout: 30_000 });
+    await expect(row.locator("> .kicker small")).toHaveText("Turkish first");
+    await expect(row.locator('[data-f="pref-subs:tr"] .chip-rank')).toHaveText("1");
+    await expect(row.locator('[data-f="pref-subs:en"] .chip-rank')).toHaveText("2");
+    // One row for it: no second subtitle language picker on the page.
+    await expect(p.locator('[data-fgroup="pref-subs"]')).toHaveCount(1);
+    await expect(p.locator(".kicker", { hasText: /^Subtitles/ })).toHaveCount(0);
+    await row.scrollIntoViewIfNeeded();
+    await p.waitForTimeout(500);
+    await p.screenshot({ path: `${SHOTS}/settings-subtitle-language-${form}.jpg`, type: "jpeg", quality: 80 });
+    await context.close();
+  }
+  await set(["eng"]);
 });
 
 test("Continue Watching: the tile's remove button off TV, the title page on TV", async ({ browser }) => {

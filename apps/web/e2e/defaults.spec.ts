@@ -1,7 +1,8 @@
 /** The recommended addons through the web screens, on a fresh core of its own
  * per walk (the shared core never gets them): nothing is installed before
  * Continue and switches turned off stay off; Browse first passes the
- * switches; a TV does it with keys only; a finished Stremio import leads to
+ * switches; a TV does it with keys only; the subtitles step after the
+ * question writes the profile's language; a finished Stremio import leads to
  * the step, and a restart before Continue gets the Home card instead; a
  * pasted link that carries a sign-in is confirmed first. Stremio's sign-in
  * cannot run here, so the import view's answer is a finished import made up
@@ -47,8 +48,8 @@ test.afterEach(async () => {
 
 /** A page whose socket reaches this walk's core. With `importDone` the import
  * view answers as a finished import. */
-async function device(browser: Browser, form: Form, opts: { importDone?: boolean } = {}): Promise<Page> {
-  const context = await browser.newContext({ ...FORMS[form], colorScheme: "dark", baseURL: `http://127.0.0.1:${PORTS.vite}` });
+async function device(browser: Browser, form: Form, opts: { importDone?: boolean; locale?: string } = {}): Promise<Page> {
+  const context = await browser.newContext({ ...FORMS[form], locale: opts.locale, colorScheme: "dark", baseURL: `http://127.0.0.1:${PORTS.vite}` });
   await context.routeWebSocket(/\/ws$/, (ws) => {
     const upstream = new WebSocket(`ws://127.0.0.1:${DEFAULTS_PORT}/ws`);
     const early: string[] = [];
@@ -134,8 +135,13 @@ test("Start fresh: nothing installed before Continue, two switches turned off st
   await expect(page.locator("h1")).toHaveText("How should Marquee pick what to play?");
   await shot(page, "stream-choice-question", "desktop");
   await page.locator('[data-f="welcome:best"]').click();
+  // Then the subtitle language, this browser's chosen.
+  await expect(page).toHaveURL(/step=subs/);
+  await expect(page.locator('[data-f="welcome:sub:en"]')).toHaveAttribute("aria-checked", "true");
+  await page.locator('[data-f="welcome:next"]').click();
   await expect(page).toHaveURL(/step=3/);
   expect((await client.req<Prefs>("setPrefs", { patch: {} })).streams).toMatchObject({ sizeLimitBytes: null, minSeeders: 20 });
+  expect((await client.req<Prefs>("setPrefs", { patch: {} })).subtitleLanguages).toEqual(["en"]);
   const choices = sent.find((m) => m.op === "installDefaults")?.choices as { key: string; on: boolean }[];
   expect(choices).toHaveLength(9);
   expect(choices.filter((c) => !c.on).map((c) => c.key)).toEqual(["torrentio", "trakt"]);
@@ -244,6 +250,10 @@ test("a TV does it with keys only: Continue first, a row toggles with select", a
   expect(mid).toBeLessThan(0.65);
   await shot(page, "stream-choice-question", "tv");
   await page.keyboard.press("Enter");
+  // The subtitle language: one press keeps this TV's.
+  await expect(page).toHaveURL(/step=subs/);
+  await expect.poll(() => focused(page)).toBe("welcome:next");
+  await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/step=3/);
   expect(sent.find((m) => m.op === "setPrefs" && JSON.stringify(m).includes("streams"))).toMatchObject({ patch: { streams: { sizeLimitBytes: 5 * 1024 ** 3, minSeeders: 50 } } });
   const now = await states();
@@ -349,6 +359,58 @@ test("Settings by keys: a switch keeps focus on its own row while the list reloa
   }
 });
 
+test("Subtitles: the device's language is chosen; the pick is the profile's; a profile with one passes by", async ({ browser }) => {
+  const languages = async () => (await client.req<Prefs>("setPrefs", { patch: {} })).subtitleLanguages;
+  // A Turkish phone: Turkish first and chosen, then the common ones and No subtitles.
+  const phone = await device(browser, "phone", { locale: "tr-TR" });
+  await phone.goto("/welcome?step=subs&form=phone");
+  await expect(phone.locator("h1")).toHaveText("Subtitles");
+  const rows = phone.locator('.langs[data-fgroup="subs"] .subrow');
+  await expect(rows.first()).toHaveAttribute("data-f", "welcome:sub:tr");
+  await expect(rows.first()).toHaveAttribute("aria-checked", "true");
+  await expect(rows.first()).toContainText("This device's language");
+  await expect(rows.last()).toHaveAttribute("data-f", "welcome:sub:none");
+  await expect(rows).toHaveCount(9);
+  await phone.waitForTimeout(500);
+  await phone.screenshot({ path: `${OUT}/subtitles-step-phone.jpg`, type: "jpeg", quality: 80, fullPage: true });
+  await phone.locator('[data-f="welcome:sub:none"]').click();
+  await expect(phone.locator('[data-f="welcome:sub:tr"]')).toHaveAttribute("aria-checked", "false");
+  await phone.locator('[data-f="welcome:next"]').click();
+  await expect(phone).toHaveURL(/step=3/);
+  expect(await languages()).toEqual([]);
+
+  // Desktop: every other language behind More languages, one chosen there.
+  const desktop = await device(browser, "desktop", { locale: "tr-TR" });
+  await desktop.goto("/welcome?step=subs&form=desktop");
+  await desktop.locator('[data-f="welcome:sub-more"]').click();
+  await expect(desktop.locator('[data-fgroup="subs-all"] .subrow')).toHaveCount(113 - 8);
+  await shot(desktop, "subtitles-step", "desktop");
+  await desktop.locator('[data-f="welcome:sub:pt-BR"]').click();
+  await desktop.locator('[data-f="welcome:next"]').click();
+  await expect(desktop).toHaveURL(/step=3/);
+  expect(await languages()).toEqual(["pt-BR"]);
+
+  // A profile with a language passes by, to the next step.
+  await desktop.goto("/welcome?step=subs&form=desktop");
+  await expect(desktop).toHaveURL(/step=3/);
+  await expect(desktop.locator("h1")).toHaveText("Setup check");
+  expect(await languages()).toEqual(["pt-BR"]);
+
+  // A TV: Continue has the focus, so one press keeps the TV's language.
+  await client.req("setPrefs", { patch: { subtitleLanguages: [] } });
+  const tv = await device(browser, "tv", { locale: "tr-TR" });
+  await tv.goto("/welcome?step=subs&form=tv");
+  await expect.poll(() => focused(tv)).toBe("welcome:next");
+  await shot(tv, "subtitles-step", "tv");
+  await tv.keyboard.press("ArrowUp");
+  await expect.poll(() => focused(tv)).toMatch(/^welcome:sub:/);
+  await tv.keyboard.press("ArrowDown");
+  await expect.poll(() => focused(tv)).toBe("welcome:next");
+  await tv.keyboard.press("Enter");
+  await expect(tv).toHaveURL(/step=3/);
+  expect(await languages()).toEqual(["tr"]);
+});
+
 test("after an import, Back from the setup check does not call Marquee's own installs From Stremio", async ({ browser }) => {
   const page = await device(browser, "desktop", { importDone: true });
   await page.goto("/welcome?form=desktop");
@@ -361,8 +423,12 @@ test("after an import, Back from the setup check does not call Marquee's own ins
   await page.locator('[data-f="welcome:next"]').click();
   await expect(page).toHaveURL(/step=choice/);
   await page.locator('[data-f="welcome:fast"]').click();
+  await expect(page).toHaveURL(/step=subs/);
+  // Skip writes nothing.
+  await page.locator('[data-f="welcome:skip"]').click();
   await expect(page).toHaveURL(/step=3/);
-  // The question is not kept under the setup check: its doors would rewrite the choice.
+  expect((await client.req<Prefs>("setPrefs", { patch: {} })).subtitleLanguages).toEqual([]);
+  // Neither the question nor the subtitles step is kept under the setup check: the question's doors would rewrite the choice.
   await page.goBack();
   await expect(page).toHaveURL(/step=2/);
   await expect(page).not.toHaveURL(/from=import/);

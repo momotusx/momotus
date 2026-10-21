@@ -37,13 +37,13 @@ import { accountWords } from "../lib/account";
 const clockTime = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
 /** The languages the pickers show before "More languages", as core tags. */
-const QUICK = ["en", "tr", "es", "fr", "de", "it", "pt", "ja"];
+export const QUICK = ["en", "tr", "es", "fr", "de", "it", "pt", "ja"];
 /** The ISO 639-2 codes earlier pickers stored for subtitles; the core reads both. */
 const LEGACY: Record<string, string> = { eng: "en", tur: "tr", spa: "es", fre: "fr", ger: "de", ita: "it", por: "pt", jpn: "ja" };
 
 // Every language the core knows (113), loaded once per app run.
 let catalog: Promise<LanguageChoice[]> | undefined;
-const allLanguages = () =>
+export const allLanguages = () =>
   (catalog ??= op<LanguageChoice[]>("languages").catch((e: unknown) => {
     catalog = undefined;
     throw e;
@@ -54,8 +54,17 @@ const allLanguages = () =>
  * first one wins), and every language the core knows behind "More
  * languages", with a search. Chips keep their place and their element when
  * one is picked, so a remote's focus stays on it. Subtitles store the core's
- * tag as is, audio the part before "-" ("pt" for "pt-BR"). */
-export function LanguagePicker(props: { label: string; help?: string; group: string; chosen: string[]; audio?: boolean; onChange: (next: string[]) => void }) {
+ * tag as is, audio the part before "-" ("pt" for "pt-BR"). `first` words the
+ * help line from the first chosen language's name (null for none). */
+export function LanguagePicker(props: {
+  label: string;
+  help?: string;
+  first?: (name: string | null) => string;
+  group: string;
+  chosen: string[];
+  audio?: boolean;
+  onChange: (next: string[]) => void;
+}) {
   const [all, setAll] = createSignal<LanguageChoice[] | null>(null);
   const [failed, setFailed] = createSignal<string | null>(null);
   const [more, setMore] = createSignal(false);
@@ -89,7 +98,7 @@ export function LanguagePicker(props: { label: string; help?: string; group: str
     <Choice<string>
       multi
       label={props.label}
-      help={props.help}
+      help={props.first ? props.first(chosen()[0] ? nameOf(chosen()[0] as string) : null) : props.help}
       group={props.group}
       items={shown()}
       isOn={isOn}
@@ -329,7 +338,8 @@ export default function SettingsScreen() {
             </div>
             <div class="filters">
               <LanguagePicker
-                label="Subtitles"
+                label="Subtitle language"
+                first={(name) => (name ? `${name} first` : "None, subtitles start off")}
                 group="pref-subs"
                 chosen={x().subtitleLanguages}
                 onChange={(next) => patch({ subtitleLanguages: next })}
@@ -357,7 +367,7 @@ export default function SettingsScreen() {
                 onPick={(v) => patch({ autoplayNext: v })}
               />
             </div>
-            <p class="note small">The numbers are the order you turned languages on; number 1 wins.</p>
+            <p class="note small">The numbers are the order you turned languages on; number 1 wins. A subtitle you pick while watching makes its language number 1.</p>
           </section>
         )}
       </Show>

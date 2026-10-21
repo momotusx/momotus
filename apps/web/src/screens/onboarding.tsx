@@ -1,11 +1,13 @@
 /** Welcome: one decision per step. 1: the doors. 2: the recommended addons,
  * a switch each (Start fresh, Browse first and a finished import all lead
  * here; nothing is installed before Continue). "choice": how Marquee picks
- * what to play, asked once (plans/m13-stream-choice.md 4.5). 3: the setup
- * check, run on its own with a fix per row. The step lives in the URL, so Back walks back
+ * what to play, asked once (plans/m13-stream-choice.md 4.5). "subs": the
+ * language subtitles start in (plans/m13-subtitle-languages.md 7). 3: the
+ * setup check, run on its own with a fix per row. The step lives in the URL, so Back walks back
  * through the steps. The Settings page of the same switches is at the end. */
 
 import { A, useNavigate, useSearchParams } from "@solidjs/router";
+import Check from "lucide-solid/icons/check";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import DoorOpen from "lucide-solid/icons/door-open";
 import Gem from "lucide-solid/icons/gem";
@@ -14,19 +16,21 @@ import PackageSearch from "lucide-solid/icons/package-search";
 import QrCode from "lucide-solid/icons/qr-code";
 import Sparkle from "lucide-solid/icons/sparkle";
 import Zap from "lucide-solid/icons/zap";
-import { createEffect, createSignal, For, Index, Match, on, onCleanup, Show, Switch } from "solid-js";
+import { createEffect, createSignal, For, Index, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { displayCaps, link, liveView, op, ping, reasonOf } from "../core/client";
+import { displayCaps, link, liveView, op, ping, prefsView, reasonOf } from "../core/client";
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import type { DefaultAddonInfo } from "../core/generated/DefaultAddonInfo";
 import type { DefaultAddons } from "../core/generated/DefaultAddons";
+import type { LanguageChoice } from "../core/generated/LanguageChoice";
 import { autoFocusSoon } from "../focus/dom";
 import { form } from "../form";
 import { resetHistoryBase } from "../history";
 import { afterContinue, catalogMissing, choicesFor, defaultsWords, grouped, switchable } from "../lib/defaults";
-import { choiceWords, findAddons, type Tone } from "../lib/words";
+import { choiceWords, findAddons, languageName, type Tone } from "../lib/words";
 import * as sync from "../core/sync";
 import { InstallField } from "./addons";
+import { allLanguages, QUICK } from "./settings";
 import { SignInStart, TvSignIn } from "./sign-in";
 import "./browse.css";
 import "./settings.css";
@@ -68,9 +72,13 @@ function leave(navigate: (to: string, o?: { replace?: boolean }) => void, to: st
   navigate(to, { replace: true });
 }
 
+/** The subtitles step, after the stream question: Home or the setup check next, as the question's `then` says. */
+const subsStep = (then: string | undefined) => `/welcome?step=subs${then ? `&then=${then}` : ""}`;
+
 export default function Onboarding() {
   const [query, setQuery] = useSearchParams();
-  const step = () => (query.step === "2" ? 2 : query.step === "3" ? 3 : query.step === "choice" ? "choice" : query.step === "doors" ? "doors" : 1);
+  const step = () =>
+    query.step === "2" ? 2 : query.step === "3" ? 3 : query.step === "choice" ? "choice" : query.step === "subs" ? "subs" : query.step === "doors" ? "doors" : 1;
   // A new step puts focus on its first action (on a remote or after keys).
   createEffect(on(step, () => autoFocusSoon(() => document.querySelector<HTMLElement>(".welcome [data-autofocus]"))));
   const { addons, defaults, error } = useDefaults();
@@ -101,6 +109,13 @@ export default function Onboarding() {
         </Show>
         {/* Skip writes nothing: the defaults are Start fast's. */}
         <Show when={step() === "choice"}>
+          <A class="skip" href={subsStep(query.then as string | undefined)} replace data-f="welcome:skip">
+            {choiceWords.question.skip.label}
+            <ChevronRight aria-hidden />
+          </A>
+        </Show>
+        {/* Skip writes nothing: no subtitle turns on by itself. */}
+        <Show when={step() === "subs"}>
           <A
             class="skip"
             href={afterContinue(query.then as string | undefined)}
@@ -108,7 +123,7 @@ export default function Onboarding() {
             onClick={() => query.then === "home" && resetHistoryBase()}
             data-f="welcome:skip"
           >
-            {choiceWords.question.skip.label}
+            Skip
             <ChevronRight aria-hidden />
           </A>
         </Show>
@@ -138,6 +153,9 @@ export default function Onboarding() {
         </Match>
         <Match when={step() === "choice"}>
           <Question then={query.then as string | undefined} />
+        </Match>
+        <Match when={step() === "subs"}>
+          <Subtitles then={query.then as string | undefined} />
         </Match>
         <Match when={step() === 3}>
           <SetupCheck list={addons.state.data?.addons ?? []} defaults={defaults()?.addons ?? []} note={note()} onFix={fix} />
@@ -377,7 +395,7 @@ function Question(props: { then?: string }) {
     setProblem(null);
     try {
       await op("setPrefs", { patch: { streams: patch } });
-      leave(navigate, afterContinue(props.then));
+      leave(navigate, subsStep(props.then));
     } catch (e) {
       setProblem(`Could not save the choice: ${reasonOf(e)}`);
     } finally {
@@ -413,6 +431,86 @@ function Question(props: { then?: string }) {
             {p()}
           </p>
         )}
+      </Show>
+    </section>
+  );
+}
+
+/** The language subtitles start in, one choice: this device's language
+ * chosen, then the common ones and No subtitles, every other language behind
+ * More languages. Continue writes it as the profile's subtitle languages;
+ * Skip writes nothing. A profile that has languages already passes by. */
+function Subtitles(props: { then?: string }) {
+  const navigate = useNavigate();
+  const prefs = prefsView();
+  const next = () => leave(navigate, afterContinue(props.then));
+  // Once, when the preferences are in: a Continue here must not pass twice.
+  createEffect(on(() => prefs.state.data !== null, (ready) => ready && (prefs.state.data?.subtitleLanguages.length ?? 0) > 0 && next()));
+  const device = (navigator.language || "en").slice(0, 2).toLowerCase();
+  const [all, setAll] = createSignal<LanguageChoice[]>([]);
+  onMount(() => void allLanguages().then(setAll, () => undefined));
+  const [chosen, setChosen] = createSignal<string | null>(device);
+  const [more, setMore] = createSignal(false);
+  const [busy, setBusy] = createSignal(false);
+  const [problem, setProblem] = createSignal<string | null>(null);
+  const nameOf = (code: string) => all().find((l) => l.code === code)?.name ?? languageName(code);
+  const common = [...new Set([device, ...QUICK])];
+  // The core's list comes sorted by name.
+  const rest = () => all().filter((l) => !common.includes(l.code));
+  const go = async () => {
+    if (busy()) return;
+    setBusy(true);
+    setProblem(null);
+    try {
+      const code = chosen();
+      await op("setPrefs", { patch: { subtitleLanguages: code ? [code] : [] } });
+      next();
+    } catch (e) {
+      setProblem(`Could not save the language: ${reasonOf(e)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const row = (code: string | null, name: string, line?: string) => (
+    <button class="drow subrow" role="radio" aria-checked={chosen() === code} data-f={`welcome:sub:${code ?? "none"}`} onClick={() => setChosen(code)}>
+      <span class="dtext">
+        <b>{name}</b>
+        <Show when={line}>
+          <small>{line}</small>
+        </Show>
+      </span>
+      <Check aria-hidden class="lcheck" />
+    </button>
+  );
+  return (
+    <section class="step-body" aria-label="Subtitles">
+      <h1>Subtitles</h1>
+      <p class="lead">Pick the language subtitles start in. They turn on when a film's audio is in another language. Change it later in Settings, under Playback.</p>
+      <div class="langs" role="radiogroup" aria-label="Subtitle language" data-fgroup="subs">
+        <For each={common}>{(code) => row(code, nameOf(code), code === device ? "This device's language" : undefined)}</For>
+        {row(null, "No subtitles", "Turn them on while watching")}
+      </div>
+      <Show when={problem()}>
+        {(p) => (
+          <p class="st bad" role="status">
+            <i class="dot" />
+            {p()}
+          </p>
+        )}
+      </Show>
+      <div class="acts">
+        <button class="btn primary" data-f="welcome:next" data-autofocus aria-disabled={busy()} onClick={() => void go()}>
+          Continue
+          <ChevronRight aria-hidden />
+        </button>
+        <button class="btn" data-f="welcome:sub-more" aria-expanded={more()} onClick={() => setMore(!more())}>
+          {more() ? "Fewer languages" : "More languages"}
+        </button>
+      </div>
+      <Show when={more()}>
+        <div class="langs" role="radiogroup" aria-label="More languages" data-fgroup="subs-all">
+          <For each={rest()}>{(l) => row(l.code, l.name)}</For>
+        </div>
       </Show>
     </section>
   );
