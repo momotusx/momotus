@@ -22,7 +22,7 @@ use crate::engine::{
 };
 use crate::roster::{
     Bundle, FORMS, Hex, Id, KitKind, MAX_KITS, MemberKeys, MemberSecret, NewKit, Role, Sponsor,
-    seal_form, seal_name,
+    open_form, seal_form, seal_name,
 };
 use crate::wire::{AccountResponse, AppendRequest, Redeemed, RosterHead};
 use base64::Engine as _;
@@ -387,6 +387,19 @@ pub async fn approve_pairing(
     let public =
         PublicKey::from_bytes(&keys.boxk.0).map_err(|_| bad("pairing code has no valid keys"))?;
     let session = Session::open(library, http, config, clock).await?;
+    // Only a phone or a tablet approves (D6): a device that said it is a TV, a computer or the
+    // web never vouches for another, whatever its app shows. One that said nothing (an older
+    // core) still may.
+    let me = session.member.id();
+    let mine = session
+        .roster
+        .members()
+        .get(&me)
+        .and_then(|m| m.form.as_deref());
+    let mine = mine.and_then(|sealed| open_form(&session.record.keys, &me, sealed));
+    if matches!(mine.as_deref(), Some("tv" | "computer" | "web")) {
+        return Err(SyncError::CannotApprove);
+    }
     // A code naming a device the account ever admitted cannot join again; approving it would
     // only hand its key out, and They differ would then drop that device.
     if session.roster.admitted(&keys.id()) {

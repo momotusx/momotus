@@ -144,6 +144,56 @@ impl Device {
     }
 }
 
+/// Only a phone or a tablet approves (D6, phase 2 web review A P3-5): the core
+/// refuses a device that said it is a TV, a computer or the web before
+/// anything is sent, whatever its app shows; a phone, a tablet and an older
+/// core that said nothing approve. The form is each device's own, sealed when
+/// it made the account or joined it.
+#[tokio::test]
+async fn only_a_phone_or_tablet_approves() {
+    let (server, _db) = relay().await;
+    let made = |form: Option<&'static str>| {
+        let server = server.clone();
+        async move {
+            let record =
+                mq_sync::create_account_with(&http(), &server, None, "Device", None, false, form)
+                    .await
+                    .unwrap();
+            Device::with(record)
+        }
+    };
+    for form in ["tv", "computer", "web"] {
+        let mut screen = made(Some(form)).await;
+        let code = start_pairing(&http(), &server).await.unwrap();
+        let refused = screen.approve(&code.qr).await.unwrap_err();
+        assert_eq!(refused.code(), Some("cannotApprove"), "{form}: {refused}");
+        assert_eq!(
+            code.poll(&http()).await.unwrap(),
+            None,
+            "{form}: nothing was sent"
+        );
+    }
+    for form in [Some("phone"), Some("tablet"), None] {
+        made(form).await.pair(&server, "TV").await;
+    }
+    // A TV that joined by pairing is refused in turn.
+    let mut phone = made(Some("phone")).await;
+    let pairing = start_pairing(&http(), &server).await.unwrap();
+    phone.approve(&pairing.qr).await.unwrap();
+    let offer = pairing.poll(&http()).await.unwrap().expect("offer");
+    let record = pairing
+        .claim_as(&http(), offer, "TV", Some("tv"))
+        .await
+        .unwrap();
+    let mut tv = Device::with(record);
+    tv.sync().await;
+    let another = start_pairing(&http(), &server).await.unwrap();
+    assert_eq!(
+        tv.approve(&another.qr).await.unwrap_err().code(),
+        Some("cannotApprove")
+    );
+}
+
 /// What each device hears (3.2, `SyncReport.announcements`): another
 /// member's join, kit or removal, until acknowledged, whichever call caught
 /// up; never what it did or vouched for itself, nor anything from before it

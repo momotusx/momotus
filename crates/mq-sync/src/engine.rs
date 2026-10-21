@@ -444,6 +444,10 @@ pub enum SyncError {
     /// The account holds as many kits as it may.
     #[error("the account has as many kits as it can hold; remove one first")]
     TooManyKits,
+    /// Only a phone or a tablet approves another device (D6): this device
+    /// said it is a TV, a computer or the web.
+    #[error("only a phone or tablet can sign in another device")]
+    CannotApprove,
 }
 
 /// The relay's coded answers map in one place. Only the relay's own 410
@@ -522,6 +526,7 @@ impl SyncError {
             SyncError::KitHere => "kitHere",
             SyncError::KitDropped => "kitDropped",
             SyncError::TooManyKits => "tooManyKits",
+            SyncError::CannotApprove => "cannotApprove",
             _ => return None,
         })
     }
