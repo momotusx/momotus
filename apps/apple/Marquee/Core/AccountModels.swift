@@ -94,6 +94,57 @@ struct SyncReport: Decodable, Hashable, Sendable {
     /// A changed keystore record: store it, then sync again at once.
     let record: JSONValue?
     let again: Bool
+    /// A deletion of the account that waits (D14), from the round's last relay answer.
+    var deletion: ScheduledDeletion? = nil
+    /// Roster changes another member made, until `ackAnnouncements` (plans/accounts.md 3.2).
+    var announcements: [Announcement] = []
+}
+
+extension SyncReport {
+    private enum Key: String, CodingKey {
+        case pushed, stale, refused, waiting, pulled, applied, unreadable, newer, parked, oldEpochWrites,
+             clockGapMs, rotationWaitMs, blocked, fingerprint, record, again, deletion, announcements
+    }
+
+    /// An older core sends neither `deletion` nor `announcements`: none.
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: Key.self)
+        self.init(
+            pushed: try c.decode(Int.self, forKey: .pushed), stale: try c.decode(Int.self, forKey: .stale),
+            refused: try c.decode(Int.self, forKey: .refused), waiting: try c.decode(Int.self, forKey: .waiting),
+            pulled: try c.decode(Int.self, forKey: .pulled), applied: try c.decode(Int.self, forKey: .applied),
+            unreadable: try c.decode(Int.self, forKey: .unreadable), newer: try c.decode(Int.self, forKey: .newer),
+            parked: try c.decode(Int.self, forKey: .parked), oldEpochWrites: try c.decode(Int.self, forKey: .oldEpochWrites),
+            clockGapMs: try c.decode(Int64.self, forKey: .clockGapMs), rotationWaitMs: try c.decode(Int64.self, forKey: .rotationWaitMs),
+            blocked: try c.decodeIfPresent(String.self, forKey: .blocked), fingerprint: try c.decode(String.self, forKey: .fingerprint),
+            record: try c.decodeIfPresent(JSONValue.self, forKey: .record), again: try c.decode(Bool.self, forKey: .again),
+            deletion: try c.decodeIfPresent(ScheduledDeletion.self, forKey: .deletion),
+            announcements: try c.decodeIfPresent([Announcement].self, forKey: .announcements) ?? [])
+    }
+}
+
+/// A deletion of the account that waits (ScheduledDeletion.ts): every device
+/// shows it with Cancel; `provider` names the identity that asked from the web page.
+struct ScheduledDeletion: Decodable, Hashable, Sendable {
+    let dueMs: Int64
+    let provider: String?
+}
+
+/// A roster change another member made (Announcement.ts): a device joined, a
+/// passkey or recovery kit added, a member removed, or older ones not kept.
+struct Announcement: Decodable, Hashable, Sendable, Identifiable {
+    /// What `ackAnnouncements` takes.
+    let id: String
+    /// `device`, `passkey`, `kit`, `removed` or `dropped`.
+    let kind: String
+    let member: String?
+    let kit: Bool
+    let passkey: Bool
+    /// The member that vouched for it or removed it (itself when a device left).
+    let by: String?
+    let name: String?
+    /// For `dropped`: how many older announcements were not kept.
+    let count: Int?
 }
 
 /// The account's members (Devices.ts).
@@ -103,6 +154,8 @@ struct SyncDevices: Decodable, Hashable, Sendable {
     let epoch: Int64
     let rotationPending: Bool
     let record: JSONValue?
+    /// The account id as base64url without padding: a new passkey's `user.id` (plans/accounts.md 3.1).
+    var account: String? = nil
 }
 
 struct MemberInfo: Decodable, Hashable, Sendable, Identifiable {
@@ -114,6 +167,36 @@ struct MemberInfo: Decodable, Hashable, Sendable, Identifiable {
     let sponsor: String?
     let addedMs: Int64
     let thisDevice: Bool
+    /// A kit made from a passkey, else a recovery kit.
+    var passkey: Bool = false
+    /// `phone`, `tablet`, `tv`, `computer` or `web`, when the device said:
+    /// only phones and tablets approve, and count as a second way in.
+    var form: String? = nil
+    /// A device that joined through a passkey ("Joined with a passkey").
+    var viaPasskey: Bool = false
+    /// A kit's newest device and when it joined: "Last used".
+    var lastUsedBy: String? = nil
+    var lastUsedMs: Int64? = nil
+}
+
+extension MemberInfo {
+    private enum Key: String, CodingKey {
+        case id, kit, name, sponsor, addedMs, thisDevice, passkey, form, viaPasskey, lastUsedBy, lastUsedMs
+    }
+
+    /// A core before accounts phase 1c sends none of the newer fields: a plain device or recovery kit.
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: Key.self)
+        self.init(
+            id: try c.decode(String.self, forKey: .id), kit: try c.decode(Bool.self, forKey: .kit),
+            name: try c.decodeIfPresent(String.self, forKey: .name), sponsor: try c.decodeIfPresent(String.self, forKey: .sponsor),
+            addedMs: try c.decode(Int64.self, forKey: .addedMs), thisDevice: try c.decode(Bool.self, forKey: .thisDevice),
+            passkey: try c.decodeIfPresent(Bool.self, forKey: .passkey) ?? false,
+            form: try c.decodeIfPresent(String.self, forKey: .form),
+            viaPasskey: try c.decodeIfPresent(Bool.self, forKey: .viaPasskey) ?? false,
+            lastUsedBy: try c.decodeIfPresent(String.self, forKey: .lastUsedBy),
+            lastUsedMs: try c.decodeIfPresent(Int64.self, forKey: .lastUsedMs))
+    }
 }
 
 /// Any JSON, kept as is: for records the app stores and hands back but never reads.
@@ -166,6 +249,8 @@ enum JSONValue: Codable, Hashable, Sendable {
 /// it vouched for, ticked for the user to untick, and the kits that always go.
 struct LostPreview: Decodable, Hashable, Sendable {
     let devices: [String]
+    /// Those of `devices` that joined through a passkey, newest first.
+    var passkeyJoined: [String] = []
     /// The kits that go with everything ticked.
     let kits: [String]
     /// The kits each of `devices` made: they stay with a device the user unticks.
@@ -214,4 +299,68 @@ struct MadeKit: Decodable, Sendable {
 
     /// The kit to hold until "I saved it", by its id.
     var held: HeldKit { HeldKit(id: id, kit: kit) }
+}
+
+extension LostPreview {
+    private enum Key: String, CodingKey { case devices, passkeyJoined, kits, deviceKits }
+
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: Key.self)
+        self.init(
+            devices: try c.decode([String].self, forKey: .devices),
+            passkeyJoined: try c.decodeIfPresent([String].self, forKey: .passkeyJoined) ?? [],
+            kits: try c.decode([String].self, forKey: .kits),
+            deviceKits: try c.decode([DeviceKits].self, forKey: .deviceKits))
+    }
+}
+
+/// The `signIn` view (SignInSnapshot.ts): a relay's brokered sign-in.
+enum SignInSnapshot: Decodable, Hashable, Sendable {
+    case starting
+    /// Open `url` in the auth session; the relay takes the flow until `expiresMs` (its time).
+    case browser(url: String, expiresMs: Int64)
+    case waiting
+    /// The identity signs in to `account`.
+    case found(ticket: String, account: String)
+    /// No account yet: create one with the ticket, or link it after joining.
+    case new(ticket: String)
+    /// Apple's revoke flow: the receipt for an unlink or a delete.
+    case receipt(receipt: String, ticket: String, account: String?)
+    case failed(code: String)
+
+    private enum Key: String, CodingKey { case phase, url, expiresMs, ticket, account, receipt, code }
+
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: Key.self)
+        switch try c.decode(String.self, forKey: .phase) {
+        case "starting": self = .starting
+        case "browser": self = .browser(url: try c.decode(String.self, forKey: .url), expiresMs: try c.decode(Int64.self, forKey: .expiresMs))
+        case "waiting": self = .waiting
+        case "found": self = .found(ticket: try c.decode(String.self, forKey: .ticket), account: try c.decode(String.self, forKey: .account))
+        case "new": self = .new(ticket: try c.decode(String.self, forKey: .ticket))
+        case "receipt":
+            self = .receipt(receipt: try c.decode(String.self, forKey: .receipt), ticket: try c.decode(String.self, forKey: .ticket),
+                            account: try c.decodeIfPresent(String.self, forKey: .account))
+        case "failed": self = .failed(code: try c.decode(String.self, forKey: .code))
+        // A phase a newer core adds: wait, as for `waiting`.
+        default: self = .waiting
+        }
+    }
+}
+
+/// A sign-in identity linked to the account (IdentityLink.ts): no subject, email or name.
+struct IdentityLink: Decodable, Hashable, Sendable, Identifiable {
+    let link: Int64
+    let provider: String
+    let createdMs: Int64
+
+    var id: Int64 { link }
+}
+
+/// `nativeSignInStart`'s answer: the flow, the nonce for the native sheet (already
+/// bound to the relay host), and the relay's deadline for it.
+struct NativeStart: Decodable, Hashable, Sendable {
+    let flow: String
+    let nonce: String
+    let expiresMs: Int64
 }

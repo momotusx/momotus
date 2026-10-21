@@ -182,6 +182,8 @@ enum SyncWords {
     static let authServerList = "keep syncing with the sync server's device list"
     static let authLeave = "stop syncing on this device"
     static let authDelete = "delete your sync account"
+    static let authUnlink = "turn off a sign-in for your account"
+    static let authSignOut = "sign out and remove your library from this device"
 
     /// Fills `{name}` in a sync line.
     static func named(_ line: String, _ name: String) -> String {

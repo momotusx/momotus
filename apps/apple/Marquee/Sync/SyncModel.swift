@@ -2,6 +2,9 @@ import Foundation
 #if !os(tvOS)
 import LocalAuthentication
 #endif
+#if canImport(UIKit)
+import UIKit
+#endif
 import Observation
 
 /// The sync account on this device: one per app. The keystore record lives
@@ -182,7 +185,7 @@ final class SyncModel {
     func startPairing(server: String, name: String) {
         // A Keychain that did not answer may hold an account: nothing replaces it unseen.
         guard !keyUnreadable else { return }
-        let attempt = LiveRecord<PairingSnapshot>("pairing", params: ["server": server, "name": name], core: core)
+        let attempt = LiveRecord<PairingSnapshot>("pairing", params: ["server": server, "name": name, "form": DeviceForm.current], core: core)
         attempt.onSnapshot = { [weak self, weak attempt] snapshot in
             guard case .joined(let record) = snapshot, let self, let attempt, self.pairing === attempt, self.joinStored == nil else { return }
             self.join(record)
@@ -198,24 +201,42 @@ final class SyncModel {
     }
 
     /// The first device of a new account.
-    func createAccount(server: String, invite: String, name: String) async throws {
+    /// With a sign-in's `ticket` the identity is linked to the new account;
+    /// `move` takes it from another account (Start over).
+    func createAccount(server: String, invite: String, name: String, ticket: String? = nil, move: Bool = false) async throws {
         try refuseUnreadableKey()
-        var fields: [String: any Sendable] = ["server": server, "name": name]
+        var fields: [String: any Sendable] = ["server": server, "name": name, "form": DeviceForm.current]
         if !invite.isEmpty { fields["invite"] = invite }
+        if let ticket { fields["ticket"] = ticket }
+        if move { fields["move"] = true }
         let record: JSONValue = try await core.call("createSyncAccount", fields, as: JSONValue.self)
         join(record)
     }
 
     /// A new device joining with a recovery kit; the page then asks for a new kit.
     func recover(server: String, kit: String, name: String) async throws {
-        try refuseUnreadableKey()
-        let recovered = try await core.call("recover", ["server": server, "kit": kit, "name": name], as: Recovered.self)
-        join(recovered.record, recovered: true)
+        try await recover(server: server, secret: ["kit": kit], name: name)
     }
 
-    /// `recover`'s answer: the record to store, and the way in (`kit` here).
+    /// A new device joining with a passkey's PRF output (`recover {prf}`):
+    /// no new kit is asked for after it. `kitUnknown` when it opens no account here.
+    func recover(server: String, prf: Data, name: String) async throws {
+        try await recover(server: server, secret: ["prf": PasskeyContract.base64url(prf)], name: name)
+    }
+
+    private func recover(server: String, secret: [String: String], name: String) async throws {
+        try refuseUnreadableKey()
+        var fields: [String: any Sendable] = ["server": server, "name": name, "form": DeviceForm.current]
+        for (key, value) in secret { fields[key] = value }
+        let recovered = try await core.call("recover", fields, as: Recovered.self)
+        // Only a recovery kit asks for a new kit after it.
+        join(recovered.record, recovered: recovered.via != "passkey")
+    }
+
+    /// `recover`'s answer: the record to store, and the way in (`kit` or `passkey`).
     private struct Recovered: Decodable {
         let record: JSONValue
+        let via: String?
     }
 
     /// A join replaces any account before it (the pages ask first), then its
@@ -389,12 +410,13 @@ final class SyncModel {
     }
 
     /// Leaves the account. Without `force` the core refuses while edits are unsent.
-    func signOut(force: Bool, askedAgain: Bool = false) async throws {
-        try await confirmOwner(SyncWords.authLeave, endsAccess: true, askedAgain: askedAgain)
+    /// `quiet`: the first step of a sign-out that also removes the library (D13): no notice, it goes on.
+    func signOut(force: Bool, askedAgain: Bool = false, quiet: Bool = false) async throws {
+        try await confirmOwner(quiet ? SyncWords.authSignOut : SyncWords.authLeave, endsAccess: true, askedAgain: askedAgain)
         let _: JSONValue = try await withRecord("signOut", ["force": force]) { _ in nil }
         forget()
         problem = nil
-        notice = SyncWords.left
+        notice = quiet ? nil : SyncWords.left
     }
 
     /// Stops syncing on this device only: nothing is sent and the sync server
@@ -413,9 +435,11 @@ final class SyncModel {
     /// passcode that ask was the step, as for leaving (D15): deleting ends
     /// access and every library stays. Once the server confirmed, this
     /// device forgets it as after a sign-out; the library stays.
-    func deleteAccount() async throws {
-        try await confirmOwner(SyncWords.authDelete, endsAccess: true, askedAgain: true)
-        let _: JSONValue = try await withRecord("deleteAccount") { _ in nil }
+    func deleteAccount(receipt: String? = nil) async throws {
+        if receipt == nil { try await confirmOwner(SyncWords.authDelete, endsAccess: true, askedAgain: true) }
+        var fields: [String: any Sendable] = [:]
+        if let receipt { fields["receipt"] = receipt }
+        let _: JSONValue = try await withRecord("deleteAccount", fields) { _ in nil }
         forget()
         problem = nil
         notice = SyncWords.accountGone
@@ -459,6 +483,102 @@ final class SyncModel {
     func forgetHere() {
         forget()
         problem = nil
+    }
+
+    // MARK: Signing in (plans/accounts.md 3.4)
+
+    /// The sign-in buttons a relay offers; none on a relay without sign-in.
+    func relayInfo(server: String) async throws -> [String] {
+        struct Info: Decodable { let providers: [String] }
+        return try await core.call("relayInfo", ["server": server], as: Info.self).providers
+    }
+
+    /// A native sheet's flow: its nonce (bound to the relay host) goes to the sheet.
+    func nativeSignInStart(server: String, provider: String, revoke: Bool = false) async throws -> NativeStart {
+        var fields: [String: any Sendable] = ["server": server, "provider": provider]
+        if revoke { fields["revoke"] = true }
+        return try await core.call("nativeSignInStart", fields, as: NativeStart.self)
+    }
+
+    /// The sheet's ID token for that flow: `found`, `new` or (a revoke) `receipt`.
+    func nativeSignIn(flow: String, idToken: String, authorizationCode: String? = nil) async throws -> SignInSnapshot {
+        var fields: [String: any Sendable] = ["flow": flow, "idToken": idToken]
+        if let authorizationCode { fields["authorizationCode"] = authorizationCode }
+        return try await core.call("nativeSignIn", fields, as: SignInSnapshot.self)
+    }
+
+    /// A relay's brokered sign-in (Google, Facebook, any other): the view to
+    /// open in an auth session, ending in `found`, `new` or `failed`.
+    func signInView(server: String, provider: String) -> LiveRecord<SignInSnapshot> {
+        LiveRecord("signIn", params: ["server": server, "provider": provider, "return": "marquee://auth"], core: core)
+    }
+
+    /// Apple's revoke on a surface without the native sheet: the same view, ending in `receipt`.
+    func appleRevokeView(server: String) -> LiveRecord<SignInSnapshot> {
+        LiveRecord("appleRevoke", params: ["server": server, "return": "marquee://auth"], core: core)
+    }
+
+    /// Hands the auth session's own return to its view; the core takes only
+    /// its own flow's return, from its relay.
+    func returned(_ view: LiveRecord<SignInSnapshot>, fragment: String) async throws {
+        guard let sub = view.sub else { throw CoreError("the sign-in ended", code: "wrongFlow") }
+        try await core.command(sub, ["type": "returned", "fragment": fragment])
+    }
+
+    // MARK: Passkeys and links
+
+    /// Saves a passkey as a way in (the owner only, D17): its PRF output, the
+    /// label every platform writes. The passkey sheet's user verification is
+    /// the re-authentication, so no OS prompt on top.
+    @discardableResult
+    func savePasskey(prf: Data, label: String) async throws -> String {
+        struct Saved: Decodable, Sendable { let id: String; let record: JSONValue }
+        let saved: Saved = try await withRecord("savePasskey", ["prf": PasskeyContract.base64url(prf), "label": label]) { $0.record }
+        try? await loadDevices()
+        return saved.id
+    }
+
+    /// The account's sign-in identities: provider and date, nothing more.
+    func identities() async throws -> [IdentityLink] {
+        struct Links: Decodable, Sendable { let links: [IdentityLink]; let record: JSONValue? }
+        return try await withRecord("identities") { (links: Links) in links.record }.links
+    }
+
+    /// Links a sign-in's identity to this account (the owner only, D16).
+    /// `linkedElsewhere` keeps the ticket: `move` takes it over.
+    func linkIdentity(ticket: String, move: Bool = false) async throws {
+        var fields: [String: any Sendable] = ["ticket": ticket]
+        if move { fields["move"] = true }
+        let _: JSONValue = try await withRecord("linkIdentity", fields) { Self.recordIn($0) }
+    }
+
+    /// Unlinks one identity. An Apple link sends Apple's revoke receipt, and
+    /// that sheet was the re-authentication; otherwise the OS prompt first.
+    func unlinkIdentity(link: Int64, receipt: String? = nil) async throws {
+        if receipt == nil { try await confirmOwner(SyncWords.authUnlink) }
+        var fields: [String: any Sendable] = ["link": link]
+        if let receipt { fields["receipt"] = receipt }
+        let _: JSONValue = try await withRecord("unlinkIdentity", fields) { Self.recordIn($0) }
+    }
+
+    /// Cancels a scheduled deletion; `unlink` also removes the identity that asked. Any profile.
+    func cancelDeletion(unlink: Bool) async throws {
+        let _: JSONValue = try await withRecord("cancelDeletion", ["unlink": unlink]) { Self.recordIn($0) }
+        request()
+    }
+
+    /// The user saw these announcements: no round reports them again.
+    func ackAnnouncements(_ ids: [String]) async throws {
+        try await core.perform("ackAnnouncements", ["ids": ids])
+        if let report = lastReport {
+            lastReport = report.without(ids)
+        }
+    }
+
+    /// An answer's `record`, when it carries one.
+    nonisolated private static func recordIn(_ value: JSONValue) -> JSONValue? {
+        guard case .object(let fields) = value, let record = fields["record"], record != .null else { return nil }
+        return record
     }
 
     // MARK: The record
@@ -585,5 +705,28 @@ final class SyncModel {
         case .askAgain: throw CoreError("no lock", code: "noLockAsk")
         case .refuse: throw CoreError("no passcode", code: "noPasscode")
         }
+    }
+}
+
+/// What this device is, sealed in the roster (`form`): only phones and
+/// tablets approve, and count as a second way in.
+enum DeviceForm {
+    @MainActor static var current: String {
+        #if os(tvOS)
+        return "tv"
+        #elseif os(macOS)
+        return "computer"
+        #else
+        return UIDevice.current.userInterfaceIdiom == .pad ? "tablet" : "phone"
+        #endif
+    }
+}
+
+extension SyncReport {
+    /// The report without announcements the user saw.
+    func without(_ ids: [String]) -> SyncReport {
+        var copy = self
+        copy.announcements.removeAll { ids.contains($0.id) }
+        return copy
     }
 }

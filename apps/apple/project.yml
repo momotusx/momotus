@@ -20,12 +20,20 @@ settings:
     CODE_SIGN_IDENTITY: "-"
     DEVELOPMENT_TEAM: ""
     DEAD_CODE_STRIPPING: YES
+    # Accounts (plans/accounts.md 9): the hosted relay first run signs in to, and the
+    # link host (passkey RP ID, universal links). Empty keeps today's first run.
+    MARQUEE_SYNC_SERVER: ""
+    MARQUEE_LINK_HOST: ""
+    # The owner's App ID carries Sign in with Apple and associated domains only after
+    # owner steps 1 and 3: until then no build asks for them (an ad hoc Mac build with
+    # them would not launch). Set to Marquee/Marquee.entitlements once they exist.
+    MARQUEE_ENTITLEMENTS: ""
 targetTemplates:
   App:
     type: application
     sources:
       - path: Marquee
-        excludes: ["Resources/**"]
+        excludes: ["Resources/**", "Marquee.entitlements"]
       - path: Marquee/Resources/Fonts
         type: folder
         buildPhase: resources
@@ -36,6 +44,9 @@ targetTemplates:
         buildPhase: resources
       # Stream choice words, shared with the web and Android.
       - path: ../shared/stream-choice-words.json
+        buildPhase: resources
+      # Account words, shared with the web and Android.
+      - path: ../shared/account-words.json
         buildPhase: resources
       - path: Core/marquee_core.swift
     dependencies:
@@ -66,10 +77,18 @@ targetTemplates:
         PRODUCT_BUNDLE_IDENTIFIER: app.marquee.dev
         # The asset catalog holds icons only; there is no app icon set yet.
         ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        CODE_SIGN_ENTITLEMENTS: $(MARQUEE_ENTITLEMENTS)
 targets:
   Marquee-macOS:
     templates: [App]
     platform: macOS
+    info:
+      path: Generated/Info-macOS.plist
+      properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        MarqueeSyncServer: $(MARQUEE_SYNC_SERVER)
+        MarqueeLinkHost: $(MARQUEE_LINK_HOST)
     settings:
       base:
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.entertainment
@@ -87,6 +106,8 @@ targets:
         # xcodegen writes 1.0 and 1 otherwise, over the build settings.
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        MarqueeSyncServer: $(MARQUEE_SYNC_SERVER)
+        MarqueeLinkHost: $(MARQUEE_LINK_HOST)
     settings:
       base:
         TARGETED_DEVICE_FAMILY: "1,2"
@@ -102,6 +123,13 @@ targets:
   Marquee-tvOS:
     templates: [App]
     platform: tvOS
+    info:
+      path: Generated/Info-tvOS.plist
+      properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        MarqueeSyncServer: $(MARQUEE_SYNC_SERVER)
+        MarqueeLinkHost: $(MARQUEE_LINK_HOST)
     settings:
       base:
         TARGETED_DEVICE_FAMILY: "3"
@@ -124,6 +152,11 @@ targets:
         excludes: ["Fixtures/**"]
       - path: ../shared/stream-choice-words.json
         buildPhase: resources
+      - path: ../shared/account-words.json
+        buildPhase: resources
+      - path: Marquee/Account/AccountWords.swift
+      - path: Marquee/Account/AccountRules.swift
+      - path: Marquee/Account/PasskeyContract.swift
       - path: Marquee/Versions/StreamChoice.swift
       - path: Marquee/Core/Models.swift
       - path: Marquee/Core/PlaybackModels.swift
