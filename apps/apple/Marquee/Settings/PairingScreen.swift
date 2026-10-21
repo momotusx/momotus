@@ -9,6 +9,13 @@ struct PairingScreen: View {
     let core: CoreClient
     /// Where Done goes after joining: Home from onboarding; nil goes back.
     var done: (() -> Void)?
+    /// The build's hosted relay: the code shows at once, with no form (sign-in, a TV's first run).
+    var autostart: String?
+    /// A TV's first run: "Sign in with your phone" and how, in place of the page's own words.
+    var heading: String?
+    var lede: String?
+    /// More ways under the code (a TV's first run: a recovery kit, no account).
+    var more: [PairingMore] = []
     @State private var server = UserDefaults.standard.string(forKey: SyncRecord.serverKey) ?? "https://"
     @State private var name = DeviceName.current
     /// The address had a user name or password: it was not kept or sent.
@@ -26,10 +33,10 @@ struct PairingScreen: View {
     var body: some View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
-                ScreenTitle(text: "Pair this device")
+                ScreenTitle(text: heading ?? "Pair this device")
                 // Once joined, the page is the result, the last sync and Done: no second pairing starts here.
                 if !joinedHere {
-                    Text("Join your sync account by scanning a code with a device that already syncs. Your library stays end to end encrypted.")
+                    Text(lede ?? "Join your sync account by scanning a code with a device that already syncs. Your library stays end to end encrypted.")
                         .font(.text(Theme.type.body))
                         .foregroundStyle(Theme.Palette.muted)
                 }
@@ -42,8 +49,17 @@ struct PairingScreen: View {
                     JoinedState(core: core, stored: true, done: done)
                 } else if sync.keyUnreadable {
                     KeyUnreadable()
-                } else {
+                } else if autostart == nil {
                     form
+                }
+                if !joinedHere, !more.isEmpty {
+                    FlowRow(spacing: Theme.Space.xs) {
+                        ForEach(more) { way in
+                            Button(action: way.action) { Label(way.title, glyph: way.glyph) }
+                                .buttonStyle(PillButtonStyle())
+                        }
+                    }
+                    .padding(.top, Theme.Space.s)
                 }
             }
             .frame(maxWidth: 760, alignment: .leading)
@@ -56,6 +72,12 @@ struct PairingScreen: View {
         .topScrim()
         // Opens it again after a core restart; the model started it already.
         .task(id: sync.pairing?.taskId) { sync.pairing?.start() }
+        // The hosted relay: the code at once, no form to fill.
+        .task {
+            guard let autostart, sync.pairing == nil, !sync.joined, !sync.keyUnreadable else { return }
+            UserDefaults.standard.set(autostart, forKey: SyncRecord.serverKey)
+            sync.startPairing(server: autostart, name: name)
+        }
         .confirmationDialog(SyncWords.replaceAsk, isPresented: $replacing, titleVisibility: .visible) {
             Button(SyncWords.replaceButton, role: .destructive) { start(confirmed: true) }
             Button(SyncWords.cancel, role: .cancel) {}
@@ -322,4 +344,13 @@ enum DeviceName {
         return UIDevice.current.name
         #endif
     }
+}
+
+/// A way in shown under the pairing code (a TV's first run).
+struct PairingMore: Identifiable {
+    let title: String
+    let glyph: String
+    let action: () -> Void
+
+    var id: String { title }
 }

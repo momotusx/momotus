@@ -9,7 +9,9 @@ import SwiftUI
 /// lead to the addons; joining never does. Settings opens the check step
 /// alone as a page.
 struct OnboardingScreen: View {
-    enum Step { case doors, defaults, question, check }
+    /// `signIn`: a phone, tablet or Mac with a hosted relay signs in first
+    /// (plans/accounts.md 4.1); `tvSignIn`: a TV shows the phone's QR (4.2).
+    enum Step { case signIn, tvSignIn, doors, defaults, question, check }
 
     let core: CoreClient
     /// Ends the flow (Browse first, Done); nil when the check is a page.
@@ -31,6 +33,7 @@ struct OnboardingScreen: View {
     @State private var note: (ok: Bool, text: String)?
     @State private var showImport = false
     @State private var showPairing = false
+    @State private var showTVKit = false
     /// TV: the doors step enters on the first door, not on Browse first.
     @FocusState private var firstDoor: Bool
     /// TV: the addons step enters on Continue, so one press keeps them all.
@@ -50,16 +53,58 @@ struct OnboardingScreen: View {
         #else
         let walk = false
         #endif
-        _step = State(initialValue: walk && start == .doors ? .defaults : start)
+        _step = State(initialValue: walk && start == .doors ? .defaults : Self.first(start))
         _addons = State(initialValue: LiveRecord("addons", core: core))
         _defaults = State(initialValue: DefaultsStep(core: core, scope: .all))
         _fixer = State(initialValue: DefaultsStep(core: core, scope: .all))
     }
 
+    /// With a hosted relay, first run begins at sign-in: a TV with the phone's QR.
+    @MainActor private static func first(_ start: Step) -> Step {
+        guard start == .doors, AccountServer.default != nil else { return start }
+        #if os(tvOS)
+        return .tvSignIn
+        #else
+        return .signIn
+        #endif
+    }
+
     var body: some View {
+        Group {
+            if step == .tvSignIn, let server = AccountServer.default {
+                tvSignInStep(server)
+            } else {
+                steps
+            }
+        }
+        .background(Theme.Palette.bg)
+        .animation(Theme.Motion.panel, value: step)
+        // Already in an account when first run opens: sign-in is done. (A join made
+        // in it ends it there, Home or the doors.)
+        .onAppear { if sync.joined, step == .signIn || step == .tvSignIn { step = .doors } }
+        .navigationDestination(isPresented: $showTVKit) { SyncJoinScreen(kit: true, server: AccountServer.default) }
+    }
+
+    /// A TV's first run (4.2): the QR a signed-in phone scans, the six digits,
+    /// a recovery kit, or no account. A TV that joined goes Home, past the doors.
+    private func tvSignInStep(_ server: String) -> some View {
+        PairingScreen(core: core, done: close, autostart: server,
+                      heading: AccountWords.shared.tvSignIn, lede: AccountWords.shared.tvSignInHow,
+                      more: [
+                          PairingMore(title: AccountWords.shared.useRecoveryKit, glyph: "life-buoy") { showTVKit = true },
+                          PairingMore(title: AccountWords.shared.tvWithoutAccount, glyph: "door-open") {
+                              sync.endPairing()
+                              step = .doors
+                          },
+                      ])
+    }
+
+    private var steps: some View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: Theme.Space.l) {
                 switch step {
+                case .signIn: signInStep
+                case .tvSignIn: doorsStep
                 case .doors: doorsStep
                 case .defaults: defaultsStep
                 case .question: questionStep
@@ -72,9 +117,7 @@ struct OnboardingScreen: View {
             .padding(.vertical, Theme.Space.l)
         }
         .scrollIndicators(.hidden)
-        .background(Theme.Palette.bg)
         .topScrim()
-        .animation(Theme.Motion.panel, value: step)
         .navigationDestination(isPresented: $showImport) {
             ImportScreen(core: core) {
                 showImport = false
@@ -147,6 +190,23 @@ struct OnboardingScreen: View {
     /// Browse first goes Home; Start fresh and an import go to the setup check.
     private func afterQuestion() {
         if thenHome, let close { close() } else { step = .check }
+    }
+
+    /// Sign in (4.1): Not now and Use my own sync server lead to the doors;
+    /// an account that existed goes Home; a new one goes on to the doors.
+    @ViewBuilder private var signInStep: some View {
+        #if os(tvOS)
+        doorsStep
+        #else
+        if let server = AccountServer.default {
+            SignInScreen(server: server, sync: sync,
+                         notNow: { step = .doors },
+                         joined: { if let close { close() } else { step = .doors } },
+                         created: { step = .doors })
+        } else {
+            doorsStep
+        }
+        #endif
     }
 
     private var doorsStep: some View {
