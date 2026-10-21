@@ -70,6 +70,14 @@ targetTemplates:
               exit 1
             fi
           done
+      # The entitlements name the link host (applinks, webcredentials): never an empty one.
+      - name: Refuse entitlements without a link host
+        basedOnDependencyAnalysis: false
+        script: |
+          if [ -n "$MARQUEE_ENTITLEMENTS" ] && [ -z "$MARQUEE_LINK_HOST" ]; then
+            echo "error: MARQUEE_ENTITLEMENTS is set but MARQUEE_LINK_HOST is empty: the associated domains would name no host."
+            exit 1
+          fi
     settings:
       base:
         PRODUCT_NAME: Marquee
@@ -158,6 +166,8 @@ targets:
       - path: Marquee/Account/AccountRules.swift
       - path: Marquee/Account/PasskeyContract.swift
       - path: Marquee/Account/AccountWipe.swift
+      - path: Marquee/Account/SignInFlow.swift
+      - path: Marquee/Account/SignInSheets.swift
       - path: Marquee/Versions/StreamChoice.swift
       - path: Marquee/Core/Models.swift
       - path: Marquee/Core/PlaybackModels.swift

@@ -29,8 +29,9 @@ final class SignInFlow {
         /// The identity has an account this device cannot open yet: the
         /// pairing QR, a recovery kit, or I can't use any of these.
         case cannotOpen(ticket: String?)
-        /// No account for this identity: create one, or join the account another device holds.
-        case new(ticket: String, passkeyHere: Bool)
+        /// No account for this identity, and no passkey here opened one:
+        /// create one, or join the account another device holds.
+        case new(ticket: String)
         /// "I can't use any of these": a new account in place of the old one, after its warning.
         case startOver(ticket: String)
         /// The account was just made: save a passkey as its way in.
@@ -52,28 +53,28 @@ final class SignInFlow {
     private(set) var provider: String?
     /// The relay could not be asked for its providers.
     private(set) var unreachable = false
-    /// A ticket linked once this device joined another way (the pairing door, a passkey).
-    private(set) var linkAfterJoin: String?
+    /// Bumped by Try again: the screen's task opens the flow again.
+    private(set) var attempt = 0
+    /// A sign-in linked once this device joined another way (the pairing door).
+    private(set) var linkAfterJoin: HeldLink?
 
     let server: String
     @ObservationIgnored private let sync: SyncModel
+    @ObservationIgnored private let sheets: SignInSheets.Calls
     @ObservationIgnored private var native: NativeStart?
-    @ObservationIgnored private var renewal: Task<Void, Never>?
     @ObservationIgnored private var brokered: LiveRecord<SignInSnapshot>?
 
-    init(server: String, sync: SyncModel) {
+    init(server: String, sync: SyncModel, sheets: SignInSheets.Calls = .init()) {
         self.server = server
         self.sync = sync
-    }
-
-    deinit {
-        renewal?.cancel()
+        self.sheets = sheets
     }
 
     // MARK: Opening
 
-    /// The relay's providers, and Apple's native flow ready before the button
-    /// is pressed, renewed before its 10 minutes end (4.3).
+    /// The relay's providers, then Apple's native flow ready before the button
+    /// is pressed, renewed before its 10 minutes end (4.3) for as long as the
+    /// screen's task runs: it ends when the screen closes.
     func open() async {
         do {
             providers = AccountRules.orderedProviders(try await sync.relayInfo(server: server))
@@ -83,15 +84,16 @@ final class SignInFlow {
             return
         }
         guard providers.contains("apple") else { return }
-        renewal?.cancel()
-        renewal = Task { [weak self] in
-            while !Task.isCancelled {
-                guard let self else { return }
-                self.native = try? await self.sync.nativeSignInStart(server: self.server, provider: "apple")
-                // ponytail: renewed every 9 minutes; the relay keeps a flow 10.
-                try? await Task.sleep(for: .seconds(9 * 60))
-            }
+        while !Task.isCancelled {
+            native = try? await sync.nativeSignInStart(server: server, provider: "apple")
+            // ponytail: renewed every 9 minutes; the relay keeps a flow 10.
+            try? await Task.sleep(for: .seconds(9 * 60))
         }
+    }
+
+    /// Try again when the relay did not answer: the screen's task opens it again.
+    func retry() {
+        attempt += 1
     }
 
     func back() {
@@ -112,9 +114,9 @@ final class SignInFlow {
             if let native { start = native } else { start = try await sync.nativeSignInStart(server: server, provider: "apple") }
             // Used once: the next press starts a new flow.
             native = nil
-            switch try await SignInSheets.continueWithApple(nonce: start.nonce) {
+            switch try await sheets.apple(start.nonce) {
             case .passkey(let prf):
-                await recover(prf: prf, name: name, link: nil)
+                await recover(prf: prf, name: name, link: nil, otherwise: .cannotOpen(ticket: nil))
             case .apple(let token, _):
                 let answer = try await sync.nativeSignIn(flow: start.flow, idToken: token)
                 await signedIn(answer, name: name)
@@ -140,7 +142,7 @@ final class SignInFlow {
                 return await signedIn(view.snapshot ?? .failed(code: "unreachable"), name: name)
             }
             guard let address = URL(string: url) else { throw CoreError("not a link", code: "unreachable") }
-            let fragment = try await SignInSheets.browser(address)
+            let fragment = try await sheets.browser(address)
             try await sync.returned(view, fragment: fragment)
             let answer = await next(view, where: { switch $0 { case .found, .new, .failed, .receipt: true; default: false } })
             await signedIn(answer, name: name)
@@ -155,8 +157,8 @@ final class SignInFlow {
         stage = .working
         trouble = nil
         do {
-            let prf = try await SignInSheets.passkey(immediate: false)
-            await recover(prf: prf, name: name, link: nil)
+            let passkey = try await sheets.passkey(false)
+            await recover(prf: passkey.prf, name: name, link: nil, otherwise: .cannotOpen(ticket: nil))
         } catch {
             if case SignInSheets.Failure.cancelled = error {
                 say("passkeyCancelled")
@@ -169,49 +171,58 @@ final class SignInFlow {
 
     // MARK: Found and new
 
-    /// `found`: a passkey already here opens it; none, or one that opens
-    /// nothing, leads to the QR. `new`: create, or join another device's account.
-    private func signedIn(_ answer: SignInSnapshot, name: String) async {
+    /// What a sign-in answered. `found`: a passkey already here opens it;
+    /// none, or one that opens nothing, leads to the QR (4.1.3). `new`: a
+    /// passkey here opens the account it belongs to in that one sheet, and the
+    /// identity is linked to it (4.1.4); none, a closed sheet, or one that
+    /// opens nothing leads to Create, the sign-in kept.
+    func signedIn(_ answer: SignInSnapshot, name: String) async {
         switch answer {
         case .found(let ticket, _):
-            // 4.1.3: ask for a passkey here only, no QR to another phone.
-            if let prf = try? await SignInSheets.passkey(immediate: true) {
-                await recover(prf: prf, name: name, link: nil)
+            // Asked for a passkey on this device only, no QR to another phone.
+            if let here = try? await sheets.passkey(true) {
+                await recover(prf: here.prf, name: name, link: nil, otherwise: .cannotOpen(ticket: ticket))
             } else {
                 stage = .cannotOpen(ticket: ticket)
             }
         case .new(let ticket):
-            let here = (try? await SignInSheets.passkey(immediate: true)) != nil
-            stage = .new(ticket: ticket, passkeyHere: here)
+            if let here = try? await sheets.passkey(true) {
+                await recover(prf: here.prf, name: name, link: ticket, otherwise: .new(ticket: ticket))
+            } else {
+                stage = .new(ticket: ticket)
+            }
         case .failed(let code):
-            if code == "cancelled" { stage = .choose } else { say(code); stage = .choose }
+            if code != "cancelled" { say(code) }
+            stage = .choose
         default:
             stage = .choose
         }
     }
 
-    /// The passkey here on `new`: it recovers the account it opens, and the
-    /// identity is then linked with the ticket held.
-    func usePasskeyHere(ticket: String, name: String) async {
+    /// A passkey's PRF output opens its account here; then the held sign-in is
+    /// linked to it. One that opens nothing (`kitUnknown`) goes to `otherwise`.
+    private func recover(prf: Data, name: String, link: String?, otherwise: Stage) async {
         stage = .working
         do {
-            let prf = try await SignInSheets.passkey(immediate: false)
-            await recover(prf: prf, name: name, link: ticket)
+            try await sync.recover(server: server, prf: prf, name: name)
+            if let link { await self.link(HeldLink(ticket: link, provider: provider ?? "")) }
+            stage = .joined
+        } catch let error as CoreError where error.code == "kitUnknown" {
+            stage = otherwise
         } catch {
             fail(error)
         }
     }
 
-    private func recover(prf: Data, name: String, link: String?) async {
+    /// Links a held sign-in to the account this device just joined. One that
+    /// another account holds waits for Account's "Use it for this account instead".
+    private func link(_ held: HeldLink) async {
         do {
-            try await sync.recover(server: server, prf: prf, name: name)
-            if let link { try? await sync.linkIdentity(ticket: link) }
-            stage = .joined
-        } catch let error as CoreError where error.code == "kitUnknown" {
-            say("kitUnknown")
-            stage = .cannotOpen(ticket: link)
+            try await sync.linkIdentity(ticket: held.ticket)
+        } catch let refusal as CoreError where refusal.code == "linkedElsewhere" {
+            sync.heldLink = held
         } catch {
-            fail(error)
+            // ponytail: any other failure is offered again by Account's Link another.
         }
     }
 
@@ -224,19 +235,14 @@ final class SignInFlow {
     /// "I already use Marquee on another device": the pairing QR; the ticket
     /// is linked once the join is stored (`linkHeld`).
     func joinAnotherWay(ticket: String?) {
-        linkAfterJoin = ticket
+        linkAfterJoin = ticket.map { HeldLink(ticket: $0, provider: provider ?? "") }
     }
 
     /// The join another way has landed: the held identity goes to this account.
     func linkHeld() async {
-        guard let ticket = linkAfterJoin, sync.joined else { return }
+        guard let held = linkAfterJoin, sync.joined else { return }
         linkAfterJoin = nil
-        do {
-            try await sync.linkIdentity(ticket: ticket)
-        } catch {
-            // ponytail: a link that fails here is offered again from Account's Link another.
-            say((error as? CoreError)?.code ?? "")
-        }
+        await link(held)
     }
 
     // MARK: Creating
@@ -251,7 +257,7 @@ final class SignInFlow {
             await savePasskey(userName: userName)
         } catch {
             fail(error)
-            stage = .new(ticket: ticket, passkeyHere: false)
+            stage = .new(ticket: ticket)
         }
     }
 
@@ -275,7 +281,7 @@ final class SignInFlow {
         do {
             let list = try await sync.loadDevices()
             guard let account = list.account.flatMap(PasskeyContract.userID) else { throw SignInSheets.Failure.noRelyingParty }
-            let prf = try await SignInSheets.createPasskey(account: account, userName: userName)
+            let prf = try await sheets.create(account, userName)
             try await sync.savePasskey(prf: prf, label: AccountRules.passkeyLabel(device: DeviceName.current))
             stage = .done
         } catch {
@@ -325,6 +331,36 @@ final class SignInFlow {
         say(code)
         if trouble == nil { trouble = AccountRules.Trouble(text: error.localizedDescription, actions: []) }
         stage = .choose
+    }
+}
+#endif
+
+#if !os(tvOS)
+/// Save a passkey here, on Account (3.1): a passkey already on this device
+/// that was made for this account is tried first ("Your passkey already works
+/// on this device", nothing saved). One made for another account (its
+/// `user.id`) is left alone and a new one is made, so it never ends in
+/// `kitTaken`, also after Start over.
+enum PasskeySave {
+    enum Outcome: Equatable { case saved, alreadyHere }
+
+    @MainActor
+    static func here(sync: SyncModel, sheets: SignInSheets.Calls = .init(), userName: String) async throws -> Outcome {
+        let list = try await sync.loadDevices()
+        guard let account = list.account.flatMap(PasskeyContract.userID) else { throw CoreError("no account id", code: "unreachable") }
+        let label = AccountRules.passkeyLabel(device: DeviceName.current)
+        if let here = try? await sheets.passkey(true), here.user == account {
+            do {
+                try await sync.savePasskey(prf: here.prf, label: label)
+                return .saved
+            } catch let refusal as CoreError where refusal.code == "kitHere" {
+                return .alreadyHere
+            } catch let refusal as CoreError where refusal.code == "kitDropped" {
+                // Removed once, it never comes back: a new one below.
+            }
+        }
+        try await sync.savePasskey(prf: try await sheets.create(account, userName), label: label)
+        return .saved
     }
 }
 #endif

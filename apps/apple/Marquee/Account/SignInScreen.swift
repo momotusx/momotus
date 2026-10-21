@@ -45,7 +45,8 @@ struct SignInScreen: View {
             if let trouble = flow.trouble { troubleLine(trouble) }
             stage
         }
-        .task { await flow.open() }
+        // The native flow is renewed while this runs: it stops when the screen closes.
+        .task(id: flow.attempt) { await flow.open() }
         .onChange(of: flow.stage) { _, stage in
             if stage == .joined { joined() }
             if stage == .done { created() }
@@ -72,8 +73,8 @@ struct SignInScreen: View {
             ProgressView().controlSize(.large).tint(Theme.Palette.text)
         case .cannotOpen(let ticket):
             cannotOpen(ticket)
-        case .new(let ticket, let passkeyHere):
-            newAccount(ticket, passkeyHere: passkeyHere)
+        case .new(let ticket):
+            newAccount(ticket)
         case .startOver(let ticket):
             startOver(ticket)
         case .noSecondWayIn:
@@ -88,7 +89,7 @@ struct SignInScreen: View {
             if flow.unreachable {
                 Said(tone: .bad, text: words.unreachable)
                 FlowRow(spacing: Theme.Space.xs) {
-                    Button(words.unreachableActions[0]) { Task { await flow.open() } }
+                    Button(words.unreachableActions[0]) { flow.retry() }
                         .buttonStyle(PillButtonStyle(prominent: true))
                     Button(words.unreachableActions[1], action: notNow)
                         .buttonStyle(PillButtonStyle())
@@ -160,21 +161,13 @@ struct SignInScreen: View {
         }
     }
 
-    private func newAccount(_ ticket: String, passkeyHere: Bool) -> some View {
+    /// `new` once no passkey here opened an account (the probe's sheet was 4.1.4's line).
+    private func newAccount(_ ticket: String) -> some View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
-            if passkeyHere {
-                Text(words.passkeyHere)
-                    .font(.text(Theme.type.body))
-                    .foregroundStyle(Theme.Palette.text)
-                Button { Task { await flow.usePasskeyHere(ticket: ticket, name: DeviceName.current) } } label: {
-                    Label(words.usePasskey, glyph: "key-round")
-                }
-                .buttonStyle(PillButtonStyle(prominent: true))
-            }
             Button { Task { await flow.create(ticket: ticket, name: DeviceName.current, userName: userName) } } label: {
                 Label(words.createAccount, glyph: "plus")
             }
-            .buttonStyle(PillButtonStyle(prominent: !passkeyHere))
+            .buttonStyle(PillButtonStyle(prominent: true))
             Button { flow.joinAnotherWay(ticket: ticket); showPairing = true } label: { Label(words.alreadyUse, glyph: "qr-code") }
                 .buttonStyle(PillButtonStyle())
             back

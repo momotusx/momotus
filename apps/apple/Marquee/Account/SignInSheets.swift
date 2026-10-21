@@ -21,6 +21,21 @@ enum SignInSheets {
         case passkey(prf: Data)
     }
 
+    /// A Marquee passkey's answer: its PRF output, and the account it was
+    /// made for (`user.id`, the 16-byte account id, 3.1).
+    struct Passkey: Sendable {
+        let prf: Data
+        let user: Data
+    }
+
+    /// The sheets the sign-in flow opens, as calls a test can script.
+    struct Calls {
+        var apple: @MainActor (_ nonce: String) async throws -> AppleAnswer = { try await continueWithApple(nonce: $0) }
+        var passkey: @MainActor (_ immediate: Bool) async throws -> Passkey = { try await SignInSheets.passkey(immediate: $0) }
+        var create: @MainActor (_ account: Data, _ userName: String) async throws -> Data = { try await createPasskey(account: $0, userName: $1) }
+        var browser: @MainActor (URL) async throws -> String = { try await SignInSheets.browser($0) }
+    }
+
     enum Failure: Error, Equatable {
         /// The user closed the sheet: back on the screen, no words.
         case cancelled
@@ -75,11 +90,12 @@ enum SignInSheets {
     /// `immediate`: only one already on this device, no QR to another phone
     /// (the 3.1 probe); none answers `noCredential`.
     @MainActor
-    static func passkey(immediate: Bool, allow: [Data] = []) async throws -> Data {
+    static func passkey(immediate: Bool, allow: [Data] = []) async throws -> Passkey {
         guard let request = assertion(allow: allow) else { throw Failure.noRelyingParty }
         let authorization = try await Runner().run([request], immediate: immediate)
-        guard case .passkey(let prf) = try answer(authorization) else { throw Failure.noPRF }
-        return prf
+        guard case .passkey(let prf) = try answer(authorization),
+              let made = authorization.credential as? ASAuthorizationPlatformPublicKeyCredentialAssertion else { throw Failure.noPRF }
+        return Passkey(prf: prf, user: made.userID ?? Data())
     }
 
     /// Save a passkey here (3.1): `create()` with the account as `user.id`,
@@ -98,7 +114,7 @@ enum SignInSheets {
         }
         if let first = made.prf?.first { return first.withUnsafeBytes { Data($0) } }
         guard made.prf?.isSupported != false else { throw Failure.noPRF }
-        return try await passkey(immediate: false, allow: [made.credentialID])
+        return try await passkey(immediate: false, allow: [made.credentialID]).prf
     }
 
     /// The passkey assertion with the PRF input; none without a link host.
@@ -136,16 +152,20 @@ enum SignInSheets {
     @MainActor
     static func browser(_ url: URL) async throws -> String {
         let anchor = Anchor()
+        // Held until its callback: a session nothing holds can end its sheet at once.
+        var session: ASWebAuthenticationSession?
         let callback: URL = try await withCheckedThrowingContinuation { continuation in
-            let session = ASWebAuthenticationSession(url: url, callback: .customScheme("marquee")) { url, error in
+            let opened = ASWebAuthenticationSession(url: url, callback: .customScheme("marquee")) { url, error in
                 if let url { continuation.resume(returning: url) } else {
                     let cancelled = (error as? ASWebAuthenticationSessionError)?.code == .canceledLogin
                     continuation.resume(throwing: cancelled ? Failure.cancelled : Failure.other(error?.localizedDescription ?? "no return"))
                 }
             }
-            session.presentationContextProvider = anchor
-            if !session.start() { continuation.resume(throwing: Failure.other("the browser did not open")) }
+            opened.presentationContextProvider = anchor
+            session = opened
+            if !opened.start() { continuation.resume(throwing: Failure.other("the browser did not open")) }
         }
+        withExtendedLifetime((session, anchor)) {}
         guard let fragment = AccountRules.returnedFragment(callback) else { throw Failure.other("not a sign-in return") }
         return fragment
     }

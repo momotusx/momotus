@@ -335,17 +335,6 @@ private struct JoinedState: View {
     }
 }
 
-/// How other devices in the sync account will see this one.
-enum DeviceName {
-    @MainActor static var current: String {
-        #if os(macOS)
-        return Host.current().localizedName ?? "Mac"
-        #else
-        return UIDevice.current.name
-        #endif
-    }
-}
-
 /// A way in shown under the pairing code (a TV's first run).
 struct PairingMore: Identifiable {
     let title: String

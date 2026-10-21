@@ -5,10 +5,13 @@ import Testing
 // app's model on a real core, a local relay with an identity file and the
 // mock OpenID provider (`cargo run -p mq-sync-server --example mock-oidc`).
 // Runs only with MARQUEE_SIGNIN_RELAY set (xcodebuild passes it as
-// TEST_RUNNER_MARQUEE_SIGNIN_RELAY); the auth session's browser is played
-// by URLSession, which follows the provider's picker and stops at the return.
+// TEST_RUNNER_MARQUEE_SIGNIN_RELAY) and reports skipped without it. The auth
+// session's browser is played by URLSession, which follows the provider's
+// picker and stops at the return; the other sheets are scripted. The suite
+// signs in 13 times, 26 of the 30 sign-in calls a minute the relay allows one
+// address: start a run a minute after the last.
 
-private let relay = ProcessInfo.processInfo.environment["MARQUEE_SIGNIN_RELAY"]
+private let relayAddress = ProcessInfo.processInfo.environment["MARQUEE_SIGNIN_RELAY"]
 
 /// Follows a page without redirects, so the `marquee://auth` return is seen, not followed.
 private final class NoRedirect: NSObject, URLSessionTaskDelegate {
@@ -40,9 +43,10 @@ private func browse(_ url: String, as subject: String) async throws -> String {
     throw CoreError("no return", code: "noRedirect")
 }
 
-@Suite(.serialized) @MainActor struct AccountRelayTests {
+@Suite(.serialized, .enabled(if: relayAddress != nil, "needs MARQUEE_SIGNIN_RELAY: a local relay with the mock provider"))
+@MainActor struct AccountRelayTests {
     @Test func aBrokeredSignInMakesAnAccountThenFindsIt() async throws {
-        guard let relay else { return }
+        let relay = try #require(relayAddress)
         let core = RealCore()
         #expect(await core.ready())
         let keychain = FakeKeychain()
@@ -71,7 +75,7 @@ private func browse(_ url: String, as subject: String) async throws -> String {
     }
 
     @Test func aSavedPasskeyOpensTheAccountOnASecondDevice() async throws {
-        guard let relay else { return }
+        let relay = try #require(relayAddress)
         let subject = "walk-\(UUID().uuidString.prefix(8))"
         // The first device: an account from a sign-in, then a passkey (its PRF output, as a sheet would give it).
         let phone = RealCore()
@@ -112,6 +116,153 @@ private func browse(_ url: String, as subject: String) async throws -> String {
         #expect(AccountRules.text(joined, members: first.devices?.members ?? []) == "A new device joined: Tablet.")
         try await first.ackAnnouncements([joined.id])
         #expect(first.lastReport?.announcements.contains { $0.id == joined.id } == false)
+    }
+
+    // MARK: The sign-in flow (4.1, 5), its sheets scripted, its browser played
+
+    @Test func theFlowMakesAnAccountAndItsPasskeyAfterAFailedSave() async throws {
+        let relay = try #require(relayAddress)
+        let (phone, core) = try await member()
+        let sheets = scripted(as: subject())
+        sheets.create = .failure(.noPRF)
+        let flow = SignInFlow(server: relay, sync: phone, sheets: sheets.calls)
+        await flow.continueWith("mock", name: "Phone")
+        guard case .new(let ticket) = flow.stage else { Issue.record("not new: \(flow.stage)"); return }
+        #expect(sheets.passkeys == [true])
+        await flow.create(ticket: ticket, name: "Phone", userName: "Robin (Marquee)")
+        // The new passkey gave no PRF output: 4.1.6.
+        #expect(phone.joined && flow.stage == .noSecondWayIn && sheets.created == 1)
+        // Try again: saved, and the first-run steps go on.
+        sheets.create = .success(PasskeyContract.challenge())
+        await flow.savePasskey(userName: "Robin (Marquee)")
+        #expect(flow.stage == .done)
+        #expect(phone.devices?.members.contains { $0.passkey } == true)
+        #expect(try await phone.identities().map(\.provider) == ["mock"])
+        withExtendedLifetime(core) {}
+    }
+
+    @Test func aPasskeyThatOpensNothingOnNewKeepsTheSignIn() async throws {
+        let relay = try #require(relayAddress)
+        let (tablet, core) = try await member()
+        // The passkey opens nothing: Create next, the sign-in kept.
+        let sheets = scripted(as: subject())
+        sheets.passkey = .success(stranger())
+        let flow = SignInFlow(server: relay, sync: tablet, sheets: sheets.calls)
+        await flow.continueWith("mock", name: "Tablet")
+        guard case .new = flow.stage else { Issue.record("not new: \(flow.stage)"); return }
+        #expect(sheets.passkeys == [true] && !tablet.joined)
+        withExtendedLifetime(core) {}
+    }
+
+    @Test func aPasskeyOnNewOpensItsAccountAndLinksTheSignIn() async throws {
+        let relay = try #require(relayAddress)
+        let (phone, phoneCore) = try await account(relay, as: subject())
+        let prf = PasskeyContract.challenge()
+        try await phone.savePasskey(prf: prf, label: AccountRules.passkeyLabel(device: "Phone"))
+        let (tablet, tabletCore) = try await member()
+        let sheets = scripted(as: subject())
+        sheets.passkey = .success(.init(prf: prf, user: try accountID(phone)))
+        let flow = SignInFlow(server: relay, sync: tablet, sheets: sheets.calls)
+        await flow.continueWith("mock", name: "Tablet")
+        // One sheet: the probe's answer opened the account, and the new sign-in is linked to it.
+        #expect(flow.stage == .joined && tablet.joined && sheets.passkeys == [true])
+        #expect(try await tablet.identities().count == 2)
+        withExtendedLifetime((phoneCore, tabletCore)) {}
+    }
+
+    @Test func aSignInHeldOverAnotherWayInIsLinkedOrOfferedOnAccount() async throws {
+        let relay = try #require(relayAddress)
+        let alice = subject()
+        let (phone, phoneCore) = try await account(relay, as: alice)
+        let prf = PasskeyContract.challenge()
+        try await phone.savePasskey(prf: prf, label: AccountRules.passkeyLabel(device: "Phone"))
+
+        // A new sign-in, then "I already use Marquee on another device": linked once the join lands.
+        let (tablet, tabletCore) = try await member()
+        let flow = SignInFlow(server: relay, sync: tablet, sheets: scripted(as: subject()).calls)
+        await flow.continueWith("mock", name: "Tablet")
+        guard case .new(let ticket) = flow.stage else { Issue.record("not new: \(flow.stage)"); return }
+        flow.joinAnotherWay(ticket: ticket)
+        // The QR's join, played by the passkey here.
+        try await tablet.recover(server: relay, prf: prf, name: "Tablet")
+        await flow.linkHeld()
+        #expect(try await tablet.identities().count == 2)
+
+        // found, with a passkey here that opens nothing: the code next, the sign-in kept.
+        let (laptop, laptopCore) = try await member()
+        let again = scripted(as: alice)
+        again.passkey = .success(stranger())
+        let held = SignInFlow(server: relay, sync: laptop, sheets: again.calls)
+        await held.continueWith("mock", name: "Laptop")
+        guard case .cannotOpen(let found?) = held.stage else { Issue.record("no ticket kept: \(held.stage)"); return }
+        #expect(again.passkeys == [true] && !laptop.joined)
+        // Alice's sign-in held while this device joins another account: Account offers to move it.
+        held.joinAnotherWay(ticket: found)
+        guard case .new(let other) = try await signIn(laptop, relay, as: subject()) else { Issue.record("not new"); return }
+        try await laptop.createAccount(server: relay, invite: "", name: "Laptop", ticket: other)
+        await held.linkHeld()
+        #expect(laptop.heldLink == HeldLink(ticket: found, provider: "mock"))
+        withExtendedLifetime((phoneCore, tabletCore, laptopCore)) {}
+    }
+
+    @Test func savingAPasskeyLeavesAnotherAccountsPasskeyAlone() async throws {
+        let relay = try #require(relayAddress)
+        let (phone, phoneCore) = try await account(relay, as: subject())
+        let theirs = PasskeyContract.challenge()
+        try await phone.savePasskey(prf: theirs, label: AccountRules.passkeyLabel(device: "Phone"))
+        let (tablet, tabletCore) = try await account(relay, as: subject())
+        let ours = PasskeyContract.challenge()
+        try await tablet.savePasskey(prf: ours, label: AccountRules.passkeyLabel(device: "Tablet"))
+
+        // The probe offers the other account's passkey (as after Start over): a new one is made, no kitTaken.
+        let sheets = ScriptedSheets()
+        sheets.passkey = .success(.init(prf: theirs, user: try accountID(phone)))
+        sheets.create = .success(PasskeyContract.challenge())
+        #expect(try await PasskeySave.here(sync: tablet, sheets: sheets.calls, userName: "Robin (Marquee)") == .saved)
+        #expect(sheets.created == 1)
+        // This account's own passkey: it already works here, nothing saved.
+        sheets.passkey = .success(.init(prf: ours, user: try accountID(tablet)))
+        #expect(try await PasskeySave.here(sync: tablet, sheets: sheets.calls, userName: "Robin (Marquee)") == .alreadyHere)
+        #expect(sheets.created == 1)
+        withExtendedLifetime((phoneCore, tabletCore)) {}
+    }
+
+    // MARK: Helpers
+
+    private func subject() -> String { "walk-\(UUID().uuidString.prefix(8))" }
+
+    /// A passkey no account knows.
+    private func stranger() -> SignInSheets.Passkey {
+        SignInSheets.Passkey(prf: PasskeyContract.challenge(), user: Data(repeating: 9, count: 16))
+    }
+
+    /// A fresh device: its core, and the app's model on it.
+    private func member() async throws -> (SyncModel, RealCore) {
+        let core = RealCore()
+        #expect(await core.ready())
+        let sync = SyncModel(core: core.client, records: FakeKeychain().record,
+                             defaults: try #require(UserDefaults(suiteName: "mq-test-\(UUID().uuidString)")))
+        return (sync, core)
+    }
+
+    /// A device in a new account, made with `subject`'s sign-in.
+    private func account(_ relay: String, as subject: String) async throws -> (SyncModel, RealCore) {
+        let (sync, core) = try await member()
+        guard case .new(let ticket) = try await signIn(sync, relay, as: subject) else { throw CoreError("not new", code: "test") }
+        try await sync.createAccount(server: relay, invite: "", name: "Device", ticket: ticket)
+        return (sync, core)
+    }
+
+    /// The account's id, as a passkey made for it carries it (`user.id`).
+    private func accountID(_ sync: SyncModel) throws -> Data {
+        try #require(sync.devices?.account.flatMap(PasskeyContract.userID))
+    }
+
+    /// Sheets with the provider's page played as `subject`.
+    private func scripted(as subject: String) -> ScriptedSheets {
+        let sheets = ScriptedSheets()
+        sheets.browser = { url in try await browse(url.absoluteString, as: subject) }
+        return sheets
     }
 
     private func signIn(_ sync: SyncModel, _ relay: String, as subject: String) async throws -> SignInSnapshot {

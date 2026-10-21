@@ -84,6 +84,15 @@ final class SyncModel {
     @ObservationIgnored private var account = 0
     /// A record the Keychain refused, held in memory: nothing is sent until it is stored.
     @ObservationIgnored private var unstored: JSONValue?
+    #if !os(tvOS)
+    /// The OS prompt itself (passcode, Face ID or Touch ID). Tests answer it; the app never changes it.
+    @ObservationIgnored var ownerPrompt: @MainActor (_ reason: String) async -> Bool = { reason in
+        (try? await LAContext().evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason)) ?? false
+    }
+    #endif
+    /// A sign-in held for linking that another account holds (`linkedElsewhere`): Account's
+    /// Signed in with offers to use it for this account. In memory only: the ticket is a secret.
+    var heldLink: HeldLink?
 
     /// `leftover`: a record left by a deleted install could not be removed yet
     /// (`SyncRecord.forgetLeftover`): it is never loaded, and the page offers
@@ -445,6 +454,19 @@ final class SyncModel {
         notice = SyncWords.accountGone
     }
 
+    /// The OS prompt before D13's Remove from this device (its steps 2 and 3,
+    /// with no account left to leave), as for a sign-out.
+    func confirmRemoval(askedAgain: Bool = false) async throws {
+        try await confirmOwner(SyncWords.authRemoveHere, endsAccess: true, askedAgain: askedAgain)
+    }
+
+    /// The sync server this device's account is on, as its record names it: the
+    /// one field the app reads from it, so a code for another server is said so.
+    func joinedServer() -> String? {
+        guard case .object(let fields)? = try? storedRecord(), case .string(let server)? = fields["server"] else { return nil }
+        return server
+    }
+
     /// OK on "Your Marquee account was deleted", heard from the sync server:
     /// the line goes, also from the next launch.
     func dismissGone() {
@@ -698,7 +720,7 @@ final class SyncModel {
         switch SyncRules.ownerStep(hasLock: hasLock, endsAccess: endsAccess, askedAgain: askedAgain) {
         case .prompt:
             #if !os(tvOS)
-            let ok = (try? await context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason)) ?? false
+            let ok = await ownerPrompt(reason)
             guard ok else { throw CoreError("not confirmed", code: "unconfirmed") }
             #endif
         case .run: return
@@ -720,6 +742,23 @@ enum DeviceForm {
         return UIDevice.current.userInterfaceIdiom == .pad ? "tablet" : "phone"
         #endif
     }
+}
+
+/// How other devices in the sync account will see this one.
+enum DeviceName {
+    @MainActor static var current: String {
+        #if os(macOS)
+        return Host.current().localizedName ?? "Mac"
+        #else
+        return UIDevice.current.name
+        #endif
+    }
+}
+
+/// A sign-in another account holds, kept for Account's "Use it for this account instead".
+struct HeldLink: Equatable {
+    let ticket: String
+    let provider: String
 }
 
 extension SyncReport {

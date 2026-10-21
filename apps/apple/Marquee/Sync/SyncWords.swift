@@ -64,6 +64,7 @@ enum SyncWords {
     static let leaveAnyway = "Stop anyway"
     static let noLockAsk = "This device has no passcode, so nothing can check that it is you. Stop syncing on it anyway? Your library stays here."
     static let tvSure = "Nobody can confirm it is you on this TV. Are you sure?"
+    static let noLockRemove = "This device has no passcode, so nothing can check that it is you. Remove your profiles and library from it anyway?"
     static let syncAgain = "Sync again"
     // A different device list: the compare page
     static let compare = "Compare device lists"
@@ -191,6 +192,9 @@ enum SyncWords {
     static let savePasskey = "Save a passkey here"
     static let linkedOn = "Linked on {date}"
     static let authSignOut = "sign out and remove your library from this device"
+    static let authRemoveHere = "remove your library from this device"
+    /// Under the only sign-in left, before its Unlink (4.3).
+    static let unlinkLast = "Without it, you sign in with a passkey or another device."
 
     /// Fills `{name}` in a sync line.
     static func named(_ line: String, _ name: String) -> String {

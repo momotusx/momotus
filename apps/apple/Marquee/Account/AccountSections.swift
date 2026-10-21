@@ -58,6 +58,10 @@ struct SignedInWith: View {
             #endif
         }
         .task { await load() }
+        #if !os(tvOS)
+        // A sign-in another account holds, met after a join by QR: offered here.
+        .onChange(of: sync.heldLink, initial: true) { takeHeld() }
+        #endif
     }
 
     /// Providers the relay offers that this account does not sign in with yet.
@@ -80,6 +84,14 @@ struct SignedInWith: View {
                 .accessibilityElement(children: .combine)
             }
             if owner {
+                // The only sign-in left: what signing in is without it (4.3).
+                if links?.count == 1 {
+                    Text(SyncWords.unlinkLast)
+                        .font(.text(Theme.type.callout, relativeTo: .callout))
+                        .foregroundStyle(Theme.Palette.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.leading, 24 + Theme.Space.s)
+                }
                 FlowRow(spacing: Theme.Space.xs) {
                     Button { Task { await unlink(link) } } label: { Label(SyncWords.unlink, glyph: "x") }
                         .buttonStyle(PillButtonStyle())
@@ -160,6 +172,15 @@ struct SignedInWith: View {
             if case SignInSheets.Failure.cancelled = error { return }
             self.error = AccountRules.trouble((error as? CoreError)?.code ?? "", provider: provider)?.text ?? error.localizedDescription
         }
+    }
+
+    /// The held sign-in (linkedElsewhere after a join by QR), on the owner: its words and
+    /// "Use it for this account instead".
+    private func takeHeld() {
+        guard owner, let held = sync.heldLink else { return }
+        sync.heldLink = nil
+        elsewhere = (held.ticket, held.provider)
+        error = AccountRules.trouble("linkedElsewhere", provider: held.provider)?.text
     }
 
     private func move(_ ticket: String) async {
@@ -265,23 +286,10 @@ struct SavePasskeyRow: View {
         defer { busy = false }
         said = nil
         do {
-            // The 3.1 probe: a passkey already here that opens this account is said, nothing saved.
-            if let prf = try? await SignInSheets.passkey(immediate: true) {
-                do {
-                    try await sync.savePasskey(prf: prf, label: AccountRules.passkeyLabel(device: DeviceName.current))
-                    return
-                } catch let refusal as CoreError where refusal.code == "kitHere" {
-                    said = (.ok, AccountWords.shared.kitHere)
-                    return
-                } catch let refusal as CoreError where refusal.code != "kitDropped" {
-                    throw refusal
-                }
-            }
-            let list = try await sync.loadDevices()
-            guard let account = list.account.flatMap(PasskeyContract.userID) else { throw CoreError("no account id", code: "unreachable") }
             let owner = profiles.snapshot?.profiles.first(where: \.isOwner)?.name ?? DeviceName.current
-            let prf = try await SignInSheets.createPasskey(account: account, userName: "\(owner) (Marquee)")
-            try await sync.savePasskey(prf: prf, label: AccountRules.passkeyLabel(device: DeviceName.current))
+            if try await PasskeySave.here(sync: sync, userName: "\(owner) (Marquee)") == .alreadyHere {
+                said = (.ok, AccountWords.shared.kitHere)
+            }
         } catch {
             if case SignInSheets.Failure.cancelled = error { return }
             let code = (error as? CoreError)?.code ?? ""
