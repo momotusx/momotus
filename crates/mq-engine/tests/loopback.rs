@@ -7,7 +7,7 @@ use std::net::Ipv4Addr;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use mq_engine::{Cached, Engine, FileHint, TorrentHandle};
+use mq_engine::{Cached, Engine, FileHint, TorrentHandle, cached_on_disk};
 use tokio::io::AsyncReadExt;
 
 async fn read_range(
@@ -794,8 +794,9 @@ async fn a_second_add_reads_the_kept_details_with_no_peer() {
     assert!(dir.path().join(format!("{}.torrent", s.info_hash)).exists());
     first.remove(t, true).await.unwrap();
     drop(first);
-    let again = engine_on(dir.path()).await;
     let nothing = Some(Cached { ready: false });
+    assert_eq!(cached_on_disk(dir.path(), &s.info_hash, movie, 0), nothing);
+    let again = engine_on(dir.path()).await;
     assert_eq!(again.cached(&s.info_hash, movie, 0).await, nothing);
     assert_eq!(
         again.cached(&s.info_hash.to_uppercase(), movie, 0).await,
@@ -893,10 +894,21 @@ async fn a_kept_torrent_starts_with_no_peer_reachable() {
         drop(first);
         let hash = s.info_hash.clone();
         drop(s);
-        let again = engine_on(dir.path()).await;
         let ready = Some(Cached { ready: true });
+        assert_eq!(cached_on_disk(dir.path(), &hash, file, 0), ready, "{name}");
+        let again = engine_on(dir.path()).await;
         assert_eq!(again.cached(&hash, file, 0).await, ready, "{name}");
         let t = again.add_magnet(&hash, &[], &[]).await.unwrap();
+        // Loaded, not started: the engine and the folder alone agree, at the
+        // head and half way (kept or not, as the readahead went).
+        for at in [0, movie.len() as u64 / 2] {
+            let on_disk = cached_on_disk(dir.path(), &hash, file, at);
+            assert_eq!(
+                again.cached(&hash, file, at).await,
+                on_disk,
+                "{name} at {at}"
+            );
+        }
         again
             .select_file(t, "default", &FileHint::Name(name.into()))
             .await

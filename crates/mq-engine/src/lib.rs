@@ -851,15 +851,16 @@ impl Engine {
             live.as_ref()?.managed.ext_have_pieces()
         });
         let bytes = loaded.map(|t| t.torrent_bytes.clone());
-        let dir = self.inner.cfg.data_dir.join(&hex);
-        let sched = self.sched_config();
-        tokio::task::spawn_blocking(move || {
-            let bytes = bytes.or_else(|| kept_torrent(&dir.with_extension(TORRENT), &hex))?;
-            let have = live_have
-                .unwrap_or_else(|| std::fs::read(dir.with_extension(HAVE)).unwrap_or_default());
-            Some(Cached {
-                ready: ready_on_disk(&dir, &bytes, &have, sched, file, offset),
-            })
+        let data_dir = self.inner.cfg.data_dir.clone();
+        tokio::task::spawn_blocking(move || match bytes {
+            Some(bytes) => Some(cached_from(
+                &data_dir.join(&hex),
+                &bytes,
+                live_have,
+                file,
+                offset,
+            )),
+            None => cached_on_disk(&data_dir, &hex, file, offset),
         })
         .await
         .ok()
@@ -1857,6 +1858,39 @@ fn kept_torrent(path: &Path, hex: &str) -> Option<Vec<u8>> {
             tracing::warn!("{}: not the details of {hex}", path.display());
             None
         }
+    }
+}
+
+/// [`Engine::cached`] with no engine running (a launch that has not started
+/// one): the same answer from `data_dir` alone, a torrent's kept details and
+/// its `.have`. Blocking: reads the disk, so call it off the async workers.
+pub fn cached_on_disk(
+    data_dir: &Path,
+    info_hash: &str,
+    file: usize,
+    offset: u64,
+) -> Option<Cached> {
+    let hex = hex_hash(info_hash.trim())?;
+    let dir = data_dir.join(&hex);
+    let bytes = kept_torrent(&dir.with_extension(TORRENT), &hex)?;
+    Some(cached_from(&dir, &bytes, None, file, offset))
+}
+
+/// The torrent of `torrent` in `dir` at `offset` of `file`, from `have` (a
+/// live bitfield) or, with none, its `.have`. Blocking.
+fn cached_from(
+    dir: &Path,
+    torrent: &[u8],
+    have: Option<Vec<u8>>,
+    file: usize,
+    offset: u64,
+) -> Cached {
+    let have = have.unwrap_or_else(|| std::fs::read(dir.with_extension(HAVE)).unwrap_or_default());
+    // Every device class waits on the same Ready set: the presets differ
+    // in readahead and request depths only.
+    let sched = SchedConfig::standard();
+    Cached {
+        ready: ready_on_disk(dir, torrent, &have, sched, file, offset),
     }
 }
 
