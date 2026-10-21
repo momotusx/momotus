@@ -1406,6 +1406,98 @@ async fn a_subtitle_turns_on_at_start_only_as_the_profile_and_the_user_say() {
     assert_eq!(next.auto_subtitle, Some(url(&next, "eng")));
 }
 
+/// The owner's flow (plans/m13-subtitle-languages.md 7): a subtitle picked
+/// in one title puts its language first in the profile's languages, so the
+/// next title starts with it on; Off stays that title's own. A kids profile
+/// keeps languages of its own.
+#[tokio::test]
+async fn a_picked_subtitle_language_starts_the_next_titles() {
+    let (video, _) = counted_origin().await;
+    let subs: Vec<_> = ["eng", "tur", "ger"]
+        .iter()
+        .map(|lang| serde_json::json!({"id": lang, "lang": lang, "url": format!("https://subs.test/{lang}.srt")}))
+        .collect();
+    let stream = serde_json::json!({"streams": [{"url": format!("{video}/v.mkv"), "title": "Film.2020.1080p.WEB", "subtitles": subs}]})
+        .to_string();
+    let open = |core: &Core, id: &str| {
+        let title = PlayTarget {
+            item_id: id.into(),
+            video_id: id.into(),
+            ..target()
+        };
+        PlaybackView::open(core, setup(core, &stream), title)
+    };
+    // `lang`: the language of a track by its url; `url`: the track of a language.
+    let lang = |s: &PlaybackSnapshot, url: Option<&String>| {
+        let on = s.subtitles.iter().find(|t| Some(&t.url) == url);
+        on.map(|t| t.lang.clone())
+    };
+    let url = |s: &PlaybackSnapshot, lang: &str| {
+        s.subtitles
+            .iter()
+            .find(|t| t.lang == lang)
+            .unwrap()
+            .url
+            .clone()
+    };
+    let started = async |core: &Core, id: &str| {
+        let s = settled_list(&open(core, id)).await;
+        lang(&s, s.auto_subtitle.as_ref())
+    };
+    let pick = async |core: &Core, id: &str, choice: Option<&str>| {
+        let view = open(core, id);
+        let s = settled_list(&view).await;
+        view.subtitle_chosen(choice.map(|l| url(&s, l)).as_deref());
+    };
+    let on = |l: &str| Some(l.to_owned());
+
+    let owner = Core::temporary(mq_library::OWNER).unwrap();
+    owner
+        .set_pin(mq_library::OWNER, Some("1357"), None)
+        .await
+        .unwrap();
+    let kid = owner.for_profile(&owner.create_kids_profile("Kid", "fox").unwrap());
+    for id in ["tt1", "tt2"] {
+        let row = mq_library::AllowedRow {
+            item_id: id.into(),
+            kind: "movie".into(),
+            name: id.into(),
+            names: vec![],
+            poster: None,
+            allowed: true,
+            added_ms: 1,
+        };
+        kid.library()
+            .write_allowed(kid.profile(), &row, &kid.hlc())
+            .unwrap();
+    }
+
+    // Title A: nothing set, nothing on; the user picks Turkish.
+    assert_eq!(started(&owner, "tt1").await, None);
+    pick(&owner, "tt1", Some("tur")).await;
+    assert_eq!(owner.prefs().subtitle_languages, ["tr"]);
+    // Title B starts with Turkish on; the user turns it off.
+    assert_eq!(started(&owner, "tt2").await, on("tur"));
+    pick(&owner, "tt2", None).await;
+    assert_eq!(owner.prefs().subtitle_languages, ["tr"], "Off is B's own");
+    // Title C starts with Turkish on; B stays off.
+    assert_eq!(started(&owner, "tt3").await, on("tur"));
+    assert_eq!(started(&owner, "tt2").await, None);
+    // A German pick goes first, Turkish after it.
+    pick(&owner, "tt3", Some("ger")).await;
+    assert_eq!(owner.prefs().subtitle_languages, ["de", "tr"]);
+    assert_eq!(started(&owner, "tt4").await, on("ger"));
+
+    // The kids profile set nothing: the owner's picks start nothing there.
+    assert!(kid.prefs().subtitle_languages.is_empty());
+    assert_eq!(started(&kid, "tt1").await, None);
+    // Its own English pick starts its next title, and leaves the owner's.
+    pick(&kid, "tt1", Some("eng")).await;
+    assert_eq!(kid.prefs().subtitle_languages, ["en"]);
+    assert_eq!(started(&kid, "tt2").await, on("eng"));
+    assert_eq!(owner.prefs().subtitle_languages, ["de", "tr"]);
+}
+
 async fn settled_list(view: &PlaybackView) -> PlaybackSnapshot {
     until(view, "the list", |s| {
         s.phase == PlaybackPhase::Ready && !s.subtitles_pending

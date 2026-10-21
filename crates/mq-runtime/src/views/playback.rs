@@ -1114,7 +1114,9 @@ impl PlaybackView {
     /// The user picked a subtitle track (`url`), or turned subtitles off
     /// (`None`): nothing is turned on for them again in this playback
     /// (`autoSubtitle` clears), and the title remembers the choice, the
-    /// track's language or Off, for its next plays.
+    /// track's language or Off, for its next plays. A track's language also
+    /// goes first in the profile's subtitle languages, so the next titles
+    /// start with it; Off stays the title's own.
     pub fn subtitle_chosen(&self, url: Option<&str>) {
         let mut s = lock(&self.state);
         let choice = match url {
@@ -1135,6 +1137,14 @@ impl PlaybackView {
         let Some(choice) = choice else {
             return;
         };
+        if url.is_some()
+            && let Some(next) = picked_first(&self.core.prefs().subtitle_languages, &choice)
+        {
+            let patch = serde_json::json!({ "subtitleLanguages": next });
+            if let Err(e) = self.core.set_prefs(&patch) {
+                tracing::warn!("subtitle language not kept: {e}");
+            }
+        }
         self.remember(binge_group, |memory| memory["subtitle"] = choice.into());
     }
 
@@ -3680,6 +3690,19 @@ fn auto_subtitle(
 /// How a title's memory says the user turned subtitles off.
 const OFF: &str = "off";
 
+/// The profile's subtitle languages with `tag`, the language of a track the
+/// user picked, first: each language once, by its tag (an older "tur" gives
+/// way to "tr"), a regional tag kept as picked. None when it is first
+/// already, or when the track names no language the core knows.
+fn picked_first(languages: &[String], tag: &str) -> Option<Vec<String>> {
+    use crate::languages::{is_known, language, primary};
+    if !is_known(primary(tag)) || languages.first().is_some_and(|l| l == tag) {
+        return None;
+    }
+    let rest = languages.iter().filter(|l| language(l).tag != tag).cloned();
+    Some(std::iter::once(tag.to_owned()).chain(rest).collect())
+}
+
 /// The user's subtitle choice for this title: `OFF` or a language tag.
 fn remembered_subtitle(core: &Core, target: &PlayTarget) -> Option<String> {
     stream_memory(core, target)?
@@ -5763,5 +5786,26 @@ mod subtitle_order_tests {
         let wire = serde_json::to_value(of("u7")).unwrap();
         assert_eq!(wire["hashMatch"], false);
         assert_eq!(wire["madeForFps"], 25.0);
+    }
+
+    #[test]
+    fn a_picked_language_goes_first_once() {
+        let first = |list: &[&str], tag: &str| {
+            let list: Vec<String> = list.iter().map(|s| s.to_string()).collect();
+            picked_first(&list, tag)
+        };
+        let list = |l: &[&str]| Some(l.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        assert_eq!(first(&[], "tr"), list(&["tr"]));
+        assert_eq!(first(&["en"], "tr"), list(&["tr", "en"]));
+        assert_eq!(first(&["en", "tr"], "tr"), list(&["tr", "en"]));
+        // Every spelling of the language gives way to its tag.
+        assert_eq!(first(&["eng", "tur", "tr"], "tr"), list(&["tr", "eng"]));
+        // A region is its own entry, kept as picked.
+        assert_eq!(first(&["pt", "en"], "pt-BR"), list(&["pt-BR", "pt", "en"]));
+        assert_eq!(first(&["pt-BR", "en"], "pt"), list(&["pt", "pt-BR", "en"]));
+        // First already, or no language: nothing to write.
+        assert_eq!(first(&["tr", "en"], "tr"), None);
+        assert_eq!(first(&["tr"], "und"), None);
+        assert_eq!(first(&["tr"], "xx"), None);
     }
 }
