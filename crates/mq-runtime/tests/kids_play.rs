@@ -736,6 +736,28 @@ async fn a_torrent_on_a_full_device_is_refused_and_one_that_fits_plays_whole() {
 #[cfg(feature = "test-hooks")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_resume_has_its_own_point_in_at_ready() {
+    // Half way through ten minutes of a film.
+    resume_reads_its_share("movie", "tt1", None, 600_000).await;
+}
+
+/// Review P1-1: an 80 minute episode resumes at its own share of the file,
+/// where the episode rate floor (the file over an hour) would place it a
+/// third too far.
+#[cfg(feature = "test-hooks")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_80_minute_episode_resumes_at_its_share_of_the_file() {
+    resume_reads_its_share("series", "tt1:1:1", Some((1, 1)), 4_800_000).await;
+}
+
+/// A play of `video_id` saved half way through `duration_ms` resumes 32 MiB
+/// into the 64 MiB file: that piece and the head's are in at Ready.
+#[cfg(feature = "test-hooks")]
+async fn resume_reads_its_share(
+    kind: &str,
+    video_id: &str,
+    episode: Option<(u32, u32)>,
+    duration_ms: i64,
+) {
     const MIB: u64 = 1 << 20;
     let s = support::swarm_big(64 << 20, 1 << 20).await;
     let t = s
@@ -750,26 +772,30 @@ async fn a_resume_has_its_own_point_in_at_ready() {
         .unwrap();
     let fixture = Fixture::default();
     fixture.set(
-        "/stream/movie/tt1.json",
+        &format!("/stream/{kind}/{video_id}.json"),
         json!({"streams": [{"name": "Fixture", "title": "Up.2009.1080p.WEB.x264-GROUP",
                             "infoHash": s.info_hash, "fileIdx": movie}]}),
     );
     let (owner, _kid) = kid(&fixture).await;
     owner.set_torrent_engine(s.leecher.clone());
-    let found = candidates(&owner, "movie", "tt1", "tt1").await;
-    // Half way through ten minutes: the file's own rate puts it 32 MiB in.
+    let found = candidates(&owner, kind, "tt1", video_id).await;
     let progress = mq_library::ProgressRow {
-        video_id: "tt1",
+        video_id,
         item_id: "tt1",
-        position_ms: 300_000,
-        duration_ms: 600_000,
+        position_ms: duration_ms / 2,
+        duration_ms,
         updated_ms: 1,
     };
     owner
         .library()
         .set_progress(owner.profile(), progress, &owner.hlc())
         .unwrap();
-    let view = PlaybackView::open(&owner, found, target("movie", "tt1", "tt1"));
+    let play = PlayTarget {
+        season: episode.map(|e| e.0),
+        episode: episode.map(|e| e.1),
+        ..target(kind, "tt1", video_id)
+    };
+    let view = PlaybackView::open(&owner, found, play);
     ready(&view).await;
     let offset = |file_at: u64| files[..movie].iter().map(|f| f.len).sum::<u64>() + file_at;
     let piece = |at: u64| (offset(at) / MIB) as u32;
@@ -836,50 +862,8 @@ async fn a_title_kept_on_this_device_says_so() {
 async fn after_a_relaunch_the_folder_alone_says_on_this_device() {
     let s = support::swarm(true).await;
     let data = tempfile::tempdir().unwrap();
-    let open = || mq_runtime::CoreConfig {
-        data_dir: data.path().into(),
-        profile_id: OWNER.into(),
-        device_id: 0,
-    };
     {
-        let core = Core::open(open()).unwrap();
-        // The device's engine on the core's own folder, as the app's.
-        let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
-        let ip = std::net::Ipv4Addr::LOCALHOST.into();
-        let config = mq_engine::EngineConfig {
-            discovery: false,
-            upload: false,
-            ..mq_engine::EngineConfig::new(data.path().join("torrents"), http.torrent_scope(&[ip]))
-        };
-        let engine = mq_engine::Engine::start(config).await.unwrap();
-        let t = engine
-            .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
-            .await
-            .unwrap();
-        let movie = engine
-            .files(t)
-            .unwrap()
-            .iter()
-            .position(|f| f.path.ends_with("movie.mkv"))
-            .unwrap();
-        core.set_torrent_engine(engine.clone());
-        let fixture = Fixture::default();
-        fixture.set(
-            "/stream/movie/tt1.json",
-            json!({"streams": [{"name": "Fixture", "title": "Up.2009.1080p.WEB.x264-GROUP",
-                                "infoHash": s.info_hash, "fileIdx": movie}]}),
-        );
-        let addon = fixture.addon().await;
-        core.library()
-            .set_addons(OWNER, &[addon], &core.hlc())
-            .unwrap();
-        let found = candidates(&core, "movie", "tt1", "tt1").await;
-        let view = PlaybackView::open(&core, found, target("movie", "tt1", "tt1"));
-        let url = ready(&view).await;
-        let len = s.movie.len() as u64;
-        assert!(read_range(&url, 0, len).await == s.movie, "the whole film");
-        view.report_progress(60_000, 120_000, false);
-        drop(view);
+        let (_core, engine, t, _fixture, _) = played_here(&s, data.path()).await;
         // Closed: the torrent leaves the session and its bitfield is on disk.
         until_async("the torrent let go", || async {
             engine.remove(t, true).await.is_ok()
@@ -898,7 +882,7 @@ async fn after_a_relaunch_the_folder_alone_says_on_this_device() {
         );
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    let again = Core::open(open()).unwrap();
+    let again = Core::open(own_config(data.path())).unwrap();
     let home = mq_runtime::HomeView::open(&again);
     let caption = || {
         home.snapshot()
@@ -913,6 +897,111 @@ async fn after_a_relaunch_the_folder_alone_says_on_this_device() {
     })
     .await;
     assert!(!again.engine_started(), "the check started the engine");
+}
+
+/// Review P1-1: a start of a torrent the device kept that fails (here its
+/// file is larger than the version lists) leaves the torrent's folder, its
+/// details and its bitfield: the title stays on the device.
+#[cfg(feature = "torrent")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_failed_start_of_a_kept_torrent_keeps_what_the_device_held() {
+    let s = support::swarm(true).await;
+    let data = tempfile::tempdir().unwrap();
+    let (core, _engine, _t, fixture, movie) = played_here(&s, data.path()).await;
+    fixture.set(
+        "/stream/movie/tt2.json",
+        json!({"streams": [{"name": "Fixture", "title": "Up.2009.1080p.WEB.x264-GROUP",
+                            "infoHash": s.info_hash, "fileIdx": movie,
+                            "behaviorHints": {"videoSize": 1000}}]}),
+    );
+    let found = candidates(&core, "movie", "tt2", "tt2").await;
+    let view = PlaybackView::open(&core, found, target("movie", "tt2", "tt2"));
+    until("the start failed", || {
+        view.snapshot().phase == PlaybackPhase::Failed
+    })
+    .await;
+    let attempts = view.snapshot().attempts;
+    assert!(
+        attempts
+            .iter()
+            .any(|a| a.error.contains("larger than the version")),
+        "{attempts:?}"
+    );
+    let dir = data.path().join("torrents");
+    assert!(dir.join(&s.info_hash).is_dir(), "the folder");
+    assert!(
+        dir.join(format!("{}.torrent", s.info_hash)).exists(),
+        "the details"
+    );
+    assert_eq!(
+        mq_engine::cached_on_disk(&dir, &s.info_hash, movie, 0),
+        Some(mq_engine::Cached { ready: true }),
+        "the bitfield"
+    );
+}
+
+/// A core on its own data folder, as an app opens it.
+#[cfg(feature = "torrent")]
+fn own_config(data: &std::path::Path) -> mq_runtime::CoreConfig {
+    mq_runtime::CoreConfig {
+        data_dir: data.into(),
+        profile_id: OWNER.into(),
+        device_id: 0,
+    }
+}
+
+/// A core on `data` whose engine, on the core's own torrent folder as the
+/// app's, played the swarm's film whole as tt1, left half way; the fixture
+/// serving its streams, and the film's file index.
+#[cfg(feature = "torrent")]
+async fn played_here(
+    s: &support::Swarm,
+    data: &std::path::Path,
+) -> (
+    Core,
+    mq_engine::Engine,
+    mq_engine::TorrentHandle,
+    Fixture,
+    usize,
+) {
+    let core = Core::open(own_config(data)).unwrap();
+    let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+    let ip = std::net::Ipv4Addr::LOCALHOST.into();
+    let config = mq_engine::EngineConfig {
+        discovery: false,
+        upload: false,
+        ..mq_engine::EngineConfig::new(data.join("torrents"), http.torrent_scope(&[ip]))
+    };
+    let engine = mq_engine::Engine::start(config).await.unwrap();
+    let t = engine
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let movie = engine
+        .files(t)
+        .unwrap()
+        .iter()
+        .position(|f| f.path.ends_with("movie.mkv"))
+        .unwrap();
+    core.set_torrent_engine(engine.clone());
+    let fixture = Fixture::default();
+    fixture.set(
+        "/stream/movie/tt1.json",
+        json!({"streams": [{"name": "Fixture", "title": "Up.2009.1080p.WEB.x264-GROUP",
+                            "infoHash": s.info_hash, "fileIdx": movie}]}),
+    );
+    let addon = fixture.addon().await;
+    core.library()
+        .set_addons(OWNER, &[addon], &core.hlc())
+        .unwrap();
+    let found = candidates(&core, "movie", "tt1", "tt1").await;
+    let view = PlaybackView::open(&core, found, target("movie", "tt1", "tt1"));
+    let url = ready(&view).await;
+    let len = s.movie.len() as u64;
+    assert!(read_range(&url, 0, len).await == s.movie, "the whole film");
+    view.report_progress(60_000, 120_000, false);
+    drop(view);
+    (core, engine, t, fixture, movie)
 }
 
 /// A resume on a small device (review P1-2): the torrent's own folder

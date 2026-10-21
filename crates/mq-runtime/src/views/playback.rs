@@ -2034,11 +2034,26 @@ async fn open_torrent(
             duration_s,
         )
     };
+    // A torrent this device kept before this start (its details beside its
+    // folder, written by an earlier file choice) keeps its folder when the
+    // start fails: an offline or stalled start never takes a kept title off
+    // the device.
+    let kept = {
+        let (dir, hash) = (core.torrent_dir().to_owned(), info_hash.to_owned());
+        tokio::task::spawn_blocking(move || mq_engine::cached_on_disk(&dir, &hash, 0, 0).is_some())
+            .await
+            .unwrap_or(false)
+    };
     let started = async {
         let file = engine.select_file(torrent, profile, &hint).await?;
         let len = engine.files(torrent)?.get(file).map_or(0, |f| f.len);
-        let resume_ms = lock(state).snapshot.resume_ms;
-        open_window(core, &engine, torrent, file, len, rate_of(len), resume_ms).await?;
+        // Where a resume reads first: the saved share of the file.
+        let resume = {
+            let s = lock(state);
+            s.snapshot.resume_ms.zip(s.known_duration_ms)
+        }
+        .and_then(|(pos, dur)| resume_offset(pos, dur, len));
+        open_window(core, &engine, torrent, file, len, rate_of(len), resume).await?;
         let reader = claim.open_reader(file).await?;
         let info = reader.file().clone();
         // The file the addon pointed at must be the one listed (3.4).
@@ -2053,7 +2068,8 @@ async fn open_torrent(
         // window and the index make Ready. The head's blocking window is
         // kept beside it as a probe (2.3, 2.8), for the player's first read.
         let blocking = engine.blocking_bytes();
-        let at = resume_at(resume_ms, rate_of(info.len), blocking, info.len);
+        // Within the head's blocking window the head read fetches it anyway.
+        let at = resume.filter(|&at| at > blocking);
         let mut from = match at {
             Some(at) => Some(reader.range(at, None).await?),
             None => None,
@@ -2144,9 +2160,10 @@ async fn open_torrent(
         Ok((_, _, Started::Ready(Err(e)))) | Err(e) => e.to_string(),
     };
     // The next candidate plays instead: stop downloading this one, unless
-    // another playback still claims it (the engine then keeps it).
+    // another playback still claims it (the engine then keeps it). What it
+    // held before this start stays.
     drop(claim);
-    let _ = engine.remove(torrent, refused).await;
+    let _ = engine.remove(torrent, refused || kept).await;
     Err(failed)
 }
 
@@ -2162,7 +2179,7 @@ async fn open_window(
     file: usize,
     len: u64,
     rate: u64,
-    resume_ms: Option<u64>,
+    resume_at: Option<u64>,
 ) -> Result<(), mq_engine::EngineError> {
     let walk = core.walk_window();
     let Some(free) = core.free_bytes() else {
@@ -2212,7 +2229,7 @@ async fn open_window(
         plan,
         bitrate: rate,
         metered: core.network() == crate::speed::Network::Cellular,
-        resume_at: resume_ms.map(|ms| ms * rate / 1000),
+        resume_at,
     };
     engine.window(torrent, file, window).await
 }
@@ -2436,13 +2453,18 @@ async fn ticking<T>(work: impl std::future::Future<Output = T>, mut tick: impl F
     }
 }
 
-/// Where a resume reads first in a file of `len` bytes at `rate` bytes a
-/// second, as the window places it: none within the head's blocking
-/// window, which the head read fetches anyway.
-#[cfg(feature = "torrent")]
-fn resume_at(resume_ms: Option<u64>, rate: u64, blocking: u64, len: u64) -> Option<u64> {
-    let at = resume_ms? * rate / 1000;
-    (at > blocking && at < len).then_some(at)
+/// Where a play saved at `pos_ms` of `dur_ms` resumes in a file of `len`
+/// bytes: the same share of the file. The playback, its window and "On this
+/// device" all place it so (a guessed or floored rate would land an 80 min
+/// episode a third too far). None with the duration unknown, or at or past
+/// the file's end.
+#[cfg(any(test, feature = "torrent"))]
+fn resume_offset(pos_ms: u64, dur_ms: u64, len: u64) -> Option<u64> {
+    if dur_ms == 0 {
+        return None;
+    }
+    let at = u128::from(pos_ms) * u128::from(len) / u128::from(dur_ms);
+    u64::try_from(at).ok().filter(|&at| at < len)
 }
 
 #[cfg(test)]
@@ -3560,13 +3582,11 @@ pub(crate) async fn kept_start(core: &Core, item_id: &str, video_id: &str) -> Op
         kept["len"].as_u64()?,
     );
     let progress = core.library().progress(core.profile(), video_id).ok()?;
-    // As the playback places it: the file over the saved duration.
-    let at = match (resume_point(progress), progress) {
-        (Some(pos), Some((_, dur))) if dur > 0 => {
-            (u128::from(pos) * u128::from(len) / dur as u128) as u64
-        }
-        _ => 0,
-    };
+    // As the playback places it; its head with the duration unknown.
+    let at = resume_point(progress)
+        .zip(progress.map(|(_, dur)| dur.max(0) as u64))
+        .and_then(|(pos, dur)| resume_offset(pos, dur, len))
+        .unwrap_or(0);
     // A running engine answers for what it has loaded; else the data folder
     // answers alone, and no engine starts (no DHT or trackers at a launch).
     let file = file as usize;
@@ -4343,6 +4363,20 @@ mod tests {
         assert_eq!(track("TOPAZ").name, "TOPAZ", "nothing parses: the text");
         let bare = SubtitleTrack::new("u".into(), "eng", None, "Subs", None);
         assert_eq!((bare.name.as_str(), bare.release), ("Subs", None));
+    }
+
+    /// Review P1-1: a resume lands at its saved share of the file, whatever
+    /// rate would size the window; none with the duration unknown, at the
+    /// end, or past it.
+    #[test]
+    fn a_resume_lands_at_its_share_of_the_file() {
+        let len: u64 = 2_500_000_000;
+        // 40 of 80 minutes is half way; an hour's rate floor says 2/3.
+        assert_eq!(resume_offset(2_400_000, 4_800_000, len), Some(len / 2));
+        assert_eq!(resume_offset(0, 4_800_000, len), Some(0));
+        assert_eq!(resume_offset(1_000, 0, len), None, "duration unknown");
+        assert_eq!(resume_offset(4_800_000, 4_800_000, len), None, "the end");
+        assert_eq!(resume_offset(u64::MAX, 1, len), None, "an absurd position");
     }
 
     /// A torrent's fill is the engine's count of what Ready waits on, not
