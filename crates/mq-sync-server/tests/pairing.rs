@@ -4,7 +4,7 @@ use mq_http::{ClientConfig, HttpClient, HttpError, RequestOptions};
 use mq_library::Library;
 use mq_library::hlc::HlcClock;
 use mq_sync::pair::{approve_pairing, cancel_pairing, make_kit, recover, start_pairing};
-use mq_sync::{SyncConfig, SyncError, devices, report_lost, sync_once};
+use mq_sync::{Announced, SyncConfig, SyncError, devices, remove_devices, report_lost, sync_once};
 use mq_sync_server::{Config, router};
 use std::path::PathBuf;
 
@@ -71,9 +71,11 @@ impl Device {
         }
     }
 
-    /// Syncs until the record settles, storing it like an app does.
+    /// Syncs until the record settles, storing it like an app does. The
+    /// announcements of every round are kept, as an app keeps them.
     async fn sync(&mut self) -> mq_sync::SyncReport {
         let mut report = None;
+        let mut heard = Vec::new();
         for _ in 0..3 {
             let r = sync_once(&self.library, &http(), &self.record, &self.clock)
                 .await
@@ -82,12 +84,25 @@ impl Device {
             if let Some(record) = r.record.clone() {
                 self.record = record;
             }
+            heard.extend(r.announcements.clone());
             report = Some(r);
             if !again {
                 break;
             }
         }
-        report.unwrap()
+        mq_sync::SyncReport {
+            announcements: heard,
+            ..report.unwrap()
+        }
+    }
+
+    async fn heard(&mut self) -> Vec<(Announced, Option<String>)> {
+        let report = self.sync().await;
+        report
+            .announcements
+            .into_iter()
+            .map(|a| (a.kind, a.name))
+            .collect()
     }
 
     async fn approve(&mut self, qr: &str) -> Result<String, SyncError> {
@@ -116,6 +131,59 @@ impl Device {
         names.sort();
         names
     }
+}
+
+/// What each device hears (3.2, `SyncReport.announcements`): another
+/// member's join, kit or removal, once, whichever call caught up; never what
+/// it did or vouched for itself, nor anything from before it joined.
+#[tokio::test]
+async fn each_device_hears_once_what_the_others_changed() {
+    let (server, _) = relay().await;
+    let mut phone = Device::first(&server, "Phone").await;
+    let mut tv = phone.pair(&server, "TV").await;
+    assert_eq!(phone.heard().await, [], "it vouched for the TV");
+    assert_eq!(tv.heard().await, [], "all before its own join");
+
+    let mut laptop = tv.pair(&server, "Laptop").await;
+    assert_eq!(
+        laptop.heard().await,
+        [],
+        "the TV's join came before its own"
+    );
+    let listed = devices(&phone.library, &http(), &phone.record, &phone.clock)
+        .await
+        .unwrap();
+    let laptop_id = listed
+        .members
+        .iter()
+        .find(|m| m.name.as_deref() == Some("Laptop"))
+        .unwrap()
+        .id;
+    let joined = [(Announced::Device, Some("Laptop".to_owned()))];
+    assert_eq!(phone.heard().await, joined, "kept since the list caught up");
+    assert_eq!(phone.heard().await, [], "once");
+    assert_eq!(tv.heard().await, [], "it vouched for the laptop");
+
+    let (_, _, record) = make_kit(&phone.library, &http(), &phone.record, &phone.clock)
+        .await
+        .unwrap();
+    phone.record = record;
+    phone.record = remove_devices(
+        &phone.library,
+        &http(),
+        &phone.record,
+        &phone.clock,
+        vec![laptop_id],
+    )
+    .await
+    .unwrap();
+    let changed = [
+        (Announced::Kit, None),
+        (Announced::Removed, Some("Laptop".to_owned())),
+    ];
+    assert_eq!(tv.heard().await, changed);
+    assert_eq!(phone.heard().await, [], "its own kit and removal");
+    drop(laptop);
 }
 
 #[tokio::test]
