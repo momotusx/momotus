@@ -1,8 +1,9 @@
 //! IMDb and Rotten Tomatoes scores from MDBList (plans/research/ratings.md),
 //! against a local fake: batching, cache ages, rests, the missing-score rule,
-//! and the views that show them.
+//! and the views that show them. Then the Rotten Tomatoes addon's "Fresh"
+//! mark, against a fake of that addon.
 
-use mq_library::{AddonRow, RatingRow};
+use mq_library::{AddonRow, OWNER, RatingRow};
 use mq_runtime::ratings::{BATCH, Host, Ratings, Scores, Title};
 use mq_runtime::views::discover::DiscoverState;
 use mq_runtime::{Core, DiscoverView, HomeView, RowState, SearchView, TitleView};
@@ -234,7 +235,8 @@ async fn titles_go_by_kind_a_hundred_a_call_with_the_key() {
         known[&movie("tt1000000")],
         Scores {
             imdb: Some(8.8),
-            rt: Some(87)
+            rt: Some(87),
+            fresh: false
         }
     );
     let calls = fake.calls();
@@ -305,7 +307,8 @@ async fn a_failed_call_keeps_rows_up_to_30_days_and_rests_mdblist() {
             movie("tt1"),
             Scores {
                 imdb: Some(8.1),
-                rt: Some(90)
+                rt: Some(90),
+                fresh: false
             }
         )]),
         "the 10 day old row still shows, the 31 day old one does not"
@@ -541,14 +544,16 @@ async fn the_imdb_answer_stays_when_only_the_tomatometer_call_fails() {
         known[&movie("tt1")],
         Scores {
             imdb: Some(8.8),
-            rt: Some(90)
+            rt: Some(90),
+            fresh: false
         }
     );
     assert_eq!(
         known[&movie("tt2")],
         Scores {
             imdb: Some(9.1),
-            rt: None
+            rt: None,
+            fresh: false
         }
     );
     // Both are asked again once the rest is over.
@@ -560,7 +565,8 @@ async fn the_imdb_answer_stays_when_only_the_tomatometer_call_fails() {
         core.ratings().known(&titles)[&movie("tt1")],
         Scores {
             imdb: Some(8.8),
-            rt: Some(99)
+            rt: Some(99),
+            fresh: false
         }
     );
 }
@@ -907,4 +913,413 @@ async fn discover_and_search_show_both_scores() {
         serde_json::to_value(&godfather.ratings).unwrap(),
         pair(None, Some("97%"))
     );
+}
+
+/// A fake Rotten Tomatoes addon: Shawshank on the movie list, The Godfather
+/// only on its Drama page, Breaking Bad on the series list; every other page
+/// is empty, and `fail` answers 500. It keeps the paths it served.
+#[derive(Clone)]
+struct RtAddon {
+    row: AddonRow,
+    served: Arc<Mutex<Vec<String>>>,
+    fail: Arc<Mutex<Option<&'static str>>>,
+}
+
+impl RtAddon {
+    fn served(&self) -> Vec<String> {
+        self.served.lock().unwrap().clone()
+    }
+
+    fn url(&self) -> &str {
+        &self.row.transport_url
+    }
+}
+
+const RT_MOVIES: &str = "/catalog/movie/rtfresh_movie.json";
+const RT_DRAMA: &str = "/catalog/movie/rtfresh_movie/genre=Drama.json";
+
+async fn rt_addon() -> RtAddon {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let served: Arc<Mutex<Vec<String>>> = Arc::default();
+    let fail: Arc<Mutex<Option<&'static str>>> = Arc::default();
+    let (log, failing) = (served.clone(), fail.clone());
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut socket, _)) = listener.accept().await else {
+                return;
+            };
+            let (log, failing) = (log.clone(), failing.clone());
+            tokio::spawn(async move {
+                let (line, _) = read_request(&mut socket).await;
+                let path = line.split(' ').nth(1).unwrap_or_default().to_owned();
+                log.lock().unwrap().push(path.clone());
+                let body = match path.as_str() {
+                    RT_MOVIES => {
+                        r#"{"metas":[{"id":"tt0111161","type":"movie","name":"The Shawshank Redemption"}]}"#
+                    }
+                    RT_DRAMA => {
+                        r#"{"metas":[{"id":"tt0068646","type":"movie","name":"The Godfather"}]}"#
+                    }
+                    "/catalog/series/rtfresh_series.json" => {
+                        r#"{"metas":[{"id":"tt0903747","type":"series","name":"Breaking Bad"}]}"#
+                    }
+                    _ => r#"{"metas":[]}"#,
+                };
+                let status = if *failing.lock().unwrap() == Some(path.as_str()) {
+                    "500 No"
+                } else {
+                    "200 OK"
+                };
+                let resp = format!(
+                    "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(resp.as_bytes()).await;
+            });
+        }
+    });
+    let genre = json!([{"name": "genre", "isRequired": false, "options": ["Drama", "Comedy"]}]);
+    let manifest = json!({
+        "id": "pw.ers.rottentomatoes", "version": "1.0.9", "name": "Rotten Tomatoes",
+        "types": ["movie", "series"], "resources": ["catalog"], "idPrefixes": ["tt"],
+        "catalogs": [
+            {"type": "movie", "id": "rtfresh_movie", "name": "RT: Certified Fresh", "extra": genre},
+            {"type": "series", "id": "rtfresh_series", "name": "RT: Fresh TV Shows", "extra": genre}
+        ]
+    });
+    RtAddon {
+        row: AddonRow {
+            transport_url: format!("http://{addr}/manifest.json"),
+            manifest_json: manifest.to_string(),
+            position: 1,
+            enabled: true,
+            allow_private: true,
+        },
+        served,
+        fail,
+    }
+}
+
+fn show(id: &str) -> Title {
+    ("show".into(), id.into())
+}
+
+fn rt_of(known: &HashMap<Title, Scores>, title: &Title) -> Option<String> {
+    Ratings::of(known.get(title), None).rotten_tomatoes
+}
+
+#[tokio::test]
+async fn the_addons_lists_mark_their_titles_fresh_and_are_read_once_a_day() {
+    let core = Core::temporary("p").unwrap();
+    let rt = rt_addon().await;
+    core.library()
+        .set_addons("p", std::slice::from_ref(&rt.row), &core.hlc())
+        .unwrap();
+    let titles = vec![
+        movie("tt0111161"),
+        movie("tt0068646"),
+        show("tt0903747"),
+        movie("tt0071562"),
+        show("tt0111161"),
+    ];
+    let known = core.ratings().lookup(&titles).await.expect("marked");
+    assert_eq!(rt_of(&known, &movie("tt0111161")).as_deref(), Some("Fresh"));
+    assert_eq!(
+        rt_of(&known, &movie("tt0068646")).as_deref(),
+        Some("Fresh"),
+        "from the Drama page"
+    );
+    assert_eq!(rt_of(&known, &show("tt0903747")).as_deref(), Some("Fresh"));
+    assert_eq!(rt_of(&known, &movie("tt0071562")), None, "not listed");
+    assert_eq!(rt_of(&known, &show("tt0111161")), None, "listed as a movie");
+    let mut pages = rt.served();
+    pages.sort();
+    assert_eq!(
+        pages,
+        [
+            "/catalog/movie/rtfresh_movie.json",
+            "/catalog/movie/rtfresh_movie/genre=Comedy.json",
+            "/catalog/movie/rtfresh_movie/genre=Drama.json",
+            "/catalog/series/rtfresh_series.json",
+            "/catalog/series/rtfresh_series/genre=Comedy.json",
+            "/catalog/series/rtfresh_series/genre=Drama.json",
+        ],
+        "each list as is and by each genre"
+    );
+    // Within the day nothing is read again, and the cache answers at once.
+    assert!(core.ratings().lookup(&titles).await.is_some());
+    core.ratings().age_lists(Duration::from_secs(23 * 3600));
+    assert!(core.ratings().lookup(&titles).await.is_some());
+    assert_eq!(rt.served().len(), 6);
+    assert_eq!(
+        core.ratings().known(&titles)[&movie("tt0111161")],
+        Scores {
+            imdb: None,
+            rt: None,
+            fresh: true
+        }
+    );
+    // A day on, the lists are read again; a page that fails keeps what it
+    // listed and is read again after a rest.
+    *rt.fail.lock().unwrap() = Some(RT_DRAMA);
+    core.ratings().age_lists(Duration::from_secs(3600));
+    let known = core.ratings().lookup(&titles).await.expect("marked");
+    assert_eq!(rt.served().len(), 12);
+    assert_eq!(rt_of(&known, &movie("tt0068646")).as_deref(), Some("Fresh"));
+    *rt.fail.lock().unwrap() = None;
+    core.ratings().lookup(&titles).await;
+    assert_eq!(rt.served().len(), 12, "resting");
+    core.ratings().age_lists(Duration::from_secs(300));
+    core.ratings().lookup(&titles).await;
+    assert_eq!(rt.served().len(), 18);
+    // Titles it does not list: nothing to show.
+    assert_eq!(core.ratings().lookup(&[movie("tt0071562")]).await, None);
+}
+
+#[tokio::test]
+async fn mdblists_tomatometer_wins_over_the_mark() {
+    let core = Core::temporary("p").unwrap();
+    let rt = rt_addon().await;
+    core.library()
+        .set_addons("p", std::slice::from_ref(&rt.row), &core.hlc())
+        .unwrap();
+    let fake = mdblist(
+        json!({"tt0111161": {"imdb": 9.2, "tomatoes": 89}, "tt0068646": {"imdb": 9.1, "tomatoes": null}}),
+        Duration::ZERO,
+    )
+    .await;
+    core.ratings().set_host(fake.host());
+    let titles = vec![movie("tt0111161"), movie("tt0068646")];
+    let known = core.ratings().lookup(&titles).await.expect("asked");
+    let row = |title: &Title| Ratings::of(known.get(title), None);
+    assert_eq!(
+        row(&movie("tt0111161")),
+        Ratings {
+            imdb: Some("9.2".into()),
+            rotten_tomatoes: Some("89%".into())
+        }
+    );
+    assert_eq!(
+        row(&movie("tt0068646")),
+        Ratings {
+            imdb: Some("9.1".into()),
+            rotten_tomatoes: Some("Fresh".into())
+        },
+        "MDBList had no Tomatometer: the mark"
+    );
+}
+
+#[tokio::test]
+async fn a_disabled_addon_or_a_kids_profile_reads_no_list_and_shows_no_mark() {
+    let owner = Core::temporary(OWNER).unwrap();
+    owner.set_pin(OWNER, Some("7351"), None).await.unwrap();
+    let rt = rt_addon().await;
+    let off = AddonRow {
+        enabled: false,
+        ..rt.row.clone()
+    };
+    owner
+        .library()
+        .set_addons(OWNER, &[off], &owner.hlc())
+        .unwrap();
+    let titles = vec![movie("tt0111161")];
+    assert_eq!(owner.ratings().lookup(&titles).await, None);
+    assert!(rt.served().is_empty());
+
+    // A kids profile reads the owner's addons, but never these lists.
+    owner.set_addon_enabled(rt.url(), true).unwrap();
+    let kid = owner.for_profile(&owner.create_kids_profile("Kid", "fox").unwrap());
+    assert_eq!(kid.ratings().lookup(&titles).await, None);
+    assert!(rt.served().is_empty());
+    // Nor shows the mark once the owner's Home has read them.
+    assert!(owner.ratings().lookup(&titles).await.is_some());
+    assert!(owner.ratings().known(&titles)[&titles[0]].fresh);
+    assert!(kid.ratings().known(&titles).is_empty());
+
+    // Turned off again: the mark goes.
+    owner.set_addon_enabled(rt.url(), false).unwrap();
+    assert!(owner.ratings().known(&titles).is_empty());
+    assert_eq!(owner.ratings().lookup(&titles).await, None);
+}
+
+#[tokio::test]
+async fn home_discover_search_and_the_title_page_show_the_mark_until_the_addon_goes() {
+    let core = Core::temporary("p").unwrap();
+    let rt = rt_addon().await;
+    core.library()
+        .set_addons("p", &[addon().await, rt.row.clone()], &core.hlc())
+        .unwrap();
+    let home = HomeView::open(&core);
+    until("the mark on Home", || {
+        home.snapshot().rows.first().is_some_and(|r| {
+            r.state == RowState::Ready && r.tiles[1].ratings.rotten_tomatoes.is_some()
+        })
+    })
+    .await;
+    let tiles = serde_json::to_value(&home.snapshot().rows[0].tiles).unwrap();
+    assert_eq!(tiles[0]["ratings"], pair(Some("9.3"), Some("Fresh")));
+    assert_eq!(tiles[1]["ratings"], pair(None, Some("Fresh")));
+    assert_eq!(tiles[2]["ratings"], pair(Some("9.0"), None), "not listed");
+    until("the mark on the hero", || {
+        home.snapshot()
+            .header
+            .hero
+            .is_some_and(|h| h.tile.ratings.rotten_tomatoes.is_some())
+    })
+    .await;
+
+    let title = TitleView::open(&core, "movie", "tt0111161");
+    until("the mark on the title page", || {
+        title
+            .snapshot()
+            .header
+            .details
+            .is_some_and(|d| d.ratings.rotten_tomatoes.is_some())
+    })
+    .await;
+    let json = serde_json::to_value(title.snapshot().header.details.unwrap()).unwrap();
+    assert_eq!(json["ratings"], pair(Some("9.3"), Some("Fresh")));
+    assert_eq!(
+        json["ratingsFrom"],
+        "IMDb and Rotten Tomatoes (the Rotten Tomatoes addon)"
+    );
+
+    let discover = DiscoverView::open(&core);
+    until("the mark in Discover", || {
+        let s = discover.snapshot();
+        s.state != DiscoverState::Loading
+            && s.items
+                .get(1)
+                .is_some_and(|t| t.ratings.rotten_tomatoes.is_some())
+    })
+    .await;
+    assert_eq!(discover.snapshot().items[2].ratings.rotten_tomatoes, None);
+    let search = SearchView::open(&core);
+    search.set_query("godfather");
+    until("the mark in Search", || {
+        search.snapshot().rows.first().is_some_and(|r| {
+            r.state == RowState::Ready
+                && r.tiles
+                    .iter()
+                    .any(|t| t.id == "tt0068646" && t.ratings.rotten_tomatoes.is_some())
+        })
+    })
+    .await;
+
+    // The owner turns the addon off: the open Home takes the mark away.
+    core.set_addon_enabled(rt.url(), false).unwrap();
+    until("the mark gone from Home", || {
+        let snap = home.snapshot();
+        snap.rows
+            .iter()
+            .all(|r| r.tiles.iter().all(|t| t.ratings.rotten_tomatoes.is_none()))
+            && snap
+                .header
+                .hero
+                .is_some_and(|h| h.tile.ratings.rotten_tomatoes.is_none())
+    })
+    .await;
+    assert_eq!(
+        home.snapshot().rows[0].tiles[0].ratings.imdb.as_deref(),
+        Some("9.3")
+    );
+    let title = TitleView::open(&core, "movie", "tt0111161");
+    until("the title page without the addon", || {
+        title.snapshot().header.details.is_some()
+    })
+    .await;
+    let json = serde_json::to_value(title.snapshot().header.details.unwrap()).unwrap();
+    assert_eq!(json["ratings"], pair(Some("9.3"), None));
+    assert_eq!(json["ratingsFrom"], Value::Null);
+}
+
+/// The nine defaults against the real addons: how many tiles a Home of
+/// their catalogs marks Fresh. Prints one JSON line for
+/// `bench/core/ratings.jsonl`.
+///
+/// `cargo test -p mq-runtime --test ratings -- --ignored --nocapture`
+#[tokio::test]
+#[ignore = "network: the default addons"]
+async fn a_home_of_the_default_catalogs_marks_the_listed_titles_fresh() {
+    let core = Core::temporary(OWNER).unwrap();
+    let all_on: Vec<mq_runtime::defaults::DefaultChoice> = mq_runtime::defaults::list()
+        .iter()
+        .map(|d| serde_json::from_value(json!({ "key": d.key, "on": true })).unwrap())
+        .collect();
+    core.install_defaults(&all_on).unwrap();
+    let started = std::time::Instant::now();
+    let home = HomeView::open(&core);
+    let fresh = |tiles: &[mq_runtime::views::home::Tile]| {
+        tiles
+            .iter()
+            .filter(|t| t.ratings.rotten_tomatoes.as_deref() == Some("Fresh"))
+            .count()
+    };
+    let settled = || {
+        let rows = home.snapshot().rows;
+        !rows.is_empty()
+            && rows
+                .iter()
+                .all(|r| !matches!(r.state, RowState::Loading | RowState::Slow))
+    };
+    while !settled() && started.elapsed() < Duration::from_secs(60) {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    let settled_ms = started.elapsed().as_millis();
+    // The lookups Home started wait on the same read of the lists as this one.
+    let shown: Vec<Title> = home
+        .snapshot()
+        .rows
+        .iter()
+        .flat_map(|r| &r.tiles)
+        .filter_map(|t| match t.kind.as_str() {
+            "movie" => Some(movie(&t.id)),
+            "series" => Some(show(&t.id)),
+            _ => None,
+        })
+        .collect();
+    core.ratings().lookup(&shown).await;
+    let lists_ms = started.elapsed().as_millis();
+    let count = || {
+        let rows = home.snapshot().rows;
+        rows.iter().map(|r| fresh(&r.tiles)).sum::<usize>()
+    };
+    let (mut last, mut since) = (count(), std::time::Instant::now());
+    while since.elapsed() < Duration::from_secs(1) {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        if count() != last {
+            (last, since) = (count(), std::time::Instant::now());
+        }
+    }
+    let snap = home.snapshot();
+    let rows: Vec<Value> = snap
+        .rows
+        .iter()
+        .map(|r| json!({"row": r.title, "source": r.source, "tiles": r.tiles.len(), "fresh": fresh(&r.tiles)}))
+        .collect();
+    let tiles: usize = snap.rows.iter().map(|r| r.tiles.len()).sum();
+    let mut titles: Vec<(String, String)> = snap
+        .rows
+        .iter()
+        .flat_map(|r| &r.tiles)
+        .filter(|t| t.ratings.rotten_tomatoes.as_deref() == Some("Fresh"))
+        .map(|t| (t.kind.clone(), t.id.clone()))
+        .collect();
+    titles.sort();
+    titles.dedup();
+    let hero =
+        snap.header.hero.as_ref().map(
+            |h| json!({"name": h.tile.name, "rottenTomatoes": h.tile.ratings.rotten_tomatoes}),
+        );
+    println!(
+        "{}",
+        json!({
+            "date": "2026-10-21", "kind": "live", "milestone": "ratings",
+            "what": "a Home of the nine defaults, all on, no MDBList key",
+            "tiles": tiles, "fresh_tiles": last, "fresh_titles": titles.len(),
+            "rows": rows, "hero": hero, "rows_settled_ms": settled_ms, "lists_read_ms": lists_ms,
+        })
+    );
+    assert!(last > 0, "no tile marked Fresh");
 }

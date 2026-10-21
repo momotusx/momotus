@@ -338,8 +338,9 @@ impl Core {
         &self.inner.segments
     }
 
-    pub fn ratings(&self) -> &crate::ratings::Finder {
-        &self.inner.ratings
+    /// IMDb and Rotten Tomatoes scores as this profile sees them.
+    pub fn ratings(&self) -> crate::ratings::Rater<'_> {
+        crate::ratings::Rater::new(self, &self.inner.ratings)
     }
 
     pub fn addons(&self) -> &AddonClient {

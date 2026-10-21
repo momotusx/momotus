@@ -478,6 +478,10 @@ async fn watch_addons(
 ) {
     let mut loads = JoinSet::new();
     while home_changed(&mut changes).await {
+        while loads.try_join_next().is_some() {}
+        // The Rotten Tomatoes addon's mark comes and goes with the addon.
+        let titles = rerate(&core, &rows, &header);
+        loads.spawn(rate(core.clone(), rows.clone(), header.clone(), titles));
         let slots = board(&core);
         let next: Vec<String> = slots.iter().map(|s| s.row_id.clone()).collect();
         if next == ids {
@@ -523,7 +527,6 @@ async fn watch_addons(
                 header.clone(),
             ));
         }
-        while loads.try_join_next().is_some() {}
     }
 }
 
@@ -723,6 +726,37 @@ async fn rate(
             .as_mut()
             .is_some_and(|hero| ratings::apply([&mut hero.tile], &known))
     });
+}
+
+/// Puts on every tile shown, the hero's too, what the ratings cache and
+/// the Rotten Tomatoes addon's lists hold now. The titles shown, for a
+/// lookup.
+fn rerate(
+    core: &Core,
+    rows: &Mutex<ObservableVector<HomeRow>>,
+    header: &SharedObservable<HomeHeader>,
+) -> Vec<Title> {
+    let hero = header.get().hero;
+    let mut rows = lock(rows);
+    let titles = ratings::titles(
+        rows.iter()
+            .flat_map(|r| &r.tiles)
+            .chain(hero.iter().map(|h| &h.tile)),
+    );
+    let known = core.ratings().known(&titles);
+    for index in 0..rows.len() {
+        let mut row = rows[index].clone();
+        if ratings::reset(&mut row.tiles, &known) {
+            rows.set(index, row);
+        }
+    }
+    drop(rows);
+    header.update_if(|h| {
+        h.hero
+            .as_mut()
+            .is_some_and(|hero| ratings::reset([&mut hero.tile], &known))
+    });
+    titles
 }
 
 /// Fills the row from the catalog's answer; the titles it may show, for
