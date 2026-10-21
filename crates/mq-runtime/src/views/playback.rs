@@ -184,6 +184,9 @@ pub enum StartStage {
     Connecting,
     /// The swarm sends the start of the video.
     Buffering,
+    /// What is in is read through the core's server for the first time
+    /// (the player gets the URL next).
+    Opening,
 }
 
 /// A version the playback moved on to, or offers instead.
@@ -583,9 +586,7 @@ struct State {
     playing: OwnedPlaying,
     /// The start's progress when the source starting now began, and when
     /// it began (`start`).
-    #[cfg_attr(not(feature = "torrent"), allow(dead_code))]
     start_base: f32,
-    #[cfg_attr(not(feature = "torrent"), allow(dead_code))]
     source_since: tokio::time::Instant,
     /// Torrents of this view that did not start (no details in time, a
     /// stall, the deadline), by lowercase info hash: another source of one
@@ -1527,6 +1528,10 @@ async fn resolve_next(
         };
         let opened = match open_source(&core, &stream, &target, (&state, &snapshot, run)).await {
             Ok((upstream, filename, size)) => {
+                // The first byte comes through the server now (review
+                // P3-8): the fill and its words do not sit at the last
+                // count meanwhile.
+                show_opening(&state, &snapshot, run);
                 let name = filename
                     .clone()
                     .unwrap_or_else(|| format!("{}.mkv", target.video_id));
@@ -2379,14 +2384,11 @@ fn look_ahead(core: &Core, engine: &mq_engine::Engine, s: &mut State, current: &
 }
 
 /// The start never reads 1 before `ready`.
-#[cfg(any(test, feature = "torrent"))]
 const START_MAX: f32 = 0.99;
 /// A source starting this long gets the core's words for its stage.
-#[cfg(any(test, feature = "torrent"))]
 const LONG_STAGE: Duration = Duration::from_secs(3);
 
 /// What a source's start is doing now.
-#[cfg(any(test, feature = "torrent"))]
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Sample {
     stage: StartStage,
@@ -2396,7 +2398,6 @@ struct Sample {
     rate: u64,
 }
 
-#[cfg(any(test, feature = "torrent"))]
 impl Default for Sample {
     fn default() -> Self {
         Self {
@@ -2432,7 +2433,6 @@ fn begin_start(s: &mut State, stage: StartStage) {
 /// Shows `x` as the starting source's start: its share of what was left
 /// when the source began, never back, and the stage's words once the source
 /// has taken long.
-#[cfg(any(test, feature = "torrent"))]
 fn show_start(s: &mut State, x: Sample) {
     let long = s.source_since.elapsed() >= LONG_STAGE;
     let base = s.start_base;
@@ -2446,6 +2446,7 @@ fn show_start(s: &mut State, x: Sample) {
         StartStage::Connecting if x.peers == 0 => Some("Finding peers".into()),
         StartStage::Connecting => Some(format!("Finding peers, {} so far", x.peers)),
         StartStage::Buffering => Some(format!("Buffering, {} of {} MB", mb(x.have), mb(x.need))),
+        StartStage::Opening => Some("Opening the video".into()),
     };
     start.progress = (base + (START_MAX - base) * start_share(&x)).max(start.progress);
     start.stage = x.stage;
@@ -2465,10 +2466,30 @@ fn publish_start((state, snapshot, run): InRun, x: Sample) {
     }
 }
 
+/// The source is open; its first byte is read through the server: the
+/// start's last numbers stay, at the `opening` stage.
+fn show_opening(state: &Mutex<State>, snapshot: &SharedObservable<PlaybackSnapshot>, run: u64) {
+    let mut s = lock(state);
+    if !current(&s, run) || s.snapshot.phase != PlaybackPhase::Resolving {
+        return;
+    }
+    let Some(start) = s.snapshot.start.as_ref() else {
+        return;
+    };
+    let opening = Sample {
+        stage: StartStage::Opening,
+        peers: start.peers,
+        have: start.have_bytes,
+        need: start.need_bytes,
+        rate: start.bytes_per_s,
+    };
+    show_start(&mut s, opening);
+    snapshot.set(s.snapshot.clone());
+}
+
 /// A source's share of its start done: peers 15 % (8 or more, as Stremio
 /// counts them), the start's bytes 75 % and the speed 5 % (1 MiB/s or
 /// more) once the details are in, which count 5 %.
-#[cfg(any(test, feature = "torrent"))]
 fn start_share(x: &Sample) -> f32 {
     let part = |have: u64, full: u64| (have as f32 / full.max(1) as f32).min(1.0);
     match x.stage {
@@ -2482,7 +2503,6 @@ fn start_share(x: &Sample) -> f32 {
 }
 
 /// Megabytes with one decimal: "4.1", "8".
-#[cfg(any(test, feature = "torrent"))]
 fn mb(bytes: u64) -> String {
     let mb = format!("{:.1}", bytes as f64 / 1e6);
     mb.strip_suffix(".0").map_or(mb.clone(), str::to_owned)
@@ -2827,7 +2847,7 @@ fn first_sample(info_hash: &str, network: crate::speed::Network) -> bool {
 /// when our cache check found the service does not have it: the ranking
 /// scored it by torrent speed (3.2), and asking the service would add it
 /// to the account (code review r1 P2-2).
-fn by_engine(stream: &ParsedStream, account: bool, engine: bool) -> bool {
+pub(crate) fn by_engine(stream: &ParsedStream, account: bool, engine: bool) -> bool {
     matches!(stream.source, Source::Torrent { .. })
         && (!account || (engine && stream.cached == Some(false)))
 }
@@ -4493,6 +4513,39 @@ mod tests {
             Some("Film.2020.1080p.WEB.h264-CAKES")
         );
         assert_eq!(track(w, "Subs", "u".into()).name, "CAKES, WEB 1080p");
+    }
+
+    /// Review P3-8: while the first byte is read through the server the
+    /// start says so, its numbers kept, instead of sitting at the last
+    /// count's words.
+    #[tokio::test(start_paused = true)]
+    async fn the_first_read_shows_as_opening() {
+        let mut st = State::new(vec![stream(r#"{"url":"http://127.0.0.1:9/a.mkv"}"#)], None);
+        st.next = 1;
+        begin_start(&mut st, StartStage::Details);
+        tokio::time::advance(Duration::from_secs(4)).await;
+        let full = Sample {
+            stage: StartStage::Buffering,
+            peers: 6,
+            have: 8_400_000,
+            need: 8_400_000,
+            rate: 2 << 20,
+        };
+        show_start(&mut st, full);
+        let before = st.snapshot.start.clone().unwrap();
+        let snapshot = SharedObservable::new(st.snapshot.clone());
+        let state = Mutex::new(st);
+        show_opening(&state, &snapshot, 0);
+        let start = lock(&state).snapshot.start.clone().unwrap();
+        assert_eq!(
+            (start.stage, start.caption.as_deref()),
+            (StartStage::Opening, Some("Opening the video"))
+        );
+        assert_eq!(
+            (start.have_bytes, start.need_bytes, start.peers),
+            (before.have_bytes, before.need_bytes, before.peers)
+        );
+        assert!(start.progress >= before.progress && start.progress < 1.0);
     }
 
     /// Review P1-1: a resume lands at its saved share of the file, whatever

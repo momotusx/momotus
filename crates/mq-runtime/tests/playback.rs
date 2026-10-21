@@ -535,16 +535,22 @@ async fn the_start_names_its_source_and_clears_at_ready() {
         ]}}"#
     );
     let view = PlaybackView::open(&core, setup(&core, &streams), target());
-    let on = |n: u32| move |s: &PlaybackSnapshot| s.start.as_ref().is_some_and(|p| p.source == n);
+    // A link opens at once; its first byte is read at the `opening` stage.
+    let on = |n: u32| {
+        move |s: &PlaybackSnapshot| {
+            s.start
+                .as_ref()
+                .is_some_and(|p| p.source == n && p.stage == StartStage::Opening)
+        }
+    };
     let first = until(&view, "the first source", on(1)).await.start.unwrap();
-    assert_eq!(
-        (first.sources, first.stage, first.caption, first.progress),
-        (3, StartStage::Connecting, None, 0.0)
-    );
+    assert_eq!((first.sources, first.caption.as_deref()), (3, None));
+    assert!(first.progress < 0.1, "{first:?}");
     let second = until(&view, "the second source", on(2))
         .await
         .start
         .unwrap();
+    assert!(second.progress >= first.progress, "{second:?}");
     assert_eq!(second.caption.as_deref(), Some("Trying source 2 of 3"));
     let s = until(&view, "ready", |s| s.phase != PlaybackPhase::Resolving).await;
     assert_eq!(s.phase, PlaybackPhase::Ready, "{s:?}");

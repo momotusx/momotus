@@ -1497,7 +1497,7 @@ fn blocked(s: &State, ranking: &Ranking) -> Option<BlockedVersions> {
     let rows = rank(streams, &input)
         .rows
         .iter()
-        .map(|r| row_dto(r, None))
+        .map(|r| row_dto(r, None, false))
         .collect();
     Some(BlockedVersions {
         reason,
@@ -1651,7 +1651,7 @@ fn render(s: &State) -> VersionsSnapshot {
         .rows
         .iter()
         .filter(|r| !holds_pick(r))
-        .map(|r| row_dto(r, kept))
+        .map(|r| row_dto(r, kept, s.rank.debrid))
         .collect();
     let mut by_reason: Vec<(HideReason, u32)> = Vec::new();
     for h in &s.ranked.hidden {
@@ -1664,7 +1664,10 @@ fn render(s: &State) -> VersionsSnapshot {
         conditions: s.conditions.clone(),
         blocked: s.blocked.clone(),
         note: s.note.clone(),
-        recommended: s.recommended.as_ref().map(|r| row_dto(r, kept)),
+        recommended: s
+            .recommended
+            .as_ref()
+            .map(|r| row_dto(r, kept, s.rank.debrid)),
         rows,
         hidden: HiddenSummary {
             count: s.ranked.hidden.len() as u32,
@@ -1698,12 +1701,14 @@ fn nobody_sharing(s: &State) -> bool {
 }
 
 /// The row for `r`; `kept` is the key of the version that starts from what
-/// this device keeps, the row's own or one in its chain.
-fn row_dto(r: &RankedRow, kept: Option<&str>) -> VersionRow {
+/// this device keeps, the row's own or one in its chain, said only while it
+/// would play on the engine (`account`: a streaming service may take it
+/// instead, review P3-9).
+fn row_dto(r: &RankedRow, kept: Option<&str>, account: bool) -> VersionRow {
     let s = &r.stream;
-    let on_device = std::iter::once(s)
-        .chain(&r.failover)
-        .any(|st| Some(st.key.as_str()) == kept);
+    let on_device = std::iter::once(s).chain(&r.failover).any(|st| {
+        Some(st.key.as_str()) == kept && crate::views::playback::by_engine(st, account, true)
+    });
     let rel = &s.release;
     VersionRow {
         key: s.key.clone(),
@@ -1926,6 +1931,23 @@ mod tests {
         row.failover.push(link);
         s.ranked.rows = vec![row];
         assert!(!nobody_sharing(&s), "a link behind it can play");
+    }
+
+    /// Review P3-9: "On this device" only for a row that plays on the
+    /// engine: with a streaming account and no proof the service lacks it,
+    /// the service would take it.
+    #[test]
+    fn on_this_device_only_where_the_engine_plays_it() {
+        let torrent = wire(&format!(
+            r#"{{"title":"x","infoHash":"{}"}}"#,
+            "a".repeat(40)
+        ));
+        let key = torrent.key.clone();
+        let row = &rank_for_tests(vec![torrent])[0];
+        let said = |account| row_dto(row, Some(&key), account).on_device;
+        assert_eq!(said(false).as_deref(), Some("On this device"));
+        assert_eq!(said(true), None, "a service may take it");
+        assert_eq!(row_dto(row, Some("another"), false).on_device, None);
     }
 
     /// Code review r1 P3: with two accounts, one store's cache answer

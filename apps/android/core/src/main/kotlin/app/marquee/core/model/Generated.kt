@@ -1394,6 +1394,7 @@ enum class StartStage(
     Details("details"),
     Connecting("connecting"),
     Buffering("buffering"),
+    Opening("opening"),
 
     /** A value from a newer core that this app does not know yet. */
     Unknown(""),
