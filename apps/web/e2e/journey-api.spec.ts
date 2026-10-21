@@ -344,6 +344,40 @@ test("the language pickers search every language the core knows", async ({ brows
   await context.close();
 });
 
+// The focus loop's tile with no art (plans/design-v3-rollout.md, phase 1a): the journey film has
+// no poster and no backdrop, so its picture is the bare art box, and focus still lifts that box.
+// (mqj1, the plan's example, never reaches Continue Watching: its next episode is not out.)
+test("TV: a Continue Watching tile with no art lifts its art box on focus", async ({ browser }) => {
+  const home = await watchHome();
+  await seedFilm(120_000);
+  await expect.poll(home.ids).toContain("mqjm");
+  home.close();
+  const { context, page: p } = await page(browser, { width: 1920, height: 1080 });
+  await p.goto("/?form=tv");
+  const tile = p.locator('[data-f="tile:home:continue-watching:mqjm"]');
+  await expect(tile).toBeVisible({ timeout: 30_000 });
+  await expect(tile.locator(".pic img.in")).toHaveCount(0);
+  const art = () =>
+    tile.evaluate((el) => {
+      for (const a of document.getAnimations()) {
+        try {
+          a.finish();
+        } catch {
+          // An endless pulse cannot finish.
+        }
+      }
+      const s = getComputedStyle(el.querySelector(".pic") as HTMLElement);
+      return { transform: s.transform, ring: s.outlineStyle === "none" ? 0 : parseFloat(s.outlineWidth) };
+    });
+  await p.locator('[data-f="nav:/"]').focus();
+  const rest = await art();
+  await tile.focus();
+  const lifted = await art();
+  expect(lifted.transform).not.toBe(rest.transform);
+  expect(lifted.ring).toBe(0);
+  await context.close();
+});
+
 test("Continue Watching: the tile's remove button off TV, the title page on TV", async ({ browser }) => {
   const home = await watchHome();
   await seedFilm(120_000);

@@ -1,5 +1,6 @@
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { GOT } from "./core";
+import { type Form, FORMS, focusStop, SCREENS, type Screen, visible } from "./screens";
 
 /** Where focus lands stays readable: a focused card and its ring sit clear
  * of a list's fade, and a chip row fades only toward chips left to scroll
@@ -15,9 +16,9 @@ async function open(browser: Browser, path: string, viewport: { width: number; h
   return { context, page };
 }
 
-/** The focused element, its 4 px ring at a 4 px offset included, inside its
- * list, below its group's pinned heading if it has one, and above the list's
- * fade (canvas pixels, scaled like the page). */
+/** The focused element as drawn, its rise and scale included (TV draws no ring), inside its
+ * list, below its group's pinned heading if it has one, and above the list's fade (canvas
+ * pixels, scaled like the page). */
 const clearOfFade = (page: Page, fade: number) =>
   page.evaluate((fade) => {
     const el = document.activeElement as HTMLElement;
@@ -26,7 +27,7 @@ const clearOfFade = (page: Page, fade: number) =>
     const l = list.getBoundingClientRect();
     const k = l.height / list.offsetHeight || 1;
     const e = el.getBoundingClientRect();
-    const ring = 8 * k;
+    const ring = 0;
     const head = el.closest(".vgroup")?.querySelector("h3")?.getBoundingClientRect();
     const top = Math.max(l.top, head ? head.bottom : l.top);
     const why = `ring ${Math.round(e.top - ring)} to ${Math.round(e.bottom + ring)}, clear from ${Math.round(top)} to ${Math.round(l.bottom - fade * k)}`;
@@ -132,5 +133,232 @@ test("TV: an episode's actions lay over its card: no width change, Right in, Lef
   }
   // Back from the strip went to the card, not off the page.
   expect(page.url()).toBe(address);
+  await context.close();
+});
+
+// The focus loop (plans/design-v3-rollout.md, phase 1a): Tab through every screen the shots
+// cover, on each form, until the walk comes back to a stop it judged, and judge every stop
+// (focusStop). The player screens wait for phase 5. Home rows is walked at rest (its shot picks a
+// row up), and Settings once more with More languages open, for its search field.
+const LOOP: Screen[] = [
+  ...SCREENS.filter((s) => !s.name.startsWith("player") && s.name !== "title-trailer" && s.name !== "home-rows"),
+  { name: "home-rows at rest", path: "/home-rows", ready: visible(".hrow-main") },
+  {
+    name: "settings with more languages",
+    path: "/settings",
+    ready: async (page) => {
+      await visible('[data-fgroup="pref-subs"]')(page);
+      await page.locator('[data-f="pref-subs:more"]').click();
+      await page.locator(".lang-search input").focus();
+    },
+  },
+];
+for (const form of Object.keys(FORMS) as Form[]) {
+  for (const screen of LOOP) {
+    test(`focus loop: ${screen.name} ${form}`, async ({ browser }) => {
+      const f = FORMS[form];
+      const context = await browser.newContext({ viewport: { width: f.width, height: f.height }, reducedMotion: "reduce", isMobile: form === "phone", hasTouch: form === "phone" });
+      const page = await context.newPage();
+      await page.goto(`${screen.path}${screen.path.includes("?") ? "&" : "?"}form=${form}`);
+      await screen.ready(page, form);
+      const seen: string[] = [];
+      const failed: string[] = [];
+      // The screen's own first focus is the first stop.
+      for (let i = 0; i < 40; i++) {
+        if (i > 0 || (await page.evaluate(() => document.activeElement === document.body))) {
+          await page.keyboard.press("Tab");
+          // Past the last control the page itself takes focus; the next Tab starts over.
+          if (await page.evaluate(() => document.activeElement === document.body)) await page.keyboard.press("Tab");
+        }
+        const stop = await focusStop(page, form);
+        for (const r of stop.results) if (!r.ok) failed.push(`${r.key}: ${r.why}`);
+        if (!stop.key || seen.includes(stop.key)) break;
+        seen.push(stop.key);
+      }
+      // The last stop is judged when focus leaves it.
+      await page.keyboard.press("Tab");
+      for (const r of (await focusStop(page, form)).results) if (!r.ok) failed.push(`${r.key}: ${r.why}`);
+      test.info().annotations.push({ type: "stops", description: String(seen.length) });
+      expect(seen.length, "Tab reached focusable elements").toBeGreaterThan(0);
+      expect(failed, `stops: ${seen.join(", ")}`).toEqual([]);
+      await screen.after?.(page);
+      await context.close();
+    });
+  }
+}
+
+// The phase 1a review (plans/reviews/design-v3-phase1a-a.md, -b.md): the art's lift fits its
+// lane, the caption stays over the shadow, one white per action row, the white profile, dark words.
+const settle = (page: Page) =>
+  page.evaluate(() => {
+    for (const a of document.getAnimations()) {
+      try {
+        a.finish();
+      } catch {
+        // An endless pulse cannot finish.
+      }
+    }
+  });
+
+/** The focused art's box, its transform and its shadow, against the lane that scrolls it. */
+const artInLane = (page: Page, art: string) =>
+  page.evaluate((art) => {
+    const pic = art === "self" ? (document.activeElement as HTMLElement | null) : document.activeElement?.querySelector<HTMLElement>(art);
+    const lane = pic?.closest<HTMLElement>("[data-hscroll]");
+    if (!pic || !lane) return null;
+    const s = getComputedStyle(pic);
+    // The lift is the shadow with the widest blur (the first may be the transparent no-halo).
+    const shadows = [...s.boxShadow.matchAll(/(-?[\d.]+)px (-?[\d.]+)px ([\d.]+)px/g)].map((m) => ({ y: Number(m[2]), blur: Number(m[3]) }));
+    const { y, blur } = shadows.sort((p, q) => q.blur - p.blur)[0] ?? { y: 0, blur: 0 };
+    const p = pic.getBoundingClientRect();
+    const l = lane.getBoundingClientRect();
+    const m = new DOMMatrix(s.transform);
+    return {
+      room: { left: p.left - blur - l.left, top: p.top + y - blur - l.top, bottom: l.bottom - (p.bottom + y + blur) },
+      scale: m.a,
+      rise: art === "self" ? parseFloat(s.translate.split(" ")[1] ?? "0") : m.f,
+      halo: s.boxShadow.includes("0px 0px 30px"),
+      caption: getComputedStyle(pic.nextElementSibling ?? pic).position,
+    };
+  }, art);
+
+test("TV: a focused tile and a calendar still rise as art and keep their whole shadow inside the lane", async ({ browser }) => {
+  const { context, page } = await open(browser, "/?form=tv", { width: 1920, height: 1080 });
+  // A catalog row long enough to scroll (Continue Watching holds two or three).
+  const tile = page.locator(".row").nth(1).locator("[data-f]").first();
+  await expect(tile).toBeVisible({ timeout: 30_000 });
+  for (const step of [0, 3, 8]) {
+    await tile.focus();
+    for (let i = 0; i < step; i++) await page.keyboard.press("ArrowRight");
+    await settle(page);
+    const at = await artInLane(page, ".pic");
+    expect(at, `the focused tile after ${step} steps right`).not.toBeNull();
+    expect(at!.scale).toBeCloseTo(1.1, 2);
+    expect(at!.rise).toBeCloseTo(-10, 1);
+    expect(at!.halo).toBe(false);
+    expect(at!.caption).not.toBe("static");
+    expect(at!.room.left).toBeGreaterThanOrEqual(-1);
+    expect(at!.room.top).toBeGreaterThanOrEqual(-1);
+    expect(at!.room.bottom).toBeGreaterThanOrEqual(-1);
+    // Revealed inside the row, not in the room past its edge.
+    const box = await page.evaluate(() => (document.activeElement as HTMLElement).getBoundingClientRect().toJSON());
+    expect(box.right, `the focused tile after ${step} steps right is on screen`).toBeLessThanOrEqual(1920 - 80);
+  }
+  await page.goto("/calendar?form=tv");
+  const card = page.locator(".cal-card").first();
+  await expect(card).toBeVisible({ timeout: 30_000 });
+  await card.focus();
+  await settle(page);
+  const still = await artInLane(page, ".cal-art");
+  expect(still).not.toBeNull();
+  expect(still!.scale).toBeCloseTo(1.1, 2);
+  expect(still!.room.left).toBeGreaterThanOrEqual(-1);
+  expect(still!.room.top).toBeGreaterThanOrEqual(-1);
+  expect(still!.room.bottom).toBeGreaterThanOrEqual(-1);
+  await context.close();
+});
+
+test("TV: one white per action row, a white profile with a dark glyph, dark words on a white row that rises", async ({ browser }) => {
+  const { context, page } = await open(browser, `/title/series/${GOT.id}?form=tv`, { width: 1920, height: 1080 });
+  const fill = (key: string) => page.locator(`[data-f="${key}"]`).evaluate((el) => getComputedStyle(el).backgroundColor);
+  const resume = page.locator('[data-f="title:play"]');
+  await expect(resume).toBeVisible({ timeout: 30_000 });
+  // Start over sits in Resume's row: while it holds focus, Resume steps back to the secondary fill.
+  await page.locator('[data-f="title:startover"]').focus();
+  await settle(page);
+  expect(await fill("title:startover")).toBe("rgba(255, 255, 255, 0.92)");
+  expect(await fill("title:play")).toBe("rgba(255, 255, 255, 0.16)");
+  // With focus elsewhere on the page (Trailer, another row) it stays white.
+  await page.locator('[data-f="title:trailer"]').focus();
+  await settle(page);
+  expect(await fill("title:play")).toBe("rgba(255, 255, 255, 0.92)");
+
+  await page.goto("/profiles?form=tv");
+  const tile = page.locator(".ptile").first();
+  await expect(tile).toBeVisible({ timeout: 30_000 });
+  await tile.focus();
+  await settle(page);
+  const avatar = await tile.locator(".avatar").evaluate((el) => {
+    const s = getComputedStyle(el);
+    return { fill: s.backgroundColor, ink: s.color, sheen: s.backgroundImage.startsWith("linear-gradient") };
+  });
+  expect(avatar).toEqual({ fill: "rgba(255, 255, 255, 0.92)", ink: "rgba(0, 0, 0, 0.88)", sheen: true });
+
+  await page.goto("/settings?form=tv");
+  const row = page.locator('[data-f="settings:stream-choice"]');
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  await row.focus();
+  await settle(page);
+  expect(await row.locator("small").first().evaluate((el) => getComputedStyle(el).color)).toBe("rgba(0, 0, 0, 0.64)");
+  // A row rises by focus.rise over the 0 30px 60px lift, never as high as art.
+  const lift = await row.evaluate((el) => ({ rise: getComputedStyle(el).translate, shadow: getComputedStyle(el).boxShadow }));
+  expect(lift.rise).toBe("0px -8px");
+  expect(lift.shadow).toContain("0px 30px 60px");
+  await context.close();
+});
+
+test("TV: a focused chip rises by focus.rise and keeps its whole lift shadow inside its lane", async ({ browser }) => {
+  const { context, page } = await open(browser, "/discover?form=tv", { width: 1920, height: 1080 });
+  const chip = page.locator(".chips-track .chip").first();
+  await expect(chip).toBeVisible({ timeout: 30_000 });
+  await chip.focus();
+  await settle(page);
+  const at = await artInLane(page, "self");
+  expect(at).not.toBeNull();
+  expect(at!.scale).toBeCloseTo(1.06, 2);
+  expect(at!.rise).toBeCloseTo(-8, 1);
+  expect(at!.room.left).toBeGreaterThanOrEqual(-1);
+  expect(at!.room.top).toBeGreaterThanOrEqual(-1);
+  expect(at!.room.bottom).toBeGreaterThanOrEqual(-1);
+  await context.close();
+});
+
+test("desktop: the mouse wheel scrolls Home over a row's heading, the gap between rows and a tile", async ({ browser }) => {
+  const { context, page } = await open(browser, "/?form=desktop", { width: 1440, height: 900 });
+  const row = page.locator(".row").nth(1);
+  await expect(row.locator("[data-f]").first()).toBeVisible({ timeout: 30_000 });
+  const scroller = () => page.evaluate(() => (document.querySelector(".row")?.closest("[data-vscroll]") as HTMLElement | null)?.scrollTop ?? -1);
+  // The points: the row's heading, 8 px above it (the gap after the row before), and its first tile.
+  const points = await row.evaluate((r) => {
+    const head = r.querySelector(".row-head")?.getBoundingClientRect();
+    const tile = r.querySelector("[data-f]")?.getBoundingClientRect();
+    if (!head || !tile) return [];
+    return [
+      { where: "heading", x: head.left + 200, y: head.top + head.height / 2 },
+      { where: "gap", x: head.left + 200, y: head.top - 8 },
+      { where: "tile", x: tile.left + tile.width / 2, y: tile.top + tile.height / 2 },
+    ];
+  });
+  expect(points.length).toBe(3);
+  for (const p of points) {
+    await page.evaluate(() => {
+      const s = document.querySelector(".row")?.closest("[data-vscroll]") as HTMLElement | null;
+      if (s) s.scrollTop = 0;
+    });
+    await page.mouse.move(p.x, p.y);
+    await page.mouse.wheel(0, 400);
+    await expect.poll(scroller, { message: `the wheel over the ${p.where} scrolls the page` }).toBeGreaterThan(0);
+  }
+  await context.close();
+});
+
+test("TV: a focused field is white with its lift and no edge, and its row's primary steps back", async ({ browser }) => {
+  const { context, page } = await open(browser, "/pair?form=tv", { width: 1920, height: 1080 });
+  // The fields sit under Advanced: open while no server is known, else opened by remote.
+  const advanced = page.locator('[data-f="pair:advanced"]');
+  await expect(advanced).toBeVisible({ timeout: 30_000 });
+  if ((await advanced.getAttribute("aria-expanded")) !== "true") {
+    await advanced.focus();
+    await page.keyboard.press("Enter");
+  }
+  const name = page.locator('[data-f="pair:name"]');
+  await expect(name).toBeVisible({ timeout: 30_000 });
+  await name.focus();
+  await settle(page);
+  const field = await name.evaluate((el) => ({ fill: getComputedStyle(el).backgroundColor, shadow: getComputedStyle(el).boxShadow }));
+  expect(field.fill).toBe("rgba(255, 255, 255, 0.92)");
+  expect(field.shadow).not.toContain("inset");
+  expect(field.shadow).toContain("0px 30px 60px");
+  expect(await page.locator('[data-f="pair:start"]').evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgba(255, 255, 255, 0.16)");
   await context.close();
 });
