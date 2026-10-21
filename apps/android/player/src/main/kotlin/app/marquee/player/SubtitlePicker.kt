@@ -87,6 +87,9 @@ private val SHEET_FILL = Color(0xF01E1E20)
 /** The search field's fill, the segmented track's grey. */
 private val FIELD_FILL = Color(0x3D767680)
 
+/** An inset group inside a sheet, as the iPhone draws one ("#2C2C2E inside a sheet", design/DECISION.md). */
+private val SHEET_GROUP = Color(0xFF2C2C2E)
+
 const val SEARCH_LANGUAGES = "Search languages"
 
 /** A language's flag (circle-flags, never emoji); with none, a neutral round mark with its two letters. */
@@ -388,7 +391,7 @@ private fun PhoneRow(
         Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(Marquee.colors.surface)
+            .background(SHEET_GROUP)
             .drawBehind {
                 if (index > 0) drawLine(line, Offset(16.dp.toPx(), 0f), Offset(size.width, 0f), 1f)
             },
