@@ -109,12 +109,16 @@ fn window_of(s: &ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Opt
     matches!(room, Room::Window { .. }).then_some(room)
 }
 
-/// The release is a season pack (or names several episodes) and the target
-/// one episode of it.
+/// The row lists a whole pack's size for one episode of it: the release is
+/// a season pack, several episodes or a complete pack, and the addon named
+/// no file (a file name or `videoSize` is the file the row plays, whatever
+/// its title says, review r2 B P2-1).
 fn pack(s: &ParsedStream, input: &RankInput<'_>) -> bool {
     let r = &s.release;
     let episode = input.target.season.is_some() || input.target.episode.is_some();
     episode
+        && !s.size_is_file
+        && s.filename.is_none()
         && (r.complete || r.episodes.len() >= 2 || (r.episodes.is_empty() && !r.seasons.is_empty()))
 }
 
@@ -969,6 +973,8 @@ fn line(
             budget_bytes: budget,
         };
     }
+    // A pack's episode, as its buffer line says.
+    let size = file_size(s, input).or(size);
     if key.start == 3 {
         return ReasonLine::Quick {
             seeders: s.seeders,

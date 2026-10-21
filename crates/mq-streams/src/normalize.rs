@@ -42,6 +42,7 @@ pub fn normalize(
         index,
         source,
         size_bytes: hints.video_size.or(facts.size_bytes),
+        size_is_file: hints.video_size.is_some(),
         seeders: hints.seeders.or(facts.seeders),
         cached,
         service,

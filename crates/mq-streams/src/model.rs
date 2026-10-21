@@ -290,6 +290,10 @@ pub struct ParsedStream {
     pub source: Source,
     pub release: ParsedRelease,
     pub size_bytes: Option<u64>,
+    /// `size_bytes` is the played file's (`behaviorHints.videoSize`), never
+    /// a pack's to share among its episodes.
+    #[serde(skip)]
+    pub size_is_file: bool,
     pub seeders: Option<u32>,
     pub cached: Option<bool>,
     pub service: Option<String>,

@@ -1280,6 +1280,70 @@ fn a_season_pack_row_is_judged_by_the_episode_it_plays() {
     let unknown = case(3 << 29, None).rank(pack());
     assert_eq!(unknown.rows.len(), 1, "{:?}", unknown.hidden);
     assert_ne!(kind(&unknown.rows[0].line), "buffer");
+    // A smaller pack (4 GiB) that plays whole: its list line says the
+    // episode's size too, as its buffer line would (review r2 B P3-3).
+    let small = vec![seeded(2, "Show.S01.1080p.WEB.x264-GRP", 300, 4.0)];
+    let line = &case(8 << 30, Some(10)).rank(small).rows[0].line;
+    assert!(
+        matches!(line, ReasonLine::Quick { size_bytes: Some(b), .. } if *b == (4 << 30) / 10),
+        "{line:?}"
+    );
+}
+
+/// Review r2 B P2-1: a Torrentio row for one episode of a pack names its
+/// file and gives the file's size (`videoSize`) under a "COMPLETE" title;
+/// that size is never shared among the season's episodes, whether the row
+/// gives both, the size alone or the file name alone. Where the 1.2 GiB
+/// episode cannot play it is hidden; in a window it says 1.2 GiB.
+#[test]
+fn an_episode_row_under_a_pack_title_keeps_its_files_size() {
+    const EPISODE: u64 = 1_288_490_188;
+    let file = "Show.S01E03.1080p.WEB-GRP.mkv";
+    let rows = [
+        json!({ "filename": file, "videoSize": EPISODE }),
+        json!({ "videoSize": EPISODE }),
+        json!({ "filename": file }),
+    ];
+    let case = |free: u64| Case {
+        target: Target {
+            title: "Show".into(),
+            year: None,
+            season: Some(1),
+            episode: Some(3),
+        },
+        conditions: Conditions {
+            runtime_s: Some(2700),
+            episodes_in_season: Some(10),
+            free_bytes: Some(free),
+            window: true,
+            ..engine().clone()
+        },
+        ..Case::stick()
+    };
+    const RESERVE: u64 = 512 << 20;
+    for hints in rows {
+        let row = || {
+            vec![json!({ "name": "Torrentio\n1080p",
+                         "title": format!("Show.S01.COMPLETE.1080p.WEB-GRP\n{file}\n👤 300 💾 1.2 GB"),
+                         "infoHash": "e".repeat(40), "fileIdx": 2, "behaviorHints": hints })]
+        };
+        // 130 MiB over the reserve: a tenth of the episode would fit whole;
+        // the episode itself has no room even for a window.
+        let short = case(RESERVE + (130 << 20)).rank(row());
+        assert_eq!(
+            hidden(&short, HideReason::NoSpace),
+            1,
+            "{hints}: {:?}",
+            short.rows
+        );
+        // 400 MiB over: a window, with the file's size.
+        let windowed = case(RESERVE + (400 << 20)).rank(row());
+        let line = &windowed.rows[0].line;
+        assert!(
+            matches!(line, ReasonLine::Buffer { size_bytes: Some(b), .. } if *b == EPISODE),
+            "{hints}: {line:?}"
+        );
+    }
 }
 
 /// Phase 3 tests g and h: under the default limit a windowed row passes
