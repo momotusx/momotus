@@ -138,6 +138,7 @@ Font stack `-apple-system, BlinkMacSystemFont, SF Pro, Helvetica Neue, Helvetica
 | Cast name / role | 12 / 400 / 15 | 92 / 64 percent |
 | Info table term / value | 12 / 400 / 16 | 92 / 64 percent |
 | Top 10 ordinal | 40 / 700 / 49 | 100 percent |
+| Explainability line ("#1 Movie on Apple TV", "Another Season Is Coming"; web r1, `span.explainability-line`) | 13 / 600 / 16, between the synopsis and the buttons: synopsis, 9 px, this line, 16 px, the 40 px button row | 92 percent |
 | MORE | 11 / 600 / 14 | on a hero: a pill, padding 0 6, radius 8, white on 64 percent white; in body text (About): key color text |
 | Footer links | 11 / 400 | 92 percent; copyright 64 percent |
 
