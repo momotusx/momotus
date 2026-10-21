@@ -211,8 +211,10 @@ struct TitleDetails: Decodable, Hashable, Sendable {
     let ratings: Ratings?
     /// The title's IMDb page, where its IMDb score links (not on TV).
     let imdbUrl: String?
-    /// Who the scores come from ("IMDb and Rotten Tomatoes via MDBList"),
-    /// a "Ratings from" row beside "Details from"; nil when MDBList gave none.
+    /// Who the scores come from, each source named for what it gave ("IMDb
+    /// from Cinemeta, Rotten Tomatoes from the Rotten Tomatoes addon"), a
+    /// "Ratings from" row beside "Details from"; nil when MDBList and the
+    /// Rotten Tomatoes addon gave nothing.
     let ratingsFrom: String?
     let source: String
     /// Trailers the metadata names (YouTube), first is the main one.
