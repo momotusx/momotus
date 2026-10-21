@@ -1,0 +1,11 @@
+# Kept on purpose (design/gate.ts). Each entry says why; a phase that adds one gets it reviewed.
+# Generated from design/tokens.json: the token names themselves.
+apps/web/src/theme/tokens.css
+apps/android/design/src/main/kotlin/app/marquee/design/Tokens.kt
+apps/apple/Marquee/Theme/Theme.generated.swift
+# tvOS keeps its v2 focus ring and its tvOS-only code (D9); rg cannot skip #if os(tvOS) blocks.
+apps/apple/Marquee/Theme/Components.swift :: private static var color: Color { Theme.Palette.accent }
+apps/apple/Marquee/Settings/FindAddonsScreen.swift :: .background(Capsule().fill(lit ? AnyShapeStyle(Theme.Palette.primary) : AnyShapeStyle(Theme.controlFill)))
+apps/apple/Marquee/Settings/FindAddonsScreen.swift :: .overlay { if !lit { Capsule().strokeBorder(Theme.Palette.control, lineWidth: edgeWidth) } }
+# The gate's own patterns and the web focus fallback that names the accent on TV.
+apps/web/src/theme/app.css :: [data-form="tv"], [data-form="tv"] [data-scheme="dark"] { --key: var(--accent); }

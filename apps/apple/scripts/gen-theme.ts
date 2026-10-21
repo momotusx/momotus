@@ -1,6 +1,6 @@
 // Generates Marquee/Theme/Theme.generated.swift from design/tokens.json.
-// Run: bun apps/apple/scripts/gen-theme.ts
-import { readFileSync, writeFileSync } from "node:fs";
+// Run: bun apps/apple/scripts/gen-theme.ts; with --check it writes nothing and exits 1 when the file is stale.
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const apple = join(import.meta.dir, "..");
@@ -117,5 +117,10 @@ ${lets(tokens.tracking)}
 `;
 
 const out = join(apple, "Marquee/Theme/Theme.generated.swift");
+if (process.argv.includes("--check")) {
+  const fresh = existsSync(out) && readFileSync(out, "utf8") === swift;
+  console.log(fresh ? `${out} matches design/tokens.json` : `${out} is stale: run bun apps/apple/scripts/gen-theme.ts`);
+  process.exit(fresh ? 0 : 1);
+}
 writeFileSync(out, swift);
 console.log(`wrote ${out}`);
