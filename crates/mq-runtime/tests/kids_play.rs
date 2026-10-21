@@ -776,6 +776,16 @@ async fn a_resume_counts_its_own_folder_in_the_room() {
     })
     .await;
     let own = folder_bytes(&s.leech_dir().join(&s.info_hash));
+    // Piece 6 (6 MiB in, past the head's pinned window) left with the trim.
+    let have = |p: u32| {
+        let leecher = s.leecher.clone();
+        async move {
+            mq_engine::test_hooks::piece_state(&leecher, t, p)
+                .await
+                .contains("Some((true,")
+        }
+    };
+    assert!(!have(6).await, "the trim took piece 6");
     // Free space short of the floor plus 64 MiB by all but 4 MiB of what
     // the torrent holds.
     let floor = mq_engine::window_plan(
@@ -803,7 +813,7 @@ async fn a_resume_counts_its_own_folder_in_the_room() {
     // Before the player's read: the head read was a probe, so nothing past
     // the head's pinned window was wanted again at byte 0 (review P2-2).
     tokio::time::sleep(Duration::from_secs(2)).await;
-    assert_eq!(s.leecher.stats(t).await.unwrap().refetched_bytes, 0);
+    assert!(!have(6).await, "the head's windows were fetched again");
     assert!(read_range(&url, at, 8 * MIB).await == s.movie[at as usize..(at + 8 * MIB) as usize]);
     assert_eq!(s.leecher.stats(t).await.unwrap().refetched_bytes, 0);
 }
