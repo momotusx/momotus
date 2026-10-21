@@ -298,16 +298,38 @@ async fn timed_read(http: &HttpClient, url: &str, offset: u64, want: u64) -> Val
 /// trackers on, `wait_ms` after the start, the trackers warmed from the
 /// start with `warm` (a title's page opened first). Per hash its count; per
 /// tracker the stages it reached and the one the budget cut.
-pub async fn scrape(hashes: &[String], wait_ms: u64, warm: bool) -> Result<Value, String> {
+pub async fn scrape(
+    hashes: &[String],
+    wait_ms: u64,
+    warm: bool,
+    sources: Option<&std::path::Path>,
+) -> Result<Value, String> {
+    let mut asked: Vec<(String, Vec<String>)> =
+        hashes.iter().map(|h| (h.clone(), Vec::new())).collect();
+    if let Some(file) = sources {
+        let body = std::fs::read(file).map_err(|e| e.to_string())?;
+        let answer = mq_protocol::decode_streams(&body).map_err(|e| e.to_string())?;
+        for wire in &answer.streams {
+            if let mq_protocol::Source::Torrent {
+                info_hash,
+                trackers,
+                ..
+            } = wire.source()
+                && !asked.iter().any(|(h, _)| *h == info_hash)
+            {
+                asked.push((info_hash, trackers));
+            }
+        }
+    }
     let dir = std::env::temp_dir().join(format!("mq-scrape-{}", std::process::id()));
-    let result = scrape_in(&dir, hashes, wait_ms, warm).await;
+    let result = scrape_in(&dir, &asked, wait_ms, warm).await;
     let _ = std::fs::remove_dir_all(&dir);
     result
 }
 
 async fn scrape_in(
     dir: &std::path::Path,
-    hashes: &[String],
+    hashes: &[(String, Vec<String>)],
     wait_ms: u64,
     warm: bool,
 ) -> Result<Value, String> {
@@ -324,7 +346,10 @@ async fn scrape_in(
         tokio::spawn(async move { engine.warm_trackers().await });
     }
     tokio::time::sleep(Duration::from_millis(wait_ms)).await;
-    let asked: Vec<(&str, &[String])> = hashes.iter().map(|h| (h.as_str(), &[][..])).collect();
+    let asked: Vec<(&str, &[String])> = hashes
+        .iter()
+        .map(|(h, own)| (h.as_str(), own.as_slice()))
+        .collect();
     let at = Instant::now();
     let counts = engine.scrape(&asked).await;
     let scrape_ms = ms(at);
@@ -353,7 +378,7 @@ async fn scrape_in(
         "warm": warm,
         "scrape_ms": scrape_ms,
         "answered": counts.iter().filter(|c| c.is_some()).count(),
-        "counts": hashes.iter().zip(&counts).map(|(h, c)| json!({
+        "counts": hashes.iter().map(|(h, _)| h).zip(&counts).map(|(h, c)| json!({
             "hash": h, "seeders": c.map(|c| c.seeders), "leechers": c.map(|c| c.leechers),
         })).collect::<Vec<_>>(),
         "trackers": trackers,

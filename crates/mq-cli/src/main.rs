@@ -196,6 +196,10 @@ enum Command {
         /// Warm the default trackers from the start (a title's page opened).
         #[arg(long)]
         warm: bool,
+        /// An addon's stream answer (JSON): its swarms are asked, each with
+        /// its stream's own trackers, as Versions asks them.
+        #[arg(long)]
+        sources: Option<PathBuf>,
     },
     /// Probe an http(s) stream, play it in mpv and report time to first frame.
     PlayUrl {
@@ -316,9 +320,10 @@ async fn main() {
         hashes,
         wait_ms,
         warm,
+        sources,
     } = &cli.command
     {
-        match magnet::scrape(hashes, *wait_ms, *warm).await {
+        match magnet::scrape(hashes, *wait_ms, *warm, sources.as_deref()).await {
             Ok(run) => emit(run),
             Err(e) => fail(&e),
         }
