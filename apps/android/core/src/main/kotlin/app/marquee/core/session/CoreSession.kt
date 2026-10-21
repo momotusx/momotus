@@ -17,6 +17,7 @@ import app.marquee.core.ffi.CoreListener
 import app.marquee.core.ffi.MarqueeCore
 import app.marquee.core.model.DebridRecord
 import app.marquee.core.model.DebridTombstone
+import app.marquee.core.model.SignInSnapshot
 import app.marquee.core.model.TraktStatus
 import app.marquee.core.secrets.DebridCore
 import app.marquee.core.secrets.DeviceId
@@ -37,6 +38,7 @@ import app.marquee.core.views.PlaybackView
 import app.marquee.core.views.ProfilesView
 import app.marquee.core.views.SearchView
 import app.marquee.core.views.SettingsView
+import app.marquee.core.views.SignInView
 import app.marquee.core.views.TitleView
 import app.marquee.core.views.TraktLoginView
 import app.marquee.core.views.TraktView
@@ -264,7 +266,16 @@ class CoreSession(
     fun pairing(
         server: String,
         name: String,
-    ) = PairingView(client, scope, server, name).also { it.open() }
+        form: String? = null,
+    ) = PairingView(client, scope, server, name, form).also { it.open() }
+
+    /** A brokered sign-in, or Apple's revoke with [revoke]; every phase reaches [onPhase] as it arrives. */
+    fun signIn(
+        server: String,
+        provider: String,
+        revoke: Boolean = false,
+        onPhase: (SignInSnapshot) -> Unit,
+    ) = SignInView(client, scope, server, provider, revoke, onPhase).also { it.open() }
 
     /**
      * Ranked stream choices for one video. `title` is the movie or series name, never an episode

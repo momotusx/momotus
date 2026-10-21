@@ -7,9 +7,12 @@ import app.marquee.core.SyncCopy
 import app.marquee.core.SyncRules
 import app.marquee.core.client.CoreError
 import app.marquee.core.client.CoreLog
+import app.marquee.core.model.Announcement
 import app.marquee.core.model.Devices
 import app.marquee.core.model.ForkPreview
+import app.marquee.core.model.IdentityLink
 import app.marquee.core.model.LostPreview
+import app.marquee.core.model.ScheduledDeletion
 import app.marquee.core.model.SyncRecord
 import app.marquee.core.model.SyncReport
 import app.marquee.core.secrets.SecretStore
@@ -229,6 +232,8 @@ open class SyncAccount(
                     "sync round: pushed ${report.pushed}, pulled ${report.pulled}, stored ${report.record != null}",
                 )
                 lastReport = report
+                // The round says how things are now: a cancel made here is in it.
+                deletionCancelled = false
                 lastSynced = System.currentTimeMillis()
                 fingerprint = report.fingerprint
                 problem = null
@@ -282,6 +287,8 @@ open class SyncAccount(
             fingerprint = null
             listFailed = false
             failed = Failed()
+            acked = emptySet()
+            deletionCancelled = false
             problem = if (durable) null else Problem("storage", SyncCopy.JOINED_SESSION_ONLY)
             joining = false
             request()
@@ -308,22 +315,85 @@ open class SyncAccount(
         server: String,
         invite: String,
         name: String,
+        ticket: String? = null,
+        move: Boolean = false,
+        form: String? = null,
     ) = scope
         .async {
-            val record = ops.createSyncAccount(server, name, invite.ifEmpty { null })
+            val record = ops.createSyncAccount(server, name, invite.ifEmpty { null }, ticket, move, form)
             join(record).join()
         }.await()
 
-    /** A new device joining with a recovery kit, in the app's scope like [createAccount]; the page then asks for a kit. */
+    /**
+     * A new device joining with a recovery kit or a passkey's PRF output, in the app's scope like
+     * [createAccount]. Returns the way in (`kit` or `passkey`); only after a kit does the page ask for a new one.
+     */
     suspend fun recover(
         server: String,
-        kit: String,
+        kit: String?,
         name: String,
-    ) = scope
-        .async {
-            val record = ops.recover(server, kit, name)
-            join(record, recoveredWithKit = true).join()
-        }.await()
+        prf: String? = null,
+        form: String? = null,
+    ): String =
+        scope
+            .async {
+                val recovered = ops.recover(server, kit, name, prf, form)
+                join(recovered.record, recoveredWithKit = recovered.via == "kit").join()
+                recovered.via
+            }.await()
+
+    /** The account's sign-in links (any profile). */
+    suspend fun identities(): List<IdentityLink> = withRecord("identities", { ops.identities(it) }) { it.record }.links
+
+    /** Links a sign-in's identity here; [move] takes one linked elsewhere (the owner profile only, D16). */
+    suspend fun linkIdentity(
+        ticket: String,
+        move: Boolean = false,
+    ) {
+        withRecord("linkIdentity", { ops.linkIdentity(it, ticket, move) }) { it.record }
+    }
+
+    /** Unlinks by link id, with Apple's revoke [receipt] for an Apple link when there is one (the owner, D16). */
+    suspend fun unlinkIdentity(
+        link: Long,
+        receipt: String? = null,
+    ) {
+        withRecord("unlinkIdentity", { ops.unlinkIdentity(it, link, receipt) }) { it.record }
+    }
+
+    /** A passkey kit from the passkey's PRF output (the owner profile only, D17); returns its id. */
+    suspend fun savePasskey(
+        prf: String,
+        label: String,
+    ): String {
+        val saved = withRecord("savePasskey", { ops.savePasskey(it, prf, label) }) { it.record }
+        runCatching { loadDevices() }
+        return saved.id
+    }
+
+    /** Cancels the scheduled deletion (any profile); [unlink] also removes the identity that asked for it. */
+    suspend fun cancelDeletion(unlink: Boolean = false) {
+        withRecord("cancelDeletion", { ops.cancelDeletion(it, unlink) }) { it.record }
+        deletionCancelled = true
+        request()
+    }
+
+    /** The account is scheduled for deletion, as the last round said, unless this device just cancelled it. */
+    val deletion: ScheduledDeletion? get() = lastReport?.deletion?.takeUnless { deletionCancelled }
+
+    private var deletionCancelled by mutableStateOf(false)
+
+    /** Announcements the user dismissed on this run: gone at once, before the next round stops reporting them. */
+    private var acked by mutableStateOf(emptySet<String>())
+
+    /** The announcements the last round reported and nobody dismissed here yet. */
+    val announcements: List<Announcement> get() = lastReport?.announcements.orEmpty().filter { it.id !in acked }
+
+    /** The user dismissed [ids]; security notices are the owner's (`notOwner` from another profile, nothing hidden). */
+    suspend fun ackAnnouncements(ids: List<String>) {
+        ops.ackAnnouncements(ids)
+        acked = acked + ids
+    }
 
     /** The device list, fresh from the sync server. */
     suspend fun loadDevices(): Devices {
@@ -477,27 +547,30 @@ open class SyncAccount(
     }
 
     /** Leaves the account; the library stays. Without [force] the core refuses while edits are unsent (`unsent`). */
-    suspend fun signOut(force: Boolean) =
-        scope
-            .async {
-                // All of it in the app's scope: Back while the core answers still forgets the account here.
-                withRecord("signOut", { ops.signOut(it, force) }) { null }
-                forget()
-                problem = null
-                leftHere = false
-                deletedHere = false
-            }.await()
+    suspend fun signOut(
+        force: Boolean,
+        removeAfter: Boolean? = null,
+    ) = scope
+        .async {
+            // All of it in the app's scope: Back while the core answers still forgets the account here. With
+            // [removeAfter] the core records D13's removal (and whether debrid goes) before the leave goes out.
+            withRecord("signOut", { ops.signOut(it, force, removeAfter = removeAfter) }) { null }
+            forget()
+            problem = null
+            leftHere = false
+            deletedHere = false
+        }.await()
 
     /**
      * Deletes the account on the sync server for every device. Once the server confirmed, this device
      * forgets it as after [signOut] (the library stays) and the page says the account was deleted, as it
      * says a sign-out (the OK line is for news from another device).
      */
-    suspend fun deleteAccount() =
+    suspend fun deleteAccount(receipt: String? = null) =
         scope
             .async {
                 // All of it in the app's scope: Back while the core answers still forgets the account here.
-                withRecord("deleteAccount", { ops.deleteAccount(it) }) { null }
+                withRecord("deleteAccount", { ops.deleteAccount(it, receipt) }) { null }
                 forget()
                 problem = null
                 leftHere = false
@@ -632,6 +705,8 @@ open class SyncAccount(
         lastSynced = null
         recovered = false
         saveRecovered(false)
+        acked = emptySet()
+        deletionCancelled = false
         dropKits()
     }
 

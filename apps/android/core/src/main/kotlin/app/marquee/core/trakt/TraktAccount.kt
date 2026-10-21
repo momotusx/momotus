@@ -190,6 +190,27 @@ class TraktAccount(
             }.await()
 
     /**
+     * D13's step 2 (plans/accounts.md): every profile on this device signs out of Trakt, its record leaves the
+     * file. The session's own profile takes the plain sign-out; the others are the owner's to end (`notOwner`
+     * from any other profile). False when a record could not be dropped (the wipe then waits for a retry).
+     */
+    suspend fun signOutEvery(profiles: List<String>): Boolean =
+        scope
+            .async {
+                line.withLock {
+                    var dropped = true
+                    for (p in profiles) {
+                        if (p == profile) ops.traktSignOut() else ops.traktSignOut(p)
+                        inMemory -= p
+                        if (!records.delete(p)) dropped = false
+                    }
+                    acked = null
+                    memoryOnly = false
+                    dropped
+                }
+            }.await()
+
+    /**
      * A profile was deleted, here or by sync (`{"profile": "gone"}`, also sent at start for one removed
      * meanwhile): its record leaves the file. The core revokes and drops its own state; a delete that
      * fails is tried again at the next start, when the core says it is gone again.

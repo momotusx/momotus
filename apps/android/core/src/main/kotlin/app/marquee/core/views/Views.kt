@@ -28,6 +28,7 @@ import app.marquee.core.model.PlaybackSnapshot
 import app.marquee.core.model.Prefs
 import app.marquee.core.model.ProfilesSnapshot
 import app.marquee.core.model.SearchSnapshot
+import app.marquee.core.model.SignInSnapshot
 import app.marquee.core.model.TitleHeader
 import app.marquee.core.model.TitleSnapshot
 import app.marquee.core.model.TitleUpdate
@@ -421,14 +422,65 @@ class PairingView(
     scope: CoroutineScope,
     server: String,
     name: String,
+    /** `phone`, `tablet` or `tv`, sealed in the roster: only a phone or tablet approves others (D6). */
+    form: String? = null,
 ) : RecordView<PairingSnapshot>(
         client,
         scope,
         "pairing",
-        JsonObject(mapOf("server" to JsonPrimitive(server), "name" to JsonPrimitive(name))),
+        JsonObject(
+            buildMap {
+                put("server", JsonPrimitive(server))
+                put("name", JsonPrimitive(name))
+                form?.let { put("form", JsonPrimitive(it)) }
+            },
+        ),
         PairingSnapshot.serializer(),
     ) {
     fun confirm() = post(command("confirm"))
 
     fun reject() = post(command("reject"))
+}
+
+/**
+ * A relay's brokered sign-in (`signIn`), or Apple's revoke (`appleRevoke`), returning to `marquee://auth`
+ * (plans/core-protocol.md "Sign-in"). Every phase reaches [onPhase] on the state thread as it arrives.
+ */
+class SignInView(
+    client: CoreClient,
+    scope: CoroutineScope,
+    server: String,
+    provider: String,
+    revoke: Boolean,
+    private val onPhase: (SignInSnapshot) -> Unit,
+) : RecordView<SignInSnapshot>(
+        client,
+        scope,
+        if (revoke) "appleRevoke" else "signIn",
+        JsonObject(
+            buildMap {
+                put("server", JsonPrimitive(server))
+                if (!revoke) put("provider", JsonPrimitive(provider))
+                put("return", JsonPrimitive(RETURN))
+            },
+        ),
+        SignInSnapshot.serializer(),
+    ) {
+    override fun applySnapshot(snapshot: SignInSnapshot) {
+        super.applySnapshot(snapshot)
+        onPhase(snapshot)
+    }
+
+    override fun applyUpdates(updates: List<SignInSnapshot>) {
+        super.applyUpdates(updates)
+        updates.lastOrNull()?.let(onPhase)
+    }
+
+    /** The redirect's fragment (after `#`), from this app's own auth session only. */
+    fun returned(fragment: String) = post(command("returned") { put("fragment", JsonPrimitive(fragment)) })
+
+    companion object {
+        /** Where the relay sends the browser back: the app's own scheme (an Auth Tab's redirect scheme). */
+        const val RETURN = "marquee://auth"
+    }
 }

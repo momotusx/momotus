@@ -9,16 +9,23 @@ import app.marquee.core.model.DefaultChoice
 import app.marquee.core.model.Devices
 import app.marquee.core.model.ForkPreview
 import app.marquee.core.model.HomeCatalog
+import app.marquee.core.model.Identities
 import app.marquee.core.model.InstalledAddon
 import app.marquee.core.model.KeystoreRecord
 import app.marquee.core.model.LanguageChoice
 import app.marquee.core.model.LearnedChoice
 import app.marquee.core.model.LostPreview
+import app.marquee.core.model.NativeStart
 import app.marquee.core.model.Network
 import app.marquee.core.model.Prefs
 import app.marquee.core.model.ProfilesSnapshot
+import app.marquee.core.model.RecordReply
+import app.marquee.core.model.Recovered
 import app.marquee.core.model.RecoveryKitResult
+import app.marquee.core.model.RelayInfo
 import app.marquee.core.model.RestoreAnswer
+import app.marquee.core.model.SavedPasskey
+import app.marquee.core.model.SignInSnapshot
 import app.marquee.core.model.StreamConditions
 import app.marquee.core.model.SyncRecord
 import app.marquee.core.model.SyncReport
@@ -320,11 +327,18 @@ class CoreOps(
             .jsonPrimitive.int
     }
 
-    /** Starts an account with this device as its first member (`name` is how other devices show it). Returns the record to store. */
+    /**
+     * Starts an account with this device as its first member (`name` is how other devices show it). On a relay
+     * with sign-in it takes a sign-in's [ticket], whose identity is linked; [move] takes an identity linked
+     * elsewhere over (Start over). [form] is sealed in the roster. Returns the record to store.
+     */
     suspend fun createSyncAccount(
         server: String,
         name: String,
         invite: String? = null,
+        ticket: String? = null,
+        move: Boolean = false,
+        form: String? = null,
     ): SyncRecord =
         client
             .request(
@@ -333,8 +347,100 @@ class CoreOps(
                     put("server", text(server))
                     put("name", text(name))
                     invite?.let { put("invite", text(it)) }
+                    ticket?.let { put("ticket", text(it)) }
+                    if (move) put("move", JsonPrimitive(true))
+                    form?.let { put("form", text(it)) }
                 },
             ).jsonObject
+
+    /** The sign-in providers [server] offers, read before any account exists. */
+    suspend fun relayInfo(server: String): RelayInfo =
+        call("relayInfo", mapOf("server" to text(server)), RelayInfo.serializer())
+
+    /** A native sheet's flow (Google through Credential Manager): give the answer's nonce to the sheet as it is. */
+    suspend fun nativeSignInStart(
+        server: String,
+        provider: String,
+    ): NativeStart =
+        call(
+            "nativeSignInStart",
+            mapOf("server" to text(server), "provider" to text(provider)),
+            NativeStart.serializer(),
+        )
+
+    /** The sheet's ID token for [flow]: `found` or `new` (a [SignInSnapshot]). */
+    suspend fun nativeSignIn(
+        flow: String,
+        idToken: String,
+    ): SignInSnapshot =
+        call("nativeSignIn", mapOf("flow" to text(flow), "idToken" to text(idToken)), SignInSnapshot.serializer())
+
+    /** The account's sign-in links; a returned record must be stored. Any profile. */
+    suspend fun identities(record: SyncRecord): Identities =
+        call("identities", mapOf("record" to record), Identities.serializer())
+
+    /** Links a sign-in's identity to this account; [move] takes one linked elsewhere. The owner profile only. */
+    suspend fun linkIdentity(
+        record: SyncRecord,
+        ticket: String,
+        move: Boolean = false,
+    ): RecordReply =
+        call(
+            "linkIdentity",
+            buildMap {
+                put("record", record)
+                put("ticket", text(ticket))
+                if (move) put("move", JsonPrimitive(true))
+            },
+            RecordReply.serializer(),
+        )
+
+    /** Unlinks by link id; an Apple link sends Apple's revoke [receipt] when there is one. The owner only. */
+    suspend fun unlinkIdentity(
+        record: SyncRecord,
+        link: Long,
+        receipt: String? = null,
+    ): RecordReply =
+        call(
+            "unlinkIdentity",
+            buildMap {
+                put("record", record)
+                put("link", JsonPrimitive(link))
+                receipt?.let { put("receipt", text(it)) }
+            },
+            RecordReply.serializer(),
+        )
+
+    /** Cancels a scheduled deletion; [unlink] also removes the identity that asked for it. Any profile. */
+    suspend fun cancelDeletion(
+        record: SyncRecord,
+        unlink: Boolean = false,
+    ): RecordReply =
+        call(
+            "cancelDeletion",
+            buildMap {
+                put("record", record)
+                if (unlink) put("unlink", JsonPrimitive(true))
+            },
+            RecordReply.serializer(),
+        )
+
+    /** The user saw these announcements; security notices are the owner's (`notOwner` otherwise). */
+    suspend fun ackAnnouncements(ids: List<String>) {
+        client.request("ackAnnouncements", mapOf("ids" to JsonArray(ids.map(::text))))
+    }
+
+    /** Appends a passkey kit from the passkey's PRF output (base64url); the owner profile only. */
+    suspend fun savePasskey(
+        record: SyncRecord,
+        prf: String,
+        label: String,
+    ): SavedPasskey =
+        call(
+            "savePasskey",
+            mapOf("record" to record, "prf" to text(prf), "label" to text(label)),
+            SavedPasskey.serializer(),
+        )
 
     /** One sync round. When the report carries a `record`, store it and call again at once (`again`). */
     suspend fun syncNow(record: SyncRecord): SyncReport =
@@ -357,14 +463,22 @@ class CoreOps(
      */
     suspend fun recover(
         server: String,
-        kit: String,
+        kit: String?,
         name: String,
-    ): SyncRecord =
-        client
-            .request("recover", mapOf("server" to text(server), "kit" to text(kit), "name" to text(name)))
-            .jsonObject
-            .getValue("record")
-            .jsonObject
+        prf: String? = null,
+        form: String? = null,
+    ): Recovered =
+        call(
+            "recover",
+            buildMap {
+                put("server", text(server))
+                kit?.let { put("kit", text(it)) }
+                prf?.let { put("prf", text(it)) }
+                put("name", text(name))
+                form?.let { put("form", text(it)) }
+            },
+            Recovered.serializer(),
+        )
 
     /** The account's members, fingerprint and epoch. A changed `record` in the reply must be stored. */
     suspend fun syncDevices(record: SyncRecord): Devices =
@@ -400,13 +514,24 @@ class CoreOps(
      * account (the way out for a device the sync server will not let leave).
      */
     suspend fun signOut(
-        record: SyncRecord,
+        record: SyncRecord?,
         force: Boolean = false,
         local: Boolean = false,
+        removeAfter: Boolean? = null,
+        wipe: Boolean = false,
+        disconnectDebrid: Boolean = false,
     ) {
         client.request(
             "signOut",
-            mapOf("record" to record, "force" to JsonPrimitive(force), "local" to JsonPrimitive(local)),
+            buildMap {
+                record?.let { put("record", it) }
+                put("force", JsonPrimitive(force))
+                put("local", JsonPrimitive(local))
+                // D13's removal: recorded before the leave goes out; `debrid` says whether the debrid accounts go too.
+                removeAfter?.let { put("removeAfter", JsonObject(mapOf("debrid" to JsonPrimitive(it)))) }
+                if (wipe) put("wipe", JsonPrimitive(true))
+                if (disconnectDebrid) put("disconnectDebrid", JsonPrimitive(true))
+            },
         )
     }
 
@@ -415,8 +540,17 @@ class CoreOps(
      * forgets it as after [signOut] (the library stays) and the caller deletes its stored record. Put behind
      * the OS re-authentication prompt.
      */
-    suspend fun deleteAccount(record: SyncRecord) {
-        client.request("deleteAccount", mapOf("record" to record))
+    suspend fun deleteAccount(
+        record: SyncRecord,
+        receipt: String? = null,
+    ) {
+        client.request(
+            "deleteAccount",
+            buildMap {
+                put("record", record)
+                receipt?.let { put("receipt", text(it)) }
+            },
+        )
     }
 
     // Trakt (plans/m7-trakt.md section 3): the record is the profile's, from the keystore; the core keeps it in
@@ -431,8 +565,8 @@ class CoreOps(
     suspend fun traktSync(): TraktReport = call("traktSync", emptyMap(), TraktReport.serializer())
 
     /** Signs this device out of Trakt for the profile (revoke best effort); the app then deletes the record. */
-    suspend fun traktSignOut() {
-        client.request("traktSignOut")
+    suspend fun traktSignOut(profile: String? = null) {
+        client.request("traktSignOut", profile?.let { mapOf("profile" to text(it)) } ?: emptyMap())
     }
 
     /**
