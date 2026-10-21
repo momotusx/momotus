@@ -5,7 +5,24 @@ import type { Announced } from "./Announced";
  * A device that joined, a passkey or a recovery kit added, or a member
  * removed, by another member than this device.
  */
-export type Announcement = { kind: Announced, id: string, 
+export type Announcement = { 
+/**
+ * What `ackAnnouncements` takes: the roster entry's seq and the
+ * member, `<seq>.<member>`.
+ */
+id: string, kind: Announced, 
+/**
+ * The device or kit it is about.
+ */
+member: string, 
+/**
+ * A recovery kit or passkey, else a device (it words `removed`).
+ */
+kit: boolean, 
+/**
+ * A passkey kit.
+ */
+passkey: boolean, 
 /**
  * The member that vouched for it, or removed it (itself when a device
  * left).

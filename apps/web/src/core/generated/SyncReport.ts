@@ -76,7 +76,8 @@ again: boolean,
  */
 deletion: ScheduledDeletion | null, 
 /**
- * Roster changes another member made since this device joined, each
- * reported once (3.2): show each until OK.
+ * Roster changes another member made since this device joined (3.2),
+ * reported by every round until `ackAnnouncements` names them: show
+ * each until OK, then acknowledge it.
  */
 announcements: Array<Announcement>, };
