@@ -228,14 +228,15 @@ enum Request {
         record: Box<SyncConfig>,
         qr: String,
     },
-    /// Makes a recovery kit and adds it to the roster. Replies `{kit,
-    /// record}`; show the kit once.
+    /// Makes a recovery kit and adds it to the roster, on the owner profile
+    /// only (D17). Replies `{kit, id, record}`; show the kit once.
     CreateRecoveryKit {
         id: u64,
         record: Box<SyncConfig>,
     },
     /// Saves a passkey as a way into the account: `prf` is its 32-byte PRF
-    /// output (base64url), `label` the row's words. Replies `{kit, record}`.
+    /// output (base64url), `label` the row's words; the owner only (D17).
+    /// Replies `{id, record}`.
     SavePasskey {
         id: u64,
         record: Box<SyncConfig>,
@@ -243,8 +244,7 @@ enum Request {
         label: String,
     },
     /// Joins the account a recovery kit or a passkey (`prf`, base64url)
-    /// opens as a new device; the reply is its keystore record, with `via`
-    /// (`kit` or `passkey`) beside the record's own fields.
+    /// opens as a new device: `{record, via}` (`kit` or `passkey`).
     Recover {
         id: u64,
         server: String,
@@ -283,16 +283,26 @@ enum Request {
         keep: Vec<Id>,
     },
     /// Sends what is queued, leaves the account and forgets sync state; the
-    /// platform then deletes the keystore record.
+    /// platform then deletes the keystore record. Without a `record` (a
+    /// device that already forgot its account) only `wipe` runs.
     SignOut {
         id: u64,
-        record: Box<SyncConfig>,
+        #[serde(default)]
+        record: Option<Box<SyncConfig>>,
         #[serde(default)]
         force: bool,
         /// On this device only: no round, nothing sent; for a device the relay
         /// will not let leave.
         #[serde(default)]
         local: bool,
+        /// Then removes this device's profiles and library (D13): the device
+        /// is as new, and a profile-gone event names each profile it had.
+        #[serde(default)]
+        wipe: bool,
+        /// Then drops every debrid connection: the answer's `disconnected`
+        /// lists each `{service, generation}` for the app's tombstones.
+        #[serde(default, rename = "disconnectDebrid")]
+        disconnect_debrid: bool,
     },
     /// Deletes the account on the sync server for every device; replies `{}`
     /// once the relay confirmed. This device forgets the account as after a
@@ -960,6 +970,10 @@ impl Session {
                 });
             }
             Request::CreateRecoveryKit { id, record } => {
+                // A kit is a portable copy of the account key (D17).
+                if let Err(refused) = owner_only(&core) {
+                    return send_answer(&self.out, json!(id), Err(refused));
+                }
                 self.spawn(id, async move {
                     let _gate = core.sync_gate().await;
                     let (library, http, clock) = (core.library(), core.http(), core.clock());
@@ -974,7 +988,8 @@ impl Session {
                 prf,
                 label,
             } => {
-                let prf = match self.prf(&prf) {
+                let checked = owner_only(&core).and_then(|()| self.prf(&prf));
+                let prf = match checked {
                     Ok(prf) => prf,
                     Err(refused) => return send_answer(&self.out, json!(id), Err(refused)),
                 };
@@ -983,7 +998,7 @@ impl Session {
                     let (library, http, clock) = (core.library(), core.http(), core.clock());
                     mq_sync::pair::save_passkey(library, http, &record, clock, &prf, &label)
                         .await
-                        .map(|(kit, record)| json!({ "kit": kit, "record": record }))
+                        .map(|(id, record)| json!({ "id": id, "record": record }))
                 });
             }
             Request::Recover {
@@ -1018,11 +1033,8 @@ impl Session {
                     if joined.is_ok() {
                         core.joined_sync_account();
                     }
-                    // The record as before, with the way in beside its fields.
                     let (record, via) = joined?;
-                    let mut answer = to_value(&record).map_err(Failure::from)?;
-                    answer["via"] = to_value(&via).map_err(Failure::from)?;
-                    Ok::<_, Failure>(answer)
+                    Ok::<_, Failure>(json!({ "record": record, "via": via }))
                 });
             }
             Request::SyncDevices { id, record } => {
@@ -1064,16 +1076,41 @@ impl Session {
                 record,
                 force,
                 local,
+                wipe,
+                disconnect_debrid,
             } => {
+                let (shared, out) = (self.shared.clone(), self.out.clone());
                 self.spawn(id, async move {
                     let _gate = core.sync_gate().await;
-                    if local {
-                        return mq_sync::leave_here(core.library(), &record).map(|()| json!({}));
-                    }
                     let (library, http, clock) = (core.library(), core.http(), core.clock());
-                    mq_sync::sign_out(library, http, &record, clock, force)
-                        .await
-                        .map(|()| json!({}))
+                    match record {
+                        Some(record) if local => mq_sync::leave_here(library, &record)?,
+                        Some(record) => mq_sync::sign_out(library, http, &record, clock, force).await?,
+                        // Nothing to leave: only a device that holds no account.
+                        None if wipe && !library.in_sync_account().unwrap_or(true) => {}
+                        None => return Err(Failure::from(mq_sync::SyncError::WrongRecord)),
+                    }
+                    let mut answer = json!({});
+                    if disconnect_debrid {
+                        let dropped = core.disconnect_all_debrid();
+                        answer["disconnected"] = dropped
+                            .into_iter()
+                            .map(|(service, generation)| json!({ "service": service, "generation": generation }))
+                            .collect();
+                    }
+                    if wipe {
+                        let gone = core.wipe().map_err(|e| Failure::from(e.to_string()))?;
+                        // The session goes on as the device's new owner, its
+                        // views closed; then each profile that was here is gone.
+                        let owner = core.for_profile(mq_library::OWNER);
+                        owner.make_active().map_err(|e| Failure::from(e.to_string()))?;
+                        let closed = lock(&shared).transition(owner, false);
+                        drop(closed);
+                        for profile in gone {
+                            let _ = out.send(&json!({ "profile": "gone", "id": profile }));
+                        }
+                    }
+                    Ok::<_, Failure>(answer)
                 });
             }
             Request::DeleteAccount {

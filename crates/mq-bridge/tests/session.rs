@@ -394,12 +394,21 @@ async fn sync_account_then_two_devices_share_preferences() {
     let cancelled = next(&mut rx_a).await;
     assert_eq!(cancelled["result"]["keys"]["epoch"], 1, "{cancelled}");
 
-    // A kit's reply names its own entry in the device list.
+    // Only the owner makes a kit (D17); its reply names its own entry in
+    // the device list.
     a.handle_text(
         &json!({"id": 16, "op": "createRecoveryKit", "record": cancelled["result"]}).to_string(),
     )
     .await;
-    let made = next(&mut rx_a).await;
+    assert_eq!(next(&mut rx_a).await["code"], "notOwner");
+    let (tx_k, mut rx_k) = Output::channel();
+    let mut owner_a = Session::new(Core::temporary("default").unwrap(), tx_k);
+    owner_a
+        .handle_text(
+            &json!({"id": 1, "op": "createRecoveryKit", "record": cancelled["result"]}).to_string(),
+        )
+        .await;
+    let made = next(&mut rx_k).await;
     let kit_id = made["result"]["id"].clone();
     a.handle_text(
         &json!({"id": 17, "op": "syncDevices", "record": made["result"]["record"]}).to_string(),
@@ -829,13 +838,16 @@ async fn joining_a_sync_account_ends_the_defaults_step() {
     .await
     .expect("the open addons view follows the join");
 
-    // Recovered with a kit.
-    a.handle_text(
-        &json!({"id": 3, "op": "createRecoveryKit", "record": approved["result"]["record"]})
-            .to_string(),
-    )
-    .await;
-    let made = next(&mut rx_a).await;
+    // Recovered with a kit, which the owner makes (D17).
+    let (tx_k, mut rx_k) = Output::channel();
+    let mut owner_a = Session::new(Core::temporary("default").unwrap(), tx_k);
+    owner_a
+        .handle_text(
+            &json!({"id": 3, "op": "createRecoveryKit", "record": approved["result"]["record"]})
+                .to_string(),
+        )
+        .await;
+    let made = next(&mut rx_k).await;
     let core_c = Core::temporary("p").unwrap();
     assert!(core_c.addons_fresh());
     let (tx_c, mut rx_c) = Output::channel();
@@ -939,7 +951,8 @@ async fn passkeys_over_the_protocol() {
         s.handle_text(&request.to_string()).await;
         reply_to(rx, id).await
     }
-    let prf = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([5u8; 32]);
+    let b64 = |bytes: [u8; 32]| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes);
+    let prf = b64([5u8; 32]);
     let (mut phone, mut phone_rx) = session(true);
     let made = ask(
         &mut phone,
@@ -948,36 +961,125 @@ async fn passkeys_over_the_protocol() {
     )
     .await;
     let record = made["result"].clone();
+    // Sent padded, as a platform encoder may: taken.
     let saved = ask(
         &mut phone,
         &mut phone_rx,
-        json!({"id": 2, "op": "savePasskey", "record": record, "prf": prf, "label": "Passkey, saved on the phone"}),
+        json!({"id": 2, "op": "savePasskey", "record": record, "prf": format!("{prf}="), "label": "Passkey, saved on the phone"}),
     )
     .await;
-    assert!(saved["result"]["kit"].is_string(), "{saved}");
+    let kit_id = saved["result"]["id"].clone();
+    assert!(
+        kit_id.is_string() && saved["result"]["kit"].is_null(),
+        "{saved}"
+    );
     let record = saved["result"]["record"].clone();
-    let (mut laptop, mut laptop_rx) = session(true);
-    let back = ask(
-        &mut laptop,
-        &mut laptop_rx,
-        json!({"id": 1, "op": "recover", "server": server, "prf": prf, "name": "Laptop", "form": "computer"}),
+    // The save probe (3.1): this passkey already opens the account.
+    let here = ask(
+        &mut phone,
+        &mut phone_rx,
+        json!({"id": 3, "op": "savePasskey", "record": record, "prf": prf, "label": "x"}),
     )
     .await;
-    assert_eq!(back["result"]["via"], "passkey", "{back}");
-    assert!(back["result"]["deviceToken"].is_string());
+    assert_eq!(here["code"], "kitHere", "{here}");
+    for (name, form) in [("Laptop", "computer"), ("Desk", "computer")] {
+        let (mut device, mut rx) = session(true);
+        let back = ask(
+            &mut device,
+            &mut rx,
+            json!({"id": 1, "op": "recover", "server": server, "prf": prf, "name": name, "form": form}),
+        )
+        .await;
+        assert_eq!(back["result"]["via"], "passkey", "{back}");
+        assert!(
+            back["result"]["record"]["deviceToken"].is_string(),
+            "{back}"
+        );
+        assert!(
+            back["result"]["record"]["via"].is_null(),
+            "beside the record, never in it"
+        );
+    }
     let devices = ask(
         &mut phone,
         &mut phone_rx,
-        json!({"id": 3, "op": "syncDevices", "record": record}),
+        json!({"id": 4, "op": "syncDevices", "record": record}),
     )
     .await;
+    let account = devices["result"]["account"].as_str().unwrap().to_owned();
+    assert_eq!(
+        account.len(),
+        22,
+        "16 bytes as base64url, the passkey's user.id"
+    );
     let members = devices["result"]["members"].as_array().unwrap();
     let kit = members.iter().find(|m| m["kit"] == true).unwrap();
     assert_eq!(kit["passkey"], true, "{kit}");
     assert_eq!(kit["name"], "Passkey, saved on the phone");
-    let joined = members.iter().find(|m| m["viaPasskey"] == true).unwrap();
-    assert_eq!(joined["form"], "computer", "{joined}");
+    let laptop = members.iter().find(|m| m["name"] == "Laptop").unwrap();
+    let desk = members.iter().find(|m| m["name"] == "Desk").unwrap();
+    assert_eq!(
+        (laptop["form"].as_str(), laptop["viaPasskey"].as_bool()),
+        (Some("computer"), Some(true))
+    );
+    let lost = ask(
+        &mut phone,
+        &mut phone_rx,
+        json!({"id": 5, "op": "lostPreview", "record": record, "lost": laptop["id"]}),
+    )
+    .await;
+    assert_eq!(
+        lost["result"]["passkeyJoined"],
+        json!([desk["id"]]),
+        "{lost}"
+    );
 
+    // Kits are the owner's to make (D17).
+    let (mut kid, mut kid_rx) = {
+        let (tx, rx) = Output::channel();
+        (Session::new(Core::temporary("p").unwrap(), tx), rx)
+    };
+    for request in [
+        json!({"id": 1, "op": "createRecoveryKit", "record": record}),
+        json!({"id": 2, "op": "savePasskey", "record": record, "prf": b64([6; 32]), "label": "x"}),
+    ] {
+        let refused = ask(&mut kid, &mut kid_rx, request).await;
+        assert_eq!(refused["code"], "notOwner", "{refused}");
+    }
+
+    // Removed, it is never let in again; and at the cap, no ninth kit.
+    let removed = ask(
+        &mut phone,
+        &mut phone_rx,
+        json!({"id": 6, "op": "removeDevice", "record": record, "device": kit_id}),
+    )
+    .await;
+    let mut record = removed["result"].clone();
+    let dropped = ask(
+        &mut phone,
+        &mut phone_rx,
+        json!({"id": 7, "op": "savePasskey", "record": record, "prf": prf, "label": "x"}),
+    )
+    .await;
+    assert_eq!(dropped["code"], "kitDropped", "{dropped}");
+    for n in 0..8u8 {
+        let saved = ask(
+            &mut phone,
+            &mut phone_rx,
+            json!({"id": 10 + u64::from(n), "op": "savePasskey", "record": record, "prf": b64([20 + n; 32]), "label": "x"}),
+        )
+        .await;
+        record = saved["result"]["record"].clone();
+    }
+    let full = ask(
+        &mut phone,
+        &mut phone_rx,
+        json!({"id": 30, "op": "savePasskey", "record": record, "prf": b64([40; 32]), "label": "x"}),
+    )
+    .await;
+    assert_eq!(full["code"], "tooManyKits", "{full}");
+
+    let (mut laptop, mut laptop_rx) = session(true);
     let (mut far, mut far_rx) = session(false);
     for request in [
         json!({"id": 1, "op": "savePasskey", "record": record, "prf": prf, "label": "x"}),

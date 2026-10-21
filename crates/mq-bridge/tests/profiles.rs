@@ -621,3 +621,69 @@ async fn a_new_session_names_every_profile_removed_before_it() {
     removed.sort();
     assert_eq!(named, removed);
 }
+
+/// Sign out with "Remove your profiles and library from this device" (D13,
+/// plans/accounts.md 3.3): after the leave every table goes, each profile
+/// that was here is named gone (the app drops its keystore entries), the
+/// debrid connections go when asked, and the device is as new: its owner
+/// alone, no account, the recommended addons first.
+#[tokio::test]
+async fn a_sign_out_with_wipe_leaves_the_device_as_new() {
+    let dir = std::env::temp_dir().join(format!("mq-bridge-wipe-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let app = mq_sync_server::router(&dir.join("relay.sqlite"), Default::default()).unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+
+    let core = Core::temporary("default").unwrap();
+    // Debrid calls go nowhere: only the connection's record matters here.
+    core.set_debrid_origin("http://127.0.0.1:9");
+    let mut c = Client::new(core.clone());
+    let record = c
+        .ok(json!({"op": "createSyncAccount", "server": server, "name": "Phone"}))
+        .await;
+    let kid = c.create("Kid").await;
+    let generation = c
+        .ok(json!({"op": "setDebridKey", "service": "realdebrid", "key": "k"}))
+        .await["generation"]
+        .clone();
+    let synced = c.ok(json!({"op": "syncNow", "record": record})).await;
+    let record = match &synced["record"] {
+        Value::Null => record,
+        stored => stored.clone(),
+    };
+    assert!(core.library().in_sync_account().unwrap());
+    // A device that still syncs leaves with its record first.
+    assert_eq!(
+        c.code(json!({"op": "signOut", "wipe": true})).await,
+        "wrongRecord"
+    );
+    let answer = c
+        .ok(json!({"op": "signOut", "record": record, "wipe": true, "disconnectDebrid": true}))
+        .await;
+    assert_eq!(
+        answer["disconnected"][0]["generation"], generation,
+        "{answer}"
+    );
+    for id in ["default".to_owned(), kid] {
+        c.push_where(|m| m["profile"] == "gone" && m["id"] == json!(id))
+            .await;
+    }
+    let left: Vec<String> = core
+        .library()
+        .profiles()
+        .unwrap()
+        .into_iter()
+        .map(|p| p.id)
+        .collect();
+    assert_eq!(left, ["default"]);
+    assert!(!core.library().in_sync_account().unwrap());
+    assert!(
+        core.addons_fresh(),
+        "the recommended addons come first again"
+    );
+    // Without an account a wipe needs no record.
+    c.ok(json!({"op": "signOut", "wipe": true})).await;
+    let _ = std::fs::remove_dir_all(&dir);
+}
