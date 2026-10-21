@@ -119,7 +119,8 @@ private struct JoinedSync: View {
             SignedInWith()
             devices
             links
-            LeaveSync()
+            // A TV's Sign out always removes the library: the owner's only (D13).
+            if !isTV || SyncRules.mayDeleteAccount(profiles.snapshot) { LeaveSync() }
             if SyncRules.mayDeleteAccount(profiles.snapshot) { DeleteSync() }
         }
         .task { await load() }
@@ -466,18 +467,14 @@ private struct LeaveSync: View {
                 .foregroundStyle(Theme.Palette.muted)
             if owner {
                 #if !os(tvOS)
-                Toggle(AccountWords.shared.removeLibraryAsk, isOn: $removeLibrary)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
-                    .foregroundStyle(Theme.Palette.text)
+                switchRow(AccountWords.shared.removeLibraryAsk, on: $removeLibrary)
                 #else
                 Text(AccountWords.shared.removeLibraryAsk)
                     .font(.text(Theme.type.callout, relativeTo: .callout))
                     .foregroundStyle(Theme.Palette.text)
                 #endif
                 if removes {
-                    Toggle(AccountWords.shared.removeLibraryDebrid, isOn: $disconnectDebrid)
-                        .font(.text(Theme.type.callout, relativeTo: .callout))
-                        .foregroundStyle(Theme.Palette.text)
+                    switchRow(AccountWords.shared.removeLibraryDebrid, on: $disconnectDebrid)
                 }
             }
             if let error { Said(tone: .bad, text: error) }
@@ -528,6 +525,29 @@ private struct LeaveSync: View {
     /// The removal is the owner profile's only (D13); a TV always removes.
     private var owner: Bool { SyncRules.mayDeleteAccount(profiles.snapshot) }
 
+    /// D13's choices with the app's own switch (`SwitchMark`), a row the whole of which flips it.
+    private func switchRow(_ title: String, on: Binding<Bool>) -> some View {
+        Button { on.wrappedValue.toggle() } label: {
+            HStack(spacing: Theme.Space.s) {
+                Text(title)
+                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .foregroundStyle(Theme.Palette.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                SwitchMark(on: on.wrappedValue)
+            }
+            .multilineTextAlignment(.leading)
+            .padding(.horizontal, Theme.Space.s)
+            .padding(.vertical, Theme.Space.xs)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        }
+        .buttonStyle(.row)
+        .accessibilityLabel(title)
+        .accessibilityValue(on.wrappedValue ? "On" : "Off")
+        .accessibilityAddTraits(.isToggle)
+    }
+
     private var isTV: Bool {
         #if os(tvOS)
         true
@@ -576,6 +596,8 @@ private struct DeleteSync: View {
     @State private var appleLinked = false
     /// Apple's step failed: the next press deletes anyway, after the OS prompt.
     @State private var anyway = false
+    /// Apple's receipt, good for 10 minutes: a delete that failed after it tries again with it.
+    @State private var receipt: (value: String, until: Date)?
     @State private var asking = false
     @State private var error: String?
     @State private var busy = false
@@ -651,13 +673,30 @@ private struct DeleteSync: View {
         error = nil
         #if !os(tvOS)
         if appleLinked, !anyway {
+            let held: String
+            if let receipt, receipt.until > .now {
+                held = receipt.value
+            } else {
+                do {
+                    held = try await AppleReauth.receipt(sync: sync)
+                    receipt = (held, .now.addingTimeInterval(10 * 60))
+                } catch {
+                    if case SignInSheets.Failure.cancelled = error { return }
+                    // Apple's step did not run: Delete anyway, behind the OS prompt.
+                    anyway = true
+                    self.error = SyncProblem(error, action: .delete).words
+                    return
+                }
+            }
             do {
-                let receipt = try await AppleReauth.receipt(sync: sync)
-                try await sync.deleteAccount(receipt: receipt)
+                try await sync.deleteAccount(receipt: held)
+                receipt = nil
             } catch {
-                if case SignInSheets.Failure.cancelled = error { return }
-                // Apple's step did not run: Delete anyway, behind the OS prompt.
-                anyway = true
+                // A good receipt is tried again on the next press; one the relay refused is not.
+                if (error as? CoreError)?.code == "receiptRefused" {
+                    receipt = nil
+                    anyway = true
+                }
                 self.error = SyncProblem(error, action: .delete).words
             }
             return

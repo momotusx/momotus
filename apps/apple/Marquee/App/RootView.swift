@@ -228,7 +228,8 @@ struct MainShell: View {
             .environment(wipe)
             .environment(\.metrics, metrics)
         }
-        .onChange(of: AppRouter.shared.scanRequests) { showScanner = true }
+        // Never on a kids profile: Account and approving are not its own.
+        .onChange(of: AppRouter.shared.scanRequests) { if profiles.snapshot?.current?.kids != true { showScanner = true } }
         // A phone camera on a TV's code opens /pair here: the scanner, never the code in the link (D6).
         .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
             guard let url = activity.webpageURL, AccountRules.opensScanner(url, linkHost: PasskeyContract.relyingParty) else { return }

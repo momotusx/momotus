@@ -101,11 +101,15 @@ enum AccountRules {
         case secondWayIn
     }
 
-    static func homeCard(deletion: ScheduledDeletion?, gone: Bool, announcements: [Announcement], secondWayIn: Bool) -> HomeCard? {
+    /// A kids profile sees none (Account is hidden from it); the nudge leads
+    /// to the owner's rows, so only the owner sees it.
+    static func homeCard(deletion: ScheduledDeletion?, gone: Bool, announcements: [Announcement], secondWayIn: Bool,
+                         owner: Bool, kids: Bool) -> HomeCard? {
+        if kids { return nil }
         if let deletion { return .deletion(deletion) }
         if gone { return .gone }
         if let first = announcements.first { return .announcement(first) }
-        return secondWayIn ? .secondWayIn : nil
+        return secondWayIn && owner ? .secondWayIn : nil
     }
 
     /// "Your account will be deleted on <date>.", or the web page's ask naming its provider.
@@ -178,6 +182,25 @@ enum AccountRules {
     static func opensScanner(_ url: URL, linkHost: String?) -> Bool {
         guard let linkHost, !linkHost.isEmpty else { return false }
         return url.scheme == "https" && url.host() == linkHost && url.path() == "/pair"
+    }
+
+    /// The sync server a scanned pairing code names (its `s` field): in the
+    /// fragment of a v3 link, in the query of a v2 code.
+    static func codeServer(_ qr: String) -> String? {
+        guard let code = URLComponents(string: qr.trimmingCharacters(in: .whitespacesAndNewlines)) else { return nil }
+        let fields = code.scheme == "https" ? code.percentEncodedFragment : code.percentEncodedQuery
+        for field in (fields ?? "").split(separator: "&") {
+            let pair = field.split(separator: "=", maxSplits: 1)
+            if pair.count == 2, pair[0] == "s" { return String(pair[1]).replacingOccurrences(of: "+", with: " ").removingPercentEncoding }
+        }
+        return nil
+    }
+
+    /// Section 5's "This code is from another sync service.": the code names
+    /// another server than this device's account (the core refuses it too).
+    static func isOtherRelayCode(_ qr: String, joined server: String?) -> Bool {
+        guard let server, let named = codeServer(qr) else { return false }
+        return named != server
     }
 
     /// A brokered sign-in's return (`marquee://auth#...`): its fragment, for

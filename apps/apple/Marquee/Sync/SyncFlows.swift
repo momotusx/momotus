@@ -178,6 +178,8 @@ struct AddDeviceScreen: View {
     @State private var scanning = false
     /// The code waiting for the step that names its sync server.
     @State private var reviewing: String?
+    /// The reviewed code names another sync server than this account's (section 5).
+    @State private var otherRelay = false
     @State private var busy = false
     @State private var error: String?
     @State private var digits: String?
@@ -243,10 +245,32 @@ struct AddDeviceScreen: View {
         typing = nil
         error = nil
         announce(AccountWords.shared.codeFound)
+        otherRelay = AccountRules.isOtherRelayCode(trimmed, joined: sync.joinedServer())
         reviewing = trimmed
     }
 
-    private func review(_ qr: String) -> some View {
+    @ViewBuilder private func review(_ qr: String) -> some View {
+        if otherRelay {
+            // The core refuses it anyway: say why, and scan again (section 5).
+            VStack(alignment: .leading, spacing: Theme.Space.m) {
+                Said(tone: .bad, text: AccountWords.shared.otherRelayCode)
+                FlowRow(spacing: Theme.Space.xs) {
+                    #if os(iOS)
+                    Button { reviewing = nil; otherRelay = false; scanning = true } label: {
+                        Label(AccountWords.shared.otherRelayCodeActions[0], glyph: "camera")
+                    }
+                    .buttonStyle(PillButtonStyle(prominent: true))
+                    #endif
+                    Button(W.cancel) { reviewing = nil; otherRelay = false }
+                        .buttonStyle(PillButtonStyle())
+                }
+            }
+        } else {
+            reviewStep(qr)
+        }
+    }
+
+    private func reviewStep(_ qr: String) -> some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
             // The code is for the user's own sync server (the core refuses any other): the question is the device.
             Text(W.reviewAsk)

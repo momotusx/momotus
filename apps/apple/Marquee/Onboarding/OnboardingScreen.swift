@@ -225,9 +225,12 @@ struct OnboardingScreen: View {
                 .display(metrics.wide ? 44 : Theme.type.title1 + 4)
                 .foregroundStyle(Theme.Palette.text)
                 .accessibilityAddTraits(.isHeader)
-            Text("No account needed. Everything stays on this device until you turn on sync.")
-                .font(.text(Theme.type.body))
-                .foregroundStyle(Theme.Palette.muted)
+            // Said to someone without an account only: after Create it is not so.
+            if !sync.joined {
+                Text("No account needed. Everything stays on this device until you turn on sync.")
+                    .font(.text(Theme.type.body))
+                    .foregroundStyle(Theme.Palette.muted)
+            }
             let doors = Group {
                 Button { showImport = true } label: {
                     Door(symbol: "door-open", title: "I use Stremio", text: "Bring your addons, library and Continue Watching over with a code.")

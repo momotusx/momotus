@@ -48,8 +48,10 @@ final class AccountWipe {
         try await finish(profiles: profiles)
     }
 
-    /// The account is gone already (another device deleted it): steps 2 and 3.
-    func removeHere(profiles: [String], disconnectDebrid: Bool) async throws {
+    /// The account is gone already (another device deleted it): steps 2 and 3,
+    /// behind the same OS prompt as a sign-out.
+    func removeHere(profiles: [String], disconnectDebrid: Bool, askedAgain: Bool = false) async throws {
+        try await sync.confirmRemoval(askedAgain: askedAgain)
         mark(disconnectDebrid: disconnectDebrid)
         try await finish(profiles: profiles)
     }

@@ -98,11 +98,15 @@ private func announcement(_ kind: String, member: String? = "m", by: String? = "
 @Test func homesAccountCardGoesByPriority() {
     let deletion = ScheduledDeletion(dueMs: 1_800_000_000_000, provider: "google")
     let notice = announcement("device", name: "TV")
-    #expect(AccountRules.homeCard(deletion: deletion, gone: true, announcements: [notice], secondWayIn: true) == .deletion(deletion))
-    #expect(AccountRules.homeCard(deletion: nil, gone: true, announcements: [notice], secondWayIn: true) == .gone)
-    #expect(AccountRules.homeCard(deletion: nil, gone: false, announcements: [notice], secondWayIn: true) == .announcement(notice))
-    #expect(AccountRules.homeCard(deletion: nil, gone: false, announcements: [], secondWayIn: true) == .secondWayIn)
-    #expect(AccountRules.homeCard(deletion: nil, gone: false, announcements: [], secondWayIn: false) == nil)
+    #expect(AccountRules.homeCard(deletion: deletion, gone: true, announcements: [notice], secondWayIn: true, owner: true, kids: false) == .deletion(deletion))
+    #expect(AccountRules.homeCard(deletion: nil, gone: true, announcements: [notice], secondWayIn: true, owner: true, kids: false) == .gone)
+    #expect(AccountRules.homeCard(deletion: nil, gone: false, announcements: [notice], secondWayIn: true, owner: true, kids: false) == .announcement(notice))
+    #expect(AccountRules.homeCard(deletion: nil, gone: false, announcements: [], secondWayIn: true, owner: true, kids: false) == .secondWayIn)
+    #expect(AccountRules.homeCard(deletion: nil, gone: false, announcements: [], secondWayIn: false, owner: true, kids: false) == nil)
+    // A kids profile sees no account card; the nudge leads to the owner's rows, so the owner only.
+    #expect(AccountRules.homeCard(deletion: deletion, gone: true, announcements: [notice], secondWayIn: true, owner: false, kids: true) == nil)
+    #expect(AccountRules.homeCard(deletion: nil, gone: false, announcements: [], secondWayIn: true, owner: false, kids: false) == nil)
+    #expect(AccountRules.homeCard(deletion: deletion, gone: false, announcements: [], secondWayIn: true, owner: false, kids: false) == .deletion(deletion))
     // The web page's deletion names its provider; a Start over names none.
     #expect(AccountRules.deletionText(deletion).hasPrefix("Someone signed in with your Google account and asked to delete your Marquee account on "))
     #expect(AccountRules.deletionText(ScheduledDeletion(dueMs: 0, provider: nil)).hasPrefix("Your account will be deleted on "))
@@ -159,6 +163,18 @@ private func announcement(_ kind: String, member: String? = "m", by: String? = "
     #expect(AccountRules.reportLostButton(4) == "Remove 4 devices")
 }
 
+@Test func aCodeForAnotherSyncServiceIsSaidSo() {
+    let v3 = "https://link.example/pair#v=3&s=https%3A%2F%2Frelay.example&p=slot&k=AAAA&g=BBBB"
+    let v2 = "marquee:pair?v=2&s=https%3A%2F%2Fother.example%3A8787&p=slot&k=AAAA&g=BBBB"
+    #expect(AccountRules.codeServer(v3) == "https://relay.example")
+    #expect(AccountRules.codeServer(v2) == "https://other.example:8787")
+    #expect(AccountRules.codeServer("https://link.example/pair#v=3&p=slot") == nil)
+    #expect(!AccountRules.isOtherRelayCode(v3, joined: "https://relay.example"))
+    #expect(AccountRules.isOtherRelayCode(v2, joined: "https://relay.example"))
+    // Nothing to compare with: the core decides.
+    #expect(!AccountRules.isOtherRelayCode(v2, joined: nil))
+}
+
 @Test func aTVAlwaysRemovesItsLibraryOnSignOut() {
     #expect(AccountRules.removesLibrary(asked: false, tv: true))
     #expect(AccountRules.removesLibrary(asked: true, tv: false))
@@ -212,8 +228,12 @@ private func announcement(_ kind: String, member: String? = "m", by: String? = "
         var gone: [String] = []
         let wipe = AccountWipe(core: core.client, sync: sync, traktGone: { gone.append($0) },
                                debridAccounts: { [] }, disconnect: { _ in }, defaults: defaults)
+        // Remove from this device asks the OS prompt first, as a sign-out does.
+        var asked: [String] = []
+        sync.ownerPrompt = { asked.append($0); return true }
 
         try await wipe.removeHere(profiles: profiles, disconnectDebrid: false)
+        #expect(asked == [SyncWords.authRemoveHere])
         #expect(gone == profiles)
         #expect(!wipe.pending && wipe.problem == nil)
         #expect(await eventually { session.snapshot?.profiles.map(\.id) == ["default"] })
@@ -226,6 +246,7 @@ private func announcement(_ kind: String, member: String? = "m", by: String? = "
         let sync = SyncModel(core: core.client, records: FakeKeychain().record, defaults: defaults)
         var fails = true
         var disconnected: [String] = []
+        sync.ownerPrompt = { _ in true }
         let account = DebridAccount(service: "realdebrid", generation: "g1", state: "ok")
         let wipe = AccountWipe(core: core.client, sync: sync, traktGone: { _ in }, debridAccounts: { [account] },
                                disconnect: {
@@ -237,12 +258,28 @@ private func announcement(_ kind: String, member: String? = "m", by: String? = "
         await wipe.resume(profiles: ["default"])
         #expect(disconnected.isEmpty)
 
-        await #expect(throws: CoreError.self) { try await wipe.removeHere(profiles: ["default"], disconnectDebrid: true) }
+        await #expect(throws: CoreError.self) { try await wipe.removeHere(profiles: ["default"], disconnectDebrid: true, askedAgain: true) }
         #expect(wipe.pending && wipe.problem != nil)
         // The restart: the debrid choice was kept with the flag.
         fails = false
         await wipe.resume(profiles: ["default"])
         #expect(disconnected == ["g1"])
         #expect(!wipe.pending && wipe.problem == nil)
+    }
+
+    @Test func aDeclinedPromptRemovesNothing() async throws {
+        let core = RealCore()
+        #expect(await core.ready())
+        let defaults = try #require(UserDefaults(suiteName: "mq-test-\(UUID().uuidString)"))
+        let sync = SyncModel(core: core.client, records: FakeKeychain().record, defaults: defaults)
+        var gone: [String] = []
+        let wipe = AccountWipe(core: core.client, sync: sync, traktGone: { gone.append($0) },
+                               debridAccounts: { [] }, disconnect: { _ in }, defaults: defaults)
+        sync.ownerPrompt = { _ in false }
+        // With a lock the prompt says no; without one the page asks a second time first.
+        await #expect { try await wipe.removeHere(profiles: ["default"], disconnectDebrid: true) } throws: {
+            ["unconfirmed", "noLockAsk"].contains(($0 as? CoreError)?.code)
+        }
+        #expect(gone.isEmpty && !wipe.pending)
     }
 }

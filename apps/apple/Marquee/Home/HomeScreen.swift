@@ -42,9 +42,10 @@ struct HomeScreen: View {
                 // Without catalogs, or with none answering, there is no art to show.
                 if !model.needsSetup && !model.allFailed {
                     HeroView(hero: model.header.hero, height: heroHeight, startScope: start == .hero ? startScopeID : nil, play: playHero, starting: starting)
-                        // Phone: the profile button sits at the header's top right.
+                        // Phone and tablet: the profile button, with Sign in another device
+                        // in its menu (4.2), sits at the header's top right.
                         .overlay(alignment: .topTrailing) {
-                            if !metrics.wide { ProfileButton(signInAnother: signInAnother) { showProfiles = true }.padding(.trailing, 24).padding(.top, 10) }
+                            if showsProfileButton { ProfileButton(signInAnother: signInAnother) { showProfiles = true }.padding(.trailing, 24).padding(.top, 10) }
                         }
                         .padding(.top, cardTop)
                 }
@@ -114,10 +115,20 @@ struct HomeScreen: View {
         })
     }
 
-    /// The profile menu's Sign in another device: a phone in an account only (a Mac approves nothing).
+    /// iPhone and iPad; a Mac and a TV carry it in their navigation.
+    private var showsProfileButton: Bool {
+        #if os(iOS)
+        true
+        #else
+        !metrics.wide
+        #endif
+    }
+
+    /// The profile menu's Sign in another device: a phone or tablet in an account,
+    /// never a kids profile (a Mac approves nothing).
     private var signInAnother: (() -> Void)? {
         #if os(iOS)
-        sync.joined ? { AppRouter.shared.requestScan() } : nil
+        sync.joined && profiles.snapshot?.current?.kids != true ? { AppRouter.shared.requestScan() } : nil
         #else
         nil
         #endif
