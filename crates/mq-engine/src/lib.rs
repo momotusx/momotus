@@ -652,10 +652,11 @@ impl Engine {
     /// trackers count them now, for ranking on live seeders rather than an
     /// addon's number. Each hash's own trackers, plus the default ones when
     /// the DHT is on (as for a bare hash), are scraped at once (BEP 15 UDP,
-    /// BEP 48 HTTP) under the trackers' address policy; answers after about
-    /// a second are dropped, and it returns sooner once every tracker asked
-    /// has answered or failed. A count is the answer with the most seeders,
-    /// then leechers; `None` when no answer told anything (a default
+    /// BEP 48 HTTP) under the trackers' address policy; it returns after
+    /// about a second, sooner once every tracker asked has answered or
+    /// failed, and an answer later than that still counts for the next
+    /// call. A count is the answer with the most seeders, then leechers,
+    /// and a later answer never lowers it; `None` when no answer told anything (a default
     /// tracker's zero needs 3 or more leechers: one that does not track a
     /// hash answers 0/0, and one or two may be our own viewers). Counts
     /// stand for five minutes per hash. At most 16 own trackers per hash and

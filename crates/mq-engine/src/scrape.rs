@@ -98,9 +98,24 @@ const FAILED_KEEP: Duration = Duration::from_secs(60);
 
 pub(crate) struct Scraper {
     reach: Reach,
-    kept: Mutex<HashMap<String, (Instant, SwarmCount)>>,
+    kept: Arc<Mutex<HashMap<String, Held>>>,
     last: Mutex<Vec<TrackerTrace>>,
 }
+
+/// A hash's count, the most any tracker reported since `at`, and whether
+/// every tracker asked about it was in: a count some tracker still owed is
+/// asked again rather than kept as it is.
+#[derive(Clone, Copy)]
+struct Held {
+    at: Instant,
+    count: SwarmCount,
+    whole: bool,
+}
+
+/// How long a tracker's answer past the budget still counts: it folds into
+/// the kept counts for the next call (pick audit: the main tracker missing
+/// its second turned 13 of 14 healthy swarms thin).
+const LATE: Duration = Duration::from_secs(3);
 
 /// What a tracker call needs: the policy, the HTTP client, and what each
 /// tracker left from earlier calls.
@@ -224,7 +239,7 @@ impl Scraper {
                 trackers: Arc::default(),
                 names,
             },
-            kept: Mutex::default(),
+            kept: Arc::default(),
             last: Mutex::default(),
         }
     }
@@ -272,8 +287,10 @@ impl Scraper {
     /// leechers: a tracker that does not track a hash answers 0/0, and one or
     /// two leechers may be our own viewers. A count is the answer with the
     /// most seeders, then leechers. The call ends once every tracker asked
-    /// has answered or failed, or at the budget. At most `MAX_OWN` own
-    /// trackers per hash and `MAX_TRACKERS` per call.
+    /// has answered or failed, or at the budget; a tracker still on the way
+    /// then folds its answer into the kept count within `LATE`, and a count
+    /// some tracker still owed is asked again, from what it was. At most
+    /// `MAX_OWN` own trackers per hash and `MAX_TRACKERS` per call.
     pub async fn scrape(
         &self,
         torrents: &[(String, Vec<String>)],
@@ -285,14 +302,19 @@ impl Scraper {
         let mut order: Vec<String> = Vec::new();
         // Per hash asked, its own trackers.
         let mut owners: HashMap<String, Vec<String>> = HashMap::new();
+        // A count some tracker still owed is asked again, from what it was.
+        let mut fresh: HashMap<String, SwarmCount> = HashMap::new();
         {
             let kept = lock(&self.kept);
             for (hash, own) in torrents {
-                if let Some((at, count)) = kept.get(hash)
-                    && now.duration_since(*at) < KEEP
+                if let Some(held) = kept.get(hash)
+                    && now.duration_since(held.at) < KEEP
                 {
-                    found.insert(hash.clone(), *count);
-                    continue;
+                    if held.whole {
+                        found.insert(hash.clone(), held.count);
+                        continue;
+                    }
+                    fresh.insert(hash.clone(), held.count);
                 }
                 let mut mine: Vec<&str> = Vec::new();
                 for t in own.iter().map(String::as_str) {
@@ -335,35 +357,64 @@ impl Scraper {
             });
         }
         let deadline = tokio::time::Instant::now() + BUDGET;
-        let mut fresh: HashMap<String, SwarmCount> = HashMap::new();
         // No early end: the ranking's start tiers sit at 5, `min_seeders` (50
         // by default) and four times that, all over the floor, so only the
         // most any tracker counts ranks right (engine review r3, P2-1).
         while let Ok(Some(answer)) = tokio::time::timeout_at(deadline, asks.join_next()).await {
-            let Ok((tracker, counts)) = answer else {
-                continue;
-            };
-            for (hash, count) in counts {
-                let own = owners.get(&hash).is_some_and(|o| o.contains(&tracker));
-                if !own && count.seeders == 0 && count.leechers < DEFAULT_ZERO_LEECHERS {
-                    continue; // a tracker that does not track it, or only us
-                }
-                let best = fresh.entry(hash).or_insert(count);
-                if (count.seeders, count.leechers) > (best.seeders, best.leechers) {
-                    *best = count;
-                }
+            if let Ok((tracker, counts)) = answer {
+                fold(&mut fresh, &owners, &tracker, counts);
             }
         }
-        asks.abort_all();
         if !traces.is_empty() {
             *lock(&self.last) = traces.iter().map(|t| lock(t).clone()).collect();
         }
+        let whole = asks.is_empty();
         {
             let mut kept = lock(&self.kept);
-            kept.retain(|_, (at, _)| now.duration_since(*at) < KEEP);
+            kept.retain(|_, held| now.duration_since(held.at) < KEEP);
             for (hash, count) in &fresh {
-                kept.insert(hash.clone(), (now, *count));
+                let held = Held {
+                    at: now,
+                    count: *count,
+                    whole,
+                };
+                kept.insert(hash.clone(), held);
             }
+        }
+        if !whole {
+            // The trackers still on the way are not dropped: what they count
+            // within `LATE` folds into the kept counts, never lowering one.
+            let kept = self.kept.clone();
+            tokio::spawn(async move {
+                let late = async {
+                    while let Some(answer) = asks.join_next().await {
+                        let Ok((tracker, counts)) = answer else {
+                            continue;
+                        };
+                        let mut more = HashMap::new();
+                        fold(&mut more, &owners, &tracker, counts);
+                        let mut kept = lock(&kept);
+                        for (hash, count) in more {
+                            let held = kept.entry(hash).or_insert(Held {
+                                at: now,
+                                count,
+                                whole: false,
+                            });
+                            if (count.seeders, count.leechers)
+                                > (held.count.seeders, held.count.leechers)
+                            {
+                                held.count = count;
+                            }
+                        }
+                    }
+                };
+                let answered = tokio::time::timeout(LATE, late).await.is_ok();
+                if answered {
+                    for held in lock(&kept).values_mut().filter(|h| h.at == now) {
+                        held.whole = true;
+                    }
+                }
+            });
         }
         found.extend(fresh);
         torrents
@@ -375,6 +426,30 @@ impl Scraper {
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+/// One tracker's `counts` into `into`, the most seeders, then leechers, per
+/// hash. An answer tells something when it comes from one of the hash's
+/// own trackers, counts any seeder, or counts `DEFAULT_ZERO_LEECHERS` or
+/// more leechers.
+fn fold(
+    into: &mut HashMap<String, SwarmCount>,
+    owners: &HashMap<String, Vec<String>>,
+    tracker: &str,
+    counts: Vec<(String, SwarmCount)>,
+) {
+    for (hash, count) in counts {
+        let own = owners
+            .get(&hash)
+            .is_some_and(|o| o.iter().any(|t| t == tracker));
+        if !own && count.seeders == 0 && count.leechers < DEFAULT_ZERO_LEECHERS {
+            continue; // a tracker that does not track it, or only us
+        }
+        let best = into.entry(hash).or_insert(count);
+        if (count.seeders, count.leechers) > (best.seeders, best.leechers) {
+            *best = count;
+        }
+    }
 }
 
 /// One tracker's counts for `hashes`; nothing when it is refused, silent or
@@ -1006,6 +1081,25 @@ mod tests {
         let (count, took) = timed(&tracker(Some(1)), refused).await;
         assert_eq!(count, seeders(1));
         assert!(took < early, "a failed tracker was waited for: {took:?}");
+    }
+
+    /// A tracker that answers past the budget is not lost: the call returns
+    /// at the budget with what came, the late answer folds into the kept
+    /// count, and the next call reads the most any tracker reported, never
+    /// less (pick audit: the main tracker missing its second turned 13 of
+    /// 14 healthy swarms thin, and the count stood five minutes).
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_late_answer_folds_in_and_never_lowers_a_count() {
+        let s = loopback_scraper();
+        let late = counting_after(Some((300, 0)), Duration::from_millis(600));
+        let asked = vec![(H1.to_owned(), vec![tracker(Some(10)), late])];
+        let started = Instant::now();
+        let first = s.scrape(&asked, &[]).await;
+        assert!(started.elapsed() < BUDGET + BUDGET / 2, "the budget held");
+        assert_eq!(first[0].map(|c| c.seeders), Some(10), "what came in time");
+        tokio::time::sleep(LATE).await;
+        let second = s.scrape(&asked, &[]).await;
+        assert_eq!(second[0].map(|c| c.seeders), Some(300), "the late answer");
     }
 
     /// At most 16 own trackers per hash and 24 per call, the shared ones
