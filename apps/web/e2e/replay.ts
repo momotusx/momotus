@@ -3,34 +3,52 @@
  * subtitle files, any addon a test installs) comes here as
  * `/replay/<scheme>/<host><path>`, and so does every request the browser
  * makes off this machine (startBrowserRecorder). The first run asks the live
- * host once and keeps the answer in e2e/.cache/replay, which is never
- * committed: these are other services' data. Every later run is served from
- * there, so the whole e2e runs with the network off.
+ * host once and keeps the answer in one cache per machine, shared by every
+ * checkout and never committed (these are other services' data):
+ * MQ_E2E_REPLAY_DIR, else ~/.cache/marquee-e2e/replay. Every later run is
+ * served from there, so the whole e2e runs with the network off.
  *
- * MQ_E2E_OFFLINE=1: never ask a live host; a missing answer is a 504, and
- * the run lists every one at its end. MQ_E2E_RECORD=1: ask every live host
- * again and keep the new answers. */
+ * Only answers below 500, and not 429, are kept, and a name that does not
+ * resolve only when it cannot exist (a test's made-up addon): a service's bad
+ * moment is never recorded, and the next run asks again.
+ *
+ * MQ_E2E_OFFLINE=1: never ask a live host; a missing answer is a 504 (an
+ * image a grey placeholder), and the run lists every one at its end.
+ * MQ_E2E_RECORD=1: ask every live host again and keep the new answers. */
 
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { createServer as createSecureServer } from "node:https";
-import { fileURLToPath } from "node:url";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
-const DIR = fileURLToPath(new URL("./.cache/replay/", import.meta.url));
+const ROOT = join(homedir(), ".cache", "marquee-e2e");
+const DIR = process.env.MQ_E2E_REPLAY_DIR ?? join(ROOT, "replay");
 const OFFLINE = process.env.MQ_E2E_OFFLINE === "1";
 const RECORD = process.env.MQ_E2E_RECORD === "1";
 /** Request headers that change an answer, passed to the live host. */
 const PASSED = ["accept", "accept-language", "content-type", "range", "user-agent"];
 /** Answer headers kept: the type, and CORS (a page reads a logo's pixels only when allowed). */
 const KEPT = ["content-type", "access-control-allow-origin", "access-control-expose-headers"];
+/** A one-pixel grey PNG: what an image missing from the recording shows offline. */
+const GREY = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGOwAgAAPAA7Rl0XFwAAAABJRU5ErkJggg==", "base64");
 
-/** An answer as kept, or a host that does not exist. */
+/** An answer as kept, or a host that cannot exist. */
 type Kept = { url: string; status: number; headers: Record<string, string>; body: string } | { url: string; unknownHost: true };
 
 /** Answers this run had to ask a live host for, and those it could not serve. */
 export const replayed = { asked: 0, missed: new Set<string>() };
+
+/** Whether an answer with `status` is kept: a server's failure or a refusal to answer now is not. */
+export const keeps = (status: number) => status < 500 && status !== 429;
+
+/** A name under a top-level domain reserved never to resolve (RFC 2606): a test's made-up host. */
+export const madeUp = (host: string) => /(^|\.)(example|invalid|test)$/i.test(host.replace(/:\d+$/, ""));
+
+/** What an unrecorded answer becomes offline: a grey image when an image was asked for. */
+export const placeholder = (accept: string | undefined): Buffer | null => (accept?.includes("image/") ? GREY : null);
 
 async function body(req: IncomingMessage): Promise<Buffer | undefined> {
   if (req.method === "GET" || req.method === "HEAD") return undefined;
@@ -51,11 +69,19 @@ async function ask(url: string, req: IncomingMessage, sent: Buffer | undefined):
     const kept = Object.fromEntries(KEPT.flatMap((name) => (res.headers.get(name) === null ? [] : [[name, res.headers.get(name) as string]])));
     return { url, status: res.status, headers: kept, body: answer.toString("base64") };
   } catch (e) {
-    // A host that does not exist stays so (a test's made-up addon); any other
-    // failure is not kept, and the next run asks again.
+    // A name that cannot exist stays so; any other failure (a DNS hiccup, a
+    // timeout, a machine offline while recording) is not an answer.
     const code = (e as { cause?: { code?: string } }).cause?.code;
-    return code === "ENOTFOUND" ? { url, unknownHost: true } : null;
+    return code === "ENOTFOUND" && madeUp(new URL(url).host) ? { url, unknownHost: true } : null;
   }
+}
+
+/** Writes `kept` whole or not at all: checkouts running at once share the cache. */
+function store(dir: string, file: string, kept: Kept) {
+  mkdirSync(dir, { recursive: true });
+  const part = `${file}.${process.pid}.part`;
+  writeFileSync(part, JSON.stringify(kept));
+  renameSync(part, file);
 }
 
 /** Serves `rest` (`<scheme>/<host><path>?<query>`) from the recording. */
@@ -65,20 +91,18 @@ export async function replay(req: IncomingMessage, res: ServerResponse, rest: st
   const host = new URL(url).host.replace(/[^\w.-]/g, "_");
   const sent = await body(req);
   const key = createHash("sha256").update(`${req.method} ${url} ${req.headers.range ?? ""} `).update(sent ?? Buffer.alloc(0)).digest("hex").slice(0, 40);
-  const file = `${DIR}${host}/${key}.json`;
+  const file = join(DIR, host, `${key}.json`);
   let kept: Kept | null = !RECORD && existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as Kept) : null;
   if (!kept && !OFFLINE) {
     replayed.asked++;
     kept = await ask(url, req, sent);
-    if (kept) {
-      mkdirSync(`${DIR}${host}`, { recursive: true });
-      writeFileSync(file, JSON.stringify(kept));
-    }
+    if (kept && ("unknownHost" in kept || keeps(kept.status))) store(join(DIR, host), file, kept);
   }
   if (!kept) {
     if (OFFLINE) replayed.missed.add(`${req.method} ${url}`);
-    res.writeHead(504, { "content-type": "text/plain" });
-    res.end("not recorded");
+    const grey = OFFLINE ? placeholder(req.headers.accept) : null;
+    res.writeHead(grey ? 200 : 504, { "content-type": grey ? "image/png" : "text/plain" });
+    res.end(grey ?? "not recorded");
     return;
   }
   // As the core would see a name that does not resolve: no answer at all.
@@ -90,11 +114,11 @@ export async function replay(req: IncomingMessage, res: ServerResponse, rest: st
   res.end(Buffer.from(kept.body, "base64"));
 }
 
-/** A certificate made for this checkout's runs (e2e/.cache/tls): the browser
- * is told to ignore its errors, so any name may be served with it. */
+/** A certificate made once per machine (~/.cache/marquee-e2e/tls): the
+ * browser is told to ignore its errors, so any name may be served with it. */
 function certificate(): { key: Buffer; cert: Buffer } {
-  const dir = fileURLToPath(new URL("./.cache/tls/", import.meta.url));
-  const [key, cert] = [`${dir}key.pem`, `${dir}cert.pem`];
+  const dir = join(ROOT, "tls");
+  const [key, cert] = [join(dir, "key.pem"), join(dir, "cert.pem")];
   if (!existsSync(cert)) {
     mkdirSync(dir, { recursive: true });
     execFileSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", key, "-out", cert, "-subj", "/CN=marquee-e2e", "-days", "3650"], { stdio: "ignore" });
