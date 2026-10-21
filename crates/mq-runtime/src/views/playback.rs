@@ -238,22 +238,29 @@ pub struct SubtitleTrack {
     /// The language's own name ("Português (Brasil)", "Türkçe"); the
     /// English name when the core knows no other.
     pub native_name: String,
-    /// What tells this track from the others of its language: the release
-    /// it was made for when the addon names it, else its source; numbered
-    /// when two would read the same.
+    /// What tells this track from the others of its language: what its
+    /// release text says, the group, then source and resolution ("CAKES,
+    /// WEB 1080p", "PSA, WEBRip 1080p 10 bit"); the text itself when it
+    /// names none of them; else its source. Numbered when two would read
+    /// the same.
     pub name: String,
     pub label: Option<String>,
     /// Addon name.
     pub source: String,
     pub forced: bool,
+    /// The addon says so, or the release text marks it ("-hi", ".HI.",
+    /// "SDH").
     pub hearing_impaired: bool,
-    /// The track names the playing release's group: made for this release
-    /// ("Made for this release").
+    /// The track names the playing release's group: show "Same release
+    /// group" for it.
     pub fits: bool,
-    /// The release text `name` starts from, when there is one.
+    /// The release text the addon names for the track (its label, file
+    /// name or release name), for a detail line; null when it names none.
+    pub release: Option<String>,
+    /// `name` before numbering.
     #[serde(skip)]
     #[cfg_attr(feature = "ts", ts(skip))]
-    pub(crate) release: Option<String>,
+    base: String,
     /// What the track says of its release, for the release match.
     #[serde(skip)]
     #[cfg_attr(feature = "ts", ts(skip))]
@@ -261,9 +268,9 @@ pub struct SubtitleTrack {
 }
 
 impl SubtitleTrack {
-    /// A track in `lang` from `source`, its language read and its name set
-    /// to the release text, else the source, until `reorder` tells
-    /// duplicates apart.
+    /// A track in `lang` from `source`, its language read, its name what its
+    /// release text says (`short_name`), else the source, until `reorder`
+    /// tells duplicates apart.
     fn new(
         url: String,
         lang: &str,
@@ -278,22 +285,94 @@ impl SubtitleTrack {
                 && !r.eq_ignore_ascii_case(&language.name)
                 && !r.eq_ignore_ascii_case(lang)
         });
+        let (marked, plain) = release
+            .as_deref()
+            .map_or((false, String::new()), hearing_marks);
+        let base = match &release {
+            Some(text) => short_name(&plain).unwrap_or_else(|| text.clone()),
+            None => source.to_owned(),
+        };
         Self {
             url,
             lang: lang.to_owned(),
             language: language.tag,
-            name: release.clone().unwrap_or_else(|| source.to_owned()),
+            name: base.clone(),
+            base,
             language_name: language.name,
             native_name: language.native,
             label,
             source: source.to_owned(),
             forced: false,
-            hearing_impaired: false,
+            hearing_impaired: marked,
             fits: false,
-            made: Made::of(fit::Made::read(release.as_deref().unwrap_or_default())),
+            made: Made::of(fit::Made::read(&plain)),
             release,
         }
     }
+}
+
+/// What tells one release from another in a subtitle menu: its group, then
+/// source and resolution and a bit depth over 8 ("CAKES, WEB 1080p", "PSA,
+/// WEBRip 1080p 10 bit"); `None` when the text names none of them.
+fn short_name(text: &str) -> Option<String> {
+    use mq_relparse::{Quality as Q, Resolution as R};
+    let r = mq_relparse::parse(text);
+    let source = match r.quality {
+        Q::WebDl => "WEB",
+        Q::WebRip => "WEBRip",
+        Q::BluRay => "BluRay",
+        Q::Remux => "Remux",
+        Q::Hdtv => "HDTV",
+        Q::Dvd => "DVD",
+        Q::Screener => "SCR",
+        Q::Telesync => "TS",
+        Q::Cam => "CAM",
+        Q::Unknown => "",
+    };
+    let height = (r.resolution != R::Unknown).then(|| format!("{}p", r.resolution.height()));
+    let bits = r.bit_depth.filter(|b| *b > 8).map(|b| format!("{b} bit"));
+    let what: Vec<String> = std::iter::once(source.to_owned())
+        .filter(|s| !s.is_empty())
+        .chain(height)
+        .chain(bits)
+        .collect();
+    match (r.group, what.join(" ")) {
+        (None, what) if what.is_empty() => None,
+        (None, what) => Some(what),
+        (Some(group), what) if what.is_empty() => Some(group),
+        (Some(group), what) => Some(format!("{group}, {what}")),
+    }
+}
+
+/// Whether a release text marks its file for the hard of hearing (a "-hi"
+/// or ".HI." word, or "SDH"), and the text without those marks, so the
+/// parser never takes "hi" for the group.
+fn hearing_marks(text: &str) -> (bool, String) {
+    let (mut found, mut kept, mut last) = (false, String::new(), 0);
+    let mut chars = text.char_indices().peekable();
+    while let Some((start, c)) = chars.next() {
+        if !c.is_alphanumeric() {
+            continue;
+        }
+        let mut end = start + c.len_utf8();
+        while let Some(&(at, c)) = chars.peek().filter(|(_, c)| c.is_alphanumeric()) {
+            end = at + c.len_utf8();
+            chars.next();
+        }
+        let (word, before) = (&text[start..end], text[..start].chars().next_back());
+        let mark = word.eq_ignore_ascii_case("sdh")
+            || (word.eq_ignore_ascii_case("hi") && before == Some('-'))
+            || (word == "HI" && before == Some('.'));
+        if mark {
+            found = true;
+            // The mark goes with the separator before it.
+            let cut = before.map_or(start, |b| start - b.len_utf8());
+            kept.push_str(&text[last..cut.max(last)]);
+            last = end;
+        }
+    }
+    kept.push_str(&text[last..]);
+    (found, kept)
 }
 
 /// What a subtitle says of the release it was made for (`fit::Made`),
@@ -2917,9 +2996,12 @@ async fn built_in_tracks(
                 s.order.insert(url.clone(), (position + 1, rank));
                 if !s.snapshot.subtitles.iter().any(|known| known.url == url) {
                     let label = Some(found.label.clone());
+                    // Its own label already says what tells its files apart.
                     s.snapshot.subtitles.push(SubtitleTrack {
                         hearing_impaired: found.row.hearing_impaired,
                         made: Made::of(found.row.made()),
+                        name: found.label.clone(),
+                        base: found.label.clone(),
                         ..SubtitleTrack::new(url, "tur", label, BUILT_IN, Some(found.label))
                     });
                 }
@@ -3051,10 +3133,11 @@ fn track(
     addon_url: Option<&Url>,
 ) -> Option<SubtitleTrack> {
     let url = slot.add(w.url.as_str(), &w.lang, addon_url)?;
+    let t = SubtitleTrack::new(url, &w.lang, w.label.clone(), source, release(w));
     Some(SubtitleTrack {
         forced: w.forced,
-        hearing_impaired: w.hearing_impaired,
-        ..SubtitleTrack::new(url, &w.lang, w.label.clone(), source, release(w))
+        hearing_impaired: w.hearing_impaired || t.hearing_impaired,
+        ..t
     })
 }
 
@@ -3331,7 +3414,7 @@ fn reorder(s: &mut State, preferred: &[String]) {
             order.get(&t.url).copied().unwrap_or((usize::MAX, 0)),
         )
     });
-    let base = |t: &SubtitleTrack| t.release.clone().unwrap_or_else(|| t.source.clone());
+    let base = |t: &SubtitleTrack| t.base.clone();
     let mut seen: HashMap<(String, String), usize> = HashMap::new();
     let mut total: HashMap<(String, String), usize> = HashMap::new();
     for t in &snapshot.subtitles {
@@ -4191,6 +4274,59 @@ mod tests {
         let start = s.snapshot.start.clone().unwrap();
         assert_eq!(start.progress, last, "never back");
         assert_eq!(start.caption.as_deref(), Some("Trying source 2 of 2"));
+    }
+
+    /// Plans/player-polish.md 2.2: a track is named by what tells its
+    /// release apart, the group then source and resolution; by the text
+    /// itself when it names none of them. A "-hi", ".HI." or "SDH" mark is
+    /// for the hard of hearing, and never read as the group.
+    #[test]
+    fn a_track_is_named_by_what_its_release_says() {
+        for (text, name) in [
+            ("Show.S01E01.1080p.WEB.h264-CAKES", Some("CAKES, WEB 1080p")),
+            (
+                "Show.S01E01.1080p.WEBRip.x265.10bit-PSA",
+                Some("PSA, WEBRip 1080p 10 bit"),
+            ),
+            ("Show.S01E01.DVDRip.XviD-ORPHEUS", Some("ORPHEUS, DVD")),
+            (
+                "Movie.2020.2160p.UHD.BluRay.REMUX.HEVC-FGT",
+                Some("FGT, Remux 2160p"),
+            ),
+            ("TOPAZ", None),
+        ] {
+            assert_eq!(short_name(text).as_deref(), name, "{text}");
+        }
+        let track = |release: &str| {
+            SubtitleTrack::new("u".into(), "eng", None, "Subs", Some(release.into()))
+        };
+        let hi = track("Sintel.2010.1080p.WEB-DL.DDP5.1.H.264-FLUX-hi");
+        assert_eq!(
+            (hi.name.as_str(), hi.hearing_impaired),
+            ("FLUX, WEB 1080p", true)
+        );
+        assert_eq!(
+            hi.release.as_deref(),
+            Some("Sintel.2010.1080p.WEB-DL.DDP5.1.H.264-FLUX-hi"),
+            "the text kept for the detail line"
+        );
+        for marked in [
+            "Film.2020.1080p.WEB-FLUX.HI",
+            "Film 2020 SDH",
+            "Film.2020-HI",
+        ] {
+            assert!(track(marked).hearing_impaired, "{marked}");
+        }
+        for plain in [
+            "Hi.Score.Girl.S01E01.1080p.WEB-GRP",
+            "Say.hi.2020.1080p.WEB-GRP",
+            "Film.2020.1080p.WEB-HIGH",
+        ] {
+            assert!(!track(plain).hearing_impaired, "{plain}");
+        }
+        assert_eq!(track("TOPAZ").name, "TOPAZ", "nothing parses: the text");
+        let bare = SubtitleTrack::new("u".into(), "eng", None, "Subs", None);
+        assert_eq!((bare.name.as_str(), bare.release), ("Subs", None));
     }
 
     /// A torrent's fill is the engine's count of what Ready waits on, not

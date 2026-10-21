@@ -1124,13 +1124,13 @@ async fn subtitles_come_grouped_by_language_named_and_told_apart() {
             // The profile's subtitle language, then its audio language.
             ("tr", "Turkish", "TOPAZ 1"),
             ("tr", "Turkish", "TOPAZ 2"),
-            ("en", "English", "Show.S01E01.DVDRip.XviD-ORPHEUS"),
+            ("en", "English", "ORPHEUS, DVD"),
             ("en", "English", "Local 1"),
             ("en", "English", "Local 2"),
             // The rest by English name; one language however it is spelled.
             ("yue", "Chinese (Cantonese)", "Local"),
             ("zh-Hant", "Chinese (Traditional)", "Local"),
-            ("fr", "French", "Show.S01.WEB-NTb"),
+            ("fr", "French", "NTb, WEB"),
             ("de", "German", "Local 1"),
             ("de", "German", "Local 2"),
             ("cnr", "Montenegrin", "Local"),
@@ -1180,7 +1180,7 @@ async fn subtitles_rank_by_the_playing_release_within_each_language() {
             "own-hi",
             "eng",
             "Sintel.2010.1080p.WEB-DL.DDP5.1.H.264-FLUX-hi.srt",
-            true
+            false
         ),
         sub("plain", "eng", "", false),
         sub(
@@ -1211,24 +1211,22 @@ async fn subtitles_rank_by_the_playing_release_within_each_language() {
     assert_eq!(
         rows,
         [
-            (
-                "Sintel.2010.1080p.WEB-DL.DDP5.1.H.264-FLUX",
-                true,
-                "English"
-            ),
-            (
-                "Sintel.2010.1080p.WEB-DL.DDP5.1.H.264-FLUX-hi",
-                true,
-                "English"
-            ),
-            ("Sintel.2010.1080p.WEBRip.x264-RARBG", false, "English"),
-            ("Sintel.2010.1080p.BluRay.x264-OTHER", false, "English"),
+            ("FLUX, WEB 1080p 1", true, "English"),
+            ("FLUX, WEB 1080p 2", true, "English"),
+            ("RARBG, WEBRip 1080p", false, "English"),
+            ("OTHER, BluRay 1080p", false, "English"),
             ("Local", false, "English"),
-            ("Sintel.2010.1080p.WEB-DL.H.264-FLUX", true, "Türkçe"),
-            ("Sintel.2010.720p.BluRay.x264-OTHER", false, "Türkçe"),
+            ("FLUX, WEB 1080p", true, "Türkçe"),
+            ("OTHER, BluRay 720p", false, "Türkçe"),
         ]
     );
+    // The "-hi" in its file name marks it, with no flag from the addon;
+    // the detail line keeps the release text.
     assert!(s.subtitles[1].hearing_impaired);
+    assert_eq!(
+        s.subtitles[1].release.as_deref(),
+        Some("Sintel.2010.1080p.WEB-DL.DDP5.1.H.264-FLUX-hi")
+    );
     assert_eq!(
         s.auto_subtitle.as_deref(),
         Some(s.subtitles[0].url.as_str())

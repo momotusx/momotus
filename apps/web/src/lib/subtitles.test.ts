@@ -14,6 +14,7 @@ const track = (language: string, languageName: string, name: string, more: Parti
   forced: false,
   hearingImpaired: false,
   fits: false,
+  release: null,
   ...more,
 });
 

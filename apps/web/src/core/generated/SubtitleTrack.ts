@@ -23,17 +23,29 @@ languageName: string,
  */
 nativeName: string, 
 /**
- * What tells this track from the others of its language: the release
- * it was made for when the addon names it, else its source; numbered
- * when two would read the same.
+ * What tells this track from the others of its language: what its
+ * release text says, the group, then source and resolution ("CAKES,
+ * WEB 1080p", "PSA, WEBRip 1080p 10 bit"); the text itself when it
+ * names none of them; else its source. Numbered when two would read
+ * the same.
  */
 name: string, label: string | null, 
 /**
  * Addon name.
  */
-source: string, forced: boolean, hearingImpaired: boolean, 
+source: string, forced: boolean, 
 /**
- * The track names the playing release's group: made for this release
- * ("Made for this release").
+ * The addon says so, or the release text marks it ("-hi", ".HI.",
+ * "SDH").
  */
-fits: boolean, };
+hearingImpaired: boolean, 
+/**
+ * The track names the playing release's group: show "Same release
+ * group" for it.
+ */
+fits: boolean, 
+/**
+ * The release text the addon names for the track (its label, file
+ * name or release name), for a detail line; null when it names none.
+ */
+release: string | null, };

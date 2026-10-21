@@ -1492,15 +1492,18 @@ data class SubtitleTrack(
     val languageName: String = "",
     /** The language's own name ("Português (Brasil)", "Türkçe"); the English name when the core knows no other. */
     val nativeName: String = "",
-    /** What tells this track from the others of its language: the release it was made for when the addon names it, else its source; numbered when two would read the same. */
+    /** What tells this track from the others of its language: what its release text says, the group, then source and resolution ("CAKES, WEB 1080p", "PSA, WEBRip 1080p 10 bit"); the text itself when it names none of them; else its source. Numbered when two would read the same. */
     val name: String = "",
     val label: String? = null,
     /** Addon name. */
     val source: String,
     val forced: Boolean,
+    /** The addon says so, or the release text marks it ("-hi", ".HI.", "SDH"). */
     val hearingImpaired: Boolean,
-    /** The track names the playing release's group: made for this release ("Made for this release"). */
+    /** The track names the playing release's group: show "Same release group" for it. */
     val fits: Boolean = false,
+    /** The release text the addon names for the track (its label, file name or release name), for a detail line; null when it names none. */
+    val release: String? = null,
 )
 
 @Serializable
