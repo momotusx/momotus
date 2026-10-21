@@ -15,6 +15,8 @@ class SyncCopyTest {
     @Test
     fun `failures with a fix get their words, a network error never shows its address`() {
         assertTrue(SyncCopy.problem("dropped", "x").startsWith("This device was removed"))
+        // A kit or a wipe asked off the main profile (D13, D17), not a server that did not answer.
+        assertEquals("Only the main profile can do that.", SyncCopy.problem("notOwner", "x", Action.Kit))
         assertEquals(
             "The sync server did not answer. Your changes wait here and go out on the next sync.",
             SyncCopy.problem(null, "network: error sending request (https://relay.example/<redacted>)"),

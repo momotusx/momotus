@@ -18,17 +18,28 @@ object SyncRules {
     /** Make a recovery kit shows on the owner profile only: a kit is a copy of the whole account key (D17). */
     fun mayMakeKit(snapshot: ProfilesSnapshot?) = mayDeleteAccount(snapshot)
 
-    /** A pairing code as the new device shows it; any other QR in view is ignored. */
-    fun isPairingCode(text: String) = text.trim().startsWith("marquee:pair?")
+    /**
+     * A pairing code as the new device shows it: the TV's link `https://<link host>/pair#v=3&...`, or
+     * `marquee:pair?v=2&...` from an older build. Any other QR in view is ignored.
+     */
+    fun isPairingCode(text: String) =
+        text.trim().startsWith("marquee:pair?") || fields(text)?.split('&')?.contains("v=3") == true
+
+    /** A pairing code's fields: a v3 link carries them in its fragment, a v2 code in its query. */
+    private fun fields(code: String): String? {
+        val text = code.trim()
+        if (text.startsWith("marquee:pair?")) return text.substringAfter('?')
+        val link = runCatching { URI(text) }.getOrNull() ?: return null
+        return link.rawFragment?.takeIf { link.scheme == "https" && link.path == "/pair" }
+    }
 
     /**
      * The sync server a pairing code joins through, for the step before approving it; null when the
      * code names none. Only the host is ever shown.
      */
     fun pairingHost(code: String): String? {
-        val query = code.trim().substringAfter('?', "")
         val server =
-            query
+            (fields(code) ?: return null)
                 .split('&')
                 .firstOrNull { it.startsWith("s=") }
                 ?.removePrefix("s=")

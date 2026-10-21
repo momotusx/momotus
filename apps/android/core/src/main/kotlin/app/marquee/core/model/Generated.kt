@@ -64,6 +64,33 @@ data class AddonsSnapshot(
     val fresh: Boolean = false,
 )
 
+@Serializable(with = Announced.Serializer::class)
+enum class Announced(
+    val wire: String,
+) {
+    Device("device"),
+    Passkey("passkey"),
+    Kit("kit"),
+    Removed("removed"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<Announced>("Announced", Announced.entries, Announced::wire, Unknown)
+}
+
+/** A device that joined, a passkey or a recovery kit added, or a member removed, by another member than this device. */
+@Serializable
+data class Announcement(
+    val kind: Announced,
+    val id: String,
+    /** The member that vouched for it, or removed it (itself when a device left). */
+    val by: String,
+    /** A device's name, or a kit's label. */
+    val name: String? = null,
+)
+
 @Serializable
 data class Attempt(
     val key: String,
@@ -1440,9 +1467,11 @@ data class SyncReport(
     val again: Boolean,
     /** The account's deletion waits for this time (D14): show it with Cancel on every device. From the round's last relay answer. */
     val deletion: ScheduledDeletion? = null,
+    /** Roster changes another member made since this device joined, each reported once (3.2): show each until OK. */
+    val announcements: List<Announcement> = emptyList(),
 ) {
     // Holds keys or a token: never printed.
-    override fun toString() = "SyncReport(pushed=$pushed, stale=$stale, refused=$refused, waiting=$waiting, pulled=$pulled, applied=$applied, unreadable=$unreadable, newer=$newer, parked=$parked, oldEpochWrites=$oldEpochWrites, clockGapMs=$clockGapMs, rotationWaitMs=$rotationWaitMs, blocked=$blocked, fingerprint=$fingerprint, record=${record?.let { "hidden" }}, again=$again, deletion=$deletion)"
+    override fun toString() = "SyncReport(pushed=$pushed, stale=$stale, refused=$refused, waiting=$waiting, pulled=$pulled, applied=$applied, unreadable=$unreadable, newer=$newer, parked=$parked, oldEpochWrites=$oldEpochWrites, clockGapMs=$clockGapMs, rotationWaitMs=$rotationWaitMs, blocked=$blocked, fingerprint=$fingerprint, record=${record?.let { "hidden" }}, again=$again, deletion=$deletion, announcements=$announcements)"
 }
 
 @Serializable

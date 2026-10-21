@@ -59,6 +59,14 @@ class SyncRulesTest {
         assertNull(SyncRules.pairingHost("marquee:pair?v=2&s=not%20an%20address&p=abc"))
         // A bad percent escape is not a code, and never ends the app.
         assertNull(SyncRules.pairingHost("marquee:pair?s=%zz"))
+        // The TV's v3 link, from any link host: its fields are in the fragment.
+        val link = "https://link.example.org/pair#v=3&s=https%3A%2F%2Fsync.example.org&p=abc&k=key&g=sig"
+        assertTrue(SyncRules.isPairingCode(" $link "))
+        assertEquals("sync.example.org", SyncRules.pairingHost(link))
+        assertFalse(SyncRules.isPairingCode("http://link.example.org/pair#v=3&p=abc"))
+        assertFalse(SyncRules.isPairingCode("https://link.example.org/pairs#v=3&p=abc"))
+        assertFalse(SyncRules.isPairingCode("https://link.example.org/pair#v=2&p=abc"))
+        assertFalse(SyncRules.isPairingCode("https://link.example.org/pair?v=3&p=abc"))
     }
 
     @Test

@@ -413,6 +413,11 @@ object SyncCopy {
             "noLock" -> {
                 return "Set a screen lock first: Marquee asks for it before changing your devices or making a kit."
             }
+
+            // A kit, a passkey or a wipe is the main profile's (D13, D17).
+            "notOwner" -> {
+                return "Only the main profile can do that."
+            }
         }
         if (action == Action.Start && message == "http status 403") {
             return "This sync server needs an invite code, or the one entered is wrong."
