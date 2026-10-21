@@ -568,13 +568,20 @@ async fn a_save_says_here_dropped_or_too_many() {
 
 /// History is never refused for a lookup another account holds now: A
 /// saved a passkey and dropped it, then B saved the same one. A's device
-/// sending its roster again (as after a relay restore) is taken, and the
-/// lookup stays B's.
+/// sending its roster again (as after a relay restore) is taken, a backup
+/// from before all three restored with the journal starts (B's account
+/// replayed first), and the lookup stays B's.
 #[tokio::test]
 async fn history_is_never_refused_for_a_lookup_held_since() {
     let relay = Relay::new().await;
-    let mut a = Device::first(&relay).await;
-    let mut b = Device::first(&relay).await;
+    let first = Device::first(&relay).await;
+    let second = Device::first(&relay).await;
+    // The journal replays accounts in id order: B's goes first.
+    let (mut b, mut a) = match first.record.keys.account < second.record.keys.account {
+        true => (first, second),
+        false => (second, first),
+    };
+    let before = relay.snapshot();
     let key = prf();
     let kit = a.save(&key).await.unwrap();
     a.remove(vec![kit]).await;
@@ -611,4 +618,17 @@ async fn history_is_never_refused_for_a_lookup_held_since() {
         joined.record.keys.account, b.record.keys.account,
         "the lookup is still B's"
     );
+    // The backup from before the three entries, restored with the journal.
+    let db = fresh_dir().join("relay.sqlite");
+    std::fs::rename(&before, &db).unwrap();
+    std::fs::copy(
+        relay.db.with_extension("roster.jsonl"),
+        db.with_extension("roster.jsonl"),
+    )
+    .unwrap();
+    let restored = Relay::start(db, true).await;
+    let (joined, _) = recover(&restored, Recovery::Passkey(key), None)
+        .await
+        .unwrap();
+    assert_eq!(joined.record.keys.account, b.record.keys.account);
 }
