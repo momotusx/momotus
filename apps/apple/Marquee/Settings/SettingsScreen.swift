@@ -130,15 +130,15 @@ struct SettingsScreen: View {
                 }
                 section("About").padding(.top, Theme.Space.s)
                 Text("Marquee \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""), core \(core.version)")
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                 // The licences ship in the app: LICENSE-lucide.txt and each font's OFL.txt.
                 Text("Turkish subtitles from TurkceAltyazi.org, fetched by this device when you play.")
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 Text("Icons: Lucide 1.58.0, ISC licence. Fonts: Inter and IBM Plex Mono, SIL Open Font License 1.1.")
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
                     .modifier(ReadableOnTV())
@@ -202,7 +202,7 @@ struct SettingsScreen: View {
             subtitleSize(p)
             upNext(p)
             Text("Languages are listed in the order you turn them on; the first one wins.")
-                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .textFont(Theme.type.callout, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.muted)
         }
     }
@@ -281,9 +281,9 @@ struct SettingsRow: View {
             Glyph(symbol, size: 22)
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                Text(title).textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                 Text(detail)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
             }
             Spacer()

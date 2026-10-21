@@ -22,7 +22,7 @@ struct LanguagePicker: View {
                 TextField("Search languages", text: $query)
                     .focused($typing)
                     .textFieldStyle(.plain)
-                    .font(.text(Theme.type.body))
+                    .textFont(Theme.type.body)
                     .autocorrectionDisabled()
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
@@ -36,7 +36,7 @@ struct LanguagePicker: View {
                         let on = isOn(row.code)
                         Button { toggle(row.code) } label: {
                             HStack {
-                                Text(row.name).font(.text(Theme.type.body))
+                                Text(row.name).textFont(Theme.type.body)
                                 Spacer()
                                 if on { Glyph("check") }
                             }

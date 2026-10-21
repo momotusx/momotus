@@ -55,11 +55,19 @@ func reveal(since start: ContinuousClock.Instant) -> Animation? {
     ContinuousClock.now - start > .milliseconds(50) ? .easeOut(duration: 0.25) : nil
 }
 
-/// Accent ring with a dark halo, the focus mark from the design system. It
-/// keeps 3:1 contrast on any artwork and never relies on color alone.
+/// The focus ring with a dark halo, the focus mark from the design system. It
+/// keeps 3:1 contrast on any artwork and never relies on color alone: the key
+/// blue on the Mac (Apple's keyboard ring), white on tvOS, which has no key
+/// color and keeps its v2 ring (design/DECISION.md).
 struct FocusRing<S: InsettableShape>: ViewModifier {
     let shape: S
     let active: Bool
+
+    #if os(macOS)
+    private static var color: Color { Theme.Palette.key }
+    #else
+    private static var color: Color { Theme.Palette.accent }
+    #endif
 
     func body(content: Content) -> some View {
         content.overlay {
@@ -68,7 +76,7 @@ struct FocusRing<S: InsettableShape>: ViewModifier {
             // keyboard navigation, never for a click (FocusRule).
             if FocusRule.shown(focused: active, keyboardNavigation: KeyboardNavigation.on), !touch {
                 shape.inset(by: -(3 + Theme.Focus.ring))
-                    .strokeBorder(Theme.Palette.accent, lineWidth: Theme.Focus.ring)
+                    .strokeBorder(Self.color, lineWidth: Theme.Focus.ring)
                     .shadow(color: Theme.Palette.halo, radius: Theme.Focus.halo / 2)
                     .allowsHitTesting(false)
             }
@@ -193,8 +201,7 @@ struct CardTitle: View {
 
     var body: some View {
         Text(text)
-            .font(.text(size, weight: .bold, relativeTo: .callout))
-            .tracking(size * Theme.Tracking.label)
+            .textFont(size, weight: .bold, relativeTo: .callout)
             .foregroundStyle(card.lit && !onGlass ? Theme.Palette.accent : Theme.Palette.text)
             .lineLimit(lines)
             .multilineTextAlignment(.leading)
@@ -292,7 +299,7 @@ private struct RoundLabel<Icon: View, Title: View>: View {
                 .modifier(FocusRing(shape: Circle(), active: focused))
                 .scaleEffect(reduceMotion ? 1 : pressed ? 0.95 : focused ? Theme.Focus.scaleCard : 1)
             title
-                .font(.text(Self.word, weight: Font.Weight(token: Theme.Weight.label), relativeTo: .caption))
+                .textFont(Self.word, weight: Font.Weight(token: Theme.Weight.label), relativeTo: .caption)
                 .foregroundStyle(focused || hovered ? Theme.Palette.text : Theme.Palette.muted)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
@@ -500,7 +507,7 @@ struct StateLine: View {
 
     private var reason: some View {
         Label(text, glyph: symbol)
-            .font(.text(Theme.type.callout, relativeTo: .callout))
+            .textFont(Theme.type.callout, relativeTo: .callout)
             .foregroundStyle(Theme.Palette.muted)
             .fixedSize(horizontal: false, vertical: true)
     }

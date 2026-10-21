@@ -47,7 +47,7 @@ struct ChipRow<ID: Hashable>: View {
 
     private var caption: some View {
         Text(caps: label)
-            .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
+            .textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
             .tracking(1.6)
             .foregroundStyle(Theme.Palette.muted)
     }
@@ -60,7 +60,7 @@ struct ChipRow<ID: Hashable>: View {
                     if isSelected(chip.id) { Glyph("check", size: Theme.type.callout, relativeTo: .callout) }
                     Text(chip.title)
                     if let detail = chip.detail {
-                        Text(detail).fontWeight(Font.Weight.regular.legible).opacity(0.7)
+                        Text(detail).fontWeight(.regular).opacity(0.7)
                     }
                 }
             }
@@ -161,7 +161,7 @@ struct CardCaption: View {
             CardTitle(text: name, size: metrics.cardName)
             if let info, !info.isEmpty {
                 Text(info)
-                    .font(.text(metrics.cardInfo, weight: .medium, relativeTo: .caption))
+                    .textFont(metrics.cardInfo, weight: .medium, relativeTo: .caption)
                     .foregroundStyle(Theme.Palette.dim)
                     .lineLimit(1)
             }

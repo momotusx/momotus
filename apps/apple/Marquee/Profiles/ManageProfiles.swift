@@ -52,9 +52,9 @@ struct ProfileRow: View {
         HStack(spacing: Theme.Space.s) {
             ProfileAvatar(stored, name: name, size: 40)
             VStack(alignment: .leading, spacing: 3) {
-                Text(name).font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                Text(name).textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                 Text(detail)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
             }
             Spacer()
@@ -152,7 +152,7 @@ struct EditProfile: View {
     private func deleteConfirm(_ target: ProfileInfo) -> some View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
             Text("Delete \(target.name)? Their library, progress and settings are removed from this device now and from your other devices when they next sync.")
-                .font(.text(Theme.type.body))
+                .textFont(Theme.type.body)
                 .foregroundStyle(Theme.Palette.text)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 12) {
@@ -211,7 +211,7 @@ struct EditProfile: View {
                     caps("Name")
                     TextField("Name", text: $name)
                         .textFieldStyle(.plain)
-                        .font(.text(Theme.type.body))
+                        .textFont(Theme.type.body)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 12)
                         .focused($nameFocused)
@@ -252,7 +252,7 @@ struct EditProfile: View {
             .scrollIndicators(.hidden)
             if let said {
                 Label(said.text, glyph: said.ok ? "circle-check" : "triangle-alert")
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(said.ok ? Theme.Palette.muted : Theme.Palette.text)
             }
             Button(profileId == nil ? "Add profile" : "Save", action: save)
@@ -263,7 +263,7 @@ struct EditProfile: View {
 
     private func caps(_ text: String) -> some View {
         Text(caps: text)
-            .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
+            .textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
             .tracking(1.6)
             .foregroundStyle(Theme.Palette.muted)
     }

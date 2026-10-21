@@ -98,7 +98,7 @@ private struct SeasonPicker: View {
         ScrollView(.horizontal) {
             HStack(spacing: 8) {
                 Text(caps: "Season")
-                    .font(.text(Theme.type.caption, weight: .bold, relativeTo: .caption))
+                    .textFont(Theme.type.caption, weight: .bold, relativeTo: .caption)
                     .tracking(Theme.type.caption * 0.12)
                     .foregroundStyle(Theme.Palette.muted)
                     .padding(.trailing, 6)
@@ -126,7 +126,7 @@ private struct SeasonButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.text(Theme.type.callout, weight: selected ? .bold : .semibold, relativeTo: .callout))
+            .textFont(Theme.type.callout, weight: selected ? .bold : .semibold, relativeTo: .callout)
             .foregroundStyle(selected ? Theme.Palette.text : Theme.Palette.muted)
             .padding(.horizontal, round ? 0 : 14)
             .frame(width: round ? Self.size : nil, height: Self.size)
@@ -229,20 +229,20 @@ private struct EpisodeRow: View {
                         size: metrics.cardName + 2, onGlass: true, lines: 2)
                     if !meta.isEmpty {
                         Text(meta)
-                            .font(.text(metrics.cardInfo, weight: .medium, relativeTo: .caption))
+                            .textFont(metrics.cardInfo, weight: .medium, relativeTo: .caption)
                             .foregroundStyle(current && episode.progress != nil ? Theme.Palette.text : Theme.Palette.dim)
                             .monospacedDigit()
                     }
                     if let overview = episode.overview, !overview.isEmpty {
                         Text(overview)
-                            .font(.text(metrics.cardInfo + 1, relativeTo: .callout))
+                            .textFont(metrics.cardInfo + 1, relativeTo: .callout)
                             .foregroundStyle(Theme.Palette.muted)
                             .lineLimit(2)
                             .multilineTextAlignment(.leading)
                     }
                     if let status {
                         Label(status, glyph: status == "Finding a version" ? "clock" : "circle-alert", size: metrics.cardInfo + 2)
-                            .font(.text(metrics.cardInfo + 1, relativeTo: .callout))
+                            .textFont(metrics.cardInfo + 1, relativeTo: .callout)
                             .foregroundStyle(Theme.Palette.text)
                             .multilineTextAlignment(.leading)
                             .fixedSize(horizontal: false, vertical: true)
@@ -270,7 +270,7 @@ private struct EpisodeRow: View {
             .frame(width: width, height: width * 9 / 16)
             .overlay(alignment: .bottomLeading) {
                 Text("\(episode.episode)")
-                    .font(.text(chip + 2, weight: .heavy, relativeTo: .caption))
+                    .textFont(chip + 2, weight: .heavy, relativeTo: .caption)
                     .monospacedDigit()
                     .foregroundStyle(Theme.Palette.text)
                     .padding(.horizontal, chip * 0.5)
@@ -282,7 +282,7 @@ private struct EpisodeRow: View {
                 if episode.watched {
                     Label("Watched", glyph: "check", size: chip)
                         .labelStyle(ChipLabelStyle())
-                        .font(.text(chip, weight: .bold, relativeTo: .caption2))
+                        .textFont(chip, weight: .bold, relativeTo: .caption2)
                         .foregroundStyle(Theme.Palette.text)
                         .padding(.horizontal, chip * 0.55)
                         .frame(height: chip * 1.8)

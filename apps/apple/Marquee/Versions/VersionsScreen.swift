@@ -89,7 +89,7 @@ struct VersionsScreen: View {
 
     private var subject: some View {
         Text("for \(heading)")
-            .font(.text(Theme.type.headline, relativeTo: .headline))
+            .textFont(Theme.type.headline, relativeTo: .headline)
             .foregroundStyle(Theme.Palette.muted)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -104,10 +104,10 @@ struct VersionsScreen: View {
             .foregroundStyle(Theme.Palette.text)
             let progress = VersionWords.progress(snapshot)
             DotLine(text: progress.text, tone: progress.tone)
-                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .textFont(Theme.type.callout, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.text)
             Label(snapshot?.conditions.map { StreamChoice.conditionsHeader(device: StreamChoice.device, $0) } ?? DeviceCaps.line, glyph: "monitor-check")
-                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .textFont(Theme.type.callout, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.muted)
                 .padding(.top, 4)
         }
@@ -125,7 +125,7 @@ struct VersionsScreen: View {
                     .foregroundStyle(Theme.Palette.text)
                     .accessibilityAddTraits(.isHeader)
                 Text(words.text)
-                    .font(.text(Theme.type.body))
+                    .textFont(Theme.type.body)
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 if blocked.reason == "needsAccount" {
@@ -147,10 +147,10 @@ struct VersionsScreen: View {
             VStack(alignment: .leading, spacing: 10) {
                 if let snapshot, snapshot.done {
                     Label(VersionWords.waitingTitle(snapshot), glyph: "circle-alert")
-                        .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                        .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                         .foregroundStyle(Theme.Palette.text)
                     Text(VersionWords.waitingBody(snapshot))
-                        .font(.text(Theme.type.body))
+                        .textFont(Theme.type.body)
                         .foregroundStyle(Theme.Palette.muted)
                     // With no version at all a source is the way on; with some, choosing one is.
                     if snapshot.rows.isEmpty {
@@ -200,7 +200,7 @@ struct VersionsScreen: View {
                         Spacer()
                         Text("\(rows.count)").monospacedDigit()
                     }
-                    .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
+                    .textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
                     .foregroundStyle(Theme.Palette.text)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 9)
@@ -224,7 +224,7 @@ struct VersionsScreen: View {
                             }
                         }
                         .buttonStyle(.textLink)
-                        .font(.text(Theme.type.callout, weight: .medium, relativeTo: .callout))
+                        .textFont(Theme.type.callout, weight: .medium, relativeTo: .callout)
                         .foregroundStyle(Theme.Palette.muted)
                         .padding(.vertical, 10)
                         .padding(.horizontal, 14)
@@ -235,11 +235,11 @@ struct VersionsScreen: View {
                 Label {
                     let window = snapshot?.conditions?.window ?? true
                     let reasons = Text(VersionWords.hidden(hidden, window: window)).foregroundStyle(Theme.Palette.muted)
-                    Text("\(Text("Hidden (\(hidden.count))").fontWeight(Font.Weight.semibold.legible))  \(reasons)")
+                    Text("\(Text("Hidden (\(hidden.count))").fontWeight(.semibold))  \(reasons)")
                 } icon: {
                     Glyph("eye-off")
                 }
-                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .textFont(Theme.type.callout, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.text)
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -302,7 +302,7 @@ private struct PickCard: View {
 
     static var kicker: some View {
         Text(caps: "Recommended for this screen")
-            .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
+            .textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
             .tracking(1.6)
             .foregroundStyle(Theme.Palette.muted)
     }
@@ -331,7 +331,7 @@ private struct PickCard: View {
                     } icon: {
                         Glyph("check").foregroundStyle(Theme.Palette.ok)
                     }
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.text)
                 }
                 // A version that plays in a window says so, with its minutes ahead.
@@ -340,13 +340,13 @@ private struct PickCard: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(line.text).foregroundStyle(Theme.Palette.text)
                             Text(line.details)
-                                .font(.text(Theme.type.caption, relativeTo: .caption))
+                                .textFont(Theme.type.caption, relativeTo: .caption)
                                 .foregroundStyle(Theme.Palette.muted)
                         }
                     } icon: {
                         Glyph("check").foregroundStyle(Theme.Palette.ok)
                     }
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                 }
             }
             // Wraps at the dots between tokens, never inside one ("mp" / "4"). Not
@@ -359,7 +359,7 @@ private struct PickCard: View {
             playButton.padding(.top, 6)
             #endif
             Label(VersionWords.failover(row), glyph: "refresh-cw")
-                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .textFont(Theme.type.callout, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.muted)
         }
         .padding(Theme.Space.m)
@@ -378,14 +378,14 @@ private struct PickCard: View {
     private func fact(_ label: String, _ value: String, dot: Color? = nil) -> some View {
         GridRow {
             Text(caps: label)
-                .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
+                .textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
                 .tracking(1.4)
                 .foregroundStyle(Theme.Palette.muted)
             HStack(spacing: 6) {
                 if let dot { Circle().fill(dot).frame(width: 8, height: 8) }
                 Text(value)
             }
-            .font(.text(Theme.type.body))
+            .textFont(Theme.type.body)
             .foregroundStyle(Theme.Palette.text)
         }
     }
@@ -401,7 +401,7 @@ private struct ColumnHeadings: View {
             Text("Status").frame(width: VersionRowView.statusWidth, alignment: .leading)
             Text("Via").frame(width: VersionRowView.viaWidth, alignment: .leading)
         }
-        .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
+        .textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
         .foregroundStyle(Theme.Palette.muted)
         .padding(.horizontal, 14)
         .accessibilityHidden(true)
@@ -437,7 +437,7 @@ private struct VersionRowView: View {
                 if wide {
                     HStack(spacing: 16) {
                         Text(VersionWords.cell(row.quality))
-                            .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                            .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                             // One word: smaller before it would break inside it.
                             .lineLimit(1)
                             .minimumScaleFactor(0.75)
@@ -454,7 +454,7 @@ private struct VersionRowView: View {
                     // Phone: two lines, "720p · HDR10 · 1.2 GB" over "Torrent, 12 seeds · Torrentio".
                     Text(([VersionWords.cell(row.quality)] + row.features + [VersionWords.size(row.sizeBytes)].compactMap { $0 })
                         .joined(separator: " \u{B7} "))
-                        .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                        .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                     HStack(spacing: 6) {
                         status
                         Text("\u{B7} \(row.via)").foregroundStyle(Theme.Palette.muted)
@@ -480,11 +480,11 @@ private struct VersionRowView: View {
                 }
                 if !wide && tapped {
                     Label("Play this version", glyph: "play-fill")
-                        .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
+                        .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
                         .padding(.top, 2)
                 }
             }
-            .font(.text(Theme.type.callout, relativeTo: .callout))
+            .textFont(Theme.type.callout, relativeTo: .callout)
             .foregroundStyle(Theme.Palette.text)
             .padding(.vertical, 12)
             .padding(.horizontal, 14)
@@ -530,9 +530,9 @@ private struct NobodySharingLine: View {
         let words = StreamChoice.words.nobodySharing
         Label {
             VStack(alignment: .leading, spacing: 2) {
-                Text(words.text).font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
+                Text(words.text).textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
                 Text(words.details)
-                    .font(.text(Theme.type.caption, relativeTo: .caption))
+                    .textFont(Theme.type.caption, relativeTo: .caption)
                     .foregroundStyle(Theme.Palette.muted)
             }
             .fixedSize(horizontal: false, vertical: true)
@@ -552,7 +552,7 @@ private struct LearnedNoteBar: View {
         HStack(alignment: .center, spacing: 12) {
             Glyph("sparkle").foregroundStyle(Theme.Palette.text).accessibilityHidden(true)
             Text(text)
-                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .textFont(Theme.type.callout, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.text)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)

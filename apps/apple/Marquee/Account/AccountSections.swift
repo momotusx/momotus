@@ -35,7 +35,7 @@ struct SignedInWith: View {
             #if !os(tvOS)
             if owner, !unlinked.isEmpty {
                 Text(words.linkAnother)
-                    .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
+                    .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                 FlowRow(spacing: Theme.Space.xs) {
                     ForEach(unlinked, id: \.self) { id in
@@ -76,9 +76,9 @@ struct SignedInWith: View {
                 Glyph("link-2").frame(width: 24)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(AccountRules.providerAccount(link.provider))
-                        .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                        .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                     Text(AccountRules.fill(words.linkedOn, ["date": AccountRules.date(link.createdMs)]))
-                        .font(.text(Theme.type.callout, relativeTo: .callout))
+                        .textFont(Theme.type.callout, relativeTo: .callout)
                         .foregroundStyle(Theme.Palette.muted)
                 }
                 .accessibilityElement(children: .combine)
@@ -87,7 +87,7 @@ struct SignedInWith: View {
                 // The only sign-in left: what signing in is without it (4.3).
                 if links?.count == 1 {
                     Text(words.unlinkLast)
-                        .font(.text(Theme.type.callout, relativeTo: .callout))
+                        .textFont(Theme.type.callout, relativeTo: .callout)
                         .foregroundStyle(Theme.Palette.muted)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.leading, 24 + Theme.Space.s)

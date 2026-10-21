@@ -76,7 +76,7 @@ private struct EmptyLibrary: View {
                 .display(Theme.type.title2)
                 .foregroundStyle(Theme.Palette.text)
             Text("Add titles with Add to Library on a title page, or import your Stremio library from Settings.")
-                .font(.text(Theme.type.body))
+                .textFont(Theme.type.body)
                 .foregroundStyle(Theme.Palette.muted)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)

@@ -18,12 +18,12 @@ struct TraktScreen: View {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 VStack(alignment: .leading, spacing: Theme.Space.xs) {
                     Text(caps: W.eyebrow)
-                        .font(.text(Theme.type.caption, weight: .bold, relativeTo: .caption))
+                        .textFont(Theme.type.caption, weight: .bold, relativeTo: .caption)
                         .tracking(Theme.type.caption * 0.14)
                         .foregroundStyle(Theme.Palette.accent)
                     ScreenTitle(text: W.title)
                     Text(W.lede)
-                        .font(.text(Theme.type.body))
+                        .textFont(Theme.type.body)
                         .foregroundStyle(Theme.Palette.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -59,7 +59,7 @@ struct TraktScreen: View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
             Text(W.unmappedTitle).display(Theme.type.title2).foregroundStyle(Theme.Palette.text).accessibilityAddTraits(.isHeader)
             Text(W.unmappedLede)
-                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .textFont(Theme.type.callout, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
             ForEach(items, id: \.itemId) { item in
@@ -67,10 +67,10 @@ struct TraktScreen: View {
                     Glyph("triangle-alert").foregroundStyle(Theme.Palette.warn)
                     VStack(alignment: .leading, spacing: Theme.Space.xs) {
                         Text(item.name)
-                            .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                            .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                             .foregroundStyle(Theme.Palette.text)
                         Text(item.reason)
-                            .font(.text(Theme.type.callout, relativeTo: .callout))
+                            .textFont(Theme.type.callout, relativeTo: .callout)
                             .foregroundStyle(Theme.Palette.muted)
                     }
                 }
@@ -111,7 +111,7 @@ private struct TraktCard: View {
             Said(tone: tone, text: card.line)
             if let detail = card.detail {
                 Text(detail)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
             }
             if connectedish { facts }
@@ -167,7 +167,7 @@ private struct TraktCard: View {
 
     private func fact(_ words: String) -> some View {
         Text(words)
-            .font(.text(Theme.type.callout, relativeTo: .callout))
+            .textFont(Theme.type.callout, relativeTo: .callout)
             .foregroundStyle(Theme.Palette.muted)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -302,13 +302,13 @@ private struct TraktConnect: View {
             }
             VStack(alignment: .leading, spacing: Theme.Space.xs) {
                 Text(showsQR ? W.scanOrOpen : W.open)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                 Text(url.replacingOccurrences(of: "https://", with: ""))
-                    .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                    .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                     .foregroundStyle(Theme.Palette.text)
                 Text(W.enterCode)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                 Text(userCode)
                     .font(.mono(Theme.type.title1))
@@ -316,12 +316,12 @@ private struct TraktConnect: View {
                     .foregroundStyle(Theme.Palette.text)
                     .accessibilityLabel(TraktRules.spokenCode(userCode))
                 Text(W.waiting)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                 // The time left, from the code's own deadline. Never announced: it changes every second.
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     Text(TraktRules.fill(W.goodFor, ["time": TraktRules.timeLeft(expiresMs: expiresMs, nowMs: Int64(context.date.timeIntervalSince1970 * 1000))]))
-                        .font(.text(Theme.type.callout, relativeTo: .callout).monospacedDigit())
+                        .textFont(Theme.type.callout, relativeTo: .callout).monospacedDigit()
                         .foregroundStyle(Theme.Palette.muted)
                 }
             }
@@ -359,7 +359,7 @@ struct TraktMark: View {
                 Glyph(mark.warn ? "triangle-alert" : "circle-check", size: Theme.type.callout)
                     .foregroundStyle(mark.warn ? Theme.Palette.warn : Theme.Palette.ok)
                 Text(mark.warn ? mark.label : W.title)
-                    .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
+                    .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
                     .foregroundStyle(.white.opacity(0.85))
                     .fixedSize(horizontal: false, vertical: true)
             }

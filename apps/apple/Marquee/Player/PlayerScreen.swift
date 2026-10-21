@@ -132,7 +132,7 @@ struct PlayerScreen: View {
             if let status = model.subtitleStatus, model.playback?.phase != "failed" {
                 // Why the picked subtitles did not load, for a few seconds, clear of Skip at the other corner.
                 Text(status)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(.white)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, Theme.Space.s)
@@ -412,7 +412,7 @@ private struct SkipButton: View {
                 .buttonStyle(PillButtonStyle(prominent: true))
                 .focused($focused)
             Text("Skip data: \(segment.source)")
-                .font(.text(Theme.type.caption, relativeTo: .caption))
+                .textFont(Theme.type.caption, relativeTo: .caption)
                 .foregroundStyle(.white.opacity(0.85))
                 .shadow(color: .black.opacity(0.7), radius: 6)
                 .opacity(focused || showSource ? 1 : 0)
@@ -498,12 +498,12 @@ private struct StatusOverlay: View {
             if let note = PlayerLayout.failureNote(tryingAgain: model.tryingAgain) {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small).tint(Theme.Palette.text)
-                    Text(note).font(.text(Theme.type.body))
+                    Text(note).textFont(Theme.type.body)
                 }
             }
             ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
                 Label(line, glyph: "circle-x")
-                    .font(.text(Theme.type.body))
+                    .textFont(Theme.type.body)
                     .foregroundStyle(Theme.Palette.muted)
             }
             // Side by side when they fit, else stacked with the way on first.
@@ -529,7 +529,7 @@ private struct StatusOverlay: View {
 
     private var waitingWords: some View {
         Text(PlayerLayout.waitingWords(model.playback, notice: model.notice, tryingAgain: model.tryingAgain))
-            .font(.text(Theme.type.callout, relativeTo: .callout))
+            .textFont(Theme.type.callout, relativeTo: .callout)
             .foregroundStyle(.white.opacity(0.8))
     }
 

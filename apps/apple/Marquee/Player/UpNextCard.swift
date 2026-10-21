@@ -22,7 +22,7 @@ struct UpNextCard: View {
                     }
                     VStack(alignment: .leading, spacing: 6) {
                         Text("NEXT EPISODE")
-                            .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
+                            .textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
                             .tracking(1.6)
                             .foregroundStyle(.white.opacity(0.7))
                         Text("S\(next.season):E\(next.episode) \(next.title)")
@@ -32,11 +32,11 @@ struct UpNextCard: View {
                             .accessibilityLabel("\(spokenEpisode(season: next.season, episode: next.episode)), \(next.title)")
                         if model.startingNext {
                             Label("Finding a version", glyph: "clock")
-                                .font(.text(Theme.type.callout, relativeTo: .callout))
+                                .textFont(Theme.type.callout, relativeTo: .callout)
                                 .foregroundStyle(.white.opacity(0.8))
                         } else if model.autoplayNext {
                             Text(startsIn(seconds: model.countdown))
-                                .font(.text(Theme.type.callout, relativeTo: .callout))
+                                .textFont(Theme.type.callout, relativeTo: .callout)
                                 .monospacedDigit()
                                 .foregroundStyle(.white.opacity(0.8))
                         }
@@ -97,7 +97,7 @@ struct EndCard: View {
             Glyph("circle-alert", size: 34).accessibilityHidden(true)
             heading("S\(next.season):E\(next.episode) \(next.title)")
             Text(failure)
-                .font(.text(Theme.type.body))
+                .textFont(Theme.type.body)
                 .foregroundStyle(.white.opacity(0.8))
             actions {
                 Button("Choose a version", action: chooseVersion).buttonStyle(PillButtonStyle(prominent: true)).focused($focused)
@@ -133,7 +133,7 @@ struct EndCard: View {
 
     private func kicker(_ text: String) -> some View {
         Text(caps: text)
-            .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
+            .textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
             .tracking(1.6)
             .foregroundStyle(.white.opacity(0.7))
     }

@@ -43,24 +43,42 @@ extension View {
         }
     }
 
-    /// Display and heading type: Inter 800, tracked tight (display from
-    /// title1 up, heading below).
+    /// Display and heading type: SF at the display weight.
     func display(_ size: CGFloat, relativeTo style: Font.TextStyle = .title) -> some View {
-        font(.display(size, relativeTo: style))
-            .tracking(size * (size >= Theme.type.title1 ? Theme.Tracking.display : Theme.Tracking.heading))
+        textFont(size, weight: Font.Weight(token: Theme.Weight.display), relativeTo: style)
     }
 
-    /// Labels on controls: the label weight, tracked a little tight.
+    /// Labels on controls: the label weight.
     func labelFont(_ size: CGFloat, relativeTo style: Font.TextStyle = .headline) -> some View {
-        font(.text(size, weight: Font.Weight(token: Theme.Weight.label), relativeTo: style))
-            .tracking(size * Theme.Tracking.label)
+        textFont(size, weight: Font.Weight(token: Theme.Weight.label), relativeTo: style)
+    }
+
+    /// SF Pro, the system font, at a token size. On iOS the size follows Dynamic Type relative to
+    /// `style`, also when it changes while the app is open; tvOS and macOS have no Dynamic Type.
+    /// SF tracks itself and bolds itself under Bold Text, so neither is added here.
+    func textFont(_ size: CGFloat, weight: Font.Weight = .regular, relativeTo style: Font.TextStyle = .body) -> some View {
+        modifier(TextFont(size: size, weight: weight, style: style))
+    }
+}
+
+private struct TextFont: ViewModifier {
+    @ScaledMetric private var size: CGFloat
+    private let weight: Font.Weight
+
+    init(size: CGFloat, weight: Font.Weight, style: Font.TextStyle) {
+        _size = ScaledMetric(wrappedValue: size, relativeTo: style)
+        self.weight = weight
+    }
+
+    func body(content: Content) -> some View {
+        content.font(.system(size: size, weight: weight))
     }
 }
 
 extension Font.Weight {
-    /// The nearest named weight at or below a token weight (650 sets as semibold).
+    /// The nearest named weight at or below a token weight (the weights v3 uses).
     init(token: CGFloat) {
-        let named: [(CGFloat, Font.Weight)] = [(900, .black), (800, .heavy), (700, .bold), (600, .semibold), (500, .medium)]
+        let named: [(CGFloat, Font.Weight)] = [(700, .bold), (600, .semibold), (500, .medium)]
         self = named.first { token >= $0.0 }?.1 ?? .regular
     }
 }
@@ -78,15 +96,24 @@ enum Fonts {
 }
 
 extension Font {
-    /// Inter at the display weight: titles and headings. Use `View.display`
-    /// for its tracking too.
+    /// SF at the display weight, for the few places that need a `Font` value; views use
+    /// `View.display`.
     @MainActor static func display(_ size: CGFloat, relativeTo style: Font.TextStyle = .title) -> Font {
-        .custom(Theme.Family.display, size: size, relativeTo: style).weight(Font.Weight(token: Theme.Weight.display).legible)
+        .system(size: scaled(size, style), weight: Font.Weight(token: Theme.Weight.display))
     }
 
-    /// Inter: everything the user reads to decide.
+    /// SF for a `Font` value (a choice between faces); views use `View.textFont`. The size is
+    /// scaled for Dynamic Type when the view is drawn.
     @MainActor static func text(_ size: CGFloat, weight: Font.Weight = .regular, relativeTo style: Font.TextStyle = .body) -> Font {
-        .custom(Theme.Family.text, size: size, relativeTo: style).weight(weight.legible)
+        .system(size: scaled(size, style), weight: weight)
+    }
+
+    @MainActor private static func scaled(_ size: CGFloat, _ style: Font.TextStyle) -> CGFloat {
+        #if os(iOS)
+        UIFontMetrics(forTextStyle: style.uiKit).scaledValue(for: size)
+        #else
+        size
+        #endif
     }
 
     /// IBM Plex Mono: release names and technical lines.
@@ -115,18 +142,27 @@ extension Font.Weight {
         #endif
     }
 
-    /// This weight, one step heavier under Bold Text.
-    @MainActor var legible: Font.Weight {
-        guard Font.Weight.boldText else { return self }
+}
+
+#if os(iOS)
+private extension Font.TextStyle {
+    var uiKit: UIFont.TextStyle {
         switch self {
-        case .ultraLight, .thin, .light: return .regular
-        case .regular, .medium: return .semibold
-        case .semibold: return .bold
-        case .bold: return .heavy
-        default: return .black
+        case .largeTitle: .largeTitle
+        case .title: .title1
+        case .title2: .title2
+        case .title3: .title3
+        case .headline: .headline
+        case .subheadline: .subheadline
+        case .callout: .callout
+        case .footnote: .footnote
+        case .caption: .caption1
+        case .caption2: .caption2
+        default: .body
         }
     }
 }
+#endif
 
 /// Layout numbers that depend on the device class, set once at the root.
 struct Metrics: Sendable {

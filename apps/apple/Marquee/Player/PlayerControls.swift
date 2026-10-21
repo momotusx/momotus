@@ -108,7 +108,7 @@ struct PlayerControls: View {
                     .display(metrics.wide ? Theme.type.title1 : Theme.type.title2)
                 if let season = target.season, let episode = target.episode {
                     Text("S\(season):E\(episode)")
-                        .font(.text(Theme.type.callout, relativeTo: .callout))
+                        .textFont(Theme.type.callout, relativeTo: .callout)
                         .foregroundStyle(.white.opacity(0.75))
                         .accessibilityLabel(spokenEpisode(season: season, episode: episode))
                 }
@@ -140,7 +140,7 @@ struct PlayerControls: View {
             #endif
             if model.duration > 0, model.playback?.phase != "failed" {
                 Text("Ends at \(endsAt.formatted(date: .omitted, time: .shortened))")
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(.white.opacity(0.8))
                     .frame(minHeight: 40)
             }
@@ -170,7 +170,7 @@ struct PlayerControls: View {
                 ProgressLine(value: model.duration > 0 ? model.position / model.duration : 0)
                 Text("-" + timecode(max(0, model.duration - model.position))).monospacedDigit()
             }
-            .font(.text(Theme.type.callout, relativeTo: .callout))
+            .textFont(Theme.type.callout, relativeTo: .callout)
             .padding(.vertical, 10)
             .padding(.horizontal, 14)
             .contentShape(Capsule())
@@ -200,7 +200,7 @@ struct PlayerControls: View {
             }
             #else
             scrubRow(spacing: 12)
-                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .textFont(Theme.type.callout, relativeTo: .callout)
             #endif
             if metrics.wide {
                 HStack(alignment: .center) {
@@ -249,7 +249,7 @@ struct PlayerControls: View {
         VStack(spacing: 6) {
             #if !os(tvOS)
             scrubRow(spacing: 8)
-                .font(.text(Theme.type.caption, relativeTo: .caption))
+                .textFont(Theme.type.caption, relativeTo: .caption)
                 .padding(.horizontal, PhoneFrame.barInset)
                 .frame(height: PhoneFrame.barHeight)
                 .glass(Capsule())
@@ -485,7 +485,7 @@ struct PlayerControls: View {
     private func action(_ title: String, _ symbol: String, _ value: String, searching: Bool = false, shown: Bool = true) -> some View {
         let current = HStack(spacing: 4) {
             // Capped: a long track name ("English Audio Description") must not widen the row without end.
-            Text(value).font(.text(Theme.type.caption, relativeTo: .caption))
+            Text(value).textFont(Theme.type.caption, relativeTo: .caption)
                 .lineLimit(1)
             // More may come: the core is still asking subtitle addons.
             if searching {
@@ -500,7 +500,7 @@ struct PlayerControls: View {
                 // One compact line under the scrubber: icon, word, value.
                 HStack(spacing: 6) {
                     Glyph(symbol, size: 16)
-                    Text(title).font(.text(Theme.type.caption + 1, weight: .semibold, relativeTo: .caption))
+                    Text(title).textFont(Theme.type.caption + 1, weight: .semibold, relativeTo: .caption)
                         .fixedSize()
                     if shown { current }
                 }
@@ -509,7 +509,7 @@ struct PlayerControls: View {
             } else {
                 VStack(spacing: 3) {
                     Glyph(symbol, size: 18)
-                    Text(title).font(.text(Theme.type.caption + 1, weight: .semibold, relativeTo: .caption))
+                    Text(title).textFont(Theme.type.caption + 1, weight: .semibold, relativeTo: .caption)
                     current
                 }
             }
@@ -557,7 +557,7 @@ private struct SkipGlyph: View {
     var body: some View {
         Glyph(name, size: 26)
             .overlay {
-                Text("10").font(.text(9, weight: .bold)).monospacedDigit().offset(y: 1)
+                Text("10").textFont(9, weight: .bold).monospacedDigit().offset(y: 1)
             }
             .frame(width: wide ? 56 : 50, height: wide ? 56 : 50)
             .glass(Circle())

@@ -27,7 +27,7 @@ struct ImportScreen: View {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 ScreenTitle(text: "Import from Stremio")
                 Text("Brings your addons, library and progress over once. Nothing is sent back to Stremio.")
-                    .font(.text(Theme.type.body))
+                    .textFont(Theme.type.body)
                     .foregroundStyle(Theme.Palette.muted)
                 phase
                 if let failure = importer.failure {
@@ -51,14 +51,14 @@ struct ImportScreen: View {
             // Not while the view could not open: the reason and Try again show instead.
             if importer.failure == nil {
                 Label("Asking Stremio for a sign-in code", glyph: "clock")
-                    .font(.text(Theme.type.body))
+                    .textFont(Theme.type.body)
                     .foregroundStyle(Theme.Palette.muted)
             }
         case .waitingForLink(let code, let link, _)?:
             HStack(alignment: .top, spacing: Theme.Space.l) {
                 VStack(alignment: .leading, spacing: Theme.Space.s) {
                     Text("Open the link on any device signed in to Stremio and enter this code:")
-                        .font(.text(Theme.type.body))
+                        .textFont(Theme.type.body)
                         .foregroundStyle(Theme.Palette.text)
                     Text(code)
                         .font(.mono(Theme.type.hero))
@@ -69,7 +69,7 @@ struct ImportScreen: View {
                         #if os(tvOS)
                         // A TV has no browser: the address to type on a phone or computer, beside its QR.
                         Label(url.host() ?? link, glyph: "external-link")
-                            .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                            .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                             .foregroundStyle(Theme.Palette.text)
                         #else
                         Button { openURL(url) } label: { Label(url.host() ?? link, glyph: "external-link") }
@@ -77,14 +77,14 @@ struct ImportScreen: View {
                         #endif
                     }
                     Label("Waiting for the link. This page moves on by itself.", glyph: "clock")
-                        .font(.text(Theme.type.callout, relativeTo: .callout))
+                        .textFont(Theme.type.callout, relativeTo: .callout)
                         .foregroundStyle(Theme.Palette.muted)
                 }
                 if metrics.wide { QRCode(text: link).frame(width: 180, height: 180) }
             }
         case .importing(let step)?:
             Label(step, glyph: "download")
-                .font(.text(Theme.type.body))
+                .textFont(Theme.type.body)
                 .foregroundStyle(Theme.Palette.text)
         case .done(let summary)?:
             VStack(alignment: .leading, spacing: 8) {
@@ -102,7 +102,7 @@ struct ImportScreen: View {
                         .padding(.top, Theme.Space.s)
                 }
             }
-            .font(.text(Theme.type.body))
+            .textFont(Theme.type.body)
             .foregroundStyle(Theme.Palette.text)
         case .expired?:
             StateLine(symbol: "clock-alert", text: "The code expired before it was linked.", action: ("New code", restart))

@@ -37,7 +37,7 @@ struct PairingScreen: View {
                 // Once joined, the page is the result, the last sync and Done: no second pairing starts here.
                 if !joinedHere {
                     Text(lede ?? "Join your sync account by scanning a code with a device that already syncs. Your library stays end to end encrypted.")
-                        .font(.text(Theme.type.body))
+                        .textFont(Theme.type.body)
                         .foregroundStyle(Theme.Palette.muted)
                 }
                 if let pairing = sync.pairing {
@@ -106,7 +106,7 @@ struct PairingScreen: View {
     private func again(_ text: String, symbol: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Label(text, glyph: symbol)
-                .font(.text(Theme.type.body))
+                .textFont(Theme.type.body)
                 .foregroundStyle(Theme.Palette.text)
                 .fixedSize(horizontal: false, vertical: true)
             Button { sync.endPairing() } label: { Label("Start again", glyph: "refresh-cw") }
@@ -148,13 +148,13 @@ struct PairingScreen: View {
     private func field(_ label: String, text: Binding<String>, prompt: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(caps: label)
-                .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
+                .textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
                 .tracking(1.6)
                 .foregroundStyle(Theme.Palette.muted)
             TextField(prompt, text: text)
                 .focused($typing, equals: label)
                 .textFieldStyle(.plain)
-                .font(.text(Theme.type.body))
+                .textFont(Theme.type.body)
                 .autocorrectionDisabled()
                 #if os(iOS)
                 .textInputAutocapitalization(.never)
@@ -169,22 +169,22 @@ struct PairingScreen: View {
         switch pairing.snapshot {
         case nil, .starting?:
             Label("Asking the sync server for a code", glyph: "clock")
-                .font(.text(Theme.type.body))
+                .textFont(Theme.type.body)
                 .foregroundStyle(Theme.Palette.muted)
         case .waiting(let qr, let expiresMs)?:
             VStack(alignment: .leading, spacing: Theme.Space.s) {
                 QRCode(text: qr).frame(width: metrics.wide ? 240 : 200, height: metrics.wide ? 240 : 200)
                 Text("On a device that already syncs, open Settings, then Account, then Add a device, and scan this code.")
-                    .font(.text(Theme.type.body))
+                    .textFont(Theme.type.body)
                     .foregroundStyle(Theme.Palette.text)
                 let expires = Date(timeIntervalSince1970: TimeInterval(expiresMs) / 1000)
                 Text("The code works until \(expires.formatted(date: .omitted, time: .shortened)).")
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                 #if !os(tvOS)
                 // No camera on the other side: the code goes over by paste, on this device only, until it expires.
                 Text(SyncWords.copyHelp)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 Button {
@@ -198,7 +198,7 @@ struct PairingScreen: View {
         case .confirm(let code)?:
             VStack(alignment: .leading, spacing: Theme.Space.s) {
                 Text("Does the other device show the same six digits?")
-                    .font(.text(Theme.type.body))
+                    .textFont(Theme.type.body)
                     .foregroundStyle(Theme.Palette.text)
                 Text(code)
                     .font(.mono(Theme.type.hero + 8))
@@ -265,7 +265,7 @@ private struct JoinedState: View {
                 case nil: Label("Saving the account to this device", glyph: "clock")
                 }
             }
-            .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+            .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
             .foregroundStyle(Theme.Palette.text)
             if stored == true { arrived }
             if stored != nil {
@@ -285,7 +285,7 @@ private struct JoinedState: View {
     @ViewBuilder private var arrived: some View {
         if sync.syncing {
             Label("Bringing over your library", glyph: "clock")
-                .font(.text(Theme.type.body))
+                .textFont(Theme.type.body)
                 .foregroundStyle(Theme.Palette.muted)
         } else {
             if let problem = sync.problem {
@@ -296,7 +296,7 @@ private struct JoinedState: View {
             if let counts {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(caps: "Now on this device")
-                        .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
+                        .textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
                         .tracking(1.6)
                         .foregroundStyle(Theme.Palette.muted)
                     table(counts)
@@ -329,7 +329,7 @@ private struct JoinedState: View {
                 .accessibilityElement(children: .combine)
             }
         }
-        .font(.text(metrics.cardName, weight: .semibold, relativeTo: .footnote))
+        .textFont(metrics.cardName, weight: .semibold, relativeTo: .footnote)
         .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
         .frame(maxWidth: 420)
     }

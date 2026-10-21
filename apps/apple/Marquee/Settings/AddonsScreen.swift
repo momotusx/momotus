@@ -32,7 +32,7 @@ struct AddonsScreen: View {
                 Text(sourcesOnly
                     ? "A source is an addon that finds a playable stream for a title. \(linkVerb) a source addon's link to add one."
                     : "Addons bring catalogs, details, streams and subtitles. Order matters: earlier addons answer first.")
-                    .font(.text(Theme.type.body))
+                    .textFont(Theme.type.body)
                     .foregroundStyle(Theme.Palette.muted)
                 InstallField(core: addons.core, focusRequest: focusLink ? 1 : 0)
                 FindAddonsLink(core: addons.core)
@@ -126,13 +126,13 @@ struct InstallField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(caps: "Addon link")
-                .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
+                .textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
                 .tracking(1.6)
                 .foregroundStyle(Theme.Palette.muted)
             HStack(spacing: 12) {
                 TextField("https://example.org/manifest.json or stremio://", text: $install.link)
                     .textFieldStyle(.plain)
-                    .font(.text(Theme.type.body))
+                    .textFont(Theme.type.body)
                     .autocorrectionDisabled()
                     #if os(iOS)
                     .textInputAutocapitalization(.never)
@@ -227,8 +227,8 @@ private struct AddonCard: View {
                 logo
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(addon.name).font(.text(Theme.type.headline + 1, weight: .semibold, relativeTo: .headline))
-                        Text(addon.version).font(.text(Theme.type.caption + 1, relativeTo: .caption)).foregroundStyle(Theme.Palette.muted)
+                        Text(addon.name).textFont(Theme.type.headline + 1, weight: .semibold, relativeTo: .headline)
+                        Text(addon.version).textFont(Theme.type.caption + 1, relativeTo: .caption).foregroundStyle(Theme.Palette.muted)
                     }
                     // A source Marquee runs itself has no host to name.
                     Text(addon.hostLine)
@@ -236,12 +236,12 @@ private struct AddonCard: View {
                         .foregroundStyle(Theme.Palette.muted)
                     if let description = addon.description {
                         Text(description)
-                            .font(.text(Theme.type.callout, relativeTo: .callout))
+                            .textFont(Theme.type.callout, relativeTo: .callout)
                             .foregroundStyle(Theme.Palette.muted)
                             .lineLimit(2)
                     }
                     Text(provides)
-                        .font(.text(Theme.type.callout, weight: .medium, relativeTo: .callout))
+                        .textFont(Theme.type.callout, weight: .medium, relativeTo: .callout)
                         .foregroundStyle(Theme.Palette.text)
                 }
                 .opacity(addon.enabled ? 1 : 0.55)
@@ -307,7 +307,7 @@ struct SwitchMark: View {
                     Text("Off").hidden()
                     Text(on ? "On" : "Off")
                 }
-                .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
+                .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
                 .foregroundStyle(on ? Theme.Palette.text : Theme.Palette.muted)
             }
         }

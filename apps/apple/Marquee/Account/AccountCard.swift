@@ -62,7 +62,7 @@ struct AccountCard: View {
             Callout(glyph: "info", text: words.accountGone)
             if askAgain {
                 Text(noLockWords)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.text)
                     .fixedSize(horizontal: false, vertical: true)
                 FlowRow(spacing: Theme.Space.xs) {
@@ -91,7 +91,7 @@ struct AccountCard: View {
             if removingPasskey, let member = notice.member {
                 // A passkey nobody here added: what removing it does, then the OS prompt.
                 Text(words.removePasskeyAsk)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.text)
                     .fixedSize(horizontal: false, vertical: true)
                 FlowRow(spacing: Theme.Space.xs) {

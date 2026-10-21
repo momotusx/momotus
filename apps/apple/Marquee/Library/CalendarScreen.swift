@@ -124,10 +124,10 @@ private struct CalendarRow: View {
                 .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous))
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.name)
-                    .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                    .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                     .foregroundStyle(Theme.Palette.text)
                 Text(episode)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                     .lineLimit(2)
                     .accessibilityLabel(spokenCodes(episode))

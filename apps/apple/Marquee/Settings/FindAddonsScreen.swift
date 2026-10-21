@@ -67,12 +67,12 @@ struct FindAddonsScreen: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: Theme.Space.xs) {
             Text(caps: W.eyebrow)
-                .font(.text(Theme.type.caption, weight: .bold, relativeTo: .caption))
+                .textFont(Theme.type.caption, weight: .bold, relativeTo: .caption)
                 .tracking(Theme.type.caption * 0.14)
                 .foregroundStyle(Theme.Palette.accent)
             ScreenTitle(text: W.title)
             Text(W.lede)
-                .font(.text(Theme.type.body))
+                .textFont(Theme.type.body)
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -118,7 +118,7 @@ struct FindAddonsScreen: View {
         HStack(alignment: .top, spacing: Theme.Space.s) {
             Glyph("info", size: Theme.type.headline, relativeTo: .callout).foregroundStyle(Theme.Palette.text)
             Text(W.community)
-                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .textFont(Theme.type.callout, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -197,7 +197,7 @@ struct FindAddonsScreen: View {
 
     private func failureWords(_ words: String) -> some View {
         Label(words, glyph: "triangle-alert")
-            .font(.text(Theme.type.callout, relativeTo: .callout))
+            .textFont(Theme.type.callout, relativeTo: .callout)
             .foregroundStyle(Theme.Palette.muted)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -210,7 +210,7 @@ struct FindAddonsScreen: View {
 
     private func note(_ words: String) -> some View {
         Text(words)
-            .font(.text(Theme.type.callout, relativeTo: .callout))
+            .textFont(Theme.type.callout, relativeTo: .callout)
             .foregroundStyle(Theme.Palette.muted)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -388,7 +388,7 @@ private struct FindAddonCard: View {
             // The name and its host read as one pair: the host's own leading is their gap.
             VStack(alignment: .leading, spacing: 0) {
                 Text(entry.name)
-                    .font(.text(Theme.type.headline, weight: .bold, relativeTo: .headline))
+                    .textFont(Theme.type.headline, weight: .bold, relativeTo: .headline)
                     .natural(entry.name)
                 // Two lines at most, the end kept: it tells same-name entries apart.
                 Text(entry.host)
@@ -399,18 +399,18 @@ private struct FindAddonCard: View {
             }
             if let description = entry.description, !description.isEmpty {
                 Text(description)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                     .lineLimit(2)
                     .natural(description)
             }
             Text(entry.providesLine)
-                .font(.text(Theme.type.caption, relativeTo: .caption))
+                .textFont(Theme.type.caption, relativeTo: .caption)
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
             if act == .configure {
                 Text(isTV ? W.configureTv : W.configureHelp)
-                    .font(.text(Theme.type.callout, weight: .medium, relativeTo: .callout))
+                    .textFont(Theme.type.callout, weight: .medium, relativeTo: .callout)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, Theme.Space.xs)
             }

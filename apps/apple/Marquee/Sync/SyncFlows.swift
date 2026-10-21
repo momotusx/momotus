@@ -37,7 +37,7 @@ struct SyncJoinScreen: View {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 ScreenTitle(text: kit ? W.recoverTitle : W.startTitle)
                 Text(kit ? W.recoverLede : W.startText)
-                    .font(.text(Theme.type.body))
+                    .textFont(Theme.type.body)
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 SyncField(label: W.server, text: $server, prompt: W.serverHint, typing: $typing, url: true)
@@ -124,14 +124,14 @@ struct SyncField: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(caps: label)
-                    .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
+                    .textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
                     .tracking(1.6)
                     .foregroundStyle(Theme.Palette.muted)
                 if secret {
                     Spacer()
                     Button(revealed ? W.hideKit : W.showKit) { revealed.toggle() }
                         .buttonStyle(.textLink)
-                        .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
+                        .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
                         .foregroundStyle(Theme.Palette.text)
                 }
             }
@@ -150,7 +150,7 @@ struct SyncField: View {
                 .fieldChrome(focused: typing.wrappedValue == label)
             if let help {
                 Text(help)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
             }
         }
@@ -222,7 +222,7 @@ struct AddDeviceScreen: View {
     private var entry: some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
             Text(W.addLede)
-                .font(.text(Theme.type.body))
+                .textFont(Theme.type.body)
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
             if fromLink { Callout(glyph: "camera", text: AccountWords.shared.scanAgainHere) }
@@ -278,7 +278,7 @@ struct AddDeviceScreen: View {
                 .foregroundStyle(Theme.Palette.text)
                 .fixedSize(horizontal: false, vertical: true)
             Text(W.reviewText)
-                .font(.text(Theme.type.body))
+                .textFont(Theme.type.body)
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
             Callout(glyph: "shield-alert", text: AccountWords.shared.approveWarning)
@@ -319,7 +319,7 @@ struct AddDeviceScreen: View {
                 Said(tone: .warn, text: W.differEnded)
             } else {
                 Text(W.approvedStep)
-                    .font(.text(Theme.type.body))
+                    .textFont(Theme.type.body)
                     .foregroundStyle(Theme.Palette.text)
                 Text(digits)
                     .font(.mono(Theme.type.hero + 8))
@@ -327,7 +327,7 @@ struct AddDeviceScreen: View {
                     .foregroundStyle(Theme.Palette.text)
                     .accessibilityLabel("Code \(digits.map(String.init).joined(separator: " "))")
                 Text(W.approvedHelp)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -440,11 +440,11 @@ struct RecoveryKitScreen: View {
     private var ask: some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
             Text(W.kitLede)
-                .font(.text(Theme.type.body))
+                .textFont(Theme.type.body)
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
             Text(W.kitOnce)
-                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .textFont(Theme.type.callout, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.muted)
             if !sync.kits.unseen.isEmpty { Callout(glyph: "triangle-alert", text: sync.kits.expired ? W.kitExpired : W.kitUnseen) }
             if sync.kits.unknownUnseen { Callout(glyph: "triangle-alert", text: W.kitUnseenUnknown) }
@@ -466,7 +466,7 @@ struct RecoveryKitScreen: View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
             Callout(glyph: "key-round", text: W.kitWaiting)
             Text(W.kitAskShow)
-                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .textFont(Theme.type.callout, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
             if let error { Said(tone: .bad, text: error) }
@@ -540,7 +540,7 @@ struct RecoveryKitScreen: View {
                 .disabled(gate.asking)
             if visible, !holding, left > 0 {
                 Text(W.hiddenIn(left))
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                     .monospacedDigit()
                     .accessibilityHidden(true)
@@ -552,7 +552,7 @@ struct RecoveryKitScreen: View {
     private func kit(_ held: HeldKit) -> some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
             Text(caps: W.kitShown)
-                .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
+                .textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
                 .tracking(1.6)
                 .foregroundStyle(Theme.Palette.muted)
             if held.id.isEmpty { Said(tone: .warn, text: W.kitIdUnknown) }
@@ -569,7 +569,7 @@ struct RecoveryKitScreen: View {
                 }
             }
             Text(W.macCapture)
-                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .textFont(Theme.type.callout, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
             #else
@@ -577,7 +577,7 @@ struct RecoveryKitScreen: View {
             #endif
             Callout(glyph: "triangle-alert", text: W.kitWarning)
             Text(copied ? W.kitCopied : W.copyKitHelp)
-                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .textFont(Theme.type.callout, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
             FlowRow(spacing: Theme.Space.xs) {
@@ -763,7 +763,7 @@ struct ReportLostScreen: View {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 ScreenTitle(text: "\(W.reportLost): \(name)")
                 Text(W.named(W.lostLede, name))
-                    .font(.text(Theme.type.body))
+                    .textFont(Theme.type.body)
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 if let loadError {
@@ -816,7 +816,7 @@ struct ReportLostScreen: View {
             VStack(alignment: .leading, spacing: Theme.Space.s) {
                 Text(W.named(W.lostAdded, name)).display(Theme.type.title3).foregroundStyle(Theme.Palette.text).accessibilityAddTraits(.isHeader)
                 Text(W.named(W.lostAddedHelp, name))
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 ForEach(rows) { row in tick(row, joined: joinedWithPasskey(row.id, preview, members)) }
@@ -855,13 +855,13 @@ struct ReportLostScreen: View {
             HStack(alignment: .top, spacing: Theme.Space.s) {
                 Glyph(going ? "circle-check" : "circle-dashed").foregroundStyle(going ? Theme.Palette.bad : Theme.Palette.muted)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(row.name).font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                    Text(row.name).textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                     Text(row.detail)
-                        .font(.text(Theme.type.callout, relativeTo: .callout))
+                        .textFont(Theme.type.callout, relativeTo: .callout)
                         .foregroundStyle(Theme.Palette.muted)
                     if let joined {
                         Text(joined)
-                            .font(.text(Theme.type.callout, relativeTo: .callout))
+                            .textFont(Theme.type.callout, relativeTo: .callout)
                             .foregroundStyle(Theme.Palette.muted)
                     }
                 }
@@ -915,7 +915,7 @@ struct QRScanner: View {
                 CameraView(found: found, failed: { failed = true }).ignoresSafeArea()
                 VStack(spacing: Theme.Space.s) {
                     Text(W.scanning)
-                        .font(.text(Theme.type.body))
+                        .textFont(Theme.type.body)
                         .foregroundStyle(.white)
                         .multilineTextAlignment(.center)
                     Button(W.cancel, action: cancel).buttonStyle(PillButtonStyle())
@@ -1039,7 +1039,7 @@ struct ForkReviewScreen: View {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 ScreenTitle(text: W.forkTitle)
                 Text(W.forkLede)
-                    .font(.text(Theme.type.body))
+                    .textFont(Theme.type.body)
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 if let loadError {
@@ -1096,7 +1096,7 @@ struct ForkReviewScreen: View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
             Text(W.forkServer).display(Theme.type.title3).foregroundStyle(Theme.Palette.text).accessibilityAddTraits(.isHeader)
             Text(W.forkServerHelp)
-                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .textFont(Theme.type.callout, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
             ForEach(SyncRules.sortMembers(preview.server)) { member in
@@ -1109,7 +1109,7 @@ struct ForkReviewScreen: View {
             VStack(alignment: .leading, spacing: Theme.Space.s) {
                 Text(W.forkMine).display(Theme.type.title3).foregroundStyle(Theme.Palette.text).accessibilityAddTraits(.isHeader)
                 Text(W.forkMineHelp)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 ForEach(SyncRules.sortMembers(sides.mineOnly)) { member in
@@ -1146,10 +1146,10 @@ struct ForkReviewScreen: View {
                 HStack(alignment: .top, spacing: Theme.Space.s) {
                     Glyph(on ? "circle-check" : "circle-dashed").foregroundStyle(on ? Theme.Palette.bad : Theme.Palette.muted)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(name).font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
-                        Text(detail).font(.text(Theme.type.callout, relativeTo: .callout)).foregroundStyle(Theme.Palette.muted)
+                        Text(name).textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
+                        Text(detail).textFont(Theme.type.callout, relativeTo: .callout).foregroundStyle(Theme.Palette.muted)
                         // A ticked device's kits are named on its row: they go with it.
-                        if on, kits > 0 { Text(W.goesWith(kits)).font(.text(Theme.type.callout, weight: .medium, relativeTo: .callout)) }
+                        if on, kits > 0 { Text(W.goesWith(kits)).textFont(Theme.type.callout, weight: .medium, relativeTo: .callout) }
                     }
                     Spacer(minLength: 0)
                 }
@@ -1167,12 +1167,12 @@ struct ForkReviewScreen: View {
     private func plainRow(name: String, detail: String, tag: String?) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: Theme.Space.xs) {
-                Text(name).font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                Text(name).textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                 if let tag {
-                    Text(tag).font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption)).foregroundStyle(Theme.Palette.muted)
+                    Text(tag).textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption).foregroundStyle(Theme.Palette.muted)
                 }
             }
-            Text(detail).font(.text(Theme.type.callout, relativeTo: .callout)).foregroundStyle(Theme.Palette.muted)
+            Text(detail).textFont(Theme.type.callout, relativeTo: .callout).foregroundStyle(Theme.Palette.muted)
         }
         .foregroundStyle(Theme.Palette.text)
         .padding(Theme.Space.s)

@@ -33,7 +33,7 @@ struct ProfileAvatar: View {
             .overlay {
                 if avatar.glyph == "letter" {
                     Text(ProfileRules.initial(name))
-                        .font(.text(size * 0.46, weight: .heavy))
+                        .textFont(size * 0.46, weight: .heavy)
                 } else {
                     Image(avatar.glyph == "gamepad" ? "gamepad-2" : avatar.glyph)
                         .renderingMode(.template)
@@ -106,19 +106,19 @@ struct PinKeypad: View {
             dots
             if let said {
                 Text(said)
-                    .font(.text(Theme.type.body, weight: .semibold))
+                    .textFont(Theme.type.body, weight: .semibold)
                     .foregroundStyle(Theme.Palette.text)
                     .multilineTextAlignment(.center)
             }
             if let until, waiting {
                 Text("Try again in \(ProfileRules.waitText(Int64(until.timeIntervalSince(now) * 1000)))")
-                    .font(.text(Theme.type.callout, relativeTo: .callout).monospacedDigit())
+                    .textFont(Theme.type.callout, relativeTo: .callout).monospacedDigit()
                     .foregroundStyle(Theme.Palette.muted)
             }
             grid
             if let note {
                 Text(note)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 420)
@@ -209,7 +209,7 @@ struct PinKeypad: View {
                         } else {
                             Button { name == "delete" ? delete() : type(Character(name)) } label: {
                                 Group {
-                                    if name == "delete" { Glyph("delete", size: 24) } else { Text(name).font(.text(Theme.type.title2, weight: .semibold)) }
+                                    if name == "delete" { Glyph("delete", size: 24) } else { Text(name).textFont(Theme.type.title2, weight: .semibold) }
                                 }
                                 .frame(width: key, height: key)
                                 .background(Circle().fill(Theme.Palette.raised))

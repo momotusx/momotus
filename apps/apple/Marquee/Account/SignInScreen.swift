@@ -106,7 +106,7 @@ struct SignInScreen: View {
                 .buttonStyle(PillButtonStyle(prominent: flow.providers.isEmpty))
             Button(words.notNow, action: notNow)
                 .buttonStyle(.textLink)
-                .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
+                .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.text)
         }
     }

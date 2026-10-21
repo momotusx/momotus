@@ -88,7 +88,7 @@ struct SearchScreen: View {
             Glyph("search").foregroundStyle(Theme.Palette.muted)
             TextField(Self.prompt, text: $query)
                 .textFieldStyle(.plain)
-                .font(.text(Theme.type.headline + 2, relativeTo: .title3))
+                .textFont(Theme.type.headline + 2, relativeTo: .title3)
                 .foregroundStyle(Theme.Palette.text)
                 .focused($fieldFocused)
                 .autocorrectionDisabled()
@@ -123,7 +123,7 @@ struct SearchScreen: View {
             #if !os(tvOS)
             VStack(alignment: .leading, spacing: 10) {
                 Text(caps: "Recent")
-                    .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
+                    .textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
                     .tracking(1.6)
                     .foregroundStyle(Theme.Palette.muted)
                 FlowRow(spacing: 10) {

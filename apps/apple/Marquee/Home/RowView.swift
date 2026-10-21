@@ -108,7 +108,7 @@ struct RowHeader: View {
                 .accessibilityAddTraits(.isHeader)
             if let subtitle {
                 Text(subtitle)
-                    .font(.text(metrics.cardInfo + 1, weight: .medium, relativeTo: .callout))
+                    .textFont(metrics.cardInfo + 1, weight: .medium, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.dim)
                     .lineLimit(1)
             }

@@ -67,8 +67,8 @@ struct RootView: View {
                 // The profiles view is opened again every 2 seconds meanwhile.
                 VStack(spacing: Theme.Space.s) {
                     Text("Profiles did not load").display(Theme.type.title1).foregroundStyle(Theme.Palette.text)
-                    Text(problem).font(.text(Theme.type.body)).foregroundStyle(Theme.Palette.muted).multilineTextAlignment(.center)
-                    Label("Trying again", glyph: "refresh-cw").font(.text(Theme.type.callout, relativeTo: .callout)).foregroundStyle(Theme.Palette.muted)
+                    Text(problem).textFont(Theme.type.body).foregroundStyle(Theme.Palette.muted).multilineTextAlignment(.center)
+                    Label("Trying again", glyph: "refresh-cw").textFont(Theme.type.callout, relativeTo: .callout).foregroundStyle(Theme.Palette.muted)
                 }
                 .padding(Theme.Space.l)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -207,7 +207,7 @@ struct MainShell: View {
         .overlay(alignment: .top) {
             if let note = floating.note {
                 Text(note)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.text)
                     .padding(.horizontal, Theme.Space.m)
                     .padding(.vertical, Theme.Space.s)
@@ -439,7 +439,7 @@ private struct TabBar: View {
                         Glyph(item.symbol, size: 22, relativeTo: .caption2)
                         if !iconsOnly {
                             Text(item.title)
-                                .font(.text(10.5, weight: .semibold, relativeTo: .caption2))
+                                .textFont(10.5, weight: .semibold, relativeTo: .caption2)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.8)
                         }
@@ -556,7 +556,7 @@ struct NavLinkStyle: ButtonStyle {
         var body: some View {
             configuration.label
                 .labelStyle(NavLabelStyle())
-                .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
+                .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
                 .foregroundStyle(on || focused || hovered ? Theme.Palette.text : Theme.Palette.dim)
                 .padding(.horizontal, Self.horizontal)
                 .frame(height: Self.height)
@@ -731,7 +731,7 @@ private struct CoreStopped: View {
             Text("Marquee stopped")
                 .display(Theme.type.title1)
             Text(message)
-                .font(.text(Theme.type.body))
+                .textFont(Theme.type.body)
                 .foregroundStyle(Theme.Palette.muted)
                 .multilineTextAlignment(.center)
             Button("Open again", action: reopen)

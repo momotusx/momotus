@@ -25,7 +25,7 @@ struct DebridScreen: View {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 ScreenTitle(text: "Debrid services")
                 Text("A debrid account plays torrents as fast direct links. Accounts stay in this device's Keychain and are never shown again or synced.")
-                    .font(.text(Theme.type.body))
+                    .textFont(Theme.type.body)
                     .foregroundStyle(Theme.Palette.muted)
                 ForEach(DebridWords.services) { service in
                     card(service)
@@ -60,11 +60,11 @@ struct DebridScreen: View {
         let pending = snapshot?.pending.contains { $0.service == service.id } ?? false
         return VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                Text(service.name).font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                Text(service.name).textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                 Spacer()
                 let state = DebridWords.state(account, pending: pending, stored: !debrid.health.unstored.contains(service.id))
                 Text(state ?? "Not connected")
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(state == "Connected" ? Theme.Palette.ok : Theme.Palette.muted)
             }
             if let login, login.service == service.id {
@@ -110,7 +110,7 @@ struct DebridScreen: View {
             }
             if let said, said.service == service.id {
                 Label(said.text, glyph: "triangle-alert")
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.text)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -141,13 +141,13 @@ struct DebridScreen: View {
             if let url = URL(string: service.keyPage) {
                 Button("Get a key") { openURL(url) }
                     .buttonStyle(.plain)
-                    .font(.text(Theme.type.callout, weight: .medium, relativeTo: .callout))
+                    .textFont(Theme.type.callout, weight: .medium, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                     .accessibilityLabel("Get \("AEIOU".contains(service.name.prefix(1)) ? "an" : "a") \(service.name) key")
             }
             #else
             Text("Get a key at \(DebridWords.address(service.keyPage))")
-                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .textFont(Theme.type.callout, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.muted)
             #endif
         }
@@ -220,19 +220,19 @@ private struct LoginPanel: View {
             switch phase {
             case nil, .starting?:
                 if let failure {
-                    Text(failure).font(.text(Theme.type.body))
+                    Text(failure).textFont(Theme.type.body)
                     buttons(again: true)
                 } else {
-                    Label(DebridWords.login(.starting), glyph: "clock").font(.text(Theme.type.body))
+                    Label(DebridWords.login(.starting), glyph: "clock").textFont(Theme.type.body)
                     buttons(again: false)
                 }
             case let .code(userCode, url, qr, expiresMs)?:
                 HStack(alignment: .top, spacing: Theme.Space.s) {
                     QRCode(text: qr).frame(width: 160, height: 160).accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("On a phone or computer, go to").font(.text(Theme.type.callout, relativeTo: .callout)).foregroundStyle(Theme.Palette.muted)
-                        Text(DebridWords.address(url)).font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
-                        Text("and enter").font(.text(Theme.type.callout, relativeTo: .callout)).foregroundStyle(Theme.Palette.muted)
+                        Text("On a phone or computer, go to").textFont(Theme.type.callout, relativeTo: .callout).foregroundStyle(Theme.Palette.muted)
+                        Text(DebridWords.address(url)).textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
+                        Text("and enter").textFont(Theme.type.callout, relativeTo: .callout).foregroundStyle(Theme.Palette.muted)
                         Text(userCode)
                             .font(.mono(Theme.type.title1))
                             .tracking(2)
@@ -240,7 +240,7 @@ private struct LoginPanel: View {
                         // The time left, from the code's own deadline: a new code starts its own clock.
                         TimelineView(.periodic(from: .now, by: 1)) { context in
                             Text(DebridWords.goodFor(expiresMs - Int64(context.date.timeIntervalSince1970 * 1000)))
-                                .font(.text(Theme.type.callout, relativeTo: .callout).monospacedDigit())
+                                .textFont(Theme.type.callout, relativeTo: .callout).monospacedDigit()
                                 .foregroundStyle(Theme.Palette.muted)
                         }
                     }
@@ -254,9 +254,9 @@ private struct LoginPanel: View {
                 buttons(again: false)
             case .done?:
                 // Through on the service's side; the panel closes once the record is stored.
-                Label(DebridWords.doneWords(stored: stored), glyph: stored ? "clock" : "triangle-alert").font(.text(Theme.type.body))
+                Label(DebridWords.doneWords(stored: stored), glyph: stored ? "clock" : "triangle-alert").textFont(Theme.type.body)
             case let other?:
-                Text(DebridWords.login(other)).font(.text(Theme.type.body)).fixedSize(horizontal: false, vertical: true)
+                Text(DebridWords.login(other)).textFont(Theme.type.body).fixedSize(horizontal: false, vertical: true)
                 buttons(again: true)
             }
         }

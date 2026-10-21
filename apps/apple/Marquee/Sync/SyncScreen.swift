@@ -16,7 +16,7 @@ struct SyncScreen: View {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 ScreenTitle(text: W.title)
                 Text(W.lede)
-                    .font(.text(Theme.type.body))
+                    .textFont(Theme.type.body)
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 if sync.keyUnreadable { KeyUnreadable() } else if sync.joined { JoinedSync() } else { NotJoined() }
@@ -225,14 +225,14 @@ private struct JoinedSync: View {
             Said(tone: stateTone, text: stateText)
             ForEach(sync.lastReport?.notes ?? [], id: \.self) { note in
                 Label(note, glyph: "triangle-alert")
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
             // Kept past clean rounds until dismissed: a refused edit stays here only.
             if let failedSince {
                 Label(failedSince, glyph: "triangle-alert")
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 Button(W.dismiss) { sync.dismissFailed() }.buttonStyle(PillButtonStyle())
@@ -249,7 +249,7 @@ private struct JoinedSync: View {
             if let fingerprint {
                 VStack(alignment: .leading, spacing: Theme.Space.xs) {
                     Text(caps: W.compareLabel)
-                        .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
+                        .textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
                         .tracking(1.6)
                         .foregroundStyle(Theme.Palette.muted)
                     Text(SyncRules.fingerprintGroups(fingerprint))
@@ -257,7 +257,7 @@ private struct JoinedSync: View {
                         .foregroundStyle(Theme.Palette.text)
                         .accessibilityLabel("\(W.compareLabel): \(fingerprint.map(String.init).joined(separator: " "))")
                     Text(W.compareHelp)
-                        .font(.text(Theme.type.callout, relativeTo: .callout))
+                        .textFont(Theme.type.callout, relativeTo: .callout)
                         .foregroundStyle(Theme.Palette.muted)
                         .fixedSize(horizontal: false, vertical: true)
                     if listStale { Said(tone: .warn, text: W.listStale) }
@@ -324,11 +324,11 @@ private struct JoinedSync: View {
                         VStack(alignment: .leading, spacing: 0) { memberName(member); thisDeviceTag(member) }
                     }
                     Text(W.addedLine(kit: member.kit, addedMs: member.addedMs, by: SyncRules.sponsorName(member, in: members)))
-                        .font(.text(Theme.type.callout, relativeTo: .callout))
+                        .textFont(Theme.type.callout, relativeTo: .callout)
                         .foregroundStyle(Theme.Palette.muted)
                     ForEach(accountLines(member), id: \.self) { line in
                         Text(line)
-                            .font(.text(Theme.type.callout, relativeTo: .callout))
+                            .textFont(Theme.type.callout, relativeTo: .callout)
                             .foregroundStyle(Theme.Palette.muted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -388,13 +388,13 @@ private struct JoinedSync: View {
 
     private func memberName(_ member: MemberInfo) -> some View {
         Text(SyncRules.memberName(member))
-            .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+            .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
     }
 
     @ViewBuilder private func thisDeviceTag(_ member: MemberInfo) -> some View {
         if member.thisDevice {
             Text(W.thisDevice)
-                .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
+                .textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
                 .foregroundStyle(Theme.Palette.muted)
                 .lineLimit(1)
                 .fixedSize()
@@ -464,14 +464,14 @@ private struct LeaveSync: View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
             Text(W.leaveTitle).display(Theme.type.title2).foregroundStyle(Theme.Palette.text).accessibilityAddTraits(.isHeader)
             Text(W.leaveText)
-                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .textFont(Theme.type.callout, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.muted)
             if owner {
                 #if !os(tvOS)
                 switchRow(AccountWords.shared.removeLibraryAsk, on: $removeLibrary)
                 #else
                 Text(AccountWords.shared.removeLibraryAsk)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.text)
                 #endif
                 if removes {
@@ -484,7 +484,7 @@ private struct LeaveSync: View {
             if let force = again {
                 // Its own step, Cancel first: one press never stops syncing on a TV.
                 Text(W.tvSure)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.text)
                 FlowRow(spacing: Theme.Space.xs) {
                     Button(W.cancel) { again = nil }
@@ -531,7 +531,7 @@ private struct LeaveSync: View {
         Button { on.wrappedValue.toggle() } label: {
             HStack(spacing: Theme.Space.s) {
                 Text(title)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.text)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
@@ -612,14 +612,14 @@ private struct DeleteSync: View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
             Text(W.deleteTitle).display(Theme.type.title2).foregroundStyle(Theme.Palette.text).accessibilityAddTraits(.isHeader)
             Text(W.deleteText)
-                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .textFont(Theme.type.callout, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
             if let error { Said(tone: .bad, text: error) }
             #if os(tvOS)
             if asking {
                 Text(W.deleteAsk)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.text)
                     .fixedSize(horizontal: false, vertical: true)
                 FlowRow(spacing: Theme.Space.xs) {
@@ -725,7 +725,7 @@ struct LeaveHere: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.xs) {
             Text(notHere ? W.forgetHereText : W.leaveHereText)
-                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .textFont(Theme.type.callout, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
             if let error { Said(tone: .bad, text: error) }
@@ -787,7 +787,7 @@ struct Callout: View {
         HStack(alignment: .top, spacing: Theme.Space.s) {
             Glyph(glyph).foregroundStyle(Theme.Palette.text)
             Text(text)
-                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .textFont(Theme.type.callout, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -809,9 +809,9 @@ struct Elsewhere: View {
         HStack(alignment: .top, spacing: Theme.Space.s) {
             Glyph(glyph).frame(width: 28)
             VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                Text(title).textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                 Text(text)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }

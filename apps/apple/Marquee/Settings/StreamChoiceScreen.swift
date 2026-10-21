@@ -29,7 +29,7 @@ struct StreamChoiceScreen: View {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 ScreenTitle(text: w.title)
                 Text(w.lede)
-                    .font(.text(Theme.type.body))
+                    .textFont(Theme.type.body)
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 if let failure = problem ?? prefs.failure {
@@ -98,7 +98,7 @@ struct StreamChoiceScreen: View {
             ForEach(StreamChoice.learnedRows(p), id: \.text) { row in
                 HStack(spacing: 12) {
                     Text(row.text)
-                        .font(.text(Theme.type.callout, relativeTo: .callout))
+                        .textFont(Theme.type.callout, relativeTo: .callout)
                         .foregroundStyle(Theme.Palette.text)
                         .fixedSize(horizontal: false, vertical: true)
                     Button { learnOp("undoLearned", ["screenClass": row.screenClass, "choice": row.choice]) } label: {
@@ -119,7 +119,7 @@ struct StreamChoiceScreen: View {
         LabelledRow(label: w.device.label) {
             VStack(alignment: .leading, spacing: 10) {
                 Label(DeviceCaps.conditionsLine(conditions, account: hasAccount), glyph: deviceGlyph)
-                    .font(.text(Theme.type.body))
+                    .textFont(Theme.type.body)
                     .foregroundStyle(Theme.Palette.text)
                     .fixedSize(horizontal: false, vertical: true)
                 if measuring || conditions.map(StreamChoice.measured) == true {
@@ -193,12 +193,12 @@ private struct LabelledRow<Content: View>: View {
         layout {
             VStack(alignment: .leading, spacing: 4) {
                 Text(label)
-                    .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                    .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                     .foregroundStyle(Theme.Palette.text)
                     .accessibilityAddTraits(.isHeader)
                 if let help {
                     Text(help)
-                        .font(.text(Theme.type.callout, relativeTo: .callout))
+                        .textFont(Theme.type.callout, relativeTo: .callout)
                         .foregroundStyle(Theme.Palette.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 }

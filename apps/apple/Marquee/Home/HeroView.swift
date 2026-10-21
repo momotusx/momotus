@@ -96,7 +96,7 @@ struct HeroView: View {
                 .padding(.bottom, wide ? 14 : 10)
             if let description = hero.description {
                 Text(description)
-                    .font(.text(wide ? Theme.type.callout : 14, relativeTo: .callout))
+                    .textFont(wide ? Theme.type.callout : 14, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                     .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
@@ -159,7 +159,7 @@ struct Eyebrow: View {
 
     var body: some View {
         Text(caps: text)
-            .font(.text(Theme.type.caption, weight: .bold, relativeTo: .caption))
+            .textFont(Theme.type.caption, weight: .bold, relativeTo: .caption)
             .tracking(Theme.type.caption * 0.14)
             .foregroundStyle(Theme.Palette.accent)
             .lineLimit(2)
@@ -201,7 +201,7 @@ struct MetaLine: View {
                 }
             }
         }
-        .font(.text(size, weight: .semibold, relativeTo: .callout))
+        .textFont(size, weight: .semibold, relativeTo: .callout)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel((ratings.map(spokenScore) + parts).joined(separator: ", "))
         .accessibilityActions {
@@ -219,7 +219,7 @@ struct MetaLine: View {
 
     @ViewBuilder private func score(_ text: String, link: URL?) -> some View {
         // One line, never cut: the row breaks between parts, never inside a score.
-        let label = Text(text).fontWeight(Font.Weight.bold.legible).foregroundStyle(Theme.Palette.text)
+        let label = Text(text).fontWeight(.bold).foregroundStyle(Theme.Palette.text)
             .lineLimit(1).fixedSize()
         if let link {
             Link(destination: link) { label }

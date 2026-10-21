@@ -53,7 +53,7 @@ struct ProfilePicker: View {
             VStack(spacing: Theme.Space.s) {
                 ProgressView().controlSize(.large).tint(Theme.Palette.text)
                 Text("Opening \(snapshot.profiles.first { $0.id == target }?.name ?? "the profile")")
-                    .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                    .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                     .foregroundStyle(Theme.Palette.text)
             }
             .padding(.top, Theme.Space.xl)
@@ -70,7 +70,7 @@ struct ProfilePicker: View {
             header(snapshot)
             if let said = said ?? switchWords {
                 Text(said)
-                    .font(.text(Theme.type.body, weight: .semibold))
+                    .textFont(Theme.type.body, weight: .semibold)
                     .foregroundStyle(Theme.Palette.text)
                     .multilineTextAlignment(.center)
             }
@@ -90,7 +90,7 @@ struct ProfilePicker: View {
                 .accessibilityAddTraits(.isHeader)
             if snapshot.locked {
                 Text("This profile is locked. Choose a profile, then enter its PIN.")
-                    .font(.text(Theme.type.body))
+                    .textFont(Theme.type.body)
                     .foregroundStyle(Theme.Palette.muted)
                     .multilineTextAlignment(.center)
             }
@@ -118,9 +118,9 @@ struct ProfilePicker: View {
                             Text(profile.name).lineLimit(2).multilineTextAlignment(.center)
                             if profile.hasPin && !profile.syncing { Glyph("lock", size: 16) }
                         }
-                        .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                        .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                         if profile.syncing {
-                            Text("Syncing").font(.text(Theme.type.caption, relativeTo: .caption)).foregroundStyle(Theme.Palette.muted)
+                            Text("Syncing").textFont(Theme.type.caption, relativeTo: .caption).foregroundStyle(Theme.Palette.muted)
                         }
                     }
                     .foregroundStyle(Theme.Palette.text)
@@ -139,7 +139,7 @@ struct ProfilePicker: View {
                             .overlay(RoundedRectangle(cornerRadius: tile * 0.22, style: .continuous).strokeBorder(Theme.Palette.control))
                             .overlay(Glyph("plus", size: tile * 0.3))
                             .frame(width: tile, height: tile)
-                        Text("Add profile").font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                        Text("Add profile").textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                     }
                     .foregroundStyle(Theme.Palette.text)
                 }

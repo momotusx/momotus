@@ -278,7 +278,7 @@ struct TitleScreen: View {
                 StateLine(symbol: "triangle-alert", text: reason, action: ("Try again", model.retry))
             } else {
                 Text("Loading details")
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
             }
         }
@@ -383,14 +383,14 @@ private struct Synopsis: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(text)
-                .font(.text(Theme.type.body))
+                .textFont(Theme.type.body)
                 .foregroundStyle(Theme.Palette.muted)
                 .lineLimit(open ? nil : lines)
                 .fixedSize(horizontal: false, vertical: true)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { shown = $0 }
                 .background(alignment: .topLeading) {
                     Text(text)
-                        .font(.text(Theme.type.body))
+                        .textFont(Theme.type.body)
                         .fixedSize(horizontal: false, vertical: true)
                         .hidden()
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { full = $0 }
@@ -405,7 +405,7 @@ private struct Synopsis: View {
                     #endif
                 }
                 .buttonStyle(.textLink)
-                .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
+                .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.text)
                 .accessibilityHint("Shows the whole synopsis")
             }
@@ -433,7 +433,7 @@ private struct SynopsisReader: View {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 ForEach(Array(readingBlocks(text).enumerated()), id: \.offset) { index, block in
                     Text(block)
-                        .font(.text(Theme.type.body))
+                        .textFont(Theme.type.body)
                         .foregroundStyle(focused == index ? Theme.Palette.text : Theme.Palette.muted)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(Theme.Space.s)
@@ -524,7 +524,7 @@ private struct PlayBlock: View {
                 // never a Play that finds nothing.
                 let airs = nextAirs.flatMap { nextAirsWords($0) }
                 Label(airs ?? noPlayWords(hasEpisodes: hasEpisodes), glyph: airs == nil ? "circle-alert" : "calendar")
-                    .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                    .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                     .foregroundStyle(Theme.Palette.text)
             } else if versions?.done == true, versions?.recommended == nil, versions?.blocked?.reason == "needsAccount" {
                 Button(action: addAccount) {
@@ -554,7 +554,7 @@ private struct PlayBlock: View {
                                 Glyph("play-fill")
                                 Text(target?.label ?? "Play")
                                 if let resume = target?.resumeMs, resume > 0 {
-                                    Text(resumeText(resumeMs: resume, leftMs: target?.leftMs, runtime: runtime)).fontWeight(Font.Weight.regular.legible).opacity(0.8)
+                                    Text(resumeText(resumeMs: resume, leftMs: target?.leftMs, runtime: runtime)).fontWeight(.regular).opacity(0.8)
                                 }
                             }
                         }
@@ -591,7 +591,7 @@ private struct PlayBlock: View {
                 }
             }
             // Wraps whole on a small phone or a large text size: the status and source decide the pick.
-            .font(.text(Theme.type.callout, relativeTo: .callout))
+            .textFont(Theme.type.callout, relativeTo: .callout)
             .fixedSize(horizontal: false, vertical: true)
         }
     }

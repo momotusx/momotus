@@ -204,7 +204,7 @@ struct HomeScreen: View {
                 .foregroundStyle(Theme.Palette.text)
                 .accessibilityAddTraits(.isHeader)
             Text("None of your addons answered. Check the network, then try again.")
-                .font(.text(Theme.type.body))
+                .textFont(Theme.type.body)
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
             Button("Try again", action: model.reload)
@@ -283,7 +283,7 @@ struct CatalogSetup: View {
                 .foregroundStyle(Theme.Palette.text)
                 .accessibilityAddTraits(.isHeader)
             Text(text)
-                .font(.text(Theme.type.body))
+                .textFont(Theme.type.body)
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
             FlowRow(spacing: 12) {
@@ -313,7 +313,7 @@ private struct RecommendedCard: View {
                 .foregroundStyle(Theme.Palette.text)
                 .accessibilityAddTraits(.isHeader)
             Text(DefaultsRules.namesLine(names))
-                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .textFont(Theme.type.callout, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
             // Centered on one line: the words beside the pill sit on its middle.
@@ -321,7 +321,7 @@ private struct RecommendedCard: View {
                 Button("Review", action: review).buttonStyle(PillButtonStyle())
                 Button("Not now", action: notNow)
                     .buttonStyle(.textLink)
-                    .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
+                    .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.text)
             }
             .padding(.top, 4)

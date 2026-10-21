@@ -24,7 +24,7 @@ struct Credits: View {
                 .accessibilityElement(children: .combine)
             }
         }
-        .font(.text(metrics.cardName, weight: .semibold, relativeTo: .footnote))
+        .textFont(metrics.cardName, weight: .semibold, relativeTo: .footnote)
         .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
     }
 

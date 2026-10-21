@@ -150,7 +150,7 @@ struct OnboardingScreen: View {
                 Spacer()
                 Button(q.skip.label) { afterQuestion() }
                     .buttonStyle(.textLink)
-                    .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
+                    .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.text)
             }
             stepHeading(q.title, q.lead)
@@ -217,7 +217,7 @@ struct OnboardingScreen: View {
                 if let close {
                     Button("Browse first") { browseFirst(close) }
                         .buttonStyle(.textLink)
-                        .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
+                        .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
                         .foregroundStyle(Theme.Palette.text)
                 }
             }
@@ -228,7 +228,7 @@ struct OnboardingScreen: View {
             // Said to someone without an account only: after Create it is not so.
             if !sync.joined {
                 Text("No account needed. Everything stays on this device until you turn on sync.")
-                    .font(.text(Theme.type.body))
+                    .textFont(Theme.type.body)
                     .foregroundStyle(Theme.Palette.muted)
             }
             let doors = Group {
@@ -268,7 +268,7 @@ struct OnboardingScreen: View {
             // TV adds more from Settings: typing a link with a remote is no first step.
             VStack(alignment: .leading, spacing: Theme.Space.s) {
                 Text("Add another addon")
-                    .font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                    .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                     .foregroundStyle(Theme.Palette.text)
                     .accessibilityAddTraits(.isHeader)
                 // Continue stays the one white action, also with a link typed.
@@ -303,7 +303,7 @@ struct OnboardingScreen: View {
                 ForEach(checks, id: \.label) { check in
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
                         Text(check.label)
-                            .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
+                            .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
                             .foregroundStyle(Theme.Palette.muted)
                             .frame(width: metrics.wide ? 120 : 96, alignment: .leading)
                         // The fix sits under its status, so neither squeezes the other.
@@ -343,7 +343,7 @@ struct OnboardingScreen: View {
                 .foregroundStyle(Theme.Palette.text)
                 .accessibilityAddTraits(.isHeader)
             Text(text)
-                .font(.text(Theme.type.body))
+                .textFont(Theme.type.body)
                 .foregroundStyle(Theme.Palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -458,7 +458,7 @@ struct RecommendedAddons: View {
                     StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", { Task { await model.load() } }))
                 } else {
                     Label("Reading the list", glyph: "clock")
-                        .font(.text(Theme.type.body))
+                        .textFont(Theme.type.body)
                         .foregroundStyle(Theme.Palette.muted)
                 }
             }
@@ -468,7 +468,7 @@ struct RecommendedAddons: View {
                     VStack(alignment: .leading, spacing: Theme.Space.xs) {
                         // Over the marks: the rows' own inset.
                         Text(caps: group.title)
-                            .font(.text(Theme.type.caption, weight: .semibold, relativeTo: .caption))
+                            .textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
                             .tracking(1.6)
                             .foregroundStyle(Theme.Palette.muted)
                             .accessibilityAddTraits(.isHeader)
@@ -497,7 +497,7 @@ struct RecommendedAddons: View {
         } else {
             DefaultRow(addon: addon) {
                 Text(DefaultsRules.presentWord(addon, imported: imported))
-                    .font(.text(Theme.type.callout, weight: .semibold, relativeTo: .callout))
+                    .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
             }
             .accessibilityElement(children: .combine)
@@ -525,9 +525,9 @@ private struct DefaultRow<End: View>: View {
         HStack(alignment: .center, spacing: Theme.Space.s) {
             DefaultMark(addon: addon)
             VStack(alignment: .leading, spacing: 4) {
-                Text(addon.name).font(.text(Theme.type.headline, weight: .semibold, relativeTo: .headline))
+                Text(addon.name).textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                 Text(addon.line)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -583,7 +583,7 @@ struct RecommendedAddonsPage: View {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 ScreenTitle(text: DefaultsRules.title)
                 Text(settings ? DefaultsRules.settingsLead : DefaultsRules.reviewLead)
-                    .font(.text(Theme.type.body))
+                    .textFont(Theme.type.body)
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 RecommendedAddons(model: model, hasCatalog: hasCatalog, settings: settings)
@@ -636,7 +636,7 @@ private struct Door: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).display(Theme.type.title3)
                 Text(text)
-                    .font(.text(Theme.type.callout, relativeTo: .callout))
+                    .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -668,7 +668,7 @@ struct StatusDot: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Circle().fill(color).frame(width: 9, height: 9).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
             Text(text)
-                .font(.text(Theme.type.callout, relativeTo: .callout))
+                .textFont(Theme.type.callout, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.text)
                 .fixedSize(horizontal: false, vertical: true)
         }
