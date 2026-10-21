@@ -216,10 +216,19 @@ pub enum Announced {
 }
 
 impl Announced {
-    /// A security notice: a join, a passkey, or a trim that may have hidden
-    /// one. Only the owner profile dismisses these.
+    /// A security notice: a join, a passkey or a recovery kit (each a way
+    /// into the account, D17), or a trim that may have hidden one. Only the
+    /// owner profile dismisses these.
     pub fn security(self) -> bool {
-        matches!(self, Self::Device | Self::Passkey | Self::Dropped)
+        matches!(
+            self,
+            Self::Device | Self::Passkey | Self::Kit | Self::Dropped
+        )
+    }
+
+    /// Trimmed before joins and passkeys when the queue is full.
+    fn trimmed_first(self) -> bool {
+        matches!(self, Self::Kit | Self::Removed)
     }
 }
 
@@ -297,9 +306,9 @@ fn trim(queued: &mut Vec<Announcement>) {
         return;
     }
     let dropped = over as u32;
-    for security in [false, true] {
+    for first in [true, false] {
         queued.retain(|a| {
-            let goes = over > 0 && kept(a) && a.kind.security() == security;
+            let goes = over > 0 && kept(a) && a.kind.trimmed_first() == first;
             over -= usize::from(goes);
             !goes
         });

@@ -1022,6 +1022,12 @@ async fn passkeys_over_the_protocol() {
             })
             .collect()
     };
+    let heard_kinds = |reply: &Value| -> Vec<String> {
+        let said = reply["result"]["announcements"].as_array().unwrap();
+        said.iter()
+            .map(|a| a["kind"].as_str().unwrap().into())
+            .collect()
+    };
     let round = json!({"id": 40, "op": "syncNow", "record": record});
     let report = ask(&mut phone, &mut phone_rx, round).await;
     let two = [
@@ -1128,7 +1134,9 @@ async fn passkeys_over_the_protocol() {
     )
     .await;
     assert_eq!(dropped["code"], "kitDropped", "{dropped}");
-    for n in 0..8u8 {
+    let kit = json!({"id": 8, "op": "createRecoveryKit", "record": record});
+    record = ask(&mut phone, &mut phone_rx, kit).await["result"]["record"].clone();
+    for n in 0..7u8 {
         let saved = ask(
             &mut phone,
             &mut phone_rx,
@@ -1145,18 +1153,36 @@ async fn passkeys_over_the_protocol() {
     .await;
     assert_eq!(full["code"], "tooManyKits", "{full}");
     // The laptop hears what came after its own join: Desk, the passkey the
-    // phone removed, and the phone's eight saves.
+    // phone removed, its recovery kit and its seven saves.
     let (mut laptop, mut laptop_rx, laptop_record) = joined.remove(0);
     let round = json!({"id": 2, "op": "syncNow", "record": laptop_record});
     let report = ask(&mut laptop, &mut laptop_rx, round).await;
-    let kinds: Vec<String> = heard(&report).into_iter().map(|(kind, _)| kind).collect();
-    let mut expected = vec!["device".to_owned(), "removed".to_owned()];
+    let kinds: Vec<String> = heard_kinds(&report);
+    let mut expected = vec!["device".to_owned(), "removed".to_owned(), "kit".to_owned()];
     expected.resize(10, "passkey".to_owned());
     assert_eq!(kinds, expected, "{report}");
+    let said = &report["result"]["announcements"];
+    assert_eq!(said[1]["name"], "Passkey, saved on the phone");
+    // A recovery kit made elsewhere is a way in, like a passkey: another
+    // profile cannot dismiss it, but may dismiss a removal (B P2-2).
+    let made = json!({"id": 3, "op": "createProfile", "name": "Kid", "avatar": "fox:amber"});
+    let made = ask(&mut laptop, &mut laptop_rx, made).await;
+    let kid = made["result"]["profiles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["name"] == "Kid")
+        .unwrap()["id"]
+        .clone();
+    let to_kid = json!({"id": 4, "op": "switchProfile", "profile": kid});
+    assert_eq!(ask(&mut laptop, &mut laptop_rx, to_kid).await["ok"], true);
+    let ack = json!({"id": 5, "op": "ackAnnouncements", "ids": [said[2]["id"]]});
     assert_eq!(
-        report["result"]["announcements"][1]["name"],
-        "Passkey, saved on the phone"
+        ask(&mut laptop, &mut laptop_rx, ack).await["code"],
+        "notOwner"
     );
+    let ack = json!({"id": 6, "op": "ackAnnouncements", "ids": [said[1]["id"]]});
+    assert_eq!(ask(&mut laptop, &mut laptop_rx, ack).await["ok"], true);
     drop((joined, laptop, laptop_rx));
 
     let (mut laptop, mut laptop_rx) = session(true);
