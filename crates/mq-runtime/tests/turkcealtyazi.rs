@@ -617,3 +617,54 @@ async fn the_addon_list_says_built_in_and_offers_no_configure_page() {
     let line = Some("Turkish subtitles from TurkceAltyazi.org.");
     assert_eq!(words, [(NAME, line), (NAME, line), ("other", None)]);
 }
+
+/// A pick of one of its files puts Turkish first in the profile's subtitle
+/// languages, as its tag (plans/m13-subtitle-languages.md 7).
+#[tokio::test]
+async fn a_pick_of_its_file_puts_turkish_first() {
+    let (port, _) = site(|_| None);
+    let core = core_at(port);
+    let video = video_origin(Vec::new()).await;
+    let own = format!("{video}/manifest.json");
+    install(&core, &[built_in_row(), row(&own, "own", "stream", true)]);
+    let streams = STREAM.replace("VIDEO", &format!("{video}/video.mkv"));
+    let view = PlaybackView::open(&core, listed(&own, &streams), s01e01());
+    let s = until(&view, "subtitles", settled).await;
+    let file = s.subtitles.iter().find(|t| t.source == NAME).unwrap();
+    assert_eq!(file.lang, "tur");
+    view.subtitle_chosen(Some(&file.url));
+    assert_eq!(core.prefs().subtitle_languages, ["tr"]);
+}
+
+/// A pick while it still lists moves no section: it ranks with the
+/// languages the playback opened with, as the other sources do.
+#[tokio::test]
+async fn a_pick_while_it_lists_moves_no_section() {
+    // The title page comes 1.5 s late, so the stream's own track is in first.
+    let (port, _) = site(|r| {
+        if r.path == "/mov/0903747/x.html" {
+            std::thread::sleep(Duration::from_millis(1500));
+        }
+        None
+    });
+    let core = core_at(port);
+    let video = video_origin(Vec::new()).await;
+    let own = format!("{video}/manifest.json");
+    install(&core, &[built_in_row(), row(&own, "own", "stream", true)]);
+    let streams = r#"{"streams":[{"url":"VIDEO","title":"Breaking.Bad.S01E01.DVDRip.XviD-ORPHEUS","subtitles":[{"id":"u","lang":"ukr","url":"https://subs.test/ukr.srt"}]}]}"#
+        .replace("VIDEO", &format!("{video}/video.mkv"));
+    let view = PlaybackView::open(&core, listed(&own, &streams), s01e01());
+    let s = until(&view, "the stream's own track", |s| {
+        s.phase == PlaybackPhase::Ready && !s.subtitles.is_empty()
+    })
+    .await;
+    assert!(s.subtitles_pending, "{s:?}");
+    let ukrainian = s.subtitles.iter().find(|t| t.lang == "ukr").unwrap();
+    view.subtitle_chosen(Some(&ukrainian.url));
+    assert_eq!(core.prefs().subtitle_languages, ["uk"]);
+    let s = until(&view, "subtitles", settled).await;
+    let languages: Vec<&str> = s.subtitles.iter().map(|t| t.language.as_str()).collect();
+    // Turkish before Ukrainian by name, as when the playback opened.
+    assert_eq!(languages.first(), Some(&"tr"), "{languages:?}");
+    assert_eq!(languages.last(), Some(&"uk"), "{languages:?}");
+}

@@ -1116,7 +1116,9 @@ impl PlaybackView {
     /// (`autoSubtitle` clears), and the title remembers the choice, the
     /// track's language or Off, for its next plays. A track's language also
     /// goes first in the profile's subtitle languages, so the next titles
-    /// start with it; Off stays the title's own.
+    /// start with it; Off stays the title's own. A kids profile's
+    /// preferences stay as the owner left them (plans/m11-kids.md): its
+    /// picks are its titles' own.
     pub fn subtitle_chosen(&self, url: Option<&str>) {
         let mut s = lock(&self.state);
         let choice = match url {
@@ -1138,6 +1140,7 @@ impl PlaybackView {
             return;
         };
         if url.is_some()
+            && !self.core.policy().kids()
             && let Some(next) = picked_first(&self.core.prefs().subtitle_languages, &choice)
         {
             let patch = serde_json::json!({ "subtitleLanguages": next });
@@ -1785,6 +1788,8 @@ async fn resolve_next(
         };
         match opened {
             Ok((upstream, filename, size, lease)) => {
+                // Read once: a pick while the list fills reorders nothing
+                // under it (the built-in source and the addons rank alike).
                 let wanted = preferred_languages(&core, &state);
                 // The stream's own tracks come from its addon.
                 let addon_url = stream.addon_url.as_ref();
@@ -1880,7 +1885,7 @@ async fn resolve_next(
                     let addons = async {
                         let extra = video_extra(reader, filename.as_deref()).await;
                         let found = (&slot, run, &*state, &snapshot);
-                        find_subtitles(&core, &target, &installed, extra, found).await
+                        find_subtitles(&core, &target, &installed, extra, &wanted, found).await
                     };
                     let built_in = built_in_tracks(
                         &core,
@@ -1888,6 +1893,7 @@ async fn resolve_next(
                         &stream,
                         &installed,
                         probed.clone(),
+                        &wanted,
                         &slot,
                         run,
                         &state,
@@ -3320,6 +3326,7 @@ async fn built_in_tracks(
     stream: &ParsedStream,
     installed: &[InstalledAddon],
     probed: impl std::future::Future<Output = Probed>,
+    wanted: &[String],
     slot: &SubtitleSlot,
     run: u64,
     state: &Arc<Mutex<State>>,
@@ -3355,7 +3362,6 @@ async fn built_in_tracks(
     let listing = listed.unwrap_or(mq_turkcealtyazi::Listing::Problem(
         mq_turkcealtyazi::Problem::Unreachable,
     ));
-    let wanted = preferred_languages(core, state);
     let owned = OwnedPlaying {
         group: playing.group.map(str::to_owned),
         source: playing.source,
@@ -3400,7 +3406,7 @@ async fn built_in_tracks(
             add_note(&mut s.snapshot, BUILT_IN.into(), problem(p));
         }
     }
-    reorder(&mut s, &wanted);
+    reorder(&mut s, wanted);
     snapshot.set(s.snapshot.clone());
 }
 
@@ -3807,6 +3813,7 @@ async fn find_subtitles(
     target: &PlayTarget,
     installed: &[InstalledAddon],
     extra: Vec<ExtraValue>,
+    wanted: &[String],
     (slot, run, state, snapshot): (
         &SubtitleSlot,
         u64,
@@ -3825,7 +3832,6 @@ async fn find_subtitles(
         .filter(|a| a.supports(&path) && !is_built_in(a))
         .cloned()
         .collect();
-    let wanted = preferred_languages(core, state);
     let mut fanout = core.addons().fan_out(&addons, &path, Deadlines::default());
     while let Some(event) = fanout.next().await {
         let AddonEvent::Arrived {
@@ -3881,7 +3887,7 @@ async fn find_subtitles(
                 s.snapshot.subtitles.push(t);
             }
         }
-        reorder(&mut s, &wanted);
+        reorder(&mut s, wanted);
         snapshot.set(s.snapshot.clone());
     }
 }

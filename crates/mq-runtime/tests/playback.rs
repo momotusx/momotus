@@ -1,3 +1,4 @@
+use futures_util::StreamExt;
 use mq_http::{ClientConfig, HttpClient, RequestOptions};
 use mq_library::{AddonRow, CachedResponse};
 use mq_protocol::decode_streams;
@@ -1408,8 +1409,9 @@ async fn a_subtitle_turns_on_at_start_only_as_the_profile_and_the_user_say() {
 
 /// The owner's flow (plans/m13-subtitle-languages.md 7): a subtitle picked
 /// in one title puts its language first in the profile's languages, so the
-/// next title starts with it on; Off stays that title's own. A kids profile
-/// keeps languages of its own.
+/// next title starts with it on; Off stays that title's own. A kids
+/// profile's preferences stay as the owner left them (plans/m11-kids.md):
+/// its pick is that title's own.
 #[tokio::test]
 async fn a_picked_subtitle_language_starts_the_next_titles() {
     let (video, _) = counted_origin().await;
@@ -1491,11 +1493,72 @@ async fn a_picked_subtitle_language_starts_the_next_titles() {
     // The kids profile set nothing: the owner's picks start nothing there.
     assert!(kid.prefs().subtitle_languages.is_empty());
     assert_eq!(started(&kid, "tt1").await, None);
-    // Its own English pick starts its next title, and leaves the owner's.
+    // Its English pick is that title's own: its preferences and its next
+    // title stay as they were, and the owner's too.
     pick(&kid, "tt1", Some("eng")).await;
-    assert_eq!(kid.prefs().subtitle_languages, ["en"]);
-    assert_eq!(started(&kid, "tt2").await, on("eng"));
+    assert!(kid.prefs().subtitle_languages.is_empty());
+    assert_eq!(started(&kid, "tt1").await, on("eng"));
+    assert_eq!(started(&kid, "tt2").await, None);
     assert_eq!(owner.prefs().subtitle_languages, ["de", "tr"]);
+}
+
+/// A pick of the playing audio's own language (subtitles for the hard of
+/// hearing, a learner) is kept like any other: the title starts with it
+/// again, the next title in another language too, while a title whose
+/// audio is in it starts nothing.
+#[tokio::test]
+async fn a_pick_in_the_audios_own_language_is_kept_and_skipped_for_that_audio() {
+    let (video, _) = counted_origin().await;
+    let stream = |title: &str| {
+        let subs: Vec<_> = ["eng", "tur"]
+            .iter()
+            .map(|lang| serde_json::json!({"id": lang, "lang": lang, "url": format!("https://subs.test/{lang}.srt")}))
+            .collect();
+        serde_json::json!({"streams": [{"url": format!("{video}/v.mkv"), "title": title, "subtitles": subs}]})
+            .to_string()
+    };
+    let open = |core: &Core, id: &str, title: &str| {
+        let target = PlayTarget {
+            item_id: id.into(),
+            video_id: id.into(),
+            ..target()
+        };
+        PlaybackView::open(core, setup(core, &stream(title)), target)
+    };
+    let started = async |core: &Core, id: &str, title: &str| {
+        let s = settled_list(&open(core, id, title)).await;
+        let on = s
+            .subtitles
+            .iter()
+            .find(|t| Some(&t.url) == s.auto_subtitle.as_ref());
+        on.map(|t| t.lang.clone())
+    };
+    let core = Core::temporary("p").unwrap();
+    // Turkish audio (the release says so): the viewer turns Turkish on.
+    let dubbed = "Film.2020.TURKISH.1080p.WEB";
+    let view = open(&core, "tt1", dubbed);
+    let s = settled_list(&view).await;
+    assert_eq!(s.auto_subtitle, None);
+    let turkish = s
+        .subtitles
+        .iter()
+        .find(|t| t.lang == "tur")
+        .unwrap()
+        .url
+        .clone();
+    view.subtitle_chosen(Some(&turkish));
+    drop(view);
+    assert_eq!(core.prefs().subtitle_languages, ["tr"]);
+    // The title remembers it; another title in another language starts with it;
+    // another one dubbed in Turkish starts nothing.
+    assert_eq!(started(&core, "tt1", dubbed).await.as_deref(), Some("tur"));
+    assert_eq!(
+        started(&core, "tt2", "Film.2020.1080p.WEB")
+            .await
+            .as_deref(),
+        Some("tur")
+    );
+    assert_eq!(started(&core, "tt3", dubbed).await, None);
 }
 
 /// A link slow to send its first byte says "Opening the video" once its
@@ -1542,6 +1605,127 @@ async fn a_link_slow_to_send_its_first_byte_says_it_opens_the_video() {
     );
     let s = until(&view, "the play", |s| s.phase != PlaybackPhase::Resolving).await;
     assert_eq!(s.phase, PlaybackPhase::Ready, "{s:?}");
+}
+
+/// The 3 s words never come to a link that opens at once.
+#[tokio::test]
+async fn a_link_that_opens_at_once_never_says_it_opens_the_video() {
+    let (video, _) = counted_origin().await;
+    let core = Core::temporary("p").unwrap();
+    let streams = serde_json::json!({"streams": [{"url": format!("{video}/v.mkv"), "title": "Film.2020.1080p.WEB"}]})
+        .to_string();
+    let began = std::time::Instant::now();
+    let view = PlaybackView::open(&core, setup(&core, &streams), target());
+    let (_, mut updates) = view.subscribe();
+    let mut said = Vec::new();
+    while let Ok(Some(batch)) = tokio::time::timeout(Duration::from_secs(10), updates.next()).await
+    {
+        said.extend(
+            batch
+                .iter()
+                .filter_map(|s| s.start.as_ref()?.caption.clone()),
+        );
+        if batch.iter().any(|s| s.phase != PlaybackPhase::Resolving) {
+            break;
+        }
+    }
+    assert_eq!(view.snapshot().phase, PlaybackPhase::Ready);
+    assert!(
+        began.elapsed() < Duration::from_secs(3),
+        "{:?}",
+        began.elapsed()
+    );
+    assert!(said.is_empty(), "{said:?}");
+}
+
+/// After the 3 s words, a source that fails hands over to the next, whose
+/// start says it is source 2 again, not "Opening the video".
+#[tokio::test]
+async fn a_slow_link_that_fails_hands_over_with_the_next_sources_words() {
+    // Source 1 holds its first byte 5 s, then is gone; source 2 answers in 1 s.
+    let origin = async |wait: u64, reply: &'static [u8]| {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                tokio::spawn(async move {
+                    let mut buf = [0u8; 4096];
+                    let _ = socket.read(&mut buf).await;
+                    tokio::time::sleep(Duration::from_secs(wait)).await;
+                    let _ = socket.write_all(reply).await;
+                });
+            }
+        });
+        base
+    };
+    let gone = origin(
+        5,
+        b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+    )
+    .await;
+    let slow = origin(1, b"HTTP/1.1 206 Partial Content\r\nContent-Range: bytes 0-0/10\r\nContent-Length: 1\r\nConnection: close\r\n\r\nM").await;
+    let streams = serde_json::json!({"streams": [
+        {"url": format!("{gone}/v.mkv"), "title": "Film.2020.1080p.WEB"},
+        {"url": format!("{slow}/v.mkv"), "title": "Film.2020.720p.WEB"}
+    ]})
+    .to_string();
+    let core = Core::temporary("p").unwrap();
+    let view = PlaybackView::open(&core, setup(&core, &streams), target());
+    let caption = |s: &PlaybackSnapshot| s.start.as_ref().and_then(|p| p.caption.clone());
+    until(&view, "source 1's words", |s| {
+        caption(s).as_deref() == Some("Opening the video")
+    })
+    .await;
+    let s = until(&view, "source 2 or the end", |s| {
+        s.start.as_ref().is_none_or(|p| p.source == 2)
+    })
+    .await;
+    assert_eq!(
+        caption(&s).as_deref(),
+        Some("Trying source 2 of 2"),
+        "{s:?}"
+    );
+    let s = until(&view, "the play", |s| s.phase != PlaybackPhase::Resolving).await;
+    assert_eq!(s.phase, PlaybackPhase::Ready, "{s:?}");
+    assert_eq!(s.attempts.len(), 1, "{s:?}");
+}
+
+/// A playback closed while its link waits for its first byte publishes
+/// nothing more: the 3 s words never come.
+#[tokio::test]
+async fn a_playback_closed_while_its_link_waits_says_nothing_more() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                let mut buf = [0u8; 4096];
+                let _ = socket.read(&mut buf).await;
+                tokio::time::sleep(Duration::from_secs(30)).await;
+            });
+        }
+    });
+    let core = Core::temporary("p").unwrap();
+    let streams = serde_json::json!({"streams": [{"url": format!("{base}/v.mkv"), "title": "Film.2020.1080p.WEB"}]})
+        .to_string();
+    let view = PlaybackView::open(&core, setup(&core, &streams), target());
+    let (_, mut updates) = view.subscribe();
+    until(&view, "the opening stage", |s| {
+        s.start
+            .as_ref()
+            .is_some_and(|p| p.stage == StartStage::Opening)
+    })
+    .await;
+    drop(view);
+    let mut said = Vec::new();
+    while let Ok(Some(batch)) = tokio::time::timeout(Duration::from_secs(4), updates.next()).await {
+        said.extend(
+            batch
+                .iter()
+                .filter_map(|s| s.start.as_ref()?.caption.clone()),
+        );
+    }
+    assert!(said.is_empty(), "{said:?}");
 }
 
 async fn settled_list(view: &PlaybackView) -> PlaybackSnapshot {
