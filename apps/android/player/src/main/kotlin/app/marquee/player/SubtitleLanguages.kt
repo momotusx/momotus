@@ -81,18 +81,37 @@ fun flagFor(key: String): Int? = FLAGS[key] ?: FLAGS[key.substringBefore('-')]
 
 /**
  * An option's quiet line: where it is from and what it is ([TrackChoice.detail]), "Same release group" where the
- * core's match fits, then the release text cut in the middle to [room] characters ([middleCut]).
+ * core's match fits, then the release text cut in the middle ([middleCut]) as long as [fits] lets one line be: on the
+ * same line while at least [MIN_RELEASE] characters of it fit there, else alone on the next.
  */
 fun optionLine(
     option: TrackChoice,
-    room: Int,
+    fits: (String) -> Boolean,
 ): String {
     val head = listOfNotNull(option.detail, SAME_GROUP.takeIf { option.fits }).joinToString(DOT)
     val release = option.release ?: return head
-    // ponytail: a character measure, as the frames use; a measured cut if widths vary too much.
-    val left = room - head.length - DOT.length
-    val cut = middleCut(release, if (left >= MIN_RELEASE) left else room)
-    return if (head.isEmpty()) cut else head + DOT + cut
+    val alone = { longest(release, SHORTEST) { fits(middleCut(release, it)) }!! }
+    if (head.isEmpty()) return alone()
+    val beside = longest(release, MIN_RELEASE) { fits(head + DOT + middleCut(release, it)) }
+    return if (beside != null) head + DOT + beside else head + " ·\n" + alone()
+}
+
+/** [release] cut to the most characters, from [least] up, that [ok] takes; at [least] when none do (null for [MIN_RELEASE]). */
+private fun longest(
+    release: String,
+    least: Int = 1,
+    ok: (Int) -> Boolean,
+): String? {
+    val low = minOf(least, release.length)
+    if (!ok(low)) return if (least == MIN_RELEASE) null else middleCut(release, low)
+    // A cut grows with its measure, so the longest that fits is found by halves.
+    var lo = low
+    var hi = release.length
+    while (lo < hi) {
+        val mid = (lo + hi + 1) / 2
+        if (ok(mid)) lo = mid else hi = mid - 1
+    }
+    return middleCut(release, lo)
 }
 
 /** The core's caption for a track that names the playing release's group (plans/player-polish.md 2.2). */
@@ -100,6 +119,9 @@ const val SAME_GROUP = "Same release group"
 
 /** Below this many characters left on the line, the release text takes a whole line's measure (it wraps). */
 private const val MIN_RELEASE = 24
+
+/** The shortest cut a release text is given on a line of its own, however narrow. */
+private const val SHORTEST = 12
 
 /**
  * A long release name cut in its middle at a dot or space, so the group at its end stays in view and no dot
@@ -117,7 +139,7 @@ fun middleCut(
     while (from > 0 && !at(from - 1)) from--
     // A tail with no boundary near enough keeps its share and starts at the next boundary instead.
     if (text.length - from > max - 5) {
-        from = text.length - (max - 5)
+        from = (text.length - (max - 5)).coerceIn(0, text.length)
         while (from < text.length && !at(from - 1)) from++
     }
     val tail = text.substring(from).trimStart('.', ' ')

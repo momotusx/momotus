@@ -6,6 +6,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -26,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,17 +59,20 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.marquee.design.FieldInput
 import app.marquee.design.Form
 import app.marquee.design.Icons
+import app.marquee.design.LocalFocusRing
 import app.marquee.design.Marquee
 import app.marquee.design.MarqueeFonts
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
 import app.marquee.design.TextRole
 import app.marquee.design.focusClickable
+import app.marquee.design.inverted
 import app.marquee.design.marqueeFocus
 
 // The subtitle picker (plans/player-polish.md 2.4, design/DECISION.md "Subtitle picker"): a search field, Off, the
@@ -80,13 +85,6 @@ private val SHEET_FILL = Color(0xF01E1E20)
 
 /** The search field's fill, the segmented track's grey. */
 private val FIELD_FILL = Color(0x3D767680)
-
-/** Black at Apple's 64 percent: secondary words on a focused (white) TV row. */
-private val ON_WHITE_DIM = Color(0xA3000000)
-
-/** The release text's measure in characters: a TV row takes one line of about 42, a phone row two of 28. */
-private const val TV_ROOM = 42
-private const val PHONE_ROOM = 56
 
 const val SEARCH_LANGUAGES = "Search languages"
 
@@ -261,12 +259,7 @@ fun PhoneSubtitleSheet(
                     PhoneRow(i, language.options.size, option.selected, { onPick(option.id) }, spokenOption(option)) {
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             MqText(option.name, role = TextRole.Callout, maxLines = 1)
-                            MqText(
-                                optionLine(option, PHONE_ROOM),
-                                role = TextRole.Caption,
-                                color = Marquee.colors.dim,
-                                maxLines = 2,
-                            )
+                            OptionLine(option, Marquee.colors.dim)
                         }
                         if (option.selected) Checked()
                     }
@@ -416,9 +409,31 @@ private fun PhoneRow(
     }
 }
 
+/**
+ * An option's quiet line, its release text cut to what the row's width holds ([optionLine]), measured in the
+ * caption's own type: two lines at most.
+ */
+@Composable
+private fun OptionLine(
+    option: TrackChoice,
+    color: Color,
+    weight: FontWeight? = null,
+) {
+    val measurer = rememberTextMeasurer()
+    val style = TextStyle(fontSize = Marquee.type.caption, fontFamily = MarqueeFonts.text, fontWeight = weight)
+    BoxWithConstraints {
+        val width = constraints.maxWidth
+        val line =
+            remember(option, width, style) {
+                optionLine(option) { measurer.measure(it, style, softWrap = false, maxLines = 1).size.width <= width }
+            }
+        MqText(line, role = TextRole.Caption, color = color, weight = weight, maxLines = 2)
+    }
+}
+
 /** What an option row says to a screen reader: its name, then its line. */
 private fun spokenOption(option: TrackChoice): String =
-    listOf(option.name, optionLine(option, Int.MAX_VALUE)).filter { it.isNotEmpty() }.joinToString(", ")
+    listOf(option.name, optionLine(option) { true }).filter { it.isNotEmpty() }.joinToString(", ")
 
 // The TV: two columns in one panel, the languages and the focused language's options.
 
@@ -454,136 +469,142 @@ fun TvSubtitlePicker(
         withFrameNanos { }
         runCatching { (chosen?.let { requester(it.key) } ?: off).requestFocus() }
     }
-    Row(
-        modifier
-            .width(1160.dp)
-            .height(736.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(MENU_FILL)
-            .testTag(SUBTITLE_PICKER_TAG)
-            .semantics { paneTitle = "Subtitles" },
-    ) {
-        Column(Modifier.width(500.dp).fillMaxHeight().padding(horizontal = 16.dp, vertical = 24.dp)) {
-            Heading("Subtitles")
-            SearchLanguages(
-                query,
-                { query = it },
-                Modifier.padding(bottom = 10.dp).focusProperties {
-                    up = FocusRequester.Cancel
-                    left = FocusRequester.Cancel
-                    right = FocusRequester.Cancel
-                },
-            )
-            LazyColumn(
-                Modifier.weight(1f),
-                state = list,
-                // Room for the focused row's lift.
-                contentPadding = PaddingValues(vertical = 6.dp),
-            ) {
-                item(key = TRACK_OFF) {
-                    val on = rows.firstOrNull { it.id == TRACK_OFF }?.selected == true
-                    TvRow(
-                        on,
-                        { onPick(TRACK_OFF) },
-                        "Off",
-                        Modifier.focusRequester(off).focusProperties {
-                            right =
-                                FocusRequester.Cancel
-                        },
-                    ) {
-                        Spacer(Modifier.width(40.dp))
-                        MqText(
-                            "Off",
-                            Modifier.weight(1f),
-                            role = TextRole.Callout,
-                            color = it.text,
-                            weight = it.weight,
-                            maxLines = 1,
-                        )
-                        TvCheck(on, it)
-                    }
-                }
-                items(shown, key = { "lang:${it.key}" }) { lang ->
-                    TvRow(
-                        lang.chosen,
-                        { onPick(lang.best.id) },
-                        spoken(lang),
-                        Modifier
-                            .focusRequester(requester(lang.key))
-                            .onFocusChanged { if (it.isFocused) focusedKey = lang.key }
-                            .focusProperties {
-                                right = into
-                                if (lang == shown.last()) down = FocusRequester.Cancel
-                            },
-                    ) {
-                        LanguageFlag(lang.key, 40.dp)
-                        LanguageName(lang, it.text, it.quiet, Modifier.weight(1f))
-                        MqText("${lang.options.size}", role = TextRole.Callout, color = it.quiet, maxLines = 1)
-                        TvCheck(lang.chosen, it)
-                    }
-                }
-                if (note != null) {
-                    item(key = "note") {
-                        MqText(note, Modifier.padding(16.dp), role = TextRole.Caption, color = Marquee.colors.dim)
-                    }
-                }
-            }
-        }
-        Box(Modifier.width(1.dp).fillMaxHeight().background(Marquee.colors.line))
-        Column(Modifier.weight(1f).fillMaxHeight().padding(horizontal = 16.dp, vertical = 24.dp)) {
-            if (preview != null) {
-                Heading(preview.name)
-                val target = preview.options.firstOrNull { it.selected } ?: preview.options.first()
-                val back = requester(preview.key)
-                Column(
-                    Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(vertical = 6.dp),
+    // The picker is v3 throughout (its frames): its buttons and field invert on focus, not the player's ring.
+    CompositionLocalProvider(LocalFocusRing provides false) {
+        Row(
+            modifier
+                .width(1160.dp)
+                .height(736.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(MENU_FILL)
+                .testTag(SUBTITLE_PICKER_TAG)
+                .semantics { paneTitle = "Subtitles" },
+        ) {
+            Column(Modifier.width(500.dp).fillMaxHeight().padding(horizontal = 16.dp, vertical = 24.dp)) {
+                Heading("Subtitles")
+                SearchLanguages(
+                    query,
+                    { query = it },
+                    Modifier.padding(bottom = 10.dp).focusProperties {
+                        up = FocusRequester.Cancel
+                        left = FocusRequester.Cancel
+                        right = FocusRequester.Cancel
+                    },
+                )
+                LazyColumn(
+                    Modifier.weight(1f),
+                    state = list,
+                    // Room for the focused row's lift.
+                    contentPadding = PaddingValues(vertical = 6.dp),
                 ) {
-                    preview.options.forEach { option ->
+                    item(key = TRACK_OFF) {
+                        val on = rows.firstOrNull { it.id == TRACK_OFF }?.selected == true
                         TvRow(
-                            option.selected,
-                            { onPick(option.id) },
-                            spokenOption(option),
-                            Modifier
-                                .then(if (option == target) Modifier.focusRequester(into) else Modifier)
-                                .focusProperties {
-                                    left = back
-                                    right = FocusRequester.Cancel
-                                    if (option == preview.options.first()) up = FocusRequester.Cancel
-                                    if (option == preview.options.last() && timing == null) down = FocusRequester.Cancel
-                                },
-                            top = true,
+                            on,
+                            { onPick(TRACK_OFF) },
+                            "Off",
+                            Modifier.focusRequester(off).focusProperties {
+                                right =
+                                    FocusRequester.Cancel
+                            },
                         ) {
-                            Column(Modifier.weight(1f)) {
-                                MqText(
-                                    option.name,
-                                    role = TextRole.Callout,
-                                    color = it.text,
-                                    weight = it.weight,
-                                    maxLines = 1,
-                                )
-                                MqText(
-                                    optionLine(option, TV_ROOM),
-                                    role = TextRole.Caption,
-                                    color = it.quiet,
-                                    weight = FontWeight.Medium,
-                                    maxLines = 2,
-                                )
-                            }
-                            TvCheck(option.selected, it)
+                            Spacer(Modifier.width(40.dp))
+                            MqText(
+                                "Off",
+                                Modifier.weight(1f),
+                                role = TextRole.Callout,
+                                color = it.text,
+                                weight = it.weight,
+                                maxLines = 1,
+                            )
+                            TvCheck(on, it)
+                        }
+                    }
+                    items(shown, key = { "lang:${it.key}" }) { lang ->
+                        TvRow(
+                            lang.chosen,
+                            { onPick(lang.best.id) },
+                            spoken(lang),
+                            Modifier
+                                .focusRequester(requester(lang.key))
+                                .onFocusChanged { if (it.isFocused) focusedKey = lang.key }
+                                .focusProperties {
+                                    right = into
+                                    if (lang == shown.last()) down = FocusRequester.Cancel
+                                },
+                        ) {
+                            LanguageFlag(lang.key, 40.dp)
+                            LanguageName(lang, it.text, it.quiet, Modifier.weight(1f))
+                            MqText("${lang.options.size}", role = TextRole.Callout, color = it.quiet, maxLines = 1)
+                            TvCheck(lang.chosen, it)
+                        }
+                    }
+                    if (note != null) {
+                        item(key = "note") {
+                            MqText(note, Modifier.padding(16.dp), role = TextRole.Caption, color = Marquee.colors.dim)
                         }
                     }
                 }
-                if (timing != null) {
-                    TimingRow(
-                        timing,
-                        onShift,
-                        Modifier.padding(start = 16.dp, top = 12.dp),
-                        earlier =
-                            Modifier.focusProperties {
-                                left = back
-                                down = FocusRequester.Cancel
-                            },
-                    )
+            }
+            Box(Modifier.width(1.dp).fillMaxHeight().background(Marquee.colors.line))
+            Column(Modifier.weight(1f).fillMaxHeight().padding(horizontal = 16.dp, vertical = 24.dp)) {
+                if (preview != null) {
+                    Heading(preview.name)
+                    val target = preview.options.firstOrNull { it.selected } ?: preview.options.first()
+                    val back = requester(preview.key)
+                    Column(
+                        Modifier
+                            .weight(
+                                1f,
+                                fill = false,
+                            ).verticalScroll(rememberScrollState())
+                            .padding(vertical = 6.dp),
+                    ) {
+                        preview.options.forEach { option ->
+                            TvRow(
+                                option.selected,
+                                { onPick(option.id) },
+                                spokenOption(option),
+                                Modifier
+                                    .then(if (option == target) Modifier.focusRequester(into) else Modifier)
+                                    .focusProperties {
+                                        left = back
+                                        right = FocusRequester.Cancel
+                                        if (option == preview.options.first()) up = FocusRequester.Cancel
+                                        if (option == preview.options.last() &&
+                                            timing == null
+                                        ) {
+                                            down = FocusRequester.Cancel
+                                        }
+                                    },
+                                top = true,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    MqText(
+                                        option.name,
+                                        role = TextRole.Callout,
+                                        color = it.text,
+                                        weight = it.weight,
+                                        maxLines = 1,
+                                    )
+                                    OptionLine(option, it.quiet, FontWeight.Medium)
+                                }
+                                TvCheck(option.selected, it)
+                            }
+                        }
+                    }
+                    if (timing != null) {
+                        TimingRow(
+                            timing,
+                            onShift,
+                            Modifier.padding(start = 16.dp, top = 12.dp),
+                            earlier =
+                                Modifier.focusProperties {
+                                    left = back
+                                    down = FocusRequester.Cancel
+                                },
+                        )
+                    }
                 }
             }
         }
@@ -634,7 +655,7 @@ private fun TvRow(
     val lift by animateFloatAsState(if (focused) 1f else 0f, tween(Marquee.focusMs), label = "lift")
     val ink =
         when {
-            focused -> RowInk(colors.onPrimary, ON_WHITE_DIM, FontWeight.Medium)
+            focused -> colors.inverted().let { RowInk(it.text, it.dim, FontWeight.Medium) }
             on -> RowInk(Color.White, colors.dim, FontWeight.SemiBold)
             else -> RowInk(colors.text, colors.dim, FontWeight.Medium)
         }

@@ -147,14 +147,30 @@ class SubtitleLanguagesTest {
     @Test
     fun `an option's line says where it is from, the release group match, then the release cut in the middle`() {
         val en = subtitleLanguages(rows())[0].options.associateBy { it.id }
-        assertEquals("OpenSubtitles v3 · Slow…1080p.WEB.H264-CAKES", optionLine(en.getValue("late:u/en1"), 46))
-        assertEquals("OpenSubtitles v3 · Same release group", optionLine(en.getValue("late:u/en2"), 46))
-        assertEquals("In the file · Forced", optionLine(en.getValue("0:0"), 46))
-        // Too little room left on the line: the release takes the whole measure on the next.
+        // A line of 46 characters, as the TV frames measure one.
+        val line = { text: String -> text.length <= 46 }
+        assertEquals("OpenSubtitles v3 · Slow…1080p.WEB.H264-CAKES", optionLine(en.getValue("late:u/en1"), line))
+        assertEquals("OpenSubtitles v3 · Same release group", optionLine(en.getValue("late:u/en2"), line))
+        assertEquals("In the file · Forced", optionLine(en.getValue("0:0"), line))
+        // Too little room left on the line: the release goes alone on the next, as much of it as a line holds.
         val long = en.getValue("late:u/en1").copy(detail = "OpenSubtitles v3 · For the hard of hearing")
         assertEquals(
-            "OpenSubtitles v3 · For the hard of hearing · Slow.Horses.S06E02.1080p.WEB.H264-CAKES",
-            optionLine(long, 46),
+            "OpenSubtitles v3 · For the hard of hearing ·\nSlow.Horses.S06E02.1080p.WEB.H264-CAKES",
+            optionLine(long, line),
+        )
+        val narrow = { text: String -> text.length <= 30 }
+        assertEquals(
+            "OpenSubtitles v3 · For the hard of hearing ·\nSlow…1080p.WEB.H264-CAKES",
+            optionLine(long, narrow),
+        )
+        // Read out whole.
+        assertEquals(
+            "OpenSubtitles v3 · Slow.Horses.S06E02.1080p.WEB.H264-CAKES",
+            optionLine(
+                en.getValue("late:u/en1"),
+            ) {
+                true
+            },
         )
     }
 
@@ -176,6 +192,8 @@ class SubtitleLanguagesTest {
             middleCut("Slow.Horses.S06E02.1080p.WEB.H264-CAKES", 46),
         )
         assertEquals("abcdefghijklmnopqrs…", middleCut("abcdefghijklmnopqrstuvwxyz0123456789", 20))
+        // A measure too small for the rule's margins still cuts, never past the text.
+        assertEquals(true, middleCut("Slow.Horses.S06E02.1080p.WEB.H264-CAKES", 4).length <= 6)
     }
 
     @Test
