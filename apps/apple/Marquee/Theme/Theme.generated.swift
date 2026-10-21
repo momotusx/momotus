@@ -38,6 +38,14 @@ enum Theme {
         static let keyFill = Color(RGBA(0.0000, 0.4431, 0.8902, 1))
         static let onKey = Color(RGBA(1.0000, 1.0000, 1.0000, 1))
         static let switchOn = Color(RGBA(0.1882, 0.8196, 0.3451, 1))
+        static let bgPhone = Color(RGBA(0.0000, 0.0000, 0.0000, 1))
+        static let surfacePhone = Color(RGBA(0.1098, 0.1098, 0.1176, 1))
+        static let raisedPhone = Color(RGBA(0.1725, 0.1725, 0.1804, 1))
+        static let dimPhone = Color(RGBA(0.9216, 0.9216, 0.9608, 0.6))
+        static let primaryPhone = Color(RGBA(0.9608, 0.9608, 0.9608, 1))
+        static let bgDesktop = Color(RGBA(0.1216, 0.1216, 0.1216, 1))
+        static let barDesktop = Color(RGBA(0.0000, 0.0000, 0.0000, 1))
+        static let bandDesktop = Color(RGBA(0.1686, 0.1686, 0.1686, 1))
     }
 
     struct TypeScale: Sendable {

@@ -46,6 +46,14 @@ data class Palette(
     val keyFill: Color,
     val onKey: Color,
     val switchOn: Color,
+    val bgPhone: Color,
+    val surfacePhone: Color,
+    val raisedPhone: Color,
+    val dimPhone: Color,
+    val primaryPhone: Color,
+    val bgDesktop: Color,
+    val barDesktop: Color,
+    val bandDesktop: Color,
 )
 
 /** Text sizes: TV points on the 1920x1080 canvas, or phone sp. */
@@ -164,6 +172,14 @@ object Tokens {
             keyFill = Color(0xFF0071E3),
             onKey = Color(0xFFFFFFFF),
             switchOn = Color(0xFF30D158),
+            bgPhone = Color(0xFF000000),
+            surfacePhone = Color(0xFF1C1C1E),
+            raisedPhone = Color(0xFF2C2C2E),
+            dimPhone = Color(0x99EBEBF5),
+            primaryPhone = Color(0xFFF5F5F5),
+            bgDesktop = Color(0xFF1F1F1F),
+            barDesktop = Color(0xFF000000),
+            bandDesktop = Color(0xFF2B2B2B),
         )
 
     val light = Palette(
@@ -201,6 +217,14 @@ object Tokens {
             keyFill = Color(0xFF0071E3),
             onKey = Color(0xFFFFFFFF),
             switchOn = Color(0xFF30D158),
+            bgPhone = Color(0xFF000000),
+            surfacePhone = Color(0xFF1C1C1E),
+            raisedPhone = Color(0xFF2C2C2E),
+            dimPhone = Color(0x99EBEBF5),
+            primaryPhone = Color(0xFFF5F5F5),
+            bgDesktop = Color(0xFF1F1F1F),
+            barDesktop = Color(0xFF000000),
+            bandDesktop = Color(0xFF2B2B2B),
         )
 
     val tvType = TypeScale(

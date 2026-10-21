@@ -36,6 +36,14 @@
   --key-fill: #0071E3;
   --on-key: #FFFFFF;
   --switch-on: #30D158;
+  --bg-phone: #000000;
+  --surface-phone: #1C1C1E;
+  --raised-phone: #2C2C2E;
+  --dim-phone: rgba(235, 235, 245, 0.6);
+  --primary-phone: #F5F5F5;
+  --bg-desktop: #1F1F1F;
+  --bar-desktop: #000000;
+  --band-desktop: #2B2B2B;
   --font-display: "Inter Variable", Inter, system-ui, sans-serif;
   --font-text: "Inter Variable", Inter, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
@@ -146,6 +154,14 @@
   --key-fill: #0071E3;
   --on-key: #FFFFFF;
   --switch-on: #30D158;
+  --bg-phone: #000000;
+  --surface-phone: #1C1C1E;
+  --raised-phone: #2C2C2E;
+  --dim-phone: rgba(235, 235, 245, 0.6);
+  --primary-phone: #F5F5F5;
+  --bg-desktop: #1F1F1F;
+  --bar-desktop: #000000;
+  --band-desktop: #2B2B2B;
   --focus-halo: 30px;
   --focus-shadow: 0 0 0 var(--focus-ring) var(--bg), 0 0 var(--focus-halo) calc(var(--focus-ring) * 2) var(--halo);
 }
