@@ -505,6 +505,9 @@ export function syncProblem(code: string | undefined, message: string): string {
       return syncWords.wrongRecord;
     case "joining":
       return syncWords.joining;
+    // A kit, a passkey or a wipe is the main profile's (D13, D17).
+    case "notOwner":
+      return "Only the main profile can do that.";
   }
   if (message.startsWith("roster: ")) return pairingProblem(`pairing: ${message.slice("roster: ".length)}`);
   if (message.startsWith("pairing: ") || message.startsWith("invalid url") || message.startsWith("blocked private address") || message.startsWith("the relay must use https"))

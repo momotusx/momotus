@@ -1053,6 +1053,11 @@ export function AddDevice() {
 export function MakeKit() {
   const navigate = useNavigate();
   const [params] = useSearchParams<{ first?: string }>();
+  // Kits are the main profile's (D17): another profile reached here by address, or switched to
+  // while the page is open, goes back to the sync page.
+  createEffect(() => {
+    if (profiles() && !mayMakeKit(profiles())) navigate("/sync", { replace: true });
+  });
   // The kit lives in this signal only, for as long as the page is open.
   const [kit, setKit] = createSignal<string | null>(null);
   const [busy, setBusy] = createSignal(false);

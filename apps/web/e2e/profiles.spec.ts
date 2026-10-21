@@ -98,6 +98,9 @@ test("profiles: add, pick, PIN, switch both ways, locked start", async ({ page }
   await page.locator('[data-f="nav:/settings"]').click();
   await expect(page).toHaveURL(/\/settings/);
   await expect(page.locator('[data-f="settings:profiles"]')).toContainText("Kid");
+  // Kits are Main's to make (D17): Kid reaching the kit page by its address lands on the sync page.
+  await page.goto("/sync/kit?form=tv");
+  await expect(page).toHaveURL(/\/sync$/);
 
   // Back to Main needs its PIN: a wrong one says so, the right one switches.
   await page.goto("/profiles?form=tv");

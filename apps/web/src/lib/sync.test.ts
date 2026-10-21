@@ -51,7 +51,7 @@ const member = (id: string, o: Partial<MemberInfo> = {}): MemberInfo => ({
 });
 const quiet = { clockGapMs: 0, waiting: 0, parked: 0, oldEpochWrites: 0, rotationWaitMs: 0, blocked: null, refused: 0, unreadable: 0, newer: 0, again: false } as const;
 
-test("Delete account shows on the owner profile only", () => {
+test("Delete account and Make a recovery kit show on the owner profile only", () => {
   const profile = (id: string, isOwner: boolean) => ({ id, name: id, avatar: "fox:amber", position: 0, hasPin: false, isOwner, syncing: false, kids: false });
   const snapshot = (active: string) => ({ profiles: [profile("default", true), profile("kid", false)], active, locked: false }) as unknown as Parameters<typeof mayDeleteAccount>[0];
   expect(mayDeleteAccount(snapshot("default"))).toBe(true);
@@ -79,6 +79,12 @@ test("only a pairing code is taken from the camera", () => {
   expect(isPairingCode(" marquee:pair?v=2&s=x&p=y ")).toBe(true);
   expect(isPairingCode("https://example.org/marquee:pair?")).toBe(false);
   expect(isPairingCode("")).toBe(false);
+  // The TV's v3 link, from any link host; never a plain http one, another path or version.
+  expect(isPairingCode(" https://link.example.org/pair#v=3&s=https%3A%2F%2Fsync.example.org&p=y ")).toBe(true);
+  expect(isPairingCode("http://link.example.org/pair#v=3&p=y")).toBe(false);
+  expect(isPairingCode("https://link.example.org/pairs#v=3&p=y")).toBe(false);
+  expect(isPairingCode("https://link.example.org/pair#v=2&p=y")).toBe(false);
+  expect(isPairingCode("https://link.example.org/pair?v=3&p=y")).toBe(false);
 });
 
 test("a look that ends after Cancel approves nothing", async () => {
@@ -217,6 +223,7 @@ test("sync failures read by code and by action, and never show the server's addr
   expect(syncProblem("fork", "x")).toContain("Compare the lists");
   expect(syncProblem("unsent", "x")).toContain("stop anyway");
   expect(syncProblem("passkey", "x")).toBe("The passkey did not confirm it, so nothing changed.");
+  expect(syncProblem("notOwner", "only the main profile can change the account")).toBe("Only the main profile can do that.");
   // A passkey without PRF is not a server that did not answer.
   expect(syncProblem("noPrf", "this passkey has no PRF")).toBe(syncWords.noPrf);
   expect(syncProblem("rosterChanged", "x")).toBe(syncWords.forkChanged);

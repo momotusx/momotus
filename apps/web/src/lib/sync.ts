@@ -22,8 +22,18 @@ const revision = (r: SyncRecord) => (typeof r.revision === "number" ? r.revision
  * arrives after a newer record was stored never rolls it back. */
 export const keepNewer = (held: SyncRecord | null, next: SyncRecord): SyncRecord => (held && revision(held) > revision(next) ? held : next);
 
-/** A pairing code as the new device shows it; any other QR in view is ignored. */
-export const isPairingCode = (text: string) => text.trim().startsWith("marquee:pair?");
+/** A pairing code as the new device shows it: the TV's link `https://<link host>/pair#v=3&...`,
+ * or `marquee:pair?v=2&...` from an older build. Any other QR in view is ignored. */
+export function isPairingCode(text: string): boolean {
+  const code = text.trim();
+  if (code.startsWith("marquee:pair?")) return true;
+  try {
+    const link = new URL(code);
+    return link.protocol === "https:" && link.pathname === "/pair" && new URLSearchParams(link.hash.slice(1)).get("v") === "3";
+  } catch {
+    return false;
+  }
+}
 
 /** "VW4BV9DJD5EZ" to "VW4B V9DJ D5EZ", for reading aloud. */
 export const fingerprintGroups = (fp: string) => fp.match(/.{1,4}/g)?.join(" ") ?? fp;
