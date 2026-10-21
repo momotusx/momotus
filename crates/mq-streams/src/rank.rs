@@ -109,12 +109,11 @@ fn has_room(s: &ParsedStream, input: &RankInput<'_>, free: u64, size: u64) -> bo
     if !c.window {
         return false;
     }
-    // The rate from the runtime when it is known, else the guess, never
-    // under the size over 3 h (2.2).
-    let guess = guessed_rate(s, size, episode);
-    i.bitrate = weight(s, input).mbps.map_or(guess, |m| {
-        ((f64::from(m) * 125_000.0) as u64).max(size / (3 * 3600))
-    });
+    // The rate the app plays it with: this file's size over the runtime
+    // when known (a pack's share of it), else the guess (2.2).
+    let w = weight(s, input);
+    let runtime = w.mbps.and(c.runtime_s).map(u64::from);
+    i.bitrate = window_rate(s, w.size.unwrap_or(size), episode, runtime);
     mq_engine_sched::window_plan(&mq_engine_sched::Config::standard(), i)
         .is_some_and(|p| p.ahead_secs(i.bitrate) >= WINDOW_AHEAD_S)
 }
@@ -148,6 +147,18 @@ pub fn guessed_rate(stream: &ParsedStream, len: u64, episode: bool) -> u64 {
     };
     let by_size = len / if episode { 3600 } else { 3 * 3600 };
     (mbps * 1_000_000 / 8).max(by_size)
+}
+
+/// A torrent file's rate for its window (2.2), the one the ranking and the
+/// app both size with: `len` over the duration when one is known (the
+/// player's last, else the meta runtime), else [`guessed_rate`]; never
+/// under `len` over 3 h (1 h for an episode).
+pub fn window_rate(stream: &ParsedStream, len: u64, episode: bool, duration_s: Option<u64>) -> u64 {
+    let floor = len / if episode { 3600 } else { 3 * 3600 };
+    match duration_s.filter(|&d| d > 0) {
+        Some(d) => (len / d).max(floor),
+        None => guessed_rate(stream, len, episode),
+    }
 }
 
 /// How a stream starts (3.2), or `None` when nothing here can open it.
