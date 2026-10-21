@@ -1033,6 +1033,8 @@ data class ProfilesSnapshot(
     val max: Int,
     /** The session runs a kids profile: adult screens hide and leaving asks the owner's PIN (plans/m11-kids.md 9.1). The bridge keeps it set until the session's next switch. */
     val kids: Boolean,
+    /** A sign-out that removes the library (D13) was asked here and its wipe has not answered yet: run steps two and three (on the owner profile, with the debrid connections when `debrid`). Set by `signOut {removeAfter}` before the leave, cleared by a leave that failed, by any join and by the wipe. */
+    val wipePending: WipePending? = null,
 )
 
 @Serializable(with = QualityPref.Serializer::class)
@@ -1829,3 +1831,8 @@ sealed interface VersionStatus {
     @SerialName("direct")
     data object Direct : VersionStatus
 }
+
+@Serializable
+data class WipePending(
+    val debrid: Boolean,
+)
