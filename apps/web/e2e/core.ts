@@ -33,6 +33,8 @@ export const JOURNEY_PORT = 17814 + shift;
 export const SEARCH_TOP_PORT = 17815 + shift;
 /** The browser's recorder (e2e/replay.ts): every name but this machine's resolves here. */
 export const BROWSER_PORTS = { https: 17816 + shift, http: 17817 + shift };
+/** The accounts spec's own: a relay with sign-in, the mock provider, and one core per device. */
+export const ACCOUNTS_PORTS = { relay: 17818 + shift, mock: 17819 + shift, a: 17820 + shift, b: 17821 + shift, c: 17822 + shift };
 /** Every browser a run launches takes these: each name but this machine's resolves to the browser's
  * recorder, whose certificate it does not check, so pages load images and frames from the
  * recording and a run needs the network only to record (none with MQ_E2E_OFFLINE=1). A spec that
@@ -60,19 +62,36 @@ const targetDir = process.env.CARGO_TARGET_DIR ?? join(homedir(), `.cargo-target
  * no-op build takes about a second), so a stale binary is never what the
  * tests run against. The bridge is built without its `torrent` feature (the
  * dev bridge has it): a run never touches BitTorrent. */
-function binary(pkg: "mq-bridge" | "mq-sync-server", env: string): string {
+function binary(pkg: "mq-bridge" | "mq-sync-server", env: string, example?: string): string {
   const explicit = process.env[env];
   if (explicit) {
     if (!existsSync(explicit)) throw new Error(`${env} does not exist: ${explicit}`);
     return explicit;
   }
-  const r = spawnSync("cargo", ["build", "-p", pkg, "-j", "4"], {
+  const r = spawnSync("cargo", ["build", "-p", pkg, ...(example ? ["--example", example] : []), "-j", "4"], {
     cwd: repo,
     stdio: "inherit",
     env: { ...process.env, CARGO_TARGET_DIR: targetDir, CARGO_INCREMENTAL: "0" },
   });
   if (r.status !== 0) throw new Error(`cargo build -p ${pkg} failed`);
-  return join(targetDir, `debug/${pkg}`);
+  return join(targetDir, example ? `debug/examples/${example}` : `debug/${pkg}`);
+}
+
+/** The mock OpenID provider the relay's tests use (crates/mq-sync-server/examples/mock-oidc.rs):
+ * a subject picker, Cancel and Stall, on loopback. Answers its URL once it listens. */
+export function startMockProvider(port: number): Promise<{ proc: ChildProcess; url: string }> {
+  const proc = spawn(binary("mq-sync-server", "MQ_MOCK_OIDC_BIN", "mock-oidc"), [String(port)], { stdio: ["ignore", "pipe", "inherit"] });
+  return new Promise((ok, fail) => {
+    const timer = setTimeout(() => fail(new Error("no mock_oidc_ready in 30 s")), 30_000);
+    proc.stdout?.on("data", (chunk: Buffer) => {
+      const ready = /"url":"([^"]+)"/.exec(chunk.toString());
+      if (ready?.[1]) {
+        clearTimeout(timer);
+        ok({ proc, url: ready[1] });
+      }
+    });
+    proc.on("exit", (code) => fail(new Error(`mock provider exited with ${code}`)));
+  });
 }
 
 export const bridgeBinary = () => binary("mq-bridge", "MQ_BRIDGE_BIN");

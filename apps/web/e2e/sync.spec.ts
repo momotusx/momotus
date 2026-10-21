@@ -350,7 +350,7 @@ test.describe.serial("sync across three devices", () => {
     await synced(desk);
     await expect(member(desk, "Desk")).toContainText("This device");
     await expect(member(desk, "Desk")).toContainText(", the first device");
-    await expect(desk.locator(".sync-callout")).toContainText("This account has no recovery kit");
+    await expect(desk.locator(".sync-callout")).toContainText("Add a second way in");
     await expect(desk.locator(".sync-fp")).toHaveText(/^[0-9A-Z]{4} [0-9A-Z]{4} [0-9A-Z]{4}$/);
     // A second account cannot start over a live one.
     await go(desk, "/sync/start");
@@ -641,7 +641,7 @@ test.describe.serial("sync across three devices", () => {
     // A TV cannot make kits: the callout says where to.
     await expect(tv.locator(".sync-callout")).toHaveText("You joined with a recovery kit. Make a new one on your phone or computer, and remove the device you lost.");
     await expect(member(tv, "Living room TV")).toContainText("through Recovery kit");
-    await expect(tv.locator('[data-f="sync:add"]')).toContainText("a TV has no camera");
+    await expect(tv.locator('[data-f="sync:add"]')).toContainText("Use your phone to sign in other devices");
     await expect(tv.locator('[data-f="sync:kit"]')).toContainText("on a TV, anyone in the room");
     await expect.poll(() => focused(tv)).toBe("sync:now");
     await shot(tv, "sync-tv");
@@ -773,6 +773,8 @@ test.describe.serial("sync across three devices", () => {
     // Phone leaves that account, then pairs again.
     await go(phone, "/sync");
     await synced(phone);
+    // Keeping the library here (D13 asks, ticked by default; e2e/accounts.spec.ts removes it).
+    await phone.locator('[data-f="sync:remove-library"]').click();
     await phone.locator('[data-f="sync:leave"]').click();
     await expect(phone.getByText("This device no longer syncs. Your library stays here.")).toBeVisible();
 
@@ -958,6 +960,7 @@ test.describe.serial("sync across three devices", () => {
     // The browser aborts the delete of the sealed copy after 1.5 s.
     await hold(desk, "delete", 1500);
     const left = desk.getByText("This device no longer syncs. Your library stays here.");
+    await desk.locator('[data-f="sync:remove-library"]').click();
     await desk.locator('[data-f="sync:leave"]').click();
     await expect(desk.locator('[data-f="sync:start"]')).toBeVisible();
     // Nothing says it left before the delete was tried.
@@ -1071,8 +1074,12 @@ test.describe.serial("sync across three devices", () => {
     await expect(tv.getByText("This browser's storage could not be read, so nothing is remembered here")).toBeVisible();
     // The storage works again; leaving this account touches no copy it never held.
     await tv.evaluate(() => sessionStorage.removeItem("mq.e2e.noIdb"));
+    // A TV's Sign out always removes the library too (D13): it starts again at its first run,
+    // whose doors stand in for the sign-in while this browser still remembers an account.
+    await expect(tv.locator('[data-f="sync:remove-library"]')).toHaveAttribute("aria-disabled", "true");
     await tv.locator('[data-f="sync:leave"]').click();
-    await expect(tv.getByText("This device no longer syncs. Your library stays here.")).toBeVisible();
+    await expect(tv).toHaveURL(/\/welcome$/, { timeout: 30_000 });
+    await expect(tv.locator("h1")).toHaveText("How would you like to begin?");
     expect((await kept(tv)).text).toContain("credential");
     // Reloaded, the browser offers that copy; forgetting it leaves the TV as it was.
     await tv.goto("/sync");
