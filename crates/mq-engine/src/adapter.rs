@@ -68,6 +68,8 @@ pub(crate) enum Msg {
     ToEvict(tokio::sync::oneshot::Sender<Vec<u32>>),
     /// What the scheduler counts as held.
     Held(tokio::sync::oneshot::Sender<u64>),
+    /// What the torrent has written: verified pieces and received blocks.
+    Written(tokio::sync::oneshot::Sender<u64>),
     /// Of these pieces, the ones with nothing of ours (APFS's filled holes).
     Empty {
         pieces: Vec<u32>,
@@ -648,6 +650,10 @@ impl Translator {
             }
             Msg::Held(tx) => {
                 let _ = tx.send(self.sched.as_ref().map_or(0, Scheduler::held_bytes));
+                Vec::new()
+            }
+            Msg::Written(tx) => {
+                let _ = tx.send(self.sched.as_ref().map_or(0, Scheduler::written_bytes));
                 Vec::new()
             }
             Msg::ToEvict(tx) => {

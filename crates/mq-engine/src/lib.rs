@@ -1278,21 +1278,33 @@ impl Engine {
     /// Each torrent folder's bytes, by info hash: the torrents of this
     /// launch with each file's, and the folders an earlier one left.
     async fn held_bytes(&self) -> HashMap<String, HeldBytes> {
-        let loaded: Vec<(String, PathBuf, Vec<PathBuf>, bool)> = lock(&self.inner.torrents)
-            .values()
-            .map(|t| {
-                let idle = t.readers.load(Ordering::Relaxed) == 0
-                    && !t.claimed()
-                    && !lock(&t.hold).by_profile.values().any(|h| h.held);
-                let files = t.files.iter().map(|f| t.dir.join(&f.path)).collect();
-                (t.info_hash.to_ascii_lowercase(), t.dir.clone(), files, idle)
-            })
+        let all: Vec<(TorrentHandle, Arc<Torrent>)> = lock(&self.inner.torrents)
+            .iter()
+            .map(|(h, t)| (*h, t.clone()))
             .collect();
+        let mut loaded: Vec<(String, PathBuf, Vec<PathBuf>, bool, u64)> = Vec::new();
+        for (h, t) in all {
+            let idle = t.readers.load(Ordering::Relaxed) == 0
+                && !t.claimed()
+                && !lock(&t.hold).by_profile.values().any(|h| h.held);
+            let files = t.files.iter().map(|f| t.dir.join(&f.path)).collect();
+            // Its own window's part of `C`: the ranking leaves it out for
+            // the row of the title playing, as the app does (review r3 A R7).
+            let committed =
+                (self.committed(None).await).saturating_sub(self.committed(Some(h)).await);
+            loaded.push((
+                t.info_hash.to_ascii_lowercase(),
+                t.dir.clone(),
+                files,
+                idle,
+                committed,
+            ));
+        }
         let data_dir = self.inner.cfg.data_dir.clone();
         tokio::task::spawn_blocking(move || {
             let dirs: Vec<&Path> = loaded.iter().map(|l| l.1.as_path()).collect();
             let mut held = counted_on_disk_except(&data_dir, &dirs);
-            for (hash, dir, files, idle) in &loaded {
+            for (hash, dir, files, idle, committed) in &loaded {
                 let files = files.iter().map(|f| file_allocated(f)).collect();
                 let folder = allocated(dir);
                 held.insert(
@@ -1301,6 +1313,7 @@ impl Engine {
                         folder,
                         files,
                         idle: *idle,
+                        committed: *committed,
                     },
                 );
             }
@@ -1338,6 +1351,13 @@ impl Engine {
             fill,
             own,
             own_file,
+            // Verifying the file's first and last pieces writes its
+            // neighbours' bytes too (review r3 A R4).
+            boundary: if t.files.len() > 1 {
+                2 * u64::from(t.piece_len)
+            } else {
+                0
+            },
         })
     }
 
@@ -1876,14 +1896,35 @@ fn counted_on_disk_except(data_dir: &Path, held: &[&Path]) -> HashMap<String, He
         .into_iter()
         .filter_map(|(_, path, folder)| {
             let hash = path.file_name()?.to_str()?.to_ascii_lowercase();
+            // A folder of one file: that file's bytes, as the app counts
+            // them once the torrent loads (review r3 A R3).
+            let files = single_file(&path).into_iter().collect();
             let held = HeldBytes {
                 folder,
-                files: Vec::new(),
+                files,
                 idle: true,
+                committed: 0,
             };
             Some((hash, held))
         })
         .collect()
+}
+
+/// What the one file under `dir` takes on disk; `None` when there are more.
+fn single_file(dir: &Path) -> Option<u64> {
+    let mut found = None;
+    let mut dirs = vec![dir.to_path_buf()];
+    while let Some(d) = dirs.pop() {
+        for e in std::fs::read_dir(&d).ok()?.flatten() {
+            let m = e.metadata().ok()?;
+            if m.is_dir() {
+                dirs.push(e.path());
+            } else if found.replace(file_allocated(&e.path())).is_some() {
+                return None;
+            }
+        }
+    }
+    found
 }
 
 fn allocated(dir: &Path) -> u64 {

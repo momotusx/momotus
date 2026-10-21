@@ -768,15 +768,6 @@ async fn a_resume_counts_its_own_folder_in_the_room() {
     assert!(s.leecher.stats(t).await.unwrap().window_bytes.is_some());
     let (pos_ms, duration_ms) = (400_000, 1_000_000);
     let at = len * pos_ms / duration_ms;
-    assert!(read_range(&url, at, 16 * MIB).await == s.movie[at as usize..(at + 16 * MIB) as usize]);
-    view.report_progress(pos_ms, duration_ms, false);
-    drop(view);
-    until_async("the trim", || async {
-        s.leecher.stats(t).await.unwrap().window_bytes.is_none()
-    })
-    .await;
-    let own = folder_bytes(&s.leech_dir().join(&s.info_hash));
-    // Piece 6 (6 MiB in, past the head's pinned window) left with the trim.
     let have = |p: u32| {
         let leecher = s.leecher.clone();
         async move {
@@ -785,6 +776,18 @@ async fn a_resume_counts_its_own_folder_in_the_room() {
                 .contains("Some((true,")
         }
     };
+    // The head read through piece 6 (6 MiB in, past the head's pinned
+    // window), then 16 MiB 40% in.
+    assert!(read_range(&url, 0, 8 * MIB).await == s.movie[..(8 * MIB) as usize]);
+    assert!(have(6).await, "piece 6 held before the trim");
+    assert!(read_range(&url, at, 16 * MIB).await == s.movie[at as usize..(at + 16 * MIB) as usize]);
+    view.report_progress(pos_ms, duration_ms, false);
+    drop(view);
+    until_async("the trim", || async {
+        s.leecher.stats(t).await.unwrap().window_bytes.is_none()
+    })
+    .await;
+    let own = folder_bytes(&s.leech_dir().join(&s.info_hash));
     assert!(!have(6).await, "the trim took piece 6");
     // A resume with room over both floors (the 1080p guess's and the
     // duration's): the window's rate is the file over the last session's
@@ -903,8 +906,13 @@ async fn a_packs_played_episode_is_room_for_the_next_only_in_a_window() {
         "{attempts:?}"
     );
     drop(refused);
-    // The refusal removed the torrent; episode 1 again, then where holes
-    // punch: a window, which evicts episode 1 first.
+    // The refusal let the torrent go but kept its folder: episode 1's bytes
+    // stay (review r3 B P3-1).
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let kept = folder_bytes(&s.leech_dir().join(&s.info_hash));
+    assert!(kept >= 140 * MIB, "the refusal kept the folder: {kept}");
+    // Episode 1 again, then where holes punch: a window, which evicts
+    // episode 1 first.
     let t = s
         .leecher
         .add_magnet(&s.info_hash, &[], &[s.seeder_addr])

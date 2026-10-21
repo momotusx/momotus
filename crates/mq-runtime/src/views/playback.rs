@@ -1785,7 +1785,11 @@ async fn open_torrent(
         let ready = watch_start(head.ready(), progress, STALL, rule).await;
         Ok::<_, mq_engine::EngineError>((file, info, ready))
     };
-    let failed = match started.await {
+    let started = started.await;
+    // Refused before any write ("this device is full"): what the folder
+    // holds stays (a pack's other episodes, a warm window), review r3 B P3-1.
+    let refused = matches!(started, Err(mq_engine::EngineError::DeviceFull));
+    let failed = match started {
         Ok((file, info, Started::Ready(Ok(())))) => {
             let name = info
                 .path
@@ -1843,14 +1847,14 @@ async fn open_torrent(
     // The next candidate plays instead: stop downloading this one, unless
     // another playback still claims it (the engine then keeps it).
     drop(claim);
-    let _ = engine.remove(torrent, false).await;
+    let _ = engine.remove(torrent, refused).await;
     Err(failed)
 }
 
-/// Plays `file` in a window when it does not fit (plans/streaming-window.md
-/// 2.1: its size is above `room = free + R - C - reserve`), or in a walk
-/// build's override window; else it plays whole. A volume that cannot
-/// punch holes plays whole, as today.
+/// Plays `file` in a window when it does not fit whole
+/// (plans/streaming-window.md 2.1, `WindowInputs::fits_whole`), or in a
+/// walk build's override window; else it plays whole. On a volume that
+/// cannot punch holes a file that does not fit whole is refused.
 #[cfg(feature = "torrent")]
 async fn open_window(
     core: &Core,

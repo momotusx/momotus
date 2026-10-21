@@ -602,10 +602,10 @@ async fn refused_punches_end_the_playback_cleanly() {
 /// data folder, and another app's write taking it 6 MiB under the reserve
 /// while the player's one range stays open, as mpv's and ExoPlayer's do:
 /// the window gives the 6 MiB back, the keeper goes on evicting (the read
-/// is still the player's), the readahead comes back once free space is
-/// over the reserve again, nothing is fetched twice, and the same range
-/// reads on to the end. When the other app deletes its file, the window
-/// grows back.
+/// is still the player's), the readahead keeps its setting, and the same
+/// range reads on to the end. When the other app deletes its file, the
+/// window grows back, and what the cut took off the readahead is fetched
+/// again once, nothing more.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_shortfall_shrinks_the_window_and_the_read_finishes() {
     // 40 MiB: a full window holds about 34, its kept set about 14, so it
@@ -664,7 +664,95 @@ async fn a_shortfall_shrinks_the_window_and_the_read_finishes() {
     assert!(rest == w.movie(40 * MIB, len));
     let max = held.load(Ordering::Relaxed);
     assert!(max > shrunk, "the window grew back: {max} after {shrunk}");
-    assert_eq!(w.stats().await.refetched_bytes, 0, "nothing fetched twice");
+    // What the cut took off the readahead comes back once, nothing more
+    // (review r3 B P2-1: the readahead shrinks with the budget).
+    let again = w.stats().await.refetched_bytes;
+    assert!(again <= 6 * MIB + MIB, "fetched again: {again}");
+    test_hooks::set_free_base(&w.engine, None);
+}
+
+/// f, a sustained write (review r3 B P2-1): another app writes 10 MiB/s
+/// for 12 s while the player reads at 2.5 MiB/s from a window holding a
+/// remux-sized readahead (96 MiB). The window gives its readahead back as
+/// the space goes, farthest part first, so free space stays near the
+/// reserve and far from the floor, the read goes on, and nothing is
+/// fetched twice.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_sustained_write_takes_the_readahead_farthest_first() {
+    let remux = WindowPlan {
+        budget: 160 * MIB + APFS_HEAD_BYTES,
+        behind: 4 * MIB,
+        slack: 8 * MIB,
+        ahead: 96 * MIB,
+        open_floor: 8 * MIB,
+        open_cap: 8 * MIB,
+        floor: 40 * MIB,
+        playing: 6 * MIB,
+    };
+    let w = windowed(256 << 20, remux, None).await;
+    let mut base = RESERVE_BYTES + 170 * MIB + allocated(w.root.path());
+    test_hooks::set_free_base(&w.engine, Some(base));
+    let reader = w.engine.open_reader(w.t, "default", w.movie).await.unwrap();
+    let mut range = reader.range(0, None).await.unwrap();
+    let mut buf = vec![0u8; 50 * MIB as usize];
+    within(60, range.read_exact(&mut buf)).await.unwrap();
+    assert!(buf == w.movie(0, 50 * MIB));
+    // The readahead fills: 96 MiB past the playback window.
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    let before = w.stats().await.held_bytes.unwrap();
+    assert!(before > 120 * MIB, "the window filled: {before}");
+    let min_free = Arc::new(AtomicU64::new(u64::MAX));
+    let watch = tokio::spawn({
+        let (engine, min) = (w.engine.clone(), min_free.clone());
+        async move {
+            loop {
+                min.fetch_min(engine.free().unwrap(), Ordering::Relaxed);
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        }
+    });
+    let mut at = 50 * MIB;
+    let mut chunk = vec![0u8; 256 * 1024];
+    let started = Instant::now();
+    for tick in 1..=120u64 {
+        // The other app: 1 MiB every 100 ms.
+        base -= MIB;
+        test_hooks::set_free_base(&w.engine, Some(base));
+        within(30, range.read_exact(&mut chunk)).await.unwrap();
+        assert!(chunk == w.movie(at, at + 256 * 1024));
+        at += 256 * 1024;
+        let next = started + Duration::from_millis(100 * tick);
+        tokio::time::sleep_until(next.into()).await;
+    }
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    watch.abort();
+    let min = min_free.load(Ordering::Relaxed);
+    let s = w.stats().await;
+    eprintln!(
+        "writer: held {before} then {:?}, lowest free {} MiB under the reserve",
+        s.held_bytes,
+        (RESERVE_BYTES.saturating_sub(min)) / MIB
+    );
+    assert!(
+        min + 24 * MIB >= RESERVE_BYTES,
+        "free space fell {} MiB under the reserve",
+        (RESERVE_BYTES - min) / MIB
+    );
+    assert!(s.held_bytes.unwrap() + 80 * MIB <= before, "{s:?}");
+    assert_eq!(s.refetched_bytes, 0, "nothing fetched twice");
+    // The nearest readahead stays, the farthest left.
+    let have = |p: u32| {
+        let engine = w.engine.clone();
+        let t = w.t;
+        async move {
+            test_hooks::piece_state(&engine, t, p)
+                .await
+                .contains("Some((true,")
+        }
+    };
+    let pos = (at / MIB) as u32;
+    assert!(have(pos + 2).await, "the nearest readahead stays");
+    assert!(!have(pos + 60).await, "the farthest readahead left");
     test_hooks::set_free_base(&w.engine, None);
 }
 

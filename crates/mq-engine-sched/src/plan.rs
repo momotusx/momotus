@@ -39,6 +39,9 @@ pub struct WindowInputs {
     pub own: u64,
     /// What the file itself already holds.
     pub own_file: u64,
+    /// What a whole file writes into its neighbours: its first and last
+    /// pieces' bytes of the files beside it in a multi-file torrent.
+    pub boundary: u64,
 }
 
 impl WindowInputs {
@@ -55,29 +58,42 @@ impl WindowInputs {
             reclaimable: self.reclaimable.saturating_sub(self.own),
             ..*self
         };
-        len.saturating_sub(self.own_file) <= others.room()
+        len.saturating_sub(self.own_file) + self.boundary <= others.room()
     }
 }
 
 /// One torrent folder's bytes on disk (2.1, 3.1): the folder, each of its
-/// files when the torrent is loaded, and whether `R` counts it (idle).
+/// files when the torrent is loaded (a folder an earlier launch left with
+/// one file: that file), whether `R` counts it (idle), and what its own
+/// window will still take (counted in `C`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct HeldBytes {
     pub folder: u64,
     pub files: Vec<u64>,
     pub idle: bool,
+    pub committed: u64,
 }
 
 impl WindowInputs {
-    /// A row's inputs from the counted `R`: its own torrent's folder counts
-    /// in `R` (a window's keeper frees it) and as `own`, and `file`'s bytes
-    /// as `own_file`.
-    pub fn with_held(mut self, held: Option<&HeldBytes>, file: Option<usize>) -> Self {
+    /// A row's inputs from the counted `R` and `C`, as the app counts them
+    /// for its torrent: its own folder in `R` (a window's keeper frees it)
+    /// and as `own`, its own window out of `C`, and `file`'s bytes as
+    /// `own_file` (a single file's when the row names none). A torrent
+    /// with more than one file, or one not known yet, writes up to a piece
+    /// of its neighbours at each end of the file (`piece`).
+    pub fn with_held(mut self, held: Option<&HeldBytes>, file: Option<usize>, piece: u64) -> Self {
+        self.boundary = if held.is_some_and(|h| h.files.len() == 1) {
+            0
+        } else {
+            2 * piece
+        };
         if let Some(h) = held {
             if !h.idle {
                 self.reclaimable += h.folder;
             }
+            self.committed = self.committed.saturating_sub(h.committed);
             self.own = h.folder;
+            let file = file.or((h.files.len() == 1).then_some(0));
             self.own_file = file.and_then(|i| h.files.get(i)).copied().unwrap_or(0);
         }
         self

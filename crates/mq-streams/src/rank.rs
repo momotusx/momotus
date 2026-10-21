@@ -109,7 +109,7 @@ fn has_room(s: &ParsedStream, input: &RankInput<'_>, free: u64, size: u64) -> bo
         fill: (f64::from(c.p2p.mbps) * 125_000.0) as u64,
         ..Default::default()
     }
-    .with_held(held, file);
+    .with_held(held, file, estimated_piece(size));
     if i.fits_whole(size) {
         return true;
     }

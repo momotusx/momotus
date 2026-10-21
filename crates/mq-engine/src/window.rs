@@ -73,18 +73,7 @@ pub fn counted_on_disk(data_dir: &Path) -> Counted {
     Counted {
         reclaimable: left.iter().map(|l| l.2).sum(),
         committed: 0,
-        held: left
-            .into_iter()
-            .filter_map(|(_, path, folder)| {
-                let hash = path.file_name()?.to_str()?.to_ascii_lowercase();
-                let held = HeldBytes {
-                    folder,
-                    files: Vec::new(),
-                    idle: true,
-                };
-                Some((hash, held))
-            })
-            .collect(),
+        held: crate::counted_on_disk_except(data_dir, &[]),
     }
 }
 
@@ -346,8 +335,12 @@ async fn keep_windows(engine: &Weak<Inner>, h: TorrentHandle, t: &Arc<Torrent>) 
         // another app's write shrinks the window and the same app's delete
         // gives it back. The budget moves by more than `h / 2` only, so a
         // round's whole pieces do not flip it back and forth.
-        let held = engine.ask(t, adapter::Msg::Held).await.unwrap_or(0);
-        let live = (held + free).saturating_sub(RESERVE_BYTES);
+        // Bytes written, not pieces in flight at full size: free space has
+        // not dropped for those yet (review r3 A R2). No answer, no change.
+        let Some(written) = engine.ask(t, adapter::Msg::Written).await else {
+            continue;
+        };
+        let live = (written + free).saturating_sub(RESERVE_BYTES);
         let full = WindowState {
             shortfall: 0,
             ..state

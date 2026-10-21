@@ -129,6 +129,9 @@ pub struct Scheduler {
     ra_open: Vec<PieceIdx>,
     /// `held_bytes` at the start of a fill, kept up as pieces start.
     held: u64,
+    /// The window's budget when it was set: a smaller one (the space
+    /// guard's) takes its cut off the readahead, farthest part first.
+    full_budget: u64,
 }
 
 impl Scheduler {
@@ -179,12 +182,14 @@ impl Scheduler {
             paused: false,
             ra_open: Vec::new(),
             held: 0,
+            full_budget: 0,
         }
     }
 
     /// Windows a file (plans/streaming-window.md 2.2), or ends windowing.
     pub fn set_window(&mut self, window: Option<Window>) {
         self.window = window.filter(|w| w.file < self.geo.files().len());
+        self.full_budget = self.window.map_or(0, |w| w.budget);
         self.player_read = false;
         self.grace = None;
         self.dirty = true;
@@ -640,7 +645,7 @@ impl Scheduler {
         let lag = play.filter(|&p| p <= pos).map_or(0, |p| pos - p);
         let c_end = (b_end + crit.saturating_sub(lag)).min(f.len);
         let p_end = (b_end + crit + self.cfg.playback_secs * rate).min(f.len);
-        let r_end = (p_end + self.readahead[file]).min(f.len);
+        let r_end = (p_end + self.window_readahead(file)).min(f.len);
         Windows {
             blocking: (f.offset + pos, f.offset + b_end),
             critical_end: f.offset + c_end,
@@ -681,7 +686,7 @@ impl Scheduler {
         let f = self.geo.files()[d.file];
         let ahead = match self.window {
             Some(win) if win.file == d.file => {
-                let cap = self.readahead[d.file];
+                let cap = self.window_readahead(d.file);
                 if self.grace.is_some() {
                     0
                 } else {
@@ -691,6 +696,18 @@ impl Scheduler {
             _ => self.readahead[d.file],
         };
         (w.playback_end + ahead).min(f.offset + f.len)
+    }
+
+    /// `file`'s readahead: in a window less what the space guard took off
+    /// its budget (2.4), so the farthest readahead leaves the kept set
+    /// first and only as much of it as the guard needs; it grows back with
+    /// the budget.
+    fn window_readahead(&self, file: usize) -> u64 {
+        let cut = match self.window {
+            Some(w) if w.file == file => self.full_budget.saturating_sub(w.budget),
+            _ => 0,
+        };
+        self.readahead[file].saturating_sub(cut)
     }
 
     /// Readahead pieces that may be open at once (2.2): `clamp(2 s × the
@@ -782,6 +799,27 @@ impl Scheduler {
         let piece = u64::from(self.geo.piece_len());
         let urgent = (self.cfg.blocking_bytes + crit).div_ceil(piece) * piece + piece;
         w.budget.saturating_sub(urgent)
+    }
+
+    /// Bytes the torrent has written (2.4): verified pieces, and the blocks
+    /// received of the others. The space guard counts these, not pieces in
+    /// flight at full size, since free space has not dropped for those yet.
+    pub fn written_bytes(&self) -> u64 {
+        (0..self.geo.num_pieces())
+            .map(|p| {
+                if self.verified.get(p) {
+                    u64::from(self.geo.piece_size(p))
+                } else if self.busy[p as usize] > 0 {
+                    self.geo
+                        .piece_blocks(p)
+                        .filter(|&b| self.received.get(b))
+                        .map(|b| u64::from(self.geo.block_len(b)))
+                        .sum()
+                } else {
+                    0
+                }
+            })
+            .sum()
     }
 
     /// The keeper is due (2.4): the torrent holds more than
@@ -1317,15 +1355,41 @@ impl Scheduler {
             return;
         }
         let cands = self.eligible();
-        self.assign_urgent(cands.clone(), out);
         // ponytail: a scan of every piece per fill, an incremental count if
         // torrents of 100k pieces show up.
         if self.window.is_some() {
             self.held = self.held_bytes();
         }
+        self.assign_urgent(cands.clone(), out);
         for id in fill {
             self.fill_peer(id, &cands, out);
         }
+    }
+
+    /// The hard ceiling for urgent starts in a window (2.4): past the
+    /// budget only blocking-window pieces start, and those only within one
+    /// blocking span over it, so a round that waits on a slow sync never
+    /// lets urgent fetches run on; the player's buffer covers the wait.
+    /// A piece that starts counts in `held` at once.
+    fn urgent_fits(&mut self, piece: PieceIdx) -> bool {
+        let Some(w) = self.window else {
+            return true;
+        };
+        if self.busy[piece as usize] > 0 {
+            return true;
+        }
+        let size = u64::from(self.geo.piece_size(piece));
+        let span = if self.class[piece as usize] == Some(Class::Blocking) {
+            let piece_len = u64::from(self.geo.piece_len());
+            self.cfg.blocking_bytes.div_ceil(piece_len) * piece_len + piece_len
+        } else {
+            0
+        };
+        if self.held + size > w.budget + span {
+            return false;
+        }
+        self.held += size;
+        true
     }
 
     /// Block-level fan-out (libtorrent's time-critical rule): each free
@@ -1346,6 +1410,9 @@ impl Scheduler {
                 continue;
             }
             advancing = false;
+            if !self.urgent_fits(piece) {
+                continue;
+            }
             for b in blocks {
                 if self.received.get(b) || self.holders.contains_key(&b) {
                     continue;
@@ -1382,7 +1449,7 @@ impl Scheduler {
                     return;
                 }
                 let others = cands.iter().any(|c| self.peers[c].have.get(piece));
-                if !others && self.peers[&id].have.get(piece) {
+                if !others && self.peers[&id].have.get(piece) && self.urgent_fits(piece) {
                     room = self.take_blocks(id, piece, room, out);
                 }
             }

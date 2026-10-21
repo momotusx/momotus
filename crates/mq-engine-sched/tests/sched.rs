@@ -7,8 +7,8 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use mq_engine_sched::{
-    Action, BLOCK, Bitfield, BlockIdx, Class, Config, DemandId, Event, FileIndex, Geometry, PeerId,
-    PieceIdx, Scheduler, Window,
+    Action, BLOCK, Bitfield, BlockIdx, Class, Config, DemandId, Event, FileIndex, Geometry,
+    HeldBytes, PeerId, PieceIdx, RESERVE_BYTES, Scheduler, Window, WindowInputs,
 };
 use proptest::prelude::*;
 
@@ -1272,6 +1272,50 @@ fn the_budget_bounds_what_starts_and_the_keeper_brings_it_down() {
     assert!(h.s.held_bytes() <= 20 * P, "{}", h.s.held_bytes() / P);
 }
 
+/// The hard ceiling (2.4, review r3): with nothing evicted (a round that
+/// waits on its sync), seek after seek starts only blocking-window pieces
+/// past the budget, and those only within one blocking span over it; the
+/// critical windows wait for the round.
+#[test]
+fn urgent_fetches_stop_one_blocking_span_past_the_budget() {
+    const P: u64 = 64 * KIB;
+    let g = Geometry::new(P as u32, &[16 * MIB]).unwrap();
+    let cfg = Config {
+        max_depth: 256,
+        min_depth: 256,
+        ..small_cfg()
+    };
+    let mut h = Harness::new(g, cfg);
+    h.s.set_window(Some(Window {
+        budget: 20 * P,
+        slack: 4 * P,
+        open_floor: 64 * MIB,
+        open_cap: 64 * MIB,
+        ..window(0)
+    }));
+    for piece in 2..18 {
+        h.send(Event::PieceVerified { piece });
+    }
+    h.peer(1, 10 * MIB);
+    // Three seeks, nothing evicted between them: each wants a blocking
+    // piece and two critical ones.
+    for (demand, at) in [(1, 4 * MIB), (2, 8 * MIB), (3, 12 * MIB)] {
+        open(&mut h, demand, 0, at, None);
+    }
+    // The ceiling: the budget, plus a blocking span (64 KiB rounded out,
+    // and a piece) for blocking pieces only.
+    assert!(
+        h.s.held_bytes() <= 22 * P,
+        "{} pieces",
+        h.s.held_bytes() / P
+    );
+    let started: BTreeSet<PieceIdx> = h.out.iter().map(|&(b, _)| h.geo.piece_of(b)).collect();
+    assert!(
+        !started.contains(&193),
+        "a critical piece past the budget: {started:?}"
+    );
+}
+
 /// The space guard's budget change (2.4, review P1-1) keeps the player's
 /// read: the keeper still has pieces to evict, by the smaller budget.
 #[test]
@@ -1323,6 +1367,87 @@ fn an_older_range_that_reads_on_takes_the_focus_back() {
     assert!(readahead_pieces(&h).iter().all(|&p| p > 649 && p < 700));
     assert!(h.s.kept().get(646), "A's B");
     assert_eq!(h.s.class_of(1009), None, "nothing past N's blocking window");
+}
+
+/// A budget the space guard shrank takes its cut off the readahead (2.4,
+/// review r3 B P2-1): the farthest readahead leaves the kept set first, and
+/// as much of it as the cut; it comes back with the budget.
+#[test]
+fn a_shrunk_budget_takes_its_cut_off_the_farthest_readahead() {
+    let g = Geometry::new(64 * KIB as u32, &[64 * MIB]).unwrap();
+    let mut h = Harness::new(g, small_cfg());
+    h.s.set_window(Some(Window {
+        budget: 64 * MIB,
+        ..window(0)
+    }));
+    h.s.set_readahead(0, 4 * MIB);
+    open(&mut h, 1, 0, 0, None);
+    h.send(Event::RangeAdvanced {
+        demand: 1,
+        pos: 8 * MIB,
+    });
+    let full = readahead_pieces(&h);
+    assert_eq!(full.len(), 64, "4 MiB of readahead");
+    h.s.set_budget(63 * MIB);
+    h.tick(1);
+    let cut = readahead_pieces(&h);
+    assert_eq!(cut.len(), 48, "1 MiB less");
+    assert_eq!(cut, full[..48], "the farthest part left");
+    assert!(!h.s.kept().get(*full.last().unwrap()));
+    h.s.set_budget(64 * MIB);
+    h.tick(1);
+    assert_eq!(readahead_pieces(&h), full, "back with the budget");
+}
+
+/// The whole-file rule (2.1, review r3 A R3, R4, R7): a file of a pack
+/// writes up to a piece of its neighbours at each end; a folder an earlier
+/// launch left with one file counts that file's bytes for a row that names
+/// none; and the row of a torrent playing in a window leaves that window
+/// out of `C`, as the app does.
+#[test]
+fn a_rows_whole_file_room_counts_its_ends_its_file_and_not_its_own_window() {
+    const MB: u64 = 1_000_000;
+    let base = WindowInputs {
+        free: RESERVE_BYTES + 100 * MB,
+        ..Default::default()
+    };
+    let single = HeldBytes {
+        folder: 30 * MB,
+        files: vec![30 * MB],
+        idle: true,
+        committed: 0,
+    };
+    let left = WindowInputs {
+        reclaimable: 30 * MB,
+        ..base
+    };
+    // 130 MB with 30 of them on disk: fits with the folder's one file.
+    assert!(
+        left.with_held(Some(&single), None, 4 * MB)
+            .fits_whole(130 * MB)
+    );
+    // A pack: the same file needs two more pieces for its ends.
+    let pack = HeldBytes {
+        files: vec![30 * MB, 0],
+        ..single.clone()
+    };
+    let packed = left.with_held(Some(&pack), Some(0), 4 * MB);
+    assert!(!packed.fits_whole(130 * MB));
+    assert!(packed.fits_whole(122 * MB));
+    // Its own window's 20 MB still to take is not counted against it.
+    let playing = HeldBytes {
+        idle: false,
+        committed: 20 * MB,
+        ..single
+    };
+    let own = WindowInputs {
+        committed: 20 * MB,
+        ..base
+    };
+    assert!(
+        own.with_held(Some(&playing), Some(0), 4 * MB)
+            .fits_whole(130 * MB)
+    );
 }
 
 /// A range that reopens just behind its run's start (a demuxer stepping
