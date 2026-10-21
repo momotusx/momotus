@@ -6,9 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -28,6 +26,7 @@ import app.marquee.core.views.ViewStatus
 import app.marquee.design.Form
 import app.marquee.player.PlaybackController
 import app.marquee.player.PlayerHost
+import app.marquee.player.PlayerLifecycle
 import app.marquee.ui.phone.PhonePlayer
 import app.marquee.ui.tv.TvPlayer
 import kotlinx.coroutines.CancellationException
@@ -248,7 +247,8 @@ fun PlayerScreen(
             factory = viewModelFactory { initializer { PlayerHolder(session, app.versions, route, context) } },
         )
     val controller = holder.controller
-    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { controller.onStop() }
+    // Leaving stops the sound; a start under way goes on in the background (plans/player-polish.md 2c).
+    PlayerLifecycle(controller)
     // A page over the player (Versions, an install link) leaves it paused, and nothing plays it from under
     // there: not the remote's Play key through the media session, nor picture in picture.
     DisposableEffect(controller) {

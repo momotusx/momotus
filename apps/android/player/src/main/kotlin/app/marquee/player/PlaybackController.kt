@@ -181,6 +181,12 @@ class PlaybackController(
     var picture by mutableStateOf(false)
         private set
 
+    /** The start is under way: the core resolves or the player buffers, and this source has shown no picture yet. */
+    val starting: Boolean get() = (stage == Stage.Opening || stage == Stage.Buffering) && !picture
+
+    /** The app went away while the start ran: it went on paused, and plays once the viewer is back ([onStart]). */
+    private var playOnReturn = false
+
     /** The title's backdrop and logo for the loading screen; the screen sets them, as it knows the title. */
     var backdrop: String? by mutableStateOf(null)
     var logo: String? by mutableStateOf(null)
@@ -300,6 +306,8 @@ class PlaybackController(
     init {
         player.addListener(listener)
         ticker = scope.launch { tickLoop() }
+        // A start kept going in the background ([StartService]) is let go once it is over: Ready, a failure or the end.
+        scope.launch { snapshotFlow { starting }.collect { if (!it) StartService.release() } }
     }
 
     /** The core's playback view is open: follow it. */
@@ -931,8 +939,21 @@ class PlaybackController(
         player.prepare()
     }
 
-    /** Leaving the screen (Home, another app, the picture-in-picture window closing): stop the sound. */
-    fun onStop() = pause()
+    /**
+     * Leaving the screen (Home, another app, the picture-in-picture window closing): stop the sound. A start under way
+     * goes on, paused (plans/player-polish.md 2c), and plays when the viewer is back.
+     */
+    fun onStop() {
+        if (starting && wantPlay) playOnReturn = true
+        pause()
+    }
+
+    /** Back on the screen: a start that went on while the app was away plays now, at its point. */
+    fun onStart() {
+        if (!playOnReturn) return
+        playOnReturn = false
+        play()
+    }
 
     /**
      * Earlier or Later in the subtitle menu: the words move by [byMs] for the rest of this play. The
@@ -1091,6 +1112,7 @@ class PlaybackController(
         if (released) return
         report()
         released = true
+        StartService.release()
         ticker?.cancel()
         noticeJob?.cancel()
         tryingAgainJob?.cancel()

@@ -37,6 +37,8 @@ dependencies {
     implementation(libs.media3.exoplayer.dash)
     implementation(libs.media3.session)
     implementation(libs.androidx.core.ktx)
+    // The player's lifecycle effects (PlayerLifecycle).
+    implementation(libs.androidx.lifecycle.runtime.compose)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test.junit)

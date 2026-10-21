@@ -39,6 +39,7 @@ import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.time.Duration
@@ -458,6 +459,35 @@ class SubtitleFailureTest {
         }
         until("the buffer is heard") { controller.loadingFill > 0f }
         assertEquals(START_BUFFER_MS / 2f / REBUFFER_MS, controller.loadingFill, 1e-4f)
+        controller.release()
+    }
+
+    @Test
+    fun `a start the app leaves goes on paused and plays once the viewer is back, a play already showing does not`() {
+        val (player, controller) = open(snapshot(phase = "resolving"), loads = false)
+        until("the start is heard") { controller.subtitlesPending }
+        assertTrue(controller.starting)
+        StartService.keep(RuntimeEnvironment.getApplication(), "Sintel")
+        controller.onStop()
+        // Away: the core's view stays open and its stream loads, with no sound.
+        push(snapshot())
+        until("the stream loads") { player.items.size == 1 }
+        assertFalse(sent.any { it["op"]?.jsonPrimitive?.content == "unsubscribe" }, "the core's view stays open")
+        player.state(Player.STATE_READY)
+        until("Ready, paused") { controller.stage == PlaybackController.Stage.Paused }
+        assertFalse(player.playWhenReady, "no sound in the background")
+        player.renderFirstFrame()
+        until("the start is over") { !controller.starting }
+        until("the background start is let go") { !StartService.keeping }
+        // Back: it plays at its point.
+        controller.onStart()
+        until("it plays") { player.playWhenReady }
+        // Leaving while it plays pauses it, and it stays paused when the viewer is back.
+        controller.onStop()
+        assertFalse(player.playWhenReady)
+        controller.onStart()
+        runFor(100)
+        assertFalse(player.playWhenReady, "a play the viewer left stays paused")
         controller.release()
     }
 

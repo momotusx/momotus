@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- A start goes on while the app is away (plans/player-polish.md 2c): a foreground service of the media
+         playback type (Android 14 and later need the type and its permission), and its wake and Wi-Fi locks. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <application>
+        <service
+            android:name=".StartService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+    </application>
+</manifest>

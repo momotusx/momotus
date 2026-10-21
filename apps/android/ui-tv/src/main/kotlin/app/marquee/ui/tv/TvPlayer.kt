@@ -125,7 +125,7 @@ fun TvPlayer(
     val stage = controller.stage
     val live = stage == Stage.Playing || stage == Stage.Paused || stage == Stage.Buffering || stage == Stage.Ended
     // Before the source shows a picture: the loading screen alone, nothing focused; the remote's Back cancels.
-    val opening = (stage == Stage.Opening || stage == Stage.Buffering) && !controller.picture
+    val opening = controller.starting
     // The title's logo for the loading screen, loaded once for the play.
     val logo = rememberTrimmedLogo(controller.logo)
     var osd by remember { mutableStateOf(true) }

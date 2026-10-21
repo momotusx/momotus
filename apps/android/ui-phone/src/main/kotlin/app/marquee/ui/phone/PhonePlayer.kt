@@ -141,7 +141,7 @@ fun PhonePlayer(
     var corner by remember { mutableStateOf<Rect?>(null) }
     val live = stage == Stage.Playing || stage == Stage.Paused || stage == Stage.Buffering || stage == Stage.Ended
     // Before the source shows a picture: the loading screen alone, with Back (plans/player-polish.md 1.2).
-    val opening = (stage == Stage.Opening || stage == Stage.Buffering) && !controller.picture
+    val opening = controller.starting
     var osd by remember { mutableStateOf(true) }
     var wake by remember { mutableIntStateOf(0) }
     var panel by remember { mutableStateOf<Panel?>(null) }
