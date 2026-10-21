@@ -31,6 +31,17 @@ pub enum ReadMetainfoResult<Rx> {
     },
 }
 
+/// Marquee fork: the peers a magnet met, the one that sent its metadata
+/// first, so the torrent's own add dials it first; the rest keep their
+/// order.
+pub fn metadata_peer_first(
+    seen: impl IntoIterator<Item = SocketAddr>,
+    from: SocketAddr,
+) -> Vec<SocketAddr> {
+    let rest = seen.into_iter().filter(|p| *p != from);
+    std::iter::once(from).chain(rest).collect()
+}
+
 pub async fn read_metainfo_from_peer_receiver<A: Stream<Item = SocketAddr> + Unpin>(
     peer_id: Id20,
     info_hash: Id20,
@@ -124,6 +135,14 @@ mod tests {
         str::FromStr,
         sync::{Arc, Once},
     };
+
+    #[test]
+    fn the_metadata_peer_comes_first() {
+        let p = |n: u8| SocketAddr::from(([10, 0, 0, n], 6881));
+        let order = metadata_peer_first([p(1), p(2), p(3)], p(2));
+        assert_eq!(order, [p(2), p(1), p(3)]);
+        assert_eq!(metadata_peer_first([], p(4)), [p(4)]);
+    }
 
     static LOG_INIT: Once = Once::new();
 

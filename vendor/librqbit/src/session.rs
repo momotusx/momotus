@@ -18,7 +18,7 @@ use crate::{
     bitv_factory::{BitVFactory, FolderBitVFactory, NonPersistentBitVFactory},
     create_torrent,
     create_torrent_file::CreateTorrentResult,
-    dht_utils::{ReadMetainfoResult, read_metainfo_from_peer_receiver},
+    dht_utils::{ReadMetainfoResult, metadata_peer_first, read_metainfo_from_peer_receiver},
     ip_ranges::IpRanges,
     limits::{Limits, LimitsConfig},
     listen::{Accept, ListenerOptions},
@@ -1782,11 +1782,8 @@ impl Session {
                         info_bytes.0,
                     )?,
                     peer_rx: rx,
-                    // Marquee fork: the peer that sent the metadata first,
-                    // so the torrent's own add dials it first.
                     seen_peers: {
-                        let rest = seen.into_iter().filter(|p| *p != from);
-                        let seen = std::iter::once(from).chain(rest).collect_vec();
+                        let seen = metadata_peer_first(seen, from);
                         for peer in &seen {
                             trace!(?peer, "seen")
                         }
