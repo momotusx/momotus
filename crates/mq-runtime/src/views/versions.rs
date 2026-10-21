@@ -146,6 +146,10 @@ pub struct VersionsConditions {
     pub engine: bool,
     /// The profile has a streaming service account.
     pub account: bool,
+    /// A torrent too big for the free space may play in a window here
+    /// (plans/streaming-window.md 2.6). Off, such a row is too large for
+    /// this storage, whatever its free space.
+    pub window: bool,
 }
 
 /// Why nothing is listed (3.11), how many versions were found, and those
@@ -664,6 +668,12 @@ impl VersionsView {
             item_id,
         });
         lock(&state).ranking = Some(ranking.clone());
+        tasks.spawn(follow_network(
+            core.clone(),
+            core.library().subscribe(),
+            state.clone(),
+            snapshot.clone(),
+        ));
         tasks.spawn(supervise(
             core.clone(),
             changes,
@@ -918,6 +928,35 @@ async fn supervise(
         addons = next;
         let mut s = lock(&state);
         restart(&mut s, &addons);
+        snapshot.set(render(&s));
+    }
+}
+
+/// The device moved between Wi-Fi and mobile data (`networkChanged`): a
+/// window keeps its minutes ahead on one and only the device preset on the
+/// other, so the rows rank again for the network a playback opens on
+/// (plans/streaming-window.md 3.3, review r1 B P2-1).
+async fn follow_network(
+    core: Core,
+    mut changes: tokio::sync::broadcast::Receiver<Vec<Table>>,
+    state: Arc<Mutex<State>>,
+    snapshot: SharedObservable<VersionsSnapshot>,
+) {
+    use tokio::sync::broadcast::error::RecvError;
+    loop {
+        if let Err(RecvError::Closed) = changes.recv().await {
+            return;
+        }
+        let network = core.network();
+        let mut s = lock(&state);
+        if s.conditions.network == network {
+            continue;
+        }
+        s.conditions.network = network;
+        s.rank.metered = network == Network::Cellular;
+        if let Some(ranking) = s.ranking.clone() {
+            rerank(&mut s, &ranking);
+        }
         snapshot.set(render(&s));
     }
 }
@@ -1552,6 +1591,7 @@ fn view_conditions(core: &Core, params: &VersionsParams, c: &Conditions) -> Vers
         min_seeders: prefs.min_seeders,
         engine: core.has_engine(),
         account: core.debrid().is_some(),
+        window: c.window,
     }
 }
 

@@ -210,7 +210,9 @@ pub fn last_network(lib: &Library) -> Network {
 pub fn remember_network(lib: &Library, network: Network) {
     if last_network(lib) != network {
         let value = serde_json::to_string(&network).unwrap_or_default();
-        let _ = lib.set_device_value(NETWORK_KEY, &value);
+        // Announced: an open Versions view ranks again for it
+        // (plans/streaming-window.md 3.3).
+        let _ = lib.set_device_value_announced(NETWORK_KEY, &value, mq_library::Table::Settings);
     }
 }
 

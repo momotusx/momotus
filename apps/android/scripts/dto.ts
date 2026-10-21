@@ -71,6 +71,8 @@ const DEFAULTED = new Map([
   ["MemberInfo.passkey", "false"],
   ["MemberInfo.viaPasskey", "false"],
   ["Devices.account", "\"\""],
+  // The streaming window's no-punch words: an older core says nothing, as on a volume without windows.
+  ["VersionsConditions.window", "false"],
 ]);
 const INT = new Set([
   "overCount",

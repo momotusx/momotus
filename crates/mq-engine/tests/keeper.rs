@@ -597,8 +597,11 @@ async fn refused_punches_end_the_playback_cleanly() {
         }
         other => panic!("{:?}", other.err()),
     }
+    // Nothing past the budget but what 2.4's ceiling lets the player's
+    // blocking window take while the rounds fail: that window rounded out
+    // to pieces, plus a piece (2 MiB here).
     let max = allocated(&w.dir());
-    assert!(max <= W, "no fetch past the budget: {max}");
+    assert!(max <= W + 2 * MIB, "no fetch past the ceiling: {max}");
 }
 
 /// f, second half (reviews P1-1, r2 P2-2). Free space that follows the
@@ -752,6 +755,36 @@ async fn a_sustained_write_takes_the_readahead_farthest_first() {
     assert!(have(pos + 12).await, "the readahead that fits stays");
     assert!(!have(pos + 60).await, "the farthest readahead left");
     test_hooks::set_free_base(&w.engine, None);
+}
+
+/// 2.2: on mobile data a window keeps the device preset ahead, and the
+/// network turning metered mid-play takes it there; back on Wi-Fi the
+/// plan's readahead returns (review r1 B P3-5).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_window_follows_the_network_to_the_mobile_preset_and_back() {
+    let remux = WindowPlan {
+        budget: 400 * MIB + APFS_HEAD_BYTES,
+        ahead: 300 * MIB,
+        ..plan()
+    };
+    let w = windowed(16 << 20, remux, None).await;
+    let readahead = || async { w.stats().await.readahead_bytes };
+    // The app gives the rate on Wi-Fi at open.
+    w.engine.set_rate(w.t, w.movie, RATE, false).await.unwrap();
+    until("the plan's readahead", || async {
+        readahead().await == Some(300 * MIB)
+    })
+    .await;
+    w.engine.set_metered(true).await;
+    until("the device preset", || async {
+        readahead().await.is_some_and(|r| r < 300 * MIB)
+    })
+    .await;
+    w.engine.set_metered(false).await;
+    until("the plan's readahead again", || async {
+        readahead().await == Some(300 * MIB)
+    })
+    .await;
 }
 
 /// q. Under the terminal floor (a quarter of the reserve) the playback ends

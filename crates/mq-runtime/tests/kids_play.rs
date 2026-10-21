@@ -953,33 +953,35 @@ async fn a_version_too_big_for_the_free_space_says_its_minutes_ahead() {
     owner.set_torrent_engine(s.leecher.clone());
     owner.set_punches(true);
     owner.set_free_bytes(mq_engine::RESERVE_BYTES + (1 << 30));
-    for network in [Network::Wifi, Network::Cellular] {
-        owner.set_network(network);
-        let versions = VersionsView::open_checked(&owner, params("movie", "tt3", ""), Some("tt3"));
-        let shown = settled(&versions).await;
-        let row = shown
+    owner.set_network(Network::Wifi);
+    let versions = VersionsView::open_checked(&owner, params("movie", "tt3", ""), Some("tt3"));
+    let minutes = |snap: &mq_runtime::VersionsSnapshot| {
+        let row = snap
             .recommended
             .clone()
-            .or_else(|| shown.rows.first().cloned());
-        let line = row.map(|r| r.line);
-        match (network, &line) {
-            (
-                Network::Wifi,
-                Some(ReasonLine::Buffer {
-                    ahead_min: Some(m), ..
-                }),
-            ) => {
-                assert!((2..=10).contains(m), "{line:?}");
-            }
-            (
-                Network::Cellular,
-                Some(ReasonLine::Buffer {
-                    ahead_min: None, ..
-                }),
-            ) => {}
-            _ => panic!("{network:?}: {line:?} ({:?})", shown.hidden),
+            .or_else(|| snap.rows.first().cloned());
+        match row.map(|r| r.line) {
+            Some(ReasonLine::Buffer { ahead_min, .. }) => Ok(ahead_min),
+            other => Err(format!("{other:?} ({:?})", snap.hidden)),
         }
-    }
+    };
+    let on_wifi = minutes(&settled(&versions).await).unwrap();
+    assert!(
+        on_wifi.is_some_and(|m| (2..=10).contains(&m)),
+        "{on_wifi:?}"
+    );
+    // The device moves to mobile data with the view open: the same row now
+    // promises no minutes (review r1 B P2-1), and back on Wi-Fi it does.
+    owner.on_network_changed(Some(Network::Cellular));
+    until("the row ranked for mobile data", || {
+        minutes(&versions.snapshot()) == Ok(None)
+    })
+    .await;
+    owner.on_network_changed(Some(Network::Wifi));
+    until("the row ranked for Wi-Fi", || {
+        minutes(&versions.snapshot()) == Ok(on_wifi)
+    })
+    .await;
 }
 
 /// `len` bytes of `url` from `at`.

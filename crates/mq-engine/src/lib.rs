@@ -1211,6 +1211,19 @@ impl Engine {
         Ok(())
     }
 
+    /// The device's network is now metered (mobile data) or not: every
+    /// playing torrent's readahead follows at the rate it plays, a window's
+    /// and a whole file's alike (plans/streaming-window.md 2.2).
+    pub async fn set_metered(&self, metered: bool) {
+        let rates: Vec<(TorrentHandle, usize, u64)> = lock(&self.inner.torrents)
+            .iter()
+            .filter_map(|(h, t)| lock(&t.rate).map(|(file, rate, _)| (*h, file, rate)))
+            .collect();
+        for (h, file, rate) in rates {
+            let _ = self.set_rate(h, file, rate, metered).await;
+        }
+    }
+
     /// Free space on the data folder's volume.
     pub fn free(&self) -> Option<u64> {
         #[cfg(feature = "test-hooks")]

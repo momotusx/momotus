@@ -22,4 +22,10 @@ engine: boolean,
 /**
  * The profile has a streaming service account.
  */
-account: boolean, };
+account: boolean, 
+/**
+ * A torrent too big for the free space may play in a window here
+ * (plans/streaming-window.md 2.6). Off, such a row is too large for
+ * this storage, whatever its free space.
+ */
+window: boolean, };

@@ -1780,6 +1780,8 @@ data class VersionsConditions(
     val engine: Boolean,
     /** The profile has a streaming service account. */
     val account: Boolean,
+    /** A torrent too big for the free space may play in a window here (plans/streaming-window.md 2.6). Off, such a row is too large for this storage, whatever its free space. */
+    val window: Boolean = false,
 )
 
 @Serializable

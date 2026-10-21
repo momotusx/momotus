@@ -422,6 +422,17 @@ impl Core {
         }
         if let Some(network) = network {
             self.set_network(network);
+            // A playing torrent's readahead follows: the device preset on
+            // mobile data, its minutes on Wi-Fi (plans/streaming-window.md
+            // 2.2, review r1 B P3-5).
+            #[cfg(feature = "torrent")]
+            if let (Some(engine), Ok(_)) = (
+                self.inner.engine.get().cloned(),
+                tokio::runtime::Handle::try_current(),
+            ) {
+                let metered = network == crate::speed::Network::Cellular;
+                tokio::spawn(async move { engine.set_metered(metered).await });
+            }
         }
     }
 
