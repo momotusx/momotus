@@ -1771,6 +1771,7 @@ impl Session {
                 info_bytes,
                 rx,
                 seen,
+                from,
             } => {
                 trace!(?info, "received result from DHT");
                 let info = info.validate()?;
@@ -1781,8 +1782,11 @@ impl Session {
                         info_bytes.0,
                     )?,
                     peer_rx: rx,
+                    // Marquee fork: the peer that sent the metadata first,
+                    // so the torrent's own add dials it first.
                     seen_peers: {
-                        let seen = seen.into_iter().collect_vec();
+                        let rest = seen.into_iter().filter(|p| *p != from);
+                        let seen = std::iter::once(from).chain(rest).collect_vec();
                         for peer in &seen {
                             trace!(?peer, "seen")
                         }

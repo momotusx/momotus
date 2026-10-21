@@ -20,6 +20,8 @@ pub enum ReadMetainfoResult<Rx> {
         info_bytes: ByteBufOwned,
         rx: Rx,
         seen: HashSet<SocketAddr>,
+        /// Marquee fork: the peer that sent it, the one known to answer.
+        from: SocketAddr,
     },
     ChannelClosed {
         #[allow(dead_code)]
@@ -64,7 +66,7 @@ pub async fn read_metainfo_from_peer_receiver<A: Stream<Item = SocketAddr> + Unp
             .await
             .with_context(|| format!("error reading metainfo from {addr}"));
             drop(token);
-            ret
+            ret.map(|(info, bytes)| (info, bytes, addr))
         }
     };
 
@@ -86,7 +88,7 @@ pub async fn read_metainfo_from_peer_receiver<A: Stream<Item = SocketAddr> + Unp
         tokio::select! {
             done = unordered.next(), if !unordered.is_empty() => {
                 match done {
-                    Some(Ok((info, info_bytes))) => return ReadMetainfoResult::Found { info, info_bytes, seen, rx: addrs },
+                    Some(Ok((info, info_bytes, from))) => return ReadMetainfoResult::Found { info, info_bytes, seen, rx: addrs, from },
                     Some(Err(e)) => {
                         debug!("{:#}", e);
                         last_error = Some(e);
