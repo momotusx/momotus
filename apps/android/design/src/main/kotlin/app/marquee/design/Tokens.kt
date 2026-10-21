@@ -138,7 +138,7 @@ object Tokens {
             edge = Color(0x1AFFFFFF),
             line = Color(0x1AFFFFFF),
             lineStrong = Color(0x40FFFFFF),
-            control = Color(0xFF636366),
+            control = Color(0xFF6C6C70),
             text = Color(0xEBFFFFFF),
             muted = Color(0xB3FFFFFF),
             dim = Color(0xA3FFFFFF),
@@ -175,7 +175,7 @@ object Tokens {
             edge = Color(0x1AFFFFFF),
             line = Color(0x1AFFFFFF),
             lineStrong = Color(0x40FFFFFF),
-            control = Color(0xFF636366),
+            control = Color(0xFF6C6C70),
             text = Color(0xEBFFFFFF),
             muted = Color(0xB3FFFFFF),
             dim = Color(0xA3FFFFFF),
@@ -260,10 +260,10 @@ object Tokens {
             landscape = TileSize(410.dp, 231.dp),
             square = TileSize(300.dp, 300.dp),
             gap = 40.dp,
-            pad = 48.dp,
+            pad = 34.dp,
             inset = 34.dp,
             peek = 140.dp,
-            caption = 84.dp,
+            caption = 52.dp,
         )
 
     val phoneTiles = TileMetrics(

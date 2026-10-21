@@ -12,7 +12,7 @@ enum Theme {
         static let edge = Color(RGBA(1.0000, 1.0000, 1.0000, 0.1))
         static let line = Color(RGBA(1.0000, 1.0000, 1.0000, 0.1))
         static let lineStrong = Color(RGBA(1.0000, 1.0000, 1.0000, 0.25))
-        static let control = Color(RGBA(0.3882, 0.3882, 0.4000, 1))
+        static let control = Color(RGBA(0.4235, 0.4235, 0.4392, 1))
         static let text = Color(RGBA(1.0000, 1.0000, 1.0000, 0.92))
         static let muted = Color(RGBA(1.0000, 1.0000, 1.0000, 0.7))
         static let dim = Color(RGBA(1.0000, 1.0000, 1.0000, 0.64))
