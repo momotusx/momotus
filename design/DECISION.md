@@ -12,6 +12,8 @@ The owner's words, translated: study every page of Apple's design in detail, on 
 
 What this sets: phone layouts follow Apple's iPhone TV app (`design/reference/apple-tv.md`, iPhone sections); web and desktop layouts follow tv.apple.com as measured there (its navigation, hover and keyboard states, shelves and pages), not the TV canvas scaled; the TV form follows tvOS and is checked on Android TV; Stremio's good parts are studied in `design/reference/stremio.md` and borrowed where they fit this language; every title shows its IMDb and Rotten Tomatoes ratings side by side wherever a rating appears (hero, title page, cards where ratings show), as Apple's TV app shows Rotten Tomatoes, by default and without any setting.
 
+Addon text and emoji (2026-10-21): addons send their own text with emoji (a floppy disk before a size, flags before languages). The no-emoji rule covers everything Marquee shows, so the core strips emoji and pictographs from third-party text it passes through and keeps the words; flags become the language name the core already knows. The core's own captions stay as written. The 12 borrow items in `design/reference/stremio.md` are adopted where they fit the v3 language, as listed there.
+
 ## Owner direction for v3 (2026-10-21, before the pick)
 
 The owner's words, translated: every page, Settings included, must look ultra sleek, Apple level, Apple style. Study Apple's own design in detail (the Apple TV app on tvOS and iPhone, tv.apple.com) and keep its appeal. Color: monochrome, with one accent between blue and green; no red and no orange. Do not mix colors. Run the design through review rounds until it is perfect.
