@@ -8,13 +8,13 @@ import type { Announced } from "./Announced";
 export type Announcement = { 
 /**
  * What `ackAnnouncements` takes: the roster entry's seq and the
- * member, `<seq>.<member>`.
+ * member, `<seq>.<member>` (`dropped.<seq>` for `dropped`).
  */
 id: string, kind: Announced, 
 /**
- * The device or kit it is about.
+ * The device or kit it is about; none for `dropped`.
  */
-member: string, 
+member: string | null, 
 /**
  * A recovery kit or passkey, else a device (it words `removed`).
  */
@@ -25,10 +25,14 @@ kit: boolean,
 passkey: boolean, 
 /**
  * The member that vouched for it, or removed it (itself when a device
- * left).
+ * left); none for `dropped`.
  */
-by: string, 
+by: string | null, 
 /**
  * A device's name, or a kit's label.
  */
-name: string | null, };
+name: string | null, 
+/**
+ * For `dropped`: how many older announcements were not kept.
+ */
+count: number | null, };
