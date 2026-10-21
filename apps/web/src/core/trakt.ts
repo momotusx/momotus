@@ -211,6 +211,17 @@ async function saveAgain() {
 /** "Sync now": one round. */
 export const traktSync = () => op<TraktReport>("traktSync");
 
+/** A sign-out that removes the library (D13): every profile here signed out of Trakt (the owner
+ * signs the others out) and each record deleted from this browser, before the wipe. */
+export async function traktSignOutEvery(ids: readonly string[]) {
+  for (const profile of ids) {
+    await op("traktSignOut", { profile });
+    dropPending(profile);
+    await records.signedOut(profile);
+  }
+  setLockedHere(false);
+}
+
 /** Signs this profile out of Trakt; once the core did, its record goes here too. False when a
  * sealed copy could not be deleted: that is said, with Try again. */
 export async function traktSignOut(): Promise<boolean> {

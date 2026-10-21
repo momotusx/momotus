@@ -12,6 +12,7 @@ import { BridgeError } from "./bridge";
 import { op, privateLink } from "./client";
 import type { Devices } from "./generated/Devices";
 import type { ForkPreview } from "./generated/ForkPreview";
+import type { IdentityLink } from "./generated/IdentityLink";
 import type { LostPreview } from "./generated/LostPreview";
 import type { SyncReport } from "./generated/SyncReport";
 import * as vault from "./vault";
@@ -261,8 +262,10 @@ async function start(request: () => Promise<SyncRecord>, recoveredWithKit: boole
   }
 }
 
-export const createAccount = (server: string, name: string, invite: string) =>
-  start(() => op<SyncRecord>("createSyncAccount", { server, name, ...(invite ? { invite } : {}) }), false);
+/** A new account; `ticket` links the sign-in that led here, and `move` (Start over) moves it from
+ * the account it signed in to, which is then deleted in 7 days unless a device cancels. */
+export const createAccount = (server: string, name: string, invite: string, ticket?: string, move = false) =>
+  start(() => op<SyncRecord>("createSyncAccount", { server, name, form: "web", ...(invite ? { invite } : {}), ...(ticket ? { ticket, move } : {}) }), false);
 
 export const recover = (server: string, kit: string, name: string) =>
   start(async () => (await op<{ record: SyncRecord; via: "kit" | "passkey" }>("recover", { server, kit, name })).record, true);
@@ -345,15 +348,46 @@ export async function signOut(force: boolean, local = false) {
 }
 
 /** Deletes the account on the sync server for every device, once the passkey said yes; this
- * browser then forgets it as after leaving, and the library stays. */
-export async function deleteAccount() {
+ * browser then forgets it as after leaving, and the library stays. `receipt`: Apple's revoke's,
+ * when the account has an Apple link. */
+export async function deleteAccount(receipt?: string) {
   const mine = account;
   await gate();
-  await withRecord("deleteAccount", {}, () => null);
+  await withRecord("deleteAccount", receipt ? { receipt } : {}, () => null);
   if (mine !== account) return;
   await forget();
   setProblem(null);
   setNotice(syncWords.accountGone);
+}
+
+/** The sync server this device's account lives on ("" when none). */
+export const accountServer = () => (typeof record?.server === "string" ? record.server : "");
+
+/** The account's sign-in links (provider and when; no name or address). */
+export const identities = async () => (await withRecord<{ links: IdentityLink[]; record: SyncRecord }>("identities", {}, (r) => r.record)).links;
+
+/** Links a sign-in's identity to this account; `move` takes it from another account. The owner's (D16). */
+export async function linkIdentity(ticket: string, move = false) {
+  await gate();
+  await withRecord<{ record: SyncRecord }>("linkIdentity", { ticket, move }, (r) => r.record);
+}
+
+/** Unlinks one; an Apple link takes its revoke's receipt, or goes without one ("Unlink anyway"). */
+export async function unlinkIdentity(link: number, receipt?: string) {
+  await gate();
+  await withRecord<{ record: SyncRecord }>("unlinkIdentity", { link, ...(receipt ? { receipt } : {}) }, (r) => r.record);
+}
+
+/** Stops a scheduled deletion (any profile: it only protects); `unlink` also drops the sign-in that asked. */
+export async function cancelDeletion(unlink: boolean) {
+  await withRecord<{ record: SyncRecord }>("cancelDeletion", { unlink }, (r) => r.record);
+  await syncNow();
+}
+
+/** OK on announcements: no round reports them again. Security notices are the owner's (`notOwner`). */
+export async function ackAnnouncements(ids: string[]) {
+  await op("ackAnnouncements", { ids });
+  setReport((r) => (r ? { ...r, announcements: r.announcements.filter((a) => !ids.includes(a.id)) } : r));
 }
 
 const GONE_KEY = "mq.syncGone";
