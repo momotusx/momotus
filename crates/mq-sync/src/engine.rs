@@ -155,8 +155,9 @@ pub struct SyncReport {
     /// The account's deletion waits for this time (D14): show it with
     /// Cancel on every device. From the round's last relay answer.
     pub deletion: Option<ScheduledDeletion>,
-    /// Roster changes another member made since this device joined, each
-    /// reported once (3.2): show each until OK.
+    /// Roster changes another member made since this device joined (3.2),
+    /// reported by every round until `ackAnnouncements` names them: show
+    /// each until OK, then acknowledge it.
     pub announcements: Vec<Announcement>,
 }
 
@@ -169,9 +170,17 @@ pub struct SyncReport {
     ts(export, export_to = "../../../apps/web/src/core/generated/")
 )]
 pub struct Announcement {
+    /// What `ackAnnouncements` takes: the roster entry's seq and the
+    /// member, `<seq>.<member>`.
+    pub id: String,
     pub kind: Announced,
+    /// The device or kit it is about.
     #[cfg_attr(feature = "ts", ts(type = "string"))]
-    pub id: Id,
+    pub member: Id,
+    /// A recovery kit or passkey, else a device (it words `removed`).
+    pub kit: bool,
+    /// A passkey kit.
+    pub passkey: bool,
     /// The member that vouched for it, or removed it (itself when a device
     /// left).
     #[cfg_attr(feature = "ts", ts(type = "string"))]
@@ -179,6 +188,11 @@ pub struct Announcement {
     /// A device's name, or a kit's label.
     pub name: Option<String>,
 }
+
+/// Unacknowledged announcements kept; the oldest go first.
+// ponytail: a fixed cap, so an app that never acknowledges cannot grow the
+// store; 100 is far beyond what one person's devices and 8 kits produce.
+const MAX_ANNOUNCED: usize = 100;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(
@@ -194,12 +208,13 @@ pub enum Announced {
     Removed,
 }
 
-/// What one roster entry by `author` changed that this device should hear
-/// of: nothing before this device was a member, and nothing it did or
+/// What the roster entry `seq` by `author` changed that this device should
+/// hear of: nothing before this device was a member, and nothing it did or
 /// vouched for itself.
 fn announcements(
     before: &BTreeMap<Id, Member>,
     after: &BTreeMap<Id, Member>,
+    seq: u64,
     author: Id,
     me: Id,
     keys: &Bundle,
@@ -207,7 +222,15 @@ fn announcements(
     if !before.contains_key(&me) || author == me {
         return Vec::new();
     }
-    let name = |id: &Id, m: &Member| m.name.as_deref().and_then(|n| open_name(keys, id, n));
+    let about = |kind, id: &Id, m: &Member, by| Announcement {
+        id: format!("{seq}.{}", hex::encode(id.0)),
+        kind,
+        member: *id,
+        kit: m.role == Role::Kit,
+        passkey: m.passkey,
+        by,
+        name: m.name.as_deref().and_then(|n| open_name(keys, id, n)),
+    };
     let added = after
         .iter()
         .filter(|(id, _)| !before.contains_key(id))
@@ -218,26 +241,16 @@ fn announcements(
                 (Role::Kit, true) => Announced::Passkey,
                 (Role::Kit, false) => Announced::Kit,
             };
-            Some(Announcement {
-                kind,
-                id: *id,
-                by,
-                name: name(id, m),
-            })
+            Some(about(kind, id, m, by))
         });
     let removed = before
         .iter()
         .filter(|(id, _)| !after.contains_key(id))
-        .map(|(id, m)| Announcement {
-            kind: Announced::Removed,
-            id: *id,
-            by: author,
-            name: name(id, m),
-        });
+        .map(|(id, m)| about(Announced::Removed, id, m, author));
     added.chain(removed).collect()
 }
 
-/// The roster changes waiting for a report.
+/// The roster changes not acknowledged yet.
 fn queued(library: &Library) -> Vec<Announcement> {
     library
         .sync_state(ANNOUNCE)
@@ -245,6 +258,26 @@ fn queued(library: &Library) -> Vec<Announcement> {
         .flatten()
         .and_then(|q| serde_json::from_str(&q).ok())
         .unwrap_or_default()
+}
+
+fn keep_queued(library: &Library, mut queued: Vec<Announcement>) -> Result<(), SyncError> {
+    let over = queued.len().saturating_sub(MAX_ANNOUNCED);
+    queued.drain(..over);
+    let queued = serde_json::to_string(&queued).expect("announcements serialize");
+    library.set_sync_state(ANNOUNCE, &queued)?;
+    Ok(())
+}
+
+/// The user saw these announcements: no round reports them again. Ids
+/// not queued (acknowledged before, or never made) are skipped.
+pub fn ack_announcements(library: &Library, ids: &[String]) -> Result<(), SyncError> {
+    let mut queued = queued(library);
+    let before = queued.len();
+    queued.retain(|a| !ids.contains(&a.id));
+    if queued.len() != before {
+        keep_queued(library, queued)?;
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -861,28 +894,36 @@ impl<'a> Session<'a> {
         &self.record.server
     }
 
-    /// Queues what `entry` changed for the next round's report, before the
-    /// entry is stored: a crash between the two repeats a notice, never
-    /// loses one.
+    /// Queues what `entry` changed until the app acknowledges it, before
+    /// the entry is stored: a crash between the two repeats a notice (under
+    /// the same id), never loses one. An entry at or below the stored
+    /// record's checkpoint was seen before: a rebuilt local store reads it
+    /// again, and it is not announced twice.
     fn announce(&self, before: &BTreeMap<Id, Member>, entry: &Entry) -> Result<(), SyncError> {
         let Ok(body) = entry.parse() else {
             return Ok(());
         };
+        if !self.persist || body.seq <= self.stored.checkpoint.seq {
+            return Ok(());
+        }
         let fresh = announcements(
             before,
             self.roster.members(),
+            body.seq,
             body.author,
             self.member.id(),
             &self.record.keys,
         );
-        if fresh.is_empty() || !self.persist {
+        if fresh.is_empty() {
             return Ok(());
         }
         let mut queued = queued(self.library);
-        queued.extend(fresh);
-        let queued = serde_json::to_string(&queued).expect("announcements serialize");
-        self.library.set_sync_state(ANNOUNCE, &queued)?;
-        Ok(())
+        for a in fresh {
+            if !queued.iter().any(|q| q.id == a.id) {
+                queued.push(a);
+            }
+        }
+        keep_queued(self.library, queued)
     }
 
     fn keep(&mut self, entry: Entry) -> Result<(), SyncError> {
@@ -1094,11 +1135,6 @@ impl<'a> Session<'a> {
     pub(crate) fn finish(&self, mut report: SyncReport) -> SyncReport {
         report.fingerprint = self.roster.fingerprint();
         report.announcements = queued(self.library);
-        if !report.announcements.is_empty()
-            && let Err(e) = self.library.set_sync_state(ANNOUNCE, "[]")
-        {
-            tracing::warn!("could not clear the reported roster changes: {e}");
-        }
         if self.roster.rotation_pending() {
             report.blocked.get_or_insert(Blocked::RotationPending);
         }
