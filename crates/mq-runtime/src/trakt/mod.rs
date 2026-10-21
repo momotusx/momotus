@@ -476,6 +476,21 @@ impl Core {
         format!("trakt.device.{}", self.clock().device())
     }
 
+    /// Whether this device is still signed in to Trakt for any profile (its
+    /// `trakt.device.<id>` setting). A wipe waits until each is signed out
+    /// (D13): no Trakt record outlives the profiles it belonged to.
+    pub fn trakt_held(&self) -> Result<bool, CoreError> {
+        let library = self.library();
+        let key = self.trakt_device_setting();
+        for profile in library.profiles()? {
+            let settings = library.settings(&profile.id)?;
+            if settings.into_iter().any(|(k, v)| k == key && v != "null") {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
     /// One round now ("Sync now").
     pub async fn trakt_sync(&self) -> Result<TraktReport, CoreError> {
         let trakt = self.trakt();
