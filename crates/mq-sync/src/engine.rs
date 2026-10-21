@@ -171,25 +171,30 @@ pub struct SyncReport {
 )]
 pub struct Announcement {
     /// What `ackAnnouncements` takes: the roster entry's seq and the
-    /// member, `<seq>.<member>`.
+    /// member, `<seq>.<member>` (`dropped.<seq>` for `dropped`).
     pub id: String,
     pub kind: Announced,
-    /// The device or kit it is about.
-    #[cfg_attr(feature = "ts", ts(type = "string"))]
-    pub member: Id,
+    /// The device or kit it is about; none for `dropped`.
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    pub member: Option<Id>,
     /// A recovery kit or passkey, else a device (it words `removed`).
     pub kit: bool,
     /// A passkey kit.
     pub passkey: bool,
     /// The member that vouched for it, or removed it (itself when a device
-    /// left).
-    #[cfg_attr(feature = "ts", ts(type = "string"))]
-    pub by: Id,
+    /// left); none for `dropped`.
+    #[cfg_attr(feature = "ts", ts(type = "string | null"))]
+    pub by: Option<Id>,
     /// A device's name, or a kit's label.
     pub name: Option<String>,
+    /// For `dropped`: how many older announcements were not kept.
+    #[serde(default)]
+    pub count: Option<u32>,
 }
 
-/// Unacknowledged announcements kept; the oldest go first.
+/// Unacknowledged announcements kept. Past it, kit and removal notices go
+/// first, then joins and passkeys, the oldest first, and one `dropped`
+/// announcement counts them, so a flood never hides a join silently.
 // ponytail: a fixed cap, so an app that never acknowledges cannot grow the
 // store; 100 is far beyond what one person's devices and 8 kits produce.
 const MAX_ANNOUNCED: usize = 100;
@@ -206,6 +211,16 @@ pub enum Announced {
     Passkey,
     Kit,
     Removed,
+    /// Older announcements were not kept ("Check Devices").
+    Dropped,
+}
+
+impl Announced {
+    /// A security notice: a join, a passkey, or a trim that may have hidden
+    /// one. Only the owner profile dismisses these.
+    pub fn security(self) -> bool {
+        matches!(self, Self::Device | Self::Passkey | Self::Dropped)
+    }
 }
 
 /// What the roster entry `seq` by `author` changed that this device should
@@ -225,11 +240,12 @@ fn announcements(
     let about = |kind, id: &Id, m: &Member, by| Announcement {
         id: format!("{seq}.{}", hex::encode(id.0)),
         kind,
-        member: *id,
+        member: Some(*id),
         kit: m.role == Role::Kit,
         passkey: m.passkey,
-        by,
+        by: Some(by),
         name: m.name.as_deref().and_then(|n| open_name(keys, id, n)),
+        count: None,
     };
     let added = after
         .iter()
@@ -251,7 +267,7 @@ fn announcements(
 }
 
 /// The roster changes not acknowledged yet.
-fn queued(library: &Library) -> Vec<Announcement> {
+pub fn queued_announcements(library: &Library) -> Vec<Announcement> {
     library
         .sync_state(ANNOUNCE)
         .ok()
@@ -261,17 +277,65 @@ fn queued(library: &Library) -> Vec<Announcement> {
 }
 
 fn keep_queued(library: &Library, mut queued: Vec<Announcement>) -> Result<(), SyncError> {
-    let over = queued.len().saturating_sub(MAX_ANNOUNCED);
-    queued.drain(..over);
+    trim(&mut queued);
     let queued = serde_json::to_string(&queued).expect("announcements serialize");
     library.set_sync_state(ANNOUNCE, &queued)?;
     Ok(())
 }
 
+/// Keeps `MAX_ANNOUNCED` announcements: kit and removal notices go before
+/// joins and passkeys, the oldest first, and the `dropped` one at the front
+/// counts what went.
+fn trim(queued: &mut Vec<Announcement>) {
+    let kept = |a: &Announcement| a.kind != Announced::Dropped;
+    let mut over = queued
+        .iter()
+        .filter(|a| kept(a))
+        .count()
+        .saturating_sub(MAX_ANNOUNCED);
+    if over == 0 {
+        return;
+    }
+    let dropped = over as u32;
+    for security in [false, true] {
+        queued.retain(|a| {
+            let goes = over > 0 && kept(a) && a.kind.security() == security;
+            over -= usize::from(goes);
+            !goes
+        });
+    }
+    // The newest entry's seq: a later trim's marker gets another id.
+    let newest = queued
+        .iter()
+        .filter_map(|a| a.id.split('.').next()?.parse::<u64>().ok())
+        .max()
+        .unwrap_or_default();
+    let id = format!("dropped.{newest}");
+    match queued.iter_mut().find(|a| !kept(a)) {
+        Some(marker) => {
+            marker.count = Some(marker.count.unwrap_or_default() + dropped);
+            marker.id = id;
+        }
+        None => queued.insert(
+            0,
+            Announcement {
+                id,
+                kind: Announced::Dropped,
+                member: None,
+                kit: false,
+                passkey: false,
+                by: None,
+                name: None,
+                count: Some(dropped),
+            },
+        ),
+    }
+}
+
 /// The user saw these announcements: no round reports them again. Ids
 /// not queued (acknowledged before, or never made) are skipped.
 pub fn ack_announcements(library: &Library, ids: &[String]) -> Result<(), SyncError> {
-    let mut queued = queued(library);
+    let mut queued = queued_announcements(library);
     let before = queued.len();
     queued.retain(|a| !ids.contains(&a.id));
     if queued.len() != before {
@@ -917,7 +981,7 @@ impl<'a> Session<'a> {
         if fresh.is_empty() {
             return Ok(());
         }
-        let mut queued = queued(self.library);
+        let mut queued = queued_announcements(self.library);
         for a in fresh {
             if !queued.iter().any(|q| q.id == a.id) {
                 queued.push(a);
@@ -1134,7 +1198,7 @@ impl<'a> Session<'a> {
 
     pub(crate) fn finish(&self, mut report: SyncReport) -> SyncReport {
         report.fingerprint = self.roster.fingerprint();
-        report.announcements = queued(self.library);
+        report.announcements = queued_announcements(self.library);
         if self.roster.rotation_pending() {
             report.blocked.get_or_insert(Blocked::RotationPending);
         }
@@ -1759,6 +1823,20 @@ fn member_infos(roster: &Roster, keys: &Bundle, me: &Id) -> Vec<MemberInfo> {
             }
         })
         .collect()
+}
+
+/// This device's member id and the account's devices, from the roster this
+/// device stored (no relay call): who is still in the account.
+pub fn stored_devices(library: &Library, config: &SyncConfig) -> Result<(Id, Vec<Id>), SyncError> {
+    let entries = stored_entries(library, &genesis_key(&config.keys))?;
+    let roster = rebuild(&entries).map_err(roster_error)?;
+    let devices = roster
+        .members()
+        .iter()
+        .filter(|(_, m)| m.role == Role::Device)
+        .map(|(id, _)| *id)
+        .collect();
+    Ok((config.secret().id(), devices))
 }
 
 pub async fn devices(

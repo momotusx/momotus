@@ -11,6 +11,6 @@ pub use engine::{
     Announced, Announcement, Blocked, DeviceKits, Devices, ForkPreview, LostPreview, MemberInfo,
     PAIRING_MS, SyncConfig, SyncError, SyncReport, ack_announcements, create_account,
     create_account_with, delete_account, devices, fork_preview, leave_here, lost_preview,
-    pull_changes, push_changes, remove_devices, report_lost, sign_out, sync_once,
-    use_server_roster,
+    pull_changes, push_changes, queued_announcements, remove_devices, report_lost, sign_out,
+    stored_devices, sync_once, use_server_roster,
 };
