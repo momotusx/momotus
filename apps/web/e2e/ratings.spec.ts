@@ -178,17 +178,19 @@ for (const form of Object.keys(FORMS) as Form[]) {
     measure(form, "poster chip", { chip: widest.width, poster: widest.outer, parts: pair.map((p) => p.width) });
 
     // The hero: side by side, one line each.
-    const hero = await scores(page, ".hero-body .meta .rate", ".hero-body");
+    const hero = await scores(page, ".hero-body .meta .rate > [aria-hidden]", ".hero-body");
     expect(hero.map((h) => h.text)).toEqual(["IMDb 10.0", "RT 100%"]);
     for (const h of hero) expect(h, JSON.stringify(h)).toMatchObject({ lines: 1, cut: false, inside: true });
     expect(Math.abs(hero[1]!.middle - hero[0]!.middle)).toBeLessThanOrEqual(1);
+    // A screen reader reads the hidden twin, never "R T".
+    await expect(page.locator(".hero-body .meta .rate .sr")).toHaveText(["IMDb 10.0", "Rotten Tomatoes 100 percent"]);
     measure(form, "hero", hero.map((h) => h.width));
     await page.screenshot({ path: `${SHOTS}/ratings-home-${form}.jpg`, type: "jpeg", quality: 80 });
 
     // The title page: side by side, IMDb's links off TV, and the credit row.
     await page.goto(`/title/movie/${MAX.id}?form=${form}`);
-    await expect(page.locator(".info .meta .rate").nth(1)).toHaveText("RT 100%", { timeout: 30_000 });
-    const title = await scores(page, ".info .meta .rate", ".info");
+    await expect(page.locator(".info .meta .rate > [aria-hidden]").nth(1)).toHaveText("RT 100%", { timeout: 30_000 });
+    const title = await scores(page, ".info .meta .rate > [aria-hidden]", ".info");
     for (const t of title) expect(t, JSON.stringify(t)).toMatchObject({ lines: 1, cut: false, inside: true });
     // Side by side: one line through both (the phone's link is taller, a finger's size).
     expect(Math.abs(title[1]!.middle - title[0]!.middle)).toBeLessThanOrEqual(1);
@@ -199,7 +201,7 @@ for (const form of Object.keys(FORMS) as Form[]) {
       await expect(link).toHaveAttribute("aria-label", "IMDb 10.0, on IMDb");
       if (form === "phone") expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     }
-    await expect(page.locator(".info .meta span.rate", { hasText: "RT 100%" })).toHaveAttribute("aria-label", "Rotten Tomatoes 100 percent");
+    await expect(page.locator(".info .meta span.rate .sr")).toHaveText(form === "tv" ? ["IMDb 10.0", "Rotten Tomatoes 100 percent"] : ["Rotten Tomatoes 100 percent"]);
     await expect(page.locator(".facts div", { hasText: "Ratings from" })).toContainText("IMDb and Rotten Tomatoes via MDBList");
     measure(form, "title page", title.map((t) => t.width));
     await page.screenshot({ path: `${SHOTS}/ratings-title-${form}.jpg`, type: "jpeg", quality: 80 });
@@ -212,8 +214,9 @@ for (const form of Object.keys(FORMS) as Form[]) {
     await expect(page.locator(".hit-meta", { hasText: "RT 100%" }).first()).toBeVisible({ timeout: 30_000 });
     const meta = await page.locator(".hit-meta").first().evaluate((el) => ({ width: el.clientWidth, needs: el.scrollWidth }));
     expect(meta.needs, JSON.stringify(meta)).toBeLessThanOrEqual(meta.width);
-    const hit = await scores(page, ".hit-meta .rate", ".hit-meta");
+    const hit = await scores(page, ".hit-meta .rate > [aria-hidden]", ".hit-meta");
     for (const h of hit.slice(0, 2)) expect(h, JSON.stringify(h)).toMatchObject({ lines: 1, cut: false, inside: true });
+    await expect(page.locator(".hit-meta").first().locator(".rate .sr")).toHaveText(["IMDb 10.0", "Rotten Tomatoes 100 percent"]);
     measure(form, "search hit", meta);
     await page.context().close();
   });

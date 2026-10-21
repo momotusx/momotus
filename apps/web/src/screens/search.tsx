@@ -344,8 +344,9 @@ function Hit(props: { tile: Tile; fkey: string; onOpen: () => void }) {
             {(p) => (
               <>
                 <i aria-hidden="true">·</i>
-                <span class="rate" aria-label={p.spoken}>
-                  {p.text}
+                <span class="rate">
+                  <span aria-hidden="true">{p.text}</span>
+                  <span class="sr">{p.spoken}</span>
                 </span>
               </>
             )}

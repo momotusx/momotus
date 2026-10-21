@@ -139,14 +139,15 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                         <Show
                           when={p.imdb && form() !== "tv" && x().imdbUrl}
                           fallback={
-                            <span class="rate num" aria-label={p.spoken}>
-                              {p.text}
+                            <span class="rate num">
+                              <span aria-hidden="true">{p.text}</span>
+                              <span class="sr">{p.spoken}</span>
                             </span>
                           }
                         >
                           {(url) => (
                             <a class="rate num" href={url()} target="_blank" rel="noopener noreferrer" data-f="title:imdb" aria-label={`${p.spoken}, on IMDb`}>
-                              {p.text}
+                              <span aria-hidden="true">{p.text}</span>
                             </a>
                           )}
                         </Show>

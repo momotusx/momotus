@@ -106,11 +106,11 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 .kicker { font: 700 var(--type-caption) / 1 var(--font-text); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
 .eyebrow { font: 700 var(--type-caption) / 1 var(--font-text); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
 
-/* A star and a rating: gold star, white number. */
+/* A score as plain text, the source's name first: one line, white. Screen readers get its
+ * spoken twin (`.sr`), the visible text is hidden from them. */
 .rate { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--text); white-space: nowrap; }
 /* The IMDb score on a phone's title page is a link: a finger-sized target. */
 [data-form="phone"] .info .meta a.rate { min-height: 44px; }
-.rate svg { width: .9em; height: .9em; fill: var(--star); color: var(--star); }
 
 /* Label and value pairs (Versions pick, import summary). */
 .facts-grid { display: grid; grid-template-columns: 180px 1fr; row-gap: 4px; width: 100%; }
