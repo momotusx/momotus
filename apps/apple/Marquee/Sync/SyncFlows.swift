@@ -684,8 +684,7 @@ private struct HoldStyle: ButtonStyle {
             .foregroundStyle(Theme.Palette.text)
             .padding(.horizontal, PillButtonStyle.horizontal)
             .padding(.vertical, PillButtonStyle.vertical)
-            .background(Capsule().fill(configuration.isPressed ? AnyShapeStyle(Theme.Palette.raised) : AnyShapeStyle(Theme.controlFill)))
-            .overlay(Capsule().strokeBorder(Theme.Palette.control, lineWidth: 1))
+            .background { if configuration.isPressed { Capsule().fill(Theme.Palette.raised) } else { SecondaryFill(shape: Capsule()) } }
             .contentShape(Capsule())
             .onChange(of: configuration.isPressed) { _, pressed in holding = pressed }
     }

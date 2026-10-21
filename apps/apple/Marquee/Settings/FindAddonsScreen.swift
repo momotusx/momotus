@@ -66,10 +66,6 @@ struct FindAddonsScreen: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: Theme.Space.xs) {
-            Text(caps: W.eyebrow)
-                .textFont(Theme.type.caption, weight: .bold, relativeTo: .caption)
-                .tracking(Theme.type.caption * 0.14)
-                .foregroundStyle(Theme.Palette.muted)
             ScreenTitle(text: W.title)
             Text(W.lede)
                 .textFont(Theme.type.body)
@@ -532,8 +528,7 @@ private struct TVActionPill: View {
         .foregroundStyle(lit ? Theme.Palette.onPrimary : Theme.Palette.text)
         .padding(.horizontal, Theme.Space.m)
         .padding(.vertical, Theme.Space.s)
-        .background(Capsule().fill(lit ? AnyShapeStyle(Theme.Palette.primary) : AnyShapeStyle(Theme.controlFill)))
-        .overlay { if !lit { Capsule().strokeBorder(Theme.Palette.control, lineWidth: edgeWidth) } }
+        .background { if lit { Capsule().fill(Theme.Palette.primary) } else { SecondaryFill(shape: Capsule()) } }
     }
 }
 #endif

@@ -468,13 +468,9 @@ private struct Backdrop: View {
             .clipped()
             .overlay {
                 if wide {
-                    LinearGradient(
-                        stops: [.init(color: bg.opacity(0.95), location: 0), .init(color: bg.opacity(0.6), location: 0.42), .init(color: .clear, location: 0.75)],
-                        startPoint: .leading, endPoint: .trailing)
+                    LinearGradient(stops: BackdropStops.gradient(BackdropStops.titleSide, bg), startPoint: .leading, endPoint: .trailing)
                 }
-                LinearGradient(
-                    stops: [.init(color: bg.opacity(wide ? 0 : 0.6), location: 0), .init(color: .clear, location: 0.3), .init(color: bg.opacity(0.85), location: 0.82), .init(color: bg, location: 1)],
-                    startPoint: .top, endPoint: .bottom)
+                LinearGradient(stops: BackdropStops.gradient(BackdropStops.titleFoot(wide: wide), bg), startPoint: .top, endPoint: .bottom)
             }
             .accessibilityHidden(true)
     }

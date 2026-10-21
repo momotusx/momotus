@@ -86,11 +86,9 @@ let touch = true
 let touch = false
 #endif
 
-/// What a card shows of its state: focus rings its art; focus or hover
-/// light the art's edge and turn its title accent.
+/// What a card shows of its state: focus rings its art.
 struct CardState: Equatable {
     var focused = false
-    var lit = false
 }
 
 extension EnvironmentValues {
@@ -127,7 +125,7 @@ private struct Interactive<S: InsettableShape>: View {
 
     var body: some View {
         content
-            .environment(\.card, CardState(focused: focused, lit: focused || hovered))
+            .environment(\.card, CardState(focused: focused))
             .pressVeil(shape, pressed: configuration.isPressed)
             .modifier(FocusRing(shape: shape, active: focused && !card))
             .brightness(hovered && !focused && !card ? 0.04 : 0)
@@ -166,14 +164,19 @@ struct CardButtonStyle: ButtonStyle {
 }
 
 extension View {
-    /// A card's art: rounded, a faint edge that turns white while the card is
-    /// lit, and the focus ring.
+    /// A card's art: rounded, Apple's inner keyline (white at 25 percent) so dark
+    /// art never melts into the page, and the focus ring.
     func cardArt(radius: CGFloat = Theme.Radius.m) -> some View {
         modifier(CardArt(radius: radius))
     }
 }
 
 private struct CardArt: ViewModifier {
+    #if os(tvOS)
+    static let keyline: CGFloat = 1
+    #else
+    static let keyline: CGFloat = 0.5
+    #endif
     let radius: CGFloat
     @Environment(\.card) private var card
 
@@ -181,31 +184,31 @@ private struct CardArt: ViewModifier {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         content
             .clipShape(shape)
-            .overlay { shape.strokeBorder(.white.opacity(card.lit ? 0.5 : 0.06), lineWidth: 1).allowsHitTesting(false) }
+            .overlay { shape.strokeBorder(Theme.Palette.lineStrong, lineWidth: CardArt.keyline).allowsHitTesting(false) }
             .modifier(FocusRing(shape: shape, active: card.focused))
     }
 }
 
-/// A card's name: 700, accent while the card is lit. Accent text sits on
-/// `bg` only, so a name on a glass card (`onGlass`) stays white.
+/// A card's name under its art: weight 600 in the text color, which focus and
+/// hover never change (the art lifts instead).
 struct CardTitle: View {
     let text: String
     var size = Theme.type.callout
-    var onGlass = false
     var lines = 1
-    @Environment(\.card) private var card
 
     var body: some View {
         Text(text)
-            .textFont(size, weight: .bold, relativeTo: .callout)
-            .foregroundStyle(card.lit && !onGlass ? Theme.Palette.accent : Theme.Palette.text)
+            .textFont(size, weight: .semibold, relativeTo: .callout)
+            .foregroundStyle(Theme.Palette.text)
             .lineLimit(lines)
             .multilineTextAlignment(.leading)
     }
 }
 
 /// Capsule buttons. `prominent` is the one primary action on a screen: the
-/// white pill. The rest are a faint sheen with a `control` edge.
+/// white pill, its label black at 88 percent, weight 600. The rest are the
+/// secondary: the 16 percent fill with no edge and a pure white label, which
+/// keeps 4.5:1 over art on the backdrop's ramp.
 struct PillButtonStyle: ButtonStyle {
     var prominent = false
     @Environment(\.isEnabled) private var enabled
@@ -219,18 +222,15 @@ struct PillButtonStyle: ButtonStyle {
                 configuration.label
                     .labelFont(Theme.type.headline)
                     .labelStyle(PillLabelStyle())
-                    .foregroundStyle(prominent ? Theme.Palette.onPrimary : Theme.Palette.text)
+                    .foregroundStyle(prominent ? Theme.Palette.onPrimary : .white)
                     .padding(.horizontal, Self.horizontal)
                     .padding(.vertical, Self.vertical)
                     .background {
                         if prominent {
                             Capsule().fill(Theme.Palette.primary).shadow(color: .black.opacity(0.28), radius: 8, y: 3)
                         } else {
-                            Capsule().fill(Theme.controlFill)
+                            SecondaryFill(shape: Capsule())
                         }
-                    }
-                    .overlay {
-                        if !prominent { Capsule().strokeBorder(Theme.Palette.control, lineWidth: edgeWidth) }
                     }
                     .contentShape(Capsule())
                     .opacity(enabled ? 1 : 0.55)
@@ -255,8 +255,9 @@ let edgeWidth: CGFloat = 1.5
 #endif
 
 /// A round button with its word under the circle (Details, Trailer,
-/// Versions). `on` marks a state that holds, like In Library: a lighter fill
-/// and a bright edge, never the ring (the ring means focus).
+/// Versions): the secondary's fill in a circle, no edge. `on` marks a state
+/// that holds, like In Library: a lighter fill, never the ring (the ring
+/// means focus).
 struct RoundButtonStyle: ButtonStyle {
     var on = false
 
@@ -287,10 +288,10 @@ private struct RoundLabel<Icon: View, Title: View>: View {
     var body: some View {
         VStack(spacing: Self.gap) {
             icon
-                .foregroundStyle(Theme.Palette.text)
+                // Pure white over art, as every secondary label (the glass check).
+                .foregroundStyle(.white)
                 .frame(width: Self.size, height: Self.size)
-                .background(Circle().fill(on ? AnyShapeStyle(Color.white.opacity(0.22)) : AnyShapeStyle(Theme.controlFill)))
-                .overlay(Circle().strokeBorder(edge, lineWidth: edgeWidth))
+                .background(SecondaryFill(shape: Circle(), on: on))
                 .pressVeil(Circle(), pressed: pressed)
                 .modifier(FocusRing(shape: Circle(), active: focused))
                 .scaleEffect(reduceMotion ? 1 : pressed ? 0.95 : focused ? Theme.Focus.scaleCard : 1)
@@ -309,11 +310,6 @@ private struct RoundLabel<Icon: View, Title: View>: View {
         #if !os(tvOS)
         .onHover { hovered = $0 }
         #endif
-    }
-
-    private var edge: Color {
-        if on { return .white.opacity(0.55) }
-        return hovered ? .white.opacity(0.44) : Theme.Palette.control
     }
 
     #if os(tvOS)
@@ -467,15 +463,18 @@ extension View {
     }
 }
 
-/// Thin progress bar for partly watched items.
+/// Thin progress bar for partly watched items: Apple's white fill on a dark
+/// track (web `.prog`), so it reads on any art. Every progress bar takes these two.
 struct ProgressLine: View {
+    static let track = Color.black.opacity(0.55)
+    static let fill = Color.white
     let value: Double
 
     var body: some View {
         GeometryReader { geo in
-            Capsule().fill(Theme.Palette.text.opacity(0.25))
+            Capsule().fill(Self.track)
                 .overlay(alignment: .leading) {
-                    Capsule().fill(Theme.Palette.accent).frame(width: geo.size.width * min(max(value, 0), 1))
+                    Capsule().fill(Self.fill).frame(width: geo.size.width * min(max(value, 0), 1))
                 }
         }
         .frame(height: 4)
@@ -484,15 +483,16 @@ struct ProgressLine: View {
     }
 }
 
-/// A short explanation for an empty or failed state, with an optional fix
-/// in the primary style. It wraps rather than cut a reason off, and the fix
-/// moves under the reason when the two do not fit side by side.
+/// A short explanation for an empty or failed state, as text on the page at
+/// 64 percent (design/DECISION.md, States), with an optional fix as a secondary
+/// pill. It wraps rather than cut a reason off, and the fix moves under the
+/// reason when the two do not fit side by side.
 struct StateLine: View {
     let symbol: String
     let text: String
     var action: (title: String, run: () -> Void)?
-    /// False inside a page that has its own primary (a failed row on a working Home).
-    var primary = true
+    /// True only where the fix is the page's one action and so its primary.
+    var primary = false
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
@@ -504,7 +504,7 @@ struct StateLine: View {
     private var reason: some View {
         Label(text, glyph: symbol)
             .textFont(Theme.type.callout, relativeTo: .callout)
-            .foregroundStyle(Theme.Palette.muted)
+            .foregroundStyle(Theme.Palette.dim)
             .fixedSize(horizontal: false, vertical: true)
     }
 

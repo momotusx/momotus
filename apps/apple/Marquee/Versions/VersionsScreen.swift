@@ -300,11 +300,11 @@ private struct PickCard: View {
     /// TV: the page enters on Play.
     var focus: FocusState<Bool>.Binding
 
+    /// The pick's heading: a plain 64 percent line, not an eyebrow.
     static var kicker: some View {
-        Text(caps: "Recommended for this screen")
+        Text("Best for this screen")
             .textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
-            .tracking(1.6)
-            .foregroundStyle(Theme.Palette.muted)
+            .foregroundStyle(Theme.Palette.dim)
     }
 
     var body: some View {

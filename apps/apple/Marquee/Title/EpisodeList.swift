@@ -201,10 +201,9 @@ private struct EpisodeActions: View {
 
     private func circle(_ glyph: String, on: Bool) -> some View {
         Glyph(glyph)
-            .foregroundStyle(Theme.Palette.text)
+            .foregroundStyle(.white)
             .frame(width: 44, height: 44)
-            .background(Circle().fill(on ? AnyShapeStyle(Color.white.opacity(0.22)) : AnyShapeStyle(Theme.controlFill)))
-            .overlay(Circle().strokeBorder(on ? .white.opacity(0.55) : Theme.Palette.control, lineWidth: 1))
+            .background(SecondaryFill(shape: Circle(), on: on))
     }
 }
 
@@ -226,7 +225,7 @@ private struct EpisodeRow: View {
                     // Two lines on a phone, where the still leaves the title little width.
                     CardTitle(
                         text: episode.title.isEmpty ? "Episode \(episode.episode)" : episode.title,
-                        size: metrics.cardName + 2, onGlass: true, lines: 2)
+                        size: metrics.cardName + 2, lines: 2)
                     if !meta.isEmpty {
                         Text(meta)
                             .textFont(metrics.cardInfo, weight: .medium, relativeTo: .caption)
@@ -295,11 +294,11 @@ private struct EpisodeRow: View {
                 if let progress = episode.progress, !episode.watched {
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
-                            Rectangle().fill(.white.opacity(0.25))
-                            Rectangle().fill(Theme.Palette.accent).frame(width: geo.size.width * min(max(progress, 0), 1))
+                            Rectangle().fill(ProgressLine.track)
+                            Rectangle().fill(ProgressLine.fill).frame(width: geo.size.width * min(max(progress, 0), 1))
                         }
                     }
-                    .frame(height: metrics.wide ? 4 : 3)
+                    .frame(height: 4)
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: metrics.wide ? 10 : 8, style: .continuous))

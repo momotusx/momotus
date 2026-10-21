@@ -17,10 +17,6 @@ struct TraktScreen: View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 VStack(alignment: .leading, spacing: Theme.Space.xs) {
-                    Text(caps: W.eyebrow)
-                        .textFont(Theme.type.caption, weight: .bold, relativeTo: .caption)
-                        .tracking(Theme.type.caption * 0.14)
-                        .foregroundStyle(Theme.Palette.muted)
                     ScreenTitle(text: W.title)
                     Text(W.lede)
                         .textFont(Theme.type.body)

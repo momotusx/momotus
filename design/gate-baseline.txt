@@ -220,9 +220,7 @@ apps/apple/Marquee/App/RootView.swift :: Circle().fill(Theme.Palette.accent).fra
 apps/apple/Marquee/App/RootView.swift :: .glass(RoundedRectangle(cornerRadius: 24, style: .continuous), shadow: true)
 apps/apple/Marquee/App/RootView.swift :: .glass(Capsule(), shadow: true)
 apps/apple/Marquee/App/RootView.swift :: Capsule().fill(.white.opacity(0.12)).overlay(Capsule().strokeBorder(Theme.Palette.edge, lineWidth: 1))
-apps/apple/Marquee/Home/ContinueCard.swift :: Capsule().fill(Theme.Palette.accent).frame(width: geo.size.width * min(max(value, 0), 1))
 apps/apple/Marquee/Home/HeroView.swift :: .overlay { card.strokeBorder(Theme.Palette.edge, lineWidth: 1).allowsHitTesting(false) }
-apps/apple/Marquee/Home/HomeScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/Library/CalendarScreen.swift :: .foregroundStyle(day.date == today ? Theme.Palette.accent : Theme.Palette.text)
 apps/apple/Marquee/Library/CalendarScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/Onboarding/OnboardingScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
@@ -261,8 +259,6 @@ apps/apple/Marquee/Settings/PairingScreen.swift :: .glass(RoundedRectangle(corne
 apps/apple/Marquee/Settings/SettingsScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/Settings/StreamChoiceScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous))
 apps/apple/Marquee/Sync/SyncFlows.swift :: Button(W.replaceButton, role: .destructive) { submit(confirmed: true) }
-apps/apple/Marquee/Sync/SyncFlows.swift :: .background(Capsule().fill(configuration.isPressed ? AnyShapeStyle(Theme.Palette.raised) : AnyShapeStyle(Theme.controlFill)))
-apps/apple/Marquee/Sync/SyncFlows.swift :: .overlay(Capsule().strokeBorder(Theme.Palette.control, lineWidth: 1))
 apps/apple/Marquee/Sync/SyncFlows.swift :: Button(AccountRules.reportLostButton(drop.count), role: .destructive) { report() }
 apps/apple/Marquee/Sync/SyncFlows.swift :: Glyph(going ? "circle-check" : "circle-dashed").foregroundStyle(going ? Theme.Palette.bad : Theme.Palette.muted)
 apps/apple/Marquee/Sync/SyncFlows.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
@@ -280,21 +276,12 @@ apps/apple/Marquee/Sync/SyncScreen.swift :: Button(W.leaveHere, role: .destructi
 apps/apple/Marquee/Sync/SyncScreen.swift :: Button(W.forgetHere, role: .destructive) { sync.forgetHere() }
 apps/apple/Marquee/Sync/SyncScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/Sync/SyncScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Theme/Components.swift :: .foregroundStyle(card.lit && !onGlass ? Theme.Palette.accent : Theme.Palette.text)
-apps/apple/Marquee/Theme/Components.swift :: Capsule().fill(Theme.controlFill)
-apps/apple/Marquee/Theme/Components.swift :: if !prominent { Capsule().strokeBorder(Theme.Palette.control, lineWidth: edgeWidth) }
-apps/apple/Marquee/Theme/Components.swift :: .background(Circle().fill(on ? AnyShapeStyle(Color.white.opacity(0.22)) : AnyShapeStyle(Theme.controlFill)))
 apps/apple/Marquee/Theme/Components.swift :: .overlay(shape.strokeBorder(focused ? Theme.Palette.accent : Theme.Palette.control, lineWidth: focused ? 2 : 1))
 apps/apple/Marquee/Theme/Components.swift :: .foregroundStyle(enabled ? Theme.Palette.bad : Theme.Palette.muted)
-apps/apple/Marquee/Theme/Components.swift :: Capsule().fill(Theme.Palette.accent).frame(width: geo.size.width * min(max(value, 0), 1))
-apps/apple/Marquee/Theme/ThemeSupport.swift :: static let controlFill = LinearGradient(
 apps/apple/Marquee/Title/Credits.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/Title/EpisodeList.swift :: .overlay { Capsule().strokeBorder(selected ? .white.opacity(0.55) : Theme.Palette.control, lineWidth: edgeWidth) }
-apps/apple/Marquee/Title/EpisodeList.swift :: .background(Circle().fill(on ? AnyShapeStyle(Color.white.opacity(0.22)) : AnyShapeStyle(Theme.controlFill)))
-apps/apple/Marquee/Title/EpisodeList.swift :: .overlay(Circle().strokeBorder(on ? .white.opacity(0.55) : Theme.Palette.control, lineWidth: 1))
 apps/apple/Marquee/Title/EpisodeList.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/Title/EpisodeList.swift :: .overlay(Capsule().strokeBorder(Theme.Palette.edge, lineWidth: 1))
-apps/apple/Marquee/Title/EpisodeList.swift :: Rectangle().fill(Theme.Palette.accent).frame(width: geo.size.width * min(max(progress, 0), 1))
 apps/apple/Marquee/Trakt/TraktScreen.swift :: Glyph("triangle-alert").foregroundStyle(Theme.Palette.warn)
 apps/apple/Marquee/Trakt/TraktScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/Trakt/TraktScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))

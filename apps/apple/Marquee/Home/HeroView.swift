@@ -14,6 +14,13 @@ struct HeroView: View {
     var starting = false
     @Environment(\.metrics) private var metrics
 
+    /// The explainability line: the caption on TV, the frames' 13/600 elsewhere.
+    #if os(tvOS)
+    private static let reasonSize = Theme.type.caption
+    #else
+    private static let reasonSize: CGFloat = 13
+    #endif
+
     var body: some View {
         let card = RoundedRectangle(cornerRadius: Theme.Radius.hero, style: .continuous)
         // The art is a minimum, the words decide: at a large text size or in a
@@ -55,27 +62,11 @@ struct HeroView: View {
         let bg = Theme.Palette.bg
         return ZStack {
             if metrics.wide {
-                LinearGradient(
-                    stops: [
-                        .init(color: bg.opacity(0.94), location: 0), .init(color: bg.opacity(0.72), location: 0.28),
-                        .init(color: bg.opacity(0.18), location: 0.58), .init(color: .clear, location: 0.72),
-                    ],
-                    startPoint: .leading, endPoint: .trailing)
-                LinearGradient(
-                    stops: [.init(color: bg.opacity(0.9), location: 0), .init(color: bg.opacity(0.3), location: 0.34), .init(color: .clear, location: 0.58)],
-                    startPoint: .bottom, endPoint: .top)
+                LinearGradient(stops: BackdropStops.gradient(BackdropStops.heroSide, bg), startPoint: .leading, endPoint: .trailing)
+                LinearGradient(stops: BackdropStops.gradient(BackdropStops.heroFoot, bg), startPoint: .bottom, endPoint: .top)
             } else {
-                // A 72 pt band under the wordmark, then a fade: the white mark
-                // reads on bright art too.
-                LinearGradient(
-                    stops: [
-                        .init(color: bg.opacity(0.78), location: 0), .init(color: bg.opacity(0.6), location: 72 / height),
-                        .init(color: .clear, location: 140 / height),
-                    ],
-                    startPoint: .top, endPoint: .bottom)
-                LinearGradient(
-                    stops: [.init(color: bg.opacity(0.96), location: 0), .init(color: bg.opacity(0.55), location: 0.38), .init(color: .clear, location: 0.62)],
-                    startPoint: .bottom, endPoint: .top)
+                LinearGradient(stops: BackdropStops.gradient(BackdropStops.heroPhoneTop(height: height), bg), startPoint: .top, endPoint: .bottom)
+                LinearGradient(stops: BackdropStops.gradient(BackdropStops.heroPhoneFoot, bg), startPoint: .bottom, endPoint: .top)
             }
         }
         .allowsHitTesting(false)
@@ -85,7 +76,11 @@ struct HeroView: View {
         let tile = hero.tile
         let wide = metrics.wide
         return VStack(alignment: .leading, spacing: 0) {
-            Eyebrow(text: hero.reason)
+            // The core's reason as Apple's explainability line: no eyebrow, no chip.
+            Text(hero.reason)
+                .textFont(Self.reasonSize, weight: .semibold, relativeTo: .caption)
+                .foregroundStyle(Theme.Palette.text)
+                .lineLimit(2)
                 .padding(.bottom, wide ? 14 : 10)
             TitleLogo(
                 logo: tile.logo, name: tile.name, maxWidth: wide ? 440 : 260, height: wide ? 120 : 84,
@@ -148,34 +143,6 @@ struct StartFocus: ViewModifier {
 func heroMeta(_ hero: Hero) -> [String] {
     let genres = (hero.genres ?? []).joined(separator: ", ")
     return [hero.tile.releaseInfo, hero.runtime, genres.isEmpty ? nil : genres].compactMap { $0 }
-}
-
-/// An eyebrow over artwork: spaced capitals at the 70 percent level in a chip
-/// filled with the page colour, until 1b drops the eyebrow (white would outshine
-/// the title under it).
-struct Eyebrow: View {
-    let text: String
-    @Environment(\.metrics) private var metrics
-
-    var body: some View {
-        Text(caps: text)
-            .textFont(Theme.type.caption, weight: .bold, relativeTo: .caption)
-            .tracking(Theme.type.caption * 0.14)
-            .foregroundStyle(Theme.Palette.muted)
-            .lineLimit(2)
-            .padding(.horizontal, padding.width)
-            .padding(.vertical, padding.height)
-            .background(Capsule().fill(Theme.Palette.bg))
-    }
-
-    /// The web's chip: 8 by 14 on the TV canvas, 5 by 10 on a phone.
-    private var padding: CGSize {
-        #if os(tvOS)
-        return CGSize(width: 14, height: 8)
-        #else
-        return metrics.wide ? CGSize(width: 11, height: 6) : CGSize(width: 10, height: 5)
-        #endif
-    }
 }
 
 /// "IMDb 9.2 · RT 89% · 2011–2019 · Drama, Fantasy · 8 seasons": the scores

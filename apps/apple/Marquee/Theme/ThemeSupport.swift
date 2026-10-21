@@ -15,11 +15,17 @@ extension Color {
     }
 }
 
-extension Theme {
-    /// Secondary controls (web `.btn`): a faint white sheen over the page,
-    /// edged with `control`.
-    static let controlFill = LinearGradient(
-        colors: [.white.opacity(0.12), .white.opacity(0.065)], startPoint: .topLeading, endPoint: .bottomTrailing)
+/// A secondary control's fill (web `.btn`, the frames' 16 percent white): no edge, over a blur of
+/// what lies behind. Over art it sits on a backdrop ramp deep enough that its white label keeps
+/// 4.5:1 (`BackdropStops`, the glass check). `on` is a state that holds (In Library): a step lighter.
+/// The label on it is pure white.
+struct SecondaryFill<S: Shape>: View {
+    let shape: S
+    var on = false
+
+    var body: some View {
+        shape.fill(.white.opacity(on ? SecondaryFillLevel.held : SecondaryFillLevel.rest)).background(.ultraThinMaterial, in: shape)
+    }
 }
 
 extension View {
@@ -185,7 +191,7 @@ struct Metrics: Sendable {
         poster: CGSize(width: 160, height: 240), gutter: Theme.Space.l, rowSpacing: Theme.Space.l, wide: true,
         cardName: 15, cardInfo: 13, chip: 12)
     static let compact = Metrics(
-        poster: CGSize(width: 112, height: 168), gutter: 16, rowSpacing: Theme.Space.m, wide: false,
+        poster: Theme.Tile.poster, gutter: 16, rowSpacing: Theme.Space.m, wide: false,
         cardName: 13, cardInfo: 12, chip: 11)
 }
 

@@ -68,10 +68,6 @@ struct HomeScreen: View {
         }
         .focusScope(startScope)
         #endif
-        #if os(macOS)
-        // The card runs up under the window toolbar, where the navigation pill floats over it.
-        .fullBleedTop()
-        #endif
         .topScrim(underBar || model.needsSetup || model.allFailed)
         .onGeometryChange(for: CGSize.self) { $0.size } action: { (width, height) = ($0.width, $0.height) }
         .onChange(of: shown, initial: true) { _, now in placeShown = now }
@@ -328,6 +324,7 @@ private struct RecommendedCard: View {
         }
         .padding(Theme.Space.s + 4)
         .frame(maxWidth: 760, alignment: .leading)
-        .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        // A solid surface with no edge: content, not glass (design/DECISION.md, Surfaces).
+        .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
     }
 }
