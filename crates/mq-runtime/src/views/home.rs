@@ -203,10 +203,15 @@ impl HomeView {
             rows.clone(),
             header.clone(),
         ));
+        tasks.spawn(ratings::on_listed(listed, {
+            let (core, rows, header) = (core.clone(), rows.clone(), header.clone());
+            move || {
+                rerate(&core, &rows, &header);
+            }
+        }));
         tasks.spawn(watch_addons(
             core.clone(),
             changes,
-            listed,
             ids,
             rows.clone(),
             header.clone(),
@@ -473,26 +478,17 @@ fn loading_row(slot: &CatalogSlot) -> HomeRow {
 /// Follows the installed addons: rows of catalogs that stay keep their tiles
 /// (so nothing flashes), new catalogs load, removed ones go, and the order
 /// follows the addon order. The swap is one batch of diffs. The ratings
-/// shown are put on again then, and when a read of the Rotten Tomatoes
-/// addon's lists ends.
+/// shown are put on again then (and, by `on_listed`, when a read of the
+/// Rotten Tomatoes addon's lists ends).
 async fn watch_addons(
     core: Core,
     mut changes: tokio::sync::broadcast::Receiver<Vec<Table>>,
-    mut listed: tokio::sync::watch::Receiver<u64>,
     mut ids: Vec<String>,
     rows: Arc<Mutex<ObservableVector<HomeRow>>>,
     header: SharedObservable<HomeHeader>,
 ) {
     let mut loads = JoinSet::new();
-    loop {
-        tokio::select! {
-            more = home_changed(&mut changes) => if !more { return },
-            Ok(()) = listed.changed() => {
-                // A read of the Rotten Tomatoes lists ended with other titles.
-                rerate(&core, &rows, &header);
-                continue;
-            }
-        }
+    while home_changed(&mut changes).await {
         while loads.try_join_next().is_some() {}
         // The Rotten Tomatoes addon's mark comes and goes with the addon.
         let titles = rerate(&core, &rows, &header);

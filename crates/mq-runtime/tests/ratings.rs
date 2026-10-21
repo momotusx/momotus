@@ -1570,3 +1570,83 @@ async fn a_home_of_the_default_catalogs_marks_the_listed_titles_fresh() {
     );
     assert!(last > 0, "no tile marked Fresh");
 }
+
+#[tokio::test]
+async fn a_title_page_discover_and_search_opened_before_the_read_ends_get_the_mark() {
+    // No Home: these views open first (a reload on a title page, a deep
+    // link, Search first after a cold start), while the read is slow.
+    let core = Core::temporary("p").unwrap();
+    let rt = rt_addon_with(&["Drama", "Comedy"], Duration::from_millis(500)).await;
+    install(&core, &[addon().await, rt.row.clone()]);
+    let title = TitleView::open(&core, "movie", SHAWSHANK);
+    let discover = DiscoverView::open(&core);
+    let search = SearchView::open(&core);
+    search.set_query("godfather");
+    until("the read on its way", || core.ratings().reading_lists()).await;
+    until("the read's end", || !core.ratings().reading_lists()).await;
+    until("the mark on the title page", || {
+        title
+            .snapshot()
+            .header
+            .details
+            .is_some_and(|d| d.ratings.rotten_tomatoes.as_deref() == Some("Fresh"))
+    })
+    .await;
+    let json = serde_json::to_value(title.snapshot().header.details.unwrap()).unwrap();
+    assert_eq!(
+        json["ratingsFrom"],
+        "IMDb from Local, Rotten Tomatoes from the Rotten Tomatoes addon"
+    );
+    until("the mark in Discover", || {
+        discover
+            .snapshot()
+            .items
+            .get(1)
+            .is_some_and(|t| t.ratings.rotten_tomatoes.is_some())
+    })
+    .await;
+    until("the mark in Search", || {
+        search.snapshot().rows.first().is_some_and(|r| {
+            r.tiles
+                .iter()
+                .any(|t| t.id == GODFATHER && t.ratings.rotten_tomatoes.is_some())
+        })
+    })
+    .await;
+}
+
+/// A read whose runtime goes away (the app's, at its end, or a panic)
+/// clears its flag: the next lookup starts a read again.
+#[test]
+fn a_read_that_never_ends_lets_the_next_one_start() {
+    let server = tokio::runtime::Runtime::new().unwrap();
+    let rt = server.block_on(async {
+        let rt = rt_addon().await;
+        rt.hang.lock().unwrap().insert(RT_MOVIES.to_owned());
+        rt
+    });
+    let core = Core::temporary("p").unwrap();
+    install(&core, std::slice::from_ref(&rt.row));
+    let titles = [movie(SHAWSHANK)];
+    let first = tokio::runtime::Runtime::new().unwrap();
+    first.block_on(core.ratings().lookup(&titles));
+    assert!(core.ratings().reading_lists());
+    drop(first);
+    assert!(
+        !core.ratings().reading_lists(),
+        "the read went with its runtime"
+    );
+    let asked = rt.served().len();
+    let second = tokio::runtime::Runtime::new().unwrap();
+    second.block_on(async {
+        core.ratings().lookup(&titles).await;
+        assert!(core.ratings().reading_lists(), "a new read started");
+        for _ in 0..300 {
+            if rt.served().len() > asked {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        panic!("the new read asked nothing");
+    });
+}

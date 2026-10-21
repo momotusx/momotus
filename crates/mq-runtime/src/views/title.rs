@@ -226,6 +226,12 @@ impl TitleView {
             _tasks: JoinSet::new(),
         };
         if !view.denied {
+            // Taken before the first read of the ratings, so a read of the
+            // lists that ends after it is heard.
+            let listed = core.ratings().listed();
+            let ctx = view.ctx();
+            view._tasks
+                .spawn(crate::ratings::on_listed(listed, move || ctx.rate()));
             view._tasks.spawn(load_meta(view.ctx()));
             view._tasks.spawn(watch_library(view.ctx()));
             // Versions usually come next: their first scrape finds the
@@ -372,9 +378,8 @@ async fn load_meta(ctx: Ctx) {
                 state.scores = titles.first().and_then(|t| known.get(t)).copied();
             }
             ctx.render_with_source(&source);
-            if let Some(found) = ctx.core.ratings().lookup(&titles).await {
-                lock(&ctx.state).scores = titles.first().and_then(|t| found.get(t)).copied();
-                ctx.render();
+            if ctx.core.ratings().lookup(&titles).await.is_some() {
+                ctx.rate();
             }
         }
         Err(reason) => {
@@ -400,6 +405,23 @@ async fn watch_library(ctx: Ctx) {
 }
 
 impl Ctx {
+    /// Puts what holds now on the page's scores: not what a lookup saw, as
+    /// a read of the lists may have ended since. Nothing before the meta.
+    fn rate(&self) {
+        let Some(title) = title_of(&self.kind, &self.id) else {
+            return;
+        };
+        {
+            let mut state = lock(&self.state);
+            if state.meta.is_none() {
+                return;
+            }
+            let known = self.core.ratings().known(std::slice::from_ref(&title));
+            state.scores = known.get(&title).copied();
+        }
+        self.render();
+    }
+
     fn render(&self) {
         let source = self
             .header

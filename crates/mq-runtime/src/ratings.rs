@@ -542,6 +542,35 @@ impl Finder {
     }
 }
 
+/// A read on its way: however it ends (a panic, its runtime going away), it
+/// clears `reading`, so reads never stop for good.
+struct Reading {
+    lists: Arc<Lists>,
+    url: String,
+}
+
+impl Drop for Reading {
+    fn drop(&mut self) {
+        if let Some(listed) = lock(&self.lists.by_url).get_mut(&self.url) {
+            listed.reading = false;
+        }
+    }
+}
+
+/// Runs `put` each time a read of the Rotten Tomatoes lists changes what
+/// they hold, until the core goes: how a live view (Home, a title page,
+/// Discover) puts the marks on when the read it never waited for ends.
+/// `listed` is taken when the view opens, so no read that ends later goes
+/// unheard.
+pub(crate) async fn on_listed(
+    mut listed: tokio::sync::watch::Receiver<u64>,
+    mut put: impl FnMut(),
+) {
+    while listed.changed().await.is_ok() {
+        put();
+    }
+}
+
 impl Lists {
     /// The titles the addon at `url` lists, once a read of them has ended.
     fn marks(&self, url: &str) -> Option<Arc<HashSet<Title>>> {
@@ -564,12 +593,15 @@ impl Lists {
             }
             listed.reading = true;
         }
-        let lists = self.clone();
+        let reading = Reading {
+            lists: self.clone(),
+            url,
+        };
         let addons = addons.with_max_bytes(LIST_MAX_BYTES);
         let addon = addon.clone();
         tokio::spawn(async move {
             let answers = read_pages(&addons, &addon).await;
-            lists.store(&url, answers);
+            reading.lists.store(&reading.url, answers);
         });
     }
 
@@ -727,7 +759,7 @@ impl<'a> Rater<'a> {
     }
 
     /// Moves on when a read of the Rotten Tomatoes lists changes what they
-    /// hold, for a view to put the marks on again (`views::home`).
+    /// hold, for a live view to put the marks on again (`on_listed`).
     pub(crate) fn listed(&self) -> tokio::sync::watch::Receiver<u64> {
         self.finder.lists.changed.subscribe()
     }

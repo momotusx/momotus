@@ -145,8 +145,16 @@ impl DiscoverView {
             snapshot: SharedObservable::new(snapshot),
             task: Mutex::new(None),
         });
+        // Taken before the first read of the ratings (`on_listed`).
+        let listed = core.ratings().listed();
         inner.select_first();
-        let watch = tokio::spawn(watch_addons(inner.clone(), changes));
+        let (watched, rated) = (inner.clone(), inner.clone());
+        let watch = tokio::spawn(async move {
+            let rate = crate::ratings::on_listed(listed, move || {
+                rate_items(&rated.core, &rated.state, &rated.snapshot);
+            });
+            futures_util::join!(watch_addons(watched, changes), rate);
+        });
         Self { inner, watch }
     }
 
@@ -436,10 +444,16 @@ async fn load_page(
         // lookup was on its way cancelled it.
         crate::ratings::titles(&s.snapshot.items)
     };
-    if let Some(known) = core.ratings().lookup(&titles).await {
-        let mut s = lock(&state);
-        if crate::ratings::apply(&mut s.snapshot.items, &known) {
-            snapshot.set(s.snapshot.clone());
-        }
+    if core.ratings().lookup(&titles).await.is_some() {
+        rate_items(&core, &state, &snapshot);
+    }
+}
+
+/// Puts what holds now on every item shown (a lookup landed, or a read of
+/// the lists ended): not what a lookup saw, which a read may have changed.
+fn rate_items(core: &Core, state: &Mutex<State>, snapshot: &SharedObservable<DiscoverSnapshot>) {
+    let mut s = lock(state);
+    if core.ratings().fill(&mut s.snapshot.items) {
+        snapshot.set(s.snapshot.clone());
     }
 }

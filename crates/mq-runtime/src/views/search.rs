@@ -275,6 +275,8 @@ async fn run(core: Core, query: String, snapshot: SharedObservable<SearchSnapsho
     // (a filled row shows the tiles it first showed).
     let mut known = HashMap::new();
     let mut lookups = JoinSet::new();
+    // Taken before the first read of the ratings (`ratings::on_listed`).
+    let mut listed = core.ratings().listed();
     let mut publish = |top: &Option<(RowState, Vec<Tile>)>,
                        rows: &[(RowState, Vec<Tile>)],
                        known: &HashMap<_, _>| {
@@ -303,10 +305,15 @@ async fn run(core: Core, query: String, snapshot: SharedObservable<SearchSnapsho
     let soft = tokio::time::sleep(SOFT_DEADLINE);
     tokio::pin!(soft);
     let mut soft_fired = false;
+    // What holds now for every tile shown: a lookup landed, or a read of
+    // the lists ended.
+    let now = |top: &Option<(RowState, Vec<Tile>)>, rows: &[(RowState, Vec<Tile>)]| {
+        let shown = rows.iter().chain(top.as_ref()).flat_map(|r| &r.1);
+        core.ratings().known(&ratings::titles(shown))
+    };
+    // Once the rows are in, the search stays to hear a read of the lists
+    // end, until the next query or the view goes.
     loop {
-        if calls.is_empty() && !top_pending && lookups.is_empty() {
-            break;
-        }
         tokio::select! {
             Some(joined) = calls.join_next(), if !calls.is_empty() => {
                 let Ok((index, result)) = joined else { continue };
@@ -325,10 +332,14 @@ async fn run(core: Core, query: String, snapshot: SharedObservable<SearchSnapsho
                 publish(&top, &rows, &known);
             }
             Some(joined) = lookups.join_next(), if !lookups.is_empty() => {
-                if let Ok(Some(found)) = joined {
-                    known.extend(found);
+                if let Ok(Some(_)) = joined {
+                    known.extend(now(&top, &rows));
                     publish(&top, &rows, &known);
                 }
+            }
+            Ok(()) = listed.changed() => {
+                known.extend(now(&top, &rows));
+                publish(&top, &rows, &known);
             }
             _ = &mut soft, if !soft_fired => {
                 soft_fired = true;
@@ -337,6 +348,7 @@ async fn run(core: Core, query: String, snapshot: SharedObservable<SearchSnapsho
                 }
                 publish(&top, &rows, &known);
             }
+            else => break,
         }
     }
 }
