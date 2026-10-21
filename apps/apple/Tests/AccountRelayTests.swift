@@ -98,7 +98,9 @@ private func browse(_ url: String, as subject: String) async throws -> String {
         #expect(!AccountRules.needsSecondWayIn(list.members))
 
         // Another passkey opens nothing: kitUnknown, the QR next.
-        let third = SyncModel(core: RealCore().client, records: FakeKeychain().record, defaults: try #require(UserDefaults(suiteName: "mq-test-\(UUID().uuidString)")))
+        let stranger = RealCore()
+        #expect(await stranger.ready())
+        let third = SyncModel(core: stranger.client, records: FakeKeychain().record, defaults: try #require(UserDefaults(suiteName: "mq-test-\(UUID().uuidString)")))
         await #expect { try await third.recover(server: relay, prf: PasskeyContract.challenge(), name: "Stranger") } throws: {
             ($0 as? CoreError)?.code == "kitUnknown"
         }
