@@ -163,7 +163,7 @@ object VersionsCopy {
 
     /** Why every version found is hidden ("Marquee found 12 versions. This version of the app..."), or null. */
     fun blockedText(snapshot: VersionsSnapshot?): String? =
-        snapshot?.blocked?.let { StreamChoiceCopy.blocked(it.reason, it.count)?.first }
+        snapshot?.blocked?.let { StreamChoiceCopy.blocked(it.reason, it.count, snapshot.conditions.window)?.first }
 
     /** The heading of the card shown while there is no recommendation. */
     fun waitingTitle(snapshot: VersionsSnapshot): String =
@@ -179,10 +179,11 @@ object VersionsCopy {
      */
     fun waitingBody(snapshot: VersionsSnapshot): String {
         if (!snapshot.done) return addons(snapshot) ?: "Your addons are answering."
+        val window = snapshot.conditions.window
         val why =
             when {
                 snapshot.rows.isNotEmpty() -> "Choose a version to start it."
-                snapshot.hidden.count > 0 -> "Every result was hidden: ${hiddenDetail(snapshot.hidden)}."
+                snapshot.hidden.count > 0 -> "Every result was hidden: ${hiddenDetail(snapshot.hidden, window)}."
                 else -> "None of your addons returned a stream for this video. A source addon finds playable streams."
             }
         return listOfNotNull(why, addons(snapshot)?.let { "$it." }).joinToString(" ")
@@ -191,6 +192,7 @@ object VersionsCopy {
     private fun hideText(
         reason: HideReason,
         one: Boolean,
+        window: Boolean,
     ): String =
         when (reason) {
             HideReason.WrongTitle -> if (one) "is for another title" else "are for other titles"
@@ -212,18 +214,30 @@ object VersionsCopy {
 
             HideReason.NeedsDebrid -> "${if (one) "needs" else "need"} a paid streaming service account"
 
-            HideReason.NoSpace -> "${if (one) "has" else "have"} no room to play here, even a few minutes at a time"
+            HideReason.NoSpace -> noRoom(one, window)
 
             // A reason from a newer core: still counted, in general words.
             HideReason.Unknown -> if (one) "is hidden for another reason" else "are hidden for another reason"
         }
 
+    /** No room to play: on a storage that plays no window, too large for it, whatever its free space. */
+    private fun noRoom(
+        one: Boolean,
+        window: Boolean,
+    ): String =
+        when {
+            !window -> "${if (one) "is" else "are"} too large for this storage"
+            else -> "${if (one) "has" else "have"} no room to play here, even a few minutes at a time"
+        }
+
     /** "Hidden (5)": the bold half of the hidden row. */
     fun hiddenTitle(summary: HiddenSummary): String = "Hidden (${summary.count})"
 
-    /** "3 are for other titles, 2 are over your size limit": the other half. */
-    fun hiddenDetail(summary: HiddenSummary): String =
-        summary.byReason.joinToString(", ") { (reason, n) -> "$n ${hideText(reason, n == 1)}" }
+    /** "3 are for other titles, 2 are over your size limit": the other half. `window` as in [StreamChoiceCopy.blocked]. */
+    fun hiddenDetail(
+        summary: HiddenSummary,
+        window: Boolean = true,
+    ): String = summary.byReason.joinToString(", ") { (reason, n) -> "$n ${hideText(reason, n == 1, window)}" }
 
     /** The tone of a line drawn with a dot. */
     enum class Tone { Idle, Ok, Warn, Bad }

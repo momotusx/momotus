@@ -7,6 +7,7 @@ import app.marquee.core.model.Prefs
 import app.marquee.core.model.ReasonLine
 import app.marquee.core.model.Speed
 import app.marquee.core.model.StreamPrefs
+import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionsConditions
 import java.util.Locale
 
@@ -146,6 +147,9 @@ object StreamChoiceCopy {
                 ("Marquee found {versions}, but this device is nearly full, so none can play here." to "Show them"),
             BlockedReason.NothingPlaysHere to ("Found {versions}, but none plays on this device." to "Show them"),
         )
+
+    /** The no-room text on a storage that plays no window: too large for it, whatever its free space. */
+    const val NO_SPACE_NO_WINDOW = "Marquee found {versions}, too large for this storage."
     const val SHOW_ROWS = "Show them"
 
     val LEARNED =
@@ -415,12 +419,22 @@ object StreamChoiceCopy {
         return Line(w.tone, text, capital(details.mapNotNull { part(it, f) }.joinToString(", ")))
     }
 
-    /** Why no version is visible, and its one action (3.11); null for a reason from a newer core. */
+    /**
+     * Why no version is visible, and its one action (3.11); null for a reason from a newer core. `window`: the
+     * storage plays a torrent too big for its free space in a window (the snapshot's conditions).
+     */
     fun blocked(
         reason: BlockedReason,
         count: Int,
+        window: Boolean = true,
     ): Pair<String, String>? =
-        BLOCKED[reason]?.let { (text, action) -> text.replace("{versions}", counted("versions", count)) to action }
+        BLOCKED[reason]?.let { (text, action) ->
+            val words = if (reason == BlockedReason.NoSpace && !window) NO_SPACE_NO_WINDOW else text
+            words.replace("{versions}", counted("versions", count)) to action
+        }
+
+    /** The recommended card's line: a version that plays in a window says so under its reasons. */
+    fun cardLine(row: VersionRow): Line? = (row.line as? ReasonLine.Buffer)?.let(::line)
 
     /** The speed that decides here: HTTP with a streaming service account or without the engine, else the engine's. */
     fun speedFor(

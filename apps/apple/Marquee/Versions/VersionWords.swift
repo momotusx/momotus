@@ -70,8 +70,9 @@ enum VersionWords {
 
     static let groupOrder = ["best", "smallerFaster", "otherLanguages", "needsDownload"]
 
-    /// "19 are for other titles, 1 is another episode"
-    static func hidden(_ summary: HiddenSummary) -> String {
+    /// "19 are for other titles, 1 is another episode". `window` as in
+    /// `StreamChoice.blockedWords`.
+    static func hidden(_ summary: HiddenSummary, window: Bool = true) -> String {
         summary.byReason.map { item in
             let one = item.count == 1
             let what: String
@@ -86,6 +87,7 @@ enum VersionWords {
             case "leavesApp": what = "would open outside Marquee"
             case "notForKids": what = one ? "is not for kids" : "are not for kids"
             case "needsDebrid": what = one ? "needs a paid streaming service account" : "need a paid streaming service account"
+            case "noSpace" where !window: what = "\(one ? "is" : "are") too large for this storage"
             case "noSpace": what = "\(one ? "has" : "have") no room to play here, even a few minutes at a time"
             default: what = item.reason
             }
@@ -96,9 +98,10 @@ enum VersionWords {
 
     /// Why there is no pick once every addon has answered; blocked versions say what would let them play.
     static func none(_ snapshot: VersionsSnapshot) -> String {
-        if let blocked = snapshot.blocked, let words = StreamChoice.blockedWords(blocked) { return words.text }
+        let window = snapshot.conditions?.window ?? true
+        if let blocked = snapshot.blocked, let words = StreamChoice.blockedWords(blocked, window: window) { return words.text }
         return snapshot.hidden.count > 0
-            ? "No version plays here: \(hidden(snapshot.hidden))"
+            ? "No version plays here: \(hidden(snapshot.hidden, window: window))"
             : "No version found: your addons have no source for this"
     }
 

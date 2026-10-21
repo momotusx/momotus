@@ -202,7 +202,9 @@ fun PhoneVersions(
                 GlassBar(Modifier.padding(top = Marquee.space.s)) {
                     MqIcon(Icons.EyeOff, tint = colors.muted)
                     MqText(
-                        "${VersionsCopy.hiddenTitle(hidden)}  ${VersionsCopy.hiddenDetail(hidden)}",
+                        "${VersionsCopy.hiddenTitle(hidden)}  ${
+                            VersionsCopy.hiddenDetail(hidden, snapshot.conditions.window)
+                        }",
                         role = TextRole.Callout,
                         color = colors.muted,
                         maxLines = 3,
@@ -270,6 +272,16 @@ private fun Pick(
                         ) {
                             MqIcon(Icons.Check, tint = colors.ok)
                             MqText(VersionsCopy.reason(reason, best.status), role = TextRole.Callout, maxLines = 2)
+                        }
+                    }
+                    // A version that plays in a window says so, with its minutes ahead.
+                    StreamChoiceCopy.cardLine(best)?.let { line ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            MqIcon(Icons.Check, tint = colors.ok)
+                            Column {
+                                MqText(line.text, role = TextRole.Callout, maxLines = 2)
+                                MqText(line.details, role = TextRole.Caption, color = colors.muted, maxLines = 3)
+                            }
                         }
                     }
                 }
@@ -354,7 +366,9 @@ private fun Blocked(
     onShow: () -> Unit,
     onAddAccount: () -> Unit,
 ) {
-    val (text, action) = StreamChoiceCopy.blocked(blocked.reason, blocked.count) ?: (null to StreamChoiceCopy.SHOW_ROWS)
+    val (text, action) =
+        StreamChoiceCopy.blocked(blocked.reason, blocked.count, snapshot.conditions.window)
+            ?: (null to StreamChoiceCopy.SHOW_ROWS)
     val account = blocked.reason == BlockedReason.NeedsAccount
     StateMessage(
         title = "No playable version found",

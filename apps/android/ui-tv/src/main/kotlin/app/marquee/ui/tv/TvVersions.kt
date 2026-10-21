@@ -303,6 +303,16 @@ private fun Pick(
                                 MqText(VersionsCopy.reason(reason, best.status), role = TextRole.Callout, maxLines = 2)
                             }
                         }
+                        // A version that plays in a window says so, with its minutes ahead.
+                        StreamChoiceCopy.cardLine(best)?.let { line ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                MqIcon(Icons.Check, tint = colors.ok, size = 26.dp)
+                                Column {
+                                    MqText(line.text, role = TextRole.Callout, maxLines = 2)
+                                    MqText(line.details, role = TextRole.Caption, color = colors.muted, maxLines = 2)
+                                }
+                            }
+                        }
                     }
                     Release(best.releaseName, maxLines = 3)
                 }
@@ -391,7 +401,9 @@ private fun Blocked(
     focus: FocusMemory,
     list: FocusRequester,
 ) {
-    val (text, action) = StreamChoiceCopy.blocked(blocked.reason, blocked.count) ?: (null to StreamChoiceCopy.SHOW_ROWS)
+    val (text, action) =
+        StreamChoiceCopy.blocked(blocked.reason, blocked.count, snapshot.conditions.window)
+            ?: (null to StreamChoiceCopy.SHOW_ROWS)
     val account = blocked.reason == BlockedReason.NeedsAccount
     StateMessage(
         title = "No playable version found",
@@ -538,7 +550,7 @@ private fun Sources(
                             maxLines = 1,
                         )
                         MqText(
-                            VersionsCopy.hiddenDetail(hidden),
+                            VersionsCopy.hiddenDetail(hidden, snapshot.conditions.window),
                             role = TextRole.Callout,
                             color = colors.muted,
                             maxLines = 2,

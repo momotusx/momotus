@@ -34,6 +34,7 @@ import { entryFrom } from "../history";
 import { onProfileReset } from "../core/profiles";
 import {
   blockedWords,
+  cardLine,
   choiceWords,
   conditionsHeader,
   counted,
@@ -266,7 +267,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
             <h2>{noVersionWords.title}</h2>
             <p>
               <Show when={(snap()?.hidden.count ?? 0) > 0} fallback={noVersionWords.detail}>
-                Every result was hidden: {hiddenSummary(snap()?.hidden ?? { count: 0, byReason: [] })}.
+                Every result was hidden: {hiddenSummary(snap()?.hidden ?? { count: 0, byReason: [] }, snap()?.conditions.window)}.
               </Show>
             </p>
             <A class="btn primary" href="/addons" data-f="versions:addons" data-autofocus>
@@ -292,7 +293,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
                   }
                 >
                   {(b) => {
-                    const w = () => blockedWords(b().reason, b().count);
+                    const w = () => blockedWords(b().reason, b().count, snap()?.conditions.window);
                     return (
                       <div class="blocked">
                         <h2>{noVersionWords.title}</h2>
@@ -358,6 +359,17 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
                         </li>
                       )}
                     </For>
+                    <Show when={cardLine(p())}>
+                      {(w) => (
+                        <li class="window">
+                          <Check aria-hidden />
+                          <span>
+                            {w().text}
+                            <span class="sub">{w().details}</span>
+                          </span>
+                        </li>
+                      )}
+                    </Show>
                   </ul>
                   <p class="rel">
                     <Release name={p().releaseName} />
@@ -494,7 +506,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
                 <p class="hidden-row">
                   <EyeOff aria-hidden />
                   <b>Hidden ({snap()?.hidden.count})</b>
-                  <span>{hiddenSummary(snap()?.hidden ?? { count: 0, byReason: [] })}</span>
+                  <span>{hiddenSummary(snap()?.hidden ?? { count: 0, byReason: [] }, snap()?.conditions.window)}</span>
                 </p>
               </Show>
               <Show when={snap() && !snap()?.done && listed().length === 0}>

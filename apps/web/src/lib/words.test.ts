@@ -7,6 +7,7 @@ import type { VersionsConditions } from "../core/generated/VersionsConditions";
 import {
   anyLearned,
   blockedWords,
+  cardLine,
   choiceSummary,
   choiceWords,
   conditionsHeader,
@@ -129,8 +130,17 @@ test("a window says its minutes ahead, or on mobile data that it keeps a short s
   expect(lineWords({ ...buffer, seeders: null, aheadMin: 10 }).details).toBe("40 GB, room for about 10 min ahead in 2.5 GB");
 });
 
-test("a hidden row with no room says so", () => {
+test("a hidden row with no room says so, or that it is too large for a storage with no windows", () => {
   expect(hiddenSummary({ count: 2, byReason: [["noSpace", 2]] })).toBe("2 have no room to play here, even a few minutes at a time");
+  expect(hiddenSummary({ count: 3, byReason: [["noSpace", 1], ["tooLarge", 2]] }, false)).toBe("1 is too large for this storage, 2 are over your size limit");
+  expect(blockedWords("noSpace", 3, false).text).toBe("Marquee found 3 versions, too large for this storage.");
+  expect(blockedWords("nothingPlaysHere", 3, false).text).toBe("Found 3 versions, but none plays on this device.");
+});
+
+test("the recommended card shows the window's line, and no other line", () => {
+  const buffer: ReasonLine = { kind: "buffer", seeders: 53, sizeBytes: 545 * 2 ** 20, aheadMin: 8, budgetBytes: 508 * 2 ** 20 };
+  expect(cardLine({ line: buffer })).toEqual({ tone: "ok", text: "Plays without storing the whole file", details: "53 seeders, 545 MB, room for about 8 min ahead in 508 MB" });
+  expect(cardLine({ line: { kind: "quick", seeders: 53, sizeBytes: GiB } })).toBeNull();
 });
 
 test("the blocked state counts the versions it found", () => {
@@ -147,7 +157,7 @@ test("the device line reads as one sentence, leaving out what is not known", () 
   expect(conditionsLine({ screenClass: 1080, hdr: false, network: "cellular", speed: prior, freeBytes: null })).toBe("1080p, mobile data, speed not measured yet");
   const v: VersionsConditions = {
     screenClass: 480, hdr: false, network: "other", http: prior, p2p: measured, freeBytes: null,
-    runtimeMin: 52, sizeLimitBytes: 5 * GiB, minSeeders: 50, engine: true, account: false,
+    runtimeMin: 52, sizeLimitBytes: 5 * GiB, minSeeders: 50, engine: true, account: false, window: true,
   };
   // No account and the engine: the torrent speed decides.
   expect(conditionsHeader("tv", v)).toBe("This TV: SD, about 42 Mbit/s on this network");

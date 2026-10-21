@@ -34,6 +34,8 @@ struct StreamChoiceWords: Decodable, Sendable {
     struct Blocked: Decodable, Sendable {
         struct Reason: Decodable, Sendable {
             let text: String
+            /// noSpace on a storage that plays no window.
+            var textNoWindow: String? = nil
             let action: String
         }
 
@@ -301,10 +303,19 @@ enum StreamChoice {
         }
     }
 
-    /// Why no version is listed, with its one action (3.11).
-    static func blockedWords(_ blocked: BlockedVersions) -> (text: String, action: String)? {
+    /// Why no version is listed, with its one action (3.11). `window`: the
+    /// storage plays a torrent too big for its free space in a window.
+    static func blockedWords(_ blocked: BlockedVersions, window: Bool = true) -> (text: String, action: String)? {
         guard let w = words.blocked.reason(blocked.reason) else { return nil }
-        return (w.text.replacingOccurrences(of: "{versions}", with: counted("versions", blocked.count)), w.action)
+        let text = window ? w.text : w.textNoWindow ?? w.text
+        return (text.replacingOccurrences(of: "{versions}", with: counted("versions", blocked.count)), w.action)
+    }
+
+    /// The recommended card's line: a version that plays in a window says
+    /// so under its reasons; other lines stay in the list.
+    static func cardLine(_ row: VersionRow) -> LineWords? {
+        guard let line = row.line, line.kind == "buffer" else { return nil }
+        return lineWords(line)
     }
 
     /// The speed that decides here: HTTP with a streaming service account or

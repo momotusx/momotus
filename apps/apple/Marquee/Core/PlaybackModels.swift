@@ -44,6 +44,9 @@ struct VersionsConditions: Decodable, Hashable, Sendable {
     let engine: Bool
     /// A streaming service account is connected.
     let account: Bool
+    /// A torrent too big for the free space plays in a window here; off (or
+    /// from an older core), such a row is too large for this storage.
+    var window: Bool?
 }
 
 /// A measured speed; 0 samples is the estimate.

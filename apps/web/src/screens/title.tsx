@@ -392,7 +392,7 @@ function VersionLine(props: { snap: VersionsSnapshot | null }) {
           <span class="st warn">
             <i class="dot" />
             {props.snap?.blocked
-              ? blockedWords(props.snap.blocked.reason, props.snap.blocked.count).text
+              ? blockedWords(props.snap.blocked.reason, props.snap.blocked.count, props.snap.conditions.window).text
               : `${noVersionWords.title}. ${noVersionWords.detail}`}
           </span>
         </p>

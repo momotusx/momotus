@@ -1,11 +1,14 @@
 package app.marquee.core
 
+import app.marquee.core.model.Group
 import app.marquee.core.model.Network
 import app.marquee.core.model.Playability
 import app.marquee.core.model.RankKey
 import app.marquee.core.model.ReasonLine
 import app.marquee.core.model.SourceClass
 import app.marquee.core.model.Speed
+import app.marquee.core.model.VersionRow
+import app.marquee.core.model.VersionStatus
 import app.marquee.core.model.VersionsConditions
 
 /** The stream choice fields (M13) every test row and snapshot carries; a test that reads them sets its own. */
@@ -51,5 +54,20 @@ internal object VersionsFixtures {
             minSeeders = 50,
             engine = false,
             account = false,
+        )
+
+    /** A row whose line is `line`, for the line's own tests. */
+    fun row(line: ReasonLine = this.line) =
+        VersionRow(
+            key = "k",
+            quality = "1080p",
+            status = VersionStatus.Ready("Real-Debrid"),
+            via = "Fixture",
+            releaseName = "A.1080p.mkv",
+            group = Group.Best,
+            failoverCount = 0,
+            line = line,
+            sourceClass = sourceClass,
+            score = score,
         )
 }

@@ -688,7 +688,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     // A version picked by hand that Versions has not listed yet.
     if (props.chosen && !key()) return { tone: "warn", text: nextVersion.finding, busy: true };
     const vs = versions();
-    if (vs?.blocked) return { tone: "bad", text: blockedWords(vs.blocked.reason, vs.blocked.count).text, busy: false };
+    if (vs?.blocked) return { tone: "bad", text: blockedWords(vs.blocked.reason, vs.blocked.count, vs.conditions.window).text, busy: false };
     if (vs?.done && !vs.recommended && !vs.rows.length) return { tone: "bad", text: noVersionWords.title, detail: noVersionWords.detail, busy: false };
     if (vs?.pendingAddons.length) return { tone: "warn", text: `Asking ${vs.pendingAddons.join(", ")} for versions`, busy: true };
     return { tone: "warn", text: ctx.details() ? "Choosing the best version" : "Opening", busy: true };

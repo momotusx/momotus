@@ -61,9 +61,17 @@ const hideText: Record<HideReason, [one: string, many: string]> = {
   noSpace: ["has no room to play here, even a few minutes at a time", "have no room to play here, even a few minutes at a time"],
 };
 
-/** "19 are for other titles, 1 is another episode". */
-export function hiddenSummary(h: HiddenSummary): string {
-  return h.byReason.map(([reason, n]) => `${n} ${hideText[reason][n === 1 ? 0 : 1]}`).join(", ");
+/** No room on a volume that cannot play a window: the file is too large
+ * for this storage, whatever its free space. */
+const tooLargeHere: [one: string, many: string] = ["is too large for this storage", "are too large for this storage"];
+
+/** "19 are for other titles, 1 is another episode". `window`: the storage
+ * plays a torrent too big for its free space in a window (the snapshot's
+ * conditions). */
+export function hiddenSummary(h: HiddenSummary, window = true): string {
+  return h.byReason
+    .map(([reason, n]) => `${n} ${(reason === "noSpace" && !window ? tooLargeHere : hideText[reason])[n === 1 ? 0 : 1]}`)
+    .join(", ");
 }
 
 export type Tone = "ok" | "warn" | "bad" | "idle";
@@ -676,10 +684,18 @@ export function lineWords(l: ReasonLine): { tone: Exclude<Tone, "idle">; text: s
   return { tone: w.tone as Exclude<Tone, "idle">, text, details: capital(details.join(", ")) };
 }
 
-/** Why no version is visible, with its one action (3.11). */
-export function blockedWords(reason: BlockedReason, count: number) {
+/** Why no version is visible, with its one action (3.11); `window` as in
+ * `hiddenSummary`. */
+export function blockedWords(reason: BlockedReason, count: number, window = true) {
   const w = choice.blocked[reason];
-  return { text: w.text.replace("{versions}", counted("versions", count)), action: w.action };
+  const text = !window && "textNoWindow" in w ? w.textNoWindow : w.text;
+  return { text: text.replace("{versions}", counted("versions", count)), action: w.action };
+}
+
+/** The recommended card's line: a version that plays in a window says so
+ * under its reasons (review r1 A P2-1); other lines stay in the list. */
+export function cardLine(row: { line: ReasonLine }) {
+  return row.line.kind === "buffer" ? lineWords(row.line) : null;
 }
 
 /** What the device line says: the screen, the connection and the disk. */

@@ -98,6 +98,7 @@
     },
     "noSpace": {
       "text": "Marquee found {versions}, but this device is nearly full, so none can play here.",
+      "textNoWindow": "Marquee found {versions}, too large for this storage.",
       "action": "Show them"
     },
     "nothingPlaysHere": {

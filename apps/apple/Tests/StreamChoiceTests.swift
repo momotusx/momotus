@@ -77,6 +77,20 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
 @Test func aHiddenRowWithNoRoomSaysSo() throws {
     let hidden = try JSONDecoder().decode(HiddenSummary.self, from: Data(#"{"count": 3, "byReason": [["noSpace", 2], ["tooLarge", 1]]}"#.utf8))
     #expect(VersionWords.hidden(hidden) == "2 have no room to play here, even a few minutes at a time, 1 is over your size limit")
+    // A storage that plays no window: too large for it, whatever its free space.
+    #expect(VersionWords.hidden(hidden, window: false) == "2 are too large for this storage, 1 is over your size limit")
+    let blocked = try JSONDecoder().decode(BlockedVersions.self, from: Data(#"{"reason": "noSpace", "count": 3, "rows": []}"#.utf8))
+    #expect(StreamChoice.blockedWords(blocked, window: false)?.text == "Marquee found 3 versions, too large for this storage.")
+    #expect(StreamChoice.blockedWords(blocked)?.text == "Marquee found 3 versions, but this device is nearly full, so none can play here.")
+}
+
+@Test func theRecommendedCardShowsTheWindowsLineAndNoOther() throws {
+    let row = { (line: String) in
+        try JSONDecoder().decode(VersionRow.self, from: Data((#"{"key": "k", "quality": "1080p", "features": [], "sizeBytes": null, "status": {"kind": "torrent", "seeds": 53}, "via": "Fixture", "releaseName": "A.1080p.mkv", "languages": [], "reasons": [], "group": "best", "failoverCount": 0, "line": "# + line + "}").utf8))
+    }
+    let buffer = try row(#"{"kind": "buffer", "seeders": 53, "sizeBytes": 571473920, "aheadMin": 8, "budgetBytes": 532676608}"#)
+    #expect(StreamChoice.cardLine(buffer) == LineWords(tone: .ok, text: "Plays without storing the whole file", details: "53 seeders, 545 MB, room for about 8 min ahead in 508 MB"))
+    #expect(StreamChoice.cardLine(try row(#"{"kind": "quick", "seeders": 53, "sizeBytes": 571473920}"#)) == nil)
 }
 
 @Test func blockedVersionsSayWhyAndOfferTheirAction() throws {

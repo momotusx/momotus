@@ -31,6 +31,7 @@ import kotlin.test.assertTrue
 
 class StreamChoiceCopyTest {
     private val gib = 1L shl 30
+    private val mib = 1L shl 20
 
     private fun value(v: Any?): JsonElement =
         when (v) {
@@ -134,6 +135,7 @@ class StreamChoiceCopyTest {
                                 reason.wire,
                                 buildJsonObject {
                                     put("text", w.first)
+                                    if (reason == BlockedReason.NoSpace) put("textNoWindow", NO_SPACE_NO_WINDOW)
                                     put("action", w.second)
                                 },
                             )
@@ -352,6 +354,32 @@ class StreamChoiceCopyTest {
         assertEquals(
             "40 GB, room for about 10 min ahead in 2.5 GB",
             line(buffer.copy(seeders = null, aheadMin = 10)).details,
+        )
+    }
+
+    @Test
+    fun `the recommended card shows the window's line, and no other line`() {
+        val buffer = ReasonLine.Buffer(53, 545 * mib, aheadMin = 8, budgetBytes = 508 * mib)
+        assertEquals(
+            StreamChoiceCopy.Line(
+                ok,
+                "Plays without storing the whole file",
+                "53 seeders, 545 MB, room for about 8 min ahead in 508 MB",
+            ),
+            StreamChoiceCopy.cardLine(VersionsFixtures.row(line = buffer)),
+        )
+        assertNull(StreamChoiceCopy.cardLine(VersionsFixtures.row(line = ReasonLine.Quick(53, gib))))
+    }
+
+    @Test
+    fun `on a storage with no windows the blocked state says the versions are too large for it`() {
+        assertEquals(
+            "Marquee found 3 versions, too large for this storage.",
+            StreamChoiceCopy.blocked(BlockedReason.NoSpace, 3, window = false)?.first,
+        )
+        assertEquals(
+            "Found 3 versions, but none plays on this device.",
+            StreamChoiceCopy.blocked(BlockedReason.NothingPlaysHere, 3, window = false)?.first,
         )
     }
 

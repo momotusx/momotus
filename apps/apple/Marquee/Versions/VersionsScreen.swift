@@ -116,7 +116,8 @@ struct VersionsScreen: View {
     @ViewBuilder private var pick: some View {
         if let best = snapshot?.recommended {
             PickCard(row: best, nobodySharing: notePlace == .card, play: { playing = model.play(best.key) }, focus: $pickFocused)
-        } else if let blocked = snapshot?.blocked, let words = StreamChoice.blockedWords(blocked) {
+        } else if let blocked = snapshot?.blocked,
+                  let words = StreamChoice.blockedWords(blocked, window: snapshot?.conditions?.window ?? true) {
             // Every addon answered and the hidden rows say why: the way on, as one action.
             VStack(alignment: .leading, spacing: 10) {
                 Text("No playable version found")
@@ -232,7 +233,8 @@ struct VersionsScreen: View {
             }
             if let hidden = snapshot?.hidden, hidden.count > 0 {
                 Label {
-                    let reasons = Text(VersionWords.hidden(hidden)).foregroundStyle(Theme.Palette.muted)
+                    let window = snapshot?.conditions?.window ?? true
+                    let reasons = Text(VersionWords.hidden(hidden, window: window)).foregroundStyle(Theme.Palette.muted)
                     Text("\(Text("Hidden (\(hidden.count))").fontWeight(Font.Weight.semibold.legible))  \(reasons)")
                 } icon: {
                     Glyph("eye-off")
@@ -331,6 +333,20 @@ private struct PickCard: View {
                     }
                     .font(.text(Theme.type.callout, relativeTo: .callout))
                     .foregroundStyle(Theme.Palette.text)
+                }
+                // A version that plays in a window says so, with its minutes ahead.
+                if let line = StreamChoice.cardLine(row) {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(line.text).foregroundStyle(Theme.Palette.text)
+                            Text(line.details)
+                                .font(.text(Theme.type.caption, relativeTo: .caption))
+                                .foregroundStyle(Theme.Palette.muted)
+                        }
+                    } icon: {
+                        Glyph("check").foregroundStyle(Theme.Palette.ok)
+                    }
+                    .font(.text(Theme.type.callout, relativeTo: .callout))
                 }
             }
             // Wraps at the dots between tokens, never inside one ("mp" / "4"). Not
