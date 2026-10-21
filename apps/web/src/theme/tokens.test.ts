@@ -56,10 +56,19 @@ const contrast = (fg: string, bg: string, page: string) => {
   return Math.max(a, b) / Math.min(a, b);
 };
 
-test("a selected chip's note reads on the selected fill", () => {
-  // browse.css `.chip.on small`: full 92 percent text on `control` (5.37:1); at .8 opacity it was 4.11.
+test("the control edge keeps 3:1 on the page until 1b removes it", () => {
   const c = JSON.parse(readFileSync(tokensPath, "utf8")).color.dark;
-  expect(contrast(c.text, c.control, c.bg)).toBeGreaterThanOrEqual(4.5);
+  expect(contrast(c.control, c.bg, c.bg)).toBeGreaterThanOrEqual(3);
+});
+
+test("a selected chip's note reads on the selected fill", () => {
+  // browse.css: `.chip.on` fills with `selected.fill` and its note keeps full 92 percent text
+  // (5.37:1); the note's own .8 opacity gave 4.11. The note's alpha is read from the sheet.
+  const tokens = JSON.parse(readFileSync(tokensPath, "utf8"));
+  const c = tokens.color.dark;
   const sheet = readFileSync(new URL("../screens/browse.css", import.meta.url), "utf8");
-  expect(sheet).toMatch(/\.chip\.on small \{ opacity: 1; \}/);
+  expect(sheet).toMatch(/\.chip\.on \{[^}]*background: var\(--selected-fill\)/);
+  const opacity = Number(/\.chip\.on small \{ opacity: ([\d.]+); \}/.exec(sheet)?.[1] ?? /\.chip small \{[^}]*opacity: ([\d.]+)/.exec(sheet)?.[1] ?? 1);
+  const [r, g, b, a] = rgba(c.text);
+  expect(contrast(`rgba(${r}, ${g}, ${b}, ${a * opacity})`, tokens.selected.fill, c.bg)).toBeGreaterThanOrEqual(4.5);
 });

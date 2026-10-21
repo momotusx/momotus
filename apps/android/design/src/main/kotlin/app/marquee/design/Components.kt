@@ -195,6 +195,16 @@ fun SecondaryButton(
 )
 
 /**
+ * A chip's detail, a step quieter than its label: `dim` beside the `muted` label on `raised`
+ * (5.73:1), and black at 70 percent beside the `onPrimary` label on the white pill (7.92:1).
+ * `copy(alpha =)` sets the alpha, it does not scale it.
+ */
+internal fun chipDetailColor(
+    selected: Boolean,
+    colors: Palette,
+): Color = if (selected) colors.onPrimary.copy(alpha = 0.7f) else colors.dim
+
+/**
  * A pill for filters and choices. Selected is the white pill with a check, never color alone.
  * [switch] makes it an on/off control on its own rather than one choice of a group.
  */
@@ -242,8 +252,8 @@ fun Chip(
                 .clip(shape)
                 // Opaque when not selected, so the focus halo of a neighbour does not show through.
                 .background(if (selected) colors.primary else colors.raised)
-                // The edge is the control token (3:1 against the page), so an unselected pill does not
-                // vanish; the ring is for focus alone.
+                // The edge is the control token, so an unselected pill does not vanish; the ring is for
+                // focus alone. It keeps 3:1 on `bg` (3.25) until 1b removes the edge.
                 .then(if (selected) Modifier else Modifier.border(2.dp, colors.control, shape))
                 .padding(horizontal = if (tv) 24.dp else 14.dp),
             contentAlignment = Alignment.Center,
@@ -265,8 +275,7 @@ fun Chip(
                     MqText(
                         detail,
                         role = TextRole.Callout,
-                        // Unselected on `raised`, the detail is `dim` (5.73:1); muted at 70 percent was 4.06.
-                        color = if (selected) ink.copy(alpha = 0.7f) else colors.dim,
+                        color = chipDetailColor(selected, colors),
                         weight = FontWeight.Normal,
                         maxLines = 1,
                     )
@@ -709,8 +718,8 @@ fun RowHeader(
 }
 
 /**
- * A short label in accent spaced capitals (design/DECISION.md v2). Accent text keeps 4.66:1 only
- * on the page color, so over artwork the label sits in a chip filled with it.
+ * A short label in spaced capitals at the 70 percent level, until 1b drops the eyebrow (white would
+ * outshine the title under it); over artwork it sits in a chip filled with the page color.
  */
 @Composable
 fun Eyebrow(
@@ -734,7 +743,7 @@ fun Eyebrow(
                 },
             ),
         role = TextRole.Caption,
-        color = colors.accent,
+        color = colors.muted,
         weight = FontWeight.Bold,
         // A phone takes a second line rather than lose the subject ("#1 IN POPULAR MOVI...").
         maxLines = if (tv) 1 else 2,

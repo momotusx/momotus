@@ -3,9 +3,10 @@
 .browse.page { position: absolute; inset: 0; padding: var(--content-top) var(--safe-side) var(--safe-bottom); }
 .browse h1 { font: var(--weight-display) var(--type-title1) / 1.05 var(--font-display); letter-spacing: var(--tracking-display); margin: 14px 0 34px;
   background: linear-gradient(180deg, var(--text) 30%, var(--dim)); -webkit-background-clip: text; background-clip: text; color: transparent; }
-/* An accent eyebrow over the page title. */
+/* The eyebrow over the page title, at the 70 percent level until 1b drops it (white would
+   outshine the title under it). */
 .browse h1[data-eyebrow]::before { content: attr(data-eyebrow); display: block; margin-bottom: 14px;
-  font: 700 var(--type-caption) / 1 var(--font-text); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); -webkit-text-fill-color: var(--accent); }
+  font: 700 var(--type-caption) / 1 var(--font-text); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); -webkit-text-fill-color: var(--muted); }
 .filters { display: grid; gap: 14px; margin-bottom: 40px; }
 .chips-row { display: flex; align-items: center; gap: 20px; min-width: 0; }
 .chips-row > .kicker { width: 130px; flex: none; }

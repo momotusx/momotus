@@ -67,10 +67,17 @@ class DesignTest {
         // The TV ring, white on the page.
         assertTrue(contrast(dark.accent, dark.bg) >= 3f)
         assertTrue(contrast(dark.switchOn, dark.surface) >= 3f) // 6.89
-        // A chip's detail (Discover's catalog source): dim on `raised` unselected, and onPrimary at
-        // 70 percent on the white pill selected (Chip in Components.kt).
-        assertTrue(contrast(dark.dim, dark.raised) >= 4.5f) // 5.73
-        assertTrue(contrast(dark.onPrimary.copy(alpha = dark.onPrimary.alpha * 0.7f), dark.primary) >= 4.5f) // 5.80
+        // A chip's detail (Discover's catalog source), as Chip draws it: a step quieter than its label
+        // and still 4.5:1 on its pill, unselected on `raised` and selected on the white pill.
+        val rest = chipDetailColor(selected = false, colors = dark)
+        val picked = chipDetailColor(selected = true, colors = dark)
+        assertTrue(rest.alpha < dark.muted.alpha) // the label is muted
+        assertTrue(picked.alpha < dark.onPrimary.alpha) // the label is onPrimary
+        assertTrue(contrast(rest, dark.raised) >= 4.5f) // 5.73
+        assertTrue(contrast(picked, dark.primary) >= 4.5f) // 7.92
+        // The control edge still drawn on chips, buttons, fields and the off switch until phase 1b
+        // removes it: 3:1 on the page.
+        assertTrue(contrast(dark.control, dark.bg) >= 3f) // 3.25
         // Dark only: the light palette mirrors the dark one.
         assertEquals(dark, Tokens.light)
     }

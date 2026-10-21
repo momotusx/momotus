@@ -1594,7 +1594,7 @@ export function ForkReview() {
                               <b dir="auto">
                                 {memberName(m)}
                                 {tag(m)}
-                                <span class="sync-tag" classList={{ bad: goes(m.id) }}>
+                                <span class="sync-tag">
                                   {m.thisDevice ? w.thisDevice : goes(m.id) ? w.forkGoes : named(w.goesWithTicked, sponsorName(m, all()) ?? "")}
                                 </span>
                               </b>

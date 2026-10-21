@@ -63,11 +63,7 @@ struct FocusRing<S: InsettableShape>: ViewModifier {
     let shape: S
     let active: Bool
 
-    #if os(macOS)
-    private static var color: Color { Theme.Palette.key }
-    #else
-    private static var color: Color { Theme.Palette.accent }
-    #endif
+    private static var color: Color { FocusRule.ring == .key ? Theme.Palette.key : Theme.Palette.accent }
 
     func body(content: Content) -> some View {
         content.overlay {

@@ -180,6 +180,7 @@ targets:
       - path: Marquee/Core/ListDiff.swift
       - path: Marquee/Title/TitleWords.swift
       - path: Marquee/App/TabBarRule.swift
+      - path: Marquee/Common/ChipRule.swift
       - path: Marquee/Versions/VersionWords.swift
       - path: Marquee/Core/ProfileModels.swift
       - path: Marquee/Core/DebridModels.swift

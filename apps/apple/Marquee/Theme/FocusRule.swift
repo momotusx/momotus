@@ -13,6 +13,17 @@ enum FocusRule {
     static func shown(focused: Bool, keyboardNavigation: Bool) -> Bool {
         focused && keyboardNavigation
     }
+
+    /// The ring's palette color: the key blue on the Mac (Apple's keyboard ring), white on
+    /// tvOS, which has no key color and keeps its v2 ring (D9).
+    enum Ring { case key, accent }
+    static var ring: Ring {
+        #if os(macOS)
+        .key
+        #else
+        .accent
+        #endif
+    }
 }
 
 enum KeyboardNavigation {
