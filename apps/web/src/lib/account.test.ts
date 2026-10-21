@@ -36,7 +36,7 @@ test("the shared file is read as it is, and its about names only keys it has", (
 
 /** Keys the web never shows, by why: it has no account passkey (D11) and approves no device (4.2). */
 const NOT_ON_THE_WEB = {
-  passkey: ["usePasskey", "passkeyHere", "passkeyLabel", "joinedWithPasskey", "lastUsed", "givingAway", "kitHere", "kitDropped", "tooManyKits", "kitTaken", "plainLink"],
+  passkey: ["usePasskey", "passkeyHere", "savePasskeyHere", "passkeyLabel", "joinedWithPasskey", "lastUsed", "givingAway", "kitHere", "kitDropped", "tooManyKits", "kitTaken", "plainLink"],
   passkeySheet: ["noSecondWayIn", "noSecondWayInActions", "passkeyCancelled", "passkeyCancelledActions", "kitUnknownPasskey", "kitUnknownPasskeyActions"],
   approving: ["approveWarning", "scanAgainHere", "codeFound", "otherRelayCode", "otherRelayCodeActions"],
 };
