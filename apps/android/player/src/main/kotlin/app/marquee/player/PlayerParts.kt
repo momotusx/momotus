@@ -160,33 +160,20 @@ fun Scrubber(
     }
 }
 
-/**
- * The audio or subtitles list: one row per track with its full name and what it is under it, the
- * chosen one filled and checked. On a TV focus starts on the chosen row.
- */
+/** The audio list: one row per track with its full name and what it is under it, the chosen one filled and checked. On a TV focus starts on the chosen row. */
 @Composable
 fun TrackPanel(
     title: String,
     rows: List<TrackChoice>,
     onPick: (String) -> Unit,
     modifier: Modifier = Modifier,
-    note: String? = null,
-    /**
-     * The subtitle panel's Timing row, under the title and outside the list so it is one press away: this
-     * play's delay, null while no subtitle is on (the row then does not show).
-     */
-    timing: Long? = null,
-    onShift: (Long) -> Unit = {},
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
     val requesters = remember(rows.size) { List(rows.size) { FocusRequester() } }
-    val earlier = remember { FocusRequester() }
     val chosen = rows.indexOfFirst { it.selected }.coerceAtLeast(0)
-    // The list starts at the chosen row, so its node exists to take focus (a list of 40 subtitle tracks
-    // composes only the rows in view); the list also holds a heading over each language, counted here.
-    val chosenItem = chosen + (0..chosen).count { startsSection(rows, it) }
-    val state = rememberLazyListState(initialFirstVisibleItemIndex = (chosenItem - 1).coerceAtLeast(0))
+    // The list starts at the chosen row, so its node exists to take focus.
+    val state = rememberLazyListState(initialFirstVisibleItemIndex = (chosen - 1).coerceAtLeast(0))
     if (tv) {
         LaunchedEffect(Unit) {
             withFrameNanos { }
@@ -211,7 +198,6 @@ fun TrackPanel(
             modifier = Modifier.padding(horizontal = 12.dp).semantics { heading() },
             maxLines = 1,
         )
-        if (timing != null) TimingRow(timing, onShift, earlier)
         LazyColumn(
             Modifier.heightIn(max = if (tv) 520.dp else 230.dp),
             state = state,
@@ -220,52 +206,25 @@ fun TrackPanel(
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             rows.forEachIndexed { index, row ->
-                // A run of one language (or the file's own tracks) under its heading, which focus skips.
-                val section = row.section
-                if (section != null && startsSection(rows, index)) {
-                    item(key = "section:$index") {
-                        MqText(
-                            section,
-                            role = TextRole.Caption,
-                            color = colors.muted,
-                            weight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            modifier =
-                                Modifier
-                                    .padding(
-                                        start = 16.dp,
-                                        top = 8.dp,
-                                        bottom = 8.dp,
-                                    ).semantics { heading() },
-                        )
-                    }
-                }
-                item(key = row.id) {
-                    TrackRow(row, index, rows.lastIndex, requesters[index], onPick, earlier.takeIf { timing != null })
-                }
-            }
-            if (note != null) {
-                item(key = "note") {
-                    MqText(note, role = TextRole.Caption, color = colors.muted, modifier = Modifier.padding(16.dp))
-                }
+                item(key = row.id) { TrackRow(row, index, rows.lastIndex, requesters[index], onPick) }
             }
         }
     }
 }
 
 /**
- * This play's subtitle timing, between the panel title and the tracks: Earlier and Later move the words by
- * half a second each, and the line says where they are now ("0.5 s later"). The panel stays open; focus
- * stays in it (Down goes to the tracks).
+ * This play's subtitle timing, under a language's options: Earlier and Later move the words by half a second each,
+ * and the line says where they are now ("0.5 s later"). The picker stays open.
  */
 @Composable
-private fun TimingRow(
+fun TimingRow(
     delayMs: Long,
     onShift: (Long) -> Unit,
-    earlier: FocusRequester,
+    modifier: Modifier = Modifier,
+    earlier: Modifier = Modifier,
 ) {
     Row(
-        Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp),
+        modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -279,21 +238,11 @@ private fun TimingRow(
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             )
         }
-        SecondaryButton(
-            "Earlier",
-            { onShift(-SUBTITLE_STEP_MS) },
-            Modifier.focusRequester(earlier).focusProperties {
-                left = FocusRequester.Cancel
-                up = FocusRequester.Cancel
-            },
-        )
+        SecondaryButton("Earlier", { onShift(-SUBTITLE_STEP_MS) }, earlier)
         SecondaryButton(
             "Later",
             { onShift(SUBTITLE_STEP_MS) },
-            Modifier.focusProperties {
-                right = FocusRequester.Cancel
-                up = FocusRequester.Cancel
-            },
+            Modifier.focusProperties { right = FocusRequester.Cancel },
         )
     }
 }
@@ -306,8 +255,6 @@ private fun TrackRow(
     last: Int,
     requester: FocusRequester,
     onPick: (String) -> Unit,
-    // The Timing row's Earlier, while it shows: Up from the first track and Left from any track go there.
-    timing: FocusRequester?,
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
@@ -319,9 +266,9 @@ private fun TrackRow(
             .focusRequester(requester)
             // Focus stays in the panel while it is open: the ends of the list and the sides go nowhere.
             .focusProperties {
-                left = timing ?: FocusRequester.Cancel
+                left = FocusRequester.Cancel
                 right = FocusRequester.Cancel
-                if (index == 0 && timing == null) up = FocusRequester.Cancel
+                if (index == 0) up = FocusRequester.Cancel
                 if (index == last) down = FocusRequester.Cancel
             }.marqueeFocus(Marquee.radius.m, scale = 1.02f)
             .clip(shape)
@@ -774,13 +721,4 @@ fun rememberTouchExploration(): Boolean {
         onDispose { manager?.removeTouchExplorationStateChangeListener(listener) }
     }
     return on
-}
-
-/** Row [index] opens a run of one language (or the file's own tracks), which has a heading over it in the list. */
-private fun startsSection(
-    rows: List<TrackChoice>,
-    index: Int,
-): Boolean {
-    val section = rows.getOrNull(index)?.section ?: return false
-    return section != rows.getOrNull(index - 1)?.section
 }

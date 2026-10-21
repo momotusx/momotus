@@ -14,12 +14,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -57,11 +59,12 @@ import app.marquee.design.MqText
 import app.marquee.design.PauseFilled
 import app.marquee.design.PlayFilled
 import app.marquee.design.RoundButton
-import app.marquee.design.Spinner
 import app.marquee.design.TextRole
 import app.marquee.design.endFade
 import app.marquee.player.ActionButton
 import app.marquee.player.EndCard
+import app.marquee.player.LoadingLayer
+import app.marquee.player.PhoneSubtitleSheet
 import app.marquee.player.PlaybackController
 import app.marquee.player.PlaybackController.Stage
 import app.marquee.player.PlayerStatus
@@ -76,8 +79,10 @@ import app.marquee.player.UpNextCard
 import app.marquee.player.activeSegment
 import app.marquee.player.audioDetail
 import app.marquee.player.clockText
+import app.marquee.player.loadingLines
 import app.marquee.player.nextSpeed
 import app.marquee.player.rememberTouchExploration
+import app.marquee.player.rememberTrimmedLogo
 import app.marquee.player.scrubTo
 import app.marquee.player.speedText
 import app.marquee.player.subtitlesDetail
@@ -135,14 +140,20 @@ fun PhonePlayer(
     // Skip or Up Next in the bottom corner, as last laid out: the subtitles' lines keep clear of it.
     var corner by remember { mutableStateOf<Rect?>(null) }
     val live = stage == Stage.Playing || stage == Stage.Paused || stage == Stage.Buffering || stage == Stage.Ended
+    // Before the source shows a picture: the loading screen alone, with Back (plans/player-polish.md 1.2).
+    val opening = (stage == Stage.Opening || stage == Stage.Buffering) && !controller.picture
     var osd by remember { mutableStateOf(true) }
     var wake by remember { mutableIntStateOf(0) }
     var panel by remember { mutableStateOf<Panel?>(null) }
+    // The title's logo for the loading screen, loaded once for the play.
+    val logo = rememberTrimmedLogo(controller.logo)
+    // The language whose options the subtitle sheet shows; null for its languages.
+    var opened by remember { mutableStateOf<String?>(null) }
     // The side of the last double tap (1 right, -1 left) and how many there were, so the same side twice restarts the hint.
     var hint by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var taps by remember { mutableIntStateOf(0) }
     val ended = stage == Stage.Ended
-    val showControls = osd && live && !ended && !inPip
+    val showControls = osd && live && !ended && !inPip && !opening
     val next = controller.next
     val showEnd = ended && !(autoplayNext && next != null)
     val showNext by remember(controller) {
@@ -193,7 +204,13 @@ fun PhonePlayer(
     }
     // A list that was open when the film ended closes: the end card is the only thing to answer.
     LaunchedEffect(ended) { if (ended) panel = null }
-    BackHandler { if (panel != null) panel = null else onBack() }
+    BackHandler {
+        when {
+            panel == Panel.Subtitles && opened != null -> opened = null
+            panel != null -> panel = null
+            else -> onBack()
+        }
+    }
 
     Box(
         modifier
@@ -238,6 +255,20 @@ fun PhonePlayer(
             subtitleCorner = corner.takeIf { showSkip || showNextCard },
         )
 
+        // The loading screen until the picture comes, and over the paused picture while it stalls with the controls
+        // hidden (with them up the Play circle turns instead).
+        val stalled = stage == Stage.Buffering && controller.picture && !showControls
+        if ((opening || stalled) && !inPip) {
+            LoadingLayer(
+                title = controller.title,
+                logo = logo,
+                backdrop = controller.backdrop,
+                fill = controller.loadingFill,
+                lines = loadingLines(controller.status, controller.start?.caption),
+                opening = opening,
+            )
+        }
+
         // Scrims: edge to edge, 120 dp at the top (60% black) and 200 dp at the foot (72%).
         AnimatedVisibility(
             visible = ((osd && !ended) || !live) && !inPip,
@@ -245,7 +276,8 @@ fun PhonePlayer(
             exit = fadeOut(),
         ) {
             Box(Modifier.fillMaxSize()) {
-                Scrim(top = true, height = 120.dp, peak = 0.85f)
+                // While loading, Back alone: the mark under it names the title.
+                if (!opening) Scrim(top = true, height = 120.dp, peak = 0.85f)
                 Row(
                     Modifier
                         .windowInsetsPadding(WindowInsets.displayCutout)
@@ -256,11 +288,13 @@ fun PhonePlayer(
                 ) {
                     RoundButton(Icons.ArrowLeft, "Back", onBack)
                     Column(Modifier.weight(1f)) {
-                        MqText(controller.title, role = TextRole.Title3, maxLines = 1)
-                        controller.episode?.let {
-                            MqText(it, role = TextRole.Callout, maxLines = 1)
+                        if (!opening) {
+                            MqText(controller.title, role = TextRole.Title3, maxLines = 1)
+                            controller.episode?.let {
+                                MqText(it, role = TextRole.Callout, maxLines = 1)
+                            }
+                            TraktMark(controller.trakt, Modifier.padding(top = 4.dp))
                         }
-                        TraktMark(controller.trakt, Modifier.padding(top = 4.dp))
                     }
                     if (live) RoundButton(Icons.PictureInPicture2, "Picture in picture", onPictureInPicture)
                 }
@@ -287,11 +321,12 @@ fun PhonePlayer(
                             .padding(horizontal = 64.dp),
                 )
             }
-            val said = controller.status != null || controller.notice != null
-            if (stage == Stage.Opening || stage == Stage.Failed || said) {
+            // While the loading screen shows, it says the status under the mark.
+            val status = controller.status.takeUnless { opening || stalled }
+            if (stage == Stage.Failed || status != null || controller.notice != null) {
                 PlayerStatus(
                     stage = stage,
-                    status = controller.status,
+                    status = status,
                     notice = controller.notice,
                     problem = controller.problem,
                     attempts = controller.attempts,
@@ -316,11 +351,6 @@ fun PhonePlayer(
                             .padding(start = 24.dp, end = 24.dp, top = 88.dp),
                 )
             }
-            // A notice while the buffer fills keeps the mark in the middle.
-            // With the controls up the spinner turns in the Play circle instead (the transport is in the middle).
-            if (stage == Stage.Buffering && controller.status == null && !showControls) {
-                Spinner(Modifier.align(Alignment.Center))
-            }
         }
 
         AnimatedVisibility(
@@ -340,7 +370,10 @@ fun PhonePlayer(
                 Controls(
                     controller = controller,
                     onAudio = { panel = Panel.Audio },
-                    onSubtitles = { panel = Panel.Subtitles },
+                    onSubtitles = {
+                        opened = null
+                        panel = Panel.Subtitles
+                    },
                     onVersions = onVersions,
                     onEpisodes = onEpisodes,
                     onTouch = { wake++ },
@@ -391,14 +424,28 @@ fun PhonePlayer(
                 }
 
                 Panel.Subtitles -> {
-                    TrackPanel(
-                        "Subtitles",
-                        controller.text,
-                        onPick = {
-                            controller.selectText(it)
-                            panel = null
-                        },
-                        modifier = sheet,
+                    // The player dims under the sheet; a tap there closes it.
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.45f))
+                            .pointerInput(Unit) { detectTapGestures { panel = null } },
+                    )
+                    PhoneSubtitleSheet(
+                        rows = controller.text,
+                        opened = opened,
+                        onOpen = { opened = it },
+                        onPick = controller::selectText,
+                        onDone = { panel = null },
+                        modifier =
+                            Modifier
+                                .align(Alignment.CenterEnd)
+                                .windowInsetsPadding(WindowInsets.displayCutout)
+                                .padding(top = 12.dp, bottom = 12.dp, end = 16.dp)
+                                .widthIn(max = 420.dp)
+                                .fillMaxWidth()
+                                .fillMaxHeight()
+                                .pointerInput(Unit) { detectTapGestures { } },
                         note = controller.subtitlePanelNote,
                         timing = controller.subtitleDelayMs.takeIf { controller.subtitleOn },
                         onShift = controller::shiftSubtitles,

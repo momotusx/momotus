@@ -1,0 +1,183 @@
+package app.marquee.ui.phone
+
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.unit.dp
+import app.marquee.design.Form
+import app.marquee.design.MarqueeTheme
+import app.marquee.player.LOADING_TAG
+import app.marquee.player.PhoneSubtitleSheet
+import app.marquee.player.PlaybackController
+import app.marquee.player.SEARCH_LANGUAGES
+import app.marquee.player.SUBTITLE_SHEET_TAG
+import app.marquee.player.TrackChoice
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import org.junit.After
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import kotlin.coroutines.CoroutineContext
+import kotlin.math.abs
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+
+/**
+ * The phone's subtitle sheet and loading screen (plans/player-polish.md 1.2 and 2.4): languages first, a level per
+ * language, a full-height sheet over the landscape player; the loading screen alone with Back until the picture.
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [36], qualifiers = "w844dp-h390dp")
+class PhoneSubtitleSheetTest {
+    @get:Rule
+    val compose = createAndroidComposeRule<ComponentActivity>()
+
+    private val main =
+        object : CoroutineDispatcher() {
+            private val handler = Handler(Looper.getMainLooper())
+
+            override fun dispatch(
+                context: CoroutineContext,
+                block: Runnable,
+            ) {
+                handler.post(block)
+            }
+        }
+    private val scope = CoroutineScope(SupervisorJob() + main)
+    private val player = PlayingPlayer()
+    private val controller = PlaybackController(player, scope, "Sintel", null, null, SystemClock.elapsedRealtime())
+
+    @After
+    fun stop() {
+        controller.release()
+        scope.cancel()
+    }
+
+    private val rows =
+        listOf(
+            TrackChoice("off", "Off"),
+            TrackChoice("late:en1", "CAKES, WEB 1080p", "OpenSubtitles v3", section = "English", language = "en"),
+            TrackChoice(
+                "late:en2",
+                "FLUX, WEB-DL 1080p",
+                "OpenSubtitles v3",
+                section = "English",
+                language = "en",
+                fits = true,
+            ),
+            TrackChoice(
+                "late:tr",
+                "SubSense",
+                section = "Turkish",
+                language = "tr",
+                nativeName = "Türkçe",
+                selected = true,
+            ),
+            TrackChoice("0:0", "English", "In the file", section = "English", language = "en", inFile = true),
+        )
+
+    @Test
+    fun `a language turns its best option on, its chevron opens its options, Languages comes back`() {
+        val picks = mutableListOf<String>()
+        compose.setContent {
+            MarqueeTheme(Form.Phone) {
+                var opened by remember { mutableStateOf<String?>(null) }
+                PhoneSubtitleSheet(
+                    rows,
+                    opened,
+                    { opened = it },
+                    onPick = { picks += it },
+                    onDone = {},
+                    modifier = Modifier.width(420.dp).fillMaxHeight(),
+                )
+            }
+        }
+        compose.onNodeWithContentDescription("Turkish, Türkçe, 1 option").assertIsSelected()
+        compose.onNodeWithContentDescription("English, 3 options").performClick()
+        compose.runOnIdle { assertEquals(listOf("0:0"), picks, "the file's own English: it always fits the file") }
+        compose.onNodeWithContentDescription("English options").performClick()
+        // The options level: the file's track first, then the core's, the match named.
+        compose.onNodeWithContentDescription("English, In the file").assertExists()
+        compose.onNodeWithContentDescription("FLUX, WEB-DL 1080p, OpenSubtitles v3 · Same release group").performClick()
+        compose.runOnIdle { assertEquals(listOf("0:0", "late:en2"), picks) }
+        compose.onNodeWithContentDescription("Back to languages").performClick()
+        compose.onNodeWithContentDescription("Off").assertExists()
+        compose.onNodeWithContentDescription(SEARCH_LANGUAGES).performTextInput("tür")
+        compose.waitForIdle()
+        assertEquals(
+            0,
+            compose.onAllNodesWithContentDescription("English", substring = true).fetchSemanticsNodes().size,
+        )
+        compose.onNodeWithContentDescription("Turkish, Türkçe, 1 option").assertExists()
+    }
+
+    @Test
+    fun `Subtitles opens a full-height sheet at the right of the player, Back closes it`() {
+        compose.setContent {
+            MarqueeTheme(
+                Form.Phone,
+            ) { PhonePlayer(controller, false, false, {}, null, { _, _ -> }, {}, {}) }
+        }
+        compose.runOnIdle { player.open() }
+        compose.waitUntil(10_000) { controller.stage == PlaybackController.Stage.Playing }
+        compose.onNodeWithContentDescription("Subtitles", substring = true).performClick()
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val sheet = compose.onNodeWithTag(SUBTITLE_SHEET_TAG).fetchSemanticsNode().boundsInRoot
+        val density = compose.activity.resources.displayMetrics.density
+        assertTrue(
+            abs(sheet.height - (root.height - 24 * density)) < 2f,
+            "full height but the 12 dp margins: $sheet in $root",
+        )
+        assertTrue(
+            sheet.right > root.width * 0.9f && sheet.width <= 420 * density + 1f,
+            "at the right, 420 dp at most: $sheet",
+        )
+        compose.activity.onBackPressedDispatcher.onBackPressed()
+        compose.waitForIdle()
+        compose.onNodeWithTag(SUBTITLE_SHEET_TAG).assertDoesNotExist()
+    }
+
+    @Test
+    fun `until the first frame the loading screen shows with Back alone, then the picture takes over`() {
+        controller.showStatus("Starting 1080p, 1.5 GB from Torrentio")
+        compose.setContent {
+            MarqueeTheme(
+                Form.Phone,
+            ) { PhonePlayer(controller, false, false, {}, null, { _, _ -> }, {}, {}) }
+        }
+        compose.onNodeWithTag(LOADING_TAG).assertExists()
+        compose.onNodeWithContentDescription("Back").assertExists()
+        compose.onNodeWithContentDescription("Loading Sintel").assertExists()
+        compose.onNodeWithText("Starting 1080p, 1.5 GB from Torrentio").assertExists()
+        // No title bar words, no transport, no options: nothing to scrub before there is a picture.
+        assertEquals(0, compose.onAllNodesWithContentDescription("Back 10 seconds").fetchSemanticsNodes().size)
+        compose.onNodeWithText("Sintel").assertDoesNotExist()
+        compose.runOnIdle { player.open() }
+        compose.waitUntil(10_000) { controller.stage == PlaybackController.Stage.Playing }
+        compose.waitForIdle()
+        compose.onNodeWithTag(LOADING_TAG).assertDoesNotExist()
+        compose.onNodeWithText("Sintel").assertExists()
+    }
+}

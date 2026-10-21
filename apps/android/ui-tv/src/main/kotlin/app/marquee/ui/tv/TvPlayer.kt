@@ -55,11 +55,11 @@ import app.marquee.design.MqText
 import app.marquee.design.PauseFilled
 import app.marquee.design.PlayFilled
 import app.marquee.design.RoundButton
-import app.marquee.design.Spinner
 import app.marquee.design.TextRole
 import app.marquee.design.marqueeFocus
 import app.marquee.player.ActionButton
 import app.marquee.player.EndCard
+import app.marquee.player.LoadingLayer
 import app.marquee.player.PlaybackController
 import app.marquee.player.PlaybackController.Stage
 import app.marquee.player.PlayerStatus
@@ -70,13 +70,16 @@ import app.marquee.player.SkipButton
 import app.marquee.player.TrackPanel
 import app.marquee.player.TraktMark
 import app.marquee.player.TraktWarning
+import app.marquee.player.TvSubtitlePicker
 import app.marquee.player.UpNextCard
 import app.marquee.player.activeSegment
 import app.marquee.player.audioDetail
 import app.marquee.player.clockText
 import app.marquee.player.endsAt
+import app.marquee.player.loadingLines
 import app.marquee.player.nextSpeed
 import app.marquee.player.rememberTouchExploration
+import app.marquee.player.rememberTrimmedLogo
 import app.marquee.player.seekStepMs
 import app.marquee.player.speedText
 import app.marquee.player.subtitlesDetail
@@ -121,6 +124,10 @@ fun TvPlayer(
     val safe = Marquee.safe
     val stage = controller.stage
     val live = stage == Stage.Playing || stage == Stage.Paused || stage == Stage.Buffering || stage == Stage.Ended
+    // Before the source shows a picture: the loading screen alone, nothing focused; the remote's Back cancels.
+    val opening = (stage == Stage.Opening || stage == Stage.Buffering) && !controller.picture
+    // The title's logo for the loading screen, loaded once for the play.
+    val logo = rememberTrimmedLogo(controller.logo)
     var osd by remember { mutableStateOf(true) }
     // The controls band's height (bar, transport and options), as last laid out: the cues sit over it.
     var controlsHeight by remember { mutableStateOf(0.dp) }
@@ -128,7 +135,7 @@ fun TvPlayer(
     var wake by remember { mutableIntStateOf(0) }
     var panel by remember { mutableStateOf<Panel?>(null) }
     val ended = stage == Stage.Ended
-    val showControls = osd && live && !ended
+    val showControls = osd && live && !ended && !opening
     val showEnd = ended && !(autoplayNext && controller.next != null)
 
     val root = remember { FocusRequester() }
@@ -325,7 +332,7 @@ fun TvPlayer(
                         // While the controls are hidden the first key brings them back, except select while a
                         // Skip button shows (that presses it), and Left and Right: they seek at once, as on the
                         // Apple TV app, with the focus on the bar so a held key goes on scrubbing.
-                        if (live && !osd) {
+                        if (live && !osd && !opening) {
                             val skip = segment
                             val seek = hiddenSeekMs(event.key)
                             if (showSkip && skip != null && event.key in selectKeys) {
@@ -354,6 +361,19 @@ fun TvPlayer(
             subtitleLift = if (showControls) controlsHeight else 0.dp,
         )
 
+        // The loading screen until the picture comes, and over the paused picture while it stalls.
+        val stalled = stage == Stage.Buffering && controller.picture
+        if (opening || stalled) {
+            LoadingLayer(
+                title = controller.title,
+                logo = logo,
+                backdrop = controller.backdrop,
+                fill = controller.loadingFill,
+                lines = loadingLines(controller.status, controller.start?.caption),
+                opening = opening,
+            )
+        }
+
         // Scrims run edge to edge (no box with an edge to see): 320 dp at the foot to 72% black,
         // 200 dp at the top to 60%, so the words over bright pictures hold their contrast.
         AnimatedVisibility(
@@ -364,7 +384,7 @@ fun TvPlayer(
         ) {
             Scrim(top = false, height = 380.dp, peak = 0.85f)
         }
-        AnimatedVisibility(visible = (osd && !ended) || !live, enter = fadeIn(), exit = fadeOut()) {
+        AnimatedVisibility(visible = ((osd && !ended) || !live) && !opening, enter = fadeIn(), exit = fadeOut()) {
             Box(Modifier.fillMaxSize()) {
                 Scrim(top = true, height = 200.dp, peak = 0.85f)
                 Header(controller, Modifier.padding(start = safe.side, top = safe.top))
@@ -378,11 +398,12 @@ fun TvPlayer(
             Modifier.align(Alignment.TopStart).padding(start = safe.side, top = safe.top + 150.dp),
         )
 
-        val said = controller.status != null || controller.notice != null
-        if (stage == Stage.Opening || stage == Stage.Failed || said) {
+        // While the loading screen shows, it says the status under the mark.
+        val status = controller.status.takeUnless { opening || stalled }
+        if (stage == Stage.Failed || status != null || controller.notice != null) {
             PlayerStatus(
                 stage = stage,
-                status = controller.status,
+                status = status,
                 notice = controller.notice,
                 problem = controller.problem,
                 attempts = controller.attempts,
@@ -403,8 +424,6 @@ fun TvPlayer(
                 cannotOpen = controller.openError != null,
             )
         }
-        // A notice while the buffer fills keeps the mark in the middle.
-        if (stage == Stage.Buffering && controller.status == null) Spinner(Modifier.align(Alignment.Center))
 
         AnimatedVisibility(
             visible = showControls,
@@ -443,15 +462,11 @@ fun TvPlayer(
             }
 
             Panel.Subtitles -> {
-                TrackPanel(
-                    title = "Subtitles",
+                TvSubtitlePicker(
                     rows = controller.text,
+                    onPick = controller::selectText,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(end = safe.side, top = 96.dp),
                     note = controller.subtitlePanelNote,
-                    onPick = {
-                        controller.selectText(it)
-                        closePanel()
-                    },
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = safe.side, bottom = 300.dp),
                     timing = controller.subtitleDelayMs.takeIf { controller.subtitleOn },
                     onShift = controller::shiftSubtitles,
                 )

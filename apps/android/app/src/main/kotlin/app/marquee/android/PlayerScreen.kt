@@ -59,6 +59,9 @@ class PlayerHolder(
 ) : ViewModel() {
     private val host = PlayerHost(context.applicationContext, DeviceCaps.deviceLanguage(Locale.getDefault()))
     private val prefs: SettingsView = session.settings()
+
+    /** The title's art for the loading screen (its backdrop and logo). */
+    private val art = session.title(route.kind, route.id)
     private var finished = false
 
     val controller =
@@ -82,6 +85,12 @@ class PlayerHolder(
             snapshotFlow {
                 prefs.snapshot?.subtitleSize
             }.collect { controller.subtitleSize = it ?: SubtitleSize.Medium }
+        }
+        viewModelScope.launch {
+            snapshotFlow { art.header?.details }.collect {
+                controller.backdrop = it?.background
+                controller.logo = it?.logo
+            }
         }
         // The stream server moved while the app was away: the play opens again where it was.
         viewModelScope.launch { session.serverMoved.collect { controller.serverMoved() } }
@@ -204,6 +213,7 @@ class PlayerHolder(
         controller.release()
         host.release()
         prefs.close()
+        art.close()
     }
 
     override fun onCleared() = shutdown()
