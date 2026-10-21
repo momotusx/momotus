@@ -14,6 +14,7 @@
   "announceUnnamedDevice": "a device with no name",
   "announceGoneDevice": "a device no longer in your account",
   "announceNotYou": "Not you? Remove this passkey",
+  "removePasskeyAsk": "Remove this passkey? It stops opening your account, on every device that has it.",
   "announceOk": "OK",
   "providerAccount": {
     "apple": "Apple Account",
