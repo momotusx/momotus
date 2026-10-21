@@ -209,8 +209,13 @@ final class SyncModel {
     /// A new device joining with a recovery kit; the page then asks for a new kit.
     func recover(server: String, kit: String, name: String) async throws {
         try refuseUnreadableKey()
-        let record: JSONValue = try await core.call("recover", ["server": server, "kit": kit, "name": name], as: JSONValue.self)
-        join(record, recovered: true)
+        let recovered = try await core.call("recover", ["server": server, "kit": kit, "name": name], as: Recovered.self)
+        join(recovered.record, recovered: true)
+    }
+
+    /// `recover`'s answer: the record to store, and the way in (`kit` here).
+    private struct Recovered: Decodable {
+        let record: JSONValue
     }
 
     /// A join replaces any account before it (the pages ask first), then its

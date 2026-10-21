@@ -143,14 +143,19 @@ private struct JoinedSync: View {
     /// No kit the user holds: none in the list but those that went unseen here.
     private var noKit: Bool { sync.devices != nil && SyncRules.noKit(members, unseen: sync.kits.unseen) }
 
+    /// Only the owner makes a kit, a copy of the whole account key (D17).
+    private var mayMakeKit: Bool { SyncRules.mayMakeKit(profiles.snapshot) }
+
     /// A kit made here waits to be saved, one went unseen, or the account has none.
     @ViewBuilder private var kitCallouts: some View {
         #if !os(tvOS)
         if sync.kits.held != nil {
             VStack(alignment: .leading, spacing: Theme.Space.xs) {
                 Callout(glyph: "key-round", text: W.kitWaiting)
-                NavigationLink { RecoveryKitScreen() } label: { Label(W.showKitAgain, glyph: "key-round") }
-                    .buttonStyle(PillButtonStyle(prominent: true))
+                if mayMakeKit {
+                    NavigationLink { RecoveryKitScreen() } label: { Label(W.showKitAgain, glyph: "key-round") }
+                        .buttonStyle(PillButtonStyle(prominent: true))
+                }
             }
         }
         #endif
@@ -158,7 +163,7 @@ private struct JoinedSync: View {
             VStack(alignment: .leading, spacing: Theme.Space.xs) {
                 Callout(glyph: sync.kits.unseen.isEmpty ? "key-round" : "triangle-alert", text: kitLine)
                 #if !os(tvOS)
-                if sync.kits.held == nil {
+                if sync.kits.held == nil && mayMakeKit {
                     NavigationLink { RecoveryKitScreen() } label: {
                         Label(sync.kits.unseen.isEmpty ? W.kitTitle : W.makeNewKit, glyph: "key-round")
                     }
@@ -375,12 +380,14 @@ private struct JoinedSync: View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
             #if os(tvOS)
             Elsewhere(glyph: "qr-code", title: W.addTitle, text: W.tvAdd)
-            Elsewhere(glyph: "key-round", title: W.kitTitle, text: W.tvKit)
+            if mayMakeKit { Elsewhere(glyph: "key-round", title: W.kitTitle, text: W.tvKit) }
             #else
             NavigationLink { AddDeviceScreen() } label: { SettingsRow(symbol: "qr-code", title: W.addTitle, detail: W.addText) }
                 .buttonStyle(.row)
-            NavigationLink { RecoveryKitScreen() } label: { SettingsRow(symbol: "key-round", title: W.kitTitle, detail: W.kitText) }
-                .buttonStyle(.row)
+            if mayMakeKit {
+                NavigationLink { RecoveryKitScreen() } label: { SettingsRow(symbol: "key-round", title: W.kitTitle, detail: W.kitText) }
+                    .buttonStyle(.row)
+            }
             #endif
         }
     }

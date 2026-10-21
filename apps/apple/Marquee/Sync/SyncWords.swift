@@ -454,6 +454,12 @@ enum SyncRules {
         snapshot?.current?.isOwner == true
     }
 
+    /// Make a recovery kit shows on the owner profile only: a kit is a copy
+    /// of the whole account key (D17).
+    static func mayMakeKit(_ snapshot: ProfilesSnapshot?) -> Bool {
+        mayDeleteAccount(snapshot)
+    }
+
     /// The codes after which this device forgets the account (its library
     /// stays): it was removed, or the account was deleted.
     static func forgets(_ code: String?) -> Bool {

@@ -189,6 +189,10 @@ private func report(_ changes: [String: Any] = [:]) throws -> SyncReport {
         // Before the profiles arrive, or for a profile that is gone: not shown.
         #expect(!SyncRules.mayDeleteAccount(nil))
         #expect(!SyncRules.mayDeleteAccount(snapshot("nobody")))
+        // A kit is a copy of the whole account key: the owner's to make (D17).
+        #expect(SyncRules.mayMakeKit(snapshot("default")))
+        #expect(!SyncRules.mayMakeKit(snapshot("kid")))
+        #expect(!SyncRules.mayMakeKit(nil))
     }
 
     @Test func everyReportFactIsSaid() throws {
