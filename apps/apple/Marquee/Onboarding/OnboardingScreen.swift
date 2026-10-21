@@ -3,7 +3,8 @@ import SwiftUI
 
 /// First run as a full-screen flow, one decision per step: the doors (I use
 /// Stremio, Start fresh, I already use Marquee), then the recommended addons
-/// with a switch each (plans/m13-default-addons.md 6), then the setup check,
+/// with a switch each (plans/m13-default-addons.md 6), the stream question,
+/// the language subtitles start in (plans/m13-subtitle-languages.md 7), then the setup check,
 /// where every line has a dot, a word and, when something is missing, its
 /// fix. Start fresh, Browse first on a new profile and a finished import
 /// lead to the addons; joining never does. Settings opens the check step
@@ -11,13 +12,20 @@ import SwiftUI
 struct OnboardingScreen: View {
     /// `signIn`: a phone, tablet or Mac with a hosted relay signs in first
     /// (plans/accounts.md 4.1); `tvSignIn`: a TV shows the phone's QR (4.2).
-    enum Step { case signIn, tvSignIn, doors, defaults, question, check }
+    enum Step { case signIn, tvSignIn, doors, defaults, question, subtitles, check }
 
     let core: CoreClient
     /// Ends the flow (Browse first, Done); nil when the check is a page.
     let close: (() -> Void)?
     @State private var step: Step
     @State private var addons: LiveRecord<AddonsSnapshot>
+    /// The profile's preferences: a profile with subtitle languages passes that step.
+    @State private var prefs: LiveRecord<Prefs>
+    /// The subtitles step: every language the core knows, the one chosen
+    /// (nil: No subtitles), and whether the rest show.
+    @State private var languages: [LanguageChoice] = []
+    @State private var subtitle: String?
+    @State private var moreLanguages = false
     /// The recommended addons step's switches.
     @State private var defaults: DefaultsStep
     /// The defaults the check's fixes read, again whenever the list changes.
@@ -40,6 +48,8 @@ struct OnboardingScreen: View {
     @FocusState private var onContinue: Bool
     /// The question enters on Start fast, the default.
     @FocusState private var onFast: Bool
+    /// The subtitles step enters on Continue, so one press keeps the device's language.
+    @FocusState private var onSubtitles: Bool
     /// The setup check opens on Done, its way on (the tvOS walk, ATV-F3).
     @FocusState private var onDone: Bool
     @Environment(\.metrics) private var metrics
@@ -49,12 +59,17 @@ struct OnboardingScreen: View {
         self.core = core
         self.close = close
         #if DEBUG
-        let walk = DefaultsRules.walkOpensDefaults(UserDefaults.standard.string(forKey: "MQOnboardingStep"), debug: true)
+        let walk = UserDefaults.standard.string(forKey: "MQOnboardingStep")
         #else
-        let walk = false
+        let walk: String? = nil
         #endif
-        _step = State(initialValue: walk && start == .doors ? .defaults : Self.first(start))
+        // `-MQOnboardingStep subtitles` opens a first run on the subtitles step, for a walk.
+        let opened: Step? = start != .doors ? nil
+            : DefaultsRules.walkOpensDefaults(walk, debug: true) ? .defaults : walk == "subtitles" ? .subtitles : nil
+        _step = State(initialValue: opened ?? Self.first(start))
         _addons = State(initialValue: LiveRecord("addons", core: core))
+        _prefs = State(initialValue: LiveRecord("settings", core: core))
+        _subtitle = State(initialValue: Self.device)
         _defaults = State(initialValue: DefaultsStep(core: core, scope: .all))
         _fixer = State(initialValue: DefaultsStep(core: core, scope: .all))
     }
@@ -108,6 +123,7 @@ struct OnboardingScreen: View {
                 case .doors: doorsStep
                 case .defaults: defaultsStep
                 case .question: questionStep
+                case .subtitles: subtitlesStep
                 case .check: checkStep
                 }
             }
@@ -128,10 +144,14 @@ struct OnboardingScreen: View {
         // A join is the way in: Done goes Home, as the other doors end.
         .navigationDestination(isPresented: $showPairing) { PairingScreen(core: core, done: close) }
         .task(id: addons.taskId) { addons.start() }
+        .task(id: prefs.taskId) { prefs.start() }
         .task(id: addons.snapshot) { if step == .check { await fixer.load() } }
         .task(id: step) {
             if step == .check { await fixer.load() }
             if step == .defaults, defaults.list == nil { await defaults.load() }
+            if step == .subtitles, languages.isEmpty {
+                languages = (try? await core.call("languages", as: [LanguageChoice].self)) ?? []
+            }
         }
         .task { await pingLoop() }
         .task { await watchNetwork() }
@@ -187,9 +207,105 @@ struct OnboardingScreen: View {
         }
     }
 
-    /// Browse first goes Home; Start fresh and an import go to the setup check.
+    /// The subtitles step next, unless the profile has languages already.
     private func afterQuestion() {
+        if SubtitleStepRules.asks(prefs.snapshot?.subtitleLanguages) { step = .subtitles } else { afterSubtitles() }
+    }
+
+    /// Browse first goes Home; Start fresh and an import go to the setup check.
+    private func afterSubtitles() {
         if thenHome, let close { close() } else { step = .check }
+    }
+
+    /// This device's language, as the core's tags begin ("tr").
+    private static var device: String? { Locale.current.language.languageCode?.identifier }
+
+    /// The language subtitles start in, one choice: this device's chosen at
+    /// first, then the common ones and No subtitles, the rest behind More
+    /// languages. Continue writes it; Skip writes nothing.
+    private var subtitlesStep: some View {
+        let columns = Array(repeating: GridItem(.flexible(), spacing: Theme.Space.s, alignment: .top), count: metrics.wide ? 3 : 1)
+        return VStack(alignment: .leading, spacing: Theme.Space.m) {
+            HStack(alignment: .firstTextBaseline) {
+                Wordmark(size: 22)
+                Spacer()
+                Button("Skip") { afterSubtitles() }
+                    .buttonStyle(.textLink)
+                    .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
+                    .foregroundStyle(Theme.Palette.text)
+            }
+            stepHeading(SubtitleStepRules.title, SubtitleStepRules.lead)
+            LazyVGrid(columns: columns, alignment: .leading, spacing: Theme.Space.xs) {
+                ForEach(SubtitleStepRules.common(languages, device: Self.device), id: \.code) { language in
+                    languageRow(language.code, language.name, line: language.code == Self.device ? SubtitleStepRules.device : nil)
+                }
+                languageRow(nil, SubtitleStepRules.none, line: SubtitleStepRules.noneLine)
+            }
+            if let note, !note.ok {
+                StatusDot(tone: .bad, text: note.text)
+            }
+            HStack {
+                Button(moreLanguages ? SubtitleStepRules.fewer : SubtitleStepRules.more) { moreLanguages.toggle() }
+                    .buttonStyle(PillButtonStyle())
+                Spacer()
+                Button(busy == "subtitles" ? "Saving" : "Continue") { Task { await saveSubtitle() } }
+                    .buttonStyle(PillButtonStyle(prominent: true))
+                    .disabled(busy != nil)
+                    .focused($onSubtitles)
+            }
+            .padding(.top, Theme.Space.s)
+            if moreLanguages {
+                LazyVGrid(columns: columns, alignment: .leading, spacing: Theme.Space.xs) {
+                    ForEach(SubtitleStepRules.rest(languages, device: Self.device), id: \.code) { language in
+                        languageRow(language.code, language.name, line: nil)
+                    }
+                }
+            }
+        }
+        .defaultFocus($onSubtitles, true)
+    }
+
+    /// One language: its name, a line when it has one, a check when chosen.
+    private func languageRow(_ code: String?, _ name: String, line: String?) -> some View {
+        let on = subtitle == code
+        let shape = RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+        return Button { subtitle = code } label: {
+            HStack(spacing: Theme.Space.s) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(name).textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
+                    if let line {
+                        Text(line)
+                            .textFont(Theme.type.callout, relativeTo: .callout)
+                            .foregroundStyle(Theme.Palette.muted)
+                    }
+                }
+                Spacer(minLength: 0)
+                if on { Glyph("check") }
+            }
+            .multilineTextAlignment(.leading)
+            .foregroundStyle(Theme.Palette.text)
+            .padding(.horizontal, Theme.Space.s)
+            .padding(.vertical, Theme.Space.xs + 2)
+            .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+            .glass(shape)
+            .overlay(shape.strokeBorder(Theme.Palette.text, lineWidth: on ? 2 : 0))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.row)
+        .accessibilityAddTraits(on ? .isSelected : [])
+    }
+
+    private func saveSubtitle() async {
+        guard busy == nil else { return }
+        busy = "subtitles"
+        note = nil
+        defer { busy = nil }
+        do {
+            try await core.perform("setPrefs", ["patch": SubtitleStepRules.patch(subtitle)])
+            afterSubtitles()
+        } catch {
+            note = (false, "Could not save the language: \(error.localizedDescription)")
+        }
     }
 
     /// Sign in (4.1): Not now and Use my own sync server lead to the doors;

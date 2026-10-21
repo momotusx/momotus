@@ -1,0 +1,58 @@
+import Foundation
+
+/// The languages offered as chips: ISO 639-1 for audio, the 639-2 codes
+/// subtitle addons use, and the name in the user's language.
+struct Language {
+    let audio: String
+    let subtitle: String
+
+    var name: String { Locale.current.localizedString(forLanguageCode: audio)?.capitalized ?? audio }
+
+    /// The eight common languages, then any other the profile chose from the
+    /// full list, so each chosen one shows and can be turned off.
+    static func items(chosen: [String], subtitle: Bool) -> [(String, String)] {
+        let common = all.map { (subtitle ? $0.subtitle : $0.audio, $0.name) }
+        let extra = chosen.filter { code in !common.contains { $0.0 == code } }
+        return common + extra.map { ($0, Locale.current.localizedString(forIdentifier: $0)?.capitalized ?? $0) }
+    }
+
+    /// A stored subtitle language as the core's tag: the older chips' codes
+    /// ("eng", "tur") read as the core reads them ("en", "tr").
+    static func tag(_ code: String) -> String {
+        all.first { $0.subtitle == code.lowercased() }?.audio ?? code
+    }
+
+    /// The profile's subtitle languages as tags, each once, in order.
+    static func ordered(_ stored: [String]) -> [String] {
+        var seen = Set<String>()
+        return stored.map(tag).filter { seen.insert($0).inserted }
+    }
+
+    /// The subtitle chips: the chosen languages in order, then the other common ones.
+    static func subtitleChips(_ stored: [String]) -> [String] {
+        let chosen = ordered(stored)
+        return chosen + all.map(\.audio).filter { !chosen.contains($0) }
+    }
+
+    /// Adds a language at the end as its tag, or takes it out in every spelling.
+    static func toggled(_ stored: [String], _ tag: String) -> [String] {
+        stored.contains { Self.tag($0) == tag } ? stored.filter { Self.tag($0) != tag } : stored + [tag]
+    }
+
+    /// A tag's name in the user's language.
+    static func name(_ tag: String) -> String {
+        all.first { $0.audio == tag }?.name ?? Locale.current.localizedString(forIdentifier: tag)?.capitalized ?? tag
+    }
+
+    /// Settings' line under the chips: the language subtitles start in.
+    static func firstLine(_ stored: [String]) -> String {
+        ordered(stored).first.map { "\(name($0)) first" } ?? "None, subtitles start off"
+    }
+
+    static let all = [
+        Language(audio: "en", subtitle: "eng"), Language(audio: "tr", subtitle: "tur"),
+        Language(audio: "es", subtitle: "spa"), Language(audio: "fr", subtitle: "fre"),
+        Language(audio: "de", subtitle: "ger"), Language(audio: "it", subtitle: "ita"),
+        Language(audio: "pt", subtitle: "por"), Language(audio: "ja", subtitle: "jpn"),
+    ]
+}

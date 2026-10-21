@@ -192,25 +192,32 @@ struct SettingsScreen: View {
     private func playback(_ p: Prefs) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             subtitles(p)
+            Text(Language.firstLine(p.subtitleLanguages))
+                .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
+                .foregroundStyle(Theme.Palette.text)
             NavigationLink {
-                LanguagePicker(title: "Subtitle languages", audio: false, core: core,
-                               isOn: { prefs.snapshot?.subtitleLanguages.contains(Language.subtitleCode($0)) ?? false }) { tag in
-                    set(["subtitleLanguages": toggled(prefs.snapshot?.subtitleLanguages ?? [], Language.subtitleCode(tag))])
+                LanguagePicker(title: "Subtitle language", audio: false, core: core,
+                               isOn: { tag in (prefs.snapshot?.subtitleLanguages ?? []).contains { Language.tag($0) == tag } }) { tag in
+                    set(["subtitleLanguages": Language.toggled(prefs.snapshot?.subtitleLanguages ?? [], tag)])
                 }
             } label: { Label("More languages", glyph: "search") }
             .buttonStyle(.textLink)
             subtitleSize(p)
             upNext(p)
-            Text("Languages are listed in the order you turn them on; the first one wins.")
+            Text("Languages are listed in the order you turn them on; the first one wins. A subtitle you pick while watching moves its language first.")
                 .textFont(Theme.type.callout, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.muted)
         }
     }
 
+    /// The chosen languages first, in order and numbered, then the other common ones.
     private func subtitles(_ p: Prefs) -> ChipRow<String> {
-        let chips = Language.items(chosen: p.subtitleLanguages, subtitle: true).map { Chip(id: $0.0, title: $0.1) }
-        return ChipRow(label: "Subtitles", chips: chips, isSelected: { p.subtitleLanguages.contains($0) }) { value in
-            set(["subtitleLanguages": toggled(p.subtitleLanguages, value)])
+        let chosen = Language.ordered(p.subtitleLanguages)
+        let chips = Language.subtitleChips(p.subtitleLanguages).map { tag in
+            Chip(id: tag, title: Language.name(tag), detail: chosen.firstIndex(of: tag).map { String($0 + 1) })
+        }
+        return ChipRow(label: "Subtitle language", chips: chips, isSelected: { chosen.contains($0) }) { tag in
+            set(["subtitleLanguages": Language.toggled(p.subtitleLanguages, tag)])
         }
     }
 
@@ -229,44 +236,9 @@ struct SettingsScreen: View {
         }
     }
 
-    /// Adds a language at the end, or removes it.
-    private func toggled(_ list: [String], _ code: String) -> [String] {
-        list.contains(code) ? list.filter { $0 != code } : list + [code]
-    }
-
     private func set(_ patch: [String: any Sendable]) {
         Task { await prefs.perform("setPrefs", ["patch": patch]) }
     }
-}
-
-/// The languages offered as chips: ISO 639-1 for audio, the 639-2 codes
-/// subtitle addons use, and the name in the user's language.
-struct Language {
-    let audio: String
-    let subtitle: String
-
-    var name: String { Locale.current.localizedString(forLanguageCode: audio)?.capitalized ?? audio }
-
-    /// The eight common languages, then any other the profile chose from the
-    /// full list, so each chosen one shows and can be turned off.
-    static func items(chosen: [String], subtitle: Bool) -> [(String, String)] {
-        let common = all.map { (subtitle ? $0.subtitle : $0.audio, $0.name) }
-        let extra = chosen.filter { code in !common.contains { $0.0 == code } }
-        return common + extra.map { ($0, Locale.current.localizedString(forIdentifier: $0)?.capitalized ?? $0) }
-    }
-
-    /// A subtitle language from the full list as the profile keeps it: the
-    /// chips' code ("eng") for the eight, the core's tag for the rest.
-    static func subtitleCode(_ tag: String) -> String {
-        all.first { $0.audio == tag }?.subtitle ?? tag
-    }
-
-    static let all = [
-        Language(audio: "en", subtitle: "eng"), Language(audio: "tr", subtitle: "tur"),
-        Language(audio: "es", subtitle: "spa"), Language(audio: "fr", subtitle: "fre"),
-        Language(audio: "de", subtitle: "ger"), Language(audio: "it", subtitle: "ita"),
-        Language(audio: "pt", subtitle: "por"), Language(audio: "ja", subtitle: "jpn"),
-    ]
 }
 
 /// A row that leads somewhere: icon, title, one line of detail, chevron.
