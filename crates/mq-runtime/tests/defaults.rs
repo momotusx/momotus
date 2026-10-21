@@ -600,8 +600,10 @@ async fn the_defaults_step_counts_what_it_named_and_a_new_or_kids_profile_gets_n
     core.set_pin(OWNER, Some("7351"), None).await.unwrap();
     let kid = core.create_kids_profile("Kid", "fox").unwrap();
     // A kids profile reads the owner's list: one of its own (a profile
-    // made a kid later) is left as it is. Another profile gets its own.
+    // made a kid later) is left as it is.
     list_of(&core, &kid, &OLD_SIX, &[]);
+    // A new profile copies the owner's list and what it was given, so the
+    // default the owner removed is not given to the copy.
     core.create_profile("Sam", "owl").unwrap();
     let sam = core
         .library()
@@ -611,11 +613,83 @@ async fn the_defaults_step_counts_what_it_named_and_a_new_or_kids_profile_gets_n
         .find(|p| p.name == "Sam")
         .unwrap()
         .id;
-    list_of(&core, &sam, &OLD_SIX, &[]);
     drop(core);
     let core = device.start();
-    assert!(!urls(&core).iter().any(|(u, _)| *u == url("kitsu")));
+    let has_kitsu = |profile: &str| {
+        core.library()
+            .addons(profile)
+            .unwrap()
+            .iter()
+            .any(|r| r.transport_url == url("kitsu"))
+    };
     let count = |profile: &str| core.library().addons(profile).unwrap().len();
+    assert!(!has_kitsu(OWNER));
     assert_eq!(count(&kid), 6);
-    assert_eq!(count(&sam), 9);
+    assert_eq!((count(&sam), has_kitsu(&sam)), (8, false));
+
+    // A kids profile made standard copies the same: still no Kitsu.
+    core.make_standard(&kid).unwrap();
+    drop(core);
+    let core = device.start();
+    let count = |profile: &str| core.library().addons(profile).unwrap().len();
+    assert_eq!(count(&kid), 8);
+    assert!(
+        !core
+            .library()
+            .addons(&kid)
+            .unwrap()
+            .iter()
+            .any(|r| r.transport_url == url("kitsu"))
+    );
+}
+
+#[tokio::test]
+async fn a_list_from_before_gets_only_the_three_and_an_older_default_it_removed_stays_removed() {
+    let device = Device::new("before");
+    let core = device.start();
+    // An older onboarding's six, Kitsu since removed; a second profile of
+    // that time with all six.
+    let five: Vec<&str> = OLD_SIX.iter().copied().filter(|k| *k != "kitsu").collect();
+    old_list(&core, &five, &[]);
+    core.library()
+        .ensure_profile("old", "Old", &core.zero_hlc())
+        .unwrap();
+    list_of(&core, "old", &OLD_SIX, &[]);
+    drop(core);
+    let core = device.start();
+    let mut expected: Vec<(String, bool)> = five.iter().map(|k| (url(k), true)).collect();
+    for key in ["trakt", "rottentomatoes", "torrentcatalogs"] {
+        expected.push((url(key), true));
+    }
+    assert_eq!(urls(&core), expected, "Kitsu stays removed");
+    assert_eq!(core.library().addons("old").unwrap().len(), 9);
+}
+
+#[tokio::test]
+async fn what_two_devices_gave_is_kept_whole_when_their_records_meet() {
+    let a = Core::temporary(OWNER).unwrap();
+    let b = Core::temporary(OWNER).unwrap();
+    a.install_defaults(&[choice("trakt", true)]).unwrap();
+    b.install_defaults(&[choice("rottentomatoes", true)])
+        .unwrap();
+    let settings = |core: &Core| {
+        core.library()
+            .outbox(1000)
+            .unwrap()
+            .records
+            .into_iter()
+            .map(|(_, r)| r)
+            .filter(|r| r.coll == mq_library::coll::SETTINGS)
+            .collect::<Vec<_>>()
+    };
+    let (from_a, from_b) = (settings(&a), settings(&b));
+    a.library().apply(&from_b).unwrap();
+    b.library().apply(&from_a).unwrap();
+    for core in [&a, &b] {
+        let had = core.defaults_had();
+        assert!(
+            had.iter().any(|k| k == "trakt") && had.iter().any(|k| k == "rottentomatoes"),
+            "{had:?}"
+        );
+    }
 }

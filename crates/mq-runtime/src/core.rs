@@ -127,6 +127,9 @@ struct Inner {
     ratings: crate::ratings::Finder,
     /// Tests: the free space read instead of the disk's.
     free_bytes: std::sync::Mutex<Option<u64>>,
+    /// A sync round of this run has pulled (`give_new_defaults` waits for it
+    /// in a sync account).
+    pulled: std::sync::atomic::AtomicBool,
     /// Tests: live seeders answered instead of the trackers'.
     live_seeders: std::sync::Mutex<Option<FakeSeeders>>,
     /// The torrent folder's volume punches holes (plans/streaming-window.md
@@ -220,8 +223,11 @@ impl Core {
         let torrents = config.data_dir.join("torrents");
         let walk = Walk::read(&config.data_dir);
         let core = Self::with_device(device, &config.profile_id, torrents, walk)?.active();
-        // A default a profile never had arrives once (plans/m13-default-addons.md 5).
-        core.give_new_defaults();
+        // A default a profile never had arrives once (plans/m13-default-addons.md
+        // 5); in a sync account, after the run's first pull (`sync`).
+        if !core.in_account() {
+            core.give_new_defaults();
+        }
         if let Some(walk) = walk {
             walk.watch(core.inner.torrent_dir.clone());
         }
@@ -291,6 +297,7 @@ impl Core {
                 segments: crate::segments::Finder::new(http.clone()),
                 ratings,
                 free_bytes: std::sync::Mutex::new(None),
+                pulled: std::sync::atomic::AtomicBool::new(false),
                 live_seeders: std::sync::Mutex::default(),
                 turkcealtyazi: std::sync::OnceLock::new(),
                 #[cfg(feature = "torrent")]
@@ -394,7 +401,18 @@ impl Core {
     ) -> Result<mq_sync::SyncReport, mq_sync::SyncError> {
         let _gate = self.sync_gate().await;
         self.note_sync_member(config);
-        mq_sync::sync_once(self.library(), self.http(), config, self.clock()).await
+        let report = mq_sync::sync_once(self.library(), self.http(), config, self.clock()).await;
+        // The account's lists are here now: what a profile never had can be
+        // given without overwriting newer edits made elsewhere.
+        if report.is_ok()
+            && !self
+                .inner
+                .pulled
+                .swap(true, std::sync::atomic::Ordering::SeqCst)
+        {
+            self.give_new_defaults();
+        }
+        report
     }
 
     /// Held for the whole of a sync round or a roster change: two at once
@@ -1217,6 +1235,18 @@ impl Core {
         {
             tracing::warn!("could not mark the sync join: {e}");
         }
+    }
+
+    /// This device belongs to a sync account: it holds the roster, or it
+    /// joined or made one (the roster comes with its first sync).
+    fn in_account(&self) -> bool {
+        let library = self.library();
+        let marked = library
+            .device_value(DEFAULTS_ERA)
+            .ok()
+            .flatten()
+            .is_some_and(|era| era == "joined" || era == "created");
+        marked || library.in_sync_account().unwrap_or(true)
     }
 
     /// This device created a sync account: a genesis receives no addon list,

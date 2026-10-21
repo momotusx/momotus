@@ -5,6 +5,7 @@
 
 use crate::Core;
 use crate::core::{CoreError, default_rows, put_addon};
+use mq_library::DEFAULTS_GIVEN;
 use mq_protocol::Manifest;
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
@@ -153,19 +154,24 @@ pub fn by_id(id: &str) -> Option<&'static DefaultAddon> {
     list().iter().find(|d| d.manifest.id == id)
 }
 
-/// The setting that keeps, by key, the defaults a profile has had: put in
-/// by the defaults step or by `give_new_defaults`, or found in its list.
-/// Synced, so a default removed on one device stays removed on the others.
-const GIVEN: &str = "defaultsGiven";
+/// The defaults the owner's ruling of 2026-10-22 brings to existing
+/// profiles. A profile with a list from before the profiles kept what they
+/// had counts every other default as had: it gets these three once, and an
+/// older one it removed stays removed.
+const BROUGHT: [&str; 3] = ["trakt", "rottentomatoes", "torrentcatalogs"];
 
 impl Core {
     /// Puts every default a profile never had in its list once, on, for
     /// each profile on this device (the owner's ruling, 2026-10-22: a new
-    /// default reaches existing profiles with the next build). One the
-    /// profile has, on or off, counts as had and keeps its switch; one it
-    /// had and removed stays removed. A kids profile (it reads the owner's
-    /// list) and one with no list yet (the defaults step asks it) are left
-    /// alone. Never fails the open: a profile it cannot read is skipped.
+    /// default reaches existing profiles with the next build). What a
+    /// profile has had is kept by key (`DEFAULTS_GIVEN`, synced): the keys
+    /// the defaults step named, those given here, those found in its list,
+    /// on or off. One it had and removed stays removed. A kids profile (it
+    /// reads the owner's list) and one with no list yet (the defaults step
+    /// asks it) are left alone. On a device in a sync account this runs
+    /// after the run's first pull (`Core::sync`), so a stale list never
+    /// overwrites newer edits made elsewhere. Never fails: a profile it
+    /// cannot read is skipped.
     pub(crate) fn give_new_defaults(&self) {
         let Ok(profiles) = self.library().profiles() else {
             return;
@@ -178,13 +184,19 @@ impl Core {
     }
 
     /// `give_new_defaults` for this profile; the keys it put in the list.
-    /// Before the profile kept what it had (`GIVEN`), a removal left no
-    /// trace: a default removed then counts as never had, once.
     pub(crate) fn give_defaults_once(&self) -> Result<Vec<String>, CoreError> {
         if self.policy().kids() || self.library().addon_list_hlc(self.profile())?.is_none() {
             return Ok(Vec::new());
         }
-        let given = self.defaults_given();
+        let mut given = self.defaults_given();
+        if given.is_empty() {
+            // A list from before profiles kept what they had.
+            given = list()
+                .iter()
+                .map(|d| d.key.clone())
+                .filter(|k| !BROUGHT.contains(&k.as_str()))
+                .collect();
+        }
         let new: Vec<&DefaultAddon> = list().iter().filter(|d| !given.contains(&d.key)).collect();
         if new.is_empty() {
             return Ok(Vec::new());
@@ -201,7 +213,7 @@ impl Core {
             }
             Ok(())
         })?;
-        self.mark_given(new.iter().map(|d| d.key.as_str()))?;
+        self.mark_given(list().iter().map(|d| d.key.as_str()))?;
         if !added.is_empty() {
             // Given, not offered: the card for new defaults has nothing to show.
             self.seen_defaults()?;
@@ -210,36 +222,35 @@ impl Core {
         Ok(added)
     }
 
+    /// Tests: the keys of the defaults this profile has had.
+    #[doc(hidden)]
+    pub fn defaults_had(&self) -> Vec<String> {
+        self.defaults_given()
+    }
+
     /// The keys of the defaults this profile has had.
     fn defaults_given(&self) -> Vec<String> {
         let settings = self.library().settings(self.profile()).unwrap_or_default();
         settings
             .into_iter()
-            .find(|(key, _)| key == GIVEN)
-            .and_then(|(_, value)| serde_json::from_str(&value).ok())
-            .unwrap_or_default()
+            .filter_map(|(key, _)| key.strip_prefix(DEFAULTS_GIVEN).map(str::to_owned))
+            .collect()
     }
 
-    /// Adds `keys` to the defaults this profile has had; writes only when
-    /// one is new.
+    /// Records `keys` among the defaults this profile has had, one setting
+    /// each; only the new ones are written.
     pub(crate) fn mark_given<'k>(
         &self,
         keys: impl IntoIterator<Item = &'k str>,
     ) -> Result<(), CoreError> {
-        let mut given = self.defaults_given();
-        let had = given.len();
+        let given = self.defaults_given();
         for key in keys {
             if !given.iter().any(|g| g == key) {
-                given.push(key.to_owned());
+                let setting = format!("{DEFAULTS_GIVEN}{key}");
+                self.library()
+                    .set_setting(self.profile(), &setting, "true", self.clock())?;
             }
         }
-        if given.len() == had {
-            return Ok(());
-        }
-        given.sort();
-        let json = serde_json::to_string(&given).map_err(|e| CoreError::BadPrefs(e.to_string()))?;
-        self.library()
-            .set_setting(self.profile(), GIVEN, &json, self.clock())?;
         Ok(())
     }
 }

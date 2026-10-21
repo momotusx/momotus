@@ -974,3 +974,67 @@ async fn a_removal_stays_through_a_lost_answer_and_goes_with_a_later_plain_sign_
     drop((c, core));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A device in a sync account gives the defaults its profiles never had only
+/// after the run's first pull (plans/m13-default-addons.md 5): a stale list
+/// given to before then would win over newer edits made on other devices.
+#[tokio::test]
+async fn in_a_sync_account_new_defaults_wait_for_the_runs_first_pull() {
+    let relay_dir = temp_dir("defaults-relay");
+    let app = mq_sync_server::router(&relay_dir.join("relay.sqlite"), Default::default()).unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+    let data = temp_dir("defaults-pull");
+    let open = || {
+        Core::open(CoreConfig {
+            data_dir: data.clone(),
+            profile_id: "default".into(),
+            device_id: 11,
+        })
+        .unwrap()
+    };
+    let core = open();
+    let mut c = Client::new(core.clone());
+    let record = c
+        .ok(json!({"op": "createSyncAccount", "server": server, "name": "TV"}))
+        .await;
+    drop(c);
+    // The six an older onboarding installed, as an older build left them.
+    let six = [
+        "cinemeta",
+        "kitsu",
+        "torrentio",
+        "turkcealtyazi",
+        "subsense",
+        "opensubtitles",
+    ];
+    let rows: Vec<mq_library::AddonRow> = mq_runtime::defaults::list()
+        .iter()
+        .filter(|d| six.contains(&d.key.as_str()))
+        .enumerate()
+        .map(|(position, d)| mq_library::AddonRow {
+            transport_url: d.url.clone(),
+            manifest_json: serde_json::to_string(&d.manifest).unwrap(),
+            position: position as i64,
+            enabled: true,
+            allow_private: false,
+        })
+        .collect();
+    core.library()
+        .set_addons("default", &rows, &core.hlc())
+        .unwrap();
+    drop(core);
+
+    // The next build starts in the account: nothing before the pull.
+    let core = open();
+    let count = || core.library().addons("default").unwrap().len();
+    assert_eq!(count(), 6);
+    let mut c = Client::new(core.clone());
+    c.ok(json!({"op": "syncNow", "record": record})).await;
+    assert_eq!(count(), 9, "the three it never had, after the pull");
+    drop(c);
+    drop(core);
+    let _ = std::fs::remove_dir_all(&data);
+    let _ = std::fs::remove_dir_all(&relay_dir);
+}
