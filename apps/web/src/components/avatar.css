@@ -1,5 +1,7 @@
 /* Profile avatars: white glyph or letter on a solid avatar token, no gradients. */
-.avatar { display: inline-grid; place-items: center; flex: none; color: #fff; border-radius: var(--radius-l); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08); }
+/* The fill comes in a property (AvatarArt), so a focus rule can still turn it white and lay a sheen on it. */
+.avatar { display: inline-grid; place-items: center; flex: none; color: #fff; background-color: var(--avatar-fill, var(--raised)); border-radius: var(--radius-l);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08); }
 .avatar > svg { width: 46%; height: 46%; stroke-width: 1.75; }
 .avatar-letter { font: 800 1em / 1 var(--font-display); letter-spacing: var(--tracking-display); }
 .avatar-s { width: 36px; height: 36px; border-radius: 10px; font-size: 16px; }

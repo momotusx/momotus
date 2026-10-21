@@ -40,14 +40,13 @@
 .sync-box { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; box-shadow: inset 0 0 0 2px var(--control); }
 .sync-check[aria-checked="true"] .sync-box { background: var(--primary); color: var(--on-primary); box-shadow: none; }
 .sync-box svg { width: 28px; height: 28px; }
-.sync-check:focus-visible, [data-form="tv"] .sync-check:focus { background: var(--raised); transform: scale(var(--focus-scale-tile)); }
+[data-form="tv"] .sync-check:focus { transform: scale(var(--focus-scale-tile)); }
 @media (hover: hover) { [data-form="desktop"] .sync-check:hover { background: var(--raised); } }
 .sync-lost-acts { margin-top: 12px; }
 
 /* A row a TV only reads: it says where to do the thing. */
 .link-row.elsewhere { color: var(--muted); }
 .link-row.elsewhere b { color: var(--text); }
-.link-row.elsewhere:focus-visible, [data-form="tv"] .link-row.elsewhere:focus { background: var(--raised); }
 
 .sync-form { margin-top: 8px; }
 .field-hint { font: 400 var(--type-caption) / 1.3 var(--font-text); color: var(--muted); margin-top: -14px; }

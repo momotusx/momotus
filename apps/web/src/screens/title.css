@@ -33,7 +33,9 @@
  * the next line. */
 .syn { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; width: calc(100% + 28px);
   margin: 0 -14px; padding: 0 14px; border-radius: var(--radius-m); font: 400 var(--type-body) / 1.42 var(--font-text); color: var(--muted); }
-.syn:focus-visible, [data-form="tv"] .syn:focus, .syn:hover { -webkit-line-clamp: unset; background: var(--glass-strong); color: var(--text); }
+.syn:focus-visible, [data-form="tv"] .syn:focus, .syn:hover { -webkit-line-clamp: unset; }
+/* Open on TV focus and on hover, on a solid surface (no glass in content); a keyboard gets the ring alone. */
+[data-form="tv"] .syn:focus, .syn:hover { background: var(--surface); color: var(--text); }
 .play { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; margin: 28px 0 24px; }
 .play-row { display: flex; align-items: center; gap: 20px; }
 /* The next episode is not out: its day stands where Play would be. */
@@ -58,9 +60,11 @@
   transition: transform var(--motion-focus) var(--ease); }
 .info .acts .btn .long { max-width: 9em; white-space: normal; text-align: center; line-height: 1.2; }
 .info .acts .btn[aria-pressed="true"] svg { background: var(--selected-fill); box-shadow: var(--selected-edge); }
-.info .acts .btn:focus-visible, [data-form="tv"] .info .acts .btn:focus { outline: none; box-shadow: none; transform: none; color: var(--text); }
+.info .acts .btn:focus-visible, [data-form="tv"] .info .acts .btn:focus { outline: none; box-shadow: none; transform: none; }
 .info .acts .btn:focus-visible svg, [data-form="tv"] .info .acts .btn:focus svg { outline: var(--focus-ring) solid var(--key); outline-offset: var(--focus-ring);
-  box-shadow: var(--focus-shadow); transform: scale(var(--focus-scale-card)); }
+  box-shadow: var(--focus-shadow); }
+[data-form="tv"] .info .acts .btn:focus { color: var(--text); }
+[data-form="tv"] .info .acts .btn:focus svg { transform: scale(var(--focus-scale-card)); }
 @media (hover: hover) {
   [data-form="desktop"] .info .acts .btn:hover { background: none; box-shadow: none; color: var(--text); }
   [data-form="desktop"] .info .acts .btn:hover svg { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .44); }
@@ -96,6 +100,8 @@
  * Specials always follows the last season. Padding leaves room for focus. */
 .seasons { position: relative; display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; align-self: stretch; width: calc(100% + 28px);
   margin: -24px -14px; padding: 24px 14px; }
+/* TV: room for a season's rise (focus.rise) and its 0 30px 60px lift shadow, in the same form. */
+[data-form="tv"] .seasons { width: calc(100% + 132px); margin: -40px -66px -84px; padding: 40px 66px 84px; }
 .seasons .kicker { margin-right: 8px; flex: none; }
 .seasons .tab { flex: none; }
 .tab { height: 54px; padding: 0 24px; border-radius: var(--radius-pill); font: 600 var(--type-callout) / 1 var(--font-text); color: var(--muted);
@@ -103,7 +109,7 @@
 .seasons.compact .tab { min-width: 54px; padding: 0 16px; text-align: center; }
 /* Selected is a lighter fill and a bright edge; the ring is only ever focus. */
 .tab.on { color: var(--text); background: var(--selected-fill); box-shadow: var(--selected-edge); font-weight: 700; }
-.tab:focus-visible, [data-form="tv"] .tab:focus { color: var(--text); transform: scale(var(--focus-scale-card)); }
+[data-form="tv"] .tab:focus { color: var(--text); transform: scale(var(--focus-scale-card)); }
 .toc { flex: 1; min-height: 0; margin: 0 -24px; padding: 14px 24px 72px; display: flex; flex-direction: column; gap: 14px; }
 .ep { position: relative; display: flex; align-items: stretch; gap: 10px; }
 .ep-main { flex: 1; min-width: 0; display: flex; gap: 24px; padding: 14px; border-radius: var(--radius-card);
@@ -127,8 +133,7 @@
 .ep-ov { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font: 400 var(--type-caption) / 1.38 var(--font-text); color: var(--muted); }
 .ep.seen .ep-t { color: var(--muted); }
 .ep.later .ep-t { color: var(--muted); }
-.ep-main:focus-visible, [data-form="tv"] .ep-main:focus { background: var(--glass-strong); transform: scale(var(--focus-scale-tile)); }
-.ep-main:focus-visible .ep-t, [data-form="tv"] .ep-main:focus .ep-t { color: var(--accent); }
+[data-form="tv"] .ep-main:focus { transform: scale(var(--focus-scale-tile)); }
 /* Secondary actions: on screen while the row has focus (or the pointer). On
  * TV and desktop they are a strip laid over the card's right end, so the card
  * never changes width; the words under it fade out. Right from the card
@@ -142,7 +147,7 @@
 .ep-act { display: inline-flex; align-items: center; gap: 8px; height: 52px; padding: 0 18px; border-radius: var(--radius-pill);
   font: 600 var(--type-caption) / 1 var(--font-text); color: var(--muted); white-space: nowrap; box-shadow: inset 0 0 0 2px var(--control); }
 .ep-act svg { width: 22px; height: 22px; }
-.ep-act:focus-visible, [data-form="tv"] .ep-act:focus { color: var(--text); background: rgba(255, 255, 255, .12); }
+[data-form="tv"] .ep-act:focus { transform: scale(var(--focus-scale-card)); }
 .ep:focus-within .ep-acts { display: flex; }
 .ep-act[aria-pressed="true"] { color: var(--text); background: var(--selected-fill); }
 @media (hover: hover) {

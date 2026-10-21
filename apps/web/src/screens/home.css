@@ -69,6 +69,10 @@
 .row-note { font: 500 var(--type-caption) var(--font-text); color: var(--muted); }
 .row-body { position: relative; margin-left: calc(var(--safe-side) - 34px); }
 .track { position: absolute; inset: 0; }
+/* Room for the lift, in Apple's padding and negative-margin form: the lane reaches past its row
+ * by the art's rise and its 88 px shadow (lift.focusArt), so neither is cut and no tile moves.
+ * The phone has no lift to make room for. */
+:is([data-form="tv"], [data-form="desktop"]) .track { inset: -44px -88px -132px; padding: 44px 88px 132px; }
 .lane { position: relative; height: 100%; }
 .skel-lane > .skel { position: absolute; border-radius: var(--radius-m); }
 
@@ -78,7 +82,6 @@
 .tile { display: block; border-radius: var(--radius-m); transform-origin: center bottom; }
 .tile .pic { position: relative; border-radius: var(--radius-m); overflow: hidden; background: var(--surface);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06);
-  transform-origin: center bottom;
   transition: box-shadow var(--motion-focus) var(--ease), outline-color var(--motion-focus) var(--ease), transform var(--motion-focus) var(--ease); }
 /* The name card sits under the picture: it shows while the art loads and
  * stays when there is none. */
@@ -92,15 +95,15 @@
 .chip-rate { position: absolute; z-index: 2; top: 10px; right: 10px; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; white-space: nowrap;
   border-radius: var(--radius-pill); font: 700 20px / 1 var(--font-text); color: var(--text);
   background: rgba(9, 13, 19, .72); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); box-shadow: inset 0 0 0 1px var(--edge); }
-.tile .cap { margin-top: 14px; display: grid; gap: 4px; min-width: 0; }
+/* Above the art's shadow, and never scaled with it. */
+.tile .cap { position: relative; z-index: 1; margin-top: 14px; display: grid; gap: 4px; min-width: 0; }
 .tile .cap b { font: 700 var(--type-caption) / 1.25 var(--font-text); letter-spacing: var(--tracking-label); color: var(--text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color var(--motion-focus) var(--ease); }
 .tile .cap span { font: 500 21px / 1.25 var(--font-text); color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tile:focus-visible, [data-form="tv"] .tile:focus { outline: none; box-shadow: none; }
 .tile:focus-visible .pic, [data-form="tv"] .tile:focus .pic {
-  transform: translateY(-6px) scale(var(--focus-scale-card));
-  outline: var(--focus-ring) solid var(--key); outline-offset: var(--focus-ring);
-  box-shadow: var(--focus-shadow), var(--lift-focus-edge); overflow: hidden; }
+  outline: var(--focus-ring) solid var(--key); outline-offset: var(--focus-ring); box-shadow: var(--focus-shadow); overflow: hidden; }
+[data-form="tv"] .tile:focus .pic { transform: translateY(calc(-1 * var(--focus-rise-art))) scale(var(--focus-scale-art)); box-shadow: var(--lift-focus-art); }
 .tile:focus-visible .cap b, [data-form="tv"] .tile:focus .cap b { color: var(--accent); }
 @media (hover: hover) {
   [data-form="desktop"] .tile:hover { transform: translateY(-8px); }

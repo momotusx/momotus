@@ -11,6 +11,8 @@
 .chips-row { display: flex; align-items: center; gap: 20px; min-width: 0; }
 .chips-row > .kicker { width: 130px; flex: none; }
 .chips-track { position: relative; flex: 1; min-width: 0; display: flex; gap: 14px; padding: 26px 30px; margin: -26px -30px; }
+/* TV: room for a chip's rise (focus.rise) and its 0 30px 60px lift shadow, in the same form. */
+[data-form="tv"] .chips-track { padding: 40px 66px 84px; margin: -40px -66px -84px; --chip-fade: 132px; }
 /* A row that scrolls sideways fades toward a side with chips left to scroll
  * to (Chips sets fade-start and fade-end), so a cut chip reads as more; focus
  * scrolling keeps the focused chip clear of it. Right to left mirrors it. */
@@ -35,7 +37,7 @@
 /* Selected is a lighter fill, a bright edge and the check, as the season
  * tabs: a white pill is only ever the screen's primary action. */
 .chip.on { color: var(--text); font-weight: 700; background: var(--selected-fill); box-shadow: var(--selected-edge); }
-.chip:focus-visible, [data-form="tv"] .chip:focus { color: var(--text); transform: scale(var(--focus-scale-card)); }
+[data-form="tv"] .chip:focus { color: var(--text); transform: scale(var(--focus-scale-card)); }
 @media (hover: hover) { [data-form="desktop"] .chip:not(.on):hover { color: var(--text); } }
 
 /* Columns spread over the full width, so no gutter is left at the right. */

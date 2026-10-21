@@ -54,14 +54,13 @@
 @media (prefers-reduced-motion: reduce) { .fa-acts .spin { animation: none; } }
 .fa-foot { margin-top: 36px; }
 
-/* TV: the card is the focus stop; it lifts with the ring and its action
- * reads as a pill. */
+/* TV: the card is the focus stop; it turns white and lifts, and its action
+ * reads as a dark pill on it. */
 [data-form="tv"] .fa-card:focus { transform: scale(var(--focus-scale-tile)); outline-offset: 2px; }
-[data-form="tv"] .fa-card:focus .fa-text h2 { color: var(--accent); }
 [data-form="tv"] .fa-state.pill { padding: 0 26px; border-radius: var(--radius-pill); color: var(--text);
   background: linear-gradient(145deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, .065));
   box-shadow: inset 0 0 0 2px var(--control), inset 0 1px 0 rgba(255, 255, 255, .09); }
-[data-form="tv"] .fa-card:focus .fa-state.pill:not(.live) { background: var(--primary); color: var(--on-primary); box-shadow: none; }
+[data-form="tv"] .fa-card:focus .fa-state.pill:not(.live) { background: var(--on-primary); color: var(--primary); box-shadow: none; }
 @media (hover: hover) { [data-form="desktop"] .fa-card:hover { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .24), var(--glass-highlight); } }
 
 [data-form="phone"] .fa-grid { grid-template-columns: 1fr; gap: 12px; margin-top: 16px; }

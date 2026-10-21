@@ -576,10 +576,15 @@ for (const [form, [width, height, scale]] of Object.entries(FORMS)) {
     });
     expect(row.tops).toBe(1);
     expect(row.overflow).toBeLessThanOrEqual(1);
-    // Watched is the labeled pill beside Play, not a secondary action.
-    const play = await page.locator('[data-f="title:play"]').boundingBox();
-    const toggle = await page.locator('[data-f="title:watched"]').boundingBox();
-    expect(Math.abs((toggle?.y ?? 0) + (toggle?.height ?? 0) / 2 - ((play?.y ?? 0) + (play?.height ?? 0) / 2))).toBeLessThan(2);
+    // Watched is the labeled pill beside Play, not a secondary action. Their layout boxes, not
+    // their drawn ones: on TV the focused Play rises by focus.rise.
+    const middle = (key: string) =>
+      page.locator(`[data-f="${key}"]`).evaluate((el) => {
+        let y = (el as HTMLElement).offsetHeight / 2;
+        for (let n: HTMLElement | null = el as HTMLElement; n; n = n.offsetParent as HTMLElement | null) y += n.offsetTop;
+        return y;
+      });
+    expect(Math.abs((await middle("title:watched")) - (await middle("title:play")))).toBeLessThan(2);
     // The display class comes from the screen, not the window.
     await page.goto(`/title/series/${GOT.id}/versions/${GOT.resume}?form=${form}`);
     await expect(page.locator(".device")).toContainText(/^This (TV|computer|phone): 1080p,/, { timeout: 30_000 });

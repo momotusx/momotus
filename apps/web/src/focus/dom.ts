@@ -84,11 +84,19 @@ export function reveal(el: HTMLElement) {
   const track = el.closest<HTMLElement>("[data-hscroll]");
   if (track && el.offsetParent) {
     const pad = Number(track.dataset.hscroll) || 0;
-    const left = el.offsetLeft;
+    // A lane may reach past its row to give a lifted tile room (its padding), so positions are
+    // taken in the lane's content box: where the element sits from the content's start, and the
+    // width the content box shows. Rects are scaled with the canvas (desktop), so they unscale.
+    const s = getComputedStyle(track);
+    const padL = parseFloat(s.paddingLeft) || 0;
+    const t = track.getBoundingClientRect();
+    const k = t.width / track.offsetWidth || 1;
+    const left = (el.getBoundingClientRect().left - t.left) / k - track.clientLeft - padL + track.scrollLeft;
     const right = left + el.offsetWidth;
+    const view = track.clientWidth - padL - (parseFloat(s.paddingRight) || 0);
     let target: number | null = null;
     if (left - pad < track.scrollLeft) target = left - pad;
-    else if (right + pad > track.scrollLeft + track.clientWidth) target = right + pad - track.clientWidth;
+    else if (right + pad > track.scrollLeft + view) target = right + pad - view;
     if (target !== null) track.scrollTo({ left: Math.max(0, target), behavior });
   }
   const page = el.closest<HTMLElement>("[data-vscroll]");

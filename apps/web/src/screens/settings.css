@@ -36,13 +36,13 @@
 :is(.device-line, .learned) .btn { height: 56px; padding: 0 24px; gap: 10px; font-size: var(--type-callout); }
 :is(.device-line, .learned) .btn svg { width: 24px; height: 24px; }
 .device-line .st { font: 500 var(--type-callout) / 1.3 var(--font-text); color: var(--muted); }
-:is(.device-line, .learned) .btn:focus-visible, [data-form="tv"] :is(.device-line, .learned) .btn:focus { transform: scale(var(--focus-scale-card)); }
+[data-form="tv"] :is(.device-line, .learned) .btn:focus { transform: scale(var(--focus-scale-card)); }
 .link-row { display: flex; align-items: center; gap: 26px; padding: 22px 30px; border-radius: var(--radius-l); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); transform-origin: center; }
 .link-row > svg { width: 36px; height: 36px; flex: none; }
 .link-row b { display: block; font: 600 var(--type-body) / 1.2 var(--font-text); }
 .link-row small { display: block; margin-top: 4px; font: 400 var(--type-callout) / 1.35 var(--font-text); color: var(--muted); }
 .link-row .chev { margin-left: auto; width: 30px; height: 30px; color: var(--muted); }
-.link-row:focus-visible, [data-form="tv"] .link-row:focus { background: var(--raised); transform: scale(var(--focus-scale-tile)); }
+[data-form="tv"] .link-row:focus { transform: scale(var(--focus-scale-tile)); }
 @media (hover: hover) { [data-form="desktop"] .link-row:hover { background: var(--raised); } }
 
 /* Text fields: one look for addon links, servers and names. */
@@ -53,6 +53,8 @@
 /* Placeholders read as hints, never as values. */
 .field-line input::placeholder { color: color-mix(in srgb, var(--muted) 70%, transparent); }
 .field-line input:focus-visible, [data-form="tv"] .field-line input:focus { box-shadow: inset 0 0 0 2px var(--control), var(--focus-shadow); }
+/* TV: the field takes the white lift, its lift shadow and no edge (app.css, TV focus). */
+[data-form="tv"] .field-line input:focus { box-shadow: var(--lift-focus-edge); }
 .install-state { flex-basis: 100%; font: 500 var(--type-callout) / 1.3 var(--font-text); }
 
 /* Addons */
@@ -146,7 +148,6 @@
 .hrow { display: flex; align-items: center; gap: 16px; padding: 8px 12px 8px 8px; border-radius: var(--radius-l); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge);
   transition: background-color var(--motion-focus) var(--ease), transform var(--motion-focus) var(--ease); }
 .hrow-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 24px; padding: 14px 20px; border-radius: var(--radius-m); text-align: left; }
-.hrow-main:focus-visible, [data-form="tv"] .hrow-main:focus { background: var(--raised); }
 .hrow-n { width: 48px; flex: none; font: 400 var(--type-title3) / 1 var(--font-display); color: var(--muted); }
 .hrow-text { display: grid; gap: 6px; min-width: 0; }
 .hrow-text b { font: 600 var(--type-body) / 1.2 var(--font-text); overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
@@ -180,7 +181,8 @@
 .dcard-acts { display: flex; flex-wrap: wrap; gap: 12px; }
 .dkey { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px 20px; }
 /* The key page link sits on Save's line, centered on the button. */
-.dlink { display: inline-flex; align-items: center; min-height: 72px; align-self: flex-end; font: 500 var(--type-callout) / 1.3 var(--font-text); color: var(--muted); }
+.dlink { display: inline-flex; align-items: center; min-height: 72px; align-self: flex-end; font: 500 var(--type-callout) / 1.3 var(--font-text); color: var(--muted);
+  padding: 0 22px; margin: 0 -22px; border-radius: var(--radius-pill); }
 .dlogin { display: grid; gap: 20px; }
 [data-form="phone"] .dcard { padding: 16px; border-radius: 14px; gap: 14px; }
 [data-form="phone"] .dcard-head h2 { font-size: 17px; }

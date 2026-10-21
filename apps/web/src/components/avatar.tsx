@@ -39,7 +39,7 @@ export function AvatarArt(props: { avatar: string; name: string; size?: "s" | "m
   return (
     <span
       class={`avatar avatar-${props.size ?? "m"}`}
-      style={{ background: a().color ? `var(--avatar-${a().color})` : "var(--raised)" }}
+      style={{ "--avatar-fill": a().color ? `var(--avatar-${a().color})` : "var(--raised)" }}
       aria-hidden="true"
     >
       {a().glyph === "letter" ? (

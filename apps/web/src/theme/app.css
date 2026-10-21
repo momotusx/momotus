@@ -11,6 +11,8 @@
 [data-form="phone"] { --nav-h: 64px; --content-top: 16px; }
 /* What focus scrolls into view lands below the floating navigation pill. */
 [data-vscroll] [data-row], [data-vscroll] [data-f] { scroll-margin-top: calc(var(--nav-top) + var(--nav-h) + 20px); }
+/* TV: a focused control rises by focus.rise, so what focus scrolls to keeps that much more room. */
+[data-form="tv"] [data-vscroll] [data-f] { scroll-margin-top: calc(var(--nav-top) + var(--nav-h) + 20px + var(--focus-rise)); }
 /* A focused control stays out of the bottom safe area (rows bring their top
  * into view instead). */
 [data-vscroll] [data-f] { scroll-margin-bottom: var(--safe-bottom); }
@@ -48,22 +50,35 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 
 /* Scrollers we drive with focus never show bars on TV. */
 [data-vscroll], [data-hscroll] { scrollbar-width: none; overscroll-behavior: contain; }
+/* A lane scrolls sideways only: a vertical wheel over it (its tiles, and the room it keeps for
+ * the lift over the row's heading and the gaps) goes on to the page. */
+[data-hscroll] { overscroll-behavior-y: auto; }
 [data-vscroll]::-webkit-scrollbar, [data-hscroll]::-webkit-scrollbar { display: none; }
 [data-vscroll] { overflow-y: auto; overflow-x: clip; }
 [data-hscroll] { overflow-x: auto; overflow-y: clip; }
 
-/* Focus: a 4 px ring in the key blue (Apple's keyboard ring, solid so it keeps
- * 3:1), a dark halo, and a small lift. Never color alone. TV always shows it;
- * desktop and phone show it for keyboard focus only. The TV form has no key
- * color (design/DECISION.md), so there the key, and the ring, stay white. */
+/* Focus: on TV the white lift with no ring (design/DECISION.md): controls and
+ * rows turn white with dark words and rise, art rises higher with a deeper
+ * shadow and a sheen (the end of this file). Desktop and phone show the 4 px
+ * ring in the key blue alone, solid so it keeps 3:1, for keyboard focus only:
+ * no fill and no lift, as tv.apple.com draws it. Never color alone. The TV
+ * form has no key color, so its key stays white. */
 [data-form="tv"], [data-form="tv"] [data-scheme="dark"] { --key: var(--accent); }
+/* No ring and no halo on TV: the lift's own shadow is the only one (the frames draw no halo). */
+[data-form="tv"] { --focus-ring: 0px; --focus-shadow: 0 0 0 0 transparent; }
+/* ponytail: the player keeps its white ring on TV until phase 5 gives its
+ * controls the lift (plans/player-polish.md owns player.css until then). */
+[data-form="tv"] .player-scr { --focus-ring: 4px; }
 [data-f] { outline: 0 solid transparent; position: relative;
   transition: transform var(--motion-focus) var(--ease), box-shadow var(--motion-focus) var(--ease),
-    outline-color var(--motion-focus) var(--ease), background-color var(--motion-focus) var(--ease), color var(--motion-focus) var(--ease); }
+    outline-color var(--motion-focus) var(--ease), background-color var(--motion-focus) var(--ease), color var(--motion-focus) var(--ease),
+    translate var(--motion-focus) var(--ease); }
 [data-f]:focus-visible, [data-form="tv"] [data-f]:focus {
   outline: var(--focus-ring) solid var(--key); outline-offset: var(--focus-ring);
   box-shadow: var(--focus-shadow); z-index: 3; }
 [data-f]:focus:not(:focus-visible) { outline: none; }
+/* Anything else a keyboard reaches (the phone's tab bar, a More link) takes the same ring. */
+:where(a, button, input, [tabindex]):focus-visible { outline: var(--focus-ring) solid var(--key); outline-offset: var(--focus-ring); }
 [data-form="tv"] [data-f]:focus { outline: var(--focus-ring) solid var(--key); }
 
 /* Buttons. The one primary action is a white pill; the rest are glass pills
@@ -77,7 +92,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 .btn.primary svg.fill, .btn svg.fill { fill: currentColor; }
 .btn small { font: 500 var(--type-callout) var(--font-text); opacity: .7; margin-left: 4px; }
 .btn.big { height: 84px; padding: 0 40px; font-size: var(--type-headline); }
-.btn:focus-visible, [data-form="tv"] .btn:focus { transform: scale(var(--focus-scale-card)); }
+[data-form="tv"] .btn:focus { transform: scale(var(--focus-scale-card)); }
 .btn[aria-disabled="true"] { opacity: .55; }
 @media (hover: hover) {
   [data-form="desktop"] .btn:hover { background: linear-gradient(145deg, rgba(255, 255, 255, .19), rgba(255, 255, 255, .1));
@@ -92,9 +107,11 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
   box-shadow: inset 0 0 0 2px var(--control), inset 0 1px 0 rgba(255, 255, 255, .09);
   transition: transform var(--motion-focus) var(--ease), background-color var(--motion-focus) var(--ease); }
 .rbtn .ring svg { width: 30px; height: 30px; }
-.rbtn:focus-visible, [data-form="tv"] .rbtn:focus { outline: none; box-shadow: none; color: var(--text); }
+.rbtn:focus-visible, [data-form="tv"] .rbtn:focus { outline: none; box-shadow: none; }
 .rbtn:focus-visible .ring, [data-form="tv"] .rbtn:focus .ring { outline: var(--focus-ring) solid var(--key); outline-offset: var(--focus-ring);
-  box-shadow: var(--focus-shadow); transform: scale(var(--focus-scale-card)); }
+  box-shadow: var(--focus-shadow); }
+[data-form="tv"] .rbtn:focus { color: var(--text); }
+[data-form="tv"] .rbtn:focus .ring { transform: scale(var(--focus-scale-card)); }
 @media (hover: hover) { [data-form="desktop"] .rbtn:hover { color: var(--text); } [data-form="desktop"] .rbtn:hover .ring { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .44); } }
 
 /* Status: a dot plus a word, never color alone. */
@@ -145,7 +162,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
   font: 600 var(--type-callout) / 1 var(--font-text); color: var(--dim); transform-origin: center; white-space: nowrap; }
 .nav svg { width: 26px; height: 26px; }
 .nav.on { color: var(--text); background: rgba(255, 255, 255, .12); box-shadow: inset 0 0 0 1px var(--edge); }
-.nav:focus-visible, [data-form="tv"] .nav:focus { color: var(--text); transform: scale(var(--focus-scale-card)); }
+[data-form="tv"] .nav:focus { color: var(--text); transform: scale(var(--focus-scale-card)); }
 @media (hover: hover) { [data-form="desktop"] .nav:hover { color: var(--text); } }
 
 /* Behind the pill once the page scrolls: a scrim of the page color, so what
@@ -213,3 +230,31 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 [data-form="phone"] .problem { gap: 10px; }
 [data-form="phone"] .back { left: 16px; top: calc(12px + env(safe-area-inset-top)); width: 40px; height: 40px; }
 [data-form="phone"] .back svg { width: 20px; height: 20px; }
+
+/* TV focus, the white lift. A focused control or row turns white with dark
+ * words and rises by focus.rise over its lift shadow (each rule keeps its own
+ * scale): the text and status tokens follow the fill, so every word and glyph
+ * inside it turns dark too. The title's round actions invert their circle
+ * only, their word stays on the page. */
+[data-form="tv"] :is(.btn:not(.info .acts .btn), .chip, .tab, .nav, .scope, .palette-close, .fix, .skip, .dlink, .door, .drow, .link-row, .hrow-main, .glyph-pick,
+  .sync-check, .vrow, .fold, .hit, .ep-main, .ep-act, .fa-card):focus,
+/* A text field turns white on TV only: elsewhere a click focuses it as visibly as a key does. */
+[data-form="tv"] .field-line input:focus,
+[data-form="tv"] .rbtn:focus .ring,
+[data-form="tv"] .info .acts .btn:focus svg,
+[data-form="tv"] :is(.lang-search, .palette .field):focus-within {
+  --text: var(--on-primary); --muted: rgba(0, 0, 0, .64); --dim: rgba(0, 0, 0, .64); --line: rgba(0, 0, 0, .1);
+  --ok: var(--on-primary); --warn: rgba(0, 0, 0, .7); --bad: var(--on-primary);
+  background: var(--primary); color: var(--on-primary); translate: 0 calc(-1 * var(--focus-rise)); box-shadow: var(--lift-focus-edge); }
+/* One white per screen (design/DECISION.md, TV focus): while another control in its action row
+ * holds focus, the white primary takes the secondary fill, as tvOS draws an unfocused button.
+ * With focus elsewhere on the page it stays white. */
+[data-form="tv"] :is(.play-row, .acts, .install, .dkey):focus-within .btn.primary:not(:focus) { background: rgba(255, 255, 255, .16); color: var(--text); box-shadow: none; }
+/* Art rises (the tile, calendar and profile rules lift the art box itself, so
+ * a placeholder lifts too) and catches tvOS's specular sheen. */
+.tile .pic::after, .cal-art::after { content: ""; position: absolute; inset: 0; z-index: 2; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(125deg, rgba(255, 255, 255, .26), rgba(255, 255, 255, .06) 32%, rgba(255, 255, 255, 0) 52%); opacity: 0;
+  transition: opacity var(--motion-focus) var(--ease); }
+[data-form="tv"] .tile:focus .pic::after, [data-form="tv"] .cal-card:focus .cal-art::after { opacity: 1; }
+[data-form="tv"] .ptile:focus .avatar {
+  background-image: linear-gradient(125deg, rgba(255, 255, 255, .26), rgba(255, 255, 255, .06) 32%, rgba(255, 255, 255, 0) 52%); }

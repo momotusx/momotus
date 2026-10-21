@@ -8,7 +8,6 @@ apps/web/src/screens/calendar.css :: .cal-name { padding: 0 24px; text-align: ce
 apps/web/src/screens/find-addons.css :: border-radius: var(--radius-card); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight);
 apps/web/src/screens/find-addons.css :: background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight);
 apps/web/src/screens/find-addons.css :: box-shadow: inset 0 0 0 1px var(--edge), inset 0 1px 0 rgba(255, 255, 255, .07); }
-apps/web/src/screens/find-addons.css :: [data-form="tv"] .fa-card:focus .fa-text h2 { color: var(--accent); }
 apps/web/src/screens/find-addons.css :: box-shadow: inset 0 0 0 2px var(--control), inset 0 1px 0 rgba(255, 255, 255, .09); }
 apps/web/src/screens/find-addons.css :: @media (hover: hover) { [data-form="desktop"] .fa-card:hover { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .24), var(--glass-highlight); } }
 apps/web/src/screens/find-addons.tsx :: <h1 data-eyebrow={w.eyebrow}>{w.title}</h1>
@@ -52,7 +51,6 @@ apps/web/src/screens/search.css :: .scope[aria-disabled="true"] { color: var(--d
 apps/web/src/screens/search.css :: font: var(--weight-label) var(--type-callout) / 1 var(--font-text); letter-spacing: var(--tracking-label); color: var(--muted); box-shadow: inset 0 0 0 2px var(--control); }
 apps/web/src/screens/search.css :: @media (hover: hover) { [data-form="desktop"] .palette-close:hover { color: var(--text); box-shadow: var(--lift-hover-edge), inset 0 0 0 2px var(--control); } }
 apps/web/src/screens/search.css :: box-shadow: inset 0 0 0 1px var(--edge); }
-apps/web/src/screens/search.css :: .hit:focus-visible .hit-text > b, [data-form="tv"] .hit:focus .hit-text > b { color: var(--accent); }
 apps/web/src/screens/search.css :: [data-form="desktop"] .hit:hover .hit-text > b { color: var(--accent); }
 apps/web/src/screens/settings.css :: .set > h2 { font: 800 var(--type-title3) / 1.1 var(--font-display); margin-bottom: 24px; }
 apps/web/src/screens/settings.css :: .prefs { padding: 6px 40px; border-radius: var(--radius-l); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight); }
@@ -76,7 +74,6 @@ apps/web/src/screens/sync.css :: .sync-scan video { width: min(100%, 560px); asp
 apps/web/src/screens/title.css :: linear-gradient(90deg, var(--bg) 0%, rgba(6, 9, 14, .9) 30%, rgba(6, 9, 14, .55) 50%, rgba(6, 9, 14, .62) 70%, rgba(6, 9, 14, .7) 100%),
 apps/web/src/screens/title.css :: linear-gradient(90deg, var(--bg) 0%, rgba(6, 9, 14, .88) 28%, rgba(6, 9, 14, .4) 55%, rgba(6, 9, 14, 0) 78%),
 apps/web/src/screens/title.css :: linear-gradient(0deg, var(--bg) 0%, rgba(6, 9, 14, .6) 22%, rgba(6, 9, 14, 0) 46%); }
-apps/web/src/screens/title.css :: .syn:focus-visible, [data-form="tv"] .syn:focus, .syn:hover { -webkit-line-clamp: unset; background: var(--glass-strong); color: var(--text); }
 apps/web/src/screens/title.css :: box-shadow: inset 0 0 0 2px var(--control), inset 0 1px 0 rgba(255, 255, 255, .09);
 apps/web/src/screens/title.css :: border-radius: var(--radius-card); overflow: hidden; background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge);
 apps/web/src/screens/title.css :: -webkit-backdrop-filter: blur(var(--glass-blur)); backdrop-filter: blur(var(--glass-blur)); }
@@ -85,8 +82,6 @@ apps/web/src/screens/title.css :: background: var(--glass); box-shadow: inset 0 
 apps/web/src/screens/title.css :: font: 800 20px / 1 var(--font-text); color: var(--text); background: rgba(6, 9, 14, .72); }
 apps/web/src/screens/title.css :: font: 700 17px / 1 var(--font-text); background: rgba(6, 9, 14, .72); box-shadow: inset 0 0 0 1px var(--edge); }
 apps/web/src/screens/title.css :: .meter i { display: block; height: 100%; background: var(--accent); }
-apps/web/src/screens/title.css :: .ep-main:focus-visible, [data-form="tv"] .ep-main:focus { background: var(--glass-strong); transform: scale(var(--focus-scale-tile)); }
-apps/web/src/screens/title.css :: .ep-main:focus-visible .ep-t, [data-form="tv"] .ep-main:focus .ep-t { color: var(--accent); }
 apps/web/src/screens/title.css :: :is([data-form="tv"], [data-form="desktop"]) .ep-act { background: var(--glass-strong); }
 apps/web/src/screens/title.css :: font: 600 var(--type-caption) / 1 var(--font-text); color: var(--muted); white-space: nowrap; box-shadow: inset 0 0 0 2px var(--control); }
 apps/web/src/screens/title.css :: [data-form="desktop"] .ep-main:hover { background: var(--glass-strong); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .4); }
