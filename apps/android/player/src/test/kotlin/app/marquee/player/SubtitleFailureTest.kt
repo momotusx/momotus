@@ -102,6 +102,8 @@ class SubtitleFailureTest {
     private fun open(
         first: String = snapshot,
         delay: SubtitleDelay = SubtitleDelay(),
+        /** The first snapshot has the stream: wait for it to load. */
+        loads: Boolean = true,
     ): Pair<FakePlayer, PlaybackController> {
         client.attach { text ->
             val msg = CoreJson.parseToJsonElement(text).jsonObject
@@ -120,7 +122,7 @@ class SubtitleFailureTest {
         val player = FakePlayer()
         val controller = PlaybackController(player, scope, "Sintel", null, null, SystemClock.elapsedRealtime(), delay)
         controller.attach(PlaybackView(client, scope, JsonObject(emptyMap())).also { it.open() })
-        until("the stream loads") { player.items.size == 1 }
+        if (loads) until("the stream loads") { player.items.size == 1 }
         return player to controller
     }
 
@@ -377,6 +379,89 @@ class SubtitleFailureTest {
     }
 
     @Test
+    fun `once the file opens, its own track in the start subtitle's language takes over, and nothing goes back`() {
+        val (player, controller) = open(snapshot(subtitles = listOf(subtitle, other)))
+        push(snapshot(subtitles = listOf(subtitle, other), extra = "\"autoSubtitle\":\"$subtitle\","))
+        until("the start subtitle is side-loaded") { player.items.size == 2 }
+        // The file turns out to hold a Turkish track (and a forced one, which never takes over).
+        player.media(withText(listOf(true, false), "tr"), 600_000_000L)
+        until("the file's track is on") {
+            player.current.trackSelectionParameters.overrides.keys
+                .any { it.id == "text:1" }
+        }
+        assertEquals(emptyList(), chosen(), "still the start pick: the core does not hear of it")
+        // The viewer's own choice stays: Off, and a file that lists its track again does not turn it back on.
+        controller.selectText(TRACK_OFF)
+        until("Off goes to the core") { chosen() == listOf(null) }
+        player.media(withText(listOf(false), "tr"), 600_000_000L)
+        runFor(600)
+        assertTrue(C.TRACK_TYPE_TEXT in player.current.trackSelectionParameters.disabledTrackTypes, "Off holds")
+        controller.release()
+    }
+
+    private var textGroupsMade = 0
+
+    /** The H.264 video and a text track per [forced] inside the file, in [language]; groups `text:0`, `text:1` on. */
+    private fun withText(
+        forced: List<Boolean>,
+        language: String,
+    ) = Tracks(
+        video264.groups +
+            forced.map {
+                val n = textGroupsMade++
+                Tracks.Group(
+                    TrackGroup(
+                        "text:$n",
+                        Format
+                            .Builder()
+                            .setId("$n")
+                            .setLanguage(language)
+                            .setSampleMimeType(MimeTypes.TEXT_VTT)
+                            .setSelectionFlags(if (it) C.SELECTION_FLAG_FORCED else 0)
+                            .build(),
+                    ),
+                    false,
+                    intArrayOf(C.FORMAT_HANDLED),
+                    booleanArrayOf(false),
+                )
+            },
+    )
+
+    @Test
+    fun `the loading fill follows the core's start, never back, then the player's buffer, and a stall starts over`() {
+        val start = { progress: Float, caption: String? ->
+            "\"start\":{\"stage\":\"connecting\",\"peers\":3,\"haveBytes\":0,\"needBytes\":8000000,\"bytesPerS\":0," +
+                "\"source\":1,\"sources\":1,\"progress\":$progress${caption?.let { ",\"caption\":\"$it\"" } ?: ""}},"
+        }
+        val (player, controller) = open(snapshot(phase = "resolving", extra = start(0.2f, null)), loads = false)
+        until("the core's start is heard") { controller.loadingFill == 0.2f }
+        push(snapshot(phase = "resolving", extra = start(0.5f, "Finding peers, 3 so far")))
+        until("it grows") { controller.loadingFill == 0.5f }
+        assertEquals("Finding peers, 3 so far", controller.start?.caption)
+        push(snapshot(phase = "resolving", extra = start(0.4f, null)))
+        until("the caption goes") { controller.start?.caption == null }
+        assertEquals(0.5f, controller.loadingFill, "never back within one start")
+        // The URL: the start is gone, and the buffer fills the rest against the start threshold.
+        push(snapshot())
+        until("the stream loads") { player.items.size == 1 }
+        assertEquals(null, controller.start)
+        player.buffered(START_BUFFER_MS / 2L)
+        until("the buffer is heard") { controller.loadingFill > 0.5f }
+        assertEquals(0.75f, controller.loadingFill, 1e-4f)
+        // The picture, then a stall: the fill starts over from the buffer, to the rebuffer threshold.
+        player.state(Player.STATE_READY)
+        player.renderFirstFrame()
+        until("the picture shows") { controller.picture }
+        player.state(Player.STATE_BUFFERING)
+        until("the stall starts the fill over") {
+            controller.stage == PlaybackController.Stage.Buffering && controller.loadingFill < 0.5f
+        }
+        until("the buffer is heard") { controller.loadingFill > 0f }
+        assertEquals(START_BUFFER_MS / 2f / REBUFFER_MS, controller.loadingFill, 1e-4f)
+        controller.release()
+    }
+
+    @Test
     fun `the viewer's pick or Off wins over the start subtitle and goes back to the core`() {
         val (player, controller) = open(snapshot(subtitles = listOf(subtitle, other)))
         controller.selectText(TRACK_OFF)
@@ -527,12 +612,12 @@ class SubtitleFailureTest {
         // Tracks in while slower sources are still asked: the count, with the mark.
         push(snapshot(subtitles = listOf(subtitle, other), pending = true))
         until("the list is heard") { controller.text.size == 3 }
-        assertEquals("Off, 2 found", controller.subtitlesDetail())
+        assertEquals("Off, 1 language", controller.subtitlesDetail())
         assertTrue(controller.subtitlesStillListing())
         // The core says the listing is done: the mark goes.
         push(snapshot(subtitles = listOf(subtitle, other), pending = false))
         until("the end of the listing is heard") { !controller.subtitlesPending }
-        assertEquals("Off, 2 found", controller.subtitlesDetail())
+        assertEquals("Off, 1 language", controller.subtitlesDetail())
         assertFalse(controller.subtitlesStillListing())
         controller.release()
     }

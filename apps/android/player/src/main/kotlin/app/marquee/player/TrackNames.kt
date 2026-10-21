@@ -12,19 +12,33 @@ import java.util.Locale
 data class TrackChoice(
     val id: String,
     val name: String,
-    /** Under the name: codec, channels, source, or why choosing it takes a moment. */
+    /** Under the name: codec, channels, source, or where the track is from. */
     val detail: String? = null,
     val selected: Boolean = false,
-    /** The heading of the run of rows it belongs to: a core track's language, or [IN_THE_FILE]; null for Off and audio. */
+    /** A subtitle's language by its English name, the picker's heading for it; null for Off and audio. */
     val section: String? = null,
+    /** A subtitle's language as one key ([languageKey]): the picker groups by it. Null for Off and audio. */
+    val language: String? = null,
+    /** The language's own name ("Türkçe") when it differs from [section]. */
+    val nativeName: String? = null,
+    /** A track inside the video file: it leads its language, as it always fits the file. */
+    val inFile: Boolean = false,
+    val forced: Boolean = false,
+    /** The core's match: the track names the playing release's group ("Same release group"). */
+    val fits: Boolean = false,
+    /** The release text the addon names for the track, for the detail line. */
+    val release: String? = null,
 )
 
 const val TRACK_OFF = "off"
 
-/** The heading over the subtitle tracks inside the video file, after the core's languages. */
+/** The detail of a subtitle track inside the video file. */
 const val IN_THE_FILE = "In the file"
 
-/** What the Subtitles action says under its name: the chosen language, or how many were found ("None found" for zero). */
+/** The picker's heading for a track in the file that names no language. */
+const val UNKNOWN_LANGUAGE = "Unknown language"
+
+/** What the Subtitles action says under its name: the chosen language, or how many the picker shows ("None found" for zero). */
 fun PlaybackController.subtitlesDetail(): String = subtitlesDetail(text, subtitlesPending)
 
 /** The core still lists, but tracks are in: the count shows with a small searching mark until the listing is done. */
@@ -35,29 +49,32 @@ internal fun subtitlesStillListing(
     pending: Boolean,
 ): Boolean = pending && rows.size > 1
 
-/** "Searching" only while nothing is in: the viewer does not wait for the slowest source. */
+/**
+ * The chosen track's language ("Portuguese (Brazil)"), else the languages the picker shows ("Off, 35 languages",
+ * plans/player-polish.md 2.2). "Searching" only while nothing is in: the viewer does not wait for the slowest source.
+ */
 internal fun subtitlesDetail(
     rows: List<TrackChoice>,
     pending: Boolean,
 ): String {
-    val found = rows.size - 1
+    val found = subtitleLanguages(rows).size
     val chosen = rows.firstOrNull { it.selected && it.id != TRACK_OFF }
-    // A core track says its language ("Portuguese (Brazil)"), a track in the file its own name.
-    return chosen?.let { it.section?.takeIf { s -> s != IN_THE_FILE } ?: it.name }
+    return chosen?.let { it.section ?: it.name }
         ?: if (pending && found == 0) {
             "Searching"
         } else if (found == 0) {
             "None found"
         } else {
-            "Off, $found found"
+            "Off, $found ${if (found == 1) "language" else "languages"}"
         }
 }
 
 /**
- * The subtitles menu (plans/m13-subtitle-languages.md 2): Off, then the core's tracks in the snapshot's
- * order (the profile's languages first), each under its language and named by what tells it from the
- * others; then the tracks inside the file. A side-loaded track takes its player row's id and state from
- * [loaded] (by URL); one not loaded yet loads when chosen; one in [hidden] is left out.
+ * The subtitles menu (plans/m13-subtitle-languages.md 2, plans/player-polish.md 2.4): Off, then the core's tracks
+ * in the snapshot's order (the profile's languages first), each with its language and named by what tells it from
+ * the others; then the tracks inside the file, which [subtitleLanguages] puts first in their language. A side-loaded
+ * track takes its player row's id and state from [loaded] (by URL); one not loaded yet loads when chosen; one in
+ * [hidden] is left out.
  */
 internal fun subtitleRows(
     core: List<SubtitleTrack>,
@@ -73,17 +90,20 @@ internal fun subtitleRows(
             val name = t.name.ifEmpty { t.label ?: t.source }
             // An older core sends no name or heading: the code's language stands in.
             val section = t.languageName.ifEmpty { languageName(t.lang) ?: t.lang }
-            val detail = listOfNotNull(trackDetail(t, name), "loads when chosen".takeIf { row == null })
             TrackChoice(
                 row?.id ?: "$late${t.url}",
                 name,
-                detail.filter { it.isNotEmpty() }.joinToString(", ").ifEmpty { null },
+                trackDetail(t, name).ifEmpty { null },
                 row?.selected == true,
                 section,
+                language = languageKey(t.language.ifEmpty { t.lang }),
+                nativeName = t.nativeName.takeIf { it.isNotEmpty() && it != section },
+                forced = t.forced,
+                fits = t.fits,
+                release = t.release?.takeIf { it != name },
             )
         }
-    val files = inFile.map { it.copy(section = IN_THE_FILE) }
-    val rows = coreRows + files
+    val rows = coreRows + inFile
     return listOf(TrackChoice(TRACK_OFF, "Off", selected = rows.none { it.selected })) + rows
 }
 
@@ -97,7 +117,22 @@ internal fun trackDetail(
         source,
         "Forced".takeIf { t.forced },
         "For the hard of hearing".takeIf { t.hearingImpaired },
-    ).joinToString(", ")
+    ).joinToString(DOT)
+}
+
+/** Between the parts of a subtitle's detail line. */
+internal const val DOT = " · "
+
+/** One key for every spelling of a language, so the file's "eng" and the core's "en" meet: "en", "pt-br". */
+fun languageKey(code: String): String = Util.normalizeLanguageCode(code).lowercase(Locale.ROOT)
+
+/** "Türkçe" for "tr": the language's name in itself, from the platform; null when it has none. */
+internal fun ownName(code: String): String? {
+    val locale = Locale.forLanguageTag(code)
+    val name = locale.getDisplayLanguage(locale)
+    return name.takeIf { it.isNotBlank() && !it.equals(locale.language, ignoreCase = true) }?.replaceFirstChar {
+        it.titlecase(locale)
+    }
 }
 
 /** "Still asking subtitle addons": under the subtitle list while the core still waits for some. */
@@ -209,22 +244,36 @@ fun audioChoice(
     return TrackChoice(id, name, detail.ifBlank { null }, selected)
 }
 
-/** The menu row of a subtitle track that is already loaded: "English" over "SRT, forced". */
+/** The menu row of a subtitle track inside the file: "English" over "In the file · SRT · Forced", under its language. */
 fun textChoice(
     id: String,
     format: Format,
     selected: Boolean,
 ): TrackChoice {
-    val name = languageName(format.language) ?: format.label ?: "Subtitles"
+    val language = languageName(format.language)
+    val name = language ?: format.label ?: "Subtitles"
+    val forced = format.selectionFlags and C.SELECTION_FLAG_FORCED != 0
     val detail =
         listOfNotNull(
+            IN_THE_FILE,
             format.label?.takeIf { it != name },
             // Media3 parses subtitles while extracting and then says "cues": the real type is in `codecs`.
             codecName(format.sampleMimeType) ?: codecName(format.codecs),
-            "forced".takeIf { format.selectionFlags and C.SELECTION_FLAG_FORCED != 0 },
-            "for the hard of hearing".takeIf { format.roleFlags and C.ROLE_FLAG_DESCRIBES_MUSIC_AND_SOUND != 0 },
-        ).joinToString(", ")
-    return TrackChoice(id, name, detail.ifBlank { null }, selected)
+            "Forced".takeIf { forced },
+            "For the hard of hearing".takeIf { format.roleFlags and C.ROLE_FLAG_DESCRIBES_MUSIC_AND_SOUND != 0 },
+        ).joinToString(DOT)
+    val code = format.language?.takeIf { language != null }
+    return TrackChoice(
+        id,
+        name,
+        detail,
+        selected,
+        section = language ?: UNKNOWN_LANGUAGE,
+        language = code?.let(::languageKey) ?: "",
+        nativeName = code?.let(::ownName)?.takeIf { it != language },
+        inFile = true,
+        forced = forced,
+    )
 }
 
 /**

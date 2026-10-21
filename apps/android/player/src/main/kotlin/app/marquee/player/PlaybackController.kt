@@ -27,6 +27,7 @@ import app.marquee.core.model.OtherVersion
 import app.marquee.core.model.PlaybackPhase
 import app.marquee.core.model.PlaybackSnapshot
 import app.marquee.core.model.Segment
+import app.marquee.core.model.StartProgress
 import app.marquee.core.model.SubtitleNote
 import app.marquee.core.model.SubtitleSize
 import app.marquee.core.model.SubtitleTrack
@@ -163,6 +164,29 @@ class PlaybackController(
     /** Where Skip credits was pressed: Up Next shows at once from there, until the viewer seeks back before it. */
     var skippedAtMs: Long? by mutableStateOf(null)
         private set
+
+    /**
+     * The loading screen's fill, 0 to 1 (plans/player-polish.md 1.2): the core's start progress while it resolves,
+     * then the player's buffer against its start threshold; on a stall, the buffer against the rebuffer one. Never
+     * back within one start.
+     */
+    var loadingFill by mutableFloatStateOf(0f)
+        private set
+
+    /** The core's start progress while it resolves (`PlaybackSnapshot.start`): its caption names a long wait. */
+    var start: StartProgress? by mutableStateOf(null)
+        private set
+
+    /** The source that plays has shown a frame: a wait from here on is a stall over the paused picture. */
+    var picture by mutableStateOf(false)
+        private set
+
+    /** The title's backdrop and logo for the loading screen; the screen sets them, as it knows the title. */
+    var backdrop: String? by mutableStateOf(null)
+    var logo: String? by mutableStateOf(null)
+
+    /** Where the fill stood when the player got the URL: the buffer fills the rest. */
+    private var fillBase = 0f
 
     /** Width over height of the picture once known; 0 before. */
     var videoRatio by mutableFloatStateOf(0f)
@@ -353,6 +377,7 @@ class PlaybackController(
         // and the snapshot is otherwise the one before (code review 2026-10-20 r2 P3-6).
         val retried = retriedSince(retriesSeen, s.retries)
         retriesSeen = s.retries
+        start = s.start
         // While a source is being found its list is still to come: not "None found".
         subtitlesPending = s.subtitlesPending || s.phase == PlaybackPhase.Resolving
         snapshotSubs = s.subtitles
@@ -368,10 +393,7 @@ class PlaybackController(
         }
         // The core's start subtitle, once, as if picked; nothing goes back to the core.
         startSubtitle(s.autoSubtitle, chose, pick != null, started)?.let { url ->
-            s.subtitles.firstOrNull { it.url == url }?.let { track ->
-                started = url
-                turnOn(track)
-            }
+            s.subtitles.firstOrNull { it.url == url }?.let(::startWith)
         }
         when (s.phase) {
             PlaybackPhase.Ready -> {
@@ -384,7 +406,9 @@ class PlaybackController(
                 if (stage == Stage.Failed) {
                     stage = Stage.Opening
                     problem = null
+                    loadingFill = 0f
                 }
+                s.start?.let { loadingFill = maxOf(loadingFill, it.progress) }
                 // The core moved on to the ranking's next version by itself: say which.
                 val trying = s.trying
                 if (trying != null) {
@@ -437,6 +461,8 @@ class PlaybackController(
         seekPending = false
         // A new source reports nothing until it has shown its own first frame.
         firstFrame = false
+        picture = false
+        fillBase = loadingFill
         pictureWait.reset()
         mark("url ready")
         player.setMediaItem(item(url, loadedSubs), from.coerceAtLeast(0L))
@@ -500,6 +526,11 @@ class PlaybackController(
     private fun stateChanged(state: Int) {
         when (state) {
             Player.STATE_BUFFERING -> {
+                // A stall or a seek over the picture: the loading screen fills again from the buffer.
+                if (picture && stage != Stage.Buffering) {
+                    loadingFill = 0f
+                    fillBase = 0f
+                }
                 if (loadedUrl != null) stage = Stage.Buffering
                 // Not a seek, a subtitle reload or a new source: the connection fell behind the file.
                 if (firstFrame && player.playWhenReady && !seekPending && reloadedAt == 0L) {
@@ -553,6 +584,7 @@ class PlaybackController(
 
     private fun renderedFirstFrame() {
         firstFrame = true
+        picture = true
         status = null
         if (firstFrameMs == null) {
             mark("first frame")
@@ -597,6 +629,7 @@ class PlaybackController(
         handlingFailure = true
         player.stop()
         player.clearMediaItems()
+        picture = false
         stage = Stage.Buffering
         status = "${failure.message}, trying the next source"
         playback.failOver(failure.message, playingAttempt, failure.kind.wire, failure.status)
@@ -640,6 +673,10 @@ class PlaybackController(
             durationMs = player.duration.takeIf { it > 0 } ?: durationMs
             sendDuration()
             bufferedMs = player.bufferedPosition.coerceAtLeast(0L)
+            if (stage == Stage.Buffering) {
+                val threshold = if (picture) REBUFFER_MS else START_BUFFER_MS
+                loadingFill = maxOf(loadingFill, bufferFill(fillBase, bufferedMs - positionMs, threshold.toLong()))
+            }
             val waiting =
                 waitsForPicture(
                     firstFrame,
@@ -801,6 +838,23 @@ class PlaybackController(
         if (id != TRACK_OFF && url == null) return choose(id)
         view?.subtitleChosen(url)
         choose(id)
+    }
+
+    /**
+     * The core's start subtitle, as if picked: once the file has opened, the file's own track in its language takes
+     * its place ([fileTakesOver]), as it always fits the file.
+     */
+    private fun startWith(track: SubtitleTrack) {
+        started = track.url
+        val own = fileTakesOver(languageKey(track.language.ifEmpty { track.lang }), text)
+        if (own != null) choose(own.id) else turnOn(track)
+    }
+
+    /** The file opened after the start subtitle came on: its own track in that language takes over ([startWith]). */
+    private fun fileTakesOverStart() {
+        val auto = pick?.takeIf { it.external && !chose && it.url != null && it.url == started } ?: return
+        val track = snapshotSubs.firstOrNull { it.url == auto.url } ?: return
+        fileTakesOver(languageKey(track.language.ifEmpty { track.lang }), text)?.let { choose(it.id) }
     }
 
     /** Turns one of the core's tracks on: picked from the menu, or the start subtitle. */
@@ -992,6 +1046,7 @@ class PlaybackController(
         audio = audioRows
         text = subtitleRows(core, loaded, hidden, fileRows, LATE)
         applyPick(tracks)
+        fileTakesOverStart()
     }
 
     /** The address of the addon subtitle file behind a loaded track's `ext:N` id, or null. */

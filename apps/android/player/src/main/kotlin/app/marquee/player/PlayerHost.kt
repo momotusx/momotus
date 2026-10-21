@@ -99,7 +99,9 @@ class PlayerHost(
         val ids =
             java.util.concurrent.atomic
                 .AtomicInteger()
-        const val START_BUFFER_MS = 1_000
-        const val REBUFFER_MS = 3_000
     }
 }
+
+/** Media held before the first frame plays, and before play goes on after a stall; the loading screen fills to them. */
+internal const val START_BUFFER_MS = 1_000
+internal const val REBUFFER_MS = 3_000

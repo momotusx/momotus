@@ -37,9 +37,12 @@ class SubtitleRowsTest {
         )
 
     @Test
-    fun `Off, then the core's languages in its order under their names, then the file's tracks`() {
+    fun `Off, then the core's tracks in its order with their languages, then the file's tracks`() {
         val loaded = mapOf("u/eng2" to TrackChoice("ext:1", "", selected = true))
-        val file = listOf(TrackChoice("0:0", "Spanish", "SRT"))
+        val file =
+            listOf(
+                TrackChoice("0:0", "Spanish", "In the file · SRT", section = "Spanish", language = "es", inFile = true),
+            )
         val rows = subtitleRows(core, loaded, emptySet(), file, "late:")
         assertEquals(
             listOf(
@@ -47,19 +50,22 @@ class SubtitleRowsTest {
                 TrackChoice(
                     "late:u/tur",
                     "Breaking.Bad.S01E01.720p",
-                    "SubSense, loads when chosen",
+                    "SubSense",
                     section = "Turkish",
+                    language = "tr",
                 ),
-                TrackChoice("late:u/eng1", "OpenSubtitles v3 1", "loads when chosen", section = "English"),
+                TrackChoice("late:u/eng1", "OpenSubtitles v3 1", section = "English", language = "en"),
                 // Loaded: the player's id and state; the name already says its source.
-                TrackChoice("ext:1", "OpenSubtitles v3 2", "For the hard of hearing", true, "English"),
+                TrackChoice("ext:1", "OpenSubtitles v3 2", "For the hard of hearing", true, "English", language = "en"),
                 TrackChoice(
                     "late:u/pob",
                     "OpenSubtitles v3",
-                    "Forced, loads when chosen",
+                    "Forced",
                     section = "Portuguese (Brazil)",
+                    language = "pt-br",
+                    forced = true,
                 ),
-                TrackChoice("0:0", "Spanish", "SRT", section = "In the file"),
+                file[0],
             ),
             rows,
         )
@@ -72,14 +78,16 @@ class SubtitleRowsTest {
         val rows = subtitleRows(core, emptyMap(), setOf("u/tur"), emptyList(), "late:")
         assertEquals(true, rows.first().selected)
         assertEquals(listOf("late:u/eng1", "late:u/eng2", "late:u/pob"), rows.drop(1).map { it.id })
-        assertEquals("Off, 3 found", subtitlesDetail(rows, pending = false))
-        // A track in the file says its own name on the button.
+        assertEquals("Off, 2 languages", subtitlesDetail(rows, pending = false))
+        // A track in the file says its language on the button.
         val file =
             subtitleRows(
                 emptyList(),
                 emptyMap(),
                 emptySet(),
-                listOf(TrackChoice("0:0", "Spanish", selected = true)),
+                listOf(
+                    TrackChoice("0:0", "Spanish", selected = true, section = "Spanish", language = "es", inFile = true),
+                ),
                 "late:",
             )
         assertEquals("Spanish", subtitlesDetail(file, pending = false))
@@ -99,7 +107,8 @@ class SubtitleRowsTest {
         val row = subtitleRows(listOf(old), emptyMap(), emptySet(), emptyList(), "late:")[1]
         assertEquals("German", row.name)
         assertEquals("German", row.section)
-        assertEquals("SubSense, loads when chosen", row.detail)
+        assertEquals("de", row.language)
+        assertEquals("SubSense", row.detail)
         assertNull(subtitleRows(emptyList(), emptyMap(), emptySet(), emptyList(), "late:").first().section)
     }
 
