@@ -47,6 +47,10 @@ class AccountActions(
     var said: String? by mutableStateOf(null)
         private set
 
+    /** The last action was Delete account: its [failure] and [said] show under it, the others under Signed in with. */
+    var deleting by mutableStateOf(false)
+        private set
+
     @Volatile
     var run: BrokeredRun? = null
         private set
@@ -112,7 +116,7 @@ class AccountActions(
      * Delete anyway. True once the sync server confirmed.
      */
     fun delete(onDone: () -> Unit) =
-        go {
+        go(deleting = true) {
             if (links.orEmpty().any { it.provider == "apple" }) {
                 val receipt =
                     revoke(AccountCopy.DELETE_ANYWAY) {
@@ -149,7 +153,7 @@ class AccountActions(
         val next = then ?: return
         then = null
         failure = null
-        go { next() }
+        go(deleting) { next() }
     }
 
     fun dismiss() {
@@ -239,7 +243,11 @@ class AccountActions(
         failure = AccountRules.signInFailure(code, provider)
     }
 
-    private fun go(block: suspend () -> Unit) {
+    private fun go(
+        deleting: Boolean = false,
+        block: suspend () -> Unit,
+    ) {
+        this.deleting = deleting
         scope.launch {
             busy = true
             said = null

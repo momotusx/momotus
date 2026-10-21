@@ -21,6 +21,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -189,6 +190,10 @@ class AccountSignInTest {
         assertEquals(AccountCopy.KIT_UNKNOWN_PASSKEY, s.failure!!.text)
         s.act(Act.CantUse)
         assertEquals(Step.StartOverAsk, s.step)
+        s.act(Act.Cancel)
+        assertIs<Step.Found>(s.step, "Cancel on the warning keeps the found account")
+        assertEquals(listOf(Act.Kit, Act.CantUse), s.failure!!.actions.map { it.act })
+        s.act(Act.CantUse)
         s.confirmStartOver()
         core.waitFor("created") { "createSyncAccount" in core.ops() }
         val create = core.last("createSyncAccount")
@@ -458,5 +463,35 @@ class AccountSignInTest {
         )
         core.push("signIn", """{"phase":"new","ticket":"T7"}""")
         core.waitFor("new") { s.step == Step.New }
+    }
+
+    @Test
+    fun `Use a passkey opens the account its passkey belongs to, and an unknown one says so`() {
+        platform.get =
+            { immediate -> if (immediate) PasskeyResult.None else PasskeyResult.Used("cred", "QUNDT1VOVA", "cHJm") }
+        val s = signIn()
+        ready(s)
+        s.usePasskey()
+        core.waitFor("in") { s.step == Step.Done(created = false) }
+        assertFalse(platform.gets.single().second, "the user asked: the sheet may show")
+        assertEquals(
+            "cHJm",
+            core
+                .last("recover")
+                .getValue("prf")
+                .jsonPrimitive.content,
+        )
+        core.answers["recover"] = { fail("kitUnknown") }
+        val u = signIn()
+        ready(u)
+        u.usePasskey()
+        core.waitFor("said") { u.failure != null }
+        assertIs<Step.Start>(u.step)
+        assertEquals(AccountCopy.KIT_UNKNOWN_PASSKEY, u.failure!!.text)
+        assertEquals(
+            listOf(Act.Kit, Act.Scan),
+            u.failure!!.actions.map { it.act },
+            "no held sign-in to start over from",
+        )
     }
 }

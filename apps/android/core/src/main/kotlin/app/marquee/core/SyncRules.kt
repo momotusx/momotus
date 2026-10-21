@@ -59,9 +59,10 @@ object SyncRules {
     fun sortMembers(members: List<MemberInfo>) =
         members.sortedWith(compareBy<MemberInfo>({ !it.thisDevice }, { it.kit }, { it.addedMs }))
 
+    /** A device by its name; a recovery kit by the one name; a passkey by its label ("Passkey on Pixel 9"). */
     fun memberName(member: MemberInfo) =
         if (member.kit) {
-            SyncCopy.KIT_NAME
+            member.name?.takeIf { member.passkey && it.isNotEmpty() } ?: SyncCopy.KIT_NAME
         } else {
             member.name?.ifEmpty { null }
                 ?: SyncCopy.UNNAMED

@@ -45,6 +45,19 @@ sealed interface Route : NavKey {
     @Serializable
     data object Pairing : Route
 
+    /**
+     * A phone's sign-in (plans/accounts.md 4.1): the providers, Other ways, Not now. [firstRun] from the first
+     * screen; else from Account or a scan asked for before this device had an account.
+     */
+    @Serializable
+    data class SignIn(
+        val firstRun: Boolean,
+    ) : Route
+
+    /** A TV's first run (4.2): Sign in with your phone, its pairing code and six digits. */
+    @Serializable
+    data object TvSignIn : Route
+
     /** Account (the sync page): this device's account, or the ways to join one. */
     @Serializable
     data object Sync : Route

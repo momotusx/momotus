@@ -272,6 +272,46 @@ class AccountSignIn(
         }
     }
 
+    /**
+     * Other ways: Use a passkey. It signs in only (D10): any of the link host's passkeys, picked in the sheet,
+     * opens the account it belongs to; one no account knows is `kitUnknown`, a cancelled sheet says so.
+     */
+    fun usePasskey() =
+        launch {
+            failure = null
+            if (platform.rpId.isEmpty()) return@launch
+            step = Step.Working(null)
+            when (val got = platform.passkeyGet(Passkeys.get(platform.rpId), immediate = false)) {
+                is PasskeyResult.Used -> {
+                    recoverWith(got, account = null)
+                    if (step is Step.Found) {
+                        step = startStep()
+                        failure = unknownPasskey()
+                    }
+                }
+
+                PasskeyResult.Cancelled -> {
+                    step = startStep()
+                    failure = AccountRules.signInFailure("passkeyCancelled")
+                }
+
+                else -> {
+                    step = startStep()
+                    failure = unknownPasskey()
+                }
+            }
+        }
+
+    /** No held sign-in to start over from: a recovery kit, or the QR from a signed-in device. */
+    private fun unknownPasskey() =
+        AccountRules.signInFailure("kitUnknown")?.let { f ->
+            f.copy(
+                actions =
+                    f.actions.filter { it.act != Act.CantUse } +
+                        AccountRules.Action(app.marquee.core.AccountCopy.SCAN_FROM_DEVICE, Act.Scan),
+            )
+        }
+
     /** `new`: a Marquee passkey already on this device signs in, and the identity is linked to it (4.1.4). */
     private suspend fun newHere(h: Held) {
         if (platform.rpId.isNotEmpty()) {
@@ -375,10 +415,30 @@ class AccountSignIn(
     fun act(a: Act) {
         failure = null
         when (a) {
-            Act.Retry -> provider?.let(::signIn)
-            Act.Move -> withTicket { h -> createWith(h, move = true) }
-            Act.CantUse -> startOver()
-            Act.Cancel, Act.Other, Act.NotNow, Act.Anyway, Act.Scan, Act.Kit -> Unit
+            Act.Retry -> {
+                provider?.let(::signIn)
+            }
+
+            Act.Move -> {
+                withTicket { h -> createWith(h, move = true) }
+            }
+
+            Act.CantUse -> {
+                startOver()
+            }
+
+            // Cancel on the Start over warning: back to the found account's QR and its buttons.
+            Act.Cancel -> {
+                val h = held
+                if (step == Step.StartOverAsk && h != null) {
+                    step = Step.Found(h.account.orEmpty())
+                    failure = AccountRules.signInFailure("kitUnknown")
+                }
+            }
+
+            Act.Other, Act.NotNow, Act.Anyway, Act.Scan, Act.Kit -> {
+                Unit
+            }
         }
     }
 

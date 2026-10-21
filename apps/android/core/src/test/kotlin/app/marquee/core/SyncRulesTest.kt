@@ -95,6 +95,10 @@ class SyncRulesTest {
         val list =
             listOf(member("phone", "Phone"), member("tv", "TV", sponsor = "phone"), member("x", null, sponsor = "gone"))
         assertEquals("Recovery kit", SyncRules.memberName(member("k", "ignored", kit = true)))
+        val passkey =
+            MemberInfo("p", kit = true, name = "Passkey on Pixel", addedMs = 0, thisDevice = false, passkey = true)
+        assertEquals("Passkey on Pixel", SyncRules.memberName(passkey), "a passkey reads as its label")
+        assertEquals("Recovery kit", SyncRules.memberName(passkey.copy(name = "")))
         assertEquals("Unnamed device", SyncRules.memberName(member("n", "")))
         assertEquals("Phone", SyncRules.sponsorName(list[1], list))
         assertEquals("a device or kit since removed", SyncRules.sponsorName(list[2], list))

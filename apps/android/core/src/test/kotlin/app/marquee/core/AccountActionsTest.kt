@@ -136,6 +136,7 @@ class AccountActionsTest {
         core.waitFor("asked") { actions.failure != null }
         assertEquals(AccountCopy.APPLE_REVOKE_FAILED, actions.failure!!.text)
         assertEquals(AccountCopy.UNLINK_ANYWAY, actions.failure!!.actions[0].label)
+        assertFalse(actions.deleting, "an unlink's failure shows under Signed in with")
         assertFalse("unlinkIdentity" in core.ops())
         actions.goOn()
         core.waitFor("unlinked") { "unlinkIdentity" in core.ops() }
@@ -176,8 +177,10 @@ class AccountActionsTest {
         finish("appleRevoke", """{"phase":"failed","code":"unreachable"}""")
         core.waitFor("asked") { actions.failure != null }
         assertEquals(AccountCopy.DELETE_ANYWAY, actions.failure!!.actions[0].label)
+        assertTrue(actions.deleting, "the deletion's failure shows under Delete account")
         assertFalse("deleteAccount" in core.ops())
         actions.goOn()
+        assertTrue(actions.deleting, "Delete anyway is still the deletion")
         core.waitFor("deleted") { deleted == 1 }
         assertFalse("receipt" in core.last("deleteAccount"))
     }

@@ -100,6 +100,8 @@ class LibraryRemoval(
     ) {
         running = true
         problem = null
+        // Each removal ends in its own `wiped`, which the app answers once (the first run, as on a new device).
+        wiped = false
         try {
             guard {
                 if (!traktSignOutEvery(profiles)) CoreLog.w("removal: a Trakt record stayed; the wipe will say so")
