@@ -9,7 +9,8 @@
 //!
 //! The Rotten Tomatoes addon, when a profile has it on, adds a mark with no
 //! number: a title its lists name shows "Fresh" for Rotten Tomatoes, unless
-//! MDBList gave the Tomatometer. Its lists are read once a day.
+//! MDBList gave the Tomatometer. Its lists are read once a day, on their own:
+//! no lookup waits for them, and Home puts the marks on when a read ends.
 
 use crate::Core;
 use crate::views::home::Tile;
@@ -17,7 +18,7 @@ use futures_util::StreamExt;
 use mq_addons::{AddonClient, InstalledAddon};
 use mq_http::{HttpClient, HttpError, Priority, RequestOptions};
 use mq_library::{Library, RatingRow};
-use mq_protocol::{MetaItemPreview, ResourcePath, ResourceResponse};
+use mq_protocol::{ResourcePath, ResourceResponse};
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -61,6 +62,16 @@ const LISTS_FRESH: Duration = Duration::from_secs(86_400);
 /// catalogs a Home shows.
 const LIST_PAGES_AT_ONCE: usize = 4;
 const LIST_TIMEOUT: Duration = Duration::from_secs(12);
+/// Pages read at most: the manifest names them, and any addon can claim the
+/// id (the real one has 40).
+const MAX_PAGES: usize = 64;
+/// Titles taken from one page (the real ones list at most 60).
+const MAX_PAGE_TITLES: usize = 500;
+/// A list page is refused past this size (the real ones are about 30 KB).
+const LIST_MAX_BYTES: usize = 1024 * 1024;
+/// A page that fails, or answers empty after it listed titles, keeps the
+/// titles it last listed this long at most.
+const PAGE_KEPT: Duration = Duration::from_secs(3 * 86_400);
 
 const fn given(value: Option<&'static str>) -> Option<&'static str> {
     match value {
@@ -131,16 +142,20 @@ fn rt_ok(v: i64) -> bool {
     (0..=100).contains(&v)
 }
 
-/// The words that credit the scores on a title page ("Ratings from"), when
-/// MDBList gave one of them or the Rotten Tomatoes addon its mark.
+/// The words that credit the scores on a title page ("Ratings from"), each
+/// source named for what it gave: MDBList for its numbers, the Rotten
+/// Tomatoes addon for its mark. `None` when neither gave anything.
 pub(crate) fn credit(scores: Option<&Scores>) -> Option<String> {
     let s = scores?;
-    let words = if !s.rt.is_some_and(rt_ok) && s.fresh {
-        "IMDb and Rotten Tomatoes (the Rotten Tomatoes addon)"
-    } else if s.imdb.is_some_and(imdb_ok) || s.rt.is_some_and(rt_ok) {
-        "IMDb and Rotten Tomatoes via MDBList"
-    } else {
-        return None;
+    let imdb = s.imdb.is_some_and(imdb_ok);
+    let rt = s.rt.is_some_and(rt_ok);
+    let words = match (imdb, rt, s.fresh) {
+        (true, true, _) => "IMDb and Rotten Tomatoes via MDBList",
+        (_, true, _) => "Rotten Tomatoes via MDBList",
+        (true, false, true) => "IMDb via MDBList, Rotten Tomatoes (the Rotten Tomatoes addon)",
+        (false, false, true) => "IMDb and Rotten Tomatoes (the Rotten Tomatoes addon)",
+        (true, false, false) => "IMDb via MDBList",
+        (false, false, false) => return None,
     };
     Some(words.to_owned())
 }
@@ -179,27 +194,6 @@ pub(crate) fn apply<'a>(
             continue;
         };
         let ratings = Ratings::of(Some(scores), tile.rating.as_deref());
-        if tile.ratings != ratings {
-            tile.ratings = ratings;
-            changed = true;
-        }
-    }
-    changed
-}
-
-/// Gives every tile with a title its row from `known`, which holds all of
-/// them: a title it lacks shows the addon's own rating alone. True when any
-/// tile changed.
-pub(crate) fn reset<'a>(
-    tiles: impl IntoIterator<Item = &'a mut Tile>,
-    known: &HashMap<Title, Scores>,
-) -> bool {
-    let mut changed = false;
-    for tile in tiles {
-        let Some(title) = title_of(&tile.kind, &tile.id) else {
-            continue;
-        };
-        let ratings = Ratings::of(known.get(&title), tile.rating.as_deref());
         if tile.ratings != ratings {
             tile.ratings = ratings;
             changed = true;
@@ -257,17 +251,35 @@ pub struct Finder {
     /// One round of calls at a time, so the titles asked for during a round
     /// go together in the next one.
     round: tokio::sync::Mutex<()>,
-    /// The Rotten Tomatoes addon's lists, by the address they were read from.
-    lists: Mutex<HashMap<String, Listed>>,
-    /// One read of the lists at a time.
-    listing: tokio::sync::Mutex<()>,
+    lists: Arc<Lists>,
+    /// `Rater::turn`.
+    turn: Mutex<()>,
 }
 
-/// The titles the Rotten Tomatoes addon lists, as last read.
+/// The Rotten Tomatoes addon's lists, by the address they were read from;
+/// shared with the read on its way.
+struct Lists {
+    by_url: Mutex<HashMap<String, Listed>>,
+    /// Moves on when a read changes the titles a list holds.
+    changed: tokio::sync::watch::Sender<u64>,
+}
+
+#[derive(Default)]
 struct Listed {
+    /// Each page's titles, by the page.
+    pages: HashMap<String, Page>,
+    /// Every page's titles together.
     titles: Arc<HashSet<Title>>,
-    /// Read again from this instant.
-    due: Instant,
+    /// Read again from this instant; none until a first read has ended.
+    due: Option<Instant>,
+    /// A read is on its way.
+    reading: bool,
+}
+
+/// The titles one page listed, and when it last answered with them.
+struct Page {
+    titles: HashSet<Title>,
+    answered: Instant,
 }
 
 impl Finder {
@@ -279,13 +291,18 @@ impl Finder {
             resting: Mutex::default(),
             queue: Mutex::default(),
             round: tokio::sync::Mutex::new(()),
-            lists: Mutex::default(),
-            listing: tokio::sync::Mutex::new(()),
+            lists: Arc::new(Lists {
+                by_url: Mutex::default(),
+                changed: tokio::sync::watch::channel(0).0,
+            }),
+            turn: Mutex::default(),
         }
     }
 
-    /// The cached scores of these titles (rows up to 30 days old), with the
-    /// mark of those `marks` lists.
+    /// The cached scores of these titles (rows up to 30 days old). With the
+    /// lists of a profile's Rotten Tomatoes addon, `marks`, every title is
+    /// in the answer, marked or not, so a title they no longer list loses
+    /// its mark wherever the answer lands.
     fn known(&self, titles: &[Title], marks: Option<&HashSet<Title>>) -> HashMap<Title, Scores> {
         let now = now_ms();
         let mut known: HashMap<Title, Scores> = self
@@ -301,11 +318,10 @@ impl Finder {
                 ((r.kind, r.imdb_id), scores)
             })
             .collect();
-        for title in titles
-            .iter()
-            .filter(|t| marks.is_some_and(|m| m.contains(*t)))
-        {
-            known.entry(title.clone()).or_default().fresh = true;
+        if let Some(marks) = marks {
+            for title in titles {
+                known.entry(title.clone()).or_default().fresh = marks.contains(title);
+            }
         }
         known
     }
@@ -343,50 +359,6 @@ impl Finder {
             }
         }
         true
-    }
-
-    /// The titles the Rotten Tomatoes addon at `url` lists, as last read.
-    fn marks(&self, url: &str) -> Option<Arc<HashSet<Title>>> {
-        lock(&self.lists).get(url).map(|l| l.titles.clone())
-    }
-
-    /// Reads the addon's lists when they are due: a day after the last read,
-    /// or `REST` after one that missed a page; the titles a missed page
-    /// listed stay from the read before.
-    async fn read_lists(&self, addons: &AddonClient, addon: &InstalledAddon) {
-        let url = addon.transport_url.as_str();
-        let due = || {
-            lock(&self.lists)
-                .get(url)
-                .is_none_or(|l| Instant::now() >= l.due)
-        };
-        if !due() {
-            return;
-        }
-        let _one = self.listing.lock().await;
-        // Another lookup may have read them meanwhile.
-        if !due() {
-            return;
-        }
-        let (mut titles, whole) = listed(addons, addon).await;
-        let mut lists = lock(&self.lists);
-        let wait = if whole {
-            LISTS_FRESH
-        } else {
-            tracing::warn!(
-                "a Rotten Tomatoes list did not answer: read again in {} s",
-                REST.as_secs()
-            );
-            if let Some(old) = lists.get(url) {
-                titles.extend(old.titles.iter().cloned());
-            }
-            REST
-        };
-        let listed = Listed {
-            titles: Arc::new(titles),
-            due: Instant::now() + wait,
-        };
-        lists.insert(url.to_owned(), listed);
     }
 
     fn rows(&self, titles: &[Title]) -> Vec<RatingRow> {
@@ -552,10 +524,95 @@ impl Finder {
     }
 }
 
+impl Lists {
+    /// The titles the addon at `url` lists, once a read of them has ended.
+    fn marks(&self, url: &str) -> Option<Arc<HashSet<Title>>> {
+        let by_url = lock(&self.by_url);
+        let listed = by_url.get(url)?;
+        listed.due.map(|_| listed.titles.clone())
+    }
+
+    /// Starts a read of the addon's lists when they are due (a day after
+    /// the last read, `REST` after one that missed a page) and no read is on
+    /// its way. The read runs on its own: no caller waits for it, and one
+    /// that goes away does not end it.
+    fn read_when_due(self: &Arc<Self>, addons: &AddonClient, addon: &InstalledAddon) {
+        let url = addon.transport_url.to_string();
+        {
+            let mut by_url = lock(&self.by_url);
+            let listed = by_url.entry(url.clone()).or_default();
+            if listed.reading || listed.due.is_some_and(|due| Instant::now() < due) {
+                return;
+            }
+            listed.reading = true;
+        }
+        let lists = self.clone();
+        let addons = addons.with_max_bytes(LIST_MAX_BYTES);
+        let addon = addon.clone();
+        tokio::spawn(async move {
+            let answers = read_pages(&addons, &addon).await;
+            lists.store(&url, answers);
+        });
+    }
+
+    /// Keeps a read's answers, `None` for a page that failed. A page that
+    /// failed, or answered empty after it listed titles, keeps what it last
+    /// listed (for `PAGE_KEPT` at most) and makes the read due again after
+    /// `REST`; a page the manifest no longer names goes.
+    fn store(&self, url: &str, answers: Vec<(String, Option<HashSet<Title>>)>) {
+        let now = Instant::now();
+        let mut by_url = lock(&self.by_url);
+        let listed = by_url.entry(url.to_owned()).or_default();
+        let mut pages = HashMap::new();
+        let mut whole = true;
+        for (page, answer) in answers {
+            let old = listed
+                .pages
+                .remove(&page)
+                .filter(|old| now.saturating_duration_since(old.answered) < PAGE_KEPT);
+            let kept = match (answer, old) {
+                (Some(titles), Some(old)) if titles.is_empty() && !old.titles.is_empty() => {
+                    whole = false;
+                    old
+                }
+                (Some(titles), _) => Page {
+                    titles,
+                    answered: now,
+                },
+                (None, old) => {
+                    whole = false;
+                    let Some(old) = old else { continue };
+                    old
+                }
+            };
+            pages.insert(page, kept);
+        }
+        let titles: HashSet<Title> = pages
+            .values()
+            .flat_map(|p| p.titles.iter().cloned())
+            .collect();
+        let changed = listed.due.is_none() || *listed.titles != titles;
+        listed.pages = pages;
+        listed.titles = Arc::new(titles);
+        listed.due = Some(now + if whole { LISTS_FRESH } else { REST });
+        listed.reading = false;
+        drop(by_url);
+        if !whole {
+            tracing::warn!(
+                "a Rotten Tomatoes list did not answer: read again in {} s",
+                REST.as_secs()
+            );
+        }
+        if changed {
+            self.changed.send_modify(|n| *n += 1);
+        }
+    }
+}
+
 /// The scores as one profile sees them (`Core::ratings`): MDBList's, and the
 /// Rotten Tomatoes addon's mark while the profile has that addon on. A kids
 /// profile never reads the addon's lists, as its Home asks no addon for a
-/// catalog (plans/m11-kids.md 14.1).
+/// catalog (plans/m11-kids.md 14.1), and never asks MDBList.
 pub struct Rater<'a> {
     core: &'a Core,
     finder: &'a Finder,
@@ -572,19 +629,30 @@ impl<'a> Rater<'a> {
     }
 
     /// The Rotten Tomatoes addon, when this profile has it installed and on.
-    // ponytail: reads the addon list on each call (Home fills each row);
-    // keep the answer per profile, dropped on an `Addons` change, if traces
-    // show it.
+    /// Only the manifest that names its id is read; the id is all it is
+    /// known by (plans/research/ratings.md).
     fn addon(&self) -> Option<InstalledAddon> {
         if self.core.policy().kids() {
             return None;
         }
-        let addons = self.core.installed_addons().ok()?;
-        addons.into_iter().find(|a| a.id() == RT_ADDON)
+        let rows = self.core.library().addons(self.core.profile()).ok()?;
+        rows.into_iter()
+            .filter(|r| r.enabled && r.manifest_json.contains(RT_ADDON))
+            .find_map(|r| {
+                let manifest: mq_protocol::Manifest =
+                    serde_json::from_str(&r.manifest_json).ok()?;
+                if manifest.id != RT_ADDON {
+                    return None;
+                }
+                Some(InstalledAddon {
+                    transport_url: url::Url::parse(&r.transport_url).ok()?,
+                    manifest,
+                })
+            })
     }
 
     fn marks(&self, addon: Option<&InstalledAddon>) -> Option<Arc<HashSet<Title>>> {
-        self.finder.marks(addon?.transport_url.as_str())
+        self.finder.lists.marks(addon?.transport_url.as_str())
     }
 
     /// What the cache holds for these titles, the addon's mark included.
@@ -593,32 +661,57 @@ impl<'a> Rater<'a> {
         self.finder.known(titles, marks.as_deref())
     }
 
-    /// Fills tiles from the cache, before any lookup lands. True when any
-    /// tile changed.
-    pub(crate) fn fill<'t>(&self, tiles: impl IntoIterator<Item = &'t mut Tile>) -> bool {
-        let mut tiles: Vec<&mut Tile> = tiles.into_iter().collect();
-        let known = self.known(&titles(tiles.iter().map(|t| &**t)));
-        reset(tiles.iter_mut().map(|t| &mut **t), &known)
+    /// `known`, with every title in it: one with neither a score nor the
+    /// mark shows the addon's own rating alone, so the answer puts on a
+    /// tile exactly what holds now.
+    pub(crate) fn shown(&self, titles: &[Title]) -> HashMap<Title, Scores> {
+        let mut known = self.known(titles);
+        for title in titles {
+            known.entry(title.clone()).or_default();
+        }
+        known
     }
 
-    /// Reads the Rotten Tomatoes addon's lists when due and asks MDBList
-    /// about the titles whose rows are missing or stale, then answers what
-    /// the cache holds for all of them. `None` when there is nothing to
-    /// show: MDBList had nothing due or could not be asked (no key, MDBList
-    /// resting), and the addon marks none of these titles.
+    /// Fills tiles from what holds now, before any lookup lands. True when
+    /// any tile changed.
+    pub(crate) fn fill<'t>(&self, tiles: impl IntoIterator<Item = &'t mut Tile>) -> bool {
+        let mut tiles: Vec<&mut Tile> = tiles.into_iter().collect();
+        let known = self.shown(&titles(tiles.iter().map(|t| &**t)));
+        apply(tiles.iter_mut().map(|t| &mut **t), &known)
+    }
+
+    /// Starts a read of the Rotten Tomatoes addon's lists when due (nobody
+    /// waits for it) and asks MDBList about the titles whose rows are
+    /// missing or stale, then answers what holds for all of them, the mark
+    /// as the addon is now. `None` when there is nothing to show: MDBList
+    /// had nothing due or could not be asked (no key, MDBList resting) and
+    /// the profile has no list read. A kids profile asks nothing.
     pub async fn lookup(&self, titles: &[Title]) -> Option<HashMap<Title, Scores>> {
-        let addon = self.addon();
-        let read = async {
-            if let Some(addon) = &addon {
-                self.finder.read_lists(self.core.addons(), addon).await;
-            }
-        };
-        let ((), asked) = futures_util::join!(read, self.finder.ask_due(titles));
-        let marks = self.marks(addon.as_ref());
-        let marked = marks
-            .as_ref()
-            .is_some_and(|m| titles.iter().any(|t| m.contains(t)));
-        (asked || marked).then(|| self.finder.known(titles, marks.as_deref()))
+        if self.core.policy().kids() {
+            return None;
+        }
+        if let Some(addon) = self.addon() {
+            self.finder.lists.read_when_due(self.core.addons(), &addon);
+        }
+        let asked = self.finder.ask_due(titles).await;
+        // The addon as it is now: one turned off meanwhile gives no mark.
+        let marks = self.marks(self.addon().as_ref());
+        (asked || marks.is_some()).then(|| self.finder.known(titles, marks.as_deref()))
+    }
+
+    /// One working out and putting on of ratings at a time (Home's `rate`
+    /// and `rerate`), so an answer worked out before the addon went off
+    /// never lands after one worked out since.
+    // ponytail: one lock for the device; per view if two live views ever
+    // contend on it.
+    pub(crate) fn turn(&self) -> std::sync::MutexGuard<'a, ()> {
+        lock(&self.finder.turn)
+    }
+
+    /// Moves on when a read of the Rotten Tomatoes lists changes what they
+    /// hold, for a view to put the marks on again (`views::home`).
+    pub(crate) fn listed(&self) -> tokio::sync::watch::Receiver<u64> {
+        self.finder.lists.changed.subscribe()
     }
 
     /// Tests: how long MDBList still rests.
@@ -631,16 +724,30 @@ impl<'a> Rater<'a> {
     /// Tests: the Rotten Tomatoes lists as if read `by` earlier.
     #[doc(hidden)]
     pub fn age_lists(&self, by: Duration) {
-        for listed in lock(&self.finder.lists).values_mut() {
-            listed.due = listed.due.checked_sub(by).unwrap_or(listed.due);
+        let back = |at: Instant| at.checked_sub(by).unwrap_or(at);
+        for listed in lock(&self.finder.lists.by_url).values_mut() {
+            listed.due = listed.due.map(back);
+            for page in listed.pages.values_mut() {
+                page.answered = back(page.answered);
+            }
         }
+    }
+
+    /// Tests: whether a read of the Rotten Tomatoes lists is on its way.
+    #[doc(hidden)]
+    pub fn reading_lists(&self) -> bool {
+        lock(&self.finder.lists.by_url).values().any(|l| l.reading)
     }
 }
 
-/// The titles the Rotten Tomatoes addon lists: each catalog of its that
-/// needs no extra, as is and by each genre it offers, through the addon
-/// cache. False in second place when a page did not answer.
-async fn listed(addons: &AddonClient, addon: &InstalledAddon) -> (HashSet<Title>, bool) {
+/// The pages of the Rotten Tomatoes addon's lists, each with the titles it
+/// listed or `None` when it failed: each catalog of its that needs no extra,
+/// as is and by each genre it offers (`MAX_PAGES` at most), through the
+/// addon cache, `LIST_PAGES_AT_ONCE` at a time.
+async fn read_pages(
+    addons: &AddonClient,
+    addon: &InstalledAddon,
+) -> Vec<(String, Option<HashSet<Title>>)> {
     let pages: Vec<ResourcePath> = addon
         .manifest
         .catalogs
@@ -668,26 +775,30 @@ async fn listed(addons: &AddonClient, addon: &InstalledAddon) -> (HashSet<Title>
                         .collect(),
                 })
         })
+        .take(MAX_PAGES)
         .collect();
-    let answers: Vec<Option<Vec<MetaItemPreview>>> = futures_util::stream::iter(pages)
+    futures_util::stream::iter(pages)
         .map(|path| async move {
-            let fetched = addons.fetch(addon, &path, LIST_TIMEOUT).await.ok()?;
-            match serde_json::from_slice(&fetched.body).ok()? {
-                ResourceResponse::Metas { metas } => Some(metas),
-                _ => None,
-            }
+            let genre = path.extra.first().map_or("", |e| e.value.as_str());
+            let page = format!("{}/{}/{genre}", path.r#type, path.id);
+            let titles = async {
+                let fetched = addons.fetch(addon, &path, LIST_TIMEOUT).await.ok()?;
+                match serde_json::from_slice::<ResourceResponse>(&fetched.body).ok()? {
+                    ResourceResponse::Metas { metas } => Some(
+                        metas
+                            .iter()
+                            .take(MAX_PAGE_TITLES)
+                            .filter_map(|m| title_of(&m.r#type, &m.id))
+                            .collect(),
+                    ),
+                    _ => None,
+                }
+            };
+            (page, titles.await)
         })
         .buffer_unordered(LIST_PAGES_AT_ONCE)
         .collect()
-        .await;
-    let whole = answers.iter().all(Option::is_some);
-    let titles = answers
-        .into_iter()
-        .flatten()
-        .flatten()
-        .filter_map(|m| title_of(&m.r#type, &m.id))
-        .collect();
-    (titles, whole)
+        .await
 }
 
 /// Asked again: older than 3 days, or than 1 day without a Tomatometer, or
@@ -803,9 +914,10 @@ mod tests {
             credit(Some(&fresh(None, None))).as_deref(),
             Some("IMDb and Rotten Tomatoes (the Rotten Tomatoes addon)")
         );
+        // Each source named for what it gave.
         assert_eq!(
             credit(Some(&fresh(Some(8.8), None))).as_deref(),
-            Some("IMDb and Rotten Tomatoes (the Rotten Tomatoes addon)")
+            Some("IMDb via MDBList, Rotten Tomatoes (the Rotten Tomatoes addon)")
         );
         assert_eq!(
             credit(Some(&number)).as_deref(),
@@ -813,7 +925,11 @@ mod tests {
         );
         assert_eq!(
             credit(Some(&scores(Some(8.8), None))).as_deref(),
-            Some("IMDb and Rotten Tomatoes via MDBList")
+            Some("IMDb via MDBList")
+        );
+        assert_eq!(
+            credit(Some(&scores(None, Some(87)))).as_deref(),
+            Some("Rotten Tomatoes via MDBList")
         );
         assert_eq!(credit(Some(&scores(None, None))), None);
     }

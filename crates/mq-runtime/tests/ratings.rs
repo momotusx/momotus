@@ -8,7 +8,8 @@ use mq_runtime::ratings::{BATCH, Host, Ratings, Scores, Title};
 use mq_runtime::views::discover::DiscoverState;
 use mq_runtime::{Core, DiscoverView, HomeView, RowState, SearchView, TitleView};
 use serde_json::{Value, json};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -916,13 +917,19 @@ async fn discover_and_search_show_both_scores() {
 }
 
 /// A fake Rotten Tomatoes addon: Shawshank on the movie list, The Godfather
-/// only on its Drama page, Breaking Bad on the series list; every other page
-/// is empty, and `fail` answers 500. It keeps the paths it served.
+/// only on its Drama page, Breaking Bad on the series list; any other page
+/// answers no titles. Pages can be changed, failed (500) or hung. It keeps
+/// the paths it served and the most it answered at once.
 #[derive(Clone)]
 struct RtAddon {
     row: AddonRow,
     served: Arc<Mutex<Vec<String>>>,
-    fail: Arc<Mutex<Option<&'static str>>>,
+    /// The metas a page answers, by its path.
+    pages: Arc<Mutex<HashMap<String, Value>>>,
+    fail: Arc<Mutex<HashSet<String>>>,
+    hang: Arc<Mutex<HashSet<String>>>,
+    busy: Arc<AtomicUsize>,
+    most: Arc<AtomicUsize>,
 }
 
 impl RtAddon {
@@ -933,40 +940,95 @@ impl RtAddon {
     fn url(&self) -> &str {
         &self.row.transport_url
     }
+
+    fn list(&self, path: &str, titles: &[(&str, &str)]) {
+        let metas: Vec<Value> = titles
+            .iter()
+            .map(|(kind, id)| json!({"id": id, "type": kind, "name": id}))
+            .collect();
+        self.pages
+            .lock()
+            .unwrap()
+            .insert(path.to_owned(), Value::Array(metas));
+    }
+
+    fn fail(&self, path: &str, on: bool) {
+        let mut fail = self.fail.lock().unwrap();
+        if on {
+            fail.insert(path.to_owned());
+        } else {
+            fail.remove(path);
+        }
+    }
 }
 
 const RT_MOVIES: &str = "/catalog/movie/rtfresh_movie.json";
 const RT_DRAMA: &str = "/catalog/movie/rtfresh_movie/genre=Drama.json";
+const RT_COMEDY: &str = "/catalog/movie/rtfresh_movie/genre=Comedy.json";
+const SHAWSHANK: &str = "tt0111161";
+const GODFATHER: &str = "tt0068646";
+const PART_II: &str = "tt0071562";
 
 async fn rt_addon() -> RtAddon {
+    rt_addon_with(&["Drama", "Comedy"], Duration::ZERO).await
+}
+
+/// The fake with these genres on both lists, each answer `delay` late. Its
+/// manifest also has a search catalog, which needs an extra.
+async fn rt_addon_with(genres: &[&str], delay: Duration) -> RtAddon {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
-    let served: Arc<Mutex<Vec<String>>> = Arc::default();
-    let fail: Arc<Mutex<Option<&'static str>>> = Arc::default();
-    let (log, failing) = (served.clone(), fail.clone());
+    let genre = json!([{"name": "genre", "isRequired": false, "options": genres}]);
+    let manifest = json!({
+        "id": "pw.ers.rottentomatoes", "version": "1.0.9", "name": "Rotten Tomatoes",
+        "types": ["movie", "series"], "resources": ["catalog"], "idPrefixes": ["tt"],
+        "catalogs": [
+            {"type": "movie", "id": "rtfresh_movie", "name": "RT: Certified Fresh", "extra": genre},
+            {"type": "series", "id": "rtfresh_series", "name": "RT: Fresh TV Shows", "extra": genre},
+            {"type": "movie", "id": "rtsearch", "name": "Search", "extra": [{"name": "search", "isRequired": true}]}
+        ]
+    });
+    let rt = RtAddon {
+        row: AddonRow {
+            transport_url: format!("http://{addr}/manifest.json"),
+            manifest_json: manifest.to_string(),
+            position: 1,
+            enabled: true,
+            allow_private: true,
+        },
+        served: Arc::default(),
+        pages: Arc::default(),
+        fail: Arc::default(),
+        hang: Arc::default(),
+        busy: Arc::default(),
+        most: Arc::default(),
+    };
+    rt.list(RT_MOVIES, &[("movie", SHAWSHANK)]);
+    rt.list(RT_DRAMA, &[("movie", GODFATHER)]);
+    rt.list(
+        "/catalog/series/rtfresh_series.json",
+        &[("series", "tt0903747")],
+    );
+    let fake = rt.clone();
     tokio::spawn(async move {
         loop {
             let Ok((mut socket, _)) = listener.accept().await else {
                 return;
             };
-            let (log, failing) = (log.clone(), failing.clone());
+            let fake = fake.clone();
             tokio::spawn(async move {
                 let (line, _) = read_request(&mut socket).await;
                 let path = line.split(' ').nth(1).unwrap_or_default().to_owned();
-                log.lock().unwrap().push(path.clone());
-                let body = match path.as_str() {
-                    RT_MOVIES => {
-                        r#"{"metas":[{"id":"tt0111161","type":"movie","name":"The Shawshank Redemption"}]}"#
-                    }
-                    RT_DRAMA => {
-                        r#"{"metas":[{"id":"tt0068646","type":"movie","name":"The Godfather"}]}"#
-                    }
-                    "/catalog/series/rtfresh_series.json" => {
-                        r#"{"metas":[{"id":"tt0903747","type":"series","name":"Breaking Bad"}]}"#
-                    }
-                    _ => r#"{"metas":[]}"#,
-                };
-                let status = if *failing.lock().unwrap() == Some(path.as_str()) {
+                fake.served.lock().unwrap().push(path.clone());
+                let now = fake.busy.fetch_add(1, Ordering::SeqCst) + 1;
+                fake.most.fetch_max(now, Ordering::SeqCst);
+                tokio::time::sleep(delay).await;
+                if fake.hang.lock().unwrap().contains(&path) {
+                    tokio::time::sleep(Duration::from_secs(3600)).await;
+                }
+                let metas = fake.pages.lock().unwrap().get(&path).cloned();
+                let body = json!({"metas": metas.unwrap_or(json!([]))}).to_string();
+                let status = if fake.fail.lock().unwrap().contains(&path) {
                     "500 No"
                 } else {
                     "200 OK"
@@ -976,29 +1038,11 @@ async fn rt_addon() -> RtAddon {
                     body.len()
                 );
                 let _ = socket.write_all(resp.as_bytes()).await;
+                fake.busy.fetch_sub(1, Ordering::SeqCst);
             });
         }
     });
-    let genre = json!([{"name": "genre", "isRequired": false, "options": ["Drama", "Comedy"]}]);
-    let manifest = json!({
-        "id": "pw.ers.rottentomatoes", "version": "1.0.9", "name": "Rotten Tomatoes",
-        "types": ["movie", "series"], "resources": ["catalog"], "idPrefixes": ["tt"],
-        "catalogs": [
-            {"type": "movie", "id": "rtfresh_movie", "name": "RT: Certified Fresh", "extra": genre},
-            {"type": "series", "id": "rtfresh_series", "name": "RT: Fresh TV Shows", "extra": genre}
-        ]
-    });
-    RtAddon {
-        row: AddonRow {
-            transport_url: format!("http://{addr}/manifest.json"),
-            manifest_json: manifest.to_string(),
-            position: 1,
-            enabled: true,
-            allow_private: true,
-        },
-        served,
-        fail,
-    }
+    rt
 }
 
 fn show(id: &str) -> Title {
@@ -1009,30 +1053,52 @@ fn rt_of(known: &HashMap<Title, Scores>, title: &Title) -> Option<String> {
     Ratings::of(known.get(title), None).rotten_tomatoes
 }
 
+fn install(core: &Core, rows: &[AddonRow]) {
+    core.library()
+        .set_addons(core.profile(), rows, &core.hlc())
+        .unwrap();
+}
+
+/// A lookup starts a read of the lists when they are due; this waits for
+/// it to end.
+async fn read(core: &Core, titles: &[Title]) {
+    core.ratings().lookup(titles).await;
+    for _ in 0..500 {
+        if !core.ratings().reading_lists() {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("the read of the lists never ended");
+}
+
+const DAY: Duration = Duration::from_secs(86_400);
+
 #[tokio::test]
 async fn the_addons_lists_mark_their_titles_fresh_and_are_read_once_a_day() {
     let core = Core::temporary("p").unwrap();
     let rt = rt_addon().await;
-    core.library()
-        .set_addons("p", std::slice::from_ref(&rt.row), &core.hlc())
-        .unwrap();
+    install(&core, std::slice::from_ref(&rt.row));
     let titles = vec![
-        movie("tt0111161"),
-        movie("tt0068646"),
+        movie(SHAWSHANK),
+        movie(GODFATHER),
         show("tt0903747"),
-        movie("tt0071562"),
-        show("tt0111161"),
+        movie(PART_II),
+        show(SHAWSHANK),
     ];
+    // Nothing read yet: nothing to show, and the lookup does not wait.
+    assert_eq!(core.ratings().lookup(&titles).await, None);
+    read(&core, &titles).await;
     let known = core.ratings().lookup(&titles).await.expect("marked");
-    assert_eq!(rt_of(&known, &movie("tt0111161")).as_deref(), Some("Fresh"));
+    assert_eq!(rt_of(&known, &movie(SHAWSHANK)).as_deref(), Some("Fresh"));
     assert_eq!(
-        rt_of(&known, &movie("tt0068646")).as_deref(),
+        rt_of(&known, &movie(GODFATHER)).as_deref(),
         Some("Fresh"),
         "from the Drama page"
     );
     assert_eq!(rt_of(&known, &show("tt0903747")).as_deref(), Some("Fresh"));
-    assert_eq!(rt_of(&known, &movie("tt0071562")), None, "not listed");
-    assert_eq!(rt_of(&known, &show("tt0111161")), None, "listed as a movie");
+    assert_eq!(rt_of(&known, &movie(PART_II)), None, "not listed");
+    assert_eq!(rt_of(&known, &show(SHAWSHANK)), None, "listed as a movie");
     let mut pages = rt.served();
     pages.sort();
     assert_eq!(
@@ -1045,63 +1111,198 @@ async fn the_addons_lists_mark_their_titles_fresh_and_are_read_once_a_day() {
             "/catalog/series/rtfresh_series/genre=Comedy.json",
             "/catalog/series/rtfresh_series/genre=Drama.json",
         ],
-        "each list as is and by each genre"
+        "each list as is and by each genre, never the catalog that needs an extra"
     );
-    // Within the day nothing is read again, and the cache answers at once.
-    assert!(core.ratings().lookup(&titles).await.is_some());
+    // Within the day nothing is read again.
+    read(&core, &titles).await;
     core.ratings().age_lists(Duration::from_secs(23 * 3600));
-    assert!(core.ratings().lookup(&titles).await.is_some());
+    read(&core, &titles).await;
     assert_eq!(rt.served().len(), 6);
     assert_eq!(
-        core.ratings().known(&titles)[&movie("tt0111161")],
+        core.ratings().known(&titles)[&movie(SHAWSHANK)],
         Scores {
             imdb: None,
             rt: None,
             fresh: true
         }
     );
-    // A day on, the lists are read again; a page that fails keeps what it
-    // listed and is read again after a rest.
-    *rt.fail.lock().unwrap() = Some(RT_DRAMA);
     core.ratings().age_lists(Duration::from_secs(3600));
-    let known = core.ratings().lookup(&titles).await.expect("marked");
-    assert_eq!(rt.served().len(), 12);
-    assert_eq!(rt_of(&known, &movie("tt0068646")).as_deref(), Some("Fresh"));
-    *rt.fail.lock().unwrap() = None;
-    core.ratings().lookup(&titles).await;
-    assert_eq!(rt.served().len(), 12, "resting");
+    read(&core, &titles).await;
+    assert_eq!(rt.served().len(), 12, "a day on, read again");
+    // A title they do not list is answered too, unmarked.
+    let known = core
+        .ratings()
+        .lookup(&[movie(PART_II)])
+        .await
+        .expect("read");
+    assert_eq!(known[&movie(PART_II)], Scores::default());
+}
+
+#[tokio::test]
+async fn a_failed_or_emptied_page_keeps_only_its_own_titles_for_a_while() {
+    let core = Core::temporary("p").unwrap();
+    let rt = rt_addon().await;
+    install(&core, std::slice::from_ref(&rt.row));
+    let titles = vec![movie(SHAWSHANK), movie(GODFATHER), movie(PART_II)];
+    let fresh = |id: &str| core.ratings().known(&titles)[&movie(id)].fresh;
+    read(&core, &titles).await;
+    assert!(fresh(SHAWSHANK) && fresh(GODFATHER));
+
+    // Shawshank leaves the movie list while the Comedy page fails: the
+    // failed page keeps only what it listed, so Shawshank loses the mark.
+    rt.list(RT_MOVIES, &[("movie", PART_II)]);
+    rt.fail(RT_COMEDY, true);
+    core.ratings().age_lists(DAY);
+    read(&core, &titles).await;
+    assert!(!fresh(SHAWSHANK), "de-listed");
+    assert!(fresh(PART_II) && fresh(GODFATHER));
+    // A page failed: read again after a rest, not a day.
+    let served = rt.served().len();
+    read(&core, &titles).await;
+    assert_eq!(rt.served().len(), served, "resting");
+    rt.fail(RT_COMEDY, false);
+
+    // An empty answer after titles counts as a failure: The Godfather keeps
+    // its mark, and the read is due again after the rest.
+    rt.list(RT_DRAMA, &[]);
     core.ratings().age_lists(Duration::from_secs(300));
-    core.ratings().lookup(&titles).await;
-    assert_eq!(rt.served().len(), 18);
-    // Titles it does not list: nothing to show.
-    assert_eq!(core.ratings().lookup(&[movie("tt0071562")]).await, None);
+    read(&core, &titles).await;
+    assert_eq!(rt.served().len(), served + 6);
+    assert!(fresh(GODFATHER), "an empty answer is not believed at once");
+    core.ratings().age_lists(Duration::from_secs(300));
+    read(&core, &titles).await;
+    assert_eq!(rt.served().len(), served + 12);
+    // Three days on, the empty answer stands.
+    core.ratings().age_lists(3 * DAY);
+    read(&core, &titles).await;
+    assert!(!fresh(GODFATHER), "kept 3 days at most");
+}
+
+#[tokio::test]
+async fn mdblists_numbers_never_wait_on_the_lists_and_a_lookup_that_goes_away_leaves_the_read() {
+    let core = Core::temporary("p").unwrap();
+    let rt = rt_addon_with(&["Drama", "Comedy"], Duration::from_millis(400)).await;
+    rt.hang.lock().unwrap().insert(RT_COMEDY.to_owned());
+    install(&core, std::slice::from_ref(&rt.row));
+    let fake = mdblist(
+        json!({SHAWSHANK: {"imdb": 9.2, "tomatoes": 89}}),
+        Duration::ZERO,
+    )
+    .await;
+    core.ratings().set_host(fake.host());
+    let titles = vec![movie(SHAWSHANK), movie(GODFATHER)];
+    // Three lookups at once, gone before any page answers: one read, which
+    // goes on.
+    let lookups: Vec<_> = (0..3)
+        .map(|_| {
+            let (core, titles) = (core.clone(), titles.clone());
+            tokio::spawn(async move { core.ratings().lookup(&titles).await })
+        })
+        .collect();
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    for lookup in &lookups {
+        lookup.abort();
+    }
+    assert!(core.ratings().reading_lists());
+    // MDBList's numbers come while a page hangs.
+    let started = std::time::Instant::now();
+    let known = core.ratings().lookup(&titles).await.expect("asked");
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "{:?}",
+        started.elapsed()
+    );
+    assert_eq!(known[&movie(SHAWSHANK)].rt, Some(89));
+    assert!(
+        core.ratings().reading_lists(),
+        "the hung page holds only the read"
+    );
+    // One read: each page asked once, though three lookups came.
+    until("every page asked", || rt.served().len() == 6).await;
+    tokio::time::sleep(Duration::from_millis(1000)).await;
+    let mut once = rt.served();
+    once.sort();
+    once.dedup();
+    assert_eq!((rt.served().len(), once.len()), (6, 6));
+}
+
+#[tokio::test]
+async fn a_lookup_gives_no_mark_once_the_addon_went_off_meanwhile() {
+    let core = Core::temporary("p").unwrap();
+    let rt = rt_addon().await;
+    install(&core, std::slice::from_ref(&rt.row));
+    let titles = vec![movie(SHAWSHANK)];
+    read(&core, &titles).await;
+    let fake = mdblist(
+        json!({SHAWSHANK: {"imdb": 9.2, "tomatoes": null}}),
+        Duration::from_millis(300),
+    )
+    .await;
+    core.ratings().set_host(fake.host());
+    let lookup = {
+        let (core, titles) = (core.clone(), titles.clone());
+        tokio::spawn(async move { core.ratings().lookup(&titles).await })
+    };
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    core.set_addon_enabled(rt.url(), false).unwrap();
+    let known = lookup.await.unwrap().expect("asked");
+    assert_eq!(known[&titles[0]].imdb, Some(9.2));
+    assert!(!known[&titles[0]].fresh, "the addon as it is now");
+}
+
+#[tokio::test]
+async fn four_pages_at_a_time_and_at_most_64_pages_of_500_titles() {
+    let core = Core::temporary("p").unwrap();
+    let genres = ["Drama", "Comedy", "Action", "Horror", "War"];
+    let rt = rt_addon_with(&genres, Duration::from_millis(50)).await;
+    install(&core, std::slice::from_ref(&rt.row));
+    read(&core, &[movie(SHAWSHANK)]).await;
+    assert_eq!(rt.served().len(), 12);
+    let most = rt.most.load(Ordering::SeqCst);
+    assert!((2..=4).contains(&most), "{most} pages at once");
+
+    // A manifest naming 200 genres is read 64 pages deep, and a page of
+    // 600 titles gives 500.
+    let core = Core::temporary("p").unwrap();
+    let genres: Vec<String> = (0..200).map(|i| format!("G{i}")).collect();
+    let genres: Vec<&str> = genres.iter().map(String::as_str).collect();
+    let rt = rt_addon_with(&genres, Duration::ZERO).await;
+    let many: Vec<String> = (0..600).map(|i| format!("tt9{i:06}")).collect();
+    let listed: Vec<(&str, &str)> = many.iter().map(|id| ("movie", id.as_str())).collect();
+    rt.list(RT_MOVIES, &listed);
+    install(&core, std::slice::from_ref(&rt.row));
+    read(&core, &[movie(SHAWSHANK)]).await;
+    assert_eq!(rt.served().len(), 64);
+    let titles = [movie(&many[499]), movie(&many[500])];
+    let known = core.ratings().known(&titles);
+    assert!(known[&titles[0]].fresh);
+    assert!(!known[&titles[1]].fresh, "past 500 titles a page");
 }
 
 #[tokio::test]
 async fn mdblists_tomatometer_wins_over_the_mark() {
     let core = Core::temporary("p").unwrap();
     let rt = rt_addon().await;
-    core.library()
-        .set_addons("p", std::slice::from_ref(&rt.row), &core.hlc())
-        .unwrap();
+    install(&core, std::slice::from_ref(&rt.row));
     let fake = mdblist(
-        json!({"tt0111161": {"imdb": 9.2, "tomatoes": 89}, "tt0068646": {"imdb": 9.1, "tomatoes": null}}),
+        json!({SHAWSHANK: {"imdb": 9.2, "tomatoes": 89}, GODFATHER: {"imdb": 9.1, "tomatoes": null}}),
         Duration::ZERO,
     )
     .await;
     core.ratings().set_host(fake.host());
-    let titles = vec![movie("tt0111161"), movie("tt0068646")];
-    let known = core.ratings().lookup(&titles).await.expect("asked");
+    let titles = vec![movie(SHAWSHANK), movie(GODFATHER)];
+    read(&core, &titles).await;
+    let known = core.ratings().known(&titles);
     let row = |title: &Title| Ratings::of(known.get(title), None);
     assert_eq!(
-        row(&movie("tt0111161")),
+        row(&movie(SHAWSHANK)),
         Ratings {
             imdb: Some("9.2".into()),
             rotten_tomatoes: Some("89%".into())
         }
     );
     assert_eq!(
-        row(&movie("tt0068646")),
+        row(&movie(GODFATHER)),
         Ratings {
             imdb: Some("9.1".into()),
             rotten_tomatoes: Some("Fresh".into())
@@ -1119,27 +1320,35 @@ async fn a_disabled_addon_or_a_kids_profile_reads_no_list_and_shows_no_mark() {
         enabled: false,
         ..rt.row.clone()
     };
-    owner
-        .library()
-        .set_addons(OWNER, &[off], &owner.hlc())
-        .unwrap();
-    let titles = vec![movie("tt0111161")];
+    install(&owner, &[off]);
+    let titles = vec![movie(SHAWSHANK)];
     assert_eq!(owner.ratings().lookup(&titles).await, None);
+    assert!(!owner.ratings().reading_lists());
     assert!(rt.served().is_empty());
 
-    // A kids profile reads the owner's addons, but never these lists.
+    // A kids profile reads the owner's addons, but never these lists, and
+    // never asks MDBList.
     owner.set_addon_enabled(rt.url(), true).unwrap();
+    let fake = mdblist(
+        json!({SHAWSHANK: {"imdb": 9.2, "tomatoes": 89}}),
+        Duration::ZERO,
+    )
+    .await;
+    owner.ratings().set_host(fake.host());
     let kid = owner.for_profile(&owner.create_kids_profile("Kid", "fox").unwrap());
     assert_eq!(kid.ratings().lookup(&titles).await, None);
+    assert!(!kid.ratings().reading_lists());
     assert!(rt.served().is_empty());
+    assert!(fake.calls().is_empty(), "no MDBList call for a kid");
     // Nor shows the mark once the owner's Home has read them.
-    assert!(owner.ratings().lookup(&titles).await.is_some());
+    read(&owner, &titles).await;
     assert!(owner.ratings().known(&titles)[&titles[0]].fresh);
-    assert!(kid.ratings().known(&titles).is_empty());
+    let kids = kid.ratings().known(&titles);
+    assert!(!kids.get(&titles[0]).is_some_and(|s| s.fresh));
 
     // Turned off again: the mark goes.
     owner.set_addon_enabled(rt.url(), false).unwrap();
-    assert!(owner.ratings().known(&titles).is_empty());
+    assert!(!owner.ratings().known(&titles)[&titles[0]].fresh);
     assert_eq!(owner.ratings().lookup(&titles).await, None);
 }
 
@@ -1147,10 +1356,10 @@ async fn a_disabled_addon_or_a_kids_profile_reads_no_list_and_shows_no_mark() {
 async fn home_discover_search_and_the_title_page_show_the_mark_until_the_addon_goes() {
     let core = Core::temporary("p").unwrap();
     let rt = rt_addon().await;
-    core.library()
-        .set_addons("p", &[addon().await, rt.row.clone()], &core.hlc())
-        .unwrap();
+    install(&core, &[addon().await, rt.row.clone()]);
     let home = HomeView::open(&core);
+    // The lookups do not wait for the lists: Home puts the marks on when
+    // the read ends.
     until("the mark on Home", || {
         home.snapshot().rows.first().is_some_and(|r| {
             r.state == RowState::Ready && r.tiles[1].ratings.rotten_tomatoes.is_some()
@@ -1169,7 +1378,7 @@ async fn home_discover_search_and_the_title_page_show_the_mark_until_the_addon_g
     })
     .await;
 
-    let title = TitleView::open(&core, "movie", "tt0111161");
+    let title = TitleView::open(&core, "movie", SHAWSHANK);
     until("the mark on the title page", || {
         title
             .snapshot()
@@ -1202,8 +1411,24 @@ async fn home_discover_search_and_the_title_page_show_the_mark_until_the_addon_g
             r.state == RowState::Ready
                 && r.tiles
                     .iter()
-                    .any(|t| t.id == "tt0068646" && t.ratings.rotten_tomatoes.is_some())
+                    .any(|t| t.id == GODFATHER && t.ratings.rotten_tomatoes.is_some())
         })
+    })
+    .await;
+
+    // A read that no longer lists The Godfather takes its mark off the
+    // open Home and gives it to Part II.
+    rt.list(RT_DRAMA, &[("movie", PART_II)]);
+    core.ratings().age_lists(DAY);
+    read(&core, &[movie(GODFATHER)]).await;
+    let shown = |i: usize| {
+        home.snapshot().rows[0].tiles[i]
+            .ratings
+            .rotten_tomatoes
+            .clone()
+    };
+    until("Home after the read", || {
+        shown(1).is_none() && shown(2).is_some()
     })
     .await;
 
@@ -1224,7 +1449,7 @@ async fn home_discover_search_and_the_title_page_show_the_mark_until_the_addon_g
         home.snapshot().rows[0].tiles[0].ratings.imdb.as_deref(),
         Some("9.3")
     );
-    let title = TitleView::open(&core, "movie", "tt0111161");
+    let title = TitleView::open(&core, "movie", SHAWSHANK);
     until("the title page without the addon", || {
         title.snapshot().header.details.is_some()
     })
@@ -1232,6 +1457,37 @@ async fn home_discover_search_and_the_title_page_show_the_mark_until_the_addon_g
     let json = serde_json::to_value(title.snapshot().header.details.unwrap()).unwrap();
     assert_eq!(json["ratings"], pair(Some("9.3"), None));
     assert_eq!(json["ratingsFrom"], Value::Null);
+}
+
+#[tokio::test]
+async fn the_addon_turned_off_while_its_lists_are_read_never_brings_the_mark_back() {
+    let core = Core::temporary("p").unwrap();
+    let rt = rt_addon_with(&["Drama", "Comedy"], Duration::from_millis(300)).await;
+    install(&core, &[addon().await, rt.row.clone()]);
+    let home = HomeView::open(&core);
+    until("Home with the read on its way", || {
+        core.ratings().reading_lists()
+            && home
+                .snapshot()
+                .rows
+                .first()
+                .is_some_and(|r| r.state == RowState::Ready)
+    })
+    .await;
+    core.set_addon_enabled(rt.url(), false).unwrap();
+    until("the read's end", || !core.ratings().reading_lists()).await;
+    // Home has put on what holds after the read: no mark.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let snap = home.snapshot();
+    assert!(
+        snap.rows
+            .iter()
+            .flat_map(|r| &r.tiles)
+            .all(|t| t.ratings.rotten_tomatoes.is_none())
+    );
+    let titles = [movie(SHAWSHANK)];
+    assert!(core.ratings().known(&titles).is_empty());
+    assert_eq!(core.ratings().lookup(&titles).await, None);
 }
 
 /// The nine defaults against the real addons: how many tiles a Home of
@@ -1267,19 +1523,10 @@ async fn a_home_of_the_default_catalogs_marks_the_listed_titles_fresh() {
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     let settled_ms = started.elapsed().as_millis();
-    // The lookups Home started wait on the same read of the lists as this one.
-    let shown: Vec<Title> = home
-        .snapshot()
-        .rows
-        .iter()
-        .flat_map(|r| &r.tiles)
-        .filter_map(|t| match t.kind.as_str() {
-            "movie" => Some(movie(&t.id)),
-            "series" => Some(show(&t.id)),
-            _ => None,
-        })
-        .collect();
-    core.ratings().lookup(&shown).await;
+    // Home's first lookup started the read of the lists.
+    while core.ratings().reading_lists() && started.elapsed() < Duration::from_secs(120) {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
     let lists_ms = started.elapsed().as_millis();
     let count = || {
         let rows = home.snapshot().rows;
@@ -1315,7 +1562,7 @@ async fn a_home_of_the_default_catalogs_marks_the_listed_titles_fresh() {
     println!(
         "{}",
         json!({
-            "date": "2026-10-21", "kind": "live", "milestone": "ratings",
+            "date": "2026-10-22", "kind": "live", "milestone": "ratings",
             "what": "a Home of the nine defaults, all on, no MDBList key",
             "tiles": tiles, "fresh_tiles": last, "fresh_titles": titles.len(),
             "rows": rows, "hero": hero, "rows_settled_ms": settled_ms, "lists_read_ms": lists_ms,

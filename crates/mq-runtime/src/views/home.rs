@@ -173,6 +173,7 @@ impl HomeView {
     pub fn open(core: &Core) -> Self {
         // Subscribed before reading, so no addon change falls in between.
         let changes = core.library().subscribe();
+        let listed = core.ratings().listed();
         let kids = core.policy().kids();
         let access = core.library().subscribe();
         let slots = board(core);
@@ -205,6 +206,7 @@ impl HomeView {
         tasks.spawn(watch_addons(
             core.clone(),
             changes,
+            listed,
             ids,
             rows.clone(),
             header.clone(),
@@ -470,16 +472,27 @@ fn loading_row(slot: &CatalogSlot) -> HomeRow {
 
 /// Follows the installed addons: rows of catalogs that stay keep their tiles
 /// (so nothing flashes), new catalogs load, removed ones go, and the order
-/// follows the addon order. The swap is one batch of diffs.
+/// follows the addon order. The swap is one batch of diffs. The ratings
+/// shown are put on again then, and when a read of the Rotten Tomatoes
+/// addon's lists ends.
 async fn watch_addons(
     core: Core,
     mut changes: tokio::sync::broadcast::Receiver<Vec<Table>>,
+    mut listed: tokio::sync::watch::Receiver<u64>,
     mut ids: Vec<String>,
     rows: Arc<Mutex<ObservableVector<HomeRow>>>,
     header: SharedObservable<HomeHeader>,
 ) {
     let mut loads = JoinSet::new();
-    while home_changed(&mut changes).await {
+    loop {
+        tokio::select! {
+            more = home_changed(&mut changes) => if !more { return },
+            Ok(()) = listed.changed() => {
+                // A read of the Rotten Tomatoes lists ended with other titles.
+                rerate(&core, &rows, &header);
+                continue;
+            }
+        }
         while loads.try_join_next().is_some() {}
         // The Rotten Tomatoes addon's mark comes and goes with the addon.
         let titles = rerate(&core, &rows, &header);
@@ -703,22 +716,54 @@ async fn load_catalogs(
     while lookups.join_next().await.is_some() {}
 }
 
-/// Looks up the ratings of `titles` and puts them on every tile that shows
-/// one of them, the hero's too.
+/// Looks up the ratings of `titles`, then puts what holds for them now on
+/// every tile that shows one of them, the hero's too: not what the lookup
+/// saw, since the addon may have gone off meanwhile, and the tiles' fill
+/// may be older still.
 async fn rate(
     core: Core,
     rows: Arc<Mutex<ObservableVector<HomeRow>>>,
     header: SharedObservable<HomeHeader>,
     titles: Vec<Title>,
 ) {
-    let Some(known) = core.ratings().lookup(&titles).await else {
-        return;
-    };
+    core.ratings().lookup(&titles).await;
+    let rater = core.ratings();
+    let _turn = rater.turn();
+    put(&rows, &header, &rater.shown(&titles));
+}
+
+/// Puts on every tile shown, the hero's too, what the ratings cache and
+/// the Rotten Tomatoes addon's lists hold now. The titles shown, for a
+/// lookup. The rows are locked only to read them and to put the answer on.
+fn rerate(
+    core: &Core,
+    rows: &Mutex<ObservableVector<HomeRow>>,
+    header: &SharedObservable<HomeHeader>,
+) -> Vec<Title> {
+    let rater = core.ratings();
+    let _turn = rater.turn();
+    let hero = header.get().hero;
+    let titles = ratings::titles(
+        lock(rows)
+            .iter()
+            .flat_map(|r| &r.tiles)
+            .chain(hero.iter().map(|h| &h.tile)),
+    );
+    put(rows, header, &rater.shown(&titles));
+    titles
+}
+
+/// Gives every tile of a title `known` holds, the hero's too, its row.
+fn put(
+    rows: &Mutex<ObservableVector<HomeRow>>,
+    header: &SharedObservable<HomeHeader>,
+    known: &HashMap<Title, ratings::Scores>,
+) {
     {
-        let mut rows = lock(&rows);
+        let mut rows = lock(rows);
         for index in 0..rows.len() {
             let mut row = rows[index].clone();
-            if ratings::apply(&mut row.tiles, &known) {
+            if ratings::apply(&mut row.tiles, known) {
                 rows.set(index, row);
             }
         }
@@ -726,39 +771,8 @@ async fn rate(
     header.update_if(|h| {
         h.hero
             .as_mut()
-            .is_some_and(|hero| ratings::apply([&mut hero.tile], &known))
+            .is_some_and(|hero| ratings::apply([&mut hero.tile], known))
     });
-}
-
-/// Puts on every tile shown, the hero's too, what the ratings cache and
-/// the Rotten Tomatoes addon's lists hold now. The titles shown, for a
-/// lookup.
-fn rerate(
-    core: &Core,
-    rows: &Mutex<ObservableVector<HomeRow>>,
-    header: &SharedObservable<HomeHeader>,
-) -> Vec<Title> {
-    let hero = header.get().hero;
-    let mut rows = lock(rows);
-    let titles = ratings::titles(
-        rows.iter()
-            .flat_map(|r| &r.tiles)
-            .chain(hero.iter().map(|h| &h.tile)),
-    );
-    let known = core.ratings().known(&titles);
-    for index in 0..rows.len() {
-        let mut row = rows[index].clone();
-        if ratings::reset(&mut row.tiles, &known) {
-            rows.set(index, row);
-        }
-    }
-    drop(rows);
-    header.update_if(|h| {
-        h.hero
-            .as_mut()
-            .is_some_and(|hero| ratings::reset([&mut hero.tile], &known))
-    });
-    titles
 }
 
 /// Fills the row from the catalog's answer; the titles it may show, for

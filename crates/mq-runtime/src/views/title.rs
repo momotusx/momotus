@@ -45,10 +45,10 @@ pub struct TitleDetails {
     /// The title's IMDb page, for the IMDb score to link to; null for an id
     /// that is not IMDb's.
     pub imdb_url: Option<String>,
-    /// Who the scores come from, a "Ratings from" row beside "Details from"
-    /// ("IMDb and Rotten Tomatoes via MDBList", or "IMDb and Rotten Tomatoes
-    /// (the Rotten Tomatoes addon)" for its Fresh mark); null when neither
-    /// gave anything.
+    /// Who the scores come from, a "Ratings from" row beside "Details from",
+    /// each source named for what it gave ("IMDb and Rotten Tomatoes via
+    /// MDBList", "IMDb and Rotten Tomatoes (the Rotten Tomatoes addon)");
+    /// null when neither gave anything.
     pub ratings_from: Option<String>,
     pub source: String,
     /// Trailers the metadata names (YouTube), first is the main one.

@@ -1588,7 +1588,7 @@ data class TitleDetails(
     val ratings: Ratings = Ratings(),
     /** The title's IMDb page, for the IMDb score to link to; null for an id that is not IMDb's. */
     val imdbUrl: String? = null,
-    /** Who the scores come from, a "Ratings from" row beside "Details from" ("IMDb and Rotten Tomatoes via MDBList", or "IMDb and Rotten Tomatoes (the Rotten Tomatoes addon)" for its Fresh mark); null when neither gave anything. */
+    /** Who the scores come from, a "Ratings from" row beside "Details from", each source named for what it gave ("IMDb and Rotten Tomatoes via MDBList", "IMDb and Rotten Tomatoes (the Rotten Tomatoes addon)"); null when neither gave anything. */
     val ratingsFrom: String? = null,
     val source: String,
     /** Trailers the metadata names (YouTube), first is the main one. */
