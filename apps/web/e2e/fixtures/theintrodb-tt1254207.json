@@ -1,7 +1,7 @@
 {
-  "_comment": "Synthetic, not TheIntroDB's data: its answer shape with credits this test chooses (8:10 to 9:41 of the test film). TheIntroDB allows a session cache only, so no answer of it is stored (plans/m8-skip.md 3.4).",
+  "_comment": "Synthetic, not TheIntroDB's data: its answer shape with credits this test chooses (8:00 to 9:50 of the test film, round times taken from no service). TheIntroDB allows a session cache only, so no answer of it is stored (plans/m8-skip.md 3.4).",
   "tmdb_id": 0,
   "type": "movie",
   "intro": [],
-  "credits": [{ "start_ms": 490000, "end_ms": 581000 }]
+  "credits": [{ "start_ms": 480000, "end_ms": 590000 }]
 }

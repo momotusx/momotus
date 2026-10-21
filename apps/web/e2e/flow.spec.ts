@@ -145,7 +145,7 @@ async function skipCredits(page: Page, time: () => Promise<number>, seekTo: (s: 
   await expect(skip).toHaveCount(0);
 
   // The skip fixture (synthetic, in TheIntroDB's shape) marks the credits
-  // from 8:10 to 9:41; the core looks them up once the player reports the
+  // from 8:00 to 9:50; the core looks them up once the player reports the
   // file's length.
   await seekTo(493);
   await expect(skip).toHaveText("Skip credits", { timeout: 30_000 });
@@ -182,7 +182,7 @@ async function skipCredits(page: Page, time: () => Promise<number>, seekTo: (s: 
 
   // One press acts at once, without first waking the controls.
   await page.keyboard.press("Enter");
-  await expect.poll(time).toBeGreaterThanOrEqual(580.9);
+  await expect.poll(time).toBeGreaterThanOrEqual(589.9);
   await expect(skip).toHaveCount(0);
   await expect.poll(() => focused(page)).toBe("player:toggle");
 
