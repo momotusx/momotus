@@ -675,6 +675,25 @@ async fn an_orphan_is_punched_and_fetched_again() {
     assert!(l.piece_matches(8).await);
 }
 
+/// Probes at once in one folder (the core's at open, the engine's at its
+/// start) all answer yes where holes punch: each has a scratch file of its
+/// own (review r3 A R1).
+#[test]
+fn probes_at_once_never_share_a_scratch_file() {
+    let dir = tempfile::tempdir().unwrap();
+    if !mq_engine::librqbit::punch_supported(dir.path()) {
+        eprintln!("skipped: this host's temp folder cannot punch holes");
+        return;
+    }
+    let answers: Vec<bool> = std::thread::scope(|s| {
+        let probes: Vec<_> = (0..16)
+            .map(|_| s.spawn(|| (0..10).all(|_| mq_engine::librqbit::punch_supported(dir.path()))))
+            .collect();
+        probes.into_iter().map(|p| p.join().unwrap()).collect()
+    });
+    assert!(answers.iter().all(|&a| a), "{answers:?}");
+}
+
 /// j. A punch that fails (here after freeing its first block, as neither
 /// call promises all or nothing): the probe says no, and a round's pieces
 /// leave unclaimed and are fetched again, never claimed over a hole.

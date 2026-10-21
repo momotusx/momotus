@@ -123,9 +123,13 @@ fn punch_once(_file: &File, _offset: u64, _len: u64) -> io::Result<()> {
 /// Whether files under `dir` give space back when punched: 4 extents of
 /// 64 KiB written and synced, the second punched through [`punch_file`] (the
 /// path an eviction takes), synced again, and the file's allocated blocks
-/// must fall by 64 KiB. Any error, or no fall, is a no.
+/// must fall by 64 KiB. Any error, or no fall, is a no. Each call has a
+/// scratch file of its own, so two probes at once (the core's at open and
+/// the engine's at start) never truncate each other's.
 pub fn punch_supported(dir: &Path) -> bool {
-    let path = dir.join(".mq-punch-probe");
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let path = dir.join(format!(".mq-punch-probe-{}-{n}", std::process::id()));
     let ok = probe(&path).unwrap_or(false);
     let _ = std::fs::remove_file(&path);
     ok

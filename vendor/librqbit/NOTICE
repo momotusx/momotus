@@ -98,6 +98,8 @@ Marquee changes (each changed spot carries a "Marquee fork" comment):
   `PieceChecked(ok)`, the per-file count and `have_bytes` move under the
   lock that sets `have`.
 - src/storage/filesystem/punch.rs: the punch is retried on EINTR.
+- src/storage/filesystem/punch.rs: each `punch_supported` call probes on a
+  scratch file of its own, so two probes at once never share one.
 - src/torrent_state/live/mod.rs: a peer connection's death acts only on
   its own peer slot (upstream took a newer connection's state for its own
   when a peer disconnected as not needed was queued again before its old
