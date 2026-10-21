@@ -154,7 +154,7 @@ pub(crate) struct Snapshot {
     pub rate: Option<(usize, u64, u64)>,
     /// What a window's scheduler counts as held.
     pub held_bytes: Option<u64>,
-    /// What the focused range's Ready waits on (DWH only).
+    /// What the start waits on until the file starts (DWH only).
     pub start: Option<StartBytes>,
 }
 

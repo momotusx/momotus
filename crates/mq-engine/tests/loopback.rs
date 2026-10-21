@@ -191,14 +191,7 @@ async fn tracked(
     s: &support::Swarm,
     dir: &Path,
 ) -> (support::HttpTracker, Engine, mq_engine::TorrentHandle) {
-    let body = b"d8:intervali60e5:peers0:e";
-    let mut answer = format!(
-        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        body.len()
-    )
-    .into_bytes();
-    answer.extend(body);
-    let tracker = support::HttpTracker::start(answer, false);
+    let tracker = quiet_tracker();
     let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
     let local = [
         Ipv4Addr::LOCALHOST.into(),
@@ -228,6 +221,19 @@ async fn tracked(
     tokio::time::sleep(Duration::from_secs(1)).await;
     assert!(tracker.requests() >= 1, "never announced");
     (tracker, engine, t)
+}
+
+/// An HTTP tracker that answers every announce: an interval of 60 s, no
+/// peers.
+fn quiet_tracker() -> support::HttpTracker {
+    let body = b"d8:intervali60e5:peers0:e";
+    let mut answer = format!(
+        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    )
+    .into_bytes();
+    answer.extend(body);
+    support::HttpTracker::start(answer, false)
 }
 
 /// `stopped` announces the tracker took.
@@ -291,10 +297,15 @@ async fn a_dropped_engine_stops_its_torrents() {
 /// An engine on `dir` that may reach 127.0.0.1, once the one before let go
 /// of the folder.
 async fn engine_on(dir: &Path) -> Engine {
+    engine_reaching(dir, &[Ipv4Addr::LOCALHOST.into()]).await
+}
+
+/// [`engine_on`] that may reach `scope`.
+async fn engine_reaching(dir: &Path, scope: &[std::net::IpAddr]) -> Engine {
     let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
     let config = || mq_engine::EngineConfig {
         discovery: false,
-        ..mq_engine::EngineConfig::new(dir, http.torrent_scope(&[Ipv4Addr::LOCALHOST.into()]))
+        ..mq_engine::EngineConfig::new(dir, http.torrent_scope(scope))
     };
     for _ in 0..40 {
         if let Ok(engine) = Engine::start(config()).await {
@@ -926,4 +937,70 @@ async fn a_kept_torrent_starts_with_no_peer_reachable() {
             assert!(all == movie, "{name} differs");
         }
     }
+}
+
+/// A start from kept details still announces to this stream's trackers,
+/// not only to those the start that kept them used (review P2-3).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_kept_start_announces_to_the_streams_trackers() {
+    let s = support::swarm(true).await;
+    let dir = tempfile::tempdir().unwrap();
+    let first = engine_on(dir.path()).await;
+    let t = first
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    first
+        .select_file(t, "default", &FileHint::Largest)
+        .await
+        .unwrap();
+    first.remove(t, true).await.unwrap();
+    drop(first);
+    let tracker = quiet_tracker();
+    let local = [
+        Ipv4Addr::LOCALHOST.into(),
+        std::net::Ipv6Addr::LOCALHOST.into(),
+    ];
+    let again = engine_reaching(dir.path(), &local).await;
+    let t = again
+        .add_magnet(&s.info_hash, std::slice::from_ref(&tracker.url), &[])
+        .await
+        .unwrap();
+    again
+        .select_file(t, "default", &FileHint::Largest)
+        .await
+        .unwrap();
+    for _ in 0..50 {
+        if tracker.requests() > 0 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert!(
+        tracker.requests() > 0,
+        "the stream's tracker was never asked"
+    );
+}
+
+/// A torrent playing now answers the on-device check from its own
+/// bitfield: its `.have` claims what came only at its next flush
+/// (review P2-5).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_live_torrent_answers_from_its_own_bitfield() {
+    let s = big_swarm().await;
+    let dir = tempfile::tempdir().unwrap();
+    let (engine, t) = head_read(&s, dir.path()).await;
+    let movie = engine
+        .files(t)
+        .unwrap()
+        .iter()
+        .position(|f| f.path.ends_with("movie.mkv"))
+        .unwrap();
+    let ready = |ready| Some(Cached { ready });
+    assert_eq!(engine.cached(&s.info_hash, movie, 0).await, ready(true));
+    assert_eq!(
+        cached_on_disk(dir.path(), &s.info_hash, movie, 0),
+        ready(false),
+        "the .have claimed the head before a flush"
+    );
 }

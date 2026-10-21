@@ -324,12 +324,14 @@ pub struct TorrentStats {
     pub received_bytes: u64,
     /// From `select_file` to the first peer unchoking us.
     pub unchoked_ms: Option<u64>,
-    /// What the newest range's Ready waits on, for a loading screen: the
-    /// bytes of its blocking window and its file's index in whole pieces,
-    /// and of those the verified ones; both 0 with no range open (or with
-    /// the stock picker). While an MP4's index is not known yet
-    /// (`start_index_pending`), `start_need` counts the fixed tail, and it
-    /// changes once the file's head says where the index is.
+    /// What the start waits on, for a loading screen: the bytes of the
+    /// newest range's blocking window and its file's index in whole pieces
+    /// (a resume's head read counts), and of those the verified ones. Both
+    /// 0 once a range of the file was Ready, with no range open, or with
+    /// the stock picker. While an MP4's index is not known yet
+    /// (`start_index_pending`), `start_need` counts the fixed tail and
+    /// changes once the head says where the index is, so the two are not
+    /// monotone: clamp the fill.
     pub start_need: u64,
     pub start_have: u64,
     pub start_index_pending: bool,
@@ -454,6 +456,9 @@ fn lock_error(e: std::fs::TryLockError) -> EngineError {
 pub(crate) struct Torrent {
     info_hash: String,
     torrent_bytes: Vec<u8>,
+    /// Trackers its own add announces to beside those `torrent_bytes`
+    /// lists: a start from kept details asks this stream's too.
+    trackers: Vec<String>,
     files: Vec<FileInfo>,
     piece_len: u32,
     peers: Vec<SocketAddr>,
@@ -748,13 +753,16 @@ impl Engine {
             .ok()
             .flatten()
         {
-            match self.add(AddTorrent::from_bytes(bytes), peers).await {
+            // This stream's trackers, not only the kept ones (review P2-3).
+            let fresh = tracker_list(trackers, self.inner.cfg.discovery);
+            match self.add(AddTorrent::from_bytes(bytes), peers, fresh).await {
                 Ok(h) => return Ok(h),
                 Err(e) => tracing::warn!("{hash}: the kept details failed: {e:#}"),
             }
         }
         let magnet = magnet_uri(hash, trackers, self.inner.cfg.discovery);
-        self.add(AddTorrent::from_url(magnet), peers).await
+        self.add(AddTorrent::from_url(magnet), peers, Vec::new())
+            .await
     }
 
     /// Adds a torrent from `.torrent` bytes. A torrent whose data already
@@ -765,10 +773,18 @@ impl Engine {
         peers: &[SocketAddr],
     ) -> Result<TorrentHandle> {
         self.inner.cfg.policy.refresh();
-        self.add(AddTorrent::from_bytes(bytes), peers).await
+        self.add(AddTorrent::from_bytes(bytes), peers, Vec::new())
+            .await
     }
 
-    async fn add(&self, add: AddTorrent<'static>, peers: &[SocketAddr]) -> Result<TorrentHandle> {
+    /// `trackers` go to the torrent's own add beside those its details
+    /// list.
+    async fn add(
+        &self,
+        add: AddTorrent<'static>,
+        peers: &[SocketAddr],
+        trackers: Vec<String>,
+    ) -> Result<TorrentHandle> {
         let started = Instant::now();
         let opts = AddTorrentOptions {
             list_only: true,
@@ -783,15 +799,12 @@ impl Engine {
         let metadata_ms = started.elapsed().as_millis() as u64;
         let files = file_infos(&list.info);
         let info_hash = list.info_hash.as_string();
-        // The peer that sent the details comes first (the fork lists it
-        // first): it is the one known to answer (start-latency cause 6).
-        let mut seen = list.seen_peers.clone();
-        seen.extend(peers.iter().filter(|p| !list.seen_peers.contains(p)));
-        let peers = seen;
+        let peers = dial_order(&list.seen_peers, peers);
         let torrent = Arc::new(Torrent {
             dir: self.inner.cfg.data_dir.join(&info_hash),
             info_hash,
             torrent_bytes: list.torrent_bytes.to_vec(),
+            trackers,
             files,
             piece_len: list.info.lengths().default_piece_length(),
             peers,
@@ -836,8 +849,9 @@ impl Engine {
 
     /// What this device holds for a start of `file` at byte `offset`, read
     /// from the data folder alone: no torrent starts and nothing goes on
-    /// the network. `None` unless the torrent's details are kept (it was
-    /// played here before, or is loaded now), so its add needs no peer.
+    /// the network. `None` when the torrent's details are neither kept on
+    /// disk (played here before) nor loaded in this launch; with them its
+    /// add needs no peer.
     pub async fn cached(&self, info_hash: &str, file: usize, offset: u64) -> Option<Cached> {
         let hex = hex_hash(info_hash.trim())?;
         let loaded = lock(&self.inner.torrents)
@@ -945,6 +959,7 @@ impl Engine {
             overwrite: true,
             output_folder: Some(t.dir.to_string_lossy().into_owned()),
             initial_peers: Some(t.peers.clone()),
+            trackers: (!t.trackers.is_empty()).then(|| t.trackers.clone()),
             ext_sched: Some(ExtSched {
                 tx: ext_tx,
                 drive: dwh,
@@ -1840,6 +1855,15 @@ const HAVE: &str = "have";
 /// folder.
 const TORRENT: &str = "torrent";
 
+/// The torrent's own add dials in this order: the peers its metadata came
+/// with, the one that sent it first (the fork lists it so, start-latency
+/// cause 6), then the caller's not among them.
+fn dial_order(seen: &[SocketAddr], given: &[SocketAddr]) -> Vec<SocketAddr> {
+    let mut order = seen.to_vec();
+    order.extend(given.iter().filter(|p| !seen.contains(p)));
+    order
+}
+
 /// Lowercase hex of a v1 info hash given as 40 hex or 32 base32
 /// characters.
 fn hex_hash(hash: &str) -> Option<String> {
@@ -1851,9 +1875,13 @@ fn hex_hash(hash: &str) -> Option<String> {
 /// The details kept at `path` when they parse and are `hex`'s (a file cut
 /// short or another torrent's is no use). Blocking: reads the disk.
 fn kept_torrent(path: &Path, hex: &str) -> Option<Vec<u8>> {
-    let bytes = std::fs::read(path).ok()?;
+    use std::io::Read;
+    let mut bytes = Vec::new();
+    let file = std::fs::File::open(path).ok()?;
+    file.take(MAX_TORRENT + 1).read_to_end(&mut bytes).ok()?;
+    let small = bytes.len() as u64 <= MAX_TORRENT;
     match librqbit::torrent_from_bytes(&bytes) {
-        Ok(meta) if meta.info_hash.as_string() == hex => Some(bytes),
+        Ok(meta) if small && meta.info_hash.as_string() == hex => Some(bytes),
         _ => {
             tracing::warn!("{}: not the details of {hex}", path.display());
             None
@@ -1872,9 +1900,48 @@ pub fn cached_on_disk(
 ) -> Option<Cached> {
     let hex = hex_hash(info_hash.trim())?;
     let dir = data_dir.join(&hex);
-    let bytes = kept_torrent(&dir.with_extension(TORRENT), &hex)?;
-    Some(cached_from(&dir, &bytes, None, file, offset))
+    // A list of rows asks again and again: an answer stands while the
+    // folder's details, bitfield and data folder have not changed.
+    let stamp = [
+        dir.with_extension(TORRENT),
+        dir.with_extension(HAVE),
+        dir.clone(),
+    ]
+    .map(|p| {
+        std::fs::metadata(p)
+            .ok()
+            .map(|m| (m.len(), m.modified().ok()))
+    });
+    let key = (dir.clone(), file, offset);
+    if let Some((s, answer)) = lock(&ON_DISK).get(&key)
+        && *s == stamp
+    {
+        return *answer;
+    }
+    let answer = kept_torrent(&dir.with_extension(TORRENT), &hex)
+        .map(|bytes| cached_from(&dir, &bytes, None, file, offset));
+    let mut memo = lock(&ON_DISK);
+    // ponytail: dropped whole at 1024 answers, an LRU if rows ever need more.
+    if memo.len() >= 1024 {
+        memo.clear();
+    }
+    memo.insert(key, (stamp, answer));
+    answer
 }
+
+/// A folder's `.torrent`, `.have` and data folder: length and change time.
+type Stamp = [Option<(u64, Option<std::time::SystemTime>)>; 3];
+
+/// [`cached_on_disk`]'s answers by folder, file and offset, with the stamp
+/// they were read at.
+#[allow(clippy::type_complexity)]
+static ON_DISK: std::sync::LazyLock<
+    Mutex<HashMap<(PathBuf, usize, u64), (Stamp, Option<Cached>)>>,
+> = std::sync::LazyLock::new(Mutex::default);
+
+/// A `.torrent` larger than this is not read: a v1 file for a terabyte in
+/// 4 MiB pieces holds 5 MB of hashes.
+const MAX_TORRENT: u64 = 16 << 20;
 
 /// The torrent of `torrent` in `dir` at `offset` of `file`, from `have` (a
 /// live bitfield) or, with none, its `.have`. Blocking.
@@ -1916,6 +1983,11 @@ fn ready_on_disk(
     let Some(path) = files.get(file).map(|f| dir.join(&f.path)) else {
         return false;
     };
+    // A `.have` whose data is gone (a purge, a crash in an eviction) is
+    // no start (review P2-4).
+    if !path.is_file() {
+        return false;
+    }
     let lens: Vec<u64> = files.iter().map(|f| f.len).collect();
     let iso = files.iter().map(|f| iso_bmff(&f.path)).collect();
     let mut tr = adapter::Translator::new(piece_len, &lens, sched, true).with_iso_bmff(iso);
@@ -1931,8 +2003,13 @@ fn ready_on_disk(
     if let Some((file, n)) = tr.index_wanted() {
         use std::io::Read;
         let mut head = vec![0u8; n as usize];
-        let read = std::fs::File::open(&path).and_then(|mut f| f.read_exact(&mut head));
-        tr.index_found(file, if read.is_ok() { &head } else { &[] });
+        if std::fs::File::open(&path)
+            .and_then(|mut f| f.read_exact(&mut head))
+            .is_err()
+        {
+            return false;
+        }
+        tr.index_found(file, &head);
     }
     *rx.borrow()
 }
@@ -1949,12 +2026,15 @@ fn file_infos<B: AsRef<[u8]>>(info: &librqbit::ValidatedTorrentMetaV1Info<B>) ->
         .collect()
 }
 
-/// Writes a torrent's details to `path`, whole or not at all: a crash
-/// mid-write leaves the old file or none.
+/// Writes a torrent's details to `path`, whole or not at all: synced before
+/// the rename, so a crash leaves the old file, the new one or none.
 async fn keep_torrent(path: PathBuf, bytes: Vec<u8>) {
+    use tokio::io::AsyncWriteExt;
     let tmp = path.with_extension("torrent.tmp");
     let kept = async {
-        tokio::fs::write(&tmp, &bytes).await?;
+        let mut file = tokio::fs::File::create(&tmp).await?;
+        file.write_all(&bytes).await?;
+        file.sync_all().await?;
         tokio::fs::rename(&tmp, &path).await
     };
     if let Err(e) = kept.await {
@@ -2154,22 +2234,30 @@ fn iso_bmff(path: &str) -> bool {
     matches!(ext.as_deref(), Some("mp4" | "m4v" | "mov"))
 }
 
+/// A magnet with [`tracker_list`]'s trackers.
+fn magnet_uri(hash: &str, trackers: &[String], defaults: bool) -> String {
+    let mut magnet = format!("magnet:?xt=urn:btih:{hash}");
+    for t in tracker_list(trackers, defaults) {
+        magnet.push_str("&tr=");
+        magnet.push_str(&percent_encode(&t));
+    }
+    magnet
+}
+
 /// The defaults first when `defaults`, then at most `MAX_OWN` of the
 /// stream's own trackers, each once. Discovery is off only in loopback
 /// tests, which keep exactly theirs.
-fn magnet_uri(hash: &str, trackers: &[String], defaults: bool) -> String {
+fn tracker_list(trackers: &[String], defaults: bool) -> Vec<String> {
     let extra = DEFAULT_TRACKERS.into_iter().filter(|_| defaults);
     let given = trackers
         .iter()
         .map(|t| t.strip_prefix("tracker:").unwrap_or(t))
         .filter(|t| t.contains("://"));
-    let mut seen = std::collections::HashSet::new();
-    let mut magnet = format!("magnet:?xt=urn:btih:{hash}");
+    let mut list: Vec<String> = Vec::new();
     let mut push = |t: &str| {
-        let new = seen.insert(t.to_owned());
+        let new = !list.iter().any(|x| x == t);
         if new {
-            magnet.push_str("&tr=");
-            magnet.push_str(&percent_encode(t));
+            list.push(t.to_owned());
         }
         new
     };
@@ -2188,7 +2276,7 @@ fn magnet_uri(hash: &str, trackers: &[String], defaults: bool) -> String {
             own += 1;
         }
     }
-    magnet
+    list
 }
 
 fn percent_encode(s: &str) -> String {
@@ -2363,5 +2451,116 @@ mod tests {
         next.await.unwrap();
         assert!(!older.exists(), "the older leftover stayed");
         assert!(newer.exists(), "the newer leftover went too");
+    }
+
+    const MIB: u64 = 1 << 20;
+
+    /// A torrent of one file kept in `data_dir` as a playback leaves it:
+    /// `name` of `len` bytes in `piece` pieces, its data file starting with
+    /// `head` (all of it written with `whole`), and a `.have` with the
+    /// pieces `have`. Its info hash.
+    fn kept(
+        data_dir: &Path,
+        name: &str,
+        (len, piece): (u64, u64),
+        head: &[u8],
+        whole: bool,
+        have: impl IntoIterator<Item = u64>,
+    ) -> String {
+        let n = len.div_ceil(piece);
+        let mut t = format!(
+            "d4:infod6:lengthi{len}e4:name{}:{name}12:piece lengthi{piece}e6:pieces{}:",
+            name.len(),
+            n * 20
+        )
+        .into_bytes();
+        t.extend(vec![0xab; (n * 20) as usize]);
+        t.extend(b"ee");
+        let hex = librqbit::torrent_from_bytes(&t)
+            .unwrap()
+            .info_hash
+            .as_string();
+        let dir = data_dir.join(&hex);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut data = head.to_vec();
+        data.resize(if whole { len as usize } else { head.len() }, 7);
+        std::fs::write(dir.join(name), &data).unwrap();
+        std::fs::write(dir.with_extension(TORRENT), &t).unwrap();
+        let mut bits = vec![0u8; n.div_ceil(8) as usize];
+        for p in have {
+            bits[(p / 8) as usize] |= 0x80 >> (p % 8);
+        }
+        std::fs::write(dir.with_extension(HAVE), bits).unwrap();
+        hex
+    }
+
+    /// An MP4 head: `ftyp`, then an `mdat` that leaves the last 200 KiB of
+    /// `len` to the `moov`.
+    fn mp4_head(len: u64) -> Vec<u8> {
+        let mut head = vec![0, 0, 0, 24];
+        head.extend(b"ftypisom");
+        head.extend([0; 12]);
+        head.extend(((len - 24 - (200 << 10)) as u32).to_be_bytes());
+        head.extend(b"mdat");
+        head.resize(4096, 0);
+        head
+    }
+
+    /// The on-device check at an offset (review P2-5): a kept MP4 with its
+    /// head and `moov` is ready at the head, not half way until that part
+    /// is kept too; with its data gone, or its head unreadable, it is not
+    /// ready at all (P2-4). An MKV waits on its tail.
+    #[test]
+    fn the_on_device_check_follows_the_offset_and_the_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let at = |hex: &str, offset| cached_on_disk(dir.path(), hex, 0, offset).map(|c| c.ready);
+        // 8 MiB in 256 KiB pieces: head 0..4, `moov` in 31, half way 16..20.
+        let geo = (8 * MIB, 256 << 10);
+        let mp4 = kept(
+            dir.path(),
+            "a.mp4",
+            geo,
+            &mp4_head(8 * MIB),
+            false,
+            (0..4).chain([31]),
+        );
+        assert_eq!(at(&mp4, 0), Some(true));
+        assert_eq!(at(&mp4, 4 * MIB), Some(false), "half way is not kept");
+        let all = kept(dir.path(), "b.mp4", geo, &mp4_head(8 * MIB), false, 0..32);
+        assert_eq!(at(&all, 4 * MIB), Some(true));
+        // The head cannot be read: no index, no start.
+        let short = kept(dir.path(), "c.mp4", geo, &[0; 100], false, 0..32);
+        assert_eq!(at(&short, 0), Some(false), "an unreadable head");
+        // An MKV kept half way and at its 2 MiB tail (pieces 24..32), not at
+        // its head: no head read tells that the data went.
+        let mkv = kept(dir.path(), "d.mkv", geo, b"", true, (16..20).chain(24..32));
+        assert_eq!(at(&mkv, 4 * MIB), Some(true));
+        assert_eq!(at(&mkv, 0), Some(false));
+        std::fs::remove_dir_all(dir.path().join(&mkv)).unwrap();
+        assert_eq!(at(&mkv, 4 * MIB), Some(false), "the data is gone");
+        assert_eq!(at(&"0".repeat(40), 0), None, "nothing kept");
+    }
+
+    /// A folder an earlier launch left goes with its `.have` and `.torrent`
+    /// when the budget evicts it (review P2-5).
+    #[tokio::test]
+    async fn an_evicted_leftover_takes_its_details() {
+        let dir = tempfile::tempdir().unwrap();
+        let hex = kept(dir.path(), "a.mkv", (2 * MIB, 256 << 10), b"", true, 0..8);
+        let engine = Engine::start(config(dir.path(), MIB)).await.unwrap();
+        engine.enforce_budget(None, 0).await;
+        let gone = |end| !dir.path().join(&hex).with_extension(end).exists();
+        assert!(gone(TORRENT) && gone(HAVE), "the details stayed");
+        assert!(!dir.path().join(&hex).exists(), "the folder stayed");
+    }
+
+    /// The torrent's own add dials the peers met with the metadata in their
+    /// order (the sender first), then the caller's not among them (cause 6).
+    #[test]
+    fn the_metadata_peers_are_dialed_first() {
+        let p = |n: u8| SocketAddr::from(([10, 0, 0, n], 6881));
+        let seen = [p(3), p(1), p(2)];
+        assert_eq!(dial_order(&seen, &[p(9), p(1)]), [p(3), p(1), p(2), p(9)]);
+        assert_eq!(dial_order(&[], &[p(9)]), [p(9)]);
     }
 }
