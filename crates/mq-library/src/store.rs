@@ -237,6 +237,38 @@ impl Library {
         self.changes.subscribe()
     }
 
+    /// Forgets everything this device held of its account and profiles (a
+    /// sign-out that removes them, D13): every table is emptied in one
+    /// transaction, this device's id and the hosts relay ids were pinned to
+    /// aside, and the files are scrubbed after. Every view hears it. The
+    /// caller makes the device fresh again (its owner, the defaults step).
+    pub fn wipe(&self) -> Result<(), LibraryError> {
+        self.write(|c| {
+            self.mark_removal();
+            let tables: Vec<String> = {
+                let mut stmt = c.prepare(
+                    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+                )?;
+                stmt.query_map([], |r| r.get(0))?
+                    .collect::<rusqlite::Result<_>>()?
+            };
+            for table in tables {
+                let delete = match table.as_str() {
+                    "sync_state" => "DELETE FROM sync_state \
+                         WHERE key != 'device_id' AND substr(key, 1, 6) != 'relay:'"
+                        .to_owned(),
+                    _ => format!("DELETE FROM \"{table}\""),
+                };
+                c.execute(&delete, [])?;
+            }
+            // A whole-table delete skips the update hook: announce them all.
+            *lock(&self.touched) = Table::ALL.to_vec();
+            Ok(())
+        })?;
+        self.checkpoint();
+        Ok(())
+    }
+
     /// Sets a device value that a view reads through `table`, announcing
     /// `table` with the commit (the defaults marker changes the addons
     /// view's `fresh`).
