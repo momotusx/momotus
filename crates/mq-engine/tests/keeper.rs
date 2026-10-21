@@ -192,24 +192,27 @@ async fn a_window_never_holds_more_than_its_budget() {
     );
 }
 
-/// m. The bitfield's fsync held (a round can free nothing until it ends),
-/// and a seek meanwhile: the cap leaves a seek's urgent windows (blocking
-/// and critical, 5 MiB here, 6 pieces rounded out) room under `W`, and
-/// nothing else starts (the grace keeps back the readahead), so the
-/// folder stays within `W` (review P2-3).
+/// m. A parked read whose readahead (12 MiB here) wants more than the
+/// window has room for: the torrent fills up to the cap. Then, the
+/// bitfield's fsync held (a round can free nothing until it ends), a seek:
+/// the cap left its urgent windows (blocking and critical, 5 MiB here, 6
+/// pieces rounded out) room under `W`, nothing else starts (the grace keeps
+/// back the readahead), and the folder stays within `W` (review P2-3).
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_seek_while_a_round_waits_fetches_only_its_urgent_windows() {
-    let w = windowed(48 << 20, plan(), None).await;
-    let fsync = sync_log::hold(w.root.path(), Point::Fsync);
+    let long = WindowPlan {
+        ahead: 12 * MIB,
+        ..plan()
+    };
+    let w = windowed(48 << 20, long, None).await;
     let reader = w.engine.open_reader(w.t, "default", w.movie).await.unwrap();
     let mut range = reader.range(0, None).await.unwrap();
-    let mut buf = vec![0u8; 64 * 1024];
-    let started = Instant::now();
-    while !fsync.reached() {
-        within(30, range.read(&mut buf)).await.unwrap();
-        assert!(started.elapsed() < Duration::from_secs(30), "no round");
-    }
-    drop(range);
+    let mut head = vec![0u8; 8 * MIB as usize];
+    within(30, range.read_exact(&mut head)).await.unwrap();
+    // Parked: the readahead fills to the cap, the keeper takes what is
+    // behind the read.
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    let fsync = sync_log::hold(w.root.path(), Point::Fsync);
     let before = allocated(&w.dir());
     let sampler = Sampler::start(w.dir());
     let at = 36 * MIB;
@@ -218,7 +221,7 @@ async fn a_seek_while_a_round_waits_fetches_only_its_urgent_windows() {
     tokio::time::sleep(Duration::from_millis(1500)).await;
     let max = sampler.max();
     fsync.open();
-    drop(seek);
+    drop((seek, range));
     // A half piece over for the file system's own blocks.
     let bound = W + MIB / 2;
     assert!(
