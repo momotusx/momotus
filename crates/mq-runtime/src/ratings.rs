@@ -167,13 +167,17 @@ impl Default for Host {
     fn default() -> Self {
         Self {
             url: HOST.into(),
-            key: KEY
-                .map(str::trim)
-                .filter(|k| !k.is_empty())
-                .map(str::to_owned),
+            key: baked(KEY),
             local: false,
         }
     }
+}
+
+/// The key as the build gave it, trimmed: a blank one is no key.
+fn baked(key: Option<&str>) -> Option<String> {
+    key.map(str::trim)
+        .filter(|k| !k.is_empty())
+        .map(str::to_owned)
 }
 
 /// Never prints the key.
@@ -344,9 +348,10 @@ impl Finder {
                                     .filter(|v| rt_ok(*v)),
                                 None => was.and_then(|w| w.rt),
                             },
-                            // At least 3 days old: due, and still shown.
+                            // Due either way: a new row as 3 days old, an old one at its
+                            // own age, so the failed source's value still ends at 30 days.
                             fetched_ms: if partial {
-                                was.map_or(now - FRESH_MS, |w| w.fetched_ms.max(now - FRESH_MS))
+                                was.map_or(now - FRESH_MS, |w| w.fetched_ms)
                             } else {
                                 now
                             },
@@ -591,5 +596,12 @@ mod tests {
             local: false,
         };
         assert!(!format!("{host:?}").contains("SECRET"));
+    }
+
+    #[test]
+    fn a_blank_key_is_no_key() {
+        assert_eq!(baked(Some("  abc123 \n")).as_deref(), Some("abc123"));
+        assert_eq!(baked(Some(" \t\n")), None);
+        assert_eq!(baked(None), None);
     }
 }

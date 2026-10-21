@@ -566,6 +566,43 @@ async fn the_imdb_answer_stays_when_only_the_tomatometer_call_fails() {
 }
 
 #[tokio::test]
+async fn a_partial_answer_keeps_the_failed_sources_own_age() {
+    let core = Core::temporary("p").unwrap();
+    let fake = mdblist(
+        json!({"tt1": {"imdb": 8.8, "tomatoes": 99}}),
+        Duration::ZERO,
+    )
+    .await;
+    core.ratings().set_host(fake.host());
+    aged(&core, "tt1", Some(7.0), Some(90), 25 * DAY_MS);
+    fake.refuse(503, None, Some("/tomatoes"));
+    core.ratings().lookup(&[movie("tt1")]).await.expect("asked");
+    let stored = &core.library().ratings(&[movie("tt1")]).unwrap()[0];
+    assert_eq!((stored.imdb, stored.rt), (Some(8.8), Some(90)));
+    // Still 25 days old: the kept Tomatometer goes at 30 days, as any other.
+    assert!(now_ms() - stored.fetched_ms >= 25 * DAY_MS - 60_000);
+}
+
+#[tokio::test]
+async fn requests_to_the_dev_recorder_never_carry_the_key() {
+    // Every request to a host off this machine goes to a recorder that is not there; the hosts
+    // of this file's other tests are on this machine, so the recorder leaves them alone.
+    mq_http::set_dev_replay("http://127.0.0.1:9/replay");
+    let core = Core::temporary("p").unwrap();
+    core.ratings().set_host(Host {
+        url: "https://api.mdblist.com".into(),
+        key: Some("test-key".into()),
+        local: false,
+    });
+    assert_eq!(core.ratings().lookup(&[movie("tt1")]).await, None);
+    assert_eq!(
+        core.ratings().rest_left(),
+        None,
+        "nothing was asked, so nothing failed"
+    );
+}
+
+#[tokio::test]
 async fn refusals_rest_for_as_long_as_they_say() {
     // (status, Retry-After, the rest it gives, at least and at most)
     let day = Duration::from_secs(86_400);
@@ -613,7 +650,9 @@ async fn refusals_rest_for_as_long_as_they_say() {
     }
 }
 
-/// Every log line of the test's thread, at every level.
+/// Every log line of the test's thread, at every `tracing` level (reqwest's
+/// own lines go through `log`, which is not bridged here; they name the host,
+/// never the URL).
 #[derive(Clone, Default)]
 struct Logs(Arc<Mutex<Vec<u8>>>);
 
