@@ -176,6 +176,9 @@ pub struct Conditions {
     pub reclaimable_bytes: Option<u64>,
     /// `C`: what the windows playing will still take.
     pub committed_bytes: u64,
+    /// On mobile data: a window keeps the device preset ahead, so its row
+    /// says no minutes (plans/streaming-window.md 3.3).
+    pub metered: bool,
     /// Each torrent folder's bytes by info hash: a row's own folder is room
     /// for its window, never for it whole (plans/streaming-window.md 2.1).
     #[serde(skip)]
@@ -240,6 +243,7 @@ impl Default for Conditions {
             window: false,
             reclaimable_bytes: None,
             committed_bytes: 0,
+            metered: false,
             held: Default::default(),
         }
     }
@@ -506,6 +510,20 @@ pub enum ReasonLine {
         size_bytes: Option<u64>,
         /// The service it may be ready on (`Unknown`).
         service: Option<String>,
+    },
+    /// A torrent too big for the free space that plays in a window
+    /// (plans/streaming-window.md 3.3), in place of `Quick` or `Should`.
+    #[serde(rename_all = "camelCase")]
+    Buffer {
+        seeders: Option<u32>,
+        #[cfg_attr(feature = "ts", ts(type = "number | null"))]
+        size_bytes: Option<u64>,
+        /// Minutes of it the window holds ahead, rounded down, at most 10;
+        /// none on mobile data, where the engine keeps the device preset.
+        ahead_min: Option<u32>,
+        /// The window's size.
+        #[cfg_attr(feature = "ts", ts(type = "number"))]
+        budget_bytes: u64,
     },
 }
 

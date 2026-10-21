@@ -615,6 +615,7 @@ impl VersionsView {
             window,
             reclaimable_bytes,
             committed_bytes,
+            metered: core.network() == crate::speed::Network::Cellular,
             held,
         };
         let item_id = item_id.map_or_else(

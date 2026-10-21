@@ -212,7 +212,7 @@ object VersionsCopy {
 
             HideReason.NeedsDebrid -> "${if (one) "needs" else "need"} a paid streaming service account"
 
-            HideReason.NoSpace -> if (one) "is larger than the free space" else "are larger than the free space"
+            HideReason.NoSpace -> "${if (one) "has" else "have"} no room to play here, even a few minutes at a time"
 
             // A reason from a newer core: still counted, in general words.
             HideReason.Unknown -> if (one) "is hidden for another reason" else "are hidden for another reason"

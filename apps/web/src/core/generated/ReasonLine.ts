@@ -22,4 +22,13 @@ chosen: boolean, } | { "kind": "few", seeders: number, } | { "kind": "ready", se
 /**
  * The service it may be ready on (`Unknown`).
  */
-service: string | null, };
+service: string | null, } | { "kind": "buffer", seeders: number | null, sizeBytes: number | null, 
+/**
+ * Minutes of it the window holds ahead, rounded down, at most 10;
+ * none on mobile data, where the engine keeps the device preset.
+ */
+aheadMin: number | null, 
+/**
+ * The window's size.
+ */
+budgetBytes: number, };

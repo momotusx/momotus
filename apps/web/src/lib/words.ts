@@ -58,7 +58,7 @@ const hideText: Record<HideReason, [one: string, many: string]> = {
   leavesApp: ["would open outside Marquee", "would open outside Marquee"],
   notForKids: ["is not for kids", "are not for kids"],
   needsDebrid: ["needs a paid streaming service account", "need a paid streaming service account"],
-  noSpace: ["is larger than the free space", "are larger than the free space"],
+  noSpace: ["has no room to play here, even a few minutes at a time", "have no room to play here, even a few minutes at a time"],
 };
 
 /** "19 are for other titles, 1 is another episode". */
@@ -645,6 +645,10 @@ const numbers = (l: ReasonLine): Fields => {
   if ("seeders" in l) f.seeders = l.seeders === null ? null : counted("seeders", l.seeders);
   if ("sizeBytes" in l) f.size = l.sizeBytes === null ? null : bytes(l.sizeBytes);
   if (l.kind === "large") f.limit = bytes(l.limitBytes);
+  if (l.kind === "buffer") {
+    f.minutes = l.aheadMin;
+    f.budget = bytes(l.budgetBytes);
+  }
   if (l.kind === "mayPause") {
     f.need = Math.round(l.needMbps);
     f.have = Math.round(l.haveMbps);
@@ -656,7 +660,8 @@ const numbers = (l: ReasonLine): Fields => {
 /** A version's line: the tone, the default text, and the details shown on
  * focus (TV), hover (desktop) or tap (phone). A large file says "Larger
  * than the size you chose" when the user set the limit; a version that may
- * pause because few people share it says so. */
+ * pause because few people share it says so; a window on mobile data says
+ * it keeps only a short stretch ahead instead of its minutes. */
 export function lineWords(l: ReasonLine): { tone: Exclude<Tone, "idle">; text: string; details: string } {
   const w = choice.lines[l.kind];
   const text =
@@ -666,7 +671,8 @@ export function lineWords(l: ReasonLine): { tone: Exclude<Tone, "idle">; text: s
         ? w.textSmallSwarm
         : w.text;
   const f = numbers(l);
-  const details = w.details.map((d) => part(d, f)).filter((d) => d !== null);
+  const parts = l.kind === "buffer" && l.aheadMin === null && "detailsMobile" in w ? w.detailsMobile : w.details;
+  const details = parts.map((d) => part(d, f)).filter((d) => d !== null);
   return { tone: w.tone as Exclude<Tone, "idle">, text, details: capital(details.join(", ")) };
 }
 

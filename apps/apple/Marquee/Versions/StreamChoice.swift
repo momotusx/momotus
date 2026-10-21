@@ -12,6 +12,8 @@ struct StreamChoiceWords: Decodable, Sendable {
         /// mayPause when only a few are sharing the file: the swarm, not the connection.
         let textSmallSwarm: String?
         let details: [String]
+        /// buffer on mobile data, where it says no minutes.
+        var detailsMobile: [String]? = nil
     }
 
     struct Choice<Value: Decodable & Sendable>: Decodable, Sendable {
@@ -268,13 +270,17 @@ enum StreamChoice {
             "limit": line.limitBytes.map(bytes),
             "need": line.needMbps.map { String(Int($0.rounded())) },
             "have": line.haveMbps.map { String(Int($0.rounded())) },
+            "minutes": line.aheadMin.map(String.init),
+            "budget": line.budgetBytes.map(bytes),
         ]
         if let samples = line.samples {
             fields["speedSource"] = samples > 0
                 ? words.speedSource["measured"]?.replacingOccurrences(of: "{playbacks}", with: counted("playbacks", samples))
                 : words.speedSource["estimated"]
         }
-        let details = w.details.compactMap { fill($0, fields) }.joined(separator: ", ")
+        // A window on mobile data keeps only a short stretch ahead: no minutes.
+        let parts = line.kind == "buffer" && line.aheadMin == nil ? w.detailsMobile ?? w.details : w.details
+        let details = parts.compactMap { fill($0, fields) }.joined(separator: ", ")
         return LineWords(tone: tone(w.tone), text: lineText(w, line, limitChosen: limitChosen), details: capital(details))
     }
 

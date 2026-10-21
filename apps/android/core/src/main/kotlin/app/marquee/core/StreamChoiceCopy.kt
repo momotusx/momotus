@@ -26,6 +26,8 @@ object StreamChoiceCopy {
         val textChosen: String? = null,
         /** "May pause: only a few people are sharing it": the mayPause line when the swarm is small. */
         val textSmallSwarm: String? = null,
+        /** The buffer line on mobile data, where it says no minutes. */
+        val detailsMobile: List<String>? = null,
     )
 
     /** A line as shown: its tone, its default words and the details (empty when no part is known). */
@@ -119,6 +121,13 @@ object StreamChoiceCopy {
             "quick" to LineWords(ok, "Starts quickly", listOf("{seeders}", "{size}")),
             "should" to
                 LineWords(ok, "Should start quickly", listOf("{seeders}", "{size}", "may be ready on {service}")),
+            "buffer" to
+                LineWords(
+                    ok,
+                    "Plays without storing the whole file",
+                    listOf("{seeders}", "{size}", "room for about {minutes} min ahead in {budget}"),
+                    detailsMobile = listOf("{seeders}", "{size}", "keeps only a short stretch ahead on mobile data"),
+                ),
         )
 
     const val SPEED_MEASURED = "measured from {playbacks}"
@@ -134,7 +143,7 @@ object StreamChoiceCopy {
                         "Add an account"
                 ),
             BlockedReason.NoSpace to
-                ("Marquee found {versions}, but none fits in the free space on this device." to "Show them"),
+                ("Marquee found {versions}, but this device is nearly full, so none can play here." to "Show them"),
             BlockedReason.NothingPlaysHere to ("Found {versions}, but none plays on this device." to "Show them"),
         )
     const val SHOW_ROWS = "Show them"
@@ -375,12 +384,23 @@ object StreamChoiceCopy {
                         "service" to l.service,
                     )
             }
+
+            is ReasonLine.Buffer -> {
+                "buffer" to
+                    mapOf(
+                        "seeders" to l.seeders?.let { counted("seeders", it) },
+                        "size" to l.sizeBytes?.let(Format::bytes),
+                        "minutes" to l.aheadMin,
+                        "budget" to Format.bytes(l.budgetBytes),
+                    )
+            }
         }
 
     /**
      * A version's line: the tone, the default text, and the details shown on focus (TV) or in the opened
      * row (phone). A large file says "Larger than the size you chose" when the user set the limit; a version
-     * that may pause because few people share it says so.
+     * that may pause because few people share it says so; a window on mobile data says it keeps only a short
+     * stretch ahead instead of its minutes.
      */
     fun line(l: ReasonLine): Line {
         val (kind, f) = fields(l)
@@ -391,7 +411,8 @@ object StreamChoiceCopy {
                 l is ReasonLine.MayPause && l.smallSwarm -> w.textSmallSwarm ?: w.text
                 else -> w.text
             }
-        return Line(w.tone, text, capital(w.details.mapNotNull { part(it, f) }.joinToString(", ")))
+        val details = if (l is ReasonLine.Buffer && l.aheadMin == null) w.detailsMobile ?: w.details else w.details
+        return Line(w.tone, text, capital(details.mapNotNull { part(it, f) }.joinToString(", ")))
     }
 
     /** Why no version is visible, and its one action (3.11); null for a reason from a newer core. */

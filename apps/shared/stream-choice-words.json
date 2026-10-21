@@ -79,6 +79,12 @@
       "tone": "ok",
       "text": "Should start quickly",
       "details": ["{seeders}", "{size}", "may be ready on {service}"]
+    },
+    "buffer": {
+      "tone": "ok",
+      "text": "Plays without storing the whole file",
+      "details": ["{seeders}", "{size}", "room for about {minutes} min ahead in {budget}"],
+      "detailsMobile": ["{seeders}", "{size}", "keeps only a short stretch ahead on mobile data"]
     }
   },
   "speedSource": {
@@ -91,7 +97,7 @@
       "action": "Add an account"
     },
     "noSpace": {
-      "text": "Marquee found {versions}, but none fits in the free space on this device.",
+      "text": "Marquee found {versions}, but this device is nearly full, so none can play here.",
       "action": "Show them"
     },
     "nothingPlaysHere": {

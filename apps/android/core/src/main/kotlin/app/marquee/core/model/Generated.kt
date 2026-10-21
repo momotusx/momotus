@@ -1187,6 +1187,17 @@ sealed interface ReasonLine {
         /** The service it may be ready on (`Unknown`). */
         val service: String? = null,
     ) : ReasonLine
+
+    @Serializable
+    @SerialName("buffer")
+    data class Buffer(
+        val seeders: Int? = null,
+        val sizeBytes: Long? = null,
+        /** Minutes of it the window holds ahead, rounded down, at most 10; none on mobile data, where the engine keeps the device preset. */
+        val aheadMin: Int? = null,
+        /** The window's size. */
+        val budgetBytes: Long,
+    ) : ReasonLine
 }
 
 @Serializable

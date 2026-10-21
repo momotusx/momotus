@@ -71,7 +71,7 @@ const GiB = 1024 ** 3;
 test("the web renders the shared stream choice words as they are", () => {
   expect(choiceWords).toEqual(shared);
   for (const [kind, w] of Object.entries(shared.lines)) {
-    const line = { kind, seeders: 3, year: 1999, service: "TorBox", sizeBytes: GiB, limitBytes: 5 * GiB, chosen: false, needMbps: 30, haveMbps: 12, samples: 0, quality: "cam" } as unknown as ReasonLine;
+    const line = { kind, seeders: 3, year: 1999, service: "TorBox", sizeBytes: GiB, limitBytes: 5 * GiB, chosen: false, needMbps: 30, haveMbps: 12, samples: 0, quality: "cam", aheadMin: 7, budgetBytes: 2.5 * GiB } as unknown as ReasonLine;
     expect(lineWords(line)).toMatchObject({ tone: w.tone, text: w.text });
   }
 });
@@ -122,10 +122,21 @@ test("may pause on a small swarm says few people share it", () => {
   expect(lineWords({ kind: "mayPause", needMbps: 2.1, haveMbps: 1.7, samples: 0, smallSwarm: false }).text).toBe("May pause on this connection");
 });
 
+test("a window says its minutes ahead, or on mobile data that it keeps a short stretch", () => {
+  const buffer: ReasonLine = { kind: "buffer", seeders: 214, sizeBytes: 40 * GiB, aheadMin: 7, budgetBytes: 2.5 * GiB };
+  expect(lineWords(buffer)).toEqual({ tone: "ok", text: "Plays without storing the whole file", details: "214 seeders, 40 GB, room for about 7 min ahead in 2.5 GB" });
+  expect(lineWords({ ...buffer, aheadMin: null }).details).toBe("214 seeders, 40 GB, keeps only a short stretch ahead on mobile data");
+  expect(lineWords({ ...buffer, seeders: null, aheadMin: 10 }).details).toBe("40 GB, room for about 10 min ahead in 2.5 GB");
+});
+
+test("a hidden row with no room says so", () => {
+  expect(hiddenSummary({ count: 2, byReason: [["noSpace", 2]] })).toBe("2 have no room to play here, even a few minutes at a time");
+});
+
 test("the blocked state counts the versions it found", () => {
   expect(blockedWords("needsAccount", 1).text).toStartWith("Marquee found 1 version. This version of the app");
   expect(blockedWords("nothingPlaysHere", 42)).toEqual({ text: "Found 42 versions, but none plays on this device.", action: "Show them" });
-  expect(blockedWords("noSpace", 3).text).toBe("Marquee found 3 versions, but none fits in the free space on this device.");
+  expect(blockedWords("noSpace", 3).text).toBe("Marquee found 3 versions, but this device is nearly full, so none can play here.");
   expect(counted("versions", 2000)).toBe("2,000 versions");
 });
 

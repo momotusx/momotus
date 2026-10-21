@@ -82,17 +82,39 @@ fn gate(s: &ParsedStream, input: &RankInput<'_>) -> Result<SourceClass, HideReas
     // is what must fit (code review r2 P2-4).
     if class == SourceClass::Swarm
         && let (Some(free), Some(size)) = (input.conditions.free_bytes, weight(s, input).size)
-        && !has_room(s, input, free, size)
+        && room(s, input, free, size) == Room::None
     {
         return Err(HideReason::NoSpace);
     }
     Ok(class)
 }
 
-/// A swarm row has room (plans/streaming-window.md 3.1): it fits whole in
-/// `free + R - C - reserve` (the engine's 512 MiB), or, where windows
-/// play, its window holds 120 s of it ahead.
-fn has_room(s: &ParsedStream, input: &RankInput<'_>, free: u64, size: u64) -> bool {
+/// Where a swarm row plays (plans/streaming-window.md 3.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Room {
+    /// Whole: it fits in `free + R - C - reserve` (the engine's 512 MiB).
+    Whole,
+    /// In a window of `budget` bytes holding `ahead_s` of it ahead.
+    Window { ahead_s: u64, budget: u64 },
+    /// Nowhere: no windows here, or under 120 s ahead.
+    None,
+}
+
+/// A swarm row's window, when it plays in one.
+fn window_of(s: &ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Option<Room> {
+    if class != SourceClass::Swarm {
+        return None;
+    }
+    let room = room(
+        s,
+        input,
+        input.conditions.free_bytes?,
+        weight(s, input).size?,
+    );
+    matches!(room, Room::Window { .. }).then_some(room)
+}
+
+fn room(s: &ParsedStream, input: &RankInput<'_>, free: u64, size: u64) -> Room {
     let c = input.conditions;
     let episode = input.target.season.is_some() || input.target.episode.is_some();
     let file = match &s.source {
@@ -111,18 +133,43 @@ fn has_room(s: &ParsedStream, input: &RankInput<'_>, free: u64, size: u64) -> bo
     }
     .with_held(held, file, estimated_piece(size));
     if i.fits_whole(size) {
-        return true;
+        return Room::Whole;
     }
     if !c.window {
-        return false;
+        return Room::None;
     }
     // The rate the app plays it with: this file's size over the runtime
     // when known (a pack's share of it), else the guess (2.2).
     let w = weight(s, input);
     let runtime = w.mbps.and(c.runtime_s).map(u64::from);
     i.bitrate = window_rate(s, w.size.unwrap_or(size), episode, runtime);
-    mq_engine_sched::window_plan(&mq_engine_sched::Config::standard(), i)
-        .is_some_and(|p| p.ahead_secs(i.bitrate) >= WINDOW_AHEAD_S)
+    match mq_engine_sched::window_plan(&mq_engine_sched::Config::standard(), i) {
+        Some(p) if p.ahead_secs(i.bitrate) >= WINDOW_AHEAD_S => Room::Window {
+            ahead_s: p.ahead_secs(i.bitrate),
+            budget: p.budget,
+        },
+        _ => Room::None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// Phase 3 test k (plans/streaming-window.md 3.1): 1 MiB for 571 MB,
+    /// 2 MiB for 2.5 GiB, 8 MiB for 15 and 40 GiB, 16 MiB for 60 GiB.
+    #[test]
+    fn the_piece_estimate_is_four_times_libtorrents_at_most_16_mib() {
+        const MIB: u64 = 1 << 20;
+        const GIB: u64 = 1 << 30;
+        for (size, piece) in [
+            (571_346_576, MIB),
+            (5 * GIB / 2, 2 * MIB),
+            (15 * GIB, 8 * MIB),
+            (40 * GIB, 8 * MIB),
+            (60 * GIB, 16 * MIB),
+        ] {
+            assert_eq!(super::estimated_piece(size), piece, "{size}");
+        }
+    }
 }
 
 /// The piece size of a torrent not opened yet (3.1): 4 times libtorrent's
@@ -748,6 +795,7 @@ fn score(stream: ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Sco
         start(class, s.seeders, input.prefs)
     };
     let fails_here = no_picture(s, input) || did_not_play(s, input) || wrong_file(s, input);
+    let window = window_of(s, class, input);
     let key = RankKey {
         language: input.prefs.languages.is_empty()
             || langs.is_empty()
@@ -763,13 +811,17 @@ fn score(stream: ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Sco
             playability(s, input).unwrap_or(Playability::NeedsTranscode)
         },
         viable: start > 0 && !fails_here,
-        size_ok: size_ok(weight.size, class, input.prefs),
+        // A windowed row frees the disk as it plays: under the default
+        // limit it passes; a limit the viewer chose compares the file
+        // (plans/streaming-window.md 3.1).
+        size_ok: (window.is_some() && !input.conditions.limit_chosen)
+            || size_ok(weight.size, class, input.prefs),
         start,
         binge: matches!((input.last_binge_group, &s.binge_group), (Some(a), Some(b)) if a == b),
         effective_height: effective_height(s, bitrate, input),
         within: within(s, class, bitrate, safe, input),
     };
-    let line = line(s, class, &key, weight, judged, input);
+    let line = line(s, class, &key, weight, judged, window, input);
     Scored {
         stream,
         key,
@@ -786,6 +838,7 @@ fn line(
     key: &RankKey,
     weight: Weight,
     speed: Option<(Speed, bool)>,
+    window: Option<Room>,
     input: &RankInput<'_>,
 ) -> ReasonLine {
     let (size, bitrate) = (weight.size, weight.mbps);
@@ -853,6 +906,14 @@ fn line(
         return ReasonLine::Ready {
             service: s.service.clone(),
             size_bytes: size,
+        };
+    }
+    if let Some(Room::Window { ahead_s, budget }) = window {
+        return ReasonLine::Buffer {
+            seeders: s.seeders,
+            size_bytes: size,
+            ahead_min: (!input.conditions.metered).then(|| (ahead_s / 60).min(10) as u32),
+            budget_bytes: budget,
         };
     }
     if key.start == 3 {

@@ -86,7 +86,7 @@ enum VersionWords {
             case "leavesApp": what = "would open outside Marquee"
             case "notForKids": what = one ? "is not for kids" : "are not for kids"
             case "needsDebrid": what = one ? "needs a paid streaming service account" : "need a paid streaming service account"
-            case "noSpace": what = one ? "is larger than the free space" : "are larger than the free space"
+            case "noSpace": what = "\(one ? "has" : "have") no room to play here, even a few minutes at a time"
             default: what = item.reason
             }
             return "\(item.count) \(what)"

@@ -86,7 +86,8 @@ class UnknownValueTest {
         val m13 = snapshot.replace("geoBlocked", "needsDebrid").replace("expired", "noSpace")
         val known = CoreJson.decodeFromString(VersionsSnapshot.serializer(), m13)
         assertEquals(
-            "2 need a paid streaming service account, 1 is over your size limit, 1 is larger than the free space",
+            "2 need a paid streaming service account, 1 is over your size limit, " +
+                "1 has no room to play here, even a few minutes at a time",
             VersionsCopy.hiddenDetail(known.hidden),
         )
     }

@@ -982,6 +982,262 @@ fn a_torrent_that_does_not_fit_shows_when_its_window_holds_two_minutes() {
     assert_eq!(case(1_100_000_000, false, 888).rank(small).rows.len(), 1);
 }
 
+/// Where windows play, with a measured 60 Mbit/s line (so no remux row
+/// may pause): `free` bytes free and the runtime known.
+fn windowed_case(free: u64, runtime_s: Option<u32>, caps: DeviceCaps) -> Case {
+    let mut case = prior_case(free, runtime_s, caps);
+    case.conditions.p2p = Speed {
+        mbps: 60.0,
+        samples: 3,
+    };
+    case
+}
+
+/// The same with the P2P prior (10 Mbit/s), as 3.2 sizes the small files.
+fn prior_case(free: u64, runtime_s: Option<u32>, caps: DeviceCaps) -> Case {
+    Case {
+        caps,
+        conditions: Conditions {
+            runtime_s,
+            free_bytes: Some(free),
+            window: true,
+            ..engine().clone()
+        },
+        ..Case::stick()
+    }
+}
+
+/// The owner's example (3.2): 7 min ahead, 6 on Apple targets, where the
+/// engine's `F` also counts the 16 MiB APFS keeps of the head (419 s).
+fn owners_minutes() -> u32 {
+    if mq_engine_sched::APFS_HEAD_BYTES > 0 {
+        6
+    } else {
+        7
+    }
+}
+
+/// One row's line, ranked alone.
+fn line_of(case: &Case, release: &str, gb: f64) -> ReasonLine {
+    let ranked = case.rank(vec![seeded(1, release, 300, gb)]);
+    assert_eq!(ranked.rows.len(), 1, "{release}: {:?}", ranked.hidden);
+    ranked.rows[0].line.clone()
+}
+
+/// The minutes ahead a window row says, `None` on a row with no window.
+fn minutes(line: &ReasonLine) -> Option<u32> {
+    match line {
+        ReasonLine::Buffer { ahead_min, .. } => *ahead_min,
+        _ => None,
+    }
+}
+
+/// Phase 3 test a and the 3.2 table (plans/streaming-window.md): each row
+/// shown with its minutes ahead, or whole, or hidden; the windowed rows
+/// keep their seeders and size and never say "Large file". The minutes are
+/// the engine's: its `F` pins a piece more than 3.2's, so Tears of Steel
+/// on the 1 GiB image's 0.84 GB says 3 min (214 to 235 s), not 4.
+#[test]
+fn the_window_rows_of_the_worked_table() {
+    const GB: u64 = 1_000_000_000;
+    let stick = DeviceCaps::basic_1080p;
+    let remux = "Movie.2020.1080p.BluRay.REMUX.AVC-GRP";
+    let web4k = "Movie.2020.2160p.WEB-DL.DV.H.265-GRP";
+    let tos = "Movie.2012.1080p.WEB.x264-GRP";
+    let (fast, prior) = (windowed_case, prior_case);
+    type CaseOf = fn(u64, Option<u32>, DeviceCaps) -> Case;
+    // A release, its GiB, runtime and free bytes, the device, the line's
+    // speed, and the minutes it says.
+    type Row = (&'static str, f64, u32, u64, DeviceCaps, CaseOf, Option<u32>);
+    let cases: [Row; 9] = [
+        // The owner's example: 40 GiB in 2 h 30 min with 3 GiB free.
+        (
+            remux,
+            40.0,
+            9000,
+            3 << 30,
+            stick(),
+            fast,
+            Some(owners_minutes()),
+        ),
+        (remux, 40.0, 9000, 8 << 30, stick(), fast, Some(10)),
+        (web4k, 15.0, 7200, 5 << 29, caps_4k_dv(), fast, Some(10)),
+        (web4k, 15.0, 7200, 10 << 30, caps_4k_dv(), fast, Some(10)),
+        (
+            "Movie.2020.1080p.WEB.x264-GRP",
+            2.5,
+            7200,
+            2 << 30,
+            stick(),
+            prior,
+            Some(10),
+        ),
+        // Tears of Steel on the Pixel (PX9) and on the 1 GiB image.
+        (tos, 0.532, 734, 1_100_000_000, stick(), prior, Some(9)),
+        (tos, 0.532, 734, 840_000_000, stick(), prior, Some(3)),
+        // Sintel fits whole on the same Pixel; a 20 GiB remux on a Mac too.
+        (
+            "Movie.2010.1080p.WEB.x264-GRP",
+            0.133,
+            888,
+            1_100_000_000,
+            stick(),
+            prior,
+            None,
+        ),
+        (remux, 20.0, 7200, 400 << 30, stick(), fast, None),
+    ];
+    for (release, gb, runtime, free, caps, case, want) in cases {
+        let mut whole = case(free, Some(runtime), caps.clone());
+        whole.conditions.window = false;
+        let line = line_of(&case(free, Some(runtime), caps), release, gb);
+        assert_eq!(
+            minutes(&line),
+            want,
+            "{release} {gb} GiB with {free} free: {line:?}"
+        );
+        match line {
+            ReasonLine::Buffer {
+                seeders,
+                size_bytes,
+                budget_bytes,
+                ..
+            } => {
+                assert_eq!(seeders, Some(300));
+                assert_eq!(size_bytes, Some((gb * GIB) as u64));
+                assert!(budget_bytes < free, "{budget_bytes}");
+            }
+            // Whole, as today.
+            other => assert_eq!(other, line_of(&whole, release, gb), "{release}"),
+        }
+    }
+    // A 4K remux of 60 GiB in 2 h with 1.5 GiB free: about 40 s ahead.
+    let ranked = windowed_case(3 << 29, Some(7200), caps_4k_dv()).rank(vec![seeded(
+        2,
+        "Movie.2020.2160p.BluRay.REMUX.HEVC.DV-GRP",
+        300,
+        60.0,
+    )]);
+    assert_eq!(hidden(&ranked, HideReason::NoSpace), 1);
+    // With 8 GiB free the window is the cap: about 4.9 GB stays free.
+    let capped = line_of(&windowed_case(8 << 30, Some(9000), stick()), remux, 40.0);
+    let ReasonLine::Buffer { budget_bytes, .. } = capped else {
+        panic!("{capped:?}");
+    };
+    assert!(
+        (3_600_000_000..3_800_000_000).contains(&budget_bytes),
+        "{budget_bytes}"
+    );
+    assert!((8 << 30) - budget_bytes > 48 * GB / 10);
+}
+
+/// Phase 3 test b: a windowed playback trimmed and left idle keeps 1 GiB of
+/// the film; the same row still shows with the same minutes, the folder
+/// counted as room for its window.
+#[test]
+fn a_trimmed_window_left_idle_keeps_its_row_and_minutes() {
+    let remux = "Movie.2020.1080p.BluRay.REMUX.AVC-GRP";
+    let mut case = windowed_case(2 << 30, Some(9000), DeviceCaps::basic_1080p());
+    case.conditions.reclaimable_bytes = Some(1 << 30);
+    case.conditions.held.insert(
+        format!("{:040x}", 0x101),
+        mq_engine_sched::HeldBytes {
+            folder: 1 << 30,
+            files: vec![1 << 30],
+            idle: true,
+            committed: 0,
+        },
+    );
+    assert_eq!(
+        minutes(&line_of(&case, remux, 40.0)),
+        Some(owners_minutes())
+    );
+}
+
+/// Phase 3 test d: a file that fits ranks and reads as it did without
+/// windows.
+#[test]
+fn a_file_that_fits_ranks_as_without_windows() {
+    let rows = || {
+        vec![
+            seeded(1, "Movie.2020.1080p.WEB.x264-AAA", 300, 2.0),
+            seeded(2, "Movie.2020.1080p.BluRay.x264-BBB", 40, 9.0),
+            seeded(3, "Movie.2020.720p.WEB.x264-CCC", 900, 1.0),
+        ]
+    };
+    let with = windowed_case(100 << 30, Some(7200), DeviceCaps::basic_1080p());
+    let mut without = windowed_case(100 << 30, Some(7200), DeviceCaps::basic_1080p());
+    without.conditions.window = false;
+    let (a, b) = (with.rank(rows()), without.rank(rows()));
+    let lines = |r: &Ranked| {
+        r.rows
+            .iter()
+            .map(|row| (first_line(row).to_owned(), row.line.clone()))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(lines(&a), lines(&b));
+}
+
+/// Phase 3 test f: with no runtime, a window's rate is never under the
+/// file over 3 h: a 40 GiB 1080p WEB (guessed at 10 Mbit/s) is sized at
+/// 40 GiB over 3 h.
+#[test]
+fn with_no_runtime_a_window_is_sized_at_the_file_over_three_hours() {
+    let web = "Movie.2020.1080p.WEB.x264-GRP";
+    let unknown = line_of(
+        &windowed_case(3 << 30, None, DeviceCaps::basic_1080p()),
+        web,
+        40.0,
+    );
+    let three_h = line_of(
+        &windowed_case(3 << 30, Some(10_800), DeviceCaps::basic_1080p()),
+        web,
+        40.0,
+    );
+    assert_eq!(minutes(&unknown), minutes(&three_h));
+    assert!(minutes(&unknown).is_some());
+}
+
+/// Phase 3 tests g and h: under the default limit a windowed row passes
+/// the size limit (no "Large file"); a limit the viewer chose compares the
+/// file.
+#[test]
+fn a_windowed_row_passes_the_default_limit_not_a_chosen_one() {
+    let remux = "Movie.2020.1080p.BluRay.REMUX.AVC-GRP";
+    let mut case = windowed_case(8 << 30, Some(9000), DeviceCaps::basic_1080p());
+    assert_eq!(kind(&line_of(&case, remux, 40.0)), "buffer");
+    case.conditions.limit_chosen = true;
+    let line = line_of(&case, remux, 40.0);
+    assert!(
+        matches!(line, ReasonLine::Large { chosen: true, .. }),
+        "{line:?}"
+    );
+}
+
+/// Phase 3 test j: a window playing elsewhere takes its `C`, so the second
+/// row has fewer minutes ahead.
+#[test]
+fn a_window_playing_elsewhere_takes_its_room_from_the_minutes() {
+    let remux = "Movie.2020.1080p.BluRay.REMUX.AVC-GRP";
+    let mut case = windowed_case(3 << 30, Some(9000), DeviceCaps::basic_1080p());
+    let alone = minutes(&line_of(&case, remux, 40.0)).unwrap();
+    case.conditions.committed_bytes = 1 << 30;
+    let shared = minutes(&line_of(&case, remux, 40.0)).unwrap();
+    assert_eq!((alone, shared), (owners_minutes(), 3));
+}
+
+/// Phase 3 (3.3): on mobile data a windowed row says no minutes; the
+/// engine keeps the device preset ahead there.
+#[test]
+fn on_mobile_data_a_windowed_row_says_no_minutes() {
+    let remux = "Movie.2020.1080p.BluRay.REMUX.AVC-GRP";
+    let mut case = windowed_case(3 << 30, Some(9000), DeviceCaps::basic_1080p());
+    case.conditions.metered = true;
+    let line = line_of(&case, remux, 40.0);
+    assert_eq!(kind(&line), "buffer");
+    assert_eq!(minutes(&line), None);
+}
+
 /// Mutation 6: a torrent larger than the free space less 512 MiB is hidden.
 #[test]
 fn no_room_hides_a_torrent_larger_than_the_free_space() {

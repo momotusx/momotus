@@ -113,6 +113,7 @@ class StreamChoiceCopyTest {
                                     w.textChosen?.let { put("textChosen", it) }
                                     w.textSmallSwarm?.let { put("textSmallSwarm", it) }
                                     put("details", JsonArray(w.details.map(::JsonPrimitive)))
+                                    w.detailsMobile?.let { put("detailsMobile", JsonArray(it.map(::JsonPrimitive))) }
                                 },
                             )
                         }
@@ -334,6 +335,27 @@ class StreamChoiceCopyTest {
     }
 
     @Test
+    fun `a window says its minutes ahead, or on mobile data that it keeps a short stretch`() {
+        val buffer = ReasonLine.Buffer(214, 40 * gib, aheadMin = 7, budgetBytes = (2.5 * gib).toLong())
+        assertEquals(
+            StreamChoiceCopy.Line(
+                ok,
+                "Plays without storing the whole file",
+                "214 seeders, 40 GB, room for about 7 min ahead in 2.5 GB",
+            ),
+            line(buffer),
+        )
+        assertEquals(
+            "214 seeders, 40 GB, keeps only a short stretch ahead on mobile data",
+            line(buffer.copy(aheadMin = null)).details,
+        )
+        assertEquals(
+            "40 GB, room for about 10 min ahead in 2.5 GB",
+            line(buffer.copy(seeders = null, aheadMin = 10)).details,
+        )
+    }
+
+    @Test
     fun `the blocked state counts the versions it found`() {
         assertTrue(
             StreamChoiceCopy
@@ -346,7 +368,7 @@ class StreamChoiceCopyTest {
             StreamChoiceCopy.blocked(BlockedReason.NothingPlaysHere, 42),
         )
         assertEquals(
-            "Marquee found 3 versions, but none fits in the free space on this device.",
+            "Marquee found 3 versions, but this device is nearly full, so none can play here.",
             StreamChoiceCopy.blocked(BlockedReason.NoSpace, 3)?.first,
         )
         assertNull(StreamChoiceCopy.blocked(BlockedReason.Unknown, 3))

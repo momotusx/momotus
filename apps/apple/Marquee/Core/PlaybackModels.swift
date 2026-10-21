@@ -74,8 +74,8 @@ struct LearnedNote: Decodable, Hashable, Sendable {
 /// with its numbers; the words live in apps/shared/stream-choice-words.json.
 struct ReasonLine: Decodable, Hashable, Sendable {
     /// "copy", "fetch", "stalled", "noPicture", "didNotPlay", "veryFew",
-    /// "otherYear", "mayPause", "washedOut", "large", "few", "ready", "quick"
-    /// or "should".
+    /// "otherYear", "mayPause", "washedOut", "large", "few", "ready", "quick",
+    /// "should" or "buffer".
     let kind: String
     var quality: String?
     var service: String?
@@ -88,6 +88,10 @@ struct ReasonLine: Decodable, Hashable, Sendable {
     var smallSwarm: Bool?
     var sizeBytes: Int64?
     var limitBytes: Int64?
+    /// "buffer": the minutes ahead its window holds (at most 10); none on mobile data.
+    var aheadMin: Int?
+    /// "buffer": the window's size.
+    var budgetBytes: Int64?
 }
 
 struct VersionRow: Decodable, Hashable, Sendable, Identifiable {

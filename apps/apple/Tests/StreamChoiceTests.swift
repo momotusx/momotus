@@ -26,7 +26,7 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
 }
 
 @Test func theSharedWordsLoadWithEveryLine() {
-    let kinds = ["copy", "fetch", "stalled", "noPicture", "didNotPlay", "veryFew", "otherYear", "mayPause", "washedOut", "large", "few", "ready", "quick", "should"]
+    let kinds = ["copy", "fetch", "stalled", "noPicture", "didNotPlay", "veryFew", "otherYear", "mayPause", "washedOut", "large", "few", "ready", "quick", "should", "buffer"]
     #expect(Set(StreamChoice.words.lines.keys) == Set(kinds))
     #expect(StreamChoice.words.question.fast.patch.sizeLimitBytes == 5_368_709_120)
 }
@@ -63,8 +63,20 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
     #expect(StreamChoice.lineWords(large)?.text == "Large file")
     #expect(StreamChoice.lineWords(large, limitChosen: true)?.text == "Larger than the size you chose")
     #expect(StreamChoice.lineWords(large)?.details == "9 GB; Marquee prefers files up to 5 GB")
+    // A window: its minutes ahead, or on mobile data a short stretch.
+    #expect(try words(#"{"kind": "buffer", "seeders": 214, "sizeBytes": 42949672960, "aheadMin": 7, "budgetBytes": 2684354560}"#)
+        == LineWords(tone: .ok, text: "Plays without storing the whole file", details: "214 seeders, 40 GB, room for about 7 min ahead in 2.5 GB"))
+    #expect(try words(#"{"kind": "buffer", "seeders": 214, "sizeBytes": 42949672960, "aheadMin": null, "budgetBytes": 2684354560}"#).details
+        == "214 seeders, 40 GB, keeps only a short stretch ahead on mobile data")
+    #expect(try words(#"{"kind": "buffer", "seeders": null, "sizeBytes": 42949672960, "aheadMin": 10, "budgetBytes": 2684354560}"#).details
+        == "40 GB, room for about 10 min ahead in 2.5 GB")
     // A newer core's kind has no words here: the row keeps its status.
     #expect(StreamChoice.lineWords(try line(#"{"kind": "somethingNew"}"#)) == nil)
+}
+
+@Test func aHiddenRowWithNoRoomSaysSo() throws {
+    let hidden = try JSONDecoder().decode(HiddenSummary.self, from: Data(#"{"count": 3, "byReason": [["noSpace", 2], ["tooLarge", 1]]}"#.utf8))
+    #expect(VersionWords.hidden(hidden) == "2 have no room to play here, even a few minutes at a time, 1 is over your size limit")
 }
 
 @Test func blockedVersionsSayWhyAndOfferTheirAction() throws {

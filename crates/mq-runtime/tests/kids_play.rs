@@ -933,6 +933,55 @@ async fn a_packs_played_episode_is_room_for_the_next_only_in_a_window() {
     );
 }
 
+/// Phase 3 (plans/streaming-window.md 3.3): where windows play, a version
+/// too big for the free space shows with the buffer line, its minutes ahead
+/// on Wi-Fi and none on mobile data, where the engine keeps the device
+/// preset.
+#[cfg(feature = "torrent")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_version_too_big_for_the_free_space_says_its_minutes_ahead() {
+    use mq_runtime::speed::Network;
+    use mq_streams::ReasonLine;
+    let s = support::swarm(true).await;
+    let fixture = Fixture::default();
+    fixture.set(
+        "/stream/movie/tt3.json",
+        json!({"streams": [{"name": "Fixture", "title": "Up.2009.1080p.WEB.x264-GROUP\n👤 300 💾 2.5 GB",
+                            "infoHash": "a".repeat(40), "fileIdx": 0}]}),
+    );
+    let (owner, _kid) = kid(&fixture).await;
+    owner.set_torrent_engine(s.leecher.clone());
+    owner.set_punches(true);
+    owner.set_free_bytes(mq_engine::RESERVE_BYTES + (1 << 30));
+    for network in [Network::Wifi, Network::Cellular] {
+        owner.set_network(network);
+        let versions = VersionsView::open_checked(&owner, params("movie", "tt3", ""), Some("tt3"));
+        let shown = settled(&versions).await;
+        let row = shown
+            .recommended
+            .clone()
+            .or_else(|| shown.rows.first().cloned());
+        let line = row.map(|r| r.line);
+        match (network, &line) {
+            (
+                Network::Wifi,
+                Some(ReasonLine::Buffer {
+                    ahead_min: Some(m), ..
+                }),
+            ) => {
+                assert!((2..=10).contains(m), "{line:?}");
+            }
+            (
+                Network::Cellular,
+                Some(ReasonLine::Buffer {
+                    ahead_min: None, ..
+                }),
+            ) => {}
+            _ => panic!("{network:?}: {line:?} ({:?})", shown.hidden),
+        }
+    }
+}
+
 /// `len` bytes of `url` from `at`.
 #[cfg(feature = "torrent")]
 async fn read_range(url: &str, at: u64, len: u64) -> Vec<u8> {

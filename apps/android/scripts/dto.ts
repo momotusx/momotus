@@ -47,6 +47,8 @@ const LONG = new Set([
   "atMs",
   "freeBytes",
   "sizeLimitBytes",
+  // The streaming window's Buffer line.
+  "budgetBytes",
 ]);
 const FLOAT = new Set(["progress", "bitrateMbps", "needMbps", "haveMbps", "mbps"]);
 /** Scalar fields the core added after the golden traces were recorded, as `Type.field`, with the
@@ -127,6 +129,7 @@ const INT = new Set([
   "runtimeMin",
   "minSeeders",
   "learnedEpoch",
+  "aheadMin",
 ]);
 
 type TypeIr =
