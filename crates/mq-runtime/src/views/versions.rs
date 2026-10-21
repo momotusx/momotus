@@ -590,10 +590,11 @@ impl VersionsView {
         let eligible = eligible(core, &path);
         let facts = &params.facts;
         #[cfg(feature = "torrent")]
-        let (window, (reclaimable_bytes, committed_bytes)) =
+        let (window, (reclaimable_bytes, committed_bytes, held)) =
             (core.windows_ok(), core.room_counts());
         #[cfg(not(feature = "torrent"))]
-        let (window, (reclaimable_bytes, committed_bytes)) = (false, (None, 0));
+        let (window, (reclaimable_bytes, committed_bytes, held)) =
+            (false, (None, 0, Default::default()));
         let conditions = Conditions {
             runtime_s: facts.runtime_s,
             title_year: facts.title_year,
@@ -614,6 +615,7 @@ impl VersionsView {
             window,
             reclaimable_bytes,
             committed_bytes,
+            held,
         };
         let item_id = item_id.map_or_else(
             || {

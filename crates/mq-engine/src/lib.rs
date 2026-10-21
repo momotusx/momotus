@@ -30,7 +30,8 @@ pub use pick::FileHint;
 pub use reader::{RangeReader, StreamReader};
 pub use scrape::{SwarmCount, TrackerTrace};
 pub use window::{
-    APFS_HEAD_BYTES, RESERVE_BYTES, WindowInputs, WindowPlan, free_space, reclaimable, window_plan,
+    APFS_HEAD_BYTES, Counted, HeldBytes, RESERVE_BYTES, WindowInputs, WindowPlan, counted_on_disk,
+    free_space, window_plan,
 };
 
 use std::collections::{HashMap, HashSet};
@@ -405,9 +406,12 @@ struct Inner {
     /// Free space as the engine reads it, for tests of a full disk.
     #[cfg(feature = "test-hooks")]
     free: Mutex<Option<u64>>,
-    /// `R` and `C` as maintenance last counted them, for a ranking that
-    /// cannot wait (plans/streaming-window.md 3.1).
-    counted: Mutex<Option<(u64, u64)>>,
+    /// Free space that follows the data folder: this less what it holds.
+    #[cfg(feature = "test-hooks")]
+    free_base: Mutex<Option<u64>>,
+    /// `R`, `C` and the folders' bytes as maintenance last counted them,
+    /// for a ranking that cannot wait (plans/streaming-window.md 3.1).
+    counted: Mutex<Option<window::Counted>>,
 }
 
 /// The session's tasks hang off its token, each torrent's as a child: a
@@ -599,6 +603,8 @@ impl Engine {
                 evict_hold: Mutex::default(),
                 #[cfg(feature = "test-hooks")]
                 free: Mutex::default(),
+                #[cfg(feature = "test-hooks")]
+                free_base: Mutex::default(),
                 counted: Mutex::default(),
             }),
         };
@@ -842,7 +848,7 @@ impl Engine {
             .as_ref()
             .is_none_or(|l| !l.selected.contains(&idx));
         if starts {
-            let need = self.free_for_whole(&t, t.files[idx].len).await;
+            let need = self.free_for_whole(&t, idx, t.files[idx].len).await;
             self.enforce_budget(Some(h), need).await;
         }
         lock(&t.ended).take();
@@ -1211,6 +1217,10 @@ impl Engine {
         if let Some(free) = *lock(&self.inner.free) {
             return Some(free);
         }
+        #[cfg(feature = "test-hooks")]
+        if let Some(base) = *lock(&self.inner.free_base) {
+            return Some(base.saturating_sub(allocated(&self.inner.cfg.data_dir)));
+        }
         free_space(&self.inner.cfg.data_dir)
     }
 
@@ -1259,10 +1269,45 @@ impl Engine {
         .unwrap_or(0)
     }
 
-    /// `R` and `C` as maintenance last counted them (every few seconds);
-    /// `None` before its first count.
-    pub fn counted(&self) -> Option<(u64, u64)> {
-        *lock(&self.inner.counted)
+    /// `R`, `C` and the folders' bytes as maintenance last counted them
+    /// (every few seconds); `None` before its first count.
+    pub fn counted(&self) -> Option<window::Counted> {
+        lock(&self.inner.counted).clone()
+    }
+
+    /// Each torrent folder's bytes, by info hash: the torrents of this
+    /// launch with each file's, and the folders an earlier one left.
+    async fn held_bytes(&self) -> HashMap<String, HeldBytes> {
+        let loaded: Vec<(String, PathBuf, Vec<PathBuf>, bool)> = lock(&self.inner.torrents)
+            .values()
+            .map(|t| {
+                let idle = t.readers.load(Ordering::Relaxed) == 0
+                    && !t.claimed()
+                    && !lock(&t.hold).by_profile.values().any(|h| h.held);
+                let files = t.files.iter().map(|f| t.dir.join(&f.path)).collect();
+                (t.info_hash.to_ascii_lowercase(), t.dir.clone(), files, idle)
+            })
+            .collect();
+        let data_dir = self.inner.cfg.data_dir.clone();
+        tokio::task::spawn_blocking(move || {
+            let dirs: Vec<&Path> = loaded.iter().map(|l| l.1.as_path()).collect();
+            let mut held = counted_on_disk_except(&data_dir, &dirs);
+            for (hash, dir, files, idle) in &loaded {
+                let files = files.iter().map(|f| file_allocated(f)).collect();
+                let folder = allocated(dir);
+                held.insert(
+                    hash.clone(),
+                    HeldBytes {
+                        folder,
+                        files,
+                        idle: *idle,
+                    },
+                );
+            }
+            held
+        })
+        .await
+        .unwrap_or_default()
     }
 
     /// What a window of `h` is sized with (2.1), the one source for the
@@ -1272,18 +1317,27 @@ impl Engine {
     pub async fn window_inputs(
         &self,
         h: TorrentHandle,
+        file: usize,
         free: u64,
         bitrate: u64,
         fill: u64,
     ) -> Result<WindowInputs> {
-        let piece_len = u64::from(self.torrent(h)?.piece_len);
+        let t = self.torrent(h)?;
+        let path = t.files.get(file).ok_or(EngineError::NoFile)?.path.clone();
+        let dir = t.dir.clone();
+        let (own, own_file) =
+            tokio::task::spawn_blocking(move || (allocated(&dir), file_allocated(&dir.join(path))))
+                .await
+                .unwrap_or((0, 0));
         Ok(WindowInputs {
             free,
             reclaimable: self.reclaimable(Some(h)).await,
             committed: self.committed(Some(h)).await,
             bitrate,
-            piece_len,
+            piece_len: u64::from(t.piece_len),
             fill,
+            own,
+            own_file,
         })
     }
 
@@ -1415,22 +1469,18 @@ impl Engine {
 
     /// The space guard's shortfall for `state`'s window (2.4): its budget
     /// and readahead change, its player read and rate stay.
-    pub(crate) async fn set_shortfall(
-        &self,
-        t: &Torrent,
-        state: window::WindowState,
-        shortfall: u64,
-    ) {
-        let state = window::WindowState { shortfall, ..state };
+    pub(crate) async fn set_shortfall(&self, t: &Torrent, generation: u64, shortfall: u64) {
         let preset = self.sched_config().readahead_bytes;
         let live = t.live.lock().await;
-        {
+        // The stored state, so a rate `set_rate` wrote meanwhile stays.
+        let state = {
             let mut window = lock(&t.window);
-            if window.map(|w| w.generation) != Some(state.generation) {
+            let Some(w) = window.as_mut().filter(|w| w.generation == generation) else {
                 return;
-            }
-            *window = Some(state);
-        }
+            };
+            w.shortfall = shortfall;
+            *w
+        };
         if let Some(l) = live.as_ref() {
             let _ = l.msgs.send(adapter::Msg::Budget {
                 budget: state.budget(),
@@ -1474,12 +1524,13 @@ impl Engine {
     /// Ends a windowed playback before a write fails (2.4): fetching stops,
     /// and every range fails with `why` until the next window or file
     /// choice.
-    async fn end_window(&self, t: &Torrent, why: &str) {
+    async fn end_window(&self, t: &Torrent, why: &str, generation: Option<u64>) {
         tracing::warn!("{}: {why}", t.info_hash);
         *lock(&t.ended) = Some(why.to_owned());
         // The scheduler's window and cap end too: the same file played again
-        // after space was freed may fit (review P2-5).
-        self.put_window(t, None, None, None).await;
+        // after space was freed may fit (review P2-5). A window set since
+        // (a reopen) is not this one's to end.
+        self.put_window(t, None, None, generation).await;
         let live = t.live.lock().await;
         if let Some(l) = live.as_ref() {
             if !l.managed.is_paused() {
@@ -1496,16 +1547,14 @@ impl Engine {
     /// The free space a whole file needs before it starts (2.1): when it
     /// fits only by counting `R`, `size - held + reserve`; else none (it
     /// fits, or it plays in a window).
-    async fn free_for_whole(&self, t: &Torrent, size: u64) -> u64 {
-        let dir = t.dir.clone();
-        let data = self.inner.cfg.data_dir.clone();
-        let (held, free) =
-            tokio::task::spawn_blocking(move || (allocated(&dir), free_space(&data)))
-                .await
-                .unwrap_or((0, None));
-        #[cfg(feature = "test-hooks")]
-        let free = (*lock(&self.inner.free)).or(free);
-        let Some(free) = free else {
+    async fn free_for_whole(&self, t: &Torrent, file: usize, size: u64) -> u64 {
+        // The file's own bytes only: no keeper frees the torrent's other
+        // files (a pack's earlier episodes) for a whole file.
+        let path = t.dir.join(&t.files[file].path);
+        let held = tokio::task::spawn_blocking(move || file_allocated(&path))
+            .await
+            .unwrap_or(0);
+        let Some(free) = self.free() else {
             return 0;
         };
         let need = (size + RESERVE_BYTES).saturating_sub(held);
@@ -1779,7 +1828,11 @@ async fn maintenance(inner: std::sync::Weak<Inner>) {
         }
         engine.enforce_budget(None, 0).await;
         engine.guard_whole_files().await;
-        let counts = (engine.reclaimable(None).await, engine.committed(None).await);
+        let counts = window::Counted {
+            reclaimable: engine.reclaimable(None).await,
+            committed: engine.committed(None).await,
+            held: engine.held_bytes().await,
+        };
         *lock(&engine.inner.counted) = Some(counts);
     }
 }
@@ -1802,6 +1855,37 @@ fn readahead_for(
 }
 
 /// Bytes actually allocated on disk (sparse files count what is written).
+/// What one file takes on disk (none when it is not there).
+fn file_allocated(path: &Path) -> u64 {
+    std::fs::metadata(path).map_or(0, |m| {
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::MetadataExt::blocks(&m) * 512
+        }
+        #[cfg(not(unix))]
+        {
+            m.len()
+        }
+    })
+}
+
+/// [`window::counted_on_disk`]'s folders, but those in `held`.
+fn counted_on_disk_except(data_dir: &Path, held: &[&Path]) -> HashMap<String, HeldBytes> {
+    leftovers(data_dir, held)
+        .0
+        .into_iter()
+        .filter_map(|(_, path, folder)| {
+            let hash = path.file_name()?.to_str()?.to_ascii_lowercase();
+            let held = HeldBytes {
+                folder,
+                files: Vec::new(),
+                idle: true,
+            };
+            Some((hash, held))
+        })
+        .collect()
+}
+
 fn allocated(dir: &Path) -> u64 {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return 0;

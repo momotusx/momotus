@@ -786,6 +786,21 @@ async fn a_resume_counts_its_own_folder_in_the_room() {
         }
     };
     assert!(!have(6).await, "the trim took piece 6");
+    // A resume with room over both floors (the 1080p guess's and the
+    // duration's): the window's rate is the file over the last session's
+    // duration, not the guess (review P2-2).
+    owner.set_free_bytes(mq_engine::RESERVE_BYTES + 200 * MIB - own);
+    let view = PlaybackView::open(&owner, found.clone(), target("movie", "tt1", "tt1"));
+    ready(&view).await;
+    let stats = s.leecher.stats(t).await.unwrap();
+    assert!(stats.window_bytes.is_some());
+    assert_eq!(stats.bytes_per_s, Some(len * 1000 / duration_ms));
+    drop(view);
+    until_async("the trim", || async {
+        s.leecher.stats(t).await.unwrap().window_bytes.is_none()
+    })
+    .await;
+    let own = folder_bytes(&s.leech_dir().join(&s.info_hash));
     // Free space short of the floor plus 64 MiB by all but 4 MiB of what
     // the torrent holds.
     let floor = mq_engine::window_plan(
@@ -797,6 +812,7 @@ async fn a_resume_counts_its_own_folder_in_the_room() {
             bitrate: len * 1000 / duration_ms,
             piece_len: MIB,
             fill: 0,
+            ..Default::default()
         },
     )
     .unwrap()
@@ -805,17 +821,108 @@ async fn a_resume_counts_its_own_folder_in_the_room() {
     owner.set_free_bytes(mq_engine::RESERVE_BYTES + floor + 68 * MIB - own);
     let view = PlaybackView::open(&owner, found, target("movie", "tt1", "tt1"));
     let url = ready(&view).await;
-    let stats = s.leecher.stats(t).await.unwrap();
-    assert!(stats.window_bytes.is_some());
-    // The rate is the file over the last session's duration, not the
-    // 1080p guess (review P2-2).
-    assert_eq!(stats.bytes_per_s, Some(len * 1000 / duration_ms));
+    assert!(s.leecher.stats(t).await.unwrap().window_bytes.is_some());
     // Before the player's read: the head read was a probe, so nothing past
     // the head's pinned window was wanted again at byte 0 (review P2-2).
     tokio::time::sleep(Duration::from_secs(2)).await;
     assert!(!have(6).await, "the head's windows were fetched again");
     assert!(read_range(&url, at, 8 * MIB).await == s.movie[at as usize..(at + 8 * MIB) as usize]);
     assert_eq!(s.leecher.stats(t).await.unwrap().refetched_bytes, 0);
+}
+
+/// A season pack (review r2 P1-1): the played episode's bytes are room for
+/// the next episode's window, whose keeper evicts them first, never for it
+/// whole. Where the volume cannot punch holes, the next episode that fits
+/// only by counting them is hidden, and refused when opened.
+#[cfg(feature = "torrent")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_packs_played_episode_is_room_for_the_next_only_in_a_window() {
+    const MIB: u64 = 1 << 20;
+    let s = support::swarm_pack(&[("e01.mkv", 160 << 20), ("e02.mkv", 160 << 20)], 1 << 20).await;
+    let t = s
+        .leecher
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let files = s.leecher.files(t).unwrap();
+    let idx = |name: &str| files.iter().position(|f| f.path.ends_with(name)).unwrap();
+    let fixture = Fixture::default();
+    for (id, name) in [("tt1", "e01.mkv"), ("tt2", "e02.mkv")] {
+        fixture.set(
+            &format!("/stream/movie/{id}.json"),
+            json!({"streams": [{"name": "Fixture", "title": "Up.2009.1080p.WEB.x264-GROUP",
+                                "infoHash": s.info_hash, "fileIdx": idx(name),
+                                "behaviorHints": {"videoSize": 160u64 << 20}}]}),
+        );
+    }
+    let (owner, _kid) = kid(&fixture).await;
+    owner.set_torrent_engine(s.leecher.clone());
+    owner.set_punches(true);
+    let first = candidates(&owner, "movie", "tt1", "tt1").await;
+    let next = candidates(&owner, "movie", "tt2", "tt2").await;
+    // Episode 1 plays whole, 140 MiB of it read (not finished, so the
+    // seeder stays connected for episode 2).
+    let play_first = || async {
+        owner.set_free_bytes(mq_engine::RESERVE_BYTES + 1024 * MIB);
+        let view = PlaybackView::open(&owner, first.clone(), target("movie", "tt1", "tt1"));
+        let url = ready(&view).await;
+        let t = s.leecher.add_magnet(&s.info_hash, &[], &[]).await.unwrap();
+        assert_eq!(s.leecher.stats(t).await.unwrap().window_bytes, None);
+        assert!(read_range(&url, 0, 140 * MIB).await == s.movie[..(140 * MIB) as usize]);
+    };
+    play_first().await;
+    // Free space 40 MiB over the reserve: episode 2 (160 MiB) fits only by
+    // counting episode 1's 140 MiB. Maintenance counts the folder idle.
+    let free = mq_engine::RESERVE_BYTES + 40 * MIB;
+    tokio::time::sleep(Duration::from_secs(6)).await;
+    // A volume that cannot punch holes: hidden, and refused when opened.
+    let (flat, _) = kid(&fixture).await;
+    flat.set_torrent_engine(s.leecher.clone());
+    flat.set_punches(false);
+    flat.set_free_bytes(free);
+    let versions = VersionsView::open_checked(&flat, params("movie", "tt2", ""), Some("tt2"));
+    let shown = settled(&versions).await;
+    assert!(shown.recommended.is_none(), "{:?}", shown.recommended);
+    assert!(
+        shown
+            .hidden
+            .by_reason
+            .iter()
+            .any(|(r, n)| *r == HideReason::NoSpace && *n > 0),
+        "{:?}",
+        shown.hidden
+    );
+    let refused = PlaybackView::open(&flat, next.clone(), target("movie", "tt2", "tt2"));
+    until("the playback failed", || {
+        refused.snapshot().phase == PlaybackPhase::Failed
+    })
+    .await;
+    let attempts = refused.snapshot().attempts;
+    assert!(
+        attempts.iter().any(|a| a.error == "this device is full"),
+        "{attempts:?}"
+    );
+    drop(refused);
+    // The refusal removed the torrent; episode 1 again, then where holes
+    // punch: a window, which evicts episode 1 first.
+    let t = s
+        .leecher
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    play_first().await;
+    owner.set_free_bytes(free);
+    let view = PlaybackView::open(&owner, next, target("movie", "tt2", "tt2"));
+    let url = ready(&view).await;
+    assert!(s.leecher.stats(t).await.unwrap().window_bytes.is_some());
+    let e02 = &s.others[0];
+    assert!(read_range(&url, 0, 100 * MIB).await == e02[..(100 * MIB) as usize]);
+    // Piece 180 is episode 1's (the torrent lists episode 2 first).
+    let state = mq_engine::test_hooks::piece_state(&s.leecher, t, 180).await;
+    assert!(
+        !state.contains("Some((true,"),
+        "episode 1 went first: {state}"
+    );
 }
 
 /// `len` bytes of `url` from `at`.

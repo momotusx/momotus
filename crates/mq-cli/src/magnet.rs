@@ -416,13 +416,20 @@ async fn run(
     let metadata_ms = ms(started);
     // What the scheduler holds, sampled beside the folder: a folder past
     // it is the file system's (APFS's refills), not the scheduler's.
-    let max_held = Arc::new(AtomicU64::new(0));
+    // The lowest free space beside it: how close the run came to the reserve.
+    let (max_held, min_free) = (
+        Arc::new(AtomicU64::new(0)),
+        Arc::new(AtomicU64::new(u64::MAX)),
+    );
     let held_sampler = tokio::spawn({
-        let (engine, max) = (engine.clone(), Arc::clone(&max_held));
+        let (engine, max, min) = (engine.clone(), Arc::clone(&max_held), Arc::clone(&min_free));
         async move {
             loop {
                 if let Ok(s) = engine.stats(t).await {
                     max.fetch_max(s.held_bytes.unwrap_or(0), Ordering::Relaxed);
+                }
+                if let Some(free) = engine.free() {
+                    min.fetch_min(free, Ordering::Relaxed);
                 }
                 tokio::time::sleep(Duration::from_millis(250)).await;
             }
@@ -443,7 +450,7 @@ async fn run(
     let mut window_row = None;
     if let (Some(limit), Some(rate)) = (o.window, o.rate) {
         let inputs = engine
-            .window_inputs(t, engine.free().unwrap_or(0), rate, FILL_ESTIMATE)
+            .window_inputs(t, file, engine.free().unwrap_or(0), rate, FILL_ESTIMATE)
             .await
             .map_err(|e| e.to_string())?;
         let mut plan = mq_engine::window_plan(engine.device_class(), inputs)
@@ -618,6 +625,7 @@ async fn run(
         "window": window_row,
         "held_bytes": stats.held_bytes,
         "max_held_bytes": stats.held_bytes.map(|h| h.max(max_held.load(Ordering::Relaxed))),
+        "min_free_bytes": Some(min_free.load(Ordering::Relaxed)).filter(|&f| f < u64::MAX),
         "evict_rounds": stats.evict_rounds,
         "sched_seeks": stats.seeks,
         "max_allocated_bytes": max_allocated_bytes,

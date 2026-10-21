@@ -466,13 +466,16 @@ async fn the_trim_keeps_180_s_at_the_rate_the_player_gave() {
     }
 }
 
-/// Up Next in a pack (review P2-3): a file newly chosen in a live torrent
-/// that fits only by counting `R` gets the whole-file round (the idle
-/// torrent goes), and playing it whole ends the window its other file had.
+/// Up Next in a pack (reviews P2-3, r2 P1-1): the next episode, newly
+/// chosen in a live torrent, fits only by counting `R` (the earlier
+/// episode's bytes are no room for it whole): it gets the whole-file round
+/// (the idle torrent goes), and playing it whole ends the window the
+/// earlier episode had.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_next_file_of_a_live_torrent_gets_its_round_and_ends_the_window() {
-    let w = windowed(32 << 20, plan(), None).await;
-    assert!(w.read(0, 4 * MIB).await == w.movie(0, 4 * MIB));
+    let s = support::swarm_pack(&[("movie.mkv", 32 << 20), ("e02.mkv", 8 << 20)], PIECE).await;
+    let w = windowed_on(s, tempfile::tempdir().unwrap(), plan(), None).await;
+    assert!(w.read(0, 16 * MIB).await == w.movie(0, 16 * MIB));
     let idle = support::swarm(true).await;
     let a = w
         .engine
@@ -488,20 +491,18 @@ async fn the_next_file_of_a_live_torrent_gets_its_round_and_ends_the_window() {
     let mut r = reader.range(0, None).await.unwrap();
     within(30, r.read_to_end(&mut Vec::new())).await.unwrap();
     drop((r, reader));
-    // The `.nfo` with free space short of it plus the reserve, past what
-    // the torrent holds, by less than the idle torrent holds.
-    let held = allocated(&w.dir());
-    test_hooks::set_free(&w.engine, Some(37_000 + RESERVE_BYTES - held - 1));
-    let nfo = w
+    // Free space a byte short of the next episode plus the reserve.
+    test_hooks::set_free(&w.engine, Some((8 << 20) + RESERVE_BYTES - 1));
+    let next = w
         .engine
-        .select_file(w.t, "default", &FileHint::Name("a.nfo".into()))
+        .select_file(w.t, "default", &FileHint::Name("e02.mkv".into()))
         .await
         .unwrap();
     assert!(matches!(
         w.engine.stats(a).await,
         Err(EngineError::UnknownTorrent)
     ));
-    w.engine.play_whole(w.t, nfo).await.unwrap();
+    w.engine.play_whole(w.t, next).await.unwrap();
     let s = w.stats().await;
     assert_eq!(s.window_bytes, None);
     until("no window in the scheduler", || async {
@@ -543,35 +544,74 @@ async fn refused_punches_end_the_playback_cleanly() {
     assert!(max <= W, "no fetch past the budget: {max}");
 }
 
-/// f, second half (review P1-1). Free space forced under the reserve while
-/// the player's one range stays open, as mpv's and ExoPlayer's do: the
-/// window gives back the shortfall and its readahead, the keeper goes on
-/// evicting (the read is still the player's), the torrent holds no more
-/// than its budget less the shortfall, and the same range reads on to the
-/// end.
+/// f, second half (reviews P1-1, r2 P2-2). Free space that follows the
+/// data folder, and another app's write taking it 6 MiB under the reserve
+/// while the player's one range stays open, as mpv's and ExoPlayer's do:
+/// the window gives the 6 MiB back, the keeper goes on evicting (the read
+/// is still the player's), the readahead comes back once free space is
+/// over the reserve again, nothing is fetched twice, and the same range
+/// reads on to the end. When the other app deletes its file, the window
+/// grows back.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_shortfall_shrinks_the_window_and_the_read_finishes() {
-    let w = windowed(48 << 20, plan(), None).await;
+    // 40 MiB: a full window holds about 34, its kept set about 14, so it
+    // has 6 MiB to give.
+    let wide = WindowPlan {
+        budget: 40 * MIB + APFS_HEAD_BYTES,
+        ..plan()
+    };
+    let w = windowed(64 << 20, wide, None).await;
     let reader = w.engine.open_reader(w.t, "default", w.movie).await.unwrap();
     let mut range = reader.range(0, None).await.unwrap();
-    let mut head = vec![0u8; 10 * MIB as usize];
-    within(60, range.read_exact(&mut head)).await.unwrap();
-    assert!(head == w.movie(0, 10 * MIB));
-    test_hooks::set_free(&w.engine, Some(RESERVE_BYTES - 6 * MIB));
+    let mut buf = vec![0u8; 30 * MIB as usize];
+    within(60, range.read_exact(&mut buf)).await.unwrap();
+    assert!(buf == w.movie(0, 30 * MIB));
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let before = w.stats().await;
+    let base = RESERVE_BYTES - 6 * MIB + allocated(w.root.path());
+    test_hooks::set_free_base(&w.engine, Some(base));
+    let (shrunk, rounds) = (before.held_bytes.unwrap() - 6 * MIB, before.evict_rounds);
     tokio::time::sleep(Duration::from_millis(1500)).await;
-    let rounds = w.stats().await.evict_rounds;
-    let len = w.s.movie.len() as u64;
     let sampler = Sampler::start(w.dir());
+    let mut buf = vec![0u8; 10 * MIB as usize];
+    within(60, range.read_exact(&mut buf)).await.unwrap();
+    assert!(buf == w.movie(30 * MIB, 40 * MIB));
+    let s = w.stats().await;
+    assert!(s.evict_rounds > rounds, "the keeper went on: {s:?}");
+    assert!(s.held_bytes.unwrap() <= shrunk, "{s:?}");
+    assert!(sampler.max() <= 40 * MIB, "{}", sampler.max());
+    assert_eq!(
+        s.readahead_bytes,
+        Some(plan().ahead),
+        "the readahead came back: {s:?}"
+    );
+    assert!(
+        w.engine.free().unwrap() >= RESERVE_BYTES,
+        "free space came back"
+    );
+    // The other app deletes its file: the window grows back to `W`.
+    test_hooks::set_free_base(&w.engine, Some(base + 6 * MIB + 32 * MIB));
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    let held = Arc::new(AtomicU64::new(0));
+    let watch = tokio::spawn({
+        let (engine, t, held) = (w.engine.clone(), w.t, held.clone());
+        async move {
+            loop {
+                let h = engine.stats(t).await.unwrap().held_bytes.unwrap_or(0);
+                held.fetch_max(h, Ordering::Relaxed);
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        }
+    });
+    let len = w.s.movie.len() as u64;
     let mut rest = Vec::new();
     within(60, range.read_to_end(&mut rest)).await.unwrap();
-    assert!(rest == w.movie(10 * MIB, len));
-    let max = sampler.max();
-    assert!(max <= W, "{max}");
-    let s = w.stats().await;
-    assert_eq!(s.readahead_bytes, Some(0));
-    assert!(s.evict_rounds > rounds, "the keeper went on: {s:?}");
-    assert!(s.held_bytes.unwrap() <= W - 6 * MIB, "{s:?}");
-    test_hooks::set_free(&w.engine, None);
+    watch.abort();
+    assert!(rest == w.movie(40 * MIB, len));
+    let max = held.load(Ordering::Relaxed);
+    assert!(max > shrunk, "the window grew back: {max} after {shrunk}");
+    assert_eq!(w.stats().await.refetched_bytes, 0, "nothing fetched twice");
+    test_hooks::set_free_base(&w.engine, None);
 }
 
 /// q. Under the terminal floor (a quarter of the reserve) the playback ends
@@ -762,6 +802,7 @@ fn a_device_under_the_window_floor_is_full() {
         bitrate: 4_775_000,
         piece_len: 4 * MIB,
         fill: 5_000_000,
+        ..Default::default()
     };
     assert!(matches!(
         mq_engine::window_plan(mq_engine::DeviceClass::Standard, inputs),
@@ -784,6 +825,7 @@ fn the_window_plan_matches_the_worked_numbers() {
                 bitrate,
                 piece_len,
                 fill: 5_000_000,
+                ..Default::default()
             },
         )
         .unwrap()

@@ -176,6 +176,10 @@ pub struct Conditions {
     pub reclaimable_bytes: Option<u64>,
     /// `C`: what the windows playing will still take.
     pub committed_bytes: u64,
+    /// Each torrent folder's bytes by info hash: a row's own folder is room
+    /// for its window, never for it whole (plans/streaming-window.md 2.1).
+    #[serde(skip)]
+    pub held: std::collections::HashMap<String, mq_engine_sched::HeldBytes>,
     /// This build has the torrent engine.
     pub engine: bool,
     /// The profile has a debrid account.
@@ -236,6 +240,7 @@ impl Default for Conditions {
             window: false,
             reclaimable_bytes: None,
             committed_bytes: 0,
+            held: Default::default(),
         }
     }
 }

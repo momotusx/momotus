@@ -624,17 +624,26 @@ impl Core {
         self.inner.punches.get().copied().unwrap_or(false)
     }
 
-    /// `R` and `C` for the ranking (plans/streaming-window.md 3.1): the
-    /// engine's last count, or before it starts every torrent folder (none
-    /// is in use) and no window.
+    /// `R`, `C` and each torrent folder's bytes for the ranking
+    /// (plans/streaming-window.md 3.1): the engine's last count, or before
+    /// it starts every torrent folder (none is in use) and no window.
     #[cfg(feature = "torrent")]
-    pub(crate) fn room_counts(&self) -> (Option<u64>, u64) {
+    pub(crate) fn room_counts(
+        &self,
+    ) -> (
+        Option<u64>,
+        u64,
+        std::collections::HashMap<String, mq_engine::HeldBytes>,
+    ) {
         // Before the engine's first count, every torrent folder as before
         // it started (R was 0 there, and rows that fit by R hid).
-        match self.inner.engine.get().and_then(|e| e.counted()) {
-            Some((r, c)) => (Some(r), c),
-            None => (Some(mq_engine::reclaimable(&self.inner.torrent_dir)), 0),
-        }
+        let counted = self
+            .inner
+            .engine
+            .get()
+            .and_then(|e| e.counted())
+            .unwrap_or_else(|| mq_engine::counted_on_disk(&self.inner.torrent_dir));
+        (Some(counted.reclaimable), counted.committed, counted.held)
     }
 
     /// Tests: the probe's answer, before the engine starts.

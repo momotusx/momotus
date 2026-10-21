@@ -21,7 +21,7 @@ pub const APFS_HEAD_BYTES: u64 = if cfg!(target_vendor = "apple") {
 };
 
 /// What a window needs to know of the device and the file.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct WindowInputs {
     /// Free bytes on the torrent folder's volume.
     pub free: u64,
@@ -34,12 +34,53 @@ pub struct WindowInputs {
     pub piece_len: u64,
     /// The P2P speed estimate in bytes per second (`h` and `open`).
     pub fill: u64,
+    /// Of `reclaimable`, the file's own torrent's folder: a window's keeper
+    /// frees it (its other files first), nothing frees it for a whole file.
+    pub own: u64,
+    /// What the file itself already holds.
+    pub own_file: u64,
 }
 
 impl WindowInputs {
-    /// `room = free + R - C - reserve`.
+    /// `room = free + R - C - reserve`: what a window may hold.
     pub fn room(&self) -> u64 {
         (self.free + self.reclaimable).saturating_sub(self.committed + RESERVE_BYTES)
+    }
+
+    /// A file of `len` bytes plays whole (2.1): what it still needs fits in
+    /// the room without its own torrent's folder, which no keeper frees for
+    /// a whole file (a pack's other episodes stay).
+    pub fn fits_whole(&self, len: u64) -> bool {
+        let others = Self {
+            reclaimable: self.reclaimable.saturating_sub(self.own),
+            ..*self
+        };
+        len.saturating_sub(self.own_file) <= others.room()
+    }
+}
+
+/// One torrent folder's bytes on disk (2.1, 3.1): the folder, each of its
+/// files when the torrent is loaded, and whether `R` counts it (idle).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct HeldBytes {
+    pub folder: u64,
+    pub files: Vec<u64>,
+    pub idle: bool,
+}
+
+impl WindowInputs {
+    /// A row's inputs from the counted `R`: its own torrent's folder counts
+    /// in `R` (a window's keeper frees it) and as `own`, and `file`'s bytes
+    /// as `own_file`.
+    pub fn with_held(mut self, held: Option<&HeldBytes>, file: Option<usize>) -> Self {
+        if let Some(h) = held {
+            if !h.idle {
+                self.reclaimable += h.folder;
+            }
+            self.own = h.folder;
+            self.own_file = file.and_then(|i| h.files.get(i)).copied().unwrap_or(0);
+        }
+        self
     }
 }
 

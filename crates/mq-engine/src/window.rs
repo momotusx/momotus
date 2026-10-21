@@ -12,7 +12,7 @@ use crate::{
     DeviceClass, Engine, EngineError, Inner, Result, Torrent, TorrentHandle, adapter, lock,
 };
 
-pub use mq_engine_sched::{APFS_HEAD_BYTES, RESERVE_BYTES, WindowInputs, WindowPlan};
+pub use mq_engine_sched::{APFS_HEAD_BYTES, HeldBytes, RESERVE_BYTES, WindowInputs, WindowPlan};
 
 /// Under a quarter of the reserve the playback ends with "storage full"
 /// before any write fails (2.4).
@@ -57,10 +57,35 @@ pub fn free_space(_dir: &Path) -> Option<u64> {
     None
 }
 
-/// `R` before the engine starts: what every torrent folder in `data_dir`
-/// holds (none has a reader yet). Blocking: walks the disk.
-pub fn reclaimable(data_dir: &Path) -> u64 {
-    crate::leftovers(data_dir, &[]).0.iter().map(|l| l.2).sum()
+/// `R`, `C` and each torrent folder's bytes (by info hash), as maintenance
+/// counts them for a ranking that cannot wait (3.1).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Counted {
+    pub reclaimable: u64,
+    pub committed: u64,
+    pub held: std::collections::HashMap<String, HeldBytes>,
+}
+
+/// [`Counted`] before the engine starts: every torrent folder in
+/// `data_dir`, none in use. Blocking: walks the disk.
+pub fn counted_on_disk(data_dir: &Path) -> Counted {
+    let left = crate::leftovers(data_dir, &[]).0;
+    Counted {
+        reclaimable: left.iter().map(|l| l.2).sum(),
+        committed: 0,
+        held: left
+            .into_iter()
+            .filter_map(|(_, path, folder)| {
+                let hash = path.file_name()?.to_str()?.to_ascii_lowercase();
+                let held = HeldBytes {
+                    folder,
+                    files: Vec::new(),
+                    idle: true,
+                };
+                Some((hash, held))
+            })
+            .collect(),
+    }
 }
 
 /// A windowed playback's state on its torrent.
@@ -104,13 +129,15 @@ impl WindowState {
             .saturating_sub(self.shortfall + mq_engine_sched::APFS_HEAD_BYTES)
     }
 
-    /// The readahead: none while the space guard holds, the device preset on
-    /// a metered network, else the window's.
+    /// The readahead: the device preset on a metered network, else the
+    /// window's. A shrunk budget's cap holds it back; it is never turned
+    /// off, so what it fetched stays kept (review r2 P2-2: off, it was
+    /// evicted and fetched again).
     pub fn ahead(&self, preset: u64) -> u64 {
-        match () {
-            _ if self.shortfall > 0 => 0,
-            _ if self.metered => preset.min(self.plan.ahead),
-            _ => self.plan.ahead,
+        if self.metered {
+            preset.min(self.plan.ahead)
+        } else {
+            self.plan.ahead
         }
     }
 }
@@ -130,7 +157,7 @@ impl Engine {
                 continue;
             }
             if free < FLOOR_BYTES {
-                self.end_window(&t, "storage full").await;
+                self.end_window(&t, "storage full", None).await;
                 continue;
             }
             let Some((file, bytes_per_s, readahead)) = *lock(&t.rate) else {
@@ -309,21 +336,28 @@ async fn keep_windows(engine: &Weak<Inner>, h: TorrentHandle, t: &Arc<Torrent>) 
         }
         let free = engine.free().unwrap_or(u64::MAX);
         if free < FLOOR_BYTES {
-            engine.end_window(t, "storage full").await;
+            engine
+                .end_window(t, "storage full", Some(state.generation))
+                .await;
             break;
         }
-        // The space guard (2.4): other apps wrote, so the window gives back
-        // the shortfall and its readahead stops, until free space is over
-        // the reserve plus `h` again.
-        let shortfall = if free < RESERVE_BYTES {
-            state.shortfall.max(RESERVE_BYTES - free)
-        } else if free > RESERVE_BYTES + state.plan.slack {
-            0
-        } else {
-            state.shortfall
-        };
-        if shortfall != state.shortfall {
-            engine.set_shortfall(t, state, shortfall).await;
+        // The space guard (2.4): the scheduler may hold what it holds and the
+        // free space over the reserve, never more than its full budget, so
+        // another app's write shrinks the window and the same app's delete
+        // gives it back. The budget moves by more than `h / 2` only, so a
+        // round's whole pieces do not flip it back and forth.
+        let held = engine.ask(t, adapter::Msg::Held).await.unwrap_or(0);
+        let live = (held + free).saturating_sub(RESERVE_BYTES);
+        let full = WindowState {
+            shortfall: 0,
+            ..state
+        }
+        .budget();
+        let shortfall = full.saturating_sub(live);
+        let moved = shortfall.abs_diff(state.shortfall) > state.plan.slack / 2
+            || (shortfall == 0) != (state.shortfall == 0);
+        if moved {
+            engine.set_shortfall(t, state.generation, shortfall).await;
         }
         engine.clear_filled_holes(t, state).await;
         let Some(pieces) = engine.ask(t, adapter::Msg::ToEvict).await else {
@@ -340,7 +374,9 @@ async fn keep_windows(engine: &Weak<Inner>, h: TorrentHandle, t: &Arc<Torrent>) 
             Err(e) => failed.push(e.to_string()),
         }
         if failed.len() as u32 >= FAILED_ROUNDS {
-            engine.end_window(t, &storage_error(&failed)).await;
+            engine
+                .end_window(t, &storage_error(&failed), Some(state.generation))
+                .await;
             break;
         }
     }

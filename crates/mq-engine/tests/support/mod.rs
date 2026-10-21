@@ -17,6 +17,9 @@ pub struct Swarm {
     pub info_hash: String,
     pub seeder_addr: SocketAddr,
     pub movie: Vec<u8>,
+    /// A pack's other videos, after `movie` (`swarm_pack`).
+    #[allow(dead_code)]
+    pub others: Vec<Vec<u8>>,
     /// The torrent (the window tests' extra seeders).
     #[allow(dead_code)]
     pub torrent: Vec<u8>,
@@ -103,25 +106,71 @@ pub async fn swarm_with(
     let movie: Vec<u8> = (0..5 * 1024 * 1024 + 12_345u32)
         .map(|i| (i.wrapping_mul(2_654_435_761) >> 13) as u8)
         .collect();
-    swarm_of(ip, seeder, leecher, piece_len, dwh, ("movie.mkv", movie)).await
+    swarm_of(
+        ip,
+        seeder,
+        leecher,
+        piece_len,
+        dwh,
+        true,
+        vec![("movie.mkv", movie)],
+    )
+    .await
 }
 
 /// The swarm on `127.0.0.1` with a `len`-byte video in `piece_len` pieces
-/// (the window keeper's tests).
+/// (the window keeper's tests); the leecher uploads nothing, as the app's.
 #[allow(dead_code)]
 pub async fn swarm_big(len: usize, piece_len: u32) -> Swarm {
     let movie: Vec<u8> = (0..len as u32)
         .map(|i| (i.wrapping_mul(2_654_435_761) >> 13) as u8)
         .collect();
     let ip = Ipv4Addr::LOCALHOST.into();
-    swarm_of(ip, &[ip], &[ip], piece_len, true, ("movie.mkv", movie)).await
+    swarm_of(
+        ip,
+        &[ip],
+        &[ip],
+        piece_len,
+        true,
+        false,
+        vec![("movie.mkv", movie)],
+    )
+    .await
+}
+
+/// A season pack on `127.0.0.1`: the `.nfo`, then a video of each
+/// `(name, len)` in turn, in `piece_len` pieces. `movie` is the first video,
+/// `others` the rest; the leecher uploads nothing, as the app's.
+#[allow(dead_code)]
+pub async fn swarm_pack(videos: &[(&str, usize)], piece_len: u32) -> Swarm {
+    let videos = videos
+        .iter()
+        .enumerate()
+        .map(|(n, &(name, len))| {
+            let bytes = (0..len as u32)
+                .map(|i| (i.wrapping_add(n as u32 * 7_919).wrapping_mul(2_654_435_761) >> 13) as u8)
+                .collect();
+            (name, bytes)
+        })
+        .collect();
+    let ip = Ipv4Addr::LOCALHOST.into();
+    swarm_of(ip, &[ip], &[ip], piece_len, true, false, videos).await
 }
 
 /// The swarm on `127.0.0.1` with `movie` as the video file, named `name`.
 #[allow(dead_code)] // the server's MP4 tests use it
 pub async fn swarm_movie(name: &str, movie: Vec<u8>) -> Swarm {
     let ip = Ipv4Addr::LOCALHOST.into();
-    swarm_of(ip, &[ip], &[ip], 256 * 1024, true, (name, movie)).await
+    swarm_of(
+        ip,
+        &[ip],
+        &[ip],
+        256 * 1024,
+        true,
+        true,
+        vec![(name, movie)],
+    )
+    .await
 }
 
 async fn swarm_of(
@@ -130,13 +179,16 @@ async fn swarm_of(
     leecher: &[IpAddr],
     piece_len: u32,
     dwh: bool,
-    (name, movie): (&str, Vec<u8>),
+    leech_upload: bool,
+    videos: Vec<(&str, Vec<u8>)>,
 ) -> Swarm {
     let (seed_dir, leech_dir) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
     let src = seed_dir.path().join("src");
     std::fs::create_dir_all(&src).unwrap();
     std::fs::write(src.join("a.nfo"), vec![b'n'; 37_000]).unwrap();
-    std::fs::write(src.join(name), &movie).unwrap();
+    for (name, bytes) in &videos {
+        std::fs::write(src.join(name), bytes).unwrap();
+    }
     let spawner = mq_engine::librqbit::spawn_utils::BlockingSpawner::new(2);
     let created = mq_engine::librqbit::create_torrent(
         &src,
@@ -153,18 +205,22 @@ async fn swarm_of(
     // The seeder finds the data where it keeps every torrent.
     let data = seed_dir.path().join("engine").join(&info_hash);
     std::fs::create_dir_all(&data).unwrap();
-    for f in ["a.nfo", name] {
+    for f in std::iter::once("a.nfo").chain(videos.iter().map(|v| v.0)) {
         std::fs::copy(src.join(f), data.join(f)).unwrap();
     }
-    let config = |dir: &Path, scope: &[IpAddr]| {
+    let mut videos = videos.into_iter().map(|v| v.1);
+    let movie = videos.next().unwrap_or_default();
+    let others = videos.collect();
+    let config = |dir: &Path, scope: &[IpAddr], upload: bool| {
         let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
         EngineConfig {
             discovery: false,
             dwh,
+            upload,
             ..EngineConfig::new(dir, http.torrent_scope(scope))
         }
     };
-    let seeder = Engine::start(config(&seed_dir.path().join("engine"), seeder))
+    let seeder = Engine::start(config(&seed_dir.path().join("engine"), seeder, true))
         .await
         .unwrap();
     let t = seeder
@@ -177,7 +233,7 @@ async fn swarm_of(
         .unwrap();
     wait_complete(&seeder, t).await;
     let port = seeder.listen_addr().unwrap().port();
-    let leecher = Engine::start(config(leech_dir.path(), leecher))
+    let leecher = Engine::start(config(leech_dir.path(), leecher, leech_upload))
         .await
         .unwrap();
     Swarm {
@@ -186,6 +242,7 @@ async fn swarm_of(
         info_hash,
         seeder_addr: SocketAddr::new(ip, port),
         movie,
+        others,
         torrent: created.as_bytes().unwrap().to_vec(),
         _dirs: (seed_dir, leech_dir),
     }

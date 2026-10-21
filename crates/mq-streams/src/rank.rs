@@ -95,6 +95,11 @@ fn gate(s: &ParsedStream, input: &RankInput<'_>) -> Result<SourceClass, HideReas
 fn has_room(s: &ParsedStream, input: &RankInput<'_>, free: u64, size: u64) -> bool {
     let c = input.conditions;
     let episode = input.target.season.is_some() || input.target.episode.is_some();
+    let file = match &s.source {
+        Source::Torrent { file_idx, .. } => file_idx.map(|i| i as usize),
+        _ => None,
+    };
+    let held = info_hash(s).and_then(|h| c.held.get(&h));
     let mut i = mq_engine_sched::WindowInputs {
         free,
         reclaimable: c.reclaimable_bytes.unwrap_or(0),
@@ -102,8 +107,10 @@ fn has_room(s: &ParsedStream, input: &RankInput<'_>, free: u64, size: u64) -> bo
         bitrate: 0,
         piece_len: estimated_piece(size),
         fill: (f64::from(c.p2p.mbps) * 125_000.0) as u64,
-    };
-    if size <= i.room() {
+        ..Default::default()
+    }
+    .with_held(held, file);
+    if i.fits_whole(size) {
         return true;
     }
     if !c.window {

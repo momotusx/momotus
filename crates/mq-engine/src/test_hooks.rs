@@ -46,6 +46,12 @@ pub fn set_free(engine: &Engine, free: Option<u64>) {
     *lock(&engine.inner.free) = free;
 }
 
+/// Free space that follows the data folder from now on: `base` less what
+/// the folder holds, as a volume's would (`None`: the volume's).
+pub fn set_free_base(engine: &Engine, base: Option<u64>) {
+    *lock(&engine.inner.free_base) = base;
+}
+
 /// Holds every range `engine` opens from now on at the barrier, until
 /// [`Hold::open`].
 pub fn hold_ranges(engine: &Engine) -> Arc<Hold> {

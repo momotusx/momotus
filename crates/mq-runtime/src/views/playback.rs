@@ -1862,22 +1862,34 @@ async fn open_window(
     resume_ms: Option<u64>,
 ) -> Result<(), mq_engine::EngineError> {
     let walk = core.walk_window();
-    if !core.windows_ok() {
-        if walk.is_some() {
-            tracing::warn!("walk window: this volume cannot punch holes");
-        }
-        return Ok(());
-    }
     let Some(free) = core.free_bytes() else {
         return Ok(());
     };
     let p2p = core.speed(crate::speed::Kind::P2p).mbps;
-    // The torrent's own folder counts in R (review P1-2): a resume finds
-    // its window there.
+    // The torrent's own folder counts in R for a window (review P1-2: a
+    // resume finds its window there), never for a whole file (review r2
+    // P1-1: a pack's earlier episodes are not freed for the next one).
     let inputs = engine
-        .window_inputs(torrent, free, rate, (f64::from(p2p) * 125_000.0) as u64)
+        .window_inputs(
+            torrent,
+            file,
+            free,
+            rate,
+            (f64::from(p2p) * 125_000.0) as u64,
+        )
         .await?;
-    if walk.is_none() && len <= inputs.room() {
+    if !core.windows_ok() {
+        if walk.is_some() {
+            tracing::warn!("walk window: this volume cannot punch holes");
+        }
+        // Whole or not at all: the ranking hides such a row (3.1).
+        return if inputs.fits_whole(len) {
+            Ok(())
+        } else {
+            Err(mq_engine::EngineError::DeviceFull)
+        };
+    }
+    if walk.is_none() && inputs.fits_whole(len) {
         // A window another file of the torrent left (Up Next in a pack)
         // ends with it.
         return engine.play_whole(torrent, file).await;
