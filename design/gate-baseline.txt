@@ -1,7 +1,6 @@
 # v2 leftovers the rollout removes (design/gate.ts). It only shrinks; it is empty at phase 13 (--final).
 apps/web/src/components/avatar.css :: .avatar-letter { font: 800 1em / 1 var(--font-display); letter-spacing: var(--tracking-display); }
 apps/web/src/components/trakt-mark.css :: font: 650 var(--type-caption) / 1 var(--font-text); color: var(--text); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); text-shadow: none; }
-apps/web/src/screens/browse.css :: font: 700 var(--type-caption) / 1 var(--font-text); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); -webkit-text-fill-color: var(--accent); }
 apps/web/src/screens/browse.css :: background: linear-gradient(145deg, rgba(255, 255, 255, .1), rgba(255, 255, 255, .05)); box-shadow: inset 0 0 0 2px var(--control); }
 apps/web/src/screens/browse.css :: .chip-rank { display: grid; place-items: center; min-width: 26px; height: 26px; padding: 0 6px; border-radius: 13px; background: var(--text); color: var(--bg); font: 800 15px / 1 var(--font-text); }
 apps/web/src/screens/calendar.css :: .cal-day h2 { display: grid; gap: 8px; padding-top: 6px; font: 800 var(--type-title3) / 1.05 var(--font-display); }
@@ -147,7 +146,6 @@ apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .backgrou
 apps/android/design/src/main/kotlin/app/marquee/design/Avatar.kt :: fontWeight = FontWeight.ExtraBold,
 apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: .background(colors.accent),
 apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: fun Eyebrow(
-apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: color = colors.accent,
 apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: MqIcon(StarFilled, tint = colors.star, size = if (tv) 26.dp else 15.dp)
 apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: * A title's facts as a key-value table on glass (design/DECISION.md v2, Title page): a `dim`
 apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: * label and its value per row. Over artwork the strong glass keeps both readable.
@@ -243,7 +241,6 @@ apps/apple/Marquee/Common/Browse.swift :: Glyph("star-fill", size: metrics.chip 
 apps/apple/Marquee/Common/Browse.swift :: .glass(Capsule(), strong: true)
 apps/apple/Marquee/Home/ContinueCard.swift :: Capsule().fill(Theme.Palette.accent).frame(width: geo.size.width * min(max(value, 0), 1))
 apps/apple/Marquee/Home/HeroView.swift :: .overlay { card.strokeBorder(Theme.Palette.edge, lineWidth: 1).allowsHitTesting(false) }
-apps/apple/Marquee/Home/HeroView.swift :: .foregroundStyle(Theme.Palette.accent)
 apps/apple/Marquee/Home/HeroView.swift :: Glyph("star-fill", size: size * 0.9, relativeTo: .callout).foregroundStyle(Theme.Palette.star)
 apps/apple/Marquee/Home/HomeScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/Library/CalendarScreen.swift :: .foregroundStyle(day.date == today ? Theme.Palette.accent : Theme.Palette.text)
@@ -274,7 +271,6 @@ apps/apple/Marquee/Settings/AddonsScreen.swift :: Button("Remove", glyph: "trash
 apps/apple/Marquee/Settings/AddonsScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/Settings/DebridScreen.swift :: .foregroundStyle(state == "Connected" ? Theme.Palette.ok : Theme.Palette.muted)
 apps/apple/Marquee/Settings/DebridScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Settings/FindAddonsScreen.swift :: .foregroundStyle(Theme.Palette.accent)
 apps/apple/Marquee/Settings/FindAddonsScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/Settings/FindAddonsScreen.swift :: .glass(RoundedRectangle(cornerRadius: metrics.wide ? Theme.Radius.l : Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/Settings/FindAddonsScreen.swift :: .overlay(shape.strokeBorder(Theme.Palette.edge, lineWidth: 1))
@@ -319,7 +315,6 @@ apps/apple/Marquee/Title/EpisodeList.swift :: .overlay(Circle().strokeBorder(on 
 apps/apple/Marquee/Title/EpisodeList.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/Title/EpisodeList.swift :: .overlay(Capsule().strokeBorder(Theme.Palette.edge, lineWidth: 1))
 apps/apple/Marquee/Title/EpisodeList.swift :: Rectangle().fill(Theme.Palette.accent).frame(width: geo.size.width * min(max(progress, 0), 1))
-apps/apple/Marquee/Trakt/TraktScreen.swift :: .foregroundStyle(Theme.Palette.accent)
 apps/apple/Marquee/Trakt/TraktScreen.swift :: Glyph("triangle-alert").foregroundStyle(Theme.Palette.warn)
 apps/apple/Marquee/Trakt/TraktScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/Trakt/TraktScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))

@@ -13,7 +13,8 @@
 // baseline line that matches no hit (a phase deletes the lines it cleaned), and --base fails on a
 // baseline line that <ref>'s tree did not have, so no phase can bless a leftover of its own. Both
 // files name a hit as `<path> :: <the line, trimmed>`; an allow line may give a prefix of the line,
-// or a path alone for the whole file.
+// or a path alone for the whole file. An allow line that matches no hit fails too, so a kept
+// exception goes with the change that removes it.
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -83,10 +84,8 @@ const read = (name: string) => {
     .filter((l) => l && !l.startsWith("#"));
 };
 const allowed = read("gate-allow.txt");
-const isAllowed = (hit: string) => {
-  const [path] = hit.split(" :: ");
-  return allowed.some((a) => (a.includes(" :: ") ? hit === a || hit.startsWith(a) : path === a));
-};
+const covers = (a: string, hit: string) => (a.includes(" :: ") ? hit === a || hit.startsWith(a) : hit.split(" :: ")[0] === a);
+const isAllowed = (hit: string) => allowed.some((a) => covers(a, hit));
 const counts = (keys: string[]) => keys.reduce((m, k) => m.set(k, (m.get(k) ?? 0) + 1), new Map<string, number>());
 /** The keys of `a` that `b` does not cover, counting repeats. */
 const minus = (a: string[], b: string[]) => {
@@ -104,7 +103,8 @@ const writeBaseline = (list: string[]) =>
   );
 
 const args = process.argv.slice(2);
-const now = hits(work).filter((h) => !isAllowed(h));
+const every = hits(work);
+const now = every.filter((h) => !isAllowed(h));
 const baseline = read("gate-baseline.txt");
 
 if (args[0] === "--baseline") {
@@ -137,6 +137,7 @@ const heldHere = files ? held.filter((h) => files!.includes(h.split(" :: ")[0]))
 for (const h of minus(checked, heldHere)) failures.push(`new v2 leftover: ${h}`);
 // A stale line: the baseline names a leftover that is gone; delete it with the change that fixed it.
 for (const h of minus(held, now)) failures.push(`stale baseline line (delete it): ${h}`);
+for (const a of allowed.filter((a) => !every.some((h) => covers(a, h)))) failures.push(`stale allow line (delete it): ${a}`);
 // A grown baseline: a line <ref>'s tree did not have, so this change blessed a leftover of its own.
 if (ref) for (const h of minus(held, hits(at(ref)).filter((x) => !isAllowed(x)))) failures.push(`baseline grew past ${ref}: ${h}`);
 
