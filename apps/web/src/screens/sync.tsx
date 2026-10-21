@@ -308,7 +308,7 @@ function NotJoined() {
       <section class="set">
         <div class="links">
           <Show when={providers.state === "ready" && providers().length > 0}>
-            <LinkRow href="/sign-in" fkey="sync:sign-in" icon={<LogIn aria-hidden />} title={aw.signInTitle} text={aw.libraryAdded} />
+            <LinkRow href={tv() ? "/welcome" : "/sign-in"} fkey="sync:sign-in" icon={<LogIn aria-hidden />} title={aw.signInTitle} text={aw.libraryAdded} />
           </Show>
           <LinkRow href="/pair" fkey="sync:pair" icon={<QrCode aria-hidden />} title={w.pairTitle} text={w.pairText} />
           <LinkRow href="/sync/start" fkey="sync:start" icon={<Plus aria-hidden />} title={w.startTitle} text={w.startText} />

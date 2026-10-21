@@ -120,7 +120,7 @@ function AccountCard() {
             <Show when={c().kind === "secondWay"}>
               <h2>{aw.secondWayIn}</h2>
             </Show>
-            <p>{c().kind === "secondWay" ? aw.secondWayInText : c().text}</p>
+            <p>{"detail" in c() ? (c() as Extract<Card, { kind: "secondWay" }>).detail : c().text}</p>
             <Show when={problem()}>
               {(p) => (
                 <p class="st bad" role="status">
@@ -154,7 +154,7 @@ function AccountCard() {
                     when={removing()}
                     fallback={
                       <>
-                        <A class="btn primary" href="/sign-in" data-f="home:account:sign-in">
+                        <A class="btn primary" href={form() === "tv" ? "/welcome" : "/sign-in"} data-f="home:account:sign-in">
                           {gone[0]}
                         </A>
                         <Show when={g().remove}>

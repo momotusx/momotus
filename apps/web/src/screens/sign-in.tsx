@@ -323,6 +323,8 @@ function useHeldTicket(from: From) {
       await work(h.ticket);
     } catch (e) {
       failed = codeOf(e);
+      // The sign-in got an account meanwhile: that is `found`, whose Start over warns first.
+      if (failed === "linkedElsewhere" && !h.account) return navigate(`/sign-in/found${tail(from)}`, { replace: true });
       setFailure(signInFailure(failed, h.provider));
     } finally {
       setBusy(false);
@@ -339,12 +341,11 @@ function useHeldTicket(from: From) {
       if (pending) void run(pending);
     },
   );
-  const act = (a: Act, move?: () => void) => {
+  const act = (a: Act) => {
     if (a === "retry") {
       if (!failure() || failed === "ticketExpired") again.again();
       else if (pending) void run(pending);
     } else if (a === "other") navigate(`/sign-in/other${tail(from)}`);
-    else if (a === "move" && move) move();
     else {
       setFailure(null);
       again.setFailure(null);
@@ -405,7 +406,7 @@ export function NewAccount() {
           >
             {(n) => <Session server={h().server} name={name} how={w.tvSignInHow} onJoined={() => void link()} onDone={() => setPairing(n + 1)} />}
           </Show>
-          <SignInState said={t.said()} fkey="signin:new" onAct={(a) => t.act(a, () => void create(true))} />
+          <SignInState said={t.said()} fkey="signin:new" onAct={(a) => t.act(a)} />
         </Frame>
       )}
     </Show>

@@ -16,8 +16,10 @@ export const AUTH_CHANNEL = "mq-auth";
 /** How a sign-in ended: an account found, none yet, a revoke's receipt, or the core's code. */
 export type SignInEnd = Extract<SignInSnapshot, { phase: "found" | "new" | "receipt" | "failed" }>;
 
-/** The sync service sign-in goes to: the one this device used, else the one this build names. */
-export const signInServer = (): string => rememberedServer() || ((import.meta.env.VITE_MQ_RELAY as string | undefined) ?? "");
+/** The sync service sign-in goes to: the one this device used, else the build's hosted default
+ * (`VITE_MARQUEE_SYNC_SERVER`, the web's `MARQUEE_SYNC_SERVER`, plans/accounts.md 9.2; unset keeps
+ * today's onboarding). */
+export const signInServer = (): string => rememberedServer() || ((import.meta.env.VITE_MARQUEE_SYNC_SERVER as string | undefined) ?? "");
 
 /** The providers a sync service offers (none: no sign-in there, only the pairing and kit doors). */
 export const relayProviders = async (server: string) => (await op<{ providers: string[] }>("relayInfo", { server })).providers;
