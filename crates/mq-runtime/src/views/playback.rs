@@ -4320,6 +4320,12 @@ mod tests {
             Some("Sintel.2010.1080p.WEB-DL.DDP5.1.H.264-FLUX-hi"),
             "the text kept for the detail line"
         );
+        let wire = serde_json::to_value(&hi).unwrap();
+        assert_eq!(
+            wire["release"],
+            hi.release.as_deref().unwrap(),
+            "on the wire"
+        );
         for marked in [
             "Film.2020.1080p.WEB-FLUX.HI",
             "Film 2020 SDH",
