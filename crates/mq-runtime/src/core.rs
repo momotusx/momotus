@@ -124,7 +124,7 @@ struct Inner {
     /// Skip segment lookups and their session cache.
     segments: crate::segments::Finder,
     /// Tests: the free space read instead of the disk's.
-    free_bytes: std::sync::OnceLock<u64>,
+    free_bytes: std::sync::Mutex<Option<u64>>,
     /// Tests: live seeders answered instead of the trackers'.
     live_seeders: std::sync::Mutex<Option<FakeSeeders>>,
     /// The torrent folder's volume punches holes (plans/streaming-window.md
@@ -279,7 +279,7 @@ impl Core {
                 engine: OnceCell::new(),
                 debrid: crate::debrid::Accounts::new(http.clone()),
                 segments: crate::segments::Finder::new(http.clone()),
-                free_bytes: std::sync::OnceLock::new(),
+                free_bytes: std::sync::Mutex::new(None),
                 live_seeders: std::sync::Mutex::default(),
                 turkcealtyazi: std::sync::OnceLock::new(),
                 #[cfg(feature = "torrent")]
@@ -443,7 +443,12 @@ impl Core {
     /// Free space where the engine keeps torrents (the nearest folder that
     /// exists); `None` without the engine or where it cannot be read.
     pub fn free_bytes(&self) -> Option<u64> {
-        if let Some(&bytes) = self.inner.free_bytes.get() {
+        if let Some(bytes) = *self
+            .inner
+            .free_bytes
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+        {
             return Some(bytes);
         }
         #[cfg(all(unix, feature = "torrent"))]
@@ -465,11 +470,15 @@ impl Core {
     }
 
     /// Tests: the ranking, Settings and the engine's cache read `bytes` as
-    /// the free space, so no test depends on the host's disk. Set it once,
-    /// before opening a view.
+    /// the free space, so no test depends on the host's disk. Set it before
+    /// opening a view; a later call changes it for the next one.
     #[doc(hidden)]
     pub fn set_free_bytes(&self, bytes: u64) {
-        let _ = self.inner.free_bytes.set(bytes);
+        *self
+            .inner
+            .free_bytes
+            .lock()
+            .unwrap_or_else(|p| p.into_inner()) = Some(bytes);
     }
 
     /// Tests: `live_seeders` answers from `counts` (lowercase info hash to
@@ -620,11 +629,10 @@ impl Core {
     /// is in use) and no window.
     #[cfg(feature = "torrent")]
     pub(crate) fn room_counts(&self) -> (Option<u64>, u64) {
-        match self.inner.engine.get() {
-            Some(engine) => {
-                let (r, c) = engine.counted();
-                (Some(r), c)
-            }
+        // Before the engine's first count, every torrent folder as before
+        // it started (R was 0 there, and rows that fit by R hid).
+        match self.inner.engine.get().and_then(|e| e.counted()) {
+            Some((r, c)) => (Some(r), c),
             None => (Some(mq_engine::reclaimable(&self.inner.torrent_dir)), 0),
         }
     }

@@ -17,8 +17,8 @@ use std::time::{Duration, Instant};
 
 use mq_engine::librqbit::sync_log::{self, Fail, Point};
 use mq_engine::{
-    Claim, Engine, EngineError, FileHint, RESERVE_BYTES, TorrentHandle, Window, WindowPlan,
-    test_hooks,
+    APFS_HEAD_BYTES, Claim, Engine, EngineError, FileHint, RESERVE_BYTES, TorrentHandle, Window,
+    WindowPlan, test_hooks,
 };
 use tokio::io::AsyncReadExt;
 
@@ -27,9 +27,13 @@ const PIECE: u32 = 1 << 20;
 /// 64 KiB/s: a 4 MiB critical window, a 1.9 MiB playback window.
 const RATE: u64 = 64 * 1024;
 
+/// The scheduler's budget in these tests: the plan's `W` less what APFS
+/// keeps of a file's head (on Apple targets), which the plan holds apart.
+const W: u64 = 24 * MIB;
+
 fn plan() -> WindowPlan {
     WindowPlan {
-        budget: 24 * MIB,
+        budget: W + APFS_HEAD_BYTES,
         behind: 2 * MIB,
         slack: 4 * MIB,
         ahead: 4 * MIB,
@@ -162,13 +166,9 @@ async fn a_window_never_holds_more_than_its_budget() {
     let got = w.read(0, len).await;
     assert!(got == w.s.movie, "bytes differ");
     let max = sampler.max();
-    assert!(
-        max <= plan().budget,
-        "allocated {max} over {}",
-        plan().budget
-    );
+    assert!(max <= W, "allocated {max} over {}", W);
     let s = w.stats().await;
-    assert!(s.held_bytes.unwrap() <= plan().budget);
+    assert!(s.held_bytes.unwrap() <= W);
     assert_eq!(
         s.readahead_bytes,
         Some(plan().ahead),
@@ -193,10 +193,10 @@ async fn a_window_never_holds_more_than_its_budget() {
 }
 
 /// m. The bitfield's fsync held (a round can free nothing until it ends),
-/// and a seek meanwhile: past `W` the scheduler fetches only the seek's
-/// urgent windows (blocking and critical, 5 MiB here, 6 pieces rounded
-/// out), not its 1.9 MiB playback window (the grace keeps back its
-/// readahead).
+/// and a seek meanwhile: the cap leaves a seek's urgent windows (blocking
+/// and critical, 5 MiB here, 6 pieces rounded out) room under `W`, and
+/// nothing else starts (the grace keeps back the readahead), so the
+/// folder stays within `W` (review P2-3).
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_seek_while_a_round_waits_fetches_only_its_urgent_windows() {
     let w = windowed(48 << 20, plan(), None).await;
@@ -220,7 +220,7 @@ async fn a_seek_while_a_round_waits_fetches_only_its_urgent_windows() {
     fsync.open();
     drop(seek);
     // A half piece over for the file system's own blocks.
-    let bound = plan().budget.max(before + 6 * MIB) + MIB / 2;
+    let bound = W + MIB / 2;
     assert!(
         max <= bound,
         "allocated {max} over {bound} ({before} before the seek)"
@@ -252,11 +252,8 @@ async fn a_scrub_stays_within_the_budget() {
     let max = sampler.max();
     tokio::time::sleep(Duration::from_millis(2500)).await;
     let settled = allocated(&w.dir());
-    eprintln!(
-        "scrub: peak {max}, settled {settled}, budget {}",
-        plan().budget
-    );
-    assert!(settled <= plan().budget, "allocated {settled} once settled");
+    eprintln!("scrub: peak {max}, settled {settled}, budget {}", W);
+    assert!(settled <= W, "allocated {settled} once settled");
     assert!(w.stats().await.evict_rounds > 0);
 }
 
@@ -357,7 +354,7 @@ async fn a_trimmed_window_resumes_warm() {
     // its trigger by more than the head pieces they leave behind, and the
     // reader waits out the index read's grace.
     let small = WindowPlan {
-        budget: 10 * MIB,
+        budget: 10 * MIB + APFS_HEAD_BYTES,
         ..plan()
     };
     let w = windowed_on(s, root, small, Some(at)).await;
@@ -381,6 +378,102 @@ async fn a_trimmed_window_resumes_warm() {
         0,
         "fetched again near {at}"
     );
+}
+
+/// p, a playback stopped before the keeper's first look (well under a
+/// second): its window is trimmed and ends all the same.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_playback_stopped_at_once_is_trimmed() {
+    let mut w = windowed(48 << 20, plan(), None).await;
+    drop(w.claim.take());
+    until("the trim", || async {
+        w.stats().await.window_bytes.is_none()
+    })
+    .await;
+}
+
+/// p, a reopen (review P2-1): the same file opens again while the trim's
+/// round runs. The new window stays, and its keeper evicts as the read
+/// goes on.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_window_set_during_the_trim_stays_and_is_kept() {
+    let mut w = windowed(48 << 20, plan(), None).await;
+    assert!(w.read(0, 16 * MIB).await == w.movie(0, 16 * MIB));
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    let gated = sync_log::hold(w.root.path(), Point::Gated);
+    drop(w.claim.take());
+    let started = Instant::now();
+    while !gated.reached() {
+        assert!(started.elapsed() < Duration::from_secs(10), "no trim");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let claim = w.engine.claim(w.t, "default").unwrap();
+    let again = WindowPlan {
+        budget: plan().budget + 4 * MIB,
+        ..plan()
+    };
+    let window = Window {
+        plan: again,
+        bitrate: RATE,
+        metered: false,
+        resume_at: None,
+    };
+    w.engine.window(w.t, w.movie, window).await.unwrap();
+    gated.open();
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    assert_eq!(w.stats().await.window_bytes, Some(again.budget));
+    let rounds = w.stats().await.evict_rounds;
+    let len = w.s.movie.len() as u64;
+    assert!(w.read(16 * MIB, len).await == w.movie(16 * MIB, len));
+    let s = w.stats().await;
+    assert!(s.evict_rounds > rounds, "the new window's keeper: {s:?}");
+    assert!(s.held_bytes.unwrap() <= W + 4 * MIB, "{s:?}");
+    drop(claim);
+}
+
+/// Up Next in a pack (review P2-3): a file newly chosen in a live torrent
+/// that fits only by counting `R` gets the whole-file round (the idle
+/// torrent goes), and playing it whole ends the window its other file had.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_next_file_of_a_live_torrent_gets_its_round_and_ends_the_window() {
+    let w = windowed(32 << 20, plan(), None).await;
+    assert!(w.read(0, 4 * MIB).await == w.movie(0, 4 * MIB));
+    let idle = support::swarm(true).await;
+    let a = w
+        .engine
+        .add_magnet(&idle.info_hash, &[], &[idle.seeder_addr])
+        .await
+        .unwrap();
+    let movie = w
+        .engine
+        .select_file(a, "default", &FileHint::Name("movie.mkv".into()))
+        .await
+        .unwrap();
+    let reader = w.engine.open_reader(a, "default", movie).await.unwrap();
+    let mut r = reader.range(0, None).await.unwrap();
+    within(30, r.read_to_end(&mut Vec::new())).await.unwrap();
+    drop((r, reader));
+    // The `.nfo` with free space short of it plus the reserve, past what
+    // the torrent holds, by less than the idle torrent holds.
+    let held = allocated(&w.dir());
+    test_hooks::set_free(&w.engine, Some(37_000 + RESERVE_BYTES - held - 1));
+    let nfo = w
+        .engine
+        .select_file(w.t, "default", &FileHint::Name("a.nfo".into()))
+        .await
+        .unwrap();
+    assert!(matches!(
+        w.engine.stats(a).await,
+        Err(EngineError::UnknownTorrent)
+    ));
+    w.engine.play_whole(w.t, nfo).await.unwrap();
+    let s = w.stats().await;
+    assert_eq!(s.window_bytes, None);
+    until("no window in the scheduler", || async {
+        w.stats().await.held_bytes.is_none()
+    })
+    .await;
+    test_hooks::set_free(&w.engine, None);
 }
 
 /// f. Every punch refused: after three failed rounds the playback ends,
@@ -412,26 +505,37 @@ async fn refused_punches_end_the_playback_cleanly() {
         other => panic!("{:?}", other.err()),
     }
     let max = allocated(&w.dir());
-    assert!(max <= plan().budget, "no fetch past the budget: {max}");
+    assert!(max <= W, "no fetch past the budget: {max}");
 }
 
-/// f, second half. Free space forced under the reserve mid-read: the
-/// window gives back the shortfall and its readahead, holds no more than
-/// its budget less the shortfall, and the read goes on to the end.
+/// f, second half (review P1-1). Free space forced under the reserve while
+/// the player's one range stays open, as mpv's and ExoPlayer's do: the
+/// window gives back the shortfall and its readahead, the keeper goes on
+/// evicting (the read is still the player's), the torrent holds no more
+/// than its budget less the shortfall, and the same range reads on to the
+/// end.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_shortfall_shrinks_the_window_and_the_read_finishes() {
     let w = windowed(48 << 20, plan(), None).await;
-    assert!(w.read(0, 10 * MIB).await == w.movie(0, 10 * MIB));
+    let reader = w.engine.open_reader(w.t, "default", w.movie).await.unwrap();
+    let mut range = reader.range(0, None).await.unwrap();
+    let mut head = vec![0u8; 10 * MIB as usize];
+    within(60, range.read_exact(&mut head)).await.unwrap();
+    assert!(head == w.movie(0, 10 * MIB));
     test_hooks::set_free(&w.engine, Some(RESERVE_BYTES - 6 * MIB));
     tokio::time::sleep(Duration::from_millis(1500)).await;
+    let rounds = w.stats().await.evict_rounds;
     let len = w.s.movie.len() as u64;
     let sampler = Sampler::start(w.dir());
-    assert!(w.read(10 * MIB, len).await == w.movie(10 * MIB, len));
+    let mut rest = Vec::new();
+    within(60, range.read_to_end(&mut rest)).await.unwrap();
+    assert!(rest == w.movie(10 * MIB, len));
     let max = sampler.max();
-    assert!(max <= plan().budget, "{max}");
+    assert!(max <= W, "{max}");
     let s = w.stats().await;
     assert_eq!(s.readahead_bytes, Some(0));
-    assert!(s.held_bytes.unwrap() <= plan().budget - 6 * MIB, "{s:?}");
+    assert!(s.evict_rounds > rounds, "the keeper went on: {s:?}");
+    assert!(s.held_bytes.unwrap() <= W - 6 * MIB, "{s:?}");
     test_hooks::set_free(&w.engine, None);
 }
 
@@ -448,6 +552,11 @@ async fn under_the_floor_the_playback_ends_with_storage_full() {
     })
     .await;
     assert!(w.stats().await.paused, "fetching stopped");
+    // The scheduler's window and cap end too (review P2-5).
+    until("no window in the scheduler", || async {
+        w.stats().await.held_bytes.is_none()
+    })
+    .await;
 }
 
 /// q for a whole file: under the floor a playback with no window ends
@@ -652,11 +761,21 @@ fn the_window_plan_matches_the_worked_numbers() {
     let tos = plan(1_050_000_000, 778_400, 512 * 1024);
     assert!((480_000_000..540_000_000).contains(&tos.budget), "{tos:?}");
     assert!(tos.ahead > 0 && tos.ahead <= 600 * 778_400);
-    // The walk override lowers the budget and the readahead by as much,
-    // and never goes under the floor.
+    // The walk override lowers the budget, the readahead first and then
+    // `B` by what is left (review P2-6), so the kept set still fits; it
+    // never goes under the floor.
     let walk = tos.within(200_000_000).unwrap();
     assert_eq!(walk.budget, 200_000_000);
-    assert_eq!(tos.budget - walk.budget, tos.ahead - walk.ahead);
+    assert_eq!(
+        tos.budget - walk.budget,
+        (tos.ahead - walk.ahead) + (tos.behind - walk.behind)
+    );
+    let tight = tos.within(tos.floor + 10 * MIB).unwrap();
+    assert_eq!(tight.ahead, 0);
+    assert!(
+        tight.floor + tight.behind <= tight.budget,
+        "the kept set fits: {tight:?}"
+    );
     assert!(tos.within(tos.floor - 1).is_none());
     assert!(tos.ahead_secs(778_400) >= 120);
 }

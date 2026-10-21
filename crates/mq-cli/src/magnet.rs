@@ -414,6 +414,20 @@ async fn run(
         .map_err(|_| "no metadata in time".to_owned())?
         .map_err(|e| e.to_string())?;
     let metadata_ms = ms(started);
+    // What the scheduler holds, sampled beside the folder: a folder past
+    // it is the file system's (APFS's refills), not the scheduler's.
+    let max_held = Arc::new(AtomicU64::new(0));
+    let held_sampler = tokio::spawn({
+        let (engine, max) = (engine.clone(), Arc::clone(&max_held));
+        async move {
+            loop {
+                if let Ok(s) = engine.stats(t).await {
+                    max.fetch_max(s.held_bytes.unwrap_or(0), Ordering::Relaxed);
+                }
+                tokio::time::sleep(Duration::from_millis(250)).await;
+            }
+        }
+    });
     let hint = o.file.map_or(FileHint::Largest, FileHint::Index);
     let file = engine
         .select_file(t, CLI, &hint)
@@ -428,14 +442,10 @@ async fn run(
     }
     let mut window_row = None;
     if let (Some(limit), Some(rate)) = (o.window, o.rate) {
-        let inputs = mq_engine::WindowInputs {
-            free: engine.free().unwrap_or(0),
-            reclaimable: engine.reclaimable().await,
-            committed: engine.committed(Some(t)).await,
-            bitrate: rate,
-            piece_len: u64::from(engine.piece_len(t).map_err(|e| e.to_string())?),
-            fill: FILL_ESTIMATE,
-        };
+        let inputs = engine
+            .window_inputs(t, engine.free().unwrap_or(0), rate, FILL_ESTIMATE)
+            .await
+            .map_err(|e| e.to_string())?;
         let mut plan = mq_engine::window_plan(engine.device_class(), inputs)
             .and_then(|p| p.within(limit).ok_or(mq_engine::EngineError::DeviceFull))
             .map_err(|e| e.to_string())?;
@@ -550,6 +560,7 @@ async fn run(
     let stats = engine.stats(t).await.map_err(|e| e.to_string())?;
     let dialed = engine.connections();
     sampler.abort();
+    held_sampler.abort();
     let allocated_bytes = allocated(dir);
     let max_allocated_bytes = max_allocated.load(Ordering::Relaxed).max(allocated_bytes);
     // Seeks: the walk's time to first byte, or mpv's to its next frame.
@@ -606,6 +617,7 @@ async fn run(
         "readahead_bytes": stats.readahead_bytes,
         "window": window_row,
         "held_bytes": stats.held_bytes,
+        "max_held_bytes": stats.held_bytes.map(|h| h.max(max_held.load(Ordering::Relaxed))),
         "evict_rounds": stats.evict_rounds,
         "sched_seeks": stats.seeks,
         "max_allocated_bytes": max_allocated_bytes,

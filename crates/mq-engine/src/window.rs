@@ -12,7 +12,7 @@ use crate::{
     DeviceClass, Engine, EngineError, Inner, Result, Torrent, TorrentHandle, adapter, lock,
 };
 
-pub use mq_engine_sched::{RESERVE_BYTES, WindowInputs, WindowPlan};
+pub use mq_engine_sched::{APFS_HEAD_BYTES, RESERVE_BYTES, WindowInputs, WindowPlan};
 
 /// Under a quarter of the reserve the playback ends with "storage full"
 /// before any write fails (2.4).
@@ -72,6 +72,12 @@ pub(crate) struct WindowState {
     pub metered: bool,
     /// What the space guard took off the budget (2.4).
     pub shortfall: u64,
+    /// Which window of the torrent this is: a trim or an end clears only
+    /// its own.
+    pub generation: u64,
+    /// The playback's claim came before its window (the app's order): a
+    /// stop before the keeper's first look still trims.
+    pub claimed: bool,
 }
 
 impl WindowState {
@@ -80,13 +86,22 @@ impl WindowState {
         let p = &self.plan;
         mq_engine_sched::Window {
             file: self.file,
-            budget: p.budget.saturating_sub(self.shortfall),
+            budget: self.budget(),
             slack: p.slack,
             behind: p.behind,
             ramp_floor: ramp_floor.min(p.ahead),
             open_floor: p.open_floor,
             open_cap: p.open_cap,
         }
+    }
+
+    /// The scheduler's budget: `W` less the space guard's shortfall and
+    /// what APFS keeps of the file's head (2.6), so the folder stays
+    /// within `W`.
+    pub fn budget(&self) -> u64 {
+        self.plan
+            .budget
+            .saturating_sub(self.shortfall + mq_engine_sched::APFS_HEAD_BYTES)
     }
 
     /// The readahead: none while the space guard holds, the device preset on
@@ -248,10 +263,23 @@ fn storage_error(errors: &[String]) -> String {
 /// second for the space guard. When the last claim drops it trims the
 /// torrent and ends.
 pub(crate) async fn keep(engine: Weak<Inner>, h: TorrentHandle, t: Arc<Torrent>) {
+    loop {
+        keep_windows(&engine, h, &t).await;
+        t.keeping.store(false, Ordering::Release);
+        // A window set while this keeper was ending found it running.
+        if lock(&t.window).is_none() || t.keeping.swap(true, Ordering::AcqRel) {
+            break;
+        }
+    }
+}
+
+/// The keeper's rounds, window after window, until the torrent has none.
+async fn keep_windows(engine: &Weak<Inner>, h: TorrentHandle, t: &Arc<Torrent>) {
     let mut failed: Vec<String> = Vec::new();
     // The playback's claim may come just after its window.
     let mut claimed = false;
     let mut punched: Option<std::time::Instant> = None;
+    let mut generation = None;
     loop {
         let every = match punched {
             Some(at) if at.elapsed() < HOLES_FOR => HOLES_EVERY,
@@ -268,14 +296,20 @@ pub(crate) async fn keep(engine: Weak<Inner>, h: TorrentHandle, t: Arc<Torrent>)
         let Some(state) = *lock(&t.window) else {
             break;
         };
+        // A new window (a reopen right after a stop) starts afresh.
+        if generation != Some(state.generation) {
+            generation = Some(state.generation);
+            (claimed, punched) = (state.claimed, None);
+            failed.clear();
+        }
         claimed |= t.claimed();
         if claimed && !t.claimed() {
-            engine.trim(h, &t, state).await;
-            break;
+            engine.trim(h, t, state).await;
+            continue;
         }
         let free = engine.free().unwrap_or(u64::MAX);
         if free < FLOOR_BYTES {
-            engine.end_window(&t, "storage full").await;
+            engine.end_window(t, "storage full").await;
             break;
         }
         // The space guard (2.4): other apps wrote, so the window gives back
@@ -289,12 +323,10 @@ pub(crate) async fn keep(engine: Weak<Inner>, h: TorrentHandle, t: Arc<Torrent>)
             state.shortfall
         };
         if shortfall != state.shortfall {
-            let state = WindowState { shortfall, ..state };
-            *lock(&t.window) = Some(state);
-            engine.send_window(&t, Some(state), None).await;
+            engine.set_shortfall(t, state, shortfall).await;
         }
-        engine.clear_filled_holes(&t, state).await;
-        let Some(pieces) = engine.ask(&t, adapter::Msg::ToEvict).await else {
+        engine.clear_filled_holes(t, state).await;
+        let Some(pieces) = engine.ask(t, adapter::Msg::ToEvict).await else {
             continue;
         };
         if pieces.is_empty() {
@@ -308,9 +340,8 @@ pub(crate) async fn keep(engine: Weak<Inner>, h: TorrentHandle, t: Arc<Torrent>)
             Err(e) => failed.push(e.to_string()),
         }
         if failed.len() as u32 >= FAILED_ROUNDS {
-            engine.end_window(&t, &storage_error(&failed)).await;
+            engine.end_window(t, &storage_error(&failed)).await;
             break;
         }
     }
-    t.keeping.store(false, Ordering::Release);
 }

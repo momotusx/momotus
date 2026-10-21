@@ -56,6 +56,12 @@ pub(crate) enum Msg {
         bitrate: u64,
         resume_at: Option<u64>,
     },
+    /// The space guard's budget for the window, and its file's readahead
+    /// (2.4): the window goes on as it was.
+    Budget {
+        budget: u64,
+        readahead: u64,
+    },
     /// The player paused or plays again.
     Paused(bool),
     /// The keeper's round: what to evict now.
@@ -620,6 +626,18 @@ impl Translator {
                     now_us: self.now_us,
                 })
             }
+            Msg::Budget { budget, readahead } => {
+                if let Some(s) = self.sched.as_mut() {
+                    s.set_budget(budget);
+                    if let Some((file, bytes_per_s, _)) = self.rate {
+                        s.set_readahead(file, readahead);
+                        self.rate = Some((file, bytes_per_s, readahead));
+                    }
+                }
+                self.feed(Event::Tick {
+                    now_us: self.now_us,
+                })
+            }
             Msg::Paused(paused) => {
                 if let Some(s) = self.sched.as_mut() {
                     s.set_paused(paused);
@@ -825,6 +843,7 @@ pub(crate) async fn run(
     }
     let mut tick = tokio::time::interval(TICK);
     let mut last_rate = Instant::now();
+    let mut was_due = false;
     loop {
         execute(&torrent, &mut tr, pending);
         // A read file's verified head says where its container index is.
@@ -834,9 +853,13 @@ pub(crate) async fn run(
             execute(&torrent, &mut tr, more);
         }
         *snapshot.lock().unwrap_or_else(|p| p.into_inner()) = tr.snapshot();
-        if tr.keeper_due() {
+        // Once each time a round becomes due: a round that frees nothing
+        // waits for the keeper's own tick instead of every event.
+        let due = tr.keeper_due();
+        if due && !was_due {
             keeper.notify_one();
         }
+        was_due = due;
         pending = tokio::select! {
             Some(ev) = ext.recv() => {
                 let mut out = tr.tick(now());

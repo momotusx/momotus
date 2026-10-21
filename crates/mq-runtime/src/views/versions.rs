@@ -264,6 +264,9 @@ pub struct Pick {
     /// device's language, then English (the bridge fills them in). The
     /// playback orders subtitles with them too.
     pub languages: Vec<String>,
+    /// The meta runtime the view ranked with: a torrent's window is sized
+    /// with the same rate (plans/streaming-window.md 2.2).
+    pub runtime_s: Option<u32>,
 }
 
 /// Playback reports through this that the picked row failed; when it was
@@ -842,6 +845,7 @@ impl VersionsView {
             handle,
             note,
             languages: self.learning.prefs.languages.clone(),
+            runtime_s: lock(&self.state).rank.runtime_s,
         }
     }
 

@@ -29,7 +29,9 @@ pub use librqbit;
 pub use pick::FileHint;
 pub use reader::{RangeReader, StreamReader};
 pub use scrape::{SwarmCount, TrackerTrace};
-pub use window::{RESERVE_BYTES, WindowInputs, WindowPlan, free_space, reclaimable, window_plan};
+pub use window::{
+    APFS_HEAD_BYTES, RESERVE_BYTES, WindowInputs, WindowPlan, free_space, reclaimable, window_plan,
+};
 
 use std::collections::{HashMap, HashSet};
 use std::net::{IpAddr, SocketAddr};
@@ -405,7 +407,7 @@ struct Inner {
     free: Mutex<Option<u64>>,
     /// `R` and `C` as maintenance last counted them, for a ranking that
     /// cannot wait (plans/streaming-window.md 3.1).
-    counted: Mutex<(u64, u64)>,
+    counted: Mutex<Option<(u64, u64)>>,
 }
 
 /// The session's tasks hang off its token, each torrent's as a child: a
@@ -455,6 +457,8 @@ pub(crate) struct Torrent {
     keeper_wake: Arc<tokio::sync::Notify>,
     /// A keeper task runs.
     keeping: std::sync::atomic::AtomicBool,
+    /// The last window's generation.
+    window_generation: AtomicU64,
     /// Why a window ended the playback; ranges fail with it until the next
     /// window or file choice.
     ended: Mutex<Option<String>>,
@@ -775,6 +779,7 @@ impl Engine {
             window: Mutex::new(None),
             keeper_wake: Arc::default(),
             keeping: Default::default(),
+            window_generation: AtomicU64::new(0),
             ended: Mutex::new(None),
             player_paused: Default::default(),
             starved: Default::default(),
@@ -830,7 +835,12 @@ impl Engine {
         // The budget round runs before `live` is held for good: a round
         // holds the round lock while it takes an evicted torrent's `live`
         // (engine review r4, P3-1).
-        let starts = t.live.lock().await.is_none();
+        let starts = t
+            .live
+            .lock()
+            .await
+            .as_ref()
+            .is_none_or(|l| !l.selected.contains(&idx));
         if starts {
             let need = self.free_for_whole(&t, t.files[idx].len).await;
             self.enforce_budget(Some(h), need).await;
@@ -1164,7 +1174,15 @@ impl Engine {
     ) -> Result<()> {
         let t = self.torrent(h)?;
         let sched = self.sched_config();
-        let windowed = (*lock(&t.window)).filter(|w| w.file == file);
+        let windowed = {
+            let mut window = lock(&t.window);
+            // The window keeps the rate and network from now on: a budget
+            // change or the trim sends them, never the plan's guess.
+            if let Some(w) = window.as_mut().filter(|w| w.file == file) {
+                (w.bitrate, w.metered) = (bytes_per_s, metered);
+            }
+            (*window).filter(|w| w.file == file)
+        };
         let readahead = match windowed {
             // A window keeps the readahead its plan gave (2.2).
             Some(w) => w.ahead(sched.readahead_bytes),
@@ -1196,6 +1214,12 @@ impl Engine {
         free_space(&self.inner.cfg.data_dir)
     }
 
+    /// The blocking window's bytes: a range that ends within it from its
+    /// start is a probe (plans/streaming-window.md 2.3).
+    pub fn blocking_bytes(&self) -> u64 {
+        self.sched_config().blocking_bytes
+    }
+
     /// The scheduler presets this engine runs with, for [`window_plan`].
     pub fn device_class(&self) -> DeviceClass {
         self.inner.cfg.device_class
@@ -1207,13 +1231,19 @@ impl Engine {
     }
 
     /// `R` (plans/streaming-window.md 2.1): what torrents with no reader,
-    /// claim or hold, and folders an earlier launch left, hold on disk.
-    pub async fn reclaimable(&self) -> u64 {
+    /// claim or hold, and folders an earlier launch left, hold on disk;
+    /// with `own`, also what that torrent holds (a window counts its own
+    /// folder: what a resume finds there is its own).
+    pub async fn reclaimable(&self, own: Option<TorrentHandle>) -> u64 {
         let idle: Vec<PathBuf> = lock(&self.inner.torrents)
-            .values()
-            .filter(|t| t.readers.load(Ordering::Relaxed) == 0 && !t.claimed())
-            .filter(|t| !lock(&t.hold).by_profile.values().any(|h| h.held))
-            .map(|t| t.dir.clone())
+            .iter()
+            .filter(|(h, t)| {
+                Some(**h) == own
+                    || (t.readers.load(Ordering::Relaxed) == 0
+                        && !t.claimed()
+                        && !lock(&t.hold).by_profile.values().any(|h| h.held))
+            })
+            .map(|(_, t)| t.dir.clone())
             .collect();
         let held: Vec<PathBuf> = lock(&self.inner.torrents)
             .values()
@@ -1229,9 +1259,32 @@ impl Engine {
         .unwrap_or(0)
     }
 
-    /// `R` and `C` as maintenance last counted them (every few seconds).
-    pub fn counted(&self) -> (u64, u64) {
+    /// `R` and `C` as maintenance last counted them (every few seconds);
+    /// `None` before its first count.
+    pub fn counted(&self) -> Option<(u64, u64)> {
         *lock(&self.inner.counted)
+    }
+
+    /// What a window of `h` is sized with (2.1), the one source for the
+    /// app and the CLI: `free` (the caller's, as its ranking read it), `R`
+    /// with `h`'s own folder counted, `C` of the other windows, and `h`'s
+    /// pieces.
+    pub async fn window_inputs(
+        &self,
+        h: TorrentHandle,
+        free: u64,
+        bitrate: u64,
+        fill: u64,
+    ) -> Result<WindowInputs> {
+        let piece_len = u64::from(self.torrent(h)?.piece_len);
+        Ok(WindowInputs {
+            free,
+            reclaimable: self.reclaimable(Some(h)).await,
+            committed: self.committed(Some(h)).await,
+            bitrate,
+            piece_len,
+            fill,
+        })
     }
 
     /// `C` (2.1): what the windows playing, but `except`'s, will still take
@@ -1284,11 +1337,12 @@ impl Engine {
             bitrate: w.bitrate,
             metered: w.metered,
             shortfall: 0,
+            generation: t.window_generation.fetch_add(1, Ordering::Relaxed) + 1,
+            claimed: t.claimed(),
         };
-        *lock(&t.window) = Some(state);
         let sched = self.sched_config();
         *lock(&t.rate) = Some((file, w.bitrate, state.ahead(sched.readahead_bytes)));
-        self.send_window(&t, Some(state), w.resume_at).await;
+        self.put_window(&t, Some(state), w.resume_at, None).await;
         if !t.keeping.swap(true, Ordering::AcqRel) {
             tokio::spawn(window::keep(Arc::downgrade(&self.inner), h, t.clone()));
         }
@@ -1307,13 +1361,28 @@ impl Engine {
         Ok(())
     }
 
-    /// The window `state` (or none) to the adapter's scheduler.
-    async fn send_window(
+    /// `file` of `h` plays whole: a window on another of its files (the
+    /// last episode of a pack) ends, its cap with it.
+    pub async fn play_whole(&self, h: TorrentHandle, file: usize) -> Result<()> {
+        let t = self.torrent(h)?;
+        let other = (*lock(&t.window)).filter(|w| w.file != file);
+        if let Some(w) = other {
+            self.put_window(&t, None, None, Some(w.generation)).await;
+        }
+        Ok(())
+    }
+
+    /// Makes `state` (or none) the torrent's window and sends it to the
+    /// adapter's scheduler, both under the `live` lock so a trim and a new
+    /// window never cross; with `only`, only while the window is still that
+    /// generation. Whether it was put.
+    async fn put_window(
         &self,
         t: &Torrent,
         state: Option<window::WindowState>,
         resume_at: Option<u64>,
-    ) {
+        only: Option<u64>,
+    ) -> bool {
         let sched = self.sched_config();
         let floor = |bitrate| {
             readahead_for(
@@ -1330,8 +1399,43 @@ impl Engine {
             bitrate: state.map_or(0, |s| s.bitrate),
             resume_at,
         };
-        if let Some(l) = t.live.lock().await.as_ref() {
+        let live = t.live.lock().await;
+        {
+            let mut window = lock(&t.window);
+            if only.is_some() && window.map(|w| w.generation) != only {
+                return false;
+            }
+            *window = state;
+        }
+        if let Some(l) = live.as_ref() {
             let _ = l.msgs.send(msg);
+        }
+        true
+    }
+
+    /// The space guard's shortfall for `state`'s window (2.4): its budget
+    /// and readahead change, its player read and rate stay.
+    pub(crate) async fn set_shortfall(
+        &self,
+        t: &Torrent,
+        state: window::WindowState,
+        shortfall: u64,
+    ) {
+        let state = window::WindowState { shortfall, ..state };
+        let preset = self.sched_config().readahead_bytes;
+        let live = t.live.lock().await;
+        {
+            let mut window = lock(&t.window);
+            if window.map(|w| w.generation) != Some(state.generation) {
+                return;
+            }
+            *window = Some(state);
+        }
+        if let Some(l) = live.as_ref() {
+            let _ = l.msgs.send(adapter::Msg::Budget {
+                budget: state.budget(),
+                readahead: state.ahead(preset),
+            });
         }
     }
 
@@ -1363,8 +1467,8 @@ impl Engine {
         {
             tracing::warn!("trimming {}: {e}", t.info_hash);
         }
-        *lock(&t.window) = None;
-        self.send_window(t, None, None).await;
+        // A window set meanwhile (the same file opened again) stays.
+        self.put_window(t, None, None, Some(w.generation)).await;
     }
 
     /// Ends a windowed playback before a write fails (2.4): fetching stops,
@@ -1373,7 +1477,9 @@ impl Engine {
     async fn end_window(&self, t: &Torrent, why: &str) {
         tracing::warn!("{}: {why}", t.info_hash);
         *lock(&t.ended) = Some(why.to_owned());
-        *lock(&t.window) = None;
+        // The scheduler's window and cap end too: the same file played again
+        // after space was freed may fit (review P2-5).
+        self.put_window(t, None, None, None).await;
         let live = t.live.lock().await;
         if let Some(l) = live.as_ref() {
             if !l.managed.is_paused() {
@@ -1403,7 +1509,7 @@ impl Engine {
             return 0;
         };
         let need = (size + RESERVE_BYTES).saturating_sub(held);
-        if need <= free || need > free + self.reclaimable().await {
+        if need <= free || need > free + self.reclaimable(None).await {
             return 0;
         }
         need
@@ -1673,8 +1779,8 @@ async fn maintenance(inner: std::sync::Weak<Inner>) {
         }
         engine.enforce_budget(None, 0).await;
         engine.guard_whole_files().await;
-        let counts = (engine.reclaimable().await, engine.committed(None).await);
-        *lock(&engine.inner.counted) = counts;
+        let counts = (engine.reclaimable(None).await, engine.committed(None).await);
+        *lock(&engine.inner.counted) = Some(counts);
     }
 }
 

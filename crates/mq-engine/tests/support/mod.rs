@@ -23,6 +23,14 @@ pub struct Swarm {
     _dirs: (tempfile::TempDir, tempfile::TempDir),
 }
 
+impl Swarm {
+    /// The leecher's data folder.
+    #[allow(dead_code)]
+    pub fn leech_dir(&self) -> &std::path::Path {
+        self._dirs.1.path()
+    }
+}
+
 /// One more seeder of a swarm's torrent, on `127.0.0.1`.
 #[allow(dead_code)] // only the window tests use it
 pub struct Seeder {

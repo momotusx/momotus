@@ -300,6 +300,11 @@ pub struct PlayTarget {
 
 struct State {
     snapshot: PlaybackSnapshot,
+    /// The last session's duration of this video, and the meta runtime of
+    /// the picked row's view: a torrent's rate until the player reports one
+    /// (plans/streaming-window.md 2.2).
+    known_duration_ms: Option<u64>,
+    runtime_s: Option<u32>,
     candidates: Vec<ParsedStream>,
     next: usize,
     /// A source of the version failed for a reason of the version's own:
@@ -394,6 +399,8 @@ pub struct PlaybackView {
 impl State {
     fn new(candidates: Vec<ParsedStream>, resume_ms: Option<u64>) -> Self {
         Self {
+            known_duration_ms: None,
+            runtime_s: None,
             snapshot: PlaybackSnapshot {
                 phase: PlaybackPhase::Resolving,
                 url: None,
@@ -502,16 +509,20 @@ impl PlaybackView {
                 denied: true,
             };
         }
-        let resume_ms = core
+        let progress = core
             .library()
             .progress(core.profile(), &target.video_id)
             .ok()
-            .flatten()
+            .flatten();
+        let resume_ms = progress
             .filter(|&(pos, dur)| {
                 pos > 0 && (dur == 0 || (pos as f64) < dur as f64 * FINISHED_RATIO)
             })
             .map(|(pos, _)| pos as u64);
         let mut state = State::new(candidates, resume_ms);
+        // The last session's length: a torrent's rate before the player
+        // reports this one's (plans/streaming-window.md 2.2).
+        state.known_duration_ms = progress.map(|(_, dur)| dur as u64).filter(|&d| d > 0);
         state.pick = pick;
         let snapshot = SharedObservable::new(state.snapshot.clone());
         let shared = Arc::new(Mutex::new(state));
@@ -555,7 +566,10 @@ impl PlaybackView {
         plays: &[Format],
     ) -> Self {
         let view = Self::open_with(core, pick.candidates, Some(pick.handle), target, plays);
-        lock(&view.state).languages = pick.languages;
+        let mut s = lock(&view.state);
+        s.languages = pick.languages;
+        s.runtime_s = pick.runtime_s;
+        drop(s);
         view
     }
 
@@ -1724,12 +1738,26 @@ async fn open_torrent(
         _ => FileHint::Largest,
     };
     let by_episode = matches!(hint, FileHint::Episode { .. });
+    // The rate the ranking sized the row with (2.2): the file over the last
+    // session's duration, else the meta runtime, else the guess.
+    let rate_of = |len: u64| {
+        let s = lock(state);
+        let duration_s = s
+            .known_duration_ms
+            .map(|ms| ms / 1000)
+            .or(s.runtime_s.map(u64::from));
+        window_rate(
+            stream,
+            len,
+            by_episode || target.episode.is_some(),
+            duration_s,
+        )
+    };
     let started = async {
         let file = engine.select_file(torrent, profile, &hint).await?;
         let len = engine.files(torrent)?.get(file).map_or(0, |f| f.len);
-        let rate = guessed_rate(stream, len, by_episode || target.episode.is_some());
         let resume_ms = lock(state).snapshot.resume_ms;
-        open_window(core, &engine, torrent, file, len, rate, resume_ms).await?;
+        open_window(core, &engine, torrent, file, len, rate_of(len), resume_ms).await?;
         let reader = claim.open_reader(file).await?;
         let info = reader.file().clone();
         // The file the addon pointed at must be the one listed (3.4).
@@ -1740,7 +1768,10 @@ async fn open_torrent(
         if let Some(why) = never_opens(core, stream, target, state, &info.path) {
             return Ok((file, info, Started::Wrong(why)));
         }
-        let mut head = reader.range(0, None).await?;
+        // A resume's head read is a probe (2.3, 2.8): it fetches the head's
+        // blocking window and never takes the focus from the resume point.
+        let head_end = resume_ms.map(|_| engine.blocking_bytes());
+        let mut head = reader.range(0, head_end).await?;
         // Received payload and the first unchoke (code review r1 P1): a
         // piece verifies only whole, long after its first blocks.
         let progress = || async {
@@ -1766,8 +1797,9 @@ async fn open_torrent(
             // Seconds of this file for the scheduler, until the player says
             // how long it is (plans/streaming-window.md 2.2).
             let metered = core.network() == crate::speed::Network::Cellular;
-            let rate = guessed_rate(stream, info.len, by_episode || target.episode.is_some());
-            let _ = engine.set_rate(torrent, file, rate, metered).await;
+            let _ = engine
+                .set_rate(torrent, file, rate_of(info.len), metered)
+                .await;
             lock(state).rate_of = Some((torrent, file, info.len));
             let upstream = Upstream::Torrent { claim, file };
             return Ok((upstream, Some(name), Some(info.len)));
@@ -1840,16 +1872,15 @@ async fn open_window(
         return Ok(());
     };
     let p2p = core.speed(crate::speed::Kind::P2p).mbps;
-    let inputs = mq_engine::WindowInputs {
-        free,
-        reclaimable: engine.reclaimable().await,
-        committed: engine.committed(Some(torrent)).await,
-        bitrate: rate,
-        piece_len: u64::from(engine.piece_len(torrent)?),
-        fill: (f64::from(p2p) * 125_000.0) as u64,
-    };
+    // The torrent's own folder counts in R (review P1-2): a resume finds
+    // its window there.
+    let inputs = engine
+        .window_inputs(torrent, free, rate, (f64::from(p2p) * 125_000.0) as u64)
+        .await?;
     if walk.is_none() && len <= inputs.room() {
-        return Ok(());
+        // A window another file of the torrent left (Up Next in a pack)
+        // ends with it.
+        return engine.play_whole(torrent, file).await;
     }
     let mut plan = mq_engine::window_plan(engine.device_class(), inputs)?;
     if let Some(w) = walk {
@@ -1857,7 +1888,7 @@ async fn open_window(
     }
     tracing::info!(
         budget = plan.budget,
-        free,
+        free = inputs.free,
         room = inputs.room(),
         walk = ?walk,
         "torrent window"
@@ -1871,8 +1902,10 @@ async fn open_window(
     engine.window(torrent, file, window).await
 }
 
-#[cfg(any(test, feature = "torrent"))]
+#[cfg(test)]
 use mq_streams::guessed_rate;
+#[cfg(any(test, feature = "torrent"))]
+use mq_streams::window_rate;
 
 /// How a torrent's start went.
 #[cfg(any(test, feature = "torrent"))]
@@ -3056,6 +3089,22 @@ mod tests {
         // An episode: its size over 1 h.
         assert_eq!(guessed_rate(&web, 8 * gib, true), 8 * gib / 3600);
         assert_eq!(guessed_rate(&named("Film.2020.720p"), gib, false), 625_000);
+    }
+
+    /// The window's rate (review P2-2): the file over a known duration (the
+    /// last session's, else the meta runtime), as the ranking sizes the row;
+    /// the guess only when none is known; never under the size over 3 h.
+    #[test]
+    fn a_window_rate_comes_from_the_duration_before_the_guess() {
+        let web = stream(&format!(
+            r#"{{"name":"x","title":"Film.2020.1080p.WEB-DL.x264-G","infoHash":"{}"}}"#,
+            "a".repeat(40)
+        ));
+        let len = 2_500_000_000;
+        assert_eq!(window_rate(&web, len, false, Some(7200)), len / 7200);
+        assert_eq!(window_rate(&web, len, false, None), 1_250_000);
+        assert_eq!(window_rate(&web, len, false, Some(0)), 1_250_000);
+        assert_eq!(window_rate(&web, len, false, Some(100_000)), len / 10_800);
     }
 
     /// Code review r1 P2-1: one capacity sample per torrent and network.

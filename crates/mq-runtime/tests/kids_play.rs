@@ -729,6 +729,135 @@ async fn a_torrent_on_a_full_device_is_refused_and_one_that_fits_plays_whole() {
     assert_eq!(s.leecher.stats(t).await.unwrap().window_bytes, None);
 }
 
+/// A resume on a small device (review P1-2): the torrent's own folder
+/// counts in R, so what the trim left is room the resume plays in. With
+/// free space short of the window's floor but for that folder, the second
+/// playback opens a window and reads the resume region from disk.
+#[cfg(feature = "torrent")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_resume_counts_its_own_folder_in_the_room() {
+    const MIB: u64 = 1 << 20;
+    let s = support::swarm_big(256 << 20, 1 << 20).await;
+    let t = s
+        .leecher
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let movie = s
+        .leecher
+        .files(t)
+        .unwrap()
+        .iter()
+        .position(|f| f.path.ends_with("movie.mkv"))
+        .unwrap();
+    let fixture = Fixture::default();
+    fixture.set(
+        "/stream/movie/tt1.json",
+        json!({"streams": [{"name": "Fixture", "title": "Up.2009.1080p.WEB.x264-GROUP",
+                            "infoHash": s.info_hash, "fileIdx": movie}]}),
+    );
+    let (owner, _kid) = kid(&fixture).await;
+    owner.set_torrent_engine(s.leecher.clone());
+    owner.set_punches(true);
+    let found = candidates(&owner, "movie", "tt1", "tt1").await;
+    let len = s.movie.len() as u64;
+    // The first play: a window in 200 MiB of room, 16 MiB read 40% in.
+    owner.set_free_bytes(mq_engine::RESERVE_BYTES + 200 * MIB);
+    let view = PlaybackView::open(&owner, found.clone(), target("movie", "tt1", "tt1"));
+    let url = ready(&view).await;
+    assert!(s.leecher.stats(t).await.unwrap().window_bytes.is_some());
+    let (pos_ms, duration_ms) = (400_000, 1_000_000);
+    let at = len * pos_ms / duration_ms;
+    assert!(read_range(&url, at, 16 * MIB).await == s.movie[at as usize..(at + 16 * MIB) as usize]);
+    view.report_progress(pos_ms, duration_ms, false);
+    drop(view);
+    until_async("the trim", || async {
+        s.leecher.stats(t).await.unwrap().window_bytes.is_none()
+    })
+    .await;
+    let own = folder_bytes(&s.leech_dir().join(&s.info_hash));
+    // Free space short of the floor plus 64 MiB by all but 4 MiB of what
+    // the torrent holds.
+    let floor = mq_engine::window_plan(
+        mq_engine::DeviceClass::Standard,
+        mq_engine::WindowInputs {
+            free: 1 << 40,
+            reclaimable: 0,
+            committed: 0,
+            bitrate: len * 1000 / duration_ms,
+            piece_len: MIB,
+            fill: 0,
+        },
+    )
+    .unwrap()
+    .floor;
+    assert!(own > 8 * MIB, "the trim kept {own}");
+    owner.set_free_bytes(mq_engine::RESERVE_BYTES + floor + 68 * MIB - own);
+    let view = PlaybackView::open(&owner, found, target("movie", "tt1", "tt1"));
+    let url = ready(&view).await;
+    let stats = s.leecher.stats(t).await.unwrap();
+    assert!(stats.window_bytes.is_some());
+    // The rate is the file over the last session's duration, not the
+    // 1080p guess (review P2-2).
+    assert_eq!(stats.bytes_per_s, Some(len * 1000 / duration_ms));
+    assert!(read_range(&url, at, 8 * MIB).await == s.movie[at as usize..(at + 8 * MIB) as usize]);
+    assert_eq!(s.leecher.stats(t).await.unwrap().refetched_bytes, 0);
+}
+
+/// `len` bytes of `url` from `at`.
+#[cfg(feature = "torrent")]
+async fn read_range(url: &str, at: u64, len: u64) -> Vec<u8> {
+    let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+    let local = mq_http::RequestOptions {
+        allow_private: true,
+        ..Default::default()
+    };
+    let range = Some(format!("bytes={at}-{}", at + len - 1));
+    let mut body = http.stream(url, range, &local).await.unwrap();
+    let mut got = Vec::new();
+    while (got.len() as u64) < len {
+        let chunk = tokio::time::timeout(Duration::from_secs(30), body.next_chunk())
+            .await
+            .expect("a chunk in 30 s")
+            .expect("more bytes")
+            .unwrap();
+        got.extend_from_slice(&chunk);
+    }
+    got
+}
+
+/// What a folder takes on disk.
+#[cfg(feature = "torrent")]
+fn folder_bytes(dir: &std::path::Path) -> u64 {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::read_dir(dir).map_or(0, |entries| {
+        entries
+            .flatten()
+            .map(|e| {
+                let m = e.metadata().unwrap();
+                if m.is_dir() {
+                    folder_bytes(&e.path())
+                } else {
+                    m.blocks() * 512
+                }
+            })
+            .sum()
+    })
+}
+
+/// Waits up to 30 s for `f` to answer true.
+#[cfg(feature = "torrent")]
+async fn until_async<F: std::future::Future<Output = bool>>(what: &str, mut f: impl FnMut() -> F) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    while !f().await {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "{what}: not within 30 s"
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
 /// Whether `url` serves its first bytes within 10 s.
 #[cfg(feature = "torrent")]
 async fn serves(url: &str) -> bool {
