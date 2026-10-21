@@ -603,9 +603,10 @@ async fn refused_punches_end_the_playback_cleanly() {
 /// while the player's one range stays open, as mpv's and ExoPlayer's do:
 /// the window gives the 6 MiB back, the keeper goes on evicting (the read
 /// is still the player's), the readahead keeps its setting, and the same
-/// range reads on to the end. When the other app deletes its file, the
-/// window grows back, and what the cut took off the readahead is fetched
-/// again once, nothing more.
+/// range reads on to the end. The shrunk budget leaves no room for the
+/// whole readahead beside a seek's urgent windows, so its far part leaves.
+/// When the other app deletes its file, the window grows back, and what
+/// the cut took off the readahead is fetched again once, nothing more.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_shortfall_shrinks_the_window_and_the_read_finishes() {
     // 40 MiB: a full window holds about 34, its kept set about 14, so it
@@ -664,10 +665,8 @@ async fn a_shortfall_shrinks_the_window_and_the_read_finishes() {
     assert!(rest == w.movie(40 * MIB, len));
     let max = held.load(Ordering::Relaxed);
     assert!(max > shrunk, "the window grew back: {max} after {shrunk}");
-    // What the cut took off the readahead comes back once, nothing more
-    // (review r3 B P2-1: the readahead shrinks with the budget).
     let again = w.stats().await.refetched_bytes;
-    assert!(again <= 6 * MIB + MIB, "fetched again: {again}");
+    assert!(again <= plan().ahead + MIB, "fetched again: {again}");
     test_hooks::set_free_base(&w.engine, None);
 }
 

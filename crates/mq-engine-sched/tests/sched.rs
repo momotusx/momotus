@@ -1314,6 +1314,10 @@ fn urgent_fetches_stop_one_blocking_span_past_the_budget() {
         !started.contains(&193),
         "a critical piece past the budget: {started:?}"
     );
+    assert!(
+        started.contains(&192),
+        "the last seek's blocking piece starts within its span: {started:?}"
+    );
 }
 
 /// The space guard's budget change (2.4, review P1-1) keeps the player's
@@ -1369,9 +1373,30 @@ fn an_older_range_that_reads_on_takes_the_focus_back() {
     assert_eq!(h.s.class_of(1009), None, "nothing past N's blocking window");
 }
 
-/// A budget the space guard shrank takes its cut off the readahead (2.4,
-/// review r3 B P2-1): the farthest readahead leaves the kept set first, and
-/// as much of it as the cut; it comes back with the budget.
+/// The space guard counts what the torrent wrote (2.4, review r3 A R2):
+/// verified pieces, and of a piece in flight only its received blocks, as
+/// free space has dropped for those only; the kept set counts it whole.
+#[test]
+fn written_bytes_count_a_piece_in_flight_by_its_received_blocks() {
+    let g = Geometry::new(64 * KIB as u32, &[4 * MIB]).unwrap();
+    let mut h = Harness::new(g, small_cfg());
+    h.s.set_window(Some(window(0)));
+    h.send(Event::PieceVerified { piece: 5 });
+    h.peer(1, MIB);
+    open(&mut h, 1, 0, 0, None);
+    let block = h.geo.piece_blocks(0).start;
+    assert!(h.out.contains(&(block, 1)), "piece 0 in flight");
+    h.deliver(1, block);
+    assert_eq!(h.s.written_bytes(), 64 * KIB + u64::from(BLOCK));
+    assert!(h.s.held_bytes() >= 2 * 64 * KIB);
+}
+
+/// A budget the space guard shrank (2.4, review r3 B P2-1) takes its cut
+/// first from the room past the kept set (the watched bytes behind `B`),
+/// so the readahead stays whole while it fits; past that, off the
+/// readahead's far end, byte for byte, so the kept set stays within the
+/// keeper's target: the farthest part leaves the kept set first. It comes
+/// back with the budget.
 #[test]
 fn a_shrunk_budget_takes_its_cut_off_the_farthest_readahead() {
     let g = Geometry::new(64 * KIB as u32, &[64 * MIB]).unwrap();
@@ -1388,12 +1413,28 @@ fn a_shrunk_budget_takes_its_cut_off_the_farthest_readahead() {
     });
     let full = readahead_pieces(&h);
     assert_eq!(full.len(), 64, "4 MiB of readahead");
-    h.s.set_budget(63 * MIB);
+    // 56 MiB less: the room behind takes it.
+    h.s.set_budget(8 * MIB);
+    h.tick(1);
+    assert_eq!(readahead_pieces(&h), full, "the readahead fits");
+    // 60 MiB less: past that room, the farthest readahead leaves.
+    h.s.set_budget(4 * MIB);
     h.tick(1);
     let cut = readahead_pieces(&h);
-    assert_eq!(cut.len(), 48, "1 MiB less");
-    assert_eq!(cut, full[..48], "the farthest part left");
+    assert!(cut.len() < 64 && cut == full[..cut.len()], "{cut:?}");
     assert!(!h.s.kept().get(*full.last().unwrap()));
+    let kept: u64 = (0..h.geo.num_pieces())
+        .filter(|&p| h.s.kept().get(p))
+        .count() as u64;
+    assert_eq!(
+        kept * 64 * KIB,
+        4 * MIB - 256 * KIB,
+        "the kept set fills the target"
+    );
+    // Each MiB more comes off the readahead.
+    h.s.set_budget(3 * MIB);
+    h.tick(1);
+    assert_eq!(readahead_pieces(&h), full[..cut.len() - 16], "1 MiB less");
     h.s.set_budget(64 * MIB);
     h.tick(1);
     assert_eq!(readahead_pieces(&h), full, "back with the budget");

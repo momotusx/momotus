@@ -628,6 +628,16 @@ impl Scheduler {
     // ---- windows ----
 
     fn windows(&self, file: usize, pos: u64, end: Option<u64>, play: Option<u64>) -> Windows {
+        let w = self.windows_core(file, pos, end, play);
+        let f = self.geo.files()[file];
+        Windows {
+            readahead_end: (w.playback_end + self.window_readahead(file)).min(f.offset + f.len),
+            ..w
+        }
+    }
+
+    /// [`Self::windows`] with no readahead: it ends at the playback end.
+    fn windows_core(&self, file: usize, pos: u64, end: Option<u64>, play: Option<u64>) -> Windows {
         let f = self.geo.files()[file];
         let rate = self.bitrate[file];
         let pos = pos.min(f.len);
@@ -645,12 +655,11 @@ impl Scheduler {
         let lag = play.filter(|&p| p <= pos).map_or(0, |p| pos - p);
         let c_end = (b_end + crit.saturating_sub(lag)).min(f.len);
         let p_end = (b_end + crit + self.cfg.playback_secs * rate).min(f.len);
-        let r_end = (p_end + self.window_readahead(file)).min(f.len);
         Windows {
             blocking: (f.offset + pos, f.offset + b_end),
             critical_end: f.offset + c_end,
             playback_end: f.offset + p_end,
-            readahead_end: f.offset + r_end,
+            readahead_end: f.offset + p_end,
         }
     }
 
@@ -698,16 +707,36 @@ impl Scheduler {
         (w.playback_end + ahead).min(f.offset + f.len)
     }
 
-    /// `file`'s readahead: in a window less what the space guard took off
-    /// its budget (2.4), so the farthest readahead leaves the kept set
-    /// first and only as much of it as the guard needs; it grows back with
-    /// the budget.
+    /// `file`'s kept readahead (2.4). A budget the space guard shrank takes
+    /// its cut first from the room past the kept set (the watched bytes
+    /// behind `B`, which the keeper takes farthest back first), then off
+    /// the readahead's far end, so that the kept set stays `slack / 2`
+    /// under the keeper's target (`cap - slack`): the readahead stays whole
+    /// while it fits, its farthest part leaves first, and it grows back
+    /// with the budget. The `slack / 2` is one step of the guard: the
+    /// keeper leaves that much past the kept set, nearest first, so a read
+    /// that moves on between steps finds it on disk rather than fetching
+    /// what the next step takes. A plan whose readahead passed the target
+    /// at its full budget loses the cut itself.
     fn window_readahead(&self, file: usize) -> u64 {
-        let cut = match self.window {
-            Some(w) if w.file == file => self.full_budget.saturating_sub(w.budget),
-            _ => 0,
+        let full = self.readahead[file];
+        let Some(w) = self.window.filter(|w| w.file == file) else {
+            return full;
         };
-        self.readahead[file].saturating_sub(cut)
+        let cut = self.full_budget.saturating_sub(w.budget);
+        if cut == 0 {
+            return full;
+        }
+        // ponytail: a scan of every piece per call while the guard binds,
+        // as `held_bytes` per fill.
+        let kept = self.kept_with(false);
+        let rest: u64 = (0..self.geo.num_pieces())
+            .filter(|&p| kept.get(p))
+            .map(|p| u64::from(self.geo.piece_size(p)))
+            .sum();
+        let step = w.slack / 2;
+        let over = (rest + full + w.slack + step).saturating_sub(self.cap(&w));
+        full.saturating_sub(cut.min(over))
     }
 
     /// Readahead pieces that may be open at once (2.2): `clamp(2 s × the
@@ -732,6 +761,11 @@ impl Scheduler {
     /// with no reader the anchor's `[pos − B, playback end)`, its readahead
     /// too while paused. Every piece with no window.
     pub fn kept(&self) -> Bitfield {
+        self.kept_with(true)
+    }
+
+    /// [`Self::kept`], with the readahead or without it.
+    fn kept_with(&self, readahead: bool) -> Bitfield {
         let n = self.geo.num_pieces();
         let Some(win) = self.window else {
             return Bitfield::full(n);
@@ -744,14 +778,19 @@ impl Scheduler {
             }
         };
         let back = |file: usize, pos: u64| g.files()[file].offset + pos.saturating_sub(win.behind);
-        let head = self.windows(win.file, 0, None, None);
+        let head = self.windows_core(win.file, 0, None, None);
         keep(g.pieces_in(head.blocking.0, head.blocking.1));
         keep(self.index_pieces(win.file));
         let focus = self.focus().map(|d| d.id);
         for d in &self.demands {
-            let w = self.windows(d.file, d.pos, d.end, self.play_pos[d.file]);
+            let w = self.windows_core(d.file, d.pos, d.end, self.play_pos[d.file]);
             if Some(d.id) == focus {
-                keep(g.pieces_in(back(d.file, d.pos), self.readahead_end(d, &w)));
+                let end = if readahead {
+                    self.readahead_end(d, &w)
+                } else {
+                    w.playback_end
+                };
+                keep(g.pieces_in(back(d.file, d.pos), end));
             } else {
                 keep(g.pieces_in(w.blocking.0, w.blocking.1));
             }
@@ -762,19 +801,19 @@ impl Scheduler {
             .into_iter()
             .chain(self.resume)
         {
-            let w = self.windows(file, pos, None, None);
+            let w = self.windows_core(file, pos, None, None);
             keep(g.pieces_in(back(file, pos), w.playback_end));
         }
         if focus.is_none()
             && let Some((file, pos)) = self.anchor
         {
-            let w = self.windows(file, pos, None, None);
-            let end = if self.paused {
-                w.readahead_end
+            // With no readahead, `readahead_end` is the playback end.
+            let w = if self.paused && readahead {
+                self.windows(file, pos, None, None)
             } else {
-                w.playback_end
+                self.windows_core(file, pos, None, None)
             };
-            keep(g.pieces_in(back(file, pos), end));
+            keep(g.pieces_in(back(file, pos), w.readahead_end));
         }
         kept
     }
