@@ -216,7 +216,7 @@ pub enum Announced {
     Passkey,
     Kit,
     Removed,
-    /// Older announcements were not kept ("Check Devices").
+    /// Older announcements were not kept ("Check the Account page").
     Dropped,
 }
 
