@@ -51,6 +51,12 @@ func spokenScore(_ score: String) -> String {
     return "Rotten Tomatoes " + rt.replacingOccurrences(of: "%", with: " percent")
 }
 
+/// What VoiceOver says for a poster: its name and caption, then the scores
+/// its chip shows ("Inception, 2010, IMDb 8.8, Rotten Tomatoes: Fresh").
+func posterLabel(_ parts: [String?], _ ratings: Ratings?) -> String {
+    (parts.compactMap { $0 } + ratingParts(ratings).map(spokenScore)).joined(separator: ", ")
+}
+
 struct Hero: Decodable, Hashable, Sendable {
     let tile: Tile
     /// One line telling the user why this title is here.

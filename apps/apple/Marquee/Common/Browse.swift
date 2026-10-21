@@ -147,7 +147,7 @@ struct PosterGrid: View {
                     }
                 }
                 .buttonStyle(CardButtonStyle())
-                .accessibilityLabel([tile.name, caption(tile)].compactMap { $0 }.joined(separator: ", "))
+                .accessibilityLabel(posterLabel([tile.name, caption(tile)], tile.ratings))
                 .onAppear { if key == keyed.last?.key { onEnd?() } }
             }
         }

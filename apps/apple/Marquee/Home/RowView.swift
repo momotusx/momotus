@@ -141,7 +141,7 @@ struct PosterTile: View {
             CardCaption(name: tile.name, info: tile.releaseInfo).frame(width: size.width, alignment: .leading)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(([tile.name, tile.releaseInfo].compactMap { $0 } + ratingParts(tile.ratings).map(spokenScore)).joined(separator: ", "))
+        .accessibilityLabel(posterLabel([tile.name, tile.releaseInfo], tile.ratings))
     }
 
     private var size: CGSize {

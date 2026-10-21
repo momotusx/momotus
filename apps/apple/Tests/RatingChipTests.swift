@@ -97,3 +97,10 @@ private let registered: Bool = {
     #expect(spokenScore("RT Fresh") == "Rotten Tomatoes: Fresh")
     #expect(spokenScore("IMDb 8.8") == "IMDb 8.8")
 }
+
+@Test func aPosterSpeaksTheScoresItsChipShows() {
+    let fresh = Ratings(imdb: "8.8", rottenTomatoes: "Fresh")
+    #expect(posterLabel(["Inception", "2010"], fresh) == "Inception, 2010, IMDb 8.8, Rotten Tomatoes: Fresh")
+    #expect(posterLabel(["Inception", nil], Ratings(imdb: nil, rottenTomatoes: "87%")) == "Inception, Rotten Tomatoes 87 percent")
+    #expect(posterLabel(["Inception"], nil) == "Inception")
+}
