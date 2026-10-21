@@ -46,7 +46,7 @@ use tokio::sync::{broadcast, watch};
 
 mod dev;
 pub mod output;
-pub use dev::dev_trakt;
+pub use dev::{dev_segments, dev_trakt};
 pub use output::{Outgoing, Output, SendError};
 use tokio::task::JoinHandle;
 
@@ -970,9 +970,21 @@ impl Session {
                 });
             }
             Request::AckAnnouncements { id, ids } => {
+                let owner = owner_only(&core);
                 self.spawn(id, async move {
                     // After any round that is queueing more.
                     let _gate = core.sync_gate().await;
+                    // Joins and passkeys are the owner's to dismiss: another
+                    // profile sees them but cannot clear them unseen.
+                    if let Err(refused) = owner {
+                        let queued = mq_sync::queued_announcements(core.library());
+                        if queued
+                            .iter()
+                            .any(|a| a.kind.security() && ids.contains(&a.id))
+                        {
+                            return Err(refused);
+                        }
+                    }
                     answer(mq_sync::ack_announcements(core.library(), &ids).map(|()| json!({})))
                 });
             }

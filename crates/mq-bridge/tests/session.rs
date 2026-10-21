@@ -1036,6 +1036,29 @@ async fn passkeys_over_the_protocol() {
         .iter()
         .map(|a| a["id"].clone())
         .collect();
+    // A join is the owner's to dismiss: another profile sees it, and its OK
+    // is refused and clears nothing (B P3-2).
+    let made = json!({"id": 36, "op": "createProfile", "name": "Kid", "avatar": "fox:amber"});
+    let made = ask(&mut phone, &mut phone_rx, made).await;
+    let kid = made["result"]["profiles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["name"] == "Kid")
+        .unwrap()["id"]
+        .clone();
+    let to_kid = json!({"id": 37, "op": "switchProfile", "profile": kid});
+    assert_eq!(ask(&mut phone, &mut phone_rx, to_kid).await["ok"], true);
+    let ack = json!({"id": 38, "op": "ackAnnouncements", "ids": [ids[0]]});
+    assert_eq!(
+        ask(&mut phone, &mut phone_rx, ack).await["code"],
+        "notOwner"
+    );
+    let round = json!({"id": 39, "op": "syncNow", "record": record});
+    let seen = ask(&mut phone, &mut phone_rx, round).await;
+    assert_eq!(heard(&seen), two, "{seen}");
+    let back = json!({"id": 35, "op": "switchProfile", "profile": "default"});
+    assert_eq!(ask(&mut phone, &mut phone_rx, back).await["ok"], true);
     // OK on the first only: the second comes again.
     let ack = json!({"id": 41, "op": "ackAnnouncements", "ids": [ids[0]]});
     assert_eq!(
@@ -1335,5 +1358,98 @@ async fn sign_in_over_the_protocol() {
         Some(1),
         "{links}"
     );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A device that left the account can never sync its Trakt sign-out, so its
+/// flag stops counting on the devices still there (B P3-3): the last device
+/// of the account to sign out of Trakt ends the profile's use of it.
+#[tokio::test]
+async fn a_device_that_left_no_longer_counts_as_signed_in_to_trakt() {
+    use base64::Engine as _;
+    let dir = std::env::temp_dir().join(format!("mq-bridge-trakt-left-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let app = mq_sync_server::router(&dir.join("relay.sqlite"), Default::default()).unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+    let open = |name: &str, device: u64| {
+        let config = mq_runtime::CoreConfig {
+            data_dir: dir.join(name),
+            profile_id: "default".into(),
+            device_id: device,
+        };
+        let core = Core::open(config).unwrap();
+        let (tx, rx) = Output::channel();
+        (core.clone(), Session::over(core, tx, true), rx)
+    };
+    struct Peer {
+        session: Session,
+        rx: mpsc::UnboundedReceiver<Outgoing>,
+        id: u64,
+    }
+    impl Peer {
+        async fn ask(&mut self, mut request: Value) -> Value {
+            self.id += 1;
+            request["id"] = json!(self.id);
+            self.session.handle_text(&request.to_string()).await;
+            let reply = reply_to(&mut self.rx, self.id).await;
+            assert_eq!(reply["ok"], true, "{request} -> {reply}");
+            reply["result"].clone()
+        }
+        /// Rounds until the record settles, storing it like an app does.
+        async fn settle(&mut self, mut record: Value) -> Value {
+            loop {
+                let report = self.ask(json!({"op": "syncNow", "record": record})).await;
+                if !report["record"].is_null() {
+                    record = report["record"].clone();
+                }
+                if report["again"] != true {
+                    return record;
+                }
+            }
+        }
+    }
+    let (phone_core, session, rx) = open("phone", 11);
+    let mut phone = Peer { session, rx, id: 0 };
+    let (laptop_core, session, rx) = open("laptop", 22);
+    let mut laptop = Peer { session, rx, id: 0 };
+    let made = json!({"op": "createSyncAccount", "server": server, "name": "Phone"});
+    let record = phone.ask(made).await;
+    let prf = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([7u8; 32]);
+    let save = json!({"op": "savePasskey", "record": record, "prf": prf, "label": "x"});
+    let record = phone.ask(save).await["record"].clone();
+    let join = json!({"op": "recover", "server": server, "prf": prf, "name": "Laptop"});
+    let laptop_record = laptop.ask(join).await["record"].clone();
+
+    // Both signed in to Trakt on the owner profile, as `setTrakt` marks it.
+    for core in [&phone_core, &laptop_core] {
+        let flag = format!("trakt.device.{}", core.clock().device());
+        for key in [flag.as_str(), "trakt.account"] {
+            core.library()
+                .set_setting("default", key, "\"someone\"", core.clock())
+                .unwrap();
+        }
+    }
+    let laptop_record = laptop.settle(laptop_record).await;
+    let record = phone.settle(record).await;
+    // The laptop leaves still signed in: its flag stays in the account.
+    laptop
+        .ask(json!({"op": "signOut", "record": laptop_record}))
+        .await;
+    phone.settle(record).await;
+    phone.ask(json!({"op": "traktSignOut"})).await;
+    let account = phone_core
+        .library()
+        .settings("default")
+        .unwrap()
+        .into_iter()
+        .find_map(|(k, v)| (k == "trakt.account").then_some(v));
+    assert_eq!(
+        account.as_deref(),
+        Some("null"),
+        "no device of it is signed in"
+    );
+    drop((phone, laptop, phone_core, laptop_core));
     let _ = std::fs::remove_dir_all(&dir);
 }

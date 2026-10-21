@@ -30,6 +30,7 @@ async fn main() {
     .expect("open core");
     core.set_debrid_keys(&StoreId::keys_from_env());
     mq_bridge::dev_trakt(&core);
+    mq_bridge::dev_segments(&core);
     let mut app = Router::new().route("/ws", get(ws)).with_state(core);
     if let Ok(dir) = std::env::var("MQ_STATIC") {
         app = app.fallback_service(tower_http::services::ServeDir::new(dir));

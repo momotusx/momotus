@@ -32,6 +32,34 @@ pub fn dev_trakt(core: &Core) {
 #[cfg(not(debug_assertions))]
 pub fn dev_trakt(_: &Core) {}
 
+/// Development builds only, on the same rule: `MQ_DEV_SEGMENTS=<loopback
+/// base url>` asks a local fake for skip segments (TheIntroDB at
+/// `<base>/theintrodb`, IntroDB at `<base>/introdb`, AniSkip at
+/// `<base>/aniskip`, Kitsu at `<base>/kitsu`), so the web e2e plays a
+/// recorded answer and never waits on a live service.
+#[cfg(debug_assertions)]
+pub fn dev_segments(core: &Core) {
+    let Ok(url) = std::env::var("MQ_DEV_SEGMENTS") else {
+        return;
+    };
+    if !loopback_url(&url) {
+        tracing::warn!("MQ_DEV_SEGMENTS ignored: only an http URL on this machine is taken");
+        eprintln!("MQ_DEV_SEGMENTS ignored: only an http URL on this machine is taken");
+        return;
+    }
+    let base = url.trim_end_matches('/');
+    core.segments().set_hosts(mq_runtime::segments::Hosts {
+        theintrodb: format!("{base}/theintrodb"),
+        introdb: format!("{base}/introdb"),
+        aniskip: format!("{base}/aniskip"),
+        kitsu: format!("{base}/kitsu"),
+        local: true,
+    });
+}
+
+#[cfg(not(debug_assertions))]
+pub fn dev_segments(_: &Core) {}
+
 /// Development builds only, on the same rule: `MQ_DEV_CINEMETA=<loopback
 /// manifest url>` reads Find addons' two lists from a local fake (walks of
 /// the empty and filter-empty states, which the live lists never show).
