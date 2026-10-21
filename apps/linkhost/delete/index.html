@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <!-- Strict: this page's own files, and calls to the sync service only. _headers sends the same,
+         with frame-ancestors, which a meta tag cannot. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src {{RELAY_URL}}; base-uri 'none'; form-action 'none'"
+    />
+    <title>Delete your Marquee account</title>
+    <link rel="stylesheet" href="/linkhost.css" />
+    <script type="module" src="/delete/delete.js"></script>
+  </head>
+  <body>
+    <main>
+      <h1>Delete your Marquee account</h1>
+      <p>
+        Sign in with the account you use for Marquee. Deleting from this page takes 7 days, so a stolen sign-in cannot delete your library at once: until then, every
+        device in your account shows the request on Home with Cancel. To delete at once, use Account in the app.
+      </p>
+      <!-- One button per provider the sync service offers; remove the others. -->
+      <div class="acts">
+        <button type="button" data-provider="apple">Continue with Apple</button>
+        <button type="button" data-provider="google">Continue with Google</button>
+        <button type="button" data-provider="facebook">Continue with Facebook</button>
+      </div>
+      <p id="said" role="status"></p>
+      <div class="acts">
+        <button type="button" id="confirm" class="danger" hidden>Delete my account</button>
+      </div>
+    </main>
+  </body>
+</html>

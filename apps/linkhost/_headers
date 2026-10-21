@@ -1,0 +1,15 @@
+# Headers for hosts that read this file (Cloudflare Pages, Netlify); others set the same. Each page
+# has one policy of its own: two matching policies would both apply.
+/*
+  Referrer-Policy: no-referrer
+  X-Content-Type-Options: nosniff
+  Strict-Transport-Security: max-age=31536000
+
+/pair*
+  Content-Security-Policy: default-src 'none'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+
+/delete*
+  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src {{RELAY_URL}}; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+
+/.well-known/apple-app-site-association
+  Content-Type: application/json

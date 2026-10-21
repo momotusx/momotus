@@ -1,0 +1,13 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["{{APPLE_TEAM_ID}}.{{APPLE_BUNDLE_ID}}"],
+        "components": [{ "/": "/pair", "comment": "The pairing link opens the app's scanner; the fragment is never read" }]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["{{APPLE_TEAM_ID}}.{{APPLE_BUNDLE_ID}}"]
+  }
+}
