@@ -44,7 +44,8 @@ private let registered: Bool = {
     let out = FileManager.default.temporaryDirectory.appendingPathComponent("marquee-ratings")
     try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
     if let tiff = image?.tiffRepresentation, let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
-        try png.write(to: out.appendingPathComponent("chip-\(name).png"))
+        let scores = ratings.joined(separator: "-").replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "%", with: "")
+        try png.write(to: out.appendingPathComponent("chip-\(name)-\(scores).png"))
     }
     print(#"ratings-measure {"platform":"apple","form":"\#(name)","scores":"\#(ratings.joined(separator: " "))","chip":\#(size.width),"room":\#(room),"poster":\#(metrics.poster.width),"height":\#(size.height)}"#)
 }
@@ -57,12 +58,14 @@ private let registered: Bool = {
     try check("regular", .regular, stacked: false)
 }
 
-@MainActor @Test func aTVPosterHoldsTheWidestScores() throws {
-    // Side by side when the pair fits, else stacked; either way inside the poster.
-    let room = Metrics.tv.poster.width - 2 * Metrics.tv.chip * 0.55
-    let (size, _) = render(widest, .tv, width: room)
-    let (one, _) = render([widest[0]], .tv, width: room)
-    try check("tv", .tv, stacked: size.height > one.height * 1.5)
+@MainActor @Test func theWidestScoresStackOnATVPoster() throws {
+    // Side by side the pair would need more than the poster leaves at 20 pt.
+    try check("tv", .tv, stacked: true)
+}
+
+@MainActor @Test func usualScoresSitSideBySideOnATVPoster() throws {
+    try check("tv", .tv, stacked: false, ratings: ["IMDb 8.8", "RT 87%"])
+    try check("tv", .tv, stacked: false, ratings: ["IMDb 8.8", "RT 100%"])
 }
 
 @Test func voiceOverSaysTheNames() {
