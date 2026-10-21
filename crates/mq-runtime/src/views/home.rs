@@ -1053,8 +1053,11 @@ async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) 
 /// per refresh; with no engine running the data folder answers, so a launch
 /// starts none for it.
 async fn kept_here(core: &Core, item: &ContinueItem) -> bool {
+    // With a streaming account the service may take the title, as a
+    // Versions row says (round 2 N5): only the engine starts from here.
     #[cfg(feature = "torrent")]
     return item.duration_ms > 0
+        && core.debrid().is_none()
         && crate::views::playback::kept_start(core, &item.item_id, &item.video_id)
             .await
             .is_some();

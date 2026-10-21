@@ -289,7 +289,7 @@ impl SubtitleTrack {
         });
         let (marked, plain) = release
             .as_deref()
-            .map_or((false, String::new()), hearing_marks);
+            .map_or((false, String::new()), |r| hearing_marks(r, &language.tag));
         // Parsed once, for the name and the release match.
         let parsed = release
             .as_ref()
@@ -371,8 +371,10 @@ fn release_group(r: &mq_relparse::ParsedRelease) -> Option<&str> {
 /// "hi" or "HI" after a dash or a dot, or in brackets, with no language
 /// beside it: "EN-HI" and ".HI.TA" are Hindi), and the text without those
 /// marks, so the parser never takes "hi" for the group. A title word "Hi"
-/// is no mark.
-fn hearing_marks(text: &str) -> (bool, String) {
+/// is no mark. The track's own language before a lowercase ".hi" is the
+/// sidecar naming for the hard of hearing ("Movie.en.hi"), no Hindi: `own`
+/// is that language's tag.
+fn hearing_marks(text: &str, own: &str) -> (bool, String) {
     let (mut found, mut kept, mut last) = (false, String::new(), 0);
     let mut previous: Option<&str> = None;
     let mut chars = text.char_indices().peekable();
@@ -387,9 +389,16 @@ fn hearing_marks(text: &str) -> (bool, String) {
         }
         let (word, before) = (&text[start..end], text[..start].chars().next_back());
         let after = text[end..].chars().next();
-        // A language beside it makes "HI" Hindi ("EN-HI", ".HI.TA").
-        let language =
-            |w: Option<&str>| w.is_some_and(|w| w.len() <= 3 && crate::languages::is_known(w));
+        // A language beside it makes "HI" Hindi ("EN-HI", ".HI.TA"), but
+        // not the track's own one before a sidecar's ".hi".
+        let sidecar = word == "hi" && before == Some('.');
+        let language = |w: Option<&str>| {
+            w.is_some_and(|w| {
+                let own_one = crate::languages::primary(&crate::languages::language(w).tag)
+                    == crate::languages::primary(own);
+                w.len() <= 3 && crate::languages::is_known(w) && !(sidecar && own_one)
+            })
+        };
         let next = text[end..]
             .split(|c: char| !c.is_alphanumeric())
             .find(|w| !w.is_empty());
@@ -401,14 +410,15 @@ fn hearing_marks(text: &str) -> (bool, String) {
         previous = Some(word);
         if mark {
             found = true;
-            // The mark goes with the separator before it.
+            // The mark goes with the separator before it, and in brackets
+            // with the closing one.
             let cut = before.map_or(start, |b| start - b.len_utf8());
             kept.push_str(&text[last..cut.max(last)]);
-            last = end;
+            last = end + after.filter(|_| bracketed).map_or(0, char::len_utf8);
         }
     }
-    kept.push_str(&text[last..]);
-    (found, kept)
+    kept.push_str(&text[last.min(text.len())..]);
+    (found, kept.trim().to_owned())
 }
 
 /// What a subtitle says of the release it was made for (`fit::Made`),
@@ -2585,8 +2595,6 @@ enum Started<T> {
     Wrong(String),
 }
 
-/// A start that ended so says its swarm did not start: no Ready by the
-/// deadline, or a stall.
 #[cfg(test)]
 impl Sample {
     fn with_need(self, need: u64) -> Self {
@@ -2594,6 +2602,8 @@ impl Sample {
     }
 }
 
+/// A start that ended so says its swarm did not start: no Ready by the
+/// deadline, or a stall.
 #[cfg(any(test, feature = "torrent"))]
 fn not_started<T>(started: &Started<T>) -> bool {
     matches!(started, Started::Late { .. } | Started::Stalled { .. })
@@ -4489,8 +4499,19 @@ mod tests {
             "Film.2020-HI",
             "Film.2020.1080p.WEB-GRP [HI]",
             "Film.2020.hi.1080p.WEB-GRP",
+            // Round 2 N1: the sidecar naming, the track's own language first.
+            "Film.2020.1080p.WEB-GRP.en.hi",
         ] {
             assert!(track(marked).hearing_impaired, "{marked}");
+        }
+        // Round 2 N2: a bracketed mark goes with both its brackets, so the
+        // group survives in the name.
+        for marked in [
+            "Film.2020.1080p.WEB-GRP [HI]",
+            "Film.2020.1080p.WEB-GRP (SDH)",
+            "Film.2020.1080p.WEB-GRP.en.hi",
+        ] {
+            assert_eq!(track(marked).name, "GRP, WEB 1080p", "{marked}");
         }
         // Review P3-2: beside a language "HI" is Hindi; a title's "Hi" is
         // no mark.

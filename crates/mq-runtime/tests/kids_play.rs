@@ -922,6 +922,109 @@ async fn after_a_relaunch_the_folder_alone_says_on_this_device() {
         seen.iter().all(|c| c.ends_with(" \u{b7} On this device")),
         "{seen:?}"
     );
+    // Round 2 N5: with a streaming account the service may take it, as a
+    // Versions row says: no mark.
+    again.set_debrid_keys(&[(mq_runtime::StoreId::RealDebrid, "rd".into())]);
+    let another = mq_library::ProgressRow {
+        video_id: "tt8",
+        item_id: "tt8",
+        position_ms: 1_000,
+        duration_ms: 100_000,
+        updated_ms: 3,
+    };
+    again
+        .library()
+        .set_progress(again.profile(), another, &again.hlc())
+        .unwrap();
+    until("the mark gone with an account", || {
+        caption().as_deref() == Some("1 min left")
+    })
+    .await;
+}
+
+/// Round 2 N4: a resume of a torrent kept here starts from the device with
+/// the swarm gone: Ready from disk, at the saved share of the file.
+#[cfg(feature = "torrent")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_kept_resume_starts_from_the_device_with_the_swarm_gone() {
+    let s = support::swarm(true).await;
+    let film = s.movie.clone();
+    let data = tempfile::tempdir().unwrap();
+    let (core, engine, t, _fixture, _) = played_here(&s, data.path()).await;
+    until_async("the torrent let go", || async {
+        engine.remove(t, true).await.is_ok()
+    })
+    .await;
+    drop(s);
+    let found = candidates(&core, "movie", "tt1", "tt1").await;
+    let view = PlaybackView::open(&core, found, target("movie", "tt1", "tt1"));
+    let url = ready(&view).await;
+    assert_eq!(view.snapshot().resume_ms, Some(60_000));
+    let at = film.len() as u64 / 2;
+    let read = read_range(&url, at, 1 << 20).await;
+    assert!(
+        read == film[at as usize..at as usize + (1 << 20)],
+        "the resume point"
+    );
+}
+
+/// Round 2 N4: a resume waits for the head's blocking window as well as its
+/// own point: kept here with the head lost and the swarm gone, it never
+/// comes Ready from its point alone.
+#[cfg(feature = "torrent")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_resume_waits_for_the_head_as_well() {
+    let s = support::swarm(true).await;
+    let data = tempfile::tempdir().unwrap();
+    let (core, engine, t, _fixture, _) = played_here(&s, data.path()).await;
+    until_async("the torrent let go", || async {
+        engine.remove(t, true).await.is_ok()
+    })
+    .await;
+    let hash = s.info_hash.clone();
+    drop(s);
+    // The first 2 MiB (pieces 0 to 7, the head's blocking window among
+    // them) gone from the bitfield and the data; the resume point and the
+    // tail stay.
+    let dir = data.path().join("torrents");
+    let have = dir.join(format!("{hash}.have"));
+    let mut bits = std::fs::read(&have).unwrap();
+    bits[0] = 0;
+    std::fs::write(&have, bits).unwrap();
+    let film = walk(&dir.join(&hash))
+        .into_iter()
+        .find(|p| p.ends_with("movie.mkv"))
+        .unwrap();
+    let mut bytes = std::fs::read(&film).unwrap();
+    bytes[..1 << 20].fill(0);
+    std::fs::write(&film, bytes).unwrap();
+    let found = candidates(&core, "movie", "tt1", "tt1").await;
+    let view = PlaybackView::open(&core, found, target("movie", "tt1", "tt1"));
+    tokio::time::sleep(Duration::from_secs(5)).await;
+    let s = view.snapshot();
+    assert_eq!(
+        s.phase,
+        PlaybackPhase::Resolving,
+        "Ready with no head: {s:?}"
+    );
+}
+
+/// Every file under `dir`.
+#[cfg(feature = "torrent")]
+fn walk(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    std::fs::read_dir(dir).map_or(Vec::new(), |entries| {
+        entries
+            .flatten()
+            .flat_map(|e| {
+                let path = e.path();
+                if path.is_dir() {
+                    walk(&path)
+                } else {
+                    vec![path]
+                }
+            })
+            .collect()
+    })
 }
 
 /// Every `releaseInfo` of a tile `id` anywhere in `value`.
