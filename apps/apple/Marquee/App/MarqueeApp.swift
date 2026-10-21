@@ -59,10 +59,11 @@ struct MarqueeApp: App {
         return "\(core.generation)/\(profiles.snapshot?.active ?? "")"
     }
 
-    /// Which profile's Trakt runs: none while the picker shows, a new one for every core.
+    /// Which profile's Trakt runs: none while the picker shows, a new one for every
+    /// core and after the wipe (the same owner id, its view closed by the core).
     private var traktKey: String {
         guard profiles.open, let active = profiles.snapshot?.active else { return "" }
-        return "\(core.generation)/\(active)"
+        return "\(core.generation)/\(active)/\(profiles.epoch)"
     }
 
     var body: some Scene {

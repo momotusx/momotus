@@ -247,11 +247,26 @@ private func announcement(_ kind: String, member: String? = "m", by: String? = "
         var asked: [String] = []
         sync.ownerPrompt = { asked.append($0); return true }
 
+        let epoch = session.epoch
         try await wipe.removeHere(profiles: profiles, disconnectDebrid: false)
         #expect(asked == [SyncWords.authRemoveHere])
         #expect(gone == profiles)
         #expect(wipe.problem == nil)
         #expect(await eventually { session.snapshot?.profiles.map(\.id) == ["default"] && session.snapshot?.wipePending == nil })
+        // The screens are built again at once, first run first (AP4-F1): no relaunch.
+        #expect(await eventually { session.epoch == epoch + 1 && session.resumeOnboarding })
+        #expect(session.open)
+    }
+
+    @Test func aDeletedProfileDoesNotRebuildTheScreens() async throws {
+        let (_, session, core) = try await device()
+        try await session.perform("createProfile", ["name": "Kid", "avatar": ProfileRules.formatAvatar(glyph: "cat", color: "teal")])
+        let kid = try #require(await eventually { session.snapshot?.profiles.count == 2 } ? session.snapshot?.profiles.first { !$0.isOwner }?.id : nil)
+        let epoch = session.epoch
+        try await session.perform("deleteProfile", ["profile": kid])
+        #expect(await eventually { session.gone?.id == kid })
+        #expect(session.epoch == epoch && !session.resumeOnboarding)
+        withExtendedLifetime(core) {}
     }
 
     @Test func aStoppedRemovalIsHeldByTheCoreAndAResumeFinishesIt() async throws {

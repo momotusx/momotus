@@ -18,7 +18,8 @@ final class ProfileSession {
     private(set) var switching: String?
     /// Why the last switch failed; the picker that takes over shows it.
     private(set) var switchProblem: CoreError?
-    /// Bumped by every switch: the profile's screens are built again from nothing.
+    /// Bumped by every switch and by the device's wipe: the profile's screens
+    /// are built again from nothing.
     private(set) var epoch = 0
     /// A switch request is with the core: no second switch starts, and Cancel
     /// waits for its answer (the core may still commit it).
@@ -90,6 +91,13 @@ final class ProfileSession {
         // A removed profile's keystore entries go too (also for one removed before this session).
         trakt?.profileGone(id)
         gone = (id, (gone?.count ?? 0) + 1)
+        // The owner gone is the device's wipe (D13's removal; no other op removes
+        // the owner): the session goes on as the new owner with its views closed
+        // by the core, so the screens are built again and first run shows at once.
+        if id == (snapshot?.profiles.first(where: \.isOwner)?.id ?? "default") {
+            resumeOnboarding = true
+            epoch += 1
+        }
     }
 
     /// The root: the profile's screens appeared, or left.
