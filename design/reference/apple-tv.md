@@ -28,6 +28,7 @@ The owner asked for every v3 page, Settings included, to read as Apple level (se
 | UIKit focus | https://developer.apple.com/documentation/uikit/about-focus-interactions-for-apple-tv |
 | web | tv.apple.com computed style, read with `getComputedStyle` in the live page (storefront TR in English, signed out; `/us` redirects by location). Pixel values are CSS px at a 1440 px wide viewport unless a width is named |
 | web vars | tv.apple.com resolved CSS custom properties on `:root` in dark mode (581 variables) |
+| web r1 | an earlier pass on 2026-10-19: headless Chromium (Playwright 1.63.0), dark scheme, storefront "Türkiye (English)", signed out, 1440x900 and 1920x1080 at DPR 1; computed styles of the live DOM and the downloaded stylesheet; focus by keyboard modality plus `focus()`, so `:focus-visible` matched |
 | shot | a file in `apple-ref/` (listed at the end) |
 | iPhone | pending: see "iPhone TV app and iOS Settings" below |
 
@@ -58,6 +59,8 @@ HIG numbers are points (tvOS canvas 1920x1080 pt). Web numbers are CSS px; the w
 | Header over scrolled content | `--navigationScrollBackgroundColor` | #00000066 |
 | Modal sheet | `--appModalBackgroundColor` | #2D2D2D; sign-in sheet computed #1D1D1F |
 | Modal close button | `--modalCloseButtonBGColor` | #333336 (rollover #37373A, pressed #2F2F32) |
+| Modal scrim | `--modalScrimColor`; `dialog::backdrop` computed (web r1) | #0000008C, rgba(0,0,0,.55); the `dialog` itself #1F1F1F, radius 10, no shadow |
+| Award and "New" capsule | `div.badging-capsule` computed (web r1) | fill rgba(0,0,0,.8) inside a `linear-gradient(rgba(255,255,255,.5), rgba(255,255,255,.18))` rim, glow `0 0 12px rgba(255,255,255,.16)`, radius 8.5 for the rim and 7 for the fill; label 12/12, weight 600, primary text |
 | Sidebar active item | `--sidebarActiveItemBackgroundColor` | #EBEBF51A |
 | Segmented control | `--segmentedControlBG` / selected | #7676803D / #636366 |
 | Progress fill | `--progressBarFillColor` | #FFFFFF (white, not the key color) |
@@ -176,7 +179,7 @@ The web token scale (web vars, weight size/line height): `--large-title` 400 26/
 ### Title page (show and movie)
 
 - web: product header full bleed 16:9 (1440x810) over black. Layers from the bottom: the backdrop (or a muted background video with a 28 px mute control at the top right), then three scrims on the artwork container: `linear-gradient(80deg, rgba(0,0,0,.14), transparent 41%)`, `linear-gradient(0deg, rgba(0,0,0,.45) 0%, .36 5%, .27 9%, .18 16%, .09 22%, .02 29%, 0 36%)`, and a radial vignette `radial-gradient(100vmax at 66.7% 0%, 0 0%, .04 19%, .15 36%, .30 51%, ...)`; finally the page fades into #1F1F1F with `linear-gradient(to top, #1F1F1F, transparent)`. Shots: `web-show.png`, `web-movie.png`.
-- web, left column from the top at x 40: an award or schedule capsule (12/600 text, 20 px tall, gradient hairline `linear-gradient(rgba(255,255,255,.5), rgba(255,255,255,.18))`), the title as a logo image (F1: 141x81 px; never set text when a logo exists), the metadata line with a 23 px provider coin, two lines of synopsis with MORE, the secondary meta line with format badges, then the 40 px button row, which ends 75 px above the bottom of the hero.
+- web, left column from the top at x 40: an award or schedule capsule (12/600 text, 20 px tall, gradient hairline `linear-gradient(rgba(255,255,255,.5), rgba(255,255,255,.18))` around a black 80 percent fill; see "Award and New capsule" under Color), the title as a logo image (F1: 141x81 px; never set text when a logo exists), the metadata line with a 23 px provider coin, two lines of synopsis with MORE, the secondary meta line with format badges, then the 40 px button row, which ends 75 px above the bottom of the hero.
 - web, right column: "Starring" and "Director" lines right aligned at the bottom (13/400, label 64 percent, names 92 percent).
 - web, below: Season picker and episodes, Trailers, Related (posters), Cast and Crew (circles), How to Watch, then a lighter band (#2B2B2B, 12 px top padding) holding About (a 440x155 card, 10 percent white, radius 12, padding 14 16 16), and three columns Information, Languages, Accessibility (headings 17/700, terms 12/400). Shots: `web-show-s1.png` to `web-show-s3.png`, `web-movie-s1.png`.
 
@@ -238,6 +241,7 @@ Not captured: a still of the web player needs playback, and the iPhone walk is p
 - HIG lockups: posters hide title and subtitle until focused; caption buttons tilt in the direction of the swipe (up and down in a column, left and right in a row, both in a grid).
 - HIG materials and UIKit (`adjustsImageWhenAncestorFocused`): focused image views and buttons take on Liquid Glass on supported Apple TV models.
 - Apple publishes no number for the focus scale, shadow or timing; measuring them needs the tvOS simulator (busy with another agent's walk today) or an Apple TV. Open item.
+- web keyboard focus (web r1): every focusable element (posters, cards, people, buttons, links, the search field, Sign In) takes `box-shadow: 0 0 0 4px rgba(10,132,255,.6)` with `outline: none` and `outline-offset: 1px`, following the element's radius; the page dots instead take a 10 px outline in the same blue on the dot; focus also turns on the poster's hover scrim (`--lockupHoverBGColor` #3333334D, rgba(51,51,51,.3)) and its "..." button (`:focus-within`). The ring shows for keyboard focus only (`:focus-visible`).
 - web hover: lockups do not scale on hover in the web app; the only press feedback measured is `scale` over 0.1 s ease-in on buttons and the global `opacity .1s ease-in` transition (web vars `--global-transition`).
 
 ### Motion (observable)
