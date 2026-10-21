@@ -256,7 +256,7 @@ for (const form of Object.keys(FORMS) as Form[]) {
     for (const t of freshTitle) expect(t, JSON.stringify(t)).toMatchObject({ lines: 1, cut: false, inside: true });
     expect(Math.abs(freshTitle[1]!.middle - freshTitle[0]!.middle)).toBeLessThanOrEqual(1);
     await expect(page.locator(".info .meta span.rate .sr")).toHaveText(form === "tv" ? ["IMDb 10.0", "Rotten Tomatoes: Fresh"] : ["Rotten Tomatoes: Fresh"]);
-    await expect(page.locator(".facts div", { hasText: "Ratings from" })).toContainText("IMDb via MDBList, Rotten Tomatoes (the Rotten Tomatoes addon)");
+    await expect(page.locator(".facts div", { hasText: "Ratings from" })).toContainText("IMDb via MDBList, Rotten Tomatoes from the Rotten Tomatoes addon");
     measure(form, "title page, RT Fresh", freshTitle.map((t) => t.width));
 
     // Search: the meta line keeps every score whole.
