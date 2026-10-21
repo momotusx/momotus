@@ -4,7 +4,7 @@
 
 use crate::Core;
 use crate::live::{FRAME, ListDiff, coalesce};
-use crate::ratings::{Ratings, Scores, title_of};
+use crate::ratings::{Ratings, Scores, credit, title_of};
 use crate::views::playback::{aired, following};
 use eyeball::SharedObservable;
 use eyeball_im::ObservableVector;
@@ -45,6 +45,9 @@ pub struct TitleDetails {
     /// The title's IMDb page, for the IMDb score to link to; null for an id
     /// that is not IMDb's.
     pub imdb_url: Option<String>,
+    /// Who the scores come from, a "Ratings from" row beside "Details from"
+    /// ("IMDb and Rotten Tomatoes via MDBList"); null when MDBList gave none.
+    pub ratings_from: Option<String>,
     pub source: String,
     /// Trailers the metadata names (YouTube), first is the main one.
     pub trailers: Vec<Trailer>,
@@ -633,6 +636,7 @@ fn details(meta: &MetaItem, source: &str, scores: Option<&Scores>) -> TitleDetai
         ratings: Ratings::of(scores, links("imdb").first().map(String::as_str)),
         imdb_url: crate::segments::is_imdb(&p.id)
             .then(|| format!("https://www.imdb.com/title/{}/", p.id)),
+        ratings_from: credit(scores),
         source: source.to_owned(),
         trailers: p
             .trailer_streams

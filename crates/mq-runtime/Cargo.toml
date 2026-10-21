@@ -59,3 +59,5 @@ rusqlite = "0.40"
 # The engine's loopback swarm (tests/kids_play.rs, feature torrent).
 tempfile = "3"
 tokio = { workspace = true, features = ["test-util"] }
+# Captures the log lines of a test (tests/ratings.rs: the key never reaches one).
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt"] }

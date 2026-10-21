@@ -752,7 +752,8 @@ fn apply_catalog(
             }
             _ => Err("addon returned no catalog items".to_owned()),
         });
-    let titles = outcome.as_ref().map(ratings::titles).unwrap_or_default();
+    // Only the titles the row takes: an answer it refuses asks nothing.
+    let mut titles = Vec::new();
     update_row(rows, row_id, |row| {
         // A row shown again loads again. The first answer fills it; a later
         // success may still replace a failure (an older load that failed
@@ -764,6 +765,7 @@ fn apply_catalog(
         }
         match outcome {
             Ok(tiles) => {
+                titles = ratings::titles(&tiles);
                 row.tiles = tiles;
                 row.state = if row.tiles.is_empty() {
                     RowState::Empty

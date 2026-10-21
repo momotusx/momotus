@@ -47,6 +47,22 @@ pub fn set_dev_replay(base: &str) {
         Some(base.trim_end_matches('/').to_owned());
 }
 
+/// Whether requests to hosts off this machine go to the recorder
+/// (`set_dev_replay`); never in a shipped build.
+pub fn dev_replaying() -> bool {
+    #[cfg(debug_assertions)]
+    {
+        DEV_REPLAY
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some()
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        false
+    }
+}
+
 /// `url` as the recorder at `base` takes it; `None` for a host on this
 /// machine or the LAN, which is asked as it is.
 #[cfg_attr(not(any(debug_assertions, test)), allow(dead_code))]

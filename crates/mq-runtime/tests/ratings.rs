@@ -24,20 +24,39 @@ struct Call {
     ids: Vec<String>,
 }
 
-/// A status and its `Retry-After` seconds.
-type Refusal = (u16, Option<u64>);
+/// A refusal: its status, its `Retry-After` as sent, and the source it
+/// is limited to ("tomatoes"), else every call.
+#[derive(Clone, Copy)]
+struct Refusal {
+    status: u16,
+    retry: Option<&'static str>,
+    only: Option<&'static str>,
+}
 
 #[derive(Clone)]
 struct Fake {
     url: String,
     calls: Arc<Mutex<Vec<Call>>>,
-    /// While set, every call is refused with this status and `Retry-After`.
     refuse: Arc<Mutex<Option<Refusal>>>,
+    /// While set, every call is answered 200 with this body.
+    answer: Arc<Mutex<Option<&'static str>>>,
 }
 
 impl Fake {
     fn calls(&self) -> Vec<Call> {
         self.calls.lock().unwrap().clone()
+    }
+
+    fn refuse(&self, status: u16, retry: Option<&'static str>, only: Option<&'static str>) {
+        *self.refuse.lock().unwrap() = Some(Refusal {
+            status,
+            retry,
+            only,
+        });
+    }
+
+    fn accept(&self) {
+        *self.refuse.lock().unwrap() = None;
     }
 
     fn host(&self) -> Host {
@@ -88,6 +107,7 @@ async fn mdblist(scores: Value, delay: Duration) -> Fake {
         url: format!("http://{}", listener.local_addr().unwrap()),
         calls: Arc::default(),
         refuse: Arc::default(),
+        answer: Arc::default(),
     };
     let served = fake.clone();
     tokio::spawn(async move {
@@ -117,16 +137,25 @@ async fn mdblist(scores: Value, delay: Duration) -> Fake {
                     ids: ids.clone(),
                 });
                 tokio::time::sleep(delay).await;
-                let refused = *served.refuse.lock().unwrap();
-                let resp = match refused {
-                    Some((status, retry)) => {
+                let refused = served
+                    .refuse
+                    .lock()
+                    .unwrap()
+                    .filter(|r| r.only.is_none_or(|only| url.path().ends_with(only)));
+                let answer = *served.answer.lock().unwrap();
+                let resp = match (refused, answer) {
+                    (Some(Refusal { status, retry, .. }), _) => {
                         let retry =
                             retry.map_or(String::new(), |s| format!("Retry-After: {s}\r\n"));
                         format!(
                             "HTTP/1.1 {status} No\r\n{retry}Content-Length: 2\r\nConnection: close\r\n\r\n{{}}"
                         )
                     }
-                    None => {
+                    (None, Some(answer)) => format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{answer}",
+                        answer.len()
+                    ),
+                    (None, None) => {
                         let (kind, source) = url
                             .path()
                             .strip_prefix("/rating/")
@@ -261,7 +290,7 @@ async fn a_failed_call_keeps_rows_up_to_30_days_and_rests_mdblist() {
     core.ratings().set_host(fake.host());
     aged(&core, "tt1", Some(8.1), Some(90), 10 * DAY_MS);
     aged(&core, "tt2", Some(7.0), Some(50), 31 * DAY_MS);
-    *fake.refuse.lock().unwrap() = Some((503, None));
+    fake.refuse(503, None, None);
     let titles = vec![movie("tt1"), movie("tt2")];
 
     let known = core.ratings().lookup(&titles).await.expect("asked");
@@ -282,7 +311,7 @@ async fn a_failed_call_keeps_rows_up_to_30_days_and_rests_mdblist() {
         "the 10 day old row still shows, the 31 day old one does not"
     );
     // A 5xx without Retry-After rests MDBList: the next lookup sends nothing.
-    *fake.refuse.lock().unwrap() = None;
+    fake.accept();
     assert_eq!(core.ratings().lookup(&titles).await, None);
     assert_eq!(fake.calls().len(), 2);
     assert_eq!(core.ratings().known(&titles).len(), 1);
@@ -297,11 +326,11 @@ async fn retry_after_is_honoured_for_every_lookup() {
     )
     .await;
     core.ratings().set_host(fake.host());
-    *fake.refuse.lock().unwrap() = Some((429, Some(1)));
+    fake.refuse(429, Some("1"), None);
     let titles = vec![movie("tt1")];
     core.ratings().lookup(&titles).await;
     assert_eq!(fake.calls().len(), 2);
-    *fake.refuse.lock().unwrap() = None;
+    fake.accept();
     // Another title, another view: still nothing until Retry-After has passed.
     assert_eq!(core.ratings().lookup(&[movie("tt9")]).await, None);
     assert_eq!(fake.calls().len(), 2);
@@ -368,15 +397,40 @@ async fn without_a_key_mdblist_is_never_asked() {
 }
 
 #[tokio::test]
+async fn lookups_a_moment_apart_go_in_one_round() {
+    let core = Core::temporary("p").unwrap();
+    let fake = mdblist(json!({}), Duration::ZERO).await;
+    core.ratings().set_host(fake.host());
+    let mut tasks = Vec::new();
+    for id in ["tt1", "tt2", "tt3"] {
+        let core = core.clone();
+        tasks.push(tokio::spawn(async move {
+            core.ratings().lookup(&[movie(id)]).await
+        }));
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    for task in tasks {
+        task.await.unwrap();
+    }
+    let mut rounds: Vec<Vec<String>> = fake.calls().into_iter().map(|c| c.ids).collect();
+    rounds.sort();
+    assert_eq!(
+        rounds,
+        [vec!["tt1", "tt2", "tt3"], vec!["tt1", "tt2", "tt3"]],
+        "one IMDb call and one Tomatometer call for all three"
+    );
+}
+
+#[tokio::test]
 async fn titles_asked_for_during_a_round_go_together_in_the_next() {
     let core = Core::temporary("p").unwrap();
-    let fake = mdblist(json!({}), Duration::from_millis(300)).await;
+    let fake = mdblist(json!({}), Duration::from_millis(400)).await;
     core.ratings().set_host(fake.host());
     let first = {
         let core = core.clone();
         tokio::spawn(async move { core.ratings().lookup(&[movie("tt1")]).await })
     };
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
     let later: Vec<_> = ["tt2", "tt3"]
         .map(|id| {
             let core = core.clone();
@@ -398,6 +452,226 @@ async fn titles_asked_for_during_a_round_go_together_in_the_next() {
             vec!["tt2", "tt3"]
         ]
     );
+}
+
+#[tokio::test]
+async fn a_round_cancelled_half_way_loses_no_title() {
+    let core = Core::temporary("p").unwrap();
+    let fake = mdblist(
+        json!({"tt2": {"imdb": 7.2, "tomatoes": 72}}),
+        Duration::from_millis(400),
+    )
+    .await;
+    core.ratings().set_host(fake.host());
+    // Both queue within one gathering wait; the first takes both, then its view goes away.
+    let first = {
+        let core = core.clone();
+        tokio::spawn(async move { core.ratings().lookup(&[movie("tt1")]).await })
+    };
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    let second = {
+        let core = core.clone();
+        tokio::spawn(async move { core.ratings().lookup(&[movie("tt2")]).await })
+    };
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    first.abort();
+    let known = second.await.unwrap().expect("asked");
+    assert_eq!(known[&movie("tt2")].rt, Some(72));
+    let mut rounds: Vec<Vec<String>> = fake.calls().into_iter().map(|c| c.ids).collect();
+    rounds.sort();
+    assert_eq!(
+        rounds,
+        [
+            vec!["tt1", "tt2"],
+            vec!["tt1", "tt2"],
+            vec!["tt2"],
+            vec!["tt2"]
+        ]
+    );
+}
+
+#[tokio::test]
+async fn an_answer_of_another_shape_stores_nothing_and_rests_mdblist() {
+    for body in [
+        r#"{"error": "nope"}"#,
+        r#"{"ratings": null}"#,
+        r#"{"ratings": [{"imdb_id": "tt1", "rating": 87}]}"#,
+        r#"[{"id": "tt1", "rating": 87}]"#,
+    ] {
+        let core = Core::temporary("p").unwrap();
+        let fake = mdblist(json!({}), Duration::ZERO).await;
+        core.ratings().set_host(fake.host());
+        *fake.answer.lock().unwrap() = Some(body);
+        core.ratings().lookup(&[movie("tt1")]).await;
+        assert!(
+            core.library().ratings(&[movie("tt1")]).unwrap().is_empty(),
+            "{body}"
+        );
+        let left = core.ratings().rest_left().expect("resting");
+        assert!(left > Duration::from_secs(290), "{body}: {left:?}");
+        assert_eq!(core.ratings().lookup(&[movie("tt1")]).await, None, "{body}");
+        assert_eq!(fake.calls().len(), 2, "{body}");
+    }
+    // An empty array is an answer: the title has no score, and nothing rests.
+    let core = Core::temporary("p").unwrap();
+    let fake = mdblist(json!({}), Duration::ZERO).await;
+    core.ratings().set_host(fake.host());
+    *fake.answer.lock().unwrap() = Some(r#"{"ratings": []}"#);
+    core.ratings().lookup(&[movie("tt1")]).await.expect("asked");
+    let stored = core.library().ratings(&[movie("tt1")]).unwrap();
+    assert_eq!((stored[0].imdb, stored[0].rt), (None, None));
+    assert_eq!(core.ratings().rest_left(), None);
+}
+
+#[tokio::test]
+async fn the_imdb_answer_stays_when_only_the_tomatometer_call_fails() {
+    let core = Core::temporary("p").unwrap();
+    let fake = mdblist(
+        json!({"tt1": {"imdb": 8.8, "tomatoes": 99}, "tt2": {"imdb": 9.1, "tomatoes": 91}}),
+        Duration::ZERO,
+    )
+    .await;
+    core.ratings().set_host(fake.host());
+    aged(&core, "tt1", Some(7.0), Some(90), 4 * DAY_MS);
+    fake.refuse(503, None, Some("/tomatoes"));
+    let titles = vec![movie("tt1"), movie("tt2")];
+    let known = core.ratings().lookup(&titles).await.expect("asked");
+    // The new IMDb score, the Tomatometer the row had.
+    assert_eq!(
+        known[&movie("tt1")],
+        Scores {
+            imdb: Some(8.8),
+            rt: Some(90)
+        }
+    );
+    assert_eq!(
+        known[&movie("tt2")],
+        Scores {
+            imdb: Some(9.1),
+            rt: None
+        }
+    );
+    // Both are asked again once the rest is over.
+    assert!(core.ratings().rest_left().is_some());
+    core.ratings().set_host(fake.host());
+    fake.accept();
+    core.ratings().lookup(&titles).await.expect("asked again");
+    assert_eq!(
+        core.ratings().known(&titles)[&movie("tt1")],
+        Scores {
+            imdb: Some(8.8),
+            rt: Some(99)
+        }
+    );
+}
+
+#[tokio::test]
+async fn refusals_rest_for_as_long_as_they_say() {
+    // (status, Retry-After, the rest it gives, at least and at most)
+    let day = Duration::from_secs(86_400);
+    let cases: [(u16, Option<&'static str>, Duration, Duration); 6] = [
+        (401, None, day - Duration::from_secs(60), day),
+        (403, Some("10"), day - Duration::from_secs(60), day),
+        (
+            400,
+            None,
+            Duration::from_secs(290),
+            Duration::from_secs(300),
+        ),
+        (
+            429,
+            Some("0"),
+            Duration::from_millis(500),
+            Duration::from_secs(1),
+        ),
+        (
+            429,
+            Some("18446744073709551615"),
+            day - Duration::from_secs(60),
+            day,
+        ),
+        (
+            503,
+            Some("120"),
+            Duration::from_secs(110),
+            Duration::from_secs(120),
+        ),
+    ];
+    for (status, retry, least, most) in cases {
+        let core = Core::temporary("p").unwrap();
+        let fake = mdblist(json!({}), Duration::ZERO).await;
+        core.ratings().set_host(fake.host());
+        fake.refuse(status, retry, None);
+        core.ratings().lookup(&[movie("tt1")]).await;
+        let left = core.ratings().rest_left().expect("resting");
+        assert!(
+            left >= least && left <= most,
+            "{status} {retry:?}: rests {left:?}"
+        );
+        assert_eq!(core.ratings().lookup(&[movie("tt2")]).await, None);
+        assert_eq!(fake.calls().len(), 2, "{status} {retry:?}");
+    }
+}
+
+/// Every log line of the test's thread, at every level.
+#[derive(Clone, Default)]
+struct Logs(Arc<Mutex<Vec<u8>>>);
+
+impl std::io::Write for Logs {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(buf);
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[tokio::test]
+async fn the_key_never_reaches_a_log() {
+    let logs = Logs::default();
+    let writer = logs.clone();
+    let subscriber = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::TRACE)
+        .with_writer(move || writer.clone())
+        .finish();
+    // With only one dispatcher alive, tracing decides a log site's interest
+    // on the thread that first reaches it, and another test's thread has none:
+    // a second dispatcher makes every site ask all of them.
+    let _second = tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default());
+    let _guard = tracing::subscriber::set_default(subscriber);
+    let core = Core::temporary("p").unwrap();
+    let fake = mdblist(
+        json!({"tt1": {"imdb": 8.8, "tomatoes": 87}}),
+        Duration::ZERO,
+    )
+    .await;
+    let key = "SECRET-mdblist-key-7f3a";
+    let host = Host {
+        key: Some(key.into()),
+        ..fake.host()
+    };
+    core.ratings().set_host(host.clone());
+    core.ratings().lookup(&[movie("tt1")]).await.expect("asked");
+    fake.refuse(401, None, None);
+    core.ratings().lookup(&[movie("tt2")]).await;
+    // A host that does not answer at all.
+    core.ratings().set_host(Host {
+        url: "http://127.0.0.1:9".into(),
+        ..host
+    });
+    core.ratings().lookup(&[movie("tt3")]).await;
+    let text = String::from_utf8(logs.0.lock().unwrap().clone()).unwrap();
+    assert!(text.contains("MDBList refused the key (401)"), "{text}");
+    assert!(
+        text.contains("MDBList imdb lookup failed")
+            || text.contains("MDBList tomatoes lookup failed"),
+        "{text}"
+    );
+    assert!(!text.contains(key), "{text}");
+    // One warning a rest, though both calls of the round failed.
+    assert_eq!(text.matches("no ratings lookups").count(), 2, "{text}");
+    assert!(fake.calls().iter().all(|c| c.key.as_deref() == Some(key)));
 }
 
 /// A movie addon with a catalog, a search catalog and metas.
@@ -545,6 +819,21 @@ async fn the_title_page_shows_both_scores_and_links_to_imdb() {
     assert_eq!(json["ratings"], pair(Some("9.2"), Some("89%")));
     assert_eq!(json["rating"], "9.3");
     assert_eq!(json["imdbUrl"], "https://www.imdb.com/title/tt0111161/");
+    assert_eq!(json["ratingsFrom"], "IMDb and Rotten Tomatoes via MDBList");
+
+    // No score from MDBList: no credit line; the addon's IMDb score still shows.
+    let core = Core::temporary("p").unwrap();
+    core.library()
+        .set_addons("p", &[addon().await], &core.hlc())
+        .unwrap();
+    let view = TitleView::open(&core, "movie", "tt0111161");
+    until("the title page without MDBList", || {
+        view.snapshot().header.details.is_some()
+    })
+    .await;
+    let json = serde_json::to_value(view.snapshot().header.details.unwrap()).unwrap();
+    assert_eq!(json["ratings"], pair(Some("9.3"), None));
+    assert_eq!(json["ratingsFrom"], Value::Null);
 }
 
 #[tokio::test]

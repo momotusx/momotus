@@ -36,6 +36,9 @@ const KEPT_MS: i64 = 30 * DAY_MS;
 const REST: Duration = Duration::from_secs(300);
 const MAX_REST: Duration = Duration::from_secs(86_400);
 const TIMEOUT: Duration = Duration::from_secs(6);
+/// A lookup waits this long before its round, so the catalogs of a Home
+/// that answer one by one go to MDBList together.
+const GATHER: Duration = Duration::from_millis(200);
 
 const fn given(value: Option<&'static str>) -> Option<&'static str> {
     match value {
@@ -101,6 +104,14 @@ fn rt_ok(v: i64) -> bool {
     (0..=100).contains(&v)
 }
 
+/// The words that credit the scores on a title page ("Ratings from"), when
+/// MDBList gave one of them.
+pub(crate) fn credit(scores: Option<&Scores>) -> Option<String> {
+    let s = scores?;
+    (s.imdb.is_some_and(imdb_ok) || s.rt.is_some_and(rt_ok))
+        .then(|| "IMDb and Rotten Tomatoes via MDBList".to_owned())
+}
+
 /// The title MDBList is asked about for a tile's kind and id: movies and
 /// series with an IMDb id. Nothing else is asked (`kitsu:` ids, channels).
 pub(crate) fn title_of(kind: &str, id: &str) -> Option<Title> {
@@ -144,7 +155,7 @@ pub(crate) fn apply<'a>(
 }
 
 /// Where MDBList answers and with which key; tests point it at a local fake.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Host {
     pub url: String,
     pub key: Option<String>,
@@ -156,9 +167,23 @@ impl Default for Host {
     fn default() -> Self {
         Self {
             url: HOST.into(),
-            key: KEY.map(str::to_owned),
+            key: KEY
+                .map(str::trim)
+                .filter(|k| !k.is_empty())
+                .map(str::to_owned),
             local: false,
         }
+    }
+}
+
+/// Never prints the key.
+impl std::fmt::Debug for Host {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Host")
+            .field("url", &self.url)
+            .field("key", &self.key.as_ref().map(|_| "<set>"))
+            .field("local", &self.local)
+            .finish()
     }
 }
 
@@ -223,11 +248,17 @@ impl Finder {
     pub async fn lookup(&self, titles: &[Title]) -> Option<HashMap<Title, Scores>> {
         let host = lock(&self.host).clone();
         let key = host.key.clone()?;
+        // A development build whose requests go to the e2e recorder: the
+        // recorder would keep the key on disk and spend the shared quota.
+        if !host.local && mq_http::dev_replaying() {
+            return None;
+        }
         let mine = self.due(titles, now_ms());
         if mine.is_empty() || self.resting() {
             return None;
         }
         lock(&self.queue).extend(mine.iter().cloned());
+        tokio::time::sleep(GATHER).await;
         {
             let _round = self.round.lock().await;
             let mut batch = std::mem::take(&mut *lock(&self.queue));
@@ -266,10 +297,17 @@ impl Finder {
     }
 
     /// One round: per kind, `BATCH` ids a call, an IMDb call and a
-    /// Tomatometer call for each batch. A batch is stored only when both
-    /// answered; a failure rests MDBList and ends the round.
+    /// Tomatometer call for each batch. A failure rests MDBList and ends the
+    /// round; when only one of the two calls failed, the other's scores are
+    /// stored, the failed source keeps what the row had, and the row stays
+    /// due, so it is asked again once the rest is over.
     async fn ask(&self, host: &Host, key: &str, titles: Vec<Title>) {
         let removals = self.library.removals();
+        let had: HashMap<Title, RatingRow> = self
+            .rows(&titles)
+            .into_iter()
+            .map(|r| ((r.kind.clone(), r.imdb_id.clone()), r))
+            .collect();
         let mut by_kind: BTreeMap<String, Vec<String>> = BTreeMap::new();
         for (kind, id) in titles {
             by_kind.entry(kind).or_default().push(id);
@@ -283,22 +321,43 @@ impl Finder {
                     self.call(host, key, &kind, "imdb", batch),
                     self.call(host, key, &kind, "tomatoes", batch)
                 );
-                let (Some(imdb), Some(rt)) = (imdb, rt) else {
+                if imdb.is_none() && rt.is_none() {
                     return;
-                };
+                }
+                let partial = imdb.is_none() || rt.is_none();
                 let now = now_ms();
                 let rows: Vec<RatingRow> = batch
                     .iter()
-                    .map(|id| RatingRow {
-                        imdb_id: id.clone(),
-                        kind: kind.clone(),
-                        imdb: imdb.get(id).copied().filter(|v| imdb_ok(*v)),
-                        rt: rt.get(id).map(|v| v.round() as i64).filter(|v| rt_ok(*v)),
-                        fetched_ms: now,
+                    .map(|id| {
+                        let was = had.get(&(kind.clone(), id.clone()));
+                        RatingRow {
+                            imdb_id: id.clone(),
+                            kind: kind.clone(),
+                            imdb: match &imdb {
+                                Some(found) => found.get(id).copied().filter(|v| imdb_ok(*v)),
+                                None => was.and_then(|w| w.imdb),
+                            },
+                            rt: match &rt {
+                                Some(found) => found
+                                    .get(id)
+                                    .map(|v| v.round() as i64)
+                                    .filter(|v| rt_ok(*v)),
+                                None => was.and_then(|w| w.rt),
+                            },
+                            // At least 3 days old: due, and still shown.
+                            fetched_ms: if partial {
+                                was.map_or(now - FRESH_MS, |w| w.fetched_ms.max(now - FRESH_MS))
+                            } else {
+                                now
+                            },
+                        }
                     })
                     .collect();
                 if let Err(e) = self.library.put_ratings(&rows, now - KEPT_MS, removals) {
                     tracing::warn!("ratings not stored: {e}");
+                }
+                if partial {
+                    return;
                 }
             }
         }
@@ -328,33 +387,35 @@ impl Finder {
         };
         let body = serde_json::json!({"provider": "imdb", "ids": ids});
         // Logs name the status or the error's kind only: the URL holds the key.
-        let failed = match self.http.post_json(url.as_str(), &body, &opts).await {
+        let (wait, why) = match self.http.post_json(url.as_str(), &body, &opts).await {
             Ok(response) => {
                 if let Some(left) = response.header("x-ratelimit-remaining") {
                     tracing::debug!(left, "MDBList reads left today");
                 }
-                match response.json::<Value>() {
-                    Ok(body) => return Some(scored(&body)),
-                    Err(_) => {
-                        tracing::debug!("MDBList {source} lookup unreadable");
-                        REST
-                    }
+                match response.json::<Value>().ok().as_ref().and_then(scored) {
+                    Some(scores) => return Some(scores),
+                    None => (
+                        REST,
+                        format!("sent a {source} answer this core cannot read"),
+                    ),
                 }
             }
+            // A key that is revoked or refused stays so: once a day is enough.
+            Err(HttpError::Status {
+                status: status @ (401 | 403),
+                ..
+            }) => (MAX_REST, format!("refused the key ({status})")),
             Err(HttpError::Status {
                 status,
                 retry_after,
                 ..
-            }) => {
-                tracing::debug!(status, "MDBList {source} lookup refused");
-                retry_after.unwrap_or(REST)
-            }
-            Err(e) => {
-                tracing::debug!("MDBList {source} lookup failed: {}", e.kind());
-                REST
-            }
+            }) => (
+                retry_after.map_or(REST, |r| r.max(Duration::from_secs(1))),
+                format!("refused the {source} lookup ({status})"),
+            ),
+            Err(e) => (REST, format!("{source} lookup failed ({})", e.kind())),
         };
-        self.rest(failed.min(MAX_REST));
+        self.rest(wait.min(MAX_REST), &why);
         None
     }
 
@@ -362,29 +423,52 @@ impl Finder {
         lock(&self.resting).is_some_and(|until| Instant::now() < until)
     }
 
-    fn rest(&self, wait: Duration) {
+    /// Tests: how long MDBList still rests.
+    #[doc(hidden)]
+    pub fn rest_left(&self) -> Option<Duration> {
+        let until = (*lock(&self.resting))?;
+        until.checked_duration_since(Instant::now())
+    }
+
+    /// Rests MDBList for `wait`; the warning goes out once, when a rest starts.
+    fn rest(&self, wait: Duration, why: &str) {
         let Some(until) = Instant::now().checked_add(wait) else {
             return;
         };
         let mut resting = lock(&self.resting);
+        let started = resting.is_none_or(|old| old <= Instant::now());
         *resting = Some(resting.map_or(until, |old| old.max(until)));
+        if started {
+            tracing::warn!("MDBList {why}: no ratings lookups for {} s", wait.as_secs());
+        }
     }
 }
 
-/// Asked again: older than 3 days, or than 1 day without a Tomatometer.
+/// Asked again: older than 3 days, or than 1 day without a Tomatometer, or
+/// dated ahead of this device's clock.
 fn stale(row: &RatingRow, now: i64) -> bool {
     let age = now - row.fetched_ms;
-    age >= FRESH_MS || (row.rt.is_none() && age >= FRESH_WITHOUT_RT_MS)
+    !(0..FRESH_MS).contains(&age) || (row.rt.is_none() && age >= FRESH_WITHOUT_RT_MS)
 }
 
 /// `{"ratings": [{"id": "tt…", "rating": 87}, …]}`: the ids with a number.
-fn scored(body: &Value) -> HashMap<String, f64> {
-    body["ratings"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|r| Some((r["id"].as_str()?.to_owned(), r["rating"].as_f64()?)))
-        .collect()
+/// `None` for another shape: no `ratings` array, or items none of which has
+/// a readable `id` (an empty array is an answer).
+fn scored(body: &Value) -> Option<HashMap<String, f64>> {
+    let items = body.get("ratings")?.as_array()?;
+    let named: Vec<(&str, &Value)> = items
+        .iter()
+        .filter_map(|r| Some((r.get("id")?.as_str()?, r)))
+        .collect();
+    if named.is_empty() && !items.is_empty() {
+        return None;
+    }
+    Some(
+        named
+            .into_iter()
+            .filter_map(|(id, r)| Some((id.to_owned(), r.get("rating")?.as_f64()?)))
+            .collect(),
+    )
 }
 
 fn now_ms() -> i64 {
@@ -470,6 +554,8 @@ mod tests {
         assert!(stale(&row(Some(87), 3 * DAY_MS), now));
         assert!(!stale(&row(None, DAY_MS - 1), now));
         assert!(stale(&row(None, DAY_MS), now));
+        // Dated ahead of this clock: asked again, never kept forever.
+        assert!(stale(&row(Some(87), -60_000), now));
     }
 
     #[test]
@@ -477,7 +563,33 @@ mod tests {
         let body = serde_json::json!({"provider_id": "imdb", "provider_rating": "tomatoes",
             "mediatype": "movie", "ratings": [{"id": "tt1", "rating": 87}, {"id": "tt2", "rating": null},
             {"id": "tt3"}, {"rating": 50}]});
-        assert_eq!(scored(&body), HashMap::from([("tt1".to_owned(), 87.0)]));
-        assert!(scored(&serde_json::json!({"ratings": null})).is_empty());
+        assert_eq!(
+            scored(&body),
+            Some(HashMap::from([("tt1".to_owned(), 87.0)]))
+        );
+        // An empty array is an answer; anything else of another shape is not.
+        assert_eq!(
+            scored(&serde_json::json!({"ratings": []})),
+            Some(HashMap::new())
+        );
+        for other in [
+            serde_json::json!({"ratings": null}),
+            serde_json::json!({}),
+            serde_json::json!([{"id": "tt1", "rating": 87}]),
+            serde_json::json!({"ratings": [{"imdb_id": "tt1", "rating": 87}]}),
+            serde_json::json!({"ratings": [{"id": 1375666, "rating": 87}]}),
+        ] {
+            assert_eq!(scored(&other), None, "{other}");
+        }
+    }
+
+    #[test]
+    fn the_key_never_prints() {
+        let host = Host {
+            url: "https://api.mdblist.com".into(),
+            key: Some("SECRET-KEY-1234".into()),
+            local: false,
+        };
+        assert!(!format!("{host:?}").contains("SECRET"));
     }
 }

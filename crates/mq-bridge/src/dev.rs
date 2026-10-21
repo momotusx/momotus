@@ -60,6 +60,29 @@ pub fn dev_segments(core: &Core) {
 #[cfg(not(debug_assertions))]
 pub fn dev_segments(_: &Core) {}
 
+/// Development builds only, on the same rule: `MQ_DEV_MDBLIST=<loopback base
+/// url>` asks a local fake for IMDb and Rotten Tomatoes scores with a test
+/// key, so the web e2e shows the ratings row without the project's key.
+#[cfg(debug_assertions)]
+pub fn dev_ratings(core: &Core) {
+    let Ok(url) = std::env::var("MQ_DEV_MDBLIST") else {
+        return;
+    };
+    if !loopback_url(&url) {
+        tracing::warn!("MQ_DEV_MDBLIST ignored: only an http URL on this machine is taken");
+        eprintln!("MQ_DEV_MDBLIST ignored: only an http URL on this machine is taken");
+        return;
+    }
+    core.ratings().set_host(mq_runtime::ratings::Host {
+        url: url.trim_end_matches('/').to_owned(),
+        key: Some("marquee-dev".into()),
+        local: true,
+    });
+}
+
+#[cfg(not(debug_assertions))]
+pub fn dev_ratings(_: &Core) {}
+
 /// Development builds only, on the same rule: `MQ_DEV_REPLAY=<loopback base
 /// url>` sends every request the core makes to a host off this machine
 /// (addons, subtitles, any source) to a local recorder, as
