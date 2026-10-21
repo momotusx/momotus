@@ -39,6 +39,7 @@ import {
   lostDrop,
   lostRows,
   mayDeleteAccount,
+  mayMakeKit,
   memberName,
   sortMembers,
   sponsorName,
@@ -481,12 +482,16 @@ function Joined() {
             fallback={
               <>
                 <ElsewhereRow fkey="sync:add" icon={<QrCode aria-hidden />} title={w.addTitle} text={w.tvAdd} />
-                <ElsewhereRow fkey="sync:kit" icon={<KeyRound aria-hidden />} title={w.kitTitle} text={w.tvKit} />
+                <Show when={mayMakeKit(profiles())}>
+                  <ElsewhereRow fkey="sync:kit" icon={<KeyRound aria-hidden />} title={w.kitTitle} text={w.tvKit} />
+                </Show>
               </>
             }
           >
             <LinkRow href="/sync/add" fkey="sync:add" icon={<QrCode aria-hidden />} title={w.addTitle} text={w.addText} />
-            <LinkRow href="/sync/kit" fkey="sync:kit" icon={<KeyRound aria-hidden />} title={w.kitTitle} text={w.kitText} />
+            <Show when={mayMakeKit(profiles())}>
+              <LinkRow href="/sync/kit" fkey="sync:kit" icon={<KeyRound aria-hidden />} title={w.kitTitle} text={w.kitText} />
+            </Show>
           </Show>
         </div>
       </section>
@@ -757,7 +762,7 @@ function JoinForm(props: { kit: boolean }) {
       sync.rememberJoin(s, n);
       setExtra("");
       // A new account makes its kit next: without one, losing this device loses the account.
-      navigate(props.kit || tv() ? "/sync" : "/sync/kit?first=1", { replace: true });
+      navigate(props.kit || tv() || !mayMakeKit(profiles()) ? "/sync" : "/sync/kit?first=1", { replace: true });
     } catch (err) {
       setError(say(err, props.kit ? "recover" : "start"));
       setBusy(false);

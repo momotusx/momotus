@@ -4,4 +4,9 @@ import type { MemberInfo } from "./MemberInfo";
 /**
  * The account's members, after catching up.
  */
-export type Devices = { members: Array<MemberInfo>, fingerprint: string, epoch: number, rotationPending: boolean, record: Record<string, unknown> | null, };
+export type Devices = { members: Array<MemberInfo>, fingerprint: string, epoch: number, rotationPending: boolean, 
+/**
+ * The account id, base64url without padding: a saved passkey's
+ * `user.id` (3.1), as WebAuthn and Credential Manager take it.
+ */
+account: string, record: Record<string, unknown> | null, };

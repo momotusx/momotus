@@ -4,8 +4,14 @@ import type { MemberInfo } from "../core/generated/MemberInfo";
 import type { ProfilesSnapshot } from "../core/generated/ProfilesSnapshot";
 import { syncWords as w } from "./words";
 
+const onOwner = (s: ProfilesSnapshot | null | undefined) => s?.profiles.find((p) => p.id === s.active)?.isOwner === true;
+
 /** Delete account shows on the owner profile only: the account holds every profile (D15). */
-export const mayDeleteAccount = (s: ProfilesSnapshot | null | undefined) => s?.profiles.find((p) => p.id === s.active)?.isOwner === true;
+export const mayDeleteAccount = onOwner;
+
+/** Make a recovery kit (and, later, Save a passkey) shows on the owner profile only: a kit is a
+ * portable copy of the whole account key (D17). */
+export const mayMakeKit = onOwner;
 
 /** The keystore record (`SyncConfig`): opaque to the app but for its revision. */
 export type SyncRecord = Record<string, unknown>;

@@ -24,7 +24,8 @@ passkeyJoined: Array<string>,
  */
 kits: Array<string>, 
 /**
- * The kits each of `devices` made: they stay with a device the user
- * unticks, and go with it otherwise.
+ * The recovery kits each of `devices` made: they stay with a device
+ * the user unticks, and go with it otherwise. Passkey kits go whatever
+ * is unticked.
  */
 deviceKits: Array<DeviceKits>, };

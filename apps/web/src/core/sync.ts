@@ -264,7 +264,8 @@ async function start(request: () => Promise<SyncRecord>, recoveredWithKit: boole
 export const createAccount = (server: string, name: string, invite: string) =>
   start(() => op<SyncRecord>("createSyncAccount", { server, name, ...(invite ? { invite } : {}) }), false);
 
-export const recover = (server: string, kit: string, name: string) => start(() => op<SyncRecord>("recover", { server, kit, name }), true);
+export const recover = (server: string, kit: string, name: string) =>
+  start(async () => (await op<{ record: SyncRecord; via: "kit" | "passkey" }>("recover", { server, kit, name })).record, true);
 
 /** Pairing may start here: no account syncs, waits to be unlocked or is being started, and the link is private. Ask after `vaultReady`. */
 export const mayPair = () => !record && !locked() && !slot && privateLink;

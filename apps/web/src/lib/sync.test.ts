@@ -12,6 +12,7 @@ import {
   lostDrop,
   lostRows,
   mayDeleteAccount,
+  mayMakeKit,
   memberName,
   sortMembers,
   sponsorName,
@@ -58,6 +59,10 @@ test("Delete account shows on the owner profile only", () => {
   // Before the profiles arrive, or for a profile that is gone: not shown.
   expect(mayDeleteAccount(null)).toBe(false);
   expect(mayDeleteAccount(snapshot("nobody"))).toBe(false);
+  // A kit is a copy of the whole account key: the owner's too (D17).
+  expect(mayMakeKit(snapshot("default"))).toBe(true);
+  expect(mayMakeKit(snapshot("kid"))).toBe(false);
+  expect(mayMakeKit(null)).toBe(false);
 });
 
 test("the record with the highest revision is kept", () => {
