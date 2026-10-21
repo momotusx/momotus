@@ -594,16 +594,18 @@ async fn the_defaults_step_counts_what_it_named_and_a_new_or_kids_profile_gets_n
     assert_eq!(core.library().addon_list_hlc(OWNER).unwrap(), None);
     assert!(core.addons_fresh());
 
-    // The step named all nine; one removed later does not come back.
+    // The step named all nine; ones removed later do not come back.
     core.install_defaults(&switches(&[])).unwrap();
     core.remove_addon(&url("kitsu")).unwrap();
+    core.remove_addon(&url("rottentomatoes")).unwrap();
     core.set_pin(OWNER, Some("7351"), None).await.unwrap();
     let kid = core.create_kids_profile("Kid", "fox").unwrap();
     // A kids profile reads the owner's list: one of its own (a profile
     // made a kid later) is left as it is.
     list_of(&core, &kid, &OLD_SIX, &[]);
-    // A new profile copies the owner's list and what it was given, so the
-    // default the owner removed is not given to the copy.
+    // A new profile copies the owner's list and what it was given, so a
+    // default the owner removed (Rotten Tomatoes too, one a list from
+    // before would get) is not given to the copy.
     core.create_profile("Sam", "owl").unwrap();
     let sam = core
         .library()
@@ -615,32 +617,32 @@ async fn the_defaults_step_counts_what_it_named_and_a_new_or_kids_profile_gets_n
         .id;
     drop(core);
     let core = device.start();
-    let has_kitsu = |profile: &str| {
+    let has = |profile: &str, key: &str| {
         core.library()
             .addons(profile)
             .unwrap()
             .iter()
-            .any(|r| r.transport_url == url("kitsu"))
+            .any(|r| r.transport_url == url(key))
     };
     let count = |profile: &str| core.library().addons(profile).unwrap().len();
-    assert!(!has_kitsu(OWNER));
+    assert!(!has(OWNER, "kitsu") && !has(OWNER, "rottentomatoes"));
     assert_eq!(count(&kid), 6);
-    assert_eq!((count(&sam), has_kitsu(&sam)), (8, false));
+    assert_eq!(count(&sam), 7);
+    assert!(!has(&sam, "kitsu") && !has(&sam, "rottentomatoes"));
 
-    // A kids profile made standard copies the same: still no Kitsu.
+    // A kids profile made standard copies the same.
     core.make_standard(&kid).unwrap();
     drop(core);
     let core = device.start();
-    let count = |profile: &str| core.library().addons(profile).unwrap().len();
-    assert_eq!(count(&kid), 8);
-    assert!(
-        !core
-            .library()
-            .addons(&kid)
+    let has = |profile: &str, key: &str| {
+        core.library()
+            .addons(profile)
             .unwrap()
             .iter()
-            .any(|r| r.transport_url == url("kitsu"))
-    );
+            .any(|r| r.transport_url == url(key))
+    };
+    assert_eq!(core.library().addons(&kid).unwrap().len(), 7);
+    assert!(!has(&kid, "kitsu") && !has(&kid, "rottentomatoes"));
 }
 
 #[tokio::test]
