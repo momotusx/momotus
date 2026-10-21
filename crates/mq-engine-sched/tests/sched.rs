@@ -1293,22 +1293,20 @@ fn urgent_fetches_stop_one_blocking_span_past_the_budget() {
         open_cap: 64 * MIB,
         ..window(0)
     }));
-    for piece in 2..18 {
+    for piece in 2..19 {
         h.send(Event::PieceVerified { piece });
     }
     h.peer(1, 10 * MIB);
     // Three seeks, nothing evicted between them: each wants a blocking
-    // piece and two critical ones.
+    // piece and two critical ones, and the last blocking piece passes the
+    // budget.
     for (demand, at) in [(1, 4 * MIB), (2, 8 * MIB), (3, 12 * MIB)] {
         open(&mut h, demand, 0, at, None);
     }
     // The ceiling: the budget, plus a blocking span (64 KiB rounded out,
     // and a piece) for blocking pieces only.
-    assert!(
-        h.s.held_bytes() <= 22 * P,
-        "{} pieces",
-        h.s.held_bytes() / P
-    );
+    let held = h.s.held_bytes() / P;
+    assert!(held > 20 && held <= 22, "{held} pieces");
     let started: BTreeSet<PieceIdx> = h.out.iter().map(|&(b, _)| h.geo.piece_of(b)).collect();
     assert!(
         !started.contains(&193),
