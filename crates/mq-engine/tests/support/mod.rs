@@ -248,8 +248,10 @@ async fn swarm_of(
     }
 }
 
+/// The seeder's check of its data: up to a minute, since a test binary's
+/// swarms hash at once and a loaded machine slows a debug build's SHA-1.
 async fn wait_complete(engine: &Engine, t: TorrentHandle) {
-    for _ in 0..200 {
+    for _ in 0..1200 {
         let s = engine.stats(t).await.unwrap();
         if s.pieces_total > 0 && s.pieces_have == s.pieces_total {
             return;
