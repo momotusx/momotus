@@ -304,15 +304,6 @@ impl Harness {
         }
         acts
     }
-
-    /// Verifies what a range of `file` opened at `start` waits on (its
-    /// blocking window and the file's index), so it is Ready as it opens
-    /// and gets its other windows.
-    fn ready_at(&mut self, file: usize, start: u64) {
-        for piece in self.blocking_pieces(file, start, None) {
-            self.send(Event::PieceVerified { piece });
-        }
-    }
 }
 
 fn requests(acts: &[Action]) -> Vec<(PeerId, BlockIdx)> {
@@ -515,7 +506,6 @@ fn urgent_blocks_of_one_piece_fan_out_across_peers() {
 fn focused_reader_gets_critical_window_and_older_keep_blocking() {
     let g = Geometry::new(256 * KIB as u32, &[256 * MIB]).unwrap();
     let mut h = Harness::new(g, Config::standard());
-    h.ready_at(0, 0);
     h.send(Event::RangeOpened {
         demand: 1,
         file: 0,
@@ -527,7 +517,6 @@ fn focused_reader_gets_critical_window_and_older_keep_blocking() {
     assert_eq!(h.s.class_of(4), Some(Class::Critical));
     assert_eq!(h.s.class_of(19), Some(Class::Critical));
     assert_eq!(h.s.class_of(20), Some(Class::Playback));
-    h.ready_at(0, 128 * MIB);
     h.send(Event::RangeOpened {
         demand: 2,
         file: 0,
@@ -552,7 +541,6 @@ fn focused_reader_gets_critical_window_and_older_keep_blocking() {
 fn play_position_shrinks_critical_window() {
     let g = Geometry::new(256 * KIB as u32, &[256 * MIB]).unwrap();
     let mut h = Harness::new(g, Config::standard());
-    h.ready_at(0, 0);
     h.send(Event::RangeOpened {
         demand: 1,
         file: 0,
@@ -578,7 +566,6 @@ fn play_position_shrinks_critical_window() {
 fn first_read_in_tail_zone_merges_head() {
     let g = Geometry::new(256 * KIB as u32, &[256 * MIB]).unwrap();
     let mut h = Harness::new(g, Config::standard());
-    h.ready_at(0, 256 * MIB - 100 * KIB);
     h.send(Event::RangeOpened {
         demand: 1,
         file: 0,
@@ -594,7 +581,6 @@ fn first_read_in_tail_zone_merges_head() {
 fn seek_cancels_stale_requests() {
     let g = Geometry::new(256 * KIB as u32, &[512 * MIB]).unwrap();
     let mut h = Harness::new(g, Config::standard());
-    h.ready_at(0, 0);
     h.peer(1, 4 * MIB);
     h.peer(2, 4 * MIB);
     let acts = h.send(Event::RangeOpened {
@@ -960,7 +946,6 @@ fn silent_peer_is_snubbed_not_dropped() {
 fn readahead_and_bitrate_are_set_per_file() {
     let g = Geometry::new(64 * KIB as u32, &[8 * MIB, 8 * MIB]).unwrap();
     let mut h = Harness::new(g, small_cfg());
-    h.ready_at(0, 0);
     h.send(Event::RangeOpened {
         demand: 1,
         file: 0,
@@ -1004,9 +989,6 @@ fn readahead_prefers_rare_pieces() {
             reqq: 250,
         });
     }
-    for piece in (0..5).chain([127]) {
-        h.send(Event::PieceVerified { piece });
-    }
     h.send(Event::RangeOpened {
         demand: 1,
         file: 0,
@@ -1016,6 +998,9 @@ fn readahead_prefers_rare_pieces() {
     // Blocking 0, critical 1..3, playback 3..5, readahead 5..9, tail 127.
     assert_eq!(h.s.class_of(5), Some(Class::Readahead));
     assert_eq!(h.s.class_of(7), Some(Class::Readahead));
+    for piece in (0..5).chain([127]) {
+        h.send(Event::PieceVerified { piece });
+    }
     h.send(Event::PeerConnected {
         peer: 1,
         have: Bitfield::full(n),
@@ -1106,7 +1091,6 @@ fn a_probe_never_takes_the_focus() {
     let g = Geometry::new(64 * KIB as u32, &[8 * MIB]).unwrap();
     let mut h = Harness::new(g, small_cfg());
     // Piece 64: blocking 64, critical 65..67, playback 67..69, readahead 69..73.
-    h.ready_at(0, 4 * MIB);
     open(&mut h, 1, 0, 4 * MIB, None);
     let ahead = readahead_pieces(&h);
     assert_eq!(ahead, [69, 70, 71, 72]);
@@ -1200,7 +1184,6 @@ fn the_ramp_grows_with_the_bytes_read() {
     let mut h = Harness::new(g, small_cfg());
     h.s.set_window(Some(window(0)));
     h.s.set_readahead(0, MIB);
-    h.ready_at(0, 0);
     open(&mut h, 1, 0, 0, None);
     assert_eq!(readahead_pieces(&h).len(), 2, "the floor");
     h.send(Event::RangeAdvanced {
@@ -1214,10 +1197,8 @@ fn the_ramp_grows_with_the_bytes_read() {
     });
     assert_eq!(readahead_pieces(&h).len(), 16, "the cap");
     h.send(Event::RangeClosed { demand: 1 });
-    h.ready_at(0, MIB + 32 * KIB);
     open(&mut h, 2, 0, MIB + 32 * KIB, None);
     assert_eq!(readahead_pieces(&h).len(), 16, "the run goes on");
-    h.ready_at(0, 8 * MIB);
     open(&mut h, 3, 0, 8 * MIB, None);
     h.tick(6_000);
     assert_eq!(readahead_pieces(&h).len(), 2, "a seek starts again");
@@ -1232,13 +1213,11 @@ fn a_seek_has_a_grace_in_a_window_only() {
     let g = Geometry::new(64 * KIB as u32, &[16 * MIB]).unwrap();
     let mut h = Harness::new(g.clone(), small_cfg());
     h.s.set_window(Some(window(0)));
-    h.ready_at(0, 0);
     open(&mut h, 1, 0, 0, None);
     h.send(Event::RangeAdvanced {
         demand: 1,
         pos: 2 * MIB,
     });
-    h.ready_at(0, 8 * MIB);
     open(&mut h, 2, 0, 8 * MIB, None);
     h.send(Event::RangeClosed { demand: 1 });
     assert!(readahead_pieces(&h).is_empty(), "no readahead in the grace");
@@ -1251,7 +1230,6 @@ fn a_seek_has_a_grace_in_a_window_only() {
     assert!(!(30..37).any(|p| h.s.kept().get(p)));
     let mut whole = Harness::new(g, small_cfg());
     open(&mut whole, 1, 0, 0, None);
-    whole.ready_at(0, 8 * MIB);
     open(&mut whole, 2, 0, 8 * MIB, None);
     assert_eq!(readahead_pieces(&whole).len(), 4, "the preset at once");
 }
@@ -1264,7 +1242,6 @@ fn bounded_chunks_on_a_file_that_fits_get_todays_windows() {
     let g = Geometry::new(64 * KIB as u32, &[16 * MIB]).unwrap();
     let mut h = Harness::new(g, small_cfg());
     for (demand, start) in [(1, 0), (2, 4 * MIB), (3, 8 * MIB)] {
-        h.ready_at(0, start);
         open(&mut h, demand, 0, start, Some(start + 4 * MIB));
         assert_eq!(readahead_pieces(&h).len(), 4, "chunk at {start}");
         h.send(Event::RangeClosed { demand });
@@ -1318,7 +1295,6 @@ fn readahead_pieces_open_at_once_stay_within_the_limit() {
     let mut h = Harness::new(g.clone(), cfg.clone());
     h.s.set_window(Some(window(0)));
     h.s.set_readahead(0, 2 * MIB);
-    h.ready_at(0, 0);
     open(&mut h, 1, 0, 0, None);
     h.send(Event::RangeAdvanced {
         demand: 1,
@@ -1342,7 +1318,6 @@ fn readahead_pieces_open_at_once_stay_within_the_limit() {
         ..window(0)
     }));
     quick.s.set_readahead(0, 2 * MIB);
-    quick.ready_at(0, 0);
     open(&mut quick, 1, 0, 0, None);
     quick.send(Event::RangeAdvanced {
         demand: 1,
@@ -1352,7 +1327,6 @@ fn readahead_pieces_open_at_once_stay_within_the_limit() {
     assert_eq!(open_ra(&quick).len(), 16);
     let mut whole = Harness::new(g, cfg);
     whole.s.set_readahead(0, 2 * MIB);
-    whole.ready_at(0, 4 * MIB);
     open(&mut whole, 1, 0, 4 * MIB, None);
     whole.peer(1, 10 * MIB);
     assert!(open_ra(&whole).len() > 4);
@@ -1385,7 +1359,6 @@ fn the_budget_bounds_what_starts_and_the_keeper_brings_it_down() {
     for piece in 2..11 {
         h.send(Event::PieceVerified { piece });
     }
-    h.ready_at(0, 0);
     open(&mut h, 1, 0, 0, None);
     h.send(Event::RangeAdvanced {
         demand: 1,
@@ -1393,12 +1366,11 @@ fn the_budget_bounds_what_starts_and_the_keeper_brings_it_down() {
     });
     h.peer(1, 10 * MIB);
     // The cap: 20 pieces less 64 KiB blocking and 128 KiB critical (3
-    // pieces) and one more. 11 held (the Ready set 0 and 255 among them),
-    // the urgent 64..67, then playback and readahead up to 16 pieces in
-    // all.
+    // pieces) and one more. 9 held, the urgent 64..67 and 255, then
+    // playback and readahead up to 16 pieces in all.
     assert_eq!(h.s.held_bytes(), 16 * P);
     let started: BTreeSet<PieceIdx> = h.out.iter().map(|&(b, _)| h.geo.piece_of(b)).collect();
-    assert_eq!(started.len(), 5, "{started:?}");
+    assert_eq!(started.len(), 7, "{started:?}");
     assert!(h.s.keeper_due());
     assert_eq!(h.s.to_evict(), [2, 3, 4, 5]);
     for piece in 2..6 {
@@ -1407,20 +1379,14 @@ fn the_budget_bounds_what_starts_and_the_keeper_brings_it_down() {
     // The room fills again with readahead, and the next round is due.
     assert_eq!(h.s.held_bytes(), 16 * P);
     let started: BTreeSet<PieceIdx> = h.out.iter().map(|&(b, _)| h.geo.piece_of(b)).collect();
-    assert_eq!(started.len(), 9, "{started:?}");
+    assert_eq!(started.len(), 11, "{started:?}");
     assert_eq!(h.s.to_evict(), [6, 7, 8, 9]);
     let trim = h.s.trimmable(2 * P);
     assert_eq!(trim, (6..11).collect::<Vec<_>>());
     // A seek before the keeper's round: its urgent windows start past the
-    // cap and stay within the budget, its blocking piece first and its
-    // critical ones once that is in.
+    // cap and stay within the budget.
     open(&mut h, 2, 0, 12 * MIB, None);
-    let blocks: Vec<BlockIdx> = h.geo.piece_blocks(192).collect();
-    assert!(blocks.iter().all(|&b| h.out.contains(&(b, 1))));
-    for b in blocks {
-        h.deliver(1, b);
-    }
-    let urgent = h.geo.pieces_in(12 * MIB + 64 * KIB, 12 * MIB + 192 * KIB);
+    let urgent = h.geo.pieces_in(12 * MIB, 12 * MIB + 192 * KIB);
     assert!(
         urgent
             .clone()
@@ -1509,7 +1475,6 @@ fn an_older_range_that_reads_on_takes_the_focus_back() {
     let g = Geometry::new(64 * KIB as u32, &[64 * MIB]).unwrap();
     let mut h = Harness::new(g, small_cfg());
     h.s.set_window(Some(window(0)));
-    h.ready_at(0, 40 * MIB);
     open(&mut h, 1, 0, 40 * MIB, None);
     h.send(Event::RangeAdvanced {
         demand: 1,
@@ -1564,7 +1529,6 @@ fn a_shrunk_budget_takes_its_cut_off_the_farthest_readahead() {
         ..window(0)
     }));
     h.s.set_readahead(0, 4 * MIB);
-    h.ready_at(0, 0);
     open(&mut h, 1, 0, 0, None);
     h.send(Event::RangeAdvanced {
         demand: 1,
@@ -1666,7 +1630,6 @@ fn a_reopen_behind_the_run_start_keeps_the_ramp_sound() {
         pos: 8 * MIB + 20_000,
     });
     h.send(Event::RangeClosed { demand: 1 });
-    h.ready_at(0, 8 * MIB - 30_000);
     open(&mut h, 2, 0, 8 * MIB - 30_000, None);
     assert_eq!(readahead_pieces(&h).len(), 2, "the floor");
 }
@@ -1682,7 +1645,6 @@ fn an_idle_open_range_never_takes_the_focus_back() {
     let mut h = Harness::new(g, small_cfg());
     h.s.set_window(Some(window(0)));
     open(&mut h, 1, 0, 0, None);
-    h.ready_at(0, 40 * MIB);
     open(&mut h, 2, 0, 40 * MIB, None);
     h.tick(6_000);
     h.send(Event::RangeAdvanced {
@@ -1698,7 +1660,6 @@ fn an_idle_open_range_never_takes_the_focus_back() {
         Some(Class::Playback),
         "the anchor is warm"
     );
-    h.ready_at(0, 40 * MIB + 96 * KIB);
     open(&mut h, 3, 0, 40 * MIB + 96 * KIB, None);
     assert!(!readahead_pieces(&h).is_empty(), "no grace");
     assert_eq!(h.s.class_of(1), None);
