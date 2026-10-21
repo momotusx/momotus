@@ -10,7 +10,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import java.security.SecureRandom
-import java.util.Base64
+import kotlin.io.encoding.Base64
 
 /** What a passkey sheet gave: a passkey used (its id, its `user.id`, and the PRF output), or why not. */
 sealed interface PasskeyResult {
@@ -48,7 +48,10 @@ object Passkeys {
     private val json = Json { ignoreUnknownKeys = true }
     private val random = SecureRandom()
 
-    private fun b64(bytes: ByteArray): String = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+    // Kotlin's codec, not java.util.Base64: that one needs API 26 and the app starts at 24.
+    private val base64url = Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT_OPTIONAL)
+
+    private fun b64(bytes: ByteArray): String = base64url.encode(bytes)
 
     /** 32 random bytes: the challenge, which nothing checks (3.1). */
     fun challenge(): String = b64(ByteArray(32).also(random::nextBytes))
@@ -181,7 +184,7 @@ object Passkeys {
 
     private fun fromBase64(value: String): ByteArray? =
         runCatching {
-            Base64.getUrlDecoder().decode(unpadded(value))
+            base64url.decode(unpadded(value))
         }.getOrNull()
 
     private fun unpadded(value: String) = value.trimEnd('=')
