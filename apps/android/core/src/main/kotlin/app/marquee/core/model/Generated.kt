@@ -72,6 +72,7 @@ enum class Announced(
     Passkey("passkey"),
     Kit("kit"),
     Removed("removed"),
+    Dropped("dropped"),
 
     /** A value from a newer core that this app does not know yet. */
     Unknown(""),
@@ -83,19 +84,21 @@ enum class Announced(
 /** A device that joined, a passkey or a recovery kit added, or a member removed, by another member than this device. */
 @Serializable
 data class Announcement(
-    /** What `ackAnnouncements` takes: the roster entry's seq and the member, `<seq>.<member>`. */
+    /** What `ackAnnouncements` takes: the roster entry's seq and the member, `<seq>.<member>` (`dropped.<seq>` for `dropped`). */
     val id: String,
     val kind: Announced,
-    /** The device or kit it is about. */
-    val member: String,
+    /** The device or kit it is about; none for `dropped`. */
+    val member: String? = null,
     /** A recovery kit or passkey, else a device (it words `removed`). */
     val kit: Boolean,
     /** A passkey kit. */
     val passkey: Boolean,
-    /** The member that vouched for it, or removed it (itself when a device left). */
-    val by: String,
+    /** The member that vouched for it, or removed it (itself when a device left); none for `dropped`. */
+    val by: String? = null,
     /** A device's name, or a kit's label. */
     val name: String? = null,
+    /** For `dropped`: how many older announcements were not kept. */
+    val count: Int? = null,
 )
 
 @Serializable
