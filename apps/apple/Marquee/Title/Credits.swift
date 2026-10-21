@@ -38,7 +38,7 @@ struct Credits: View {
     }
 }
 
-/// Years, up to three genres and the season count: the meta line after the rating.
+/// Years, up to three genres and the season count: the meta line after the scores.
 func metaParts(_ details: TitleDetails, seasons: [Int]) -> [String] {
     let regular = seasons.filter { $0 > 0 }.count
     let parts: [String?] = [

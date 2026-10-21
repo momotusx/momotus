@@ -132,7 +132,7 @@ struct PosterGrid: View {
                         ArtImage(url: tile.poster, fallback: tile.name)
                             .aspectRatio(2 / 3, contentMode: .fit)
                             .overlay(alignment: .topTrailing) {
-                                if let rating = tile.rating { RatingChip(rating: rating).padding(metrics.chip * 0.55) }
+                                if !ratingParts(tile.ratings).isEmpty { RatingChip(ratings: ratingParts(tile.ratings)).padding(metrics.chip * 0.55) }
                             }
                             .overlay(alignment: .bottom) {
                                 if let progress = tile.progress { EdgeProgress(value: progress) }
@@ -170,15 +170,16 @@ struct CardCaption: View {
     }
 }
 
-/// "★ 8.0" on a small strong-glass chip at a poster's top right.
+/// "IMDb 8.0  RT 87%" on a small strong-glass chip at a poster's top right.
 struct RatingChip: View {
-    let rating: String
+    let ratings: [String]
     @Environment(\.metrics) private var metrics
 
     var body: some View {
-        HStack(spacing: metrics.chip * 0.3) {
-            Glyph("star-fill", size: metrics.chip * 0.85, relativeTo: .caption2).foregroundStyle(Theme.Palette.star)
-            Text(rating).font(.text(metrics.chip, weight: .bold, relativeTo: .caption2)).monospacedDigit()
+        HStack(spacing: metrics.chip * 0.5) {
+            ForEach(ratings, id: \.self) { score in
+                Text(score).font(.text(metrics.chip, weight: .bold, relativeTo: .caption2)).monospacedDigit()
+            }
         }
         .foregroundStyle(Theme.Palette.text)
         .padding(.horizontal, metrics.chip * 0.55)

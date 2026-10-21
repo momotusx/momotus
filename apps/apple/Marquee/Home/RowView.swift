@@ -141,13 +141,13 @@ struct PosterTile: View {
             ArtImage(url: tile.poster, fallback: tile.name)
                 .frame(width: size.width, height: size.height)
                 .overlay(alignment: .topTrailing) {
-                    if let rating = tile.rating { RatingChip(rating: rating).padding(metrics.chip * 0.55) }
+                    if !ratingParts(tile.ratings).isEmpty { RatingChip(ratings: ratingParts(tile.ratings)).padding(metrics.chip * 0.55) }
                 }
                 .cardArt()
             CardCaption(name: tile.name, info: tile.releaseInfo).frame(width: size.width, alignment: .leading)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel([tile.name, tile.releaseInfo, tile.rating.map { "rated \($0)" }].compactMap { $0 }.joined(separator: ", "))
+        .accessibilityLabel(([tile.name, tile.releaseInfo].compactMap { $0 } + ratingParts(tile.ratings)).joined(separator: ", "))
     }
 
     private var size: CGSize {

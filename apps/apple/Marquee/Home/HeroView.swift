@@ -91,7 +91,7 @@ struct HeroView: View {
                 logo: tile.logo, name: tile.name, maxWidth: wide ? 440 : 260, height: wide ? 120 : 84,
                 nameSize: wide ? Theme.type.hero + 12 : Theme.type.title1)
                 .padding(.bottom, wide ? 18 : 12)
-            MetaLine(rating: tile.rating, parts: heroMeta(hero), size: wide ? Theme.type.callout : 13)
+            MetaLine(ratings: ratingParts(tile.ratings), parts: heroMeta(hero), size: wide ? Theme.type.callout : 13)
                 .foregroundStyle(Theme.Palette.muted)
                 .padding(.bottom, wide ? 14 : 10)
             if let description = hero.description {
@@ -144,7 +144,7 @@ struct StartFocus: ViewModifier {
     }
 }
 
-/// The hero's meta after the rating: year, runtime and genres, as the core gives them.
+/// The hero's meta after the scores: year, runtime and genres, as the core gives them.
 func heroMeta(_ hero: Hero) -> [String] {
     let genres = (hero.genres ?? []).joined(separator: ", ")
     return [hero.tile.releaseInfo, hero.runtime, genres.isEmpty ? nil : genres].compactMap { $0 }
@@ -178,31 +178,52 @@ struct Eyebrow: View {
     }
 }
 
-/// "★ 9.2 · 2011–2019 · Drama, Fantasy · 8 seasons": the gold star beside the
-/// rating, the rest joined by dots. Lines break only between the parts.
+/// "IMDb 9.2 · RT 89% · 2011–2019 · Drama, Fantasy · 8 seasons": the scores
+/// as plain text, the rest joined by dots. Lines break only between the parts.
+/// `imdbLink` makes the first score, IMDb's, open its page (never on TV).
 struct MetaLine: View {
-    let rating: String?
+    let ratings: [String]
     let parts: [String]
     let size: CGFloat
+    var imdbLink: URL? = nil
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         FlowRow(spacing: size * 0.45) {
-            if let rating {
-                HStack(spacing: size * 0.3) {
-                    Glyph("star-fill", size: size * 0.9, relativeTo: .callout).foregroundStyle(Theme.Palette.star)
-                    Text(rating).fontWeight(Font.Weight.bold.legible).foregroundStyle(Theme.Palette.text)
-                }
-            }
-            ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
-                if rating != nil || index > 0 {
+            ForEach(Array((ratings + parts).enumerated()), id: \.offset) { index, part in
+                if index > 0 {
                     Text("\u{B7}").foregroundStyle(Theme.Palette.dim)
                 }
-                Text(part)
+                if index < ratings.count {
+                    score(part, link: index == 0 ? link : nil)
+                } else {
+                    Text(part)
+                }
             }
         }
         .font(.text(size, weight: .semibold, relativeTo: .callout))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(([rating.map { "Rated \($0)" }] + parts).compactMap { $0 }.joined(separator: ", "))
+        .accessibilityLabel((ratings + parts).joined(separator: ", "))
+        .accessibilityActions {
+            if let link { Button("Open on IMDb") { openURL(link) } }
+        }
+    }
+
+    private var link: URL? {
+        #if os(tvOS)
+        nil
+        #else
+        imdbLink
+        #endif
+    }
+
+    @ViewBuilder private func score(_ text: String, link: URL?) -> some View {
+        let label = Text(text).fontWeight(Font.Weight.bold.legible).foregroundStyle(Theme.Palette.text)
+        if let link {
+            Link(destination: link) { label }.buttonStyle(.plain)
+        } else {
+            label
+        }
     }
 }
 

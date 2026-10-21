@@ -16,11 +16,28 @@ struct Tile: Decodable, Hashable, Sendable {
     let videoId: String?
     /// The IMDb rating the addon gave, as written ("8.4").
     let rating: String?
+    /// The IMDb and Rotten Tomatoes scores to show side by side. Optional here
+    /// only so replies recorded before the field existed still decode.
+    let ratings: Ratings?
 
     /// What Play on this tile plays, as the web and Android have it: the
     /// video it names (an episode in progress), else a movie itself. A series
     /// with no video named has nothing to play from here: its page decides.
     var playVideoId: String? { videoId ?? (kind == "movie" ? id : nil) }
+}
+
+/// A title's IMDb and Rotten Tomatoes scores, written as shown ("8.8", "87%");
+/// a score the core left null has no slot.
+struct Ratings: Decodable, Hashable, Sendable {
+    let imdb: String?
+    let rottenTomatoes: String?
+}
+
+/// The scores side by side as plain text, the source first: "IMDb 8.8",
+/// "RT 87%". No IMDb or Rotten Tomatoes logos or icons, ever
+/// (plans/research/ratings.md).
+func ratingParts(_ ratings: Ratings?) -> [String] {
+    [ratings?.imdb.map { "IMDb \($0)" }, ratings?.rottenTomatoes.map { "RT \($0)" }].compactMap { $0 }
 }
 
 struct Hero: Decodable, Hashable, Sendable {
@@ -173,6 +190,10 @@ struct TitleDetails: Decodable, Hashable, Sendable {
     let cast: [String]
     let directors: [String]
     let rating: String?
+    /// As on tiles; optional only so older recordings decode.
+    let ratings: Ratings?
+    /// The title's IMDb page, where its IMDb score links (not on TV).
+    let imdbUrl: String?
     let source: String
     /// Trailers the metadata names (YouTube), first is the main one.
     let trailers: [Trailer]

@@ -260,7 +260,10 @@ struct TitleScreen: View {
     @ViewBuilder private var decisionBody: some View {
         VStack(alignment: .leading, spacing: 14) {
             if let details {
-                MetaLine(rating: details.rating, parts: metaParts(details, seasons: model.header?.seasons ?? []), size: Theme.type.callout)
+                MetaLine(
+                    ratings: ratingParts(details.ratings), parts: metaParts(details, seasons: model.header?.seasons ?? []),
+                    size: Theme.type.callout,
+                    imdbLink: details.ratings?.imdb == nil ? nil : details.imdbUrl.flatMap(URL.init(string:)))
                     .foregroundStyle(Theme.Palette.muted)
                 if let description = details.description {
                     Synopsis(text: description, lines: 3)

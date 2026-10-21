@@ -157,9 +157,27 @@ private func fixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T 
     """#
     let hero = try JSONDecoder().decode(Hero.self, from: Data(json.utf8))
     #expect(hero.tile.rating == "9.3")
+    // Recorded before the scores existed: none to show, never a placeholder.
+    #expect(hero.tile.ratings == nil)
+    #expect(ratingParts(hero.tile.ratings).isEmpty)
     #expect(hero.genres == ["Drama", "Crime", "Prison"])
     #expect(hero.runtime == "142 min")
     #expect(hero.description?.hasPrefix("A banker") == true)
+}
+
+@Test func ratingsSitSideBySideAndAMissingScoreHasNoSlot() throws {
+    // The shape mq-runtime's ratings test asserts (tests/ratings.rs).
+    let json = #"""
+    {"id": "tt0111161", "kind": "movie", "name": "The Shawshank Redemption", "poster": null, "background": null,
+     "logo": null, "posterShape": "poster", "releaseInfo": "1994", "progress": null, "videoId": null, "rating": "9.3",
+     "ratings": {"imdb": "9.2", "rottenTomatoes": "89%"}}
+    """#
+    let tile = try JSONDecoder().decode(Tile.self, from: Data(json.utf8))
+    #expect(ratingParts(tile.ratings) == ["IMDb 9.2", "RT 89%"])
+    #expect(ratingParts(Ratings(imdb: "9.0", rottenTomatoes: nil)) == ["IMDb 9.0"])
+    #expect(ratingParts(Ratings(imdb: nil, rottenTomatoes: "0%")) == ["RT 0%"])
+    #expect(ratingParts(Ratings(imdb: nil, rottenTomatoes: nil)).isEmpty)
+    #expect(ratingParts(nil).isEmpty)
 }
 
 // Subtitle notes (plans/m13-turkcealtyazi.md 4.2).

@@ -8,7 +8,7 @@ private func row(_ state: RowState, _ tiles: String...) -> HomeRow {
         tiles: tiles.map {
             Tile(
                 id: $0, kind: "movie", name: $0, poster: nil, background: nil, logo: nil, posterShape: "poster",
-                releaseInfo: nil, progress: nil, videoId: nil, rating: nil)
+                releaseInfo: nil, progress: nil, videoId: nil, rating: nil, ratings: nil)
         })
 }
 
@@ -16,7 +16,7 @@ private func row(_ state: RowState, _ tiles: String...) -> HomeRow {
     func tile(_ kind: String, videoId: String?) -> Tile {
         Tile(
             id: "tt1", kind: kind, name: "A", poster: nil, background: nil, logo: nil, posterShape: "poster",
-            releaseInfo: nil, progress: nil, videoId: videoId, rating: nil)
+            releaseInfo: nil, progress: nil, videoId: videoId, rating: nil, ratings: nil)
     }
     #expect(tile("movie", videoId: nil).playVideoId == "tt1")
     #expect(tile("series", videoId: "tt1:2:3").playVideoId == "tt1:2:3")
