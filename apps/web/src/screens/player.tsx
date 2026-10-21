@@ -759,7 +759,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   const [coreFill, setCoreFill] = createSignal(0);
   createEffect(() => {
     const p = snap()?.start?.progress;
-    if (p != null) setCoreFill((h) => Math.max(h, p));
+    if (p != null) setCoreFill(p);
   });
   const fill = () => {
     const share = url() ? bufferShare(buffered(), engine.position()) : 0;

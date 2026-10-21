@@ -5,6 +5,8 @@ test("the buffer's share: seconds ahead of the playhead over what the player wan
   expect(bufferShare([], 0)).toBe(0);
   expect(bufferShare([[0, 1.5]], 0)).toBe(1.5 / START_AHEAD_S);
   expect(bufferShare([[0, 10]], 0)).toBe(1);
+  // What counts is ahead of the playhead, not the whole range (a stall late in a range).
+  expect(bufferShare([[0, 10]], 9, 3)).toBeCloseTo(1 / 3, 5);
   // A resume: the range around the start point counts, not the one before it.
   expect(bufferShare([[0, 5], [600, 601.5]], 600, 3)).toBe(0.5);
   expect(bufferShare([[0, 5]], 600, 3)).toBe(0);
