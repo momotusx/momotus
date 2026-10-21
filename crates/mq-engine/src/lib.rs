@@ -1201,11 +1201,14 @@ impl Engine {
             ),
         };
         *lock(&t.rate) = Some((file, bytes_per_s, readahead));
+        // A whole file starved under the reserve keeps no readahead until
+        // the guard lets it go (2.4, review r2 B P3-1).
+        let starved = windowed.is_none() && t.starved.load(Ordering::Relaxed);
         if let Some(l) = t.live.lock().await.as_ref() {
             let _ = l.msgs.send(adapter::Msg::Rate {
                 file,
                 bytes_per_s,
-                readahead,
+                readahead: if starved { 0 } else { readahead },
             });
         }
         Ok(())

@@ -579,10 +579,24 @@ async fn refused_punches_end_the_playback_cleanly() {
     std::fs::create_dir_all(&folder).unwrap();
     sync_log::fail(&folder, Fail::PunchRefused, usize::MAX);
     let w = windowed_on(s, root, plan(), None).await;
+    // What the scheduler holds, sampled through the read (review r2 B).
+    let held = Arc::new(AtomicU64::new(0));
+    let watch = tokio::spawn({
+        let (engine, t, held) = (w.engine.clone(), w.t, held.clone());
+        async move {
+            loop {
+                if let Ok(s) = engine.stats(t).await {
+                    held.fetch_max(s.held_bytes.unwrap_or(0), Ordering::Relaxed);
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        }
+    });
     let reader = w.engine.open_reader(w.t, "default", w.movie).await.unwrap();
     let mut range = reader.range(0, None).await.unwrap();
     let mut got = Vec::new();
     let err = within(60, range.read_to_end(&mut got)).await.unwrap_err();
+    watch.abort();
     assert_eq!(
         err.to_string(),
         "this storage cannot free space while playing"
@@ -602,6 +616,11 @@ async fn refused_punches_end_the_playback_cleanly() {
     // to pieces, plus a piece (2 MiB here).
     let max = allocated(&w.dir());
     assert!(max <= W + 2 * MIB, "no fetch past the ceiling: {max}");
+    let held = held.load(Ordering::Relaxed);
+    assert!(
+        held > 0 && held <= W + 2 * MIB,
+        "held past the ceiling: {held}"
+    );
 }
 
 /// f, second half (reviews P1-1, r2 P2-2). Free space that follows the
@@ -783,6 +802,45 @@ async fn a_window_follows_the_network_to_the_mobile_preset_and_back() {
     w.engine.set_metered(false).await;
     until("the plan's readahead again", || async {
         readahead().await == Some(300 * MIB)
+    })
+    .await;
+}
+
+/// 2.4: a whole file under the reserve keeps no readahead until free space
+/// is back; a network or rate change meanwhile does not bring it back
+/// (review r2 B P3-1).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_starved_whole_file_stays_starved_through_a_network_change() {
+    let s = support::swarm_big(16 << 20, PIECE).await;
+    let root = tempfile::tempdir().unwrap();
+    let engine = engine_on(root.path()).await;
+    let t = engine
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let movie = engine
+        .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
+        .await
+        .unwrap();
+    let _claim = engine.claim(t, "default").unwrap();
+    engine.set_rate(t, movie, RATE, false).await.unwrap();
+    let readahead = || async { engine.stats(t).await.unwrap().readahead_bytes };
+    until("a readahead", || async {
+        readahead().await.is_some_and(|r| r > 0)
+    })
+    .await;
+    test_hooks::set_free(&engine, Some(RESERVE_BYTES - 1));
+    until("starved under the reserve", || async {
+        readahead().await == Some(0)
+    })
+    .await;
+    engine.set_metered(true).await;
+    engine.set_rate(t, movie, RATE, false).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert_eq!(readahead().await, Some(0), "still starved");
+    test_hooks::set_free(&engine, None);
+    until("fed again", || async {
+        readahead().await.is_some_and(|r| r > 0)
     })
     .await;
 }
