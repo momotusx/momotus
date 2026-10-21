@@ -196,6 +196,26 @@ private func playback(_ extra: String) throws -> PlaybackSnapshot {
     #expect(notes[1].words == "Subtitles from Subs did not load.")
 }
 
+// The start progress and the subtitle picker's fields (plans/player-polish.md 1.3, 2).
+
+@Test func theStartAndTheTracksOwnNamesDecodeWithAndWithoutTheFields() throws {
+    let old = try playback("")
+    #expect(old.start == nil)
+    let start = #"{"stage": "buffering", "peers": 3, "haveBytes": 4100000, "needBytes": 8400000, "bytesPerS": 1048576, "#
+        + #""source": 2, "sources": 3, "progress": 0.42, "caption": "Trying source 2 of 3"}"#
+    let new = try playback(#", "start": "# + start)
+    #expect(new.start?.stage == "buffering" && new.start?.source == 2 && new.start?.needBytes == 8_400_000)
+    #expect(new.start?.caption == "Trying source 2 of 3")
+    let track = { (extra: String) in
+        let json = #"{"url": "u", "lang": "tur", "label": null, "source": "S", "forced": false, "hearingImpaired": false"# + extra + "}"
+        return try JSONDecoder().decode(SubtitleTrack.self, from: Data(json.utf8))
+    }
+    let before = try track("")
+    #expect(before.nativeName == nil && before.fits == nil)
+    let now = try track(#", "nativeName": "Türkçe", "fits": true"#)
+    #expect(now.nativeName == "Türkçe" && now.fits == true)
+}
+
 @Test func foregroundSaysWhenTheStreamServerMoved() throws {
     let decode = { (json: String) in try JSONDecoder().decode(ForegroundReply.self, from: Data(json.utf8)) }
     // Moved: the URLs handed out before are dead, and the player opens its source again.

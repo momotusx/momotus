@@ -208,8 +208,32 @@ struct PlaybackSnapshot: Decodable, Hashable, Sendable {
     /// "Trying again" from it, so a retry that fails again at once still reads
     /// as a new try (optional for older cores).
     let retries: Int?
+    /// How far the start is while `resolving`: the loading screen's fill and
+    /// its words (plans/player-polish.md 1.3); nil before the first source
+    /// starts, from `ready` on, and from an older core.
+    var start: StartProgress?
 
     var notes: [SubtitleNote] { subtitleNotes ?? [] }
+}
+
+/// One start of the playback, from the first source it tries to `ready`.
+struct StartProgress: Decodable, Hashable, Sendable {
+    /// "details", "connecting" or "buffering"; a string, so a newer core's stage still decodes.
+    let stage: String
+    /// Peers connected to a torrent.
+    let peers: Int
+    /// What a torrent's swarm sent of the start the player needs, and all of it.
+    let haveBytes: Int64
+    let needBytes: Int64
+    let bytesPerS: Int64
+    /// The source of the version it is on, from 1, of `sources`.
+    let source: Int
+    let sources: Int
+    /// 0 to 1, never back within one start, never 1 before `ready`.
+    let progress: Double
+    /// The core's words once a stage takes long ("Finding peers, 3 so far",
+    /// "Trying source 2 of 3"); nil otherwise.
+    let caption: String?
 }
 
 /// A version the playback moved on to, or offers instead: its key for
@@ -405,6 +429,11 @@ struct SubtitleTrack: Decodable, Hashable, Sendable, Identifiable {
     /// What tells it from the other tracks of its language: the release, else
     /// the source, numbered when two would read the same.
     var name: String?
+    /// The language's own name ("Türkçe", "Português (Brasil)"); older cores send none.
+    var nativeName: String?
+    /// The track names the playing release's group: "Made for this release";
+    /// older cores send none.
+    var fits: Bool?
 
     var id: String { url }
 }
