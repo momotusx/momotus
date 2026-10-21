@@ -26,8 +26,9 @@ struct Tile: Decodable, Hashable, Sendable {
     var playVideoId: String? { videoId ?? (kind == "movie" ? id : nil) }
 }
 
-/// A title's IMDb and Rotten Tomatoes scores, written as shown ("8.8", "87%");
-/// a score the core left null has no slot.
+/// A title's IMDb and Rotten Tomatoes scores, written as shown ("8.8", "87%",
+/// or "Fresh", the Rotten Tomatoes addon's mark); a score the core left null
+/// has no slot.
 struct Ratings: Decodable, Hashable, Sendable {
     let imdb: String?
     let rottenTomatoes: String?
@@ -41,10 +42,13 @@ func ratingParts(_ ratings: Ratings?) -> [String] {
 }
 
 /// What VoiceOver says for a score: "IMDb 8.8", "Rotten Tomatoes 87 percent",
-/// never "R T".
+/// never "R T". The Rotten Tomatoes addon's mark is a word, not a number:
+/// "Rotten Tomatoes: Fresh".
 func spokenScore(_ score: String) -> String {
     guard score.hasPrefix("RT ") else { return score }
-    return "Rotten Tomatoes " + score.dropFirst(3).replacingOccurrences(of: "%", with: " percent")
+    let rt = score.dropFirst(3)
+    guard rt.wholeMatch(of: /\d+%/) != nil else { return "Rotten Tomatoes: \(rt)" }
+    return "Rotten Tomatoes " + rt.replacingOccurrences(of: "%", with: " percent")
 }
 
 struct Hero: Decodable, Hashable, Sendable {

@@ -5,10 +5,12 @@ import Testing
 
 // The widest scores there are ("IMDb 10.0", "RT 100%") on a poster's chip, rendered in SF Pro as
 // the app ships it: the chip fits inside the poster on iPhone, Mac and TV, stacked on iPhone and
-// side by side wherever the pair fits. Widths print as `ratings-measure` lines for
-// bench/core/ratings.jsonl; the snapshots go to the temporary directory.
+// side by side wherever the pair fits. The Rotten Tomatoes addon's mark ("RT Fresh") is held to the
+// same. Widths print as `ratings-measure` lines for bench/core/ratings.jsonl; the snapshots go to
+// the temporary directory.
 
 private let widest = ["IMDb 10.0", "RT 100%"]
+private let fresh = ["IMDb 10.0", "RT Fresh"]
 
 /// Inter from the source tree: the test bundle carries no fonts.
 private let registered: Bool = {
@@ -73,7 +75,25 @@ private let registered: Bool = {
     try check("tv", .tv, stacked: true, ratings: ["IMDb 8.8", "RT 100%"])
 }
 
+@MainActor @Test func theFreshMarkStacksOnAnIPhonePoster() throws {
+    try check("compact", .compact, stacked: true, ratings: fresh)
+}
+
+@MainActor @Test func theFreshMarkSitsSideBySideOnAMacPoster() throws {
+    try check("regular", .regular, stacked: false, ratings: fresh)
+}
+
+@MainActor @Test func theFreshMarkBesideTheWidestIMDbScoreStacksOnATVPoster() throws {
+    try check("tv", .tv, stacked: true, ratings: fresh)
+}
+
+@MainActor @Test func theFreshMarkWithAUsualIMDbScoreFitsOnATVPoster() throws {
+    try check("tv", .tv, stacked: true, ratings: ["IMDb 8.8", "RT Fresh"])
+}
+
 @Test func voiceOverSaysTheNames() {
     #expect(spokenScore("RT 87%") == "Rotten Tomatoes 87 percent")
+    #expect(spokenScore("RT 0%") == "Rotten Tomatoes 0 percent")
+    #expect(spokenScore("RT Fresh") == "Rotten Tomatoes: Fresh")
     #expect(spokenScore("IMDb 8.8") == "IMDb 8.8")
 }
