@@ -234,6 +234,8 @@ struct EditProfile: View {
                 .padding(4)
             }
             .scrollIndicators(.hidden)
+            // The focus ring and the lift draw past the row; the scroll view must not cut them.
+            .scrollClipDisabled()
             caps("Color")
             ScrollView(.horizontal) {
                 HStack(spacing: 10) {
@@ -250,6 +252,8 @@ struct EditProfile: View {
                 .padding(4)
             }
             .scrollIndicators(.hidden)
+            // The focus ring and the lift draw past the row; the scroll view must not cut them.
+            .scrollClipDisabled()
             if let said {
                 Label(said.text, glyph: said.ok ? "circle-check" : "triangle-alert")
                     .textFont(Theme.type.callout, relativeTo: .callout)
