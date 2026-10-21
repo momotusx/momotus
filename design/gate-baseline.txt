@@ -216,9 +216,6 @@ apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvVersions.kt :: .border(1.
 apps/apple/Marquee/Account/AccountCard.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/Account/AccountSections.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/App/RootView.swift :: .glass(Capsule(), shadow: true)
-apps/apple/Marquee/App/RootView.swift :: Circle().fill(Theme.Palette.accent).frame(width: size * 0.38, height: size * 0.38)
-apps/apple/Marquee/App/RootView.swift :: .glass(RoundedRectangle(cornerRadius: 24, style: .continuous), shadow: true)
-apps/apple/Marquee/App/RootView.swift :: .glass(Capsule(), shadow: true)
 apps/apple/Marquee/App/RootView.swift :: Capsule().fill(.white.opacity(0.12)).overlay(Capsule().strokeBorder(Theme.Palette.edge, lineWidth: 1))
 apps/apple/Marquee/Home/HeroView.swift :: .overlay { card.strokeBorder(Theme.Palette.edge, lineWidth: 1).allowsHitTesting(false) }
 apps/apple/Marquee/Library/CalendarScreen.swift :: .foregroundStyle(day.date == today ? Theme.Palette.accent : Theme.Palette.text)

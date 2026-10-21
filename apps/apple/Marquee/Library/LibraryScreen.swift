@@ -16,6 +16,9 @@ struct LibraryScreen: View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 ScreenTitle(text: "Library")
+                #if os(iOS)
+                CalendarRow()
+                #endif
                 if let s = library.snapshot, total(s) == 0 {
                     // Nothing to filter or sort: the way in instead of chips that say "All 0".
                     EmptyLibrary()
@@ -88,3 +91,27 @@ private struct EmptyLibrary: View {
         .padding(.top, metrics.wide ? Theme.Space.xxl : Theme.Space.xl)
     }
 }
+
+#if os(iOS)
+/// The iPhone's way to the Calendar (D6): a row at the top of Library, as an iOS grouped row.
+private struct CalendarRow: View {
+    @Environment(\.openTab) private var openTab
+
+    var body: some View {
+        Button { openTab(.calendar) } label: {
+            HStack(spacing: 13) {
+                Glyph("calendar", size: 20)
+                Text("Calendar").textFont(Theme.type.body)
+                Spacer(minLength: 0)
+                Glyph("chevron-right", size: 14).foregroundStyle(Theme.Palette.dim)
+            }
+            .foregroundStyle(Theme.Palette.text)
+            .padding(.horizontal, 16)
+            .frame(minHeight: 51)
+            .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        }
+        .buttonStyle(FocusPlainStyle(shape: RoundedRectangle(cornerRadius: 26, style: .continuous)))
+        .accessibilityHint("Shows what airs next")
+    }
+}
+#endif

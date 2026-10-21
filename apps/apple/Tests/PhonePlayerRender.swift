@@ -171,7 +171,7 @@ private struct PhoneSketch: View {
             }
         }
         let shell = column
-            .contentMargins(.bottom, TabBarMetrics.scrollMargin(immersive: true), for: .scrollContent)
+            .contentMargins(.bottom, TabBarMetrics.scrollMargin(immersive: true, bottomInset: 34), for: .scrollContent)
             .frame(width: size.width, height: size.height)
         let host = NSHostingView(rootView: shell)
         host.frame = CGRect(origin: .zero, size: size)
@@ -184,8 +184,12 @@ private struct PhoneSketch: View {
 }
 
 @Test func thePlacesKeepTheBarsMarginButNotUnderThePlayer() {
-    #expect(TabBarMetrics.scrollMargin(immersive: false) == TabBarMetrics.height)
-    #expect(TabBarMetrics.scrollMargin(immersive: true) == 0)
+    // The capsule's foot 21 pt above the screen's edge: 49 pt above a 34 pt home indicator, 83 on an SE.
+    #expect(TabBarMetrics.scrollMargin(immersive: false, bottomInset: 34) == 49)
+    #expect(TabBarMetrics.scrollMargin(immersive: false, bottomInset: 0) == 83)
+    #expect(TabBarMetrics.drop(bottomInset: 34) == 13)
+    #expect(TabBarMetrics.drop(bottomInset: 0) == -21)
+    #expect(TabBarMetrics.scrollMargin(immersive: true, bottomInset: 34) == 0)
 }
 
 @MainActor private final class Frames {
