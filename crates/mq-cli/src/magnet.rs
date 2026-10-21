@@ -496,14 +496,18 @@ async fn run(
         let ready = tokio::time::timeout(READY_TIMEOUT, head.ready()).await;
         (ready.ok().and_then(Result::ok).map(|()| ms(selected)), head)
     }));
-    let (mut ready_ms, mut peers_at_ready, mut kept_head) = (None, None, None);
+    let (mut ready_ms, mut peers_at_ready) = (None, None);
     if !o.bytes && !o.walk {
         let task = ready_task.take().expect("set above");
         let (ready, head) = task.await.map_err(|e| e.to_string())?;
+        // The head range ends at Ready, as the app's does: kept open, it took
+        // the focus whenever the player had no read open and fetched the
+        // window's evicted head again.
+        drop(head);
         let peers = engine.stats(t).await.map_err(|e| e.to_string())?.peers;
         crate::emit(json!({ "event": "ready", "ms": ready, "peers": peers }));
         ready_ms = Some(ready.ok_or("the head and tail were not verified in time")?);
-        (peers_at_ready, kept_head) = (Some(peers), Some(head));
+        peers_at_ready = Some(peers);
     }
 
     let played = if o.bytes {
@@ -542,7 +546,6 @@ async fn run(
             task.abort();
         }
     }
-    drop(kept_head);
     let first = first.await.unwrap_or_default();
     let stats = engine.stats(t).await.map_err(|e| e.to_string())?;
     let dialed = engine.connections();
