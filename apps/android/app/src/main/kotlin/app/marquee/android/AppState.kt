@@ -110,6 +110,13 @@ class AppState(
         }
     }
 
+    /** D13's removal went through: every screen of the old library goes, and the app starts at the first run. */
+    fun wiped() {
+        resetProfile(resetAt, home = false)
+        sentHome = true
+        start = Start.Onboarding
+    }
+
     /** Onboarding is done: a restart from here on opens Home, not onboarding again. */
     fun onboarded() {
         if (start == Start.Onboarding) start = Start.Home

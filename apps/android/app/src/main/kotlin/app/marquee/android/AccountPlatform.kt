@@ -3,11 +3,13 @@ package app.marquee.android
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResultLauncher
 import androidx.browser.auth.AuthTabIntent
 import androidx.browser.customtabs.CustomTabsClient
 import androidx.browser.customtabs.CustomTabsIntent
+import androidx.core.net.toUri
 import androidx.credentials.CreatePublicKeyCredentialRequest
 import androidx.credentials.CreatePublicKeyCredentialResponse
 import androidx.credentials.CredentialManager
@@ -52,11 +54,13 @@ class AccountPlatform(
         authTab = AuthTabIntent.registerActivityResultLauncher(activity, ::authTabResult)
     }
 
-    override val rpId: String = BuildConfig.LINK_HOST
+    // Passkeys need Android 9 (Credential Manager's public key credentials); before it there is none to offer.
+    override val rpId: String =
+        BuildConfig.LINK_HOST.takeIf { Build.VERSION.SDK_INT >= Build.VERSION_CODES.P }.orEmpty()
 
     override fun openBrowser(url: String) {
         val a = activity.get() ?: return CoreLog.w("sign-in: no activity to open the provider page in")
-        val uri = Uri.parse(url)
+        val uri = url.toUri()
         val browser = CustomTabsClient.getPackageName(a, null)
         val launcher = authTab
         if (browser != null && launcher != null && CustomTabsClient.isAuthTabSupported(a, browser)) {
@@ -115,6 +119,7 @@ class AccountPlatform(
 
     override suspend fun passkeyCreate(request: String): PasskeyResult {
         val a = activity.get() ?: return PasskeyResult.Failed("no activity")
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return PasskeyResult.Failed("before Android 9")
         return try {
             val made = credentials.createCredential(a, CreatePublicKeyCredentialRequest(request))
             (made as? CreatePublicKeyCredentialResponse)?.let { Passkeys.used(it.registrationResponseJson) }

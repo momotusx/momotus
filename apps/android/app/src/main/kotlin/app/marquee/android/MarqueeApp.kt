@@ -48,6 +48,9 @@ class MarqueeApp :
     /** Credential Manager, Auth Tab and the sign-in's return (plans/accounts.md 4.4), for the app's life. */
     val accountPlatform by lazy { AccountPlatform(this) }
 
+    /** The account flows: the sign-in under way, Account's actions, D13's removal. */
+    val accounts by lazy { AccountFlows(this) }
+
     /**
      * Sign in another device was asked for (the app shortcut, Account, or a phone camera on a TV's QR, which opens
      * the `/pair` App Link): the scanner opens, after sign-in when this device has no account yet. [scanAgain]

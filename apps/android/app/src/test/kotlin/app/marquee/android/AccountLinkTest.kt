@@ -4,6 +4,8 @@ import android.app.Application
 import android.content.Intent
 import android.net.Uri
 import app.marquee.core.AccountCopy
+import app.marquee.core.route.Route
+import app.marquee.design.Form
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -46,6 +48,13 @@ class AccountLinkTest {
         assertEquals(AccountLink.Shortcut, accountLink(Intent(SIGN_IN_ANOTHER), "link.example"))
         val old = view("marquee://auth#flow=f").addFlags(Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY)
         assertNull(accountLink(old, "link.example"))
+    }
+
+    @Test
+    fun `a first run opens the sign-in over the doors where a sync service is known`() {
+        assertEquals(listOf(Route.Onboarding), firstRun("", Form.Phone), "no service: the doors")
+        assertEquals(listOf(Route.Onboarding, Route.SignIn(firstRun = true)), firstRun("sync.example.org", Form.Phone))
+        assertEquals(listOf(Route.Onboarding, Route.TvSignIn), firstRun("sync.example.org", Form.Tv))
     }
 
     @Test

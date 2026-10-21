@@ -16,9 +16,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,7 +41,6 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import app.marquee.core.Format
 import app.marquee.core.PendingRemoval
-import app.marquee.core.SyncRules
 import app.marquee.core.TileCopy
 import app.marquee.core.model.HomeCatalog
 import app.marquee.core.model.Tile
@@ -89,6 +90,11 @@ fun MarqueeRoot(
         if (gate.shutCount > app.resetAt) app.resetProfile(gate.shutCount, home = !gate.restarted)
         gate.resetDone(app.resetAt)
     }
+    // D13: a removal the core holds goes on (once, on the owner of a device with no account), and one that went
+    // through starts the app as on a new device.
+    val accounts = marquee.accounts
+    LaunchedEffect(gate.snapshot?.wipePending, gate.snapshot?.active, marquee.sync.joined) { accounts.resumeRemoval() }
+    LaunchedEffect(accounts.removal.wiped) { if (accounts.removal.wiped) app.wiped() }
     Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
         val locked = gate.snapshot?.locked == true
         when {
@@ -110,7 +116,7 @@ fun MarqueeRoot(
                     ProfileKeyed(gate.snapshot?.active) {
                         when (app.start) {
                             Start.Loading -> Unit
-                            Start.Onboarding -> AppNav(session, form, app, listOf(Route.Onboarding))
+                            Start.Onboarding -> AppNav(session, form, app, firstRun(accounts.server(marquee), form))
                             Start.Home -> AppNav(session, form, app, debugStack ?: listOf(Route.Home))
                         }
                     }
@@ -120,6 +126,20 @@ fun MarqueeRoot(
         CoreStoppedOverlay(session)
     }
 }
+
+/**
+ * A first run's stack (plans/accounts.md 4.1, 4.2): the doors, with the sign-in over them where a sync service is
+ * known (Not now and Back lead to the doors).
+ */
+internal fun firstRun(
+    server: String,
+    form: Form,
+): List<Route> =
+    when {
+        server.isEmpty() -> listOf(Route.Onboarding)
+        form == Form.Tv -> listOf(Route.Onboarding, Route.TvSignIn)
+        else -> listOf(Route.Onboarding, Route.SignIn(firstRun = true))
+    }
 
 /**
  * TV, on Home: Back moves focus to the first tile of the first lane unless it is there already or
@@ -257,10 +277,36 @@ private fun AppNav(
         if (backStack.lastOrNull() != Route.Sources) backStack.add(Route.Sources)
     }
 
-    // A join from the first screen settles how to begin: back on it, the app goes Home.
+    // A join from the first screen settles how to begin: back on it, the app goes Home. An account created there
+    // goes on through the doors (I use Stremio or Start fresh, 4.1.5).
+    var created by rememberSaveable { mutableStateOf(false) }
     val onFirstScreen = backStack.singleOrNull() == Route.Onboarding
     LaunchedEffect(sync.joined, onFirstScreen) {
-        if (sync.joined && onFirstScreen) arrive()
+        if (sync.joined && onFirstScreen && !created) arrive()
+    }
+
+    // Sign in another device (the app shortcut, or a phone camera on a TV's QR): the scanner, after the sign-in
+    // when this device has no account yet. A TV approves nothing (D6).
+    val signingIn = routes.any { it is Route.SignIn }
+    LaunchedEffect(marquee.pendingScan, sync.joined, signingIn) {
+        when {
+            !marquee.pendingScan || signingIn -> {
+                Unit
+            }
+
+            tv -> {
+                marquee.pendingScan = false
+            }
+
+            sync.joined -> {
+                marquee.pendingScan = false
+                if (backStack.lastOrNull() != Route.AddDevice) backStack.add(Route.AddDevice)
+            }
+
+            else -> {
+                backStack.add(Route.SignIn(firstRun = Route.Onboarding in routes))
+            }
+        }
     }
 
     // Back, in one place. Order: overlays and the player (none yet), the stack (NavDisplay's own
@@ -298,7 +344,41 @@ private fun AppNav(
                         OnboardingScreen(
                             onDefaults = { backStack.add(Route.Defaults(DefaultsMode.FirstRun)) },
                             onImport = { backStack.add(Route.Import) },
-                            onPair = { backStack.add(Route.Pairing) },
+                            onPair = if (created) null else ({ backStack.add(Route.Pairing) }),
+                        )
+                    }
+                    entry<Route.SignIn> { route ->
+                        SignInScreen(
+                            marquee.accounts,
+                            session,
+                            sync,
+                            route.firstRun,
+                            onNotNow = {
+                                marquee.pendingScan = false
+                                pop()
+                            },
+                            onScan = { backStack.add(Route.Pairing) },
+                            onKit = { backStack.add(Route.SyncJoin(kit = true)) },
+                            onNoProviders = {
+                                pop()
+                                backStack.add(Route.Sync)
+                            },
+                            onCreated = { kit ->
+                                if (route.firstRun) created = true
+                                pop()
+                                if (kit) backStack.add(Route.RecoveryKit)
+                            },
+                            onIn = { if (route.firstRun) arrive() else pop() },
+                        )
+                    }
+                    entry<Route.TvSignIn> {
+                        TvSignInScreen(
+                            session,
+                            sync,
+                            marquee.accounts.server(marquee),
+                            onDoors = ::pop,
+                            onKit = { backStack.add(Route.SyncJoin(kit = true)) },
+                            onIn = ::arrive,
                         )
                     }
                     entry<Route.Import> {
@@ -347,19 +427,36 @@ private fun AppNav(
                         LaunchedEffect(profile?.active) {
                             app.defaultsCard.check(kids = profile?.kids != false) { defaultsSeen(session) }
                         }
-                        val card: (@Composable () -> Unit)? =
-                            app.defaultsCard.offer?.takeIf { app.home.rows.isNotEmpty() }?.let { answer ->
+                        // Home's one account card slot comes first (plans/accounts.md 4.3): a scheduled deletion
+                        // is the one thing that must not wait behind the addons card.
+                        val accountCard: (@Composable () -> Unit)? =
+                            marquee.accounts.homeCard()?.let { shown ->
                                 {
-                                    RecommendedCard(
-                                        answer,
-                                        onReview = {
-                                            app.defaultsCard.answer()
-                                            backStack.add(Route.Defaults(DefaultsMode.Review))
+                                    AccountCard(
+                                        marquee.accounts,
+                                        sync,
+                                        shown,
+                                        onSignIn = {
+                                            backStack.add(if (tv) Route.TvSignIn else Route.SignIn(firstRun = false))
                                         },
-                                        onNotNow = { app.defaultsCard.answer() },
+                                        onMakeKit = { backStack.add(Route.RecoveryKit) },
                                     )
                                 }
                             }
+                        val card: (@Composable () -> Unit)? =
+                            accountCard
+                                ?: app.defaultsCard.offer?.takeIf { app.home.rows.isNotEmpty() }?.let { answer ->
+                                    {
+                                        RecommendedCard(
+                                            answer,
+                                            onReview = {
+                                                app.defaultsCard.answer()
+                                                backStack.add(Route.Defaults(DefaultsMode.Review))
+                                            },
+                                            onNotNow = { app.defaultsCard.answer() },
+                                        )
+                                    }
+                                }
                         val removal = app.removal
                         val notice: (@Composable () -> Unit)? =
                             if (removal.removing != null || removal.failed != null) ({ RemovalNote(removal) }) else null
@@ -491,28 +588,43 @@ private fun AppNav(
                         PairingScreen(session, sync, onDone = {
                             when {
                                 // Also when setup was opened again from an empty Home or Discover.
-                                Route.Onboarding in backStack -> arrive()
+                                Route.Onboarding in backStack -> {
+                                    arrive()
+                                }
 
-                                backStack.size > 1 -> backStack.removeAt(backStack.lastIndex)
+                                else -> {
+                                    pop()
+                                    // Scanned in from a sign-in's Other ways: that sign-in is done with.
+                                    if (sync.joined && backStack.lastOrNull() is Route.SignIn) {
+                                        marquee.accounts.endSignIn()
+                                        pop()
+                                    }
+                                }
                             }
                         })
                     }
                     entry<Route.Sync> {
                         SyncScreen(
                             sync,
+                            marquee.accounts,
                             onPair = { backStack.add(Route.Pairing) },
                             onJoin = { backStack.add(Route.SyncJoin(it)) },
                             onAdd = { backStack.add(Route.AddDevice) },
                             onKit = { backStack.add(Route.RecoveryKit) },
                             onLost = { backStack.add(Route.ReportLost(it)) },
                             onCompare = { backStack.add(Route.SyncFork) },
-                            canDelete = SyncRules.mayDeleteAccount(gate.snapshot),
-                            canMakeKit = SyncRules.mayMakeKit(gate.snapshot),
+                            onSignIn = { backStack.add(Route.SignIn(firstRun = false)) },
+                            rows = marquee.accounts.rows(tv),
                         )
                     }
                     entry<Route.SyncFork> { ForkScreen(sync, onDone = ::pop) }
                     entry<Route.SyncJoin> { route -> SyncJoinScreen(sync, route.kit, onDone = ::pop) }
-                    entry<Route.AddDevice> { AddDeviceScreen(sync, onDone = ::pop) }
+                    entry<Route.AddDevice> {
+                        AddDeviceScreen(sync, onDone = {
+                            marquee.scanAgain = false
+                            pop()
+                        }, scanAgain = marquee.scanAgain)
+                    }
                     entry<Route.RecoveryKit> { RecoveryKitScreen(sync, onDone = ::pop) }
                     entry<Route.ReportLost> { route -> ReportLostScreen(sync, route.id, onDone = ::pop) }
                     entry<Route.Title> { route ->

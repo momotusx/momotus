@@ -28,6 +28,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -61,6 +62,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import app.marquee.core.AccountCopy
+import app.marquee.core.AccountRules
 import app.marquee.core.SyncCopy
 import app.marquee.core.SyncCopy.Action
 import app.marquee.core.SyncRules
@@ -88,6 +91,7 @@ import app.marquee.design.SecondaryButton
 import app.marquee.design.StateMessage
 import app.marquee.design.Status
 import app.marquee.design.StatusWord
+import app.marquee.design.SwitchRow
 import app.marquee.design.TextRole
 import app.marquee.design.focusClickable
 import app.marquee.design.focusSoon
@@ -112,14 +116,14 @@ private const val SERVER = "syncServer"
 private const val NAME = "syncName"
 
 /** The sync server this device used before; not a secret, so plain preferences hold it. */
-private fun Context.knownServer(): String =
+internal fun Context.knownServer(): String =
     getSharedPreferences(
         PREFS,
         Context.MODE_PRIVATE,
     ).getString(SERVER, null).orEmpty().trim().takeIf(SyncRules::plainAddress).orEmpty()
 
 /** The server and this device's name, for the next pairing or kit: neither is a secret. */
-private fun Context.rememberJoin(
+internal fun Context.rememberJoin(
     server: String,
     name: String,
 ) = getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit {
@@ -128,7 +132,7 @@ private fun Context.rememberJoin(
 }
 
 /** How other devices list this one: the name it joined with last, else one by its form. */
-private fun Context.deviceName(tv: Boolean): String =
+internal fun Context.deviceName(tv: Boolean): String =
     getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(NAME, null)?.trim()?.ifEmpty { null }
         ?: if (tv) "Marquee TV" else "Marquee phone"
 
@@ -202,7 +206,7 @@ internal fun Callout(
 
 /** A row a TV cannot act on: focusable so the remote reads it, with the line that says where to do it. */
 @Composable
-private fun ElsewhereRow(
+internal fun ElsewhereRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
     text: String,
@@ -231,7 +235,7 @@ private fun ElsewhereRow(
 }
 
 /** A page's own column: the gutter on both sides and a readable width. */
-private fun LazyListScope.block(
+internal fun LazyListScope.block(
     key: String,
     content: @Composable () -> Unit,
 ) = item(key = key) {
@@ -260,7 +264,7 @@ private fun Fingerprint(fingerprint: String) {
 }
 
 /** What a failed action reads as. */
-private fun wordsOf(
+internal fun wordsOf(
     e: Throwable,
     action: Action,
 ): String {
@@ -274,7 +278,7 @@ private fun wordsOf(
  * none refuses (there is nothing to ask with), and a TV with none takes the page's second step,
  * [askAgain]. Returns the words of why nothing ran, or null when [run] ran (it may throw).
  */
-private suspend fun guarded(
+internal suspend fun guarded(
     owner: OwnerCheck,
     tv: Boolean,
     title: String,
@@ -361,20 +365,26 @@ internal fun CoroutineScope.refocus(vararg targets: FocusRequester) {
 @Composable
 fun SyncScreen(
     sync: SyncController,
+    flows: AccountFlows,
     onPair: () -> Unit,
     onJoin: (kit: Boolean) -> Unit,
     onAdd: () -> Unit,
     onKit: () -> Unit,
     onLost: (String) -> Unit,
     onCompare: () -> Unit,
-    /** The session runs the owner profile: only it deletes the account (D15). */
-    canDelete: Boolean,
-    /** The owner profile again: only it makes a recovery kit, a copy of the account key (D17). */
-    canMakeKit: Boolean,
+    /** Sign in, where this device's sync service offers it (plans/accounts.md 4.1); not on a TV. */
+    onSignIn: () -> Unit,
+    /** What the profile on screen may do here (D13, D15 to D17). */
+    rows: AccountRules.Rows,
 ) {
     val tv = Marquee.form == Form.Tv
+    val context = LocalContext.current
     var left by remember { mutableStateOf(false) }
     val addFocus = remember { FocusRequester() }
+    val server = remember(sync.joined) { flows.server(context) }
+    val providers by produceState(emptyList<String>(), server, sync.joined) {
+        value = if (sync.joined || tv) emptyList() else flows.providers(server)
+    }
     LazyColumn(
         Modifier.fillMaxSize().focusRestorer(),
         contentPadding = pagePadding(framed = false),
@@ -398,6 +408,10 @@ fun SyncScreen(
                         Said(problem.words, Status.Bad)
                     }
                 }
+                Removal(flows, owner = rows.links)
+            }
+            if (providers.isNotEmpty()) {
+                item(key = "sign-in") { LinkRow(Icons.Users, AccountCopy.SIGN_IN_TITLE, "", onSignIn) }
             }
             item(key = "pair") { LinkRow(Icons.QrCode, SyncCopy.PAIR_TITLE, SyncCopy.PAIR_TEXT, onPair) }
             item(key = "start") { LinkRow(Icons.Plus, SyncCopy.START_TITLE, SyncCopy.START_TEXT, { onJoin(false) }) }
@@ -405,14 +419,35 @@ fun SyncScreen(
                 key = "recover",
             ) { LinkRow(Icons.LifeBuoy, SyncCopy.RECOVER_TITLE, SyncCopy.RECOVER_TEXT, { onJoin(true) }) }
         } else {
-            val kit = onKit.takeIf { canMakeKit }
-            joined(sync, tv, onAdd, kit, onLost, onCompare, onLeft = { left = true }, addFocus, canDelete)
+            val kit = onKit.takeIf { rows.makeKit }
+            joined(sync, flows, rows, tv, onAdd, kit, onLost, onCompare, onLeft = { left = true }, addFocus)
         }
+    }
+}
+
+/** D13's removal while it runs, or why it stopped with Try again (the owner's: the core refuses the others). */
+@Composable
+private fun Removal(
+    flows: AccountFlows,
+    owner: Boolean,
+) {
+    val scope = rememberCoroutineScope()
+    val removal = flows.removal
+    if (removal.running) Said(AccountCopy.WIPING, Status.Warn)
+    val problem = removal.problem ?: return
+    Said(problem, Status.Bad)
+    if (problem != AccountCopy.WIPE_FAILED) Said(AccountCopy.WIPE_FAILED, Status.Bad)
+    if (owner) {
+        SecondaryButton(SyncCopy.RETRY, {
+            if (!removal.running) scope.launch { runCatching { flows.retryRemoval() } }
+        }, icon = Icons.RefreshCw, busy = removal.running)
     }
 }
 
 private fun LazyListScope.joined(
     sync: SyncController,
+    flows: AccountFlows,
+    rows: AccountRules.Rows,
     tv: Boolean,
     onAdd: () -> Unit,
     /** Null off the owner profile: no kit row, no Make a new kit (D17). */
@@ -421,15 +456,19 @@ private fun LazyListScope.joined(
     onCompare: () -> Unit,
     onLeft: () -> Unit,
     addFocus: FocusRequester,
-    canDelete: Boolean,
 ) {
     item(key = "state") { StateCard(sync, onCompare) }
-    item(key = "devices") { DeviceList(sync, onLost, onKit, addFocus) }
+    block("sign-in-rows") { AccountRows(flows, sync, rows) }
+    // Sign in another device: a phone or tablet's scanner; a TV approves nothing (D6).
     item(key = "add") {
         Box(Modifier.focusRequester(addFocus)) {
-            LinkRow(Icons.QrCode, SyncCopy.ADD_TITLE, if (tv) SyncCopy.TV_ADD else SyncCopy.ADD_TEXT, onAdd)
+            when {
+                tv -> ElsewhereRow(Icons.QrCode, AccountCopy.USE_PHONE_TO_SIGN_IN, AccountCopy.TV_SIGN_IN_HOW)
+                rows.approve -> LinkRow(Icons.QrCode, AccountCopy.SIGN_IN_ANOTHER, SyncCopy.ADD_TEXT, onAdd)
+            }
         }
     }
+    item(key = "devices") { DeviceList(sync, onLost, onKit, addFocus) }
     when {
         onKit == null -> Unit
         tv -> item(key = "kit") { ElsewhereRow(Icons.KeyRound, SyncCopy.KIT_TITLE, SyncCopy.TV_KIT) }
@@ -437,8 +476,8 @@ private fun LazyListScope.joined(
     }
     // A stuck device's way out is in the state card; a plain stop would only fail again. Deleting needs
     // only the relay's token, so it stays, a fork included: that is where someone who wants out looks.
-    if (!sync.stuck) block("leave") { Leave(sync, onLeft) }
-    if (canDelete) block("delete") { DeleteAccount(sync) }
+    if (!sync.stuck && rows.leave.show) block("leave") { Leave(sync, flows, rows.leave, onLeft) }
+    if (rows.delete) block("delete") { DeleteAccount(flows) }
 }
 
 /** This device: the state, every fact of the last round, Sync now and a fix, and the 12 characters. */
@@ -557,7 +596,8 @@ private fun DeviceList(
             }
     }
     val members = SyncRules.sortMembers(sync.devices?.members.orEmpty())
-    val noKit = sync.devices != null && members.none { it.kit }
+    // No second way in yet (4.1.7): the owner's to add (D17), so the callout shows there only.
+    val noKit = onKit != null && AccountRules.needsSecondWayIn(sync.devices?.members)
     Column(
         Modifier
             .padding(horizontal = Marquee.safe.side)
@@ -584,7 +624,7 @@ private fun DeviceList(
             sync.recovered || noKit -> {
                 val text =
                     when {
-                        !sync.recovered -> SyncCopy.NO_KIT
+                        !sync.recovered -> "${AccountCopy.SECOND_WAY_IN}. ${AccountCopy.SECOND_WAY_IN_TEXT}"
                         tv -> SyncCopy.TV_AFTER_RECOVER
                         else -> SyncCopy.AFTER_RECOVER
                     }
@@ -694,12 +734,35 @@ private fun MemberRow(
             if (member.thisDevice) StatusWord(SyncCopy.THIS_DEVICE, Status.Ok)
         }
         MqText(
-            SyncCopy.addedLine(member.kit, member.addedMs, SyncRules.sponsorName(member, members)),
+            if (member.viaPasskey) {
+                AccountRules.fill(AccountCopy.JOINED_WITH_PASSKEY, mapOf("date" to accountDate(member.addedMs)))
+            } else {
+                SyncCopy.addedLine(member.kit, member.addedMs, SyncRules.sponsorName(member, members))
+            },
             role = TextRole.Caption,
             color = Marquee.colors.muted,
         )
+        // A passkey's last use: the newest device it opened the account on, gone or not.
+        val lastBy = member.lastUsedBy
+        val lastMs = member.lastUsedMs
+        if (member.kit && member.passkey && lastBy != null && lastMs != null) {
+            MqText(
+                AccountRules.fill(
+                    AccountCopy.LAST_USED,
+                    mapOf("device" to AccountRules.byName(lastBy, members), "date" to accountDate(lastMs)),
+                ),
+                role = TextRole.Caption,
+                color = Marquee.colors.muted,
+            )
+        }
         said?.let { Said(it, Status.Bad) }
-        if (member.thisDevice) return@Column
+        if (member.thisDevice) {
+            // The passkey lives in this phone's password manager: a sign-out first keeps it with its owner.
+            if (!tv && members.any { it.kit && it.passkey }) {
+                MqText(AccountCopy.GIVING_AWAY, role = TextRole.Caption, color = Marquee.colors.muted)
+            }
+            return@Column
+        }
         when {
             again -> {
                 AskAgain("${SyncCopy.REMOVE} $name", onYes = {
@@ -783,6 +846,8 @@ private fun MemberRow(
 @Composable
 private fun Leave(
     sync: SyncController,
+    flows: AccountFlows,
+    choice: AccountRules.LeaveChoice,
     onLeft: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -796,6 +861,12 @@ private fun Leave(
     var busy by remember { mutableStateOf(false) }
     val leaveFocus = remember { FocusRequester() }
 
+    // D13: the owner is asked to remove the profiles and library too, ticked; a TV always removes, so only its
+    // owner signs out there. The debrid accounts go with them, ticked.
+    var removeLibrary by remember { mutableStateOf(true) }
+    var debrid by remember { mutableStateOf(true) }
+    val removing = choice.always || (choice.ask && removeLibrary)
+
     fun leave(force: Boolean) {
         if (busy) return
         busy = true
@@ -803,7 +874,11 @@ private fun Leave(
         scope.launch {
             try {
                 // Without a screen lock this page's button is the step: leaving ends access, never grants it.
-                val refused = guarded(owner, tv, SyncCopy.AUTH_LEAVE, askAgain = null) { sync.signOut(force) }
+                val refused =
+                    guarded(owner, tv, SyncCopy.AUTH_LEAVE, askAgain = null) {
+                        // The core records the removal before the leave goes out; steps 2 and 3 follow.
+                        if (removing) flows.signOutAndRemove(force, debrid) else sync.signOut(force)
+                    }
                 if (refused == null) onLeft() else error = refused
             } catch (e: CancellationException) {
                 throw e
@@ -811,6 +886,7 @@ private fun Leave(
                 val problem = SyncAccount.problemOf(e, Action.Leave)
                 unsent = problem.code == "unsent"
                 unreachable = problem.code == null || SyncAccount.stuck(problem.code)
+                // A leave that went out and a removal that stopped: Account's doors say why, with Try again.
                 error = problem.words
             } finally {
                 busy = false
@@ -819,6 +895,14 @@ private fun Leave(
     }
     Kicker(SyncCopy.LEAVE_TITLE, side = 0.dp)
     MqText(SyncCopy.LEAVE_TEXT, role = TextRole.Callout, color = Marquee.colors.muted)
+    if (choice.ask || choice.always) {
+        if (choice.always) {
+            MqText(AccountCopy.REMOVE_LIBRARY_ASK, role = TextRole.Callout)
+        } else {
+            SwitchRow(removeLibrary, { removeLibrary = !removeLibrary }) { MqText(AccountCopy.REMOVE_LIBRARY_ASK) }
+        }
+        if (removing) SwitchRow(debrid, { debrid = !debrid }) { MqText(AccountCopy.REMOVE_LIBRARY_DEBRID) }
+    }
     error?.let { Said(it, Status.Bad) }
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
@@ -849,30 +933,19 @@ private fun Leave(
 /**
  * Delete the account for every device: one ask that names what goes, then the screen lock. Without a
  * lock that ask is the step, as for Leave (D15): deleting ends access and every library stays, and a
- * phone with no lock must still be able to delete. This device keeps its library; the page says so.
+ * phone with no lock must still be able to delete. With an Apple link, Apple's revoke page comes next and
+ * its receipt goes with the deletion, else Delete anyway (4.3). This device keeps its library.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun DeleteAccount(sync: SyncController) {
+private fun DeleteAccount(flows: AccountFlows) {
     val tv = Marquee.form == Form.Tv
     val scope = rememberCoroutineScope()
     val owner = rememberOwnerCheck()
+    val actions = flows.actions
     var asking by remember { mutableStateOf(false) }
-    var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val deleteFocus = remember { FocusRequester() }
-    val delete: suspend () -> Unit = {
-        busy = true
-        try {
-            sync.deleteAccount()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            error = wordsOf(e, Action.Delete)
-        } finally {
-            busy = false
-        }
-    }
     Kicker(SyncCopy.DELETE_TITLE, side = 0.dp)
     MqText(SyncCopy.DELETE_TEXT, role = TextRole.Callout, color = Marquee.colors.muted)
     error?.let { Said(it, Status.Bad) }
@@ -889,17 +962,24 @@ private fun DeleteAccount(sync: SyncController) {
         verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
     ) {
         SecondaryButton(SyncCopy.DELETE_BUTTON, {
-            if (busy) return@SecondaryButton
+            if (actions.busy) return@SecondaryButton
             error = null
             scope.launch {
-                guarded(owner, tv, SyncCopy.AUTH_DELETE, askAgain = null) { delete() }?.let { error = it }
+                error = guarded(owner, tv, SyncCopy.AUTH_DELETE, askAgain = null) { actions.delete { asking = false } }
             }
-        }, icon = Icons.Trash, busy = busy)
+        }, icon = Icons.Trash, busy = actions.busy)
         // A remote lands on Cancel: two presses never delete the account.
         SecondaryButton(SyncCopy.CANCEL, {
             asking = false
             scope.refocus(deleteFocus)
         }, focusRequester = stepFocus())
+    }
+    // Apple's revoke said no: Delete anyway, or Cancel; any other failure in words.
+    if (actions.deleting) {
+        actions.failure?.let { f ->
+            FailureNote(f) { a -> if (a == AccountRules.Act.Anyway) actions.goOn() else actions.dismiss() }
+        }
+        actions.said?.let { Said(it, Status.Bad) }
     }
 }
 
@@ -1142,12 +1222,13 @@ fun SyncJoinScreen(
 fun AddDeviceScreen(
     sync: SyncController,
     onDone: () -> Unit,
+    /** Opened from a phone camera on a TV's QR (the `/pair` App Link): that scan counts for nothing here. */
+    scanAgain: Boolean = false,
 ) {
     val context = LocalContext.current
     val tv = Marquee.form == Form.Tv
     val scope = rememberCoroutineScope()
     val canScan = !tv && context.hasCamera()
-    var code by remember { mutableStateOf("") }
     var scanning by remember { mutableStateOf(false) }
 
     /** Why the camera is not scanning: not allowed, or not working. */
@@ -1164,12 +1245,21 @@ fun AddDeviceScreen(
     var ended by remember { mutableStateOf(false) }
     var differError by remember { mutableStateOf<String?>(null) }
     val owner = rememberOwnerCheck()
-    val fieldFocus = remember { FocusRequester() }
+    val scanFocus = remember { FocusRequester() }
     val permission =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             scanning = granted
             noCamera = SyncCopy.CAMERA_DENIED.takeUnless { granted }
         }
+
+    fun scan() {
+        error = null
+        noCamera = null
+        if (context.cameraAllowed()) scanning = true else permission.launch(Manifest.permission.CAMERA)
+    }
+
+    // Sign in another device is one tap: the scanner opens with the page (plans/accounts.md 4.2).
+    LaunchedEffect(Unit) { if (canScan && sync.joined) scan() }
 
     fun take(text: String) {
         val trimmed = text.trim()
@@ -1187,13 +1277,11 @@ fun AddDeviceScreen(
         error = null
         scope.launch {
             try {
-                // Letting a device in asks for the screen lock; a TV without one had this review as its second
-                // step (a non-null askAgain refuses on a phone without a lock).
+                // Letting a device in asks for the screen lock; a phone without one refuses (a non-null askAgain).
                 error =
                     guarded(owner, tv, SyncCopy.AUTH_APPROVE, askAgain = { }.takeUnless { tv }) {
                         digits = sync.approvePairing(qr)
                         approvedQr = qr
-                        code = ""
                         reviewing = null
                     }
             } catch (e: CancellationException) {
@@ -1236,7 +1324,7 @@ fun AddDeviceScreen(
         contentPadding = pagePadding(framed = false),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
-        item(key = "head") { BrowseHeader(SyncCopy.TITLE, SyncCopy.ADD_TITLE) }
+        item(key = "head") { BrowseHeader(SyncCopy.TITLE, AccountCopy.SIGN_IN_ANOTHER) }
         block("body") {
             NeedsAccount(sync, onDone) {
                 val shown = digits
@@ -1253,8 +1341,7 @@ fun AddDeviceScreen(
                                 digits = null
                                 approvedQr = null
                                 ended = false
-                                code = ""
-                                scope.refocus(fieldFocus)
+                                if (canScan) scan()
                             }, icon = Icons.QrCode, focusRequester = stepFocus())
                             SecondaryButton(SyncCopy.DONE, onDone, icon = Icons.Check)
                         }
@@ -1276,8 +1363,10 @@ fun AddDeviceScreen(
 
                     // The code's server is always this account's own: the question is about the device.
                     pending != null -> {
+                        // Said once the scanner took a code, for TalkBack too.
+                        LiveSpoken(AccountCopy.CODE_FOUND) { StatusWord(AccountCopy.CODE_FOUND, Status.Ok) }
                         MqText(SyncCopy.REVIEW_ASK, role = TextRole.Title3)
-                        Callout(Icons.ShieldAlert, SyncCopy.REVIEW_TEXT)
+                        Callout(Icons.ShieldAlert, AccountCopy.APPROVE_WARNING)
                         error?.let { Said(it, Status.Bad) }
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
@@ -1293,14 +1382,21 @@ fun AddDeviceScreen(
                                 if (!busy) {
                                     reviewing = null
                                     error = null
-                                    scope.refocus(fieldFocus)
+                                    scope.refocus(scanFocus)
                                 }
                             })
                         }
                     }
 
+                    // A TV approves nothing (D6): the phone signs it in.
+                    tv || !canScan -> {
+                        MqText(AccountCopy.USE_PHONE_TO_SIGN_IN, color = Marquee.colors.muted)
+                        noCamera?.let { Said(it, Status.Bad) }
+                    }
+
                     else -> {
-                        MqText(if (tv) SyncCopy.TV_ADD else SyncCopy.ADD_LEDE, color = Marquee.colors.muted)
+                        if (scanAgain) Callout(Icons.QrCode, AccountCopy.SCAN_AGAIN_HERE)
+                        MqText(SyncCopy.ADD_LEDE, color = Marquee.colors.muted)
                         Callout(Icons.ShieldAlert, SyncCopy.ADD_WARNING)
                         if (scanning) {
                             QrScanner(
@@ -1324,49 +1420,10 @@ fun AddDeviceScreen(
                             )
                             MqText(SyncCopy.SCANNING, role = TextRole.Callout)
                             SecondaryButton(SyncCopy.CANCEL, { scanning = false })
-                        } else if (canScan) {
-                            PrimaryButton(SyncCopy.SCAN, {
-                                error = null
-                                noCamera = null
-                                if (context.cameraAllowed()) {
-                                    scanning = true
-                                } else {
-                                    permission.launch(
-                                        Manifest.permission.CAMERA,
-                                    )
-                                }
-                            }, icon = Icons.Camera)
+                        } else {
+                            PrimaryButton(SyncCopy.SCAN, ::scan, icon = Icons.Camera, focusRequester = scanFocus)
                         }
                         noCamera?.let { Said(it, Status.Bad) }
-                        Labeled(if (canScan) SyncCopy.PASTE_LABEL else SyncCopy.PASTE_ONLY) {
-                            MqTextField(
-                                code,
-                                { code = it },
-                                label = if (canScan) SyncCopy.PASTE_LABEL else SyncCopy.PASTE_ONLY,
-                                placeholder = SyncCopy.PASTE_HINT,
-                                modifier = Modifier.focusRequester(fieldFocus),
-                                keyboardOptions =
-                                    KeyboardOptions(
-                                        autoCorrectEnabled = false,
-                                        keyboardType = KeyboardType.Uri,
-                                    ),
-                            )
-                        }
-                        if (canScan) {
-                            SecondaryButton(
-                                SyncCopy.NEXT,
-                                { take(code) },
-                                icon = Icons.Check,
-                                enabled = code.isNotBlank(),
-                            )
-                        } else {
-                            PrimaryButton(
-                                SyncCopy.NEXT,
-                                { take(code) },
-                                icon = Icons.Check,
-                                enabled = code.isNotBlank(),
-                            )
-                        }
                         error?.let { Said(it, Status.Bad) }
                     }
                 }
@@ -1947,6 +2004,8 @@ fun ForkScreen(
 class PairingHolder(
     private val session: CoreSession,
     private val sync: SyncController,
+    /** `phone`, `tablet` or `tv`, sealed in the roster (D6). */
+    private val form: String,
 ) : ViewModel() {
     var view: PairingView? by mutableStateOf(null)
         private set
@@ -1962,7 +2021,7 @@ class PairingHolder(
         hand()
         view?.close()
         watch?.cancel()
-        val next = session.pairing(server, name)
+        val next = session.pairing(server, name, form)
         view = next
         watch =
             viewModelScope.launch {
@@ -1994,12 +2053,12 @@ fun PairingScreen(
     onDone: () -> Unit,
 ) {
     val context = LocalContext.current
+    val tv = Marquee.form == Form.Tv
     val holder =
         viewModel<PairingHolder>(
             key = "pairing",
-            factory = viewModelFactory { initializer { PairingHolder(session, sync) } },
+            factory = viewModelFactory { initializer { PairingHolder(session, sync, deviceForm(context, tv)) } },
         )
-    val tv = Marquee.form == Form.Tv
     // A remembered address with a user name or password (an older version saved it) is not used.
     val known = remember(context) { context.knownServer() }
     var server by rememberSaveable { mutableStateOf(known) }
@@ -2095,7 +2154,7 @@ fun PairingScreen(
 /** One attempt, from the code to the join. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Session(
+internal fun Session(
     view: PairingView,
     sync: SyncController,
     server: String,

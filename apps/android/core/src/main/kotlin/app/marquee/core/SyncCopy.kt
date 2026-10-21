@@ -119,19 +119,15 @@ object SyncCopy {
         "Approve only a code on a screen in front of you. Whoever controls that screen gets your account."
     const val SCAN = "Scan the code"
     const val SCANNING = "Point the camera at the code on the other device."
-    const val NO_CAMERA = "The camera is not available. Paste the code instead."
-    const val PASTE_LABEL = "Or paste the code"
-    const val PASTE_ONLY = "Paste the code"
-    const val PASTE_HINT = "marquee:pair?..."
+
+    // Only a live scan approves (plans/accounts.md D6): no paste field, so no words for one.
+    const val NO_CAMERA = "The camera is not available."
     const val NOT_A_CODE = "This code is not a Marquee pairing code."
     const val NEXT = "Next"
-    const val CAMERA_DENIED = "Marquee may not use the camera. Allow it in the system settings, or paste the code."
+    const val CAMERA_DENIED = "Marquee may not use the camera. Allow it in the system settings."
 
     /** The step before approving: the code's server is always this account's own, so it asks about the device. */
     const val REVIEW_ASK = "Approve a new device?"
-    const val REVIEW_TEXT =
-        "Approve it only if the new device is in front of you and shows the code you scanned or pasted. Whoever " +
-            "confirms the six digits next joins your account."
     const val APPROVE = "Approve"
     const val APPROVING = "Approving"
     const val APPROVED_STEP = "The new device now shows six digits. They must be these:"
