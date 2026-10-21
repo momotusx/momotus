@@ -385,8 +385,13 @@ fn wrong_title(s: &ParsedStream, target: &Target, c: &Conditions) -> bool {
     }
     let line = s.raw_description.lines().next().unwrap_or_default();
     let others = line.contains(" / ").then(|| line.split(" / "));
+    // A pack's file is often named for its episode alone ("S01E01- Winter
+    // Is Coming.mkv") or a hash, while the torrent's own name, the title
+    // line, names the show (pick audit: 8 right rows over 4 of 6 shows).
+    let torrent = std::iter::once_with(|| normalize_title(&mq_relparse::parse(line).title));
     std::iter::once(parsed)
         .chain(others.into_iter().flatten().map(normalize_title))
+        .chain(torrent)
         .filter(|n| n.len() >= 3)
         .all(|n| title_similarity(&n, &wanted) < 0.5)
 }

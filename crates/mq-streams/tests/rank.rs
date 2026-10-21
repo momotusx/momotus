@@ -1701,6 +1701,46 @@ fn a_title_named_in_two_languages_matches_either() {
     );
 }
 
+/// A season pack's file named for its episode alone, or for a hash, is the
+/// show the torrent's own name says (pick audit, Torrentio on 2026-10-22);
+/// a torrent named for another work still hides.
+#[test]
+fn a_pack_file_named_for_its_episode_matches_the_torrents_name() {
+    let case = Case {
+        target: Target {
+            title: "Game of Thrones".into(),
+            year: None,
+            season: Some(1),
+            episode: Some(1),
+        },
+        ..Case::stick()
+    };
+    let named = |i, torrent: &str, file: &str| {
+        let mut row = seeded(i, &format!("{torrent}\n{file}"), 106, 0.4);
+        row["behaviorHints"] = json!({ "filename": file });
+        row
+    };
+    let ranked = case.rank(vec![
+        named(
+            1,
+            "Game of Thrones Season 1 S01 720p BluRay x264 MrLss",
+            "S01E01- Winter Is Coming.mkv",
+        ),
+        named(
+            2,
+            "Game of Thrones S01E01 1080p WEB-DL x264-NTb",
+            "3424e951679a42e7ad891930319ce1df[EZTVx.to].mkv",
+        ),
+        named(
+            3,
+            "The Island of Dr. Moreau (1996) 720p BluRay",
+            "S01E01- Winter Is Coming.mkv",
+        ),
+    ]);
+    assert_eq!(ranked.rows.len(), 2, "{:?}", ranked.hidden);
+    assert_eq!(hidden(&ranked, HideReason::WrongTitle), 1);
+}
+
 /// 3.3: phones count as their class.
 #[test]
 fn a_display_counts_as_its_screen_class() {
