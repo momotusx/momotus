@@ -1,8 +1,8 @@
 /** A browser context whose core messages pass through a test's `patch` on
- * their way to the page: a playback held where a test wants it (the loading
- * layer's states), or fields a bridge built before them lacks filled from
- * fixtures (plans/player-polish.md: `start`, a track's `nativeName`, `fits`
- * and `release`). Every other message passes as the core sent it. */
+ * their way to the page, which watches what the core sent or writes what the
+ * e2e bridge cannot reach (it has no torrent engine): a torrent's start for
+ * the loading layer, a version that plays from this device. Every other
+ * message passes as the core sent it. */
 
 import type { Browser, BrowserContextOptions, WebSocketRoute } from "@playwright/test";
 import { PORTS } from "./core";

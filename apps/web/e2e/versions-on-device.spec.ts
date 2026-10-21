@@ -1,6 +1,7 @@
 /** Versions says "On this device" where the core does (plans/player-polish.md
- * 2b): as the row's line, and on the recommended card. A bridge built before
- * `onDevice` sends none, so the shared core's Versions of Game of Thrones
+ * 2b): as the row's line, and on the recommended card. The core sets
+ * `onDevice` only on a version its torrent engine plays, and the e2e bridge
+ * has no torrent engine, so the shared core's Versions of Game of Thrones
  * S2:E3 (a pick and one row) gets it on its way to the page (e2e/patch.ts). */
 
 import { expect, test } from "@playwright/test";

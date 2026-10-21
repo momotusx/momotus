@@ -21,6 +21,9 @@ let addon: Server | null = null;
 let media: Server | null = null;
 
 const SRT = "1\n00:00:01,000 --> 00:00:30,000\nA line\n";
+// The release the stream names (a group of its own), and an English file made for that group, so
+// the core's release match marks it (`fits`) and names it by what it says.
+const PLAYING = "Big.Buck.Bunny.2008.240p.WEB.VP9-OPENFILM";
 
 function manySubs(film: string): Promise<Server> {
   const server = createServer((req, res) => {
@@ -39,8 +42,8 @@ function manySubs(film: string): Promise<Server> {
           {
             name: "Many Subs\n240p",
             url: film,
-            behaviorHints: { filename: NAME },
-            subtitles: [sub("1", "pob"), sub("2", "eng"), sub("3", "tur", "TOPAZ"), sub("4", "ger"), sub("5", "zht"), sub("6", "tur", "TOPAZ"), sub("7", "deu"), sub("8", "eng", "Big.Buck.Bunny.2008.WEB")],
+            behaviorHints: { filename: `${PLAYING}.webm` },
+            subtitles: [sub("1", "pob"), sub("2", "eng"), sub("3", "tur", "TOPAZ"), sub("4", "ger"), sub("5", "zht"), sub("6", "tur", "TOPAZ"), sub("7", "deu"), sub("8", "eng", PLAYING)],
           },
         ],
       });
@@ -179,25 +182,10 @@ test("while the core still asks, Subtitles counts what is in and marks the searc
   }
 });
 
-// The fields a bridge built before the picker lacks (plans/core-protocol.md: a track's own
-// language name, `fits` and `release`), filled from fixtures on the way to the page; a newer
-// bridge's own values stand.
-const OWN: Record<string, string> = { tr: "Türkçe", de: "Deutsch", "pt-BR": "Português (Brasil)", "zh-Hant": "中文（繁體）" };
-const WEB_RELEASE = "Big.Buck.Bunny.2008.1080p.WEB-DL.DDP5.1.H.264-OPENFILM";
-type Track = { name: string; language: string; languageName: string; nativeName?: string; fits?: boolean; release?: string | null };
-const fixtures = (view: string, s: { subtitles?: Track[] }) => {
-  if (view !== "playback" || !Array.isArray(s?.subtitles)) return s;
-  for (const t of s.subtitles) {
-    t.nativeName ??= OWN[t.language] ?? t.languageName;
-    t.fits ??= t.name === "Big.Buck.Bunny.2008.WEB";
-    if (t.release === undefined) t.release = t.name === "Big.Buck.Bunny.2008.WEB" ? WEB_RELEASE : null;
-  }
-  return s;
-};
-
 const VIEWPORTS = { tv: { width: 1920, height: 1080 }, desktop: { width: 1440, height: 900 }, phone: { width: 844, height: 390 } };
 async function picker(browser: Browser, form: keyof typeof VIEWPORTS) {
-  const { context } = await patchedContext(browser, LANGS_PORT, { viewport: VIEWPORTS[form] }, fixtures);
+  // The core's own fields reach the page as it sent them (a pass-through proxy to this spec's core).
+  const { context } = await patchedContext(browser, LANGS_PORT, { viewport: VIEWPORTS[form] }, (_view, snapshot) => snapshot);
   const page = await context.newPage();
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -224,6 +212,7 @@ test("the picker lists languages first, in the core's order, with flags and coun
   // Its own name, quietly, where it differs; none for English.
   await expect(panel.locator('[data-f="sublang:tr"] .own')).toHaveText("Türkçe");
   await expect(panel.locator('[data-f="sublang:en"] .own')).toHaveCount(0);
+  await expect(panel.locator('[data-f="sublang:de"] .own')).toHaveText("Deutsch");
   // A circle flag, drawn from the bundled file; Off and the search come first, Off chosen (remembered).
   for (const tag of ["tr", "en", "zh-Hant", "de", "pt-BR"])
     await expect.poll(() => panel.locator(`[data-f="sublang:${tag}"] img.flag`).evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBeGreaterThan(0);
@@ -276,25 +265,27 @@ test("a language opens its options: names, the quiet detail, the fit, the chosen
   await panel.locator('[data-f="subopen:en"]').dispatchEvent("click");
   const opts = panel.locator(".subp-opts");
   await expect(opts.locator(".subp-head h2")).toHaveText("English");
-  await expect(opts.locator(".opt b")).toHaveText(["Many Subs", "Big.Buck.Bunny.2008.WEB"]);
-  // The second names the playing release's group (a fixture here): its detail says so, then the
-  // release text, cut in the middle at a dot so its group stays in view.
-  const second = opts.locator(".opt").nth(1);
-  await expect(second.locator(".fit")).toHaveText("Same release group");
-  await expect(second.locator(".rel")).toHaveText(/^Big\.Buck.*….*-OPENFILM$/);
-  await expect(second.locator(".rel")).toHaveAttribute("title", WEB_RELEASE);
+  // The file made for the playing release's group comes first, named by what it says.
+  await expect(opts.locator(".opt b")).toHaveText([/^OPENFILM, WEB\b/, "Many Subs"]);
+  // Its detail says the core's match words, then the release text, cut in the middle at a dot so
+  // its group stays in view.
+  const fitting = opts.locator(".opt").first();
+  await expect(fitting.locator(".fit")).toHaveText("Same release group");
+  await expect(fitting.locator(".rel")).toHaveText(/^Big\.Buck.*….*-OPENFILM$/);
+  await expect(fitting.locator(".rel")).toHaveAttribute("title", PLAYING);
+  await expect(opts.locator(".opt").nth(1).locator(".fit")).toHaveCount(0);
   // The timing row waits for a track; size is always there.
   await expect(opts.locator(".sub-size output")).toHaveText(/^\d+%$/);
   await page.screenshot({ path: `${SHOTS}/subtitle-options-desktop.png` });
 
-  await second.dispatchEvent("click");
+  await fitting.dispatchEvent("click");
   await expect(page.locator('[data-f="player:subs"] small')).toHaveText("English");
   // Opened again: the languages, English checked; its options, that one checked, and timing.
   await page.locator('[data-f="player:subs"]').dispatchEvent("click");
   await expect(panel.locator('[data-f="sublang:en"]')).toHaveClass(/\bon\b/);
   await expect(panel.locator('[data-f="sublang:en"] .ck svg')).toHaveCount(1);
   await panel.locator('[data-f="subopen:en"]').dispatchEvent("click");
-  await expect(opts.locator(".opt.on b")).toHaveText("Big.Buck.Bunny.2008.WEB");
+  await expect(opts.locator(".opt.on b")).toHaveText(/^OPENFILM, WEB\b/);
   await expect(opts.locator(".sub-delay output")).toHaveText("In step");
   // Back to the languages, by the link and by the key.
   await opts.locator('[data-f="sub:languages"]').dispatchEvent("click");
