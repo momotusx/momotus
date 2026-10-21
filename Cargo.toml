@@ -56,6 +56,9 @@ opt-level = 2
 opt-level = 3
 [profile.dev.package.blake2]
 opt-level = 3
+# Piece checks (SHA-1 on ring): a test seeder checks hundreds of MiB at start.
+[profile.dev.package.ring]
+opt-level = 3
 
 [patch.crates-io]
 # Marquee fork of the SHA-1 wrapper: ring instead of aws-lc (plans/provenance.md).
