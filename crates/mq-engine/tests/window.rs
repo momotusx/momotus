@@ -675,6 +675,26 @@ async fn an_orphan_is_punched_and_fetched_again() {
     assert!(l.piece_matches(8).await);
 }
 
+/// A folder an earlier launch left counts its one file's bytes, as the app
+/// counts them once the torrent loads, so the ranking's whole-file room
+/// matches the app's (review r3 A R3); a folder of a pack names none.
+#[test]
+fn a_leftover_folder_of_one_file_counts_that_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let single = dir.path().join("a".repeat(40));
+    std::fs::create_dir_all(single.join("Film (2014)")).unwrap();
+    let film = single.join("Film (2014)/film.mkv");
+    std::fs::write(&film, vec![1u8; 1 << 20]).unwrap();
+    let pack = dir.path().join("b".repeat(40));
+    std::fs::create_dir_all(&pack).unwrap();
+    std::fs::write(pack.join("e01.mkv"), vec![1u8; 1 << 20]).unwrap();
+    std::fs::write(pack.join("e02.mkv"), vec![1u8; 1 << 20]).unwrap();
+    let counted = mq_engine::counted_on_disk(dir.path());
+    let on_disk = std::fs::metadata(&film).unwrap().blocks() * 512;
+    assert_eq!(counted.held[&"a".repeat(40)].files, [on_disk]);
+    assert!(counted.held[&"b".repeat(40)].files.is_empty());
+}
+
 /// Probes at once in one folder (the core's at open, the engine's at its
 /// start) all answer yes where holes punch: each has a scratch file of its
 /// own (review r3 A R1).
