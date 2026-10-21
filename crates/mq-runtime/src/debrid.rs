@@ -757,6 +757,33 @@ impl Accounts {
         record
     }
 
+    fn disconnect_all(&self) -> Vec<(String, String)> {
+        let mut state = self.lock();
+        let mut dropped: Vec<(String, String)> = state
+            .conns
+            .values()
+            .map(|c| (c.service.name().to_owned(), c.generation.clone()))
+            .chain(
+                state
+                    .pending
+                    .values()
+                    .map(|r| (r.service.clone(), r.generation.clone())),
+            )
+            .collect();
+        dropped.sort();
+        dropped.dedup();
+        for (_, generation) in &dropped {
+            state.gone.insert(generation.clone());
+        }
+        state.pending.clear();
+        let services: Vec<StoreId> = state.conns.keys().copied().collect();
+        for service in services {
+            self.disconnect_service(&mut state, service);
+        }
+        self.changed(&state);
+        dropped
+    }
+
     fn disconnect(&self, service: StoreId, generation: &str) {
         let mut state = self.lock();
         state.gone.insert(generation.to_owned());
@@ -1059,6 +1086,13 @@ impl Core {
     /// still has `generation`; the generation is never restored again.
     pub fn disconnect_debrid(&self, service: StoreId, generation: &str) {
         self.accounts().disconnect(service, generation);
+    }
+
+    /// Drops every debrid connection and pending record (a sign-out that
+    /// takes them, D13): `(service, generation)` of each, for the app's
+    /// tombstones. None of them is restored again.
+    pub fn disconnect_all_debrid(&self) -> Vec<(String, String)> {
+        self.accounts().disconnect_all()
     }
 
     /// Points every debrid service at one origin (tests): Real-Debrid at
