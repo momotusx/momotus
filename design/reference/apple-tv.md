@@ -4,7 +4,7 @@ The owner asked for every v3 page, Settings included, to read as Apple level (se
 
 ## Summary
 
-1. Apple's TV design is a black or near-black stage (#000 hero and header, #1F1F1F page on the web) where the artwork is the only color; chrome is white text at fixed opacities (92, 70, 64, 40 percent) and hairlines at 10 percent white.
+1. Apple's TV design is a black or near-black stage (#000 hero and header and #1F1F1F page on the web; a #000 page with #1C1C1E groups on iPhone) where the artwork is the only color; chrome is white text at fixed opacities (92, 70, 64, 40 percent) and hairlines at 10 percent white.
 2. One type family (SF Pro) carries everything; hierarchy comes from size and weight, never color: shelf titles 17 pt bold on the web, tvOS Title 1 to Caption 2 from 76 down to 23 pt, body 29 pt on TV and 17 pt on iPhone.
 3. Content sits on a strict grid: tvOS 80 pt side and 60 pt top and bottom safe area, 40 pt gutters, fixed column widths (8 posters per row on the web, a HIG grid table that runs from 2 to 9 columns on tvOS), and partially visible next items to signal scrolling.
 4. Every card is the same shape language: 14 px corners on the web, a 0.5 px inner white keyline at 25 percent, eased legibility gradients under any text on art, and full-bleed 16:9 heroes with layered scrims.
@@ -30,7 +30,7 @@ The owner asked for every v3 page, Settings included, to read as Apple level (se
 | web vars | tv.apple.com resolved CSS custom properties on `:root` in dark mode (581 variables) |
 | web r1 | an earlier pass on 2026-10-19: headless Chromium (Playwright 1.63.0), dark scheme, storefront "Türkiye (English)", signed out, 1440x900 and 1920x1080 at DPR 1; computed styles of the live DOM and the downloaded stylesheet; focus by keyboard modality plus `focus()`, so `:focus-visible` matched |
 | shot | a file in `apple-ref/` (listed at the end) |
-| iPhone | pending: see "iPhone TV app and iOS Settings" below |
+| iPhone | the owner's iPhone 13 Pro (iOS 27.0.1), XCUITest screenshots and accessibility frames, 2026-10-21; method in "iPhone TV app and iOS Settings" below |
 
 HIG numbers are points (tvOS canvas 1920x1080 pt). Web numbers are CSS px; the web app is the desktop form of the same design, so its ratios (radius to card size, text opacity levels, gradient stops) carry over, its absolute sizes do not.
 
@@ -201,7 +201,7 @@ The web token scale (web vars, weight size/line height): `--large-title` 400 26/
 
 ### Player chrome (stills only)
 
-Not captured: a still of the web player needs playback, and the iPhone walk is pending. What Apple publishes (HIG video): on tvOS the system player shows transport controls (subtitles, audio language, actions such as add to library) and, below them, content tabs (Info, Episodes, Chapters); keep custom actions to a step or two; wait at least 0.5 s before pausing for an interactive overlay; keep logos and noninteractive overlays small and translucent; scrubbing thumbnails are 160 px wide. The web keeps a white progress fill (`--progressBarFillColor` #FFF) and a dark player panel (`--playerBackground` #2D2D2DE0, `--playbackOverlayBackgroundColor` #333333B3) (web vars).
+Not captured: a still of the player needs playback, which neither the web pass nor the iPhone walk did (no Play). What Apple publishes (HIG video): on tvOS the system player shows transport controls (subtitles, audio language, actions such as add to library) and, below them, content tabs (Info, Episodes, Chapters); keep custom actions to a step or two; wait at least 0.5 s before pausing for an interactive overlay; keep logos and noninteractive overlays small and translucent; scrubbing thumbnails are 160 px wide. The web keeps a white progress fill (`--progressBarFillColor` #FFF) and a dark player panel (`--playerBackground` #2D2D2DE0, `--playbackOverlayBackgroundColor` #333333B3) (web vars).
 
 ### Search
 
@@ -213,7 +213,7 @@ Not captured: a still of the web player needs playback, and the iPhone walk is p
 - HIG lists (tvOS): a focused row highlights and slightly grows, its corners can round; do not mask images near it yourself. The tab bar stays pinned at the top for split views such as Settings and the Library (HIG tab bars).
 - HIG materials (tvOS): regular material to separate sections such as a sidebar or a grouped table; thick for a dark element over a regular background; thin and ultra thin for light schemes.
 - web: the lower band pattern (a 5 to 10 percent lighter band holding grouped cards at radius 12) is the web's grouped list. Values above.
-- iOS Settings (root, Apple Account page, a grouped list): pending the iPhone walk.
+- iPhone: iOS Settings uses inset grouped cards (358 wide, radius about 26 pt, #1C1C1E on black), 51 pt rows, separators inset to the label, 35 pt between groups; measured values under "iOS Settings" below.
 
 ### Account and sign-in
 
@@ -225,7 +225,7 @@ Not captured: a still of the web player needs playback, and the iPhone walk is p
 
 - HIG accounts and video: tvOS 16 and later share one sign-in across users and switch profiles automatically with the current viewer; if a playback request names no profile, ask once before playing.
 - HIG lockups: people are shown as monograms, a circular picture with the name under it, initials when there is no image (the web cast row matches: 118 px circles, name and role under).
-- The Apple TV app's profile and account sheet on iPhone: pending the iPhone walk.
+- iPhone: the TV app shows the viewer as a 40 pt initials avatar at the top right of every top level tab; it opens the Apple Account sheet (measured under "Account sheet" below). There is no profile picker on the phone.
 
 ### Tab bar and top navigation
 
@@ -256,20 +256,79 @@ Not captured: a still of the web player needs playback, and the iPhone walk is p
 
 ## iPhone TV app and iOS Settings
 
-Pending. The XCUITest runner is built (`apple-ref` scratchpad, signed for iphone-a); the first run raised iOS's "Enable UI Automation" passcode prompt, which only the owner can answer, and the phone then auto-locked. No tap reached the phone. When the owner unlocks iphone-a and enters the passcode once, the walk captures: TV app Home top and rows, a show page, its episode list, a movie page, Search, Library, the account sheet; iOS Settings root, the Apple Account page and one grouped list, with accessibility frames for every measure.
+Walked on 2026-10-21 on the owner's iPhone 13 Pro (iphone-a, iOS 27.0.1, dark mode, 390x844 pt at 3x) with a browse-only XCUITest runner: screenshots from `XCUIScreen.main.screenshot()` and the app's accessibility tree (`debugDescription`) at every stop. Taps were limited to tabs, the account button and its Close, the search field, result rows, Back and Settings rows; nothing was played, bought, signed in or out, or changed. The runner was uninstalled afterwards.
+
+How to read these numbers: frames (x, y, width, height) are points from the accessibility tree. Font sizes are estimated from a single-line label's box height divided by 1.19 (SF Pro's line height), calibrated on the large title (34 pt, box 40.7 pt) and checked against cap height (0.705 em): the large title's cap is 24.0 pt (34 pt), a shelf title's cap 13.3 pt (19 pt). Weights are by eye. Colors are sampled pixels; radii are fitted to the edge of the corner curve (Apple uses continuous corners, so a circle fit is within about 1 pt). Sources: `ios-*.png` screenshots and `trees/ios-*.tree.txt` in `apple-ref/`.
+
+### Frame and navigation (TV app)
+
+- Page #000000 everywhere (sampled). Content margin 20 pt left and right for shelves, cards and hero text; navigation chrome sits at 16 pt.
+- Top level tabs (Home, Search, Library): a 54 pt navigation bar at y 47 holding a large title at x 16, 34 pt bold white (box 40.7), and the account button at the top right: a 40x40 avatar circle with initials at x 332 (shot `ios-tv-home-top.png`).
+- Tab bar: a floating Liquid Glass capsule 348x62 at x 21, y 761, so it ends 21 pt above the bottom of the screen and 21 pt from each side. Five tabs of 83x54: Home, Apple TV, Store, Library, Search; icon about 28 pt (SF Symbols `house.fill`, `bag.fill`, `rectangle.stack.fill`, `magnifyingglass`), label about 10 pt under it. Over black the glass reads #202020 with a lighter rim at the top edge (#636363 fading to #2A2B2B over 1 pt); icons and labels #F9F9F9; the selected tab sits in a darker inner capsule (#0A0A0A) and its icon and label turn system blue (#0697FF sampled, HIG Blue #0091FF). The bar stays on screen on every page, detail pages included (shots `ios-tv-library.png`, `ios-tv-show-top.png`).
+- Detail pages have no title bar: a 44x44 Back button (a 36 pt glass circle) at x 16, y 47 and a 36x36 Share circle at x 334 float over the artwork. Once the hero scrolls away, the primary pill (178x48) and the + circle move up between them into the top bar, so the main action is always one tap away (shot `ios-tv-show-1.png`).
+
+### Home
+
+- Hero: full bleed 390x680 (81 percent of the screen), running under the status bar and the navigation bar. Bottom up: the page indicator (170x61 hit area centered at y 624; the current page is a short capsule, the others dots), the button row at y 576 (primary pill 178x48, fill #F5F5F5, dark label about 17 pt semibold (by eye); a 48x48 glass circle with + 12 pt to its right, #393A3B over the art), a meta line at y 537 (a 21 pt provider glyph, genres about 14 pt (box 17.0) separated by dots, a 12x12 age rating glyph), the title as a 306x60 logo, an award line above it. Everything centered in a 350 pt column (shot `ios-tv-home-top.png`, tree `ios-tv-home-top`).
+- Shelf header: a 51 pt row (72 pt with a subtitle) with the title about 19 pt bold white (box 23.0, cap 13.3) and a chevron after it; the subtitle about 14 pt (box 17.0) in #8D8D93, which is iOS secondary label (rgba(235,235,245,.6)) on black.
+- Posters 99.3x149 (2:3), 12 pt apart, radius about 11 pt, 3.4 visible so the fourth peeks. No title under the poster; the name lives in the accessibility label only. Top 10 rows put an ordinal (about 27 pt bold, box 32.3) at the top left and a genre caption (about 11 pt, box 13.3) at the bottom, both over the art (shot `ios-tv-home-rows-1.png`).
+- Rhythm: header 51 + posters 149 + 18 to the next header, a 218 pt pitch.
+- Feature card ("Ice-Cold Survival"): 350x450 portrait (7:9), radius about 17 pt, 12 pt to the next card which peeks at the right; bottom left 18 pt in: a "New" capsule, the title logo, the meta line and "#1 Movie on Apple TV"; a 28 pt mute control at the top right; the preview autoplays with the app's own mute default (shot `ios-tv-home-rows-3.png`).
+- Brand card: a full-width card with a poster collage, the brand logo, two centered lines of large semibold text (by eye) and the white pill (shot `ios-tv-home-rows-4.png`).
+
+### Title page (show and movie)
+
+- The same 390x680 hero. Bottom up, centered: a schedule or award capsule ("All Episodes Now Available", "2026 Oscar Winner"; text about 14 pt, box 17.0), the title logo, the genres line with a provider chevron link, then the primary pill 178x48 and the 48 pt + circle (y 520 on a show, 541 on a movie). Under the buttons, left aligned at x 20: two lines of synopsis with an inline MORE pill (55x21), then the meta line "2022 · 53m" with rating and format badges (about 14 pt, box 17.0, #C5C9C8 over the faded art). Shots `ios-tv-show-top.png`, `ios-tv-movie-top.png`.
+- Season picker: "Season 1" with an up-down chevron as a 98.7x32 button in title weight, 8 pt above the cards.
+- Episode cards 238.7x226.3 (about 1.05:1), radius about 13 pt, 12 pt apart, 1.5 cards visible. The still fills the card and the text sits on it over a dark ramp, 12 pt in: tag "EPISODE 1" about 11 pt uppercase (box 13.3, #D0D4D1), title about 14 pt semibold white (box 17.0), three lines of synopsis about 13 pt (box 46.3, #C8C8C6), duration about 12 pt (box 14.3) and a More (ellipsis) button at the bottom right (shot `ios-tv-show-1.png`).
+- Trailers: 238.7x168.3 cards with the title and "▶ 2m" over the bottom of the art.
+- Related: the Home poster lockup (99.3x149).
+- Cast and Crew: 99.3 pt circles, the name 8 pt under the circle about 12 pt white (box 14.3), the role about 11 pt grey (box 13.3), centered, up to two lines (shot `ios-tv-show-2.png`).
+- How to Watch: a 322x79 card, fill #1C1C1E, radius about 13 pt, with the channel tile and "Sign Up to Watch".
+- About: a 322x153 card in the same #1C1C1E: title, genre in small caps, four lines of synopsis with MORE (shot `ios-tv-show-3.png`).
+- Information, Languages, Accessibility: section titles about 22 pt bold (box 26.0, iOS Title 2 emphasized), each term about 12 pt white (box 14.0) with its value in grey under it, one item every 49 pt (shot `ios-tv-show-4.png`).
+
+### Search
+
+- Search tab: large title, then a 358x42 search field at x 16 ("Shows, Movies, and More", dictation glyph at the right), then category tiles 108.7x163.3, three per row, 12 pt apart, radius about 11 pt, the name about 16 pt bold white at the bottom left 8 pt in (shot `ios-tv-search.png`).
+- Results: the field moves into the top bar (305x42 with a clear button) next to a 42 pt Close circle; scope pills 32 pt tall (Top Results, TV Shows, Movies), the selected one filled system blue with white text, the others plain white text; result rows 350x92.3 with a 48 pt wide poster thumbnail (radius about 7 pt), title about 15 pt (box 18.0), meta "TV Show · Thriller" about 12 pt (box 14.3) in grey, an ellipsis More at the right and a hairline between rows that starts at the text (shot `ios-tv-search-show-results.png`).
+
+### Library
+
+- Large title and account button as on Home. The empty state is two centered lines: "Your Library Is Empty" about 21 pt bold (box 25.3) and the explanation about 14 pt grey (box 17.0); while loading, "Loading Your Library" in the same style (shot `ios-tv-library.png`).
+
+### Account sheet (TV app, view only)
+
+- A sheet over Home: fill #1C1C1E, a 54 pt header at y 63 with a 28 pt Apple Account glyph and "Apple Account" about 17 pt semibold (box 20.3) at x 52, and a 36 pt Close circle at the top right.
+- Grouped rows in #2C2C2E, 358 wide at x 16, radius about 26 pt: the account row 85 pt tall (avatar, name about 16 pt (box 19.3), "Account info, payments and settings" about 12 pt in #9F9FA5); then 51 pt rows (Purchase History, Playback, Sports, Privacy & Access) with the label at x 32 and a chevron; 35 pt between groups; a footnote under a group about 12 pt in #98989F; three 114x56.3 action tiles 8 pt apart whose glyph and label are system blue (#0091FF sampled) (shot `ios-tv-account.png`).
+
+### iOS Settings
+
+- Root: page #000000; a 106 pt navigation bar with the large title "Settings" (34 pt bold, box 39.7) at x 16, y 105.7. Inset grouped cards 358 wide at x 16 (16 pt margins), fill #1C1C1E, radius about 26 pt, 35 pt between groups. The account card is 90 pt tall with a 60 pt avatar at x 32 (16 pt in), the name about 19 pt semibold (box 23.0) and "Apple Account, iCloud, and more" about 12 pt (box 14.3) in #98989F. Standard rows are 51 pt tall: a 28 pt rounded-square icon at x 29.7, the label at x 71 about 16 pt white (box 19.3), the value right aligned ending at x 336.6 in #98989F, a 6.7x11.3 chevron at x 349 in #5A5A5E; separators #38383B, 1 pt, starting at the label (x 71), not at the card edge. The search field is a floating glass capsule at the bottom (334x28 field at x 28, y 778) above the content (shot `ios-settings-root.png`).
+- Colors match iOS's semantic dark palette: label #FFFFFF, secondary label #98989F on #1C1C1E (rgba(235,235,245,.6)), tertiary #5A5A5E (rgba(235,235,245,.3)), grouped background #000000 and #1C1C1E, the sheet's inner groups #2C2C2E.
+- Apple Account page: inline title "Apple Account" about 17 pt semibold (box 20.7) centered in a 54 pt bar with a 44 pt Back glass circle; a 100 pt contact photo centered at y 121, the name about 27 pt bold (box 32.3) and the email about 16 pt grey under it; rows 52 pt tall in 358 wide cards, radius about 26 pt (shot `ios-settings-apple-account.png`; it shows the owner's personal data and stays private).
+- General: inline title as above; a header card 358x195.7 with a 60 pt icon, "General" about 21 pt bold (box 25.3) and a four line description about 13 pt; then 51 pt rows in groups (three, one, then a longer one), 35 pt apart (shot `ios-settings-general.png`).
+
+### What the iPhone adds to the web and HIG picture
+
+- Black, not #1F1F1F: on the phone the page is pure black and grouped surfaces are #1C1C1E (one level) and #2C2C2E (inside a sheet).
+- The secondary text is iOS's semantic grey (#8D8D93 on black, #98989F on #1C1C1E), not white at an opacity as on the web.
+- The phone uses system blue for state (selected tab, selected search scope, account sheet actions); the primary pill stays off-white (#F5F5F5) with dark text.
+- Radii grow with size: about 7 pt thumbnails, 11 pt posters and tiles, 13 pt episode and info cards, 17 pt feature cards, 26 pt grouped lists, full capsules for buttons, the tab bar and search fields.
+- Rows: 51 pt list rows (52 on the account page), 35 pt between groups, 16 pt side margins in Settings and 20 pt in the TV app's content.
 
 ## What makes it feel Apple
 
 1. The artwork is the only color. Chrome is black, #1F1F1F and white at four fixed opacities (100, 92, 70, 64 percent; 40 for tertiary), and a hairline is 10 percent white, not a grey hex.
-2. One accent, used for exactly two jobs: the primary action of a sheet and links (Apple's blue on the web). Progress bars and the hero primary pill stay white.
+2. One accent, used for state and the few true actions: the selected tab, the selected search scope and sheet actions on iPhone (#0091FF), the sheet primary and links on the web (#0A84FF). Progress bars and the hero primary pill stay white (#F5F5F5 with dark text on iPhone).
 3. Full-bleed 16:9 heroes with layered, eased scrims (a left wash, a bottom ramp in six stops, a soft vignette) instead of one flat gradient, and a logo instead of typed titles.
 4. One family, two to three weights per screen. Hierarchy is size and weight; captions drop to 70 percent white, never to a tinted grey.
 5. A fixed column grid with 20 px (web) or 40 pt (tvOS) gutters and identical card sizes per row; the next card peeks at the edge.
-6. Corners that scale with the card: 14 px cards, 8 px thumbnails, 12 px grouped cards, 20 px banners, full pills for buttons.
+6. Corners that scale with the card: on iPhone about 7 pt thumbnails, 11 pt posters, 13 pt episode cards, 17 pt feature cards, 26 pt grouped lists; on the web 14 px cards, 8 px thumbnails, 12 px grouped cards, 20 px banners; full capsules for buttons, search fields and the tab bar.
 7. A 0.5 px inner keyline at 25 percent white on every artwork, so dark art never melts into the page.
 8. Text on art only over an eased legibility gradient (0, .13, .21, .30, .40 over about 140 px), and always bottom aligned.
 9. Primary buttons are 40 px white pills with 30 px side padding; secondary actions are 40 px round glass buttons with a single glyph.
-10. Glass is reserved for controls that float over content (page dots, More buttons, the tab bar); content surfaces are opaque fills of 5 to 10 percent white.
+10. Glass is reserved for controls that float over content (the iPhone tab bar as a capsule 21 pt off the edges, Back and Share circles, page dots, More buttons); content surfaces are opaque (#1C1C1E on iPhone, 5 to 10 percent white on the web).
 11. On TV focus is scale, lift, shadow, parallax and sheen together; color never marks focus alone, and focused posters reveal their title only on focus.
 12. Motion is short and quiet: 0.1 s ease-in fades and presses on the web, and on TV a parallax sway that the HIG calls "designed to be almost unnoticeable".
 
@@ -281,3 +340,4 @@ Pending. The XCUITest runner is built (`apple-ref` scratchpad, signed for iphone
 - `web-movie.png`, `web-movie2.png`, `web-movie-s1.png`, `web-movie-s2.png`: F1 The Movie product page.
 - `web-search.png`: search results for "slow horses".
 - `web-signin.png`: the sign-in sheet, view only.
+- iPhone (`ios-*.png`, trees in `trees/`): `ios-tv-root.png`, `ios-tv-home-top.png`, `ios-tv-home-rows-1.png` to `-4.png`, `ios-tv-home-back-top.png`, `ios-tv-account.png`, `ios-tv-account-1.png`, `ios-tv-search.png`, `ios-tv-search-show-results.png`, `ios-tv-search-movie-results.png`, `ios-tv-show-top.png`, `ios-tv-show-1.png` to `-5.png`, `ios-tv-movie-top.png`, `ios-tv-movie-1.png` to `-3.png`, `ios-tv-library.png`, `ios-tv-library-1.png`, `ios-settings-root.png`, `ios-settings-root-1.png`, `ios-settings-root-2.png`, `ios-settings-apple-account.png` (personal data), `ios-settings-apple-account-1.png`, `ios-settings-general.png`, `ios-settings-general-1.png`.
