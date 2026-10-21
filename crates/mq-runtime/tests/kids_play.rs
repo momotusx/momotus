@@ -970,11 +970,34 @@ async fn a_version_too_big_for_the_free_space_says_its_minutes_ahead() {
         on_wifi.is_some_and(|m| (2..=10).contains(&m)),
         "{on_wifi:?}"
     );
+    // A torrent playing on the engine at 4 MiB/s, readahead by Wi-Fi.
+    let t = s
+        .leecher
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let movie = s
+        .leecher
+        .select_file(t, "default", &mq_engine::FileHint::Name("movie.mkv".into()))
+        .await
+        .unwrap();
+    s.leecher.set_rate(t, movie, 4 << 20, false).await.unwrap();
+    let readahead = || async { s.leecher.stats(t).await.unwrap().readahead_bytes };
+    until_async("the Wi-Fi readahead", || async {
+        readahead().await.is_some()
+    })
+    .await;
+    let on_wifi_ahead = readahead().await.unwrap();
     // The device moves to mobile data with the view open: the same row now
-    // promises no minutes (review r1 B P2-1), and back on Wi-Fi it does.
+    // promises no minutes (review r1 B P2-1), and the playing torrent keeps
+    // only the device preset ahead (B P3-5); back on Wi-Fi both return.
     owner.on_network_changed(Some(Network::Cellular));
     until("the row ranked for mobile data", || {
         minutes(&versions.snapshot()) == Ok(None)
+    })
+    .await;
+    until_async("the mobile preset", || async {
+        readahead().await.is_some_and(|r| r < on_wifi_ahead)
     })
     .await;
     owner.on_network_changed(Some(Network::Wifi));
