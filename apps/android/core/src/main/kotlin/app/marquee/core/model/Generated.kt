@@ -83,8 +83,15 @@ enum class Announced(
 /** A device that joined, a passkey or a recovery kit added, or a member removed, by another member than this device. */
 @Serializable
 data class Announcement(
-    val kind: Announced,
+    /** What `ackAnnouncements` takes: the roster entry's seq and the member, `<seq>.<member>`. */
     val id: String,
+    val kind: Announced,
+    /** The device or kit it is about. */
+    val member: String,
+    /** A recovery kit or passkey, else a device (it words `removed`). */
+    val kit: Boolean,
+    /** A passkey kit. */
+    val passkey: Boolean,
     /** The member that vouched for it, or removed it (itself when a device left). */
     val by: String,
     /** A device's name, or a kit's label. */
@@ -1467,7 +1474,7 @@ data class SyncReport(
     val again: Boolean,
     /** The account's deletion waits for this time (D14): show it with Cancel on every device. From the round's last relay answer. */
     val deletion: ScheduledDeletion? = null,
-    /** Roster changes another member made since this device joined, each reported once (3.2): show each until OK. */
+    /** Roster changes another member made since this device joined (3.2), reported by every round until `ackAnnouncements` names them: show each until OK, then acknowledge it. */
     val announcements: List<Announcement> = emptyList(),
 ) {
     // Holds keys or a token: never printed.
