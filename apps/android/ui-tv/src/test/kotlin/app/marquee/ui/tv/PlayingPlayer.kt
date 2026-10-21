@@ -14,6 +14,9 @@ internal class PlayingPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
     private var wants = true
     private var ready = false
     private var firstFrame = false
+
+    /** A source was set and prepared before the file opens: Media3 buffers it. */
+    private var prepared = false
     private var cues = emptyList<Cue>()
 
     override fun getState(): State {
@@ -30,6 +33,12 @@ internal class PlayingPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
                 .setContentPositionMs(PositionSupplier.getConstant(at))
                 .setNewlyRenderedFirstFrame(firstFrame)
                 .setCurrentCues(CueGroup(cues, at * 1000))
+        if (!ready && prepared) {
+            return state
+                .setPlaylist(listOf(MediaItemData.Builder("film").build()))
+                .setPlaybackState(Player.STATE_BUFFERING)
+                .build()
+        }
         if (!ready) return state.setPlaybackState(Player.STATE_IDLE).build()
         return state
             .setPlaylist(listOf(MediaItemData.Builder("film").setDurationUs(600_000_000L).build()))
@@ -70,6 +79,17 @@ internal class PlayingPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
         seekCommand: Int,
     ): ListenableFuture<*> {
         at = positionMs
+        return Futures.immediateVoidFuture()
+    }
+
+    override fun handleSetMediaItems(
+        mediaItems: List<androidx.media3.common.MediaItem>,
+        startIndex: Int,
+        startPositionMs: Long,
+    ): ListenableFuture<*> = Futures.immediateVoidFuture()
+
+    override fun handlePrepare(): ListenableFuture<*> {
+        prepared = true
         return Futures.immediateVoidFuture()
     }
 

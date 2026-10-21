@@ -109,6 +109,13 @@ class SubtitleLanguagesTest {
         assertEquals("late:u/ar", languages.getValue("ar").best.id)
         // A language with only a forced track still turns that one on.
         assertEquals("late:u/pob", languages.getValue("pt-br").best.id)
+        // A forced track the core lists first gives way to its plain one.
+        val german =
+            listOf(
+                TrackChoice("late:de1", "Forced", section = "German", language = "de", forced = true),
+                TrackChoice("late:de2", "Full", section = "German", language = "de"),
+            )
+        assertEquals("late:de2", subtitleLanguages(german)[0].best.id)
         // Without the file, the core's first track (its best match).
         assertEquals(
             "late:u/en1",
