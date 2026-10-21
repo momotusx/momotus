@@ -24,7 +24,7 @@ export async function verifierHash(verifier) {
 export function readReturn(fragment, relay = RELAY) {
   const fields = new URLSearchParams(fragment.replace(/^#/, ""));
   const flow = fields.get("flow");
-  if (!flow || fields.get("relay") !== new URL(relay).host) return null;
+  if (!flow || fields.get("relay") !== new URL(relay).hostname) return null;
   const error = fields.get("error");
   const code = fields.get("code");
   return error ? { flow, error } : code ? { flow, code } : null;

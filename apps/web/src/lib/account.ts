@@ -105,7 +105,7 @@ export function sameRelay(fragment: string, server: string): boolean {
   const named = returnRelay(fragment);
   if (named === null) return true;
   try {
-    return named === new URL(server).host;
+    return named === new URL(server).hostname;
   } catch {
     return false;
   }

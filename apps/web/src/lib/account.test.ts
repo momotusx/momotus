@@ -181,6 +181,7 @@ test("sign out removes the library only on the owner profile, always on a TV (D1
 
 test("a return from another relay is never handed on", () => {
   expect(sameRelay("flow=f&code=c&relay=sync.example.org", "https://sync.example.org")).toBe(true);
-  expect(sameRelay("flow=f&code=c&relay=127.0.0.1:17818", "http://127.0.0.1:17818")).toBe(true);
+  // A relay is named by its host alone: its port may change when it moves (mq-sync host()).
+  expect(sameRelay("flow=f&code=c&relay=127.0.0.1", "http://127.0.0.1:17818")).toBe(true);
   expect(sameRelay("flow=f&code=c&relay=evil.example", "https://sync.example.org")).toBe(false);
 });
