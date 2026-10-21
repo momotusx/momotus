@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- circle-flags 2.8.3 (MIT, HatScripts), flags/language/oto.svg; written by scripts/flags.ts -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <group>
+        <clip-path android:pathData="M0 256 a256 256 0 1 0 512 0 a256 256 0 1 0 -512 0 z" />
+        <path
+            android:fillColor="#FF9811"
+            android:pathData="m0 160 256 -32 256 32 v192 l-256 32 L0 352 Z" />
+        <path
+            android:fillColor="#EEEEEE"
+            android:pathData="m0 160 256 -32 256 32 v32 H0 Z" />
+        <path
+            android:fillColor="#338AF3"
+            android:pathData="M0 0 h512 v160 H0 Z" />
+        <path
+            android:fillColor="#EEEEEE"
+            android:pathData="m0 352 256 32 256 -32 v-32 H0 Z" />
+        <path
+            android:fillColor="#6DA544"
+            android:pathData="M0 352 h512 v160 H0 Z" />
+        <path
+            android:fillColor="#EEEEEE"
+            android:pathData="M96 256 a160 160 0 1 0 320 0 a160 160 0 1 0 -320 0 z" />
+        <path
+            android:fillColor="#338AF3"
+            android:pathData="M128 256 a128 128 0 1 0 256 0 a128 128 0 1 0 -256 0 z" />
+        <path
+            android:fillColor="#FF9811"
+            android:pathData="M207 139 v68 h-68 l49 49 -49 49 h68 v68 l49 -49 49 49 v-68 h68 l-49 -49 49 -49 h-68 v-68 l-49 49 z" />
+    </group>
+</vector>

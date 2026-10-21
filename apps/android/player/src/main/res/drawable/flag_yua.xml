@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- circle-flags 2.8.3 (MIT, HatScripts), flags/language/yua.svg; written by scripts/flags.ts -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <group>
+        <clip-path android:pathData="M0 256 a256 256 0 1 0 512 0 a256 256 0 1 0 -512 0 z" />
+        <path
+            android:fillColor="#EEEEEE"
+            android:pathData="M144 0 h223 l33 256 -33 256 H144 l-32 -256 z" />
+        <path
+            android:fillColor="#D80027"
+            android:pathData="M368 0 h144 v512 H368 z" />
+        <path
+            android:fillColor="#751A46"
+            android:pathData="M256 174 c22 11 12 33 11 34 l-2 -4 c-4 -15 -13 -33 -31 -18 v11 q10 1 11 11 -11 12 -4 26 l4 8 -13 23 29 -7 18 18 v-11 l11 11 23 -11 -35 -21 -2 -13 c22 -2 34 4 51 29 9 -83 -45 -86 -64 -86 Z" />
+        <path
+            android:fillColor="#6DA544"
+            android:pathData="M209 183 q-5 4 -4 12 1 11 10 15 c3 2 8 0 10 3 3 3 -2 5 -4 6 q-8 5 -9 14 3 10 12 15 c2 2 7 4 5 7 q-4 2 -9 -2 -12 -6 -19 -19 c-2 -3 -1 -10 -7 -10 -7 2 -4 10 -2 14 q8 14 21 23 9 8 20 3 10 -6 4 -17 c-3 -6 -11 -8 -14 -14 -2 -3 2 -4 4 -6 q8 -4 9 -11 -2 -13 -14 -15 -6 1 -7 -6 c-1 -3 3 -7 0 -11 q-2 -3 -6 -1" />
+        <path
+            android:fillColor="#496E2D"
+            android:pathData="M0 0 v512 h144 V0 zm164 235 a5 5 0 0 0 -5 5 97 97 0 0 0 194 0 5 5 0 0 0 -5 -5 5 5 0 0 0 -5 5 87 87 0 1 1 -174 0 5 5 0 0 0 -5 -5 m35 25 -4 1 q-3 4 1 8 23 21 54 24 v17 h12 v-17 q31 -3 54 -24 4 -4 1 -8 -4 -3 -8 0 a78 78 0 0 1 -106 0 z" />
+        <path
+            android:fillColor="#338AF3"
+            android:pathData="M256 316 q-21 0 -40 -13 l6 -9 c20 13 48 13 68 0 l7 9 q-18 13 -41 13" />
+        <path
+            android:fillColor="#FF9811"
+            android:pathData="M250 299 h12 a11 11 0 0 1 11 11 v0 a11 11 0 0 1 -11 11 h-12 a11 11 0 0 1 -11 -11 v0 a11 11 0 0 1 11 -11 z" />
+        <path
+            android:fillColor="#FFDA44"
+            android:pathData="m234 186 -12 11 v11 l18 -9 q4 -3 1 -7 zm-62 79 a10 10 0 0 0 -10 10 10 10 0 0 0 10 10 10 10 0 0 0 10 -10 10 10 0 0 0 -10 -10 m169 0 a10 10 0 0 0 -10 10 10 10 0 0 0 10 10 10 10 0 0 0 10 -10 10 10 0 0 0 -10 -10 m-69 4 -16 8 v5 l15 -1 4 -9 zm-83 23 a10 10 0 0 0 -10 10 10 10 0 0 0 10 10 10 10 0 0 0 10 -10 10 10 0 0 0 -10 -10 m135 0 a10 10 0 0 0 -10 10 10 10 0 0 0 10 10 10 10 0 0 0 10 -10 10 10 0 0 0 -10 -10 m-108 21 a10 10 0 0 0 -10 10 10 10 0 0 0 10 10 10 10 0 0 0 10 -10 10 10 0 0 0 -10 -10 m81 0 a10 10 0 0 0 -10 10 10 10 0 0 0 10 10 10 10 0 0 0 10 -10 10 10 0 0 0 -10 -10" />
+    </group>
+</vector>

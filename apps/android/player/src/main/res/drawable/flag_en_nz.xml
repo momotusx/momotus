@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- circle-flags 2.8.3 (MIT, HatScripts), flags/language/en-nz.svg; written by scripts/flags.ts -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <group>
+        <clip-path android:pathData="M0 256 a256 256 0 1 0 512 0 a256 256 0 1 0 -512 0 z" />
+        <path
+            android:fillColor="#0052B4"
+            android:pathData="M512 0 v512 H0 l16 -34 -16 -34 V336 l64 -80 -64 -80 V68 L68 0 h108 l80 64 80 -64 h108 l34 16 z" />
+        <path
+            android:fillColor="#EEEEEE"
+            android:pathData="m0 0 8 22 -8 23 v23 l108 108 H0 v32 l32 48 -32 48 v32 h108 L0 444 v68 L512 0 l-23 8 -22 -8 h-23 L336 108 V0 h-32 l-48 32 -48 -32 h-32 v108 L68 0 H0 zm383 169 -11 35 h-37 l30 21 -12 35 30 -22 30 22 -12 -35 30 -21 h-37 l-11 -35 zm61 72 -11 35 h-37 l30 21 -11 35 29 -21 30 21 -12 -35 30 -21 h-37 l-11 -35 zm-123 10 -11 35 h-37 l30 22 -11 35 29 -22 30 22 -11 -35 29 -22 h-36 l-12 -35 zm59 114 -11 35 h-37 l30 21 -11 35 29 -21 30 21 -11 -35 29 -21 h-36 l-12 -35 z" />
+        <path
+            android:fillColor="#D80027"
+            android:pathData="M0 0 v45 l131 131 h45 L0 0 zm208 0 v208 H0 v96 h208 l96 -96 V0 h-96 zm259 0 L336 131 v45 L512 0 h-45 zm-84 194 -6 17 h-18 l15 11 -6 17 15 -10 15 10 -6 -17 15 -11 h-18 l-6 -17 zm61 72 -6 18 h-18 l15 11 -6 17 15 -11 15 11 -6 -17 15 -11 h-18 l-6 -18 zm-123 11 -5 17 h-19 l15 11 -6 17 15 -11 15 11 -6 -17 15 -11 h-18 l-6 -17 zm59 113 -5 18 h-19 l15 10 -6 18 15 -11 15 11 -5 -18 14 -10 h-18 l-6 -18 z" />
+    </group>
+</vector>

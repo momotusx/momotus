@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- circle-flags 2.8.3 (MIT, HatScripts), flags/language/tk.svg; written by scripts/flags.ts -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <group>
+        <clip-path android:pathData="M0 256 a256 256 0 1 0 512 0 a256 256 0 1 0 -512 0 z" />
+        <path
+            android:fillColor="#496E2D"
+            android:pathData="M0 0 h66 l67 32 67 -32 h312 v512 H200 l-67 -32 -67 32 H0 Z" />
+        <path
+            android:fillColor="#D80027"
+            android:pathData="M66 0 h134 v512 H66 Z" />
+        <path
+            android:fillColor="#EEEEEE"
+            android:pathData="m280 96 6 17 -15 11 h18 l6 18 6 -18 h18 l-15 -11 6 -17 -15 11 zm88 15 c31 19 44 58 32 92 a78 78 0 0 1 -83 51 l15 7 a78 78 0 1 0 53 -146 zm-40 9 6 17 -15 11 h18 l6 18 6 -18 h18 l-15 -11 6 -17 -15 11 zm-48 24 6 17 -15 11 h18 l6 18 6 -18 h18 l-15 -11 6 -17 -15 11 zm-48 24 6 17 -15 11 h18 l6 18 6 -18 h18 l-15 -11 6 -17 -15 11 zm48 24 6 17 -15 11 h18 l6 18 6 -18 h18 l-15 -11 6 -17 -15 11 zM97 52 l24 -24 h24 l24 24 v24 l-24 24 h-24 L97 76 zm0 384 24 -24 h24 l24 24 v24 l-24 24 h-24 l-24 -24 z" />
+        <path
+            android:fillColor="#FF9811"
+            android:pathData="M66 0 v47 l31 -31 L81 0 zm119 0 -16 16 31 31 V0 zm-64 28 L97 52 v12 h36 V28 zm12 36 v36 h12 l24 -24 V64 zM66 81 v62 l31 -31 zm134 0 -31 31 31 31 zm-84 31 -31 31 v34 l31 31 -31 31 v34 l31 31 -31 31 v34 l31 31 h34 l31 -31 v-34 l-31 -31 31 -31 v-34 l-31 -31 31 -31 v-34 l-31 -31 zm-50 65 v62 l31 -31 zm134 0 -31 31 31 31 zM66 273 v62 l31 -31 zm134 0 -31 31 31 31 zM66 369 v62 l31 -31 zm134 0 -31 31 31 31 zm-79 43 -24 24 v12 h36 v-36 zm12 36 v36 h12 l24 -24 v-12 zm-67 17 v47 h15 l16 -16 zm134 0 -31 31 16 16 h15 z" />
+        <path
+            android:fillColor="#496E2D"
+            android:pathData="m121 124 -24 24 v24 l24 24 h24 l24 -24 v-24 l-24 -24 zm0 96 -24 24 v24 l24 24 h24 l24 -24 v-24 l-24 -24 zm0 96 -24 24 v24 l24 24 h24 l24 -24 v-24 l-24 -24 z" />
+        <path
+            android:fillColor="#D80027"
+            android:pathData="M133 148 a12 12 0 0 0 -12 12 12 12 0 0 0 12 12 12 12 0 0 0 12 -12 12 12 0 0 0 -12 -12 m0 96 a12 12 0 0 0 -12 12 12 12 0 0 0 12 12 12 12 0 0 0 12 -12 12 12 0 0 0 -12 -12 m0 96 a12 12 0 0 0 -12 12 12 12 0 0 0 12 12 12 12 0 0 0 12 -12 12 12 0 0 0 -12 -12" />
+    </group>
+</vector>

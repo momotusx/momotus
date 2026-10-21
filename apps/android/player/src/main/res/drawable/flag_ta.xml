@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- circle-flags 2.8.3 (MIT, HatScripts), flags/language/ta.svg; written by scripts/flags.ts -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <group>
+        <clip-path android:pathData="M0 256 a256 256 0 1 0 512 0 a256 256 0 1 0 -512 0 z" />
+        <path
+            android:fillColor="#EEEEEE"
+            android:pathData="M0 0 h512 v512 H0 z" />
+        <path
+            android:fillColor="#496E2D"
+            android:pathData="M256 32 a206 206 0 1 0 0 412 206 206 0 0 0 0 -412 zm0 8 a198 198 0 0 1 182 276 h-43 a158 158 0 0 0 -73 -222 v8 a151 151 0 0 1 64 214 h-1 v72 a197 197 0 0 1 -258 0 v-72 a151 151 0 0 1 63 -214 v-8 a159 159 0 0 0 -73 222 H74 A198 198 0 0 1 256 40 zm0 12 A186 186 0 0 0 73 271 a8 8 0 0 0 9 7 8 8 0 0 0 7 -9 l-3 -31 a170 170 0 1 1 337 31 8 8 0 0 0 7 9 8 8 0 0 0 9 -7 A187 187 0 0 0 256 52 zM63 355 a8 8 0 0 0 -4 1 8 8 0 0 0 -3 11 238 238 0 0 0 400 0 8 8 0 0 0 -3 -11 8 8 0 0 0 -11 3 222 222 0 0 1 -372 0 8 8 0 0 0 -7 -4 z" />
+        <path
+            android:fillColor="#FFDA44"
+            android:pathData="M199 86 v51 l-25 153 -38 31 h240 l-38 -31 -25 -153 V86 H199 z" />
+        <path
+            android:fillColor="#FF9811"
+            android:pathData="M136 321 h240 v24 H136 z" />
+        <path
+            android:fillColor="#EEEEEE"
+            android:pathData="M136 345 h240 v24 H136 z" />
+        <path
+            android:fillColor="#6DA544"
+            android:pathData="M136 369 h240 v24 H136 z" />
+        <path
+            android:fillColor="#0052B4"
+            android:pathData="M183 357 a8 8 0 1 0 16 0 a8 8 0 1 0 -16 0 z" />
+        <path
+            android:fillColor="#0052B4"
+            android:pathData="M313 357 a8 8 0 1 0 16 0 a8 8 0 1 0 -16 0 z" />
+        <path
+            android:fillColor="#D80027"
+            android:pathData="M256 252 a20 20 0 0 0 -20 20 20 20 0 0 0 -17 -10 20 20 0 0 0 -20 20 20 20 0 0 0 20 20 20 20 0 0 0 3 0 v71 h-1 c-5 0 -10 4 -10 10 v8 c0 5 5 10 10 10 h1 v1 c0 6 5 10 10 10 h48 c6 0 10 -4 10 -10 v-1 h1 c6 0 10 -5 10 -10 v-8 c0 -6 -4 -10 -10 -10 h-1 v-71 a20 20 0 0 0 3 0 20 20 0 0 0 20 -20 20 20 0 0 0 -20 -20 20 20 0 0 0 -17 11 20 20 0 0 0 0 -1 20 20 0 0 0 -20 -20 z" />
+    </group>
+</vector>

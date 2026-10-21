@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- circle-flags 2.8.3 (MIT, HatScripts), flags/language/pms.svg; written by scripts/flags.ts -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <group>
+        <clip-path android:pathData="M0 256 a256 256 0 1 0 512 0 a256 256 0 1 0 -512 0 z" />
+        <path
+            android:fillColor="#D80027"
+            android:pathData="M0 0 h512 v512 H0 V0 Z" />
+        <path
+            android:fillColor="#EEEEEE"
+            android:pathData="M512 204.8 H310.9 V0 H201.1 v204.8 H0 v102.4 h201.1 V512 h109.8 V307.2 H512 V204.8 z" />
+        <path
+            android:fillColor="#0052B4"
+            android:pathData="M256 544 c-77 0 -149.3 -30 -203.6 -84.4 C-2 405.3 -32 333 -32 256 S-2 106.7 52.4 52.4 C106.7 -2 179 -32 256 -32 S405.3 -2 459.6 52.4 C514 106.7 544 179 544 256 s-30 149.3 -84.4 203.6 A286.1 286.1 0 0 1 256 544 Zm0 -512 c-59.8 0 -116 23.3 -158.4 65.6 C55.3 140 32 196.2 32 256 s23.3 116 65.6 158.4 C140 456.7 196.2 480 256 480 s116 -23.3 158.4 -65.6 C456.7 372 480 315.8 480 256 s-23.3 -116 -65.6 -158.4 A222.5 222.5 0 0 0 256 32 Z" />
+        <path
+            android:fillColor="#0052B4"
+            android:pathData="m432 176 -32 -64 H112 l-32 64 h64 l-20 -40 h120 l-20 40 h64 l-20 -40 h120 l-20 40 h64 Z" />
+    </group>
+</vector>

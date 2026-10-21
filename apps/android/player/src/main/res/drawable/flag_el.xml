@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- circle-flags 2.8.3 (MIT, HatScripts), flags/language/el.svg; written by scripts/flags.ts -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <group>
+        <clip-path android:pathData="M0 256 a256 256 0 1 0 512 0 a256 256 0 1 0 -512 0 z" />
+        <path
+            android:fillColor="#0052B4"
+            android:pathData="M0 0 h99 l29 32 28 -32 h356 v57 l-32 28 32 29 v57 l-32 28 32 29 v57 l-32 28 32 28 v57 l-32 29 32 28 v57 H0 v-57 l32 -28 -32 -29 v-56 l32 -29 -32 -28 V171 l32 -29 -32 -28 Z" />
+        <path
+            android:fillColor="#EEEEEE"
+            android:pathData="M99 0 v114 H0 v57 h99 v114 H0 v57 h512 v-57 H156 V171 h100 v-57 H156 V0 Zm157 57 v57 h256 V57 Zm0 114 v57 h256 v-57 ZM0 398 v57 h512 v-57 z" />
+    </group>
+</vector>

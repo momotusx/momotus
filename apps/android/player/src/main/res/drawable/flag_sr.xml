@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- circle-flags 2.8.3 (MIT, HatScripts), flags/language/sr.svg; written by scripts/flags.ts -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <group>
+        <clip-path android:pathData="M0 256 a256 256 0 1 0 512 0 a256 256 0 1 0 -512 0 z" />
+        <path
+            android:fillColor="#0052B4"
+            android:pathData="m0 167 253.8 -19.3 L512 167 v178 l-254.9 32.3 L0 345 z" />
+        <path
+            android:fillColor="#D80027"
+            android:pathData="M0 0 h512 v167 H0 z" />
+        <path
+            android:fillColor="#EEEEEE"
+            android:pathData="M0 345 h512 v167 H0 z" />
+        <path
+            android:fillColor="#D80027"
+            android:pathData="M66.2 144.7 v127.7 c0 72.6 94.9 95 94.9 95 s94.9 -22.4 94.9 -95 V144.7 z" />
+        <path
+            android:fillColor="#FFDA44"
+            android:pathData="M105.4 167 h111.4 v-44.6 l-22.3 11.2 -33.4 -33.4 -33.4 33.4 -22.3 -11.2 zm128.3 123.2 -72.3 -72.4 L89 290.2 l23.7 23.6 48.7 -48.7 48.7 48.7 z" />
+        <path
+            android:fillColor="#EEEEEE"
+            android:pathData="M233.7 222.6 H200 a22.1 22.1 0 0 0 3 -11.1 22.3 22.3 0 0 0 -42 -10.5 22.3 22.3 0 0 0 -41.9 10.5 22.1 22.1 0 0 0 3 11.1 H89 a23 23 0 0 0 23 22.3 h-.7 c0 12.3 10 22.2 22.3 22.2 0 11 7.8 20 18.1 21.9 l-17.5 39.6 a72.1 72.1 0 0 0 27.2 5.3 72.1 72.1 0 0 0 27.2 -5.3 L171.1 289 c10.3 -2 18.1 -11 18.1 -21.9 12.3 0 22.3 -10 22.3 -22.2 h-.8 a23 23 0 0 0 23 -22.3 z" />
+    </group>
+</vector>

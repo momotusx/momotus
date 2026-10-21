@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- circle-flags 2.8.3 (MIT, HatScripts), flags/language/ay.svg; written by scripts/flags.ts -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <group>
+        <clip-path android:pathData="M0 256 a256 256 0 1 0 512 0 a256 256 0 1 0 -512 0 z" />
+        <path
+            android:fillColor="#EEEEEE"
+            android:pathData="M0 73 V0 h73 l439 439 v73 h-73 Z" />
+        <path
+            android:fillColor="#FFDA44"
+            android:pathData="M73 0 v73 h73 v73 h73 v73 h74 v74 h73 v73 h73 v73 h73 v-73 l-73 -73 -73 -73 v-1 l-73 -73 -74 -73 -73 -73 H73 z" />
+        <path
+            android:fillColor="#FF9811"
+            android:pathData="M146 0 v73 h73 v73 h74 v73 h73 v74 h73 v73 h73 v-73 l-73 -74 L293 73 219 0 h-73 z" />
+        <path
+            android:fillColor="#D80027"
+            android:pathData="M219 0 v73 h74 v73 h73 v73 h73 v74 h73 v-74 l-73 -73 -73 -73 -73 -73 h-74 z" />
+        <path
+            android:fillColor="#4A1F63"
+            android:pathData="M293 0 v73 h73 v73 h73 v73 h73 v-73 l-73 -73 -73 -73 h-73 z" />
+        <path
+            android:fillColor="#0052B4"
+            android:pathData="M366 0 v73 h73 v73 h73 V73 L439 0 h-73 z" />
+        <path
+            android:fillColor="#6DA544"
+            android:pathData="M439 0 v73 h73 V0 Zm0 512 v-73 h-74 v-73 h-73 v-73 h-73 v-74 h-73 v-73 H73 V73 H0 v73 l73 73 73 73 v1 l73 73 73 73 73 73 z" />
+        <path
+            android:fillColor="#0052B4"
+            android:pathData="M366 512 v-73 h-74 v-73 h-73 v-73 h-73 v-74 H73 v-73 H0 v73 l73 74 146 146 73 73 z" />
+        <path
+            android:fillColor="#4A1F63"
+            android:pathData="M292 512 v-73 h-73 v-73 h-73 v-73 H73 v-74 H0 v74 l73 73 73 73 73 73 z" />
+        <path
+            android:fillColor="#D80027"
+            android:pathData="M219 512 v-73 h-73 v-73 H73 v-74 H0 v74 l73 73 73 73 z" />
+        <path
+            android:fillColor="#FF9811"
+            android:pathData="M146 512 v-73 H73 v-73 H0 v73 l73 73 z" />
+        <path
+            android:fillColor="#FFDA44"
+            android:pathData="M73 512 v-73 H0 v73 z" />
+    </group>
+</vector>
