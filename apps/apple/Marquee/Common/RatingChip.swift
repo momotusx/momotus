@@ -34,7 +34,7 @@ struct RatingChip: View {
     @ViewBuilder private var scores: some View {
         ForEach(ratings, id: \.self) { score in
             Text(score)
-                .font(.text(metrics.chip, weight: .bold, relativeTo: .caption2))
+                .textFont(metrics.chip, weight: .bold, relativeTo: .caption2)
                 .monospacedDigit()
                 .lineLimit(1)
                 .fixedSize()

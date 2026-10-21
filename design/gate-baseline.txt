@@ -17,7 +17,6 @@ apps/web/src/screens/home.css :: linear-gradient(90deg, rgba(6, 9, 14, .94) 0%, 
 apps/web/src/screens/home.css :: linear-gradient(0deg, rgba(6, 9, 14, .9) 0%, rgba(6, 9, 14, .3) 34%, rgba(6, 9, 14, 0) 58%); }
 apps/web/src/screens/home.css :: background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight); }
 apps/web/src/screens/home.css :: background: rgba(9, 13, 19, .72); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); box-shadow: inset 0 0 0 1px var(--edge); }
-apps/web/src/screens/home.css :: .chip-rate svg { width: 16px; height: 16px; color: var(--star); fill: var(--star); }
 apps/web/src/screens/home.css :: .tile:focus-visible .cap b, [data-form="tv"] .tile:focus .cap b { color: var(--accent); }
 apps/web/src/screens/home.css :: [data-form="desktop"] .tile:hover .cap b { color: var(--accent); }
 apps/web/src/screens/home.css :: .bar-track i { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
@@ -118,7 +117,6 @@ apps/web/src/theme/app.css :: .glass.strong { background: var(--glass-strong); }
 apps/web/src/theme/app.css :: box-shadow: inset 0 0 0 2px var(--control), inset 0 1px 0 rgba(255, 255, 255, .09); transform-origin: center; }
 apps/web/src/theme/app.css :: box-shadow: inset 0 0 0 2px var(--control), inset 0 1px 0 rgba(255, 255, 255, .09);
 apps/web/src/theme/app.css :: .eyebrow { font: 700 var(--type-caption) / 1 var(--font-text); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
-apps/web/src/theme/app.css :: .rate svg { width: .9em; height: .9em; fill: var(--star); color: var(--star); }
 apps/web/src/theme/app.css :: .brand::before { content: ""; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); }
 apps/web/src/theme/app.css :: .nav.on { color: var(--text); background: rgba(255, 255, 255, .12); box-shadow: inset 0 0 0 1px var(--edge); }
 apps/web/src/theme/app.css :: padding: 16px 26px; border-radius: 16px; background: var(--glass-strong); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-shadow);
@@ -146,7 +144,6 @@ apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .backgrou
 apps/android/design/src/main/kotlin/app/marquee/design/Avatar.kt :: fontWeight = FontWeight.ExtraBold,
 apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: .background(colors.accent),
 apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: fun Eyebrow(
-apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: MqIcon(StarFilled, tint = colors.star, size = if (tv) 26.dp else 15.dp)
 apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: * A title's facts as a key-value table on glass (design/DECISION.md v2, Title page): a `dim`
 apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: * label and its value per row. Over artwork the strong glass keeps both readable.
 apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: .background(colors.glassStrong)
@@ -158,9 +155,7 @@ apps/android/design/src/main/kotlin/app/marquee/design/TextField.kt :: .border(2
 apps/android/design/src/main/kotlin/app/marquee/design/TextField.kt :: cursorBrush = SolidColor(colors.accent),
 apps/android/design/src/main/kotlin/app/marquee/design/Theme.kt :: /** Reads of the current theme, e.g. `Marquee.colors.accent`. */
 apps/android/design/src/main/kotlin/app/marquee/design/Tiles.kt :: color = if (focused) colors.accent else colors.text,
-apps/android/design/src/main/kotlin/app/marquee/design/Tiles.kt :: /** A star and the rating on strong glass, at the top right of a poster. */
 apps/android/design/src/main/kotlin/app/marquee/design/Tiles.kt :: .background(colors.glassStrong)
-apps/android/design/src/main/kotlin/app/marquee/design/Tiles.kt :: MqIcon(StarFilled, tint = colors.star, size = if (tv) 20.dp else 12.dp)
 apps/android/design/src/main/kotlin/app/marquee/design/Tiles.kt :: .background(colors.glassStrong)
 apps/android/player/src/main/kotlin/app/marquee/player/PlayerParts.kt :: * a glass pill. It stays while the controls hide, so a viewer who never opens them still learns it.
 apps/android/player/src/main/kotlin/app/marquee/player/PlayerParts.kt :: .background(Marquee.colors.glass)
@@ -237,11 +232,8 @@ apps/apple/Marquee/App/RootView.swift :: Circle().fill(Theme.Palette.accent).fra
 apps/apple/Marquee/App/RootView.swift :: .glass(RoundedRectangle(cornerRadius: 24, style: .continuous), shadow: true)
 apps/apple/Marquee/App/RootView.swift :: .glass(Capsule(), shadow: true)
 apps/apple/Marquee/App/RootView.swift :: Capsule().fill(.white.opacity(0.12)).overlay(Capsule().strokeBorder(Theme.Palette.edge, lineWidth: 1))
-apps/apple/Marquee/Common/Browse.swift :: Glyph("star-fill", size: metrics.chip * 0.85, relativeTo: .caption2).foregroundStyle(Theme.Palette.star)
-apps/apple/Marquee/Common/Browse.swift :: .glass(Capsule(), strong: true)
 apps/apple/Marquee/Home/ContinueCard.swift :: Capsule().fill(Theme.Palette.accent).frame(width: geo.size.width * min(max(value, 0), 1))
 apps/apple/Marquee/Home/HeroView.swift :: .overlay { card.strokeBorder(Theme.Palette.edge, lineWidth: 1).allowsHitTesting(false) }
-apps/apple/Marquee/Home/HeroView.swift :: Glyph("star-fill", size: size * 0.9, relativeTo: .callout).foregroundStyle(Theme.Palette.star)
 apps/apple/Marquee/Home/HomeScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/Library/CalendarScreen.swift :: .foregroundStyle(day.date == today ? Theme.Palette.accent : Theme.Palette.text)
 apps/apple/Marquee/Library/CalendarScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))

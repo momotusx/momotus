@@ -95,9 +95,11 @@ class RatingsMeasureTest {
     fun `on a TV poster a usual pair sits side by side and fits`() =
         poster(Form.Tv, listOf("IMDb 8.8", "RT 87%"), stacked = false)
 
+    // The v3 TV poster is 217 dp wide (240 in v2), so RT 100 percent with a usual IMDb score stacks
+    // until phase 1 moves the scores under the art (design/exploration/v3 frames).
     @Test
-    fun `on a TV poster RT 100 percent with a usual IMDb score sits side by side and fits`() =
-        poster(Form.Tv, listOf("IMDb 8.8", "RT 100%"), stacked = false)
+    fun `on a TV poster RT 100 percent with a usual IMDb score stacks and fits`() =
+        poster(Form.Tv, listOf("IMDb 8.8", "RT 100%"), stacked = true)
 
     @Test
     fun `the phone meta line keeps both scores whole`() = line(Form.Phone)

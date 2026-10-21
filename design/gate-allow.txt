@@ -13,3 +13,6 @@ apps/android/design/src/main/kotlin/app/marquee/design/Focus.kt :: val ringColor
 apps/web/src/theme/app.css :: .ok .dot, .dot.ok { background: var(--ok); box-shadow: none; }
 apps/web/src/theme/app.css :: .warn .dot, .dot.warn { background: var(--warn); box-shadow: none; }
 apps/web/src/theme/app.css :: .bad .dot, .dot.bad { background: var(--bad); box-shadow: none; }
+# The poster score chip from the ratings row (trunk d2d20a0c) keeps v2 glass until phase 1 moves the scores under the art, as the frames show.
+apps/android/design/src/main/kotlin/app/marquee/design/Tiles.kt :: * The scores as plain text on strong glass, at the top right of a poster: on a phone's narrow
+apps/apple/Marquee/Common/RatingChip.swift :: .glass(RoundedRectangle(cornerRadius: metrics.chip * 0.9, style: .continuous), strong: true)

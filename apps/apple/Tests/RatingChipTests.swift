@@ -3,7 +3,7 @@ import CoreText
 import SwiftUI
 import Testing
 
-// The widest scores there are ("IMDb 10.0", "RT 100%") on a poster's chip, rendered with Inter as
+// The widest scores there are ("IMDb 10.0", "RT 100%") on a poster's chip, rendered in SF Pro as
 // the app ships it: the chip fits inside the poster on iPhone, Mac and TV, stacked on iPhone and
 // side by side wherever the pair fits. Widths print as `ratings-measure` lines for
 // bench/core/ratings.jsonl; the snapshots go to the temporary directory.
@@ -65,7 +65,12 @@ private let registered: Bool = {
 
 @MainActor @Test func usualScoresSitSideBySideOnATVPoster() throws {
     try check("tv", .tv, stacked: false, ratings: ["IMDb 8.8", "RT 87%"])
-    try check("tv", .tv, stacked: false, ratings: ["IMDb 8.8", "RT 100%"])
+}
+
+// In SF Pro on the v3 poster RT 100 percent with a usual IMDb score stacks, as on Android TV, until
+// phase 1 moves the scores under the art (design/exploration/v3 frames).
+@MainActor @Test func aFullTomatometerStacksOnATVPoster() throws {
+    try check("tv", .tv, stacked: true, ratings: ["IMDb 8.8", "RT 100%"])
 }
 
 @Test func voiceOverSaysTheNames() {
