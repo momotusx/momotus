@@ -673,9 +673,8 @@ async fn a_shortfall_shrinks_the_window_and_the_read_finishes() {
 /// f, a sustained write (review r3 B P2-1): another app writes 10 MiB/s
 /// for 12 s while the player reads at 2.5 MiB/s from a window holding a
 /// remux-sized readahead (96 MiB). The window gives its readahead back as
-/// the space goes, farthest part first, so free space stays near the
-/// reserve and far from the floor, the read goes on, and nothing is
-/// fetched twice.
+/// the space goes, farthest part first, so free space never falls under
+/// the reserve, the read goes on, and nothing is fetched twice.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_sustained_write_takes_the_readahead_farthest_first() {
     let remux = WindowPlan {
@@ -728,15 +727,11 @@ async fn a_sustained_write_takes_the_readahead_farthest_first() {
     let min = min_free.load(Ordering::Relaxed);
     let s = w.stats().await;
     eprintln!(
-        "writer: held {before} then {:?}, lowest free {} MiB under the reserve",
+        "writer: held {before} then {:?}, lowest free {} KiB over the reserve",
         s.held_bytes,
-        (RESERVE_BYTES.saturating_sub(min)) / MIB
+        (min as i64 - RESERVE_BYTES as i64) / 1024
     );
-    assert!(
-        min + 24 * MIB >= RESERVE_BYTES,
-        "free space fell {} MiB under the reserve",
-        (RESERVE_BYTES - min) / MIB
-    );
+    assert!(min >= RESERVE_BYTES, "free space fell under the reserve");
     assert!(s.held_bytes.unwrap() + 80 * MIB <= before, "{s:?}");
     assert_eq!(s.refetched_bytes, 0, "nothing fetched twice");
     // The nearest readahead stays, the farthest left.
