@@ -624,10 +624,11 @@ async fn a_new_session_names_every_profile_removed_before_it() {
 
 /// Sign out with "Remove your profiles and library from this device" (D13,
 /// plans/accounts.md 3.3) runs in three steps the app repeats until done:
-/// leave; drop its keystore entries and disconnect each debrid account,
-/// tombstone first; then a wipe without a record, the owner's to send. A
-/// restart between any two steps ends the same way, and none of them lets
-/// the previous owner's debrid key come back.
+/// leave; sign each profile out of Trakt, drop the keystore entries and
+/// disconnect each debrid account, tombstone first; then a wipe without a
+/// record, the owner's to send. A restart between any two steps ends the
+/// same way, and the wipe waits while a debrid key or a Trakt sign-in of the
+/// previous owner is left.
 #[tokio::test]
 async fn a_sign_out_with_wipe_leaves_the_device_as_new() {
     let dir = temp_dir("wipe");
@@ -713,6 +714,25 @@ async fn a_sign_out_with_wipe_leaves_the_device_as_new() {
         .ok(json!({"op": "restoreDebrid", "records": [key], "tombstones": [tombstone]}))
         .await;
     assert_eq!(restored["refused"], json!([key["generation"]]));
+    // Kid is still signed in to Trakt on this device: the wipe waits until
+    // the owner signs it out (only the owner may, for another profile).
+    let signed_in = format!("trakt.device.{}", core.clock().device());
+    core.library()
+        .set_setting(&kid, &signed_in, "\"kid-account\"", core.clock())
+        .unwrap();
+    assert_eq!(
+        c.code(json!({"op": "signOut", "wipe": true, "disconnectDebrid": true}))
+            .await,
+        "traktConnected"
+    );
+    c.switch(&kid, None).await;
+    assert_eq!(
+        c.code(json!({"op": "traktSignOut", "profile": "default"}))
+            .await,
+        "notOwner"
+    );
+    c.switch("default", None).await;
+    c.ok(json!({"op": "traktSignOut", "profile": kid})).await;
     // Step 3.
     assert_eq!(
         c.ok(json!({"op": "signOut", "wipe": true, "disconnectDebrid": true}))

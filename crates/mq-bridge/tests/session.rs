@@ -1008,9 +1008,9 @@ async fn passkeys_over_the_protocol() {
         json!({"id": 4, "op": "syncDevices", "record": record}),
     )
     .await;
-    // Each device hears once what the others changed (3.2): the phone, of
-    // the two that joined with its passkey (caught up by the list above),
-    // and never of its own save.
+    // Each device hears what the others changed (3.2) until it acknowledges
+    // it: the phone, of the two that joined with its passkey (caught up by
+    // the list above), and never of its own save.
     let heard = |reply: &Value| -> Vec<(String, String)> {
         let said = reply["result"]["announcements"].as_array().unwrap();
         said.iter()
@@ -1030,7 +1030,24 @@ async fn passkeys_over_the_protocol() {
     ];
     assert_eq!(heard(&report), two, "{report}");
     assert_eq!(report["result"]["announcements"][1]["by"], kit_id);
-    let round = json!({"id": 41, "op": "syncNow", "record": record});
+    let ids: Vec<Value> = report["result"]["announcements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| a["id"].clone())
+        .collect();
+    // OK on the first only: the second comes again.
+    let ack = json!({"id": 41, "op": "ackAnnouncements", "ids": [ids[0]]});
+    assert_eq!(
+        ask(&mut phone, &mut phone_rx, ack).await["result"],
+        json!({})
+    );
+    let round = json!({"id": 42, "op": "syncNow", "record": record});
+    let again = ask(&mut phone, &mut phone_rx, round).await;
+    assert_eq!(heard(&again), [two[1].clone()], "{again}");
+    let ack = json!({"id": 43, "op": "ackAnnouncements", "ids": [ids[1]]});
+    ask(&mut phone, &mut phone_rx, ack).await;
+    let round = json!({"id": 44, "op": "syncNow", "record": record});
     assert_eq!(heard(&ask(&mut phone, &mut phone_rx, round).await), []);
     let account = devices["result"]["account"].as_str().unwrap().to_owned();
     assert_eq!(

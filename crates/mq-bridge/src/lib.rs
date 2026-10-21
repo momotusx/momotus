@@ -221,6 +221,12 @@ enum Request {
         id: u64,
         record: Box<SyncConfig>,
     },
+    /// The user saw these announcements (their `id`s from `SyncReport`):
+    /// no round reports them again. Replies `{}`.
+    AckAnnouncements {
+        id: u64,
+        ids: Vec<String>,
+    },
     /// On a device that syncs: vouches for the device showing `qr`. Replies
     /// `{code, record}`.
     ApprovePairing {
@@ -428,10 +434,13 @@ enum Request {
     TraktSync {
         id: u64,
     },
-    /// Signs this device out of Trakt for the profile; the app then deletes
-    /// its record.
+    /// Signs this device out of Trakt for the profile, or for `profile` (the
+    /// owner only, for another: a sign-out that removes the library signs
+    /// every profile out first, D13); the app then deletes its record.
     TraktSignOut {
         id: u64,
+        #[serde(default)]
+        profile: Option<String>,
     },
     /// The owner adds a profile (no PIN, the owner's addons copied once).
     /// Profile ops reply `ProfilesSnapshot`.
@@ -960,6 +969,13 @@ impl Session {
                     Ok::<_, mq_sync::SyncError>(json!({ "record": record }))
                 });
             }
+            Request::AckAnnouncements { id, ids } => {
+                self.spawn(id, async move {
+                    // After any round that is queueing more.
+                    let _gate = core.sync_gate().await;
+                    answer(mq_sync::ack_announcements(core.library(), &ids).map(|()| json!({})))
+                });
+            }
             Request::SyncNow { id, record } => {
                 self.spawn(id, async move { answer(core.sync(&record).await) });
             }
@@ -1127,6 +1143,13 @@ impl Session {
                             "disconnect each debrid account first",
                         ));
                     }
+                    // Each profile's Trakt sign-in goes with it (D13).
+                    if core.trakt_held().unwrap_or(true) {
+                        return Err(Failure::coded(
+                            "traktConnected",
+                            "sign each profile out of Trakt first",
+                        ));
+                    }
                     let gone = core.wipe().map_err(|e| Failure::from(e.to_string()))?;
                     // The session goes on as the device's new owner, its
                     // views closed; then each profile that was here is gone.
@@ -1208,9 +1231,22 @@ impl Session {
                     to_value(&report).map_err(Failure::from)
                 });
             }
-            Request::TraktSignOut { id } => {
+            Request::TraktSignOut { id, profile } => {
+                let target = match profile.filter(|p| p != core.profile()) {
+                    None => core,
+                    Some(other) => {
+                        if let Err(refused) = owner_only(&core) {
+                            return send_answer(&self.out, json!(id), Err(refused));
+                        }
+                        if !matches!(core.library().profile(&other), Ok(Some(_))) {
+                            let unknown = Failure::coded("unknownProfile", "no such profile");
+                            return send_answer(&self.out, json!(id), Err(unknown));
+                        }
+                        core.for_profile(&other)
+                    }
+                };
                 self.spawn_fenced(id, async move {
-                    core.trakt_sign_out().await.map_err(trakt_failure)?;
+                    target.trakt_sign_out().await.map_err(trakt_failure)?;
                     Ok::<_, Failure>(json!({}))
                 });
             }
