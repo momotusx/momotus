@@ -96,6 +96,10 @@ class RatingsMeasureTest {
         poster(Form.Tv, listOf("IMDb 8.8", "RT 87%"), stacked = false)
 
     @Test
+    fun `on a TV poster RT 100 percent with a usual IMDb score sits side by side and fits`() =
+        poster(Form.Tv, listOf("IMDb 8.8", "RT 100%"), stacked = false)
+
+    @Test
     fun `the phone meta line keeps both scores whole`() = line(Form.Phone)
 
     @Test

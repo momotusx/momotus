@@ -147,7 +147,7 @@ fun PosterTile(
 /**
  * The scores as plain text on strong glass, at the top right of a poster: on a phone's narrow
  * poster one above the other; elsewhere side by side, and one above the other only when the pair
- * is wider than the poster (TV's 23 sp floor puts "IMDb 10.0  RT 100%" past 240 dp). A score never
+ * is wider than the poster (at TV's 23 sp floor only "IMDb 10.0  RT 100%" is, about 243 dp of 240). A score never
  * wraps and is never cut.
  */
 @Composable
@@ -160,10 +160,11 @@ private fun RatingChip(
     val chip =
         modifier
             .testTag("rating-chip")
-            .padding(if (tv) 10.dp else 6.dp)
+            // 6 dp in and out on TV too: "IMDb 8.8  RT 100%" stays on one line in 240 dp.
+            .padding(6.dp)
             .clip(RoundedCornerShape(Marquee.radius.pill))
             .background(colors.glassStrong)
-            .padding(horizontal = if (tv) 10.dp else 6.dp, vertical = if (tv) 4.dp else 2.dp)
+            .padding(horizontal = 6.dp, vertical = if (tv) 4.dp else 2.dp)
     val score: @Composable (String) -> Unit = {
         MqText(
             it,
