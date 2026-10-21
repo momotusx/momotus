@@ -2447,6 +2447,9 @@ fn show_start(s: &mut State, x: Sample) {
         StartStage::Details => Some("Getting the file's details".into()),
         StartStage::Connecting if x.peers == 0 => Some("Finding peers".into()),
         StartStage::Connecting => Some(format!("Finding peers, {} so far", x.peers)),
+        // The engine counts nothing once a range of the file was Ready (a
+        // later start of the same file): no numbers then.
+        StartStage::Buffering if x.need == 0 => Some("Buffering".into()),
         StartStage::Buffering => Some(format!("Buffering, {} of {} MB", mb(x.have), mb(x.need))),
         StartStage::Opening => Some("Opening the video".into()),
     };
@@ -2584,6 +2587,13 @@ enum Started<T> {
 
 /// A start that ended so says its swarm did not start: no Ready by the
 /// deadline, or a stall.
+#[cfg(test)]
+impl Sample {
+    fn with_need(self, need: u64) -> Self {
+        Self { need, ..self }
+    }
+}
+
 #[cfg(any(test, feature = "torrent"))]
 fn not_started<T>(started: &Started<T>) -> bool {
     matches!(started, Started::Late { .. } | Started::Stalled { .. })
@@ -4420,6 +4430,13 @@ mod tests {
         let start = s.snapshot.start.clone().unwrap();
         assert_eq!(start.progress, last, "never back");
         assert_eq!(start.caption.as_deref(), Some("Trying source 2 of 2"));
+        // A later start of a file that was Ready once: the engine counts
+        // nothing, and the words say no numbers.
+        tokio::time::advance(Duration::from_secs(4)).await;
+        show_start(&mut s, at(Buffering, 4, 0, 0).with_need(0));
+        let start = s.snapshot.start.clone().unwrap();
+        assert_eq!(start.caption.as_deref(), Some("Buffering"));
+        assert_eq!(start.progress, last, "never back");
     }
 
     /// Plans/player-polish.md 2.2: a track is named by what tells its
