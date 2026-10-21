@@ -623,22 +623,33 @@ async fn a_new_session_names_every_profile_removed_before_it() {
 }
 
 /// Sign out with "Remove your profiles and library from this device" (D13,
-/// plans/accounts.md 3.3): after the leave every table goes, each profile
-/// that was here is named gone (the app drops its keystore entries), the
-/// debrid connections go when asked, and the device is as new: its owner
-/// alone, no account, the recommended addons first.
+/// plans/accounts.md 3.3) runs in three steps the app repeats until done:
+/// leave; drop its keystore entries and disconnect each debrid account,
+/// tombstone first; then a wipe without a record, the owner's to send. A
+/// restart between any two steps ends the same way, and none of them lets
+/// the previous owner's debrid key come back.
 #[tokio::test]
 async fn a_sign_out_with_wipe_leaves_the_device_as_new() {
-    let dir = std::env::temp_dir().join(format!("mq-bridge-wipe-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = temp_dir("wipe");
     let app = mq_sync_server::router(&dir.join("relay.sqlite"), Default::default()).unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let server = format!("http://{}", listener.local_addr().unwrap());
     tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+    let open = || {
+        let core = Core::open(CoreConfig {
+            data_dir: dir.join("device"),
+            profile_id: "default".into(),
+            device_id: 0,
+        })
+        .unwrap();
+        // Debrid calls go nowhere: only the connection's record matters here.
+        core.set_debrid_origin("http://127.0.0.1:9");
+        core
+    };
 
-    let core = Core::temporary("default").unwrap();
-    // Debrid calls go nowhere: only the connection's record matters here.
-    core.set_debrid_origin("http://127.0.0.1:9");
+    let core = open();
+    let device_id = core.library().sync_state("device_id").unwrap();
+    assert!(device_id.is_some());
     let mut c = Client::new(core.clone());
     let record = c
         .ok(json!({"op": "createSyncAccount", "server": server, "name": "Phone"}))
@@ -648,23 +659,65 @@ async fn a_sign_out_with_wipe_leaves_the_device_as_new() {
         .ok(json!({"op": "setDebridKey", "service": "realdebrid", "key": "k"}))
         .await["generation"]
         .clone();
+    // The record the app keeps in its keystore.
+    let key = json!({"service": "realdebrid", "generation": generation, "revision": 1,
+        "credential": {"kind": "key", "key": "k"}});
     let synced = c.ok(json!({"op": "syncNow", "record": record})).await;
     let record = match &synced["record"] {
         Value::Null => record,
         stored => stored.clone(),
     };
-    assert!(core.library().in_sync_account().unwrap());
-    // A device that still syncs leaves with its record first.
+    // Another profile never wipes the device (D13).
+    c.switch(&kid, None).await;
+    assert_eq!(
+        c.code(json!({"op": "signOut", "wipe": true})).await,
+        "notOwner"
+    );
+    c.switch("default", None).await;
+    // A device that still syncs leaves first, and the wipe never rides on
+    // the leave.
     assert_eq!(
         c.code(json!({"op": "signOut", "wipe": true})).await,
         "wrongRecord"
     );
-    let answer = c
-        .ok(json!({"op": "signOut", "record": record, "wipe": true, "disconnectDebrid": true}))
+    c.code(json!({"op": "signOut", "record": record, "wipe": true}))
+        .await;
+    assert!(
+        core.library().in_sync_account().unwrap(),
+        "it did not leave"
+    );
+
+    // Step 1, then the app stops.
+    c.ok(json!({"op": "signOut", "record": record})).await;
+    drop((c, core));
+
+    // The restart gets the debrid record back with no tombstone yet: the
+    // wipe that takes debrid waits, and wipes nothing.
+    let core = open();
+    let mut c = Client::new(core.clone());
+    c.ok(json!({"op": "restoreDebrid", "records": [key], "tombstones": []}))
         .await;
     assert_eq!(
-        answer["disconnected"][0]["generation"], generation,
-        "{answer}"
+        c.code(json!({"op": "signOut", "wipe": true, "disconnectDebrid": true}))
+            .await,
+        "debridConnected"
+    );
+    assert_eq!(core.library().profiles().unwrap().len(), 2);
+    // Step 2 wrote the tombstone; the app stops before `disconnectDebrid`.
+    drop((c, core));
+
+    let core = open();
+    let mut c = Client::new(core.clone());
+    let tombstone = json!({"service": "realdebrid", "generation": key["generation"]});
+    let restored = c
+        .ok(json!({"op": "restoreDebrid", "records": [key], "tombstones": [tombstone]}))
+        .await;
+    assert_eq!(restored["refused"], json!([key["generation"]]));
+    // Step 3.
+    assert_eq!(
+        c.ok(json!({"op": "signOut", "wipe": true, "disconnectDebrid": true}))
+            .await,
+        json!({})
     );
     for id in ["default".to_owned(), kid] {
         c.push_where(|m| m["profile"] == "gone" && m["id"] == json!(id))
@@ -679,11 +732,17 @@ async fn a_sign_out_with_wipe_leaves_the_device_as_new() {
         .collect();
     assert_eq!(left, ["default"]);
     assert!(!core.library().in_sync_account().unwrap());
+    assert_eq!(core.library().sync_state("device_id").unwrap(), device_id);
     assert!(
         core.addons_fresh(),
         "the recommended addons come first again"
     );
-    // Without an account a wipe needs no record.
-    c.ok(json!({"op": "signOut", "wipe": true})).await;
+    let debrid = c.ok(json!({"op": "subscribe", "view": "debrid"})).await;
+    assert_eq!(
+        debrid["snapshot"],
+        json!({"accounts": [], "pending": []}),
+        "{debrid}"
+    );
+    drop((c, core));
     let _ = std::fs::remove_dir_all(&dir);
 }

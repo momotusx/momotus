@@ -284,7 +284,8 @@ enum Request {
     },
     /// Sends what is queued, leaves the account and forgets sync state; the
     /// platform then deletes the keystore record. Without a `record` (a
-    /// device that already forgot its account) only `wipe` runs.
+    /// device that left, or whose account was deleted) only `wipe` runs:
+    /// the third step of a sign-out that removes the library (D13).
     SignOut {
         id: u64,
         #[serde(default)]
@@ -295,12 +296,14 @@ enum Request {
         /// will not let leave.
         #[serde(default)]
         local: bool,
-        /// Then removes this device's profiles and library (D13): the device
-        /// is as new, and a profile-gone event names each profile it had.
+        /// Without a record, on a device that holds no account: removes its
+        /// profiles and library (D13), the owner profile only. The device is
+        /// as new, and a profile-gone event names each profile it had.
         #[serde(default)]
         wipe: bool,
-        /// Then drops every debrid connection: the answer's `disconnected`
-        /// lists each `{service, generation}` for the app's tombstones.
+        /// With `wipe`: the debrid connections go too. Refused (code
+        /// `debridConnected`) while one is left: the app disconnects each
+        /// first, tombstone first.
         #[serde(default, rename = "disconnectDebrid")]
         disconnect_debrid: bool,
     },
@@ -1079,38 +1082,64 @@ impl Session {
                 wipe,
                 disconnect_debrid,
             } => {
+                if let Some(record) = record {
+                    // A wipe is its own call after the leave (D13), once the
+                    // app dropped its keystore entries: a failed leave then
+                    // never costs a Trakt sign-in or a debrid key.
+                    if wipe || disconnect_debrid {
+                        let refused =
+                            Failure::from("leave first, then wipe without a record".to_owned());
+                        return send_answer(&self.out, json!(id), Err(refused));
+                    }
+                    self.spawn(id, async move {
+                        let _gate = core.sync_gate().await;
+                        let (library, http, clock) = (core.library(), core.http(), core.clock());
+                        if local {
+                            mq_sync::leave_here(library, &record)?;
+                        } else {
+                            mq_sync::sign_out(library, http, &record, clock, force).await?;
+                        }
+                        Ok::<_, Failure>(json!({}))
+                    });
+                    return;
+                }
+                if !wipe {
+                    return send_answer(
+                        &self.out,
+                        json!(id),
+                        Err(Failure::from(mq_sync::SyncError::WrongRecord)),
+                    );
+                }
+                // It empties every profile's library: the owner's to do (D13).
+                if let Err(refused) = owner_only(&core) {
+                    return send_answer(&self.out, json!(id), Err(refused));
+                }
                 let (shared, out) = (self.shared.clone(), self.out.clone());
                 self.spawn(id, async move {
                     let _gate = core.sync_gate().await;
-                    let (library, http, clock) = (core.library(), core.http(), core.clock());
-                    match record {
-                        Some(record) if local => mq_sync::leave_here(library, &record)?,
-                        Some(record) => mq_sync::sign_out(library, http, &record, clock, force).await?,
-                        // Nothing to leave: only a device that holds no account.
-                        None if wipe && !library.in_sync_account().unwrap_or(true) => {}
-                        None => return Err(Failure::from(mq_sync::SyncError::WrongRecord)),
+                    // Nothing to leave: only a device that holds no account.
+                    if core.library().in_sync_account().unwrap_or(true) {
+                        return Err(Failure::from(mq_sync::SyncError::WrongRecord));
                     }
-                    let mut answer = json!({});
-                    if disconnect_debrid {
-                        let dropped = core.disconnect_all_debrid();
-                        answer["disconnected"] = dropped
-                            .into_iter()
-                            .map(|(service, generation)| json!({ "service": service, "generation": generation }))
-                            .collect();
+                    if disconnect_debrid && core.debrid_held() {
+                        return Err(Failure::coded(
+                            "debridConnected",
+                            "disconnect each debrid account first",
+                        ));
                     }
-                    if wipe {
-                        let gone = core.wipe().map_err(|e| Failure::from(e.to_string()))?;
-                        // The session goes on as the device's new owner, its
-                        // views closed; then each profile that was here is gone.
-                        let owner = core.for_profile(mq_library::OWNER);
-                        owner.make_active().map_err(|e| Failure::from(e.to_string()))?;
-                        let closed = lock(&shared).transition(owner, false);
-                        drop(closed);
-                        for profile in gone {
-                            let _ = out.send(&json!({ "profile": "gone", "id": profile }));
-                        }
+                    let gone = core.wipe().map_err(|e| Failure::from(e.to_string()))?;
+                    // The session goes on as the device's new owner, its
+                    // views closed; then each profile that was here is gone.
+                    let owner = core.for_profile(mq_library::OWNER);
+                    owner
+                        .make_active()
+                        .map_err(|e| Failure::from(e.to_string()))?;
+                    let closed = lock(&shared).transition(owner, false);
+                    drop(closed);
+                    for profile in gone {
+                        let _ = out.send(&json!({ "profile": "gone", "id": profile }));
                     }
-                    Ok::<_, Failure>(answer)
+                    Ok::<_, Failure>(json!({}))
                 });
             }
             Request::DeleteAccount {

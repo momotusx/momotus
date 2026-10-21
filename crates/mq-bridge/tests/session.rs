@@ -982,6 +982,7 @@ async fn passkeys_over_the_protocol() {
     )
     .await;
     assert_eq!(here["code"], "kitHere", "{here}");
+    let mut joined = Vec::new();
     for (name, form) in [("Laptop", "computer"), ("Desk", "computer")] {
         let (mut device, mut rx) = session(true);
         let back = ask(
@@ -999,6 +1000,7 @@ async fn passkeys_over_the_protocol() {
             back["result"]["record"]["via"].is_null(),
             "beside the record, never in it"
         );
+        joined.push((device, rx, back["result"]["record"].clone()));
     }
     let devices = ask(
         &mut phone,
@@ -1006,6 +1008,30 @@ async fn passkeys_over_the_protocol() {
         json!({"id": 4, "op": "syncDevices", "record": record}),
     )
     .await;
+    // Each device hears once what the others changed (3.2): the phone, of
+    // the two that joined with its passkey (caught up by the list above),
+    // and never of its own save.
+    let heard = |reply: &Value| -> Vec<(String, String)> {
+        let said = reply["result"]["announcements"].as_array().unwrap();
+        said.iter()
+            .map(|a| {
+                (
+                    a["kind"].as_str().unwrap().into(),
+                    a["name"].as_str().unwrap().into(),
+                )
+            })
+            .collect()
+    };
+    let round = json!({"id": 40, "op": "syncNow", "record": record});
+    let report = ask(&mut phone, &mut phone_rx, round).await;
+    let two = [
+        ("device".into(), "Laptop".into()),
+        ("device".into(), "Desk".into()),
+    ];
+    assert_eq!(heard(&report), two, "{report}");
+    assert_eq!(report["result"]["announcements"][1]["by"], kit_id);
+    let round = json!({"id": 41, "op": "syncNow", "record": record});
+    assert_eq!(heard(&ask(&mut phone, &mut phone_rx, round).await), []);
     let account = devices["result"]["account"].as_str().unwrap().to_owned();
     assert_eq!(
         account.len(),
@@ -1078,6 +1104,20 @@ async fn passkeys_over_the_protocol() {
     )
     .await;
     assert_eq!(full["code"], "tooManyKits", "{full}");
+    // The laptop hears what came after its own join: Desk, the passkey the
+    // phone removed, and the phone's eight saves.
+    let (mut laptop, mut laptop_rx, laptop_record) = joined.remove(0);
+    let round = json!({"id": 2, "op": "syncNow", "record": laptop_record});
+    let report = ask(&mut laptop, &mut laptop_rx, round).await;
+    let kinds: Vec<String> = heard(&report).into_iter().map(|(kind, _)| kind).collect();
+    let mut expected = vec!["device".to_owned(), "removed".to_owned()];
+    expected.resize(10, "passkey".to_owned());
+    assert_eq!(kinds, expected, "{report}");
+    assert_eq!(
+        report["result"]["announcements"][1]["name"],
+        "Passkey, saved on the phone"
+    );
+    drop((joined, laptop, laptop_rx));
 
     let (mut laptop, mut laptop_rx) = session(true);
     let (mut far, mut far_rx) = session(false);
