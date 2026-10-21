@@ -1020,11 +1020,17 @@ async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) 
     // tiles their artwork (the episode's still, else the backdrop).
     let mut items: Vec<(i64, Tile)> =
         futures_util::future::join_all(unfinished.into_iter().map(|item| async move {
-            let meta = core.fetch_meta(&item.kind, &item.item_id).await.ok();
-            (
-                item.updated_ms,
-                tile_from_continue(item, meta.as_ref().map(|m| &m.0)),
-            )
+            let (meta, kept) = tokio::join!(
+                core.fetch_meta(&item.kind, &item.item_id),
+                kept_here(core, &item)
+            );
+            let at = item.updated_ms;
+            let mut tile = tile_from_continue(item, meta.ok().as_ref().map(|m| &m.0));
+            if kept {
+                let words = crate::views::playback::ON_DEVICE;
+                tile.release_info = tile.release_info.map(|c| format!("{c} \u{b7} {words}"));
+            }
+            (at, tile)
         }))
         .await;
     let next_up = futures_util::future::join_all(finished.into_iter().map(|done| async move {
@@ -1037,48 +1043,26 @@ async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) 
     items.extend(next_up.into_iter().flatten());
     core.ratings().fill(items.iter_mut().map(|(_, t)| t));
     let titles = ratings::titles(items.iter().map(|(_, t)| t));
-    #[cfg(feature = "torrent")]
-    let shown = items.clone();
     apply_continue(core, rows, items);
-    #[cfg(feature = "torrent")]
-    kept_on_device(core, rows, shown).await;
     titles
 }
 
 /// A video in progress whose torrent starts from what this device keeps
 /// says so after its caption: "S1:E3 · 12 min left · On this device"
-/// (plans/player-polish.md 2b). Asked once the tiles show; with no engine
-/// running the data folder answers, so a launch starts none for it.
-#[cfg(feature = "torrent")]
-async fn kept_on_device(
-    core: &Core,
-    rows: &Mutex<ObservableVector<HomeRow>>,
-    mut items: Vec<(i64, Tile)>,
-) {
-    let kept = futures_util::future::join_all(items.iter().map(|(_, t)| async move {
-        match &t.video_id {
-            Some(video) if t.progress.is_some() => {
-                crate::views::playback::kept_start(core, &t.id, video)
-                    .await
-                    .is_some()
-            }
-            _ => false,
-        }
-    }))
-    .await;
-    if !kept.contains(&true) {
-        return;
+/// (plans/player-polish.md 2b). Asked with its meta, so the row applies once
+/// per refresh; with no engine running the data folder answers, so a launch
+/// starts none for it.
+async fn kept_here(core: &Core, item: &ContinueItem) -> bool {
+    #[cfg(feature = "torrent")]
+    return item.duration_ms > 0
+        && crate::views::playback::kept_start(core, &item.item_id, &item.video_id)
+            .await
+            .is_some();
+    #[cfg(not(feature = "torrent"))]
+    {
+        let _ = (core, item);
+        false
     }
-    for ((_, tile), kept) in items.iter_mut().zip(kept) {
-        if kept {
-            let words = crate::views::playback::ON_DEVICE;
-            tile.release_info = Some(match tile.release_info.take() {
-                Some(caption) => format!("{caption} \u{b7} {words}"),
-                None => words.to_owned(),
-            });
-        }
-    }
-    apply_continue(core, rows, items);
 }
 
 /// Puts the newest tiles in the Continue Watching row, adding or removing

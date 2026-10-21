@@ -897,6 +897,48 @@ async fn after_a_relaunch_the_folder_alone_says_on_this_device() {
     })
     .await;
     assert!(!again.engine_started(), "the check started the engine");
+    // Review P2-1: a refresh applies the row once, with the mark: no update
+    // shows the caption without it.
+    use futures_util::StreamExt;
+    let (_, mut updates) = home.subscribe();
+    let other = mq_library::ProgressRow {
+        video_id: "tt9",
+        item_id: "tt9",
+        position_ms: 1_000,
+        duration_ms: 100_000,
+        updated_ms: 2,
+    };
+    again
+        .library()
+        .set_progress(again.profile(), other, &again.hlc())
+        .unwrap();
+    let mut seen = Vec::new();
+    let end = tokio::time::Instant::now() + Duration::from_secs(3);
+    while let Ok(Some(batch)) = tokio::time::timeout_at(end, updates.next()).await {
+        captions_of("tt1", &serde_json::to_value(&batch).unwrap(), &mut seen);
+    }
+    assert!(!seen.is_empty(), "the refresh never reached the row");
+    assert!(
+        seen.iter().all(|c| c.ends_with(" \u{b7} On this device")),
+        "{seen:?}"
+    );
+}
+
+/// Every `releaseInfo` of a tile `id` anywhere in `value`.
+#[cfg(feature = "torrent")]
+fn captions_of(id: &str, value: &Value, out: &mut Vec<String>) {
+    match value {
+        Value::Object(o) => {
+            if o.get("id").and_then(Value::as_str) == Some(id)
+                && let Some(c) = o.get("releaseInfo").and_then(Value::as_str)
+            {
+                out.push(c.to_owned());
+            }
+            o.values().for_each(|v| captions_of(id, v, out));
+        }
+        Value::Array(a) => a.iter().for_each(|v| captions_of(id, v, out)),
+        _ => {}
+    }
 }
 
 /// Review P1-1: a start of a torrent the device kept that fails (here its
