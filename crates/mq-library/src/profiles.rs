@@ -373,6 +373,14 @@ fn owner_has_pin(c: &rusqlite::Connection) -> rusqlite::Result<bool> {
 }
 
 /// Writes a copy of the owner's addon list as `id`'s list.
+/// Settings keys under this prefix, one per default addon key, record the
+/// defaults a profile has had (mq-runtime's defaults rule). One register
+/// each, so two devices that recorded different ones keep both; they travel
+/// with a copied addon list.
+pub const DEFAULTS_GIVEN: &str = "defaultsGiven.";
+
+/// Copies the owner's addon list to `id`, with what that list was given
+/// (`DEFAULTS_GIVEN`): a default the owner removed is not given to the copy.
 fn copy_owner_addons(
     c: &rusqlite::Connection,
     id: &str,
@@ -395,7 +403,19 @@ fn copy_owner_addons(
         .collect::<rusqlite::Result<Vec<_>>>()?;
     local(c, coll::ADDONS, &[id], stamp, |h| {
         sql::set_addons(c, id, &addons, h)
-    })
+    })?;
+    let mut stmt = c.prepare("SELECT key, value_json FROM settings WHERE profile_id = ?1")?;
+    let given = stmt
+        .query_map(params![OWNER], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    for (key, value) in given.iter().filter(|(k, _)| k.starts_with(DEFAULTS_GIVEN)) {
+        local(c, coll::SETTINGS, &[id, key], stamp, |h| {
+            sql::set_setting(c, id, key, value, h)
+        })?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
