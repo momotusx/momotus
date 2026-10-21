@@ -262,7 +262,7 @@ const keyOf = (file: string) => `url:http://127.0.0.1:${(addon?.address() as Add
 test("the recommendation that cannot play here moves on and says so", async ({ browser }) => {
   const { context, page: p, sent } = await page(browser);
   await p.goto(`/play/movie/${BBB_ID}/${BBB_ID}?form=desktop`);
-  await expect(p.locator(".pstate .st")).toContainText("Trying the next version: ", { timeout: 60_000 });
+  await expect(p.locator(".ld.on .ld-cap")).toContainText("Trying the next version: ", { timeout: 60_000 });
   // It plays the real file in the end, with no card on the way.
   await mute(p);
   await expect.poll(() => playing(p), { timeout: 60_000 }).toBeGreaterThan(1);
@@ -374,7 +374,7 @@ test("a source that fails before its metadata is not a decode failure, and Try a
   await p.keyboard.press("Enter");
   await expect(card.locator(".end-note")).toHaveText("Trying again");
   await expect(card).toBeVisible();
-  await expect(p.locator(".pstate")).toHaveCount(0);
+  await expect(p.locator(".ld.on")).toHaveCount(0);
   await expect(card.locator(".end-note")).toHaveCount(0, { timeout: 10_000 });
   await expect.poll(() => p.evaluate(() => document.activeElement?.getAttribute("data-f"))).toBe("player:retry");
   // The server answers again; Try again asks the core to start over.
@@ -408,7 +408,7 @@ test("a reload after a hand pick plays that version once Versions lists it again
   // entry still holds the key, and the play waits for it to be listed.
   await p.reload();
   // Until Versions lists it again, the pick is being found (as on Android).
-  await expect(p.locator(".pstate .st")).toHaveText("Finding this version");
+  await expect(p.locator(".ld.on .ld-cap")).toHaveText("Finding this version");
   expect(p.url()).not.toContain("key");
   expect(await chosen(p)).toBe(keyOf(file));
   await expect.poll(() => source(p), { timeout: 60_000 }).toContain(file);

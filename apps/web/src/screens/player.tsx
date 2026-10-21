@@ -33,10 +33,12 @@ import { videoContext } from "../core/video";
 import { autoFocusSoon, goBack } from "../focus/dom";
 import { form } from "../form";
 import { backThenReplace, entryFrom, historyBase, historyDepth, markBack } from "../history";
+import { Loading, type Wait } from "../player/loading";
 import { SubtitlePicker } from "../player/subtitle-picker";
 import { createVideoEngine } from "../player/video-engine";
 import { loadedSource, type Retry, sourceStart, TRYING_AGAIN_MS, tryingAgain } from "../lib/failover";
 import { bytes, clock, decoded, delayText, startsText, episodeLabel, groupFailures, playPath, playState, seasonName, titlePath, versionsPath } from "../lib/format";
+import { bufferShare, loadingLines, startFill } from "../lib/loading";
 import { offSummary, pickerLanguages } from "../lib/subtitles";
 import { blockedWords, languageName, nextVersion, noVersionWords, qualityCell, qualityText, restartLine, subtitleNote } from "../lib/words";
 import "./player.css";
@@ -46,6 +48,8 @@ const HIDE_MS = 4000;
 const PROGRESS_MS = 5000;
 // Up Next appears this many seconds before the end.
 const NEXT_AT = 20;
+// A wait for data this long after the first frame is a stall (a seek's short wait is not).
+const STALL_MS = 500;
 // The profile's subtitle sizes in order, as the picker steps them.
 const SIZES: { size: SubtitleSize; text: string }[] = [
   { size: "small", text: "80%" },
@@ -251,7 +255,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     },
     onSubtitleError: (lang) => setSubError(`Could not load ${languageName(lang)} subtitles from the core`),
   });
-  const { time, duration, paused, buffered, started, rate } = engine;
+  const { time, duration, paused, buffered, started, waiting, rate } = engine;
   // Subtitle timing, for this play only (the size is the profile's, synced).
   const [subDelay, setSubDelay] = createSignal(0);
   const nudgeSubs = (by: number) => {
@@ -715,8 +719,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       // Moving on (the recommendation failed for a reason of its own), or Try again.
       const restart = restartLine(s, again());
       if (restart) return { tone: "warn", text: restart, busy: true };
-      const r = playing();
-      return { tone: "warn", text: r ? `Starting ${qualityText(r.quality)}${r.sizeBytes ? `, ${bytes(r.sizeBytes)}` : ""} from ${r.via}` : "Starting", busy: true };
+      return { tone: "warn", text: startLine(), busy: true };
     }
     // A version picked by hand that Versions has not listed yet.
     if (props.chosen && !key()) return { tone: "warn", text: nextVersion.finding, busy: true };
@@ -726,12 +729,50 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     if (vs?.pendingAddons.length) return { tone: "warn", text: `Asking ${vs.pendingAddons.join(", ")} for versions`, busy: true };
     return { tone: "warn", text: ctx.details() ? "Choosing the best version" : "Opening", busy: true };
   };
+  // The pick as it starts: "Starting 1080p, 1.5 GB from Torrentio".
+  const startLine = () => {
+    const r = playing();
+    return r ? `Starting ${qualityText(r.quality)}${r.sizeBytes ? `, ${bytes(r.sizeBytes)}` : ""} from ${r.via}` : "Starting";
+  };
+
+  // The loading layer (plans/player-polish.md 1.2): while there is no
+  // picture yet, and on a stall after the first frame (the element waits for
+  // data while playing; a seek's short wait does not count).
+  const [stalled, setStalled] = createSignal(false);
+  createEffect(() => {
+    if (!started() || !waiting() || paused() || ended()) return setStalled(false);
+    const t = setTimeout(() => setStalled(true), STALL_MS);
+    onCleanup(() => clearTimeout(t));
+  });
+  const wait = createMemo((): Wait | null => {
+    if (ended()) return null;
+    const s = status();
+    if (s) return s.busy ? "start" : null;
+    // The URL is in, the first frame is not, and nothing paused it (a
+    // browser that refuses to play on its own shows the controls instead).
+    if (url() && !started() && !paused()) return "start";
+    return stalled() ? "stall" : null;
+  });
+  // The core's progress until the player has the URL (it keeps the last it
+  // sent once `start` clears at `ready`), then the player's own buffer fills
+  // the rest; a stall fills from the buffer alone.
+  const [coreFill, setCoreFill] = createSignal(0);
+  createEffect(() => {
+    const p = snap()?.start?.progress;
+    if (p != null) setCoreFill((h) => Math.max(h, p));
+  });
+  const fill = () => {
+    const share = url() ? bufferShare(buffered(), engine.position()) : 0;
+    return wait() === "stall" ? startFill(0, share) : startFill(coreFill(), share);
+  };
+  const waitLines = () => (wait() === "stall" ? [] : loadingLines(status()?.text ?? startLine(), snap()?.start?.caption));
+
   return (
     <div
       class="player-scr"
       data-scheme="dark"
       data-subsize={prefs.state.data?.subtitleSize ?? "medium"}
-      classList={{ idle: !osd() && !!url(), started: started(), paused: pausedNow() }}
+      classList={{ idle: !osd() && !!url(), started: started(), paused: pausedNow(), loading: wait() === "start" }}
       onPointerMove={wake}
       onPointerDown={(e) => {
         // While the controls are hidden, a click only brings them back.
@@ -772,6 +813,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       {/* Paused, the picture steps back and the title says what it is, as
           the Apple TV app, Netflix and Infuse do. */}
       <div class="pdim" aria-hidden="true" />
+      <Loading wait={wait()} fill={fill()} logo={ctx.details()?.logo} name={ctx.details()?.name} background={ctx.details()?.background} lines={waitLines()} />
       <div class="osd-top" />
       <div class="osd-bot" />
 
@@ -789,19 +831,10 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       </header>
       <Show when={endsAt()}>{(t) => <p class="clock num">Ends at {t()}</p>}</Show>
 
+      {/* Still on its way: the loading layer says so (above). */}
       <Show when={status()}>
         {(s) => (
-          <Show
-            when={!s().busy}
-            fallback={
-              <section class="pstate" role="status">
-                <p class={`st ${s().tone}`}>
-                  <LoaderCircle aria-hidden class="spin" />
-                  {s().text}
-                </p>
-              </section>
-            }
-          >
+          <Show when={!s().busy}>
             {/* Nothing plays: a centered card with the way on, never a
                 black screen with a line of text. */}
             <section class="endcard" role="alert">
@@ -935,7 +968,9 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         </p>
       </Show>
 
-      <Show when={url() && !ended()}>
+      {/* Not before the first frame: the loading screen has nothing to act on
+          but Back (and on TV no focus at all). */}
+      <Show when={url() && !ended() && wait() !== "start"}>
         <section class="osd" aria-label="Playback controls" inert={panel() !== null || undefined}>
           <div class="tl">
             <span class="num">{clock(time())}</span>

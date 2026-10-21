@@ -50,6 +50,8 @@ export interface Engine {
   buffered: Accessor<[number, number][]>;
   /** The first frame is on screen. */
   started: Accessor<boolean>;
+  /** Playing, the picture stopped for data (a stall), until it moves again. */
+  waiting: Accessor<boolean>;
   rate: Accessor<number>;
   tracks: Accessor<Track[]>;
   /** A new source (first start or failover), from `startSec`, then plays. */

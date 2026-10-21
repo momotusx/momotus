@@ -13,6 +13,7 @@ export function createVideoEngine(events: EngineEvents): Engine {
   const [paused, setPaused] = createSignal(true);
   const [buffered, setBuffered] = createSignal<[number, number][]>([]);
   const [started, setStarted] = createSignal(false);
+  const [waiting, setWaiting] = createSignal(false);
   const [rate, setRate] = createSignal(1);
   const [subtitle, setSubtitle] = createSignal<{ url: string; lang: string } | null>(null);
   // Audio tracks where the browser lists them (Safari; Chromium only behind a
@@ -59,7 +60,13 @@ export function createVideoEngine(events: EngineEvents): Engine {
   const seek = (sec: number) => {
     if (video && !start.retarget(sec)) video.currentTime = Math.max(0, sec);
   };
-  const play = () => void video?.play().catch(() => setPaused(true));
+  // Not paused from the press on (the play event comes a task later), and
+  // paused again when the browser refuses (it sends no event then).
+  const play = () => {
+    if (!video) return;
+    setPaused(false);
+    void video.play().catch(() => setPaused(video.paused));
+  };
 
   const view = (
     <video
@@ -73,7 +80,12 @@ export function createVideoEngine(events: EngineEvents): Engine {
         setPaused(false);
         events.onPlay();
       }}
-      onPlaying={() => setStarted(true)}
+      onPlaying={() => {
+        setStarted(true);
+        setWaiting(false);
+      }}
+      onWaiting={() => setWaiting(true)}
+      onEmptied={() => setWaiting(false)}
       onPause={() => {
         setPaused(true);
         events.onPause();
@@ -111,6 +123,7 @@ export function createVideoEngine(events: EngineEvents): Engine {
     paused,
     buffered,
     started,
+    waiting,
     rate,
     tracks,
     load(url, startSec) {
