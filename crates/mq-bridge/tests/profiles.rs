@@ -909,3 +909,68 @@ async fn a_removal_is_recorded_before_the_leave_and_ends_with_the_wipe_or_a_join
     drop((c, core));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// When the flag clears (phase 2 web review A round 2): a leave with no
+/// answer (a network error or a 5xx; the relay may have taken it) keeps the
+/// removal, so the next start runs it once the device holds no account; only
+/// a definite refusal clears it. A later sign-out without `removeAfter` is
+/// the user's latest choice: an older removal that never ran is off.
+#[tokio::test]
+async fn a_removal_stays_through_a_lost_answer_and_goes_with_a_later_plain_sign_out() {
+    let dir = temp_dir("removal-answers");
+    let app = mq_sync_server::router(&dir.join("relay.sqlite"), Default::default()).unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+    // A relay that is not there (its port closed) and one that answers 503 to everything.
+    let closed = {
+        let gone = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        format!("http://{}", gone.local_addr().unwrap())
+    };
+    let failing = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let unavailable = format!("http://{}", failing.local_addr().unwrap());
+    tokio::spawn(async move {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        while let Ok((mut socket, _)) = failing.accept().await {
+            let mut request = [0u8; 4096];
+            let _ = socket.read(&mut request).await;
+            let busy = "HTTP/1.1 503 Service Unavailable\r\ncontent-length: 0\r\nconnection: close\r\n\r\n";
+            let _ = socket.write_all(busy.as_bytes()).await;
+        }
+    });
+    let core = Core::open(CoreConfig {
+        data_dir: dir.join("device"),
+        profile_id: "default".into(),
+        device_id: 0,
+    })
+    .unwrap();
+    let mut c = Client::new(core.clone());
+    let created = c
+        .ok(json!({"op": "createSyncAccount", "server": server, "name": "Phone"}))
+        .await;
+    let synced = c.ok(json!({"op": "syncNow", "record": created})).await;
+    let record = match &synced["record"] {
+        Value::Null => created,
+        stored => stored.clone(),
+    };
+    for (relay, what) in [(&closed, "no relay"), (&unavailable, "a 503")] {
+        let mut lost = record.clone();
+        lost["server"] = json!(relay);
+        let leave = json!({"op": "signOut", "record": lost, "force": true, "removeAfter": {"debrid": true}});
+        let reply = c.call(leave).await;
+        assert_eq!(reply["ok"], false, "{what}: {reply}");
+        assert_eq!(
+            wipe_pending(&mut c).await,
+            json!({"debrid": true}),
+            "{what}: the relay may have taken the leave"
+        );
+    }
+    // The user signs out keeping the library: the older removal is off, and nothing is wiped.
+    c.ok(json!({"op": "signOut", "record": record, "force": true}))
+        .await;
+    assert_eq!(wipe_pending(&mut c).await, Value::Null);
+    assert!(!core.library().in_sync_account().unwrap());
+    assert_eq!(core.library().profiles().unwrap().len(), 1);
+    drop((c, core));
+    let _ = std::fs::remove_dir_all(&dir);
+}

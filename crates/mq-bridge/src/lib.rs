@@ -1143,15 +1143,21 @@ impl Session {
                         return send_answer(&self.out, json!(id), Err(refused));
                     }
                     // Recorded before the leave goes out: an app closed while
-                    // it runs still finds the removal at its next start.
-                    if let Some(after) = &remove_after
-                        && let Err(e) = core.mark_removal(after.debrid)
-                    {
-                        return send_answer(
-                            &self.out,
-                            json!(id),
-                            Err(Failure::from(e.to_string())),
-                        );
+                    // it runs still finds the removal at its next start. A
+                    // sign-out without it is the user's latest choice: an
+                    // older removal that never ran (its leave never went out)
+                    // is off.
+                    match &remove_after {
+                        Some(after) => {
+                            if let Err(e) = core.mark_removal(after.debrid) {
+                                return send_answer(
+                                    &self.out,
+                                    json!(id),
+                                    Err(Failure::from(e.to_string())),
+                                );
+                            }
+                        }
+                        None => core.clear_removal(),
                     }
                     let marked = remove_after.is_some();
                     self.spawn(id, async move {
@@ -1161,8 +1167,12 @@ impl Session {
                             true => mq_sync::leave_here(library, &record),
                             false => mq_sync::sign_out(library, http, &record, clock, force).await,
                         };
-                        // Not left: the device keeps its account, and its library with it.
-                        if left.is_err() && marked {
+                        // Refused for sure: the device keeps its account, and
+                        // its library with it. No answer (a network error, a
+                        // 5xx) may mean the relay took the leave: the removal
+                        // stays, and the next start runs it once the device
+                        // holds no account.
+                        if marked && matches!(&left, Err(e) if !e.transient()) {
                             core.clear_removal();
                         }
                         left?;
