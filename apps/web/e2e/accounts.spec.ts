@@ -33,7 +33,7 @@ const errors: string[] = [];
 /** The last pairing code each core's page showed, by the core's port. */
 const codes = new Map<number, string>();
 /** Every request a page sent its core: op and which fields it carried. */
-const asked: { port: number; op?: string; fields: string[] }[] = [];
+const asked: { port: number; op?: string; view?: string; fields: string[]; form?: string }[] = [];
 /** Tickets and receipts that crossed a socket. */
 const secrets = new Set<string>();
 
@@ -55,10 +55,11 @@ const FORMS = {
 };
 
 /** A browser context whose page talks to the core on `port`, with this relay as the one it knows. */
-async function device(browser: Browser, port: number, form: keyof typeof FORMS): Promise<Page> {
+async function device(browser: Browser, port: number, form: keyof typeof FORMS, approver = false): Promise<Page> {
   const context = await browser.newContext({ ...FORMS[form], colorScheme: "dark", baseURL: `http://127.0.0.1:${PORTS.vite}` });
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await context.addInitScript((server) => localStorage.getItem("mq.syncServer") || localStorage.setItem("mq.syncServer", server), SERVER);
+  if (approver) await context.addInitScript(() => localStorage.setItem("mq.devDeviceForm", "phone"));
   await context.routeWebSocket(/\/ws$/, (ws) => {
     const core = new WebSocket(`ws://127.0.0.1:${port}/ws`);
     const early: string[] = [];
@@ -73,7 +74,8 @@ async function device(browser: Browser, port: number, form: keyof typeof FORMS):
     ws.onMessage((m) => {
       collect(port, String(m));
       const request = JSON.parse(String(m)) as Record<string, unknown>;
-      asked.push({ port, op: request.op as string | undefined, fields: Object.keys(request) });
+      const params = request.params as Record<string, unknown> | undefined;
+      asked.push({ port, op: request.op as string | undefined, view: request.view as string | undefined, fields: Object.keys(request), form: (request.form ?? params?.form) as string | undefined });
       if (core.readyState === WebSocket.OPEN) core.send(String(m));
       else early.push(String(m));
     });
@@ -186,7 +188,8 @@ test.describe.serial("accounts on the web", () => {
       await c.req("installAddon", { url: `http://127.0.0.1:${PORTS.source}/manifest.json` });
       c.close();
     }
-    desk = await device(browser, P.a, "desktop");
+    // Desk approves the others: as the e2e's peer it states a phone (only phones and tablets approve, D6).
+    desk = await device(browser, P.a, "desktop", true);
     phone = await device(browser, P.b, "phone");
     tv = await device(browser, P.c, "tv");
   });
@@ -244,6 +247,7 @@ test.describe.serial("accounts on the web", () => {
     await expect(desk.locator('[data-f="welcome:pair"]')).toHaveCount(0);
     // The create carried the ticket and the web's form.
     expect(asked.find((a) => a.port === P.a && a.op === "createSyncAccount")?.fields).toEqual(expect.arrayContaining(["ticket", "form"]));
+    expect(asked.find((a) => a.port === P.a && a.op === "createSyncAccount")?.form).toBe("phone");
   });
 
   test("Account lists the sign-in; Apple links, unlinks after its revoke, and once more without one", async () => {
@@ -294,6 +298,8 @@ test.describe.serial("accounts on the web", () => {
     await phone.locator('[data-f="signin:create"]').click();
     await expect(phone).toHaveURL(/\/sync\/kit\?first=1&then=doors$/);
     await phone.locator('[data-f="sync-kit:cancel"]').click();
+    // The web states its form: neither it nor a TV approves another device (D6).
+    expect(asked.find((a) => a.port === P.b && a.op === "createSyncAccount")?.form).toBe("web");
     await expect(phone).toHaveURL(/\/welcome\?step=doors$/);
     await go(phone, "/");
     const card = phone.locator(".account-card");
@@ -317,7 +323,15 @@ test.describe.serial("accounts on the web", () => {
     await shot(phone, "accounts-sign-out-phone");
     const from = asked.length;
     await phone.locator('[data-f="sync:leave"]').click();
-    // The device is as new: the first run's sign-in.
+    // The tab is closed the moment the leave went out: the core recorded the removal first.
+    await expect.poll(() => asked.slice(from).some((a) => a.port === P.b && a.op === "signOut" && a.fields.includes("removeAfter"))).toBe(true);
+    const context = phone.context();
+    await phone.close();
+    // The next start finds it in the profiles view and finishes steps two and three: the
+    // device is as new, at the first run's sign-in.
+    phone = await context.newPage();
+    phone.on("pageerror", (e) => errors.push(`phone: ${e.message}`));
+    await phone.goto("/");
     await expect(phone).toHaveURL(/\/welcome$/, { timeout: 30_000 });
     await expect(phone.locator("h1")).toHaveText("Sign in");
     const ops = asked.slice(from).filter((a) => a.port === P.b).map((a) => a.op);
@@ -328,7 +342,6 @@ test.describe.serial("accounts on the web", () => {
     expect(leave).toBeGreaterThanOrEqual(0);
     expect(trakt).toBeGreaterThan(leave);
     expect(wipe).toBeGreaterThan(trakt);
-    expect(await phone.evaluate(() => localStorage.getItem("mq.wipePending"))).toBeNull();
     // The core holds no library: its sample addon went with it.
     const c = new Client(`ws://127.0.0.1:${P.b}/ws`);
     const addons = await c.subscribe<{ fresh: boolean; addons: unknown[] }>("addons");
@@ -343,6 +356,7 @@ test.describe.serial("accounts on the web", () => {
     await expect(tv.locator(".qrbox svg")).toBeVisible();
     await expect(tv.locator('[data-f="signin:tv-without"]')).toHaveText("Use without an account");
     await expect(tv.locator('[data-f="signin:tv-kit"]')).toHaveText("Use a recovery kit");
+    expect(asked.find((a) => a.port === P.c && a.view === "pairing")?.form).toBe("tv");
     await shot(tv, "accounts-first-run-tv");
     const code = codes.get(P.c) ?? "";
     expect(code).toMatch(/^marquee:pair\?v=2&|^https:\/\/[^/]+\/pair#v=3&/);

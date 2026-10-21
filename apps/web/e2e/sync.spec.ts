@@ -319,6 +319,9 @@ test.describe.serial("sync across three devices", () => {
     });
     // A passkey needs a host name: Desk opens Marquee on localhost.
     desk = await device(deskBrowser, SYNC_PORTS.a, "desktop", "localhost");
+    // Desk approves the others: as the e2e's peer it states a phone (only phones and tablets
+    // approve, D6; the web itself states `web`).
+    await desk.evaluate(() => localStorage.setItem("mq.devDeviceForm", "phone"));
     phone = await device(browser, SYNC_PORTS.b, "phone");
     tv = await device(browser, SYNC_PORTS.c, "tv");
   });
