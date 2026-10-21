@@ -132,6 +132,8 @@ pub struct Scheduler {
     /// The window's budget when it was set: a smaller one (the space
     /// guard's) takes its cut off the readahead, farthest part first.
     full_budget: u64,
+    /// Per file: a range of it was Ready once; the start's gate is over.
+    started: Vec<bool>,
 }
 
 impl Scheduler {
@@ -183,6 +185,7 @@ impl Scheduler {
             ra_open: Vec::new(),
             held: 0,
             full_budget: 0,
+            started: vec![false; files],
         }
     }
 
@@ -1017,15 +1020,23 @@ impl Scheduler {
                 continue; // older readers keep only their blocking window
             }
             focus_blocking.push(blocking);
-            // Until it is Ready, the focused read asks for what Ready waits
-            // on and nothing more: fast peers otherwise fill critical and
-            // readahead pieces while the last head or index block sits at a
-            // slow one (plans/research/start-latency.md, cause 2).
-            if !d.ready {
-                continue;
-            }
             let g = &self.geo;
             let rate = self.bitrate[d.file];
+            // A first read in the container index zone: the player comes back
+            // to the head next, so fetch it now (head and tail merged). Its
+            // blocking window comes before the start's gate: an MP4's index
+            // is known only once the head is in.
+            let zone = self.cfg.tail_bytes.max(f.len / 64);
+            let head = (d.start > 0 && d.start >= f.len.saturating_sub(zone))
+                .then(|| self.windows(d.file, 0, None, None));
+            if let Some(h) = &head {
+                let blocking = g.pieces_in(h.blocking.0, h.blocking.1);
+                focus_blocking.push(blocking.clone());
+                spans.push((blocking, Class::Blocking));
+            }
+            if self.gated(d) {
+                continue;
+            }
             let now_at = f.offset + play.filter(|&p| p <= d.pos).unwrap_or(d.pos);
             critical.push((g.pieces_in(w.blocking.1, w.critical_end), now_at, rate));
             spans.push((g.pieces_in(w.critical_end, w.playback_end), Class::Playback));
@@ -1033,14 +1044,7 @@ impl Scheduler {
                 g.pieces_in(w.playback_end, self.readahead_end(d, &w)),
                 Class::Readahead,
             ));
-            // A first read in the container index zone: the player comes back
-            // to the head next, so fetch it now (head and tail merged).
-            let zone = self.cfg.tail_bytes.max(f.len / 64);
-            if d.start > 0 && d.start >= f.len.saturating_sub(zone) {
-                let h = self.windows(d.file, 0, None, None);
-                let head = g.pieces_in(h.blocking.0, h.blocking.1);
-                focus_blocking.push(head.clone());
-                spans.push((head, Class::Blocking));
+            if let Some(h) = head {
                 critical.push((g.pieces_in(h.blocking.1, h.critical_end), f.offset, rate));
             }
         }
@@ -1179,6 +1183,7 @@ impl Scheduler {
                 && self.ready_set(d).all(|p| self.verified.get(p));
             if ready {
                 self.demands[i].ready = true;
+                self.started[self.demands[i].file] = true;
                 // Its other windows follow at the next rebuild.
                 self.dirty = true;
                 out.push(Action::Ready {
@@ -1196,11 +1201,24 @@ impl Scheduler {
         blocking.chain(self.index_pieces(d.file))
     }
 
-    /// The focused read's start, for a loading screen: the bytes of the
-    /// pieces its Ready waits on and of those verified; `None` with no
-    /// focused read.
+    /// Until the file's first Ready, the focused read asks for what Ready
+    /// waits on and nothing more: fast peers otherwise fill critical and
+    /// readahead pieces while the last head or index block sits at a slow
+    /// one (plans/research/start-latency.md, cause 2). A later read (a seek)
+    /// keeps every window, and so does one that read past its blocking
+    /// window with no Ready (a reader that does not wait for it).
+    fn gated(&self, d: &Demand) -> bool {
+        !self.started[d.file] && d.pos < d.start.saturating_add(self.cfg.blocking_bytes)
+    }
+
+    /// A start, for a loading screen: the bytes of the pieces its Ready
+    /// waits on and of those verified. The focused read, or with none the
+    /// newest (a resume's head read is a probe); `None` once its file has
+    /// started, or with no read.
     pub fn start_bytes(&self) -> Option<StartBytes> {
-        let d = self.focus()?;
+        let waiting = |d: &&Demand| !self.started[d.file];
+        let newest = || self.demands.iter().filter(waiting).max_by_key(|d| d.seq);
+        let d = self.focus().filter(waiting).or_else(newest)?;
         let mut pieces: Vec<PieceIdx> = self.ready_set(d).collect();
         pieces.sort_unstable();
         pieces.dedup();

@@ -31,6 +31,8 @@ struct Harness {
     log: Vec<Action>,
     /// Container index per file, as sent.
     index: BTreeMap<usize, FileIndex>,
+    /// Files with a range that was Ready: the start's gate is over.
+    started: BTreeSet<usize>,
 }
 
 impl Harness {
@@ -50,6 +52,7 @@ impl Harness {
             hedges: VecDeque::new(),
             log: Vec::new(),
             index: BTreeMap::new(),
+            started: BTreeSet::new(),
         }
     }
 
@@ -206,6 +209,7 @@ impl Harness {
                     let &(file, start, end) =
                         self.open.get(&demand).expect("ready for closed demand");
                     assert!(self.ready.insert(demand), "ready twice");
+                    self.started.insert(file);
                     for p in self.blocking_pieces(file, start, end) {
                         assert!(self.verified.get(p), "ready before piece {p} verified");
                     }
@@ -782,6 +786,71 @@ fn before_ready_only_the_ready_set_is_asked_for() {
     );
 }
 
+/// The gate is the start's alone (review P1-2): once the file has started,
+/// a seek's range keeps its critical, playback and readahead windows
+/// before its own Ready.
+#[test]
+fn a_seek_after_the_start_keeps_every_window() {
+    let g = Geometry::new(64 * KIB as u32, &[8 * MIB]).unwrap();
+    let mut h = Harness::new(g, small_cfg());
+    h.peer(1, 4 * MIB);
+    open(&mut h, 1, 0, 0, None);
+    serve_until_ready(&mut h, 1).expect("ready");
+    open(&mut h, 2, 0, 4 * MIB, None);
+    // Piece 64: blocking 64, critical 65..67, playback 67..69, readahead
+    // 69..73.
+    assert!(!h.ready.contains(&2), "the seek is Ready already");
+    assert_eq!(h.s.class_of(65), Some(Class::Critical));
+    assert_eq!(readahead_pieces(&h), [69, 70, 71, 72]);
+}
+
+/// A first read in the index zone of an MP4 whose index is pending, with
+/// no read at the head (review P2-1): the head's blocking window is asked
+/// for before the start's gate, so the head can say where the index is and
+/// the read reaches Ready.
+#[test]
+fn a_pending_mp4_read_in_the_index_zone_asks_for_the_head() {
+    let g = Geometry::new(64 * KIB as u32, &[8 * MIB]).unwrap();
+    let mut h = Harness::new(g, small_cfg());
+    h.peer(1, 4 * MIB);
+    h.send(Event::FileIndex {
+        file: 0,
+        index: FileIndex::Pending,
+    });
+    open(&mut h, 1, 0, 8 * MIB - 100 * KIB, None);
+    assert_eq!(h.s.class_of(0), Some(Class::Blocking), "no head asked for");
+    let head: Vec<BlockIdx> = h.geo.piece_blocks(0).collect();
+    for b in head {
+        assert!(h.out.contains(&(b, 1)), "head block {b} not asked for");
+        h.deliver(1, b);
+    }
+    h.send(Event::FileIndex {
+        file: 0,
+        index: FileIndex::At {
+            start: 8 * MIB - 40 * KIB,
+            end: 8 * MIB,
+        },
+    });
+    serve_until_ready(&mut h, 1).expect("ready");
+}
+
+/// A reader that reads on with no Ready, one that does not wait for it
+/// (review P2-2), gets every window once it is past its blocking window.
+#[test]
+fn a_read_past_its_blocking_window_keeps_every_window() {
+    let g = Geometry::new(64 * KIB as u32, &[8 * MIB]).unwrap();
+    let mut h = Harness::new(g, small_cfg());
+    open(&mut h, 1, 0, 0, None);
+    assert_eq!(h.s.class_of(1), None);
+    h.send(Event::RangeAdvanced {
+        demand: 1,
+        pos: 64 * KIB,
+    });
+    // Piece 1: blocking 1, critical 2..4.
+    assert_eq!(h.s.class_of(2), Some(Class::Critical));
+    assert!(!readahead_pieces(&h).is_empty());
+}
+
 /// What a start waits on, for the loading screen: the focused read's
 /// blocking window and its file's index in whole pieces, the fixed tail
 /// while an MP4's index is pending, and the verified part of it.
@@ -816,6 +885,21 @@ fn start_bytes_count_what_ready_waits_on() {
     // A probe never takes the focus.
     open(&mut h, 2, 0, 4 * MIB, Some(4 * MIB + 1000));
     assert_eq!(h.s.start_bytes(), Some(start(256 * KIB, 64 * KIB, false)));
+    // Once the file has started there is no start to show.
+    for piece in 1..4 {
+        h.send(Event::PieceVerified { piece });
+    }
+    assert_eq!(h.s.start_bytes(), None, "Ready");
+    // A resume opens its head read as a probe and nothing else: that is
+    // the start (review P1-1).
+    let g = Geometry::new(64 * KIB as u32, &[8 * MIB]).unwrap();
+    let mut resume = Harness::new(g, small_cfg());
+    open(&mut resume, 1, 0, 0, Some(64 * KIB));
+    resume.send(Event::PieceVerified { piece: 127 });
+    assert_eq!(
+        resume.s.start_bytes(),
+        Some(start(128 * KIB, 64 * KIB, false))
+    );
 }
 
 /// An MP4 whose 5 MiB `moov` comes after `mdat`: Ready waits for all of it,
@@ -1852,9 +1936,9 @@ fn run(geo: &Geometry, cfg: &Config, ops: &[Op]) -> Harness {
                     start,
                     end_hint,
                 });
-                // The focused demand gets its blocking and critical windows
-                // once it is Ready, and before that only what Ready waits
-                // on, so nothing is critical; a probe (its end within its
+                // The focused demand gets its blocking and critical windows,
+                // and until its file's first Ready only what Ready waits on,
+                // so nothing is critical; a probe (its end within its
                 // blocking window) only its blocking one
                 // (plans/streaming-window.md 2.3).
                 let f = geo.files()[file];
@@ -1866,8 +1950,8 @@ fn run(geo: &Geometry, cfg: &Config, ops: &[Op]) -> Harness {
                     .critical_min_bytes
                     .max(cfg.critical_secs * cfg.default_bitrate);
                 let probe = end_hint.is_some_and(|e| e <= start + cfg.blocking_bytes);
-                let ready = h.ready.contains(&demand.into());
-                let end = if probe || !ready {
+                let gated = !h.started.contains(&file);
+                let end = if probe || gated {
                     b_end
                 } else {
                     (b_end + crit).min(f.len)
@@ -1879,12 +1963,12 @@ fn run(geo: &Geometry, cfg: &Config, ops: &[Op]) -> Harness {
                         "focused piece {p} is {c:?}"
                     );
                 }
-                if !probe && !ready {
+                if !probe && gated {
                     for p in 0..n {
                         let c = h.s.class_of(p);
                         assert!(
                             c.is_none_or(|c| c < Class::Critical),
-                            "piece {p} is {c:?} before Ready"
+                            "piece {p} is {c:?} before the start"
                         );
                     }
                 }
