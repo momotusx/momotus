@@ -6,6 +6,12 @@ The owner's words, translated: "I told you Apple TV: the colors and everything s
 
 Details decided with it, by the same rule (match Apple TV, except where the owner ruled a color out): switches use Apple's own green on iOS and Android (`#30D158` dark) as the iOS Settings switch does; destructive actions (Delete account, Remove) stay without red, as the owner ruled red out, and use the key blue in alerts with the destructive word itself; the TV form has no key color at all, as tvOS; provider sign-in buttons keep their provider's own colors (Facebook blue, Google's mark), since each provider draws its own button. The built exploration is `design/exploration/v3/v2.html`; the draft language and tokens are `design/exploration/v3/drafts/`.
 
+## Owner direction, later on 2026-10-21
+
+The owner's words, translated: study every page of Apple's design in detail, on the phone and on the web, and make our phone, web and desktop designs exactly that way; IMDb and Rotten Tomatoes ratings sit side by side, nicely, by default, always; and take from Stremio's design too, which is not bad overall.
+
+What this sets: phone layouts follow Apple's iPhone TV app (`design/reference/apple-tv.md`, iPhone sections); web and desktop layouts follow tv.apple.com as measured there (its navigation, hover and keyboard states, shelves and pages), not the TV canvas scaled; the TV form follows tvOS and is checked on Android TV; Stremio's good parts are studied in `design/reference/stremio.md` and borrowed where they fit this language; every title shows its IMDb and Rotten Tomatoes ratings side by side wherever a rating appears (hero, title page, cards where ratings show), as Apple's TV app shows Rotten Tomatoes, by default and without any setting.
+
 ## Owner direction for v3 (2026-10-21, before the pick)
 
 The owner's words, translated: every page, Settings included, must look ultra sleek, Apple level, Apple style. Study Apple's own design in detail (the Apple TV app on tvOS and iPhone, tv.apple.com) and keep its appeal. Color: monochrome, with one accent between blue and green; no red and no orange. Do not mix colors. Run the design through review rounds until it is perfect.
