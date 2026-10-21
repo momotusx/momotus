@@ -127,7 +127,7 @@ export function TileCard(props: {
   if (!slotted) return card;
   const { ask, press } = askOnce(() => props.onRemove?.() ?? Promise.resolve());
   return (
-    <div class="tile-slot" style={{ width: `${props.w}px`, ...props.style }}>
+    <div class="tile-slot" classList={{ failed: ask() === "failed" }} style={{ width: `${props.w}px`, ...props.style }}>
       {card}
       <button
         class="tile-x"

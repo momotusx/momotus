@@ -52,17 +52,19 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 [data-vscroll] { overflow-y: auto; overflow-x: clip; }
 [data-hscroll] { overflow-x: auto; overflow-y: clip; }
 
-/* Focus: a 4 px accent ring, a dark halo that keeps 3:1 on any artwork, and
- * a small lift. Never color alone. TV always shows it; desktop and phone
- * show it for keyboard focus only. */
+/* Focus: a 4 px ring in the key blue (Apple's keyboard ring, solid so it keeps
+ * 3:1), a dark halo, and a small lift. Never color alone. TV always shows it;
+ * desktop and phone show it for keyboard focus only. The TV form has no key
+ * color (design/DECISION.md), so there the key, and the ring, stay white. */
+[data-form="tv"], [data-form="tv"] [data-scheme="dark"] { --key: var(--accent); }
 [data-f] { outline: 0 solid transparent; position: relative;
   transition: transform var(--motion-focus) var(--ease), box-shadow var(--motion-focus) var(--ease),
     outline-color var(--motion-focus) var(--ease), background-color var(--motion-focus) var(--ease), color var(--motion-focus) var(--ease); }
 [data-f]:focus-visible, [data-form="tv"] [data-f]:focus {
-  outline: var(--focus-ring) solid var(--accent); outline-offset: var(--focus-ring);
+  outline: var(--focus-ring) solid var(--key); outline-offset: var(--focus-ring);
   box-shadow: var(--focus-shadow); z-index: 3; }
 [data-f]:focus:not(:focus-visible) { outline: none; }
-[data-form="tv"] [data-f]:focus { outline: var(--focus-ring) solid var(--accent); }
+[data-form="tv"] [data-f]:focus { outline: var(--focus-ring) solid var(--key); }
 
 /* Buttons. The one primary action is a white pill; the rest are glass pills
  * with a control edge; `.round` is an icon in a circle with its label under it. */
@@ -91,7 +93,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
   transition: transform var(--motion-focus) var(--ease), background-color var(--motion-focus) var(--ease); }
 .rbtn .ring svg { width: 30px; height: 30px; }
 .rbtn:focus-visible, [data-form="tv"] .rbtn:focus { outline: none; box-shadow: none; color: var(--text); }
-.rbtn:focus-visible .ring, [data-form="tv"] .rbtn:focus .ring { outline: var(--focus-ring) solid var(--accent); outline-offset: var(--focus-ring);
+.rbtn:focus-visible .ring, [data-form="tv"] .rbtn:focus .ring { outline: var(--focus-ring) solid var(--key); outline-offset: var(--focus-ring);
   box-shadow: var(--focus-shadow); transform: scale(var(--focus-scale-card)); }
 @media (hover: hover) { [data-form="desktop"] .rbtn:hover { color: var(--text); } [data-form="desktop"] .rbtn:hover .ring { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .44); } }
 

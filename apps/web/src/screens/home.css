@@ -96,7 +96,7 @@
 .tile .cap span { font: 500 21px / 1.25 var(--font-text); color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tile:focus-visible, [data-form="tv"] .tile:focus { outline: none; box-shadow: none; transform: translateY(-6px) scale(var(--focus-scale-card)); }
 .tile:focus-visible .pic, [data-form="tv"] .tile:focus .pic {
-  outline: var(--focus-ring) solid var(--accent); outline-offset: var(--focus-ring);
+  outline: var(--focus-ring) solid var(--key); outline-offset: var(--focus-ring);
   box-shadow: var(--focus-shadow), var(--lift-focus-edge); overflow: hidden; }
 .tile:focus-visible .cap b, [data-form="tv"] .tile:focus .cap b { color: var(--accent); }
 @media (hover: hover) {
@@ -111,14 +111,16 @@
   transition: opacity var(--motion-focus) var(--ease), transform var(--motion-focus) var(--ease); }
 .tile-x svg { width: 20px; height: 20px; }
 .tile-slot:hover .tile-x, .tile-slot:focus-within .tile-x { opacity: 1; }
-.tile-x:focus-visible { outline: var(--focus-ring) solid var(--accent); outline-offset: 2px; }
+.tile-x:focus-visible { outline: var(--focus-ring) solid var(--key); outline-offset: 2px; }
 @media (hover: none) { .tile-x { opacity: 1; } }
 @media (hover: hover) { [data-form="desktop"] .tile-slot:hover .tile-x { transform: translateY(-8px); } }
 [data-form="phone"] .tile-x { opacity: 1; top: 6px; right: 6px; width: 32px; height: 32px; }
 /* Asking, or refused: the button says it in words, over the still. */
 .tile-x.asking, .tile-x.failed { width: auto; padding: 0 14px; border-radius: 18px; opacity: 1; font: 600 15px / 1 var(--font-text); white-space: nowrap; }
 .tile-x.asking { background: var(--text); color: var(--bg); }
-.tile-x.failed { background: var(--bad); color: var(--text); }
+/* Refused: no fill; the art dims under the words (on `.tile-slot.failed`). */
+.tile-x.failed { background: none; color: #fff; }
+.tile-slot.failed .pic { filter: brightness(.4); }
 [data-form="phone"] .tile-x.asking, [data-form="phone"] .tile-x.failed { width: auto; font-size: 12px; padding: 0 10px; }
 [data-form="phone"] .tile-x svg { width: 18px; height: 18px; }
 /* Progress: a thin accent line on a dark strip at the art's foot, so it

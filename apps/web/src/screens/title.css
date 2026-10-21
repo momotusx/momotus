@@ -59,7 +59,7 @@
 .info .acts .btn .long { max-width: 9em; white-space: normal; text-align: center; line-height: 1.2; }
 .info .acts .btn[aria-pressed="true"] svg { background: var(--selected-fill); box-shadow: var(--selected-edge); }
 .info .acts .btn:focus-visible, [data-form="tv"] .info .acts .btn:focus { outline: none; box-shadow: none; transform: none; color: var(--text); }
-.info .acts .btn:focus-visible svg, [data-form="tv"] .info .acts .btn:focus svg { outline: var(--focus-ring) solid var(--accent); outline-offset: var(--focus-ring);
+.info .acts .btn:focus-visible svg, [data-form="tv"] .info .acts .btn:focus svg { outline: var(--focus-ring) solid var(--key); outline-offset: var(--focus-ring);
   box-shadow: var(--focus-shadow); transform: scale(var(--focus-scale-card)); }
 @media (hover: hover) {
   [data-form="desktop"] .info .acts .btn:hover { background: none; box-shadow: none; color: var(--text); }

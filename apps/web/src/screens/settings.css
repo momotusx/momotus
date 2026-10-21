@@ -72,10 +72,9 @@
 .addon-acts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; max-width: 640px; }
 .addon-acts .btn { height: 60px; padding: 0 22px; font-size: var(--type-callout); gap: 10px; }
 .addon-acts .btn svg { width: 26px; height: 26px; }
-.btn.danger { background: var(--bad); color: var(--bg); box-shadow: none; }
-/* A choice that carries a risk (a link with a sign-in): a glass secondary
- * with the warning's edge, never the white primary. */
-.btn.caution { box-shadow: inset 0 0 0 2px var(--warn); }
+/* `.btn.danger` and `.btn.caution` stay the plain secondary: no red and no
+ * warning hue (design/DECISION.md); the words carry the meaning, and the
+ * destructive or risky choice is never the white primary. */
 .addon-acts .btn[aria-pressed="false"] { color: var(--muted); }
 
 /* Device codes and QR (Import, Pairing). */
@@ -140,7 +139,7 @@
 [data-form="phone"] .big-state svg { width: 22px; height: 22px; }
 [data-form="phone"] .summary h2 { font-size: 22px; }
 [data-form="phone"] .summary h2 svg { width: 26px; height: 26px; }
-[data-form="phone"] .field-line input:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); outline: none; }
+[data-form="phone"] .field-line input:focus-visible { box-shadow: inset 0 0 0 2px var(--key); outline: none; }
 
 /* Home rows: a numbered list; the row picked up for moving shifts right. */
 .hrows { display: grid; gap: 10px; max-width: 1400px; }
@@ -203,7 +202,7 @@
 .lang-search svg { width: 26px; height: 26px; flex: none; color: var(--muted); }
 .lang-search input { flex: 1; min-width: 0; height: 100%; font: 500 var(--type-body) / 1 var(--font-text); outline: none; }
 .lang-search input:focus { outline: none; box-shadow: none; }
-.lang-search:focus-within { outline: var(--focus-ring) solid var(--accent); outline-offset: var(--focus-ring); box-shadow: var(--focus-shadow); }
+.lang-search:focus-within { outline: var(--focus-ring) solid var(--key); outline-offset: var(--focus-ring); box-shadow: var(--focus-shadow); }
 .lang-all { display: flex; flex-wrap: wrap; gap: 14px; }
 [data-form="phone"] .lang-search { height: 44px; padding: 0 14px; gap: 10px; }
 [data-form="phone"] .lang-search svg { width: 18px; height: 18px; }

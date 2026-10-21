@@ -26,7 +26,7 @@
 .cal-skel-day { width: 180px; height: 76px; border-radius: var(--radius-m); }
 .cal-card:focus-visible, [data-form="tv"] .cal-card:focus { outline: none; box-shadow: none; transform: scale(var(--focus-scale-card)); }
 .cal-card:focus-visible .cal-art, [data-form="tv"] .cal-card:focus .cal-art {
-  outline: var(--focus-ring) solid var(--accent); outline-offset: var(--focus-ring); box-shadow: var(--focus-shadow); opacity: 1; }
+  outline: var(--focus-ring) solid var(--key); outline-offset: var(--focus-ring); box-shadow: var(--focus-shadow); opacity: 1; }
 @media (hover: hover) { [data-form="desktop"] .cal-card:hover { transform: scale(1.03); } }
 
 /* Phone: the day above a short list, art beside the text. */
