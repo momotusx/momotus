@@ -2540,6 +2540,7 @@ dependencies = [
  "mq-library",
  "mq-media",
  "mq-protocol",
+ "mq-relparse",
  "mq-runtime",
  "mq-server",
  "mq-streams",

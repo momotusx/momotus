@@ -18,6 +18,9 @@ use std::time::{Duration, Instant};
 mod magnet;
 mod play;
 mod sync;
+mod versions;
+
+use versions::{Device, versions};
 
 #[derive(Parser)]
 #[command(name = "mq", about = "Marquee core driver")]
@@ -84,6 +87,36 @@ enum Command {
         /// Start from an empty torrent folder and delete it after the run.
         #[arg(long)]
         fresh_cache: bool,
+    },
+    /// Open Versions for a title as an app does, with no playback: the pick
+    /// when every addon answered (what the apps play) and after the live
+    /// seeder counts, then every row with its parsed facts and the seeders
+    /// its addon listed. Scrapes trackers only; fetches no piece.
+    Versions {
+        kind: String,
+        id: String,
+        /// The screen's lines.
+        #[arg(long, default_value_t = 1080)]
+        height: u32,
+        /// The screen shows HDR10 and HLG.
+        #[arg(long)]
+        hdr: bool,
+        /// The screen also shows Dolby Vision and HDR10+.
+        #[arg(long, requires = "hdr")]
+        dv: bool,
+        /// The device decodes H.264 alone smoothly (no HEVC, AV1 or VP9).
+        #[arg(long)]
+        h264_only: bool,
+        /// The measured HTTP and torrent speed, in Mbit/s (default: the
+        /// priors).
+        #[arg(long)]
+        mbps: Option<f32>,
+        /// The free space, in GB (default: the disk's).
+        #[arg(long)]
+        free_gb: Option<f64>,
+        /// The device's language (ISO 639-1).
+        #[arg(long, default_value = "en")]
+        language: String,
     },
     /// Stream a torrent through the engine and the loopback server: time to
     /// metadata, first byte, Ready (head and tail verified), first frame in
@@ -345,6 +378,28 @@ async fn main() {
             pick,
             ..
         } => play(&core, kind, id, headless, seconds, pick).await,
+        Command::Versions {
+            kind,
+            id,
+            height,
+            hdr,
+            dv,
+            h264_only,
+            mbps,
+            free_gb,
+            language,
+        } => {
+            let device = Device {
+                height,
+                hdr,
+                dv,
+                h264_only,
+                mbps,
+                free_gb,
+                language,
+            };
+            versions(&core, kind, id, device).await
+        }
         Command::PlayMagnet { .. } | Command::Scrape { .. } => {
             unreachable!("handled before the core opens")
         }

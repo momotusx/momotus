@@ -16,6 +16,7 @@ mq-server = { path = "../mq-server", features = ["torrent"] }
 url.workspace = true
 libc = "0.2"
 mq-streams = { path = "../mq-streams" }
+mq-relparse = { path = "../mq-relparse" }
 mq-sync = { path = "../mq-sync" }
 mq-library = { path = "../mq-library" }
 mq-addons = { path = "../mq-addons" }
