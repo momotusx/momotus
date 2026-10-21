@@ -378,11 +378,7 @@ impl Core {
     ) -> Result<mq_sync::SyncReport, mq_sync::SyncError> {
         let _gate = self.sync_gate().await;
         self.note_sync_member(config);
-        let report = mq_sync::sync_once(self.library(), self.http(), config, self.clock()).await;
-        if report.is_ok() {
-            self.note_sync_devices(config);
-        }
-        report
+        mq_sync::sync_once(self.library(), self.http(), config, self.clock()).await
     }
 
     /// Held for the whole of a sync round or a roster change: two at once

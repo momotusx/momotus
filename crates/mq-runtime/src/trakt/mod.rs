@@ -45,8 +45,6 @@ const ACCOUNT_SETTING: &str = "trakt.account";
 /// On the owner profile, `sync.member.<device id>`: the account member a
 /// device is (synced).
 const SYNC_MEMBER: &str = "sync.member.";
-/// The account's devices as this device last saw them (local, sync state).
-const ACCOUNT_DEVICES: &str = "account_devices";
 const OWNER: &str = mq_library::OWNER;
 
 /// The Trakt app and where Trakt answers: from the build
@@ -484,11 +482,12 @@ impl Core {
 
     /// Before a round: names the account member this device is, in a synced
     /// setting on the owner profile, so the other devices can tell its
-    /// `trakt.device.<id>` flag apart once it left the account.
+    /// `trakt.device.<id>` flag apart once it left the account. The setting
+    /// stays after a device leaves: it then only says who it was.
     pub(crate) fn note_sync_member(&self, config: &mq_sync::SyncConfig) {
         let library = self.library();
         let key = format!("{SYNC_MEMBER}{}", self.clock().device());
-        let me = serde_json::to_string(&format!("{:?}", config.secret().id())).unwrap_or_default();
+        let me = serde_json::to_string(&config.member_hex()).unwrap_or_default();
         let held = library
             .settings(OWNER)
             .ok()
@@ -500,28 +499,19 @@ impl Core {
         }
     }
 
-    /// After a round: the account's devices as this device last saw them
-    /// (forgotten with the account).
-    pub(crate) fn note_sync_devices(&self, config: &mq_sync::SyncConfig) {
-        let Ok((_, devices)) = mq_sync::stored_devices(self.library(), config) else {
-            return;
-        };
-        let devices: Vec<String> = devices.iter().map(|id| format!("{id:?}")).collect();
-        let devices = serde_json::to_string(&devices).unwrap_or_default();
-        if let Err(e) = self.library().set_sync_state(ACCOUNT_DEVICES, &devices) {
-            tracing::warn!("could not keep the account's devices: {e}");
-        }
-    }
-
     /// Whether another device's `trakt.device.<id>` flag still counts as
-    /// signed in: not once this device knows the account's devices and that
-    /// one is no longer among them, since a device that left can never sync
-    /// its sign-out (B P3-3). Without either fact, it counts.
+    /// signed in: not when that device's member is missing from the roster
+    /// this device holds now, since a device that left can never sync its
+    /// sign-out (B P3-3). Outside an account, or without the member's name,
+    /// it counts.
     fn trakt_flag_counts(&self) -> Result<impl Fn(&str) -> bool, CoreError> {
         let library = self.library();
-        let devices: Option<Vec<String>> = library
-            .sync_state(ACCOUNT_DEVICES)?
-            .and_then(|d| serde_json::from_str(&d).ok());
+        // The roster store is caught up before any record is pulled, so a
+        // device whose `sync.member` arrived is already in it.
+        let devices = mq_sync::stored_devices(library).unwrap_or_else(|e| {
+            tracing::warn!("could not read the account's devices: {e}");
+            None
+        });
         let members: HashMap<String, String> = library
             .settings(OWNER)?
             .into_iter()

@@ -542,6 +542,19 @@ impl Library {
         self.read(|c| c.query_row("SELECT EXISTS(SELECT 1 FROM sync_roster)", [], |r| r.get(0)))
     }
 
+    /// The genesis key of the roster this device holds (not a fork's kept
+    /// copy), if it holds one.
+    pub fn roster_genesis(&self) -> Result<Option<String>, LibraryError> {
+        self.read(|c| {
+            c.query_row(
+                "SELECT genesis FROM sync_roster WHERE substr(genesis, 1, 5) != 'fork:' LIMIT 1",
+                [],
+                |r| r.get(0),
+            )
+            .optional()
+        })
+    }
+
     /// The account's roster entries this device verified, in order.
     pub fn roster_entries(&self, genesis: &str) -> Result<Vec<SignedEntry>, LibraryError> {
         self.read(|c| {

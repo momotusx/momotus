@@ -99,6 +99,11 @@ impl SyncConfig {
     pub fn secret(&self) -> MemberSecret {
         MemberSecret::from_seed(self.member.0)
     }
+
+    /// This device's member id as lowercase hex, as `stored_devices` lists it.
+    pub fn member_hex(&self) -> String {
+        hex::encode(self.secret().id().0)
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -1834,18 +1839,20 @@ fn member_infos(roster: &Roster, keys: &Bundle, me: &Id) -> Vec<MemberInfo> {
         .collect()
 }
 
-/// This device's member id and the account's devices, from the roster this
-/// device stored (no relay call): who is still in the account.
-pub fn stored_devices(library: &Library, config: &SyncConfig) -> Result<(Id, Vec<Id>), SyncError> {
-    let entries = stored_entries(library, &genesis_key(&config.keys))?;
-    let roster = rebuild(&entries).map_err(roster_error)?;
+/// The account's devices as lowercase hex member ids, from the roster this
+/// device stored (no record, no relay call); `None` outside an account.
+pub fn stored_devices(library: &Library) -> Result<Option<Vec<String>>, SyncError> {
+    let Some(genesis) = library.roster_genesis()? else {
+        return Ok(None);
+    };
+    let roster = rebuild(&stored_entries(library, &genesis)?).map_err(roster_error)?;
     let devices = roster
         .members()
         .iter()
         .filter(|(_, m)| m.role == Role::Device)
-        .map(|(id, _)| *id)
+        .map(|(id, _)| hex::encode(id.0))
         .collect();
-    Ok((config.secret().id(), devices))
+    Ok(Some(devices))
 }
 
 pub async fn devices(
