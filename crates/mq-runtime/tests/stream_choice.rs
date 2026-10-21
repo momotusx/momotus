@@ -250,7 +250,7 @@ async fn live_seeders_stand_over_the_addons_number() {
     let live = [(HASH_A.to_owned(), 0)];
     core.set_live_seeders(std::collections::HashMap::from(live));
     let view = VersionsView::open(&core, params(TitleFacts::default()));
-    // `done` does not wait for the counts; they rank the rows when they come.
+    // The counts rank the rows when they come; `done` waits for them.
     let counted = || {
         let s = view.snapshot();
         s.done
@@ -1178,7 +1178,7 @@ async fn a_cold_first_scrape_is_asked_again_and_reaches_a_frozen_pick() {
     core.set_live_seeders(std::collections::HashMap::from([(HASH_A.to_owned(), 37)]));
     core.miss_live_seeders(1);
     let view = VersionsView::open(&core, params(TitleFacts::default()));
-    until("done", || view.snapshot().done).await;
+    until("a pick", || view.snapshot().recommended.is_some()).await;
     let seeds = |r: &mq_runtime::VersionRow| match r.status {
         mq_runtime::VersionStatus::Torrent { seeds } => seeds,
         _ => panic!("a torrent row: {r:?}"),
@@ -1191,6 +1191,7 @@ async fn a_cold_first_scrape_is_asked_again_and_reaches_a_frozen_pick() {
         "the addon's number until the counts come"
     );
     assert!(view.counting(), "the second ask is on the way");
+    assert!(!view.snapshot().done, "done waits for the counts");
     view.freeze();
     let counted = || {
         view.snapshot()
@@ -1205,6 +1206,32 @@ async fn a_cold_first_scrape_is_asked_again_and_reaches_a_frozen_pick() {
     );
     assert_eq!(pick.line, mq_streams::ReasonLine::Few { seeders: 37 });
     until("the asks to end", || !view.counting()).await;
+    until("done", || view.snapshot().done).await;
+}
+
+/// The apps play the pick at `done` (`PlayPick`, the web player, Apple's
+/// `settledPick`), so `done` waits for the live counts once every addon
+/// answered: the pick it gives is ranked on them. Before, every pick of
+/// the audit was read about a second before the counts
+/// (plans/research/pick-audit.md).
+#[tokio::test]
+async fn done_waits_for_the_live_counts() {
+    let server = Server::start(vec![
+        route("GET", "/stream/series/tt1%3A1%3A1.json", 200, &torrents()),
+        route("GET", "/meta/series/tt1.json", 200, &meta()),
+    ])
+    .await;
+    let core = core_with(&server);
+    core.set_debrid_keys(&[(StoreId::RealDebrid, "rd".into())]);
+    // A listed 900 its trackers count at 0, the counts a second late as
+    // after a cold first scrape.
+    core.set_live_seeders(std::collections::HashMap::from([(HASH_A.to_owned(), 0)]));
+    core.miss_live_seeders(1);
+    let view = VersionsView::open(&core, params(TitleFacts::default()));
+    until("done", || view.snapshot().done).await;
+    assert!(!view.counting(), "done came before the counts");
+    let pick = view.snapshot().recommended.unwrap();
+    assert_eq!(pick.release_name, "Show.S01E01.1080p.WEB-DL.x264-BBB");
 }
 
 /// When every version is a swarm whose trackers count one seeder or none,

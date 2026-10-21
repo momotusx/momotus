@@ -187,8 +187,8 @@ pub enum BlockedReason {
     NothingPlaysHere,
 }
 
-/// How long `done` waits for the meta and for each cache check (4.2,
-/// r4 N4): the apps play at `done`.
+/// How long `done` waits for the meta, for each cache check (4.2, r4 N4)
+/// and for the live counts once the rest is in: the apps play at `done`.
 const SIDE_WAIT: Duration = Duration::from_secs(3);
 
 struct State {
@@ -1068,10 +1068,14 @@ async fn collect(
     let mut next_index = 0u32;
     // The meta and the cache checks: `done` waits for them (or 3 s each).
     let mut side: JoinSet<Side> = JoinSet::new();
-    // Live seeders: `done` never waits for them (a scrape takes its whole
-    // second); they rank the rows again when they come, until the view is
-    // frozen.
+    // Live seeders: they rank the rows again when they come, until the
+    // view is frozen. `done` waits for them once the rest is in, at most
+    // `SIDE_WAIT`: the apps play the pick at `done`, which came about a
+    // second before the counts on every pick of the audit
+    // (plans/research/pick-audit.md).
     let mut live: JoinSet<Side> = JoinSet::new();
+    let mut hold: Option<tokio::time::Instant> = None;
+    let mut held_out = false;
     if needs_meta(params, &lock(&state).rank) {
         side.spawn(meta_facts(
             core.clone(),
@@ -1096,7 +1100,8 @@ async fn collect(
                 if let Ok(found) = joined {
                     found.apply(&mut s);
                 }
-                settle(&core, &mut s, &ranking, answered && side.is_empty());
+                let done = finished(answered && side.is_empty(), &live, &mut hold, held_out);
+                settle(&core, &mut s, &ranking, done);
                 snapshot.set(render(&s));
                 continue;
             }
@@ -1106,7 +1111,16 @@ async fn collect(
                 if let Ok(found) = joined {
                     found.apply(&mut s);
                 }
-                settle(&core, &mut s, &ranking, answered && side.is_empty());
+                let done = finished(answered && side.is_empty(), &live, &mut hold, held_out);
+                settle(&core, &mut s, &ranking, done);
+                snapshot.set(render(&s));
+                continue;
+            }
+            _ = tokio::time::sleep_until(hold.unwrap_or_else(tokio::time::Instant::now)),
+                if hold.is_some() && !held_out && !live.is_empty() => {
+                held_out = true;
+                let mut s = lock(&state);
+                settle(&core, &mut s, &ranking, true);
                 snapshot.set(render(&s));
                 continue;
             }
@@ -1192,9 +1206,24 @@ async fn collect(
             }
             AddonEvent::Done => answered = true,
         }
-        settle(&core, &mut s, &ranking, answered && side.is_empty());
+        let done = finished(answered && side.is_empty(), &live, &mut hold, held_out);
+        settle(&core, &mut s, &ranking, done);
         snapshot.set(render(&s));
     }
+}
+
+/// `done`: every addon and side check is in (`rest`), and the live counts
+/// too or `SIDE_WAIT` passed since the rest was; the wait starts here.
+fn finished(
+    rest: bool,
+    live: &JoinSet<Side>,
+    hold: &mut Option<tokio::time::Instant>,
+    held_out: bool,
+) -> bool {
+    if rest && hold.is_none() {
+        *hold = Some(tokio::time::Instant::now() + SIDE_WAIT);
+    }
+    rest && (live.is_empty() || held_out)
 }
 
 /// Ranks again with what is known now; once `done`, warms the pick's
