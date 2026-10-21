@@ -13,12 +13,15 @@ export function bytes(n: number): string {
 }
 
 /** A title's scores side by side as plain text, the source first: "IMDb 8.8",
- * "RT 87%". A score the core left null has no slot, and the brands' logos and
- * icons never appear (plans/research/ratings.md). */
-export function ratingParts(r: Ratings | null | undefined): { text: string; imdb: boolean }[] {
-  const parts: { text: string; imdb: boolean }[] = [];
-  if (r?.imdb) parts.push({ text: `IMDb ${r.imdb}`, imdb: true });
-  if (r?.rottenTomatoes) parts.push({ text: `RT ${r.rottenTomatoes}`, imdb: false });
+ * "RT 87%", with what a screen reader says ("Rotten Tomatoes 87 percent"). A
+ * score the core left null has no slot, and the brands' logos and icons never
+ * appear (plans/research/ratings.md). */
+export function ratingParts(r: Ratings | null | undefined): { text: string; spoken: string; imdb: boolean }[] {
+  const parts: { text: string; spoken: string; imdb: boolean }[] = [];
+  if (r?.imdb) parts.push({ text: `IMDb ${r.imdb}`, spoken: `IMDb ${r.imdb}`, imdb: true });
+  if (r?.rottenTomatoes) {
+    parts.push({ text: `RT ${r.rottenTomatoes}`, spoken: `Rotten Tomatoes ${r.rottenTomatoes.replace("%", " percent")}`, imdb: false });
+  }
   return parts;
 }
 

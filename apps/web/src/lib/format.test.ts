@@ -87,4 +87,6 @@ test("ratings sit side by side as plain text, and a missing score has no slot", 
   expect(text(undefined)).toEqual([]);
   // Only the IMDb score links to IMDb's page.
   expect(ratingParts({ imdb: "8.8", rottenTomatoes: "87%" }).map((p) => p.imdb)).toEqual([true, false]);
+  // A screen reader says the names, not "R T".
+  expect(ratingParts({ imdb: "10.0", rottenTomatoes: "100%" }).map((p) => p.spoken)).toEqual(["IMDb 10.0", "Rotten Tomatoes 100 percent"]);
 });

@@ -35,6 +35,8 @@ export const SEARCH_TOP_PORT = 17815 + shift;
 export const BROWSER_PORTS = { https: 17816 + shift, http: 17817 + shift };
 /** The accounts spec's own: a relay with sign-in, the mock provider, and one core per device. */
 export const ACCOUNTS_PORTS = { relay: 17818 + shift, mock: 17819 + shift, a: 17820 + shift, b: 17821 + shift, c: 17822 + shift };
+/** The ratings spec's own: a core whose MDBList is a local fake (MQ_DEV_MDBLIST). */
+export const RATINGS_PORT = 17823 + shift;
 /** Every browser a run launches takes these: each name but this machine's resolves to the browser's
  * recorder, whose certificate it does not check, so pages load images and frames from the
  * recording and a run needs the network only to record (none with MQ_E2E_OFFLINE=1). A spec that

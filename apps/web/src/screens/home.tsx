@@ -293,7 +293,9 @@ export default function Home() {
                   <For each={ratingParts(h().tile.ratings)}>
                     {(p) => (
                       <>
-                        <span class="rate num">{p.text}</span>
+                        <span class="rate num" aria-label={p.spoken}>
+                          {p.text}
+                        </span>
                         <b aria-hidden="true">·</b>
                       </>
                     )}

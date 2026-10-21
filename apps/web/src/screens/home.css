@@ -87,10 +87,9 @@
 @media (prefers-reduced-motion: reduce) { .tile .pic:has(> img.fade:not(.in)) { animation: none; } }
 .pic-name { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center;
   font: var(--weight-heading) var(--type-headline) / 1.15 var(--font-display); letter-spacing: var(--tracking-heading); color: var(--text); overflow: hidden; overflow-wrap: anywhere; }
-.chip-rate { position: absolute; z-index: 2; top: 10px; right: 10px; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px;
+.chip-rate { position: absolute; z-index: 2; top: 10px; right: 10px; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; white-space: nowrap;
   border-radius: var(--radius-pill); font: 700 20px / 1 var(--font-text); color: var(--text);
   background: rgba(9, 13, 19, .72); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); box-shadow: inset 0 0 0 1px var(--edge); }
-.chip-rate svg { width: 16px; height: 16px; color: var(--star); fill: var(--star); }
 .tile .cap { margin-top: 14px; display: grid; gap: 4px; min-width: 0; }
 .tile .cap b { font: 700 var(--type-caption) / 1.25 var(--font-text); letter-spacing: var(--tracking-label); color: var(--text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color var(--motion-focus) var(--ease); }
@@ -174,8 +173,9 @@
 [data-form="phone"] .track { scroll-snap-type: x proximity; scroll-padding-left: 16px; }
 [data-form="phone"] .tile { scroll-snap-align: start; border-radius: 10px; }
 [data-form="phone"] .tile .pic { border-radius: 10px; }
-[data-form="phone"] .chip-rate { top: 6px; right: 6px; height: 20px; padding: 0 6px; gap: 3px; font-size: 11px; }
-[data-form="phone"] .chip-rate svg { width: 10px; height: 10px; }
+/* A phone poster has room for one short score a line: the two stack, never wrap or cut. */
+[data-form="phone"] .chip-rate { top: 6px; right: 6px; height: auto; padding: 3px 7px; gap: 1px; font-size: 11px; line-height: 1.2;
+  flex-direction: column; align-items: flex-end; }
 [data-form="phone"] .tile .cap { margin-top: 6px; gap: 2px; }
 [data-form="phone"] .tile .cap b { font-size: 13px; }
 [data-form="phone"] .tile .cap span { font-size: 12px; }

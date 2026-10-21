@@ -136,9 +136,16 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                         <Show when={i() > 0}>
                           <b aria-hidden="true"> · </b>
                         </Show>
-                        <Show when={p.imdb && form() !== "tv" && x().imdbUrl} fallback={<span class="rate num">{p.text}</span>}>
+                        <Show
+                          when={p.imdb && form() !== "tv" && x().imdbUrl}
+                          fallback={
+                            <span class="rate num" aria-label={p.spoken}>
+                              {p.text}
+                            </span>
+                          }
+                        >
                           {(url) => (
-                            <a class="rate num" href={url()} target="_blank" rel="noopener noreferrer" data-f="title:imdb">
+                            <a class="rate num" href={url()} target="_blank" rel="noopener noreferrer" data-f="title:imdb" aria-label={`${p.spoken}, on IMDb`}>
                               {p.text}
                             </a>
                           )}
@@ -302,6 +309,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                   <Fact label="Directed by" value={x().directors.slice(0, 2).join(", ")} />
                   <Fact label="Runtime" value={x().runtime ? `${x().runtime}${series() ? " an episode" : ""}` : ""} />
                   <Fact label="Details from" value={x().source} />
+                  <Fact label="Ratings from" value={x().ratingsFrom ?? ""} />
                 </dl>
               </section>
               <Show when={series() && form() !== "phone"}>
