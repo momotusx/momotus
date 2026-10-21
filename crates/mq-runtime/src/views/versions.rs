@@ -845,7 +845,7 @@ impl VersionsView {
             handle,
             note,
             languages: self.learning.prefs.languages.clone(),
-            runtime_s: lock(&self.state).rank.runtime_s,
+            runtime_s: s.rank.runtime_s,
         }
     }
 
