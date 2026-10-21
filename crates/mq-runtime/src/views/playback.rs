@@ -15,6 +15,7 @@ use mq_addons::{AddonEvent, Deadlines, InstalledAddon};
 use mq_debrid::{ResolveRequest, Resolver, StoreId};
 use mq_library::{Authorization, FINISHED_RATIO, LibraryItemRow, Policy, ProgressRow};
 use mq_protocol::{ResourcePath, Source, decode_subtitles};
+use mq_relparse::fit;
 use mq_server::{Format, Lease, SubtitleSlot, SubtitleTrouble, Upstream};
 use mq_streams::{DeviceCaps, ParsedStream};
 use serde::Serialize;
@@ -131,6 +132,59 @@ pub struct PlaybackSnapshot {
     /// so a retry that fails again at once still differs from the failure
     /// before it (code review 2026-10-20 r2 P3-6). Show "Trying again".
     pub retries: u32,
+    /// How far the start is while `phase` is `resolving`: the loading
+    /// screen's fill and its words (plans/player-polish.md 1.3). Null before
+    /// the first source starts and from `ready` on.
+    pub start: Option<StartProgress>,
+}
+
+/// One start of the playback, from the first source it tries to `ready`
+/// (plans/player-polish.md 1.3).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub struct StartProgress {
+    pub stage: StartStage,
+    /// Peers connected to a torrent.
+    pub peers: u32,
+    /// What a torrent's swarm sent of the start the player needs, and all
+    /// of it.
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub have_bytes: u64,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub need_bytes: u64,
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub bytes_per_s: u64,
+    /// The source of the version it is on, from 1, of `sources`.
+    pub source: u32,
+    pub sources: u32,
+    /// 0 to 1: never back within one start (a move to the next source goes
+    /// on from where the last one got), never 1 before `ready`.
+    pub progress: f32,
+    /// The core's words once a stage takes long: "Getting the file's
+    /// details", "Finding peers, 3 so far", "Buffering, 4.1 of 8.4 MB";
+    /// "Trying source 2 of 3" as a next source starts. Null otherwise.
+    pub caption: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub enum StartStage {
+    /// A torrent's details (its files) are asked of the swarm.
+    Details,
+    /// A torrent's peers are being found; a link is being opened.
+    Connecting,
+    /// The swarm sends the start of the video.
+    Buffering,
 }
 
 /// A version the playback moved on to, or offers instead.
@@ -181,6 +235,9 @@ pub struct SubtitleTrack {
     /// The language's English name ("Portuguese (Brazil)"): the heading
     /// of its group.
     pub language_name: String,
+    /// The language's own name ("Português (Brasil)", "Türkçe"); the
+    /// English name when the core knows no other.
+    pub native_name: String,
     /// What tells this track from the others of its language: the release
     /// it was made for when the addon names it, else its source; numbered
     /// when two would read the same.
@@ -190,10 +247,17 @@ pub struct SubtitleTrack {
     pub source: String,
     pub forced: bool,
     pub hearing_impaired: bool,
+    /// The track names the playing release's group: made for this release
+    /// ("Made for this release").
+    pub fits: bool,
     /// The release text `name` starts from, when there is one.
     #[serde(skip)]
     #[cfg_attr(feature = "ts", ts(skip))]
     pub(crate) release: Option<String>,
+    /// What the track says of its release, for the release match.
+    #[serde(skip)]
+    #[cfg_attr(feature = "ts", ts(skip))]
+    made: Made,
 }
 
 impl SubtitleTrack {
@@ -220,11 +284,44 @@ impl SubtitleTrack {
             language: language.tag,
             name: release.clone().unwrap_or_else(|| source.to_owned()),
             language_name: language.name,
+            native_name: language.native,
             label,
             source: source.to_owned(),
             forced: false,
             hearing_impaired: false,
+            fits: false,
+            made: Made::of(fit::Made::read(release.as_deref().unwrap_or_default())),
             release,
+        }
+    }
+}
+
+/// What a subtitle says of the release it was made for (`fit::Made`),
+/// owned by its track.
+#[derive(Debug, Clone, Default, PartialEq)]
+struct Made {
+    text: String,
+    family: Option<fit::Family>,
+    cut: Option<mq_relparse::Cut>,
+    fps: Option<f32>,
+}
+
+impl Made {
+    fn of(made: fit::Made) -> Self {
+        Self {
+            text: made.text.to_owned(),
+            family: made.family,
+            cut: made.cut,
+            fps: made.fps,
+        }
+    }
+
+    fn get(&self) -> fit::Made<'_> {
+        fit::Made {
+            text: &self.text,
+            family: self.family,
+            cut: self.cut,
+            fps: self.fps,
         }
     }
 }
@@ -366,8 +463,31 @@ struct State {
     languages: Vec<String>,
     /// Each subtitle track's place, by URL: its source's position in the
     /// installed list (the stream's own first), then its rank there. Off
-    /// the wire; `subtitles` is sorted by it within a language.
+    /// the wire; `subtitles` is sorted by it within a language, after the
+    /// release match.
     order: HashMap<String, (usize, usize)>,
+    /// What the playing release says of itself, for the subtitles' release
+    /// match: its name's, and the frame rate once the probe read it.
+    playing: OwnedPlaying,
+    /// The start's progress when the source starting now began, and when
+    /// it began (`start`).
+    #[cfg_attr(not(feature = "torrent"), allow(dead_code))]
+    start_base: f32,
+    #[cfg_attr(not(feature = "torrent"), allow(dead_code))]
+    source_since: tokio::time::Instant,
+    /// Torrents of this view that did not start (no details in time, a
+    /// stall, the deadline), by lowercase info hash: another source of one
+    /// is skipped at once. "Try again" clears it.
+    #[cfg(feature = "torrent")]
+    failed_hashes: Vec<String>,
+    /// The next torrent candidates' details, fetched while the current one
+    /// waits (plans/research/start-latency.md 4.1).
+    #[cfg(feature = "torrent")]
+    ahead: Vec<Ahead>,
+    /// Cancelled when the view closes: each fetch ahead then removes the
+    /// torrent it added unless a start took it.
+    #[cfg(feature = "torrent")]
+    closing: tokio_util::sync::CancellationToken,
     /// Every torrent this view started, from the moment `add_magnet`
     /// answered: a policy closure pauses them all, a lease adopted or not.
     #[cfg(feature = "torrent")]
@@ -423,6 +543,7 @@ impl State {
                 trying: None,
                 offer: None,
                 retries: 0,
+                start: None,
             },
             tried: candidates.iter().map(|c| c.key.clone()).collect(),
             first: candidates.clone(),
@@ -448,7 +569,16 @@ impl State {
             lookup: None,
             segments_task: None,
             order: HashMap::new(),
+            playing: OwnedPlaying::default(),
+            start_base: 0.0,
+            source_since: tokio::time::Instant::now(),
             languages: Vec::new(),
+            #[cfg(feature = "torrent")]
+            failed_hashes: Vec::new(),
+            #[cfg(feature = "torrent")]
+            ahead: Vec::new(),
+            #[cfg(feature = "torrent")]
+            closing: tokio_util::sync::CancellationToken::new(),
             #[cfg(feature = "torrent")]
             torrents: Vec::new(),
             #[cfg(feature = "torrent")]
@@ -594,6 +724,8 @@ impl PlaybackView {
             s.next = 0;
             s.version_failed = false;
             s.patient = true;
+            #[cfg(feature = "torrent")]
+            s.failed_hashes.clear();
             s.snapshot.phase = PlaybackPhase::Resolving;
             s.snapshot.attempts.clear();
             s.snapshot.trying = None;
@@ -645,6 +777,8 @@ impl PlaybackView {
             // A resolve still running reads this under the same lock: it
             // adopts no lease and starts no torrent after this.
             s.closed = true;
+            #[cfg(feature = "torrent")]
+            s.closing.cancel();
             release_all(&mut s);
             self.snapshot.set(s.snapshot.clone());
             #[cfg(feature = "torrent")]
@@ -964,6 +1098,8 @@ impl Drop for PlaybackView {
             let mut s = lock(&self.state);
             let sample = take_http_sample(&mut s);
             s.closed = true;
+            #[cfg(feature = "torrent")]
+            s.closing.cancel();
             release_all(&mut s);
             sample
         };
@@ -1254,6 +1390,7 @@ async fn resolve_next(
                     error: RETRY_GAVE_UP.into(),
                 });
                 s.snapshot.phase = PlaybackPhase::Failed;
+                s.snapshot.start = None;
                 snapshot.set(s.snapshot.clone());
                 return;
             }
@@ -1262,13 +1399,25 @@ async fn resolve_next(
             }
             let Some(stream) = s.candidates.get(s.next).cloned() else {
                 s.snapshot.phase = PlaybackPhase::Failed;
+                s.snapshot.start = None;
                 snapshot.set(s.snapshot.clone());
                 return;
             };
             s.next += 1;
+            let swarm = matches!(stream.source, Source::Torrent { .. })
+                && by_engine(&stream, core.debrid().is_some(), core.has_engine());
+            begin_start(
+                &mut s,
+                if swarm {
+                    StartStage::Details
+                } else {
+                    StartStage::Connecting
+                },
+            );
+            snapshot.set(s.snapshot.clone());
             stream
         };
-        let opened = match open_source(&core, &stream, &target, &state).await {
+        let opened = match open_source(&core, &stream, &target, (&state, &snapshot, run)).await {
             Ok((upstream, filename, size)) => {
                 let name = filename
                     .clone()
@@ -1305,6 +1454,8 @@ async fn resolve_next(
                     }
                     clear_segments(&mut s);
                     s.snapshot.phase = PlaybackPhase::Ready;
+                    s.snapshot.start = None;
+                    s.playing = OwnedPlaying::of(&stream.release);
                     s.snapshot.key = Some(stream.key.clone());
                     s.snapshot.filename = filename.clone();
                     s.snapshot.size_bytes = size.or(stream.size_bytes);
@@ -1566,6 +1717,14 @@ fn move_on(s: &mut State) -> bool {
 
 type Opened = (Upstream, Option<String>, Option<u64>);
 
+/// The resolve run a source opens in: the view's state, the snapshot it
+/// publishes, and its number (`current`).
+type InRun<'a> = (
+    &'a Mutex<State>,
+    &'a SharedObservable<PlaybackSnapshot>,
+    u64,
+);
+
 /// Resolves one stream to an upstream. Its scope is the install that listed
 /// it (the candidate's `addon_url`); neither the installed row's bit, which
 /// sync may set, nor the manifest id, which any addon may declare, is read.
@@ -1573,10 +1732,9 @@ async fn open_source(
     core: &Core,
     stream: &ParsedStream,
     target: &PlayTarget,
-    state: &Mutex<State>,
+    run: InRun<'_>,
 ) -> Result<Opened, String> {
-    #[cfg(not(feature = "torrent"))]
-    let _ = state;
+    let state = run.0;
     let (url, headers, filename, size, addon_url) = match &stream.source {
         Source::Http { url } => (
             url.to_string(),
@@ -1594,7 +1752,7 @@ async fn open_source(
             // Full builds play torrents with the built-in engine; store
             // builds have none and need a debrid account.
             #[cfg(feature = "torrent")]
-            return open_torrent(core, stream, target, state, info_hash, *file_idx, trackers).await;
+            return open_torrent(core, stream, target, run, info_hash, *file_idx, trackers).await;
             #[cfg(not(feature = "torrent"))]
             {
                 let _ = (info_hash, file_idx, trackers);
@@ -1624,7 +1782,7 @@ async fn open_source(
                 },
             ) = (&resolved, &stream.source)
             {
-                return open_torrent(core, stream, target, state, info_hash, *file_idx, trackers)
+                return open_torrent(core, stream, target, run, info_hash, *file_idx, trackers)
                     .await
                     .map_err(|p2p| format!("{e}; peer to peer: {p2p}"));
             }
@@ -1653,18 +1811,29 @@ async fn open_source(
 /// Plays a torrent with the built-in engine: metadata, file choice (the
 /// addon's `fileIdx`, else its filename, else the episode, else the largest
 /// video), then the head and container tail verified before the player gets
-/// the URL.
+/// the URL. A torrent that already did not start in this view is skipped at
+/// once; while this one waits, the next torrent candidate's metadata comes
+/// in (start-latency 4.1). Its start shows in `start` once a second.
 #[cfg(feature = "torrent")]
 async fn open_torrent(
     core: &Core,
     stream: &ParsedStream,
     target: &PlayTarget,
-    state: &Mutex<State>,
+    run: InRun<'_>,
     info_hash: &str,
     file_idx: Option<u32>,
     trackers: &[String],
 ) -> Result<Opened, String> {
     use mq_engine::FileHint;
+    let state = run.0;
+    let hash = info_hash.to_ascii_lowercase();
+    {
+        let mut s = lock(state);
+        if s.failed_hashes.contains(&hash) {
+            s.version_failed = true;
+            return Err(SAME_TORRENT.into());
+        }
+    }
     let engine = core.torrent_engine().await.map_err(|e| e.to_string())?;
     // This playback's own check, read before the torrent is touched: a
     // hold placed after it (the title left a kids list) is never lifted by
@@ -1691,8 +1860,27 @@ async fn open_torrent(
             "torrent did not start"
         );
     };
+    let ahead = {
+        let mut s = lock(state);
+        look_ahead(core, &engine, &mut s, &hash);
+        s.ahead
+            .iter()
+            .find(|a| a.hash == hash)
+            .map(|a| a.done.clone())
+    };
+    let add = async {
+        // Fetched ahead: its answer first, so the swarm is asked once.
+        if let Some(mut done) = ahead {
+            let _ = done.wait_for(|done| *done).await;
+        }
+        engine.add_magnet(info_hash, trackers, &[]).await
+    };
+    let details = Sample {
+        stage: StartStage::Details,
+        ..Sample::default()
+    };
     let wait = within_budget(state, METADATA_TIMEOUT);
-    let torrent = tokio::time::timeout(wait, engine.add_magnet(info_hash, trackers, &[]))
+    let torrent = tokio::time::timeout(wait, ticking(add, || publish_start(run, details)))
         .await
         .map_err(|_| {
             did_not_start();
@@ -1703,6 +1891,7 @@ async fn open_torrent(
             let now = {
                 let mut s = lock(state);
                 s.version_failed = true;
+                s.failed_hashes.push(hash.clone());
                 if wait == METADATA_TIMEOUT {
                     s.dead.failed(info_hash, false)
                 } else {
@@ -1725,7 +1914,18 @@ async fn open_torrent(
             return Err("The playback was stopped".into());
         }
         s.torrents.push(torrent);
+        // This start's now: its own failure removes it, never the fetch.
+        for a in s.ahead.iter().filter(|a| a.hash == hash) {
+            a.taken.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
     }
+    publish_start(
+        run,
+        Sample {
+            stage: StartStage::Connecting,
+            ..Sample::default()
+        },
+    );
     // Only a newer authorization lifts a hold; an older one leaves it, and
     // the file choice below then answers that the torrent is held.
     if let Err(e) = engine.release_hold(torrent, profile, generation).await {
@@ -1768,21 +1968,34 @@ async fn open_torrent(
         if let Some(why) = never_opens(core, stream, target, state, &info.path) {
             return Ok((file, info, Started::Wrong(why)));
         }
-        // A resume's head read is a probe (2.3, 2.8): it fetches the head's
-        // blocking window and never takes the focus from the resume point.
-        let head_end = resume_ms.map(|_| engine.blocking_bytes());
-        let mut head = reader.range(0, head_end).await?;
+        // A resume opens its own point first: the focus, whose blocking
+        // window and the index make Ready. The head's blocking window is
+        // kept beside it as a probe (2.3, 2.8), for the player's first read.
+        let blocking = engine.blocking_bytes();
+        let at = resume_at(resume_ms, rate_of(info.len), blocking, info.len);
+        let mut from = match at {
+            Some(at) => Some(reader.range(at, None).await?),
+            None => None,
+        };
+        let mut head = reader.range(0, at.map(|_| blocking)).await?;
+        let ready = async {
+            if let Some(from) = from.as_mut() {
+                from.ready().await?;
+            }
+            head.ready().await
+        };
         // Received payload and the first unchoke (code review r1 P1): a
         // piece verifies only whole, long after its first blocks.
         let progress = || async {
             let s = engine.stats(torrent).await.ok()?;
+            publish_start(run, sample(&s, info.len));
             Some(Progress {
                 received: s.received_bytes,
                 unchoked: s.unchoked_ms.is_some(),
             })
         };
         let rule = start_rule(&lock(state));
-        let ready = watch_start(head.ready(), progress, STALL, rule).await;
+        let ready = watch_start(ready, progress, STALL, rule).await;
         Ok::<_, mq_engine::EngineError>((file, info, ready))
     };
     let started = started.await;
@@ -1814,7 +2027,11 @@ async fn open_torrent(
         Err(mq_engine::EngineError::Held) => return Err("This title is not on the list".into()),
         Ok((_, _, Started::Late { unchoked })) => {
             did_not_start();
-            lock(state).version_failed = true;
+            {
+                let mut s = lock(state);
+                s.version_failed = true;
+                s.failed_hashes.push(hash);
+            }
             if unchoked {
                 let now = lock(state).dead.reached();
                 remember_dead(core, now);
@@ -1829,6 +2046,7 @@ async fn open_torrent(
             let now = {
                 let mut s = lock(state);
                 s.version_failed = true;
+                s.failed_hashes.push(hash);
                 if nothing {
                     s.dead.failed(info_hash, true)
                 } else {
@@ -1916,6 +2134,243 @@ async fn open_window(
         resume_at: resume_ms.map(|ms| ms * rate / 1000),
     };
     engine.window(torrent, file, window).await
+}
+
+/// A torrent another source of which did not start a moment ago.
+#[cfg(feature = "torrent")]
+const SAME_TORRENT: &str = "The same torrent did not start from another source";
+
+/// One torrent candidate's metadata, fetched ahead.
+#[cfg(feature = "torrent")]
+struct Ahead {
+    /// Lowercase.
+    hash: String,
+    /// Turns true when the add answered, either way.
+    done: tokio::sync::watch::Receiver<bool>,
+    /// A start took its torrent: that start's own failure removes it.
+    taken: Arc<std::sync::atomic::AtomicBool>,
+}
+
+/// A fetch ahead gives up after the longest one candidate holds the start
+/// (its details, then its deadline): its own turn then asks again.
+#[cfg(feature = "torrent")]
+const AHEAD_FOR: Duration = METADATA_TIMEOUT.saturating_add(TORRENT_READY_TIMEOUT);
+
+/// Starts the metadata of the next torrent candidate after the one opening
+/// now (`current`, a lowercase hash), when it is another torrent that has
+/// not failed in this view and nothing fetches it yet (start-latency 4.1).
+/// Metadata only: nothing downloads before its file is chosen, and the
+/// candidate's own `add_magnet` then finds it known. When the view closes,
+/// a torrent no start took, and that no reader ever woke, is removed, its
+/// folder kept (a resume's data stays).
+#[cfg(feature = "torrent")]
+fn look_ahead(core: &Core, engine: &mq_engine::Engine, s: &mut State, current: &str) {
+    let account = core.debrid().is_some();
+    let next = s.candidates[s.next.min(s.candidates.len())..]
+        .iter()
+        .find_map(|c| match &c.source {
+            Source::Torrent {
+                info_hash,
+                trackers,
+                ..
+            } if by_engine(c, account, true) => {
+                let hash = info_hash.to_ascii_lowercase();
+                (hash != current && !s.failed_hashes.contains(&hash)).then_some((hash, trackers))
+            }
+            _ => None,
+        });
+    let Some((hash, trackers)) = next else {
+        return;
+    };
+    if s.closed || s.ahead.iter().any(|a| a.hash == hash) {
+        return;
+    }
+    let (said, done) = tokio::sync::watch::channel(false);
+    let taken = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let (engine, closing, kept) = (engine.clone(), s.closing.clone(), taken.clone());
+    let (fetch, trackers) = (hash.clone(), trackers.clone());
+    tokio::spawn(async move {
+        let add = tokio::time::timeout(AHEAD_FOR, engine.add_magnet(&fetch, &trackers, &[]));
+        let added = tokio::select! {
+            added = add => added.ok().and_then(Result::ok),
+            () = closing.cancelled() => return,
+        };
+        let _ = said.send(true);
+        closing.cancelled().await;
+        // `pieces_total` is 0 until a file choice starts the torrent: one
+        // that another playback woke since keeps going.
+        if let Some(torrent) = added
+            && !kept.load(std::sync::atomic::Ordering::Relaxed)
+            && engine
+                .stats(torrent)
+                .await
+                .is_ok_and(|s| s.pieces_total == 0)
+        {
+            let _ = engine.remove(torrent, true).await;
+        }
+    });
+    s.ahead.push(Ahead { hash, done, taken });
+}
+
+/// The start never reads 1 before `ready`.
+#[cfg(any(test, feature = "torrent"))]
+const START_MAX: f32 = 0.99;
+/// A source starting this long gets the core's words for its stage.
+#[cfg(any(test, feature = "torrent"))]
+const LONG_STAGE: Duration = Duration::from_secs(3);
+
+/// What a source's start is doing now.
+#[cfg(any(test, feature = "torrent"))]
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Sample {
+    stage: StartStage,
+    peers: u32,
+    have: u64,
+    need: u64,
+    rate: u64,
+}
+
+#[cfg(any(test, feature = "torrent"))]
+impl Default for Sample {
+    fn default() -> Self {
+        Self {
+            stage: StartStage::Details,
+            peers: 0,
+            have: 0,
+            need: 0,
+            rate: 0,
+        }
+    }
+}
+
+/// The next source of the version starts: its start goes on from where the
+/// last source's got (one start never goes back), at `stage`.
+fn begin_start(s: &mut State, stage: StartStage) {
+    let progress = s.snapshot.start.as_ref().map_or(0.0, |p| p.progress);
+    s.start_base = progress;
+    s.source_since = tokio::time::Instant::now();
+    let (source, sources) = (s.next as u32, s.candidates.len() as u32);
+    s.snapshot.start = Some(StartProgress {
+        stage,
+        peers: 0,
+        have_bytes: 0,
+        need_bytes: 0,
+        bytes_per_s: 0,
+        source,
+        sources,
+        progress,
+        caption: (source > 1).then(|| format!("Trying source {source} of {sources}")),
+    });
+}
+
+/// Shows `x` as the starting source's start: its share of what was left
+/// when the source began, never back, and the stage's words once the source
+/// has taken long.
+#[cfg(any(test, feature = "torrent"))]
+fn show_start(s: &mut State, x: Sample) {
+    let long = s.source_since.elapsed() >= LONG_STAGE;
+    let base = s.start_base;
+    let Some(start) = s.snapshot.start.as_mut() else {
+        return;
+    };
+    start.caption = match x.stage {
+        _ if !long => (start.source > 1)
+            .then(|| format!("Trying source {} of {}", start.source, start.sources)),
+        StartStage::Details => Some("Getting the file's details".into()),
+        StartStage::Connecting if x.peers == 0 => Some("Finding peers".into()),
+        StartStage::Connecting => Some(format!("Finding peers, {} so far", x.peers)),
+        StartStage::Buffering => Some(format!("Buffering, {} of {} MB", mb(x.have), mb(x.need))),
+    };
+    start.progress = (base + (START_MAX - base) * start_share(&x)).max(start.progress);
+    start.stage = x.stage;
+    start.peers = x.peers;
+    start.have_bytes = x.have;
+    start.need_bytes = x.need;
+    start.bytes_per_s = x.rate;
+}
+
+/// [`show_start`], published, while `run` is the view's and it resolves.
+#[cfg(feature = "torrent")]
+fn publish_start((state, snapshot, run): InRun, x: Sample) {
+    let mut s = lock(state);
+    if current(&s, run) && s.snapshot.phase == PlaybackPhase::Resolving {
+        show_start(&mut s, x);
+        snapshot.set(s.snapshot.clone());
+    }
+}
+
+/// A source's share of its start done: peers 15 % (8 or more, as Stremio
+/// counts them), the start's bytes 75 % and the speed 5 % (1 MiB/s or
+/// more) once the details are in, which count 5 %.
+#[cfg(any(test, feature = "torrent"))]
+fn start_share(x: &Sample) -> f32 {
+    let part = |have: u64, full: u64| (have as f32 / full.max(1) as f32).min(1.0);
+    match x.stage {
+        StartStage::Details => 0.0,
+        _ => {
+            0.05 + 0.15 * part(x.peers.into(), 8)
+                + 0.75 * part(x.have, x.need)
+                + 0.05 * part(x.rate, 1 << 20)
+        }
+    }
+}
+
+/// Megabytes with one decimal: "4.1", "8".
+#[cfg(any(test, feature = "torrent"))]
+fn mb(bytes: u64) -> String {
+    let mb = format!("{:.1}", bytes as f64 / 1e6);
+    mb.strip_suffix(".0").map_or(mb.clone(), str::to_owned)
+}
+
+/// A torrent's start as its stats say: the details are in; connecting
+/// until a peer unchoked or sent.
+#[cfg(feature = "torrent")]
+fn sample(stats: &mq_engine::TorrentStats, len: u64) -> Sample {
+    let (have, need) = start_bytes(stats, len);
+    let sending = stats.unchoked_ms.is_some() || stats.received_bytes > 0;
+    Sample {
+        stage: if sending {
+            StartStage::Buffering
+        } else {
+            StartStage::Connecting
+        },
+        peers: stats.peers as u32,
+        have,
+        need,
+        rate: stats.down_bytes_per_s,
+    }
+}
+
+/// What of the start Ready waits for is in, and all of it: the payload
+/// received over Stremio's estimate of the start (0.8 % of the file, 2 to
+/// 8 MiB, design/reference/stremio.md), until the engine counts its Ready
+/// set itself.
+#[cfg(feature = "torrent")]
+fn start_bytes(stats: &mq_engine::TorrentStats, len: u64) -> (u64, u64) {
+    let need = (len / 125).clamp(2 << 20, 8 << 20);
+    (stats.received_bytes.min(need), need)
+}
+
+/// `work`, with `tick` once a second while it runs (the first at once).
+#[cfg(feature = "torrent")]
+async fn ticking<T>(work: impl std::future::Future<Output = T>, mut tick: impl FnMut()) -> T {
+    tokio::pin!(work);
+    let mut every = tokio::time::interval(Duration::from_secs(1));
+    loop {
+        tokio::select! {
+            out = &mut work => return out,
+            _ = every.tick() => tick(),
+        }
+    }
+}
+
+/// Where a resume reads first in a file of `len` bytes at `rate` bytes a
+/// second, as the window places it: none within the head's blocking
+/// window, which the head read fetches anyway.
+#[cfg(feature = "torrent")]
+fn resume_at(resume_ms: Option<u64>, rate: u64, blocking: u64, len: u64) -> Option<u64> {
+    let at = resume_ms? * rate / 1000;
+    (at > blocking && at < len).then_some(at)
 }
 
 #[cfg(test)]
@@ -2445,6 +2900,8 @@ async fn built_in_tracks(
     if !current(&s, run) {
         return;
     }
+    // The measured frame rate counts in every track's release match.
+    s.playing.fps = playing.fps;
     match listing {
         mq_turkcealtyazi::Listing::Tracks(tracks) => {
             for (rank, found) in tracks.into_iter().enumerate() {
@@ -2469,6 +2926,7 @@ async fn built_in_tracks(
                     let label = Some(found.label.clone());
                     s.snapshot.subtitles.push(SubtitleTrack {
                         hearing_impaired: found.row.hearing_impaired,
+                        made: Made::of(found.row.made()),
                         ..SubtitleTrack::new(url, "tur", label, BUILT_IN, Some(found.label))
                     });
                 }
@@ -2483,13 +2941,35 @@ async fn built_in_tracks(
     snapshot.set(s.snapshot.clone());
 }
 
-/// What the playing release says, owned by a track's fetch.
-#[derive(Clone)]
+/// What the playing release says (`fit::Playing`), owned by the view and
+/// by a track's fetch.
+#[derive(Clone, Default)]
 struct OwnedPlaying {
     group: Option<String>,
     source: mq_relparse::Quality,
     cut: Option<mq_relparse::Cut>,
     fps: Option<f32>,
+}
+
+impl OwnedPlaying {
+    /// What its release name says; the frame rate comes from the probe.
+    fn of(release: &mq_relparse::ParsedRelease) -> Self {
+        Self {
+            group: release.group.clone(),
+            source: release.quality,
+            cut: release.cut,
+            fps: None,
+        }
+    }
+
+    fn get(&self) -> fit::Playing<'_> {
+        fit::Playing {
+            group: self.group.as_deref(),
+            source: self.source,
+            cut: self.cut,
+            fps: self.fps,
+        }
+    }
 }
 
 /// One built-in track's fetch, run by the subtitle route each time the
@@ -2519,13 +2999,10 @@ impl BuiltInFetch {
     /// The file's bytes; else the note (and a faulty file leaves the list,
     /// for 6 h) and nothing.
     async fn fetch(&self) -> Option<Vec<u8>> {
-        let playing = mq_turkcealtyazi::Playing {
-            group: self.playing.group.as_deref(),
-            source: self.playing.source,
-            cut: self.playing.cut,
-            fps: self.playing.fps,
-        };
-        let fetched = self.site.fetch(&self.row, self.target, &playing).await;
+        let fetched = self
+            .site
+            .fetch(&self.row, self.target, &self.playing.get())
+            .await;
         if let mq_turkcealtyazi::Fetched::File(bytes) = fetched {
             return Some(bytes);
         }
@@ -2827,14 +3304,22 @@ fn preferred_languages(core: &Core, state: &Mutex<State>) -> Vec<String> {
 
 /// Tracks grouped by language: the preferred languages first in their
 /// order (a regional one, "pt-BR", counts with its language), then the
-/// others by English name. Within a language, by the source's place in the
+/// others by English name. Within a language, by the release match against
+/// the playing release (`fit::misses`: its group, the measured frame rate,
+/// the source family, the cut), a track for the hard of hearing after a
+/// plain one that matches as well, then by the source's place in the
 /// installed list (the stream's own first), then the source's own rank,
 /// whenever each answered. Then each track's `name`: two that would read
-/// the same in one language are numbered in that order.
+/// the same in one language are numbered in that order. A track `fits`
+/// when it names the playing group.
 fn reorder(s: &mut State, preferred: &[String]) {
     let State {
-        snapshot, order, ..
+        snapshot,
+        order,
+        playing,
+        ..
     } = s;
+    let playing = playing.get();
     let rank = |tag: &str| {
         let primary = crate::languages::primary(tag);
         preferred.iter().position(|p| p == tag).or_else(|| {
@@ -2848,6 +3333,8 @@ fn reorder(s: &mut State, preferred: &[String]) {
             rank(&t.language).unwrap_or(usize::MAX),
             t.language_name.to_lowercase(),
             t.language.clone(),
+            fit::misses(&t.made.get(), &playing),
+            t.hearing_impaired,
             order.get(&t.url).copied().unwrap_or((usize::MAX, 0)),
         )
     });
@@ -2866,6 +3353,7 @@ fn reorder(s: &mut State, preferred: &[String]) {
         } else {
             key.1
         };
+        t.fits = fit::same_group(&t.made.text, playing.group);
     }
 }
 
@@ -3583,7 +4071,208 @@ mod tests {
             None
         );
     }
+
+    /// Plans/player-polish.md 1.3: one start's progress never goes back,
+    /// not when its peers and speed drop, nor when the next source starts;
+    /// it stays under 1 with all of the start in; each stage gets its words
+    /// once the source has taken 3 s.
+    #[tokio::test(start_paused = true)]
+    async fn a_start_never_goes_back_and_names_its_stage() {
+        let link = |n: u32| stream(&format!(r#"{{"url":"http://127.0.0.1:9/{n}.mkv"}}"#));
+        let mut s = State::new(vec![link(1), link(2)], None);
+        s.next = 1;
+        begin_start(&mut s, StartStage::Details);
+        let at = |stage, peers, have, rate| Sample {
+            stage,
+            peers,
+            have,
+            need: 8_400_000,
+            rate,
+        };
+        use StartStage::{Buffering, Connecting, Details};
+        let steps = [
+            (0, at(Details, 0, 0, 0), None),
+            (4, at(Details, 0, 0, 0), Some("Getting the file's details")),
+            (1, at(Connecting, 3, 0, 0), Some("Finding peers, 3 so far")),
+            (
+                1,
+                at(Buffering, 6, 4_100_000, 2 << 20),
+                Some("Buffering, 4.1 of 8.4 MB"),
+            ),
+            (
+                1,
+                at(Buffering, 1, 4_100_000, 0),
+                Some("Buffering, 4.1 of 8.4 MB"),
+            ),
+            (
+                1,
+                at(Buffering, 20, 8_400_000, 9 << 20),
+                Some("Buffering, 8.4 of 8.4 MB"),
+            ),
+        ];
+        let mut seen: Vec<f32> = Vec::new();
+        for (wait, x, words) in steps {
+            tokio::time::advance(Duration::from_secs(wait)).await;
+            show_start(&mut s, x);
+            let start = s.snapshot.start.clone().unwrap();
+            assert_eq!(start.caption.as_deref(), words, "{x:?}");
+            assert_eq!(start.stage, x.stage);
+            seen.push(start.progress);
+        }
+        assert!(seen.windows(2).all(|w| w[0] <= w[1]), "{seen:?}");
+        assert_eq!(seen[4], seen[3], "fewer peers and no speed: held");
+        assert!(seen[3] > seen[2] && seen[2] > seen[1], "{seen:?}");
+        let last = seen[5];
+        assert!(last > 0.9 && last < 1.0, "{last}");
+        // The next source goes on from there and says which it is.
+        s.next = 2;
+        begin_start(&mut s, Details);
+        let start = s.snapshot.start.clone().unwrap();
+        assert_eq!((start.source, start.sources, start.progress), (2, 2, last));
+        assert_eq!(start.caption.as_deref(), Some("Trying source 2 of 2"));
+        show_start(&mut s, Sample::default());
+        let start = s.snapshot.start.clone().unwrap();
+        assert_eq!(start.progress, last, "never back");
+        assert_eq!(start.caption.as_deref(), Some("Trying source 2 of 2"));
+    }
+
+    /// Start-latency 4.1: a torrent that did not start is not waited on
+    /// again from another source in the same view: the second is skipped
+    /// at once, with no second 30 s for its details.
+    #[cfg(feature = "torrent")]
+    #[tokio::test(start_paused = true)]
+    async fn a_torrent_that_did_not_start_is_skipped_from_another_source() {
+        let ((engine, _dir), silent) = (own_engine().await, silent_tracker());
+        let core = Core::temporary("default").unwrap();
+        core.set_torrent_engine(engine);
+        let dead = dead_torrent(&silent);
+        let view = PlaybackView::open(&core, vec![dead.clone(), dead], PlayTarget::default());
+        let begun = tokio::time::Instant::now();
+        for _ in 0..1200 {
+            if view.snapshot().phase == PlaybackPhase::Failed {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        let s = view.snapshot();
+        let errors: Vec<&str> = s.attempts.iter().map(|a| a.error.as_str()).collect();
+        assert_eq!(
+            errors,
+            ["No peer sent the torrent's details in time", SAME_TORRENT]
+        );
+        let took = begun.elapsed();
+        assert!(took < METADATA_TIMEOUT + Duration::from_secs(5), "{took:?}");
+        assert_eq!(s.start, None, "cleared at the failure");
+    }
+
+    /// An HTTP tracker's answer naming `peer` (on IPv6), or no one.
+    #[cfg(feature = "torrent")]
+    fn announce(peer: Option<std::net::SocketAddr>) -> Vec<u8> {
+        let mut body = b"d8:intervali1800e5:peers0:".to_vec();
+        if let Some(std::net::SocketAddr::V6(peer)) = peer {
+            body.extend(b"6:peers618:");
+            body.extend(peer.ip().octets());
+            body.extend(peer.port().to_be_bytes());
+        }
+        body.push(b'e');
+        let head = format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        );
+        [head.into_bytes(), body].concat()
+    }
+
+    /// A tracker on `[::1]` that names no one.
+    #[cfg(feature = "torrent")]
+    fn silent_tracker() -> super::engine_support::HttpTracker {
+        super::engine_support::HttpTracker::start(announce(None), false)
+    }
+
+    /// An engine of its own that reaches `[::1]` only, with no DHT.
+    #[cfg(feature = "torrent")]
+    async fn own_engine() -> (mq_engine::Engine, tempfile::TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+        let scope = http.torrent_scope(&[std::net::Ipv6Addr::LOCALHOST.into()]);
+        let config = mq_engine::EngineConfig {
+            discovery: false,
+            ..mq_engine::EngineConfig::new(dir.path(), scope)
+        };
+        (mq_engine::Engine::start(config).await.unwrap(), dir)
+    }
+
+    /// A torrent whose one tracker names no one: its details never come.
+    #[cfg(feature = "torrent")]
+    fn dead_torrent(silent: &super::engine_support::HttpTracker) -> ParsedStream {
+        stream(&format!(
+            r#"{{"infoHash":"{}","fileIdx":0,"sources":["tracker:{}"]}}"#,
+            "d".repeat(40),
+            silent.url
+        ))
+    }
+
+    /// Start-latency 4.1: while the first torrent waits for its details,
+    /// the next torrent candidate's come in from its own tracker, so they
+    /// are known the moment the first fails; when the view closes, the
+    /// torrent no start took is removed.
+    #[cfg(feature = "torrent")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn the_next_torrents_details_come_while_the_first_waits() {
+        let s = super::engine_support::swarm_on(std::net::Ipv6Addr::LOCALHOST.into(), true).await;
+        let silent = silent_tracker();
+        let tracker =
+            super::engine_support::HttpTracker::start(announce(Some(s.seeder_addr)), false);
+        let core = Core::temporary("default").unwrap();
+        core.set_torrent_engine(s.leecher.clone());
+        let dead = dead_torrent(&silent);
+        let next = stream(&format!(
+            r#"{{"infoHash":"{}","sources":["tracker:{}"]}}"#,
+            s.info_hash, tracker.url
+        ));
+        let mut st = State::new(vec![dead, next], None);
+        // The first gets 3 s for its details, then the run's budget is spent.
+        st.retry_until = Some(tokio::time::Instant::now() + Duration::from_secs(3));
+        let snapshot = SharedObservable::new(st.snapshot.clone());
+        let state = Arc::new(Mutex::new(st));
+        let target = Arc::new(PlayTarget::default());
+        resolve_next(core, target, Arc::from([]), state.clone(), snapshot, 0).await;
+        let errors: Vec<String> = lock(&state)
+            .snapshot
+            .attempts
+            .iter()
+            .map(|a| a.error.clone())
+            .collect();
+        assert_eq!(
+            errors,
+            ["No peer sent the torrent's details in time", RETRY_GAVE_UP]
+        );
+        assert!(
+            tracker.requests() > 0,
+            "the next torrent's tracker was asked"
+        );
+        let known = tokio::time::timeout(
+            Duration::from_millis(200),
+            s.leecher.add_magnet(&s.info_hash, &[], &[]),
+        )
+        .await;
+        let torrent = known
+            .expect("the next torrent's details were not fetched ahead")
+            .unwrap();
+        lock(&state).closing.cancel();
+        for _ in 0..100 {
+            if s.leecher.files(torrent).is_err() {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        panic!("the torrent fetched ahead outlived the view");
+    }
 }
+
+#[cfg(all(test, feature = "torrent"))]
+#[path = "../../../mq-engine/tests/support/mod.rs"]
+#[allow(dead_code)]
+mod engine_support;
 
 #[cfg(test)]
 mod auto_subtitle_tests {

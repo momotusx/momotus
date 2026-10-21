@@ -49,6 +49,10 @@ const LONG = new Set([
   "sizeLimitBytes",
   // The streaming window's Buffer line.
   "budgetBytes",
+  // The player's start progress (plans/player-polish.md 1.3).
+  "haveBytes",
+  "needBytes",
+  "bytesPerS",
 ]);
 const FLOAT = new Set(["progress", "bitrateMbps", "needMbps", "haveMbps", "mbps"]);
 /** Scalar fields the core added after the golden traces were recorded, as `Type.field`, with the
@@ -76,6 +80,9 @@ const DEFAULTED = new Map([
   // IMDb and Rotten Tomatoes side by side: an older core or recording has no scores to show.
   ["Tile.ratings", "Ratings()"],
   ["TitleDetails.ratings", "Ratings()"],
+  // The subtitle picker (plans/player-polish.md 2): an older core names no language of its own and no fit.
+  ["SubtitleTrack.nativeName", "\"\""],
+  ["SubtitleTrack.fits", "false"],
 ]);
 const INT = new Set([
   "overCount",
@@ -135,6 +142,10 @@ const INT = new Set([
   "minSeeders",
   "learnedEpoch",
   "aheadMin",
+  // The player's start progress: peers, and the source of how many.
+  "peers",
+  "source",
+  "sources",
 ]);
 
 type TypeIr =

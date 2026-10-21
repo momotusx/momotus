@@ -7,11 +7,13 @@ const track = (language: string, languageName: string, name: string, more: Parti
   lang: language,
   language,
   languageName,
+  nativeName: languageName,
   name,
   label: null,
   source: "OpenSubtitles v3",
   forced: false,
   hearingImpaired: false,
+  fits: false,
   ...more,
 });
 

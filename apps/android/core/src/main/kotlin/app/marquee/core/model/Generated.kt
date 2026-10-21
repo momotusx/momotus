@@ -976,6 +976,8 @@ data class PlaybackSnapshot(
     val offer: OtherVersion? = null,
     /** "Try again" taken in this view: one more each time it is accepted, so a retry that fails again at once still differs from the failure before it (code review 2026-10-20 r2 P3-6). Show "Trying again". */
     val retries: Int = 0,
+    /** How far the start is while `phase` is `resolving`: the loading screen's fill and its words (plans/player-polish.md 1.3). Null before the first source starts and from `ready` on. */
+    val start: StartProgress? = null,
 )
 
 @Serializable
@@ -1366,6 +1368,40 @@ data class Speed(
     val samples: Int,
 )
 
+/** One start of the playback, from the first source it tries to `ready` (plans/player-polish.md 1.3). */
+@Serializable
+data class StartProgress(
+    val stage: StartStage,
+    /** Peers connected to a torrent. */
+    val peers: Int,
+    /** What a torrent's swarm sent of the start the player needs, and all of it. */
+    val haveBytes: Long,
+    val needBytes: Long,
+    val bytesPerS: Long,
+    /** The source of the version it is on, from 1, of `sources`. */
+    val source: Int,
+    val sources: Int,
+    /** 0 to 1: never back within one start (a move to the next source goes on from where the last one got), never 1 before `ready`. */
+    val progress: Float,
+    /** The core's words once a stage takes long: "Getting the file's details", "Finding peers, 3 so far", "Buffering, 4.1 of 8.4 MB"; "Trying source 2 of 3" as a next source starts. Null otherwise. */
+    val caption: String? = null,
+)
+
+@Serializable(with = StartStage.Serializer::class)
+enum class StartStage(
+    val wire: String,
+) {
+    Details("details"),
+    Connecting("connecting"),
+    Buffering("buffering"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<StartStage>("StartStage", StartStage.entries, StartStage::wire, Unknown)
+}
+
 /** What the core knows of this device's connection and disk, for Settings ("This device") and the `streamConditions` op. */
 @Serializable
 data class StreamConditions(
@@ -1454,6 +1490,8 @@ data class SubtitleTrack(
     val language: String = "",
     /** The language's English name ("Portuguese (Brazil)"): the heading of its group. */
     val languageName: String = "",
+    /** The language's own name ("Português (Brasil)", "Türkçe"); the English name when the core knows no other. */
+    val nativeName: String = "",
     /** What tells this track from the others of its language: the release it was made for when the addon names it, else its source; numbered when two would read the same. */
     val name: String = "",
     val label: String? = null,
@@ -1461,6 +1499,8 @@ data class SubtitleTrack(
     val source: String,
     val forced: Boolean,
     val hearingImpaired: Boolean,
+    /** The track names the playing release's group: made for this release ("Made for this release"). */
+    val fits: Boolean = false,
 )
 
 @Serializable

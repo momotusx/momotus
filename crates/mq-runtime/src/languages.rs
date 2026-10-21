@@ -1,126 +1,148 @@
 //! Subtitle languages as people read them (plans/m13-subtitle-languages.md):
-//! one tag and one English name for whatever code an addon sends.
+//! one tag, one English name and the language's own name for whatever code
+//! an addon sends.
 
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
 /// OpenSubtitles' upload languages (opensubtitles.org/addons/export_languages.php,
-/// read 2026-10-19): its code, the tag the core uses, the English name.
-const OPENSUBTITLES: &[(&str, &str, &str)] = &[
-    ("abk", "ab", "Abkhazian"),
-    ("afr", "af", "Afrikaans"),
-    ("alb", "sq", "Albanian"),
-    ("amh", "am", "Amharic"),
-    ("ara", "ar", "Arabic"),
-    ("arg", "an", "Aragonese"),
-    ("arm", "hy", "Armenian"),
-    ("asm", "as", "Assamese"),
-    ("ast", "ast", "Asturian"),
-    ("aze", "az", "Azerbaijani"),
-    ("baq", "eu", "Basque"),
-    ("bel", "be", "Belarusian"),
-    ("ben", "bn", "Bengali"),
-    ("bos", "bs", "Bosnian"),
-    ("bre", "br", "Breton"),
-    ("bul", "bg", "Bulgarian"),
-    ("bur", "my", "Burmese"),
-    ("cat", "ca", "Catalan"),
-    ("chi", "zh-Hans", "Chinese (Simplified)"),
-    ("chv", "cv", "Chuvash"),
-    ("cze", "cs", "Czech"),
-    ("dan", "da", "Danish"),
-    ("dut", "nl", "Dutch"),
-    ("eng", "en", "English"),
-    ("epo", "eo", "Esperanto"),
-    ("est", "et", "Estonian"),
-    ("fin", "fi", "Finnish"),
-    ("fre", "fr", "French"),
-    ("geo", "ka", "Georgian"),
-    ("ger", "de", "German"),
-    ("gla", "gd", "Scottish Gaelic"),
-    ("gle", "ga", "Irish"),
-    ("glg", "gl", "Galician"),
-    ("ell", "el", "Greek"),
-    ("heb", "he", "Hebrew"),
-    ("hin", "hi", "Hindi"),
-    ("hrv", "hr", "Croatian"),
-    ("hun", "hu", "Hungarian"),
-    ("ibo", "ig", "Igbo"),
-    ("ice", "is", "Icelandic"),
-    ("ina", "ia", "Interlingua"),
-    ("ind", "id", "Indonesian"),
-    ("ita", "it", "Italian"),
-    ("jpn", "ja", "Japanese"),
-    ("kan", "kn", "Kannada"),
-    ("kaz", "kk", "Kazakh"),
-    ("khm", "km", "Khmer"),
-    ("kir", "ky", "Kyrgyz"),
-    ("kor", "ko", "Korean"),
-    ("kur", "ku", "Kurdish"),
-    ("lao", "lo", "Lao"),
-    ("lav", "lv", "Latvian"),
-    ("lit", "lt", "Lithuanian"),
-    ("ltz", "lb", "Luxembourgish"),
-    ("mac", "mk", "Macedonian"),
-    ("mal", "ml", "Malayalam"),
-    ("mar", "mr", "Marathi"),
-    ("may", "ms", "Malay"),
-    ("mni", "mni", "Manipuri"),
-    ("mon", "mn", "Mongolian"),
-    ("nav", "nv", "Navajo"),
-    ("nep", "ne", "Nepali"),
-    ("nor", "no", "Norwegian"),
-    ("oci", "oc", "Occitan"),
-    ("ori", "or", "Odia"),
-    ("per", "fa", "Persian"),
-    ("pol", "pl", "Polish"),
-    ("por", "pt", "Portuguese"),
-    ("pus", "ps", "Pashto"),
-    ("rus", "ru", "Russian"),
-    ("sat", "sat", "Santali"),
-    ("scc", "sr", "Serbian"),
-    ("sin", "si", "Sinhala"),
-    ("slo", "sk", "Slovak"),
-    ("slv", "sl", "Slovenian"),
-    ("sme", "se", "Northern Sami"),
-    ("snd", "sd", "Sindhi"),
-    ("som", "so", "Somali"),
-    ("spa", "es", "Spanish"),
-    ("swa", "sw", "Swahili"),
-    ("swe", "sv", "Swedish"),
-    ("syr", "syr", "Syriac"),
-    ("tam", "ta", "Tamil"),
-    ("tat", "tt", "Tatar"),
-    ("tel", "te", "Telugu"),
-    ("tet", "tet", "Tetum"),
-    ("tgl", "tl", "Tagalog"),
-    ("tha", "th", "Thai"),
-    ("tuk", "tk", "Turkmen"),
-    ("tur", "tr", "Turkish"),
-    ("ukr", "uk", "Ukrainian"),
-    ("urd", "ur", "Urdu"),
-    ("uzb", "uz", "Uzbek"),
-    ("vie", "vi", "Vietnamese"),
-    ("wel", "cy", "Welsh"),
-    ("wen", "wen", "Sorbian"),
-    ("zul", "zu", "Zulu"),
-    ("rum", "ro", "Romanian"),
-    ("pob", "pt-BR", "Portuguese (Brazil)"),
-    ("mne", "cnr", "Montenegrin"),
-    ("zht", "zh-Hant", "Chinese (Traditional)"),
-    ("zhe", "zh-x-bilingual", "Chinese (Bilingual)"),
-    ("pom", "pt-MZ", "Portuguese (Mozambique)"),
-    ("ext", "ext", "Extremaduran"),
-    ("spl", "es-419", "Spanish (Latin America)"),
-    ("spn", "es-ES", "Spanish (Spain)"),
-    ("prs", "prs", "Dari"),
-    ("tok", "tok", "Toki Pona"),
-    ("zhc", "yue", "Chinese (Cantonese)"),
-    ("azb", "azb", "South Azerbaijani"),
-    ("zgh", "zgh", "Standard Moroccan Amazigh"),
-    ("rki", "rki", "Rakhine"),
-    ("jpe", "ja-x-bilingual", "Japanese (Bilingual)"),
+/// read 2026-10-19): its code, the tag the core uses, the English name, and
+/// its own name (plans/player-polish.md 2.4: "Turkish", "Türkçe").
+const OPENSUBTITLES: &[(&str, &str, &str, &str)] = &[
+    ("abk", "ab", "Abkhazian", "Аԥсшәа"),
+    ("afr", "af", "Afrikaans", "Afrikaans"),
+    ("alb", "sq", "Albanian", "Shqip"),
+    ("amh", "am", "Amharic", "አማርኛ"),
+    ("ara", "ar", "Arabic", "العربية"),
+    ("arg", "an", "Aragonese", "Aragonés"),
+    ("arm", "hy", "Armenian", "Հայերեն"),
+    ("asm", "as", "Assamese", "অসমীয়া"),
+    ("ast", "ast", "Asturian", "Asturianu"),
+    ("aze", "az", "Azerbaijani", "Azərbaycan"),
+    ("baq", "eu", "Basque", "Euskara"),
+    ("bel", "be", "Belarusian", "Беларуская"),
+    ("ben", "bn", "Bengali", "বাংলা"),
+    ("bos", "bs", "Bosnian", "Bosanski"),
+    ("bre", "br", "Breton", "Brezhoneg"),
+    ("bul", "bg", "Bulgarian", "Български"),
+    ("bur", "my", "Burmese", "မြန်မာ"),
+    ("cat", "ca", "Catalan", "Català"),
+    ("chi", "zh-Hans", "Chinese (Simplified)", "简体中文"),
+    ("chv", "cv", "Chuvash", "Чӑвашла"),
+    ("cze", "cs", "Czech", "Čeština"),
+    ("dan", "da", "Danish", "Dansk"),
+    ("dut", "nl", "Dutch", "Nederlands"),
+    ("eng", "en", "English", "English"),
+    ("epo", "eo", "Esperanto", "Esperanto"),
+    ("est", "et", "Estonian", "Eesti"),
+    ("fin", "fi", "Finnish", "Suomi"),
+    ("fre", "fr", "French", "Français"),
+    ("geo", "ka", "Georgian", "ქართული"),
+    ("ger", "de", "German", "Deutsch"),
+    ("gla", "gd", "Scottish Gaelic", "Gàidhlig"),
+    ("gle", "ga", "Irish", "Gaeilge"),
+    ("glg", "gl", "Galician", "Galego"),
+    ("ell", "el", "Greek", "Ελληνικά"),
+    ("heb", "he", "Hebrew", "עברית"),
+    ("hin", "hi", "Hindi", "हिन्दी"),
+    ("hrv", "hr", "Croatian", "Hrvatski"),
+    ("hun", "hu", "Hungarian", "Magyar"),
+    ("ibo", "ig", "Igbo", "Igbo"),
+    ("ice", "is", "Icelandic", "Íslenska"),
+    ("ina", "ia", "Interlingua", "Interlingua"),
+    ("ind", "id", "Indonesian", "Bahasa Indonesia"),
+    ("ita", "it", "Italian", "Italiano"),
+    ("jpn", "ja", "Japanese", "日本語"),
+    ("kan", "kn", "Kannada", "ಕನ್ನಡ"),
+    ("kaz", "kk", "Kazakh", "Қазақ тілі"),
+    ("khm", "km", "Khmer", "ខ្មែរ"),
+    ("kir", "ky", "Kyrgyz", "Кыргызча"),
+    ("kor", "ko", "Korean", "한국어"),
+    ("kur", "ku", "Kurdish", "Kurdî"),
+    ("lao", "lo", "Lao", "ລາວ"),
+    ("lav", "lv", "Latvian", "Latviešu"),
+    ("lit", "lt", "Lithuanian", "Lietuvių"),
+    ("ltz", "lb", "Luxembourgish", "Lëtzebuergesch"),
+    ("mac", "mk", "Macedonian", "Македонски"),
+    ("mal", "ml", "Malayalam", "മലയാളം"),
+    ("mar", "mr", "Marathi", "मराठी"),
+    ("may", "ms", "Malay", "Bahasa Melayu"),
+    ("mni", "mni", "Manipuri", "মৈতৈলোন্"),
+    ("mon", "mn", "Mongolian", "Монгол"),
+    ("nav", "nv", "Navajo", "Diné bizaad"),
+    ("nep", "ne", "Nepali", "नेपाली"),
+    ("nor", "no", "Norwegian", "Norsk"),
+    ("oci", "oc", "Occitan", "Occitan"),
+    ("ori", "or", "Odia", "ଓଡ଼ିଆ"),
+    ("per", "fa", "Persian", "فارسی"),
+    ("pol", "pl", "Polish", "Polski"),
+    ("por", "pt", "Portuguese", "Português"),
+    ("pus", "ps", "Pashto", "پښتو"),
+    ("rus", "ru", "Russian", "Русский"),
+    ("sat", "sat", "Santali", "ᱥᱟᱱᱛᱟᱲᱤ"),
+    ("scc", "sr", "Serbian", "Српски"),
+    ("sin", "si", "Sinhala", "සිංහල"),
+    ("slo", "sk", "Slovak", "Slovenčina"),
+    ("slv", "sl", "Slovenian", "Slovenščina"),
+    ("sme", "se", "Northern Sami", "Davvisámegiella"),
+    ("snd", "sd", "Sindhi", "سنڌي"),
+    ("som", "so", "Somali", "Soomaali"),
+    ("spa", "es", "Spanish", "Español"),
+    ("swa", "sw", "Swahili", "Kiswahili"),
+    ("swe", "sv", "Swedish", "Svenska"),
+    ("syr", "syr", "Syriac", "ܣܘܪܝܝܐ"),
+    ("tam", "ta", "Tamil", "தமிழ்"),
+    ("tat", "tt", "Tatar", "Татар"),
+    ("tel", "te", "Telugu", "తెలుగు"),
+    ("tet", "tet", "Tetum", "Tetun"),
+    ("tgl", "tl", "Tagalog", "Tagalog"),
+    ("tha", "th", "Thai", "ไทย"),
+    ("tuk", "tk", "Turkmen", "Türkmen dili"),
+    ("tur", "tr", "Turkish", "Türkçe"),
+    ("ukr", "uk", "Ukrainian", "Українська"),
+    ("urd", "ur", "Urdu", "اردو"),
+    ("uzb", "uz", "Uzbek", "Oʻzbek"),
+    ("vie", "vi", "Vietnamese", "Tiếng Việt"),
+    ("wel", "cy", "Welsh", "Cymraeg"),
+    ("wen", "wen", "Sorbian", "Serbšćina"),
+    ("zul", "zu", "Zulu", "isiZulu"),
+    ("rum", "ro", "Romanian", "Română"),
+    ("pob", "pt-BR", "Portuguese (Brazil)", "Português (Brasil)"),
+    ("mne", "cnr", "Montenegrin", "Crnogorski"),
+    ("zht", "zh-Hant", "Chinese (Traditional)", "繁體中文"),
+    (
+        "zhe",
+        "zh-x-bilingual",
+        "Chinese (Bilingual)",
+        "中文（双语）",
+    ),
+    (
+        "pom",
+        "pt-MZ",
+        "Portuguese (Mozambique)",
+        "Português (Moçambique)",
+    ),
+    ("ext", "ext", "Extremaduran", "Estremeñu"),
+    (
+        "spl",
+        "es-419",
+        "Spanish (Latin America)",
+        "Español (Latinoamérica)",
+    ),
+    ("spn", "es-ES", "Spanish (Spain)", "Español (España)"),
+    ("prs", "prs", "Dari", "دری"),
+    ("tok", "tok", "Toki Pona", "Toki pona"),
+    ("zhc", "yue", "Chinese (Cantonese)", "粵語"),
+    ("azb", "azb", "South Azerbaijani", "تۆرکجه"),
+    ("zgh", "zgh", "Standard Moroccan Amazigh", "ⵜⴰⵎⴰⵣⵉⵖⵜ"),
+    ("rki", "rki", "Rakhine", "ရခိုင်"),
+    (
+        "jpe",
+        "ja-x-bilingual",
+        "Japanese (Bilingual)",
+        "日本語（バイリンガル）",
+    ),
 ];
 
 /// Codes addons send for the same languages: ISO 639-2/T and other
@@ -155,22 +177,28 @@ const ALIASES: &[(&str, &str)] = &[
 ];
 
 /// Generic Chinese: neither script named.
-const CHINESE: (&str, &str) = ("zh", "Chinese");
+const CHINESE: Names = ("zh", "Chinese", "中文");
+
+/// A tag, its English name and its own name.
+type Names = (&'static str, &'static str, &'static str);
 
 /// A subtitle language: a tag (ISO 639-1 where there is one, with its
 /// region or script, `pt-BR`, `zh-Hant`; ISO 639-3 or the given code
-/// otherwise) and its English name.
+/// otherwise), its English name and its own name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Language {
     pub tag: String,
     pub name: String,
+    pub native: String,
 }
 
-static INDEX: LazyLock<HashMap<String, (&'static str, &'static str)>> = LazyLock::new(|| {
+static INDEX: LazyLock<HashMap<String, Names>> = LazyLock::new(|| {
     let mut index = HashMap::new();
-    for &(code, tag, name) in OPENSUBTITLES {
+    for &(code, tag, name, native) in OPENSUBTITLES {
         for key in [code, tag, name] {
-            index.entry(key.to_lowercase()).or_insert((tag, name));
+            index
+                .entry(key.to_lowercase())
+                .or_insert((tag, name, native));
         }
     }
     for &(alias, code) in ALIASES {
@@ -189,32 +217,33 @@ static INDEX: LazyLock<HashMap<String, (&'static str, &'static str)>> = LazyLock
 /// (`German`). Anything else keeps its code as the tag and as the name.
 pub(crate) fn language(code: &str) -> Language {
     let key = code.trim().to_lowercase().replace('_', "-");
-    let known = |(tag, name): (&str, &str)| Language {
+    let known = |(tag, name, native): Names| Language {
         tag: tag.to_owned(),
         name: name.to_owned(),
+        native: native.to_owned(),
     };
     if let Some(&found) = INDEX.get(&key) {
         return known(found);
     }
     // A region the table does not list: its language, the region named.
     if let Some((primary, region)) = key.split_once('-')
-        && let Some(&(tag, name)) = INDEX.get(primary)
+        && let Some(&(tag, name, native)) = INDEX.get(primary)
     {
         let region = region.to_uppercase();
         return Language {
             tag: format!("{tag}-{region}"),
             name: format!("{name} ({region})"),
+            native: format!("{native} ({region})"),
         };
     }
+    let unknown = |tag: String, name: &str| Language {
+        tag,
+        name: name.to_owned(),
+        native: name.to_owned(),
+    };
     match code.trim() {
-        "" => Language {
-            tag: "und".into(),
-            name: "Unknown language".into(),
-        },
-        other => Language {
-            tag: key,
-            name: other.to_owned(),
-        },
+        "" => unknown("und".into(), "Unknown language"),
+        other => unknown(key, other),
     }
 }
 
@@ -236,7 +265,7 @@ pub struct LanguageChoice {
 pub fn all() -> Vec<LanguageChoice> {
     let mut all: Vec<LanguageChoice> = OPENSUBTITLES
         .iter()
-        .map(|&(_, tag, name)| LanguageChoice {
+        .map(|&(_, tag, name, _)| LanguageChoice {
             code: tag.to_owned(),
             name: name.to_owned(),
         })
@@ -316,6 +345,21 @@ mod tests {
         for name in ["Arabic", "Dutch", "Korean", "Polish", "Russian"] {
             assert!(names.contains(&name), "{name}");
         }
+    }
+
+    /// Each language's own name beside its English one, a region the table
+    /// lacks kept (plans/player-polish.md 2.4).
+    #[test]
+    fn each_language_has_its_own_name() {
+        let native = |code: &str| language(code).native;
+        assert_eq!(native("tur"), "Türkçe");
+        assert_eq!(native("pob"), "Português (Brasil)");
+        assert_eq!(native("deu"), "Deutsch");
+        assert_eq!(native("eng"), "English");
+        assert_eq!(native("zho"), "中文");
+        assert_eq!(native("fr-CA"), "Français (CA)");
+        assert_eq!(native("xx"), "xx");
+        assert!(OPENSUBTITLES.iter().all(|row| !row.3.trim().is_empty()));
     }
 
     #[test]

@@ -337,13 +337,16 @@ async fn the_built_in_source_lists_once_in_its_place_and_plays() {
     let s = until(&view, "subtitles", settled).await;
     assert_eq!(s.phase, PlaybackPhase::Ready, "{s:?}");
     let sources: Vec<&str> = s.subtitles.iter().map(|t| t.source.as_str()).collect();
-    // Its 7 Turkish files sit where its first row sits, between the two
+    // The file naming the playing group leads the language (plans/
+    // player-polish.md 2.2); its other 6 Turkish files, which match no
+    // better than the addons', sit where its first row sits, between the two
     // addons around it, whichever answered first.
-    let mut expected = vec!["before.test"];
-    expected.extend([NAME; 7]);
+    let mut expected = vec![NAME, "before.test"];
+    expected.extend([NAME; 6]);
     expected.push("after.test");
     assert_eq!(sources, expected, "{s:?}");
-    let first = &s.subtitles[1];
+    let first = &s.subtitles[0];
+    assert!(first.fits);
     assert_eq!(first.lang, "tur");
     assert_eq!(
         first.label.as_deref(),

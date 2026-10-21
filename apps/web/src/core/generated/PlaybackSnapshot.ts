@@ -4,6 +4,7 @@ import type { NextEpisode } from "./NextEpisode";
 import type { OtherVersion } from "./OtherVersion";
 import type { PlaybackPhase } from "./PlaybackPhase";
 import type { Segment } from "./Segment";
+import type { StartProgress } from "./StartProgress";
 import type { SubtitleNote } from "./SubtitleNote";
 import type { SubtitleTrack } from "./SubtitleTrack";
 import type { TraktPlayback } from "./TraktPlayback";
@@ -102,4 +103,10 @@ offer: OtherVersion | null,
  * so a retry that fails again at once still differs from the failure
  * before it (code review 2026-10-20 r2 P3-6). Show "Trying again".
  */
-retries: number, };
+retries: number, 
+/**
+ * How far the start is while `phase` is `resolving`: the loading
+ * screen's fill and its words (plans/player-polish.md 1.3). Null before
+ * the first source starts and from `ready` on.
+ */
+start: StartProgress | null, };

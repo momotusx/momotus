@@ -729,6 +729,62 @@ async fn a_torrent_on_a_full_device_is_refused_and_one_that_fits_plays_whole() {
     assert_eq!(s.leecher.stats(t).await.unwrap().window_bytes, None);
 }
 
+/// Plans/player-polish.md 2b: a resume asks for its own point first. At
+/// Ready the piece the resume reads first is in beside the head's, before
+/// the player has read anything; a start that opened the head alone never
+/// asked for it.
+#[cfg(feature = "test-hooks")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_resume_has_its_own_point_in_at_ready() {
+    const MIB: u64 = 1 << 20;
+    let s = support::swarm_big(64 << 20, 1 << 20).await;
+    let t = s
+        .leecher
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let files = s.leecher.files(t).unwrap();
+    let movie = files
+        .iter()
+        .position(|f| f.path.ends_with("movie.mkv"))
+        .unwrap();
+    let fixture = Fixture::default();
+    fixture.set(
+        "/stream/movie/tt1.json",
+        json!({"streams": [{"name": "Fixture", "title": "Up.2009.1080p.WEB.x264-GROUP",
+                            "infoHash": s.info_hash, "fileIdx": movie}]}),
+    );
+    let (owner, _kid) = kid(&fixture).await;
+    owner.set_torrent_engine(s.leecher.clone());
+    let found = candidates(&owner, "movie", "tt1", "tt1").await;
+    // Half way through ten minutes: the file's own rate puts it 32 MiB in.
+    let progress = mq_library::ProgressRow {
+        video_id: "tt1",
+        item_id: "tt1",
+        position_ms: 300_000,
+        duration_ms: 600_000,
+        updated_ms: 1,
+    };
+    owner
+        .library()
+        .set_progress(owner.profile(), progress, &owner.hlc())
+        .unwrap();
+    let view = PlaybackView::open(&owner, found, target("movie", "tt1", "tt1"));
+    ready(&view).await;
+    let offset = |file_at: u64| files[..movie].iter().map(|f| f.len).sum::<u64>() + file_at;
+    let piece = |at: u64| (offset(at) / MIB) as u32;
+    let have = |p: u32| {
+        let leecher = s.leecher.clone();
+        async move {
+            mq_engine::test_hooks::piece_state(&leecher, t, p)
+                .await
+                .contains("Some((true,")
+        }
+    };
+    assert!(have(piece(0)).await, "the head");
+    assert!(have(piece(32 * MIB)).await, "the resume point");
+}
+
 /// A resume on a small device (review P1-2): the torrent's own folder
 /// counts in R, so what the trim left is room the resume plays in. With
 /// free space short of the window's floor but for that folder, the second

@@ -18,6 +18,11 @@ language: string,
  */
 languageName: string, 
 /**
+ * The language's own name ("Português (Brasil)", "Türkçe"); the
+ * English name when the core knows no other.
+ */
+nativeName: string, 
+/**
  * What tells this track from the others of its language: the release
  * it was made for when the addon names it, else its source; numbered
  * when two would read the same.
@@ -26,4 +31,9 @@ name: string, label: string | null,
 /**
  * Addon name.
  */
-source: string, forced: boolean, hearingImpaired: boolean, };
+source: string, forced: boolean, hearingImpaired: boolean, 
+/**
+ * The track names the playing release's group: made for this release
+ * ("Made for this release").
+ */
+fits: boolean, };

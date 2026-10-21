@@ -2,7 +2,7 @@ use mq_http::{ClientConfig, HttpClient, RequestOptions};
 use mq_library::{AddonRow, CachedResponse};
 use mq_protocol::decode_streams;
 use mq_runtime::{
-    Core, PlayTarget, PlaybackPhase, PlaybackSnapshot, PlaybackView, SubtitleProblem,
+    Core, PlayTarget, PlaybackPhase, PlaybackSnapshot, PlaybackView, StartStage, SubtitleProblem,
 };
 use mq_streams::{ParsedStream, normalize};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -33,6 +33,11 @@ async fn origin() -> String {
                 } else if head.starts_with("get /full.mkv") {
                     // Ignores Range and starts sending a 1.1 GB file.
                     b"HTTP/1.1 200 OK\r\nContent-Length: 1180090590\r\nConnection: close\r\n\r\nxxxx"
+                        .to_vec()
+                } else if head.starts_with("get /slow.mkv") {
+                    // Gone, after a second and a half.
+                    tokio::time::sleep(Duration::from_millis(1500)).await;
+                    b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
                         .to_vec()
                 } else {
                     b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
@@ -513,6 +518,37 @@ async fn falls_over_to_the_first_source_that_answers() {
     assert_eq!(s.phase, PlaybackPhase::Failed);
     assert_eq!(s.attempts.last().unwrap().error, "decoder error");
     assert!(http.get_range(&url, 0, 1, &local).await.is_err());
+}
+
+/// Plans/player-polish.md 1.3: while it resolves, the snapshot says which
+/// source the start is on, from the second on in the core's words, and the
+/// start is gone at `ready`.
+#[tokio::test]
+async fn the_start_names_its_source_and_clears_at_ready() {
+    let base = origin().await;
+    let core = Core::temporary("p").unwrap();
+    let streams = format!(
+        r#"{{"streams":[
+          {{"name":"Slow","url":"{base}/slow.mkv"}},
+          {{"name":"Slow too","url":"{base}/slow.mkv?again"}},
+          {{"name":"Live","url":"{base}/ok.mkv","behaviorHints":{{"proxyHeaders":{{"request":{{"x-key":"1"}}}}}}}}
+        ]}}"#
+    );
+    let view = PlaybackView::open(&core, setup(&core, &streams), target());
+    let on = |n: u32| move |s: &PlaybackSnapshot| s.start.as_ref().is_some_and(|p| p.source == n);
+    let first = until(&view, "the first source", on(1)).await.start.unwrap();
+    assert_eq!(
+        (first.sources, first.stage, first.caption, first.progress),
+        (3, StartStage::Connecting, None, 0.0)
+    );
+    let second = until(&view, "the second source", on(2))
+        .await
+        .start
+        .unwrap();
+    assert_eq!(second.caption.as_deref(), Some("Trying source 2 of 3"));
+    let s = until(&view, "ready", |s| s.phase != PlaybackPhase::Resolving).await;
+    assert_eq!(s.phase, PlaybackPhase::Ready, "{s:?}");
+    assert_eq!(s.start, None);
 }
 
 #[tokio::test]
@@ -1104,6 +1140,99 @@ async fn subtitles_come_grouped_by_language_named_and_told_apart() {
     );
     // The addon's own code is kept for the player.
     assert_eq!(s.subtitles[11].lang, "pob");
+}
+
+/// Plans/player-polish.md 2.2: within each language, the tracks naming the
+/// playing release's group come first and `fit`, a plain one before one
+/// for the hard of hearing; then the same source family; then the addon's
+/// order. The start pick is the best match. Each track names its language
+/// in that language too.
+#[tokio::test]
+async fn subtitles_rank_by_the_playing_release_within_each_language() {
+    let (base, _) = counted_origin().await;
+    let core = Core::temporary("p").unwrap();
+    core.set_prefs(&serde_json::json!({ "subtitleLanguages": ["eng"] }))
+        .unwrap();
+    let sub = |id: &str, lang: &str, file: &str, hi: bool| {
+        serde_json::json!({"id": id, "lang": lang, "url": format!("https://subs.test/{id}.srt"),
+            "subtitleFileName": file, "hearingImpaired": hi})
+    };
+    let subtitles = serde_json::json!([
+        sub(
+            "disc",
+            "eng",
+            "Sintel.2010.1080p.BluRay.x264-OTHER.srt",
+            false
+        ),
+        sub(
+            "tr-disc",
+            "tur",
+            "Sintel.2010.720p.BluRay.x264-OTHER.srt",
+            false
+        ),
+        sub(
+            "web",
+            "eng",
+            "Sintel.2010.1080p.WEBRip.x264-RARBG.srt",
+            false
+        ),
+        sub(
+            "own-hi",
+            "eng",
+            "Sintel.2010.1080p.WEB-DL.DDP5.1.H.264-FLUX-hi.srt",
+            true
+        ),
+        sub("plain", "eng", "", false),
+        sub(
+            "own",
+            "eng",
+            "Sintel.2010.1080p.WEB-DL.DDP5.1.H.264-FLUX.srt",
+            false
+        ),
+        sub(
+            "tr-own",
+            "tur",
+            "Sintel.2010.1080p.WEB-DL.H.264-FLUX.srt",
+            false
+        ),
+    ]);
+    let streams = serde_json::json!({"streams": [{
+        "url": format!("{base}/v.mkv"),
+        "title": "Sintel.2010.1080p.WEB-DL.DDP5.1.H.264-FLUX",
+        "subtitles": subtitles,
+    }]});
+    let view = PlaybackView::open(&core, setup(&core, &streams.to_string()), target());
+    let s = settled_list(&view).await;
+    let rows: Vec<(&str, bool, &str)> = s
+        .subtitles
+        .iter()
+        .map(|t| (t.name.as_str(), t.fits, t.native_name.as_str()))
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            (
+                "Sintel.2010.1080p.WEB-DL.DDP5.1.H.264-FLUX",
+                true,
+                "English"
+            ),
+            (
+                "Sintel.2010.1080p.WEB-DL.DDP5.1.H.264-FLUX-hi",
+                true,
+                "English"
+            ),
+            ("Sintel.2010.1080p.WEBRip.x264-RARBG", false, "English"),
+            ("Sintel.2010.1080p.BluRay.x264-OTHER", false, "English"),
+            ("Local", false, "English"),
+            ("Sintel.2010.1080p.WEB-DL.H.264-FLUX", true, "Türkçe"),
+            ("Sintel.2010.720p.BluRay.x264-OTHER", false, "Türkçe"),
+        ]
+    );
+    assert!(s.subtitles[1].hearing_impaired);
+    assert_eq!(
+        s.auto_subtitle.as_deref(),
+        Some(s.subtitles[0].url.as_str())
+    );
 }
 
 /// An addon that answers `body` to every request: its manifest is the row.
