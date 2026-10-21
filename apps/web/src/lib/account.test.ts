@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import shared from "../../../shared/account-words.json";
 import type { Announcement } from "../core/generated/Announcement";
 import type { MemberInfo } from "../core/generated/MemberInfo";
-import { aloneInAccount, announcementLine, continueWith, fill, homeCard, leaveChoice, providerAccount, providerName, providerOrder, revokeFailure, sameRelay, shown, signInFailure } from "./account";
+import { needsSecondWayIn, announcementLine, continueWith, fill, homeCard, leaveChoice, providerAccount, providerName, providerOrder, revokeFailure, sameRelay, shown, signInFailure } from "./account";
 
 const note = (kind: Announcement["kind"], more: Partial<Announcement> = {}): Announcement => ({
   id: `1.${kind}`,
@@ -15,7 +15,7 @@ const note = (kind: Announcement["kind"], more: Partial<Announcement> = {}): Ann
   count: null,
   ...more,
 });
-const member = (id: string, name: string | null, kit = false) => ({ id, name, kit }) as MemberInfo;
+const member = (id: string, name: string | null, kit = false, form: string | null = null, thisDevice = false) => ({ id, name, kit, form, thisDevice }) as MemberInfo;
 const owner = { isOwner: true, kids: false };
 const other = { isOwner: false, kids: false };
 const kid = { isOwner: false, kids: true };
@@ -115,10 +115,10 @@ test("Home's one account card goes by priority", () => {
   // The nudge leads to a recovery kit, the owner's to make (D17).
   expect(homeCard({ ...base, alone: true, profile: other })).toBeNull();
   const withNote = { ...base, alone: true, announcements: [note("passkey")] };
-  expect(homeCard(withNote)).toMatchObject({ kind: "announcement", ok: true, notYou: true });
+  expect(homeCard(withNote)).toMatchObject({ kind: "announcement", ok: true, notYou: true, member: "m1" });
   expect(homeCard({ ...withNote, profile: other })).toMatchObject({ kind: "announcement", ok: false, notYou: false });
-  // A kids profile skips what it may not show, to the next one.
-  expect(homeCard({ ...withNote, announcements: [note("passkey"), note("removed")], profile: kid })).toMatchObject({ kind: "announcement", id: "1.removed" });
+  // A kids profile reaches no account page: no card at all, not even the deletion or the account gone.
+  for (const state of [withNote, { ...withNote, announcements: [note("removed")] }, { ...withNote, gone: true }, { ...withNote, deletion: { dueMs: 1, provider: "google" } }]) expect(homeCard({ ...state, profile: kid })).toBeNull();
   const gone = { ...withNote, gone: true };
   expect(homeCard(gone)).toEqual({ kind: "gone", text: shared.accountGone, remove: true });
   // Remove from this device is the owner's (D13).
@@ -129,11 +129,17 @@ test("Home's one account card goes by priority", () => {
   expect(homeCard({ ...gone, deletion: { dueMs: 1, provider: null } })?.text).toBe("Your account will be deleted on 28 Oct.");
 });
 
-test("a second way in is wanted while only this device holds the account", () => {
-  expect(aloneInAccount(null)).toBe(false);
-  expect(aloneInAccount([member("a", "Desk")])).toBe(true);
-  expect(aloneInAccount([member("a", "Desk"), member("b", "Phone")])).toBe(false);
-  expect(aloneInAccount([member("a", "Desk"), member("k", null, true)])).toBe(false);
+test("a second way in is a recovery kit or another phone or tablet, as the protocol says", () => {
+  const desk = member("a", "Desk", false, "web", true);
+  expect(needsSecondWayIn(null)).toBe(false);
+  expect(needsSecondWayIn([desk])).toBe(true);
+  expect(needsSecondWayIn([desk, member("k", null, true)])).toBe(false);
+  expect(needsSecondWayIn([desk, member("b", "Phone", false, "phone")])).toBe(false);
+  expect(needsSecondWayIn([desk, member("b", "Tablet", false, "tablet")])).toBe(false);
+  // A TV, another browser or a computer signs nobody in: still wanted.
+  expect(needsSecondWayIn([desk, member("t", "TV", false, "tv"), member("w", "Laptop", false, "web"), member("c", "Mac", false, "computer")])).toBe(true);
+  // This device itself, a phone, is not its own second way in.
+  expect(needsSecondWayIn([member("p", "Phone", false, "phone", true)])).toBe(true);
 });
 
 test("every sign-in failure has its words and buttons, and a cancel says nothing", () => {

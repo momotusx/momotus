@@ -262,13 +262,29 @@ async function start(request: () => Promise<SyncRecord>, recoveredWithKit: boole
   }
 }
 
+/** The form this device states when it makes or joins an account, sealed in the roster: a TV form
+ * is `tv`, anything else the web is `web`, and neither approves another device (D6, the core
+ * refuses it). A development build lets an e2e peer state a phone (`mq.devDeviceForm`): the
+ * development-only approve page then works for it. */
+export function deviceForm(): string {
+  if (import.meta.env.DEV) {
+    try {
+      const peer = localStorage.getItem("mq.devDeviceForm");
+      if (peer) return peer;
+    } catch {
+      // The web's own form.
+    }
+  }
+  return form() === "tv" ? "tv" : "web";
+}
+
 /** A new account; `ticket` links the sign-in that led here, and `move` (Start over) moves it from
  * the account it signed in to, which is then deleted in 7 days unless a device cancels. */
 export const createAccount = (server: string, name: string, invite: string, ticket?: string, move = false) =>
-  start(() => op<SyncRecord>("createSyncAccount", { server, name, form: "web", ...(invite ? { invite } : {}), ...(ticket ? { ticket, move } : {}) }), false);
+  start(() => op<SyncRecord>("createSyncAccount", { server, name, form: deviceForm(), ...(invite ? { invite } : {}), ...(ticket ? { ticket, move } : {}) }), false);
 
 export const recover = (server: string, kit: string, name: string) =>
-  start(async () => (await op<{ record: SyncRecord; via: "kit" | "passkey" }>("recover", { server, kit, name })).record, true);
+  start(async () => (await op<{ record: SyncRecord; via: "kit" | "passkey" }>("recover", { server, kit, name, form: deviceForm() })).record, true);
 
 /** Pairing may start here: no account syncs, waits to be unlocked or is being started, and the link is private. Ask after `vaultReady`. */
 export const mayPair = () => !record && !locked() && !slot && privateLink;
@@ -295,6 +311,8 @@ export const joinPaired = (next: SyncRecord, claim: symbol) => joinOwned(claim, 
 async function gate() {
   if (vault.active()) await vault.verify();
 }
+/** The same step before Remove from this device as before Sign out. */
+export const passkeyStep = gate;
 
 /** Vouches for the device that shows `qr`; returns the six digits it must show too. */
 /** Vouches for the device that shows `qr`; returns the six digits it must show too. Hands over the account, so the passkey first. */
@@ -336,11 +354,12 @@ export async function reportLost(lost: string, keep: string[]) {
 }
 
 /** Leaves the account; the library stays. Without `force` the core refuses while edits are unsent (`unsent`). */
-export async function signOut(force: boolean, local = false) {
+export async function signOut(force: boolean, local = false, removeAfter?: { debrid: boolean }) {
   const mine = account;
   await gate();
   // `local`: nothing sent; only this device forgets the account (the way out of a list it is not on).
-  await withRecord("signOut", { force, local }, () => null);
+  // `removeAfter` (D13): the core records the removal before the leave goes out (core/wipe.ts).
+  await withRecord("signOut", { force, local, ...(removeAfter ? { removeAfter } : {}) }, () => null);
   if (mine !== account) return;
   await forget();
   setProblem(null);

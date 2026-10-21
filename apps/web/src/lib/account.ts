@@ -160,7 +160,7 @@ export function announcementLine(a: Announcement, members: readonly MemberInfo[]
 export type Card =
   | { kind: "deletion"; text: string; provider: string | null }
   | { kind: "gone"; text: string; remove: boolean }
-  | { kind: "announcement"; text: string; id: string; ok: boolean; notYou: boolean }
+  | { kind: "announcement"; text: string; id: string; ok: boolean; notYou: boolean; member: string | null }
   | { kind: "secondWay"; text: string; detail: string };
 
 export interface CardState {
@@ -169,12 +169,14 @@ export interface CardState {
   announcements: readonly Announcement[];
   members: readonly MemberInfo[] | null;
   profile: Profile | null;
-  /** This device syncs, knows the account's members, and only this device and no kit are in it. */
+  /** This device syncs and knows the account's members, and none of them is a second way in. */
   alone: boolean;
   date: (ms: number) => string;
 }
 
 export function homeCard(s: CardState): Card | null {
+  // A kids profile reaches no account page: it shows no account card at all.
+  if (!s.profile || s.profile.kids) return null;
   if (s.deletion) {
     const date = s.date(s.deletion.dueMs);
     const provider = s.deletion.provider;
@@ -183,12 +185,14 @@ export function homeCard(s: CardState): Card | null {
   if (s.gone) return { kind: "gone", text: w.accountGone, remove: s.profile?.isOwner ?? false };
   for (const a of s.announcements) {
     const seen = shown(a, s.profile);
-    if (seen.show) return { kind: "announcement", text: announcementLine(a, s.members), id: a.id, ok: seen.ok, notYou: a.kind === "passkey" && seen.ok };
+    if (seen.show) return { kind: "announcement", text: announcementLine(a, s.members), id: a.id, ok: seen.ok, notYou: a.kind === "passkey" && seen.ok, member: a.member };
   }
   // Kits are the owner's to make (D17): the nudge shows there only.
   if (s.alone && s.profile?.isOwner) return { kind: "secondWay", text: w.secondWayIn, detail: w.secondWayInText };
   return null;
 }
 
-/** Only this device, and no kit: one lost device locks the account (4.1.7). */
-export const aloneInAccount = (members: readonly MemberInfo[] | null) => !!members && !members.some((m) => m.kit) && members.filter((m) => !m.kit).length <= 1;
+/** No second way in yet (4.1.7, the `syncDevices` row): no recovery kit, and no other phone or
+ * tablet, the only devices that sign others in. The web saves no passkey (D11). */
+export const needsSecondWayIn = (members: readonly MemberInfo[] | null) =>
+  !!members && !members.some((m) => m.kit || (!m.thisDevice && (m.form === "phone" || m.form === "tablet")));

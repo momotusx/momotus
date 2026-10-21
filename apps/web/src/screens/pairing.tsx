@@ -19,7 +19,7 @@ import "./settings.css";
 
 /** A pairing code and its steps; `how` says where the code is scanned (default: the Account page of a device that syncs). */
 export function Session(props: { server: string; name: string; onDone: () => void; onJoined: () => void; how?: string }) {
-  const view = liveView<Pairing>("pairing", { server: props.server, name: props.name });
+  const view = liveView<Pairing>("pairing", { server: props.server, name: props.name, form: sync.deviceForm() });
   const p = () => view.state.data;
   // When the code stops working, as a time of day ("1:54 PM").
   const [copied, setCopied] = createSignal(false);

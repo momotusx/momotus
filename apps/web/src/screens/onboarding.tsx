@@ -152,7 +152,10 @@ function Doors(props: { onFresh: () => void }) {
   return (
     <section class="step-body" aria-label="Choose a start">
       <h1>How would you like to begin?</h1>
-      <p class="lead">No account needed. Everything stays on this device until you turn on sync.</p>
+      {/* After Create the account exists: the line would say the opposite. */}
+      <Show when={!sync.joined()}>
+        <p class="lead">No account needed. Everything stays on this device until you turn on sync.</p>
+      </Show>
       <div class="doors" data-fgroup="doors">
         <A class="door" href="/import?from=welcome" data-f="welcome:stremio" data-autofocus>
           <DoorOpen aria-hidden />

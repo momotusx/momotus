@@ -24,8 +24,14 @@ export const signInServer = (): string => rememberedServer() || ((import.meta.en
 /** The providers a sync service offers (none: no sign-in there, only the pairing and kit doors). */
 export const relayProviders = async (server: string) => (await op<{ providers: string[] }>("relayInfo", { server })).providers;
 
-/** In the click handler, before any await. Null when the browser blocked it. */
-export const openSignInWindow = (): Window | null => window.open("about:blank", "_blank", "popup,width=520,height=720");
+/** In the click handler, before any await. Null when the browser blocked it. The provider's pages
+ * never reach this window: the opener is cut while the new one is still this origin's blank page,
+ * and this side keeps the handle to send it on and close it. */
+export function openSignInWindow(): Window | null {
+  const win = window.open("about:blank", "_blank", "popup,width=520,height=720");
+  if (win) win.opener = null;
+  return win;
+}
 
 export interface SignInRun {
   done: Promise<SignInEnd>;
@@ -73,10 +79,12 @@ export function runSignIn(win: Window | null, server: string, provider: string, 
   };
   channel.onmessage = (e: MessageEvent) => {
     const fragment = typeof e.data === "string" ? e.data : "";
+    // A return from another sync service is dropped and the flow keeps waiting: any page may
+    // open `/auth` with a fragment, and none may end a sign-in that way. The core ignores a
+    // return of another flow the same way.
+    if (!sameRelay(fragment, server)) return;
     returned = true;
     setStalled(false);
-    // The core ignores a return it did not start; one from another sync service ends this one.
-    if (!sameRelay(fragment, server)) return end({ phase: "failed", code: "otherRelay" });
     void view?.command({ type: "returned", fragment }).catch(() => undefined);
   };
   addEventListener("focus", back);

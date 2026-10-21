@@ -30,7 +30,7 @@ import { privateLink } from "../core/client";
 import type { IdentityLink } from "../core/generated/IdentityLink";
 import { relayProviders, signInServer } from "../core/sign-in";
 import { pendingWipe, removeHere, wipeState } from "../core/wipe";
-import { type Act, accountWords as aw, activeProfile, aloneInAccount, continueWith, type Failure, fill, leaveChoice, providerName, providerOrder, revokeFailure, signInFailure } from "../lib/account";
+import { type Act, accountWords as aw, activeProfile, needsSecondWayIn, continueWith, type Failure, fill, leaveChoice, providerName, providerOrder, revokeFailure, signInFailure } from "../lib/account";
 import type { MemberInfo } from "../core/generated/MemberInfo";
 import { profiles } from "../core/profiles";
 import * as sync from "../core/sync";
@@ -281,7 +281,7 @@ function NotJoined() {
             </Show>
             <Show when={owner()}>
               <div class="acts">
-                <button class="btn primary" data-f="sync:wipe-again" onClick={() => void removeHere(pendingDebrid()).catch(() => undefined)}>
+                <button class="btn primary" data-f="sync:wipe-again" onClick={() => void removeHere(pendingDebrid(), !pendingWipe()).catch(() => undefined)}>
                   {w.retry}
                 </button>
               </div>
@@ -359,7 +359,7 @@ function Joined() {
     return [o === "complete" ? "Synced." : o === "pending" ? "Synced. Some changes still wait." : "Synced. Some changes did not sync.", ...notes()].join(" ");
   };
   const members = () => sortMembers(sync.devices()?.members ?? []);
-  const alone = () => aloneInAccount(sync.devices()?.members ?? null);
+  const alone = () => needsSecondWayIn(sync.devices()?.members ?? null);
   // The sign-ins linked to the account, where its sync service offers sign-in at all.
   const [providers] = createResource(() => sync.accountServer() || false, relayProviders);
   const [links, { refetch: refetchLinks }] = createResource(() => providers.state === "ready" && providers().length > 0, () => sync.identities());
@@ -842,12 +842,10 @@ function Leave() {
     if (busy()) return;
     setBusy(true);
     setError(null);
-    const remove = removing();
-    const withDebrid = debrid();
     try {
-      await sync.signOut(force);
-      // Steps two and three; this page then starts as new (core/wipe.ts says how it went).
-      if (remove) void removeHere(withDebrid).catch(() => undefined);
+      // The core records the removal before the leave goes out; core/wipe.ts then runs steps two
+      // and three, and this page starts as new (or says why it stopped).
+      await sync.signOut(force, false, removing() ? { debrid: debrid() } : undefined);
     } catch (e) {
       if (codeOf(e) === "unsent") {
         setUnsent(true);

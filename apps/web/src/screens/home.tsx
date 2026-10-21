@@ -19,7 +19,7 @@ import { onProfileReset, profiles } from "../core/profiles";
 import { BridgeError } from "../core/bridge";
 import * as sync from "../core/sync";
 import { removeHere, wipeState } from "../core/wipe";
-import { accountWords as aw, activeProfile, aloneInAccount, type Card, fill, homeCard, providerName } from "../lib/account";
+import { accountWords as aw, activeProfile, needsSecondWayIn, type Card, fill, homeCard, providerName } from "../lib/account";
 import { Tick } from "./sign-in";
 import { cardOffer, defaultsWords, namesLine } from "../lib/defaults";
 import { allFailed } from "../lib/rows";
@@ -97,11 +97,12 @@ function AccountCard() {
       announcements: sync.report()?.announcements ?? [],
       members: sync.devices()?.members ?? null,
       profile: activeProfile(profiles()),
-      alone: sync.joined() && aloneInAccount(sync.devices()?.members ?? null),
+      alone: sync.joined() && needsSecondWayIn(sync.devices()?.members ?? null),
       date: (ms) => new Date(ms).toLocaleDateString(undefined, { dateStyle: "medium" }),
     });
   const [problem, setProblem] = createSignal<string | null>(null);
   const [removing, setRemoving] = createSignal(false);
+  const [removingPasskey, setRemovingPasskey] = createSignal(false);
   const [debrid, setDebrid] = createSignal(true);
   const run = (work: () => Promise<unknown>) => {
     setProblem(null);
@@ -172,7 +173,11 @@ function AccountCard() {
                     <div class="acts" role="group" aria-label={aw.removeLibraryAsk}>
                       <p>{aw.removeLibraryAsk}</p>
                       <Tick on={debrid()} label={aw.removeLibraryDebrid} fkey="home:account:remove-debrid" onToggle={setDebrid} />
-                      <button class="btn danger" data-f="home:account:remove-confirm" aria-busy={wipeState().running || undefined} onClick={() => run(() => removeHere(debrid()))}>
+                      <button class="btn danger" data-f="home:account:remove-confirm" aria-busy={wipeState().running || undefined} onClick={() => run(async () => {
+                        // The same passkey step as Sign out, then the removal, recorded first.
+                        await sync.passkeyStep();
+                        await removeHere(debrid(), true);
+                      })}>
                         {gone[1]}
                       </button>
                       <button class="btn" data-f="home:account:remove-cancel" onClick={() => setRemoving(false)}>
@@ -184,18 +189,44 @@ function AccountCard() {
               </Match>
               <Match when={c().kind === "announcement" && (c() as Extract<Card, { kind: "announcement" }>)}>
                 {(a) => (
-                  <>
-                    <Show when={a().notYou}>
-                      <A class="btn" href="/sync" data-f="home:account:not-you">
-                        {aw.announceNotYou}
-                      </A>
-                    </Show>
-                    <Show when={a().ok}>
-                      <button class="btn primary" data-f="home:account:ok" onClick={() => run(() => sync.ackAnnouncements([a().id]))}>
-                        {aw.announceOk}
+                  <Show
+                    when={removingPasskey()}
+                    fallback={
+                      <>
+                        {/* The owner's only (notYou needs OK), and asked once before it goes. */}
+                        <Show when={a().notYou && a().member}>
+                          <button class="btn" data-f="home:account:not-you" onClick={() => setRemovingPasskey(true)}>
+                            {aw.announceNotYou}
+                          </button>
+                        </Show>
+                        <Show when={a().ok}>
+                          <button class="btn primary" data-f="home:account:ok" onClick={() => run(() => sync.ackAnnouncements([a().id]))}>
+                            {aw.announceOk}
+                          </button>
+                        </Show>
+                      </>
+                    }
+                  >
+                    <div class="acts" role="group" aria-label={aw.removePasskeyAsk}>
+                      <p>{aw.removePasskeyAsk}</p>
+                      <button
+                        class="btn danger"
+                        data-f="home:account:not-you-confirm"
+                        onClick={() =>
+                          run(async () => {
+                            await sync.removeDevice(a().member as string);
+                            await sync.ackAnnouncements([a().id]);
+                            setRemovingPasskey(false);
+                          })
+                        }
+                      >
+                        {syncWords.remove}
                       </button>
-                    </Show>
-                  </>
+                      <button class="btn" data-f="home:account:not-you-cancel" onClick={() => setRemovingPasskey(false)}>
+                        {syncWords.cancel}
+                      </button>
+                    </div>
+                  </Show>
                 )}
               </Match>
               <Match when={c().kind === "secondWay"}>
