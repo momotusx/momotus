@@ -53,7 +53,9 @@ pub struct Tile {
     /// The IMDb rating the addon gave, as written ("8.4").
     pub rating: Option<String>,
     /// The IMDb and Rotten Tomatoes scores to show side by side: MDBList's,
-    /// with the addon's own IMDb rating when MDBList has none.
+    /// with the addon's own IMDb rating when MDBList has none, and "Fresh"
+    /// when the Rotten Tomatoes addon lists the title and MDBList gave no
+    /// Tomatometer.
     pub ratings: Ratings,
     /// What the hero shows beyond the tile; kept off the wire for rows.
     #[serde(skip)]

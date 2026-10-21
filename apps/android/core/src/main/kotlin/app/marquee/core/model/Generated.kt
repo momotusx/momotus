@@ -1081,7 +1081,7 @@ data class RankKey(
     val within: Int,
 )
 
-/** A title's IMDb and Rotten Tomatoes scores, written as shown ("8.8", "87%"). A score nobody gave is null: apps show no slot for it, never a placeholder. */
+/** A title's IMDb and Rotten Tomatoes scores, written as shown ("8.8", "87%"); Rotten Tomatoes may be "Fresh", a title the Rotten Tomatoes addon lists with no number. A score nobody gave is null: apps show no slot for it, never a placeholder. */
 @Serializable
 data class Ratings(
     val imdb: String? = null,
@@ -1564,7 +1564,7 @@ data class Tile(
     val videoId: String? = null,
     /** The IMDb rating the addon gave, as written ("8.4"). */
     val rating: String? = null,
-    /** The IMDb and Rotten Tomatoes scores to show side by side: MDBList's, with the addon's own IMDb rating when MDBList has none. */
+    /** The IMDb and Rotten Tomatoes scores to show side by side: MDBList's, with the addon's own IMDb rating when MDBList has none, and "Fresh" when the Rotten Tomatoes addon lists the title and MDBList gave no Tomatometer. */
     val ratings: Ratings = Ratings(),
 )
 
@@ -1588,7 +1588,7 @@ data class TitleDetails(
     val ratings: Ratings = Ratings(),
     /** The title's IMDb page, for the IMDb score to link to; null for an id that is not IMDb's. */
     val imdbUrl: String? = null,
-    /** Who the scores come from, a "Ratings from" row beside "Details from" ("IMDb and Rotten Tomatoes via MDBList"); null when MDBList gave none. */
+    /** Who the scores come from, a "Ratings from" row beside "Details from" ("IMDb and Rotten Tomatoes via MDBList", or "IMDb and Rotten Tomatoes (the Rotten Tomatoes addon)" for its Fresh mark); null when neither gave anything. */
     val ratingsFrom: String? = null,
     val source: String,
     /** Trailers the metadata names (YouTube), first is the main one. */

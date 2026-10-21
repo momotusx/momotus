@@ -18,7 +18,9 @@ ratings: Ratings,
 imdbUrl: string | null, 
 /**
  * Who the scores come from, a "Ratings from" row beside "Details from"
- * ("IMDb and Rotten Tomatoes via MDBList"); null when MDBList gave none.
+ * ("IMDb and Rotten Tomatoes via MDBList", or "IMDb and Rotten Tomatoes
+ * (the Rotten Tomatoes addon)" for its Fresh mark); null when neither
+ * gave anything.
  */
 ratingsFrom: string | null, source: string, 
 /**

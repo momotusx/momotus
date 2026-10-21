@@ -74,8 +74,9 @@ const fn given(value: Option<&'static str>) -> Option<&'static str> {
 pub type Title = (String, String);
 
 /// A title's IMDb and Rotten Tomatoes scores, written as shown ("8.8",
-/// "87%"). A score nobody gave is null: apps show no slot for it, never a
-/// placeholder.
+/// "87%"); Rotten Tomatoes may be "Fresh", a title the Rotten Tomatoes addon
+/// lists with no number. A score nobody gave is null: apps show no slot for
+/// it, never a placeholder.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 #[cfg_attr(
     feature = "ts",
