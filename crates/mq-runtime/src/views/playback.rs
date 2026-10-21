@@ -3541,8 +3541,8 @@ pub(crate) const ON_DEVICE: &str = "On this device";
 /// The key of the stream `item_id` last played for `video_id`, when it is a
 /// torrent whose start at the video's resume point this device holds: its
 /// details and what Ready waits on there are on disk (`Engine::cached`), so
-/// it starts with no peer. The engine starts for it only when the title's
-/// memory names such a torrent.
+/// it starts with no peer. Starts no engine: with none running, the data
+/// folder answers alone (`mq_engine::cached_on_disk`).
 #[cfg(feature = "torrent")]
 pub(crate) async fn kept_start(core: &Core, item_id: &str, video_id: &str) -> Option<String> {
     let memory = core
@@ -3567,8 +3567,18 @@ pub(crate) async fn kept_start(core: &Core, item_id: &str, video_id: &str) -> Op
         }
         _ => 0,
     };
-    let engine = core.torrent_engine().await.ok()?;
-    let cached = engine.cached(hash, file as usize, at).await?;
+    // A running engine answers for what it has loaded; else the data folder
+    // answers alone, and no engine starts (no DHT or trackers at a launch).
+    let file = file as usize;
+    let cached = match core.running_engine() {
+        Some(engine) => engine.cached(hash, file, at).await?,
+        None => {
+            let (dir, hash) = (core.torrent_dir().to_owned(), hash.to_owned());
+            tokio::task::spawn_blocking(move || mq_engine::cached_on_disk(&dir, &hash, file, at))
+                .await
+                .ok()??
+        }
+    };
     cached
         .ready
         .then(|| memory["key"].as_str().map(str::to_owned))

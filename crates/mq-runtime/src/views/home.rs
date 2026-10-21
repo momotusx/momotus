@@ -1047,8 +1047,8 @@ async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) 
 
 /// A video in progress whose torrent starts from what this device keeps
 /// says so after its caption: "S1:E3 · 12 min left · On this device"
-/// (plans/player-polish.md 2b). Asked once the tiles show, so the engine a
-/// title's memory may start never holds them back.
+/// (plans/player-polish.md 2b). Asked once the tiles show; with no engine
+/// running the data folder answers, so a launch starts none for it.
 #[cfg(feature = "torrent")]
 async fn kept_on_device(
     core: &Core,

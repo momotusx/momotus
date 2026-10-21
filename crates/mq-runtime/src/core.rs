@@ -709,6 +709,25 @@ impl Core {
         let _ = self.inner.engine.set(engine);
     }
 
+    /// The torrent engine when this launch started it; none before.
+    #[cfg(feature = "torrent")]
+    pub(crate) fn running_engine(&self) -> Option<mq_engine::Engine> {
+        self.inner.engine.get().cloned()
+    }
+
+    /// Tests: whether this launch started the torrent engine.
+    #[cfg(feature = "torrent")]
+    #[doc(hidden)]
+    pub fn engine_started(&self) -> bool {
+        self.inner.engine.get().is_some()
+    }
+
+    /// Where the engine keeps torrents, running or not.
+    #[cfg(feature = "torrent")]
+    pub(crate) fn torrent_dir(&self) -> &std::path::Path {
+        &self.inner.torrent_dir
+    }
+
     pub(crate) fn accounts(&self) -> &crate::debrid::Accounts {
         &self.inner.debrid
     }

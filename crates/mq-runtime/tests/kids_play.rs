@@ -828,6 +828,81 @@ async fn a_title_kept_on_this_device_says_so() {
     );
 }
 
+/// Plans/player-polish.md 2b, after the app was closed: a core opened again
+/// on the same data folder, with no engine started, says "On this device"
+/// in Continue Watching from the folder alone, and starts no engine for it.
+#[cfg(feature = "torrent")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn after_a_relaunch_the_folder_alone_says_on_this_device() {
+    let s = support::swarm(true).await;
+    let data = tempfile::tempdir().unwrap();
+    let open = || mq_runtime::CoreConfig {
+        data_dir: data.path().into(),
+        profile_id: OWNER.into(),
+        device_id: 0,
+    };
+    {
+        let core = Core::open(open()).unwrap();
+        // The device's engine on the core's own folder, as the app's.
+        let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+        let ip = std::net::Ipv4Addr::LOCALHOST.into();
+        let config = mq_engine::EngineConfig {
+            discovery: false,
+            upload: false,
+            ..mq_engine::EngineConfig::new(data.path().join("torrents"), http.torrent_scope(&[ip]))
+        };
+        let engine = mq_engine::Engine::start(config).await.unwrap();
+        let t = engine
+            .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+            .await
+            .unwrap();
+        let movie = engine
+            .files(t)
+            .unwrap()
+            .iter()
+            .position(|f| f.path.ends_with("movie.mkv"))
+            .unwrap();
+        core.set_torrent_engine(engine.clone());
+        let fixture = Fixture::default();
+        fixture.set(
+            "/stream/movie/tt1.json",
+            json!({"streams": [{"name": "Fixture", "title": "Up.2009.1080p.WEB.x264-GROUP",
+                                "infoHash": s.info_hash, "fileIdx": movie}]}),
+        );
+        let addon = fixture.addon().await;
+        core.library()
+            .set_addons(OWNER, &[addon], &core.hlc())
+            .unwrap();
+        let found = candidates(&core, "movie", "tt1", "tt1").await;
+        let view = PlaybackView::open(&core, found, target("movie", "tt1", "tt1"));
+        let url = ready(&view).await;
+        let len = s.movie.len() as u64;
+        assert!(read_range(&url, 0, len).await == s.movie, "the whole film");
+        view.report_progress(60_000, 120_000, false);
+        drop(view);
+        // Closed: the torrent leaves the session and its bitfield is on disk.
+        until_async("the torrent let go", || async {
+            engine.remove(t, true).await.is_ok()
+        })
+        .await;
+    }
+    let again = Core::open(open()).unwrap();
+    let home = mq_runtime::HomeView::open(&again);
+    let caption = || {
+        home.snapshot()
+            .rows
+            .iter()
+            .find(|r| r.row_id == mq_runtime::views::home::CONTINUE_ROW_ID)
+            .and_then(|r| r.tiles.iter().find(|t| t.id == "tt1").cloned())
+            .and_then(|t| t.release_info)
+    };
+    until("the caption says it is on this device", || {
+        caption().is_some_and(|c| c.ends_with(" \u{b7} On this device"))
+    })
+    .await;
+    assert!(!again.engine_started(), "the check started the engine");
+}
+
 /// A resume on a small device (review P1-2): the torrent's own folder
 /// counts in R, so what the trim left is room the resume plays in. With
 /// free space short of the window's floor but for that folder, the second
