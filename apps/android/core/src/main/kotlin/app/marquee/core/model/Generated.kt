@@ -1818,6 +1818,8 @@ data class VersionRow(
     val bitrateMbps: Float? = null,
     /** The sort key, for a details panel and tests. */
     val score: RankKey,
+    /** "On this device": the version last played for this video, and this device holds its start at the resume point, so it starts with no peer (plans/player-polish.md 2b). Show it as the row's line. */
+    val onDevice: String? = null,
 )
 
 /** What the ranking read for this view, for the header "This TV: 4K HDR, about 42 Mbit/s on Wi-Fi, 61 GB free". */

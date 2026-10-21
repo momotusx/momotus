@@ -35,4 +35,10 @@ bitrateMbps: number | null,
 /**
  * The sort key, for a details panel and tests.
  */
-score: RankKey, };
+score: RankKey, 
+/**
+ * "On this device": the version last played for this video, and this
+ * device holds its start at the resume point, so it starts with no
+ * peer (plans/player-polish.md 2b). Show it as the row's line.
+ */
+onDevice: string | null, };

@@ -644,11 +644,7 @@ impl PlaybackView {
             .progress(core.profile(), &target.video_id)
             .ok()
             .flatten();
-        let resume_ms = progress
-            .filter(|&(pos, dur)| {
-                pos > 0 && (dur == 0 || (pos as f64) < dur as f64 * FINISHED_RATIO)
-            })
-            .map(|(pos, _)| pos as u64);
+        let resume_ms = resume_point(progress);
         let mut state = State::new(candidates, resume_ms);
         // The last session's length: a torrent's rate before the player
         // reports this one's (plans/streaming-window.md 2.2).
@@ -1486,7 +1482,13 @@ async fn resolve_next(
                     let attempt = lock(&state).snapshot.attempt;
                     spawn_http_sample(&core, &state, attempt);
                 }
-                remember_stream(&core, &target, &stream);
+                // The torrent file it plays, for "On this device".
+                let played = match &upstream {
+                    #[cfg(feature = "torrent")]
+                    Upstream::Torrent { file, .. } => size.map(|len| (*file, len)),
+                    _ => None,
+                };
+                remember_stream(&core, &target, &stream, played);
                 // The addons ask with the hash; the built-in source lists at
                 // once and ranks with the frame rate. Pending ends with both.
                 let subtitles = async {
@@ -1988,7 +1990,7 @@ async fn open_torrent(
         // piece verifies only whole, long after its first blocks.
         let progress = || async {
             let s = engine.stats(torrent).await.ok()?;
-            publish_start(run, sample(&s, info.len));
+            publish_start(run, sample(&s));
             Some(Progress {
                 received: s.received_bytes,
                 unchoked: s.unchoked_ms.is_some(),
@@ -2323,10 +2325,11 @@ fn mb(bytes: u64) -> String {
 }
 
 /// A torrent's start as its stats say: the details are in; connecting
-/// until a peer unchoked or sent.
+/// until a peer unchoked or sent; of the start, what the engine counts of
+/// the focused range's Ready set (its blocking window and the file's
+/// index, in whole pieces).
 #[cfg(feature = "torrent")]
-fn sample(stats: &mq_engine::TorrentStats, len: u64) -> Sample {
-    let (have, need) = start_bytes(stats, len);
+fn sample(stats: &mq_engine::TorrentStats) -> Sample {
     let sending = stats.unchoked_ms.is_some() || stats.received_bytes > 0;
     Sample {
         stage: if sending {
@@ -2335,20 +2338,10 @@ fn sample(stats: &mq_engine::TorrentStats, len: u64) -> Sample {
             StartStage::Connecting
         },
         peers: stats.peers as u32,
-        have,
-        need,
+        have: stats.start_have,
+        need: stats.start_need,
         rate: stats.down_bytes_per_s,
     }
-}
-
-/// What of the start Ready waits for is in, and all of it: the payload
-/// received over Stremio's estimate of the start (0.8 % of the file, 2 to
-/// 8 MiB, design/reference/stremio.md), until the engine counts its Ready
-/// set itself.
-#[cfg(feature = "torrent")]
-fn start_bytes(stats: &mq_engine::TorrentStats, len: u64) -> (u64, u64) {
-    let need = (len / 125).clamp(2 << 20, 8 << 20);
-    (stats.received_bytes.min(need), need)
 }
 
 /// `work`, with `tick` once a second while it runs (the first at once).
@@ -3412,14 +3405,37 @@ pub(crate) fn aired(video: &stremio_core::types::resource::Video, now_ms: i64) -
         .is_none_or(|r| r.timestamp_millis() <= now_ms)
 }
 
+/// Where a play of a video resumes, from its saved `(position, duration)`:
+/// none at its start or once it is finished.
+fn resume_point(progress: Option<(i64, i64)>) -> Option<u64> {
+    progress
+        .filter(|&(pos, dur)| pos > 0 && (dur == 0 || (pos as f64) < dur as f64 * FINISHED_RATIO))
+        .map(|(pos, _)| pos as u64)
+}
+
 /// Keeps the stream that started playing for this title, so Versions for its
-/// next episode prefers the same release line.
-fn remember_stream(core: &Core, target: &PlayTarget, stream: &ParsedStream) {
+/// next episode prefers the same release line; for a torrent, the file it
+/// played (`played`: its index and length) and the video, for "On this
+/// device" (`kept_start`).
+fn remember_stream(
+    core: &Core,
+    target: &PlayTarget,
+    stream: &ParsedStream,
+    played: Option<(usize, u64)>,
+) {
     let mut memory = serde_json::json!({
         "key": stream.key,
         "addonId": stream.addon_id,
         "release": stream.filename.as_deref().unwrap_or(&stream.raw_name),
     });
+    if let (Some((file, len)), Source::Torrent { info_hash, .. }) = (played, &stream.source) {
+        memory["torrent"] = serde_json::json!({
+            "hash": info_hash.to_ascii_lowercase(),
+            "file": file,
+            "len": len,
+            "videoId": target.video_id,
+        });
+    }
     // The user's subtitle choice for the title stays.
     if let Some(choice) = remembered_subtitle(core, target) {
         memory["subtitle"] = choice.into();
@@ -3433,6 +3449,47 @@ fn remember_stream(core: &Core, target: &PlayTarget, stream: &ParsedStream) {
     ) {
         tracing::warn!("stream memory write failed: {e}");
     }
+}
+
+/// The core's words for a version, or a title, that starts from what this
+/// device keeps (plans/player-polish.md 2b).
+pub(crate) const ON_DEVICE: &str = "On this device";
+
+/// The key of the stream `item_id` last played for `video_id`, when it is a
+/// torrent whose start at the video's resume point this device holds: its
+/// details and what Ready waits on there are on disk (`Engine::cached`), so
+/// it starts with no peer. The engine starts for it only when the title's
+/// memory names such a torrent.
+#[cfg(feature = "torrent")]
+pub(crate) async fn kept_start(core: &Core, item_id: &str, video_id: &str) -> Option<String> {
+    let memory = core
+        .library()
+        .stream_memory(core.profile(), item_id)
+        .ok()??;
+    let memory: serde_json::Value = serde_json::from_str(&memory).ok()?;
+    let kept = &memory["torrent"];
+    if kept["videoId"].as_str() != Some(video_id) {
+        return None;
+    }
+    let (hash, file, len) = (
+        kept["hash"].as_str()?,
+        kept["file"].as_u64()?,
+        kept["len"].as_u64()?,
+    );
+    let progress = core.library().progress(core.profile(), video_id).ok()?;
+    // As the playback places it: the file over the saved duration.
+    let at = match (resume_point(progress), progress) {
+        (Some(pos), Some((_, dur))) if dur > 0 => {
+            (u128::from(pos) * u128::from(len) / dur as u128) as u64
+        }
+        _ => 0,
+    };
+    let engine = core.torrent_engine().await.ok()?;
+    let cached = engine.cached(hash, file as usize, at).await?;
+    cached
+        .ready
+        .then(|| memory["key"].as_str().map(str::to_owned))
+        .flatten()
 }
 
 #[cfg(test)]
@@ -4134,6 +4191,30 @@ mod tests {
         let start = s.snapshot.start.clone().unwrap();
         assert_eq!(start.progress, last, "never back");
         assert_eq!(start.caption.as_deref(), Some("Trying source 2 of 2"));
+    }
+
+    /// A torrent's fill is the engine's count of what Ready waits on, not
+    /// the payload received; it buffers once a peer unchoked or sent.
+    #[cfg(feature = "torrent")]
+    #[test]
+    fn a_torrents_start_is_the_engines_ready_set() {
+        let mut stats = mq_engine::TorrentStats {
+            peers: 3,
+            start_need: 3 << 20,
+            start_have: 1 << 20,
+            received_bytes: 9 << 20,
+            down_bytes_per_s: 5,
+            ..Default::default()
+        };
+        let x = sample(&stats);
+        assert_eq!(
+            (x.stage, x.peers, x.have, x.need, x.rate),
+            (StartStage::Buffering, 3, 1 << 20, 3 << 20, 5)
+        );
+        stats.received_bytes = 0;
+        assert_eq!(sample(&stats).stage, StartStage::Connecting);
+        stats.unchoked_ms = Some(1);
+        assert_eq!(sample(&stats).stage, StartStage::Buffering);
     }
 
     /// Start-latency 4.1: a torrent that did not start is not waited on

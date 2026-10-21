@@ -1037,8 +1037,48 @@ async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) 
     items.extend(next_up.into_iter().flatten());
     core.ratings().fill(items.iter_mut().map(|(_, t)| t));
     let titles = ratings::titles(items.iter().map(|(_, t)| t));
+    #[cfg(feature = "torrent")]
+    let shown = items.clone();
     apply_continue(core, rows, items);
+    #[cfg(feature = "torrent")]
+    kept_on_device(core, rows, shown).await;
     titles
+}
+
+/// A video in progress whose torrent starts from what this device keeps
+/// says so after its caption: "S1:E3 · 12 min left · On this device"
+/// (plans/player-polish.md 2b). Asked once the tiles show, so the engine a
+/// title's memory may start never holds them back.
+#[cfg(feature = "torrent")]
+async fn kept_on_device(
+    core: &Core,
+    rows: &Mutex<ObservableVector<HomeRow>>,
+    mut items: Vec<(i64, Tile)>,
+) {
+    let kept = futures_util::future::join_all(items.iter().map(|(_, t)| async move {
+        match &t.video_id {
+            Some(video) if t.progress.is_some() => {
+                crate::views::playback::kept_start(core, &t.id, video)
+                    .await
+                    .is_some()
+            }
+            _ => false,
+        }
+    }))
+    .await;
+    if !kept.contains(&true) {
+        return;
+    }
+    for ((_, tile), kept) in items.iter_mut().zip(kept) {
+        if kept {
+            let words = crate::views::playback::ON_DEVICE;
+            tile.release_info = Some(match tile.release_info.take() {
+                Some(caption) => format!("{caption} \u{b7} {words}"),
+                None => words.to_owned(),
+            });
+        }
+    }
+    apply_continue(core, rows, items);
 }
 
 /// Puts the newest tiles in the Continue Watching row, adding or removing

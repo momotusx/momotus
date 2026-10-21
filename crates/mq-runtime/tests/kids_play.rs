@@ -785,6 +785,49 @@ async fn a_resume_has_its_own_point_in_at_ready() {
     assert!(have(piece(32 * MIB)).await, "the resume point");
 }
 
+/// Plans/player-polish.md 2b: a title whose last torrent this device holds
+/// at its resume point says so, in its Versions row and its Continue
+/// Watching caption; before it played here, nothing says so.
+#[cfg(feature = "torrent")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_title_kept_on_this_device_says_so() {
+    let (s, _t, _owner, kid, found) = torrent_kid().await;
+    let versions = || VersionsView::open_checked(&kid, params("movie", "tt1", ""), Some("tt1"));
+    let before = settled(&versions()).await;
+    assert_eq!(before.recommended.unwrap().on_device, None);
+    let view = PlaybackView::open(&kid, found, target("movie", "tt1", "tt1"));
+    let url = ready(&view).await;
+    let len = s.movie.len() as u64;
+    assert!(read_range(&url, 0, len).await == s.movie, "the whole film");
+    view.report_progress(60_000, 120_000, false);
+    drop(view);
+    let after = versions();
+    until("the row says it is on this device", || {
+        after
+            .snapshot()
+            .recommended
+            .is_some_and(|r| r.on_device.as_deref() == Some("On this device"))
+    })
+    .await;
+    let home = mq_runtime::HomeView::open(&kid);
+    let caption = || {
+        home.snapshot()
+            .rows
+            .iter()
+            .find(|r| r.row_id == mq_runtime::views::home::CONTINUE_ROW_ID)
+            .and_then(|r| r.tiles.iter().find(|t| t.id == "tt1").cloned())
+            .and_then(|t| t.release_info)
+    };
+    until("the caption says it is on this device", || {
+        caption().is_some_and(|c| c.ends_with(" \u{b7} On this device"))
+    })
+    .await;
+    assert_eq!(
+        caption().as_deref(),
+        Some("1 min left \u{b7} On this device")
+    );
+}
+
 /// A resume on a small device (review P1-2): the torrent's own folder
 /// counts in R, so what the trim left is room the resume plays in. With
 /// free space short of the window's floor but for that folder, the second

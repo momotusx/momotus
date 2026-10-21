@@ -59,6 +59,10 @@ pub struct VersionRow {
     pub bitrate_mbps: Option<f32>,
     /// The sort key, for a details panel and tests.
     pub score: RankKey,
+    /// "On this device": the version last played for this video, and this
+    /// device holds its start at the resume point, so it starts with no
+    /// peer (plans/player-polish.md 2b). Show it as the row's line.
+    pub on_device: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -229,6 +233,8 @@ struct State {
     prefetched: bool,
     /// Live seeder asks still on the way.
     counting: usize,
+    /// The key of the version that starts from what this device keeps.
+    on_device: Option<String>,
 }
 
 pub struct VersionsView {
@@ -659,6 +665,7 @@ impl VersionsView {
             prefetched: false,
             counting: 0,
             ranking: None,
+            on_device: None,
         }));
         let snapshot = SharedObservable::new(render(&lock(&state)));
         let mut tasks = JoinSet::new();
@@ -671,6 +678,13 @@ impl VersionsView {
         tasks.spawn(follow_network(
             core.clone(),
             core.library().subscribe(),
+            state.clone(),
+            snapshot.clone(),
+        ));
+        #[cfg(feature = "torrent")]
+        tasks.spawn(kept_start(
+            core.clone(),
+            ranking.clone(),
             state.clone(),
             snapshot.clone(),
         ));
@@ -720,6 +734,7 @@ impl VersionsView {
             prefetched: true,
             counting: 0,
             ranking: None,
+            on_device: None,
         };
         Self {
             core: core.clone(),
@@ -899,6 +914,24 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 fn eligible(core: &Core, path: &ResourcePath) -> Vec<InstalledAddon> {
     let addons = core.installed_addons().unwrap_or_default();
     addons.into_iter().filter(|a| a.supports(path)).collect()
+}
+
+/// The version last played for this video says "On this device" when this
+/// device holds its start (`playback::kept_start`).
+#[cfg(feature = "torrent")]
+async fn kept_start(
+    core: Core,
+    ranking: Arc<Ranking>,
+    state: Arc<Mutex<State>>,
+    snapshot: SharedObservable<VersionsSnapshot>,
+) {
+    let video = &ranking.params.video_id;
+    let Some(key) = crate::views::playback::kept_start(&core, &ranking.item_id, video).await else {
+        return;
+    };
+    let mut s = lock(&state);
+    s.on_device = Some(key);
+    snapshot.set(render(&s));
 }
 
 /// Asks the installed stream addons, and asks again from the start whenever
@@ -1461,7 +1494,11 @@ fn blocked(s: &State, ranking: &Ranking) -> Option<BlockedVersions> {
         kids: ranking.kids.as_deref(),
         conditions: &c,
     };
-    let rows = rank(streams, &input).rows.iter().map(row_dto).collect();
+    let rows = rank(streams, &input)
+        .rows
+        .iter()
+        .map(|r| row_dto(r, None))
+        .collect();
     Some(BlockedVersions {
         reason,
         count,
@@ -1600,6 +1637,7 @@ fn names(installs: &[(Url, String)]) -> Vec<String> {
 }
 
 fn render(s: &State) -> VersionsSnapshot {
+    let kept = s.on_device.as_deref();
     let recommended_key = s.recommended.as_ref().map(|r| r.stream.key.clone());
     // A row whose chain holds the pick is the pick's own row, folded or
     // not: shown once, as the pick (code review 2026-10-20 r2 P3-2).
@@ -1613,7 +1651,7 @@ fn render(s: &State) -> VersionsSnapshot {
         .rows
         .iter()
         .filter(|r| !holds_pick(r))
-        .map(row_dto)
+        .map(|r| row_dto(r, kept))
         .collect();
     let mut by_reason: Vec<(HideReason, u32)> = Vec::new();
     for h in &s.ranked.hidden {
@@ -1626,7 +1664,7 @@ fn render(s: &State) -> VersionsSnapshot {
         conditions: s.conditions.clone(),
         blocked: s.blocked.clone(),
         note: s.note.clone(),
-        recommended: s.recommended.as_ref().map(row_dto),
+        recommended: s.recommended.as_ref().map(|r| row_dto(r, kept)),
         rows,
         hidden: HiddenSummary {
             count: s.ranked.hidden.len() as u32,
@@ -1659,8 +1697,13 @@ fn nobody_sharing(s: &State) -> bool {
     !s.ranked.rows.is_empty() && s.ranked.rows.iter().all(dead)
 }
 
-fn row_dto(r: &RankedRow) -> VersionRow {
+/// The row for `r`; `kept` is the key of the version that starts from what
+/// this device keeps, the row's own or one in its chain.
+fn row_dto(r: &RankedRow, kept: Option<&str>) -> VersionRow {
     let s = &r.stream;
+    let on_device = std::iter::once(s)
+        .chain(&r.failover)
+        .any(|st| Some(st.key.as_str()) == kept);
     let rel = &s.release;
     VersionRow {
         key: s.key.clone(),
@@ -1685,6 +1728,7 @@ fn row_dto(r: &RankedRow) -> VersionRow {
         source_class: r.class,
         bitrate_mbps: r.bitrate_mbps,
         score: r.key,
+        on_device: on_device.then(|| crate::views::playback::ON_DEVICE.to_owned()),
     }
 }
 
