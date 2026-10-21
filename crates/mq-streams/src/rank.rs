@@ -81,7 +81,7 @@ fn gate(s: &ParsedStream, input: &RankInput<'_>) -> Result<SourceClass, HideReas
     // The engine fetches one episode of a pack, so the pack guard's size
     // is what must fit (code review r2 P2-4).
     if class == SourceClass::Swarm
-        && let (Some(free), Some(size)) = (input.conditions.free_bytes, weight(s, input).size)
+        && let (Some(free), Some(size)) = (input.conditions.free_bytes, file_size(s, input))
         && room(s, input, free, size) == Room::None
     {
         return Err(HideReason::NoSpace);
@@ -105,13 +105,38 @@ fn window_of(s: &ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Opt
     if class != SourceClass::Swarm {
         return None;
     }
-    let room = room(
-        s,
-        input,
-        input.conditions.free_bytes?,
-        weight(s, input).size?,
-    );
+    let room = room(s, input, input.conditions.free_bytes?, file_size(s, input)?);
     matches!(room, Room::Window { .. }).then_some(room)
+}
+
+/// The release is a season pack (or names several episodes) and the target
+/// one episode of it.
+fn pack(s: &ParsedStream, input: &RankInput<'_>) -> bool {
+    let r = &s.release;
+    let episode = input.target.season.is_some() || input.target.episode.is_some();
+    episode
+        && (r.complete || r.episodes.len() >= 2 || (r.episodes.is_empty() && !r.seasons.is_empty()))
+}
+
+/// The bytes of the file a row plays, which its room is judged by (3.1). A
+/// pack row lists the pack: the file is one episode's share, by the
+/// episodes it names, else by the season's count; unknown otherwise (the
+/// app then decides at open). Other rows weigh as the pack guard says.
+fn file_size(s: &ParsedStream, input: &RankInput<'_>) -> Option<u64> {
+    if !pack(s, input) {
+        return weight(s, input).size;
+    }
+    let named = s.release.episodes.len() as u64;
+    let episodes = if named >= 2 {
+        Some(named)
+    } else {
+        input
+            .conditions
+            .episodes_in_season
+            .filter(|n| *n >= 2)
+            .map(u64::from)
+    };
+    Some(s.size_bytes? / episodes?)
 }
 
 fn room(s: &ParsedStream, input: &RankInput<'_>, free: u64, size: u64) -> Room {
@@ -138,19 +163,46 @@ fn room(s: &ParsedStream, input: &RankInput<'_>, free: u64, size: u64) -> Room {
     if !c.window {
         return Room::None;
     }
-    // The rate the app plays it with: this file's size over the runtime
-    // when known (a pack's share of it), else the guess (2.2).
-    let w = weight(s, input);
-    let runtime = w.mbps.and(c.runtime_s).map(u64::from);
-    i.bitrate = window_rate(s, w.size.unwrap_or(size), episode, runtime);
-    match mq_engine_sched::window_plan(&mq_engine_sched::Config::standard(), i) {
-        Some(p) if p.ahead_secs(i.bitrate) >= WINDOW_AHEAD_S => Room::Window {
-            ahead_s: p.ahead_secs(i.bitrate),
+    // The rate the app plays it with: the file over the runtime when known
+    // (a pack's episode over the episode's), else the guess (2.2).
+    let runtime = if pack(s, input) {
+        c.runtime_s
+    } else {
+        weight(s, input).mbps.and(c.runtime_s)
+    };
+    let runtime = runtime.filter(|r| *r > 0).map(u64::from);
+    i.bitrate = window_rate(s, size, episode, runtime);
+    let Some(p) = mq_engine_sched::window_plan(&mq_engine_sched::Config::standard(), i) else {
+        return Room::None;
+    };
+    // The engine plans at the guess when the runtime is unknown, and a
+    // remux can stream faster than its guess: the seconds ahead are then
+    // counted at no less than the file over the shortest runtime of its
+    // kind, so the line never promises what a faster file would not hold
+    // (review r1 B P2-2).
+    let rate = match runtime {
+        Some(_) => i.bitrate,
+        None => i.bitrate.max(
+            size / if episode {
+                SHORTEST_EPISODE_S
+            } else {
+                SHORTEST_FILM_S
+            },
+        ),
+    };
+    match p.ahead_secs(rate) {
+        ahead_s if ahead_s >= WINDOW_AHEAD_S => Room::Window {
+            ahead_s,
             budget: p.budget,
         },
         _ => Room::None,
     }
 }
+
+/// The shortest runtimes a file with no runtime is counted at: a feature
+/// film and an episode.
+const SHORTEST_FILM_S: u64 = 75 * 60;
+const SHORTEST_EPISODE_S: u64 = 20 * 60;
 
 #[cfg(test)]
 mod tests {
@@ -911,7 +963,8 @@ fn line(
     if let Some(Room::Window { ahead_s, budget }) = window {
         return ReasonLine::Buffer {
             seeders: s.seeders,
-            size_bytes: size,
+            // The file it plays: a pack's episode, not the pack.
+            size_bytes: file_size(s, input),
             ahead_min: (!input.conditions.metered).then(|| (ahead_s / 60).min(10) as u32),
             budget_bytes: budget,
         };

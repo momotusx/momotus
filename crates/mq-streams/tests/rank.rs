@@ -1178,24 +1178,108 @@ fn a_file_that_fits_ranks_as_without_windows() {
     assert_eq!(lines(&a), lines(&b));
 }
 
-/// Phase 3 test f: with no runtime, a window's rate is never under the
-/// file over 3 h: a 40 GiB 1080p WEB (guessed at 10 Mbit/s) is sized at
-/// 40 GiB over 3 h.
+/// Phase 3 test f: with no runtime, the rate a window is planned at is
+/// never under the file over 3 h: a 40 GiB 1080p WEB (guessed at 10
+/// Mbit/s) is planned at 40 GiB over 3 h.
 #[test]
-fn with_no_runtime_a_window_is_sized_at_the_file_over_three_hours() {
-    let web = "Movie.2020.1080p.WEB.x264-GRP";
-    let unknown = line_of(
-        &windowed_case(3 << 30, None, DeviceCaps::basic_1080p()),
-        web,
-        40.0,
+fn with_no_runtime_a_window_is_planned_at_the_file_over_three_hours() {
+    let size = 40u64 << 30;
+    let ranked = Case::stick().rank(vec![seeded(1, "Movie.2020.1080p.WEB.x264-GRP", 300, 40.0)]);
+    let web = &ranked.rows[0].stream;
+    assert_eq!(window_rate(web, size, false, None), size / 10_800);
+    assert_eq!(window_rate(web, size, false, Some(7200)), size / 7200);
+}
+
+/// Review r1 B P2-2: with no runtime the engine plans at the guess, which a
+/// remux can stream faster than; the line counts its seconds at no less
+/// than the file over 75 min, so a 2 h remux at 40 Mbit/s (1080p) or 80
+/// Mbit/s (2160p) never says more minutes than its window holds at its
+/// real rate.
+#[test]
+fn with_no_runtime_the_minutes_never_pass_what_a_remux_holds() {
+    let cases = [
+        (
+            "Movie.2020.1080p.BluRay.REMUX.AVC-GRP",
+            33.5,
+            4u64 << 30,
+            DeviceCaps::basic_1080p(),
+        ),
+        (
+            "Movie.2020.2160p.BluRay.REMUX.HEVC.DV-GRP",
+            67.1,
+            6 << 30,
+            caps_4k_dv(),
+        ),
+    ];
+    // A line fast enough for both (150 Mbit/s), so neither may pause.
+    let case = |free: u64, runtime: Option<u32>, caps: DeviceCaps| {
+        let mut c = windowed_case(free, runtime, caps);
+        c.conditions.p2p.mbps = 150.0;
+        c
+    };
+    for (release, gb, free, caps) in cases {
+        let real = minutes(&line_of(&case(free, Some(7200), caps.clone()), release, gb));
+        let guessed = minutes(&line_of(&case(free, None, caps), release, gb));
+        assert!(
+            real.is_some() && guessed.is_some(),
+            "{release}: {real:?} {guessed:?}"
+        );
+        assert!(
+            guessed <= real,
+            "{release}: {guessed:?} minutes said, {real:?} held"
+        );
+    }
+}
+
+/// Review r1 B P2-3: a season pack row lists the pack (12 GiB of ten
+/// episodes); its room and its line are the episode's (1.2 GiB): it plays
+/// whole where the episode fits, says the episode's size and minutes where
+/// it does not, and says no minutes when the episode count is unknown.
+#[test]
+fn a_season_pack_row_is_judged_by_the_episode_it_plays() {
+    let pack = || vec![seeded(1, "Show.S01.1080p.WEB.x264-GRP", 300, 12.0)];
+    let case = |free: u64, episodes: Option<u32>| Case {
+        target: Target {
+            title: "Show".into(),
+            year: None,
+            season: Some(1),
+            episode: Some(3),
+        },
+        // A line the pack's 38 Mbit/s keeps up with, so no warning wins.
+        conditions: Conditions {
+            runtime_s: Some(2700),
+            episodes_in_season: episodes,
+            free_bytes: Some(free),
+            window: true,
+            p2p: Speed {
+                mbps: 60.0,
+                samples: 3,
+            },
+            ..engine().clone()
+        },
+        ..Case::stick()
+    };
+    let episode = (12 << 30) / 10;
+    // 8 GiB free: the episode fits whole, so no window is promised (the
+    // pack's size still says "Large file", as the ranking weighs it).
+    let whole = case(8 << 30, Some(10)).rank(pack());
+    assert_ne!(
+        kind(&whole.rows[0].line),
+        "buffer",
+        "{:?}",
+        whole.rows[0].line
     );
-    let three_h = line_of(
-        &windowed_case(3 << 30, Some(10_800), DeviceCaps::basic_1080p()),
-        web,
-        40.0,
+    // 1.5 GiB free: the episode plays in a window, at its own size.
+    let windowed = case(3 << 29, Some(10)).rank(pack());
+    let line = &windowed.rows[0].line;
+    assert!(
+        matches!(line, ReasonLine::Buffer { size_bytes: Some(b), .. } if *b == episode),
+        "{line:?}"
     );
-    assert_eq!(minutes(&unknown), minutes(&three_h));
-    assert!(minutes(&unknown).is_some());
+    // The season's count unknown: no promise, and no hiding either.
+    let unknown = case(3 << 29, None).rank(pack());
+    assert_eq!(unknown.rows.len(), 1, "{:?}", unknown.hidden);
+    assert_ne!(kind(&unknown.rows[0].line), "buffer");
 }
 
 /// Phase 3 tests g and h: under the default limit a windowed row passes
