@@ -10,8 +10,8 @@
 //! that changes it returns it and publishes nothing until the app stored it.
 
 use crate::roster::{
-    Bundle, Digest32, Entry, Hex, Id, Kind, MemberSecret, Role, Roster, RosterError, TokenRequest,
-    open_form, open_name,
+    Bundle, Digest32, Entry, Hex, Id, Kind, Member, MemberSecret, Role, Roster, RosterError,
+    TokenRequest, open_form, open_name,
 };
 use crate::seal::{AccountKey, SealError};
 use crate::wire::{
@@ -46,6 +46,8 @@ const RELAY_PIN: &str = "relay:";
 /// every call fails with `Fork` until `use_server_roster` settles it. The
 /// relay's history as read then is kept under `fork:<genesis>`.
 const FORK: &str = "fork";
+/// Roster changes other members made, kept until a round reports them.
+const ANNOUNCE: &str = "announce";
 
 /// Shape version of register values this build writes; newer ones are
 /// skipped until the app updates.
@@ -153,6 +155,96 @@ pub struct SyncReport {
     /// The account's deletion waits for this time (D14): show it with
     /// Cancel on every device. From the round's last relay answer.
     pub deletion: Option<ScheduledDeletion>,
+    /// Roster changes another member made since this device joined, each
+    /// reported once (3.2): show each until OK.
+    pub announcements: Vec<Announcement>,
+}
+
+/// A device that joined, a passkey or a recovery kit added, or a member
+/// removed, by another member than this device.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+pub struct Announcement {
+    pub kind: Announced,
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub id: Id,
+    /// The member that vouched for it, or removed it (itself when a device
+    /// left).
+    #[cfg_attr(feature = "ts", ts(type = "string"))]
+    pub by: Id,
+    /// A device's name, or a kit's label.
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub enum Announced {
+    Device,
+    Passkey,
+    Kit,
+    Removed,
+}
+
+/// What one roster entry by `author` changed that this device should hear
+/// of: nothing before this device was a member, and nothing it did or
+/// vouched for itself.
+fn announcements(
+    before: &BTreeMap<Id, Member>,
+    after: &BTreeMap<Id, Member>,
+    author: Id,
+    me: Id,
+    keys: &Bundle,
+) -> Vec<Announcement> {
+    if !before.contains_key(&me) || author == me {
+        return Vec::new();
+    }
+    let name = |id: &Id, m: &Member| m.name.as_deref().and_then(|n| open_name(keys, id, n));
+    let added = after
+        .iter()
+        .filter(|(id, _)| !before.contains_key(id))
+        .filter_map(|(id, m)| {
+            let by = m.sponsor.filter(|by| *by != me)?;
+            let kind = match (m.role, m.passkey) {
+                (Role::Device, _) => Announced::Device,
+                (Role::Kit, true) => Announced::Passkey,
+                (Role::Kit, false) => Announced::Kit,
+            };
+            Some(Announcement {
+                kind,
+                id: *id,
+                by,
+                name: name(id, m),
+            })
+        });
+    let removed = before
+        .iter()
+        .filter(|(id, _)| !after.contains_key(id))
+        .map(|(id, m)| Announcement {
+            kind: Announced::Removed,
+            id: *id,
+            by: author,
+            name: name(id, m),
+        });
+    added.chain(removed).collect()
+}
+
+/// The roster changes waiting for a report.
+fn queued(library: &Library) -> Vec<Announcement> {
+    library
+        .sync_state(ANNOUNCE)
+        .ok()
+        .flatten()
+        .and_then(|q| serde_json::from_str(&q).ok())
+        .unwrap_or_default()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -769,6 +861,30 @@ impl<'a> Session<'a> {
         &self.record.server
     }
 
+    /// Queues what `entry` changed for the next round's report, before the
+    /// entry is stored: a crash between the two repeats a notice, never
+    /// loses one.
+    fn announce(&self, before: &BTreeMap<Id, Member>, entry: &Entry) -> Result<(), SyncError> {
+        let Ok(body) = entry.parse() else {
+            return Ok(());
+        };
+        let fresh = announcements(
+            before,
+            self.roster.members(),
+            body.author,
+            self.member.id(),
+            &self.record.keys,
+        );
+        if fresh.is_empty() || !self.persist {
+            return Ok(());
+        }
+        let mut queued = queued(self.library);
+        queued.extend(fresh);
+        let queued = serde_json::to_string(&queued).expect("announcements serialize");
+        self.library.set_sync_state(ANNOUNCE, &queued)?;
+        Ok(())
+    }
+
     fn keep(&mut self, entry: Entry) -> Result<(), SyncError> {
         if self.persist {
             let seq = self.roster.head().map_or(0, |(seq, _)| seq);
@@ -846,8 +962,12 @@ impl<'a> Session<'a> {
             };
             let served = !entries.is_empty();
             for entry in entries {
+                let before = self.roster.members().clone();
                 match self.roster.apply(&entry) {
-                    Ok(()) => self.keep(entry)?,
+                    Ok(()) => {
+                        self.announce(&before, &entry)?;
+                        self.keep(entry)?
+                    }
                     // Not built on this device's head: another history.
                     Err(RosterError::NotNext) => return Err(self.forked().await),
                     Err(e) => {
@@ -973,6 +1093,12 @@ impl<'a> Session<'a> {
 
     pub(crate) fn finish(&self, mut report: SyncReport) -> SyncReport {
         report.fingerprint = self.roster.fingerprint();
+        report.announcements = queued(self.library);
+        if !report.announcements.is_empty()
+            && let Err(e) = self.library.set_sync_state(ANNOUNCE, "[]")
+        {
+            tracing::warn!("could not clear the reported roster changes: {e}");
+        }
         if self.roster.rotation_pending() {
             report.blocked.get_or_insert(Blocked::RotationPending);
         }
