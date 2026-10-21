@@ -397,7 +397,13 @@ async fn a_playback_stopped_at_once_is_trimmed() {
 /// goes on.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_window_set_during_the_trim_stays_and_is_kept() {
-    let mut w = windowed(48 << 20, plan(), None).await;
+    // A first window large enough that nothing leaves before the trim, so
+    // the trim always has a round to hold.
+    let first = WindowPlan {
+        budget: 40 * MIB + APFS_HEAD_BYTES,
+        ..plan()
+    };
+    let mut w = windowed(48 << 20, first, None).await;
     assert!(w.read(0, 16 * MIB).await == w.movie(0, 16 * MIB));
     tokio::time::sleep(Duration::from_millis(1500)).await;
     let gated = sync_log::hold(w.root.path(), Point::Gated);
@@ -408,10 +414,7 @@ async fn a_window_set_during_the_trim_stays_and_is_kept() {
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     let claim = w.engine.claim(w.t, "default").unwrap();
-    let again = WindowPlan {
-        budget: plan().budget + 4 * MIB,
-        ..plan()
-    };
+    let again = plan();
     let window = Window {
         plan: again,
         bitrate: RATE,
@@ -427,8 +430,37 @@ async fn a_window_set_during_the_trim_stays_and_is_kept() {
     assert!(w.read(16 * MIB, len).await == w.movie(16 * MIB, len));
     let s = w.stats().await;
     assert!(s.evict_rounds > rounds, "the new window's keeper: {s:?}");
-    assert!(s.held_bytes.unwrap() <= W + 4 * MIB, "{s:?}");
+    assert!(s.held_bytes.unwrap() <= W, "{s:?}");
     drop(claim);
+}
+
+/// The rate the player gave (`set_rate`) is the window's from then on
+/// (review P1-1): the trim keeps 180 s of it ahead of the position, not
+/// 180 s of the plan's guess.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_trim_keeps_180_s_at_the_rate_the_player_gave() {
+    let first = WindowPlan {
+        budget: 40 * MIB + APFS_HEAD_BYTES,
+        ..plan()
+    };
+    let mut w = windowed(48 << 20, first, None).await;
+    assert!(w.read(30 * MIB, 40 * MIB).await == w.movie(30 * MIB, 40 * MIB));
+    assert!(w.read(20 * MIB, 22 * MIB).await == w.movie(20 * MIB, 22 * MIB));
+    // 180 s at twice the plan's 64 KiB/s reaches 44.5 MiB from 22 MiB; at
+    // the plan's rate it would end at 33.25 MiB.
+    w.engine
+        .set_rate(w.t, w.movie, 2 * RATE, false)
+        .await
+        .unwrap();
+    drop(w.claim.take());
+    until("the trim", || async {
+        w.stats().await.window_bytes.is_none()
+    })
+    .await;
+    for p in [36, 38] {
+        let state = test_hooks::piece_state(&w.engine, w.t, p).await;
+        assert!(state.contains("Some((true,"), "piece {p}: {state}");
+    }
 }
 
 /// Up Next in a pack (review P2-3): a file newly chosen in a live torrent
