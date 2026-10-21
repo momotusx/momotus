@@ -332,7 +332,7 @@ fun TvPlayer(
                         // While the controls are hidden the first key brings them back, except select while a
                         // Skip button shows (that presses it), and Left and Right: they seek at once, as on the
                         // Apple TV app, with the focus on the bar so a held key goes on scrubbing.
-                        if (live && !osd && !opening) {
+                        if (live && !osd) {
                             val skip = segment
                             val seek = hiddenSeekMs(event.key)
                             if (showSkip && skip != null && event.key in selectKeys) {
