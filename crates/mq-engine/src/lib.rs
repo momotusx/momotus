@@ -864,12 +864,15 @@ impl Engine {
             let live = t.live.try_lock().ok()?;
             live.as_ref()?.managed.ext_have_pieces()
         });
-        let bytes = loaded.map(|t| t.torrent_bytes.clone());
+        let shape = loaded.map(|t| Shape {
+            piece_len: t.piece_len,
+            files: t.files.clone(),
+        });
         let data_dir = self.inner.cfg.data_dir.clone();
-        tokio::task::spawn_blocking(move || match bytes {
-            Some(bytes) => Some(cached_from(
+        tokio::task::spawn_blocking(move || match shape {
+            Some(shape) => Some(cached_from(
                 &data_dir.join(&hex),
-                &bytes,
+                &shape,
                 live_have,
                 file,
                 offset,
@@ -1900,62 +1903,69 @@ pub fn cached_on_disk(
 ) -> Option<Cached> {
     let hex = hex_hash(info_hash.trim())?;
     let dir = data_dir.join(&hex);
-    // A list of rows asks again and again: an answer stands while the
-    // folder's details and data folder (length, change time) and its
-    // bitfield have not changed. The bitfield by its bytes: the fork
-    // writes it through a mapping, which need not touch its change time.
-    let have = std::fs::read(dir.with_extension(HAVE)).unwrap_or_default();
-    let meta = |p: PathBuf| {
-        std::fs::metadata(p)
-            .ok()
-            .map(|m| (m.len(), m.modified().ok()))
-    };
-    let stamp = (
-        meta(dir.with_extension(TORRENT)),
-        meta(dir.clone()),
-        std::hash::BuildHasher::hash_one(
-            &std::hash::BuildHasherDefault::<std::hash::DefaultHasher>::default(),
-            &have,
-        ),
-    );
-    let key = (dir.clone(), file, offset);
-    if let Some((s, answer)) = lock(&ON_DISK).get(&key)
+    let shape = kept_shape(&dir, &hex)?;
+    Some(cached_from(&dir, &shape, None, file, offset))
+}
+
+/// What the on-device check needs of a torrent's details.
+struct Shape {
+    piece_len: u32,
+    files: Vec<FileInfo>,
+}
+
+/// The shape of the details kept beside `dir`, parsed once per version of
+/// the file (its length and change time): a list of rows asks again and
+/// again, and a parse hashes the whole info. Everything else the check
+/// reads afresh every time. Blocking.
+fn kept_shape(dir: &Path, hex: &str) -> Option<Arc<Shape>> {
+    let path = dir.with_extension(TORRENT);
+    let meta = std::fs::metadata(&path).ok()?;
+    let stamp = (meta.len(), meta.modified().ok());
+    if let Some((s, shape)) = lock(&SHAPES).get(&path)
         && *s == stamp
     {
-        return *answer;
+        return shape.clone();
     }
-    let answer = kept_torrent(&dir.with_extension(TORRENT), &hex)
-        .map(|bytes| cached_from(&dir, &bytes, Some(have), file, offset));
-    let mut memo = lock(&ON_DISK);
-    // ponytail: dropped whole at 1024 answers, an LRU if rows ever need more.
+    let shape = kept_torrent(&path, hex)
+        .and_then(|bytes| {
+            let info = librqbit::torrent_from_bytes(&bytes)
+                .ok()?
+                .info
+                .data
+                .validate()
+                .ok()?;
+            Some(Shape {
+                piece_len: info.lengths().default_piece_length(),
+                files: file_infos(&info),
+            })
+        })
+        .map(Arc::new);
+    let mut memo = lock(&SHAPES);
+    // ponytail: dropped whole at 1024 torrents, an LRU if a device ever
+    // keeps more.
     if memo.len() >= 1024 {
         memo.clear();
     }
-    memo.insert(key, (stamp, answer));
-    answer
+    memo.insert(path, (stamp, shape.clone()));
+    shape
 }
 
-/// A folder's `.torrent` and data folder (length and change time) and a
-/// hash of its `.have`.
-type Meta = Option<(u64, Option<std::time::SystemTime>)>;
-type Stamp = (Meta, Meta, u64);
-
-/// [`cached_on_disk`]'s answers by folder, file and offset, with the stamp
-/// they were read at.
+/// [`kept_shape`]'s parses by `.torrent` path, with the length and change
+/// time they were read at (a file that does not parse is kept as `None`).
 #[allow(clippy::type_complexity)]
-static ON_DISK: std::sync::LazyLock<
-    Mutex<HashMap<(PathBuf, usize, u64), (Stamp, Option<Cached>)>>,
+static SHAPES: std::sync::LazyLock<
+    Mutex<HashMap<PathBuf, ((u64, Option<std::time::SystemTime>), Option<Arc<Shape>>)>>,
 > = std::sync::LazyLock::new(Mutex::default);
 
 /// A `.torrent` larger than this is not read: a v1 file for a terabyte in
 /// 4 MiB pieces holds 5 MB of hashes.
 const MAX_TORRENT: u64 = 16 << 20;
 
-/// The torrent of `torrent` in `dir` at `offset` of `file`, from `have` (a
+/// The torrent of `shape` in `dir` at `offset` of `file`, from `have` (a
 /// live bitfield) or, with none, its `.have`. Blocking.
 fn cached_from(
     dir: &Path,
-    torrent: &[u8],
+    shape: &Shape,
     have: Option<Vec<u8>>,
     file: usize,
     offset: u64,
@@ -1965,7 +1975,7 @@ fn cached_from(
     // in readahead and request depths only.
     let sched = SchedConfig::standard();
     Cached {
-        ready: ready_on_disk(dir, torrent, &have, sched, file, offset),
+        ready: ready_on_disk(dir, shape, &have, sched, file, offset),
     }
 }
 
@@ -1975,25 +1985,21 @@ fn cached_from(
 /// disk in `dir`. Blocking: reads the disk.
 fn ready_on_disk(
     dir: &Path,
-    torrent: &[u8],
+    shape: &Shape,
     have: &[u8],
     sched: SchedConfig,
     file: usize,
     offset: u64,
 ) -> bool {
-    let Some((piece_len, files)) = librqbit::torrent_from_bytes(torrent)
-        .ok()
-        .and_then(|meta| meta.info.data.validate().ok())
-        .map(|info| (info.lengths().default_piece_length(), file_infos(&info)))
-    else {
+    let (piece_len, files) = (shape.piece_len, &shape.files);
+    let Some(f) = files.get(file) else {
         return false;
     };
-    let Some(path) = files.get(file).map(|f| dir.join(&f.path)) else {
-        return false;
-    };
-    // A `.have` whose data is gone (a purge, a crash in an eviction) is
-    // no start (review P2-4).
-    if !path.is_file() {
+    let path = dir.join(&f.path);
+    // A `.have` whose data is gone or cut short (a purge, a crash in an
+    // eviction) is no start: the engine gives a file its whole length when
+    // it starts.
+    if !std::fs::metadata(&path).is_ok_and(|m| m.is_file() && m.len() == f.len) {
         return false;
     }
     let lens: Vec<u64> = files.iter().map(|f| f.len).collect();
@@ -2464,9 +2470,11 @@ mod tests {
     const MIB: u64 = 1 << 20;
 
     /// A torrent of one file kept in `data_dir` as a playback leaves it:
-    /// `name` of `len` bytes in `piece` pieces, its data file starting with
-    /// `head` (all of it written with `whole`), and a `.have` with the
-    /// pieces `have`. Its info hash.
+    /// `name` of `len` bytes in `piece` pieces (a path such as `Season 1/a.mkv`
+    /// makes it a folder torrent, a pack's shape), its data file given its
+    /// whole length as the engine does and starting with `head` (every byte
+    /// written with `whole`), and a `.have` with the pieces `have`. Its info
+    /// hash.
     fn kept(
         data_dir: &Path,
         name: &str,
@@ -2476,12 +2484,17 @@ mod tests {
         have: impl IntoIterator<Item = u64>,
     ) -> String {
         let n = len.div_ceil(piece);
-        let mut t = format!(
-            "d4:infod6:lengthi{len}e4:name{}:{name}12:piece lengthi{piece}e6:pieces{}:",
-            name.len(),
-            n * 20
-        )
-        .into_bytes();
+        let info = if name.contains('/') {
+            let path: String = name
+                .split('/')
+                .map(|p| format!("{}:{p}", p.len()))
+                .collect();
+            format!("d5:filesld6:lengthi{len}e4:pathl{path}eee4:name4:Pack")
+        } else {
+            format!("d6:lengthi{len}e4:name{}:{name}", name.len())
+        };
+        let mut t =
+            format!("d4:info{info}12:piece lengthi{piece}e6:pieces{}:", n * 20).into_bytes();
         t.extend(vec![0xab; (n * 20) as usize]);
         t.extend(b"ee");
         let hex = librqbit::torrent_from_bytes(&t)
@@ -2492,7 +2505,11 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let mut data = head.to_vec();
         data.resize(if whole { len as usize } else { head.len() }, 7);
-        std::fs::write(dir.join(name), &data).unwrap();
+        let file = dir.join(name);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, &data).unwrap();
+        let opened = std::fs::File::options().write(true).open(&file).unwrap();
+        opened.set_len(len).unwrap();
         std::fs::write(dir.with_extension(TORRENT), &t).unwrap();
         let mut bits = vec![0u8; n.div_ceil(8) as usize];
         for p in have {
@@ -2544,9 +2561,20 @@ mod tests {
         assert_eq!(at(&mp4, 4 * MIB), Some(true), "a stale answer");
         let all = kept(dir.path(), "b.mp4", geo, &mp4_head(8 * MIB), false, 0..32);
         assert_eq!(at(&all, 4 * MIB), Some(true));
-        // The head cannot be read: no index, no start.
-        let short = kept(dir.path(), "c.mp4", geo, &[0; 100], false, 0..32);
-        assert_eq!(at(&short, 0), Some(false), "an unreadable head");
+        // A data file cut short, or one whose head cannot be read: no start.
+        let short = kept(dir.path(), "c.mp4", geo, &mp4_head(8 * MIB), false, 0..32);
+        assert_eq!(at(&short, 0), Some(true));
+        let data = dir.path().join(&short).join("c.mp4");
+        let opened = std::fs::File::options().write(true).open(&data).unwrap();
+        opened.set_len(8 * MIB - 1).unwrap();
+        assert_eq!(at(&short, 0), Some(false), "a file cut short");
+        opened.set_len(8 * MIB).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&data, std::fs::Permissions::from_mode(0o200)).unwrap();
+            assert_eq!(at(&short, 0), Some(false), "an unreadable head");
+        }
         // An MKV kept half way and at its 2 MiB tail (pieces 24..32), not at
         // its head: no head read tells that the data went.
         let mkv = kept(dir.path(), "d.mkv", geo, b"", true, (16..20).chain(24..32));
@@ -2555,6 +2583,82 @@ mod tests {
         std::fs::remove_dir_all(dir.path().join(&mkv)).unwrap();
         assert_eq!(at(&mkv, 4 * MIB), Some(false), "the data is gone");
         assert_eq!(at(&"0".repeat(40), 0), None, "nothing kept");
+    }
+
+    /// Kept details over 16 MiB are not read (review P2-5), even ones that
+    /// parse and are the right torrent's.
+    #[test]
+    fn kept_details_over_the_cap_are_not_read() {
+        let dir = tempfile::tempdir().unwrap();
+        // 17.2 MB of piece hashes.
+        let n: u64 = 860_000;
+        let mut t = format!(
+            "d4:infod6:lengthi{}e4:name5:x.mkv12:piece lengthi16384e6:pieces{}:",
+            n * 16384,
+            n * 20
+        )
+        .into_bytes();
+        t.extend(vec![0xab; (n * 20) as usize]);
+        t.extend(b"ee");
+        assert!(t.len() as u64 > MAX_TORRENT);
+        let hex = librqbit::torrent_from_bytes(&t)
+            .unwrap()
+            .info_hash
+            .as_string();
+        let path = dir.path().join(&hex).with_extension(TORRENT);
+        std::fs::write(&path, &t).unwrap();
+        assert_eq!(kept_torrent(&path, &hex), None);
+    }
+
+    /// RFC 4648 base32, no padding.
+    fn base32(bytes: &[u8]) -> String {
+        const ABC: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+        let (mut out, mut acc, mut bits) = (String::new(), 0u64, 0);
+        for &b in bytes {
+            (acc, bits) = ((acc << 8) | u64::from(b), bits + 8);
+            while bits >= 5 {
+                bits -= 5;
+                out.push(ABC[((acc >> bits) & 31) as usize] as char);
+            }
+            acc &= (1 << bits) - 1;
+        }
+        out
+    }
+
+    /// A hash given in base32, either case, is the same torrent as its hex
+    /// (review P2-5).
+    #[test]
+    fn a_base32_hash_finds_the_kept_details() {
+        let dir = tempfile::tempdir().unwrap();
+        let hex = kept(dir.path(), "a.mkv", (2 * MIB, 256 << 10), b"", false, 0..8);
+        let bytes: Vec<u8> = (0..20)
+            .map(|i| u8::from_str_radix(&hex[2 * i..2 * i + 2], 16).unwrap())
+            .collect();
+        let b32 = base32(&bytes);
+        assert_eq!(b32.len(), 32);
+        for given in [b32.clone(), b32.to_lowercase(), hex.to_uppercase()] {
+            assert_eq!(hex_hash(&given).as_deref(), Some(hex.as_str()), "{given}");
+            let ready = cached_on_disk(dir.path(), &given, 0, 0);
+            assert_eq!(ready, Some(Cached { ready: true }), "{given}");
+        }
+    }
+
+    /// A pack keeps its videos in a folder (review r2 P2-1): one deleted or
+    /// cut short there is not ready, though the torrent's own folder is
+    /// unchanged.
+    #[test]
+    fn a_pack_video_deleted_in_its_folder_is_not_ready() {
+        let dir = tempfile::tempdir().unwrap();
+        let name = "Season 1/a.mkv";
+        let geo = (8 * MIB, 256 << 10);
+        let hex = kept(dir.path(), name, geo, b"", false, (0..4).chain(24..32));
+        let at = || cached_on_disk(dir.path(), &hex, 0, 0).map(|c| c.ready);
+        assert_eq!(at(), Some(true));
+        let video = dir.path().join(&hex).join(name);
+        std::fs::remove_file(&video).unwrap();
+        assert_eq!(at(), Some(false), "deleted");
+        std::fs::write(&video, b"short").unwrap();
+        assert_eq!(at(), Some(false), "cut short");
     }
 
     /// A folder an earlier launch left goes with its `.have` and `.torrent`
