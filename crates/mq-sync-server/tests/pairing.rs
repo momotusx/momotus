@@ -246,6 +246,35 @@ async fn a_rebuilt_store_announces_only_what_is_new() {
     assert_eq!(phone.heard().await, joined);
 }
 
+/// A flood of more than 100 changes by another member (kits made and
+/// dropped) never hides an earlier join: kit and removal notices go first,
+/// and one `dropped` announcement counts what went (A P3-1).
+#[tokio::test]
+async fn a_flood_never_hides_a_join_silently() {
+    let (server, _) = relay().await;
+    let mut phone = Device::first(&server, "Phone").await;
+    let mut tv = phone.pair(&server, "TV").await;
+    let _laptop = tv.pair(&server, "Laptop").await;
+    for _ in 0..51 {
+        let (_, kit, record) = make_kit(&tv.library, &http(), &tv.record, &tv.clock)
+            .await
+            .unwrap();
+        tv.record = record;
+        tv.record = remove_devices(&tv.library, &http(), &tv.record, &tv.clock, vec![kit])
+            .await
+            .unwrap();
+    }
+    // The laptop's join, then 102 notices: 3 too many.
+    let said = phone.sync().await.announcements;
+    let kept = said.iter().filter(|a| a.kind != Announced::Dropped).count();
+    assert_eq!(kept, 100);
+    assert_eq!((said[0].kind, said[0].count), (Announced::Dropped, Some(3)));
+    let laptop = said.iter().find(|a| a.kind == Announced::Device);
+    assert_eq!(laptop.and_then(|a| a.name.as_deref()), Some("Laptop"));
+    let kits = said.iter().filter(|a| a.kind == Announced::Kit).count();
+    assert_eq!(kits, 49, "the three oldest kit notices went first");
+}
+
 #[tokio::test]
 async fn a_tv_joins_by_qr_once_after_matching_codes() {
     let (server, db) = relay().await;
