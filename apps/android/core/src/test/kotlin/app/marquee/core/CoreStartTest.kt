@@ -16,6 +16,8 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import kotlin.concurrent.thread
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * The start decision hears the core open whenever it opens. A Pixel start waited the full 10 s with the core open
@@ -46,4 +48,13 @@ class CoreStartTest {
             withTimeout(1_000) { decided!!.join() }
             assertEquals(CoreHealth.Running, session.health)
         }
+
+    @Test
+    fun `a core that died while it first opened keeps the start waiting for the next open`() {
+        val session = CoreSession(RuntimeEnvironment.getApplication())
+        session.opened(running = false)
+        assertFalse(session.ready.isCompleted, "the start waits for a core that runs")
+        session.opened(running = true)
+        assertTrue(session.ready.isCompleted)
+    }
 }

@@ -2,12 +2,14 @@ package app.marquee.core.session
 
 import android.content.Context
 import android.content.pm.ApplicationInfo
+import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.marquee.core.NativeCore
 import app.marquee.core.client.BridgeMetrics
 import app.marquee.core.client.CoreClient
+import app.marquee.core.client.CoreError
 import app.marquee.core.client.CoreJson
 import app.marquee.core.client.CoreLog
 import app.marquee.core.client.DeviceCapsParams
@@ -130,9 +132,14 @@ class CoreSession(
      */
     suspend fun awaitOpen() = ready.await()
 
-    /** The boot thread's last step: the core runs ([running]: it did not die while opening), and the start may decide. */
-    internal fun opened(running: Boolean) {
-        if (running) health = CoreHealth.Running
+    /**
+     * The boot thread's last step: [running] when the core did not die while it opened. Only a running core
+     * lets the start decide; one that died is opened again, or the start hears it gave up ([onCoreDied]).
+     */
+    @VisibleForTesting
+    fun opened(running: Boolean) {
+        if (!running) return
+        health = CoreHealth.Running
         ready.complete(Unit)
     }
 
@@ -224,6 +231,8 @@ class CoreSession(
     private fun onCoreDied(reason: String) {
         if (!mayRestart()) {
             health = CoreHealth.Stopped(reason)
+            // A start still waiting goes Home, which says why.
+            ready.completeExceptionally(CoreError(reason))
             return
         }
         health = CoreHealth.Restarting
