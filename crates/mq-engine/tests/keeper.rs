@@ -734,7 +734,8 @@ async fn a_sustained_write_takes_the_readahead_farthest_first() {
     assert!(min >= RESERVE_BYTES, "free space fell under the reserve");
     assert!(s.held_bytes.unwrap() + 80 * MIB <= before, "{s:?}");
     assert_eq!(s.refetched_bytes, 0, "nothing fetched twice");
-    // The nearest readahead stays, the farthest left.
+    // The readahead that fits the shrunk budget stays (past the playback
+    // window, about 7 MiB on), the farthest left.
     let have = |p: u32| {
         let engine = w.engine.clone();
         let t = w.t;
@@ -745,7 +746,7 @@ async fn a_sustained_write_takes_the_readahead_farthest_first() {
         }
     };
     let pos = (at / MIB) as u32;
-    assert!(have(pos + 2).await, "the nearest readahead stays");
+    assert!(have(pos + 12).await, "the readahead that fits stays");
     assert!(!have(pos + 60).await, "the farthest readahead left");
     test_hooks::set_free_base(&w.engine, None);
 }
