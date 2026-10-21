@@ -203,7 +203,7 @@ struct MetaLine: View {
         }
         .font(.text(size, weight: .semibold, relativeTo: .callout))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel((ratings + parts).joined(separator: ", "))
+        .accessibilityLabel((ratings.map(spokenScore) + parts).joined(separator: ", "))
         .accessibilityActions {
             if let link { Button("Open on IMDb") { openURL(link) } }
         }
@@ -218,9 +218,17 @@ struct MetaLine: View {
     }
 
     @ViewBuilder private func score(_ text: String, link: URL?) -> some View {
+        // One line, never cut: the row breaks between parts, never inside a score.
         let label = Text(text).fontWeight(Font.Weight.bold.legible).foregroundStyle(Theme.Palette.text)
+            .lineLimit(1).fixedSize()
         if let link {
-            Link(destination: link) { label }.buttonStyle(.plain)
+            Link(destination: link) { label }
+                .buttonStyle(.plain)
+                #if os(iOS)
+                // A finger-sized target.
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+                #endif
         } else {
             label
         }

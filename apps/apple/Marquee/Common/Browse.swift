@@ -170,25 +170,6 @@ struct CardCaption: View {
     }
 }
 
-/// "IMDb 8.0  RT 87%" on a small strong-glass chip at a poster's top right.
-struct RatingChip: View {
-    let ratings: [String]
-    @Environment(\.metrics) private var metrics
-
-    var body: some View {
-        HStack(spacing: metrics.chip * 0.5) {
-            ForEach(ratings, id: \.self) { score in
-                Text(score).font(.text(metrics.chip, weight: .bold, relativeTo: .caption2)).monospacedDigit()
-            }
-        }
-        .foregroundStyle(Theme.Palette.text)
-        .padding(.horizontal, metrics.chip * 0.55)
-        .frame(height: metrics.chip * 1.8)
-        .glass(Capsule(), strong: true)
-        .accessibilityHidden(true)
-    }
-}
-
 /// The page title in the display face.
 struct ScreenTitle: View {
     let text: String

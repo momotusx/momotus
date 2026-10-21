@@ -34,6 +34,7 @@ struct Credits: View {
         if !details.directors.isEmpty { rows.append(("Directed by", details.directors.joined(separator: ", "))) }
         if let runtime = details.runtime { rows.append(("Runtime", series ? "\(runtime) an episode" : runtime)) }
         rows.append(("Details from", details.source))
+        if let from = details.ratingsFrom { rows.append(("Ratings from", from)) }
         return rows
     }
 }

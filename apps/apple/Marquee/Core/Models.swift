@@ -40,6 +40,13 @@ func ratingParts(_ ratings: Ratings?) -> [String] {
     [ratings?.imdb.map { "IMDb \($0)" }, ratings?.rottenTomatoes.map { "RT \($0)" }].compactMap { $0 }
 }
 
+/// What VoiceOver says for a score: "IMDb 8.8", "Rotten Tomatoes 87 percent",
+/// never "R T".
+func spokenScore(_ score: String) -> String {
+    guard score.hasPrefix("RT ") else { return score }
+    return "Rotten Tomatoes " + score.dropFirst(3).replacingOccurrences(of: "%", with: " percent")
+}
+
 struct Hero: Decodable, Hashable, Sendable {
     let tile: Tile
     /// One line telling the user why this title is here.
@@ -194,6 +201,9 @@ struct TitleDetails: Decodable, Hashable, Sendable {
     let ratings: Ratings?
     /// The title's IMDb page, where its IMDb score links (not on TV).
     let imdbUrl: String?
+    /// Who the scores come from ("IMDb and Rotten Tomatoes via MDBList"),
+    /// a "Ratings from" row beside "Details from"; nil when MDBList gave none.
+    let ratingsFrom: String?
     let source: String
     /// Trailers the metadata names (YouTube), first is the main one.
     let trailers: [Trailer]
