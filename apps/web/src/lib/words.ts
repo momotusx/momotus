@@ -19,6 +19,7 @@ import type { StreamPrefs } from "../core/generated/StreamPrefs";
 import type { VersionsConditions } from "../core/generated/VersionsConditions";
 import type { Form } from "../form";
 import { bytes } from "./format";
+import accountShared from "../../../shared/account-words.json";
 import choice from "../../../shared/stream-choice-words.json";
 
 export function reasonText(r: Reason, status: VersionStatus): string {
@@ -314,7 +315,7 @@ export const syncWords = {
   unnamed: "Unnamed device",
   unknownDevice: "Unknown device",
   unknownLine: "Not in your device list yet",
-  kitName: "Recovery kit",
+  kitName: accountShared.recoveryKitName,
   remove: "Remove",
   reportLost: "Report lost",
   cancel: "Cancel",
@@ -451,7 +452,7 @@ export const count = (n: number, one: string, many: string) => `${n} ${n === 1 ?
 export const removeDeviceAsk = (name: string) => `Remove ${name}? It stops syncing and cannot read anything you change from now on. Devices it added stay.`;
 
 /** The button that confirms a lost report: it names how many devices go. */
-export const lostButton = (devices: number) => `Remove ${count(devices, "device", "devices")}`;
+export const lostButton = (devices: number) => (accountShared.reportLostRemove[devices === 1 ? 0 : 1] ?? "").replace("{n}", String(devices));
 
 /** The kits a lost report removes, always. */
 export const lostKits = (kits: number) =>

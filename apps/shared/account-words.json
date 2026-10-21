@@ -1,5 +1,5 @@
 {
-  "about": "Account words (plans/accounts.md 3.1, 3.2, 4.1 to 4.3, 5, D13), shared by the web, Android and Apple apps; each platform's reader test checks every key (phase 2). Announcements (SyncReport.announcements) take one key each: kind device is announceDevice, or announceDeviceUnnamed when name is null; passkey is announcePasskey; kit is announceKit; removed is announceLeft when by equals member (announceLeftUnnamed without a name), else announceRemovedPasskey when passkey, else announceRemovedKit when kit, else announceRemoved (announceRemovedUnnamed without a name); dropped is announceDropped. {name} is the announcement's name. {device} is the name of the member by, from syncDevices: announceUnnamedDevice when that member has no name, announceGoneDevice when it is no longer a member. announcePasskey carries announceNotYou. Kinds device, passkey, kit and dropped are security notices: every profile but a kids profile shows them, and only the owner profile shows announceOk on them (the core answers notOwner to another profile's acknowledgement); removed shows OK on every profile. accountGoneActions' Remove from this device shows on the owner profile only (D13). passkeyLabel is the label savePasskey writes into the roster, the same on every platform: {device} is the saving device's own name, and no date (Last used carries it). {provider} is the provider's name (Apple, Google, Facebook, or the name the sync server gives another OpenID provider). {providerAccount} is providerAccount's entry for apple, google or facebook, else providerAccountOther. {date} is the medium date in the device's locale. removeLibraryDebrid is the checkbox under removeLibraryAsk, ticked by default (D13); the core answers debridConnected while one is left. An actions list is the buttons in order, the first the primary. The default path never shows the words Kit (alone), PRF, roster, ticket or sync server.",
+  "about": "Account words (plans/accounts.md 3.1, 3.2, 4.1 to 4.3, 5, D13), shared by the web, Android and Apple apps; each platform's reader test checks every key (phase 2). Announcements (SyncReport.announcements) take one key each: kind device is announceDevice, or announceDeviceUnnamed when name is null; passkey is announcePasskey; kit is announceKit; removed is announceLeft when by equals member (announceLeftUnnamed without a name), else announceRemovedPasskey when passkey, else announceRemovedKit when kit, else announceRemoved (announceRemovedUnnamed without a name); dropped is announceDropped. {name} is the announcement's name. {device} is the name of the member by, from syncDevices: announceUnnamedDevice when that member has no name, announceGoneDevice when it is no longer a member. announcePasskey carries announceNotYou. Kinds device, passkey, kit and dropped are security notices: every profile but a kids profile shows them, and only the owner profile shows announceOk on them (the core answers notOwner to another profile's acknowledgement); removed shows OK on every profile. accountGoneActions' Remove from this device shows on the owner profile only (D13). passkeyLabel is the label savePasskey writes into the roster, the same on every platform: {device} is the saving device's own name, and no date (Last used carries it). {provider} is providerName's entry for apple, google or facebook, else the id the sync server gives another OpenID provider, as it is. {providerAccount} is providerAccount's entry for apple, google or facebook, else providerAccountOther. {date} is the medium date in the device's locale. removeLibraryDebrid is the checkbox under removeLibraryAsk, ticked by default (D13); the core answers debridConnected while one is left. An actions list is the buttons in order, the first the primary. The default path never shows the words Kit (alone), PRF, roster, ticket or sync server.",
   "announceDevice": "A new device joined: {name}.",
   "announceDeviceUnnamed": "A new device joined.",
   "announcePasskey": "A passkey was added on {device}.",
@@ -21,6 +21,11 @@
     "facebook": "Facebook account"
   },
   "providerAccountOther": "{provider} sign-in",
+  "providerName": {
+    "apple": "Apple",
+    "google": "Google",
+    "facebook": "Facebook"
+  },
   "signInTitle": "Sign in",
   "continueWith": "Continue with {provider}",
   "otherWays": "Other ways to sign in",
@@ -87,5 +92,22 @@
   "otherRelay": "This sign-in finished for another sync service. Start again here.",
   "otherRelayCode": "This code is from another sync service.",
   "otherRelayCodeActions": ["Scan again"],
+  "signInRefused": "The sign-in did not work. Try again or use another way.",
+  "signInWindow": "Finish signing in in the window that opened.",
+  "popupBlocked": "Your browser blocked the sign-in window. Allow pop-ups for Marquee, then try again.",
+  "returnClose": "You can close this window and go back to Marquee.",
+  "ownServerLabel": "Your sync server's address",
+  "ownServerUse": "Use this sync server",
+  "foundWeb": "This sign-in already has a Marquee account. Scan this code with your phone, where Marquee is signed in, to add this browser.",
+  "startOver": "Start over",
+  "signedInWith": "Signed in with",
+  "linkAnother": "Link another",
+  "linkedOn": "Linked {date}",
+  "unlink": "Unlink",
+  "unlinkLast": "Without a linked sign-in, you sign in with a passkey or another device.",
+  "appleRevokeFailed": "Apple did not confirm, so your Apple Account may still list Marquee.",
+  "wiping": "Removing your profiles and library",
+  "wipeFailed": "Signed out, but your profiles and library are still on this device. Try again.",
+  "secondWayInText": "Make a recovery kit or sign in on a second device, so losing this one never locks you out.",
   "notOwner": "Only the main profile can do that."
 }
