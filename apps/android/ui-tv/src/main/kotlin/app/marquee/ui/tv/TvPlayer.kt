@@ -49,6 +49,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import app.marquee.core.model.NextEpisode
+import app.marquee.core.model.SubtitleSize
 import app.marquee.design.Icons
 import app.marquee.design.Marquee
 import app.marquee.design.MqText
@@ -120,6 +121,8 @@ fun TvPlayer(
     active: Boolean = true,
     /** The failure card's "Play {label}": open that version from the same Versions view. */
     onOffer: (String) -> Unit = {},
+    /** The subtitle picker's Size: the profile's subtitle size, for this video and the next. */
+    onSubtitleSize: (SubtitleSize) -> Unit = {},
 ) {
     val safe = Marquee.safe
     val stage = controller.stage
@@ -469,6 +472,8 @@ fun TvPlayer(
                     note = controller.subtitlePanelNote,
                     timing = controller.subtitleDelayMs.takeIf { controller.subtitleOn },
                     onShift = controller::shiftSubtitles,
+                    textSize = controller.subtitleSize,
+                    onSize = onSubtitleSize,
                 )
             }
 

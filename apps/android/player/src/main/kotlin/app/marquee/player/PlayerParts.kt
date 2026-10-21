@@ -68,6 +68,7 @@ import app.marquee.core.model.Attempt
 import app.marquee.core.model.NextEpisode
 import app.marquee.core.model.OtherVersion
 import app.marquee.core.model.Segment
+import app.marquee.core.model.SubtitleSize
 import app.marquee.core.model.TraktPlayback
 import app.marquee.design.CapsLabel
 import app.marquee.design.Form
@@ -86,6 +87,7 @@ import app.marquee.design.focusClickable
 import app.marquee.design.marqueeFocus
 import app.marquee.design.scrollByKey
 import app.marquee.design.windowDp
+import kotlin.math.roundToInt
 
 /** 3725 s as "1:02:05". */
 fun clockText(ms: Long): String = Format.clock(ms / 1000)
@@ -221,7 +223,43 @@ fun TimingRow(
     delayMs: Long,
     onShift: (Long) -> Unit,
     modifier: Modifier = Modifier,
-    earlier: Modifier = Modifier,
+    first: Modifier = Modifier,
+) = StepRow("Timing", timingWords(delayMs), "Earlier", {
+    onShift(-SUBTITLE_STEP_MS)
+}, "Later", { onShift(SUBTITLE_STEP_MS) }, modifier, first)
+
+/**
+ * The profile's subtitle size, under the timing: Smaller and Larger step through its four sizes, which hold for the
+ * next videos too (`subtitleSize`, as Settings sets it); at either end the press changes nothing.
+ */
+@Composable
+fun SizeRow(
+    size: SubtitleSize,
+    onSize: (SubtitleSize) -> Unit,
+    modifier: Modifier = Modifier,
+    first: Modifier = Modifier,
+) = StepRow(
+    "Size",
+    sizeWords(size),
+    "Smaller",
+    { stepSize(size, -1)?.let(onSize) },
+    "Larger",
+    { stepSize(size, 1)?.let(onSize) },
+    modifier,
+    first,
+)
+
+/** A setting the picker steps with two buttons: its name and value at the left, the buttons at the right. */
+@Composable
+private fun StepRow(
+    title: String,
+    value: String,
+    less: String,
+    onLess: () -> Unit,
+    more: String,
+    onMore: () -> Unit,
+    modifier: Modifier,
+    first: Modifier,
 ) {
     Row(
         modifier.fillMaxWidth(),
@@ -229,23 +267,31 @@ fun TimingRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            MqText("Timing", role = TextRole.Callout, weight = FontWeight.SemiBold, maxLines = 1)
+            MqText(title, role = TextRole.Callout, weight = FontWeight.SemiBold, maxLines = 1)
             MqText(
-                timingWords(delayMs),
+                value,
                 role = TextRole.Caption,
                 color = Marquee.colors.muted,
                 maxLines = 1,
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             )
         }
-        SecondaryButton("Earlier", { onShift(-SUBTITLE_STEP_MS) }, earlier)
-        SecondaryButton(
-            "Later",
-            { onShift(SUBTITLE_STEP_MS) },
-            Modifier.focusProperties { right = FocusRequester.Cancel },
-        )
+        SecondaryButton(less, onLess, first)
+        SecondaryButton(more, onMore, Modifier.focusProperties { right = FocusRequester.Cancel })
     }
 }
+
+/** The profile's subtitle sizes in order, as the picker steps them. */
+private val SIZES = listOf(SubtitleSize.Small, SubtitleSize.Medium, SubtitleSize.Large, SubtitleSize.ExtraLarge)
+
+/** The size [by] steps from [size], or null past either end; a size from a newer core steps from Medium. */
+fun stepSize(
+    size: SubtitleSize,
+    by: Int,
+): SubtitleSize? = SIZES.getOrNull(SIZES.indexOf(size).let { if (it < 0) 1 else it } + by)
+
+/** "100%": how big this app draws [size] ([subtitleScale]). */
+fun sizeWords(size: SubtitleSize): String = "${(subtitleScale(size) * 100).roundToInt()}%"
 
 /** One track: its name and what it is, the chosen one filled and checked; focus stays in the panel. */
 @Composable

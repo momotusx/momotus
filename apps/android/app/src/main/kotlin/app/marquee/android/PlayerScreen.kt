@@ -14,6 +14,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import app.marquee.core.Format
 import app.marquee.core.PlayPick
 import app.marquee.core.VersionsCopy
+import app.marquee.core.client.CoreLog
 import app.marquee.core.model.NextEpisode
 import app.marquee.core.model.SubtitleSize
 import app.marquee.core.model.VersionRow
@@ -37,6 +38,9 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.util.Locale
 
 /** How long a recommendation stands unchanged before it plays (the web player waits the same). */
@@ -103,6 +107,20 @@ class PlayerHolder(
                     .firstOrNull { it.key == playing }
                     ?.let { VersionsCopy.cell(it.quality) }
             }.collect { controller.versionLabel = it }
+        }
+    }
+
+    /** The picker's Size: shown at once, and kept as the profile's setting, as Settings sets it. */
+    fun setSubtitleSize(size: SubtitleSize) {
+        controller.subtitleSize = size
+        viewModelScope.launch {
+            try {
+                session.ops.setPrefs(buildJsonObject { put("subtitleSize", JsonPrimitive(size.wire)) })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                CoreLog.w("the subtitle size was not kept: ${e.message}")
+            }
         }
     }
 
@@ -273,7 +291,17 @@ fun PlayerScreen(
         onOffer(key)
     }
     if (form == Form.Tv) {
-        TvPlayer(controller, holder.autoplayNext, versions, onTitle, next, leave, active = active, onOffer = offer)
+        TvPlayer(
+            controller,
+            holder.autoplayNext,
+            versions,
+            onTitle,
+            next,
+            leave,
+            active = active,
+            onOffer = offer,
+            onSubtitleSize = holder::setSubtitleSize,
+        )
     } else {
         PhonePlayer(
             controller,
@@ -285,6 +313,7 @@ fun PlayerScreen(
             window::enterPip,
             leave,
             onOffer = offer,
+            onSubtitleSize = holder::setSubtitleSize,
         )
     }
 }

@@ -20,6 +20,7 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.text.AnnotatedString
+import app.marquee.core.model.SubtitleSize
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
 import app.marquee.player.SEARCH_LANGUAGES
@@ -157,6 +158,28 @@ class TvSubtitlePickerTest {
         compose.waitForIdle()
         row("Turkish, Türkçe, 1 option").assertExists()
         assertEquals(0, compose.onAllNodesWithContentDescription("Arabic", substring = true).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun `Down from the last option reaches the Size row, which steps the profile's size`() {
+        val sizes = mutableListOf<SubtitleSize>()
+        compose.setContent {
+            MarqueeTheme(Form.Tv) {
+                TvSubtitlePicker(rows, onPick = {}, textSize = SubtitleSize.Medium, onSize = {
+                    sizes +=
+                        it
+                })
+            }
+        }
+        compose.waitForIdle()
+        row("English, 3 options").press(Key.DirectionRight)
+        compose.onNode(isFocused()).press(Key.DirectionDown)
+        compose.onNode(isFocused()).press(Key.DirectionDown)
+        compose.onNode(isFocused() and hasText("Smaller")).assertExists()
+        compose.onNode(isFocused()).press(Key.DirectionRight)
+        compose.onNode(isFocused() and hasText("Larger")).assertExists().press(Key.Enter)
+        compose.onNodeWithText("100%").assertExists()
+        compose.runOnIdle { assertEquals(listOf(SubtitleSize.Large), sizes) }
     }
 
     @Test

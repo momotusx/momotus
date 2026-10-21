@@ -62,6 +62,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import app.marquee.core.model.SubtitleSize
 import app.marquee.design.FieldInput
 import app.marquee.design.Form
 import app.marquee.design.Icons
@@ -200,7 +201,8 @@ private fun spoken(language: SubtitleLanguage): String =
 /**
  * The phone's picker, one level at a time in a sheet over the dimmed player: the languages, or the options of
  * [opened] (a language's key). The screen keeps [opened] so its Back steps out of the options first. [timing] is
- * this play's subtitle delay while a subtitle is on (the options level shows its row); [note] what the core still
+ * this play's subtitle delay while a subtitle is on (the options level shows its row, and the profile's [textSize]
+ * under it, changed through [onSize]); [note] what the core still
  * waits for or could not reach.
  */
 @Composable
@@ -214,6 +216,8 @@ fun PhoneSubtitleSheet(
     note: String? = null,
     timing: Long? = null,
     onShift: (Long) -> Unit = {},
+    textSize: SubtitleSize = SubtitleSize.Medium,
+    onSize: (SubtitleSize) -> Unit = {},
 ) {
     val languages = remember(rows) { subtitleLanguages(rows) }
     val language = languages.firstOrNull { it.key == opened }
@@ -265,15 +269,15 @@ fun PhoneSubtitleSheet(
                     }
                 }
             }
-            if (timing != null) {
-                val line = Marquee.colors.line
-                TimingRow(
-                    timing,
-                    onShift,
-                    Modifier
-                        .drawBehind { drawLine(line, Offset.Zero, Offset(size.width, 0f), 1f) }
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                )
+            val line = Marquee.colors.line
+            Column(
+                Modifier
+                    .drawBehind { drawLine(line, Offset.Zero, Offset(size.width, 0f), 1f) }
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (timing != null) TimingRow(timing, onShift)
+                SizeRow(textSize, onSize)
             }
         }
     }
@@ -450,6 +454,8 @@ fun TvSubtitlePicker(
     note: String? = null,
     timing: Long? = null,
     onShift: (Long) -> Unit = {},
+    textSize: SubtitleSize = SubtitleSize.Medium,
+    onSize: (SubtitleSize) -> Unit = {},
 ) {
     val languages = remember(rows) { subtitleLanguages(rows) }
     var query by rememberSaveable { mutableStateOf("") }
@@ -571,11 +577,6 @@ fun TvSubtitlePicker(
                                         left = back
                                         right = FocusRequester.Cancel
                                         if (option == preview.options.first()) up = FocusRequester.Cancel
-                                        if (option == preview.options.last() &&
-                                            timing == null
-                                        ) {
-                                            down = FocusRequester.Cancel
-                                        }
                                     },
                                 top = true,
                             ) {
@@ -598,13 +599,19 @@ fun TvSubtitlePicker(
                             timing,
                             onShift,
                             Modifier.padding(start = 16.dp, top = 12.dp),
-                            earlier =
-                                Modifier.focusProperties {
-                                    left = back
-                                    down = FocusRequester.Cancel
-                                },
+                            first = Modifier.focusProperties { left = back },
                         )
                     }
+                    SizeRow(
+                        textSize,
+                        onSize,
+                        Modifier.padding(start = 16.dp, top = 12.dp),
+                        first =
+                            Modifier.focusProperties {
+                                left = back
+                                down = FocusRequester.Cancel
+                            },
+                    )
                 }
             }
         }

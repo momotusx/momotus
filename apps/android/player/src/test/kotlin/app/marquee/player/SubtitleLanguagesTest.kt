@@ -3,6 +3,7 @@ package app.marquee.player
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
+import app.marquee.core.model.SubtitleSize
 import app.marquee.core.model.SubtitleTrack
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -254,5 +255,19 @@ class SubtitleLanguagesTest {
         assertEquals(UNKNOWN_LANGUAGE, unnamed.section)
         assertEquals("", unnamed.language)
         assertEquals("Signs", unnamed.name)
+    }
+
+    @Test
+    fun `the size steps through the profile's four sizes and stops at either end`() {
+        assertEquals(SubtitleSize.Large, stepSize(SubtitleSize.Medium, 1))
+        assertEquals(SubtitleSize.Small, stepSize(SubtitleSize.Medium, -1))
+        assertNull(stepSize(SubtitleSize.Small, -1))
+        assertNull(stepSize(SubtitleSize.ExtraLarge, 1))
+        assertEquals(
+            SubtitleSize.Large,
+            stepSize(SubtitleSize.Unknown, 1),
+            "a size from a newer core steps from Medium",
+        )
+        assertEquals(listOf("75%", "100%", "130%", "160%"), SubtitleSize.entries.dropLast(1).map(::sizeWords))
     }
 }
