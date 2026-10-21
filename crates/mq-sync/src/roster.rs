@@ -399,7 +399,7 @@ pub struct AddKit {
     pub boxed: SealedBox,
     #[serde(default)]
     pub kind: KitKind,
-    /// What the kit is ("Passkey, saved on Robin's iPhone, 20 Oct"), sealed
+    /// What the kit is ("Passkey, saved on Robin's iPhone"), sealed
     /// for members.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,

@@ -603,7 +603,7 @@ pub async fn make_kit(
 
 /// Saves a passkey as a way into the account: a kit whose secret comes from
 /// the passkey's 32-byte PRF output (3.1), labelled for the devices screen
-/// ("Passkey, saved on Robin's iPhone, 20 Oct"). Returns its id in the
+/// ("Passkey, saved on Robin's iPhone"). Returns its id in the
 /// roster and this device's record to store. A PRF output whose lookup
 /// another account holds is `kitTaken`; a kit dropped before is never let
 /// in again.
