@@ -393,7 +393,7 @@ private fun TvHero(
         ) {
             Eyebrow(hero.reason, overArt = true)
             Logo(tile.logo, tile.name, height = 120.dp, maxWidth = 520.dp, color = colors.text)
-            RatingLine(tile.rating, TileCopy.heroMeta(hero))
+            RatingLine(TileCopy.ratings(tile.ratings), TileCopy.heroMeta(hero))
             hero.description?.let {
                 // Measured last, so a two-line name in place of a logo takes its lines, never the buttons'.
                 MqText(
@@ -587,7 +587,7 @@ private fun TvTile(
         shape = shape,
         progress = tile.progress,
         caption = TileCopy.caption(rowId, tile) ?: tile.releaseInfo,
-        rating = tile.rating.takeIf { shape == TileShape.Poster },
+        ratings = if (shape == TileShape.Poster) TileCopy.ratings(tile.ratings) else emptyList(),
         focusRequester = requester,
         onFocusChange = { if (it) state.focus.arrived(rowId, key) else state.focus.lost(key) },
         onLongClick = onHold?.let { { it(tile, key) } },

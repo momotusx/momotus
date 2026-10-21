@@ -78,8 +78,8 @@ fun PosterTile(
     fallbackImageUrl: String? = null,
     progress: Float? = null,
     caption: String? = null,
-    /** The addon's IMDb rating as written ("8.4"); shown in a chip on the art. */
-    rating: String? = null,
+    /** The scores side by side as plain text ("IMDb 8.4", "RT 87%"), in a chip on the art; none, no chip. */
+    ratings: List<String> = emptyList(),
     /** A Watched chip at the top left of the art, as on episode cards. */
     watched: Boolean = false,
     focusRequester: FocusRequester? = null,
@@ -121,7 +121,7 @@ fun PosterTile(
         ) {
             RemoteImage(imageUrl, size.width, size.height, fallbackText = title, fallbackUrl = fallbackImageUrl) {
                 if (watched) WatchedChip(Modifier.align(Alignment.TopStart))
-                if (rating != null) RatingChip(rating, Modifier.align(Alignment.TopEnd))
+                if (ratings.isNotEmpty()) RatingChip(ratings, Modifier.align(Alignment.TopEnd))
                 if (progress != null) ProgressBar(progress, Modifier.align(Alignment.BottomStart))
             }
         }
@@ -141,10 +141,10 @@ fun PosterTile(
     }
 }
 
-/** A star and the rating on strong glass, at the top right of a poster. */
+/** The scores as plain text on strong glass, at the top right of a poster. */
 @Composable
 private fun RatingChip(
-    rating: String,
+    ratings: List<String>,
     modifier: Modifier,
 ) {
     val tv = Marquee.form == Form.Tv
@@ -158,8 +158,9 @@ private fun RatingChip(
         horizontalArrangement = Arrangement.spacedBy(if (tv) 6.dp else 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        MqIcon(StarFilled, tint = colors.star, size = if (tv) 20.dp else 12.dp)
-        MqText(rating, role = TextRole.Caption, weight = FontWeight.Bold, color = colors.text, maxLines = 1)
+        ratings.forEach {
+            MqText(it, role = TextRole.Caption, weight = FontWeight.Bold, color = colors.text, maxLines = 1)
+        }
     }
 }
 

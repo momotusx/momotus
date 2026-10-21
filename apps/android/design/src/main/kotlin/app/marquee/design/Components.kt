@@ -741,14 +741,16 @@ fun Eyebrow(
 }
 
 /**
- * A star with the IMDb rating, then the facts ("2026 · 145 min · Action, Adventure"): the meta
- * line of a hero and a title page. Without a rating it is the facts alone.
+ * The scores side by side as plain text ("IMDb 8.8", "RT 87%"), then the facts ("2026 · 145 min ·
+ * Action, Adventure"): the meta line of a hero and a title page. Without scores it is the facts
+ * alone. [onFirst] makes the first score a link (the title page's IMDb score, never on TV).
  */
 @Composable
 fun RatingLine(
-    rating: String?,
+    ratings: List<String>,
     facts: String,
     modifier: Modifier = Modifier,
+    onFirst: (() -> Unit)? = null,
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
@@ -757,11 +759,17 @@ fun RatingLine(
         horizontalArrangement = Arrangement.spacedBy(if (tv) 12.dp else 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (rating != null) {
-            MqIcon(StarFilled, tint = colors.star, size = if (tv) 26.dp else 15.dp)
+        ratings.forEachIndexed { index, score ->
             MqText(
-                rating,
-                modifier = Modifier.semantics { contentDescription = "IMDb $rating" },
+                score,
+                modifier =
+                    if (index == 0 &&
+                        onFirst != null
+                    ) {
+                        Modifier.focusClickable(onFirst, Role.Button)
+                    } else {
+                        Modifier
+                    },
                 role = TextRole.Callout,
                 weight = FontWeight.Bold,
                 maxLines = 1,

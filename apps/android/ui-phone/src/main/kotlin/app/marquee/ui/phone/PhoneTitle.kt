@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.marquee.core.Format
 import app.marquee.core.PrimaryAction
+import app.marquee.core.TileCopy
 import app.marquee.core.TitleCopy
 import app.marquee.core.VersionLine
 import app.marquee.core.VersionsCopy
@@ -337,7 +338,14 @@ private fun Info(
         Modifier.padding(horizontal = Marquee.safe.side),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
     ) {
-        RatingLine(details.rating, TitleCopy.meta(details, TitleCopy.seasonCount(header.seasons)))
+        val context = LocalContext.current
+        // The IMDb score links to the title's IMDb page.
+        val imdb = details.imdbUrl?.takeIf { details.ratings.imdb != null }
+        RatingLine(
+            TileCopy.ratings(details.ratings),
+            TitleCopy.meta(details, TitleCopy.seasonCount(header.seasons)),
+            onFirst = imdb?.let { url -> { openLink(context, url) } },
+        )
         details.description?.let { Synopsis(it) }
         // As the web lays a phone title out: the primary with Watched beside it as a pill (movies),
         // then the other actions as equal circles in one row, their words on up to two lines. On a
@@ -381,7 +389,6 @@ private fun Info(
         } else {
             VersionStatus(VersionsCopy.line(versions, versionsFailed))
         }
-        val context = LocalContext.current
         Row(Modifier.fillMaxWidth().padding(top = Marquee.space.xs)) {
             if (target != null) {
                 RoundButton(

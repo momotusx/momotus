@@ -1,6 +1,7 @@
 package app.marquee.core
 
 import app.marquee.core.model.Hero
+import app.marquee.core.model.Ratings
 import app.marquee.core.model.Tile
 
 /** The words under a tile and in a hero, the same as the web family's `lib/words.ts`. */
@@ -55,7 +56,14 @@ object TileCopy {
         }
 
     /**
-     * The facts after a hero's star rating: "2026 · 145 min · Action, Adventure". The kind
+     * A title's scores side by side as plain text, the source first: "IMDb 8.8", "RT 87%". A score the
+     * core left null has no slot, and the brands' logos and icons never appear (plans/research/ratings.md).
+     */
+    fun ratings(ratings: Ratings): List<String> =
+        listOfNotNull(ratings.imdb?.let { "IMDb $it" }, ratings.rottenTomatoes?.let { "RT $it" })
+
+    /**
+     * The facts after a hero's scores: "2026 · 145 min · Action, Adventure". The kind
      * stands in when the addon gave no year, runtime or genre ("Series").
      */
     fun heroMeta(hero: Hero): String {

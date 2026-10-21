@@ -279,7 +279,7 @@ private fun PhoneHero(
                     role = TextRole.Title1,
                     color = Marquee.colors.text,
                 )
-                RatingLine(tile.rating, TileCopy.heroMeta(hero))
+                RatingLine(TileCopy.ratings(tile.ratings), TileCopy.heroMeta(hero))
                 // A short window (a landscape phone) keeps Play above the bar: the synopsis waits on the
                 // title page.
                 if (!short) {
@@ -408,7 +408,7 @@ private fun TileLane(
                 shape = shape,
                 progress = tile.progress,
                 caption = TileCopy.caption(row.rowId, tile) ?: tile.releaseInfo,
-                rating = tile.rating.takeIf { shape == TileShape.Poster },
+                ratings = if (shape == TileShape.Poster) TileCopy.ratings(tile.ratings) else emptyList(),
                 onLongClick = onHold?.let { { it(tile) } },
                 longClickLabel = "More options".takeIf { onHold != null },
             )

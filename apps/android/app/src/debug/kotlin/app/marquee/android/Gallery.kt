@@ -183,7 +183,9 @@ private fun Gallery() {
                         modifier = Modifier.padding(top = Marquee.tiles.pad),
                         progress = if (index == 3) 0.4f else null,
                         caption = if (index == 3) "S1:E2 · 36 min left" else tile.releaseInfo,
-                        rating = tile.rating,
+                        ratings =
+                            app.marquee.core.TileCopy
+                                .ratings(tile.ratings),
                         forceFocus = index == 2,
                     )
                 }

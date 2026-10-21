@@ -1,6 +1,7 @@
 package app.marquee.core
 
 import app.marquee.core.model.Hero
+import app.marquee.core.model.Ratings
 import app.marquee.core.model.Tile
 import app.marquee.core.model.withoutRemoved
 import kotlin.test.Test
@@ -104,5 +105,15 @@ class TileCopyTest {
         val alone = listOf(cw.copy(tiles = cw.tiles.take(1)), other)
         assertEquals(listOf("pop"), alone.withoutRemoved("a").map { it.rowId })
         assertEquals(rows, rows.withoutRemoved(null))
+    }
+
+    @Test
+    fun `scores sit side by side as plain text and a missing one has no slot`() {
+        assertEquals(listOf("IMDb 8.8", "RT 87%"), TileCopy.ratings(Ratings(imdb = "8.8", rottenTomatoes = "87%")))
+        assertEquals(listOf("IMDb 8.8"), TileCopy.ratings(Ratings(imdb = "8.8")))
+        assertEquals(listOf("RT 0%"), TileCopy.ratings(Ratings(rottenTomatoes = "0%")))
+        assertEquals(emptyList(), TileCopy.ratings(Ratings()))
+        // A recording from before the field decodes to no scores, never a placeholder.
+        assertEquals(emptyList(), TileCopy.ratings(tile().ratings))
     }
 }

@@ -50,6 +50,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import app.marquee.core.Format
 import app.marquee.core.PrimaryAction
+import app.marquee.core.TileCopy
 import app.marquee.core.TitleCopy
 import app.marquee.core.VersionLine
 import app.marquee.core.VersionsCopy
@@ -293,7 +294,7 @@ private fun Info(
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
         Logo(details.logo, details.name, height = 160.dp, maxWidth = 480.dp)
         RatingLine(
-            details.rating,
+            TileCopy.ratings(details.ratings),
             TitleCopy.meta(details, TitleCopy.seasonCount(header.seasons)),
             Modifier.widthIn(max = 760.dp),
         )

@@ -379,7 +379,7 @@ internal fun Poster(
         modifier = Modifier.padding(top = Marquee.tiles.pad),
         progress = tile.progress,
         caption = caption,
-        rating = tile.rating,
+        ratings = TileCopy.ratings(tile.ratings),
     )
 }
 
