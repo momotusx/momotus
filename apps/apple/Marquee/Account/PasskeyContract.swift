@@ -38,6 +38,11 @@ enum PasskeyContract {
         return Data(base64Encoded: text)
     }
 
+    /// Whether a passkey's `user.id` is the account a sign-in found (`found` names it in hex).
+    static func isFor(_ user: Data, account hex: String) -> Bool {
+        user.map { String(format: "%02x", $0) }.joined() == hex.lowercased()
+    }
+
     /// The RP ID: the link host the build carries (`MARQUEE_LINK_HOST`), none without it.
     static var relyingParty: String? {
         let host = Bundle.main.object(forInfoDictionaryKey: "MarqueeLinkHost") as? String

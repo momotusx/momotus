@@ -51,6 +51,20 @@ private let nobody = "http://127.0.0.1:9"
         withExtendedLifetime(core) {}
     }
 
+    @Test func foundTakesOnlyAPasskeyMadeForTheFoundAccount() async throws {
+        let sheets = ScriptedSheets()
+        sheets.passkey = .success(.init(prf: Data(repeating: 7, count: 32), user: Data(repeating: 0xab, count: 16)))
+        let (flow, core) = try await open(sheets)
+        // Another account's passkey: this device never joins that one, the code next.
+        await flow.signedIn(.found(ticket: "t1", account: String(repeating: "cd", count: 16)), name: "Mac")
+        #expect(flow.stage == .cannotOpen(ticket: "t1"))
+        // The found account's own opens it (nobody answers here, so its recover fails in words).
+        await flow.signedIn(.found(ticket: "t1", account: String(repeating: "AB", count: 16)), name: "Mac")
+        #expect(flow.stage == .choose && flow.trouble != nil)
+        #expect(sheets.passkeys == [true, true])
+        withExtendedLifetime(core) {}
+    }
+
     @Test func newWithNoPasskeyHereOffersCreate() async throws {
         let sheets = ScriptedSheets()
         let (flow, core) = try await open(sheets)

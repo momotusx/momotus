@@ -188,7 +188,7 @@ private func browse(_ url: String, as subject: String) async throws -> String {
         await flow.linkHeld()
         #expect(try await tablet.identities().count == 2)
 
-        // found, with a passkey here that opens nothing: the code next, the sign-in kept.
+        // found, with a passkey here made for another account: the code next, the sign-in kept.
         let (laptop, laptopCore) = try await member()
         let again = scripted(as: alice)
         again.passkey = .success(stranger())

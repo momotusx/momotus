@@ -171,16 +171,17 @@ final class SignInFlow {
 
     // MARK: Found and new
 
-    /// What a sign-in answered. `found`: a passkey already here opens it;
-    /// none, or one that opens nothing, leads to the QR (4.1.3). `new`: a
+    /// What a sign-in answered. `found`: a passkey already here, made for the
+    /// found account, opens it; none, another account's (a device may hold
+    /// passkeys for two), or one that opens nothing, leads to the QR (4.1.3). `new`: a
     /// passkey here opens the account it belongs to in that one sheet, and the
     /// identity is linked to it (4.1.4); none, a closed sheet, or one that
     /// opens nothing leads to Create, the sign-in kept.
     func signedIn(_ answer: SignInSnapshot, name: String) async {
         switch answer {
-        case .found(let ticket, _):
+        case .found(let ticket, let account):
             // Asked for a passkey on this device only, no QR to another phone.
-            if let here = try? await sheets.passkey(true) {
+            if let here = try? await sheets.passkey(true), PasskeyContract.isFor(here.user, account: account) {
                 await recover(prf: here.prf, name: name, link: nil, otherwise: .cannotOpen(ticket: ticket))
             } else {
                 stage = .cannotOpen(ticket: ticket)
