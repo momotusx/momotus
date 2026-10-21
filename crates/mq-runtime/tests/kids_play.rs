@@ -800,6 +800,10 @@ async fn a_resume_counts_its_own_folder_in_the_room() {
     // The rate is the file over the last session's duration, not the
     // 1080p guess (review P2-2).
     assert_eq!(stats.bytes_per_s, Some(len * 1000 / duration_ms));
+    // Before the player's read: the head read was a probe, so nothing past
+    // the head's pinned window was wanted again at byte 0 (review P2-2).
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    assert_eq!(s.leecher.stats(t).await.unwrap().refetched_bytes, 0);
     assert!(read_range(&url, at, 8 * MIB).await == s.movie[at as usize..(at + 8 * MIB) as usize]);
     assert_eq!(s.leecher.stats(t).await.unwrap().refetched_bytes, 0);
 }
