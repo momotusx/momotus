@@ -21,8 +21,8 @@ use crate::engine::{
     relay_info, require_secure,
 };
 use crate::roster::{
-    Bundle, FORMS, Hex, Id, KitKind, MemberKeys, MemberSecret, NewKit, Sponsor, seal_form,
-    seal_name,
+    Bundle, FORMS, Hex, Id, KitKind, MAX_KITS, MemberKeys, MemberSecret, NewKit, Role, Sponsor,
+    seal_form, seal_name,
 };
 use crate::wire::{AccountResponse, AppendRequest, Redeemed, RosterHead};
 use base64::Engine as _;
@@ -148,16 +148,9 @@ pub async fn start_pairing(http: &HttpClient, server: &str) -> Result<PairingReq
         .await?
         .json()?;
     let member = MemberSecret::generate();
-    let keys = member.public();
-    let mut qr = url::Url::parse("marquee:pair").expect("static url");
-    qr.query_pairs_mut()
-        .append_pair("v", "2")
-        .append_pair("s", server)
-        .append_pair("p", &slot.pairing)
-        .append_pair("k", &B64URL.encode(keys.boxk.0))
-        .append_pair("g", &B64URL.encode(keys.sign.0));
+    let qr = pairing_code(LINK_HOST, server, &slot.pairing, member.public());
     Ok(PairingRequest {
-        qr: qr.to_string(),
+        qr,
         expires_ms: slot.expires_ms,
         server: server.to_owned(),
         pairing: slot.pairing,
@@ -323,18 +316,25 @@ async fn join(
 
 /// A pairing code shown by a new device: its slot and its keys. Refuses a
 /// code for another sync server.
-fn read_code(config: &SyncConfig, qr: &str) -> Result<(String, MemberKeys), SyncError> {
+fn read_code(server: &str, qr: &str) -> Result<(String, MemberKeys), SyncError> {
     let url = url::Url::parse(qr).map_err(|_| bad("not a pairing code"))?;
+    // v3 carries its fields in the fragment of an https link (any host: the
+    // link host of whichever build made it); v2 in a `marquee:` query.
+    let (fields, version) = match (url.scheme(), url.path()) {
+        ("https", "/pair") => (url.fragment().unwrap_or_default(), "3"),
+        ("marquee", "pair") => (url.query().unwrap_or_default(), "2"),
+        _ => return Err(bad("not a pairing code")),
+    };
     let field = |name: &str| {
-        url.query_pairs()
+        url::form_urlencoded::parse(fields.as_bytes())
             .find(|(k, _)| k == name)
             .map(|(_, v)| v.into_owned())
     };
-    if url.scheme() != "marquee" || url.path() != "pair" || field("v").as_deref() != Some("2") {
+    if field("v").as_deref() != Some(version) {
         return Err(bad("not a pairing code"));
     }
     let pairing = field("p").ok_or_else(|| bad("pairing code has no slot"))?;
-    if field("s").as_deref() != Some(config.server.as_str()) {
+    if field("s").as_deref() != Some(server) {
         return Err(bad("the code is for another sync server"));
     }
     let key = |name: &str| {
@@ -349,6 +349,28 @@ fn read_code(config: &SyncConfig, qr: &str) -> Result<(String, MemberKeys), Sync
     Ok((pairing, MemberKeys { sign, boxk }))
 }
 
+/// The link host this build names (`MARQUEE_LINK_HOST` when it was built):
+/// the TV's QR is then an app link to the scanner (D6).
+const LINK_HOST: Option<&str> = option_env!("MARQUEE_LINK_HOST");
+
+/// The text of a new device's QR: `https://<link host>/pair#v=3&...` when the
+/// build names a link host (a phone camera opens the app's scanner; the
+/// fragment never reaches the host), else `marquee:pair?v=2&...`. The relay,
+/// the slot and the device's public keys; no device name.
+fn pairing_code(link_host: Option<&str>, server: &str, slot: &str, keys: &MemberKeys) -> String {
+    let fields = url::form_urlencoded::Serializer::new(String::new())
+        .append_pair("v", if link_host.is_some() { "3" } else { "2" })
+        .append_pair("s", server)
+        .append_pair("p", slot)
+        .append_pair("k", &B64URL.encode(keys.boxk.0))
+        .append_pair("g", &B64URL.encode(keys.sign.0))
+        .finish();
+    match link_host {
+        Some(host) => format!("https://{host}/pair#{fields}"),
+        None => format!("marquee:pair?{fields}"),
+    }
+}
+
 /// On a device that already syncs: vouches for the device whose QR was
 /// scanned and hands it the account. Returns the code to show (the new
 /// device must show the same) and this device's record to store. If the
@@ -361,7 +383,7 @@ pub async fn approve_pairing(
     clock: &HlcClock,
     qr: &str,
 ) -> Result<(String, SyncConfig), SyncError> {
-    let (pairing, keys) = read_code(config, qr)?;
+    let (pairing, keys) = read_code(&config.server, qr)?;
     let public =
         PublicKey::from_bytes(&keys.boxk.0).map_err(|_| bad("pairing code has no valid keys"))?;
     let session = Session::open(library, http, config, clock).await?;
@@ -478,9 +500,18 @@ pub fn passkey_secret(prf: &[u8; 32]) -> [u8; 20] {
 
 const PASSKEY_KIT_INFO: &[u8] = b"marquee/passkey-kit/v1";
 
+/// What every platform's passkey sheet evaluates the PRF on (`eval.first`,
+/// 3.1); `apps/shared/passkey-vectors.json` pins its encodings.
+pub const PRF_INPUT: &str = "marquee/passkey/v1";
+
 /// A PRF output as the apps send it: 32 bytes, base64url without padding.
+/// A platform encoder that leaves the `=` on is taken too.
 pub fn read_prf(text: &str) -> Option<[u8; 32]> {
-    B64URL.decode(text).ok()?.try_into().ok()
+    B64URL
+        .decode(text.trim_end_matches('='))
+        .ok()?
+        .try_into()
+        .ok()
 }
 
 fn kit_keys_from(secret: &[u8; 20]) -> KitKeys {
@@ -534,7 +565,7 @@ pub async fn cancel_pairing(
     clock: &HlcClock,
     qr: &str,
 ) -> Result<SyncConfig, SyncError> {
-    let (_, keys) = read_code(config, qr)?;
+    let (_, keys) = read_code(&config.server, qr)?;
     let id = keys.id();
     let mut session = Session::open(library, http, config, clock).await?;
     let me = session.member.id();
@@ -602,15 +633,31 @@ async fn add_kit(
 ) -> Result<(Id, SyncConfig), SyncError> {
     let mut session = Session::open(library, http, config, clock).await?;
     let at_ms = clock.tick(clock.wall_now()).wall_ms;
+    let id = new_kit.keys.id();
     session
         .propose(|s| {
-            s.roster
+            // Judged on the roster each try is built on, before anything is
+            // sent: a passkey that already opens the account (the save
+            // probe, 3.1), one dropped before (never let in again: save a
+            // new one), the cap.
+            let roster = &s.roster;
+            if roster.members().contains_key(&id) {
+                return Err(SyncError::KitHere);
+            }
+            if roster.admitted(&id) {
+                return Err(SyncError::KitDropped);
+            }
+            let kits = roster.members().values().filter(|m| m.role == Role::Kit);
+            if kits.count() >= MAX_KITS {
+                return Err(SyncError::TooManyKits);
+            }
+            roster
                 .add_kit(&s.member, &s.record.keys, &new_kit, at_ms)
                 .map_err(|e| SyncError::Roster(e.to_string()))
         })
         .await?;
     let record = session.changed().unwrap_or_else(|| session.record.clone());
-    Ok((new_kit.keys.id(), record))
+    Ok((id, record))
 }
 
 /// A way back into an account.
@@ -772,5 +819,44 @@ mod tests {
             );
         }
         assert!(read_prf("AAAA").is_none(), "only 32 bytes");
+        // The input side: one text, its encodings and the salt WebAuthn makes of it.
+        let input = &vectors["prfInput"];
+        assert_eq!(input["text"], PRF_INPUT);
+        assert_eq!(input["hex"], hex::encode(PRF_INPUT));
+        assert_eq!(input["base64url"], B64URL.encode(PRF_INPUT));
+        let salt = Sha256::digest([b"WebAuthn PRF\0".as_slice(), PRF_INPUT.as_bytes()].concat());
+        assert_eq!(input["salt"], hex::encode(salt));
+        // A platform encoder that pads is read too.
+        let padded = format!("{}=", cases[0]["prf"].as_str().unwrap());
+        assert_eq!(read_prf(&padded), Some([0; 32]));
+    }
+
+    /// The TV's QR as an app link to the scanner when the build names a
+    /// link host (v3, its fields in the fragment), as `marquee:pair` when
+    /// not (v2); both read, for this relay only.
+    #[test]
+    fn pairing_codes_read_in_both_forms() {
+        let keys = *MemberSecret::generate().public();
+        let server = "https://sync.example.org";
+        let v3 = pairing_code(Some("link.example.org"), server, "slot", &keys);
+        assert!(v3.starts_with("https://link.example.org/pair#v=3&"), "{v3}");
+        let v2 = pairing_code(None, server, "slot", &keys);
+        assert!(v2.starts_with("marquee:pair?v=2&"), "{v2}");
+        for code in [&v3, &v2] {
+            let (slot, read) = read_code(server, code).unwrap();
+            assert_eq!((slot.as_str(), read), ("slot", keys));
+            assert!(
+                read_code("https://other.example", code).is_err(),
+                "another relay"
+            );
+        }
+        for wrong in [
+            v3.replace("v=3", "v=2"),
+            v3.replace("/pair#", "/other#"),
+            v3.replace("https:", "http:"),
+            v2.replace("v=2", "v=3"),
+        ] {
+            assert!(read_code(server, &wrong).is_err(), "{wrong}");
+        }
     }
 }

@@ -232,6 +232,15 @@ pub enum SyncError {
     /// Another account holds this passkey's lookup.
     #[error("this passkey cannot be saved for this account")]
     KitTaken,
+    /// This passkey already opens the account: nothing to save (3.1's probe).
+    #[error("this passkey already works for this account")]
+    KitHere,
+    /// This passkey was dropped from the account and never comes back.
+    #[error("this passkey was removed from the account; save a new one")]
+    KitDropped,
+    /// The account holds as many kits as it may.
+    #[error("the account has as many kits as it can hold; remove one first")]
+    TooManyKits,
 }
 
 /// The relay's coded answers map in one place. Only the relay's own 410
@@ -307,6 +316,9 @@ impl SyncError {
             SyncError::Busy => "busy",
             SyncError::KitUnknown => "kitUnknown",
             SyncError::KitTaken => "kitTaken",
+            SyncError::KitHere => "kitHere",
+            SyncError::KitDropped => "kitDropped",
+            SyncError::TooManyKits => "tooManyKits",
             _ => return None,
         })
     }
@@ -1537,6 +1549,9 @@ pub struct Devices {
     pub fingerprint: String,
     pub epoch: u32,
     pub rotation_pending: bool,
+    /// The account id, base64url without padding: a saved passkey's
+    /// `user.id` (3.1), as WebAuthn and Credential Manager take it.
+    pub account: String,
     #[cfg_attr(feature = "ts", ts(type = "Record<string, unknown> | null"))]
     pub record: Option<SyncConfig>,
 }
@@ -1596,6 +1611,8 @@ pub async fn devices(
         fingerprint: session.roster.fingerprint(),
         epoch: session.roster.epoch(),
         rotation_pending: session.roster.rotation_pending(),
+        account: base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(session.record.keys.account.0),
         record: session.changed(),
     })
 }

@@ -38,7 +38,8 @@ pub const MAX_KITS: usize = 8;
 /// What a device says it is (sealed, padded to one length so the relay
 /// cannot tell them apart): only phones and tablets approve a new device.
 pub const FORMS: [&str; 5] = ["phone", "tablet", "tv", "computer", "web"];
-const FORM_LEN: usize = 8;
+/// The smallest length a sealed name is padded to.
+const NAME_BUCKET: usize = 32;
 /// The largest entry body, checked before parsing: 32 boxes and a name fit
 /// many times over.
 pub const MAX_ENTRY: usize = 64 * 1024;
@@ -1184,16 +1185,21 @@ fn derived(ikm: &Hex<32>, info: &[u8]) -> XChaCha20Poly1305 {
     XChaCha20Poly1305::new((&key).into())
 }
 
-/// A device name sealed for members under a key from the id key, which never
-/// changes: any member reads it at any epoch, the relay cannot.
+/// A device name (or a kit's label, or a form) sealed for members under a
+/// key from the id key, which never changes: any member reads it at any
+/// epoch, the relay cannot. The text is padded with zero bytes to a bucket
+/// (32 bytes, or the next power of two), so its length tells the relay only
+/// the bucket: not a default name that would give the form away.
 pub fn seal_name(bundle: &Bundle, member: &Id, name: &str) -> String {
     let nonce: [u8; NONCE] = random();
     let aad = [&bundle.account.0[..], &member.0].concat();
+    let mut padded = name.as_bytes().to_vec();
+    padded.resize(padded.len().max(NAME_BUCKET).next_power_of_two(), 0);
     let sealed = derived(&bundle.id_key, NAME_INFO)
         .encrypt(
             &XNonce::from(nonce),
             Payload {
-                msg: name.as_bytes(),
+                msg: &padded,
                 aad: &aad,
             },
         )
@@ -1202,9 +1208,9 @@ pub fn seal_name(bundle: &Bundle, member: &Id, name: &str) -> String {
 }
 
 /// A device's form (one of `FORMS`, checked by the caller), sealed as a
-/// name padded to one length: the relay cannot tell a TV from a phone.
+/// name: one bucket for all five, so the relay cannot tell a TV from a phone.
 pub fn seal_form(bundle: &Bundle, member: &Id, form: &str) -> String {
-    seal_name(bundle, member, &format!("{form:<FORM_LEN$}"))
+    seal_name(bundle, member, form)
 }
 
 /// A sealed form, opened: one of `FORMS`, else none.
@@ -1227,7 +1233,8 @@ pub fn open_name(bundle: &Bundle, member: &Id, sealed: &str) -> Option<String> {
             },
         )
         .ok()?;
-    String::from_utf8(plain).ok()
+    let text = String::from_utf8(plain).ok()?;
+    Some(text.trim_end_matches(char::from(0)).to_owned())
 }
 
 fn chain_seal(account: &Id, new_epoch: u32, new_ak: &Hex<32>, prev_ak: &Hex<32>) -> Vec<u8> {
@@ -2022,5 +2029,16 @@ mod passkeys {
         assert_eq!(tv.len(), computer.len(), "the relay cannot tell them apart");
         let odd = seal_name(&held, &phone.id(), "toaster");
         assert_eq!(open_form(&held, &phone.id(), &odd), None);
+        // Names and labels go in buckets too: a default name ("TV", "Living
+        // room TV") gives no form away by its length.
+        let short = seal_name(&held, &phone.id(), "TV");
+        let long = seal_name(&held, &phone.id(), "Living room TV");
+        assert_eq!(short.len(), long.len());
+        assert_eq!(
+            open_name(&held, &phone.id(), &long).as_deref(),
+            Some("Living room TV")
+        );
+        let longer = seal_name(&held, &phone.id(), &"x".repeat(40));
+        assert!(longer.len() > short.len(), "the next bucket");
     }
 }

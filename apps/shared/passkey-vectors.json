@@ -1,5 +1,11 @@
 {
-  "about": "Sign-in and passkey vectors (plans/accounts.md 2.4 and 3.1). nonce: the provider nonce for a relay's flow, lowercase hex of SHA-256(relayNonce bytes || 0x00 || UTF-8 host), relayNonce given as base64url without padding. passkeyKit: a passkey's 32-byte PRF output (base64url without padding, as savePasskey and recover take it), the kit secret (hex: the first 20 bytes of HKDF-SHA256 with no salt, info marquee/passkey-kit/v1), and the kit's lookup id from that secret (hex: 16 bytes of HKDF-SHA256 with no salt, info marquee/recovery/lookup/v1, as for a recovery kit). The PRF input each platform evaluates comes in phase 1b.",
+  "about": "Sign-in and passkey vectors (plans/accounts.md 2.4 and 3.1). nonce: the provider nonce for a relay's flow, lowercase hex of SHA-256(relayNonce bytes || 0x00 || UTF-8 host), relayNonce given as base64url without padding. passkeyKit: a passkey's 32-byte PRF output (base64url without padding, as savePasskey and recover take it), the kit secret (hex: the first 20 bytes of HKDF-SHA256 with no salt, info marquee/passkey-kit/v1), and the kit's lookup id from that secret (hex: 16 bytes of HKDF-SHA256 with no salt, info marquee/recovery/lookup/v1, as for a recovery kit). prfInput: the one PRF input every platform evaluates (eval.first), as UTF-8 text, as hex, as base64url (what Credential Manager's WebAuthn JSON carries), and the hmac-secret salt the authenticator gets, SHA-256(\"WebAuthn PRF\" || 0x00 || input), which browsers and Credential Manager compute themselves. Phase 1b records whether Apple's native API takes the input or the salt.",
+  "prfInput": {
+    "text": "marquee/passkey/v1",
+    "hex": "6d6172717565652f706173736b65792f7631",
+    "base64url": "bWFycXVlZS9wYXNza2V5L3Yx",
+    "salt": "d8e685f66421c5e205c2aa82e2d3a28ce2d76dd925f83ad3d3400f169601745e"
+  },
   "nonce": [
     {
       "relayNonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
