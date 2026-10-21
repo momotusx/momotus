@@ -89,9 +89,10 @@ test.afterAll(() => {
   media?.close();
 });
 
-/** Opens the subtitle panel and picks the track labelled `label`. */
+/** Opens the subtitle picker, then English's options (both files are English), and picks the track labelled `label`. */
 async function pick(page: Page, label: string) {
   await page.locator('[data-f="player:subs"]').dispatchEvent("click");
+  await page.locator('[data-f="subopen:en"]').dispatchEvent("click");
   await page.locator('aside[aria-label="Subtitles"] .opt', { hasText: label }).dispatchEvent("click");
 }
 
@@ -125,17 +126,24 @@ test("a subtitle that does not load leaves a note and the video plays on", async
   await expect(page.locator(".toast.bad")).toHaveText(GONE);
   await page.locator('[data-f="player:subs"]').dispatchEvent("click");
   await expect(panel.locator(".opt-note")).toHaveText([GONE]);
+  await panel.locator('[data-f="subopen:en"]').dispatchEvent("click");
   await expect(panel.locator(".opt", { hasText: "Gone" })).toBeVisible();
   await expect(panel.locator(".opt.on", { hasText: "Gone" })).toBeVisible();
+  // Back from English's options steps to the languages, then closes.
   await page.keyboard.press("Escape");
+  await expect(panel.locator('[data-f="sub:off"]')).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
 
   // A file that holds no subtitle: it leaves the list and subtitles go off.
   await pick(page, "Broken");
   await expect(page.locator(".toast.bad")).toHaveText(BROKEN);
   await page.locator('[data-f="player:subs"]').dispatchEvent("click");
   await expect(panel.locator(".opt-note")).toHaveText([GONE, BROKEN]);
-  await expect(panel.locator(".opt", { hasText: "Broken" })).toHaveCount(0);
   await expect(panel.locator('[data-f="sub:off"]')).toHaveClass(/\bon\b/);
+  await panel.locator('[data-f="subopen:en"]').dispatchEvent("click");
+  await expect(panel.locator(".opt", { hasText: "Gone" })).toBeVisible();
+  await expect(panel.locator(".opt", { hasText: "Broken" })).toHaveCount(0);
 
   // The video never stopped and no source failed over.
   const at = await time();

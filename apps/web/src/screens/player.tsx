@@ -8,8 +8,6 @@ import Gauge from "lucide-solid/icons/gauge";
 import Layers from "lucide-solid/icons/layers";
 import ListVideo from "lucide-solid/icons/list-video";
 import LoaderCircle from "lucide-solid/icons/loader-circle";
-import Minus from "lucide-solid/icons/minus";
-import Plus from "lucide-solid/icons/plus";
 import Pause from "lucide-solid/icons/pause";
 import Maximize from "lucide-solid/icons/maximize";
 import Minimize from "lucide-solid/icons/minimize";
@@ -25,19 +23,21 @@ import { Backdrop } from "../components/art";
 import { Why } from "../components/why";
 import { KeyedPage } from "../components/keyed-page";
 import { TraktMark } from "../components/trakt-mark";
-import { liveView, prefsView, serverMoves } from "../core/client";
+import { liveView, op, prefsView, serverMoves } from "../core/client";
 import type { PlaybackSnapshot } from "../core/generated/PlaybackSnapshot";
 import type { Segment } from "../core/generated/Segment";
 import type { SegmentKind } from "../core/generated/SegmentKind";
+import type { SubtitleSize } from "../core/generated/SubtitleSize";
 import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
 import { videoContext } from "../core/video";
 import { autoFocusSoon, goBack } from "../focus/dom";
 import { form } from "../form";
 import { backThenReplace, entryFrom, historyBase, historyDepth, markBack } from "../history";
+import { SubtitlePicker } from "../player/subtitle-picker";
 import { createVideoEngine } from "../player/video-engine";
 import { loadedSource, type Retry, sourceStart, TRYING_AGAIN_MS, tryingAgain } from "../lib/failover";
 import { bytes, clock, decoded, delayText, startsText, episodeLabel, groupFailures, playPath, playState, seasonName, titlePath, versionsPath } from "../lib/format";
-import { byLanguage, offSummary, trackDetail } from "../lib/subtitles";
+import { offSummary, pickerLanguages } from "../lib/subtitles";
 import { blockedWords, languageName, nextVersion, noVersionWords, qualityCell, qualityText, restartLine, subtitleNote } from "../lib/words";
 import "./player.css";
 
@@ -46,6 +46,13 @@ const HIDE_MS = 4000;
 const PROGRESS_MS = 5000;
 // Up Next appears this many seconds before the end.
 const NEXT_AT = 20;
+// The profile's subtitle sizes in order, as the picker steps them.
+const SIZES: { size: SubtitleSize; text: string }[] = [
+  { size: "small", text: "80%" },
+  { size: "medium", text: "100%" },
+  { size: "large", text: "125%" },
+  { size: "extraLarge", text: "150%" },
+];
 const SKIP: Record<SegmentKind, string> = { intro: "Skip intro", recap: "Skip recap", credits: "Skip credits", preview: "Skip preview" };
 
 // The viewer's sound for this app run: one episode's level and mute are the next one's.
@@ -216,6 +223,9 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
 
   const [osd, setOsd] = createSignal(true);
   const [panel, setPanel] = createSignal<"subs" | "audio" | null>(null);
+  // The language whose options the subtitle picker shows (its second level off the TV).
+  const [subLanguage, setSubLanguage] = createSignal<string | null>(null);
+  createEffect(on(panel, (p) => p !== "subs" && setSubLanguage(null)));
   // The core's subtitle in use, if any.
   const [track, setTrack] = createSignal<{ url: string; lang: string } | null>(null);
   const [subError, setSubError] = createSignal<string | null>(null);
@@ -353,10 +363,21 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     const timer = setInterval(() => !paused() && report(), PROGRESS_MS);
     // While the controls are hidden, the first press only shows them.
     const onKey = (e: KeyboardEvent) => {
-      const back = e.key === "Escape" || e.key === "Backspace" || e.key === "GoBack" || e.keyCode === 10009 || e.keyCode === 461;
+      // Backspace in the subtitle search deletes a letter.
+      const typing = e.target instanceof HTMLInputElement && e.target.type !== "range";
+      const back = e.key === "Escape" || (e.key === "Backspace" && !typing) || e.key === "GoBack" || e.keyCode === 10009 || e.keyCode === 461;
       if (e.key === "MediaPlayPause" || e.key === "MediaPlay" || e.key === "MediaPause") {
         e.preventDefault();
         toggle();
+        return;
+      }
+      // Back in a language's options steps back to the languages (off the TV).
+      if (back && panel() === "subs" && subLanguage() && form() !== "tv") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const was = subLanguage();
+        setSubLanguage(null);
+        autoFocusSoon(() => document.querySelector<HTMLElement>(`[data-f="sublang:${was}"]`));
         return;
       }
       if (back && panel()) {
@@ -646,8 +667,20 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     engine.selectTrack("sub", id);
   };
 
-  // With no track on: what the core found so far, and whether it still asks.
-  const subsOff = () => offSummary(snap()?.subtitles.length ?? 0, !!snap()?.subtitlesPending);
+  // With no track on: the languages the picker shows so far, and whether the core still asks.
+  const subsOff = () => offSummary(pickerLanguages(snap()?.subtitles ?? [], fileSubs(), languageName).length, !!snap()?.subtitlesPending);
+  // The Subtitles button's value: the language on, else the count.
+  const subsText = () => {
+    const on = track() ? snap()?.subtitles.find((t) => t.url === track()?.url) : undefined;
+    if (track()) return on?.languageName ?? languageName(track()?.lang ?? "");
+    const file = fileSubs().find((t) => t.selected);
+    return file?.lang ? languageName(file.lang) : subsOff().text;
+  };
+  const sizeAt = () => Math.max(0, SIZES.findIndex((s) => s.size === (prefs.state.data?.subtitleSize ?? "medium")));
+  const setSize = (i: number) => {
+    const s = SIZES[i];
+    if (s) void op("setPrefs", { patch: { subtitleSize: s.size } }).catch(() => undefined);
+  };
   const pct = (x: number) => `${duration() ? Math.min(100, (x / duration()) * 100) : 0}%`;
   // The failure card's Choose a version: the way on when nothing else is (primary and focused then).
   const chooseVersion = () => (
@@ -693,7 +726,6 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     if (vs?.pendingAddons.length) return { tone: "warn", text: `Asking ${vs.pendingAddons.join(", ")} for versions`, busy: true };
     return { tone: "warn", text: ctx.details() ? "Choosing the best version" : "Opening", busy: true };
   };
-
   return (
     <div
       class="player-scr"
@@ -996,7 +1028,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                 <Captions aria-hidden />
                 <b>Subtitles</b>
                 <small>
-                  {track() ? (snap()?.subtitles.find((t) => t.url === track()?.url)?.languageName ?? languageName(track()?.lang ?? "")) : subsOff().text}
+                  {subsText()}
                   <Show when={!track() && subsOff().searching}>
                     <LoaderCircle class="spin mark" role="img" aria-label="Still searching" />
                   </Show>
@@ -1088,79 +1120,25 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       </Show>
 
       <Show when={panel() === "subs"}>
-        <aside class="panel" aria-label="Subtitles" data-fgroup="subs">
-          <h2>Subtitles</h2>
-          {/* Timing for a subtitle out of step with the speech, this play only. */}
-          <Show when={track()}>
-            <div class="sub-delay" role="group" aria-label="Subtitle timing">
-              <span>Timing</span>
-              <button class="sub-step" data-f="sub:earlier" aria-label="Show subtitles half a second earlier" onClick={() => nudgeSubs(-0.5)}>
-                <Minus aria-hidden />
-              </button>
-              <output class="num" aria-live="polite">
-                {delayText(subDelay())}
-              </output>
-              <button class="sub-step" data-f="sub:later" aria-label="Show subtitles half a second later" onClick={() => nudgeSubs(0.5)}>
-                <Plus aria-hidden />
-              </button>
-            </div>
-          </Show>
-          <div class="panel-list" data-vscroll>
-            <button class="opt" classList={{ on: !track() }} data-f="sub:off" data-autofocus onClick={() => chooseSubtitle(null)}>
-              <Show when={!track()}>
-                <Check aria-hidden class="opt-check" />
-              </Show>
-              Off
-            </button>
-            {/* One section per language, preferred first, as the core orders
-                them. Sections go by language tag and tracks by URL, so a late
-                subtitle addon adds to the list without rebuilding the option
-                a remote is on. */}
-            <For each={byLanguage(snap()?.subtitles ?? []).map((s) => s.language)}>
-              {(language) => {
-                const tracks = () => (snap()?.subtitles ?? []).filter((t) => t.language === language);
-                return (
-                <section class="sub-lang" aria-label={tracks()[0]?.languageName}>
-                  <h3>{tracks()[0]?.languageName}</h3>
-                  <For each={tracks()}>
-                    {(t) => (
-                      <button class="opt" classList={{ on: track()?.url === t.url }} data-f={`sub:${t.url}`} onClick={() => chooseSubtitle(t)}>
-                        <Show when={track()?.url === t.url}>
-                          <Check aria-hidden class="opt-check" />
-                        </Show>
-                        <b>{t.name}</b>
-                        <Show when={trackDetail(t)}>
-                          <span>{trackDetail(t)}</span>
-                        </Show>
-                      </button>
-                    )}
-                  </For>
-                </section>
-                );
-              }}
-            </For>
-            <Show when={fileSubs().length}>
-              <p class="opt-note">In the file</p>
-              <For each={fileSubs()}>
-                {(t) => (
-                  <button class="opt" classList={{ on: t.selected && !track() }} data-f={`subfile:${t.id}`} onClick={() => pickFileSub(t.id)}>
-                    <Show when={t.selected && !track()}>
-                      <Check aria-hidden class="opt-check" />
-                    </Show>
-                    <b>{t.lang ? languageName(t.lang) : t.label}</b>
-                    <Show when={t.lang && t.label !== t.lang}>
-                      <span>{t.label}</span>
-                    </Show>
-                  </button>
-                )}
-              </For>
-            </Show>
-            <Show when={snap()?.subtitlesPending}>
-              <p class="opt-note">Still asking subtitle addons</p>
-            </Show>
-            <For each={snap()?.subtitleNotes ?? []}>{(n) => <p class="opt-note">{subtitleNote(n)}</p>}</For>
-          </div>
-        </aside>
+        <SubtitlePicker
+          tracks={snap()?.subtitles ?? []}
+          fileSubs={fileSubs()}
+          on={track()?.url ?? null}
+          onFile={track() ? null : (fileSubs().find((t) => t.selected)?.id ?? null)}
+          pending={!!snap()?.subtitlesPending}
+          notes={(snap()?.subtitleNotes ?? []).map(subtitleNote)}
+          open={subLanguage()}
+          setOpen={setSubLanguage}
+          timing={track() ? { text: delayText(subDelay()), less: () => nudgeSubs(-0.5), more: () => nudgeSubs(0.5) } : null}
+          size={{
+            text: SIZES[sizeAt()]?.text ?? "100%",
+            less: sizeAt() > 0 ? () => setSize(sizeAt() - 1) : undefined,
+            more: sizeAt() < SIZES.length - 1 ? () => setSize(sizeAt() + 1) : undefined,
+          }}
+          pick={chooseSubtitle}
+          pickFile={pickFileSub}
+          close={() => setPanel(null)}
+        />
       </Show>
 
       <Show when={showSkip() && segment()} keyed>

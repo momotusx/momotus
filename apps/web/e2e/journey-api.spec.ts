@@ -290,7 +290,9 @@ test("subtitle size is the profile's; timing moves the cues for this play", asyn
     return c ? [c.startTime, c.endTime] : null;
   });
   await expect.poll(cue, { timeout: 30_000 }).toEqual([1, 30]);
+  // Timing sits under the options of a language.
   await p.locator('[data-f="player:subs"]').dispatchEvent("click");
+  await p.locator('[data-f="subopen:en"]').dispatchEvent("click");
   const timing = p.locator(".sub-delay output");
   await expect(timing).toHaveText("In step");
   await p.locator('[data-f="sub:later"]').dispatchEvent("click");
@@ -749,17 +751,17 @@ test("TV: a late subtitle addon leaves the remote on the subtitle it was on", as
   await p.locator('[data-f="player:subs"]').focus();
   await p.keyboard.press("Enter");
   await expect.poll(() => focusedKey(p)).toBe("sub:off");
-  await expect(p.locator(".sub-lang .opt").first()).toBeVisible({ timeout: 30_000 });
+  await expect(p.locator('[data-f^="sublang:"]').first()).toBeVisible({ timeout: 30_000 });
   // Brazilian Portuguese is still on its way (the Late Subs addon answers 5 s in).
-  const late = p.locator('.sub-lang[aria-label="Portuguese (Brazil)"]');
+  const late = p.locator('[data-f="sublang:pt-BR"]');
   await expect(late).toHaveCount(0);
   await p.keyboard.press("ArrowDown");
-  await expect.poll(() => focusedKey(p)).toMatch(/^sub:http/);
+  await expect.poll(() => focusedKey(p)).toBe("sublang:en");
   const on = await focusedKey(p);
   await markFocused(p);
   await expect(late).toHaveCount(1, { timeout: 15_000 });
-  // It lists first, above the English option the remote is on.
-  await expect(p.locator(".sub-lang").first()).toHaveAttribute("aria-label", "Portuguese (Brazil)");
+  // It lists first, above the English row the remote is on.
+  await expect(p.locator('[data-f^="sublang:"]').first()).toHaveAttribute("data-f", "sublang:pt-BR");
   await p.waitForTimeout(300);
   expect(await focusedKey(p)).toBe(on);
   expect(await focusedIsMarked(p)).toBe(true);

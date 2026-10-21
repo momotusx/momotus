@@ -95,22 +95,22 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 .panel h2 { font: 800 var(--type-headline) var(--font-display); margin: 0 12px 14px; }
 .panel-list { margin: 0 -24px; padding: 4px 24px 24px; }
 .opt { position: relative; display: grid; gap: 4px; width: 100%; padding: 14px 18px 14px 56px; border-radius: var(--radius-m); color: var(--text); font: 600 var(--type-callout) / 1.2 var(--font-text); }
-.opt span { font: 400 var(--type-caption) / 1.3 var(--font-text); color: var(--muted); }
+.opt > span:not([class]) { font: 400 var(--type-caption) / 1.3 var(--font-text); color: var(--muted); }
 /* The active track is a fill and a check; the ring stays for focus. */
 .opt.on { background: var(--raised); }
 .opt-check { position: absolute; left: 18px; top: 16px; width: 24px; height: 24px; }
 .opt:focus-visible, [data-form="tv"] .opt:focus { background: color-mix(in srgb, var(--text) 12%, transparent); }
-.sub-delay { display: flex; align-items: center; gap: 14px; margin: 0 12px 14px; font: 600 var(--type-callout) / 1.2 var(--font-text); }
-.sub-delay > span { flex: 1; color: var(--muted); }
-.sub-delay output { min-width: 6.5em; text-align: center; }
+.sub-delay, .sub-size { display: flex; align-items: center; gap: 14px; margin: 0 12px 14px; font: 600 var(--type-callout) / 1.2 var(--font-text); }
+.sub-delay > span, .sub-size > span { flex: 1; color: var(--muted); }
+.sub-delay output, .sub-size output { min-width: 6.5em; text-align: center; }
+.sub-step:disabled { opacity: .4; cursor: default; }
 .sub-step { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: var(--raised); color: var(--text); }
 .sub-step svg { width: 26px; height: 26px; }
 .sub-step:focus-visible, [data-form="tv"] .sub-step:focus { background: color-mix(in srgb, var(--text) 18%, transparent); }
-[data-form="phone"] .sub-delay { margin: 0 6px 10px; gap: 10px; }
+[data-form="phone"] .sub-delay, [data-form="phone"] .sub-size { margin: 0 6px 10px; gap: 10px; }
 [data-form="phone"] .sub-step { width: 40px; height: 40px; }
 [data-form="phone"] .sub-step svg { width: 20px; height: 20px; }
 .opt-note { padding: 14px 18px 14px 56px; font: 400 var(--type-caption) var(--font-text); color: var(--muted); }
-.sub-lang > h3 { padding: 18px 18px 6px 56px; font: 700 var(--type-caption) / 1.2 var(--font-text); color: var(--muted); letter-spacing: 0.02em; }
 
 .next { position: absolute; right: var(--safe-side); bottom: 330px; display: flex; gap: 28px; align-items: flex-end; padding: 24px; border-radius: var(--radius-l);
   max-width: 900px; }
@@ -223,3 +223,103 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 [data-subsize="small"] .cues.small span { font-size: 11px; }
 [data-subsize="large"] .cues.small span { font-size: 17px; }
 [data-subsize="extraLarge"] .cues.small span { font-size: 20.4px; }
+
+/* The subtitle picker (plans/player-polish.md 2.4, player/subtitle-picker.tsx),
+ * the player's strong glass panel over the picture. TV: two columns, the
+ * languages and the focused language's options. */
+.panel.subp { padding: 0; max-height: none; overflow: hidden; }
+.subp-col { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 24px 16px; }
+.subp-head { display: flex; align-items: center; gap: 12px; margin: 0 0 12px 16px; }
+.subp-head h2 { display: flex; align-items: center; gap: 14px; min-width: 0; font: 600 var(--type-callout) / 32px var(--font-text); color: var(--dim); }
+.subp-back, .subp-done { color: var(--key); font: 400 var(--type-callout) / 1.2 var(--font-text); }
+.subp-back { display: flex; align-items: center; gap: 2px; }
+.subp-back svg { width: 30px; height: 30px; }
+.subp-done { font-weight: 600; }
+.subp-find { display: flex; align-items: center; gap: 14px; height: 60px; margin: 0 0 10px; padding: 0 22px; border-radius: var(--radius-pill);
+  background: rgba(118, 118, 128, .24); color: var(--dim); }
+.subp-find svg { width: 28px; height: 28px; }
+.subp-find input { flex: 1; min-width: 0; height: 100%; font: 500 var(--type-callout) / 1 var(--font-text); color: var(--text); }
+.subp-find input::placeholder { color: var(--dim); }
+.subp-find input::-webkit-search-cancel-button { display: none; }
+.subp .subp-find input:focus { outline: none; box-shadow: none; }
+.subp-find:focus-within { outline: var(--focus-ring) solid var(--key); outline-offset: 2px; }
+.subp-list { flex: 1; min-height: 0; margin: 0 -16px; padding: 6px 16px 16px; }
+.subp [data-f] { scroll-margin: 12px 0; }
+.subp .opt { display: flex; align-items: center; gap: 14px; min-height: 60px; padding: 12px 16px; border-radius: 16px; font: 500 var(--type-callout) / 32px var(--font-text); text-align: left; }
+.subp .opt.on { background: var(--selected-fill); font-weight: 600; }
+.subp .opt.op { align-items: flex-start; }
+.subp .opt-note, .subp-none { padding: 12px 16px; font: 400 var(--type-caption) / 1.3 var(--font-text); color: var(--dim); }
+.lrow { display: flex; align-items: center; gap: 4px; }
+.lrow > .opt { flex: 1; min-width: 0; }
+.lr-open { display: grid; place-items: center; flex: none; width: 56px; height: 56px; border-radius: 50%; color: var(--dim); }
+.lr-open svg { width: 26px; height: 26px; }
+.flag { flex: none; width: 40px; height: 40px; border-radius: 50%; }
+.flag.none { display: grid; place-items: center; background: var(--control); font: 600 15px / 1 var(--font-text); color: var(--text); }
+.flag-space { flex: none; width: 40px; }
+/* A language's own name beside it only when both fit: else it wraps onto a hidden second line. */
+.lname { display: flex; flex: 1; flex-wrap: wrap; column-gap: 10px; min-width: 0; height: 32px; overflow: hidden; }
+.lname .nm { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lname .own { color: var(--dim); font-weight: 500; white-space: nowrap; }
+.subp .ct { flex: none; color: var(--dim); }
+.subp .ck { display: grid; place-items: center; flex: none; width: 28px; color: var(--key); }
+.subp .ck svg { width: 28px; height: 28px; }
+.op-tx { flex: 1; min-width: 0; }
+.op-tx b { display: block; overflow: hidden; font-weight: inherit; text-overflow: ellipsis; white-space: nowrap; }
+.op-tx small { display: block; margin-top: 2px; font: 500 var(--type-caption) / 30px var(--font-text); color: var(--dim); }
+.op-tx .fit { color: var(--text); font-weight: 600; }
+/* The release wraps as one piece, and a line too long for its measure ends in an ellipsis. */
+.op-tx .rel { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+.subp-tune { display: grid; gap: 6px; padding: 12px 16px 0; box-shadow: inset 0 1px 0 var(--line); }
+.subp-tune .sub-delay, .subp-tune .sub-size { margin: 0; }
+[data-form="tv"] .subp { top: 96px; bottom: auto; width: 1160px; height: 736px; display: grid; grid-template-columns: 500px 660px; border-radius: 24px; }
+[data-form="tv"] .subp-col + .subp-col { box-shadow: inset 1px 0 0 var(--line); }
+/* TV focus: the row inverts to white and rises a little (no ring, no key color). */
+[data-form="tv"] .subp .opt:focus { outline: none; background: var(--primary); color: var(--on-primary); box-shadow: var(--lift-focus-edge); transform: scale(var(--focus-scale-tile)); }
+[data-form="tv"] .subp .opt:focus :is(.own, .ct, small, .ck) { color: color-mix(in srgb, var(--on-primary) 73%, transparent); }
+[data-form="tv"] .subp .opt:focus .fit { color: var(--on-primary); }
+[data-form="tv"] .subp .sub-step:focus { outline: none; background: var(--primary); color: var(--on-primary); }
+[data-form="tv"] .subp-find:focus-within { outline: none; background: var(--primary); color: var(--on-primary); }
+[data-form="tv"] .subp-find:focus-within input { color: var(--on-primary); }
+/* Desktop: one panel that steps between the two levels, the check at the row's start. */
+[data-form="desktop"] .subp { top: 200px; bottom: 300px; width: 700px; display: flex; border-radius: 24px; }
+[data-form="desktop"] .subp-col { flex: 1; padding: 22px 16px 16px; }
+[data-form="desktop"] .subp-head { flex-wrap: wrap; margin: 0 0 12px 12px; }
+[data-form="desktop"] .subp-head h2 { font: 700 var(--type-callout) / 32px var(--font-text); color: var(--text); }
+[data-form="desktop"] .subp.deep .subp-head h2 { flex-basis: 100%; font-size: var(--type-title3); line-height: 46px; }
+[data-form="desktop"] .subp .opt { min-height: 70px; padding: 10px 16px; font-weight: 400; }
+[data-form="desktop"] .subp .opt.on { background: color-mix(in srgb, #fff 10%, transparent); font-weight: 400; }
+[data-form="desktop"] .subp .ck { order: -1; width: 26px; }
+[data-form="desktop"] .subp .ck svg { width: 24px; height: 24px; }
+[data-form="desktop"] .flag { width: 38px; height: 38px; }
+[data-form="desktop"] .flag-space { display: none; }
+@media (hover: hover) { [data-form="desktop"] .subp .opt:hover, [data-form="desktop"] .lr-open:hover { background: color-mix(in srgb, #fff 8%, transparent); } }
+/* Phone: a full-height sheet over the dimmed player, as an iPhone sheet. */
+[data-form="phone"] .panel.subp { top: calc(12px + env(safe-area-inset-top)); bottom: calc(12px + env(safe-area-inset-bottom)); right: calc(12px + env(safe-area-inset-right));
+  left: auto; z-index: 9; width: min(413px, calc(100% - 24px)); max-height: none; padding: 0; display: flex; border-radius: 26px; box-shadow: 0 0 0 100vmax var(--scrim); }
+[data-form="phone"] .subp-col { flex: 1; padding: 0 0 12px; }
+[data-form="phone"] .subp-head { position: relative; justify-content: center; height: 48px; margin: 0; }
+[data-form="phone"] .subp-head h2 { gap: 8px; font: 600 17px / 22px var(--font-text); color: var(--text); }
+[data-form="phone"] .subp-back, [data-form="phone"] .subp-done { position: absolute; top: 2px; height: 44px; display: flex; align-items: center; font-size: 17px; }
+[data-form="phone"] .subp-back { left: 4px; }
+[data-form="phone"] .subp-back svg { width: 22px; height: 22px; }
+[data-form="phone"] .subp-done { right: 8px; padding: 0 6px; }
+[data-form="phone"] .subp-find { height: 36px; margin: 4px 12px 6px; padding: 0 10px; gap: 6px; border-radius: 10px; }
+[data-form="phone"] .subp-find svg { width: 17px; height: 17px; }
+[data-form="phone"] .subp-find input { font-size: 17px; }
+[data-form="phone"] .subp-list { flex: 1; margin: 6px 12px 0; padding: 0; border-radius: 16px; background: var(--surface); }
+[data-form="phone"] .subp-list > * + * { box-shadow: inset 0 .5px 0 var(--line); }
+[data-form="phone"] .subp .opt { gap: 10px; min-height: 44px; padding: 8px 14px; border-radius: 0; font: 400 15px / 20px var(--font-text); }
+[data-form="phone"] .subp .opt.on { background: none; }
+[data-form="phone"] .lrow { gap: 0; }
+[data-form="phone"] .lr-open { width: 44px; height: 44px; margin-right: 2px; }
+[data-form="phone"] .lr-open svg { width: 16px; height: 16px; }
+[data-form="phone"] .flag { width: 24px; height: 24px; }
+[data-form="phone"] .flag.none { font-size: 11px; }
+[data-form="phone"] .flag-space { display: none; }
+[data-form="phone"] .lname { height: 20px; column-gap: 6px; }
+[data-form="phone"] .lname .own { font-size: 13px; }
+[data-form="phone"] .subp .ck { width: 20px; }
+[data-form="phone"] .subp .ck svg { width: 17px; height: 17px; }
+[data-form="phone"] .op-tx small { font: 400 13px / 18px var(--font-text); }
+[data-form="phone"] .subp .opt-note, [data-form="phone"] .subp-none { padding: 10px 14px; font-size: 13px; }
+[data-form="phone"] .subp-tune { padding: 8px 12px 0; }

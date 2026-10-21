@@ -1,6 +1,7 @@
 /** The core's subtitle tracks as the menu shows them: one section per
  * language, in the core's order (preferred languages first, then the rest
- * by name; plans/m13-subtitle-languages.md). */
+ * by name; plans/m13-subtitle-languages.md), and the picker built on them
+ * (plans/player-polish.md 2.4). */
 
 import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
 
@@ -17,17 +18,110 @@ export function byLanguage(tracks: SubtitleTrack[]): LanguageSection[] {
   return sections;
 }
 
-/** The Subtitles button with no track on: the count as soon as one track is
- * in, `searching` while the core still asks (`subtitlesPending`), and
- * "Searching" only while none is in. */
-export function offSummary(found: number, pending: boolean): { text: string; searching: boolean } {
-  if (found) return { text: `Off, ${found} found`, searching: pending };
+/** A track inside the file, as the engine lists it (player/engine.ts). */
+type FileTrack = { id: string; lang: string | null };
+
+/** One language of the picker's first level: its tag, its English name, its
+ * own name when the core knows a different one, the codes a search matches,
+ * and its options: the file's own tracks first (once the file has opened),
+ * then the core's in the core's order, the best match first. */
+export type PickerLanguage<F extends FileTrack = FileTrack> = {
+  language: string;
+  name: string;
+  own: string | null;
+  codes: string[];
+  file: F[];
+  tracks: SubtitleTrack[];
+};
+
+/** The picker's languages: the core's, in its order, each with the file's
+ * tracks of that language (told by their English name, `nameOf`); a
+ * language only the file has comes after them. */
+export function pickerLanguages<F extends FileTrack>(tracks: SubtitleTrack[], file: F[], nameOf: (lang: string) => string): PickerLanguage<F>[] {
+  const out: PickerLanguage<F>[] = byLanguage(tracks).map((s) => {
+    const first = s.tracks[0]?.track;
+    const own = first?.nativeName && first.nativeName !== s.name ? first.nativeName : null;
+    const codes = [...new Set([s.language.toLowerCase(), ...s.tracks.map((t) => t.track.lang.toLowerCase())])];
+    return { language: s.language, name: s.name, own, codes, file: [], tracks: s.tracks.map((t) => t.track) };
+  });
+  for (const f of file) {
+    if (!f.lang) continue;
+    const name = nameOf(f.lang);
+    const lang = out.find((l) => l.name === name);
+    if (lang) lang.file.push(f);
+    else out.push({ language: f.lang, name, own: null, codes: [f.lang.toLowerCase()], file: [f], tracks: [] });
+  }
+  return out;
+}
+
+/** Lower case with the accents gone, so "turkce" finds "Türkçe". */
+const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+/** Whether `query` starts a word of `text`. */
+const startsWord = (text: string, query: string) => ` ${fold(text).replace(/[^\p{L}\p{N}]+/gu, " ")}`.includes(` ${query}`);
+
+/** The search field's rule: a word of the English name or of the language's
+ * own name starts with what was typed, or a code does ("pt", "pob", "deu"). */
+export function matchesLanguage(l: Pick<PickerLanguage, "name" | "own" | "codes">, typed: string): boolean {
+  const q = fold(typed.trim()).replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  if (!q) return true;
+  return startsWord(l.name, q) || (!!l.own && startsWord(l.own, q)) || l.codes.some((c) => c.startsWith(q));
+}
+
+/** What a language's row counts: every option it opens. */
+export const optionCount = (l: PickerLanguage) => l.file.length + l.tracks.length;
+
+/** What picking a language turns on: the file's own track once the file
+ * has opened (it always fits the file), else the core's best match. */
+export function bestOption<F extends FileTrack>(l: PickerLanguage<F>): { file: F } | { track: SubtitleTrack } | null {
+  const file = l.file[0];
+  if (file) return { file };
+  const track = l.tracks[0];
+  return track ? { track } : null;
+}
+
+/** The Subtitles button with no track on: the languages the picker shows as
+ * soon as one is in, `searching` while the core still asks
+ * (`subtitlesPending`), and "Searching" only while none is in. */
+export function offSummary(languages: number, pending: boolean): { text: string; searching: boolean } {
+  if (languages) return { text: `Off, ${languages} ${languages === 1 ? "language" : "languages"}`, searching: pending };
   return { text: pending ? "Searching" : "None found", searching: false };
 }
 
-/** The line under a track's name: its source when the name does not
- * already say it, and what kind of file it is. */
-export function trackDetail(t: SubtitleTrack): string {
+/** The core's words for a track that names the playing release's group. */
+export const FITS = "Same release group";
+
+/** `text` cut to `max` characters in the middle, at a dot or a space, so a
+ * release's start and its group at the end both stay in view. */
+export function middle(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const at = (j: number) => text[j] === "." || text[j] === " ";
+  let from = text.length - Math.max(1, max - 1 - Math.floor((max - 1) * 0.45));
+  while (from > 0 && !at(from - 1)) from--;
+  // A tail with no boundary near enough keeps its share and starts at the next boundary instead.
+  if (text.length - from > max - 5) for (from = text.length - (max - 5); from < text.length && !at(from - 1); from++);
+  const tail = text.slice(from).replace(/^[. ]+/, "");
+  let cut = max - 1 - tail.length;
+  while (cut > 0 && !at(cut)) cut--;
+  const head = text.slice(0, cut > 0 ? cut : max - 1 - tail.length).replace(/[. ]+$/, "");
+  return `${head}…${tail}`;
+}
+
+/** The quiet line under a track's name, in parts: its source when the name
+ * does not already say it, what kind of file it is, the core's match words,
+ * then the release text cut in the middle to the line's `max` characters
+ * (the whole line when the rest leaves it under 24). */
+export function trackDetail(t: SubtitleTrack, max = 46): string[] {
   const source = t.name === t.source || t.name.startsWith(`${t.source} `) ? null : t.source;
-  return [source, t.forced ? "Forced" : null, t.hearingImpaired ? "For the hard of hearing" : null].filter(Boolean).join(", ");
+  const parts = [source, t.forced ? "Forced" : null, t.hearingImpaired ? "For the hard of hearing" : null, t.fits ? FITS : null].filter((p): p is string => !!p);
+  if (!t.release || t.release === t.name) return parts;
+  const room = max - parts.join(" · ").length - 3;
+  return [...parts, middle(t.release, room >= 24 ? room : max)];
+}
+
+/** A language's flag file in circle-flags' language set (`has` says which
+ * exist): the tag itself ("pt-br"), else its language ("zh" for "zh-Hant"). */
+export function flagFile(tag: string, has: (name: string) => boolean): string | null {
+  const lower = tag.toLowerCase();
+  const base = lower.split("-")[0] ?? lower;
+  return has(lower) ? lower : has(base) ? base : null;
 }
