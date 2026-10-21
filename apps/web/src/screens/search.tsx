@@ -10,7 +10,6 @@ import Film from "lucide-solid/icons/film";
 import ListFilter from "lucide-solid/icons/list-filter";
 import History from "lucide-solid/icons/rotate-ccw-clock";
 import SearchIcon from "lucide-solid/icons/search";
-import Star from "lucide-solid/icons/star";
 import X from "lucide-solid/icons/x";
 import { createEffect, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
 import { Poster } from "../components/art";
@@ -23,7 +22,7 @@ import type { Tile } from "../core/generated/Tile";
 import { onProfileReset } from "../core/profiles";
 import { focusEl, isBackKey, mayAutoFocus } from "../focus/dom";
 import { historyDepth } from "../history";
-import { titlePath } from "../lib/format";
+import { ratingParts, titlePath } from "../lib/format";
 import { kindLabel, problemWords } from "../lib/words";
 import "./browse.css";
 import "./search.css";
@@ -341,13 +340,14 @@ function Hit(props: { tile: Tile; fkey: string; onOpen: () => void }) {
             <i aria-hidden="true">·</i>
             <span>{t().releaseInfo}</span>
           </Show>
-          <Show when={t().rating}>
-            <i aria-hidden="true">·</i>
-            <span class="rate" aria-label={`Rated ${t().rating}`}>
-              <Star aria-hidden />
-              {t().rating}
-            </span>
-          </Show>
+          <For each={ratingParts(t().ratings)}>
+            {(p) => (
+              <>
+                <i aria-hidden="true">·</i>
+                <span class="rate">{p.text}</span>
+              </>
+            )}
+          </For>
         </span>
       </span>
       <ChevronRight aria-hidden class="hit-chev" />

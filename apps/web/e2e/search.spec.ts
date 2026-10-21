@@ -49,8 +49,8 @@ for (const form of Object.keys(FORMS) as Form[]) {
     await page.locator('[data-f="search:input"]').fill("thrones");
     const hit = page.locator(".hit").first();
     await expect(hit).toBeVisible({ timeout: 30_000 });
-    // A result row reads "Movie · 2019 · ★ 8.0" (kind, then year and rating when the addon gave them).
-    await expect(hit.locator(".hit-meta")).toHaveText(/^(Movie|Series)(\s*·\s*\S+)*$/);
+    // A result row reads "Movie · 2019 · IMDb 8.0 · RT 87%" (kind, then the year and the scores there are).
+    await expect(hit.locator(".hit-meta")).toHaveText(/^(Movie|Series)(\s*·\s*[^·\s][^·]*)*$/);
 
     if (form === "phone") {
       // Touch: a result opens its title, and the palette goes with the screen.

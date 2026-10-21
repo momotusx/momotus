@@ -6,7 +6,6 @@ import { A } from "@solidjs/router";
 import CircleAlert from "lucide-solid/icons/circle-alert";
 import LoaderCircle from "lucide-solid/icons/loader-circle";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
-import Star from "lucide-solid/icons/star";
 import Wrench from "lucide-solid/icons/wrench";
 import X from "lucide-solid/icons/x";
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
@@ -17,7 +16,7 @@ import type { Tile as TileData } from "../core/generated/Tile";
 import { op } from "../core/client";
 import { onProfileReset } from "../core/profiles";
 import { form } from "../form";
-import { pct, titlePath } from "../lib/format";
+import { pct, ratingParts, titlePath } from "../lib/format";
 import { caption } from "../lib/words";
 import { visibleRange } from "../lib/range";
 
@@ -101,10 +100,9 @@ export function TileCard(props: {
             nameCard={false}
           />
         </Show>
-        <Show when={!props.wide && props.tile.rating}>
+        <Show when={!props.wide && ratingParts(props.tile.ratings).length}>
           <span class="chip-rate num" aria-hidden="true">
-            <Star class="fill" />
-            {props.tile.rating}
+            <For each={ratingParts(props.tile.ratings)}>{(p) => <span>{p.text}</span>}</For>
           </span>
         </Show>
         {/* A track and a fill on a dark strip, so progress shows on white art. */}

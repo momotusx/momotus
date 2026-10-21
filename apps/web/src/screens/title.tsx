@@ -8,7 +8,6 @@ import CircleX from "lucide-solid/icons/circle-x";
 import LoaderCircle from "lucide-solid/icons/loader-circle";
 import KeyRound from "lucide-solid/icons/key-round";
 import Plus from "lucide-solid/icons/plus";
-import Star from "lucide-solid/icons/star";
 import Film from "lucide-solid/icons/film";
 import Layers from "lucide-solid/icons/layers";
 import Play from "lucide-solid/icons/play";
@@ -26,7 +25,7 @@ import type { Episode } from "../core/generated/Episode";
 import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
 import { focusEl, remember } from "../focus/dom";
 import { form } from "../form";
-import { airDate, bytes, clock, decoded, episodeLabel, parseVideo, pct, playPath, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
+import { airDate, bytes, clock, decoded, episodeLabel, parseVideo, pct, playPath, ratingParts, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
 import { blockedWords, choiceWords, kindLabel, noVersionWords, qualityText, statusText } from "../lib/words";
 import "./title.css";
 
@@ -130,15 +129,25 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
               <section class="info" aria-label={x().name}>
                 <Logo src={x().logo} name={x().name} class="title-logo" />
                 <p class="meta" ref={separators}>
-                  {/* The rating leads, a gold star and the number, as on Home. */}
-                  <Show when={x().rating}>
-                    <span class="rate num" aria-label={`IMDb ${x().rating}`}>
-                      <Star aria-hidden />
-                      {x().rating}
-                    </span>
-                    <Show when={metaLine().length}>
-                      <b aria-hidden="true"> · </b>
-                    </Show>
+                  {/* The ratings lead, side by side as on Home; IMDb's links to its page, except on TV. */}
+                  <For each={ratingParts(x().ratings)}>
+                    {(p, i) => (
+                      <>
+                        <Show when={i() > 0}>
+                          <b aria-hidden="true"> · </b>
+                        </Show>
+                        <Show when={p.imdb && form() !== "tv" && x().imdbUrl} fallback={<span class="rate num">{p.text}</span>}>
+                          {(url) => (
+                            <a class="rate num" href={url()} target="_blank" rel="noopener noreferrer" data-f="title:imdb">
+                              {p.text}
+                            </a>
+                          )}
+                        </Show>
+                      </>
+                    )}
+                  </For>
+                  <Show when={ratingParts(x().ratings).length && metaLine().length}>
+                    <b aria-hidden="true"> · </b>
                   </Show>
                   <For each={metaLine()}>
                     {(part, i) => (

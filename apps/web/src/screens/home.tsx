@@ -4,7 +4,6 @@ import Info from "lucide-solid/icons/info";
 import Play from "lucide-solid/icons/play";
 import Puzzle from "lucide-solid/icons/puzzle";
 import Wrench from "lucide-solid/icons/wrench";
-import Star from "lucide-solid/icons/star";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Sparkle from "lucide-solid/icons/sparkle";
 import ShieldAlert from "lucide-solid/icons/shield-alert";
@@ -25,7 +24,7 @@ import { cardOffer, defaultsWords, namesLine } from "../lib/defaults";
 import { allFailed } from "../lib/rows";
 import { form } from "../form";
 import type { Tile } from "../core/generated/Tile";
-import { playPath, titlePath } from "../lib/format";
+import { playPath, ratingParts, titlePath } from "../lib/format";
 import { kindLabel, syncWords } from "../lib/words";
 import "./home.css";
 
@@ -291,13 +290,14 @@ export default function Home() {
                 <p class="reason eyebrow">{h().reason}</p>
                 <Logo src={h().tile.logo} name={h().tile.name} class="hero-logo" />
                 <p class="meta" ref={separators}>
-                  <Show when={h().tile.rating}>
-                    <span class="rate num">
-                      <Star aria-hidden />
-                      {h().tile.rating}
-                    </span>
-                    <b aria-hidden="true">·</b>
-                  </Show>
+                  <For each={ratingParts(h().tile.ratings)}>
+                    {(p) => (
+                      <>
+                        <span class="rate num">{p.text}</span>
+                        <b aria-hidden="true">·</b>
+                      </>
+                    )}
+                  </For>
                   <Show when={h().tile.releaseInfo} fallback={kindLabel(h().tile.kind)}>
                     <span class="num">{h().tile.releaseInfo}</span>
                   </Show>

@@ -32,7 +32,8 @@ test("remote flow: Home, Title, seasons, Versions and Back restore focus", async
   // The logo is the picture; the page's heading still says the name.
   await expect(page.locator("img.title-logo")).toBeVisible();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Game of Thrones");
-  await expect(page.locator(".info .meta .rate")).toHaveAttribute("aria-label", /^IMDb \d/);
+  // The ratings lead the meta line as plain text, IMDb first.
+  await expect(page.locator(".info .meta .rate").first()).toHaveText(/^IMDb \d/);
   await expect(page.locator('[data-f="title:play"]')).toContainText("Resume S2:E3");
   await expect(page.locator('[data-f="season:2"]')).toHaveAttribute("aria-selected", "true");
   await expect(page.locator(".ep-t").first()).toHaveText("The North Remembers");

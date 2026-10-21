@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { airDate, bytes, clock, delayText, startsText, episodeLabel, groupFailures, parseVideo, playPath, releaseParts, runtimeMinutes } from "./format";
+import { airDate, bytes, clock, delayText, startsText, episodeLabel, groupFailures, parseVideo, playPath, ratingParts, releaseParts, runtimeMinutes } from "./format";
 
 test("bytes are 1024-based, as addons print sizes", () => {
   expect(bytes(5368709120)).toBe("5 GB");
@@ -75,4 +75,16 @@ test("Up Next waits for the end, then counts the last 15 s", () => {
   expect(startsText(15)).toBe("Starts in 15 s");
   expect(startsText(11.3)).toBe("Starts in 12 s");
   expect(startsText(-0.5)).toBe("Starts in 0 s");
+});
+
+test("ratings sit side by side as plain text, and a missing score has no slot", () => {
+  const text = (r: Parameters<typeof ratingParts>[0]) => ratingParts(r).map((p) => p.text);
+  expect(text({ imdb: "8.8", rottenTomatoes: "87%" })).toEqual(["IMDb 8.8", "RT 87%"]);
+  expect(text({ imdb: "8.8", rottenTomatoes: null })).toEqual(["IMDb 8.8"]);
+  expect(text({ imdb: null, rottenTomatoes: "0%" })).toEqual(["RT 0%"]);
+  expect(text({ imdb: null, rottenTomatoes: null })).toEqual([]);
+  // A recording from before the field: nothing, never a placeholder.
+  expect(text(undefined)).toEqual([]);
+  // Only the IMDb score links to IMDb's page.
+  expect(ratingParts({ imdb: "8.8", rottenTomatoes: "87%" }).map((p) => p.imdb)).toEqual([true, false]);
 });

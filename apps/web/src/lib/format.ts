@@ -1,5 +1,7 @@
 /** Small, pure formatters shared by screens. */
 
+import type { Ratings } from "../core/generated/Ratings";
+
 /** A stream's size in the 1024-based units addons print: 5368709120 is
  * "5 GB", as Torrentio lists it and as the size limit reads. */
 export function bytes(n: number): string {
@@ -8,6 +10,16 @@ export function bytes(n: number): string {
   if (gb >= 1) return `${Number(gb.toFixed(1))} GB`;
   if (n >= 1024 ** 2) return `${Math.round(n / 1024 ** 2)} MB`;
   return `${Math.max(1, Math.round(n / 1024))} KB`;
+}
+
+/** A title's scores side by side as plain text, the source first: "IMDb 8.8",
+ * "RT 87%". A score the core left null has no slot, and the brands' logos and
+ * icons never appear (plans/research/ratings.md). */
+export function ratingParts(r: Ratings | null | undefined): { text: string; imdb: boolean }[] {
+  const parts: { text: string; imdb: boolean }[] = [];
+  if (r?.imdb) parts.push({ text: `IMDb ${r.imdb}`, imdb: true });
+  if (r?.rottenTomatoes) parts.push({ text: `RT ${r.rottenTomatoes}`, imdb: false });
+  return parts;
 }
 
 /** 161 -> "2:41", 3725 -> "1:02:05". */
