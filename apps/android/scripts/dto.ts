@@ -73,6 +73,9 @@ const DEFAULTED = new Map([
   ["Devices.account", "\"\""],
   // The streaming window's no-punch words: an older core says nothing, as on a volume without windows.
   ["VersionsConditions.window", "false"],
+  // IMDb and Rotten Tomatoes side by side: an older core or recording has no scores to show.
+  ["Tile.ratings", "Ratings()"],
+  ["TitleDetails.ratings", "Ratings()"],
 ]);
 const INT = new Set([
   "overCount",

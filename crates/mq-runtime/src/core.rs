@@ -123,6 +123,8 @@ struct Inner {
     debrid: Arc<crate::debrid::Accounts>,
     /// Skip segment lookups and their session cache.
     segments: crate::segments::Finder,
+    /// IMDb and Rotten Tomatoes scores, cached in the library.
+    ratings: crate::ratings::Finder,
     /// Tests: the free space read instead of the disk's.
     free_bytes: std::sync::Mutex<Option<u64>>,
     /// Tests: live seeders answered instead of the trackers'.
@@ -246,8 +248,13 @@ impl Core {
         let device = Device::new(Library::temporary()?, 1)?;
         let core = Self::with_device(device, profile, torrents, None)?;
         // A throwaway core never asks real trackers: no swarm has a live
-        // count unless a test gives one.
+        // count unless a test gives one. Nor MDBList, whatever key the build
+        // carries.
         core.set_live_seeders(HashMap::new());
+        core.ratings().set_host(crate::ratings::Host {
+            key: None,
+            ..Default::default()
+        });
         core.library()
             .ensure_profile(profile, profile, &core.zero_hlc())?;
         core.library().set_active_profile(profile)?;
@@ -267,6 +274,7 @@ impl Core {
         crate::speed::digest_version_lists(&device.library);
         let http = HttpClient::new(ClientConfig::default())?;
         let store = Arc::new(LibraryCache(device.library.clone()));
+        let ratings = crate::ratings::Finder::new(http.clone(), device.library.clone());
         let addons = AddonClient::with_cache(http.clone(), ResponseCache::with_store(512, store));
         Ok(Self {
             inner: Arc::new(Inner {
@@ -279,6 +287,7 @@ impl Core {
                 engine: OnceCell::new(),
                 debrid: crate::debrid::Accounts::new(http.clone()),
                 segments: crate::segments::Finder::new(http.clone()),
+                ratings,
                 free_bytes: std::sync::Mutex::new(None),
                 live_seeders: std::sync::Mutex::default(),
                 turkcealtyazi: std::sync::OnceLock::new(),
@@ -327,6 +336,10 @@ impl Core {
 
     pub fn segments(&self) -> &crate::segments::Finder {
         &self.inner.segments
+    }
+
+    pub fn ratings(&self) -> &crate::ratings::Finder {
+        &self.inner.ratings
     }
 
     pub fn addons(&self) -> &AddonClient {

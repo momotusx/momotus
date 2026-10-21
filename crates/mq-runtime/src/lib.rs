@@ -10,6 +10,7 @@ pub mod languages;
 pub mod learn;
 pub mod live;
 mod profiles;
+pub mod ratings;
 pub mod segments;
 pub mod speed;
 mod trakt;

@@ -216,6 +216,7 @@ fn tile(e: &LibraryEntry) -> Tile {
             .then(|| (e.position_ms as f32 / e.duration_ms as f32).clamp(0.0, 1.0)),
         video_id: None,
         rating: None,
+        ratings: crate::ratings::Ratings::default(),
         blurb: None,
     }
 }

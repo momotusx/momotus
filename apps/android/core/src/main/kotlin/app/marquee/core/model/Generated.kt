@@ -1079,6 +1079,13 @@ data class RankKey(
     val within: Int,
 )
 
+/** A title's IMDb and Rotten Tomatoes scores, written as shown ("8.8", "87%"). A score nobody gave is null: apps show no slot for it, never a placeholder. */
+@Serializable
+data class Ratings(
+    val imdb: String? = null,
+    val rottenTomatoes: String? = null,
+)
+
 @Serializable(with = Reason.Serializer::class)
 enum class Reason(
     val wire: String,
@@ -1513,6 +1520,8 @@ data class Tile(
     val videoId: String? = null,
     /** The IMDb rating the addon gave, as written ("8.4"). */
     val rating: String? = null,
+    /** The IMDb and Rotten Tomatoes scores to show side by side: MDBList's, with the addon's own IMDb rating when MDBList has none. */
+    val ratings: Ratings = Ratings(),
 )
 
 @Serializable
@@ -1529,7 +1538,12 @@ data class TitleDetails(
     val genres: List<String> = emptyList(),
     val cast: List<String> = emptyList(),
     val directors: List<String> = emptyList(),
+    /** The IMDb rating the addon gave, as written ("8.4"). */
     val rating: String? = null,
+    /** The IMDb and Rotten Tomatoes scores to show side by side, as on tiles. */
+    val ratings: Ratings = Ratings(),
+    /** The title's IMDb page, for the IMDb score to link to; null for an id that is not IMDb's. */
+    val imdbUrl: String? = null,
     val source: String,
     /** Trailers the metadata names (YouTube), first is the main one. */
     val trailers: List<Trailer> = emptyList(),

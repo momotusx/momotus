@@ -408,26 +408,38 @@ async fn load_page(
         serde_json::from_slice::<ResourceResponse>(&f.body)
             .map_err(|e| format!("unreadable catalog: {e}"))
     });
-    let mut s = lock(&state);
-    s.snapshot.state = match parsed {
-        Ok(ResourceResponse::Metas { metas }) => {
-            let before = s.snapshot.items.len();
-            for meta in metas {
-                if s.seen.insert(meta.id.clone()) {
-                    s.snapshot.items.push(tile_from_preview(meta));
+    let titles = {
+        let mut s = lock(&state);
+        s.snapshot.state = match parsed {
+            Ok(ResourceResponse::Metas { metas }) => {
+                let before = s.snapshot.items.len();
+                for meta in metas {
+                    if s.seen.insert(meta.id.clone()) {
+                        s.snapshot.items.push(tile_from_preview(meta));
+                    }
+                }
+                core.ratings().fill(&mut s.snapshot.items[before..]);
+                // No new titles, or no paging: the catalog is done.
+                if catalog.pages && s.snapshot.items.len() > before {
+                    DiscoverState::Ready
+                } else {
+                    DiscoverState::End
                 }
             }
-            // No new titles, or no paging: the catalog is done.
-            if catalog.pages && s.snapshot.items.len() > before {
-                DiscoverState::Ready
-            } else {
-                DiscoverState::End
-            }
-        }
-        Ok(_) => DiscoverState::Failed {
-            reason: "addon returned no catalog items".into(),
-        },
-        Err(reason) => DiscoverState::Failed { reason },
+            Ok(_) => DiscoverState::Failed {
+                reason: "addon returned no catalog items".into(),
+            },
+            Err(reason) => DiscoverState::Failed { reason },
+        };
+        snapshot.set(s.snapshot.clone());
+        // Every item's, not only this page's: a page asked while the last
+        // lookup was on its way cancelled it.
+        crate::ratings::titles(&s.snapshot.items)
     };
-    snapshot.set(s.snapshot.clone());
+    if let Some(known) = core.ratings().lookup(&titles).await {
+        let mut s = lock(&state);
+        if crate::ratings::apply(&mut s.snapshot.items, &known) {
+            snapshot.set(s.snapshot.clone());
+        }
+    }
 }

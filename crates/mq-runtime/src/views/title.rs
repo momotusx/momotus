@@ -4,6 +4,7 @@
 
 use crate::Core;
 use crate::live::{FRAME, ListDiff, coalesce};
+use crate::ratings::{Ratings, Scores, title_of};
 use crate::views::playback::{aired, following};
 use eyeball::SharedObservable;
 use eyeball_im::ObservableVector;
@@ -37,7 +38,13 @@ pub struct TitleDetails {
     pub genres: Vec<String>,
     pub cast: Vec<String>,
     pub directors: Vec<String>,
+    /// The IMDb rating the addon gave, as written ("8.4").
     pub rating: Option<String>,
+    /// The IMDb and Rotten Tomatoes scores to show side by side, as on tiles.
+    pub ratings: Ratings,
+    /// The title's IMDb page, for the IMDb score to link to; null for an id
+    /// that is not IMDb's.
+    pub imdb_url: Option<String>,
     pub source: String,
     /// Trailers the metadata names (YouTube), first is the main one.
     pub trailers: Vec<Trailer>,
@@ -151,6 +158,8 @@ pub enum TitleUpdate {
 struct State {
     meta: Option<MetaItem>,
     selected_season: Option<u32>,
+    /// What MDBList answered for the title, once known.
+    scores: Option<Scores>,
 }
 
 /// A live title page. Dropping it cancels its work.
@@ -206,6 +215,7 @@ impl TitleView {
             state: Arc::new(Mutex::new(State {
                 meta: None,
                 selected_season: None,
+                scores: None,
             })),
             _tasks: JoinSet::new(),
         };
@@ -343,10 +353,23 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 }
 
 async fn load_meta(ctx: Ctx) {
+    let title = title_of(&ctx.kind, &ctx.id);
     match ctx.core.fetch_meta(&ctx.kind, &ctx.id).await {
         Ok((meta, source)) => {
-            lock(&ctx.state).meta = Some(meta);
+            // The page shows what the ratings cache holds, then what a
+            // lookup brings.
+            let titles: Vec<_> = title.into_iter().collect();
+            let known = ctx.core.ratings().known(&titles);
+            {
+                let mut state = lock(&ctx.state);
+                state.meta = Some(meta);
+                state.scores = titles.first().and_then(|t| known.get(t)).copied();
+            }
             ctx.render_with_source(&source);
+            if let Some(found) = ctx.core.ratings().lookup(&titles).await {
+                lock(&ctx.state).scores = titles.first().and_then(|t| found.get(t)).copied();
+                ctx.render();
+            }
         }
         Err(reason) => {
             let mut header = ctx.header.get();
@@ -382,9 +405,9 @@ impl Ctx {
     }
 
     fn render_with_source(&self, source: &str) {
-        let (meta, selected) = {
+        let (meta, selected, scores) = {
             let state = lock(&self.state);
-            (state.meta.clone(), state.selected_season)
+            (state.meta.clone(), state.selected_season, state.scores)
         };
         let Some(meta) = meta else { return };
         let profile = self.core.profile();
@@ -440,7 +463,7 @@ impl Ctx {
 
         let now = mq_library::hlc::now_ms() as i64;
         let (play_target, next_airs) = play_target(&meta, &self.kind, resume, &watched, now);
-        let mut details = details(&meta, source);
+        let mut details = details(&meta, source, scores.as_ref());
         if self.kids {
             // A trailer is a YouTube hand-off: it leaves the app.
             details.trailers.clear();
@@ -584,7 +607,7 @@ fn episode_label(meta: &MetaItem, video_id: &str) -> Option<String> {
     Some(format!("S{}:E{}", info.season, info.episode))
 }
 
-fn details(meta: &MetaItem, source: &str) -> TitleDetails {
+fn details(meta: &MetaItem, source: &str, scores: Option<&Scores>) -> TitleDetails {
     let p = &meta.preview;
     let links = |category: &str| -> Vec<String> {
         p.links
@@ -607,6 +630,9 @@ fn details(meta: &MetaItem, source: &str) -> TitleDetails {
         cast: links("Cast"),
         directors: links("Directors"),
         rating: links("imdb").into_iter().next(),
+        ratings: Ratings::of(scores, links("imdb").first().map(String::as_str)),
+        imdb_url: crate::segments::is_imdb(&p.id)
+            .then(|| format!("https://www.imdb.com/title/{}/", p.id)),
         source: source.to_owned(),
         trailers: p
             .trailer_streams

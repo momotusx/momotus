@@ -97,7 +97,7 @@ impl Target {
 }
 
 /// `tt` and 1 to 10 digits: the only ids that go into a source's query.
-fn is_imdb(id: &str) -> bool {
+pub(crate) fn is_imdb(id: &str) -> bool {
     id.strip_prefix("tt")
         .is_some_and(|d| (1..=10).contains(&d.len()) && d.bytes().all(|b| b.is_ascii_digit()))
 }

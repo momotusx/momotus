@@ -6,6 +6,7 @@
 //! of allowed titles, then its list's 20 newest (plans/m11-kids.md 5).
 
 use crate::live::{FRAME, ListDiff, coalesce};
+use crate::ratings::{self, Ratings, Title};
 use crate::views::playback::{NextEpisode, next_after};
 use crate::views::settings::HomeRows;
 use crate::{Core, CoreError};
@@ -51,6 +52,9 @@ pub struct Tile {
     pub video_id: Option<String>,
     /// The IMDb rating the addon gave, as written ("8.4").
     pub rating: Option<String>,
+    /// The IMDb and Rotten Tomatoes scores to show side by side: MDBList's,
+    /// with the addon's own IMDb rating when MDBList has none.
+    pub ratings: Ratings,
     /// What the hero shows beyond the tile; kept off the wire for rows.
     #[serde(skip)]
     #[cfg_attr(feature = "ts", ts(skip))]
@@ -665,13 +669,15 @@ async fn load_catalogs(
     let soft = tokio::time::sleep(SOFT_DEADLINE);
     tokio::pin!(soft);
     let mut soft_fired = false;
+    let mut lookups = JoinSet::new();
     loop {
         tokio::select! {
             joined = calls.join_next() => {
                 let Some(joined) = joined else { break };
                 let Ok((row_id, result)) = joined else { continue };
-                apply_catalog(&rows, &row_id, result);
+                let titles = apply_catalog(&core, &rows, &row_id, result);
                 maybe_pick_hero(&rows, &header);
+                lookups.spawn(rate(core.clone(), rows.clone(), header.clone(), titles));
             }
             _ = &mut soft, if !soft_fired => {
                 soft_fired = true;
@@ -688,48 +694,87 @@ async fn load_catalogs(
             }
         }
     }
+    // The ratings still on their way.
+    while lookups.join_next().await.is_some() {}
 }
 
+/// Looks up the ratings of `titles` and puts them on every tile that shows
+/// one of them, the hero's too.
+async fn rate(
+    core: Core,
+    rows: Arc<Mutex<ObservableVector<HomeRow>>>,
+    header: SharedObservable<HomeHeader>,
+    titles: Vec<Title>,
+) {
+    let Some(known) = core.ratings().lookup(&titles).await else {
+        return;
+    };
+    {
+        let mut rows = lock(&rows);
+        for index in 0..rows.len() {
+            let mut row = rows[index].clone();
+            if ratings::apply(&mut row.tiles, &known) {
+                rows.set(index, row);
+            }
+        }
+    }
+    header.update_if(|h| {
+        h.hero
+            .as_mut()
+            .is_some_and(|hero| ratings::apply([&mut hero.tile], &known))
+    });
+}
+
+/// Fills the row from the catalog's answer; the titles it may show, for
+/// their ratings.
 fn apply_catalog(
+    core: &Core,
     rows: &Mutex<ObservableVector<HomeRow>>,
     row_id: &str,
     result: Result<mq_addons::Fetched, mq_addons::AddonError>,
-) {
-    let outcome = result.map_err(|e| e.to_string()).and_then(|f| {
-        serde_json::from_slice::<ResourceResponse>(&f.body)
-            .map_err(|e| format!("unreadable catalog: {e}"))
-    });
+) -> Vec<Title> {
+    let outcome = result
+        .map_err(|e| e.to_string())
+        .and_then(|f| {
+            serde_json::from_slice::<ResourceResponse>(&f.body)
+                .map_err(|e| format!("unreadable catalog: {e}"))
+        })
+        .and_then(|response| match response {
+            ResourceResponse::Metas { metas } => {
+                let mut tiles: Vec<Tile> = metas
+                    .into_iter()
+                    .take(ROW_TILES)
+                    .map(tile_from_preview)
+                    .collect();
+                // What the ratings cache holds, before the rows lock.
+                core.ratings().fill(&mut tiles);
+                Ok(tiles)
+            }
+            _ => Err("addon returned no catalog items".to_owned()),
+        });
+    let titles = outcome.as_ref().map(ratings::titles).unwrap_or_default();
     update_row(rows, row_id, |row| {
         // A row shown again loads again. The first answer fills it; a later
         // success may still replace a failure (an older load that failed
         // first), but nothing replaces tiles.
         let open = matches!(row.state, RowState::Loading | RowState::Slow);
-        let recovers = matches!(row.state, RowState::Failed { .. })
-            && matches!(outcome, Ok(ResourceResponse::Metas { .. }));
+        let recovers = matches!(row.state, RowState::Failed { .. }) && outcome.is_ok();
         if !open && !recovers {
             return;
         }
         match outcome {
-            Ok(ResourceResponse::Metas { metas }) => {
-                row.tiles = metas
-                    .into_iter()
-                    .take(ROW_TILES)
-                    .map(tile_from_preview)
-                    .collect();
+            Ok(tiles) => {
+                row.tiles = tiles;
                 row.state = if row.tiles.is_empty() {
                     RowState::Empty
                 } else {
                     RowState::Ready
                 };
             }
-            Ok(_) => {
-                row.state = RowState::Failed {
-                    reason: "addon returned no catalog items".into(),
-                }
-            }
             Err(reason) => row.state = RowState::Failed { reason },
         }
     });
+    titles
 }
 
 pub(crate) fn tile_from_preview(m: mq_protocol::MetaItemPreview) -> Tile {
@@ -760,6 +805,7 @@ pub(crate) fn tile_from_preview(m: mq_protocol::MetaItemPreview) -> Tile {
         release_info: m.release_info,
         progress: None,
         video_id: None,
+        ratings: Ratings::of(None, rating.as_deref()),
         rating,
         blurb: Some(blurb),
     }
@@ -811,15 +857,19 @@ async fn watch_continue(
     header: SharedObservable<HomeHeader>,
 ) {
     let mut changes = core.library().subscribe();
-    refresh_continue(&core, &rows).await;
+    let mut lookups = JoinSet::new();
+    let titles = refresh_continue(&core, &rows).await;
     maybe_pick_hero(&rows, &header);
+    lookups.spawn(rate(core.clone(), rows.clone(), header.clone(), titles));
     while let Some(tables) = crate::views::next_change(&mut changes).await {
         if tables.iter().any(|t| {
             matches!(t, Table::Progress | Table::Watched | Table::LibraryItems)
                 || (kids && *t == Table::Access)
         }) {
-            refresh_continue(&core, &rows).await;
+            let titles = refresh_continue(&core, &rows).await;
             maybe_pick_hero(&rows, &header);
+            while lookups.try_join_next().is_some() {}
+            lookups.spawn(rate(core.clone(), rows.clone(), header.clone(), titles));
         }
     }
 }
@@ -891,6 +941,7 @@ pub(crate) fn kids_tile(row: &AllowedRow) -> Tile {
         progress: None,
         video_id: None,
         rating: None,
+        ratings: Ratings::default(),
         blurb: None,
     }
 }
@@ -909,8 +960,9 @@ fn shows(policy: &Policy, kind: &str, id: &str, video: &str) -> bool {
 // ponytail: runs the indexed queries on the async thread; each is a single
 // LIMIT 20 read, move to spawn_blocking if traces show it on the hot path.
 // A kids profile reads every played title and filters before taking 20, so
-// newer plays of titles off the list never crowd out allowed ones.
-async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) {
+// newer plays of titles off the list never crowd out allowed ones. Answers
+// the titles the row shows, for their ratings.
+async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) -> Vec<Title> {
     let library = core.library();
     let policy = core.policy();
     let read = if policy.kids() {
@@ -955,10 +1007,11 @@ async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) 
     // A new row shows at once from the library, so it never pushes the page
     // down late; artwork and Next Up follow when the metas answer.
     if find_row(&lock(rows), CONTINUE_ROW_ID).is_none() {
-        let quick = unfinished
+        let mut quick: Vec<(i64, Tile)> = unfinished
             .iter()
             .map(|item| (item.updated_ms, tile_from_continue(item.clone(), None)))
             .collect();
+        core.ratings().fill(quick.iter_mut().map(|(_, t)| t));
         apply_continue(core, rows, quick);
     }
     // Metas come from the addon cache after the first look; they give the
@@ -980,7 +1033,10 @@ async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) 
     }))
     .await;
     items.extend(next_up.into_iter().flatten());
+    core.ratings().fill(items.iter_mut().map(|(_, t)| t));
+    let titles = ratings::titles(items.iter().map(|(_, t)| t));
     apply_continue(core, rows, items);
+    titles
 }
 
 /// Puts the newest tiles in the Continue Watching row, adding or removing
@@ -1039,6 +1095,7 @@ fn tile_for_next(meta: &mq_protocol::MetaItem, next: NextEpisode) -> Tile {
         progress: None,
         video_id: Some(next.video_id),
         rating: imdb_rating(p),
+        ratings: Ratings::of(None, imdb_rating(p).as_deref()),
         blurb: None,
     }
 }
@@ -1093,6 +1150,7 @@ fn tile_from_continue(item: ContinueItem, meta: Option<&mq_protocol::MetaItem>) 
         release_info: Some(caption),
         progress,
         video_id: Some(item.video_id),
+        ratings: Ratings::of(None, preview.and_then(imdb_rating).as_deref()),
         rating: preview.and_then(imdb_rating),
         blurb: None,
     }

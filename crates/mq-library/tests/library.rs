@@ -366,3 +366,59 @@ fn a_finished_anime_episode_is_a_next_up_candidate() {
         .collect();
     assert_eq!(done, [("kitsu:9".to_string(), "anime".to_string())]);
 }
+
+#[test]
+fn ratings_round_trip_forget_old_rows_and_go_with_a_removed_profile() {
+    use mq_library::{Hlc, RatingRow};
+    let lib = Library::temporary().unwrap();
+    let row = |id: &str, rt: Option<i64>, at: i64| RatingRow {
+        imdb_id: id.into(),
+        kind: "movie".into(),
+        imdb: Some(8.8),
+        rt,
+        fetched_ms: at,
+    };
+    let key = |id: &str| ("movie".to_owned(), id.to_owned());
+    assert!(
+        lib.put_ratings(
+            &[row("tt1", Some(87), 100), row("tt2", None, 50)],
+            0,
+            lib.removals()
+        )
+        .unwrap()
+    );
+    assert_eq!(
+        lib.ratings(&[
+            key("tt1"),
+            key("tt2"),
+            key("tt3"),
+            ("show".into(), "tt1".into())
+        ])
+        .unwrap(),
+        [row("tt1", Some(87), 100), row("tt2", None, 50)]
+    );
+    // Rows fetched before the cutoff go with the next write.
+    lib.put_ratings(&[row("tt3", Some(1), 200)], 60, lib.removals())
+        .unwrap();
+    assert_eq!(lib.ratings(&[key("tt2")]).unwrap(), []);
+    assert_eq!(lib.ratings(&[key("tt1")]).unwrap().len(), 1);
+
+    // A profile removal clears them, and a lookup it overtook stores nothing.
+    let hlc = |wall_ms: u64| {
+        Hlc {
+            wall_ms,
+            counter: 0,
+            device: 1,
+        }
+        .encode()
+    };
+    lib.create_profile("x", "x", "", hlc(1).as_str()).unwrap();
+    let before = lib.removals();
+    lib.delete_profile("x", hlc(2).as_str()).unwrap();
+    assert_eq!(lib.ratings(&[key("tt1"), key("tt3")]).unwrap(), []);
+    assert!(
+        !lib.put_ratings(&[row("tt1", None, 300)], 0, before)
+            .unwrap()
+    );
+    assert_eq!(lib.ratings(&[key("tt1")]).unwrap(), []);
+}

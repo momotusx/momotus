@@ -13,6 +13,7 @@ pub(crate) fn migrations() -> Migrations<'static> {
         M::up(V9),
         M::up(V10),
         M::up(V11),
+        M::up(V12),
     ])
 }
 
@@ -321,6 +322,22 @@ CREATE TABLE dismissed (
     hlc         TEXT NOT NULL,
     PRIMARY KEY (profile_id, item_id)
 );
+"#;
+
+/// IMDb and Rotten Tomatoes scores looked up for titles (MDBList,
+/// plans/research/ratings.md): one row per IMDb id and MDBList kind
+/// ("movie", "show"), device-wide. A null score is one the source did not
+/// have; `fetched_ms` dates the answer, which sets when it is asked again.
+const V12: &str = r#"
+CREATE TABLE ratings (
+    imdb_id     TEXT NOT NULL,
+    kind        TEXT NOT NULL,
+    imdb        REAL,
+    rt          INTEGER,
+    fetched_ms  INTEGER NOT NULL,
+    PRIMARY KEY (imdb_id, kind)
+);
+CREATE INDEX ratings_age ON ratings (fetched_ms);
 "#;
 
 #[cfg(test)]

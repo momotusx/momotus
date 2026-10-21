@@ -14,6 +14,7 @@
 
 use crate::Core;
 use crate::live::{FRAME, coalesce};
+use crate::ratings;
 use crate::views::home::{
     HomeRow, KIDS_ROW_ID, RowState, Tile, kids_tile, tile_from_preview, type_label,
 };
@@ -270,15 +271,25 @@ async fn run(core: Core, query: String, snapshot: SharedObservable<SearchSnapsho
     let mut top: Option<(RowState, Vec<Tile>)> =
         top_pending.then(|| (RowState::Loading, Vec::new()));
     let mut shown = Shown::default();
-    let mut publish = |top: &Option<(RowState, Vec<Tile>)>, rows: &[(RowState, Vec<Tile>)]| {
+    // Ratings found so far, put on the tiles as each publish renders them
+    // (a filled row shows the tiles it first showed).
+    let mut known = HashMap::new();
+    let mut lookups = JoinSet::new();
+    let mut publish = |top: &Option<(RowState, Vec<Tile>)>,
+                       rows: &[(RowState, Vec<Tile>)],
+                       known: &HashMap<_, _>| {
+        let mut rows = render(top.as_ref(), &slots, rows, &mut shown);
+        for row in &mut rows {
+            ratings::apply(&mut row.tiles, known);
+        }
         snapshot.set(SearchSnapshot {
             query: query.clone(),
-            rows: render(top.as_ref(), &slots, rows, &mut shown),
+            rows,
             recent: Vec::new(),
             searchable: slots.len() as u32,
         })
     };
-    publish(&top, &rows);
+    publish(&top, &rows, &known);
     let top_work = tokio::time::timeout(HARD_DEADLINE, top_results(&core, &query, &key));
     tokio::pin!(top_work);
     let mut calls = JoinSet::new();
@@ -293,31 +304,55 @@ async fn run(core: Core, query: String, snapshot: SharedObservable<SearchSnapsho
     tokio::pin!(soft);
     let mut soft_fired = false;
     loop {
-        if calls.is_empty() && !top_pending {
+        if calls.is_empty() && !top_pending && lookups.is_empty() {
             break;
         }
         tokio::select! {
             Some(joined) = calls.join_next(), if !calls.is_empty() => {
                 let Ok((index, result)) = joined else { continue };
                 rows[index] = outcome(result, &query);
-                publish(&top, &rows);
+                rate(&core, &rows[index].1, &mut known, &mut lookups);
+                publish(&top, &rows, &known);
             }
             found = &mut top_work, if top_pending => {
                 top_pending = false;
                 // A source that failed leaves the row out: search then
                 // looks as it does without it.
                 top = found.ok().flatten().map(|tiles| (RowState::Ready, tiles));
-                publish(&top, &rows);
+                if let Some((_, tiles)) = &top {
+                    rate(&core, tiles, &mut known, &mut lookups);
+                }
+                publish(&top, &rows, &known);
+            }
+            Some(joined) = lookups.join_next(), if !lookups.is_empty() => {
+                if let Ok(Some(found)) = joined {
+                    known.extend(found);
+                    publish(&top, &rows, &known);
+                }
             }
             _ = &mut soft, if !soft_fired => {
                 soft_fired = true;
                 for row in rows.iter_mut().chain(top.as_mut()).filter(|r| r.0 == RowState::Loading) {
                     row.0 = RowState::Slow;
                 }
-                publish(&top, &rows);
+                publish(&top, &rows, &known);
             }
         }
     }
+}
+
+/// What the ratings cache holds for these tiles goes into `known` at once;
+/// a lookup for the rest joins `lookups`.
+fn rate(
+    core: &Core,
+    tiles: &[Tile],
+    known: &mut HashMap<ratings::Title, ratings::Scores>,
+    lookups: &mut JoinSet<Option<HashMap<ratings::Title, ratings::Scores>>>,
+) {
+    let titles = ratings::titles(tiles);
+    known.extend(core.ratings().known(&titles));
+    let core = core.clone();
+    lookups.spawn(async move { core.ratings().lookup(&titles).await });
 }
 
 /// "Top results": the titles Trakt names for the query, led as `lead`
