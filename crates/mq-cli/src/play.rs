@@ -47,6 +47,10 @@ pub async fn play_url(url: &str, options: PlayOptions) -> Result<Value, String> 
         "--load-scripts=no".into(),
         "--config=no".into(),
         "--really-quiet".into(),
+        // The file loads once the observers are in (`loadfile` below): a
+        // first frame shown before the socket connects sent its event to
+        // nobody, and the run counted no first frame.
+        "--idle=once".into(),
     ];
     // With seeks mpv quits after the last one; `--length` would end playback
     // once a seek jumps past it.
@@ -59,7 +63,6 @@ pub async fn play_url(url: &str, options: PlayOptions) -> Result<Value, String> 
     if options.headless {
         args.extend(["--vo=null".into(), "--ao=null".into()]);
     }
-    args.push(url.to_owned());
     let mpv_started = Instant::now();
     let mut child = Command::new("mpv")
         .args(&args)
@@ -79,6 +82,11 @@ pub async fn play_url(url: &str, options: PlayOptions) -> Result<Value, String> 
             .await
             .map_err(|e| e.to_string())?;
     }
+    let load = json!({ "command": ["loadfile", url] }).to_string() + "\n";
+    write
+        .write_all(load.as_bytes())
+        .await
+        .map_err(|e| e.to_string())?;
     let mut lines = BufReader::new(read).lines();
     let mut first_frame_ms = None;
     let mut file_loaded_ms = None;
