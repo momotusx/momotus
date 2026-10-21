@@ -1295,6 +1295,36 @@ fn a_budget_change_keeps_the_player_read() {
     assert!(!h.s.to_evict().is_empty(), "the read is still the player's");
 }
 
+/// Two ranges read at once (AVPlayer reads an MP4's index this way): when
+/// the newer closes, the older one that reads on past its blocking window
+/// takes the focus back (review r2 P2-1), with its windows and `B`, and
+/// nothing past the closed range's blocking window stays wanted.
+#[test]
+fn an_older_range_that_reads_on_takes_the_focus_back() {
+    let g = Geometry::new(64 * KIB as u32, &[64 * MIB]).unwrap();
+    let mut h = Harness::new(g, small_cfg());
+    h.s.set_window(Some(window(0)));
+    open(&mut h, 1, 0, 40 * MIB, None);
+    h.send(Event::RangeAdvanced {
+        demand: 1,
+        pos: 40 * MIB + 256 * KIB,
+    });
+    open(&mut h, 2, 0, 63 * MIB, None);
+    h.tick(6_000);
+    h.send(Event::RangeClosed { demand: 2 });
+    h.send(Event::RangeAdvanced {
+        demand: 1,
+        pos: 40 * MIB + 512 * KIB,
+    });
+    // Piece 648 is 40.5 MiB: its critical window, a readahead past it, and
+    // `B` (128 KiB) behind it kept.
+    assert_eq!(h.s.class_of(649), Some(Class::Critical));
+    assert!(!readahead_pieces(&h).is_empty(), "the readahead is A's");
+    assert!(readahead_pieces(&h).iter().all(|&p| p > 649 && p < 700));
+    assert!(h.s.kept().get(646), "A's B");
+    assert_eq!(h.s.class_of(1009), None, "nothing past N's blocking window");
+}
+
 /// A range that reopens just behind its run's start (a demuxer stepping
 /// back to a sync point) starts its ramp there (review P2-4: the debug
 /// build's overflow check panicked).

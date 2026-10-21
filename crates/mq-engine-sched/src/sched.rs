@@ -53,6 +53,9 @@ struct Demand {
     /// Its end lies within its blocking window (a hash range, a resume's
     /// head): it never takes the focus or moves the anchor (2.3).
     probe: bool,
+    /// Where it was when a newer focus closed past it: once it reads a
+    /// blocking window on from there, it is the player's read again.
+    parked: Option<u64>,
 }
 
 /// Window bounds in torrent byte offsets.
@@ -325,6 +328,7 @@ impl Scheduler {
                     ready: false,
                     run_start,
                     probe,
+                    parked: None,
                 });
                 self.dirty = true;
                 self.check_ready(out);
@@ -339,6 +343,16 @@ impl Scheduler {
                 d.pos = pos.min(flen).max(old);
                 let off = self.geo.files()[d.file].offset;
                 let moved = self.geo.piece_at(off + old) != self.geo.piece_at(off + d.pos);
+                // Parked by a newer focus's close (an MP4's index read in
+                // parallel), it reads on: it is the focus again.
+                if d.parked
+                    .is_some_and(|p| d.pos >= p + self.cfg.blocking_bytes)
+                {
+                    self.next_seq += 1;
+                    (d.seq, d.parked) = (self.next_seq, None);
+                    self.anchor = None;
+                    self.dirty = true;
+                }
                 let run = (d.file, d.pos, d.run_start);
                 if self.focus().is_some_and(|f| f.id == demand) {
                     self.last_run = Some(run);
@@ -358,6 +372,9 @@ impl Scheduler {
                         self.last_run = Some((d.file, d.pos, d.run_start));
                         self.anchor = Some((d.file, d.pos));
                         self.anchor_seq = d.seq;
+                        for o in self.demands.iter_mut().filter(|o| !o.probe) {
+                            o.parked = Some(o.pos);
+                        }
                     } else if !d.probe && self.focus().is_none() {
                         self.anchor = Some((d.file, d.pos));
                     }
