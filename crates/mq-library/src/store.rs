@@ -292,6 +292,23 @@ impl Library {
         })
     }
 
+    /// Deletes a device value that a view reads through `table`, announcing
+    /// `table` with the commit.
+    pub fn delete_device_value_announced(
+        &self,
+        key: &str,
+        table: Table,
+    ) -> Result<(), LibraryError> {
+        self.write(|c| {
+            c.execute("DELETE FROM device_state WHERE key = ?1", params![key])?;
+            let mut touched = lock(&self.touched);
+            if !touched.contains(&table) {
+                touched.push(table);
+            }
+            Ok(())
+        })
+    }
+
     pub(crate) fn write<T>(
         &self,
         f: impl FnOnce(&Connection) -> rusqlite::Result<T>,

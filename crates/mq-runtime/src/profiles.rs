@@ -3,7 +3,7 @@
 //! device's one attempt throttle.
 
 use crate::Core;
-use crate::views::profiles::{ProfileInfo, ProfilesSnapshot};
+use crate::views::profiles::{ProfileInfo, ProfilesSnapshot, WipePending};
 use argon2::password_hash::phc::PasswordHash;
 use argon2::password_hash::{PasswordHasher, PasswordVerifier};
 use argon2::{Algorithm, Argon2, Params, Version};
@@ -149,6 +149,7 @@ impl Core {
             locked,
             max: MAX_PROFILES as u32,
             kids,
+            wipe_pending: self.pending_removal().map(|debrid| WipePending { debrid }),
         }
     }
 

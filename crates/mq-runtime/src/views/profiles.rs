@@ -55,6 +55,23 @@ pub struct ProfilesSnapshot {
     /// the owner's PIN (plans/m11-kids.md 9.1). The bridge keeps it set
     /// until the session's next switch.
     pub kids: bool,
+    /// A sign-out that removes the library (D13) was asked here and its
+    /// wipe has not answered yet: run steps two and three (on the owner
+    /// profile, with the debrid connections when `debrid`). Set by
+    /// `signOut {removeAfter}` before the leave, cleared by a leave that
+    /// failed, by any join and by the wipe.
+    pub wipe_pending: Option<WipePending>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub struct WipePending {
+    pub debrid: bool,
 }
 
 /// A session's (active profile, locked), sent on every switch and lock.

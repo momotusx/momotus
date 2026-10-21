@@ -50,6 +50,13 @@ pub use dev::{dev_replay, dev_segments, dev_trakt};
 pub use output::{Outgoing, Output, SendError};
 use tokio::task::JoinHandle;
 
+/// `signOut`'s removal (D13): whether the debrid connections go too.
+#[derive(Deserialize)]
+struct RemoveAfter {
+    #[serde(default)]
+    debrid: bool,
+}
+
 // No Debug: requests carry keys, PINs, recovery kits and sync records.
 #[derive(Deserialize)]
 #[serde(tag = "op", rename_all = "camelCase")]
@@ -312,6 +319,14 @@ enum Request {
         /// first, tombstone first.
         #[serde(default, rename = "disconnectDebrid")]
         disconnect_debrid: bool,
+        /// Sign out with removal (D13), the owner profile only: recorded on
+        /// this device before the leave goes out, so a restart, a crash or a
+        /// closed app finds it in the profiles view (`wipePending`) and
+        /// finishes steps two and three. A leave that fails clears it. Without
+        /// a record, on a device that holds no account (its account was
+        /// deleted), it only records the removal.
+        #[serde(default, rename = "removeAfter")]
+        remove_after: Option<RemoveAfter>,
     },
     /// Deletes the account on the sync server for every device; replies `{}`
     /// once the relay confirmed. This device forgets the account as after a
@@ -1109,7 +1124,15 @@ impl Session {
                 local,
                 wipe,
                 disconnect_debrid,
+                remove_after,
             } => {
+                // The removal empties every profile's library: the owner's
+                // to ask and to run (D13).
+                if (wipe || remove_after.is_some())
+                    && let Err(refused) = owner_only(&core)
+                {
+                    return send_answer(&self.out, json!(id), Err(refused));
+                }
                 if let Some(record) = record {
                     // A wipe is its own call after the leave (D13), once the
                     // app dropped its keystore entries: a failed leave then
@@ -1119,14 +1142,44 @@ impl Session {
                             Failure::from("leave first, then wipe without a record".to_owned());
                         return send_answer(&self.out, json!(id), Err(refused));
                     }
+                    // Recorded before the leave goes out: an app closed while
+                    // it runs still finds the removal at its next start.
+                    if let Some(after) = &remove_after
+                        && let Err(e) = core.mark_removal(after.debrid)
+                    {
+                        return send_answer(
+                            &self.out,
+                            json!(id),
+                            Err(Failure::from(e.to_string())),
+                        );
+                    }
+                    let marked = remove_after.is_some();
                     self.spawn(id, async move {
                         let _gate = core.sync_gate().await;
                         let (library, http, clock) = (core.library(), core.http(), core.clock());
-                        if local {
-                            mq_sync::leave_here(library, &record)?;
-                        } else {
-                            mq_sync::sign_out(library, http, &record, clock, force).await?;
+                        let left = match local {
+                            true => mq_sync::leave_here(library, &record),
+                            false => mq_sync::sign_out(library, http, &record, clock, force).await,
+                        };
+                        // Not left: the device keeps its account, and its library with it.
+                        if left.is_err() && marked {
+                            core.clear_removal();
                         }
+                        left?;
+                        Ok::<_, Failure>(json!({}))
+                    });
+                    return;
+                }
+                if let Some(after) = remove_after.filter(|_| !wipe) {
+                    // A device whose account was deleted: nothing to leave,
+                    // only the removal to record before its steps run.
+                    self.spawn(id, async move {
+                        let _gate = core.sync_gate().await;
+                        if core.library().in_sync_account().unwrap_or(true) {
+                            return Err(Failure::from(mq_sync::SyncError::WrongRecord));
+                        }
+                        core.mark_removal(after.debrid)
+                            .map_err(|e| Failure::from(e.to_string()))?;
                         Ok::<_, Failure>(json!({}))
                     });
                     return;
@@ -1137,10 +1190,6 @@ impl Session {
                         json!(id),
                         Err(Failure::from(mq_sync::SyncError::WrongRecord)),
                     );
-                }
-                // It empties every profile's library: the owner's to do (D13).
-                if let Err(refused) = owner_only(&core) {
-                    return send_answer(&self.out, json!(id), Err(refused));
                 }
                 let (shared, out) = (self.shared.clone(), self.out.clone());
                 self.spawn(id, async move {

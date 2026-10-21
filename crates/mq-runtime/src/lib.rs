@@ -50,7 +50,7 @@ pub use views::playback::{
     Attempt, NextEpisode, PlayTarget, PlaybackPhase, PlaybackSnapshot, PlaybackView, SubtitleNote,
     SubtitleProblem, SubtitleTrack,
 };
-pub use views::profiles::{ProfileInfo, ProfilesSnapshot, ProfilesView, SessionState};
+pub use views::profiles::{ProfileInfo, ProfilesSnapshot, ProfilesView, SessionState, WipePending};
 pub use views::search::{SearchSnapshot, SearchView};
 pub use views::settings::{HomeRows, Prefs, SettingsView};
 pub use views::sign_in::{SignInSnapshot, SignInView};

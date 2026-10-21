@@ -1126,10 +1126,42 @@ impl Core {
         Ok(ids)
     }
 
+    /// A sign-out that removes the library (D13), recorded on this device
+    /// before the leave goes out: a restart, a crash or a closed app then
+    /// finds it in the profiles view (`wipePending`) and finishes steps two
+    /// and three. `debrid`: the debrid connections go too.
+    pub fn mark_removal(&self, debrid: bool) -> Result<(), CoreError> {
+        let value = if debrid { "debrid" } else { "keep" };
+        Ok(self
+            .library()
+            .set_device_value_announced(REMOVAL, value, Table::Profiles)?)
+    }
+
+    /// The removal is off: its leave failed (the device still holds the
+    /// account), or this device joined an account since.
+    pub fn clear_removal(&self) {
+        let library = self.library();
+        if library.device_value(REMOVAL).is_ok_and(|v| v.is_some())
+            && let Err(e) = library.delete_device_value_announced(REMOVAL, Table::Profiles)
+        {
+            tracing::warn!("could not clear the pending removal: {e}");
+        }
+    }
+
+    /// The removal this device recorded and has not finished: with the
+    /// debrid connections or without.
+    pub fn pending_removal(&self) -> Option<bool> {
+        let value = self.library().device_value(REMOVAL).ok().flatten()?;
+        Some(value == "debrid")
+    }
+
     /// This device joined a sync account (paired or recovered): it gets the
     /// account's addons by sync and never starts at the defaults step, also
-    /// before its first sync stores the roster.
+    /// before its first sync stores the roster. A removal recorded before is
+    /// off: its leave is long done, and the new account's library must not
+    /// go at the next start.
     pub fn joined_sync_account(&self) {
+        self.clear_removal();
         // Announced as an addons change: an open addons view drops `fresh`.
         if let Err(e) =
             self.library()
@@ -1143,6 +1175,7 @@ impl Core {
     /// so a device that started fresh still gets the recommended addons once
     /// its roster is stored (plans/accounts.md 3.3).
     pub fn created_sync_account(&self) {
+        self.clear_removal();
         let library = self.library();
         let fresh = library
             .device_value(DEFAULTS_ERA)
@@ -1199,6 +1232,9 @@ const ADDONS_REFRESHED: &str = "addons_refreshed_ms";
 /// "legacy" on one that existed before (its profiles never start at the
 /// defaults step; Home offers the new ones once).
 const DEFAULTS_ERA: &str = "addon_defaults";
+/// D13's removal, recorded before the leave and gone with the wipe (which
+/// empties `device_state`) or a join: `debrid` or `keep`.
+const REMOVAL: &str = "removal_pending";
 /// Installed manifests are fetched again at most this often.
 const REFRESH_EVERY_MS: u64 = 24 * 60 * 60 * 1000;
 

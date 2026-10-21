@@ -766,3 +766,146 @@ async fn a_sign_out_with_wipe_leaves_the_device_as_new() {
     drop((c, core));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// What the profiles view says of a removal: `{debrid}` while one waits.
+async fn wipe_pending(c: &mut Client) -> Value {
+    c.ok(json!({"op": "subscribe", "view": "profiles"})).await["snapshot"]["wipePending"].clone()
+}
+
+/// D13's removal is the core's to remember (phase 2 web reviews, A P2-1 and
+/// B P2-1): `signOut {record, removeAfter}` records it before the leave goes
+/// out, so an app closed or crashed while the leave runs finds it in the
+/// profiles view at its next start. A leave that fails clears it, and so does
+/// any join, so a later plain sign-out never wipes unasked; the wipe ends it.
+#[tokio::test]
+async fn a_removal_is_recorded_before_the_leave_and_ends_with_the_wipe_or_a_join() {
+    let dir = temp_dir("removal");
+    let app = mq_sync_server::router(&dir.join("relay.sqlite"), Default::default()).unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+    // A relay that takes the connection and never answers: a leave that is still running.
+    let silent = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let hanging = format!("http://{}", silent.local_addr().unwrap());
+    tokio::spawn(async move {
+        let mut held = Vec::new();
+        while let Ok((socket, _)) = silent.accept().await {
+            held.push(socket);
+        }
+    });
+    let open = || {
+        Core::open(CoreConfig {
+            data_dir: dir.join("device"),
+            profile_id: "default".into(),
+            device_id: 0,
+        })
+        .unwrap()
+    };
+    let core = open();
+    let mut c = Client::new(core.clone());
+    let record = c
+        .ok(json!({"op": "createSyncAccount", "server": server, "name": "Phone"}))
+        .await;
+    assert_eq!(wipe_pending(&mut c).await, Value::Null);
+
+    // Another profile neither asks nor records a removal (D13); a plain sign-out stays open to it.
+    let kid = c.create("Kid").await;
+    c.switch(&kid, None).await;
+    let remove = json!({"debrid": true});
+    assert_eq!(
+        c.code(json!({"op": "signOut", "record": record, "removeAfter": remove}))
+            .await,
+        "notOwner"
+    );
+    c.switch("default", None).await;
+    assert_eq!(wipe_pending(&mut c).await, Value::Null);
+
+    // A leave that fails (a record that is not this device's) keeps the account, and the
+    // removal is off.
+    let mut other = record.clone();
+    other["member"] = json!("11".repeat(32));
+    assert_eq!(
+        c.code(json!({"op": "signOut", "record": other, "local": true, "removeAfter": remove}))
+            .await,
+        "wrongRecord"
+    );
+    assert_eq!(wipe_pending(&mut c).await, Value::Null);
+
+    // Signed out with the removal (without the debrid connections, as asked): it waits
+    // through a restart until a join or the wipe ends it.
+    c.ok(
+        json!({"op": "signOut", "record": record, "force": true, "removeAfter": {"debrid": false}}),
+    )
+    .await;
+    drop((c, core));
+    let core = open();
+    let mut c = Client::new(core.clone());
+    assert_eq!(wipe_pending(&mut c).await, json!({"debrid": false}));
+
+    // A join since: the removal is off, and a later plain sign-out keeps the library.
+    let record = c
+        .ok(json!({"op": "createSyncAccount", "server": server, "name": "Phone"}))
+        .await;
+    assert_eq!(wipe_pending(&mut c).await, Value::Null);
+    c.ok(json!({"op": "signOut", "record": record, "force": true}))
+        .await;
+    drop((c, core));
+    let core = open();
+    let mut c = Client::new(core.clone());
+    assert_eq!(wipe_pending(&mut c).await, Value::Null);
+    assert_eq!(
+        core.library().profiles().unwrap().len(),
+        2,
+        "nothing was wiped"
+    );
+
+    // Joined again, signed out with the removal: the wipe ends it.
+    let record = c
+        .ok(json!({"op": "createSyncAccount", "server": server, "name": "Phone"}))
+        .await;
+    c.ok(json!({"op": "signOut", "record": record, "force": true, "removeAfter": remove}))
+        .await;
+    assert_eq!(wipe_pending(&mut c).await, json!({"debrid": true}));
+    c.ok(json!({"op": "traktSignOut", "profile": kid})).await;
+    c.ok(json!({"op": "signOut", "wipe": true, "disconnectDebrid": true}))
+        .await;
+    assert_eq!(wipe_pending(&mut c).await, Value::Null);
+    assert_eq!(core.pending_removal(), None);
+
+    // A device whose account was deleted records the removal without a leave; one that
+    // still holds an account is refused, and records nothing.
+    c.ok(json!({"op": "signOut", "removeAfter": remove})).await;
+    assert_eq!(wipe_pending(&mut c).await, json!({"debrid": true}));
+    c.ok(json!({"op": "signOut", "wipe": true})).await;
+    assert_eq!(wipe_pending(&mut c).await, Value::Null);
+    let created = c
+        .ok(json!({"op": "createSyncAccount", "server": server, "name": "Phone"}))
+        .await;
+    // Its first round stores the roster, as the apps run one at once.
+    let synced = c.ok(json!({"op": "syncNow", "record": created})).await;
+    let record = match &synced["record"] {
+        Value::Null => created,
+        stored => stored.clone(),
+    };
+    assert_eq!(
+        c.code(json!({"op": "signOut", "removeAfter": remove}))
+            .await,
+        "wrongRecord"
+    );
+    assert_eq!(wipe_pending(&mut c).await, Value::Null);
+
+    // The leave is under way (its relay does not answer) when the app is closed: the
+    // removal was recorded before the leave went out, so the next start finds it.
+    let mut stuck = record.clone();
+    stuck["server"] = json!(hanging);
+    let request =
+        json!({"id": 99, "op": "signOut", "record": stuck, "force": true, "removeAfter": remove});
+    c.session.handle_text(&request.to_string()).await;
+    assert_eq!(core.pending_removal(), Some(true));
+    drop((c, core));
+    let core = open();
+    let mut c = Client::new(core.clone());
+    assert_eq!(wipe_pending(&mut c).await, json!({"debrid": true}));
+    drop((c, core));
+    let _ = std::fs::remove_dir_all(&dir);
+}
