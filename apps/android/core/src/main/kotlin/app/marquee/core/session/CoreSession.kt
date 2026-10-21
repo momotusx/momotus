@@ -123,6 +123,20 @@ class CoreSession(
     val ready = CompletableDeferred<Unit>()
 
     /**
+     * Returns once the core has first opened, or throws why it could not: the start decision's wait. It waits
+     * on [ready], never on a read of [health]. That read can start inside a composition's snapshot, which still
+     * holds the value from before the boot thread's write, and the write's apply notification can go out before
+     * the read listens: the change is then never seen.
+     */
+    suspend fun awaitOpen() = ready.await()
+
+    /** The boot thread's last step: the core runs ([running]: it did not die while opening), and the start may decide. */
+    internal fun opened(running: Boolean) {
+        if (running) health = CoreHealth.Running
+        ready.complete(Unit)
+    }
+
+    /**
      * The stream server took another port while the app was away (the `foreground` answer): a player
      * with a loaded item opens its play again, where it was.
      */
@@ -192,8 +206,7 @@ class CoreSession(
                     "core open $openMillis ms (native open $native ms, then accounts), version ${opened.version()}",
                 )
                 // A core that died again while this one was opening keeps the state its death set.
-                if (client.epoch == deaths) health = CoreHealth.Running
-                ready.complete(Unit)
+                opened(running = client.epoch == deaths)
             } catch (t: Throwable) {
                 CoreLog.e("core failed to open", t)
                 val reason = "The core could not start: ${t.message ?: t.javaClass.simpleName}"

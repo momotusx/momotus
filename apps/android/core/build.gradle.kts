@@ -25,6 +25,13 @@ android {
         getByName("main").kotlin.directories.add("src/main/generated")
     }
 
+    testOptions {
+        unitTests.all {
+            // Robolectric's Android 16 sets up shared memory through JDK internals (CoreStartTest).
+            it.jvmArgs("--add-opens=java.base/jdk.internal.access=ALL-UNNAMED")
+        }
+    }
+
     lint {
         // Deliberate: arm64 and armeabi-v7a, no x86 (plans/m6-android.md D10), as the app.
         disable += "ChromeOsAbiSupport"
@@ -68,4 +75,6 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    // A real CoreSession needs a Context (CoreStartTest).
+    testImplementation(libs.robolectric)
 }

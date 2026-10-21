@@ -126,7 +126,7 @@ class TitleCopyTest {
             TitleCopy.facts(details().copy(ratingsFrom = "IMDb and Rotten Tomatoes via MDBList")).last(),
         )
         // Or the Rotten Tomatoes addon, for its Fresh mark.
-        val addon = "IMDb and Rotten Tomatoes (the Rotten Tomatoes addon)"
+        val addon = "IMDb from Cinemeta, Rotten Tomatoes from the Rotten Tomatoes addon"
         assertEquals("Ratings from" to addon, TitleCopy.facts(details().copy(ratingsFrom = addon)).last())
     }
 

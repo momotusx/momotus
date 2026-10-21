@@ -1,9 +1,9 @@
 package app.marquee.android
 
+import android.os.Looper
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
@@ -13,13 +13,14 @@ import app.marquee.core.InstallCards
 import app.marquee.core.LinkInstall
 import app.marquee.core.PendingRemoval
 import app.marquee.core.client.CoreLog
-import app.marquee.core.session.CoreHealth
 import app.marquee.core.session.CoreSession
 import app.marquee.core.startsFresh
 import app.marquee.core.views.HomeView
 import app.marquee.ui.tv.TvHomeState
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -127,15 +128,23 @@ class AppState(
 
     init {
         viewModelScope.launch {
+            // What the main thread is doing at the limit, read off it: a busy one names its call.
+            val mainAtLimit =
+                async(Dispatchers.Default) {
+                    delay(START_WAIT_MS)
+                    mainThreadStack()
+                }
             // Never a blank screen for good: past the limit Home opens, and says why if the core is silent.
             val decided =
                 withTimeoutOrNull(START_WAIT_MS) { decide() } ?: Start.Home.also {
                     // The core's state then tells a slow open (still starting, no open time) from a missed change.
+                    val main = withTimeoutOrNull(1_000) { mainAtLimit.await() } ?: "not read"
                     CoreLog.w(
                         "start: no decision in $START_WAIT_MS ms at \"$step\" (core ${session.health}, " +
-                            "open ${session.openMillis} ms), opening Home",
+                            "open ${session.openMillis} ms), opening Home; main thread at the limit: $main",
                     )
                 }
+            mainAtLimit.cancel()
             // A switch or a lock meanwhile (a lock at start) already chose Home for the next profile.
             if (!sentHome) start = decided
         }
@@ -146,7 +155,14 @@ class AppState(
      * profile) means a new user, who starts at onboarding until the defaults step is done.
      */
     private suspend fun decide(): Start {
-        snapshotFlow { session.health }.first { it == CoreHealth.Running }
+        try {
+            session.awaitOpen()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            // The core could not open: Home says why.
+            return Start.Home
+        }
         step = "reading the addons view"
         CoreLog.d("start: the core runs")
         val start =
@@ -173,3 +189,11 @@ class AppState(
 
 /** How long the start decision may wait for the core before Home opens anyway. */
 private const val START_WAIT_MS = 10_000L
+
+/** The main thread's stack, innermost first, for a log line. */
+private fun mainThreadStack(): String =
+    Looper
+        .getMainLooper()
+        .thread.stackTrace
+        .take(24)
+        .joinToString(" < ") { "${it.className.substringAfterLast('.')}.${it.methodName}:${it.lineNumber}" }
