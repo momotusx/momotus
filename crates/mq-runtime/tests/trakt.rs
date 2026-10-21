@@ -2061,6 +2061,33 @@ async fn own_sends_are_forgotten_after_a_day() {
     assert!(state(&core, "a-prune", "sent:tt100:1:2").is_some());
 }
 
+/// A sign-out that removes the library (D13) makes the owner `default`
+/// again: the old owner's Trakt tokens leave memory, so the new owner starts
+/// signed out.
+#[tokio::test]
+async fn a_wipe_drops_the_old_owners_trakt_tokens() {
+    let (core, _fake) = setup("a-wipe").await;
+    let hlc = mq_library::Hlc::zero(1).encode();
+    core.library()
+        .ensure_profile(mq_library::OWNER, "Main", &hlc)
+        .unwrap();
+    let owner = core.for_profile(mq_library::OWNER);
+    owner
+        .set_trakt(Some(record_as("a-wipe", "old-access", 1)))
+        .await
+        .unwrap();
+    owner.trakt_sync().await.unwrap();
+    assert_eq!(
+        TraktView::open(&owner).snapshot().state,
+        TraktState::Connected
+    );
+    core.wipe().unwrap();
+    let state = TraktView::open(&core.for_profile(mq_library::OWNER))
+        .snapshot()
+        .state;
+    assert_ne!(state, TraktState::Connected, "the old owner's tokens left");
+}
+
 #[tokio::test]
 async fn a_profile_deleted_elsewhere_stops_its_rounds() {
     let (core, fake) = signed_in("a-owner2").await;

@@ -1005,8 +1005,13 @@ impl Core {
     /// Trakt record). After the leave: nothing of it is sent.
     pub fn wipe(&self) -> Result<Vec<String>, CoreError> {
         let library = self.library();
-        let ids = library.profiles()?.into_iter().map(|p| p.id).collect();
+        let ids: Vec<String> = library.profiles()?.into_iter().map(|p| p.id).collect();
         library.wipe()?;
+        // Their Trakt rounds stop and their tokens leave memory: the new
+        // owner is `default` again and must not go on with the old one's.
+        for id in &ids {
+            self.trakt().forget(id);
+        }
         library.set_device_value(DEFAULTS_ERA, "fresh")?;
         let first = Hlc::zero(self.clock().device()).encode();
         library.ensure_profile(OWNER, OWNER_NAME, &first)?;
