@@ -93,7 +93,8 @@ fn bucket(h: u32) -> Resolution {
         700.. => Resolution::R720p,
         560.. => Resolution::R576p,
         400.. => Resolution::R480p,
-        200.. => Resolution::R360p,
+        300.. => Resolution::R360p,
+        200.. => Resolution::R240p,
         _ => Resolution::Unknown,
     }
 }
@@ -207,7 +208,8 @@ mod tests {
     #[test]
     fn low_resolutions_get_their_own_step() {
         assert_eq!(resolution_from("360p"), Resolution::R360p);
-        assert_eq!(resolution_from("240p"), Resolution::R360p);
+        assert_eq!(resolution_from("240p"), Resolution::R240p);
+        assert_eq!(resolution_from("426x240"), Resolution::R240p);
         assert_eq!(resolution_from("640x360"), Resolution::R360p);
         assert_eq!(resolution_from("480p"), Resolution::R480p);
         assert_eq!(resolution_from("144p"), Resolution::Unknown);

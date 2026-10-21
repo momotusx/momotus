@@ -80,6 +80,8 @@ pub(crate) static TABLE: LazyLock<Table> = LazyLock::new(|| {
         rule(F::Resolution, r"\b4k|21600?[pi]\b", Tf::Val(r"2160p")).ci().rm().into(),
         rule(F::Resolution, r"(\d{3,4}[pi])", Tf::Lower).ci().rm().into(),
         rule(F::Resolution, r"(240|360|480|576|720|1080|2160|3840)[pi]", Tf::Lower).ci().rm().into(),
+        // deviation from PTT: an Ultra HD Blu-ray is 2160p; a stated height above wins
+        rule(F::Resolution, r"\bUHD\b", Tf::Val(r"2160p")).ci().into(),
         rule(F::EpisodeCode, r"[\[\()]([A-Fa-f0-9]{8})[\]\)]", Tf::Upper).rm().into(),
         rule(F::EpisodeCode, r"[\[\()]([0-9]{8})[\]\)]", Tf::Upper).rm().into(),
         rule(F::Trash, r"\b(?:H[DQ][ .-]*)?(CAM)(?:H[DQ])?(?:[ .-]*Rip|Rp)?\b", Tf::True).ci().look(na(r".?(?:S|E|\()\d+").at(Pos::End(1))).into(),
