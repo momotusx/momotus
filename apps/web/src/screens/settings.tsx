@@ -32,6 +32,7 @@ import { AvatarArt } from "../components/avatar";
 import { profiles } from "../core/profiles";
 import { debridAccounts } from "../core/debrid";
 import { inUse } from "../lib/debrid";
+import { accountWords } from "../lib/account";
 
 const clockTime = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
@@ -251,7 +252,7 @@ export default function SettingsScreen() {
                 fkey="settings:profiles"
                 icon={<AvatarArt avatar={m().avatar} name={m().name} size="s" />}
                 title={m().name}
-                text={(profiles()?.profiles.length ?? 1) > 1 ? "Switch profile" : "Add a profile for someone else, or switch"}
+                text={(profiles()?.profiles.length ?? 1) > 1 ? accountWords.switchProfile : "Add a profile for someone else, or switch"}
               />
               <LinkRow href={`/profiles/edit/${m().id}`} fkey="settings:profile-edit" icon={<UserPen aria-hidden />} title="Edit profile" text="Name, picture and PIN." />
               <Show when={m().isOwner}>
