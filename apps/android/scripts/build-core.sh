@@ -104,6 +104,18 @@ for pair in "${TRIPLES[@]:1}"; do
   rm -rf "$other"
 done
 
+# A shipped core carries no dev hook: the MQ_DEV_ variables and the e2e recorder's set_dev_replay
+# are compiled in only with debug assertions (dev). Checked on each library before it is stripped.
+if [ "$DEV_ASSERTIONS" = false ]; then
+  for pair in "${TRIPLES[@]}"; do
+    lib=$TARGET/${pair%%:*}/release/libmarquee_core.so
+    if grep -aqE 'MQ_DEV_|set_dev_replay' "$lib"; then
+      echo "build-core.sh: $lib carries a dev hook (MQ_DEV_ or set_dev_replay): debug assertions were on" >&2
+      exit 1
+    fi
+  done
+fi
+
 rm -rf "$LIBS"
 # A plain build drops a dev library left from before, which debug builds would otherwise package.
 if [ "$DEV_ASSERTIONS" = false ]; then rm -rf "$ROOT/apps/android/core/src/debug/jniLibs"; fi

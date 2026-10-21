@@ -54,6 +54,18 @@ for target in aarch64-apple-darwin "${targets[@]}"; do
     cargo rustc -p mq-ffi --lib --release --target "$target" -j 4 --crate-type staticlib
 done
 
+# A shipped core carries no dev hook: the MQ_DEV_ variables and the e2e recorder's set_dev_replay
+# are compiled in only with debug assertions (--dev). Checked on every library built here.
+if [[ $dev_assertions == false ]]; then
+  for target in aarch64-apple-darwin "${targets[@]}"; do
+    lib="$target_dir/$target/release/libmarquee_core.a"
+    if grep -aqE 'MQ_DEV_|set_dev_replay' "$lib"; then
+      echo "build-core.sh: $lib carries a dev hook (MQ_DEV_ or set_dev_replay): debug assertions were on" >&2
+      exit 1
+    fi
+  done
+fi
+
 gen="$(mktemp -d)"
 trap 'rm -rf "$gen"' EXIT
 mac="$target_dir/aarch64-apple-darwin/release"
