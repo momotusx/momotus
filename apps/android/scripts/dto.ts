@@ -69,6 +69,8 @@ const DEFAULTED = new Map([
   ["SearchSnapshot.searchable", "0"],
   ["RankKey.pace", "3"],
   ["RankKey.covered", "0"],
+  // The pick audit's tier, above resolution: an older core or recording ranks without it.
+  ["RankKey.tier", "0"],
   ["MayPause.smallSwarm", "false"],
   ["Prefs.subtitleSize", "SubtitleSize.Medium"],
   // Accounts phase 1c: passkey kits and the devices that joined through one.
@@ -127,6 +129,7 @@ const INT = new Set([
   "total",
   // M13 stream choice: the sort key, the reason lines, the speed and the learned counters.
   "start",
+  "tier",
   "effectiveHeight",
   "within",
   "seeders",

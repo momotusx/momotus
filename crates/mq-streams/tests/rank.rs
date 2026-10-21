@@ -215,12 +215,13 @@ fn each_key_field_outranks_every_later_one() {
             Playability::NeedsTranscode
         },
         size_ok: best(8),
-        start: if best(9) { 4 } else { 0 },
+        tier: if best(9) { 3 } else { 0 },
         binge: best(10),
         effective_height: if best(11) { 2160 } else { 0 },
-        within: if best(12) { 1000 } else { 0 },
+        start: if best(12) { 4 } else { 0 },
+        within: if best(13) { 1000 } else { 0 },
     };
-    for i in 0..13 {
+    for i in 0..14 {
         assert!(
             compose(&|k| k == i) > compose(&|k| k > i),
             "field {i} must outrank every later field"
@@ -1698,6 +1699,64 @@ fn a_title_named_in_two_languages_matches_either() {
         0,
         "{:?}",
         ranked.hidden
+    );
+}
+
+/// Past the wanted seeders a swarm starts as well as with more (pick audit:
+/// 16 of 16 legal swarms with 4 to 333 live seeders started, in no order of
+/// seeders), so on a 4K TV a 4K with 116 beats a 1080p with 711; under the
+/// wanted seeders the seeders decide, as before; between versions equal
+/// on the screen, the 4 x band still does; a ready file still comes first.
+#[test]
+fn past_the_wanted_seeders_the_better_version_wins() {
+    let fast = Speed {
+        mbps: 100.0,
+        samples: 5,
+    };
+    let tv = Case {
+        caps: caps_4k_dv(),
+        conditions: Conditions {
+            runtime_s: Some(138 * 60),
+            http: fast,
+            p2p: fast,
+            ..engine().clone()
+        },
+        ..Case::stick()
+    };
+    let uhd = seeded(1, "Movie.2020.2160p.BluRay.DV.HDR10.x265-GRP", 116, 5.4);
+    let fhd = seeded(2, "Movie.2020.1080p.WEB-DL.x265-GRP", 711, 2.1);
+    let ranked = tv.rank(vec![uhd.clone(), fhd.clone()]);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.2160p.BluRay.DV.HDR10.x265-GRP"
+    );
+    let thin = seeded(1, "Movie.2020.2160p.BluRay.DV.HDR10.x265-GRP", 30, 5.4);
+    let ranked = tv.rank(vec![thin, fhd.clone()]);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.1080p.WEB-DL.x265-GRP"
+    );
+    let ready = ready(3, "Movie.2020.1080p.WEB-DL.x264-RDY", 2.0);
+    let ranked = tv.rank(vec![uhd, ready]);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.1080p.WEB-DL.x264-RDY"
+    );
+    // On a 720p screen both count as 720p: the 4 x band picks.
+    let small = Case {
+        caps: DeviceCaps {
+            display_height: 720,
+            ..DeviceCaps::basic_1080p()
+        },
+        ..tv
+    };
+    let ranked = small.rank(vec![
+        seeded(4, "Movie.2020.720p.WEB-DL.x264-GRP", 89, 1.1),
+        seeded(5, "Movie.2020.1080p.BluRay.x264-GRP", 774, 2.0),
+    ]);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.1080p.BluRay.x264-GRP"
     );
 }
 

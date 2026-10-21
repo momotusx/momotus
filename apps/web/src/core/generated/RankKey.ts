@@ -53,7 +53,16 @@ covered: number, playability: Playability,
  */
 sizeOk: boolean, 
 /**
+ * How it starts, as far as it decides over resolution: ready 3 (2
+ * when not preferred), a torrent at the wanted seeders 2, one at 5 or
+ * none stated 1, under 5 0. Past the wanted seeders a swarm starts as
+ * well as with more, so the better version wins (pick audit: 16 of 16
+ * swarms with 4 to 333 live seeders started, in no order of seeders).
+ */
+tier: number, binge: boolean, effectiveHeight: number, 
+/**
  * Ready 4 (3 when not preferred); a torrent 3 at 4 x the wanted
  * seeders, 2 at the wanted seeders, 1 at 5 or none stated, 0 under 5.
+ * Among versions as good, more seeders first.
  */
-start: number, binge: boolean, effectiveHeight: number, within: number, };
+start: number, within: number, };

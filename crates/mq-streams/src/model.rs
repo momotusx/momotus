@@ -428,11 +428,18 @@ pub struct RankKey {
     pub playability: Playability,
     /// A torrent within 1.1 x the size limit; a ready file always is.
     pub size_ok: bool,
-    /// Ready 4 (3 when not preferred); a torrent 3 at 4 x the wanted
-    /// seeders, 2 at the wanted seeders, 1 at 5 or none stated, 0 under 5.
-    pub start: u8,
+    /// How it starts, as far as it decides over resolution: ready 3 (2
+    /// when not preferred), a torrent at the wanted seeders 2, one at 5 or
+    /// none stated 1, under 5 0. Past the wanted seeders a swarm starts as
+    /// well as with more, so the better version wins (pick audit: 16 of 16
+    /// swarms with 4 to 333 live seeders started, in no order of seeders).
+    pub tier: u8,
     pub binge: bool,
     pub effective_height: u32,
+    /// Ready 4 (3 when not preferred); a torrent 3 at 4 x the wanted
+    /// seeders, 2 at the wanted seeders, 1 at 5 or none stated, 0 under 5.
+    /// Among versions as good, more seeders first.
+    pub start: u8,
     pub within: u16,
 }
 

@@ -560,8 +560,8 @@ pub fn screen_class(display_height: u32) -> u32 {
 }
 
 /// The resolution steps a release moves down: 4320, 2160, 1080, 720, 480,
-/// 360.
-const LADDER: [u32; 6] = [4320, 2160, 1080, 720, 480, 360];
+/// 360, 240.
+const LADDER: [u32; 7] = [4320, 2160, 1080, 720, 480, 360, 240];
 
 fn step_down(height: u32) -> u32 {
     LADDER.iter().copied().find(|&h| h < height).unwrap_or(0)
@@ -768,6 +768,16 @@ fn start(class: SourceClass, seeders: Option<u32>, prefs: &StreamPrefs) -> u8 {
     }
 }
 
+/// `start` as far as it outranks resolution: a ready file the user prefers,
+/// then a ready file or a swarm at the wanted seeders alike, then a thin
+/// swarm, then one that may not start.
+fn tier(class: SourceClass, start: u8) -> u8 {
+    match (class, start) {
+        (SourceClass::Ready, 4) => 3,
+        (_, s) => s.min(2),
+    }
+}
+
 /// The size limit guards a torrent's start and the disk: a ready file
 /// streams, so it never fails it (r4 N3).
 fn size_ok(size: Option<u64>, class: SourceClass, prefs: &StreamPrefs) -> bool {
@@ -877,9 +887,10 @@ fn score(stream: ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Sco
         // (plans/streaming-window.md 3.1).
         size_ok: (window.is_some() && !input.conditions.limit_chosen)
             || size_ok(weight.size, class, input.prefs),
-        start,
+        tier: tier(class, start),
         binge: matches!((input.last_binge_group, &s.binge_group), (Some(a), Some(b)) if a == b),
         effective_height: effective_height(s, bitrate, input),
+        start,
         within: within(s, class, bitrate, safe, input),
     };
     let line = line(s, class, &key, weight, judged, window, input);

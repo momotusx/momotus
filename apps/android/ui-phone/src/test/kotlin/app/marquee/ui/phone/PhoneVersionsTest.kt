@@ -99,7 +99,7 @@ class PhoneVersionsTest {
         failoverCount = 0,
         line = line,
         sourceClass = SourceClass.Swarm,
-        score = RankKey(true, true, true, true, true, 3, 0, Playability.Native, true, 3, false, 1080, 0),
+        score = RankKey(true, true, true, true, true, 3, 0, Playability.Native, true, 2, false, 1080, 3, 0),
     )
 
     private fun streams(sizeLimitBytes: Long?) =
