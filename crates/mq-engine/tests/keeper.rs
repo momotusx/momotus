@@ -524,7 +524,8 @@ async fn the_trim_keeps_180_s_at_the_rate_the_player_gave() {
 /// chosen in a live torrent, fits only by counting `R` (the earlier
 /// episode's bytes are no room for it whole): it gets the whole-file round
 /// (the idle torrent goes), and playing it whole ends the window the
-/// earlier episode had.
+/// earlier episode had. The app's inputs for it count its two boundary
+/// pieces (review r3 A R4).
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_next_file_of_a_live_torrent_gets_its_round_and_ends_the_window() {
     let s = support::swarm_pack(&[("movie.mkv", 32 << 20), ("e02.mkv", 8 << 20)], PIECE).await;
@@ -545,6 +546,8 @@ async fn the_next_file_of_a_live_torrent_gets_its_round_and_ends_the_window() {
     let mut r = reader.range(0, None).await.unwrap();
     within(30, r.read_to_end(&mut Vec::new())).await.unwrap();
     drop((r, reader));
+    let inputs = w.engine.window_inputs(w.t, 1, 0, RATE, 0).await.unwrap();
+    assert_eq!(inputs.boundary, 2 * u64::from(PIECE));
     // Free space a byte short of the next episode plus the reserve.
     test_hooks::set_free(&w.engine, Some((8 << 20) + RESERVE_BYTES - 1));
     let next = w
