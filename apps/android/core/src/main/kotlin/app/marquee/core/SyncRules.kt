@@ -3,7 +3,6 @@ package app.marquee.core
 import app.marquee.core.model.ForkPreview
 import app.marquee.core.model.LostPreview
 import app.marquee.core.model.MemberInfo
-import app.marquee.core.model.ProfilesSnapshot
 import app.marquee.core.model.SyncRecord
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.longOrNull
@@ -11,13 +10,6 @@ import java.net.URI
 
 /** Sync rules the screens share, as the web's `lib/sync.ts` and Apple's `SyncRules` have them. */
 object SyncRules {
-    /** Delete account shows on the owner profile only: the account holds every profile (D15). */
-    fun mayDeleteAccount(snapshot: ProfilesSnapshot?) =
-        snapshot?.profiles?.firstOrNull { it.id == snapshot.active }?.isOwner == true
-
-    /** Make a recovery kit shows on the owner profile only: a kit is a copy of the whole account key (D17). */
-    fun mayMakeKit(snapshot: ProfilesSnapshot?) = mayDeleteAccount(snapshot)
-
     /**
      * A pairing code as the new device shows it: the TV's link `https://<link host>/pair#v=3&...`, or
      * `marquee:pair?v=2&...` from an older build. Any other QR in view is ignored.

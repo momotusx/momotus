@@ -510,6 +510,7 @@ internal fun AccountCard(
     var error by remember { mutableStateOf<String?>(null) }
     var removing by remember { mutableStateOf(false) }
     var removingPasskey by remember { mutableStateOf(false) }
+    val owner = rememberOwnerCheck()
     var debrid by remember { mutableStateOf(true) }
     val go: (suspend () -> Unit) -> Unit = { work ->
         error = null
@@ -523,6 +524,23 @@ internal fun AccountCard(
                 } catch (e: Exception) {
                     wordsOf(e, SyncCopy.Action.Remove)
                 }
+        }
+    }
+    // Remove from this device empties it: the screen lock first, as Sign out with removal (D13). Without a lock
+    // the ask above the button is the step.
+    val removeHere: () -> Unit = {
+        if (!flows.removal.running) {
+            error = null
+            scope.launch {
+                error =
+                    try {
+                        guarded(owner, tv, SyncCopy.AUTH_REMOVE_HERE, askAgain = null) { flows.removeHere(debrid) }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        wordsOf(e, SyncCopy.Action.Remove)
+                    }
+            }
         }
     }
     Column(
@@ -592,7 +610,7 @@ internal fun AccountCard(
             ) {
                 SecondaryButton(
                     AccountCopy.ACCOUNT_GONE_ACTIONS[1],
-                    { if (!flows.removal.running) go { flows.removeHere(debrid) } },
+                    removeHere,
                     icon = Icons.Trash,
                     busy = flows.removal.running,
                 )

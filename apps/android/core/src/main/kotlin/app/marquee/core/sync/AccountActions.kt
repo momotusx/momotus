@@ -64,11 +64,24 @@ class AccountActions(
     var run: BrokeredRun? = null
         private set
 
+    /** The links, and a sign-in another account holds from a join another way: "Use it for this account instead". */
     fun load() =
         go {
             providers = AccountRules.providerOrder(ops.relayInfo(server()).providers)
             links = sync.identities()
+            sync.heldLink?.let { held ->
+                sync.heldLink = null
+                offerMove(held.provider, held.ticket)
+            }
         }
+
+    private fun offerMove(
+        provider: String,
+        ticket: String,
+    ) = ask(AccountRules.signInFailure("linkedElsewhere", provider)) {
+        sync.linkIdentity(ticket, move = true)
+        links = sync.identities()
+    }
 
     /** Link another: the provider's sign-in, then its identity is linked here; one linked elsewhere offers to move it. */
     fun link(provider: String) =
@@ -85,7 +98,7 @@ class AccountActions(
                 sync.linkIdentity(ticket)
             } catch (e: CoreError) {
                 if (e.code != "linkedElsewhere") throw e
-                ask(AccountRules.signInFailure("linkedElsewhere", provider)) { sync.linkIdentity(ticket, move = true) }
+                offerMove(provider, ticket)
                 return@go
             }
             links = sync.identities()
@@ -163,20 +176,20 @@ class AccountActions(
     }
 
     /**
-     * Save a passkey here (3.1): an immediate get first, and when that passkey already opens the account the
-     * core says `kitHere` and nothing is saved; else create, and with no PRF result one get for the new id.
-     * [probe] false after a passkey was dropped (`kitDropped`): straight to create.
+     * Save a passkey here (3.1): an immediate get first, and when that passkey is this account's (its `user.id`)
+     * and already opens it the core says `kitHere` and nothing is saved; another account's passkey, a dropped or
+     * a taken one, goes to create, and with no PRF result one get for the new id. [probe] false: straight to create.
      */
     fun savePasskeyHere(probe: Boolean = true) =
         go {
             if (platform.rpId.isEmpty()) return@go
+            val account = sync.loadDevices().account
             if (probe) {
                 val got = platform.passkeyGet(Passkeys.get(platform.rpId), immediate = true)
-                if (got is PasskeyResult.Used && got.prf != null) {
+                if (got is PasskeyResult.Used && got.prf != null && Passkeys.sameAccount(got.userHandle, account)) {
                     if (save(got.prf)) return@go
                 }
             }
-            val account = sync.loadDevices().account
             val made = platform.passkeyCreate(Passkeys.create(platform.rpId, account, ownerName()))
             val prf =
                 (made as? PasskeyResult.Used)?.let { used ->
@@ -201,10 +214,11 @@ class AccountActions(
             save(prf)
         }
 
-    /** True when the save is settled (saved, or the passkey already works here). */
+    /** True when the save is settled (saved, or the passkey already works here); a dropped or taken one is not. */
     private suspend fun save(prf: String): Boolean =
         try {
             sync.savePasskey(prf, AccountRules.fill(AccountCopy.PASSKEY_LABEL, mapOf("device" to deviceName)))
+            said = null
             true
         } catch (e: CoreError) {
             when (e.code) {
@@ -213,9 +227,14 @@ class AccountActions(
                     true
                 }
 
-                "kitDropped", "kitTaken", "tooManyKits", "plainLink", "notOwner" -> {
+                // The probe's passkey cannot be this account's way in: a new one is made next.
+                "kitDropped", "kitTaken" -> {
+                    false
+                }
+
+                "tooManyKits", "plainLink", "notOwner" -> {
                     said = KIT_WORDS.getValue(e.code!!)
-                    e.code != "kitDropped"
+                    true
                 }
 
                 else -> {

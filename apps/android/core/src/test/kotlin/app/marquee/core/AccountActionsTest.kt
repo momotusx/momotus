@@ -16,6 +16,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** Account's rows (plans/accounts.md 4.3): links, Apple's revoke before unlink and delete, Save a passkey here. */
@@ -241,5 +242,54 @@ class AccountActionsTest {
         actions.savePasskeyHere(probe = false)
         core.waitFor("said") { actions.said != null }
         assertEquals(AccountCopy.TOO_MANY_KITS, actions.said)
+    }
+
+    @Test
+    fun `Save a passkey here passes over another account's passkey and makes one for this account`() {
+        platform.get = { PasskeyResult.Used("old", "T1RIRVI", "b2xk") }
+        actions.savePasskeyHere()
+        core.waitFor("saved") { "savePasskey" in core.ops() && !actions.busy }
+        assertEquals(1, platform.creates.size, "a new passkey for this account")
+        assertEquals(1, core.ops().count { it == "savePasskey" }, "the other account's passkey is never sent")
+        assertEquals(
+            "cHJm",
+            core
+                .last("savePasskey")
+                .getValue("prf")
+                .jsonPrimitive.content,
+        )
+        assertNull(actions.said)
+    }
+
+    @Test
+    fun `a taken passkey is not the end, a new one is made`() {
+        platform.get = { PasskeyResult.Used("cred", "QUNDT1VOVA", "b2xk") }
+        var saves = 0
+        core.answers["savePasskey"] = {
+            if (saves++ == 0) fail("kitTaken") else ok("""{"id":"pk","record":{"revision":3}}""")
+        }
+        actions.savePasskeyHere()
+        core.waitFor("saved") { saves == 2 && !actions.busy }
+        assertEquals(1, platform.creates.size)
+        assertNull(actions.said, "no kitTaken words once the new passkey is saved")
+    }
+
+    @Test
+    fun `a sign-in another account holds, from a join another way, is offered on Account and moves on Use it`() {
+        sync.heldLink = SyncAccount.HeldLink("google", "T3")
+        loaded()
+        core.waitFor("asked") { actions.failure != null }
+        assertEquals(AccountRules.signInFailure("linkedElsewhere", "google"), actions.failure)
+        assertNull(sync.heldLink)
+        actions.goOn()
+        core.waitFor("moved") { "linkIdentity" in core.ops() }
+        val moved = core.last("linkIdentity")
+        assertEquals("T3", moved.getValue("ticket").jsonPrimitive.content)
+        assertTrue(
+            moved
+                .getValue("move")
+                .jsonPrimitive.content
+                .toBoolean(),
+        )
     }
 }

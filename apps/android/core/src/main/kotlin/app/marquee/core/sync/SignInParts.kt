@@ -75,8 +75,16 @@ class BrokeredRun(
     /** The provider page was opened and no return came yet: "Didn't finish signing in?" may show. */
     val waitingForReturn: Boolean get() = shown && !returnedOnce && !end.isCompleted
 
+    /** The core took a return (its `waiting` phase): a stray link it ignored does not count. */
     @Volatile
     private var returnedOnce = false
+
+    /**
+     * Opened in an Auth Tab: its return comes back as the tab's result, so a `marquee://auth` link delivered as an
+     * intent while it runs can only be another app's or a web page's ([linkReturned]).
+     */
+    @Volatile
+    var viaAuthTab = false
 
     private val signIn: SignInView =
         view { phase ->
@@ -88,7 +96,11 @@ class BrokeredRun(
                     }
                 }
 
-                SignInSnapshot.Starting, SignInSnapshot.Waiting -> {
+                SignInSnapshot.Waiting -> {
+                    returnedOnce = true
+                }
+
+                SignInSnapshot.Starting -> {
                     Unit
                 }
 
@@ -112,10 +124,12 @@ class BrokeredRun(
         if (parsed.scheme != "marquee" || parsed.host != "auth") return false
         val fragment = parsed.rawFragment ?: return false
         if (!AccountRules.sameRelay(fragment, server)) return false
-        returnedOnce = true
         signIn.returned(fragment)
         return true
     }
+
+    /** A `marquee://auth` link delivered to the app (a Custom Tab's return): taken only by a run not in an Auth Tab. */
+    fun linkReturned(uri: String): Boolean = !viaAuthTab && returned(uri)
 
     /** The provider page was left without a return (an Auth Tab reports it): the run ends as cancelled. */
     fun cancel() = finish(SignInSnapshot.Failed("cancelled"))

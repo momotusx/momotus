@@ -133,6 +133,13 @@ class AccountRulesTest {
         assertTrue(tv.leave.always)
         assertFalse(AccountRules.rows(profile(owner = false), tv = true, locked = false).leave.show)
         assertFalse(AccountRules.rows(profile(), tv = false, locked = true).delete)
+        assertFalse(
+            AccountRules.rows(profile(owner = false, kids = true), tv = false, locked = false).approve,
+            "a kids profile opens no scanner",
+        )
+        // Before the profiles arrive, or for a profile that is gone: none of the owner's rows.
+        val none = AccountRules.rows(AccountRules.activeProfile(null), tv = false, locked = false)
+        assertFalse(none.links || none.delete || none.makeKit || none.savePasskey || none.approve)
     }
 
     private fun note(

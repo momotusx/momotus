@@ -124,6 +124,13 @@ class AccountSignInTest {
         core.waitFor("failure") { down.failure != null }
         assertEquals(AccountCopy.UNREACHABLE, down.failure!!.text)
         assertEquals(listOf(Act.Retry, Act.NotNow), down.failure!!.actions.map { it.act })
+        // Try again with no provider chosen yet asks the relay again.
+        val asked = core.ops().count { it == "relayInfo" }
+        core.answers["relayInfo"] = { ok("""{"providers":["mock","google"]}""") }
+        down.act(Act.Retry)
+        core.waitFor("providers") { (down.step as? Step.Start)?.providers?.isNotEmpty() == true }
+        assertEquals(asked + 1, core.ops().count { it == "relayInfo" })
+        assertNull(down.failure)
     }
 
     @Test
@@ -493,5 +500,89 @@ class AccountSignInTest {
             u.failure!!.actions.map { it.act },
             "no held sign-in to start over from",
         )
+    }
+
+    private fun googleSheet(answer: GoogleAnswer) {
+        platform.google =
+            object : GoogleSheet {
+                override suspend fun signIn(
+                    nonce: String,
+                    passkeyRequest: String?,
+                ) = answer
+            }
+        core.answers["nativeSignInStart"] = { ok("""{"flow":"FLOW","nonce":"n","expiresMs":${Long.MAX_VALUE}}""") }
+    }
+
+    @Test
+    fun `a passkey no account knows, picked in Google's sheet, offers a kit or the QR, and the QR join is in`() {
+        googleSheet(GoogleAnswer.Passkey(PasskeyResult.Used("cred", "T1RIRVI", "cHJm")))
+        core.answers["recover"] = { fail("kitUnknown") }
+        val s = signIn(nativeGoogle = true)
+        ready(s)
+        s.choose("google")
+        core.waitFor("said") { s.failure != null }
+        assertIs<Step.Start>(s.step, "no sign-in held: nothing to join or start over with")
+        assertEquals(AccountCopy.KIT_UNKNOWN_PASSKEY, s.failure!!.text)
+        assertEquals(listOf(Act.Kit, Act.Scan), s.failure!!.actions.map { it.act })
+        // Scan from a signed-in device joined it: in, with nothing to link.
+        s.joined()
+        core.waitFor("in") { s.step == Step.Done(created = false) }
+        assertFalse("linkIdentity" in core.ops())
+    }
+
+    @Test
+    fun `no Google account on the phone signs in through the browser`() {
+        googleSheet(GoogleAnswer.NoCredential)
+        val s = signIn(nativeGoogle = true)
+        ready(s)
+        s.choose("google")
+        core.waitFor("the brokered run") { s.run != null }
+        assertEquals(Step.Working("google"), s.step)
+        core.push("signIn", """{"phase":"browser","url":"https://sync.example.org/v1/auth/google/go","expiresMs":9}""")
+        core.waitFor("the page opened") { platform.opened.isNotEmpty() }
+        assertNull(s.failure)
+    }
+
+    @Test
+    fun `a failed link after the QR join keeps the join, and a sign-in held elsewhere waits for Account`() {
+        val s = signIn()
+        ready(s)
+        broker(s, """{"phase":"new","ticket":"T8"}""")
+        core.waitFor("new") { s.step == Step.New }
+        sync.join(ScriptedCore.record()).let { j -> kotlinx.coroutines.runBlocking { j.join() } }
+        core.answers["linkIdentity"] = { fail("linkedElsewhere") }
+        s.joined()
+        core.waitFor("in") { s.step == Step.Done(created = false) }
+        assertEquals(SyncAccount.HeldLink("mock", "T8"), sync.heldLink)
+        val b = signIn()
+        ready(b)
+        broker(b, """{"phase":"new","ticket":"T9"}""")
+        core.waitFor("new") { b.step == Step.New }
+        sync.heldLink = null
+        core.answers["linkIdentity"] = { fail("busy") }
+        b.joined()
+        core.waitFor("in") { b.step == Step.Done(created = false) }
+        assertNull(sync.heldLink, "anything else is Account's Link another")
+    }
+
+    @Test
+    fun `a stray link the core ignores does not hide Didn't finish signing in, nor reach an Auth Tab run`() {
+        val s = signIn()
+        ready(s)
+        s.choose("mock")
+        core.waitFor("view") { s.run != null }
+        core.push("signIn", """{"phase":"browser","url":"https://sync.example.org/go","expiresMs":9}""")
+        core.waitFor("opened") { platform.opened.isNotEmpty() }
+        val run = s.run!!
+        assertTrue(run.linkReturned("marquee://auth#flow=other&code=c&relay=sync.example.org"))
+        s.resumed()
+        core.waitFor("asked", timeoutMs = 4_000) { s.failure != null }
+        assertEquals(AccountCopy.NO_REDIRECT, s.failure!!.text, "the core kept waiting: no return was taken")
+        run.viaAuthTab = true
+        assertFalse(
+            run.linkReturned("marquee://auth#flow=f&code=c&relay=sync.example.org"),
+            "an Auth Tab run takes its return from the tab only",
+        )
+        assertTrue(run.returned("marquee://auth#flow=f&code=c&relay=sync.example.org"))
     }
 }

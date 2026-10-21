@@ -146,6 +146,17 @@ open class SyncAccount(
     var deletedHere by mutableStateOf(false)
         private set
 
+    /** A sign-in another account holds, met after this device joined another way: its provider and ticket. */
+    data class HeldLink(
+        val provider: String,
+        val ticket: String,
+    ) {
+        override fun toString() = "HeldLink(provider=$provider, ticket=hidden)"
+    }
+
+    /** Waits, in memory only, for Account's "Use it for this account instead" (the ticket's 10 minutes). */
+    var heldLink: HeldLink? by mutableStateOf(null)
+
     /** A kit made and not yet confirmed saved: its id (its row in the device list) and its letters. */
     data class HeldKit(
         val id: String,

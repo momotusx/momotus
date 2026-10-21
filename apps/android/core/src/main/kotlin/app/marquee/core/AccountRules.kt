@@ -181,7 +181,8 @@ object AccountRules {
             delete = owner,
             makeKit = owner,
             savePasskey = owner && !tv,
-            approve = !tv && profile != null && !locked,
+            // A kids profile reaches no account page: the shortcut and the /pair link open no scanner there.
+            approve = !tv && profile != null && !profile.kids && !locked,
             leave = leaveChoice(profile, tv),
         )
     }

@@ -105,6 +105,8 @@ class AccountSignIn(
 
     /** Reads the relay's providers; a native Google flow is fetched at once, so its sheet opens without a wait. */
     fun start() {
+        // A new step each time, so Try again after an unreachable relay is seen as one.
+        step = Step.Loading
         launch {
             providers = AccountRules.providerOrder(ops.relayInfo(server).providers)
             step = Step.Start(providers)
@@ -152,7 +154,12 @@ class AccountSignIn(
                 SignInSnapshot.Failed("cancelled")
             }
 
-            GoogleAnswer.NoCredential, is GoogleAnswer.Failed -> {
+            // No Google account on this phone: the browser signs in to one.
+            GoogleAnswer.NoCredential -> {
+                brokeredSignIn("google")
+            }
+
+            is GoogleAnswer.Failed -> {
                 SignInSnapshot.Failed("signInRefused")
             }
         }
@@ -250,25 +257,30 @@ class AccountSignIn(
 
     /**
      * A passkey's PRF output opens an account: only the [account] the sign-in found, when one did (a passkey of
-     * another account is the QR's case, never a recovery into the wrong account).
+     * another account is the QR's case, never a recovery into the wrong account). One that opens nothing goes to
+     * the found account's QR; with no sign-in held (Use a passkey, Google's sheet) to the first step, since there
+     * is no ticket to join or start over with.
      */
     private suspend fun recoverWith(
         used: PasskeyResult.Used,
         account: String?,
     ) {
         val prf = used.prf
-        if (prf == null || (account != null && !Passkeys.sameAccount(used.userHandle, account))) {
-            step = Step.Found(account ?: used.userHandle.orEmpty())
-            failure = AccountRules.signInFailure("kitUnknown")
-            return
+        if (prf != null && (account == null || Passkeys.sameAccount(used.userHandle, account))) {
+            try {
+                sync.recover(server, kit = null, name = deviceName, prf = prf, form = form)
+                step = Step.Done(created = false)
+                return
+            } catch (e: CoreError) {
+                if (e.code != "kitUnknown") throw e
+            }
         }
-        try {
-            sync.recover(server, kit = null, name = deviceName, prf = prf, form = form)
-            step = Step.Done(created = false)
-        } catch (e: CoreError) {
-            if (e.code != "kitUnknown") throw e
-            step = Step.Found(account ?: used.userHandle.orEmpty())
+        if (account != null) {
+            step = Step.Found(account)
             failure = AccountRules.signInFailure("kitUnknown")
+        } else {
+            step = startStep()
+            failure = unknownPasskey()
         }
     }
 
@@ -284,10 +296,6 @@ class AccountSignIn(
             when (val got = platform.passkeyGet(Passkeys.get(platform.rpId), immediate = false)) {
                 is PasskeyResult.Used -> {
                     recoverWith(got, account = null)
-                    if (step is Step.Found) {
-                        step = startStep()
-                        failure = unknownPasskey()
-                    }
                 }
 
                 PasskeyResult.Cancelled -> {
@@ -320,15 +328,34 @@ class AccountSignIn(
             if (got is PasskeyResult.Used && got.prf != null) {
                 try {
                     sync.recover(server, kit = null, name = deviceName, prf = got.prf, form = form)
-                    sync.linkIdentity(h.ticket)
-                    step = Step.Done(created = false)
-                    return
                 } catch (e: CoreError) {
                     if (e.code != "kitUnknown") throw e
+                    step = Step.New
+                    return
                 }
+                linkHeld(h)
+                step = Step.Done(created = false)
+                return
             }
         }
         step = Step.New
+    }
+
+    /**
+     * Links a held sign-in to the account this device just joined. The join stands whatever the link answers: one
+     * that another account holds waits on Account with "Use it for this account instead" ([SyncAccount.heldLink]);
+     * anything else is Account's Link another.
+     */
+    private suspend fun linkHeld(h: Held) {
+        try {
+            sync.linkIdentity(h.ticket)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            val code = (e as? CoreError)?.code
+            CoreLog.w("sign-in: the link after the join: ${code ?: e.javaClass.simpleName}")
+            if (code == "linkedElsewhere") sync.heldLink = SyncAccount.HeldLink(h.provider, h.ticket)
+        }
     }
 
     /** Create your Marquee account: the account with the ticket, then its passkey. */
@@ -393,13 +420,15 @@ class AccountSignIn(
 
     /**
      * I already use Marquee on another device: the app opens the pairing QR and calls [joined] once this device
-     * joined, which links the identity with the ticket held.
+     * joined, which links the identity with the ticket held. Joined with no sign-in held (a passkey no account
+     * knew, then the QR), it is in all the same.
      */
     fun joined() =
-        withTicket { h ->
-            // A `found` sign-in already leads to the account the QR joined; a `new` one is linked to it now.
-            if (h.account == null) sync.linkIdentity(h.ticket)
+        launch {
+            val h = held
             held = null
+            // A `found` sign-in already leads to the account the QR joined; a `new` one is linked to it now.
+            if (h != null && h.account == null) linkHeld(h)
             step = Step.Done(created = false)
         }
 
@@ -415,8 +444,9 @@ class AccountSignIn(
     fun act(a: Act) {
         failure = null
         when (a) {
+            // No provider chosen yet: the relay did not answer, so it is asked again.
             Act.Retry -> {
-                provider?.let(::signIn)
+                provider?.let(::signIn) ?: start()
             }
 
             Act.Move -> {

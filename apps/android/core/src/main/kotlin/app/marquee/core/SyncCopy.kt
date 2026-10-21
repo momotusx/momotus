@@ -233,6 +233,7 @@ object SyncCopy {
     const val AUTH_SERVER_LIST = "Keep syncing with the sync server's device list"
     const val AUTH_LEAVE = "Stop syncing on this device"
     const val AUTH_DELETE = "Delete your sync account"
+    const val AUTH_REMOVE_HERE = "Remove your library from this device"
     const val DISMISS = "Dismiss"
 
     /** The last read of the device list failed: what shows may be from before. */

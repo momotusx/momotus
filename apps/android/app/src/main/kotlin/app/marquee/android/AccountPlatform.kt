@@ -64,6 +64,8 @@ class AccountPlatform(
         val browser = CustomTabsClient.getPackageName(a, null)
         val launcher = authTab
         if (browser != null && launcher != null && CustomTabsClient.isAuthTabSupported(a, browser)) {
+            // Its return comes as the launcher's result: a `marquee://auth` link meanwhile is not this run's.
+            run?.viaAuthTab = true
             AuthTabIntent.Builder().build().launch(launcher, uri, SCHEME)
         } else {
             // No Auth Tab: the return comes as a `marquee://auth` link, taken only while a run waits.
@@ -81,8 +83,8 @@ class AccountPlatform(
         }
     }
 
-    /** A `marquee://auth` link from a Custom Tab: handed to the run that waits, if any; else nothing happens. */
-    fun customTabReturn(uri: Uri): Boolean = run?.returned(uri.toString()) == true
+    /** A `marquee://auth` link from a Custom Tab: handed to the run that waits, unless it runs in an Auth Tab. */
+    fun customTabReturn(uri: Uri): Boolean = run?.linkReturned(uri.toString()) == true
 
     private val credentials by lazy { CredentialManager.create(app) }
 

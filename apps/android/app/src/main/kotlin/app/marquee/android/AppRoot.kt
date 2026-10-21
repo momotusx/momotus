@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -39,6 +40,7 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import app.marquee.core.AccountRules
 import app.marquee.core.Format
 import app.marquee.core.PendingRemoval
 import app.marquee.core.TileCopy
@@ -286,7 +288,7 @@ private fun AppNav(
     }
 
     // Sign in another device (the app shortcut, or a phone camera on a TV's QR): the scanner, after the sign-in
-    // when this device has no account yet. A TV approves nothing (D6).
+    // when this device has no account yet. A TV approves nothing (D6), and a kids profile reaches no account page.
     val signingIn = routes.any { it is Route.SignIn }
     LaunchedEffect(marquee.pendingScan, sync.joined, signingIn) {
         when {
@@ -294,13 +296,15 @@ private fun AppNav(
                 Unit
             }
 
-            tv -> {
+            tv || AccountRules.activeProfile(gate.snapshot)?.kids == true -> {
                 marquee.pendingScan = false
             }
 
             sync.joined -> {
                 marquee.pendingScan = false
-                if (backStack.lastOrNull() != Route.AddDevice) backStack.add(Route.AddDevice)
+                if (marquee.accounts.rows(tv).approve && backStack.lastOrNull() != Route.AddDevice) {
+                    backStack.add(Route.AddDevice)
+                }
             }
 
             else -> {
@@ -443,20 +447,29 @@ private fun AppNav(
                                     )
                                 }
                             }
+                        val addonsCard: (@Composable () -> Unit)? =
+                            app.defaultsCard.offer?.takeIf { app.home.rows.isNotEmpty() }?.let { answer ->
+                                {
+                                    RecommendedCard(
+                                        answer,
+                                        onReview = {
+                                            app.defaultsCard.answer()
+                                            backStack.add(Route.Defaults(DefaultsMode.Review))
+                                        },
+                                        onNotNow = { app.defaultsCard.answer() },
+                                    )
+                                }
+                            }
+                        // Both show, the account card first, as on the web.
+                        val cards = listOfNotNull(accountCard, addonsCard)
                         val card: (@Composable () -> Unit)? =
-                            accountCard
-                                ?: app.defaultsCard.offer?.takeIf { app.home.rows.isNotEmpty() }?.let { answer ->
-                                    {
-                                        RecommendedCard(
-                                            answer,
-                                            onReview = {
-                                                app.defaultsCard.answer()
-                                                backStack.add(Route.Defaults(DefaultsMode.Review))
-                                            },
-                                            onNotNow = { app.defaultsCard.answer() },
-                                        )
+                            cards.takeIf { it.isNotEmpty() }?.let {
+                                {
+                                    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.m)) {
+                                        cards.forEach { it() }
                                     }
                                 }
+                            }
                         val removal = app.removal
                         val notice: (@Composable () -> Unit)? =
                             if (removal.removing != null || removal.failed != null) ({ RemovalNote(removal) }) else null
