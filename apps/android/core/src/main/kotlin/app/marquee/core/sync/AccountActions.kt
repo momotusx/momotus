@@ -40,9 +40,18 @@ class AccountActions(
     var busy by mutableStateOf(false)
         private set
 
-    /** A line the last action left (a done thing, or why not), with its buttons. */
-    var failure: AccountRules.Failure? by mutableStateOf(null)
-        private set
+    /**
+     * A line the last action left (why not), with its buttons, and the step its Anyway or Move runs: one state, so
+     * the button never shows before its step is there.
+     */
+    private class Asked(
+        val failure: AccountRules.Failure,
+        val then: (suspend () -> Unit)?,
+    )
+
+    private var asked: Asked? by mutableStateOf(null)
+
+    val failure: AccountRules.Failure? get() = asked?.failure
 
     var said: String? by mutableStateOf(null)
         private set
@@ -54,9 +63,6 @@ class AccountActions(
     @Volatile
     var run: BrokeredRun? = null
         private set
-
-    /** The step after a failure's Anyway or Move: unlink or delete without a receipt, or move the identity here. */
-    private var then: (suspend () -> Unit)? = null
 
     fun load() =
         go {
@@ -79,8 +85,7 @@ class AccountActions(
                 sync.linkIdentity(ticket)
             } catch (e: CoreError) {
                 if (e.code != "linkedElsewhere") throw e
-                then = { sync.linkIdentity(ticket, move = true) }
-                failure = AccountRules.signInFailure("linkedElsewhere", provider)
+                ask(AccountRules.signInFailure("linkedElsewhere", provider)) { sync.linkIdentity(ticket, move = true) }
                 return@go
             }
             links = sync.identities()
@@ -132,7 +137,7 @@ class AccountActions(
 
     /**
      * Apple's revoke: its receipt, or null with [failure] set and [anywayStep] waiting for its [anyway] button
-     * (nothing for a cancelled page). The step is in place before the failure shows, so the button always has it.
+     * (nothing for a cancelled page). Both come in one state ([Asked]), so the button always has its step.
      */
     private suspend fun revoke(
         anyway: String,
@@ -141,24 +146,19 @@ class AccountActions(
         val end = brokeredRun("apple", revoke = true)
         if (end is SignInSnapshot.Receipt) return end.receipt
         val code = (end as? SignInSnapshot.Failed)?.code ?: "signInRefused"
-        AccountRules.revokeFailure(code, anyway, CANCEL)?.let { said ->
-            then = anywayStep
-            failure = said
-        }
+        AccountRules.revokeFailure(code, anyway, CANCEL)?.let { ask(it, anywayStep) }
         return null
     }
 
     /** The Anyway or Move under [failure]. */
     fun goOn() {
-        val next = then ?: return
-        then = null
-        failure = null
+        val next = asked?.then ?: return
+        asked = null
         go(deleting) { next() }
     }
 
     fun dismiss() {
-        then = null
-        failure = null
+        asked = null
         said = null
     }
 
@@ -189,12 +189,13 @@ class AccountActions(
                         )?.prf
                 }
             if (prf == null) {
-                failure =
+                ask(
                     if (made is PasskeyResult.Cancelled) {
                         AccountRules.signInFailure("passkeyCancelled")
                     } else {
                         AccountRules.Failure(AccountCopy.NO_SECOND_WAY_IN, emptyList())
-                    }
+                    },
+                )
                 return@go
             }
             save(prf)
@@ -239,8 +240,13 @@ class AccountActions(
     private fun fail(
         code: String,
         provider: String,
+    ) = ask(AccountRules.signInFailure(code, provider))
+
+    private fun ask(
+        failure: AccountRules.Failure?,
+        then: (suspend () -> Unit)? = null,
     ) {
-        failure = AccountRules.signInFailure(code, provider)
+        asked = failure?.let { Asked(it, then) }
     }
 
     private fun go(
