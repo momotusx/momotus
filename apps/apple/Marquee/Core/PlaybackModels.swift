@@ -221,7 +221,7 @@ struct PlaybackSnapshot: Decodable, Hashable, Sendable {
 
 /// One start of the playback, from the first source it tries to `ready`.
 struct StartProgress: Decodable, Hashable, Sendable {
-    /// "details", "connecting" or "buffering"; a string, so a newer core's stage still decodes.
+    /// "details", "connecting", "buffering" or "opening"; a string, so a newer core's stage still decodes.
     let stage: String
     /// Peers connected to a torrent.
     let peers: Int
