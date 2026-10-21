@@ -260,6 +260,60 @@ async fn a_scrub_stays_within_the_budget() {
     assert!(w.stats().await.evict_rounds > 0);
 }
 
+/// b with 16 MiB pieces (review r2): 20 scattered seeks, each a player
+/// read of 256 KiB. The folder's peak over the scheduler's (APFS's refills
+/// between a round's sync and the keeper's next clear) is printed for the
+/// plan's bound, and the folder settles within the window. Run with
+/// `TMPDIR` on a small APFS image to measure it there.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_scrub_with_large_pieces_settles_within_the_budget() {
+    const BIG: u32 = 16 << 20;
+    let wide = WindowPlan {
+        budget: 160 * MIB + APFS_HEAD_BYTES,
+        behind: 16 * MIB,
+        slack: 32 * MIB,
+        ahead: 16 * MIB,
+        open_floor: 64 * MIB,
+        open_cap: 64 * MIB,
+        floor: 96 * MIB,
+        playing: 16 * MIB,
+    };
+    let s = support::swarm_big(256 << 20, BIG).await;
+    let w = windowed_on(s, tempfile::tempdir().unwrap(), wide, None).await;
+    let sampler = Sampler::start(w.dir());
+    let held = Arc::new(AtomicU64::new(0));
+    let watch = tokio::spawn({
+        let (engine, t, held) = (w.engine.clone(), w.t, held.clone());
+        async move {
+            loop {
+                let h = engine.stats(t).await.unwrap().held_bytes.unwrap_or(0);
+                held.fetch_max(h, Ordering::Relaxed);
+                tokio::time::sleep(Duration::from_millis(2)).await;
+            }
+        }
+    });
+    let reader = w.engine.open_reader(w.t, "default", w.movie).await.unwrap();
+    let len = w.s.movie.len() as u64;
+    let mut x = 11u64;
+    let mut buf = vec![0u8; 256 * 1024];
+    for _ in 0..20 {
+        x = x.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+        let at = (x >> 33) % (len - 256 * 1024);
+        let mut range = reader.range(at, None).await.unwrap();
+        within(60, range.read_exact(&mut buf)).await.unwrap();
+        assert!(buf == w.movie(at, at + 256 * 1024));
+    }
+    let (peak, held_peak) = (sampler.max(), held.load(Ordering::Relaxed));
+    watch.abort();
+    tokio::time::sleep(Duration::from_millis(2500)).await;
+    let settled = allocated(&w.dir());
+    eprintln!(
+        "scrub16: folder peak {peak}, scheduler peak {held_peak}, settled {settled}, window {}",
+        160 * MIB
+    );
+    assert!(settled <= 160 * MIB, "allocated {settled} once settled");
+}
+
 /// c. A seek back within `B` reads from disk (no piece verified again);
 /// further back the pieces are fetched again, and the bytes are right.
 /// The playing read stays open at 30 MiB with 8 MiB of readahead, so its
