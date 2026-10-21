@@ -19,6 +19,8 @@ import Testing
         #expect(!words.contains(code), "\(code) leaks into the words")
     }
     #expect(SyncProblem(code: "kitUnknown", message: "raw", action: .recover).words == SyncWords.wrongKit)
+    // A kit or a wipe asked off the main profile (D13, D17), not a server that did not answer.
+    #expect(SyncProblem(code: "notOwner", message: "raw", action: .kit).words == "Only the main profile can do that.")
     // Anything else may name the server's address: it reads as no answer.
     #expect(SyncProblem(code: nil, message: "the relay said no").words.hasPrefix("The sync server did not answer"))
     // A transport error never shows its raw text and URL.

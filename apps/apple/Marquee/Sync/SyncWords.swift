@@ -294,6 +294,8 @@ struct SyncProblem: Equatable {
             return action == .differ ? "The approval is still open: this device did not confirm it is you." : "Nothing changed: this device did not confirm it is you."
         case "noPasscode": return "Set a device passcode first: Marquee asks for it before changing your devices or making a kit."
         case "keyUnreadable": return SyncWords.keyUnreadable
+        // A kit, a passkey or a wipe is the main profile's (D13, D17).
+        case "notOwner": return "Only the main profile can do that."
         default: break
         }
         if action == .start, message == "http status 403" { return "This sync server needs an invite code, or the one entered is wrong." }
@@ -403,9 +405,15 @@ enum PairingWords {
 
 /// Sync rules the screens share (the web's lib/sync.ts).
 enum SyncRules {
-    /// A pairing code as the new device shows it; any other QR in view is ignored.
+    /// A pairing code as the new device shows it: the TV's link
+    /// `https://<link host>/pair#v=3&...`, or `marquee:pair?v=2&...` from an
+    /// older build. Any other QR in view is ignored.
     static func isPairingCode(_ text: String) -> Bool {
-        text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("marquee:pair?")
+        let code = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if code.hasPrefix("marquee:pair?") { return true }
+        guard let link = URL(string: code), link.scheme == "https", link.path() == "/pair",
+              let fields = link.fragment() else { return false }
+        return fields.split(separator: "&").contains("v=3")
     }
 
     /// "VW4BV9DJD5EZ" to "VW4B V9DJ D5EZ", for reading aloud.

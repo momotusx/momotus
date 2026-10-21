@@ -111,6 +111,12 @@ private func report(_ changes: [String: Any] = [:]) throws -> SyncReport {
         #expect(SyncRules.isPairingCode("  \(code)\n"))
         #expect(!SyncRules.isPairingCode("https://example.org/manifest.json"))
         #expect(!SyncRules.isPairingCode("marquee:pairing"))
+        // The TV's v3 link, from any link host; never plain http, another path or version.
+        #expect(SyncRules.isPairingCode(" https://link.example.org/pair#v=3&s=https%3A%2F%2Fsync.example.org&p=slot "))
+        #expect(!SyncRules.isPairingCode("http://link.example.org/pair#v=3&p=slot"))
+        #expect(!SyncRules.isPairingCode("https://link.example.org/pairs#v=3&p=slot"))
+        #expect(!SyncRules.isPairingCode("https://link.example.org/pair#v=2&p=slot"))
+        #expect(!SyncRules.isPairingCode("https://link.example.org/pair?v=3&p=slot"))
         // The code is always for the user's own sync server: the question names no host.
         #expect(W.reviewAsk == "Approve a new device?")
         #expect(!W.reviewText.contains("sync.example.org"))
