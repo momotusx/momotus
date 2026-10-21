@@ -274,6 +274,12 @@ pub fn all() -> Vec<LanguageChoice> {
     all
 }
 
+/// Whether `word` names a language the core knows, as a code ("EN", "ger")
+/// or an English name ("English").
+pub(crate) fn is_known(word: &str) -> bool {
+    INDEX.contains_key(&word.trim().to_lowercase().replace('_', "-"))
+}
+
 /// The language without its region or script: `pt` for `pt-BR`.
 pub(crate) fn primary(tag: &str) -> &str {
     tag.split('-').next().unwrap_or(tag)

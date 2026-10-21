@@ -25,7 +25,6 @@ use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::time::{Duration, Instant};
 use stremio_core::types::addon::ExtraValue;
 use tokio::task::JoinHandle;
-use url::Url;
 
 /// Progress is written at most this often while playing.
 const SAVE_EVERY: Duration = Duration::from_secs(5);
@@ -288,8 +287,13 @@ impl SubtitleTrack {
         let (marked, plain) = release
             .as_deref()
             .map_or((false, String::new()), hearing_marks);
+        // Parsed once, for the name and the release match.
+        let parsed = release
+            .as_ref()
+            .map(|_| mq_relparse::parse(&plain))
+            .unwrap_or_default();
         let base = match &release {
-            Some(text) => short_name(&plain).unwrap_or_else(|| text.clone()),
+            Some(text) => short_name(&parsed).unwrap_or_else(|| text.clone()),
             None => source.to_owned(),
         };
         Self {
@@ -305,7 +309,12 @@ impl SubtitleTrack {
             forced: false,
             hearing_impaired: marked,
             fits: false,
-            made: Made::of(fit::Made::read(&plain)),
+            made: Made {
+                family: fit::family(parsed.quality),
+                cut: parsed.cut,
+                fps: None,
+                text: plain,
+            },
             release,
         }
     }
@@ -314,9 +323,8 @@ impl SubtitleTrack {
 /// What tells one release from another in a subtitle menu: its group, then
 /// source and resolution and a bit depth over 8 ("CAKES, WEB 1080p", "PSA,
 /// WEBRip 1080p 10 bit"); `None` when the text names none of them.
-fn short_name(text: &str) -> Option<String> {
+fn short_name(r: &mq_relparse::ParsedRelease) -> Option<String> {
     use mq_relparse::{Quality as Q, Resolution as R};
-    let r = mq_relparse::parse(text);
     let source = match r.quality {
         Q::WebDl => "WEB",
         Q::WebRip => "WEBRip",
@@ -336,19 +344,34 @@ fn short_name(text: &str) -> Option<String> {
         .chain(height)
         .chain(bits)
         .collect();
-    match (r.group, what.join(" ")) {
+    match (release_group(r), what.join(" ")) {
         (None, what) if what.is_empty() => None,
         (None, what) => Some(what),
-        (Some(group), what) if what.is_empty() => Some(group),
+        (Some(group), what) if what.is_empty() => Some(group.to_owned()),
         (Some(group), what) => Some(format!("{group}, {what}")),
     }
 }
 
-/// Whether a release text marks its file for the hard of hearing (a "-hi"
-/// or ".HI." word, or "SDH"), and the text without those marks, so the
-/// parser never takes "hi" for the group.
+/// The release's group, when its name reads as a release (a source or a
+/// resolution beside the group) and the "group" is no language: neither
+/// "Sintel (2010) - English" nor "The.Amazing.Spider-Man" names one (review
+/// P3-3).
+fn release_group(r: &mq_relparse::ParsedRelease) -> Option<&str> {
+    use mq_relparse::{Quality, Resolution};
+    let named = r.quality != Quality::Unknown || r.resolution != Resolution::Unknown;
+    r.group
+        .as_deref()
+        .filter(|g| named && !crate::languages::is_known(g))
+}
+
+/// Whether a release text marks its file for the hard of hearing ("SDH", or
+/// "hi" or "HI" after a dash or a dot, or in brackets, with no language
+/// beside it: "EN-HI" and ".HI.TA" are Hindi), and the text without those
+/// marks, so the parser never takes "hi" for the group. A title word "Hi"
+/// is no mark.
 fn hearing_marks(text: &str) -> (bool, String) {
     let (mut found, mut kept, mut last) = (false, String::new(), 0);
+    let mut previous: Option<&str> = None;
     let mut chars = text.char_indices().peekable();
     while let Some((start, c)) = chars.next() {
         if !c.is_alphanumeric() {
@@ -360,9 +383,19 @@ fn hearing_marks(text: &str) -> (bool, String) {
             chars.next();
         }
         let (word, before) = (&text[start..end], text[..start].chars().next_back());
-        let mark = word.eq_ignore_ascii_case("sdh")
-            || (word.eq_ignore_ascii_case("hi") && before == Some('-'))
-            || (word == "HI" && before == Some('.'));
+        let after = text[end..].chars().next();
+        // A language beside it makes "HI" Hindi ("EN-HI", ".HI.TA").
+        let language =
+            |w: Option<&str>| w.is_some_and(|w| w.len() <= 3 && crate::languages::is_known(w));
+        let next = text[end..]
+            .split(|c: char| !c.is_alphanumeric())
+            .find(|w| !w.is_empty());
+        let bracketed = matches!(before, Some('[' | '(')) && matches!(after, Some(']' | ')'));
+        let hi = (word == "hi" || word == "HI")
+            && (bracketed
+                || (matches!(before, Some('-' | '.')) && !language(previous) && !language(next)));
+        let mark = word.eq_ignore_ascii_case("sdh") || hi;
+        previous = Some(word);
         if mark {
             found = true;
             // The mark goes with the separator before it.
@@ -1518,6 +1551,15 @@ async fn resolve_next(
                 let slot = lease.subtitles();
                 listen_for_trouble(&slot, Arc::downgrade(&state), snapshot.clone(), run);
                 let reader = lease.reader();
+                // Read before the playback's lock.
+                let own_tracks: Vec<SubtitleTrack> = stream
+                    .subtitles
+                    .iter()
+                    .filter_map(|w| {
+                        let url = slot.add(w.url.as_str(), &w.lang, addon_url)?;
+                        Some(track(w, &stream.addon_name, url))
+                    })
+                    .collect();
                 let proven = {
                     let mut s = lock(&state);
                     if !adopt(&mut s, run, lease) {
@@ -1534,11 +1576,7 @@ async fn resolve_next(
                     s.snapshot.key = Some(stream.key.clone());
                     s.snapshot.filename = filename.clone();
                     s.snapshot.size_bytes = size.or(stream.size_bytes);
-                    s.snapshot.subtitles = stream
-                        .subtitles
-                        .iter()
-                        .filter_map(|w| track(w, &stream.addon_name, &slot, addon_url))
-                        .collect();
+                    s.snapshot.subtitles = own_tracks;
                     let own: Vec<String> =
                         s.snapshot.subtitles.iter().map(|t| t.url.clone()).collect();
                     for (rank, url) in own.into_iter().enumerate() {
@@ -2996,7 +3034,7 @@ async fn built_in_tracks(
     let site = core.turkcealtyazi();
     let release = &stream.release;
     let mut playing = mq_turkcealtyazi::Playing {
-        group: release.group.as_deref(),
+        group: release_group(release),
         source: release.quality,
         cut: release.cut,
         fps: None,
@@ -3082,7 +3120,7 @@ impl OwnedPlaying {
     /// What its release name says; the frame rate comes from the probe.
     fn of(release: &mq_relparse::ParsedRelease) -> Self {
         Self {
-            group: release.group.clone(),
+            group: release_group(release).map(str::to_owned),
             source: release.quality,
             cut: release.cut,
             fps: None,
@@ -3178,19 +3216,13 @@ fn problem(p: mq_turkcealtyazi::Problem) -> SubtitleProblem {
 /// A track served through the loopback server as UTF-8 WebVTT, whatever
 /// format and charset the addon's file has; `None` once its playback is
 /// released.
-fn track(
-    w: &mq_protocol::WireSubtitle,
-    source: &str,
-    slot: &SubtitleSlot,
-    addon_url: Option<&Url>,
-) -> Option<SubtitleTrack> {
-    let url = slot.add(w.url.as_str(), &w.lang, addon_url)?;
+fn track(w: &mq_protocol::WireSubtitle, source: &str, url: String) -> SubtitleTrack {
     let t = SubtitleTrack::new(url, &w.lang, w.label.clone(), source, release(w));
-    Some(SubtitleTrack {
+    SubtitleTrack {
         forced: w.forced,
         hearing_impaired: w.hearing_impaired || t.hearing_impaired,
         ..t
-    })
+    }
 }
 
 /// The release a file was made for, as the addon names it: its label, or
@@ -3209,10 +3241,17 @@ fn release(w: &mq_protocol::WireSubtitle) -> Option<String> {
             .map_or(f, |(stem, ext)| if ext.len() <= 4 { stem } else { f });
         stem.to_owned()
     });
+    // A label that only names the language says nothing of the release.
+    let language = crate::languages::language(&w.lang);
     let text = w
         .label
         .clone()
-        .filter(|l| !l.trim().is_empty())
+        .filter(|l| {
+            let l = l.trim();
+            !l.is_empty()
+                && !l.eq_ignore_ascii_case(&language.name)
+                && !l.eq_ignore_ascii_case(&w.lang)
+        })
         .or(file)
         .or_else(|| extra("movieReleaseName").map(str::to_owned))?;
     // At most 80 characters: a line in a menu.
@@ -3362,41 +3401,59 @@ async fn find_subtitles(
     let wanted = preferred_languages(core, state);
     let mut fanout = core.addons().fan_out(&addons, &path, Deadlines::default());
     while let Some(event) = fanout.next().await {
+        let AddonEvent::Arrived {
+            addon_id,
+            transport_url,
+            body,
+            ..
+        } = event
+        else {
+            continue;
+        };
+        let addon = addons.iter().find(|a| a.transport_url == transport_url);
+        let source = addon.map_or(addon_id.clone(), |a| a.manifest.name.clone());
+        let position = installed
+            .iter()
+            .position(|a| a.transport_url == transport_url)
+            .map_or(usize::MAX, |at| at + 1);
+        let found = decode_subtitles(&body)
+            .map(|r| r.subtitles)
+            .unwrap_or_default();
+        // One file, one loopback address: compare by it. The fetch has the
+        // scope of the install that answered.
+        let mut listed = Vec::with_capacity(found.len());
+        for (rank, w) in found.iter().enumerate() {
+            let Some(url) = slot.add(w.url.as_str(), &w.lang, Some(&transport_url)) else {
+                return;
+            };
+            listed.push((rank, url, w));
+        }
+        // Read outside the playback's lock, once per file not listed yet.
+        let known: std::collections::HashSet<String> = {
+            let s = lock(state);
+            if !current(&s, run) {
+                return;
+            }
+            s.snapshot.subtitles.iter().map(|t| t.url.clone()).collect()
+        };
+        let fresh: Vec<SubtitleTrack> = listed
+            .iter()
+            .filter(|(_, url, _)| !known.contains(url))
+            .map(|(_, url, w)| track(w, &source, url.clone()))
+            .collect();
         let mut s = lock(state);
         if !current(&s, run) {
             return;
         }
-        match event {
-            AddonEvent::Arrived {
-                addon_id,
-                transport_url,
-                body,
-                ..
-            } => {
-                let addon = addons.iter().find(|a| a.transport_url == transport_url);
-                let source = addon.map_or(addon_id.clone(), |a| a.manifest.name.clone());
-                let position = installed
-                    .iter()
-                    .position(|a| a.transport_url == transport_url)
-                    .map_or(usize::MAX, |at| at + 1);
-                let found = decode_subtitles(&body)
-                    .map(|r| r.subtitles)
-                    .unwrap_or_default();
-                for (rank, w) in found.iter().enumerate() {
-                    // One file, one loopback address: compare by it. The
-                    // fetch has the scope of the install that answered.
-                    let Some(t) = track(w, &source, slot, Some(&transport_url)) else {
-                        return;
-                    };
-                    s.order.entry(t.url.clone()).or_insert((position, rank));
-                    if !s.snapshot.subtitles.iter().any(|known| known.url == t.url) {
-                        s.snapshot.subtitles.push(t);
-                    }
-                }
-                reorder(&mut s, &wanted);
-            }
-            _ => continue,
+        for (rank, url, _) in &listed {
+            s.order.entry(url.clone()).or_insert((position, *rank));
         }
+        for t in fresh {
+            if !s.snapshot.subtitles.iter().any(|known| known.url == t.url) {
+                s.snapshot.subtitles.push(t);
+            }
+        }
+        reorder(&mut s, &wanted);
         snapshot.set(s.snapshot.clone());
     }
 }
@@ -4355,7 +4412,11 @@ mod tests {
             ),
             ("TOPAZ", None),
         ] {
-            assert_eq!(short_name(text).as_deref(), name, "{text}");
+            assert_eq!(
+                short_name(&mq_relparse::parse(text)).as_deref(),
+                name,
+                "{text}"
+            );
         }
         let track = |release: &str| {
             SubtitleTrack::new("u".into(), "eng", None, "Subs", Some(release.into()))
@@ -4380,19 +4441,58 @@ mod tests {
             "Film.2020.1080p.WEB-FLUX.HI",
             "Film 2020 SDH",
             "Film.2020-HI",
+            "Film.2020.1080p.WEB-GRP [HI]",
+            "Film.2020.hi.1080p.WEB-GRP",
         ] {
             assert!(track(marked).hearing_impaired, "{marked}");
         }
+        // Review P3-2: beside a language "HI" is Hindi; a title's "Hi" is
+        // no mark.
         for plain in [
             "Hi.Score.Girl.S01E01.1080p.WEB-GRP",
-            "Say.hi.2020.1080p.WEB-GRP",
+            "Say.Hi.2020.1080p.WEB-GRP",
             "Film.2020.1080p.WEB-HIGH",
+            "Movie.2020.1080p.WEB-DL.EN-HI",
+            "Movie.2020.1080p.WEB.DD5.1.HI.TA-GRP",
         ] {
             assert!(!track(plain).hearing_impaired, "{plain}");
         }
         assert_eq!(track("TOPAZ").name, "TOPAZ", "nothing parses: the text");
+        // Review P3-3: a language or a title word is no group, and with no
+        // source or resolution beside it nothing is.
+        for text in ["Sintel (2010) - English", "The.Amazing.Spider-Man"] {
+            assert_eq!(track(text).name, text, "{text}");
+        }
         let bare = SubtitleTrack::new("u".into(), "eng", None, "Subs", None);
         assert_eq!((bare.name.as_str(), bare.release), ("Subs", None));
+    }
+
+    /// Review P3-3: the playing release's "group" is no language or title
+    /// word, so no subtitle fits by naming it.
+    #[test]
+    fn the_playing_group_is_a_release_group() {
+        let group = |name: &str| OwnedPlaying::of(&mq_relparse::parse(name)).group;
+        assert_eq!(group("Sintel (2010) - English"), None);
+        assert_eq!(group("Movie.2020.1080p.WEB-DL.Hindi-English"), None);
+        assert_eq!(group("The.Amazing.Spider-Man"), None);
+        assert_eq!(
+            group("Sintel.2010.1080p.WEB-DL-FLUX").as_deref(),
+            Some("FLUX")
+        );
+    }
+
+    /// Review P3-4: a label that only names the language gives way to the
+    /// file name.
+    #[test]
+    fn a_language_label_gives_way_to_the_file_name() {
+        let body = br#"{"subtitles":[{"id":"1","lang":"eng","label":"English",
+            "url":"https://subs.test/1.srt","subtitleFileName":"Film.2020.1080p.WEB.h264-CAKES.srt"}]}"#;
+        let w = &decode_subtitles(body).unwrap().subtitles[0];
+        assert_eq!(
+            release(w).as_deref(),
+            Some("Film.2020.1080p.WEB.h264-CAKES")
+        );
+        assert_eq!(track(w, "Subs", "u".into()).name, "CAKES, WEB 1080p");
     }
 
     /// Review P1-1: a resume lands at its saved share of the file, whatever
