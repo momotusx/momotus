@@ -143,21 +143,39 @@ fn rt_ok(v: i64) -> bool {
 }
 
 /// The words that credit the scores on a title page ("Ratings from"), each
-/// source named for what it gave: MDBList for its numbers, the Rotten
-/// Tomatoes addon for its mark. `None` when neither gave anything.
-pub(crate) fn credit(scores: Option<&Scores>) -> Option<String> {
-    let s = scores?;
-    let imdb = s.imdb.is_some_and(imdb_ok);
-    let rt = s.rt.is_some_and(rt_ok);
-    let words = match (imdb, rt, s.fresh) {
-        (true, true, _) => "IMDb and Rotten Tomatoes via MDBList",
-        (_, true, _) => "Rotten Tomatoes via MDBList",
-        (true, false, true) => "IMDb via MDBList, Rotten Tomatoes (the Rotten Tomatoes addon)",
-        (false, false, true) => "IMDb and Rotten Tomatoes (the Rotten Tomatoes addon)",
-        (true, false, false) => "IMDb via MDBList",
-        (false, false, false) => return None,
+/// source named for what it gave: MDBList for its numbers, the meta addon
+/// (`source`, by name) for the IMDb rating it wrote (`addon_imdb`), the
+/// Rotten Tomatoes addon for its mark. `None` when only the meta addon's
+/// IMDb rating shows ("Details from" names it) or nothing does.
+pub(crate) fn credit(
+    scores: Option<&Scores>,
+    addon_imdb: Option<&str>,
+    source: &str,
+) -> Option<String> {
+    let s = scores.copied().unwrap_or_default();
+    let mdblist_imdb = s.imdb.is_some_and(imdb_ok);
+    let mdblist_rt = s.rt.is_some_and(rt_ok);
+    if mdblist_imdb && mdblist_rt {
+        return Some("IMDb and Rotten Tomatoes via MDBList".to_owned());
+    }
+    let addon_imdb = addon_imdb
+        .and_then(|r| r.trim().parse::<f64>().ok())
+        .is_some_and(imdb_ok);
+    let rt = if mdblist_rt {
+        "Rotten Tomatoes via MDBList".to_owned()
+    } else if s.fresh {
+        "Rotten Tomatoes from the Rotten Tomatoes addon".to_owned()
+    } else if mdblist_imdb {
+        return Some("IMDb via MDBList".to_owned());
+    } else {
+        return None;
     };
-    Some(words.to_owned())
+    let imdb = if mdblist_imdb {
+        Some("IMDb via MDBList".to_owned())
+    } else {
+        addon_imdb.then(|| format!("IMDb from {source}"))
+    };
+    Some(imdb.into_iter().chain([rt]).collect::<Vec<_>>().join(", "))
 }
 
 /// The title MDBList is asked about for a tile's kind and id: movies and
@@ -910,28 +928,35 @@ mod tests {
                 .as_deref(),
             Some("Fresh")
         );
+        // Each source named for what it gave, the meta addon by its name.
+        let says = |scores: Scores, addon: Option<&str>| credit(Some(&scores), addon, "Cinemeta");
         assert_eq!(
-            credit(Some(&fresh(None, None))).as_deref(),
-            Some("IMDb and Rotten Tomatoes (the Rotten Tomatoes addon)")
-        );
-        // Each source named for what it gave.
-        assert_eq!(
-            credit(Some(&fresh(Some(8.8), None))).as_deref(),
-            Some("IMDb via MDBList, Rotten Tomatoes (the Rotten Tomatoes addon)")
+            says(fresh(None, None), Some("8.4")).as_deref(),
+            Some("IMDb from Cinemeta, Rotten Tomatoes from the Rotten Tomatoes addon")
         );
         assert_eq!(
-            credit(Some(&number)).as_deref(),
+            says(fresh(None, None), None).as_deref(),
+            Some("Rotten Tomatoes from the Rotten Tomatoes addon")
+        );
+        assert_eq!(
+            says(fresh(Some(8.8), None), Some("8.4")).as_deref(),
+            Some("IMDb via MDBList, Rotten Tomatoes from the Rotten Tomatoes addon")
+        );
+        assert_eq!(
+            says(number, Some("8.4")).as_deref(),
             Some("IMDb and Rotten Tomatoes via MDBList")
         );
         assert_eq!(
-            credit(Some(&scores(Some(8.8), None))).as_deref(),
+            says(scores(Some(8.8), None), None).as_deref(),
             Some("IMDb via MDBList")
         );
         assert_eq!(
-            credit(Some(&scores(None, Some(87)))).as_deref(),
-            Some("Rotten Tomatoes via MDBList")
+            says(scores(None, Some(87)), Some("8.4")).as_deref(),
+            Some("IMDb from Cinemeta, Rotten Tomatoes via MDBList")
         );
-        assert_eq!(credit(Some(&scores(None, None))), None);
+        // The meta addon's rating alone: "Details from" already names it.
+        assert_eq!(says(scores(None, None), Some("8.4")), None);
+        assert_eq!(credit(None, None, "Cinemeta"), None);
     }
 
     #[test]

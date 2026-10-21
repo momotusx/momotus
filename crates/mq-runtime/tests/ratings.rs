@@ -1390,8 +1390,8 @@ async fn home_discover_search_and_the_title_page_show_the_mark_until_the_addon_g
     let json = serde_json::to_value(title.snapshot().header.details.unwrap()).unwrap();
     assert_eq!(json["ratings"], pair(Some("9.3"), Some("Fresh")));
     assert_eq!(
-        json["ratingsFrom"],
-        "IMDb and Rotten Tomatoes (the Rotten Tomatoes addon)"
+        json["ratingsFrom"], "IMDb from Local, Rotten Tomatoes from the Rotten Tomatoes addon",
+        "each source by its name"
     );
 
     let discover = DiscoverView::open(&core);

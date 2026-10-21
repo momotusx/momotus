@@ -47,8 +47,9 @@ pub struct TitleDetails {
     pub imdb_url: Option<String>,
     /// Who the scores come from, a "Ratings from" row beside "Details from",
     /// each source named for what it gave ("IMDb and Rotten Tomatoes via
-    /// MDBList", "IMDb and Rotten Tomatoes (the Rotten Tomatoes addon)");
-    /// null when neither gave anything.
+    /// MDBList", "IMDb from Cinemeta, Rotten Tomatoes from the Rotten
+    /// Tomatoes addon"); null when MDBList and the Rotten Tomatoes addon gave
+    /// nothing.
     pub ratings_from: Option<String>,
     pub source: String,
     /// Trailers the metadata names (YouTube), first is the main one.
@@ -638,7 +639,7 @@ fn details(meta: &MetaItem, source: &str, scores: Option<&Scores>) -> TitleDetai
         ratings: Ratings::of(scores, links("imdb").first().map(String::as_str)),
         imdb_url: crate::segments::is_imdb(&p.id)
             .then(|| format!("https://www.imdb.com/title/{}/", p.id)),
-        ratings_from: credit(scores),
+        ratings_from: credit(scores, links("imdb").first().map(String::as_str), source),
         source: source.to_owned(),
         trailers: p
             .trailer_streams
