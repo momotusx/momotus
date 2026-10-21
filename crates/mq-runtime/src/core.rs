@@ -220,6 +220,8 @@ impl Core {
         let torrents = config.data_dir.join("torrents");
         let walk = Walk::read(&config.data_dir);
         let core = Self::with_device(device, &config.profile_id, torrents, walk)?.active();
+        // A default a profile never had arrives once (plans/m13-default-addons.md 5).
+        core.give_new_defaults();
         if let Some(walk) = walk {
             walk.watch(core.inner.torrent_dir.clone());
         }
@@ -1122,10 +1124,23 @@ impl Core {
         } else {
             self.edit_addons(edit)?;
         }
+        // Every named one counts as had: removed later, it stays removed.
+        self.mark_given(choices.iter().map(|c| c.key.as_str()))?;
+        self.seen_defaults()?;
+        self.refresh_addons_soon()
+    }
+
+    /// The profile has answered this list version (`defaultsSeen`).
+    pub(crate) fn seen_defaults(&self) -> Result<(), CoreError> {
         if self.prefs().defaults_seen < defaults::LIST_VERSION {
             self.set_prefs(&serde_json::json!({ "defaultsSeen": defaults::LIST_VERSION }))?;
         }
-        // The live manifests now, not in a day: bundled ones may be older.
+        Ok(())
+    }
+
+    /// Fetches the live manifests now, not in a day: bundled ones may be
+    /// older.
+    pub(crate) fn refresh_addons_soon(&self) -> Result<(), CoreError> {
         self.library().set_device_value(ADDONS_REFRESHED, "0")?;
         if tokio::runtime::Handle::try_current().is_ok() {
             let core = self.clone();
@@ -1295,7 +1310,7 @@ fn together(rows: &[AddonRow], at: usize) -> Vec<usize> {
 
 /// The rows of a default: by manifest id, or still on the default's own
 /// link after a refresh changed its id.
-fn default_rows(rows: &[AddonRow], d: &defaults::DefaultAddon) -> Vec<usize> {
+pub(crate) fn default_rows(rows: &[AddonRow], d: &defaults::DefaultAddon) -> Vec<usize> {
     (0..rows.len())
         .filter(|&i| {
             rows[i].transport_url == d.url

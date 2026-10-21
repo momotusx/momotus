@@ -3,6 +3,8 @@
 //! so installing them needs no network and first run never waits on an
 //! addon; the daily refresh replaces them with the live ones.
 
+use crate::Core;
+use crate::core::{CoreError, default_rows, put_addon};
 use mq_protocol::Manifest;
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
@@ -149,6 +151,97 @@ pub fn list() -> &'static [DefaultAddon] {
 /// The default whose manifest has this id.
 pub fn by_id(id: &str) -> Option<&'static DefaultAddon> {
     list().iter().find(|d| d.manifest.id == id)
+}
+
+/// The setting that keeps, by key, the defaults a profile has had: put in
+/// by the defaults step or by `give_new_defaults`, or found in its list.
+/// Synced, so a default removed on one device stays removed on the others.
+const GIVEN: &str = "defaultsGiven";
+
+impl Core {
+    /// Puts every default a profile never had in its list once, on, for
+    /// each profile on this device (the owner's ruling, 2026-10-22: a new
+    /// default reaches existing profiles with the next build). One the
+    /// profile has, on or off, counts as had and keeps its switch; one it
+    /// had and removed stays removed. A kids profile (it reads the owner's
+    /// list) and one with no list yet (the defaults step asks it) are left
+    /// alone. Never fails the open: a profile it cannot read is skipped.
+    pub(crate) fn give_new_defaults(&self) {
+        let Ok(profiles) = self.library().profiles() else {
+            return;
+        };
+        for p in profiles {
+            if let Err(e) = self.for_profile(&p.id).give_defaults_once() {
+                tracing::warn!("new default addons not given: {e}");
+            }
+        }
+    }
+
+    /// `give_new_defaults` for this profile; the keys it put in the list.
+    /// Before the profile kept what it had (`GIVEN`), a removal left no
+    /// trace: a default removed then counts as never had, once.
+    pub(crate) fn give_defaults_once(&self) -> Result<Vec<String>, CoreError> {
+        if self.policy().kids() || self.library().addon_list_hlc(self.profile())?.is_none() {
+            return Ok(Vec::new());
+        }
+        let given = self.defaults_given();
+        let new: Vec<&DefaultAddon> = list().iter().filter(|d| !given.contains(&d.key)).collect();
+        if new.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut added = Vec::new();
+        self.edit_addons(|rows| {
+            for d in &new {
+                if default_rows(rows, d).is_empty() {
+                    let json = serde_json::to_string(&d.manifest)
+                        .map_err(|e| CoreError::BadManifest(e.to_string()))?;
+                    put_addon(rows, &d.url, json);
+                    added.push(d.key.clone());
+                }
+            }
+            Ok(())
+        })?;
+        self.mark_given(new.iter().map(|d| d.key.as_str()))?;
+        if !added.is_empty() {
+            // Given, not offered: the card for new defaults has nothing to show.
+            self.seen_defaults()?;
+            self.refresh_addons_soon()?;
+        }
+        Ok(added)
+    }
+
+    /// The keys of the defaults this profile has had.
+    fn defaults_given(&self) -> Vec<String> {
+        let settings = self.library().settings(self.profile()).unwrap_or_default();
+        settings
+            .into_iter()
+            .find(|(key, _)| key == GIVEN)
+            .and_then(|(_, value)| serde_json::from_str(&value).ok())
+            .unwrap_or_default()
+    }
+
+    /// Adds `keys` to the defaults this profile has had; writes only when
+    /// one is new.
+    pub(crate) fn mark_given<'k>(
+        &self,
+        keys: impl IntoIterator<Item = &'k str>,
+    ) -> Result<(), CoreError> {
+        let mut given = self.defaults_given();
+        let had = given.len();
+        for key in keys {
+            if !given.iter().any(|g| g == key) {
+                given.push(key.to_owned());
+            }
+        }
+        if given.len() == had {
+            return Ok(());
+        }
+        given.sort();
+        let json = serde_json::to_string(&given).map_err(|e| CoreError::BadPrefs(e.to_string()))?;
+        self.library()
+            .set_setting(self.profile(), GIVEN, &json, self.clock())?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]

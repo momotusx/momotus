@@ -454,3 +454,168 @@ async fn every_default_logo_is_served_on_loopback_and_nothing_else() {
     let other = torrentio.replace(token, &"0".repeat(token.len()));
     assert_eq!(get(&other).await.0, 404);
 }
+
+/// A data directory of its own, opened as the apps open it (`Core::open`,
+/// which gives the new defaults), as often as a test starts the app.
+struct Device {
+    dir: std::path::PathBuf,
+}
+
+impl Device {
+    fn new(name: &str) -> Self {
+        let dir = std::env::temp_dir().join(format!("mq-defaults-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        Self { dir }
+    }
+
+    fn start(&self) -> Core {
+        Core::open(mq_runtime::CoreConfig {
+            data_dir: self.dir.clone(),
+            profile_id: OWNER.into(),
+            device_id: 9,
+        })
+        .unwrap()
+    }
+}
+
+impl Drop for Device {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
+/// The owner's list as an older onboarding left it: these defaults, on
+/// unless named in `off`, with their bundled manifests.
+fn old_list(core: &Core, keys: &[&str], off: &[&str]) {
+    list_of(core, OWNER, keys, off);
+}
+
+fn list_of(core: &Core, profile: &str, keys: &[&str], off: &[&str]) {
+    let rows: Vec<AddonRow> = keys
+        .iter()
+        .enumerate()
+        .map(|(position, key)| {
+            let d = defaults::list().iter().find(|d| d.key == *key).unwrap();
+            AddonRow {
+                transport_url: d.url.clone(),
+                manifest_json: serde_json::to_string(&d.manifest).unwrap(),
+                position: position as i64,
+                enabled: !off.contains(key),
+                allow_private: false,
+            }
+        })
+        .collect();
+    core.library()
+        .set_addons(profile, &rows, &core.hlc())
+        .unwrap();
+}
+
+fn url(key: &str) -> String {
+    defaults::list()
+        .iter()
+        .find(|d| d.key == key)
+        .unwrap()
+        .url
+        .clone()
+}
+
+/// The six an older onboarding installed (the owner's Pixel, 2026-10-22).
+const OLD_SIX: [&str; 6] = [
+    "cinemeta",
+    "kitsu",
+    "torrentio",
+    "turkcealtyazi",
+    "subsense",
+    "opensubtitles",
+];
+
+#[tokio::test]
+async fn an_old_profile_gets_each_default_it_never_had_once_on() {
+    let device = Device::new("old");
+    let core = device.start();
+    old_list(&core, &OLD_SIX, &[]);
+    drop(core);
+
+    // The next build starts: the three it never had arrive after its own
+    // six, on, in list order, and the card has nothing left to offer.
+    let core = device.start();
+    let mut expected: Vec<(String, bool)> = OLD_SIX.iter().map(|k| (url(k), true)).collect();
+    for key in ["trakt", "rottentomatoes", "torrentcatalogs"] {
+        expected.push((url(key), true));
+    }
+    assert_eq!(urls(&core), expected);
+    assert_eq!(core.prefs().defaults_seen, defaults::LIST_VERSION);
+    let stamped = stamp(&core);
+    drop(core);
+
+    // A second start adds nothing and writes nothing.
+    let core = device.start();
+    assert_eq!(urls(&core), expected);
+    assert_eq!(stamp(&core), stamped);
+}
+
+#[tokio::test]
+async fn a_default_switched_off_or_removed_keeps_the_profiles_choice() {
+    let device = Device::new("choice");
+    let core = device.start();
+    // Rotten Tomatoes there but off, Trakt never had.
+    let mut keys = OLD_SIX.to_vec();
+    keys.push("rottentomatoes");
+    old_list(&core, &keys, &["rottentomatoes"]);
+    drop(core);
+    let core = device.start();
+    let shown = |core: &Core, key: &str| {
+        urls(core)
+            .into_iter()
+            .find(|(u, _)| *u == url(key))
+            .map(|(_, on)| on)
+    };
+    assert_eq!(shown(&core, "rottentomatoes"), Some(false), "off stays off");
+    assert_eq!(shown(&core, "trakt"), Some(true), "never had: given, on");
+
+    // Removed after it arrived: it stays removed.
+    core.remove_addon(&url("trakt")).unwrap();
+    core.remove_addon(&url("kitsu")).unwrap();
+    drop(core);
+    let core = device.start();
+    assert_eq!(shown(&core, "trakt"), None);
+    assert_eq!(shown(&core, "kitsu"), None);
+    assert_eq!(shown(&core, "rottentomatoes"), Some(false));
+}
+
+#[tokio::test]
+async fn the_defaults_step_counts_what_it_named_and_a_new_or_kids_profile_gets_nothing() {
+    let device = Device::new("step");
+    let core = device.start();
+    // No list yet: the defaults step asks, a start adds nothing.
+    drop(core);
+    let core = device.start();
+    assert_eq!(core.library().addon_list_hlc(OWNER).unwrap(), None);
+    assert!(core.addons_fresh());
+
+    // The step named all nine; one removed later does not come back.
+    core.install_defaults(&switches(&[])).unwrap();
+    core.remove_addon(&url("kitsu")).unwrap();
+    core.set_pin(OWNER, Some("7351"), None).await.unwrap();
+    let kid = core.create_kids_profile("Kid", "fox").unwrap();
+    // A kids profile reads the owner's list: one of its own (a profile
+    // made a kid later) is left as it is. Another profile gets its own.
+    list_of(&core, &kid, &OLD_SIX, &[]);
+    core.create_profile("Sam", "owl").unwrap();
+    let sam = core
+        .library()
+        .profiles()
+        .unwrap()
+        .into_iter()
+        .find(|p| p.name == "Sam")
+        .unwrap()
+        .id;
+    list_of(&core, &sam, &OLD_SIX, &[]);
+    drop(core);
+    let core = device.start();
+    assert!(!urls(&core).iter().any(|(u, _)| *u == url("kitsu")));
+    let count = |profile: &str| core.library().addons(profile).unwrap().len();
+    assert_eq!(count(&kid), 6);
+    assert_eq!(count(&sam), 9);
+}
