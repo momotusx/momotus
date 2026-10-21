@@ -223,7 +223,9 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     return tryingAgain(snap()?.phase, retry(), Date.now());
   };
   const url = () => (snap()?.phase === "ready" ? snap()?.url : null) ?? null;
-  const playing = () => [...(versions()?.recommended ? [versions()?.recommended] : []), ...(versions()?.rows ?? [])].find((r) => r?.key === snap()?.key) ?? null;
+  // The version that plays: the core names it from `ready` on; before that, the one this play
+  // opened (so the loading screen can say "Starting 1080p, 1.5 GB from Torrentio").
+  const playing = () => [...(versions()?.recommended ? [versions()?.recommended] : []), ...(versions()?.rows ?? [])].find((r) => r?.key === (snap()?.key ?? key())) ?? null;
 
   const [osd, setOsd] = createSignal(true);
   const [panel, setPanel] = createSignal<"subs" | "audio" | null>(null);
