@@ -1,5 +1,18 @@
-# v2 leftovers the rollout removes (design/gate.ts); empty at phase 13.
-apps/web/src/screens/trakt.tsx :: <h1 data-eyebrow={w.eyebrow}>{w.title}</h1>
+# v2 leftovers the rollout removes (design/gate.ts). It only shrinks; it is empty at phase 13 (--final).
+apps/web/src/components/avatar.css :: .avatar-letter { font: 800 1em / 1 var(--font-display); letter-spacing: var(--tracking-display); }
+apps/web/src/components/trakt-mark.css :: font: 650 var(--type-caption) / 1 var(--font-text); color: var(--text); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); text-shadow: none; }
+apps/web/src/screens/browse.css :: font: 700 var(--type-caption) / 1 var(--font-text); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); -webkit-text-fill-color: var(--accent); }
+apps/web/src/screens/browse.css :: background: linear-gradient(145deg, rgba(255, 255, 255, .1), rgba(255, 255, 255, .05)); box-shadow: inset 0 0 0 2px var(--control); }
+apps/web/src/screens/browse.css :: .chip-rank { display: grid; place-items: center; min-width: 26px; height: 26px; padding: 0 6px; border-radius: 13px; background: var(--text); color: var(--bg); font: 800 15px / 1 var(--font-text); }
+apps/web/src/screens/calendar.css :: .cal-day h2 { display: grid; gap: 8px; padding-top: 6px; font: 800 var(--type-title3) / 1.05 var(--font-display); }
+apps/web/src/screens/calendar.css :: .cal-name { padding: 0 24px; text-align: center; font: 800 var(--type-headline) / 1.15 var(--font-display); }
+apps/web/src/screens/find-addons.css :: border-radius: var(--radius-card); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight);
+apps/web/src/screens/find-addons.css :: background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight);
+apps/web/src/screens/find-addons.css :: box-shadow: inset 0 0 0 1px var(--edge), inset 0 1px 0 rgba(255, 255, 255, .07); }
+apps/web/src/screens/find-addons.css :: [data-form="tv"] .fa-card:focus .fa-text h2 { color: var(--accent); }
+apps/web/src/screens/find-addons.css :: box-shadow: inset 0 0 0 2px var(--control), inset 0 1px 0 rgba(255, 255, 255, .09); }
+apps/web/src/screens/find-addons.css :: @media (hover: hover) { [data-form="desktop"] .fa-card:hover { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .24), var(--glass-highlight); } }
+apps/web/src/screens/find-addons.tsx :: <h1 data-eyebrow={w.eyebrow}>{w.title}</h1>
 apps/web/src/screens/home.css :: background: var(--surface); box-shadow: inset 0 0 0 1px var(--edge); isolation: isolate; }
 apps/web/src/screens/home.css :: linear-gradient(90deg, rgba(6, 9, 14, .94) 0%, rgba(6, 9, 14, .72) 28%, rgba(6, 9, 14, .18) 58%, rgba(6, 9, 14, 0) 72%),
 apps/web/src/screens/home.css :: linear-gradient(0deg, rgba(6, 9, 14, .9) 0%, rgba(6, 9, 14, .3) 34%, rgba(6, 9, 14, 0) 58%); }
@@ -13,12 +26,27 @@ apps/web/src/screens/home.css :: padding: 0 44px; border-radius: var(--radius-ca
 apps/web/src/screens/home.css :: linear-gradient(180deg, rgba(6, 9, 14, .55) 0%, rgba(6, 9, 14, 0) 22%),
 apps/web/src/screens/home.css :: linear-gradient(0deg, rgba(6, 9, 14, .96) 0%, rgba(6, 9, 14, .55) 38%, rgba(6, 9, 14, 0) 62%); }
 apps/web/src/screens/home.css :: [data-form="phone"] .ph-top .brand { font-size: 22px; margin: 0; text-shadow: 0 1px 12px rgba(6, 9, 14, .6); }
-apps/web/src/screens/find-addons.css :: border-radius: var(--radius-card); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight);
-apps/web/src/screens/find-addons.css :: background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight);
-apps/web/src/screens/find-addons.css :: box-shadow: inset 0 0 0 1px var(--edge), inset 0 1px 0 rgba(255, 255, 255, .07); }
-apps/web/src/screens/find-addons.css :: [data-form="tv"] .fa-card:focus .fa-text h2 { color: var(--accent); }
-apps/web/src/screens/find-addons.css :: box-shadow: inset 0 0 0 2px var(--control), inset 0 1px 0 rgba(255, 255, 255, .09); }
-apps/web/src/screens/find-addons.css :: @media (hover: hover) { [data-form="desktop"] .fa-card:hover { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .24), var(--glass-highlight); } }
+apps/web/src/screens/onboarding.css :: .door { display: flex; align-items: center; gap: 24px; width: 100%; padding: 34px 34px; border-radius: var(--radius-l); background: var(--glass);
+apps/web/src/screens/onboarding.css :: box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight); transform-origin: center; text-align: left; }
+apps/web/src/screens/onboarding.css :: .door b { display: block; font: 800 var(--type-title3) / 1.1 var(--font-display); }
+apps/web/src/screens/onboarding.css :: padding: 12px 22px; border-radius: var(--radius-card); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); text-align: left; }
+apps/web/src/screens/onboarding.css :: background: var(--raised); box-shadow: inset 0 0 0 1px var(--edge); }
+apps/web/src/screens/onboarding.css :: .switch { position: relative; width: 60px; height: 34px; border-radius: 17px; box-shadow: inset 0 0 0 2px var(--control); flex: none; }
+apps/web/src/screens/onboarding.css :: .fix { height: 52px; padding: 0 20px; border-radius: 26px; background: color-mix(in srgb, var(--text) 12%, transparent); box-shadow: inset 0 0 0 2px var(--control);
+apps/web/src/screens/player.css :: .ptitle h1 { font: 800 var(--type-title2) / 1.05 var(--font-display); }
+apps/web/src/screens/player.css :: .picon { width: 68px; height: 68px; border-radius: 50%; display: grid; place-items: center; color: var(--text); background: var(--glass); }
+apps/web/src/screens/player.css :: .pback { width: 68px; height: 68px; margin-bottom: 18px; border-radius: 50%; display: grid; place-items: center; color: var(--text); background: var(--glass); }
+apps/web/src/screens/player.css :: background: var(--glass); -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)); backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+apps/web/src/screens/player.css :: box-shadow: inset 0 0 0 2px var(--control), var(--glass-highlight); }
+apps/web/src/screens/player.css :: .panel h2 { font: 800 var(--type-headline) var(--font-display); margin: 0 12px 14px; }
+apps/web/src/screens/player.css :: .next h3 { font: 800 var(--type-headline) / 1.2 var(--font-display); margin: 8px 0 6px; }
+apps/web/src/screens/player.css :: .panel, .next, .toast { background: var(--glass-strong); -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+apps/web/src/screens/player.css :: backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight), var(--glass-shadow); }
+apps/web/src/screens/player.css :: .end-body h2 { font: 800 var(--type-title1) / 1.1 var(--font-display); }
+apps/web/src/screens/profiles.css :: .ptile:focus-visible .pname, [data-form="tv"] .ptile:focus .pname { color: var(--accent); }
+apps/web/src/screens/profiles.css :: .add-art { background: var(--raised); box-shadow: inset 0 0 0 2px var(--control); color: var(--muted); }
+apps/web/src/screens/profiles.css :: .pin-dots i { width: 22px; height: 22px; border-radius: 50%; box-shadow: inset 0 0 0 2px var(--control); }
+apps/web/src/screens/profiles.css :: .pin-key { display: grid; place-items: center; width: 104px; height: 104px; border-radius: 50%; background: var(--raised); box-shadow: inset 0 0 0 2px var(--control);
 apps/web/src/screens/search.css :: -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 1.5)) saturate(var(--glass-saturate));
 apps/web/src/screens/search.css :: backdrop-filter: blur(calc(var(--glass-blur) * 1.5)) saturate(var(--glass-saturate)); }
 apps/web/src/screens/search.css :: background: var(--glass); box-shadow: inset 0 0 0 2px var(--control); }
@@ -28,20 +56,25 @@ apps/web/src/screens/search.css :: @media (hover: hover) { [data-form="desktop"]
 apps/web/src/screens/search.css :: box-shadow: inset 0 0 0 1px var(--edge); }
 apps/web/src/screens/search.css :: .hit:focus-visible .hit-text > b, [data-form="tv"] .hit:focus .hit-text > b { color: var(--accent); }
 apps/web/src/screens/search.css :: [data-form="desktop"] .hit:hover .hit-text > b { color: var(--accent); }
-apps/web/src/screens/versions.css :: .crumbs .here { color: var(--text); font-weight: 650; }
-apps/web/src/screens/versions.css :: .vhead h1 { font: 800 var(--type-title1) / 1.05 var(--font-display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-apps/web/src/screens/versions.css :: border-radius: var(--radius-l); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight);
-apps/web/src/screens/versions.css :: .pick h2 { font: 800 var(--type-title1) / 1.02 var(--font-display); margin: 14px 0 20px; }
-apps/web/src/screens/versions.css :: .pick .blocked h2 { margin: 0; font: 800 var(--type-title3) / 1.1 var(--font-display); }
-apps/web/src/screens/versions.css :: background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); font: 500 var(--type-callout) / 1.35 var(--font-text); }
-apps/web/src/screens/versions.css :: .vgroup h3 { position: sticky; top: 0; z-index: 4; display: flex; justify-content: space-between; margin: 16px 0 10px; padding: 12px 22px; border-radius: 10px; background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge);
-apps/web/src/screens/versions.css :: @media (hover: hover) { [data-form="desktop"] .vrow:hover { background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); } }
-apps/web/src/screens/versions.css :: border-radius: var(--radius-m); background: var(--glass-strong); -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-apps/web/src/screens/versions.css :: backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight), var(--glass-shadow);
-apps/web/src/screens/versions.css :: .hidden-row { display: flex; align-items: center; gap: 16px; margin-top: 18px; padding: 16px 22px; border-radius: var(--radius-m); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge);
-apps/web/src/screens/versions.css :: [data-form="phone"] .vrow.open { background: var(--glass); border-bottom-color: transparent; border-radius: 12px 12px 0 0; }
-apps/web/src/screens/versions.css :: [data-form="phone"] .vrow-open { display: grid; gap: 6px; justify-items: start; margin-bottom: 8px; padding: 2px 8px 14px 80px; border-radius: 0 0 12px 12px; background: var(--glass); }
-apps/web/src/screens/find-addons.tsx :: <h1 data-eyebrow={w.eyebrow}>{w.title}</h1>
+apps/web/src/screens/settings.css :: .set > h2 { font: 800 var(--type-title3) / 1.1 var(--font-display); margin-bottom: 24px; }
+apps/web/src/screens/settings.css :: .prefs { padding: 6px 40px; border-radius: var(--radius-l); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight); }
+apps/web/src/screens/settings.css :: .link-row { display: flex; align-items: center; gap: 26px; padding: 22px 30px; border-radius: var(--radius-l); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); transform-origin: center; }
+apps/web/src/screens/settings.css :: .field-line input { height: 72px; padding: 0 26px; border-radius: 18px; background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); box-shadow: inset 0 0 0 2px var(--control);
+apps/web/src/screens/settings.css :: .field-line input:focus-visible, [data-form="tv"] .field-line input:focus { box-shadow: inset 0 0 0 2px var(--control), var(--focus-shadow); }
+apps/web/src/screens/settings.css :: .addon { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; gap: 28px; align-items: start; padding: 26px 28px; border-radius: var(--radius-l); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); }
+apps/web/src/screens/settings.css :: font: 800 34px / 1 var(--font-display); }
+apps/web/src/screens/settings.css :: .summary h2 { display: flex; align-items: center; gap: 16px; font: 800 var(--type-title2) / 1.1 var(--font-display); }
+apps/web/src/screens/settings.css :: .hrow { display: flex; align-items: center; gap: 16px; padding: 8px 12px 8px 8px; border-radius: var(--radius-l); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge);
+apps/web/src/screens/settings.css :: .hrow.moving .hrow-n { color: var(--accent); }
+apps/web/src/screens/settings.css :: .dcard { display: grid; gap: 20px; padding: 26px 30px; border-radius: var(--radius-l); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); }
+apps/web/src/screens/settings.css :: background: var(--glass-strong); box-shadow: inset 0 0 0 1px var(--edge); }
+apps/web/src/screens/sync.css :: .sync-card { display: grid; gap: 28px; padding: 30px 34px; border-radius: var(--radius-l); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight); }
+apps/web/src/screens/sync.css :: background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); text-align: left; }
+apps/web/src/screens/sync.css :: .sync-mtext h3, .sync-mtext b { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; font: 650 var(--type-body) / 1.25 var(--font-text); overflow-wrap: anywhere; }
+apps/web/src/screens/sync.css :: .sync-tag { padding: 6px 14px; border-radius: var(--radius-pill); font: 650 var(--type-caption) / 1 var(--font-text); color: var(--text);
+apps/web/src/screens/sync.css :: background: rgba(255, 255, 255, .12); box-shadow: inset 0 0 0 1px var(--edge); }
+apps/web/src/screens/sync.css :: .sync-box { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; box-shadow: inset 0 0 0 2px var(--control); }
+apps/web/src/screens/sync.css :: .sync-scan video { width: min(100%, 560px); aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--radius-l); background: var(--surface); box-shadow: inset 0 0 0 1px var(--edge); }
 apps/web/src/screens/title.css :: linear-gradient(90deg, var(--bg) 0%, rgba(6, 9, 14, .9) 30%, rgba(6, 9, 14, .55) 50%, rgba(6, 9, 14, .62) 70%, rgba(6, 9, 14, .7) 100%),
 apps/web/src/screens/title.css :: linear-gradient(90deg, var(--bg) 0%, rgba(6, 9, 14, .88) 28%, rgba(6, 9, 14, .4) 55%, rgba(6, 9, 14, 0) 78%),
 apps/web/src/screens/title.css :: linear-gradient(0deg, var(--bg) 0%, rgba(6, 9, 14, .6) 22%, rgba(6, 9, 14, 0) 46%); }
@@ -60,77 +93,58 @@ apps/web/src/screens/title.css :: :is([data-form="tv"], [data-form="desktop"]) .
 apps/web/src/screens/title.css :: font: 600 var(--type-caption) / 1 var(--font-text); color: var(--muted); white-space: nowrap; box-shadow: inset 0 0 0 2px var(--control); }
 apps/web/src/screens/title.css :: [data-form="desktop"] .ep-main:hover { background: var(--glass-strong); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .4); }
 apps/web/src/screens/title.css :: background: linear-gradient(0deg, var(--bg) 4%, rgba(6, 9, 14, .45) 50%, rgba(6, 9, 14, .1) 78%); }
-apps/web/src/screens/settings.css :: .set > h2 { font: 800 var(--type-title3) / 1.1 var(--font-display); margin-bottom: 24px; }
-apps/web/src/screens/settings.css :: .prefs { padding: 6px 40px; border-radius: var(--radius-l); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight); }
-apps/web/src/screens/settings.css :: .link-row { display: flex; align-items: center; gap: 26px; padding: 22px 30px; border-radius: var(--radius-l); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); transform-origin: center; }
-apps/web/src/screens/settings.css :: .field-line input { height: 72px; padding: 0 26px; border-radius: 18px; background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); box-shadow: inset 0 0 0 2px var(--control);
-apps/web/src/screens/settings.css :: .field-line input:focus-visible, [data-form="tv"] .field-line input:focus { box-shadow: inset 0 0 0 2px var(--control), var(--focus-shadow); }
-apps/web/src/screens/settings.css :: .addon { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; gap: 28px; align-items: start; padding: 26px 28px; border-radius: var(--radius-l); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); }
-apps/web/src/screens/settings.css :: font: 800 34px / 1 var(--font-display); }
-apps/web/src/screens/settings.css :: .summary h2 { display: flex; align-items: center; gap: 16px; font: 800 var(--type-title2) / 1.1 var(--font-display); }
-apps/web/src/screens/settings.css :: .hrow { display: flex; align-items: center; gap: 16px; padding: 8px 12px 8px 8px; border-radius: var(--radius-l); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge);
-apps/web/src/screens/settings.css :: .hrow.moving .hrow-n { color: var(--accent); }
-apps/web/src/screens/settings.css :: .dcard { display: grid; gap: 20px; padding: 26px 30px; border-radius: var(--radius-l); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); }
-apps/web/src/screens/settings.css :: background: var(--glass-strong); box-shadow: inset 0 0 0 1px var(--edge); }
 apps/web/src/screens/trakt.css :: .trakt-card { display: grid; gap: 24px; padding: 30px 34px; border-radius: var(--radius-l); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight); }
 apps/web/src/screens/trakt.css :: .trakt-import progress { width: min(520px, 100%); height: 6px; accent-color: var(--accent); }
 apps/web/src/screens/trakt.css :: background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); }
 apps/web/src/screens/trakt.css :: .trakt-unmapped b { font: 650 var(--type-body) / 1.25 var(--font-text); overflow-wrap: anywhere; }
 apps/web/src/screens/trakt.css :: .trakt-code .step a { color: var(--text); font-weight: 650; text-decoration: underline; text-underline-offset: 4px; overflow-wrap: anywhere; }
-apps/web/src/screens/profiles.css :: .ptile:focus-visible .pname, [data-form="tv"] .ptile:focus .pname { color: var(--accent); }
-apps/web/src/screens/profiles.css :: .add-art { background: var(--raised); box-shadow: inset 0 0 0 2px var(--control); color: var(--muted); }
-apps/web/src/screens/profiles.css :: .pin-dots i { width: 22px; height: 22px; border-radius: 50%; box-shadow: inset 0 0 0 2px var(--control); }
-apps/web/src/screens/profiles.css :: .pin-key { display: grid; place-items: center; width: 104px; height: 104px; border-radius: 50%; background: var(--raised); box-shadow: inset 0 0 0 2px var(--control);
-apps/web/src/screens/browse.css :: font: 700 var(--type-caption) / 1 var(--font-text); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); -webkit-text-fill-color: var(--accent); }
-apps/web/src/screens/browse.css :: background: linear-gradient(145deg, rgba(255, 255, 255, .1), rgba(255, 255, 255, .05)); box-shadow: inset 0 0 0 2px var(--control); }
-apps/web/src/screens/browse.css :: .chip-rank { display: grid; place-items: center; min-width: 26px; height: 26px; padding: 0 6px; border-radius: 13px; background: var(--text); color: var(--bg); font: 800 15px / 1 var(--font-text); }
-apps/web/src/screens/player.css :: .ptitle h1 { font: 800 var(--type-title2) / 1.05 var(--font-display); }
-apps/web/src/screens/player.css :: .picon { width: 68px; height: 68px; border-radius: 50%; display: grid; place-items: center; color: var(--text); background: var(--glass); }
-apps/web/src/screens/player.css :: .pback { width: 68px; height: 68px; margin-bottom: 18px; border-radius: 50%; display: grid; place-items: center; color: var(--text); background: var(--glass); }
-apps/web/src/screens/player.css :: background: var(--glass); -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)); backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-apps/web/src/screens/player.css :: box-shadow: inset 0 0 0 2px var(--control), var(--glass-highlight); }
-apps/web/src/screens/player.css :: .panel h2 { font: 800 var(--type-headline) var(--font-display); margin: 0 12px 14px; }
-apps/web/src/screens/player.css :: .next h3 { font: 800 var(--type-headline) / 1.2 var(--font-display); margin: 8px 0 6px; }
-apps/web/src/screens/player.css :: .panel, .next, .toast { background: var(--glass-strong); -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-apps/web/src/screens/player.css :: backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight), var(--glass-shadow); }
-apps/web/src/screens/player.css :: .end-body h2 { font: 800 var(--type-title1) / 1.1 var(--font-display); }
-apps/web/src/screens/onboarding.css :: .door { display: flex; align-items: center; gap: 24px; width: 100%; padding: 34px 34px; border-radius: var(--radius-l); background: var(--glass);
-apps/web/src/screens/onboarding.css :: box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight); transform-origin: center; text-align: left; }
-apps/web/src/screens/onboarding.css :: .door b { display: block; font: 800 var(--type-title3) / 1.1 var(--font-display); }
-apps/web/src/screens/onboarding.css :: padding: 12px 22px; border-radius: var(--radius-card); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); text-align: left; }
-apps/web/src/screens/onboarding.css :: background: var(--raised); box-shadow: inset 0 0 0 1px var(--edge); }
-apps/web/src/screens/onboarding.css :: .switch { position: relative; width: 60px; height: 34px; border-radius: 17px; box-shadow: inset 0 0 0 2px var(--control); flex: none; }
-apps/web/src/screens/onboarding.css :: .fix { height: 52px; padding: 0 20px; border-radius: 26px; background: color-mix(in srgb, var(--text) 12%, transparent); box-shadow: inset 0 0 0 2px var(--control);
-apps/web/src/screens/calendar.css :: .cal-day h2 { display: grid; gap: 8px; padding-top: 6px; font: 800 var(--type-title3) / 1.05 var(--font-display); }
-apps/web/src/screens/calendar.css :: .cal-name { padding: 0 24px; text-align: center; font: 800 var(--type-headline) / 1.15 var(--font-display); }
-apps/web/src/screens/sync.css :: .sync-card { display: grid; gap: 28px; padding: 30px 34px; border-radius: var(--radius-l); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight); }
-apps/web/src/screens/sync.css :: background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); text-align: left; }
-apps/web/src/screens/sync.css :: .sync-mtext h3, .sync-mtext b { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; font: 650 var(--type-body) / 1.25 var(--font-text); overflow-wrap: anywhere; }
-apps/web/src/screens/sync.css :: .sync-tag { padding: 6px 14px; border-radius: var(--radius-pill); font: 650 var(--type-caption) / 1 var(--font-text); color: var(--text);
-apps/web/src/screens/sync.css :: background: rgba(255, 255, 255, .12); box-shadow: inset 0 0 0 1px var(--edge); }
-apps/web/src/screens/sync.css :: .sync-box { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; box-shadow: inset 0 0 0 2px var(--control); }
-apps/web/src/screens/sync.css :: .sync-scan video { width: min(100%, 560px); aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--radius-l); background: var(--surface); box-shadow: inset 0 0 0 1px var(--edge); }
-apps/web/src/screens/sync.css :: .sync-tag.bad { color: var(--bg); background: var(--bad); box-shadow: none; }
-apps/web/src/components/avatar.css :: .avatar-letter { font: 800 1em / 1 var(--font-display); letter-spacing: var(--tracking-display); }
-apps/web/src/components/trakt-mark.css :: font: 650 var(--type-caption) / 1 var(--font-text); color: var(--text); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); text-shadow: none; }
+apps/web/src/screens/trakt.tsx :: <h1 data-eyebrow={w.eyebrow}>{w.title}</h1>
+apps/web/src/screens/versions.css :: .crumbs .here { color: var(--text); font-weight: 650; }
+apps/web/src/screens/versions.css :: .vhead h1 { font: 800 var(--type-title1) / 1.05 var(--font-display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+apps/web/src/screens/versions.css :: border-radius: var(--radius-l); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight);
+apps/web/src/screens/versions.css :: .pick h2 { font: 800 var(--type-title1) / 1.02 var(--font-display); margin: 14px 0 20px; }
+apps/web/src/screens/versions.css :: .pick .blocked h2 { margin: 0; font: 800 var(--type-title3) / 1.1 var(--font-display); }
+apps/web/src/screens/versions.css :: background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); font: 500 var(--type-callout) / 1.35 var(--font-text); }
+apps/web/src/screens/versions.css :: .vgroup h3 { position: sticky; top: 0; z-index: 4; display: flex; justify-content: space-between; margin: 16px 0 10px; padding: 12px 22px; border-radius: 10px; background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge);
+apps/web/src/screens/versions.css :: @media (hover: hover) { [data-form="desktop"] .vrow:hover { background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); } }
+apps/web/src/screens/versions.css :: border-radius: var(--radius-m); background: var(--glass-strong); -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+apps/web/src/screens/versions.css :: backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight), var(--glass-shadow);
+apps/web/src/screens/versions.css :: .hidden-row { display: flex; align-items: center; gap: 16px; margin-top: 18px; padding: 16px 22px; border-radius: var(--radius-m); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge);
+apps/web/src/screens/versions.css :: [data-form="phone"] .vrow.open { background: var(--glass); border-bottom-color: transparent; border-radius: 12px 12px 0 0; }
+apps/web/src/screens/versions.css :: [data-form="phone"] .vrow-open { display: grid; gap: 6px; justify-items: start; margin-bottom: 8px; padding: 2px 8px 14px 80px; border-radius: 0 0 12px 12px; background: var(--glass); }
 apps/web/src/theme/app.css :: .glass { background: var(--glass); -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
 apps/web/src/theme/app.css :: backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
 apps/web/src/theme/app.css :: box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight), var(--glass-shadow); }
 apps/web/src/theme/app.css :: .glass.strong { background: var(--glass-strong); }
 apps/web/src/theme/app.css :: box-shadow: inset 0 0 0 2px var(--control), inset 0 1px 0 rgba(255, 255, 255, .09); transform-origin: center; }
 apps/web/src/theme/app.css :: box-shadow: inset 0 0 0 2px var(--control), inset 0 1px 0 rgba(255, 255, 255, .09);
-apps/web/src/theme/app.css :: .ok .dot, .dot.ok { background: var(--ok); box-shadow: none; }
-apps/web/src/theme/app.css :: .warn .dot, .dot.warn { background: var(--warn); box-shadow: none; }
-apps/web/src/theme/app.css :: .bad .dot, .dot.bad { background: var(--bad); box-shadow: none; }
 apps/web/src/theme/app.css :: .eyebrow { font: 700 var(--type-caption) / 1 var(--font-text); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
 apps/web/src/theme/app.css :: .rate svg { width: .9em; height: .9em; fill: var(--star); color: var(--star); }
 apps/web/src/theme/app.css :: .brand::before { content: ""; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); }
 apps/web/src/theme/app.css :: .nav.on { color: var(--text); background: rgba(255, 255, 255, .12); box-shadow: inset 0 0 0 1px var(--edge); }
 apps/web/src/theme/app.css :: padding: 16px 26px; border-radius: 16px; background: var(--glass-strong); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-shadow);
 apps/web/src/theme/app.css :: -webkit-backdrop-filter: blur(var(--glass-blur)); backdrop-filter: blur(var(--glass-blur));
-apps/android/design/src/main/kotlin/app/marquee/design/Focus.kt :: val ringColor = if (Marquee.form == Form.Tv) colors.accent else colors.key
-apps/android/design/src/main/kotlin/app/marquee/design/TextField.kt :: .border(2.dp, if (focused) colors.accent else colors.control, shape)
-apps/android/design/src/main/kotlin/app/marquee/design/TextField.kt :: cursorBrush = SolidColor(colors.accent),
+apps/android/app/src/main/kotlin/app/marquee/android/BrowseScreens.kt :: Eyebrow(eyebrow)
+apps/android/app/src/main/kotlin/app/marquee/android/BrowseScreens.kt :: .border(2.dp, if (focused) colors.accent else colors.control, shape)
+apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: // glass cards, each installed or turned on in one press. The web's screens/find-addons.tsx.
+apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: /** Community's caution, on glass. */
+apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: .background(Marquee.colors.glass)
+apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: .background(colors.glass)
+apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: color = if (focused) colors.accent else colors.text,
+apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: /** TV: the card's action drawn as a glass pill; the card itself takes the press. */
+apps/android/app/src/main/kotlin/app/marquee/android/HomeRowsScreen.kt :: color = colors.accent,
+apps/android/app/src/main/kotlin/app/marquee/android/Onboarding.kt :: // Glass buttons: Home's one white pill is the hero's Play.
+apps/android/app/src/main/kotlin/app/marquee/android/ProfileScreens.kt :: weight = FontWeight.ExtraBold,
+apps/android/app/src/main/kotlin/app/marquee/android/ProfileScreens.kt :: color = if (focused) colors.accent else colors.muted,
+apps/android/app/src/main/kotlin/app/marquee/android/ProfileScreens.kt :: color = if (focused) colors.accent else colors.muted,
+apps/android/app/src/main/kotlin/app/marquee/android/SettingsScreen.kt :: // Settings (plans/android-design-v2.md 5.5): addons, playback and about, as sections on glass.
+apps/android/app/src/main/kotlin/app/marquee/android/SettingsScreen.kt :: /** A section card on glass. */
+apps/android/app/src/main/kotlin/app/marquee/android/StreamChoiceScreen.kt :: * Settings > Stream choice (plans/m13-stream-choice.md 4.4, the web's page): one glass panel of rows,
+apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .background(Marquee.colors.glass)
+apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .background(Marquee.colors.glass)
+apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .background(Marquee.colors.glass)
+apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .background(Marquee.colors.glass)
+apps/android/design/src/main/kotlin/app/marquee/design/Avatar.kt :: fontWeight = FontWeight.ExtraBold,
 apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: .background(colors.accent),
 apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: fun Eyebrow(
 apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: color = colors.accent,
@@ -142,34 +156,34 @@ apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: * The ro
 apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: /** A bar on glass with an edge: a group's name and count, or the hidden summary. */
 apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: fun GlassBar(
 apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: .background(colors.glass)
+apps/android/design/src/main/kotlin/app/marquee/design/TextField.kt :: .border(2.dp, if (focused) colors.accent else colors.control, shape)
+apps/android/design/src/main/kotlin/app/marquee/design/TextField.kt :: cursorBrush = SolidColor(colors.accent),
 apps/android/design/src/main/kotlin/app/marquee/design/Theme.kt :: /** Reads of the current theme, e.g. `Marquee.colors.accent`. */
-apps/android/design/src/main/kotlin/app/marquee/design/Avatar.kt :: fontWeight = FontWeight.ExtraBold,
 apps/android/design/src/main/kotlin/app/marquee/design/Tiles.kt :: color = if (focused) colors.accent else colors.text,
 apps/android/design/src/main/kotlin/app/marquee/design/Tiles.kt :: /** A star and the rating on strong glass, at the top right of a poster. */
 apps/android/design/src/main/kotlin/app/marquee/design/Tiles.kt :: .background(colors.glassStrong)
 apps/android/design/src/main/kotlin/app/marquee/design/Tiles.kt :: MqIcon(StarFilled, tint = colors.star, size = if (tv) 20.dp else 12.dp)
 apps/android/design/src/main/kotlin/app/marquee/design/Tiles.kt :: .background(colors.glassStrong)
-apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .background(Marquee.colors.glass)
-apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .background(Marquee.colors.glass)
-apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .background(Marquee.colors.glass)
-apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .background(Marquee.colors.glass)
-apps/android/app/src/main/kotlin/app/marquee/android/StreamChoiceScreen.kt :: * Settings > Stream choice (plans/m13-stream-choice.md 4.4, the web's page): one glass panel of rows,
-apps/android/app/src/main/kotlin/app/marquee/android/HomeRowsScreen.kt :: color = colors.accent,
-apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: // glass cards, each installed or turned on in one press. The web's screens/find-addons.tsx.
-apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: /** Community's caution, on glass. */
-apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: .background(Marquee.colors.glass)
-apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: .background(colors.glass)
-apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: color = if (focused) colors.accent else colors.text,
-apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: /** TV: the card's action drawn as a glass pill; the card itself takes the press. */
-apps/android/app/src/main/kotlin/app/marquee/android/ProfileScreens.kt :: weight = FontWeight.ExtraBold,
-apps/android/app/src/main/kotlin/app/marquee/android/ProfileScreens.kt :: color = if (focused) colors.accent else colors.muted,
-apps/android/app/src/main/kotlin/app/marquee/android/ProfileScreens.kt :: color = if (focused) colors.accent else colors.muted,
-apps/android/app/src/main/kotlin/app/marquee/android/BrowseScreens.kt :: Eyebrow(eyebrow)
-apps/android/app/src/main/kotlin/app/marquee/android/BrowseScreens.kt :: .border(2.dp, if (focused) colors.accent else colors.control, shape)
-apps/android/app/src/main/kotlin/app/marquee/android/SettingsScreen.kt :: // Settings (plans/android-design-v2.md 5.5): addons, playback and about, as sections on glass.
-apps/android/app/src/main/kotlin/app/marquee/android/SettingsScreen.kt :: /** A section card on glass. */
-apps/android/app/src/main/kotlin/app/marquee/android/Onboarding.kt :: // Glass buttons: Home's one white pill is the hero's Play.
+apps/android/player/src/main/kotlin/app/marquee/player/PlayerParts.kt :: * a glass pill. It stays while the controls hide, so a viewer who never opens them still learns it.
+apps/android/player/src/main/kotlin/app/marquee/player/PlayerParts.kt :: .background(Marquee.colors.glass)
+apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneHome.kt :: Eyebrow(hero.reason, overArt = true)
+apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneShell.kt :: * floating glass bar with the top-level places sits above the system navigation bar. The bar
+apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneShell.kt :: // Opaque: Android blurs no content behind a node, and the translucent glass let the
+apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneShell.kt :: .background(colors.glassStrong.compositeOver(colors.bg))
+apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneTitle.kt :: color = Marquee.colors.accent,
+apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneTitle.kt :: // A glass card per episode (design/DECISION.md v2, Episodes).
+apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: import app.marquee.design.GlassBar
+apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: * recommendation as a glass card with its facts; every other source by group with its line (a tone
+apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: Eyebrow(heading)
+apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: item(key = "nobody") { GlassBar(Modifier.padding(bottom = Marquee.space.xs)) { NobodySharing() } }
+apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: GlassBar(Modifier.padding(top = Marquee.space.xs)) {
+apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: GlassBar(Modifier.padding(top = Marquee.space.s)) {
+apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: .background(colors.glassStrong)
+apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: GlassBar(Modifier.padding(bottom = Marquee.space.xs)) {
 apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvHome.kt :: Eyebrow(hero.reason, overArt = true)
+apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvShell.kt :: * The TV frame (plans/android-design-v2.md section 2): a glass pill centered at the top with the
+apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvShell.kt :: .background(colors.glassStrong)
+apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvShell.kt :: Box(Modifier.size(10.dp).clip(CircleShape).background(colors.accent))
 apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvTitle.kt :: // The facts sit at the right, over the art, on strong glass.
 apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvTitle.kt :: * actions) and shows whole on glass while it has it; one that fits is plain text. Open, it is held
 apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvTitle.kt :: // back, so the text lines up with the logo whether the glass shows or not.
@@ -182,26 +196,26 @@ apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvVersions.kt :: .backgroun
 apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvVersions.kt :: GlassBar {
 apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvVersions.kt :: GlassBar(Modifier.padding(top = Marquee.space.xs)) {
 apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvVersions.kt :: GlassBar(Modifier.padding(top = Marquee.space.s)) {
-apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvShell.kt :: * The TV frame (plans/android-design-v2.md section 2): a glass pill centered at the top with the
-apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvShell.kt :: .background(colors.glassStrong)
-apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvShell.kt :: Box(Modifier.size(10.dp).clip(CircleShape).background(colors.accent))
-apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: import app.marquee.design.GlassBar
-apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: * recommendation as a glass card with its facts; every other source by group with its line (a tone
-apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: Eyebrow(heading)
-apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: item(key = "nobody") { GlassBar(Modifier.padding(bottom = Marquee.space.xs)) { NobodySharing() } }
-apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: GlassBar(Modifier.padding(top = Marquee.space.xs)) {
-apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: GlassBar(Modifier.padding(top = Marquee.space.s)) {
-apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: .background(colors.glassStrong)
-apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: GlassBar(Modifier.padding(bottom = Marquee.space.xs)) {
-apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneHome.kt :: Eyebrow(hero.reason, overArt = true)
-apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneTitle.kt :: color = Marquee.colors.accent,
-apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneTitle.kt :: // A glass card per episode (design/DECISION.md v2, Episodes).
-apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneShell.kt :: * floating glass bar with the top-level places sits above the system navigation bar. The bar
-apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneShell.kt :: // Opaque: Android blurs no content behind a node, and the translucent glass let the
-apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneShell.kt :: .background(colors.glassStrong.compositeOver(colors.bg))
-apps/android/player/src/main/kotlin/app/marquee/player/PlayerParts.kt :: * a glass pill. It stays while the controls hide, so a viewer who never opens them still learns it.
-apps/android/player/src/main/kotlin/app/marquee/player/PlayerParts.kt :: .background(Marquee.colors.glass)
-apps/android/design/src/main/kotlin/app/marquee/design/TextField.kt :: .border(2.dp, if (focused) colors.accent else colors.control, shape)
+apps/android/app/src/main/kotlin/app/marquee/android/BrowseScreens.kt :: .border(2.dp, if (focused) colors.accent else colors.control, shape)
+apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: .border(1.dp, Marquee.colors.edge, shape)
+apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: .border(1.dp, colors.edge, shape)
+apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: .border(1.dp, Marquee.colors.edge, shape),
+apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: .then(if (white) Modifier else Modifier.border(2.dp, colors.control, shape))
+apps/android/app/src/main/kotlin/app/marquee/android/Onboarding.kt :: .border(1.dp, colors.edge, shape)
+apps/android/app/src/main/kotlin/app/marquee/android/Onboarding.kt :: .border(2.dp, colors.control, shape)
+apps/android/app/src/main/kotlin/app/marquee/android/ProfileScreens.kt :: .border(2.dp, if (on) colors.text else colors.control, CircleShape),
+apps/android/app/src/main/kotlin/app/marquee/android/ProfileScreens.kt :: .border(2.dp, if (focused) colors.primary else colors.control, CircleShape)
+apps/android/app/src/main/kotlin/app/marquee/android/ProfileScreens.kt :: .border(if (focused) 4.dp else 2.dp, if (focused) colors.text else colors.control, shape),
+apps/android/app/src/main/kotlin/app/marquee/android/ProfileScreens.kt :: .border(1.dp, colors.edge, shape)
+apps/android/app/src/main/kotlin/app/marquee/android/SettingsScreen.kt :: .border(1.dp, colors.edge, shape)
+apps/android/app/src/main/kotlin/app/marquee/android/SettingsScreen.kt :: .border(1.dp, colors.edge, shape)
+apps/android/app/src/main/kotlin/app/marquee/android/SettingsScreen.kt :: .border(1.dp, colors.edge, shape)
+apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .border(1.dp, Marquee.colors.edge, shape)
+apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .border(1.dp, Marquee.colors.edge, shape)
+apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .border(1.dp, Marquee.colors.edge, shape)
+apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .border(1.dp, Marquee.colors.edge, shape)
+apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .border(1.dp, Marquee.colors.edge, shape)
+apps/android/app/src/main/kotlin/app/marquee/android/TraktScreen.kt :: .border(1.dp, Marquee.colors.edge, shape)
 apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: Modifier.border(2.dp, colors.control, shape)
 apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: .then(if (selected) Modifier else Modifier.border(2.dp, colors.control, shape))
 apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: .then(if (lit) Modifier else Modifier.border(2.dp, colors.control, CircleShape))
@@ -209,68 +223,107 @@ apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: .border(
 apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: .border(1.dp, colors.edge, shape)
 apps/android/design/src/main/kotlin/app/marquee/design/Switch.kt :: .border(2.dp, colors.edge, shape),
 apps/android/design/src/main/kotlin/app/marquee/design/Switch.kt :: .border(1.dp, Marquee.colors.edge, shape),
+apps/android/design/src/main/kotlin/app/marquee/design/TextField.kt :: .border(2.dp, if (focused) colors.accent else colors.control, shape)
 apps/android/design/src/main/kotlin/app/marquee/design/Tiles.kt :: .border(1.dp, if (lift.value) colors.text else colors.edge, shape)
-apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .border(1.dp, Marquee.colors.edge, shape)
-apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .border(1.dp, Marquee.colors.edge, shape)
-apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .border(1.dp, Marquee.colors.edge, shape)
-apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .border(1.dp, Marquee.colors.edge, shape)
-apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .border(1.dp, Marquee.colors.edge, shape)
-apps/android/app/src/main/kotlin/app/marquee/android/TraktScreen.kt :: .border(1.dp, Marquee.colors.edge, shape)
-apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: .border(1.dp, Marquee.colors.edge, shape)
-apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: .border(1.dp, colors.edge, shape)
-apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: .border(1.dp, Marquee.colors.edge, shape),
-apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: .then(if (white) Modifier else Modifier.border(2.dp, colors.control, shape))
-apps/android/app/src/main/kotlin/app/marquee/android/ProfileScreens.kt :: .border(2.dp, if (on) colors.text else colors.control, CircleShape),
-apps/android/app/src/main/kotlin/app/marquee/android/ProfileScreens.kt :: .border(2.dp, if (focused) colors.primary else colors.control, CircleShape)
-apps/android/app/src/main/kotlin/app/marquee/android/ProfileScreens.kt :: .border(if (focused) 4.dp else 2.dp, if (focused) colors.text else colors.control, shape),
-apps/android/app/src/main/kotlin/app/marquee/android/ProfileScreens.kt :: .border(1.dp, colors.edge, shape)
-apps/android/app/src/main/kotlin/app/marquee/android/BrowseScreens.kt :: .border(2.dp, if (focused) colors.accent else colors.control, shape)
-apps/android/app/src/main/kotlin/app/marquee/android/SettingsScreen.kt :: .border(1.dp, colors.edge, shape)
-apps/android/app/src/main/kotlin/app/marquee/android/SettingsScreen.kt :: .border(1.dp, colors.edge, shape)
-apps/android/app/src/main/kotlin/app/marquee/android/SettingsScreen.kt :: .border(1.dp, colors.edge, shape)
-apps/android/app/src/main/kotlin/app/marquee/android/Onboarding.kt :: .border(1.dp, colors.edge, shape)
-apps/android/app/src/main/kotlin/app/marquee/android/Onboarding.kt :: .border(2.dp, colors.control, shape)
-apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvHome.kt :: .border(1.dp, colors.edge, shape),
-apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvVersions.kt :: .border(1.dp, colors.edge, shape)
-apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvShell.kt :: .border(1.dp, colors.edge, pill)
-apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: .border(1.dp, colors.edge, shape)
 apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneHome.kt :: .border(1.dp, Marquee.colors.edge, RoundedCornerShape(Marquee.radius.hero))
-apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneTitle.kt :: .border(1.dp, colors.edge, card)
 apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneShell.kt :: .border(1.dp, colors.control, shape)
-apps/apple/Marquee/Settings/StreamChoiceScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous))
-apps/apple/Marquee/Settings/SettingsScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Settings/FindAddonsScreen.swift :: .foregroundStyle(Theme.Palette.accent)
-apps/apple/Marquee/Settings/FindAddonsScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Settings/FindAddonsScreen.swift :: .glass(RoundedRectangle(cornerRadius: metrics.wide ? Theme.Radius.l : Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Settings/FindAddonsScreen.swift :: .overlay(shape.strokeBorder(Theme.Palette.edge, lineWidth: 1))
-apps/apple/Marquee/Settings/FindAddonsScreen.swift :: if case .none = act { Glyph("check", size: Theme.type.headline).foregroundStyle(Theme.Palette.ok) }
-apps/apple/Marquee/Settings/PairingScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Settings/DebridScreen.swift :: .foregroundStyle(state == "Connected" ? Theme.Palette.ok : Theme.Palette.muted)
-apps/apple/Marquee/Settings/DebridScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Settings/AddonsScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Settings/HomeRowsScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Home/ContinueCard.swift :: Capsule().fill(Theme.Palette.accent).frame(width: geo.size.width * min(max(value, 0), 1))
-apps/apple/Marquee/Home/HomeScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Home/HeroView.swift :: .overlay { card.strokeBorder(Theme.Palette.edge, lineWidth: 1).allowsHitTesting(false) }
-apps/apple/Marquee/Home/HeroView.swift :: .foregroundStyle(Theme.Palette.accent)
-apps/apple/Marquee/Home/HeroView.swift :: Glyph("star-fill", size: size * 0.9, relativeTo: .callout).foregroundStyle(Theme.Palette.star)
+apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneTitle.kt :: .border(1.dp, colors.edge, card)
+apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: .border(1.dp, colors.edge, shape)
+apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvHome.kt :: .border(1.dp, colors.edge, shape),
+apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvShell.kt :: .border(1.dp, colors.edge, pill)
+apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvVersions.kt :: .border(1.dp, colors.edge, shape)
+apps/apple/Marquee/Account/AccountCard.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+apps/apple/Marquee/Account/AccountSections.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/App/RootView.swift :: .glass(Capsule(), shadow: true)
 apps/apple/Marquee/App/RootView.swift :: Circle().fill(Theme.Palette.accent).frame(width: size * 0.38, height: size * 0.38)
 apps/apple/Marquee/App/RootView.swift :: .glass(RoundedRectangle(cornerRadius: 24, style: .continuous), shadow: true)
 apps/apple/Marquee/App/RootView.swift :: .glass(Capsule(), shadow: true)
 apps/apple/Marquee/App/RootView.swift :: Capsule().fill(.white.opacity(0.12)).overlay(Capsule().strokeBorder(Theme.Palette.edge, lineWidth: 1))
+apps/apple/Marquee/Common/Browse.swift :: Glyph("star-fill", size: metrics.chip * 0.85, relativeTo: .caption2).foregroundStyle(Theme.Palette.star)
+apps/apple/Marquee/Common/Browse.swift :: .glass(Capsule(), strong: true)
+apps/apple/Marquee/Home/ContinueCard.swift :: Capsule().fill(Theme.Palette.accent).frame(width: geo.size.width * min(max(value, 0), 1))
+apps/apple/Marquee/Home/HeroView.swift :: .overlay { card.strokeBorder(Theme.Palette.edge, lineWidth: 1).allowsHitTesting(false) }
+apps/apple/Marquee/Home/HeroView.swift :: .foregroundStyle(Theme.Palette.accent)
+apps/apple/Marquee/Home/HeroView.swift :: Glyph("star-fill", size: size * 0.9, relativeTo: .callout).foregroundStyle(Theme.Palette.star)
+apps/apple/Marquee/Home/HomeScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+apps/apple/Marquee/Library/CalendarScreen.swift :: .foregroundStyle(day.date == today ? Theme.Palette.accent : Theme.Palette.text)
+apps/apple/Marquee/Library/CalendarScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+apps/apple/Marquee/Onboarding/OnboardingScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+apps/apple/Marquee/Onboarding/OnboardingScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+apps/apple/Marquee/Onboarding/OnboardingScreen.swift :: .overlay(shape.strokeBorder(Theme.Palette.edge, lineWidth: 1))
+apps/apple/Marquee/Onboarding/OnboardingScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+apps/apple/Marquee/Onboarding/OnboardingScreen.swift :: case .ok: Theme.Palette.ok
+apps/apple/Marquee/Onboarding/OnboardingScreen.swift :: case .warn: Theme.Palette.warn
+apps/apple/Marquee/Onboarding/OnboardingScreen.swift :: case .bad: Theme.Palette.bad
+apps/apple/Marquee/Player/PictureInPicture.swift :: view.activeTintColor = UIColor(Theme.Palette.accent)
+apps/apple/Marquee/Player/PlayerControls.swift :: .glass(Circle())
+apps/apple/Marquee/Player/PlayerControls.swift :: .glass(Circle())
+apps/apple/Marquee/Player/PlayerControls.swift :: .glass(Circle())
+apps/apple/Marquee/Player/PlayerControls.swift :: .glass(Capsule())
+apps/apple/Marquee/Player/PlayerControls.swift :: .glass(Circle())
+apps/apple/Marquee/Player/PlayerScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true)
+apps/apple/Marquee/Player/UpNextCard.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true, shadow: true)
+apps/apple/Marquee/Profiles/ManageProfiles.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+apps/apple/Marquee/Profiles/ManageProfiles.swift :: Button("Delete \(target.name)", role: .destructive) { delete(target) }
+apps/apple/Marquee/Profiles/ManageProfiles.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+apps/apple/Marquee/Profiles/PinKeypad.swift :: .overlay(Circle().strokeBorder(Theme.Palette.control, lineWidth: 1))
+apps/apple/Marquee/Profiles/ProfilePicker.swift :: .overlay(RoundedRectangle(cornerRadius: tile * 0.22, style: .continuous).strokeBorder(Theme.Palette.control))
+apps/apple/Marquee/Search/SearchScreen.swift :: .overlay(Capsule().strokeBorder(fieldFocused ? Theme.Palette.accent : Theme.Palette.control, lineWidth: fieldFocused ? 2 : 1))
+apps/apple/Marquee/Settings/AddonsScreen.swift :: Button("Remove", role: .destructive) {
+apps/apple/Marquee/Settings/AddonsScreen.swift :: Button("Remove", glyph: "trash", role: .destructive, action: remove)
+apps/apple/Marquee/Settings/AddonsScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+apps/apple/Marquee/Settings/DebridScreen.swift :: .foregroundStyle(state == "Connected" ? Theme.Palette.ok : Theme.Palette.muted)
+apps/apple/Marquee/Settings/DebridScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+apps/apple/Marquee/Settings/FindAddonsScreen.swift :: .foregroundStyle(Theme.Palette.accent)
+apps/apple/Marquee/Settings/FindAddonsScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+apps/apple/Marquee/Settings/FindAddonsScreen.swift :: .glass(RoundedRectangle(cornerRadius: metrics.wide ? Theme.Radius.l : Theme.Radius.card, style: .continuous))
+apps/apple/Marquee/Settings/FindAddonsScreen.swift :: .overlay(shape.strokeBorder(Theme.Palette.edge, lineWidth: 1))
+apps/apple/Marquee/Settings/FindAddonsScreen.swift :: if case .none = act { Glyph("check", size: Theme.type.headline).foregroundStyle(Theme.Palette.ok) }
+apps/apple/Marquee/Settings/HomeRowsScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+apps/apple/Marquee/Settings/PairingScreen.swift :: Button(SyncWords.replaceButton, role: .destructive) { start(confirmed: true) }
+apps/apple/Marquee/Settings/PairingScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+apps/apple/Marquee/Settings/SettingsScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+apps/apple/Marquee/Settings/StreamChoiceScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous))
+apps/apple/Marquee/Sync/SyncFlows.swift :: Button(W.replaceButton, role: .destructive) { submit(confirmed: true) }
+apps/apple/Marquee/Sync/SyncFlows.swift :: .background(Capsule().fill(configuration.isPressed ? AnyShapeStyle(Theme.Palette.raised) : AnyShapeStyle(Theme.controlFill)))
+apps/apple/Marquee/Sync/SyncFlows.swift :: .overlay(Capsule().strokeBorder(Theme.Palette.control, lineWidth: 1))
+apps/apple/Marquee/Sync/SyncFlows.swift :: Button(AccountRules.reportLostButton(drop.count), role: .destructive) { report() }
+apps/apple/Marquee/Sync/SyncFlows.swift :: Glyph(going ? "circle-check" : "circle-dashed").foregroundStyle(going ? Theme.Palette.bad : Theme.Palette.muted)
+apps/apple/Marquee/Sync/SyncFlows.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+apps/apple/Marquee/Sync/SyncFlows.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+apps/apple/Marquee/Sync/SyncFlows.swift :: Glyph(on ? "circle-check" : "circle-dashed").foregroundStyle(on ? Theme.Palette.bad : Theme.Palette.muted)
+apps/apple/Marquee/Sync/SyncFlows.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+apps/apple/Marquee/Sync/SyncFlows.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+apps/apple/Marquee/Sync/SyncScreen.swift :: Button("\(W.remove) \(SyncRules.memberName(member))", role: .destructive) { Task { await remove(member) } }
+apps/apple/Marquee/Sync/SyncScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+apps/apple/Marquee/Sync/SyncScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+apps/apple/Marquee/Sync/SyncScreen.swift :: Button(force ? W.leaveAnyway : W.leaveButton, role: .destructive) {
+apps/apple/Marquee/Sync/SyncScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+apps/apple/Marquee/Sync/SyncScreen.swift :: Button(W.deleteButton, role: .destructive) { Task { await delete() } }
+apps/apple/Marquee/Sync/SyncScreen.swift :: Button(W.leaveHere, role: .destructive) { Task { await go() } }
+apps/apple/Marquee/Sync/SyncScreen.swift :: Button(W.forgetHere, role: .destructive) { sync.forgetHere() }
+apps/apple/Marquee/Sync/SyncScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+apps/apple/Marquee/Sync/SyncScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+apps/apple/Marquee/Theme/Components.swift :: .foregroundStyle(card.lit && !onGlass ? Theme.Palette.accent : Theme.Palette.text)
+apps/apple/Marquee/Theme/Components.swift :: Capsule().fill(Theme.controlFill)
+apps/apple/Marquee/Theme/Components.swift :: if !prominent { Capsule().strokeBorder(Theme.Palette.control, lineWidth: edgeWidth) }
+apps/apple/Marquee/Theme/Components.swift :: .background(Circle().fill(on ? AnyShapeStyle(Color.white.opacity(0.22)) : AnyShapeStyle(Theme.controlFill)))
+apps/apple/Marquee/Theme/Components.swift :: .overlay(shape.strokeBorder(focused ? Theme.Palette.accent : Theme.Palette.control, lineWidth: focused ? 2 : 1))
+apps/apple/Marquee/Theme/Components.swift :: .foregroundStyle(enabled ? Theme.Palette.bad : Theme.Palette.muted)
+apps/apple/Marquee/Theme/Components.swift :: Capsule().fill(Theme.Palette.accent).frame(width: geo.size.width * min(max(value, 0), 1))
+apps/apple/Marquee/Theme/ThemeSupport.swift :: static let controlFill = LinearGradient(
+apps/apple/Marquee/Title/Credits.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/Title/EpisodeList.swift :: .overlay { Capsule().strokeBorder(selected ? .white.opacity(0.55) : Theme.Palette.control, lineWidth: edgeWidth) }
 apps/apple/Marquee/Title/EpisodeList.swift :: .background(Circle().fill(on ? AnyShapeStyle(Color.white.opacity(0.22)) : AnyShapeStyle(Theme.controlFill)))
 apps/apple/Marquee/Title/EpisodeList.swift :: .overlay(Circle().strokeBorder(on ? .white.opacity(0.55) : Theme.Palette.control, lineWidth: 1))
 apps/apple/Marquee/Title/EpisodeList.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Title/EpisodeList.swift :: .textFont(chip + 2, weight: .heavy, relativeTo: .caption)
 apps/apple/Marquee/Title/EpisodeList.swift :: .overlay(Capsule().strokeBorder(Theme.Palette.edge, lineWidth: 1))
 apps/apple/Marquee/Title/EpisodeList.swift :: Rectangle().fill(Theme.Palette.accent).frame(width: geo.size.width * min(max(progress, 0), 1))
-apps/apple/Marquee/Title/Credits.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/Trakt/TraktScreen.swift :: .foregroundStyle(Theme.Palette.accent)
 apps/apple/Marquee/Trakt/TraktScreen.swift :: Glyph("triangle-alert").foregroundStyle(Theme.Palette.warn)
 apps/apple/Marquee/Trakt/TraktScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/Trakt/TraktScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+apps/apple/Marquee/Trakt/TraktScreen.swift :: Button(W.signOut, role: .destructive) { Task { await signOut() } }
 apps/apple/Marquee/Trakt/TraktScreen.swift :: .tint(Theme.Palette.accent)
 apps/apple/Marquee/Trakt/TraktScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/Trakt/TraktScreen.swift :: .foregroundStyle(mark.warn ? Theme.Palette.warn : Theme.Palette.ok)
@@ -286,51 +339,3 @@ apps/apple/Marquee/Versions/VersionsScreen.swift :: .glass(RoundedRectangle(corn
 apps/apple/Marquee/Versions/VersionsScreen.swift :: case .ok: Theme.Palette.ok
 apps/apple/Marquee/Versions/VersionsScreen.swift :: case .warn: Theme.Palette.warn
 apps/apple/Marquee/Versions/VersionsScreen.swift :: case .bad: Theme.Palette.bad
-apps/apple/Marquee/Library/CalendarScreen.swift :: .foregroundStyle(day.date == today ? Theme.Palette.accent : Theme.Palette.text)
-apps/apple/Marquee/Library/CalendarScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Search/SearchScreen.swift :: .overlay(Capsule().strokeBorder(fieldFocused ? Theme.Palette.accent : Theme.Palette.control, lineWidth: fieldFocused ? 2 : 1))
-apps/apple/Marquee/Common/Browse.swift :: Glyph("star-fill", size: metrics.chip * 0.85, relativeTo: .caption2).foregroundStyle(Theme.Palette.star)
-apps/apple/Marquee/Common/Browse.swift :: .glass(Capsule(), strong: true)
-apps/apple/Marquee/Theme/ThemeSupport.swift :: static let controlFill = LinearGradient(
-apps/apple/Marquee/Theme/Components.swift :: .foregroundStyle(card.lit && !onGlass ? Theme.Palette.accent : Theme.Palette.text)
-apps/apple/Marquee/Theme/Components.swift :: Capsule().fill(Theme.controlFill)
-apps/apple/Marquee/Theme/Components.swift :: if !prominent { Capsule().strokeBorder(Theme.Palette.control, lineWidth: edgeWidth) }
-apps/apple/Marquee/Theme/Components.swift :: .background(Circle().fill(on ? AnyShapeStyle(Color.white.opacity(0.22)) : AnyShapeStyle(Theme.controlFill)))
-apps/apple/Marquee/Theme/Components.swift :: .overlay(shape.strokeBorder(focused ? Theme.Palette.accent : Theme.Palette.control, lineWidth: focused ? 2 : 1))
-apps/apple/Marquee/Theme/Components.swift :: .foregroundStyle(enabled ? Theme.Palette.bad : Theme.Palette.muted)
-apps/apple/Marquee/Theme/Components.swift :: Capsule().fill(Theme.Palette.accent).frame(width: geo.size.width * min(max(value, 0), 1))
-apps/apple/Marquee/Profiles/ManageProfiles.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Profiles/ManageProfiles.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Profiles/ProfilePicker.swift :: .overlay(RoundedRectangle(cornerRadius: tile * 0.22, style: .continuous).strokeBorder(Theme.Palette.control))
-apps/apple/Marquee/Profiles/PinKeypad.swift :: .textFont(size * 0.46, weight: .heavy)
-apps/apple/Marquee/Profiles/PinKeypad.swift :: .overlay(Circle().strokeBorder(Theme.Palette.control, lineWidth: 1))
-apps/apple/Marquee/Sync/SyncFlows.swift :: .background(Capsule().fill(configuration.isPressed ? AnyShapeStyle(Theme.Palette.raised) : AnyShapeStyle(Theme.controlFill)))
-apps/apple/Marquee/Sync/SyncFlows.swift :: .overlay(Capsule().strokeBorder(Theme.Palette.control, lineWidth: 1))
-apps/apple/Marquee/Sync/SyncFlows.swift :: Glyph(going ? "circle-check" : "circle-dashed").foregroundStyle(going ? Theme.Palette.bad : Theme.Palette.muted)
-apps/apple/Marquee/Sync/SyncFlows.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Sync/SyncFlows.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Sync/SyncFlows.swift :: Glyph(on ? "circle-check" : "circle-dashed").foregroundStyle(on ? Theme.Palette.bad : Theme.Palette.muted)
-apps/apple/Marquee/Sync/SyncFlows.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Sync/SyncFlows.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Sync/SyncScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Sync/SyncScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Sync/SyncScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Sync/SyncScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Sync/SyncScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Account/AccountSections.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Account/AccountCard.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Onboarding/OnboardingScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Onboarding/OnboardingScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Onboarding/OnboardingScreen.swift :: .overlay(shape.strokeBorder(Theme.Palette.edge, lineWidth: 1))
-apps/apple/Marquee/Onboarding/OnboardingScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Onboarding/OnboardingScreen.swift :: case .ok: Theme.Palette.ok
-apps/apple/Marquee/Onboarding/OnboardingScreen.swift :: case .warn: Theme.Palette.warn
-apps/apple/Marquee/Onboarding/OnboardingScreen.swift :: case .bad: Theme.Palette.bad
-apps/apple/Marquee/Player/PlayerControls.swift :: .glass(Circle())
-apps/apple/Marquee/Player/PlayerControls.swift :: .glass(Circle())
-apps/apple/Marquee/Player/PlayerControls.swift :: .glass(Circle())
-apps/apple/Marquee/Player/PlayerControls.swift :: .glass(Capsule())
-apps/apple/Marquee/Player/PlayerControls.swift :: .glass(Circle())
-apps/apple/Marquee/Player/PictureInPicture.swift :: view.activeTintColor = UIColor(Theme.Palette.accent)
-apps/apple/Marquee/Player/PlayerScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true)
-apps/apple/Marquee/Player/UpNextCard.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true, shadow: true)
