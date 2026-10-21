@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { airDate, bytes, clock, delayText, startsText, episodeLabel, groupFailures, parseVideo, playPath, ratingParts, releaseParts, runtimeMinutes } from "./format";
+import { airDate, bytes, clock, delayText, startsText, episodeLabel, groupFailures, parseVideo, playPath, posterLabel, ratingParts, releaseParts, runtimeMinutes } from "./format";
 
 test("bytes are 1024-based, as addons print sizes", () => {
   expect(bytes(5368709120)).toBe("5 GB");
@@ -92,4 +92,8 @@ test("ratings sit side by side as plain text, and a missing score has no slot", 
   // A screen reader says the names, not "R T".
   expect(ratingParts({ imdb: "10.0", rottenTomatoes: "100%" }).map((p) => p.spoken)).toEqual(["IMDb 10.0", "Rotten Tomatoes 100 percent"]);
   expect(ratingParts({ imdb: null, rottenTomatoes: "Fresh" }).map((p) => p.spoken)).toEqual(["Rotten Tomatoes: Fresh"]);
+  // A poster speaks the scores its chip shows.
+  expect(posterLabel(["Inception", "2010"], { imdb: "8.8", rottenTomatoes: "Fresh" })).toBe("Inception, 2010, IMDb 8.8, Rotten Tomatoes: Fresh");
+  expect(posterLabel(["Inception", null], { imdb: null, rottenTomatoes: "87%" })).toBe("Inception, Rotten Tomatoes 87 percent");
+  expect(posterLabel(["Inception"], null)).toBe("Inception");
 });

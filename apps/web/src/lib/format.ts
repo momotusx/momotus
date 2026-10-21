@@ -28,6 +28,12 @@ export function ratingParts(r: Ratings | null | undefined): { text: string; spok
   return parts;
 }
 
+/** What a screen reader says for a poster: its name and caption, then the
+ * scores its chip shows ("Inception, 2010, IMDb 8.8, Rotten Tomatoes: Fresh"). */
+export function posterLabel(parts: (string | null | undefined)[], r: Ratings | null | undefined): string {
+  return [...parts.filter((p): p is string => !!p), ...ratingParts(r).map((p) => p.spoken)].join(", ");
+}
+
 /** 161 -> "2:41", 3725 -> "1:02:05". */
 export function clock(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));

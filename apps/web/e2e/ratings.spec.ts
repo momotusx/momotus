@@ -216,6 +216,8 @@ for (const form of Object.keys(FORMS) as Form[]) {
     if (form === "phone") expect(freshPair[1]!.top).toBeGreaterThan(freshPair[0]!.top);
     else expect(Math.abs(freshPair[1]!.middle - freshPair[0]!.middle)).toBeLessThanOrEqual(1);
     measure(form, "poster chip, RT Fresh", { chip: freshChip.width, poster: freshChip.outer, parts: freshPair.map((p) => p.width) });
+    // The chip is hidden from screen readers; the poster's label speaks its scores.
+    await expect(page.locator(".tile", { hasText: "Fresh widest" }).first()).toHaveAttribute("aria-label", /IMDb 10\.0, Rotten Tomatoes: Fresh$/);
 
     // The hero: side by side, one line each.
     const hero = await scores(page, ".hero-body .meta .rate > [aria-hidden]", ".hero-body");
@@ -246,14 +248,15 @@ for (const form of Object.keys(FORMS) as Form[]) {
     measure(form, "title page", title.map((t) => t.width));
     await page.screenshot({ path: `${SHOTS}/ratings-title-${form}.jpg`, type: "jpeg", quality: 80 });
 
-    // A title with the mark: the same meta line, the spoken word, the addon's credit.
+    // A title with the mark: the same meta line, the spoken word, each source credited (MDBList
+    // gave its IMDb score).
     await page.goto(`/title/movie/${FRESH[0]!.id}?form=${form}`);
     await expect(page.locator(".info .meta .rate > [aria-hidden]").nth(1)).toHaveText("RT Fresh", { timeout: 30_000 });
     const freshTitle = await scores(page, ".info .meta .rate > [aria-hidden]", ".info");
     for (const t of freshTitle) expect(t, JSON.stringify(t)).toMatchObject({ lines: 1, cut: false, inside: true });
     expect(Math.abs(freshTitle[1]!.middle - freshTitle[0]!.middle)).toBeLessThanOrEqual(1);
     await expect(page.locator(".info .meta span.rate .sr")).toHaveText(form === "tv" ? ["IMDb 10.0", "Rotten Tomatoes: Fresh"] : ["Rotten Tomatoes: Fresh"]);
-    await expect(page.locator(".facts div", { hasText: "Ratings from" })).toContainText("IMDb and Rotten Tomatoes (the Rotten Tomatoes addon)");
+    await expect(page.locator(".facts div", { hasText: "Ratings from" })).toContainText("IMDb via MDBList, Rotten Tomatoes (the Rotten Tomatoes addon)");
     measure(form, "title page, RT Fresh", freshTitle.map((t) => t.width));
 
     // Search: the meta line keeps every score whole.

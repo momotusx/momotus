@@ -16,7 +16,7 @@ import type { Tile as TileData } from "../core/generated/Tile";
 import { op } from "../core/client";
 import { onProfileReset } from "../core/profiles";
 import { form } from "../form";
-import { pct, ratingParts, titlePath } from "../lib/format";
+import { pct, posterLabel, ratingParts, titlePath } from "../lib/format";
 import { caption } from "../lib/words";
 import { visibleRange } from "../lib/range";
 
@@ -82,7 +82,8 @@ export function TileCard(props: {
       data-f={props.fkey}
       data-index={props.index}
       data-autofocus={props.autofocus ? "" : undefined}
-      aria-label={cap() ? `${props.tile.name}, ${cap()}` : props.tile.name}
+      /* The chip is hidden from screen readers: the label speaks its scores. */
+      aria-label={posterLabel([props.tile.name, cap()], props.wide ? null : props.tile.ratings)}
       style={slotted ? { width: `${props.w}px` } : { width: `${props.w}px`, ...props.style }}
       onClick={() => props.onOpen?.()}
     >
