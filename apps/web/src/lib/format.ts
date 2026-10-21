@@ -13,14 +13,17 @@ export function bytes(n: number): string {
 }
 
 /** A title's scores side by side as plain text, the source first: "IMDb 8.8",
- * "RT 87%", with what a screen reader says ("Rotten Tomatoes 87 percent"). A
- * score the core left null has no slot, and the brands' logos and icons never
- * appear (plans/research/ratings.md). */
+ * "RT 87%", "RT Fresh", with what a screen reader says ("Rotten Tomatoes 87
+ * percent", "Rotten Tomatoes: Fresh"). A score the core left null has no slot,
+ * and the brands' logos and icons never appear (plans/research/ratings.md). */
 export function ratingParts(r: Ratings | null | undefined): { text: string; spoken: string; imdb: boolean }[] {
   const parts: { text: string; spoken: string; imdb: boolean }[] = [];
   if (r?.imdb) parts.push({ text: `IMDb ${r.imdb}`, spoken: `IMDb ${r.imdb}`, imdb: true });
-  if (r?.rottenTomatoes) {
-    parts.push({ text: `RT ${r.rottenTomatoes}`, spoken: `Rotten Tomatoes ${r.rottenTomatoes.replace("%", " percent")}`, imdb: false });
+  const rt = r?.rottenTomatoes;
+  if (rt) {
+    // "Fresh" is the Rotten Tomatoes addon's mark: a word, not a number.
+    const spoken = /^\d+%$/.test(rt) ? `Rotten Tomatoes ${rt.replace("%", " percent")}` : `Rotten Tomatoes: ${rt}`;
+    parts.push({ text: `RT ${rt}`, spoken, imdb: false });
   }
   return parts;
 }

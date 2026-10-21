@@ -82,6 +82,8 @@ test("ratings sit side by side as plain text, and a missing score has no slot", 
   expect(text({ imdb: "8.8", rottenTomatoes: "87%" })).toEqual(["IMDb 8.8", "RT 87%"]);
   expect(text({ imdb: "8.8", rottenTomatoes: null })).toEqual(["IMDb 8.8"]);
   expect(text({ imdb: null, rottenTomatoes: "0%" })).toEqual(["RT 0%"]);
+  // The Rotten Tomatoes addon's mark has no number.
+  expect(text({ imdb: "8.8", rottenTomatoes: "Fresh" })).toEqual(["IMDb 8.8", "RT Fresh"]);
   expect(text({ imdb: null, rottenTomatoes: null })).toEqual([]);
   // A recording from before the field: nothing, never a placeholder.
   expect(text(undefined)).toEqual([]);
@@ -89,4 +91,5 @@ test("ratings sit side by side as plain text, and a missing score has no slot", 
   expect(ratingParts({ imdb: "8.8", rottenTomatoes: "87%" }).map((p) => p.imdb)).toEqual([true, false]);
   // A screen reader says the names, not "R T".
   expect(ratingParts({ imdb: "10.0", rottenTomatoes: "100%" }).map((p) => p.spoken)).toEqual(["IMDb 10.0", "Rotten Tomatoes 100 percent"]);
+  expect(ratingParts({ imdb: null, rottenTomatoes: "Fresh" }).map((p) => p.spoken)).toEqual(["Rotten Tomatoes: Fresh"]);
 });

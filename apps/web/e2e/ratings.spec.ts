@@ -1,8 +1,10 @@
 /** IMDb and Rotten Tomatoes side by side (plans/research/ratings.md) on a core of its own whose
  * MDBList is a local fake (MQ_DEV_MDBLIST): the widest scores there are ("IMDb 10.0", "RT 100%")
  * never wrap or get cut, on posters, the hero, the title page and search, in every form. On a
- * phone poster the two stack as two lines; everywhere else they sit side by side. The measured
- * widths are printed as `ratings-measure` lines for bench/core/ratings.jsonl. */
+ * phone poster the two stack as two lines; everywhere else they sit side by side. A fake of the
+ * Rotten Tomatoes addon lists two titles MDBList gives no Tomatometer, so they show its mark,
+ * "RT Fresh", under the same rules. The measured widths are printed as `ratings-measure` lines
+ * for bench/core/ratings.jsonl. */
 
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import type { ChildProcess } from "node:child_process";
@@ -25,13 +27,18 @@ const TITLES = [
   { id: "tt9200100", name: "Only IMDb", imdb: 7.4, tomatoes: null },
   { id: "tt9200101", name: "Only RT", imdb: null, tomatoes: 0 },
   { id: "tt9200102", name: "No scores", imdb: null, tomatoes: null },
+  // On the Rotten Tomatoes addon's list.
+  { id: "tt9200103", name: "Fresh widest", imdb: 10, tomatoes: null },
+  { id: "tt9200104", name: "Fresh only", imdb: null, tomatoes: null },
   ...Array.from({ length: 8 }, (_, i) => widest(i + 1)),
 ];
 const MAX = TITLES[0]!;
+const FRESH = TITLES.filter((t) => t.name.startsWith("Fresh"));
 
 let core: { proc: ChildProcess; data: string } | null = null;
 let addon: Server | null = null;
 let mdblist: Server | null = null;
+let rt: Server | null = null;
 
 const listen = (server: Server) => new Promise<Server>((ok) => server.listen(0, "127.0.0.1", () => ok(server)));
 
@@ -74,6 +81,25 @@ function localAddon(): Promise<Server> {
   );
 }
 
+/** The Rotten Tomatoes addon: its list, as is and by its one genre, names the FRESH titles. */
+function fakeRt(): Promise<Server> {
+  return listen(
+    createServer((req, res) => {
+      const json = (body: unknown) => {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify(body));
+      };
+      if (req.url === "/manifest.json") {
+        const catalogs = [{ type: "movie", id: "rtfresh_movie", name: "RT: Certified Fresh", extra: [{ name: "genre", isRequired: false, options: ["Drama"] }] }];
+        return json({ id: "pw.ers.rottentomatoes", version: "1.0.9", name: "Rotten Tomatoes", resources: ["catalog"], types: ["movie"], idPrefixes: ["tt"], catalogs });
+      }
+      if (req.url?.startsWith("/catalog/movie/rtfresh_movie")) return json({ metas: FRESH.map((t) => ({ id: t.id, type: "movie", name: t.name })) });
+      res.writeHead(404);
+      res.end();
+    }),
+  );
+}
+
 /** MDBList's batch call, answering from TITLES. */
 function fakeMdblist(): Promise<Server> {
   return listen(
@@ -94,10 +120,12 @@ function fakeMdblist(): Promise<Server> {
 test.beforeAll(async () => {
   addon = await localAddon();
   mdblist = await fakeMdblist();
+  rt = await fakeRt();
   core = await startBridge(RATINGS_PORT, { MQ_DEV_MDBLIST: `http://127.0.0.1:${(mdblist.address() as AddressInfo).port}` });
   const c = new Client(`ws://127.0.0.1:${RATINGS_PORT}/ws`);
   try {
     await c.req("installAddon", { url: `http://127.0.0.1:${(addon.address() as AddressInfo).port}/manifest.json` });
+    await c.req("installAddon", { url: `http://127.0.0.1:${(rt.address() as AddressInfo).port}/manifest.json` });
     await c.req("setPrefs", { patch: { defaultsSeen: 1 } });
   } finally {
     c.close();
@@ -108,6 +136,7 @@ test.afterAll(() => {
   if (core) cleanup(core.proc, core.data);
   addon?.close();
   mdblist?.close();
+  rt?.close();
 });
 
 async function open(browser: Browser, form: Form): Promise<Page> {
@@ -160,6 +189,7 @@ for (const form of Object.keys(FORMS) as Form[]) {
     await page.goto(`/?form=${form}`);
     const chips = page.locator(".tile .chip-rate");
     await expect(chips.filter({ hasText: "RT 100%" }).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator(".tile", { hasText: "Fresh widest" }).first().locator(".chip-rate")).toHaveText("IMDb 10.0RT Fresh", { timeout: 30_000 });
 
     // Posters: the chip and each of its scores.
     const chipBoxes = await scores(page, ".tile .chip-rate", ".pic");
@@ -175,7 +205,17 @@ for (const form of Object.keys(FORMS) as Form[]) {
     // A score MDBList did not give has no slot.
     await expect(page.locator(".tile", { hasText: "No scores" }).locator(".chip-rate")).toHaveCount(0);
     await expect(page.locator(".tile", { hasText: "Only IMDb" }).locator(".chip-rate")).toHaveText("IMDb 7.4");
+    await expect(page.locator(".tile", { hasText: "Fresh only" }).first().locator(".chip-rate")).toHaveText("RT Fresh");
     measure(form, "poster chip", { chip: widest.width, poster: widest.outer, parts: pair.map((p) => p.width) });
+    // The mark: a word, stacked on a phone poster and side by side elsewhere, never cut.
+    const freshChip = (await scores(page, '.tile:has-text("Fresh widest") .chip-rate', ".pic"))[0]!;
+    const freshPair = (await scores(page, '.tile:has-text("Fresh widest") .chip-rate > span', ".chip-rate")).slice(0, 2);
+    expect(freshPair.map((p) => p.text)).toEqual(["IMDb 10.0", "RT Fresh"]);
+    expect(freshChip, JSON.stringify(freshChip)).toMatchObject({ inside: true, cut: false });
+    for (const part of freshPair) expect(part, JSON.stringify(part)).toMatchObject({ lines: 1, cut: false, inside: true });
+    if (form === "phone") expect(freshPair[1]!.top).toBeGreaterThan(freshPair[0]!.top);
+    else expect(Math.abs(freshPair[1]!.middle - freshPair[0]!.middle)).toBeLessThanOrEqual(1);
+    measure(form, "poster chip, RT Fresh", { chip: freshChip.width, poster: freshChip.outer, parts: freshPair.map((p) => p.width) });
 
     // The hero: side by side, one line each.
     const hero = await scores(page, ".hero-body .meta .rate > [aria-hidden]", ".hero-body");
@@ -206,6 +246,16 @@ for (const form of Object.keys(FORMS) as Form[]) {
     measure(form, "title page", title.map((t) => t.width));
     await page.screenshot({ path: `${SHOTS}/ratings-title-${form}.jpg`, type: "jpeg", quality: 80 });
 
+    // A title with the mark: the same meta line, the spoken word, the addon's credit.
+    await page.goto(`/title/movie/${FRESH[0]!.id}?form=${form}`);
+    await expect(page.locator(".info .meta .rate > [aria-hidden]").nth(1)).toHaveText("RT Fresh", { timeout: 30_000 });
+    const freshTitle = await scores(page, ".info .meta .rate > [aria-hidden]", ".info");
+    for (const t of freshTitle) expect(t, JSON.stringify(t)).toMatchObject({ lines: 1, cut: false, inside: true });
+    expect(Math.abs(freshTitle[1]!.middle - freshTitle[0]!.middle)).toBeLessThanOrEqual(1);
+    await expect(page.locator(".info .meta span.rate .sr")).toHaveText(form === "tv" ? ["IMDb 10.0", "Rotten Tomatoes: Fresh"] : ["Rotten Tomatoes: Fresh"]);
+    await expect(page.locator(".facts div", { hasText: "Ratings from" })).toContainText("IMDb and Rotten Tomatoes (the Rotten Tomatoes addon)");
+    measure(form, "title page, RT Fresh", freshTitle.map((t) => t.width));
+
     // Search: the meta line keeps every score whole.
     await page.goto(`/search?form=${form}`);
     const field = page.locator('[data-f="search:input"]');
@@ -218,6 +268,12 @@ for (const form of Object.keys(FORMS) as Form[]) {
     for (const h of hit.slice(0, 2)) expect(h, JSON.stringify(h)).toMatchObject({ lines: 1, cut: false, inside: true });
     await expect(page.locator(".hit-meta").first().locator(".rate .sr")).toHaveText(["IMDb 10.0", "Rotten Tomatoes 100 percent"]);
     measure(form, "search hit", meta);
+    const freshHit = page.locator(".hit-meta", { hasText: "RT Fresh" }).first();
+    await expect(freshHit).toBeVisible({ timeout: 30_000 });
+    const freshMeta = await freshHit.evaluate((el) => ({ width: el.clientWidth, needs: el.scrollWidth }));
+    expect(freshMeta.needs, JSON.stringify(freshMeta)).toBeLessThanOrEqual(freshMeta.width);
+    await expect(freshHit.locator(".rate .sr")).toHaveText(["IMDb 10.0", "Rotten Tomatoes: Fresh"]);
+    measure(form, "search hit, RT Fresh", freshMeta);
     await page.context().close();
   });
 }
