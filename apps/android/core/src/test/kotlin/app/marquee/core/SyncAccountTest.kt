@@ -306,7 +306,7 @@ class SyncAccountTest {
             val store = Store(null)
             val saved = CopyOnWriteArrayList<Boolean>()
             val sync = SyncAccount(CoreOps(client), store, scope, io = Dispatchers.IO, saveRecovered = { saved += it })
-            answers["recover"] = { ok(record(1).toString()) }
+            answers["recover"] = { ok("""{"record":${record(1)},"via":"kit"}""") }
             sync.recover("https://sync.example.org", "KIT", "Phone")
             assertTrue(sync.joined)
             assertTrue(sync.recovered)

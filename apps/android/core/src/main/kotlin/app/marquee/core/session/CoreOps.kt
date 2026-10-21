@@ -351,13 +351,20 @@ class CoreOps(
     suspend fun createRecoveryKit(record: SyncRecord): RecoveryKitResult =
         call("createRecoveryKit", mapOf("record" to record), RecoveryKitResult.serializer())
 
-    /** Joins the account a recovery kit belongs to; returns the record to store (then make a new kit). */
+    /**
+     * Joins the account a recovery kit belongs to; returns the record to store (then make a new kit). The
+     * answer is `{record, via}`: `via` says the way in, which with a kit is always `kit`.
+     */
     suspend fun recover(
         server: String,
         kit: String,
         name: String,
     ): SyncRecord =
-        client.request("recover", mapOf("server" to text(server), "kit" to text(kit), "name" to text(name))).jsonObject
+        client
+            .request("recover", mapOf("server" to text(server), "kit" to text(kit), "name" to text(name)))
+            .jsonObject
+            .getValue("record")
+            .jsonObject
 
     /** The account's members, fingerprint and epoch. A changed `record` in the reply must be stored. */
     suspend fun syncDevices(record: SyncRecord): Devices =

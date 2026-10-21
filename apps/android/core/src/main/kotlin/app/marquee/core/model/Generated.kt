@@ -332,10 +332,12 @@ data class Devices(
     val fingerprint: String,
     val epoch: Int,
     val rotationPending: Boolean,
+    /** The account id, base64url without padding: a saved passkey's `user.id` (3.1), as WebAuthn and Credential Manager take it. */
+    val account: String = "",
     val record: SyncRecord? = null,
 ) {
     // Holds keys or a token: never printed.
-    override fun toString() = "Devices(members=$members, fingerprint=$fingerprint, epoch=$epoch, rotationPending=$rotationPending, record=${record?.let { "hidden" }})"
+    override fun toString() = "Devices(members=$members, fingerprint=$fingerprint, epoch=$epoch, rotationPending=$rotationPending, account=$account, record=${record?.let { "hidden" }})"
 }
 
 @Serializable
@@ -764,7 +766,7 @@ data class LostPreview(
     val passkeyJoined: List<String> = emptyList(),
     /** Every kit that goes when the lost device and all of `devices` go, every passkey kit among them, whoever added it. */
     val kits: List<String> = emptyList(),
-    /** The kits each of `devices` made: they stay with a device the user unticks, and go with it otherwise. */
+    /** The recovery kits each of `devices` made: they stay with a device the user unticks, and go with it otherwise. Passkey kits go whatever is unticked. */
     val deviceKits: List<DeviceKits> = emptyList(),
 )
 

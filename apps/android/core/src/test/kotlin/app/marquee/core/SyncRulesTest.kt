@@ -42,6 +42,10 @@ class SyncRulesTest {
         // Before the profiles arrive, or for a profile that is gone: not shown.
         assertFalse(SyncRules.mayDeleteAccount(null))
         assertFalse(SyncRules.mayDeleteAccount(snapshot("nobody")))
+        // A kit is a copy of the whole account key: the owner's to make (D17).
+        assertTrue(SyncRules.mayMakeKit(snapshot("default")))
+        assertFalse(SyncRules.mayMakeKit(snapshot("kid")))
+        assertFalse(SyncRules.mayMakeKit(null))
     }
 
     @Test

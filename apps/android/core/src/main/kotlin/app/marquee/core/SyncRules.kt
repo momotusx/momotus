@@ -15,6 +15,9 @@ object SyncRules {
     fun mayDeleteAccount(snapshot: ProfilesSnapshot?) =
         snapshot?.profiles?.firstOrNull { it.id == snapshot.active }?.isOwner == true
 
+    /** Make a recovery kit shows on the owner profile only: a kit is a copy of the whole account key (D17). */
+    fun mayMakeKit(snapshot: ProfilesSnapshot?) = mayDeleteAccount(snapshot)
+
     /** A pairing code as the new device shows it; any other QR in view is ignored. */
     fun isPairingCode(text: String) = text.trim().startsWith("marquee:pair?")
 

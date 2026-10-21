@@ -68,6 +68,7 @@ const DEFAULTED = new Map([
   // Accounts phase 1c: passkey kits and the devices that joined through one.
   ["MemberInfo.passkey", "false"],
   ["MemberInfo.viaPasskey", "false"],
+  ["Devices.account", "\"\""],
 ]);
 const INT = new Set([
   "overCount",

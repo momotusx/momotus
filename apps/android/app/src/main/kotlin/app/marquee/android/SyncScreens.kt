@@ -369,6 +369,8 @@ fun SyncScreen(
     onCompare: () -> Unit,
     /** The session runs the owner profile: only it deletes the account (D15). */
     canDelete: Boolean,
+    /** The owner profile again: only it makes a recovery kit, a copy of the account key (D17). */
+    canMakeKit: Boolean,
 ) {
     val tv = Marquee.form == Form.Tv
     var left by remember { mutableStateOf(false) }
@@ -403,7 +405,8 @@ fun SyncScreen(
                 key = "recover",
             ) { LinkRow(Icons.LifeBuoy, SyncCopy.RECOVER_TITLE, SyncCopy.RECOVER_TEXT, { onJoin(true) }) }
         } else {
-            joined(sync, tv, onAdd, onKit, onLost, onCompare, onLeft = { left = true }, addFocus, canDelete)
+            val kit = onKit.takeIf { canMakeKit }
+            joined(sync, tv, onAdd, kit, onLost, onCompare, onLeft = { left = true }, addFocus, canDelete)
         }
     }
 }
@@ -412,7 +415,8 @@ private fun LazyListScope.joined(
     sync: SyncController,
     tv: Boolean,
     onAdd: () -> Unit,
-    onKit: () -> Unit,
+    /** Null off the owner profile: no kit row, no Make a new kit (D17). */
+    onKit: (() -> Unit)?,
     onLost: (String) -> Unit,
     onCompare: () -> Unit,
     onLeft: () -> Unit,
@@ -426,10 +430,10 @@ private fun LazyListScope.joined(
             LinkRow(Icons.QrCode, SyncCopy.ADD_TITLE, if (tv) SyncCopy.TV_ADD else SyncCopy.ADD_TEXT, onAdd)
         }
     }
-    if (tv) {
-        item(key = "kit") { ElsewhereRow(Icons.KeyRound, SyncCopy.KIT_TITLE, SyncCopy.TV_KIT) }
-    } else {
-        item(key = "kit") { LinkRow(Icons.KeyRound, SyncCopy.KIT_TITLE, SyncCopy.KIT_TEXT, onKit) }
+    when {
+        onKit == null -> Unit
+        tv -> item(key = "kit") { ElsewhereRow(Icons.KeyRound, SyncCopy.KIT_TITLE, SyncCopy.TV_KIT) }
+        else -> item(key = "kit") { LinkRow(Icons.KeyRound, SyncCopy.KIT_TITLE, SyncCopy.KIT_TEXT, onKit) }
     }
     // A stuck device's way out is in the state card; a plain stop would only fail again. Deleting needs
     // only the relay's token, so it stays, a fork included: that is where someone who wants out looks.
@@ -532,7 +536,8 @@ private fun StateCard(
 private fun DeviceList(
     sync: SyncController,
     onLost: (String) -> Unit,
-    onKit: () -> Unit,
+    /** Null off the owner profile (D17). */
+    onKit: (() -> Unit)?,
     afterList: FocusRequester,
 ) {
     val tv = Marquee.form == Form.Tv
@@ -562,12 +567,14 @@ private fun DeviceList(
         // Shown until the user says it is saved: nobody holds it yet.
         if (sync.heldKit != null) {
             Callout(Icons.KeyRound, SyncCopy.KIT_WAITING)
-            SecondaryButton(SyncCopy.SHOW_KIT, onKit, icon = Icons.KeyRound)
+            if (onKit != null) SecondaryButton(SyncCopy.SHOW_KIT, onKit, icon = Icons.KeyRound)
         }
         // A kit is listed, but nobody holds it: the page never reads as if one were saved.
         if (sync.unseenKits.isNotEmpty()) {
             Callout(Icons.TriangleAlert, if (sync.kitExpired) SyncCopy.KIT_EXPIRED else SyncCopy.KIT_UNSEEN)
-            if (!tv && sync.heldKit == null) SecondaryButton(SyncCopy.MAKE_NEW_KIT, onKit, icon = Icons.KeyRound)
+            if (!tv && sync.heldKit == null && onKit != null) {
+                SecondaryButton(SyncCopy.MAKE_NEW_KIT, onKit, icon = Icons.KeyRound)
+            }
         }
         when {
             sync.heldKit != null || sync.unseenKits.isNotEmpty() -> {

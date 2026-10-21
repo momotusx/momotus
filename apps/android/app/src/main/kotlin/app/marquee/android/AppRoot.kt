@@ -507,6 +507,7 @@ private fun AppNav(
                             onLost = { backStack.add(Route.ReportLost(it)) },
                             onCompare = { backStack.add(Route.SyncFork) },
                             canDelete = SyncRules.mayDeleteAccount(gate.snapshot),
+                            canMakeKit = SyncRules.mayMakeKit(gate.snapshot),
                         )
                     }
                     entry<Route.SyncFork> { ForkScreen(sync, onDone = ::pop) }
