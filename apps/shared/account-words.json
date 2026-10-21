@@ -1,0 +1,12 @@
+{
+  "announceDevice": "A new device joined: {name}.",
+  "announcePasskey": "A passkey was added on {device}.",
+  "announceKit": "A recovery kit was made on {device}.",
+  "announceRemoved": "{name} was removed from your account on {device}.",
+  "announceRemovedPasskey": "A passkey was removed from your account on {device}.",
+  "announceRemovedKit": "A recovery kit was removed from your account on {device}.",
+  "announceLeft": "{name} signed out of your account.",
+  "announceGoneDevice": "a device no longer in your account",
+  "announceNotYou": "Not you? Remove this passkey",
+  "announceOk": "OK"
+}
