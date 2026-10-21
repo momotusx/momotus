@@ -23,10 +23,13 @@ test("a return counts only from this page's sync service, and names its flow", (
   expect(readReturn("#flow=f1&relay=sync.example.org", relay)).toBeNull();
 });
 
-test("Apple's flow revokes as it signs in; the others sign in", () => {
+test("Apple's flow revokes as it signs in, and the page says so before its button; the others sign in", () => {
   expect(purposeOf("apple")).toBe("revoke");
   expect(purposeOf("google")).toBe("signin");
   expect(purposeOf("facebook")).toBe("signin");
+  const html = read("delete/index.html");
+  expect(html.indexOf('id="apple-note"')).toBeGreaterThan(0);
+  expect(html.indexOf('id="apple-note"')).toBeLessThan(html.indexOf('data-provider="apple"'));
 });
 
 test("the pages run no inline script or style, and each policy names only what it needs", () => {
