@@ -429,14 +429,17 @@ struct SubtitleTrack: Decodable, Hashable, Sendable, Identifiable {
     var language: String?
     /// Its English name, the heading of its group ("Portuguese (Brazil)").
     var languageName: String?
-    /// What tells it from the other tracks of its language: the release, else
-    /// the source, numbered when two would read the same.
+    /// What tells it from the other tracks of its language: the group, source
+    /// and resolution its release text names ("CAKES, WEB 1080p"), else the
+    /// text, else the source, numbered when two would read the same.
     var name: String?
     /// The language's own name ("Türkçe", "Português (Brasil)"); older cores send none.
     var nativeName: String?
-    /// The track names the playing release's group: "Made for this release";
+    /// The track names the playing release's group: "Same release group";
     /// older cores send none.
     var fits: Bool?
+    /// The release text the addon names, for a detail line; older cores send none.
+    var release: String?
 
     var id: String { url }
 }

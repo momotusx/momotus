@@ -213,9 +213,10 @@ private func playback(_ extra: String) throws -> PlaybackSnapshot {
         return try JSONDecoder().decode(SubtitleTrack.self, from: Data(json.utf8))
     }
     let before = try track("")
-    #expect(before.nativeName == nil && before.fits == nil)
-    let now = try track(#", "nativeName": "Türkçe", "fits": true"#)
+    #expect(before.nativeName == nil && before.fits == nil && before.release == nil)
+    let now = try track(#", "nativeName": "Türkçe", "fits": true, "release": "Film.2020.1080p.WEB-FLUX-hi""#)
     #expect(now.nativeName == "Türkçe" && now.fits == true)
+    #expect(now.release == "Film.2020.1080p.WEB-FLUX-hi")
 }
 
 @Test func foregroundSaysWhenTheStreamServerMoved() throws {
