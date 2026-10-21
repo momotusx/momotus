@@ -1901,17 +1901,23 @@ pub fn cached_on_disk(
     let hex = hex_hash(info_hash.trim())?;
     let dir = data_dir.join(&hex);
     // A list of rows asks again and again: an answer stands while the
-    // folder's details, bitfield and data folder have not changed.
-    let stamp = [
-        dir.with_extension(TORRENT),
-        dir.with_extension(HAVE),
-        dir.clone(),
-    ]
-    .map(|p| {
+    // folder's details and data folder (length, change time) and its
+    // bitfield have not changed. The bitfield by its bytes: the fork
+    // writes it through a mapping, which need not touch its change time.
+    let have = std::fs::read(dir.with_extension(HAVE)).unwrap_or_default();
+    let meta = |p: PathBuf| {
         std::fs::metadata(p)
             .ok()
             .map(|m| (m.len(), m.modified().ok()))
-    });
+    };
+    let stamp = (
+        meta(dir.with_extension(TORRENT)),
+        meta(dir.clone()),
+        std::hash::BuildHasher::hash_one(
+            &std::hash::BuildHasherDefault::<std::hash::DefaultHasher>::default(),
+            &have,
+        ),
+    );
     let key = (dir.clone(), file, offset);
     if let Some((s, answer)) = lock(&ON_DISK).get(&key)
         && *s == stamp
@@ -1919,7 +1925,7 @@ pub fn cached_on_disk(
         return *answer;
     }
     let answer = kept_torrent(&dir.with_extension(TORRENT), &hex)
-        .map(|bytes| cached_from(&dir, &bytes, None, file, offset));
+        .map(|bytes| cached_from(&dir, &bytes, Some(have), file, offset));
     let mut memo = lock(&ON_DISK);
     // ponytail: dropped whole at 1024 answers, an LRU if rows ever need more.
     if memo.len() >= 1024 {
@@ -1929,8 +1935,10 @@ pub fn cached_on_disk(
     answer
 }
 
-/// A folder's `.torrent`, `.have` and data folder: length and change time.
-type Stamp = [Option<(u64, Option<std::time::SystemTime>)>; 3];
+/// A folder's `.torrent` and data folder (length and change time) and a
+/// hash of its `.have`.
+type Meta = Option<(u64, Option<std::time::SystemTime>)>;
+type Stamp = (Meta, Meta, u64);
 
 /// [`cached_on_disk`]'s answers by folder, file and offset, with the stamp
 /// they were read at.
@@ -2526,6 +2534,14 @@ mod tests {
         );
         assert_eq!(at(&mp4, 0), Some(true));
         assert_eq!(at(&mp4, 4 * MIB), Some(false), "half way is not kept");
+        // More pieces claimed through the mapping, its change time as before:
+        // the kept answer goes.
+        let have = dir.path().join(&mp4).with_extension(HAVE);
+        let was = std::fs::metadata(&have).unwrap().modified().unwrap();
+        std::fs::write(&have, [0xff; 4]).unwrap();
+        let file = std::fs::File::options().write(true).open(&have).unwrap();
+        file.set_modified(was).unwrap();
+        assert_eq!(at(&mp4, 4 * MIB), Some(true), "a stale answer");
         let all = kept(dir.path(), "b.mp4", geo, &mp4_head(8 * MIB), false, 0..32);
         assert_eq!(at(&all, 4 * MIB), Some(true));
         // The head cannot be read: no index, no start.

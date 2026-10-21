@@ -1004,3 +1004,54 @@ async fn a_live_torrent_answers_from_its_own_bitfield() {
         "the .have claimed the head before a flush"
     );
 }
+
+/// A window's eviction takes a piece out of the `.have` before it punches
+/// it (the fork's round: gate, flush, punch), so the on-device check never
+/// says ready where the bytes are gone, live or from the folder alone.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_evicted_resume_point_is_not_ready_on_the_device() {
+    // 24 MiB: the resume point's window lies clear of the 2 MiB tail.
+    let s = big_swarm().await;
+    let dir = tempfile::tempdir().unwrap();
+    let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+    // Eviction runs with upload off, as the app plays.
+    let engine = Engine::start(mq_engine::EngineConfig {
+        discovery: false,
+        upload: false,
+        ..mq_engine::EngineConfig::new(
+            dir.path(),
+            http.torrent_scope(&[Ipv4Addr::LOCALHOST.into()]),
+        )
+    })
+    .await
+    .unwrap();
+    let t = engine
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let movie = engine
+        .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
+        .await
+        .unwrap();
+    let len = s.movie.len() as u64;
+    read_range(&engine, t, movie, 0, len).await;
+    let half = len / 2;
+    let ready = |ready| Some(Cached { ready });
+    assert_eq!(engine.cached(&s.info_hash, movie, half).await, ready(true));
+    // The resume point's blocking window leaves the disk.
+    let files = engine.files(t).unwrap();
+    let at = files[..movie].iter().map(|f| f.len).sum::<u64>() + half;
+    let piece = u64::from(engine.piece_len(t).unwrap());
+    let pieces: Vec<u32> = (at / piece..=(at + (1 << 20)) / piece)
+        .map(|p| p as u32)
+        .collect();
+    let evicted = engine.evict_pieces(t, &pieces).await.unwrap();
+    assert!(!evicted.evicted.is_empty(), "nothing evicted: {evicted:?}");
+    assert_eq!(engine.cached(&s.info_hash, movie, half).await, ready(false));
+    let on_disk = |at| cached_on_disk(dir.path(), &s.info_hash, movie, at);
+    assert_eq!(on_disk(half), ready(false), "the .have still claims it");
+    // The removal syncs and claims the rest (its data first).
+    engine.remove(t, true).await.unwrap();
+    assert_eq!(on_disk(half), ready(false));
+    assert_eq!(on_disk(0), ready(true));
+}
