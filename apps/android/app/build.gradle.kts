@@ -21,6 +21,15 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+        // Accounts (plans/accounts.md 4.4, section 9): the hosted sync service, the link host (the passkeys' relying
+        // party and the App Link host for /pair) and the Google web client id Credential Manager asks for. Each is
+        // the owner's (gradle properties marquee.syncServer, marquee.linkHost, marquee.googleWebClientId); unset,
+        // the first run shows today's doors, no passkey is offered and Google goes through the relay's own flow.
+        buildConfigField("String", "SYNC_SERVER", "\"${property("marquee.syncServer")}\"")
+        buildConfigField("String", "LINK_HOST", "\"${property("marquee.linkHost")}\"")
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${property("marquee.googleWebClientId")}\"")
+        // A host that never resolves (RFC 2606) stands in while there is none, so the App Link filter is valid.
+        manifestPlaceholders["linkHost"] = property("marquee.linkHost").toString().ifEmpty { "link.marquee.invalid" }
     }
 
     // One APK per ABI, so a device installs only its own core library (a TV stick has little room):
@@ -138,6 +147,12 @@ dependencies {
     implementation(libs.zxing.core)
     // Installs the baseline profile (src/main/baseline-prof.txt) where the store does not.
     implementation(libs.androidx.profileinstaller)
+    // Accounts: Google's ID token and the account passkey in one Credential Manager sheet, and the relay's
+    // brokered sign-in in an Auth Tab where Chrome has one, else a Custom Tab (plans/accounts.md 4.4).
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services.auth)
+    implementation(libs.googleid)
+    implementation(libs.androidx.browser)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test.junit)

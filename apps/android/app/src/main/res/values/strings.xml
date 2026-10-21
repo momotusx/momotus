@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- apps/shared/account-words.json signInAnother; a test keeps them equal. -->
+    <string name="sign_in_another">Sign in another device</string>
+</resources>

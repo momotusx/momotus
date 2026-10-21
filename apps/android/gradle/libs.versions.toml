@@ -1,4 +1,8 @@
 [versions]
+# Accounts phase 3 (plans/accounts.md 4.4): Credential Manager with Google's ID option, and Auth Tab or Custom Tab.
+androidxCredentials = "1.6.0"
+googleId = "1.1.1"
+androidxBrowser = "1.9.0"
 agp = "9.4.1"
 kotlin = "2.4.21"
 composeBom = "2026.09.00"
@@ -23,6 +27,10 @@ uiautomator = "2.4.0"
 testExtJunit = "1.3.0"
 
 [libraries]
+androidx-credentials = { module = "androidx.credentials:credentials", version.ref = "androidxCredentials" }
+androidx-credentials-play-services-auth = { module = "androidx.credentials:credentials-play-services-auth", version.ref = "androidxCredentials" }
+googleid = { module = "com.google.android.libraries.identity.googleid:googleid", version.ref = "googleId" }
+androidx-browser = { module = "androidx.browser:browser", version.ref = "androidxBrowser" }
 androidx-benchmark-macro-junit4 = { module = "androidx.benchmark:benchmark-macro-junit4", version.ref = "benchmark" }
 androidx-profileinstaller = { module = "androidx.profileinstaller:profileinstaller", version.ref = "profileinstaller" }
 androidx-test-uiautomator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "uiautomator" }

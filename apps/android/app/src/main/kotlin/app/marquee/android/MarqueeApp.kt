@@ -44,6 +44,17 @@ class MarqueeApp :
 
     /** A stremio:// install link the activity was opened with, until the navigation takes it to the link field. */
     var addonLink: String? by mutableStateOf(null)
+
+    /** Credential Manager, Auth Tab and the sign-in's return (plans/accounts.md 4.4), for the app's life. */
+    val accountPlatform by lazy { AccountPlatform(this) }
+
+    /**
+     * Sign in another device was asked for (the app shortcut, Account, or a phone camera on a TV's QR, which opens
+     * the `/pair` App Link): the scanner opens, after sign-in when this device has no account yet. [scanAgain]
+     * says why the code must be scanned once more here.
+     */
+    var pendingScan: Boolean by mutableStateOf(false)
+    var scanAgain: Boolean by mutableStateOf(false)
     private lateinit var lifecycle: AppLifecycle
 
     /**

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sign in another device (plans/accounts.md 4.2): one tap from the home screen to the scanner. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher"
+        android:shortcutId="sign_in_another"
+        android:shortcutShortLabel="@string/sign_in_another">
+        <intent
+            android:action="app.marquee.android.SIGN_IN_ANOTHER"
+            android:targetClass="app.marquee.android.MainActivity"
+            android:targetPackage="app.marquee.android" />
+    </shortcut>
+</shortcuts>

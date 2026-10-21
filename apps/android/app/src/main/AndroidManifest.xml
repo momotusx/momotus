@@ -52,6 +52,26 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="stremio" />
             </intent-filter>
+            <!-- The relay's sign-in coming back from a Custom Tab (no Auth Tab there): taken only while a sign-in
+                 waits, only from this scheme and only for its relay (plans/accounts.md 4.4). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="marquee" android:host="auth" />
+            </intent-filter>
+            <!-- A phone camera on a TV's code opens https://<link host>/pair: the scanner, which asks for the code
+                 once more (D6). The link host is the owner's (marquee.linkHost); its assetlinks.json verifies it. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="${linkHost}" android:path="/pair" />
+            </intent-filter>
+            <!-- Sign in another device from the home screen (4.2). -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
         <!-- Empties the clipboard a minute after a recovery kit was copied, even when the app was ended meanwhile. -->
         <receiver

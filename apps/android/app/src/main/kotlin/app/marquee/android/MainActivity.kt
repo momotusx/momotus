@@ -3,6 +3,7 @@ package app.marquee.android
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.graphics.Color
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -25,6 +26,8 @@ import app.marquee.player.WalkMute
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The Auth Tab's launcher is registered before the activity starts, as the result API needs.
+        (application as MarqueeApp).accountPlatform.attach(this)
         val debuggable = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         val form = FormFactor.detect(this, if (debuggable) intent.getStringExtra("form") else null)
         applyBars()
@@ -54,7 +57,10 @@ class MainActivity : ComponentActivity() {
             }
         // Once: a recreated activity (after the process died, a font size or language change) gets the
         // same intent again, and the link was taken already.
-        if (savedInstanceState == null) addonLink(intent)?.let { (application as MarqueeApp).addonLink = it }
+        if (savedInstanceState == null) {
+            addonLink(intent)?.let { (application as MarqueeApp).addonLink = it }
+            accountIntent(intent)
+        }
         setContent {
             MarqueeTheme(form) { MarqueeRoot(session, form, debugStack) }
         }
@@ -68,6 +74,34 @@ class MainActivity : ComponentActivity() {
             WalkLog.read(this, intent)
         }
         addonLink(intent)?.let { (application as MarqueeApp).addonLink = it }
+        accountIntent(intent)
+    }
+
+    /**
+     * The account links (plans/accounts.md 4.2, 4.4): a Custom Tab's `marquee://auth` return goes to the sign-in
+     * that waits (nothing happens when none does); the `/pair` App Link and the Sign in another device shortcut
+     * open the scanner.
+     */
+    private fun accountIntent(intent: Intent?) {
+        val app = application as MarqueeApp
+        when (val link = accountLink(intent)) {
+            is AccountLink.Return -> {
+                app.accountPlatform.customTabReturn(link.uri)
+            }
+
+            AccountLink.Pair -> {
+                app.scanAgain = true
+                app.pendingScan = true
+            }
+
+            AccountLink.Shortcut -> {
+                app.pendingScan = true
+            }
+
+            null -> {
+                Unit
+            }
+        }
     }
 
     /** Transparent bars with light icons: every screen is dark. */
@@ -100,3 +134,41 @@ internal fun addonLink(intent: Intent?): String? =
         ?.data
         ?.takeIf { it.scheme.equals("stremio", ignoreCase = true) && it.path.orEmpty().endsWith("manifest.json") }
         ?.toString()
+
+/** An account link the activity was opened with. */
+internal sealed interface AccountLink {
+    data class Return(
+        val uri: Uri,
+    ) : AccountLink
+
+    /** `https://<link host>/pair#...`: the fragment is never read (D6). */
+    data object Pair : AccountLink
+
+    data object Shortcut : AccountLink
+}
+
+/** The app shortcut's action (`res/xml/shortcuts.xml`). */
+internal const val SIGN_IN_ANOTHER = "app.marquee.android.SIGN_IN_ANOTHER"
+
+internal fun accountLink(
+    intent: Intent?,
+    linkHost: String = BuildConfig.LINK_HOST,
+): AccountLink? {
+    if (intent == null || (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0) return null
+    if (intent.action == SIGN_IN_ANOTHER) return AccountLink.Shortcut
+    if (intent.action != Intent.ACTION_VIEW) return null
+    val data = intent.data ?: return null
+    return when {
+        data.scheme == AccountPlatform.SCHEME && data.host == "auth" -> {
+            AccountLink.Return(data)
+        }
+
+        linkHost.isNotEmpty() && data.scheme == "https" && data.host == linkHost && data.path == "/pair" -> {
+            AccountLink.Pair
+        }
+
+        else -> {
+            null
+        }
+    }
+}
