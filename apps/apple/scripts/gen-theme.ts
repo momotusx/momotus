@@ -27,9 +27,20 @@ const fields = (o: Record<string, number>) =>
   Object.entries(o).map(([k, v]) => `${k}: ${v}`).join(", ");
 
 // Dark only (design v2): `color.light` mirrors `color.dark` for the other
-// generators; the Apple apps read the dark palette.
-const colors = Object.entries(tokens.color.dark as Record<string, string>)
-  .map(([k, v]) => `        static let ${k} = Color(${rgba(v)})`)
+// generators; the Apple apps read the dark palette. Per form (D10): where the tokens name a phone or
+// a desktop value (`bgPhone`, `bgDesktop`), iOS and macOS take it under the base name; tvOS keeps
+// the base.
+const dark = tokens.color.dark as Record<string, string>;
+const colors = Object.entries(dark)
+  .map(([k, v]) => {
+    const phone = dark[`${k}Phone`];
+    const desktop = dark[`${k}Desktop`];
+    const line = (value: string) => `        static let ${k} = Color(${rgba(value)})`;
+    if (!phone && !desktop) return line(v);
+    // Only the branches that differ from the base.
+    const arms = [phone && ["#if os(iOS)", line(phone)], desktop && [phone ? "#elseif os(macOS)" : "#if os(macOS)", line(desktop)]].filter(Boolean) as string[][];
+    return [...arms.flatMap(([cond, l]) => [`        ${cond}`, l]), "        #else", line(v), "        #endif"].join("\n");
+  })
   .join("\n");
 
 const lets = (o: Record<string, number>) =>
@@ -46,6 +57,8 @@ enum Theme {
     /// The one palette: Marquee is dark only.
     enum Palette {
 ${colors}
+        /// A selected segment or chip: one grey step up (\`selected.fill\`).
+        static let selectedFill = Color(${rgba(tokens.selected.fill)})
     }
 
     struct TypeScale: Sendable {
@@ -96,6 +109,13 @@ ${radius}
     enum Poster {
         static let tv = CGSize(width: ${tokens.poster.tv.width}, height: ${tokens.poster.tv.height})
         static let landscape = CGSize(width: ${tokens.poster.landscape.width}, height: ${tokens.poster.landscape.height})
+    }
+
+    /// The phone's tiles (\`tile.phone\`), read by \`Metrics.compact\`.
+    enum Tile {
+        static let poster = CGSize(width: ${tokens.tile.phone.poster.width}, height: ${tokens.tile.phone.poster.height})
+        static let landscape = CGSize(width: ${tokens.tile.phone.landscape.width}, height: ${tokens.tile.phone.landscape.height})
+        static let gap: CGFloat = ${tokens.tile.phone.gap}
     }
 
     /// Font weights, 100 to 900.

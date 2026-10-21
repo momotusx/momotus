@@ -4,9 +4,23 @@ import SwiftUI
 enum Theme {
     /// The one palette: Marquee is dark only.
     enum Palette {
+        #if os(iOS)
+        static let bg = Color(RGBA(0.0000, 0.0000, 0.0000, 1))
+        #elseif os(macOS)
+        static let bg = Color(RGBA(0.1216, 0.1216, 0.1216, 1))
+        #else
         static let bg = Color(RGBA(0.1098, 0.1098, 0.1176, 1))
+        #endif
+        #if os(iOS)
+        static let surface = Color(RGBA(0.1098, 0.1098, 0.1176, 1))
+        #else
         static let surface = Color(RGBA(0.1725, 0.1725, 0.1804, 1))
+        #endif
+        #if os(iOS)
+        static let raised = Color(RGBA(0.1725, 0.1725, 0.1804, 1))
+        #else
         static let raised = Color(RGBA(0.2275, 0.2275, 0.2353, 1))
+        #endif
         static let glass = Color(RGBA(0.1490, 0.1490, 0.1569, 0.6))
         static let glassStrong = Color(RGBA(0.1176, 0.1176, 0.1255, 0.9))
         static let edge = Color(RGBA(1.0000, 1.0000, 1.0000, 0.1))
@@ -15,10 +29,18 @@ enum Theme {
         static let control = Color(RGBA(0.4235, 0.4235, 0.4392, 1))
         static let text = Color(RGBA(1.0000, 1.0000, 1.0000, 0.92))
         static let muted = Color(RGBA(1.0000, 1.0000, 1.0000, 0.7))
+        #if os(iOS)
+        static let dim = Color(RGBA(0.9216, 0.9216, 0.9608, 0.6))
+        #else
         static let dim = Color(RGBA(1.0000, 1.0000, 1.0000, 0.64))
+        #endif
         static let accent = Color(RGBA(1.0000, 1.0000, 1.0000, 1))
         static let onAccent = Color(RGBA(0.0000, 0.0000, 0.0000, 0.88))
+        #if os(iOS)
+        static let primary = Color(RGBA(0.9608, 0.9608, 0.9608, 1))
+        #else
         static let primary = Color(RGBA(1.0000, 1.0000, 1.0000, 0.92))
+        #endif
         static let onPrimary = Color(RGBA(0.0000, 0.0000, 0.0000, 0.88))
         static let star = Color(RGBA(1.0000, 1.0000, 1.0000, 0.92))
         static let halo = Color(RGBA(0.0000, 0.0000, 0.0000, 0.6))
@@ -46,6 +68,8 @@ enum Theme {
         static let bgDesktop = Color(RGBA(0.1216, 0.1216, 0.1216, 1))
         static let barDesktop = Color(RGBA(0.0000, 0.0000, 0.0000, 1))
         static let bandDesktop = Color(RGBA(0.1686, 0.1686, 0.1686, 1))
+        /// A selected segment or chip: one grey step up (`selected.fill`).
+        static let selectedFill = Color(RGBA(0.3882, 0.3882, 0.4000, 1))
     }
 
     struct TypeScale: Sendable {
@@ -113,6 +137,13 @@ enum Theme {
     enum Poster {
         static let tv = CGSize(width: 217, height: 326)
         static let landscape = CGSize(width: 410, height: 231)
+    }
+
+    /// The phone's tiles (`tile.phone`), read by `Metrics.compact`.
+    enum Tile {
+        static let poster = CGSize(width: 112, height: 168)
+        static let landscape = CGSize(width: 252, height: 142)
+        static let gap: CGFloat = 10
     }
 
     /// Font weights, 100 to 900.
