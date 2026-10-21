@@ -4,7 +4,10 @@ use mq_http::{ClientConfig, HttpClient, HttpError, RequestOptions};
 use mq_library::Library;
 use mq_library::hlc::HlcClock;
 use mq_sync::pair::{approve_pairing, cancel_pairing, make_kit, recover, start_pairing};
-use mq_sync::{Announced, SyncConfig, SyncError, devices, remove_devices, report_lost, sync_once};
+use mq_sync::{
+    Announced, Announcement, SyncConfig, SyncError, ack_announcements, devices, remove_devices,
+    report_lost, sync_once,
+};
 use mq_sync_server::{Config, router};
 use std::path::PathBuf;
 
@@ -72,10 +75,11 @@ impl Device {
     }
 
     /// Syncs until the record settles, storing it like an app does. The
-    /// announcements of every round are kept, as an app keeps them.
+    /// announcements of every round are kept once each, by id, as an app
+    /// keeps them.
     async fn sync(&mut self) -> mq_sync::SyncReport {
         let mut report = None;
-        let mut heard = Vec::new();
+        let mut heard: Vec<Announcement> = Vec::new();
         for _ in 0..3 {
             let r = sync_once(&self.library, &http(), &self.record, &self.clock)
                 .await
@@ -84,7 +88,11 @@ impl Device {
             if let Some(record) = r.record.clone() {
                 self.record = record;
             }
-            heard.extend(r.announcements.clone());
+            for a in &r.announcements {
+                if !heard.iter().any(|h| h.id == a.id) {
+                    heard.push(a.clone());
+                }
+            }
             report = Some(r);
             if !again {
                 break;
@@ -96,8 +104,11 @@ impl Device {
         }
     }
 
+    /// What the next sync announces, each then acknowledged as an app's OK.
     async fn heard(&mut self) -> Vec<(Announced, Option<String>)> {
         let report = self.sync().await;
+        let ids: Vec<String> = report.announcements.iter().map(|a| a.id.clone()).collect();
+        ack_announcements(&self.library, &ids).unwrap();
         report
             .announcements
             .into_iter()
@@ -134,8 +145,9 @@ impl Device {
 }
 
 /// What each device hears (3.2, `SyncReport.announcements`): another
-/// member's join, kit or removal, once, whichever call caught up; never what
-/// it did or vouched for itself, nor anything from before it joined.
+/// member's join, kit or removal, until acknowledged, whichever call caught
+/// up; never what it did or vouched for itself, nor anything from before it
+/// joined.
 #[tokio::test]
 async fn each_device_hears_once_what_the_others_changed() {
     let (server, _) = relay().await;
@@ -184,6 +196,54 @@ async fn each_device_hears_once_what_the_others_changed() {
     assert_eq!(tv.heard().await, changed);
     assert_eq!(phone.heard().await, [], "its own kit and removal");
     drop(laptop);
+}
+
+/// An announcement stays until the app acknowledges it: a lost answer, a
+/// web reload (the next round) and a restart of the store all bring it back
+/// under the same id.
+#[tokio::test]
+async fn an_announcement_stays_until_acknowledged() {
+    let (server, db) = relay().await;
+    let path = db.with_file_name("phone.sqlite");
+    let mut phone = Device::first(&server, "Phone").await;
+    phone.library = Library::open(&path).unwrap();
+    let mut tv = phone.pair(&server, "TV").await;
+    phone.sync().await;
+    let laptop = tv.pair(&server, "Laptop").await;
+
+    let first = phone.sync().await.announcements;
+    assert_eq!(first.len(), 1, "{first:?}");
+    assert_eq!(
+        phone.sync().await.announcements,
+        first,
+        "the answer was lost"
+    );
+    phone.library = Library::open(&path).unwrap();
+    assert_eq!(phone.sync().await.announcements, first, "after a restart");
+
+    ack_announcements(&phone.library, &[first[0].id.clone()]).unwrap();
+    assert_eq!(phone.sync().await.announcements, []);
+    // An id acknowledged twice, or never made, changes nothing.
+    ack_announcements(&phone.library, &[first[0].id.clone(), "9.x".into()]).unwrap();
+    drop(laptop);
+}
+
+/// A store rebuilt from the relay (the keystore record kept) reads every
+/// entry again, but announces only what came after the record's checkpoint.
+#[tokio::test]
+async fn a_rebuilt_store_announces_only_what_is_new() {
+    let (server, _) = relay().await;
+    let mut phone = Device::first(&server, "Phone").await;
+    let mut tv = phone.pair(&server, "TV").await;
+    let _laptop = tv.pair(&server, "Laptop").await;
+    let joined = [(Announced::Device, Some("Laptop".to_owned()))];
+    assert_eq!(phone.heard().await, joined);
+
+    phone.library = Library::temporary().unwrap();
+    assert_eq!(phone.heard().await, [], "nothing it saw before");
+    let _desk = tv.pair(&server, "Desk").await;
+    let joined = [(Announced::Device, Some("Desk".to_owned()))];
+    assert_eq!(phone.heard().await, joined);
 }
 
 #[tokio::test]
