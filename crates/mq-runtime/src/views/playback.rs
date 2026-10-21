@@ -2160,6 +2160,13 @@ async fn open_torrent(
     // Refused before any write ("this device is full"): what the folder
     // holds stays (a pack's other episodes, a warm window), review r3 B P3-1.
     let refused = matches!(started, Err(mq_engine::EngineError::DeviceFull));
+    // Another source of a swarm that did not start is skipped in this view.
+    if started
+        .as_ref()
+        .is_ok_and(|(_, _, started)| not_started(started))
+    {
+        lock(state).failed_hashes.push(hash);
+    }
     let failed = match started {
         Ok((file, info, Started::Ready(Ok(())))) => {
             let name = info
@@ -2185,11 +2192,7 @@ async fn open_torrent(
         Err(mq_engine::EngineError::Held) => return Err("This title is not on the list".into()),
         Ok((_, _, Started::Late { unchoked })) => {
             did_not_start();
-            {
-                let mut s = lock(state);
-                s.version_failed = true;
-                s.failed_hashes.push(hash);
-            }
+            lock(state).version_failed = true;
             if unchoked {
                 let now = lock(state).dead.reached();
                 remember_dead(core, now);
@@ -2204,7 +2207,6 @@ async fn open_torrent(
             let now = {
                 let mut s = lock(state);
                 s.version_failed = true;
-                s.failed_hashes.push(hash);
                 if nothing {
                     s.dead.failed(info_hash, true)
                 } else {
@@ -2578,6 +2580,13 @@ enum Started<T> {
     /// never opens.
     #[cfg_attr(test, allow(dead_code))]
     Wrong(String),
+}
+
+/// A start that ended so says its swarm did not start: no Ready by the
+/// deadline, or a stall.
+#[cfg(any(test, feature = "torrent"))]
+fn not_started<T>(started: &Started<T>) -> bool {
+    matches!(started, Started::Late { .. } | Started::Stalled { .. })
 }
 
 /// How long a swarm may take to send each `floor` of verified bytes: the
@@ -4885,6 +4894,29 @@ mod tests {
                 SAME_TORRENT
             ]
         );
+    }
+
+    /// Review P2-3: a start that ends late or stalled marks its swarm as not
+    /// started in this view; a Ready, a wrong file or an error does not.
+    #[test]
+    fn late_and_stalled_starts_are_swarms_that_did_not_start() {
+        assert!(not_started(&Started::<()>::Late { unchoked: true }));
+        assert!(not_started(&Started::<()>::Stalled { nothing: false }));
+        assert!(!not_started(&Started::Ready(())));
+        assert!(!not_started(&Started::<()>::Wrong(
+            "another episode".into()
+        )));
+    }
+
+    /// Review P3-10: one torrent is one hash however the addon spells it.
+    #[cfg(feature = "torrent")]
+    #[test]
+    fn a_hash_reads_the_same_in_base32_and_hex() {
+        let hex = "c12fe1c06bba254a9dc9f519b335aa7c1367a88a";
+        let base32 = "YEX6DQDLXISUVHOJ6UM3GNNKPQJWPKEK";
+        assert_eq!(torrent_id(base32), hex);
+        assert_eq!(torrent_id(&hex.to_uppercase()), hex);
+        assert_eq!(torrent_id(" not a hash "), "not a hash");
     }
 
     /// Review P2-3: a start's tick from a run the view moved on from, or one
