@@ -3,16 +3,20 @@
 # The Trakt app (client id and redirect URI, read by `option_env!`) comes from
 # .env.trakt.local at the repository root when this machine has it
 # (gitignored). Without the file the core has no Trakt app (notConfigured), as
-# in CI or a fresh clone. The torrent engine is built in, as in the apps' full
-# builds; MQ_TORRENT=0 leaves it out. Arguments go to the bridge.
+# in CI or a fresh clone. The MDBList key (MARQUEE_MDBLIST_KEY) comes from
+# .env.mdblist.local the same way; without it the core asks MDBList nothing.
+# The torrent engine is built in, as in the apps' full builds; MQ_TORRENT=0
+# leaves it out. Arguments go to the bridge.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../../.." && pwd)"
-if [[ -f "$root/.env.trakt.local" ]]; then
-  set -a
-  source "$root/.env.trakt.local"
-  set +a
-fi
+for env in "$root/.env.trakt.local" "$root/.env.mdblist.local"; do
+  if [[ -f "$env" ]]; then
+    set -a
+    source "$env"
+    set +a
+  fi
+done
 cd "$root"
 if [[ "${MQ_TORRENT:-1}" == "0" ]]; then
   exec cargo run -p mq-bridge -- "$@"
