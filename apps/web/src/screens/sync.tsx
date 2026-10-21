@@ -14,6 +14,8 @@ import EyeOff from "lucide-solid/icons/eye-off";
 import Fingerprint from "lucide-solid/icons/fingerprint-pattern";
 import KeyRound from "lucide-solid/icons/key-round";
 import LifeBuoy from "lucide-solid/icons/life-buoy";
+import Link2 from "lucide-solid/icons/link-2";
+import LogIn from "lucide-solid/icons/log-in";
 import LogOut from "lucide-solid/icons/log-out";
 import MonitorSmartphone from "lucide-solid/icons/monitor-smartphone";
 import Plus from "lucide-solid/icons/plus";
@@ -25,6 +27,10 @@ import TriangleAlert from "lucide-solid/icons/triangle-alert";
 import X from "lucide-solid/icons/x";
 import { createEffect, createMemo, createResource, createSignal, For, type JSX, on, onCleanup, onMount, Show } from "solid-js";
 import { privateLink } from "../core/client";
+import type { IdentityLink } from "../core/generated/IdentityLink";
+import { relayProviders, signInServer } from "../core/sign-in";
+import { pendingWipe, removeHere, wipeState } from "../core/wipe";
+import { type Act, accountWords as aw, activeProfile, aloneInAccount, continueWith, type Failure, fill, leaveChoice, providerName, providerOrder, revokeFailure, signInFailure } from "../lib/account";
 import type { MemberInfo } from "../core/generated/MemberInfo";
 import { profiles } from "../core/profiles";
 import * as sync from "../core/sync";
@@ -63,11 +69,14 @@ import {
   syncWords as w,
 } from "../lib/words";
 import { LinkRow } from "./settings";
+import { FailureNote, SignInState, Tick, useSignIn } from "./sign-in";
 import "./browse.css";
 import "./settings.css";
 import "./sync.css";
 
 const tv = () => form() === "tv";
+/** A removal that stopped: again with what it was asked for (the debrid accounts ticked by default). */
+const pendingDebrid = () => pendingWipe()?.debrid ?? true;
 // Only the protocol's string codes: a DOMException carries a numeric `code` of its own.
 const codeOf = (e: unknown) => {
   const c = e && typeof e === "object" && "code" in e ? (e as { code?: unknown }).code : undefined;
@@ -252,9 +261,34 @@ function Locked() {
 }
 
 function NotJoined() {
+  // Sign-in first where the sync service this device knows offers it (plans/accounts.md 4.1).
+  const server = signInServer();
+  const [providers] = createResource(() => server || false, relayProviders);
+  const owner = () => !!activeProfile(profiles())?.isOwner;
   return (
     <>
       <StorageNote />
+      {/* A sign-out with removal running, or stopped before it finished (D13). */}
+      <Show when={wipeState().running}>
+        <Said tone="warn">{aw.wiping}</Said>
+      </Show>
+      <Show when={wipeState().problem}>
+        {(p) => (
+          <section class="set">
+            <Said tone="bad">{p()}</Said>
+            <Show when={p() !== aw.wipeFailed}>
+              <Said tone="bad">{aw.wipeFailed}</Said>
+            </Show>
+            <Show when={owner()}>
+              <div class="acts">
+                <button class="btn primary" data-f="sync:wipe-again" onClick={() => void removeHere(pendingDebrid()).catch(() => undefined)}>
+                  {w.retry}
+                </button>
+              </div>
+            </Show>
+          </section>
+        )}
+      </Show>
       <Show when={sync.problem()}>
         {(p) => (
           <Show when={p().code === "accountGone"} fallback={<Said tone="bad">{p().words}</Said>}>
@@ -273,6 +307,9 @@ function NotJoined() {
       <Show when={!sync.problem() && sync.memoryProblem() !== w.leftKept && sync.notice()}>{(n) => <Said tone="ok">{n()}</Said>}</Show>
       <section class="set">
         <div class="links">
+          <Show when={providers.state === "ready" && providers().length > 0}>
+            <LinkRow href="/sign-in" fkey="sync:sign-in" icon={<LogIn aria-hidden />} title={aw.signInTitle} text={aw.libraryAdded} />
+          </Show>
           <LinkRow href="/pair" fkey="sync:pair" icon={<QrCode aria-hidden />} title={w.pairTitle} text={w.pairText} />
           <LinkRow href="/sync/start" fkey="sync:start" icon={<Plus aria-hidden />} title={w.startTitle} text={w.startText} />
           <LinkRow href="/sync/recover" fkey="sync:recover" icon={<LifeBuoy aria-hidden />} title={w.recoverTitle} text={w.recoverText} />
@@ -322,7 +359,10 @@ function Joined() {
     return [o === "complete" ? "Synced." : o === "pending" ? "Synced. Some changes still wait." : "Synced. Some changes did not sync.", ...notes()].join(" ");
   };
   const members = () => sortMembers(sync.devices()?.members ?? []);
-  const noKit = () => sync.devices() !== null && !members().some((m) => m.kit);
+  const alone = () => aloneInAccount(sync.devices()?.members ?? null);
+  // The sign-ins linked to the account, where its sync service offers sign-in at all.
+  const [providers] = createResource(() => sync.accountServer() || false, relayProviders);
+  const [links, { refetch: refetchLinks }] = createResource(() => providers.state === "ready" && providers().length > 0, () => sync.identities());
   const [asking, setAsking] = createSignal<string | null>(null);
   const [busy, setBusy] = createSignal(false);
   const [said, setSaid] = createSignal<{ id: string; tone: "ok" | "bad"; text: string } | null>(null);
@@ -407,11 +447,19 @@ function Joined() {
         </Show>
       </section>
 
-      <Show when={sync.recovered() || noKit()}>
+      {/* "Add a second way in" replaces the no-kit line (plans/accounts.md 4.1.7): until a kit
+          or a second device exists, one lost device locks the account. */}
+      <Show when={sync.recovered() || alone()}>
         <p class="fa-note sync-callout">
           <KeyRound aria-hidden />
-          {sync.recovered() ? (tv() ? w.afterRecoverTv : w.afterRecover) : tv() ? w.noKitTv : w.noKit}
+          <Show when={sync.recovered()} fallback={<span><b>{aw.secondWayIn}</b> {aw.secondWayInText}</span>}>
+            {tv() ? w.afterRecoverTv : w.afterRecover}
+          </Show>
         </p>
+      </Show>
+
+      <Show when={providers.state === "ready" && providers().length > 0}>
+        <SignedInWith links={links.state === "ready" ? links() : undefined} providers={providers.state === "ready" ? providers() : []} refetch={() => void refetchLinks()} />
       </Show>
 
       <section class="set">
@@ -477,18 +525,16 @@ function Joined() {
 
       <section class="set">
         <div class="links">
+          {/* The web approves no device (plans/accounts.md 4.2): the phone signs others in. */}
+          <ElsewhereRow fkey="sync:add" icon={<QrCode aria-hidden />} title={aw.signInAnother} text={aw.usePhoneToSignIn} />
           <Show
             when={!tv()}
             fallback={
-              <>
-                <ElsewhereRow fkey="sync:add" icon={<QrCode aria-hidden />} title={w.addTitle} text={w.tvAdd} />
-                <Show when={mayMakeKit(profiles())}>
-                  <ElsewhereRow fkey="sync:kit" icon={<KeyRound aria-hidden />} title={w.kitTitle} text={w.tvKit} />
-                </Show>
-              </>
+              <Show when={mayMakeKit(profiles())}>
+                <ElsewhereRow fkey="sync:kit" icon={<KeyRound aria-hidden />} title={w.kitTitle} text={w.tvKit} />
+              </Show>
             }
           >
-            <LinkRow href="/sync/add" fkey="sync:add" icon={<QrCode aria-hidden />} title={w.addTitle} text={w.addText} />
             <Show when={mayMakeKit(profiles())}>
               <LinkRow href="/sync/kit" fkey="sync:kit" icon={<KeyRound aria-hidden />} title={w.kitTitle} text={w.kitText} />
             </Show>
@@ -499,14 +545,135 @@ function Joined() {
       <Remember />
       <Leave />
       <Show when={mayDeleteAccount(profiles())}>
-        <DeleteAccount />
+        <DeleteAccount apple={links.state === "ready" && links().some((l) => l.provider === "apple")} />
       </Show>
     </>
   );
 }
 
-/** Deletes the account for every device, after one confirmation that names what goes. */
-function DeleteAccount() {
+const day = (ms: number) => new Date(ms).toLocaleDateString(undefined, { dateStyle: "medium" });
+
+/** Signed in with (4.3): the sign-ins linked to the account. The owner links another or unlinks
+ * one (D16); Apple's unlink runs its revoke first and goes on without it only when asked. */
+function SignedInWith(props: { links: IdentityLink[] | undefined; providers: string[]; refetch: () => void }) {
+  const owner = () => mayDeleteAccount(profiles());
+  const server = () => sync.accountServer();
+  const [picking, setPicking] = createSignal(false);
+  const [note, setNote] = createSignal<string | null>(null);
+  const [failure, setFailure] = createSignal<Failure | null>(null);
+  let ticket = "";
+  let target: IdentityLink | null = null;
+  const link = async (move: boolean, provider: string) => {
+    setFailure(null);
+    try {
+      await sync.linkIdentity(ticket, move);
+      setPicking(false);
+      props.refetch();
+    } catch (e) {
+      setFailure(signInFailure(codeOf(e) ?? "", provider));
+    }
+  };
+  const linking = useSignIn(server, (end, provider) => {
+    if (end.phase === "receipt") return;
+    ticket = end.ticket;
+    void link(false, provider);
+  });
+  const unlink = async (l: IdentityLink, receipt?: string) => {
+    setFailure(null);
+    setNote(null);
+    try {
+      await sync.unlinkIdentity(l.link, receipt);
+      if ((props.links?.length ?? 0) <= 1) setNote(aw.unlinkLast);
+      props.refetch();
+    } catch (e) {
+      setFailure(signInFailure(codeOf(e) ?? "", l.provider));
+    }
+  };
+  const revoking = useSignIn(
+    server,
+    (end) => {
+      if (end.phase === "receipt" && target) void unlink(target, end.receipt);
+    },
+    (code) => revokeFailure(code, aw.unlinkAnyway, w.cancel),
+  );
+  const ask = (l: IdentityLink) => {
+    target = l;
+    if (l.provider === "apple") revoking.go("apple", true);
+    else void unlink(l);
+  };
+  const act = (a: Act) => {
+    if (a === "move") void link(true, linking.provider());
+    else if (a === "anyway" && target) {
+      revoking.stop();
+      void unlink(target);
+    }
+    else if (a === "retry") linking.again();
+    else {
+      setFailure(null);
+      linking.setFailure(null);
+      revoking.setFailure(null);
+    }
+  };
+  const said = () => {
+    const a = linking.said();
+    const b = revoking.said();
+    return { waiting: a.waiting || b.waiting, failure: failure() ?? a.failure ?? b.failure };
+  };
+  return (
+    <section class="set" aria-label={aw.signedInWith}>
+      <h2>{aw.signedInWith}</h2>
+      <Show when={note()}>{(n) => <Said tone="ok">{n()}</Said>}</Show>
+      <ul class="sync-members">
+        <For each={props.links ?? []}>
+          {(l) => (
+            <li class="sync-member" data-link={l.link}>
+              <div class="sync-mtext">
+                <h3>{providerName(l.provider)}</h3>
+                <p>{fill(aw.linkedOn, { date: day(l.createdMs) })}</p>
+              </div>
+              <Show when={owner()}>
+                <div class="acts sync-macts">
+                  <button class="btn" data-f={`sync:link:${l.link}:unlink`} aria-label={`${aw.unlink} ${providerName(l.provider)}`} onClick={() => ask(l)}>
+                    {aw.unlink}
+                  </button>
+                </div>
+              </Show>
+            </li>
+          )}
+        </For>
+      </ul>
+      <SignInState said={said()} fkey="sync:identity" onAct={act} />
+      <Show when={owner()}>
+        <Show
+          when={picking()}
+          fallback={
+            <div class="acts">
+              <button class="btn" data-f="sync:link-another" onClick={() => setPicking(true)}>
+                <Link2 aria-hidden />
+                {aw.linkAnother}
+              </button>
+            </div>
+          }
+        >
+          <div class="acts">
+            <For each={providerOrder(props.providers)}>
+              {(p) => (
+                <button class="btn" data-f={`sync:link:${p}`} data-provider={p} onClick={() => linking.go(p)}>
+                  {continueWith(p)}
+                </button>
+              )}
+            </For>
+          </div>
+        </Show>
+      </Show>
+    </section>
+  );
+}
+
+/** Deletes the account for every device, after one confirmation that names what goes. With an
+ * Apple link, Apple's revoke runs first (its receipt goes with the deletion); without a receipt
+ * it goes on only on "Delete anyway". */
+function DeleteAccount(props: { apple: boolean }) {
   const [asking, setAsking] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
@@ -515,23 +682,37 @@ function DeleteAccount() {
     setError(null);
     focusSoon(on ? '[data-f="sync:delete-cancel"]' : '[data-f="sync:delete"]');
   };
-  const remove = async () => {
+  const finish = async (receipt?: string) => {
     if (busy()) return;
     setBusy(true);
     setError(null);
     try {
-      await sync.deleteAccount();
+      await sync.deleteAccount(receipt);
     } catch (e) {
       setError(say(e, "delete"));
     } finally {
       setBusy(false);
     }
   };
+  const revoking = useSignIn(
+    () => sync.accountServer(),
+    (end) => {
+      if (end.phase === "receipt") void finish(end.receipt);
+    },
+    (code) => revokeFailure(code, aw.deleteAnyway, w.cancel),
+  );
+  // In the click itself: Apple's page opens in a window.
+  const remove = () => (props.apple ? revoking.go("apple", true) : void finish());
   return (
     <section class="set">
       <h2>{w.deleteTitle}</h2>
       <p class="note small sync-lead">{w.deleteText}</p>
       <Show when={error()}>{(e) => <Said tone="bad">{e()}</Said>}</Show>
+      <SignInState said={revoking.said()} fkey="sync:delete-revoke" onAct={(a) => {
+          revoking.stop();
+          revoking.setFailure(null);
+          if (a === "anyway") void finish();
+        }} />
       <Show
         when={asking()}
         fallback={
@@ -549,7 +730,7 @@ function DeleteAccount() {
             <p class="note small">{w.passkeyAsk}</p>
           </Show>
           <div class="acts">
-            <button class="btn danger" data-f="sync:delete-confirm" aria-busy={busy() || undefined} onClick={() => void remove()}>
+            <button class="btn danger" data-f="sync:delete-confirm" aria-busy={busy() || undefined} onClick={remove}>
               <Trash aria-hidden />
               {busy() ? w.deleting : w.deleteButton}
             </button>
@@ -651,12 +832,22 @@ function Leave() {
   const [error, setError] = createSignal<string | null>(null);
   const [busy, setBusy] = createSignal(false);
   const [refused, setRefused] = createSignal(false);
+  // D13: the owner is asked to remove the profiles and library too, ticked by default (a TV
+  // always removes, so only its owner signs out there); the debrid accounts go with them, ticked.
+  const choice = () => leaveChoice(activeProfile(profiles()), tv());
+  const [removeLibrary, setRemoveLibrary] = createSignal(true);
+  const [debrid, setDebrid] = createSignal(true);
+  const removing = () => choice().always || (choice().ask && removeLibrary());
   const leave = async (force: boolean) => {
     if (busy()) return;
     setBusy(true);
     setError(null);
+    const remove = removing();
+    const withDebrid = debrid();
     try {
       await sync.signOut(force);
+      // Steps two and three; this page then starts as new (core/wipe.ts says how it went).
+      if (remove) void removeHere(withDebrid).catch(() => undefined);
     } catch (e) {
       if (codeOf(e) === "unsent") {
         setUnsent(true);
@@ -671,45 +862,55 @@ function Leave() {
     }
   };
   return (
-    <section class="set">
-      <h2>{w.leaveTitle}</h2>
-      <p class="note small sync-lead">{w.leaveText}</p>
-      <Show when={sync.remembered()}>
-        <p class="note small sync-lead">{w.passkeyAsk}</p>
-      </Show>
-      <Show when={error()}>{(e) => <Said tone="bad">{e()}</Said>}</Show>
-      <div class="acts">
-        <Show
-          when={unsent()}
-          fallback={
-            <button class="btn" data-f="sync:leave" aria-busy={busy() || undefined} onClick={() => void leave(false)}>
-              <LogOut aria-hidden />
-              {w.leaveButton}
-            </button>
-          }
-        >
-          <button
-            class="btn"
-            data-f="sync:leave-again"
-            onClick={() => {
-              setUnsent(false);
-              setError(null);
-              void sync.syncNow();
-            }}
-          >
-            <RefreshCw aria-hidden />
-            {w.syncAgain}
-          </button>
-          <button class="btn danger" data-f="sync:leave-force" aria-busy={busy() || undefined} onClick={() => void leave(true)}>
-            <LogOut aria-hidden />
-            {w.leaveAnyway}
-          </button>
+    <Show when={choice().show}>
+      <section class="set">
+        <h2>{w.leaveTitle}</h2>
+        <p class="note small sync-lead">{w.leaveText}</p>
+        <Show when={sync.remembered()}>
+          <p class="note small sync-lead">{w.passkeyAsk}</p>
         </Show>
-      </div>
-      <Show when={refused() || stuck(sync.problem()?.code)}>
-        <LeaveHere fkey="sync:leave-here" />
-      </Show>
-    </section>
+        <Show when={choice().ask || choice().always}>
+          <div class="acts" role="group" aria-label={aw.removeLibraryAsk}>
+            <Tick on={removing()} fixed={choice().always} label={aw.removeLibraryAsk} fkey="sync:remove-library" onToggle={setRemoveLibrary} />
+            <Show when={removing()}>
+              <Tick on={debrid()} label={aw.removeLibraryDebrid} fkey="sync:remove-debrid" onToggle={setDebrid} />
+            </Show>
+          </div>
+        </Show>
+        <Show when={error()}>{(e) => <Said tone="bad">{e()}</Said>}</Show>
+        <div class="acts">
+          <Show
+            when={unsent()}
+            fallback={
+              <button class="btn" data-f="sync:leave" aria-busy={busy() || undefined} onClick={() => void leave(false)}>
+                <LogOut aria-hidden />
+                {w.leaveButton}
+              </button>
+            }
+          >
+            <button
+              class="btn"
+              data-f="sync:leave-again"
+              onClick={() => {
+                setUnsent(false);
+                setError(null);
+                void sync.syncNow();
+              }}
+            >
+              <RefreshCw aria-hidden />
+              {w.syncAgain}
+            </button>
+            <button class="btn danger" data-f="sync:leave-force" aria-busy={busy() || undefined} onClick={() => void leave(true)}>
+              <LogOut aria-hidden />
+              {w.leaveAnyway}
+            </button>
+          </Show>
+        </div>
+        <Show when={refused() || stuck(sync.problem()?.code)}>
+          <LeaveHere fkey="sync:leave-here" />
+        </Show>
+      </section>
+    </Show>
   );
 }
 
@@ -1052,7 +1253,9 @@ export function AddDevice() {
 
 export function MakeKit() {
   const navigate = useNavigate();
-  const [params] = useSearchParams<{ first?: string }>();
+  const [params] = useSearchParams<{ first?: string; then?: string }>();
+  // A first run made its account at sign-in (plans/accounts.md 4.1.5): the doors come next.
+  const after = () => (params.then === "doors" ? "/welcome?step=doors" : "/sync");
   // Kits are the main profile's (D17): another profile reached here by address, or switched to
   // while the page is open, goes back to the sync page.
   createEffect(() => {
@@ -1111,7 +1314,7 @@ export function MakeKit() {
                     </Show>
                     {busy() ? w.makingKit : w.makeKit}
                   </button>
-                  <button class="btn" data-f="sync-kit:cancel" onClick={() => navigate("/sync", { replace: !!params.first })}>
+                  <button class="btn" data-f="sync-kit:cancel" onClick={() => navigate(after(), { replace: !!params.first })}>
                     {params.first ? w.later : w.cancel}
                   </button>
                 </div>
@@ -1136,7 +1339,7 @@ export function MakeKit() {
                     </Show>
                     {copied() ? w.copied : w.copyKit}
                   </button>
-                  <button class="btn primary" data-f="sync-kit:saved" data-autofocus onClick={() => navigate("/sync", { replace: true })}>
+                  <button class="btn primary" data-f="sync-kit:saved" data-autofocus onClick={() => navigate(after(), { replace: true })}>
                     <Check aria-hidden />
                     {w.savedKit}
                   </button>

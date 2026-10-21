@@ -7,7 +7,8 @@ import Wrench from "lucide-solid/icons/wrench";
 import Star from "lucide-solid/icons/star";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Sparkle from "lucide-solid/icons/sparkle";
-import { createEffect, createSignal, For, on, Show } from "solid-js";
+import ShieldAlert from "lucide-solid/icons/shield-alert";
+import { createEffect, createSignal, For, Match, on, Show, Switch } from "solid-js";
 import { Backdrop, Logo } from "../components/art";
 import { separators } from "../components/separators";
 import { CONTINUE_ROW, Row } from "../components/row";
@@ -15,12 +16,17 @@ import { homeView, liveView, op, prefsView, retryHomeRow } from "../core/client"
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import type { DefaultAddons } from "../core/generated/DefaultAddons";
 import { onProfileReset, profiles } from "../core/profiles";
+import { BridgeError } from "../core/bridge";
+import * as sync from "../core/sync";
+import { removeHere, wipeState } from "../core/wipe";
+import { accountWords as aw, activeProfile, aloneInAccount, type Card, fill, homeCard, providerName } from "../lib/account";
+import { Tick } from "./sign-in";
 import { cardOffer, defaultsWords, namesLine } from "../lib/defaults";
 import { allFailed } from "../lib/rows";
 import { form } from "../form";
 import type { Tile } from "../core/generated/Tile";
 import { playPath, titlePath } from "../lib/format";
-import { kindLabel } from "../lib/words";
+import { kindLabel, syncWords } from "../lib/words";
 import "./home.css";
 
 const pageScroll = { top: 0 };
@@ -69,6 +75,135 @@ function DefaultsCard() {
             <button class="btn" data-f="home:defaults:later" onClick={seen}>
               Not now
             </button>
+          </div>
+        </section>
+      )}
+    </Show>
+  );
+}
+
+/** Home's one account card (plans/accounts.md 4.3), by priority: a scheduled deletion, the
+ * account deleted elsewhere, an announcement, the nudge for a second way in. */
+function AccountCard() {
+  const navigate = useNavigate();
+  // The members name the device in a line and tell whether this one is alone.
+  createEffect(() => {
+    if (sync.joined() && !sync.devices()) void sync.loadDevices().catch(() => undefined);
+  });
+  const card = () =>
+    homeCard({
+      deletion: sync.report()?.deletion ?? null,
+      gone: sync.problem()?.code === "accountGone",
+      announcements: sync.report()?.announcements ?? [],
+      members: sync.devices()?.members ?? null,
+      profile: activeProfile(profiles()),
+      alone: sync.joined() && aloneInAccount(sync.devices()?.members ?? null),
+      date: (ms) => new Date(ms).toLocaleDateString(undefined, { dateStyle: "medium" }),
+    });
+  const [problem, setProblem] = createSignal<string | null>(null);
+  const [removing, setRemoving] = createSignal(false);
+  const [debrid, setDebrid] = createSignal(true);
+  const run = (work: () => Promise<unknown>) => {
+    setProblem(null);
+    work().catch((e) => {
+      const code = e instanceof BridgeError ? e.code : undefined;
+      setProblem(code === "notOwner" ? aw.notOwner : sync.problemOf(e).words);
+    });
+  };
+  const gone = aw.accountGoneActions;
+  return (
+    <Show when={card()}>
+      {(c) => (
+        <section class="defaults-card account-card" data-card={c().kind} aria-label={c().kind === "secondWay" ? aw.secondWayIn : c().text} data-fgroup="account-card">
+          <ShieldAlert aria-hidden class="dc-icon" />
+          <div class="dc-text">
+            <Show when={c().kind === "secondWay"}>
+              <h2>{aw.secondWayIn}</h2>
+            </Show>
+            <p>{c().kind === "secondWay" ? aw.secondWayInText : c().text}</p>
+            <Show when={problem()}>
+              {(p) => (
+                <p class="st bad" role="status">
+                  <i class="dot" />
+                  {p()}
+                </p>
+              )}
+            </Show>
+          </div>
+          <div class="acts">
+            <Switch>
+              <Match when={c().kind === "deletion" && (c() as Extract<Card, { kind: "deletion" }>)}>
+                {(d) => (
+                  <>
+                    <button class="btn primary" data-f="home:account:cancel" onClick={() => run(() => sync.cancelDeletion(false))}>
+                      {aw.deletionCancel}
+                    </button>
+                    <Show when={d().provider}>
+                      {(p) => (
+                        <button class="btn" data-f="home:account:cancel-unlink" onClick={() => run(() => sync.cancelDeletion(true))}>
+                          {fill(aw.deletionCancelUnlink, { provider: providerName(p()) })}
+                        </button>
+                      )}
+                    </Show>
+                  </>
+                )}
+              </Match>
+              <Match when={c().kind === "gone" && (c() as Extract<Card, { kind: "gone" }>)}>
+                {(g) => (
+                  <Show
+                    when={removing()}
+                    fallback={
+                      <>
+                        <A class="btn primary" href="/sign-in" data-f="home:account:sign-in">
+                          {gone[0]}
+                        </A>
+                        <Show when={g().remove}>
+                          <button class="btn" data-f="home:account:remove" onClick={() => setRemoving(true)}>
+                            {gone[1]}
+                          </button>
+                        </Show>
+                        <button class="btn" data-f="home:account:ok" onClick={sync.clearProblem}>
+                          {gone[2]}
+                        </button>
+                      </>
+                    }
+                  >
+                    {/* D13: the removal's own ask, the debrid accounts ticked. */}
+                    <div class="acts" role="group" aria-label={aw.removeLibraryAsk}>
+                      <p>{aw.removeLibraryAsk}</p>
+                      <Tick on={debrid()} label={aw.removeLibraryDebrid} fkey="home:account:remove-debrid" onToggle={setDebrid} />
+                      <button class="btn danger" data-f="home:account:remove-confirm" aria-busy={wipeState().running || undefined} onClick={() => run(() => removeHere(debrid()))}>
+                        {gone[1]}
+                      </button>
+                      <button class="btn" data-f="home:account:remove-cancel" onClick={() => setRemoving(false)}>
+                        {syncWords.cancel}
+                      </button>
+                    </div>
+                  </Show>
+                )}
+              </Match>
+              <Match when={c().kind === "announcement" && (c() as Extract<Card, { kind: "announcement" }>)}>
+                {(a) => (
+                  <>
+                    <Show when={a().notYou}>
+                      <A class="btn" href="/sync" data-f="home:account:not-you">
+                        {aw.announceNotYou}
+                      </A>
+                    </Show>
+                    <Show when={a().ok}>
+                      <button class="btn primary" data-f="home:account:ok" onClick={() => run(() => sync.ackAnnouncements([a().id]))}>
+                        {aw.announceOk}
+                      </button>
+                    </Show>
+                  </>
+                )}
+              </Match>
+              <Match when={c().kind === "secondWay"}>
+                <button class="btn primary" data-f="home:account:kit" onClick={() => navigate("/sync/kit")}>
+                  {syncWords.kitTitle}
+                </button>
+              </Match>
+            </Switch>
           </div>
         </section>
       )}
@@ -174,6 +309,8 @@ export default function Home() {
           </Show>
           </div>
         </section>
+
+        <AccountCard />
 
         <Show when={home.status.state === "failed" && home.status}>
           {(s) => (

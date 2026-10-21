@@ -12,6 +12,8 @@ import { bridgeUrl, link } from "./core/client";
 // The debrid accounts follow the core from the start, whatever screen is open.
 import "./core/debrid";
 import "./core/trakt";
+// A sign-out with removal that a reload cut short goes on (D13).
+import "./core/wipe";
 import { gateOpen, profiles, profilesFailed } from "./core/profiles";
 import { installFocus, restoreSoon } from "./focus/dom";
 import { form } from "./form";
@@ -32,6 +34,7 @@ import ProfilesScreen, { EditProfile, ManageProfiles, Picker } from "./screens/p
 import Player from "./screens/player";
 import Search, { leaveSearch, openSearch, SearchOverlay, searchOpen } from "./screens/search";
 import SettingsScreen from "./screens/settings";
+import SignInScreen, { Found, NewAccount, OtherWays, OwnServer } from "./screens/sign-in";
 import SyncScreen, { AddDevice, ForkReview, MakeKit, RecoverAccount, ReportLost, StartAccount } from "./screens/sync";
 import { Stub } from "./screens/stub";
 import TraktScreen from "./screens/trakt";
@@ -59,7 +62,8 @@ export function parentOf(path: string): string | null {
   if (parts[0] === "title" && parts[3] === "versions") return `/${parts.slice(0, 3).join("/")}`;
   if (parts[0] === "play" && parts[2]) return `/title/${parts[1]}/${parts[2]}`;
   if (path.startsWith("/profiles/edit/") || path === "/profiles/new") return "/profiles/manage";
-  if (path.startsWith("/sync/") || path === "/pair") return "/sync";
+  if (path.startsWith("/sync/") || path === "/pair" || path === "/sign-in") return "/sync";
+  if (path.startsWith("/sign-in/")) return "/sign-in";
   if (isSettingsPage(path) && path !== "/settings") return "/settings";
   return path === "/" ? null : "/";
 }
@@ -263,6 +267,8 @@ function Shell(props: RouteSectionProps) {
   );
 }
 
+const NotFound = () => <Stub title="Not found" text="This page does not exist in Marquee." />;
+
 export function App() {
   return (
     <Router root={Shell}>
@@ -271,6 +277,11 @@ export function App() {
       <Route path="/title/:kind/:id/versions/:videoId" component={Versions} />
       <Route path="/play/:kind/:id/:videoId" component={Player} />
       <Route path="/welcome" component={Onboarding} />
+      <Route path="/sign-in" component={SignInScreen} />
+      <Route path="/sign-in/other" component={OtherWays} />
+      <Route path="/sign-in/server" component={OwnServer} />
+      <Route path="/sign-in/new" component={NewAccount} />
+      <Route path="/sign-in/found" component={Found} />
       <Route path="/settings" component={SettingsScreen} />
       <Route path="/search" component={Search} />
       <Route path="/discover" component={Discover} />
@@ -284,7 +295,9 @@ export function App() {
       <Route path="/sync" component={SyncScreen} />
       <Route path="/sync/start" component={StartAccount} />
       <Route path="/sync/recover" component={RecoverAccount} />
-      <Route path="/sync/add" component={AddDevice} />
+      {/* The web approves no device (plans/accounts.md 4.2): "Use your phone to sign in other
+          devices". The approve page stays in development builds, for the e2e peers. */}
+      <Route path="/sync/add" component={import.meta.env.DEV ? AddDevice : NotFound} />
       <Route path="/sync/kit" component={MakeKit} />
       <Route path="/sync/lost/:id" component={ReportLost} />
       <Route path="/sync/fork" component={ForkReview} />
@@ -296,7 +309,7 @@ export function App() {
       <Route path="/profiles/manage" component={ManageProfiles} />
       <Route path="/profiles/new" component={EditProfile} />
       <Route path="/profiles/edit/:id" component={EditProfile} />
-      <Route path="*" component={() => <Stub title="Not found" text="This page does not exist in Marquee." />} />
+      <Route path="*" component={NotFound} />
     </Router>
   );
 }

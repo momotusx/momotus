@@ -17,7 +17,8 @@ import { pairingProblem, plainAddress, serverHost, syncWords } from "../lib/word
 import "./browse.css";
 import "./settings.css";
 
-function Session(props: { server: string; name: string; onDone: () => void; onJoined: () => void }) {
+/** A pairing code and its steps; `how` says where the code is scanned (default: the Account page of a device that syncs). */
+export function Session(props: { server: string; name: string; onDone: () => void; onJoined: () => void; how?: string }) {
   const view = liveView<Pairing>("pairing", { server: props.server, name: props.name });
   const p = () => view.state.data;
   // When the code stops working, as a time of day ("1:54 PM").
@@ -81,7 +82,7 @@ function Session(props: { server: string; name: string; onDone: () => void; onJo
               <Qr text={w().qr} label="Pairing QR code" />
             </div>
             <div class="pair-steps">
-              <p class="step">On a device that already syncs, open Settings, then Account, then Add a device, and scan this code.</p>
+              <p class="step">{props.how ?? "On a device that already syncs, open Settings, then Account, then Add a device, and scan this code."}</p>
               <p class="st warn live">
                 <i class="dot" />
                 {/* One text box: the dot's flex row would split the time and the period into columns. */}

@@ -25,7 +25,9 @@ import { form } from "../form";
 import { resetHistoryBase } from "../history";
 import { afterContinue, catalogMissing, choicesFor, defaultsWords, grouped, switchable } from "../lib/defaults";
 import { choiceWords, findAddons, type Tone } from "../lib/words";
+import * as sync from "../core/sync";
 import { InstallField } from "./addons";
+import { SignInStart, TvSignIn } from "./sign-in";
 import "./browse.css";
 import "./settings.css";
 import "./onboarding.css";
@@ -68,7 +70,7 @@ function leave(navigate: (to: string, o?: { replace?: boolean }) => void, to: st
 
 export default function Onboarding() {
   const [query, setQuery] = useSearchParams();
-  const step = () => (query.step === "2" ? 2 : query.step === "3" ? 3 : query.step === "choice" ? "choice" : 1);
+  const step = () => (query.step === "2" ? 2 : query.step === "3" ? 3 : query.step === "choice" ? "choice" : query.step === "doors" ? "doors" : 1);
   // A new step puts focus on its first action (on a remote or after keys).
   createEffect(on(step, () => autoFocusSoon(() => document.querySelector<HTMLElement>(".welcome [data-autofocus]"))));
   const { addons, defaults, error } = useDefaults();
@@ -91,7 +93,7 @@ export default function Onboarding() {
       <header class="welcome-head">
         <div class="brand">Marquee</div>
         {/* Browse first still passes the switches: nothing is installed unasked. */}
-        <Show when={step() === 1}>
+        <Show when={step() === 1 || step() === "doors"}>
           <A class="skip" href={fresh() ? "/welcome?step=2&then=home" : "/"} replace={!fresh()} onClick={() => !fresh() && resetHistoryBase()} data-f="welcome:skip">
             Browse first
             <ChevronRight aria-hidden />
@@ -112,37 +114,17 @@ export default function Onboarding() {
         </Show>
       </header>
       <Switch>
+        {/* Sign-in first (plans/accounts.md 4.1, 4.2), on a device with no account yet; with no
+            sync service that offers it, the doors. */}
         <Match when={step() === 1}>
-          <section class="step-body" aria-label="Choose a start">
-            <h1>How would you like to begin?</h1>
-            <p class="lead">No account needed. Everything stays on this device until you turn on sync.</p>
-            <div class="doors" data-fgroup="doors">
-              <A class="door" href="/import?from=welcome" data-f="welcome:stremio" data-autofocus>
-                <DoorOpen aria-hidden />
-                <span>
-                  <b>I use Stremio</b>
-                  <small>Bring your addons, library and Continue Watching over with a code.</small>
-                </span>
-                <ChevronRight aria-hidden class="chev" />
-              </A>
-              <button class="door" data-f="welcome:fresh" onClick={() => setQuery({ step: "2" })}>
-                <Sparkle aria-hidden />
-                <span>
-                  <b>Start fresh</b>
-                  <small>Pick from the recommended addons, then browse and play.</small>
-                </span>
-                <ChevronRight aria-hidden class="chev" />
-              </button>
-              <A class="door" href="/pair" data-f="welcome:pair">
-                <QrCode aria-hidden />
-                <span>
-                  <b>I already use Marquee</b>
-                  <small>Join your other device's sync account with a code. Library and addons follow.</small>
-                </span>
-                <ChevronRight aria-hidden class="chev" />
-              </A>
-            </div>
-          </section>
+          <Show when={!sync.joined() && !sync.locked()} fallback={<Doors onFresh={() => setQuery({ step: "2" })} />}>
+            <Show when={form() === "tv"} fallback={<SignInStart from="welcome" doors={() => <Doors onFresh={() => setQuery({ step: "2" })} />} />}>
+              <TvSignIn doors={() => <Doors onFresh={() => setQuery({ step: "2" })} />} />
+            </Show>
+          </Show>
+        </Match>
+        <Match when={step() === "doors"}>
+          <Doors onFresh={() => setQuery({ step: "2" })} />
         </Match>
         <Match when={step() === 2}>
           <Recommended
@@ -162,6 +144,44 @@ export default function Onboarding() {
         </Match>
       </Switch>
     </main>
+  );
+}
+
+/** The doors: I use Stremio, Start fresh, and (no account here yet) I already use Marquee. */
+function Doors(props: { onFresh: () => void }) {
+  return (
+    <section class="step-body" aria-label="Choose a start">
+      <h1>How would you like to begin?</h1>
+      <p class="lead">No account needed. Everything stays on this device until you turn on sync.</p>
+      <div class="doors" data-fgroup="doors">
+        <A class="door" href="/import?from=welcome" data-f="welcome:stremio" data-autofocus>
+          <DoorOpen aria-hidden />
+          <span>
+            <b>I use Stremio</b>
+            <small>Bring your addons, library and Continue Watching over with a code.</small>
+          </span>
+          <ChevronRight aria-hidden class="chev" />
+        </A>
+        <button class="door" data-f="welcome:fresh" onClick={() => props.onFresh()}>
+          <Sparkle aria-hidden />
+          <span>
+            <b>Start fresh</b>
+            <small>Pick from the recommended addons, then browse and play.</small>
+          </span>
+          <ChevronRight aria-hidden class="chev" />
+        </button>
+        <Show when={!sync.joined()}>
+          <A class="door" href="/pair" data-f="welcome:pair">
+            <QrCode aria-hidden />
+            <span>
+              <b>I already use Marquee</b>
+              <small>Join your other device's sync account with a code. Library and addons follow.</small>
+            </span>
+            <ChevronRight aria-hidden class="chev" />
+          </A>
+        </Show>
+      </div>
+    </section>
   );
 }
 
