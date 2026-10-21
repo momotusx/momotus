@@ -351,6 +351,15 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
                     </Show>
                   </dl>
                   <ul class="why">
+                    {/* This device holds its start: it plays with no peer (plans/player-polish.md 2b). */}
+                    <Show when={p().onDevice}>
+                      {(w) => (
+                        <li>
+                          <Check aria-hidden />
+                          {w()}
+                        </li>
+                      )}
+                    </Show>
                     <For each={p().reasons.slice(0, 3)}>
                       {(r) => (
                         <li>
@@ -461,7 +470,15 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
                                 <For each={r.features}>{(f) => <span>{f}</span>}</For>
                               </span>
                               <span class="size num">{r.sizeBytes ? bytes(r.sizeBytes) : ""}</span>
-                              <LineWord line={r.line} />
+                              {/* The core's "On this device" stands for the row's line where it is set. */}
+                              <Show when={r.onDevice} fallback={<LineWord line={r.line} />}>
+                                {(w) => (
+                                  <span class="st line ok">
+                                    <CircleCheck aria-hidden class="tone" />
+                                    <span class="lt">{w()}</span>
+                                  </span>
+                                )}
+                              </Show>
                               <span class="via">{r.via}</span>
                               <span class="more">
                                 <Show when={lineWords(r.line).details}>
