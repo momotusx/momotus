@@ -42,6 +42,12 @@ const UNMAPPED_SHOWN: usize = 50;
 /// Synced settings: the account the profile uses, and per device the
 /// account it signed in to (the profile is off once no device is).
 const ACCOUNT_SETTING: &str = "trakt.account";
+/// On the owner profile, `sync.member.<device id>`: the account member a
+/// device is (synced).
+const SYNC_MEMBER: &str = "sync.member.";
+/// The account's devices as this device last saw them (local, sync state).
+const ACCOUNT_DEVICES: &str = "account_devices";
+const OWNER: &str = mq_library::OWNER;
 
 /// The Trakt app and where Trakt answers: from the build
 /// (`mq_tracking::trakt::CLIENT_ID` and `REDIRECT_URI`), or set by tests.
@@ -476,6 +482,60 @@ impl Core {
         format!("trakt.device.{}", self.clock().device())
     }
 
+    /// Before a round: names the account member this device is, in a synced
+    /// setting on the owner profile, so the other devices can tell its
+    /// `trakt.device.<id>` flag apart once it left the account.
+    pub(crate) fn note_sync_member(&self, config: &mq_sync::SyncConfig) {
+        let library = self.library();
+        let key = format!("{SYNC_MEMBER}{}", self.clock().device());
+        let me = serde_json::to_string(&format!("{:?}", config.secret().id())).unwrap_or_default();
+        let held = library
+            .settings(OWNER)
+            .ok()
+            .and_then(|all| all.into_iter().find_map(|(k, v)| (k == key).then_some(v)));
+        if held.as_deref() != Some(me.as_str())
+            && let Err(e) = library.set_setting(OWNER, &key, &me, self.clock())
+        {
+            tracing::warn!("could not name this device's account member: {e}");
+        }
+    }
+
+    /// After a round: the account's devices as this device last saw them
+    /// (forgotten with the account).
+    pub(crate) fn note_sync_devices(&self, config: &mq_sync::SyncConfig) {
+        let Ok((_, devices)) = mq_sync::stored_devices(self.library(), config) else {
+            return;
+        };
+        let devices: Vec<String> = devices.iter().map(|id| format!("{id:?}")).collect();
+        let devices = serde_json::to_string(&devices).unwrap_or_default();
+        if let Err(e) = self.library().set_sync_state(ACCOUNT_DEVICES, &devices) {
+            tracing::warn!("could not keep the account's devices: {e}");
+        }
+    }
+
+    /// Whether another device's `trakt.device.<id>` flag still counts as
+    /// signed in: not once this device knows the account's devices and that
+    /// one is no longer among them, since a device that left can never sync
+    /// its sign-out (B P3-3). Without either fact, it counts.
+    fn trakt_flag_counts(&self) -> Result<impl Fn(&str) -> bool, CoreError> {
+        let library = self.library();
+        let devices: Option<Vec<String>> = library
+            .sync_state(ACCOUNT_DEVICES)?
+            .and_then(|d| serde_json::from_str(&d).ok());
+        let members: HashMap<String, String> = library
+            .settings(OWNER)?
+            .into_iter()
+            .filter_map(|(k, v)| {
+                let device = k.strip_prefix(SYNC_MEMBER)?.to_owned();
+                Some((device, serde_json::from_str::<String>(&v).ok()?))
+            })
+            .collect();
+        Ok(move |device: &str| match (&devices, members.get(device)) {
+            (Some(devices), Some(member)) => devices.contains(member),
+            _ => true,
+        })
+    }
+
     /// Whether this device is still signed in to Trakt for any profile (its
     /// `trakt.device.<id>` setting). A wipe waits until each is signed out
     /// (D13): no Trakt record outlives the profiles it belonged to.
@@ -532,10 +592,11 @@ impl Core {
         let (library, profile) = (self.library(), self.profile());
         library.set_tracker_account(profile, TRACKER, None, 0, now_ms() as i64)?;
         library.set_setting(profile, &self.trakt_device_setting(), "null", self.clock())?;
+        let counts = self.trakt_flag_counts()?;
         let others = library
             .settings(profile)?
             .into_iter()
-            .any(|(k, v)| k.starts_with("trakt.device.") && v != "null");
+            .any(|(k, v)| v != "null" && k.strip_prefix("trakt.device.").is_some_and(&counts));
         if !others && setting(self, ACCOUNT_SETTING).is_some() {
             library.set_setting(profile, ACCOUNT_SETTING, "null", self.clock())?;
         }
