@@ -9,8 +9,9 @@
 //! 1.1, which stremio-core's pin on flate2 1.0 rules out, and every zip
 //! below 9.0.0 carries advisories that deny.toml fails on.
 
-use crate::rank::{Playing, same_cut, same_group};
+use crate::rank::Playing;
 use flate2::read::DeflateDecoder;
+use mq_relparse::fit::{same_cut, same_group};
 use regex::Regex;
 use std::io::Read;
 use std::sync::LazyLock;

@@ -2,7 +2,8 @@
 //! shows (plans/m13-turkcealtyazi.md 3.4).
 
 use crate::page::{Kind, Lang, Row, Source};
-use mq_relparse::{Cut, Quality};
+pub use mq_relparse::fit::Playing;
+use mq_relparse::fit::{Family, Made, misses, same_fps};
 use std::cmp::Reverse;
 
 /// The most tracks one title offers.
@@ -15,17 +16,6 @@ pub enum Target {
     Episode { season: u32, episode: u32 },
 }
 
-/// What the playing release says about itself, from its file name, and its
-/// frame rate when the probe read one.
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
-pub struct Playing<'a> {
-    pub group: Option<&'a str>,
-    /// Its source (`Quality::Unknown` when the name gives none).
-    pub source: Quality,
-    pub cut: Option<Cut>,
-    pub fps: Option<f32>,
-}
-
 /// One Turkish subtitle to offer.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Track {
@@ -34,30 +24,24 @@ pub struct Track {
     pub label: String,
 }
 
-/// The Turkish rows that fit `target`, ranked against `playing`: the
-/// playing group first, then the measured frame rate, then the same source
-/// family (a WEB-DL's timing is a WEBRip's, a BluRay's a BDRip's), then
-/// the same cut, then, with the frame rate unknown, the most common one
-/// among the fitting rows, then an episode's own file before a few
-/// episodes before a season pack, then the more downloaded, then the newer.
+/// The Turkish rows that fit `target`, ranked against `playing` by the
+/// shared release match (`mq_relparse::fit`: the playing group, the
+/// measured frame rate, the source family, the cut), then, with the frame
+/// rate unknown, the most common one among the fitting rows, then an
+/// episode's own file before a few episodes before a season pack, then the
+/// more downloaded, then the newer.
 pub fn tracks(rows: &[Row], target: Target, playing: &Playing) -> Vec<Track> {
     let mut fit: Vec<&Row> = rows
         .iter()
         .filter(|r| r.lang == Lang::Turkish && fits(&r.kind, target))
         .collect();
-    // A measured frame rate outranks the source family (a wrong rate drifts
-    // whatever the source); the stand-in only follows the cut.
-    let measured = playing.fps;
+    // The stand-in for an unknown frame rate only follows the cut.
     let usual = usual_fps(&fit);
-    let source = family(playing.source);
     // Parsed once per row: a page has up to 2000.
     fit.sort_by_cached_key(|r| {
         (
-            !same_group(&r.release, playing.group),
-            measured.is_some() && !same_fps(r.fps, measured),
-            source.is_none() || r.source.and_then(source_family) != source,
-            !same_cut(mq_relparse::parse(&r.release).cut, playing.cut),
-            measured.is_none() && !same_fps(r.fps, usual),
+            misses(&r.made(), playing),
+            playing.fps.is_none() && !same_fps(r.fps, usual),
             spread(&r.kind),
             Reverse(r.downloads),
             Reverse(r.altid),
@@ -104,21 +88,17 @@ fn spread(kind: &Kind) -> u8 {
     }
 }
 
-/// Whether `text` (a release line or a file name) names `group` as a word.
-/// Words are cut at every mark (`x264-CtrlHD` gives `CtrlHD`) and only at
-/// spaces, slashes, dots and brackets (`CaLLioPE_MoNTEDiaZ`, `D-Z0N3` stay
-/// whole), so a group with a dash or an underscore in it matches too.
-pub(crate) fn same_group(text: &str, group: Option<&str>) -> bool {
-    group.is_some_and(|group| {
-        let fine = text.split(|c: char| !c.is_alphanumeric());
-        let coarse = text.split(|c: char| c.is_whitespace() || "/.,()[]|+".contains(c));
-        fine.chain(coarse)
-            .any(|word| word.eq_ignore_ascii_case(group))
-    })
-}
-
-fn same_fps(row: Option<f32>, playing: Option<f32>) -> bool {
-    matches!((row, playing), (Some(a), Some(b)) if (a - b).abs() < 0.01)
+impl Row {
+    /// What the row says of the release its file was made for: the release
+    /// line, the site's source mark, the cut the line names, the frame rate.
+    pub fn made(&self) -> Made<'_> {
+        Made {
+            text: &self.release,
+            family: self.source.and_then(source_family),
+            cut: mq_relparse::parse(&self.release).cut,
+            fps: self.fps,
+        }
+    }
 }
 
 /// The frame rate most fitting rows have; the first seen on a tie.
@@ -139,35 +119,6 @@ fn usual_fps(rows: &[&Row]) -> Option<f32> {
         .rev()
         .max_by_key(|(_, n)| *n)
         .map(|(fps, _)| fps)
-}
-
-/// Most releases are the theatrical cut without saying so.
-pub(crate) fn same_cut(a: Option<Cut>, b: Option<Cut>) -> bool {
-    let plain = |c: Option<Cut>| c.filter(|c| *c != Cut::Theatrical);
-    plain(a) == plain(b)
-}
-
-/// Sources whose files share their timing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Family {
-    Web,
-    Disc,
-    Dvd,
-    Screener,
-    Cam,
-    Telesync,
-}
-
-fn family(quality: Quality) -> Option<Family> {
-    Some(match quality {
-        Quality::WebRip | Quality::WebDl => Family::Web,
-        Quality::BluRay | Quality::Remux => Family::Disc,
-        Quality::Dvd => Family::Dvd,
-        Quality::Screener => Family::Screener,
-        Quality::Cam => Family::Cam,
-        Quality::Telesync => Family::Telesync,
-        Quality::Hdtv | Quality::Unknown => return None,
-    })
 }
 
 /// `HD` and `HDRip` say nothing of where a file came from.

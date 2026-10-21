@@ -1,4 +1,5 @@
-//! Release-name parser (a port of the PTT handler table) and addon stream text extractors.
+//! Release-name parser (a port of the PTT handler table) and addon stream text extractors,
+//! and [`fit`]: how well a subtitle made for one release fits another.
 //!
 //! Only linear-time engines (`regex` and `regex-automata`) are used, so hostile addon text
 //! cannot cause ReDoS.
@@ -28,6 +29,7 @@ mod convert;
 mod custom;
 mod date;
 mod engine;
+pub mod fit;
 mod gate;
 #[cfg(test)]
 mod golden;
