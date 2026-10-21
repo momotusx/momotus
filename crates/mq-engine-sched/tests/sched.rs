@@ -31,8 +31,6 @@ struct Harness {
     log: Vec<Action>,
     /// Container index per file, as sent.
     index: BTreeMap<usize, FileIndex>,
-    /// Files with a range that was Ready: the start's gate is over.
-    started: BTreeSet<usize>,
 }
 
 impl Harness {
@@ -52,7 +50,6 @@ impl Harness {
             hedges: VecDeque::new(),
             log: Vec::new(),
             index: BTreeMap::new(),
-            started: BTreeSet::new(),
         }
     }
 
@@ -209,7 +206,6 @@ impl Harness {
                     let &(file, start, end) =
                         self.open.get(&demand).expect("ready for closed demand");
                     assert!(self.ready.insert(demand), "ready twice");
-                    self.started.insert(file);
                     for p in self.blocking_pieces(file, start, end) {
                         assert!(self.verified.get(p), "ready before piece {p} verified");
                     }
@@ -759,55 +755,9 @@ fn a_pending_index_fetches_the_tail_and_waits_for_the_head() {
     assert!(acts.contains(&Action::Ready { demand: 1 }));
 }
 
-/// Cause 2 of plans/research/start-latency.md: until the focused read is
-/// Ready, nothing outside what Ready waits on is asked for; then its
-/// critical window follows at once.
-#[test]
-fn before_ready_only_the_ready_set_is_asked_for() {
-    let g = Geometry::new(64 * KIB as u32, &[8 * MIB]).unwrap();
-    let mut h = Harness::new(g, small_cfg());
-    for p in 1..=3 {
-        h.peer(p, 4 * MIB);
-    }
-    open(&mut h, 1, 0, 0, None);
-    // Blocking 0, critical 1..3, tail 127.
-    assert_eq!(h.s.class_of(1), None);
-    let asked = serve_until_ready(&mut h, 1).expect("ready");
-    let outside: Vec<PieceIdx> = asked
-        .iter()
-        .map(|&b| h.geo.piece_of(b))
-        .filter(|&p| p != 0 && p != 127)
-        .collect();
-    assert!(outside.is_empty(), "asked before Ready: {outside:?}");
-    assert_eq!(h.s.class_of(1), Some(Class::Critical));
-    assert!(
-        h.out.iter().any(|&(b, _)| h.geo.piece_of(b) == 1),
-        "the critical window waits"
-    );
-}
-
-/// The gate is the start's alone (review P1-2): once the file has started,
-/// a seek's range keeps its critical, playback and readahead windows
-/// before its own Ready.
-#[test]
-fn a_seek_after_the_start_keeps_every_window() {
-    let g = Geometry::new(64 * KIB as u32, &[8 * MIB]).unwrap();
-    let mut h = Harness::new(g, small_cfg());
-    h.peer(1, 4 * MIB);
-    open(&mut h, 1, 0, 0, None);
-    serve_until_ready(&mut h, 1).expect("ready");
-    open(&mut h, 2, 0, 4 * MIB, None);
-    // Piece 64: blocking 64, critical 65..67, playback 67..69, readahead
-    // 69..73.
-    assert!(!h.ready.contains(&2), "the seek is Ready already");
-    assert_eq!(h.s.class_of(65), Some(Class::Critical));
-    assert_eq!(readahead_pieces(&h), [69, 70, 71, 72]);
-}
-
 /// A first read in the index zone of an MP4 whose index is pending, with
 /// no read at the head (review P2-1): the head's blocking window is asked
-/// for before the start's gate, so the head can say where the index is and
-/// the read reaches Ready.
+/// for, so the head can say where the index is and the read reaches Ready.
 #[test]
 fn a_pending_mp4_read_in_the_index_zone_asks_for_the_head() {
     let g = Geometry::new(64 * KIB as u32, &[8 * MIB]).unwrap();
@@ -832,23 +782,6 @@ fn a_pending_mp4_read_in_the_index_zone_asks_for_the_head() {
         },
     });
     serve_until_ready(&mut h, 1).expect("ready");
-}
-
-/// A reader that reads on with no Ready, one that does not wait for it
-/// (review P2-2), gets every window once it is past its blocking window.
-#[test]
-fn a_read_past_its_blocking_window_keeps_every_window() {
-    let g = Geometry::new(64 * KIB as u32, &[8 * MIB]).unwrap();
-    let mut h = Harness::new(g, small_cfg());
-    open(&mut h, 1, 0, 0, None);
-    assert_eq!(h.s.class_of(1), None);
-    h.send(Event::RangeAdvanced {
-        demand: 1,
-        pos: 64 * KIB,
-    });
-    // Piece 1: blocking 1, critical 2..4.
-    assert_eq!(h.s.class_of(2), Some(Class::Critical));
-    assert!(!readahead_pieces(&h).is_empty());
 }
 
 /// What a start waits on, for the loading screen: the focused read's
@@ -1936,11 +1869,9 @@ fn run(geo: &Geometry, cfg: &Config, ops: &[Op]) -> Harness {
                     start,
                     end_hint,
                 });
-                // The focused demand gets its blocking and critical windows,
-                // and until its file's first Ready only what Ready waits on,
-                // so nothing is critical; a probe (its end within its
-                // blocking window) only its blocking one
-                // (plans/streaming-window.md 2.3).
+                // The focused demand gets its blocking and critical windows;
+                // a probe (its end within its blocking window) only its
+                // blocking one (plans/streaming-window.md 2.3).
                 let f = geo.files()[file];
                 let b_end = (start + cfg.blocking_bytes)
                     .min(end_hint.unwrap_or(f.len).min(f.len))
@@ -1950,8 +1881,7 @@ fn run(geo: &Geometry, cfg: &Config, ops: &[Op]) -> Harness {
                     .critical_min_bytes
                     .max(cfg.critical_secs * cfg.default_bitrate);
                 let probe = end_hint.is_some_and(|e| e <= start + cfg.blocking_bytes);
-                let gated = !h.started.contains(&file);
-                let end = if probe || gated {
+                let end = if probe {
                     b_end
                 } else {
                     (b_end + crit).min(f.len)
@@ -1962,15 +1892,6 @@ fn run(geo: &Geometry, cfg: &Config, ops: &[Op]) -> Harness {
                         c.is_some_and(Class::is_urgent),
                         "focused piece {p} is {c:?}"
                     );
-                }
-                if !probe && gated {
-                    for p in 0..n {
-                        let c = h.s.class_of(p);
-                        assert!(
-                            c.is_none_or(|c| c < Class::Critical),
-                            "piece {p} is {c:?} before the start"
-                        );
-                    }
                 }
             }
             Op::Advance { demand, kib } => {
