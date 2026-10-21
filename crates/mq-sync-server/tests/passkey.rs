@@ -618,7 +618,11 @@ async fn history_is_never_refused_for_a_lookup_held_since() {
         joined.record.keys.account, b.record.keys.account,
         "the lookup is still B's"
     );
-    // The backup from before the three entries, restored with the journal.
+    // A restart writes the journal again from the tables, in account order:
+    // B's entries first. Then the backup from before the three entries is
+    // restored with that journal.
+    let restarted = Relay::start(relay.db.clone(), false).await;
+    std::mem::forget(restarted);
     let db = fresh_dir().join("relay.sqlite");
     std::fs::rename(&before, &db).unwrap();
     std::fs::copy(
