@@ -103,7 +103,9 @@ extension Font {
     }
 
     /// SF for a `Font` value (a choice between faces); views use `View.textFont`. The size is
-    /// scaled for Dynamic Type when the view is drawn.
+    /// scaled for Dynamic Type when the body runs, so it does not follow a size change made while
+    /// the view stays on screen, nor a `.dynamicTypeSize` clamp. Only the face choices in
+    /// AddonsScreen and SyncFlows and the player's caption face (redrawn with every cue) use it.
     @MainActor static func text(_ size: CGFloat, weight: Font.Weight = .regular, relativeTo style: Font.TextStyle = .body) -> Font {
         .system(size: scaled(size, style), weight: weight)
     }

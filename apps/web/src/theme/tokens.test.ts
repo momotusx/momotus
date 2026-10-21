@@ -36,3 +36,30 @@ test("the browser bar takes the page color, and the page says it is dark only", 
   expect(html).toContain(`<meta name="theme-color" content="${tokens.color.dark.bg}" />`);
   expect(html).toContain('<meta name="color-scheme" content="dark" />');
 });
+
+// WCAG contrast of a token color on another, each translucent one laid on what it sits on.
+type RGBA = [number, number, number, number];
+const rgba = (c: string): RGBA => {
+  const hex = /^#([0-9a-f]{6})$/i.exec(c)?.[1];
+  if (hex) return [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16), 1];
+  const n = (c.match(/[\d.]+/g) ?? []).map(Number);
+  return [n[0] ?? 0, n[1] ?? 0, n[2] ?? 0, n[3] ?? 1];
+};
+const over = ([r, g, b, a]: RGBA, [ur, ug, ub]: RGBA): RGBA => [r * a + ur * (1 - a), g * a + ug * (1 - a), b * a + ub * (1 - a), 1];
+const lum = (c: RGBA) => {
+  const lin = (v: number) => (v / 255 <= 0.04045 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]);
+};
+const contrast = (fg: string, bg: string, page: string) => {
+  const back = over(rgba(bg), rgba(page));
+  const [a, b] = [lum(over(rgba(fg), back)) + 0.05, lum(back) + 0.05];
+  return Math.max(a, b) / Math.min(a, b);
+};
+
+test("a selected chip's note reads on the selected fill", () => {
+  // browse.css `.chip.on small`: full 92 percent text on `control` (5.37:1); at .8 opacity it was 4.11.
+  const c = JSON.parse(readFileSync(tokensPath, "utf8")).color.dark;
+  expect(contrast(c.text, c.control, c.bg)).toBeGreaterThanOrEqual(4.5);
+  const sheet = readFileSync(new URL("../screens/browse.css", import.meta.url), "utf8");
+  expect(sheet).toMatch(/\.chip\.on small \{ opacity: 1; \}/);
+});

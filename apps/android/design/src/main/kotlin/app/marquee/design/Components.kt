@@ -265,7 +265,8 @@ fun Chip(
                     MqText(
                         detail,
                         role = TextRole.Callout,
-                        color = ink.copy(alpha = 0.7f),
+                        // Unselected on `raised`, the detail is `dim` (5.73:1); muted at 70 percent was 4.06.
+                        color = if (selected) ink.copy(alpha = 0.7f) else colors.dim,
                         weight = FontWeight.Normal,
                         maxLines = 1,
                     )

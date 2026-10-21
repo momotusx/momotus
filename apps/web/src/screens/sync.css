@@ -91,7 +91,6 @@
 .sync-note.bad span { flex: 1 1 360px; }
 .sync-note .btn { height: 52px; padding: 0 20px; font-size: var(--type-callout); }
 [data-form="phone"] .sync-note .btn { height: 38px; padding: 0 14px; }
-.sync-tag.bad { color: var(--bg); background: var(--bad); box-shadow: none; }
 .sync-mtext .sync-goes { color: var(--text); font-weight: 600; }
 /* What this browser's storage did wrong, at the top of the page. */
 .sync-storage { margin-bottom: 28px; max-width: 1100px; }

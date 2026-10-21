@@ -155,9 +155,9 @@ async function skipCredits(page: Page, time: () => Promise<number>, seekTo: (s: 
   const look = () =>
     skip.evaluate((el) => {
       const s = getComputedStyle(el);
-      return { fill: s.backgroundColor, accentEdge: s.boxShadow.includes("229, 55, 42"), ring: s.outlineStyle === "none" || s.outlineColor === "rgba(0, 0, 0, 0)" ? null : s.outlineColor };
+      return { fill: s.backgroundColor, edge: s.boxShadow.includes("inset"), ring: s.outlineStyle === "none" || s.outlineColor === "rgba(0, 0, 0, 0)" ? null : s.outlineColor };
     });
-  await expect.poll(look).toEqual({ fill: "rgba(255, 255, 255, 0.92)", accentEdge: false, ring: "rgb(255, 255, 255)" });
+  await expect.poll(look).toEqual({ fill: "rgba(255, 255, 255, 0.92)", edge: false, ring: "rgb(255, 255, 255)" });
   await expect(page.locator(".skip-src")).toHaveText("Skip data: TheIntroDB");
   await expect(page.locator(".skip-src")).toHaveCSS("opacity", "1");
 
@@ -194,7 +194,7 @@ async function skipCredits(page: Page, time: () => Promise<number>, seekTo: (s: 
   await expect.poll(async () => (await box(".scrub")).top - (await box('[data-f="player:skip"]')).bottom).toBeGreaterThan(16);
   // Without the focus, no ring and still no edge.
   await skip.evaluate((el) => (el as HTMLElement).blur());
-  await expect.poll(look).toEqual({ fill: "rgba(255, 255, 255, 0.92)", accentEdge: false, ring: null });
+  await expect.poll(look).toEqual({ fill: "rgba(255, 255, 255, 0.92)", edge: false, ring: null });
 }
 
 test("movie page: trailer overlay and Mark watched by remote", async ({ page }) => {

@@ -67,6 +67,10 @@ class DesignTest {
         // The TV ring, white on the page.
         assertTrue(contrast(dark.accent, dark.bg) >= 3f)
         assertTrue(contrast(dark.switchOn, dark.surface) >= 3f) // 6.89
+        // A chip's detail (Discover's catalog source): dim on `raised` unselected, and onPrimary at
+        // 70 percent on the white pill selected (Chip in Components.kt).
+        assertTrue(contrast(dark.dim, dark.raised) >= 4.5f) // 5.73
+        assertTrue(contrast(dark.onPrimary.copy(alpha = dark.onPrimary.alpha * 0.7f), dark.primary) >= 4.5f) // 5.80
         // Dark only: the light palette mirrors the dark one.
         assertEquals(dark, Tokens.light)
     }

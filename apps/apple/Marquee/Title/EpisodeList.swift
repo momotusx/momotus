@@ -270,7 +270,7 @@ private struct EpisodeRow: View {
             .frame(width: width, height: width * 9 / 16)
             .overlay(alignment: .bottomLeading) {
                 Text("\(episode.episode)")
-                    .textFont(chip + 2, weight: .heavy, relativeTo: .caption)
+                    .textFont(chip + 2, weight: .bold, relativeTo: .caption)
                     .monospacedDigit()
                     .foregroundStyle(Theme.Palette.text)
                     .padding(.horizontal, chip * 0.5)
