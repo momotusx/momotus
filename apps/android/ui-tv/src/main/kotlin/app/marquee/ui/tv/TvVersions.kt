@@ -67,6 +67,7 @@ import app.marquee.core.views.ViewStatus
 import app.marquee.design.CapsLabel
 import app.marquee.design.Eyebrow
 import app.marquee.design.FactsGrid
+import app.marquee.design.FocusInk
 import app.marquee.design.GlassBar
 import app.marquee.design.Icons
 import app.marquee.design.LiveSpoken
@@ -82,9 +83,11 @@ import app.marquee.design.StateMessage
 import app.marquee.design.Status
 import app.marquee.design.StatusWord
 import app.marquee.design.TextRole
+import app.marquee.design.Tokens
 import app.marquee.design.ToneWord
 import app.marquee.design.endFade
 import app.marquee.design.focusClickable
+import app.marquee.design.focusPalette
 import app.marquee.design.marqueeFocus
 import app.marquee.design.scrollByKey
 import kotlinx.coroutines.launch
@@ -580,11 +583,12 @@ private fun SourceRow(
     focus: FocusMemory,
     onPlay: (VersionRow) -> Unit,
 ) {
-    val colors = Marquee.colors
     val key = rowKey(row)
     val shape = RoundedCornerShape(Marquee.radius.m)
     val watch = focus.watch(ROWS, key)
     var focused by remember { mutableStateOf(false) }
+    // The focused row turns white with dark words (focusPalette).
+    val colors = focusPalette(focused)
     val line = StreamChoiceCopy.line(row.line)
     val spoken =
         listOfNotNull(
@@ -596,7 +600,7 @@ private fun SourceRow(
         Modifier
             .fillMaxWidth()
             .focusRequester(focus.requesterFor(key))
-            .marqueeFocus(Marquee.radius.m, scale = 1.02f)
+            .marqueeFocus(Marquee.radius.m, Tokens.FOCUS_SCALE_TILE)
             .onFocusChanged { state ->
                 watch(state.isFocused)
                 focused = state.isFocused
@@ -610,31 +614,38 @@ private fun SourceRow(
             .padding(horizontal = 22.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            MqText(VersionsCopy.cell(row.quality), Modifier.width(QUALITY), weight = FontWeight.SemiBold, maxLines = 1)
-            MqText(
-                row.features.joinToString(", "),
-                Modifier.weight(1f),
-                role = TextRole.Callout,
-                color = colors.muted,
-                maxLines = 1,
-            )
-            // Left blank when the source does not say, as on the web.
-            MqText(
-                row.sizeBytes?.let(Format::bytes).orEmpty(),
-                Modifier.width(SIZE),
-                role = TextRole.Callout,
-                maxLines = 1,
-            )
-            // A long line ("Colors may look washed out on this screen") takes a second line, as on the web.
-            ToneWord(line.text, tone(line.tone), Modifier.width(STATUS))
-            MqText(row.via, Modifier.width(VIA), role = TextRole.Callout, maxLines = 1)
-        }
-        if (focused) {
-            Column(Modifier.padding(start = QUALITY), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                if (line.details.isNotEmpty()) MqText(line.details, role = TextRole.Callout, maxLines = 2)
-                Release(row.releaseName, maxLines = 2)
-                MqText(VersionsCopy.detail(row), role = TextRole.Caption, color = colors.muted, maxLines = 1)
+        FocusInk(colors) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                MqText(
+                    VersionsCopy.cell(row.quality),
+                    Modifier.width(QUALITY),
+                    weight = FontWeight.SemiBold,
+                    maxLines = 1,
+                )
+                MqText(
+                    row.features.joinToString(", "),
+                    Modifier.weight(1f),
+                    role = TextRole.Callout,
+                    color = colors.muted,
+                    maxLines = 1,
+                )
+                // Left blank when the source does not say, as on the web.
+                MqText(
+                    row.sizeBytes?.let(Format::bytes).orEmpty(),
+                    Modifier.width(SIZE),
+                    role = TextRole.Callout,
+                    maxLines = 1,
+                )
+                // A long line ("Colors may look washed out on this screen") takes a second line, as on the web.
+                ToneWord(line.text, tone(line.tone), Modifier.width(STATUS))
+                MqText(row.via, Modifier.width(VIA), role = TextRole.Callout, maxLines = 1)
+            }
+            if (focused) {
+                Column(Modifier.padding(start = QUALITY), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    if (line.details.isNotEmpty()) MqText(line.details, role = TextRole.Callout, maxLines = 2)
+                    Release(row.releaseName, maxLines = 2)
+                    MqText(VersionsCopy.detail(row), role = TextRole.Caption, color = colors.muted, maxLines = 1)
+                }
             }
         }
     }

@@ -81,6 +81,7 @@ import app.marquee.core.model.ListedAddon
 import app.marquee.core.session.CoreSession
 import app.marquee.core.views.ViewStatus
 import app.marquee.design.Chip
+import app.marquee.design.FocusInk
 import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.KeyPresses
@@ -94,6 +95,7 @@ import app.marquee.design.Status
 import app.marquee.design.StatusNote
 import app.marquee.design.TextRole
 import app.marquee.design.Tokens
+import app.marquee.design.focusPalette
 import app.marquee.design.marqueeFocus
 import app.marquee.design.openLink
 import kotlinx.coroutines.Job
@@ -620,7 +622,6 @@ private fun Card(
     modifier: Modifier = Modifier,
 ) {
     val tv = Marquee.form == Form.Tv
-    val colors = Marquee.colors
     val context = LocalContext.current
     val busy = state?.busy == true
     val action = FindAddons.cardAction(entry, state?.code)
@@ -652,6 +653,8 @@ private fun Card(
             failure,
         )
     var focused by remember { mutableStateOf(false) }
+    // On TV the focused card turns white with dark words (focusPalette).
+    val colors = focusPalette(focused)
     val requester = remember { FocusRequester() }
     val gate = memory.gate
     // Phone: this card's own install just landed while its button held the focus. The button goes, so
@@ -684,153 +687,171 @@ private fun Card(
             onDispose { if (focus[entry.key] === requester) focus.remove(entry.key) }
         }
     }
-    Column(
-        modifier
-            .fillMaxWidth()
-            .then(
-                if (tv) {
-                    Modifier
-                        .focusRequester(requester)
-                        .onFocusChanged {
-                            focused = it.isFocused
-                            if (it.isFocused) onFocus() else gate.reset()
-                        }.marqueeFocus(Marquee.radius.l, Tokens.FOCUS_SCALE_TILE)
-                } else {
-                    Modifier
-                },
-            ).clip(shape)
-            .background(colors.glass)
-            .border(1.dp, colors.edge, shape)
-            .then(
-                if (tv) {
-                    // One stop, the same node whatever the state, so an install that ends keeps focus here.
-                    Modifier
-                        .semantics(mergeDescendants = true) {
-                            contentDescription = cardWords
-                            // An installed card is not a button; a failure is read when it comes.
-                            if (pressable && !busy) {
-                                role = Role.Button
-                                onClick {
-                                    perform()
-                                    true
+    FocusInk(colors) {
+        Column(
+            modifier
+                .fillMaxWidth()
+                .then(
+                    if (tv) {
+                        Modifier
+                            .focusRequester(requester)
+                            .onFocusChanged {
+                                focused = it.isFocused
+                                if (it.isFocused) onFocus() else gate.reset()
+                            }.marqueeFocus(Marquee.radius.l, Tokens.FOCUS_SCALE_TILE)
+                    } else {
+                        Modifier
+                    },
+                ).clip(shape)
+                .background(colors.glass)
+                .border(1.dp, colors.edge, shape)
+                .then(
+                    if (tv) {
+                        // One stop, the same node whatever the state, so an install that ends keeps focus here.
+                        Modifier
+                            .semantics(mergeDescendants = true) {
+                                contentDescription = cardWords
+                                // An installed card is not a button; a failure is read when it comes.
+                                if (pressable && !busy) {
+                                    role = Role.Button
+                                    onClick {
+                                        perform()
+                                        true
+                                    }
                                 }
-                            }
-                            if (failure != null) liveRegion = LiveRegionMode.Polite
-                        }.onKeyEvent { e ->
-                            val select = e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
-                            when {
-                                !select -> Unit
-                                e.type == KeyEventType.KeyDown -> gate.keyDown()
-                                e.type == KeyEventType.KeyUp -> if (gate.keyUp() && pressable) perform()
-                            }
-                            select
-                        }.focusable()
-                } else {
-                    Modifier.semantics(mergeDescendants = true) {}
-                },
-            ).padding(if (tv) 28.dp else 16.dp),
-        verticalArrangement = Arrangement.spacedBy(if (tv) 22.dp else 12.dp),
-    ) {
-        val about: @Composable (Modifier) -> Unit = { textModifier ->
-            Row(textModifier, horizontalArrangement = Arrangement.spacedBy(if (tv) 26.dp else 14.dp)) {
-                Mark(entry.name)
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(if (tv) 6.dp else 4.dp)) {
-                    // The addon's own words read in their own direction (the web's dir="auto").
-                    MqText(
-                        entry.name,
-                        modifier = Modifier.fillMaxWidth(),
-                        role = TextRole.Headline,
-                        color = if (focused) colors.accent else colors.text,
-                        weight = FontWeight.Bold,
-                        textDirection = TextDirection.Content,
-                    )
-                    // The link may hold keys: the host stands in for it, cut in the middle so the
-                    // owner's domain at its end always shows.
-                    MqText(
-                        entry.host,
-                        role = TextRole.Caption,
-                        color = colors.dim,
-                        maxLines = 1,
-                        fontFamily = FontFamily.Monospace,
-                        overflow = TextOverflow.MiddleEllipsis,
-                    )
-                    MqText(
-                        FindAddons.providesLine(entry),
-                        modifier = Modifier.padding(top = if (tv) 8.dp else 4.dp),
-                        role = TextRole.Caption,
-                        weight = FontWeight.SemiBold,
-                    )
-                    entry.description?.let {
+                                if (failure != null) liveRegion = LiveRegionMode.Polite
+                            }.onKeyEvent { e ->
+                                val select =
+                                    e.key == Key.DirectionCenter || e.key == Key.Enter || e.key == Key.NumPadEnter
+                                when {
+                                    !select -> Unit
+                                    e.type == KeyEventType.KeyDown -> gate.keyDown()
+                                    e.type == KeyEventType.KeyUp -> if (gate.keyUp() && pressable) perform()
+                                }
+                                select
+                            }.focusable()
+                    } else {
+                        Modifier.semantics(mergeDescendants = true) {}
+                    },
+                ).padding(if (tv) 28.dp else 16.dp),
+            verticalArrangement = Arrangement.spacedBy(if (tv) 22.dp else 12.dp),
+        ) {
+            val about: @Composable (Modifier) -> Unit = { textModifier ->
+                Row(textModifier, horizontalArrangement = Arrangement.spacedBy(if (tv) 26.dp else 14.dp)) {
+                    Mark(entry.name)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(if (tv) 6.dp else 4.dp)) {
+                        // The addon's own words read in their own direction (the web's dir="auto").
                         MqText(
-                            it,
+                            entry.name,
                             modifier = Modifier.fillMaxWidth(),
-                            role = if (tv) TextRole.Callout else TextRole.Caption,
-                            color = colors.muted,
-                            maxLines = 2,
+                            role = TextRole.Headline,
+                            color = if (focused) colors.accent else colors.text,
+                            weight = FontWeight.Bold,
                             textDirection = TextDirection.Content,
                         )
-                    }
-                    help?.let {
+                        // The link may hold keys: the host stands in for it, cut in the middle so the
+                        // owner's domain at its end always shows.
                         MqText(
-                            it,
+                            entry.host,
+                            role = TextRole.Caption,
+                            color = colors.dim,
+                            maxLines = 1,
+                            fontFamily = FontFamily.Monospace,
+                            overflow = TextOverflow.MiddleEllipsis,
+                        )
+                        MqText(
+                            FindAddons.providesLine(entry),
                             modifier = Modifier.padding(top = if (tv) 8.dp else 4.dp),
-                            role = if (tv) TextRole.Callout else TextRole.Caption,
-                            weight = FontWeight.Medium,
+                            role = TextRole.Caption,
+                            weight = FontWeight.SemiBold,
+                        )
+                        entry.description?.let {
+                            MqText(
+                                it,
+                                modifier = Modifier.fillMaxWidth(),
+                                role = if (tv) TextRole.Callout else TextRole.Caption,
+                                color = colors.muted,
+                                maxLines = 2,
+                                textDirection = TextDirection.Content,
+                            )
+                        }
+                        help?.let {
+                            MqText(
+                                it,
+                                modifier = Modifier.padding(top = if (tv) 8.dp else 4.dp),
+                                role = if (tv) TextRole.Callout else TextRole.Caption,
+                                weight = FontWeight.Medium,
+                            )
+                        }
+                        // Always there, so a failure that comes is a change of a live region and is read out.
+                        Box(Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
+                            failure?.let { Note(it, failed = true, side = 0.dp) }
+                        }
+                        if (memory.noBrowser) Note(FindAddonsCopy.NO_BROWSER, failed = true, side = 0.dp)
+                    }
+                }
+            }
+            if (tv) {
+                EndOrBelow(Modifier.clearAndSetSemantics { }, { about(Modifier) }) {
+                    if (word != null || pressable) {
+                        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            word?.let { StateWord(it, installed = action is Action.None) }
+                            if (pressable) {
+                                ActionPill(
+                                    if (busy) busyWord else verb,
+                                    action is Action.TurnOn,
+                                    busy,
+                                    focused,
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                about(Modifier)
+            }
+            if (!tv && (word != null || pressable || configure)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    itemVerticalAlignment = Alignment.CenterVertically,
+                ) {
+                    word?.let {
+                        StateWord(
+                            it,
+                            installed = action is Action.None,
+                            // An installed card's one stop, which a landed install hands focus to.
+                            modifier =
+                                if (action is Action.None) {
+                                    Modifier
+                                        .focusRequester(
+                                            stay,
+                                        ).focusable()
+                                } else {
+                                    Modifier
+                                },
+                            spoken = cardWords.takeIf { action is Action.None },
                         )
                     }
-                    // Always there, so a failure that comes is a change of a live region and is read out.
-                    Box(Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
-                        failure?.let { Note(it, failed = true, side = 0.dp) }
+                    if (pressable) {
+                        // The button stays while its request runs, so focus stays on it.
+                        SecondaryButton(
+                            if (busy) busyWord else verb,
+                            perform,
+                            icon = if (action is Action.TurnOn) Icons.Power else Icons.Plus,
+                            busy = busy,
+                            spoken = pressWords,
+                            onFocusChange = { owned.changed(it, buttonGone) },
+                        )
                     }
-                    if (memory.noBrowser) Note(FindAddonsCopy.NO_BROWSER, failed = true, side = 0.dp)
-                }
-            }
-        }
-        if (tv) {
-            EndOrBelow(Modifier.clearAndSetSemantics { }, { about(Modifier) }) {
-                if (word != null || pressable) {
-                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        word?.let { StateWord(it, installed = action is Action.None) }
-                        if (pressable) ActionPill(if (busy) busyWord else verb, action is Action.TurnOn, busy, focused)
+                    if (configure) {
+                        SecondaryButton(
+                            FindAddonsCopy.CONFIGURE,
+                            { memory.noBrowser = !openLink(context, entry.configureUrl) },
+                            icon = Icons.ExternalLink,
+                            spoken = FindAddons.spoken(entry, Action.Configure, sameName),
+                        )
                     }
-                }
-            }
-        } else {
-            about(Modifier)
-        }
-        if (!tv && (word != null || pressable || configure)) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                itemVerticalAlignment = Alignment.CenterVertically,
-            ) {
-                word?.let {
-                    StateWord(
-                        it,
-                        installed = action is Action.None,
-                        // An installed card's one stop, which a landed install hands focus to.
-                        modifier = if (action is Action.None) Modifier.focusRequester(stay).focusable() else Modifier,
-                        spoken = cardWords.takeIf { action is Action.None },
-                    )
-                }
-                if (pressable) {
-                    // The button stays while its request runs, so focus stays on it.
-                    SecondaryButton(
-                        if (busy) busyWord else verb,
-                        perform,
-                        icon = if (action is Action.TurnOn) Icons.Power else Icons.Plus,
-                        busy = busy,
-                        spoken = pressWords,
-                        onFocusChange = { owned.changed(it, buttonGone) },
-                    )
-                }
-                if (configure) {
-                    SecondaryButton(
-                        FindAddonsCopy.CONFIGURE,
-                        { memory.noBrowser = !openLink(context, entry.configureUrl) },
-                        icon = Icons.ExternalLink,
-                        spoken = FindAddons.spoken(entry, Action.Configure, sameName),
-                    )
                 }
             }
         }

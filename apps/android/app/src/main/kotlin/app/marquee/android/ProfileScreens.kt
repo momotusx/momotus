@@ -78,6 +78,7 @@ import app.marquee.core.client.CoreError
 import app.marquee.core.model.ProfileInfo
 import app.marquee.core.session.CoreSession
 import app.marquee.design.AvatarArt
+import app.marquee.design.FocusInk
 import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.Marquee
@@ -89,8 +90,10 @@ import app.marquee.design.SecondaryButton
 import app.marquee.design.Status
 import app.marquee.design.StatusWord
 import app.marquee.design.TextRole
+import app.marquee.design.Tokens
 import app.marquee.design.avatarColor
 import app.marquee.design.focusClickable
+import app.marquee.design.focusPalette
 import app.marquee.design.focusSoon
 import app.marquee.design.marqueeFocus
 import kotlinx.coroutines.CancellationException
@@ -132,9 +135,10 @@ internal fun tried(e: Throwable): Tried {
 internal fun ProfileAvatar(
     p: ProfileInfo,
     size: androidx.compose.ui.unit.Dp,
+    lit: Boolean = false,
 ) {
     val a = ProfileCopy.parseAvatar(p.avatar)
-    AvatarArt(a.glyph, a.color, ProfileCopy.initial(p.name), size)
+    AvatarArt(a.glyph, a.color, ProfileCopy.initial(p.name), size, lit = lit)
 }
 
 /**
@@ -365,13 +369,15 @@ private fun PinKey(
     onClick: () -> Unit,
 ) {
     val colors = Marquee.colors
-    var focused by remember { mutableStateOf(false) }
+    var hasFocus by remember { mutableStateOf(false) }
+    // White on a TV focus; a phone keyboard's focus is the ring alone.
+    val focused = hasFocus && Marquee.form == Form.Tv
     Box(
         modifier
             .size(size)
             .alpha(if (enabled) 1f else 0.4f)
             .marqueeFocus(size / 2)
-            .onFocusChanged { focused = it.isFocused }
+            .onFocusChanged { hasFocus = it.isFocused }
             .clip(CircleShape)
             .background(if (focused) colors.primary else colors.raised)
             .border(2.dp, if (focused) colors.primary else colors.control, CircleShape)
@@ -400,21 +406,17 @@ fun PillProfile(
 ) {
     val s = gate.snapshot ?: return
     val me = s.profiles.firstOrNull { it.id == s.active } ?: return
-    val colors = Marquee.colors
     var focused by remember { mutableStateOf(false) }
     Box(
         Modifier
             .padding(start = 8.dp)
-            .marqueeFocus(14.dp)
+            // In the bar, as the tabs: it scales and turns white, and does not rise out of the bar.
+            .marqueeFocus(14.dp, Tokens.FOCUS_SCALE_TILE, rise = false)
             .onFocusChanged { focused = it.isFocused }
-            .border(
-                if (focused) 3.dp else 0.dp,
-                if (focused) colors.text else Color.Transparent,
-                RoundedCornerShape(14.dp),
-            ).padding(3.dp)
+            .padding(3.dp)
             .semantics(mergeDescendants = true) { contentDescription = "Profile: ${me.name}, switch profile" }
             .focusClickable(onClick, Role.Button),
-    ) { ProfileAvatar(me, 40.dp) }
+    ) { ProfileAvatar(me, 40.dp, lit = focused && Marquee.form == Form.Tv) }
 }
 
 /** The modes of the picker: a cold start's question, a locked session, or opened over the app. */
@@ -616,7 +618,9 @@ private fun ProfileTile(
     val tv = Marquee.form == Form.Tv
     val colors = Marquee.colors
     val size = if (tv) 168.dp else 112.dp
-    var focused by remember { mutableStateOf(false) }
+    var hasFocus by remember { mutableStateOf(false) }
+    // The ring follows the tile's focus on every form; the white and the name's brightening on TV only.
+    val focused = hasFocus && tv
     val spoken =
         listOfNotNull(
             p.name,
@@ -627,7 +631,7 @@ private fun ProfileTile(
         modifier
             .width(if (tv) 200.dp else 140.dp)
             .alpha(if (p.syncing) 0.55f else 1f)
-            .onFocusChanged { focused = it.isFocused }
+            .onFocusChanged { hasFocus = it.isFocused }
             .semantics(mergeDescendants = true) {
                 contentDescription = spoken
                 if (active) stateDescription = "Current profile"
@@ -638,13 +642,8 @@ private fun ProfileTile(
         // The focus treatment follows the clickable tile around it (the box itself never takes focus).
         Box(
             Modifier
-                .marqueeFocus(size * 0.2f, forced = focused)
-                .border(
-                    if (focused) 4.dp else 0.dp,
-                    if (focused) colors.text else Color.Transparent,
-                    RoundedCornerShape(size * 0.2f),
-                ),
-        ) { ProfileAvatar(p, size) }
+                .marqueeFocus(size * 0.2f, Tokens.FOCUS_SCALE_ART, forced = hasFocus, art = true),
+        ) { ProfileAvatar(p, size, lit = focused) }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             MqText(
                 p.name,
@@ -664,11 +663,13 @@ private fun AddTile(onClick: () -> Unit) {
     val tv = Marquee.form == Form.Tv
     val colors = Marquee.colors
     val size = if (tv) 168.dp else 112.dp
-    var focused by remember { mutableStateOf(false) }
+    var hasFocus by remember { mutableStateOf(false) }
+    // The ring follows the tile's focus on every form; the name brightens on TV only.
+    val focused = hasFocus && tv
     Column(
         Modifier
             .width(if (tv) 200.dp else 140.dp)
-            .onFocusChanged { focused = it.isFocused }
+            .onFocusChanged { hasFocus = it.isFocused }
             .semantics(mergeDescendants = true) { contentDescription = "Add profile" }
             .focusClickable(onClick, Role.Button),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -677,11 +678,10 @@ private fun AddTile(onClick: () -> Unit) {
         val shape = RoundedCornerShape(size * 0.2f)
         Box(
             Modifier
-                .marqueeFocus(size * 0.2f, forced = focused)
+                .marqueeFocus(size * 0.2f, forced = hasFocus)
                 .size(size)
                 .clip(shape)
-                .background(colors.raised)
-                .border(if (focused) 4.dp else 2.dp, if (focused) colors.text else colors.control, shape),
+                .background(colors.raised),
             contentAlignment = Alignment.Center,
         ) { MqIcon(Icons.Plus, tint = colors.muted, size = size * 0.4f) }
         MqText(
@@ -833,28 +833,33 @@ private fun ProfileRow(
     detail: String,
     onClick: () -> Unit,
 ) {
+    var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(Marquee.radius.l)
-    val colors = Marquee.colors
-    Row(
-        Modifier
-            .padding(horizontal = Marquee.safe.side)
-            .fillMaxWidth()
-            .marqueeFocus(Marquee.radius.l, scale = 1.01f)
-            .clip(shape)
-            .background(colors.surface)
-            .border(1.dp, colors.edge, shape)
-            .semantics(mergeDescendants = true) {}
-            .focusClickable(onClick, Role.Button)
-            .padding(if (Marquee.form == Form.Tv) 24.dp else 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ProfileAvatar(p, if (Marquee.form == Form.Tv) 56.dp else 40.dp)
-        Column(Modifier.weight(1f)) {
-            MqText(p.name, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 1)
-            MqText(detail, role = TextRole.Caption, color = colors.muted, maxLines = 1)
+    // On TV the focused row turns white with dark words (focusPalette).
+    FocusInk(focusPalette(focused)) {
+        val colors = Marquee.colors
+        Row(
+            Modifier
+                .padding(horizontal = Marquee.safe.side)
+                .fillMaxWidth()
+                .marqueeFocus(Marquee.radius.l, Tokens.FOCUS_SCALE_TILE)
+                .onFocusChanged { focused = it.isFocused }
+                .clip(shape)
+                .background(colors.surface)
+                .border(1.dp, colors.edge, shape)
+                .semantics(mergeDescendants = true) {}
+                .focusClickable(onClick, Role.Button)
+                .padding(if (Marquee.form == Form.Tv) 24.dp else 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ProfileAvatar(p, if (Marquee.form == Form.Tv) 56.dp else 40.dp)
+            Column(Modifier.weight(1f)) {
+                MqText(p.name, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 1)
+                MqText(detail, role = TextRole.Caption, color = colors.muted, maxLines = 1)
+            }
+            MqIcon(Icons.ChevronRight, tint = colors.muted)
         }
-        MqIcon(Icons.ChevronRight, tint = colors.muted)
     }
 }
 

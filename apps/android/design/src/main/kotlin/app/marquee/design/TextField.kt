@@ -59,34 +59,38 @@ fun MqTextField(
     keyboardActions: KeyboardActions = KeyboardActions.Default,
     visualTransformation: VisualTransformation = VisualTransformation.None,
 ) {
-    val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
     var focused by remember { mutableStateOf(false) }
+    // On TV the focused field turns white with dark words (focusPalette).
+    val colors = focusPalette(focused)
     val shape = RoundedCornerShape(Marquee.radius.pill)
     Box(
         modifier
             .fillMaxWidth()
             .height(if (tv) 72.dp else 48.dp)
-            // The shared ring, halo and lift, driven by the text input's own focus: never color alone.
-            .marqueeFocus(Marquee.radius.pill, Tokens.FOCUS_SCALE_TILE, forced = focused)
+            // The shared focus look, driven by the text input's own focus: never color alone.
+            .marqueeFocus(Marquee.radius.pill, Tokens.FOCUS_SCALE_TILE, forced = focused && tv)
             .clip(shape)
             .background(colors.raised)
-            .border(2.dp, if (focused) colors.accent else colors.control, shape)
+            // A phone field shows a 2 dp key edge on any focus (a tap included), as the web; no ring.
+            .then(if (focused && !tv) Modifier.border(2.dp, colors.key, shape) else Modifier)
             .padding(horizontal = if (tv) 24.dp else 16.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
-        FieldInput(
-            value,
-            onValueChange,
-            label,
-            placeholder,
-            TextStyle(color = colors.text, fontSize = Marquee.type.callout, fontFamily = MarqueeFonts.text),
-            onFocus = { focused = it },
-            modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = keyboardOptions,
-            keyboardActions = keyboardActions,
-            visualTransformation = visualTransformation,
-        )
+        FocusInk(colors) {
+            FieldInput(
+                value,
+                onValueChange,
+                label,
+                placeholder,
+                TextStyle(color = colors.text, fontSize = Marquee.type.callout, fontFamily = MarqueeFonts.text),
+                onFocus = { focused = it },
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = keyboardOptions,
+                keyboardActions = keyboardActions,
+                visualTransformation = visualTransformation,
+            )
+        }
     }
 }
 

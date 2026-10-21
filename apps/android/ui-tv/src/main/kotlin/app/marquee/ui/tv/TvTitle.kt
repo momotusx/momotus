@@ -82,6 +82,7 @@ import app.marquee.design.TextRole
 import app.marquee.design.endFade
 import app.marquee.design.episodeLaneHeight
 import app.marquee.design.laneHeight
+import app.marquee.design.liftRoom
 import app.marquee.design.marqueeFocus
 import app.marquee.design.openLink
 import app.marquee.design.scrollByKey
@@ -423,6 +424,8 @@ private fun Seasons(
         state = list,
         modifier =
             Modifier
+                // Room above and below for a focused chip to rise over its shadow; the page does not move.
+                .liftRoom(Marquee.tiles.pad)
                 // First entry lands on the selected season, which may be far along the row.
                 .focusProperties {
                     enter = {
@@ -431,7 +434,7 @@ private fun Seasons(
                             ?: FocusRequester.Default
                     }
                 }.focusGroup(),
-        contentPadding = PaddingValues(horizontal = Marquee.safe.side, vertical = Marquee.space.xs),
+        contentPadding = PaddingValues(horizontal = Marquee.safe.side, vertical = Marquee.space.xs + Marquee.tiles.pad),
         horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
     ) {
         if (compact) item(key = "label") { MqText("Season", role = TextRole.Callout, color = Marquee.colors.muted) }

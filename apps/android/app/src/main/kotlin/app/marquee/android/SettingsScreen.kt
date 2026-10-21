@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
@@ -72,6 +73,7 @@ import app.marquee.core.views.AddonsView
 import app.marquee.core.views.SettingsView
 import app.marquee.core.views.ViewStatus
 import app.marquee.design.Chip
+import app.marquee.design.FocusInk
 import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.LiveSpoken
@@ -86,7 +88,9 @@ import app.marquee.design.Status
 import app.marquee.design.StatusWord
 import app.marquee.design.SwitchRow
 import app.marquee.design.TextRole
+import app.marquee.design.Tokens
 import app.marquee.design.focusClickable
+import app.marquee.design.focusPalette
 import app.marquee.design.focusSoon
 import app.marquee.design.marqueeFocus
 import kotlinx.coroutines.CancellationException
@@ -458,28 +462,33 @@ private fun ProfileLinkRow(
     text: String,
     onClick: () -> Unit,
 ) {
+    var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(Marquee.radius.l)
-    val colors = Marquee.colors
-    Row(
-        Modifier
-            .padding(horizontal = Marquee.safe.side)
-            .fillMaxWidth()
-            .marqueeFocus(Marquee.radius.l, scale = 1.01f)
-            .clip(shape)
-            .background(colors.surface)
-            .border(1.dp, colors.edge, shape)
-            .semantics(mergeDescendants = true) {}
-            .focusClickable(onClick, Role.Button)
-            .padding(if (Marquee.form == Form.Tv) 24.dp else 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ProfileAvatar(p, if (Marquee.form == Form.Tv) 40.dp else 28.dp)
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            MqText(p.name, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 1)
-            MqText(text, role = TextRole.Caption, color = colors.muted, maxLines = 2)
+    // On TV the focused row turns white with dark words (focusPalette).
+    FocusInk(focusPalette(focused)) {
+        val colors = Marquee.colors
+        Row(
+            Modifier
+                .padding(horizontal = Marquee.safe.side)
+                .fillMaxWidth()
+                .marqueeFocus(Marquee.radius.l, Tokens.FOCUS_SCALE_TILE)
+                .onFocusChanged { focused = it.isFocused }
+                .clip(shape)
+                .background(colors.surface)
+                .border(1.dp, colors.edge, shape)
+                .semantics(mergeDescendants = true) {}
+                .focusClickable(onClick, Role.Button)
+                .padding(if (Marquee.form == Form.Tv) 24.dp else 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ProfileAvatar(p, if (Marquee.form == Form.Tv) 40.dp else 28.dp)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                MqText(p.name, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 1)
+                MqText(text, role = TextRole.Caption, color = colors.muted, maxLines = 2)
+            }
+            MqIcon(Icons.ChevronRight, tint = colors.muted)
         }
-        MqIcon(Icons.ChevronRight, tint = colors.muted)
     }
 }
 
@@ -493,34 +502,39 @@ internal fun LinkRow(
     /** Lines the text may take; Find addons' lede is never cut. */
     lines: Int = 2,
 ) {
+    var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(Marquee.radius.l)
-    val colors = Marquee.colors
-    Row(
-        Modifier
-            .padding(horizontal = Marquee.safe.side)
-            .fillMaxWidth()
-            .marqueeFocus(Marquee.radius.l, scale = 1.01f)
-            .clip(shape)
-            .background(colors.surface)
-            .border(1.dp, colors.edge, shape)
-            .semantics(mergeDescendants = true) {}
-            .focusClickable(onClick, Role.Button)
-            .padding(if (Marquee.form == Form.Tv) 24.dp else 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        MqIcon(icon, tint = colors.muted)
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            MqText(title, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 1)
-            MqText(text, role = TextRole.Caption, color = colors.muted, maxLines = lines)
+    // On TV the focused row turns white with dark words (focusPalette).
+    FocusInk(focusPalette(focused)) {
+        val colors = Marquee.colors
+        Row(
+            Modifier
+                .padding(horizontal = Marquee.safe.side)
+                .fillMaxWidth()
+                .marqueeFocus(Marquee.radius.l, Tokens.FOCUS_SCALE_TILE)
+                .onFocusChanged { focused = it.isFocused }
+                .clip(shape)
+                .background(colors.surface)
+                .border(1.dp, colors.edge, shape)
+                .semantics(mergeDescendants = true) {}
+                .focusClickable(onClick, Role.Button)
+                .padding(if (Marquee.form == Form.Tv) 24.dp else 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            MqIcon(icon, tint = colors.muted)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                MqText(title, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 1)
+                MqText(text, role = TextRole.Caption, color = colors.muted, maxLines = lines)
+            }
+            // Points the way the page goes: left in a right-to-left layout.
+            val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+            MqIcon(
+                Icons.ChevronRight,
+                modifier = Modifier.graphicsLayer { scaleX = if (rtl) -1f else 1f },
+                tint = colors.muted,
+            )
         }
-        // Points the way the page goes: left in a right-to-left layout.
-        val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-        MqIcon(
-            Icons.ChevronRight,
-            modifier = Modifier.graphicsLayer { scaleX = if (rtl) -1f else 1f },
-            tint = colors.muted,
-        )
     }
 }
 
@@ -544,7 +558,7 @@ private fun AddonRow(
                 onToggle,
                 Modifier
                     .focusRequester(focusRequester)
-                    .marqueeFocus(Marquee.radius.m, scale = 1.01f)
+                    .marqueeFocus(Marquee.radius.m, Tokens.FOCUS_SCALE_TILE)
                     .clip(RoundedCornerShape(Marquee.radius.m)),
             ) {
                 Column(Modifier.weight(1f)) {
@@ -553,7 +567,8 @@ private fun AddonRow(
                     MqText(
                         AddonsCopy.caption(addon),
                         role = TextRole.Caption,
-                        color = colors.dim,
+                        // Read here: a TV focus turns the switch row white, and its words dark.
+                        color = Marquee.colors.dim,
                         maxLines = 1,
                     )
                 }

@@ -43,6 +43,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -78,6 +79,7 @@ import app.marquee.core.sync.SyncAccount
 import app.marquee.core.views.PairingView
 import app.marquee.core.views.ViewStatus
 import app.marquee.design.CodeText
+import app.marquee.design.FocusInk
 import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.LiveSpoken
@@ -93,7 +95,9 @@ import app.marquee.design.Status
 import app.marquee.design.StatusWord
 import app.marquee.design.SwitchRow
 import app.marquee.design.TextRole
+import app.marquee.design.Tokens
 import app.marquee.design.focusClickable
+import app.marquee.design.focusPalette
 import app.marquee.design.focusSoon
 import app.marquee.design.marqueeFocus
 import kotlinx.coroutines.CancellationException
@@ -211,25 +215,30 @@ internal fun ElsewhereRow(
     title: String,
     text: String,
 ) {
+    var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(Marquee.radius.l)
-    Row(
-        Modifier
-            .padding(horizontal = Marquee.safe.side)
-            .fillMaxWidth()
-            .marqueeFocus(Marquee.radius.l, scale = 1.01f)
-            .clip(shape)
-            .background(Marquee.colors.surface)
-            .border(1.dp, Marquee.colors.edge, shape)
-            .semantics(mergeDescendants = true) {}
-            .focusable()
-            .padding(24.dp),
-        horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        MqIcon(icon, tint = Marquee.colors.muted)
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            MqText(title, role = TextRole.Headline, weight = FontWeight.Bold)
-            MqText(text, role = TextRole.Caption, color = Marquee.colors.muted)
+    // On TV the focused row turns white with dark words (focusPalette).
+    FocusInk(focusPalette(focused)) {
+        Row(
+            Modifier
+                .padding(horizontal = Marquee.safe.side)
+                .fillMaxWidth()
+                .marqueeFocus(Marquee.radius.l, Tokens.FOCUS_SCALE_TILE)
+                .onFocusChanged { focused = it.isFocused }
+                .clip(shape)
+                .background(Marquee.colors.surface)
+                .border(1.dp, Marquee.colors.edge, shape)
+                .semantics(mergeDescendants = true) {}
+                .focusable()
+                .padding(24.dp),
+            horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            MqIcon(icon, tint = Marquee.colors.muted)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                MqText(title, role = TextRole.Headline, weight = FontWeight.Bold)
+                MqText(text, role = TextRole.Caption, color = Marquee.colors.muted)
+            }
         }
     }
 }
@@ -1745,30 +1754,35 @@ private fun TickRow(
     down: FocusRequester?,
     onToggle: () -> Unit,
 ) {
+    var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(Marquee.radius.card)
-    Row(
-        Modifier
-            .padding(horizontal = Marquee.safe.side)
-            .fillMaxWidth()
-            .marqueeFocus(Marquee.radius.card, scale = 1.01f)
-            .clip(shape)
-            .background(Marquee.colors.glass)
-            .border(1.dp, Marquee.colors.edge, shape)
-            .semantics(mergeDescendants = true) { stateDescription = state }
-            .then(if (focus != null) Modifier.focusRequester(focus) else Modifier)
-            .focusProperties { down?.let { this.down = it } }
-            .focusClickable(onToggle, androidx.compose.ui.semantics.Role.Checkbox)
-            .padding(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        MqIcon(
-            if (going) Icons.CircleCheck else Icons.Circle,
-            tint = if (going) Marquee.colors.bad else Marquee.colors.muted,
-        )
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            MqText(name, role = TextRole.Headline, weight = FontWeight.Bold)
-            for (line in lines) MqText(line, role = TextRole.Caption, color = Marquee.colors.muted)
+    // On TV the focused row turns white with dark words (focusPalette).
+    FocusInk(focusPalette(focused)) {
+        Row(
+            Modifier
+                .padding(horizontal = Marquee.safe.side)
+                .fillMaxWidth()
+                .marqueeFocus(Marquee.radius.card, Tokens.FOCUS_SCALE_TILE)
+                .onFocusChanged { focused = it.isFocused }
+                .clip(shape)
+                .background(Marquee.colors.glass)
+                .border(1.dp, Marquee.colors.edge, shape)
+                .semantics(mergeDescendants = true) { stateDescription = state }
+                .then(if (focus != null) Modifier.focusRequester(focus) else Modifier)
+                .focusProperties { down?.let { this.down = it } }
+                .focusClickable(onToggle, androidx.compose.ui.semantics.Role.Checkbox)
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            MqIcon(
+                if (going) Icons.CircleCheck else Icons.Circle,
+                tint = if (going) Marquee.colors.bad else Marquee.colors.muted,
+            )
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                MqText(name, role = TextRole.Headline, weight = FontWeight.Bold)
+                for (line in lines) MqText(line, role = TextRole.Caption, color = Marquee.colors.muted)
+            }
         }
     }
 }

@@ -1,7 +1,6 @@
 package app.marquee.design
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,7 +18,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -66,9 +64,9 @@ private const val LINE = 1.4f
 /**
  * A title in a row or grid (design/DECISION.md v2, Cards): the picture with a rating chip, then
  * the name and a secondary line under it, never over it. [caption] is that line: the core's own
- * words (Continue Watching, Library) or the year. Focus lifts the card, adds the ring and a white
- * edge, and turns the name accent. Everything is a plain value, so the design module knows nothing
- * of the core.
+ * words (Continue Watching, Library) or the year. Focus lifts the card (on TV with its shadow and
+ * the sheen on the art, on a phone with the key ring) and brightens the name. Everything is a plain
+ * value, so the design module knows nothing of the core.
  */
 @Composable
 fun PosterTile(
@@ -96,7 +94,8 @@ fun PosterTile(
     val size = metrics.sizeOf(shape)
     val corner = Marquee.radius.m
     val lift = remember { mutableStateOf(forceFocus) }
-    val focused = lift.value
+    // The name brightens on a TV focus; a phone keyboard's focus is the ring alone.
+    val focused = lift.value && Marquee.form == Form.Tv
     // What a screen reader says after the title: the caption, or the watched share; and Watched.
     val state =
         listOfNotNull(
@@ -106,17 +105,16 @@ fun PosterTile(
     Column(
         // First in the chain: the focused tile draws above its neighbours in the row.
         modifier = Modifier.lifted(lift).then(modifier).width(size.width),
-        // The caption starts a full step under the unscaled card, so a focused card's ring never covers it.
+        // The caption starts a full step under the unscaled card, so a focused card's lift rarely covers it.
         verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
     ) {
         Box(
             Modifier
                 .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-                .marqueeFocus(corner, Tokens.FOCUS_SCALE_CARD, forced = forceFocus, lift = lift)
+                .marqueeFocus(corner, Tokens.FOCUS_SCALE_ART, forced = forceFocus, lift = lift, art = true)
                 .then(
                     if (onFocusChange != null) Modifier.onFocusChanged { onFocusChange(it.isFocused) } else Modifier,
                 ).clip(RoundedCornerShape(corner))
-                .border(1.dp, if (focused) colors.text else Color.Transparent, RoundedCornerShape(corner))
                 .semantics {
                     contentDescription = title
                     if (state != null) stateDescription = state
@@ -226,11 +224,10 @@ fun EpisodeCard(
             .then(modifier)
             .width(size.width)
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .marqueeFocus(corner, Tokens.FOCUS_SCALE_CARD, lift = lift)
+            .marqueeFocus(corner, Tokens.FOCUS_SCALE_ART, lift = lift, art = true)
             .then(if (onFocusChange != null) Modifier.onFocusChanged { onFocusChange(it.isFocused) } else Modifier)
             .clip(shape)
             .background(colors.raised)
-            .border(1.dp, if (lift.value) colors.text else colors.edge, shape)
             .semantics(mergeDescendants = true) { contentDescription = spoken }
             .focusClickable(onClick, Role.Button, onLongClick = onLongClick, longClickLabel = longClickLabel),
     ) {

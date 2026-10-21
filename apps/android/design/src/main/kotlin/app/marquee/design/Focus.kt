@@ -12,26 +12,41 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -46,29 +61,40 @@ import androidx.compose.ui.node.invalidateDraw
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.pow
+import kotlin.math.sin
 
 /**
- * The focus look from design/DECISION.md, drawn the way the web's `--focus-shadow` is: a small
- * scale, a background-colored gap, a 4 px accent ring four points off the edge, and outside it a
- * dark halo that keeps 3:1 contrast on any artwork. The halo is 14 px and soft on the dark theme
- * (a few stacked rounded rects stand in for the blur) and a crisp 3 px line on the light one.
- * Never color alone: the scale moves too.
+ * The focus look from design/DECISION.md (v3). On TV, Apple's: the item scales up; a card, a button
+ * or a chip (a scale of [Tokens.FOCUS_SCALE_TILE] or more, [rise]) rises [Tokens.focusRise] over the
+ * lift shadow, and artwork ([art]: tiles, stills, avatars) rises [Tokens.focusRiseArt] over the deeper art
+ * shadow and catches the sheen. No ring and no colored edge: buttons and rows turn white with dark
+ * words themselves ([focusPalette]); a target with no fill of its own takes a faint white platter and
+ * neither rises nor casts a shadow, so focus never shows as nothing and no shadow shows through.
+ * Inside the player ([LocalFocusRing]) the TV keeps the white ring until phase 5 gives the player its
+ * own look. On the phone, focus comes only from a keyboard or a D-pad, and shows as the ring alone:
+ * one 4 dp stroke in the key blue right outside the edge, with no gap, no scale and no fill change.
  *
- * Cost on weak GPUs: no blur, a handful of rounded rects only while focused. The focus flag and
- * the animation are read inside the graphics layer and the draw lambda, so a focus change redraws
- * this node and never recomposes the caller. Content that scales or draws outside its bounds
- * needs room around it (`Tokens` tile `pad`), because parents clip. A new focus target cancels
- * the fade of the old one, so a held D-pad leaves no trail.
+ * Cost on weak GPUs: the shadow is one blurred shape, the rest a few rounded rects, only while
+ * focused. The focus flag and the animation are read inside the graphics layer and the draw
+ * lambdas, so a focus change redraws this node and never recomposes the caller. The rise is drawn,
+ * not laid out, so focus search and the rows' anchoring keep the card's place. Content that scales,
+ * rises or draws outside its bounds needs room around it (`Tokens` tile `pad`, [liftRoom]), because
+ * parents clip. A new focus target cancels the fade of the old one, so a held D-pad leaves no trail.
  *
  * Place this before `clickable` or `focusable` in the chain: it observes the focus target after it.
  *
  * @param forced shows the focused look without focus (design gallery, screenshots).
  * @param lift when a component wraps the focused node (a tile with a caption), it lifts its own
  * root above its siblings with [lifted] and passes the flag here; without it this node lifts itself.
+ * @param art artwork: the art rise and shadow, and the sheen clipped to [radius].
+ * @param rise false for a target that only scales and inverts, such as a tab inside its bar.
  */
 @Composable
 fun Modifier.marqueeFocus(
@@ -76,6 +102,8 @@ fun Modifier.marqueeFocus(
     scale: Float = Tokens.FOCUS_SCALE_CARD,
     forced: Boolean = false,
     lift: MutableState<Boolean>? = null,
+    art: Boolean = false,
+    rise: Boolean = true,
 ): Modifier {
     var focused by remember { mutableStateOf(false) }
     val progress = remember { Animatable(if (forced) 1f else 0f) }
@@ -89,27 +117,62 @@ fun Modifier.marqueeFocus(
         }
     }
     val colors = Marquee.colors
+    val tv = Marquee.form == Form.Tv
+    val ringed = tv && LocalFocusRing.current
+    val ringWidth = ringWidth(tv, ringed)
     val halo = Marquee.focusHalo
-    // The keyboard ring is the key blue (design/DECISION.md); the TV form has no key color, so its ring stays white.
-    val ringColor = if (Marquee.form == Form.Tv) colors.accent else colors.key
+    val rises = tv && !ringed && rise && scale >= Tokens.FOCUS_SCALE_TILE
+    val shape = RoundedCornerShape(radius)
     return this
         .onFocusChanged { focused = it.isFocused }
         .then(if (lift == null) Modifier.lifted(raised) else Modifier)
-        .graphicsLayer {
-            val s = 1f + (scale - 1f) * progress.value
-            scaleX = s
-            scaleY = s
-        }.drawBehind {
+        .then(
+            // The phone's keyboard focus is the ring alone: nothing scales there.
+            if (tv) {
+                Modifier.graphicsLayer {
+                    val s = 1f + (scale - 1f) * progress.value
+                    scaleX = s
+                    scaleY = s
+                }
+            } else {
+                Modifier
+            },
+        ).then(
+            if (rises) {
+                Modifier
+                    .drawWithContent {
+                        val up = (if (art) Tokens.focusRiseArt else Tokens.focusRise).toPx() * progress.value
+                        translate(top = -up) { this@drawWithContent.drawContent() }
+                    }.dropShadow(shape) {
+                        // Apple's lift (the web's --lift-focus-edge, 0 30px 60px at .6), and for art the
+                        // deeper one (--lift-focus-art, 0 44px 88px at .55).
+                        this.radius = (if (art) Tokens.focusArtShadowBlur else halo * 2).toPx()
+                        offset = Offset(0f, (if (art) Tokens.focusArtShadowY else halo).toPx())
+                        color = Color.Black
+                        alpha = (if (art) Tokens.FOCUS_ART_SHADOW_ALPHA else colors.halo.alpha) * progress.value
+                    }
+            } else {
+                Modifier
+            },
+        ).drawBehind {
             val p = progress.value
-            if (p > 0f) {
-                val corner = radius.toPx()
-                val ring = Tokens.focusRing.toPx().coerceAtLeast(2f)
+            if (p <= 0f) return@drawBehind
+            val corner = radius.toPx()
+            if (tv && !ringed) {
+                drawRoundRect(
+                    color = PLATTER.copy(alpha = PLATTER.alpha * p),
+                    size = size,
+                    cornerRadius = CornerRadius(corner),
+                )
+            }
+            val ring = ringWidth.toPx()
+            if (ring <= 0f) return@drawBehind
+            if (ringed) {
+                // The v2 TV ring, kept in the player: a dark halo, a page-colored gap, then the ring.
                 val haloWidth = halo.toPx()
-                val steps = if (haloWidth <= ring) 1 else HALO_STEPS
-                // Stacked layers add up to the token's alpha where they all overlap.
-                val layer = 1f - (1f - colors.halo.alpha * p).pow(1f / steps)
-                for (i in 1..steps) {
-                    val spread = ring * 2 + haloWidth * i / steps
+                val layer = 1f - (1f - colors.halo.alpha * p).pow(1f / HALO_STEPS)
+                for (i in 1..HALO_STEPS) {
+                    val spread = ring * 2 + haloWidth * i / HALO_STEPS
                     drawRoundRect(
                         color = colors.halo.copy(alpha = layer),
                         topLeft = Offset(-spread, -spread),
@@ -123,17 +186,154 @@ fun Modifier.marqueeFocus(
                     size = Size(size.width + 2 * ring, size.height + 2 * ring),
                     cornerRadius = CornerRadius(corner + ring),
                 )
-                val centre = ring + ring / 2
-                drawRoundRect(
-                    color = ringColor.copy(alpha = p),
-                    topLeft = Offset(-centre, -centre),
-                    size = Size(size.width + 2 * centre, size.height + 2 * centre),
-                    cornerRadius = CornerRadius(corner + centre),
-                    style = Stroke(width = ring),
-                )
             }
-        }
+            // The ring right outside the edge (the phone's key ring), or past the gap (the player's).
+            val at = if (ringed) ring * 1.5f else ring / 2
+            drawRoundRect(
+                color = (if (ringed) colors.accent else colors.key).copy(alpha = p),
+                topLeft = Offset(-at, -at),
+                size = Size(size.width + 2 * at, size.height + 2 * at),
+                cornerRadius = CornerRadius(corner + at),
+                style = Stroke(width = ring),
+            )
+        }.then(
+            if (art && tv && !ringed) {
+                Modifier.drawWithCache {
+                    val clip =
+                        Path().apply {
+                            addRoundRect(
+                                RoundRect(Rect(Offset.Zero, size), CornerRadius(radius.toPx())),
+                            )
+                        }
+                    // CSS's linear-gradient(125deg, ...): its line runs through the center at 125
+                    // degrees from up, as long as the box's projection on it.
+                    val a = Math.toRadians(SHEEN_DEG)
+                    val dx = sin(a).toFloat()
+                    val dy = -cos(a).toFloat()
+                    val half = (abs(size.width * dx) + abs(size.height * dy)) / 2
+                    val c = Offset(size.width / 2, size.height / 2)
+                    val sheen =
+                        Brush.linearGradient(
+                            0f to Color.White.copy(alpha = 0.26f),
+                            0.32f to Color.White.copy(alpha = 0.06f),
+                            0.52f to Color.Transparent,
+                            start = Offset(c.x - dx * half, c.y - dy * half),
+                            end = Offset(c.x + dx * half, c.y + dy * half),
+                        )
+                    onDrawWithContent {
+                        drawContent()
+                        val p = progress.value
+                        if (p > 0f) clipPath(clip) { drawRect(sheen, alpha = p) }
+                    }
+                }
+            } else {
+                Modifier
+            },
+        )
 }
+
+/**
+ * The width of the ring a focus target strokes: none on TV, which shows focus by the lift and the
+ * white invert; the 4 dp ring on the phone (the key blue) and in the TV player ([LocalFocusRing]).
+ */
+internal fun ringWidth(
+    tv: Boolean,
+    ringed: Boolean,
+): Dp = if (tv && !ringed) 0.dp else Tokens.focusRing
+
+/**
+ * True inside the TV player, which keeps the v2 white ring until phase 5 (plans/player-polish.md
+ * owns its files): buttons and rows there neither invert nor rise, as on the trunk.
+ */
+val LocalFocusRing = staticCompositionLocalOf { false }
+
+/**
+ * How many buttons in this tree hold focus (MarqueeTheme provides it). On TV a white primary yields
+ * its white while one does, so focus stays the one white thing on the screen.
+ */
+val LocalButtonFocus = staticCompositionLocalOf<MutableIntState?> { null }
+
+/**
+ * Counts this button in [LocalButtonFocus] while [focused]. ponytail: one count for the whole screen,
+ * not per action row; a primary yields to a focused button anywhere, which no screen has apart from
+ * its own row today. Scope it to the row (a provider per row) if one ever does.
+ */
+@Composable
+internal fun ButtonFocused(focused: Boolean) {
+    val count = LocalButtonFocus.current ?: return
+    DisposableEffect(focused, count) {
+        if (focused) count.intValue++
+        onDispose { if (focused) count.intValue-- }
+    }
+}
+
+/** The faint platter behind a focused target that has no fill of its own (a link, a text block). */
+private val PLATTER = Color(0x29FFFFFF)
+
+/** The sheen's angle, as the frames and the web draw it. */
+private const val SHEEN_DEG = 125.0
+
+/**
+ * The palette a focus target draws with (design/DECISION.md, TV focus): on TV a focused button or
+ * row turns white with dark words, so its fill is `primary` and every word, glyph and edge inside
+ * it is dark; elsewhere, and inside the player ([LocalFocusRing]), the palette as it is. Give the
+ * result to the row's own fill and, through [FocusInk], to its content.
+ */
+@Composable
+@ReadOnlyComposable
+fun focusPalette(focused: Boolean): Palette {
+    val colors = Marquee.colors
+    return if (focused && Marquee.form == Form.Tv && !LocalFocusRing.current) colors.inverted() else colors
+}
+
+/** The TV invert: `primary` for the fills, `onPrimary` for the words, at Apple's dark levels. */
+fun Palette.inverted(): Palette =
+    copy(
+        surface = primary,
+        raised = primary,
+        glass = primary,
+        glassStrong = primary,
+        edge = Color.Transparent,
+        control = Color.Transparent,
+        line = onPrimary.copy(alpha = 0.1f),
+        lineStrong = onPrimary.copy(alpha = 0.2f),
+        text = onPrimary,
+        muted = onPrimary.copy(alpha = 0.64f),
+        dim = onPrimary.copy(alpha = 0.64f),
+        // White words and status glyphs (accent, star, ok, warn, bad are white in v3) go dark.
+        accent = onPrimary,
+        star = onPrimary,
+        ok = onPrimary,
+        warn = onPrimary.copy(alpha = 0.64f),
+        bad = onPrimary,
+    )
+
+/** Draws [content] with [colors] (a [focusPalette]), so its default text and glyph colors follow. */
+@Composable
+fun FocusInk(
+    colors: Palette,
+    content: @Composable () -> Unit,
+) {
+    CompositionLocalProvider(LocalPalette provides colors, content = content)
+}
+
+/**
+ * Room for a focused child to scale, rise and cast its shadow in a row that clips (a lazy row of
+ * chips): the row is laid out [room] taller at both ends and placed back, so the page around it
+ * does not move (Apple's padding and negative-margin form). Pair it with a vertical content padding
+ * of the same [room].
+ */
+fun Modifier.liftRoom(room: Dp): Modifier =
+    layout { measurable, constraints ->
+        val r = room.roundToPx()
+        val grown =
+            constraints.copy(
+                minHeight = constraints.minHeight + 2 * r,
+                maxHeight = if (constraints.hasBoundedHeight) constraints.maxHeight + 2 * r else constraints.maxHeight,
+            )
+        val placeable = measurable.measure(grown)
+        layout(placeable.width, (placeable.height - 2 * r).coerceAtLeast(0)) { placeable.place(0, -r) }
+    }
 
 private const val HALO_STEPS = 3
 
@@ -151,7 +351,7 @@ fun Modifier.lifted(raised: MutableState<Boolean>): Modifier =
     }
 
 /**
- * Touch gets a pressed state, TV none (its focus ring says where the press goes). A grey veil at
+ * Touch gets a pressed state, TV none (its focus says where the press goes). A grey veil at
  * a fifth: it darkens the white primary and lightens a dark surface, so it reads on both.
  */
 @Composable

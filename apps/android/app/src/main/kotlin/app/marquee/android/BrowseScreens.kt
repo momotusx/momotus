@@ -66,6 +66,7 @@ import app.marquee.core.views.ViewStatus
 import app.marquee.design.Chip
 import app.marquee.design.Eyebrow
 import app.marquee.design.FieldInput
+import app.marquee.design.FocusInk
 import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.Marquee
@@ -80,7 +81,9 @@ import app.marquee.design.StateMessage
 import app.marquee.design.TextRole
 import app.marquee.design.TileShape
 import app.marquee.design.Tokens
+import app.marquee.design.focusPalette
 import app.marquee.design.laneHeight
+import app.marquee.design.liftRoom
 import app.marquee.design.marqueeFocus
 import app.marquee.ui.phone.LocalBarSpace
 import app.marquee.ui.tv.tvContentTop
@@ -164,8 +167,9 @@ internal fun <T> ChipRow(
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
         Kicker(label, side)
         LazyRow(
-            Modifier.focusRestorer(),
-            contentPadding = PaddingValues(horizontal = side),
+            // Room for a focused chip to rise over its shadow; the page does not move.
+            Modifier.liftRoom(Marquee.tiles.pad).focusRestorer(),
+            contentPadding = PaddingValues(horizontal = side, vertical = Marquee.tiles.pad),
             horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
         ) {
             // By value: two addons can each have a "Popular" catalog of one kind, and a repeated key throws.
@@ -238,8 +242,12 @@ fun SearchScreen(
                         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
                             Kicker("Recent searches")
                             LazyRow(
-                                Modifier.focusRestorer(),
-                                contentPadding = PaddingValues(horizontal = Marquee.safe.side),
+                                Modifier.liftRoom(Marquee.tiles.pad).focusRestorer(),
+                                contentPadding =
+                                    PaddingValues(
+                                        horizontal = Marquee.safe.side,
+                                        vertical = Marquee.tiles.pad,
+                                    ),
                                 horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
                             ) {
                                 items(recent, key = { it }) { query ->
@@ -288,37 +296,46 @@ internal fun SearchField(
 ) {
     // The keyboard's Search key puts the keyboard away: the results come as the text changes.
     val keyboard = LocalSoftwareKeyboardController.current
-    val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
     val shape = RoundedCornerShape(Marquee.radius.pill)
     var focused by remember { mutableStateOf(false) }
+    // On TV the focused field turns white with dark words (focusPalette).
+    val colors = focusPalette(focused)
     Row(
         Modifier
             .padding(horizontal = Marquee.safe.side)
             .fillMaxWidth()
             .height(if (tv) 80.dp else 52.dp)
-            // The shared ring, halo and lift, driven by the text input's own focus: never color alone.
-            .marqueeFocus(Marquee.radius.pill, Tokens.FOCUS_SCALE_TILE, forced = focused)
+            // The shared focus look, driven by the text input's own focus: never color alone.
+            .marqueeFocus(Marquee.radius.pill, Tokens.FOCUS_SCALE_TILE, forced = focused && tv)
             .clip(shape)
             .background(colors.raised)
-            .border(2.dp, if (focused) colors.accent else colors.control, shape)
+            // A phone field shows a 2 dp key edge on any focus (a tap included), as the web; no ring.
+            .then(if (focused && !tv) Modifier.border(2.dp, colors.key, shape) else Modifier)
             .padding(horizontal = if (tv) 28.dp else 18.dp),
         horizontalArrangement = Arrangement.spacedBy(if (tv) 18.dp else 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         MqIcon(Icons.Search, tint = colors.muted)
         // On a TV a button until it is selected, as every field: Fire TV's keyboard would take the D-pad.
-        FieldInput(
-            text,
-            onText,
-            label = "Search titles",
-            placeholder = "Search titles",
-            textStyle = TextStyle(color = colors.text, fontSize = Marquee.type.body, fontFamily = MarqueeFonts.text),
-            onFocus = { focused = it },
-            modifier = Modifier.weight(1f),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
-        )
+        FocusInk(colors) {
+            FieldInput(
+                text,
+                onText,
+                label = "Search titles",
+                placeholder = "Search titles",
+                textStyle =
+                    TextStyle(
+                        color = colors.text,
+                        fontSize = Marquee.type.body,
+                        fontFamily = MarqueeFonts.text,
+                    ),
+                onFocus = { focused = it },
+                modifier = Modifier.weight(1f),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
+            )
+        }
     }
 }
 

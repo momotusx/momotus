@@ -1,5 +1,6 @@
 package app.marquee.android
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -30,6 +31,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.Role
@@ -70,6 +73,7 @@ import app.marquee.design.Status
 import app.marquee.design.StatusWord
 import app.marquee.design.TextRole
 import app.marquee.design.focusClickable
+import app.marquee.design.focusPalette
 import app.marquee.design.marqueeFocus
 import app.marquee.design.openLink
 import kotlinx.coroutines.CancellationException
@@ -467,12 +471,16 @@ private fun KeyPage(
     spoken: String,
     onClick: () -> Unit,
 ) {
-    val colors = Marquee.colors
+    var focused by remember { mutableStateOf(false) }
+    // On TV the focused link turns white with dark words (focusPalette).
+    val colors = focusPalette(focused)
     Row(
         Modifier
             .heightIn(min = 48.dp)
             .marqueeFocus(Marquee.radius.pill)
+            .onFocusChanged { focused = it.isFocused }
             .clip(RoundedCornerShape(Marquee.radius.pill))
+            .background(if (focused && Marquee.form == Form.Tv) colors.surface else Color.Transparent)
             .semantics(mergeDescendants = true) { contentDescription = spoken }
             .focusClickable(onClick, Role.Button)
             .padding(horizontal = 8.dp),

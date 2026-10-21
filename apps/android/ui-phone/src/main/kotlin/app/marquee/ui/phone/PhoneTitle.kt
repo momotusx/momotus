@@ -81,6 +81,7 @@ import app.marquee.design.StatusNote
 import app.marquee.design.TextRole
 import app.marquee.design.Tokens
 import app.marquee.design.focusClickable
+import app.marquee.design.liftRoom
 import app.marquee.design.openLink
 import app.marquee.design.windowDp
 
@@ -194,7 +195,9 @@ fun PhoneTitle(
                             KeepInView(seasons, if (selected < 0 || !compact) selected else selected + 1)
                             LazyRow(
                                 state = seasons,
-                                contentPadding = PaddingValues(horizontal = side),
+                                // Room for a keyboard-focused chip and its ring; the page does not move.
+                                modifier = Modifier.liftRoom(Marquee.tiles.pad),
+                                contentPadding = PaddingValues(horizontal = side, vertical = Marquee.tiles.pad),
                                 horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {

@@ -56,6 +56,7 @@ import app.marquee.core.route.switchedTo
 import app.marquee.core.session.CoreSession
 import app.marquee.core.views.ViewStatus
 import app.marquee.design.Form
+import app.marquee.design.LocalFocusRing
 import app.marquee.design.Marquee
 import app.marquee.design.MqText
 import app.marquee.design.SecondaryButton
@@ -679,39 +680,46 @@ private fun AppNav(
                         )
                     }
                     entry<Route.Player> { route ->
-                        PlayerScreen(
-                            route,
-                            session,
-                            app,
-                            form,
-                            // Leaving (fading out) it lets Back through to the page that is coming.
-                            active = backStack.lastOrNull() == route,
-                            // Only this entry pops itself: a held or double Back reaches the leaving entry
-                            // again during its fade, and must not pop the screen under it.
-                            onBack = { if (backStack.lastOrNull() == route) backStack.removeAt(backStack.lastIndex) },
-                            // Over the player, which waits paused: Back returns to it, a choice takes its place.
-                            onVersions = {
-                                if (backStack.lastOrNull() == route) {
-                                    backStack.add(Route.Versions(route.kind, route.id, route.videoId, route.title))
-                                }
-                            },
-                            onTitle = if (Format.parseVideo(route.videoId) != null) ({ toTitle(route) }) else null,
-                            onNext = { next, binge ->
-                                replacePlayer(
-                                    route,
-                                    Route.Player(
-                                        route.kind,
-                                        route.id,
-                                        next.videoId,
-                                        route.title,
-                                        key = null,
-                                        binge = binge,
-                                    ),
-                                )
-                            },
-                            // The same video and Versions view, the offered version's key.
-                            onOffer = { key -> replacePlayer(route, route.copy(key = key)) },
-                        )
+                        // The TV player keeps the v2 white ring until phase 5 gives it the v3 look (its
+                        // files belong to plans/player-polish.md); everywhere else TV focus is the lift.
+                        CompositionLocalProvider(LocalFocusRing provides true) {
+                            PlayerScreen(
+                                route,
+                                session,
+                                app,
+                                form,
+                                // Leaving (fading out) it lets Back through to the page that is coming.
+                                active = backStack.lastOrNull() == route,
+                                // Only this entry pops itself: a held or double Back reaches the leaving entry
+                                // again during its fade, and must not pop the screen under it.
+                                onBack = {
+                                    val top = backStack.lastOrNull() == route
+                                    if (top) backStack.removeAt(backStack.lastIndex)
+                                },
+                                // Over the player, which waits paused: Back returns to it, a choice takes its place.
+                                onVersions = {
+                                    if (backStack.lastOrNull() == route) {
+                                        backStack.add(Route.Versions(route.kind, route.id, route.videoId, route.title))
+                                    }
+                                },
+                                onTitle = if (Format.parseVideo(route.videoId) != null) ({ toTitle(route) }) else null,
+                                onNext = { next, binge ->
+                                    replacePlayer(
+                                        route,
+                                        Route.Player(
+                                            route.kind,
+                                            route.id,
+                                            next.videoId,
+                                            route.title,
+                                            key = null,
+                                            binge = binge,
+                                        ),
+                                    )
+                                },
+                                // The same video and Versions view, the offered version's key.
+                                onOffer = { key -> replacePlayer(route, route.copy(key = key)) },
+                            )
+                        }
                     }
                 },
         )

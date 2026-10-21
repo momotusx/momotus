@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
@@ -25,9 +26,13 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlin.test.assertEquals
 
-/** Skip intro is a plain white pill: a ring in the accent that never goes away reads as focus stuck on it. */
+/**
+ * Skip intro is a plain white pill: unfocused, nothing is drawn around it (a ring, halo or shadow that
+ * never goes away reads as focus stuck on it). Focused it stays the white pill: `buttonFill` in DesignTest.
+ */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [36], qualifiers = "w960dp-h540dp")
@@ -36,29 +41,38 @@ class SkipButtonTest {
     val compose = createComposeRule()
 
     @Test
-    fun `the Skip pill has no accent edge while it is not focused`() {
-        var accent = Color.Unspecified
+    fun `nothing is drawn around the Skip pill while it is not focused`() {
+        var bg = Color.Unspecified
         compose.setContent {
             MarqueeTheme(Form.Tv) {
-                accent = Marquee.colors.accent
-                Box(Modifier.testTag("skip").background(Marquee.colors.bg).padding(16.dp)) {
+                bg = Marquee.colors.bg
+                Box(Modifier.testTag("skip").background(Marquee.colors.bg).padding(48.dp)) {
                     SkipButton(Segment(SegmentKind.Intro, 30_000, 75_000, "TheIntroDB"), {})
                 }
             }
         }
+        // The pill's box inside the captured area, in pixels.
+        val area = compose.onNodeWithTag("skip").fetchSemanticsNode().boundsInRoot
+        val node = compose.onNode(hasClickAction()).fetchSemanticsNode().boundsInRoot
+        val left = (node.left - area.left).roundToInt()
+        val top = (node.top - area.top).roundToInt()
+        val right = (node.right - area.left).roundToInt()
+        val bottom = (node.bottom - area.top).roundToInt()
         val pixels = compose.onNodeWithTag("skip").captureToImage().toPixelMap()
-        val want = accent.toArgb()
-        var count = 0
+        val page = bg.toArgb()
+        var off = 0
+        // The band beside and below the pill (the source line sits above it).
         for (x in 0 until pixels.width) {
-            for (y in 0 until pixels.height) {
-                if (close(pixels[x, y].toArgb(), want)) count++
+            for (y in top until pixels.height) {
+                val inside = x in left - 1..right && y in top - 1..bottom
+                if (!inside && !close(pixels[x, y].toArgb(), page)) off++
             }
         }
-        assertEquals(0, count, "pixels in the accent colour")
+        assertEquals(0, off, "pixels around the unfocused pill that are not the page color")
     }
 
     private fun close(
         a: Int,
         b: Int,
-    ): Boolean = (0..2).all { shift -> abs((a shr (shift * 8) and 0xFF) - (b shr (shift * 8) and 0xFF)) <= 16 }
+    ): Boolean = (0..2).all { shift -> abs((a shr (shift * 8) and 0xFF) - (b shr (shift * 8) and 0xFF)) <= 6 }
 }

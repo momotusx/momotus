@@ -7,8 +7,6 @@ apps/apple/Marquee/Settings/FindAddonsScreen.swift :: .background(Capsule().fill
 apps/apple/Marquee/Settings/FindAddonsScreen.swift :: .overlay { if !lit { Capsule().strokeBorder(Theme.Palette.control, lineWidth: edgeWidth) } }
 # The gate's own patterns and the web focus fallback that names the accent on TV.
 apps/web/src/theme/app.css :: [data-form="tv"], [data-form="tv"] [data-scheme="dark"] { --key: var(--accent); }
-# Android TV keeps the white ring until phase 1a gives every TV target its lift (D3); the phone ring is key blue.
-apps/android/design/src/main/kotlin/app/marquee/design/Focus.kt :: val ringColor = if (Marquee.form == Form.Tv) colors.accent else colors.key
 # Status dots sit beside their words (a dot plus a word, never color alone); the tokens make them white.
 apps/web/src/theme/app.css :: .ok .dot, .dot.ok { background: var(--ok); box-shadow: none; }
 apps/web/src/theme/app.css :: .warn .dot, .dot.warn { background: var(--warn); box-shadow: none; }
@@ -16,3 +14,8 @@ apps/web/src/theme/app.css :: .bad .dot, .dot.bad { background: var(--bad); box-
 # The poster score chip from the ratings row (trunk d2d20a0c) keeps v2 glass until phase 1 moves the scores under the art, as the frames show.
 apps/android/design/src/main/kotlin/app/marquee/design/Tiles.kt :: * The scores as plain text on strong glass, at the top right of a poster: on a phone's narrow
 apps/apple/Marquee/Common/RatingChip.swift :: .glass(RoundedRectangle(cornerRadius: metrics.chip * 0.9, style: .continuous), strong: true)
+# The TV focus invert maps the v2 glass fills to the white focus fill, so a glass row turns white with dark words, until 1b removes glass.
+apps/android/design/src/main/kotlin/app/marquee/design/Focus.kt :: glass = primary,
+apps/android/design/src/main/kotlin/app/marquee/design/Focus.kt :: glassStrong = primary,
+# The TV player keeps the v2 white ring until phase 5 (LocalFocusRing; its files belong to plans/player-polish.md).
+apps/android/design/src/main/kotlin/app/marquee/design/Focus.kt :: color = (if (ringed) colors.accent else colors.key).copy(alpha = p),

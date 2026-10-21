@@ -18,7 +18,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -47,6 +50,8 @@ import app.marquee.design.Marquee
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
 import app.marquee.design.TextRole
+import app.marquee.design.Tokens
+import app.marquee.design.focusPalette
 import app.marquee.design.focusSelectable
 import app.marquee.design.marqueeFocus
 
@@ -195,28 +200,38 @@ private fun NavItem(
     onSelect: (Route) -> Unit,
     onNavFocus: () -> Unit,
 ) {
-    val colors = Marquee.colors
+    var focused by remember { mutableStateOf(false) }
+    // A focused tab turns white with dark words, as tvOS draws it (focusPalette).
+    val colors = focusPalette(focused)
     val place = places.getValue(route)
     val shape = RoundedCornerShape(Marquee.radius.pill)
     Row(
         Modifier
             .then(if (isSelected) Modifier.focusRequester(current) else Modifier)
-            .marqueeFocus(NAV_ITEM / 2)
-            .onFocusChanged { if (it.isFocused) onNavFocus() }
-            .height(NAV_ITEM)
+            .marqueeFocus(NAV_ITEM / 2, Tokens.FOCUS_SCALE_TILE, rise = false)
+            .onFocusChanged {
+                focused = it.isFocused
+                if (it.isFocused) onNavFocus()
+            }.height(NAV_ITEM)
             .clip(shape)
-            .background(if (isSelected) colors.text.copy(alpha = 0.12f) else Color.Transparent)
-            .focusSelectable(isSelected, { onSelect(route) }, Role.Tab)
+            .background(
+                when {
+                    focused -> colors.surface
+                    isSelected -> colors.text.copy(alpha = 0.12f)
+                    else -> Color.Transparent
+                },
+            ).focusSelectable(isSelected, { onSelect(route) }, Role.Tab)
             .padding(horizontal = 22.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Search and Settings carry their icon; the browsing places are words alone, as on the web.
-        if (route in tools) MqIcon(place.icon, tint = if (isSelected) colors.text else colors.muted, size = 26.dp)
+        val ink = if (isSelected || focused) colors.text else colors.muted
+        if (route in tools) MqIcon(place.icon, tint = ink, size = 26.dp)
         MqText(
             place.label,
             role = TextRole.Callout,
-            color = if (isSelected) colors.text else colors.muted,
+            color = ink,
             weight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
             maxLines = 1,
         )

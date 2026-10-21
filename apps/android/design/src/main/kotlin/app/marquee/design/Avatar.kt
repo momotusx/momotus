@@ -32,14 +32,17 @@ fun AvatarArt(
     letter: String,
     size: Dp,
     modifier: Modifier = Modifier,
+    /** White with a dark glyph: a focused profile on TV. */
+    lit: Boolean = false,
 ) {
     val colors = Marquee.colors
     val shape = RoundedCornerShape(size * 0.2f)
+    val ink = if (lit) colors.onPrimary else Color.White
     Box(
         modifier
             .size(size)
             .clip(shape)
-            .background(avatarColor(color) ?: colors.raised)
+            .background(if (lit) colors.primary else avatarColor(color) ?: colors.raised)
             .border(1.dp, Color.White.copy(alpha = 0.08f), shape)
             .clearAndSetSemantics { },
         contentAlignment = Alignment.Center,
@@ -50,14 +53,14 @@ fun AvatarArt(
                 letter,
                 style =
                     TextStyle(
-                        color = Color.White,
+                        color = ink,
                         fontSize = with(LocalDensity.current) { (size * 0.42f).toSp() },
                         fontFamily = MarqueeFonts.display,
                         fontWeight = FontWeight.ExtraBold,
                     ),
             )
         } else {
-            MqIcon(icon, tint = Color.White, size = size * 0.46f)
+            MqIcon(icon, tint = ink, size = size * 0.46f)
         }
     }
 }

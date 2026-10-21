@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -48,6 +49,7 @@ import app.marquee.core.model.TraktUnmapped
 import app.marquee.core.session.CoreSession
 import app.marquee.core.trakt.TraktAccount
 import app.marquee.core.views.TraktLoginView
+import app.marquee.design.FocusInk
 import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.LiveSpoken
@@ -59,6 +61,8 @@ import app.marquee.design.SecondaryButton
 import app.marquee.design.Status
 import app.marquee.design.StatusWord
 import app.marquee.design.TextRole
+import app.marquee.design.Tokens
+import app.marquee.design.focusPalette
 import app.marquee.design.marqueeFocus
 import app.marquee.design.openLink
 import kotlinx.coroutines.CancellationException
@@ -218,24 +222,33 @@ fun TraktScreen(
 /** One item Trakt and Marquee could not agree on: one stop for a remote and a screen reader, the name then why. */
 @Composable
 private fun Unmapped(item: TraktUnmapped) {
+    var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(Marquee.radius.l)
     val tv = Marquee.form == Form.Tv
-    Column(
-        Modifier
-            .padding(horizontal = Marquee.safe.side)
-            .fillMaxWidth()
-            .marqueeFocus(Marquee.radius.l, scale = 1.01f)
-            .clip(shape)
-            .background(Marquee.colors.surface)
-            .border(1.dp, Marquee.colors.edge, shape)
-            .semantics(mergeDescendants = true) {}
-            // A remote moves by focus: each row takes it, so the list can be read to the end.
-            .then(if (tv) Modifier.focusable() else Modifier)
-            .padding(if (tv) 24.dp else 16.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        MqText(item.name, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 2)
-        MqText(item.reason.replaceFirstChar { it.uppercase() }, role = TextRole.Caption, color = Marquee.colors.muted)
+    // On TV the focused row turns white with dark words (focusPalette).
+    FocusInk(focusPalette(focused)) {
+        Column(
+            Modifier
+                .padding(horizontal = Marquee.safe.side)
+                .fillMaxWidth()
+                .marqueeFocus(Marquee.radius.l, Tokens.FOCUS_SCALE_TILE)
+                .onFocusChanged { focused = it.isFocused }
+                .clip(shape)
+                .background(Marquee.colors.surface)
+                .border(1.dp, Marquee.colors.edge, shape)
+                .semantics(mergeDescendants = true) {}
+                // A remote moves by focus: each row takes it, so the list can be read to the end.
+                .then(if (tv) Modifier.focusable() else Modifier)
+                .padding(if (tv) 24.dp else 16.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            MqText(item.name, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 2)
+            MqText(
+                item.reason.replaceFirstChar { it.uppercase() },
+                role = TextRole.Caption,
+                color = Marquee.colors.muted,
+            )
+        }
     }
 }
 
@@ -261,7 +274,7 @@ private fun Account(
                 modifier =
                     if (tv && noAction) {
                         Modifier
-                            .marqueeFocus(Marquee.radius.pill)
+                            .marqueeFocus(Marquee.radius.pill, scale = 1f)
                             .semantics(mergeDescendants = true) {}
                             .focusable()
                     } else {

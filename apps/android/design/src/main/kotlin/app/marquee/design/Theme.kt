@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
@@ -85,6 +86,7 @@ fun MarqueeTheme(
             LocalForm provides form,
             LocalPalette provides palette,
             LocalReducedMotion provides rememberReducedMotion(),
+            LocalButtonFocus provides remember { mutableIntStateOf(0) },
         ) {
             Box(Modifier.fillMaxSize().background(palette.bg).clipToBounds()) { content() }
         }

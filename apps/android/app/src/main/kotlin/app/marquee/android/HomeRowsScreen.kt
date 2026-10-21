@@ -15,12 +15,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -44,6 +46,7 @@ import app.marquee.core.model.HomeCatalog
 import app.marquee.core.session.CoreOps
 import app.marquee.core.session.CoreSession
 import app.marquee.design.Chip
+import app.marquee.design.FocusInk
 import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.KeepInView
@@ -51,7 +54,9 @@ import app.marquee.design.Marquee
 import app.marquee.design.MqText
 import app.marquee.design.RoundButton
 import app.marquee.design.TextRole
+import app.marquee.design.Tokens
 import app.marquee.design.focusClickable
+import app.marquee.design.focusPalette
 import app.marquee.design.marqueeFocus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -170,6 +175,7 @@ private fun CatalogRow(
 ) {
     val tv = Marquee.form == Form.Tv
     val colors = Marquee.colors
+    var focused by remember { mutableStateOf(false) }
     val first = place == 1
     val last = place == count
     val shape = RoundedCornerShape(Marquee.radius.m)
@@ -184,11 +190,12 @@ private fun CatalogRow(
                     "$place",
                     modifier = Modifier.widthIn(min = if (tv) 40.dp else 20.dp),
                     role = TextRole.Headline,
-                    color = colors.dim,
+                    // Read here: a TV focus turns the row white, and its words dark.
+                    color = Marquee.colors.dim,
                     weight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
                 )
-                Column(Modifier.alpha(if (row.hidden) 0.55f else 1f)) {
+                Column(Modifier.alpha(if (row.hidden && !focused) 0.55f else 1f)) {
                     MqText(row.title, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 2)
                     MqText(
                         row.source +
@@ -200,14 +207,14 @@ private fun CatalogRow(
                                 " · Hidden"
                             },
                         role = TextRole.Caption,
-                        color = colors.dim,
+                        color = Marquee.colors.dim,
                         maxLines = 1,
                     )
                     if (picked) {
                         MqText(
                             "Up or down to move, select to put it down",
                             role = TextRole.Caption,
-                            color = colors.accent,
+                            color = Marquee.colors.text,
                         )
                     }
                 }
@@ -223,9 +230,15 @@ private fun CatalogRow(
                     Row(
                         Modifier
                             .weight(1f)
-                            .marqueeFocus(Marquee.radius.m, scale = 1.01f)
-                            .then(if (picked) Modifier.background(colors.raised, shape) else Modifier)
-                            .onPreviewKeyEvent { e ->
+                            .marqueeFocus(Marquee.radius.m, Tokens.FOCUS_SCALE_TILE)
+                            .onFocusChanged { focused = it.isFocused }
+                            .then(
+                                when {
+                                    focused -> Modifier.background(colors.primary, shape)
+                                    picked -> Modifier.background(colors.raised, shape)
+                                    else -> Modifier
+                                },
+                            ).onPreviewKeyEvent { e ->
                                 if (!picked) return@onPreviewKeyEvent false
                                 when (e.key) {
                                     Key.DirectionUp, Key.DirectionDown -> {
@@ -259,7 +272,7 @@ private fun CatalogRow(
                                     }
                             }.focusClickable(onPick, Role.Button)
                             .padding(Marquee.space.xs),
-                    ) { text() }
+                    ) { FocusInk(focusPalette(focused)) { text() } }
                     Chip(
                         if (row.hidden) "Hidden" else "Shown",
                         selected = !row.hidden,

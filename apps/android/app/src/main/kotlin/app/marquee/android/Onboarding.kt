@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -37,6 +38,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
@@ -56,6 +58,7 @@ import app.marquee.core.model.DefaultAddons
 import app.marquee.core.model.DefaultInstalled
 import app.marquee.core.route.DefaultsMode
 import app.marquee.core.session.CoreSession
+import app.marquee.design.FocusInk
 import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.LiveSpoken
@@ -70,7 +73,9 @@ import app.marquee.design.Status
 import app.marquee.design.StatusWord
 import app.marquee.design.SwitchRow
 import app.marquee.design.TextRole
+import app.marquee.design.Tokens
 import app.marquee.design.focusClickable
+import app.marquee.design.focusPalette
 import app.marquee.design.marqueeFocus
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -382,11 +387,18 @@ private fun DefaultRow(
         MarkTile(addon.logo, addon.name)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             MqText(addon.name, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 1)
-            MqText(addon.line, role = TextRole.Caption, color = colors.muted)
+            // Read here: a TV focus turns the switch row white, and its words dark.
+            MqText(addon.line, role = TextRole.Caption, color = Marquee.colors.muted)
         }
     }
     if (on != null) {
-        SwitchRow(on, onToggle, Modifier.marqueeFocus(Marquee.radius.l, scale = 1.01f).then(card), padding, words)
+        SwitchRow(
+            on,
+            onToggle,
+            Modifier.marqueeFocus(Marquee.radius.l, Tokens.FOCUS_SCALE_TILE).then(card),
+            padding,
+            words,
+        )
     } else {
         Row(
             card.semantics(mergeDescendants = true) {}.padding(padding),
@@ -451,22 +463,27 @@ private fun Door(
     modifier: Modifier,
     focusRequester: FocusRequester?,
 ) {
-    val colors = Marquee.colors
+    var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(Marquee.radius.l)
-    Column(
-        modifier
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .marqueeFocus(Marquee.radius.l)
-            .clip(shape)
-            .background(colors.surface)
-            .border(2.dp, colors.control, shape)
-            .focusClickable(onClick, Role.Button)
-            .padding(Marquee.space.m),
-        verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-    ) {
-        MqIcon(icon)
-        MqText(title, role = TextRole.Title3, maxLines = 2)
-        MqText(body, role = TextRole.Callout, color = colors.muted)
+    // On TV the focused row turns white with dark words (focusPalette).
+    FocusInk(focusPalette(focused)) {
+        val colors = Marquee.colors
+        Column(
+            modifier
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                .marqueeFocus(Marquee.radius.l)
+                .onFocusChanged { focused = it.isFocused }
+                .clip(shape)
+                .background(colors.surface)
+                .border(2.dp, colors.control, shape)
+                .focusClickable(onClick, Role.Button)
+                .padding(Marquee.space.m),
+            verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+        ) {
+            MqIcon(icon)
+            MqText(title, role = TextRole.Title3, maxLines = 2)
+            MqText(body, role = TextRole.Callout, color = colors.muted)
+        }
     }
 }
 
@@ -476,17 +493,22 @@ private fun SkipLink(
     label: String,
     onClick: () -> Unit,
 ) {
+    var focused by remember { mutableStateOf(false) }
+    // On TV the focused link turns white with dark words (focusPalette).
+    val colors = focusPalette(focused)
     Row(
         Modifier
             .heightIn(min = 48.dp)
             .marqueeFocus(Marquee.radius.m)
+            .onFocusChanged { focused = it.isFocused }
             .clip(RoundedCornerShape(Marquee.radius.m))
+            .background(if (focused && Marquee.form == Form.Tv) colors.surface else Color.Transparent)
             .focusClickable(onClick, Role.Button)
             .padding(horizontal = Marquee.space.s),
         horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        MqText(label, role = TextRole.Callout, weight = FontWeight.SemiBold, color = Marquee.colors.muted)
-        MqIcon(Icons.ChevronRight, tint = Marquee.colors.muted)
+        MqText(label, role = TextRole.Callout, weight = FontWeight.SemiBold, color = colors.muted)
+        MqIcon(Icons.ChevronRight, tint = colors.muted)
     }
 }

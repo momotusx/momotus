@@ -76,6 +76,28 @@ import kotlinx.coroutines.flow.first
 
 private enum class ButtonKind { Primary, Secondary }
 
+/** The grey of a selected choice (a chip, a toggle, a lit round button): never white, which on TV is focus. */
+internal fun selectedFill(colors: Palette): Color = colors.text.copy(alpha = 0.22f).compositeOver(colors.raised)
+
+/**
+ * A button's fill (design/DECISION.md): the one primary action is the white pill; on TV it yields
+ * its white ([yields]) while another button holds focus, so focus stays the one white thing. A
+ * secondary is raised, a selected toggle (Watched, In Library) the selected grey; on TV focus whitens
+ * a secondary, which [colors] already says when it is the [focusPalette] of a focused button.
+ */
+internal fun buttonFill(
+    primary: Boolean,
+    selected: Boolean,
+    tvFocused: Boolean,
+    colors: Palette,
+    yields: Boolean = false,
+): Color =
+    when {
+        primary && !yields -> colors.primary
+        selected && !tvFocused -> selectedFill(colors)
+        else -> colors.raised
+    }
+
 @Composable
 private fun ButtonShell(
     label: String,
@@ -92,34 +114,35 @@ private fun ButtonShell(
     spoken: String? = null,
 ) {
     val tv = Marquee.form == Form.Tv
-    val colors = Marquee.colors
+    var focused by remember { mutableStateOf(false) }
+    // On TV a focused secondary turns white with dark words (focusPalette).
+    val colors = focusPalette(focused)
     val height = if (tv) (if (big) 84.dp else 72.dp) else (if (big) 56.dp else 48.dp)
     val pad = if (tv) (if (big) 36.dp else 30.dp) else (if (big) 24.dp else 20.dp)
     val gap = if (tv) 14.dp else 8.dp
     val corner = height / 2
     val shape = RoundedCornerShape(corner)
-    // The one primary action is the white pill (design/DECISION.md v2). A secondary is raised with
-    // the control edge; a selected toggle (Watched, In Library) is lighter. The ring is for focus alone.
-    val background =
-        when {
-            kind == ButtonKind.Primary -> colors.primary
-            selected -> colors.text.copy(alpha = 0.22f).compositeOver(colors.raised)
-            else -> colors.raised
-        }
-    val content = if (kind == ButtonKind.Primary) colors.onPrimary else colors.text
+    val ringed = LocalFocusRing.current
+    // A white primary yields to a focused neighbour on TV (one white per screen).
+    val buttons = LocalButtonFocus.current
+    val yields = tv && !ringed && kind == ButtonKind.Primary && !focused && (buttons?.intValue ?: 0) > 0
+    ButtonFocused(focused && kind == ButtonKind.Secondary)
+    val background = buttonFill(kind == ButtonKind.Primary, selected, tvFocused = tv && focused, colors, yields)
+    val content = if (kind == ButtonKind.Primary && !yields) colors.onPrimary else colors.text
     Row(
         modifier =
             modifier
                 .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
                 .alpha(if (enabled) 1f else 0.55f)
                 .marqueeFocus(corner)
-                .then(
-                    if (onFocusChange != null) Modifier.onFocusChanged { onFocusChange(it.isFocused) } else Modifier,
-                ).heightIn(min = height) // grows with a large system font instead of cutting the label
+                .onFocusChanged {
+                    focused = it.isFocused
+                    onFocusChange?.invoke(it.isFocused)
+                }.heightIn(min = height) // grows with a large system font instead of cutting the label
                 .clip(shape)
                 .background(background)
                 .then(
-                    if (kind == ButtonKind.Secondary) {
+                    if (kind == ButtonKind.Secondary || yields) {
                         Modifier.border(2.dp, colors.control, shape)
                     } else {
                         Modifier
@@ -195,14 +218,14 @@ fun SecondaryButton(
 )
 
 /**
- * A chip's detail, a step quieter than its label: `dim` beside the `muted` label on `raised`
- * (5.73:1), and black at 70 percent beside the `onPrimary` label on the white pill (7.92:1).
- * `copy(alpha =)` sets the alpha, it does not scale it.
+ * A chip's detail: `dim`, a step quieter than the `muted` label on `raised` (5.73:1); on the selected
+ * grey it keeps the label's `text` (5.37:1), as the web's `.chip.on small`; in a TV focus's inverted
+ * palette both are dark.
  */
 internal fun chipDetailColor(
     selected: Boolean,
     colors: Palette,
-): Color = if (selected) colors.onPrimary.copy(alpha = 0.7f) else colors.dim
+): Color = if (selected) colors.text else colors.dim
 
 /**
  * A pill for filters and choices. Selected is the white pill with a check, never color alone.
@@ -221,7 +244,9 @@ fun Chip(
     detail: String? = null,
 ) {
     val tv = Marquee.form == Form.Tv
-    val colors = Marquee.colors
+    var focused by remember { mutableStateOf(false) }
+    // On TV a focused chip turns white with dark words (focusPalette).
+    val colors = focusPalette(focused)
     // The pill is 36 dp on a phone inside a 48 dp touch target; on TV they are the same.
     val pill = if (tv) 52.dp else 36.dp
     val target = if (tv) pill else 48.dp
@@ -231,9 +256,10 @@ fun Chip(
             modifier
                 .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
                 .marqueeFocus(target / 2, Tokens.FOCUS_SCALE_CARD)
-                .then(
-                    if (onFocusChange != null) Modifier.onFocusChanged { onFocusChange(it.isFocused) } else Modifier,
-                ).heightIn(min = target)
+                .onFocusChanged {
+                    focused = it.isFocused
+                    onFocusChange?.invoke(it.isFocused)
+                }.heightIn(min = target)
                 .then(
                     if (switch) {
                         Modifier.focusToggleable(
@@ -251,9 +277,9 @@ fun Chip(
                 .heightIn(min = pill)
                 .clip(shape)
                 // Opaque when not selected, so the focus halo of a neighbour does not show through.
-                .background(if (selected) colors.primary else colors.raised)
-                // The edge is the control token, so an unselected pill does not vanish; the ring is for
-                // focus alone. It keeps 3:1 on `bg` (3.25) until 1b removes the edge.
+                .background(if (selected && !(tv && focused)) selectedFill(colors) else colors.raised)
+                // The edge is the control token, so an unselected pill does not vanish; focus is the white.
+                // It keeps 3:1 on `bg` (3.25) until 1b removes the edge.
                 .then(if (selected) Modifier else Modifier.border(2.dp, colors.control, shape))
                 .padding(horizontal = if (tv) 24.dp else 14.dp),
             contentAlignment = Alignment.Center,
@@ -262,8 +288,8 @@ fun Chip(
                 horizontalArrangement = Arrangement.spacedBy(if (tv) 10.dp else 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (selected) MqIcon(Icons.Check, tint = colors.onPrimary, size = if (tv) 24.dp else 16.dp)
-                val ink = if (selected) colors.onPrimary else colors.muted
+                if (selected) MqIcon(Icons.Check, tint = colors.text, size = if (tv) 24.dp else 16.dp)
+                val ink = if (selected) colors.text else colors.muted
                 MqText(
                     label,
                     role = TextRole.Callout,
@@ -618,8 +644,17 @@ fun RoundButton(
             showLabel -> if (tv) 30.dp else 20.dp
             else -> if (tv) 36.dp else 22.dp
         }
-    val lit = main || selected
     var focused by remember { mutableStateOf(false) }
+    ButtonFocused(focused)
+    // White is the main action or a TV focus (not in the player, which keeps its ring); a selected
+    // circle is the selected grey with a white glyph.
+    val lit = main || (tv && focused && !LocalFocusRing.current)
+    val fill =
+        when {
+            lit -> colors.primary
+            selected -> selectedFill(colors)
+            else -> colors.raised
+        }
     Column(
         modifier.alpha(if (enabled) 1f else 0.55f),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -634,7 +669,7 @@ fun RoundButton(
                     focused = it.isFocused
                     onFocusChange?.invoke(it.isFocused)
                 }.clip(CircleShape)
-                .background(if (lit) colors.primary else colors.raised)
+                .background(fill)
                 .then(if (lit) Modifier else Modifier.border(2.dp, colors.control, CircleShape))
                 .semantics {
                     contentDescription = spoken
@@ -678,7 +713,7 @@ fun RoundButton(
                             },
                         ),
                 role = TextRole.Caption,
-                color = if (focused) colors.text else colors.muted,
+                color = if (tv && focused) colors.text else colors.muted,
                 weight = FontWeight.SemiBold,
                 // A narrow slot (equal widths in a row, a large font) wraps the word under its ring.
                 maxLines = 2,

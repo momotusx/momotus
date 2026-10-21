@@ -3,6 +3,7 @@ package app.marquee.design
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -68,13 +69,14 @@ class DesignTest {
         assertTrue(contrast(dark.accent, dark.bg) >= 3f)
         assertTrue(contrast(dark.switchOn, dark.surface) >= 3f) // 6.89
         // A chip's detail (Discover's catalog source), as Chip draws it: a step quieter than its label
-        // and still 4.5:1 on its pill, unselected on `raised` and selected on the white pill.
+        // on `raised`, and the label's own white on the selected grey; 4.5:1 on its pill either way.
         val rest = chipDetailColor(selected = false, colors = dark)
         val picked = chipDetailColor(selected = true, colors = dark)
         assertTrue(rest.alpha < dark.muted.alpha) // the label is muted
-        assertTrue(picked.alpha < dark.onPrimary.alpha) // the label is onPrimary
         assertTrue(contrast(rest, dark.raised) >= 4.5f) // 5.73
-        assertTrue(contrast(picked, dark.primary) >= 4.5f) // 7.92
+        assertTrue(contrast(picked, selectedFill(dark)) >= 4.5f) // 5.37
+        // One white: selection is a grey that never reads as the white focus.
+        assertTrue(contrast(dark.primary, selectedFill(dark)) >= 3f)
         // The control edge still drawn on chips, buttons, fields and the off switch until phase 1b
         // removes it: 3:1 on the page.
         assertTrue(contrast(dark.control, dark.bg) >= 3f) // 3.25
@@ -105,6 +107,78 @@ class DesignTest {
         for (art in listOf(Color.Black, Color(0xFF808080), Color.White)) {
             assertTrue(contrast(dark.text, dark.glassStrong, art) >= 4.5f, "text on $art")
         }
+    }
+
+    @Test
+    fun `the primary stays the white pill when focused, and a TV focus whitens a secondary`() {
+        val dark = Tokens.dark
+        // The Skip pill and every primary: white, focused or not, with no ring around it on TV.
+        assertEquals(dark.primary, buttonFill(primary = true, selected = false, tvFocused = false, colors = dark))
+        assertEquals(
+            dark.primary,
+            buttonFill(primary = true, selected = false, tvFocused = true, colors = dark.inverted()),
+        )
+        // A secondary is raised; focused on TV (its palette inverted) it is the white fill, a selected one too.
+        assertEquals(dark.raised, buttonFill(primary = false, selected = false, tvFocused = false, colors = dark))
+        assertEquals(
+            dark.primary,
+            buttonFill(primary = false, selected = false, tvFocused = true, colors = dark.inverted()),
+        )
+        assertEquals(
+            dark.primary,
+            buttonFill(primary = false, selected = true, tvFocused = true, colors = dark.inverted()),
+        )
+        // While another button holds the TV focus the primary yields its white: one white per screen.
+        assertEquals(
+            dark.raised,
+            buttonFill(primary = true, selected = false, tvFocused = false, colors = dark, yields = true),
+        )
+        // A selected toggle is the selected grey, never white.
+        assertEquals(selectedFill(dark), buttonFill(primary = false, selected = true, tvFocused = false, colors = dark))
+    }
+
+    @Test
+    fun `TV focus lifts buttons and rows by the rise token and art by the deeper art tokens`() {
+        // design/tokens.json focus and lift (the frames and the web): buttons 1.06, rows 1.03, art 1.1.
+        assertEquals(1.06f, Tokens.FOCUS_SCALE_CARD)
+        assertEquals(1.03f, Tokens.FOCUS_SCALE_TILE)
+        assertEquals(1.1f, Tokens.FOCUS_SCALE_ART)
+        assertEquals(8.dp, Tokens.focusRise)
+        assertEquals(10.dp, Tokens.focusRiseArt)
+        // The art shadow, 0 44px 88px at .55.
+        assertEquals(44.dp, Tokens.focusArtShadowY)
+        assertEquals(88.dp, Tokens.focusArtShadowBlur)
+        assertEquals(0.55f, Tokens.FOCUS_ART_SHADOW_ALPHA)
+    }
+
+    @Test
+    fun `the TV strokes no ring, the phone and the TV player stroke the 4 dp one`() {
+        assertEquals(0.dp, ringWidth(tv = true, ringed = false))
+        assertEquals(Tokens.focusRing, ringWidth(tv = false, ringed = false))
+        assertEquals(Tokens.focusRing, ringWidth(tv = true, ringed = true))
+    }
+
+    @Test
+    fun `a TV focus turns a row white, and its words, glyphs and states stay readable`() {
+        val dark = Tokens.dark
+        val on = dark.inverted()
+        // The fill is the white primary; nothing of the row's own edge is left on it.
+        assertEquals(dark.primary, on.surface)
+        assertEquals(dark.primary, on.raised)
+        assertEquals(0f, on.edge.alpha)
+        // Every word and state the palette gives reads at 4.5:1 on the white (white-in-v3 states go dark).
+        val words =
+            mapOf(
+                "text" to on.text,
+                "muted" to on.muted,
+                "dim" to on.dim,
+                "accent" to on.accent,
+                "ok" to on.ok,
+                "warn" to on.warn,
+                "bad" to on.bad,
+                "star" to on.star,
+            )
+        for ((name, ink) in words) assertTrue(contrast(ink, on.surface) >= 4.5f, "$name on the focus white")
     }
 
     /** WCAG contrast of [fg] on [bg]: a translucent [bg] is first laid on [base], then [fg] on that. */
