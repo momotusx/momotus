@@ -886,6 +886,18 @@ async fn after_a_relaunch_the_folder_alone_says_on_this_device() {
         })
         .await;
     }
+    // The first launch's engine is gone (its folder lock with it), as when
+    // the app was closed: a new one could start here. Its capacity sample
+    // holds it for the 30 s after the start.
+    let lock = data.path().join("torrents").join(".lock");
+    let deadline = std::time::Instant::now() + Duration::from_secs(90);
+    while !std::fs::File::open(&lock).is_ok_and(|f| f.try_lock().is_ok()) {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the first engine lives on"
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
     let again = Core::open(open()).unwrap();
     let home = mq_runtime::HomeView::open(&again);
     let caption = || {
