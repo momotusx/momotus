@@ -120,6 +120,9 @@ struct VersionRow: Decodable, Hashable, Sendable, Identifiable {
     /// "ready", "unknown", "swarm" or "fetch".
     let sourceClass: String?
     let bitrateMbps: Double?
+    /// "On this device": the version last played here starts from what this
+    /// device keeps, with no peer (optional for older cores).
+    var onDevice: String?
 
     var id: String { key }
 }

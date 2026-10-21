@@ -121,6 +121,8 @@ private func fixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T 
     #expect(pick.reasons == ["playsDirectly"])
     #expect(pick.sizeBytes == 61_878_609)
     #expect(pick.via == "Sample Source")
+    // Recorded before "On this device" (plans/player-polish.md 2b): none.
+    #expect(pick.onDevice == nil)
 }
 
 @Test func playbackHandsOverALoopbackURL() throws {
