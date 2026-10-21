@@ -11,6 +11,15 @@ const MIB: u64 = 1 << 20;
 /// volume low on storage at `min(5% of total, 500 MiB)`.
 pub const RESERVE_BYTES: u64 = 512 * MIB;
 
+/// APFS keeps a file's first 16 MiB allocated through a punch (2.6): on
+/// Apple targets a window counts it in `F`, and the scheduler's budget
+/// leaves it out, so the folder stays within `W`.
+pub const APFS_HEAD_BYTES: u64 = if cfg!(target_vendor = "apple") {
+    16 * MIB
+} else {
+    0
+};
+
 /// What a window needs to know of the device and the file.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WindowInputs {
@@ -58,8 +67,8 @@ pub struct WindowPlan {
 
 impl WindowPlan {
     /// The walk-only override (plans/streaming-window.md 4): a budget of at
-    /// most `limit`, with the readahead it costs taken off; `None` under
-    /// the window's floor.
+    /// most `limit`, the cut taken off the readahead and then off `B`, so
+    /// the kept set still fits; `None` under the window's floor.
     pub fn within(self, limit: u64) -> Option<Self> {
         if limit < self.floor {
             return None;
@@ -68,6 +77,7 @@ impl WindowPlan {
         Some(Self {
             budget: self.budget - cut,
             ahead: self.ahead.saturating_sub(cut),
+            behind: self.behind.saturating_sub(cut.saturating_sub(self.ahead)),
             ..self
         })
     }
@@ -94,7 +104,7 @@ pub fn window_plan(cfg: &Config, i: WindowInputs) -> Option<WindowPlan> {
     // The head's blocking window and the container index, rounded out to
     // pieces.
     let pinned = round(cfg.blocking_bytes) + round(cfg.tail_bytes) + piece;
-    let fixed = pinned + cfg.blocking_bytes + slack + open + playing;
+    let fixed = pinned + cfg.blocking_bytes + slack + open + playing + APFS_HEAD_BYTES;
     let cap = fixed + behind + playing + 600 * r;
     let floor = fixed + playing;
     if room < floor + 64 * MIB {

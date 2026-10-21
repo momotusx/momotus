@@ -12,7 +12,7 @@
 mod plan;
 mod sched;
 
-pub use plan::{RESERVE_BYTES, WindowInputs, WindowPlan, window_plan};
+pub use plan::{APFS_HEAD_BYTES, RESERVE_BYTES, WindowInputs, WindowPlan, window_plan};
 pub use sched::Scheduler;
 
 use std::ops::Range;

@@ -1208,9 +1208,11 @@ fn readahead_pieces_open_at_once_stay_within_the_limit() {
 }
 
 /// The window's budget (2.4): no piece outside the urgent windows starts
-/// past it, the keeper is due past `budget - slack / 2` and evicts down to
-/// `budget - slack`, farthest back first; a trim keeps the pinned pieces
-/// and the region around the read.
+/// past its cap (the budget less a seek's blocking and critical windows
+/// rounded out, plus a piece), the keeper is due past `cap - slack / 2`
+/// and evicts down to `cap - slack`, farthest back first, a seek's urgent
+/// windows stay within the budget, and a trim keeps the pinned pieces and
+/// the region around the read.
 #[test]
 fn the_budget_bounds_what_starts_and_the_keeper_brings_it_down() {
     const P: u64 = 64 * KIB;
@@ -1238,23 +1240,110 @@ fn the_budget_bounds_what_starts_and_the_keeper_brings_it_down() {
         pos: 4 * MIB,
     });
     h.peer(1, 10 * MIB);
-    // 9 held, the urgent 64..67 and 255, then playback and readahead up to
-    // 20 pieces in all.
-    assert_eq!(h.s.held_bytes(), 20 * P);
+    // The cap: 20 pieces less 64 KiB blocking and 128 KiB critical (3
+    // pieces) and one more. 9 held, the urgent 64..67 and 255, then
+    // playback and readahead up to 16 pieces in all.
+    assert_eq!(h.s.held_bytes(), 16 * P);
     let started: BTreeSet<PieceIdx> = h.out.iter().map(|&(b, _)| h.geo.piece_of(b)).collect();
-    assert_eq!(started.len(), 11, "{started:?}");
+    assert_eq!(started.len(), 7, "{started:?}");
     assert!(h.s.keeper_due());
     assert_eq!(h.s.to_evict(), [2, 3, 4, 5]);
     for piece in 2..6 {
         h.send(Event::PieceEvicted { piece });
     }
     // The room fills again with readahead, and the next round is due.
-    assert_eq!(h.s.held_bytes(), 20 * P);
+    assert_eq!(h.s.held_bytes(), 16 * P);
     let started: BTreeSet<PieceIdx> = h.out.iter().map(|&(b, _)| h.geo.piece_of(b)).collect();
-    assert_eq!(started.len(), 15, "{started:?}");
+    assert_eq!(started.len(), 11, "{started:?}");
     assert_eq!(h.s.to_evict(), [6, 7, 8, 9]);
     let trim = h.s.trimmable(2 * P);
     assert_eq!(trim, (6..11).collect::<Vec<_>>());
+    // A seek before the keeper's round: its urgent windows start past the
+    // cap and stay within the budget.
+    open(&mut h, 2, 0, 12 * MIB, None);
+    let urgent = h.geo.pieces_in(12 * MIB, 12 * MIB + 192 * KIB);
+    assert!(
+        urgent
+            .clone()
+            .all(|p| h.s.class_of(p).is_some_and(Class::is_urgent))
+    );
+    let started: BTreeSet<PieceIdx> = h.out.iter().map(|&(b, _)| h.geo.piece_of(b)).collect();
+    assert!(urgent.clone().all(|p| started.contains(&p)), "{started:?}");
+    assert!(h.s.held_bytes() <= 20 * P, "{}", h.s.held_bytes() / P);
+}
+
+/// The space guard's budget change (2.4, review P1-1) keeps the player's
+/// read: the keeper still has pieces to evict, by the smaller budget.
+#[test]
+fn a_budget_change_keeps_the_player_read() {
+    const P: u64 = 64 * KIB;
+    let g = Geometry::new(P as u32, &[16 * MIB]).unwrap();
+    let mut h = Harness::new(g, small_cfg());
+    h.s.set_window(Some(Window {
+        budget: 64 * P,
+        slack: 4 * P,
+        ..window(0)
+    }));
+    for piece in 0..40 {
+        h.send(Event::PieceVerified { piece });
+    }
+    open(&mut h, 1, 0, 2 * MIB, None);
+    assert!(h.s.to_evict().is_empty(), "within the budget");
+    h.s.set_budget(30 * P);
+    h.tick(1);
+    assert!(h.s.keeper_due());
+    assert!(!h.s.to_evict().is_empty(), "the read is still the player's");
+}
+
+/// A range that reopens just behind its run's start (a demuxer stepping
+/// back to a sync point) starts its ramp there (review P2-4: the debug
+/// build's overflow check panicked).
+#[test]
+fn a_reopen_behind_the_run_start_keeps_the_ramp_sound() {
+    let g = Geometry::new(64 * KIB as u32, &[16 * MIB]).unwrap();
+    let mut h = Harness::new(g, small_cfg());
+    h.s.set_window(Some(window(0)));
+    h.s.set_readahead(0, MIB);
+    open(&mut h, 1, 0, 8 * MIB, None);
+    h.tick(6_000);
+    h.send(Event::RangeAdvanced {
+        demand: 1,
+        pos: 8 * MIB + 20_000,
+    });
+    h.send(Event::RangeClosed { demand: 1 });
+    open(&mut h, 2, 0, 8 * MIB - 30_000, None);
+    assert_eq!(readahead_pieces(&h).len(), 2, "the floor");
+}
+
+/// A range left open that nobody reads (an abandoned connection, a parked
+/// header read) does not take the focus when the player's read closes,
+/// and is not the previous focus of the player's next read (review P2-1):
+/// nothing past its blocking window is wanted, and the read that reopens
+/// near the player's position keeps its readahead with no grace.
+#[test]
+fn an_idle_open_range_never_takes_the_focus_back() {
+    let g = Geometry::new(64 * KIB as u32, &[64 * MIB]).unwrap();
+    let mut h = Harness::new(g, small_cfg());
+    h.s.set_window(Some(window(0)));
+    open(&mut h, 1, 0, 0, None);
+    open(&mut h, 2, 0, 40 * MIB, None);
+    h.tick(6_000);
+    h.send(Event::RangeAdvanced {
+        demand: 2,
+        pos: 40 * MIB + 32 * KIB,
+    });
+    let ahead = readahead_pieces(&h);
+    assert!(!ahead.is_empty());
+    h.send(Event::RangeClosed { demand: 2 });
+    assert_eq!(h.s.class_of(1), None, "the idle range is not the focus");
+    assert_eq!(
+        h.s.class_of(640),
+        Some(Class::Playback),
+        "the anchor is warm"
+    );
+    open(&mut h, 3, 0, 40 * MIB + 96 * KIB, None);
+    assert!(!readahead_pieces(&h).is_empty(), "no grace");
+    assert_eq!(h.s.class_of(1), None);
 }
 
 // ---- property tests ----

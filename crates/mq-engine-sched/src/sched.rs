@@ -87,6 +87,9 @@ pub struct Scheduler {
     demands: Vec<Demand>,
     next_seq: u64,
     anchor: Option<(usize, u64)>,
+    /// The `seq` of the focused read whose close set the anchor: a range
+    /// opened before it does not take the focus back (2.3).
+    anchor_seq: u64,
     class: Vec<Option<Class>>,
     urgent: Vec<PieceIdx>,
     /// Deadline (microseconds) of each urgent piece.
@@ -149,6 +152,7 @@ impl Scheduler {
             demands: Vec::new(),
             next_seq: 0,
             anchor: None,
+            anchor_seq: 0,
             urgent: Vec::new(),
             deadline: BTreeMap::new(),
             normal: Vec::new(),
@@ -181,6 +185,15 @@ impl Scheduler {
         self.player_read = false;
         self.grace = None;
         self.dirty = true;
+    }
+
+    /// The space guard's budget (2.4): the window goes on with its player
+    /// read and its grace, only `W` changes.
+    pub fn set_budget(&mut self, budget: u64) {
+        if let Some(w) = self.window.as_mut() {
+            w.budget = budget;
+            self.dirty = true;
+        }
     }
 
     /// The playback resumes at file byte `pos`: the anchor sits there, and
@@ -278,7 +291,7 @@ impl Scheduler {
                 let piece = u64::from(self.geo.piece_len());
                 let near = |(f2, p): (usize, u64)| f2 == file && start.abs_diff(p) <= piece;
                 let run_start = match self.last_run {
-                    Some((f2, p, from)) if near((f2, p)) => from,
+                    Some((f2, p, from)) if near((f2, p)) => from.min(start),
                     _ => start,
                 };
                 if !probe {
@@ -339,9 +352,13 @@ impl Scheduler {
                     let focused = self.focus().is_some_and(|f| f.id == demand);
                     let d = self.demands.remove(i);
                     if focused {
+                        // Its position is the anchor until a read opens: an
+                        // older range left open (parked, abandoned) does not
+                        // take the focus in the gap.
                         self.last_run = Some((d.file, d.pos, d.run_start));
-                    }
-                    if !d.probe && self.focus().is_none() {
+                        self.anchor = Some((d.file, d.pos));
+                        self.anchor_seq = d.seq;
+                    } else if !d.probe && self.focus().is_none() {
                         self.anchor = Some((d.file, d.pos));
                     }
                     self.dirty = true;
@@ -632,11 +649,12 @@ impl Scheduler {
         }
     }
 
-    /// The newest read that is not a probe.
+    /// The newest read that is not a probe, unless the focus closed after
+    /// it opened (then the anchor stands for the player).
     fn focus(&self) -> Option<&Demand> {
         self.demands
             .iter()
-            .filter(|d| !d.probe)
+            .filter(|d| !d.probe && d.seq > self.anchor_seq)
             .max_by_key(|d| d.seq)
     }
 
@@ -650,7 +668,7 @@ impl Scheduler {
                 if self.grace.is_some() {
                     0
                 } else {
-                    (2 * (d.pos - d.run_start)).clamp(win.ramp_floor.min(cap), cap)
+                    (2 * d.pos.saturating_sub(d.run_start)).clamp(win.ramp_floor.min(cap), cap)
                 }
             }
             _ => self.readahead[d.file],
@@ -736,11 +754,24 @@ impl Scheduler {
             .sum()
     }
 
+    /// What the torrent may hold outside the urgent windows (2.4): the
+    /// budget less one seek's blocking and critical windows rounded out to
+    /// pieces, plus a piece, so a seek's urgent fetches stay within `W`.
+    fn cap(&self, w: &Window) -> u64 {
+        let crit = self
+            .cfg
+            .critical_min_bytes
+            .max(self.cfg.critical_secs * self.bitrate[w.file]);
+        let piece = u64::from(self.geo.piece_len());
+        let urgent = (self.cfg.blocking_bytes + crit).div_ceil(piece) * piece + piece;
+        w.budget.saturating_sub(urgent)
+    }
+
     /// The keeper is due (2.4): the torrent holds more than
-    /// `budget - slack / 2`.
+    /// `cap - slack / 2`.
     pub fn keeper_due(&self) -> bool {
         self.window
-            .is_some_and(|w| self.held_bytes() > w.budget.saturating_sub(w.slack / 2))
+            .is_some_and(|w| self.held_bytes() > self.cap(&w).saturating_sub(w.slack / 2))
     }
 
     /// Of `pieces`, those of the windowed file with no block received or
@@ -762,12 +793,12 @@ impl Scheduler {
     }
 
     /// What the keeper evicts now: enough to bring the torrent down to
-    /// `budget - slack`, in [`Self::evictable`]'s order.
+    /// `cap - slack`, in [`Self::evictable`]'s order.
     pub fn to_evict(&self) -> Vec<PieceIdx> {
         let Some(w) = self.window else {
             return Vec::new();
         };
-        let target = w.budget.saturating_sub(w.slack);
+        let target = self.cap(&w).saturating_sub(w.slack);
         self.evictable(self.held_bytes().saturating_sub(target))
     }
 
@@ -1356,13 +1387,13 @@ impl Scheduler {
             if !self.peers[&id].have.get(piece) {
                 continue;
             }
-            // Past the window's budget no new piece starts; the keeper
+            // Past the window's cap no new piece starts; the keeper
             // makes room (2.4).
             if let Some(w) = self.window
                 && self.busy[piece as usize] == 0
             {
                 let size = u64::from(self.geo.piece_size(piece));
-                if self.held + size > w.budget {
+                if self.held + size > self.cap(&w) {
                     continue;
                 }
                 self.held += size;
