@@ -1,5 +1,9 @@
 # Design decision
 
+## The v3 pick (2026-10-21)
+
+The owner's words, translated: "I told you Apple TV: the colors and everything should be the same." So v3 is the direction closest to the Apple TV app, which both design critics named in every round: V2 Top Shelf (`design/exploration/v3/index.html`, five review rounds, 10 of 10 on TV and phone, `plans/reviews/design-v3-*`). Its colors follow Apple TV's own, as measured in `design/reference/apple-tv.md`: a black or near-black stage where the artwork is the only color, white text at Apple's opacity levels, 10 percent hairlines, a white focus (scale, lift, shadow, specular, never a colored ring), the white primary pill, and Apple's system blue only where Apple uses a key color (sheet primaries, sign-in, links). This replaces the blue-green accent switch of the exploration and the v2 accent #E5372A. If the owner wants another direction or a different key color, this block is where it changes.
+
 ## Owner direction for v3 (2026-10-21, before the pick)
 
 The owner's words, translated: every page, Settings included, must look ultra sleek, Apple level, Apple style. Study Apple's own design in detail (the Apple TV app on tvOS and iPhone, tv.apple.com) and keep its appeal. Color: monochrome, with one accent between blue and green; no red and no orange. Do not mix colors. Run the design through review rounds until it is perfect.
