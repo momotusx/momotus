@@ -67,6 +67,9 @@
   --focus-shadow: 0 0 0 var(--focus-ring) var(--bg), 0 0 var(--focus-halo) calc(var(--focus-ring) * 2) var(--halo);
   --focus-scale-card: 1.06;
   --focus-scale-tile: 1.03;
+  --focus-rise: 8px;
+  --focus-scale-art: 1.1;
+  --focus-rise-art: 10px;
   --weight-display: 700;
   --weight-heading: 700;
   --weight-label: 600;
@@ -79,6 +82,7 @@
   --glass-highlight: inset 0 0.5px 0 rgba(255, 255, 255, 0.08);
   --glass-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
   --lift-focus-edge: 0 30px 60px rgba(0, 0, 0, 0.6);
+  --lift-focus-art: 0 44px 88px rgba(0, 0, 0, 0.55);
   --lift-hover-edge: 0 18px 40px rgba(0, 0, 0, 0.45);
   --lift-primary-shadow: 0 3px 16px rgba(0, 0, 0, 0.28);
   --selected-fill: #636366;

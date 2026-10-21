@@ -295,6 +295,12 @@ object Tokens {
     val focusHaloLight = 30.dp
     const val FOCUS_SCALE_CARD = 1.06f
     const val FOCUS_SCALE_TILE = 1.03f
+    val focusRise = 8.dp
+    const val FOCUS_SCALE_ART = 1.1f
+    val focusRiseArt = 10.dp
+    val focusArtShadowY = 44.dp
+    val focusArtShadowBlur = 88.dp
+    const val FOCUS_ART_SHADOW_ALPHA = 0.55f
 
     const val FOCUS_MS = 180
     const val PANEL_MS = 260

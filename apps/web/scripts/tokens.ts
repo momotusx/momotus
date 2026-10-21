@@ -13,14 +13,14 @@ export interface Tokens {
   space: Scale;
   radius: Scale;
   safeArea: { tv: Scale; phone: Scale };
-  focus: { ring: number; halo: { dark: number; light: number }; scaleCard: number; scaleTile: number };
+  focus: { ring: number; halo: { dark: number; light: number }; scaleCard: number; scaleTile: number; rise: number; scaleArt: number; riseArt: number };
   motion: { focusMs: number; panelMs: number; ease: string };
   poster: Record<string, { width: number; height: number }>;
   weight: Scale;
   tracking: Scale;
   glass: { blur: number; saturate: number; highlight: string; shadow: string };
   /** The white edge a card takes on focus or hover, and the primary pill's shadow. */
-  lift: { focusEdge: string; hoverEdge: string; primaryShadow: string };
+  lift: { focusEdge: string; focusArt: string; hoverEdge: string; primaryShadow: string };
   /** Selected, never focused: a lighter fill and a bright 2 px edge (tabs, chips, pressed toggles). */
   selected: { fill: string; edge: string };
 }
@@ -59,6 +59,11 @@ export function generate(t: Tokens): string {
     "--focus-shadow: 0 0 0 var(--focus-ring) var(--bg), 0 0 var(--focus-halo) calc(var(--focus-ring) * 2) var(--halo);",
     `--focus-scale-card: ${t.focus.scaleCard};`,
     `--focus-scale-tile: ${t.focus.scaleTile};`,
+    // Buttons, rows and cards rise this far on TV focus, over `lift.focusEdge`.
+    `--focus-rise: ${t.focus.rise}px;`,
+    // TV art (posters, stills, avatars) lifts more than a button: the frames' 10 ft focus.
+    `--focus-scale-art: ${t.focus.scaleArt};`,
+    `--focus-rise-art: ${t.focus.riseArt}px;`,
     ...Object.entries(t.weight).map(([k, v]) => `--weight-${kebab(k)}: ${v};`),
     ...Object.entries(t.tracking).map(([k, v]) => `--tracking-${kebab(k)}: ${v}em;`),
     `--glass-blur: ${t.glass.blur}px;`,

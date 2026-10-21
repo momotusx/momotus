@@ -27,7 +27,7 @@ export interface Tokens {
   space: Scale;
   radius: Scale;
   safeArea: { tv: Scale; phone: Scale };
-  focus: { ring: number; halo: { dark: number; light: number }; scaleCard: number; scaleTile: number };
+  focus: { ring: number; halo: { dark: number; light: number }; scaleCard: number; scaleTile: number; rise: number; scaleArt: number; riseArt: number };
   motion: { focusMs: number; panelMs: number; ease: string };
   tile: { tv: TileSet; phone: TileSet };
   weight: Scale;
@@ -79,6 +79,13 @@ function tileSet(t: TileSet): string {
     ["peek", dp(t.peek)],
     ["caption", dp(t.caption)],
   ]);
+}
+
+/** "0 44px 88px rgba(0, 0, 0, 0.55)" as the Kotlin constants of a downward shadow. */
+function artShadow(css: string): string[] {
+  const m = /^0 (\d+)px (\d+)px rgba\(0, 0, 0, ([\d.]+)\)$/.exec(css);
+  if (!m) throw new Error(`lift.focusArt is not a plain downward shadow: ${css}`);
+  return [`    val focusArtShadowY = ${m[1]}.dp`, `    val focusArtShadowBlur = ${m[2]}.dp`, `    const val FOCUS_ART_SHADOW_ALPHA = ${m[3]}f`];
 }
 
 export function generate(t: Tokens): string {
@@ -173,6 +180,12 @@ export function generate(t: Tokens): string {
     `    val focusHaloLight = ${dp(t.focus.halo.light)}`,
     `    const val FOCUS_SCALE_CARD = ${float(t.focus.scaleCard)}`,
     `    const val FOCUS_SCALE_TILE = ${float(t.focus.scaleTile)}`,
+    // Buttons, rows and cards rise this far on TV focus.
+    `    val focusRise = ${dp(t.focus.rise)}`,
+    // TV art lifts more than a button (the frames' 10 ft focus): scale, rise and the shadow under it.
+    `    const val FOCUS_SCALE_ART = ${float(t.focus.scaleArt)}`,
+    `    val focusRiseArt = ${dp(t.focus.riseArt)}`,
+    ...artShadow(t.lift.focusArt),
     "",
     `    const val FOCUS_MS = ${t.motion.focusMs}`,
     `    const val PANEL_MS = ${t.motion.panelMs}`,
