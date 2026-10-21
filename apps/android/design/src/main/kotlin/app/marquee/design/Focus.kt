@@ -90,6 +90,8 @@ fun Modifier.marqueeFocus(
     }
     val colors = Marquee.colors
     val halo = Marquee.focusHalo
+    // The keyboard ring is the key blue (design/DECISION.md); the TV form has no key color, so its ring stays white.
+    val ringColor = if (Marquee.form == Form.Tv) colors.accent else colors.key
     return this
         .onFocusChanged { focused = it.isFocused }
         .then(if (lift == null) Modifier.lifted(raised) else Modifier)
@@ -123,7 +125,7 @@ fun Modifier.marqueeFocus(
                 )
                 val centre = ring + ring / 2
                 drawRoundRect(
-                    color = colors.accent.copy(alpha = p),
+                    color = ringColor.copy(alpha = p),
                     topLeft = Offset(-centre, -centre),
                     size = Size(size.width + 2 * centre, size.height + 2 * centre),
                     cornerRadius = CornerRadius(corner + centre),
