@@ -535,23 +535,80 @@ async fn report_lost_takes_every_passkey_and_ticks_who_joined_through_one() {
     );
 }
 
-/// A passkey dropped once is never let in again: saving the same one
-/// is refused, and the user saves a new one.
+/// What a save answers before anything is sent (3.1, 3.2): a passkey that
+/// already opens the account is `kitHere` (the save probe), one dropped
+/// once is `kitDropped` (never let in again: the user saves a new one), and
+/// a ninth kit is `tooManyKits`.
 #[tokio::test]
-async fn a_dropped_passkey_is_never_let_in_again() {
+async fn a_save_says_here_dropped_or_too_many() {
     let relay = Relay::new().await;
     let mut phone = Device::first(&relay).await;
     let key = prf();
     let kit = phone.save(&key).await.unwrap();
+    let here = phone.save(&key).await.unwrap_err();
+    assert!(matches!(here, SyncError::KitHere), "{here:?}");
     phone.remove(vec![kit]).await;
     assert!(unknown(&relay, &key).await);
     let again = phone.save(&key).await.unwrap_err();
-    assert!(
-        matches!(
-            again,
-            SyncError::Http(HttpError::Status { status: 400, .. })
-        ),
-        "{again:?}"
+    assert!(matches!(again, SyncError::KitDropped), "{again:?}");
+    let rows = relay.roster(&phone.record.keys.account).head();
+    for _ in 0..8 {
+        phone.save(&prf()).await.unwrap();
+    }
+    let full = phone.save(&prf()).await.unwrap_err();
+    assert!(matches!(full, SyncError::TooManyKits), "{full:?}");
+    assert_eq!(full.code(), Some("tooManyKits"));
+    let after = relay.roster(&phone.record.keys.account).head();
+    assert_eq!(
+        after.map(|(seq, _)| seq),
+        rows.map(|(seq, _)| seq + 8),
+        "refusals send nothing"
     );
-    phone.save(&prf()).await.unwrap();
+}
+
+/// History is never refused for a lookup another account holds now: A
+/// saved a passkey and dropped it, then B saved the same one. A's device
+/// sending its roster again (as after a relay restore) is taken, and the
+/// lookup stays B's.
+#[tokio::test]
+async fn history_is_never_refused_for_a_lookup_held_since() {
+    let relay = Relay::new().await;
+    let mut a = Device::first(&relay).await;
+    let mut b = Device::first(&relay).await;
+    let key = prf();
+    let kit = a.save(&key).await.unwrap();
+    a.remove(vec![kit]).await;
+    b.save(&key).await.unwrap();
+    let account = a.record.keys.account;
+    let sql = rusqlite::Connection::open(&relay.db).unwrap();
+    let mut stmt = sql
+        .prepare("SELECT body, sig FROM roster WHERE account = ?1 ORDER BY seq")
+        .unwrap();
+    let entries: Vec<Entry> = stmt
+        .query_map([hex::encode(account.0)], |r| {
+            let sig: Vec<u8> = r.get(1)?;
+            Ok(Entry {
+                body: r.get(0)?,
+                sig: Hex(sig.try_into().unwrap()),
+            })
+        })
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    let replayed = http()
+        .post_json(
+            &format!("{}/v1/roster/replay", relay.url),
+            &mq_sync::wire::ReplayRequest { account, entries },
+            &RequestOptions {
+                allow_private: true,
+                ..Default::default()
+            },
+        )
+        .await;
+    assert!(replayed.is_ok(), "{:?}", replayed.err());
+    let (joined, _) = recover(&relay, Recovery::Passkey(key), None).await.unwrap();
+    assert_eq!(
+        joined.record.keys.account, b.record.keys.account,
+        "the lookup is still B's"
+    );
 }

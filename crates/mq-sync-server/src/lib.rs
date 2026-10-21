@@ -595,7 +595,7 @@ fn open_journal(path: &Path, conn: &Connection) -> Result<std::fs::File, String>
                 let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
                 let entry = std::slice::from_ref(entry);
                 if let Err(refused) =
-                    append_entries(&tx, account, entry, None).map_err(|e| e.to_string())?
+                    append_entries(&tx, account, entry, None, false).map_err(|e| e.to_string())?
                 {
                     return Err(format!("roster journal seq {}: {}", body.seq, refused.1));
                 }
@@ -997,6 +997,7 @@ async fn create_account(
             &body.account,
             std::slice::from_ref(&request.entry),
             None,
+            true,
         )? {
             return Ok(Err(refused.into_response()));
         }
@@ -1341,6 +1342,7 @@ fn append_entries(
     account: &Id,
     entries: &[Entry],
     pending: Option<&[u8]>,
+    live: bool,
 ) -> rusqlite::Result<Result<Vec<Entry>, Refused>> {
     let mut roster = load_roster(tx, account)?;
     let mut stored = Vec::new();
@@ -1351,9 +1353,25 @@ fn append_entries(
             Ok(_) => return refuse(StatusCode::BAD_REQUEST, "entry for another account"),
             Err(e) => return refuse(StatusCode::BAD_REQUEST, &e.to_string()),
         };
+        if roster.head().is_some_and(|(seq, _)| body.seq <= seq) {
+            let held: Option<Vec<u8>> = tx
+                .query_row(
+                    "SELECT hash FROM roster WHERE account = ?1 AND seq = ?2",
+                    params![hex::encode(account.0), body.seq as i64],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            if held.as_deref() == Some(&entry.hash().0[..]) {
+                continue;
+            }
+            return refuse(StatusCode::CONFLICT, "another entry holds that place");
+        }
         // A kit's lookup is one account's: a passkey's lookup another
-        // account holds would answer redeems for that one.
-        if let Kind::AddKit(kit) = &body.kind {
+        // account holds would answer redeems for that one. Only for a new
+        // entry a device sends (`live`): history (a replay, the journal at
+        // start) keeps whoever holds the lookup now, and is never refused
+        // for it.
+        if let (true, Kind::AddKit(kit)) = (live, &body.kind) {
             let holder: Option<String> = tx
                 .query_row(
                     "SELECT account FROM recovery WHERE lookup_hash = ?1",
@@ -1367,19 +1385,6 @@ fn append_entries(
                     "this kit's lookup belongs to another account",
                 );
             }
-        }
-        if roster.head().is_some_and(|(seq, _)| body.seq <= seq) {
-            let held: Option<Vec<u8>> = tx
-                .query_row(
-                    "SELECT hash FROM roster WHERE account = ?1 AND seq = ?2",
-                    params![hex::encode(account.0), body.seq as i64],
-                    |r| r.get(0),
-                )
-                .optional()?;
-            if held.as_deref() == Some(&entry.hash().0[..]) {
-                continue;
-            }
-            return refuse(StatusCode::CONFLICT, "another entry holds that place");
         }
         match roster.apply(entry) {
             Ok(()) => {}
@@ -1564,7 +1569,13 @@ async fn append_roster(
     }
     let appended = (|| {
         let tx = db.transaction()?;
-        let stored = append_entries(&tx, &auth.account, &[request.entry], pending.as_deref())?;
+        let stored = append_entries(
+            &tx,
+            &auth.account,
+            &[request.entry],
+            pending.as_deref(),
+            true,
+        )?;
         if stored.is_ok() {
             tx.commit()?;
         }
@@ -1634,7 +1645,7 @@ async fn replay_roster(
     }
     let appended = (|| {
         let tx = db.transaction()?;
-        let stored = append_entries(&tx, &request.account, &request.entries, None)?;
+        let stored = append_entries(&tx, &request.account, &request.entries, None, false)?;
         if stored.is_ok() {
             tx.commit()?;
         }
