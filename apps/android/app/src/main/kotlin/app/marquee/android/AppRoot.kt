@@ -416,7 +416,14 @@ private fun AppNav(
                             }
                         })
                     }
-                    entry<Route.StreamQuestion> { StreamQuestionScreen(session, onDone = ::arrive) }
+                    // The subtitles step takes the question's place: Back from it goes to the addons.
+                    entry<Route.StreamQuestion> {
+                        StreamQuestionScreen(
+                            session,
+                            onDone = { backStack[backStack.lastIndex] = Route.SubtitleLanguage },
+                        )
+                    }
+                    entry<Route.SubtitleLanguage> { SubtitleStepScreen(session, onDone = ::arrive) }
                     entry<Route.Home> {
                         // Fully drawn once the first rows show: the start's end for the system and the benchmarks.
                         ReportDrawnWhen { app.home.rows.isNotEmpty() }

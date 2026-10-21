@@ -106,6 +106,10 @@ sealed interface Route : NavKey {
     @Serializable
     data object StreamQuestion : Route
 
+    /** A first run's subtitles step, after the question: the language subtitles start in. */
+    @Serializable
+    data object SubtitleLanguage : Route
+
     /**
      * "Add a source" from a title: the link field first, then the source addons. Pushed over the
      * title, so Back returns to it, and its versions follow the install.

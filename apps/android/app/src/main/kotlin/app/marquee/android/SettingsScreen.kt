@@ -754,19 +754,13 @@ private fun Playback(
     val ops = holder.session.ops
     Section {
         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-            MqText("Subtitles", role = TextRole.Headline, weight = FontWeight.Bold)
-            Languages(prefs.subtitleLanguages, ops::languages, { list ->
+            SubtitleLanguage(prefs.subtitleLanguages, ops::languages) { list ->
                 if (!busy) {
                     run("Changing the subtitle languages") {
                         ops.setPrefs(buildJsonObject { put("subtitleLanguages", json(list)) })
                     }
                 }
-            })
-            MqText(
-                "Languages are listed in the order you turn them on; the first one wins.",
-                role = TextRole.Caption,
-                color = Marquee.colors.muted,
-            )
+            }
             MqText("Subtitle size", role = TextRole.Headline, weight = FontWeight.Bold)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
@@ -805,10 +799,28 @@ private fun Playback(
 
 private fun json(list: List<String>) = JsonArray(list.map(::JsonPrimitive))
 
+/** Settings > Playback's Subtitle language: the first chosen language named, then the ordered picker. */
+@Composable
+internal fun SubtitleLanguage(
+    chosen: List<String>,
+    load: suspend () -> List<LanguageChoice>,
+    onChange: (List<String>) -> Unit,
+) {
+    MqText("Subtitle language", role = TextRole.Headline, weight = FontWeight.Bold)
+    Languages(chosen, load, onChange, first = { name -> name?.let { "$it first" } ?: "None, subtitles start off" })
+    MqText(
+        "Languages are listed in the order you turn them on; the first one wins. " +
+            "A subtitle you pick while watching moves its language first.",
+        role = TextRole.Caption,
+        color = Marquee.colors.muted,
+    )
+}
+
 /**
  * A language picker over every language the core knows ([load]): the chosen ones first, in the order
  * they were turned on (the first wins), each a press away from off; then a search by name, which
- * offers the common ones before anything is typed. A pick clears the search.
+ * offers the common ones before anything is typed. A pick clears the search. [first] words a line over
+ * the chips from the first chosen language's name (null for none).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -818,6 +830,7 @@ internal fun Languages(
     onChange: (List<String>) -> Unit,
     /** Audio takes the base codes ("pt" for "pt-BR"); subtitles take the core's codes as they are. */
     audio: Boolean = false,
+    first: ((String?) -> String)? = null,
 ) {
     val all by produceState(emptyList<LanguageChoice>(), load) {
         value =
@@ -844,6 +857,16 @@ internal fun Languages(
         follow = null
     }
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
+        first?.let {
+            MqText(
+                it(
+                    chosen.firstOrNull()?.let { code ->
+                        LanguagePicks.name(code, all)
+                    },
+                ),
+                role = TextRole.Callout,
+            )
+        }
         if (chosen.isNotEmpty()) {
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),

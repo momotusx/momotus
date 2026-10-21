@@ -26,8 +26,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -40,6 +42,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -53,9 +56,11 @@ import app.marquee.core.DefaultsCopy
 import app.marquee.core.DefaultsStep
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.StreamChoiceSettings
+import app.marquee.core.SubtitleStep
 import app.marquee.core.model.DefaultAddonInfo
 import app.marquee.core.model.DefaultAddons
 import app.marquee.core.model.DefaultInstalled
+import app.marquee.core.model.Prefs
 import app.marquee.core.route.DefaultsMode
 import app.marquee.core.session.CoreSession
 import app.marquee.design.FocusInk
@@ -76,6 +81,7 @@ import app.marquee.design.TextRole
 import app.marquee.design.Tokens
 import app.marquee.design.focusClickable
 import app.marquee.design.focusPalette
+import app.marquee.design.focusSelectable
 import app.marquee.design.marqueeFocus
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -250,6 +256,134 @@ fun StreamQuestionScreen(
     }
 }
 
+/** The subtitles step for the page's life (the state and the write live in [SubtitleStep]). */
+class SubtitleStepHolder(
+    session: CoreSession,
+    device: String?,
+) : ViewModel() {
+    val step = SubtitleStep(session.ops, viewModelScope, device).also { it.load() }
+}
+
+/**
+ * A first run's subtitles step, after the question (plans/m13-subtitle-languages.md 7): the language
+ * subtitles start in, one choice, this device's chosen at first. Continue writes it, then [onDone]; Skip
+ * writes nothing. A profile with subtitle languages already passes by. Continue stays in sight under the
+ * list; on TV it has focus first, so one press keeps the device's language.
+ */
+@Composable
+fun SubtitleStepScreen(
+    session: CoreSession,
+    onDone: () -> Unit,
+) {
+    val device = DeviceCaps.deviceLanguage(LocalConfiguration.current.locales[0])
+    val holder =
+        viewModel<SubtitleStepHolder>(
+            key = "subtitle-step",
+            factory = viewModelFactory { initializer { SubtitleStepHolder(session, device) } },
+        )
+    // Read once, before anything shows: null while the core has not said.
+    val has by produceState<Boolean?>(null) { value = prefsNow(session)?.subtitleLanguages?.isNotEmpty() == true }
+    LaunchedEffect(has) { if (has == true) onDone() }
+    if (has == false) SubtitleStepPage(holder.step, device, onDone)
+}
+
+/** The subtitles step's page over [step]: the rows, Continue and More languages. */
+@Composable
+internal fun SubtitleStepPage(
+    step: SubtitleStep,
+    device: String?,
+    onDone: () -> Unit,
+) {
+    val tv = Marquee.form == Form.Tv
+    val go = remember { FocusRequester() }
+    AutoFocus(go)
+    var more by remember { mutableStateOf(false) }
+    Column(
+        Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.systemBars)
+            .padding(horizontal = Marquee.safe.side, vertical = Marquee.safe.top),
+        verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            MqText("Marquee", role = TextRole.Title2, modifier = Modifier.weight(1f))
+            SkipLink(SubtitleStep.SKIP, onDone)
+        }
+        val width = Modifier.widthIn(max = 900.dp).fillMaxWidth()
+        Column(
+            width.weight(1f).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+        ) {
+            MqText(SubtitleStep.TITLE, role = if (tv) TextRole.Title1 else TextRole.Title2)
+            MqText(SubtitleStep.LEAD, role = TextRole.Body, color = Marquee.colors.muted)
+            for (language in step.common) {
+                LanguageRow(
+                    language.name,
+                    SubtitleStep.DEVICE.takeIf { language.code == device },
+                    step.chosen == language.code,
+                ) {
+                    step.chosen = language.code
+                }
+            }
+            LanguageRow(SubtitleStep.NONE, SubtitleStep.NONE_LINE, step.chosen == null) { step.chosen = null }
+            if (more) {
+                Kicker(SubtitleStep.MORE, side = 0.dp)
+                for (language in step.rest) {
+                    LanguageRow(language.name, null, step.chosen == language.code) { step.chosen = language.code }
+                }
+            }
+            step.problem?.let { StatusWord("${SubtitleStep.FAILED}: $it", Status.Bad) }
+        }
+        Row(width, horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
+            PrimaryButton(
+                DefaultsCopy.CONTINUE,
+                { step.save(onDone) },
+                icon = Icons.Check,
+                enabled = !step.busy,
+                focusRequester = go,
+            )
+            SecondaryButton(if (more) SubtitleStep.FEWER else SubtitleStep.MORE, { more = !more })
+        }
+    }
+}
+
+/** One language of the subtitles step: its name, a line when it has one, a check when chosen. One focus stop. */
+@Composable
+private fun LanguageRow(
+    name: String,
+    line: String?,
+    chosen: Boolean,
+    onClick: () -> Unit,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(Marquee.radius.l)
+    // On TV the focused row turns white with dark words (focusPalette).
+    FocusInk(focusPalette(focused)) {
+        val colors = Marquee.colors
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .marqueeFocus(Marquee.radius.l, Tokens.FOCUS_SCALE_TILE)
+                .onFocusChanged { focused = it.isFocused }
+                .clip(shape)
+                .background(colors.surface)
+                .border(if (chosen) 2.dp else 1.dp, if (chosen) colors.text else colors.edge, shape)
+                .focusSelectable(chosen, onClick)
+                .heightIn(min = 56.dp)
+                .padding(horizontal = Marquee.space.s, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                MqText(name, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 1)
+                line?.let { MqText(it, role = TextRole.Caption, color = colors.muted) }
+            }
+            if (chosen) MqIcon(Icons.Check)
+        }
+    }
+}
+
 /** The defaults step for the page's life (the state and the install live in [DefaultsStep]). */
 class DefaultsHolder(
     session: CoreSession,
@@ -412,10 +546,13 @@ private fun DefaultRow(
 }
 
 /** The profile's `defaultsSeen`, read once from the settings view (null when it does not answer in time). */
-internal suspend fun defaultsSeen(session: CoreSession): Int? {
+internal suspend fun defaultsSeen(session: CoreSession): Int? = prefsNow(session)?.defaultsSeen
+
+/** The profile's preferences, read once from the settings view (null when it does not answer in time). */
+private suspend fun prefsNow(session: CoreSession): Prefs? {
     val view = session.settings()
     return try {
-        withTimeoutOrNull(OFFER_WAIT_MS) { snapshotFlow { view.snapshot }.filterNotNull().first().defaultsSeen }
+        withTimeoutOrNull(OFFER_WAIT_MS) { snapshotFlow { view.snapshot }.filterNotNull().first() }
     } finally {
         view.close()
     }
