@@ -8,7 +8,7 @@
  * (needsAccount) and these direct links are what plays, with no BitTorrent
  * in any run. */
 
-import { createReadStream, createWriteStream, existsSync, mkdirSync, renameSync, statSync } from "node:fs";
+import { createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, statSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -52,6 +52,15 @@ const LISTED: Record<string, string[]> = {
 };
 const SERVED = new Set(Object.values(LISTED).flat().map((n) => `/media/${n}`));
 
+/** Skip segments the core asks for (MQ_DEV_SEGMENTS points it here), as
+ * synthetic answers in TheIntroDB's and IntroDB's shapes (their terms allow no stored copy):
+ * `bun run e2e:live` checks that the live answers still have those shapes. */
+const fixture = (name: string) => JSON.parse(readFileSync(fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url)), "utf8")) as unknown;
+const SEGMENTS: Record<string, unknown> = {
+  "/segments/theintrodb/v3/media": fixture(`theintrodb-${BBB_ID}.json`),
+  "/segments/introdb/segments": fixture(`introdb-${BBB_ID}.json`),
+};
+
 const manifest = {
   id: "dev.marquee.sample-source",
   version: "1.0.0",
@@ -71,6 +80,11 @@ export function startSource(port: number): Promise<Server> {
     };
     const path = decodeURIComponent(req.url ?? "");
     if (path === "/manifest.json") return json(200, manifest);
+    const asked = new URL(req.url ?? "/", "http://source");
+    if (asked.pathname.startsWith("/segments/")) {
+      const recorded = asked.searchParams.get("imdb_id") === BBB_ID ? SEGMENTS[asked.pathname] : undefined;
+      return recorded ? json(200, recorded) : json(404, { error: "not found" });
+    }
     const files = LISTED[path];
     if (files) {
       const size = statSync(BBB_FILE).size;

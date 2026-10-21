@@ -117,7 +117,7 @@ const SCREENS: Screen[] = [
     },
   },
   {
-    // Inside the live TheIntroDB credits, controls hidden, Skip focused.
+    // Inside the fixture's credits (TheIntroDB's shape), controls hidden, Skip focused.
     name: "player-skip",
     path: `/play/movie/${BBB_ID}/${BBB_ID}`,
     ready: async (page) => {

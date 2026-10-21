@@ -1,0 +1,9 @@
+{
+  "_comment": "Synthetic, not IntroDB's data: its answer shape with no segments. IntroDB grants no license for its data, so no answer of it is stored (plans/m8-skip.md 3.4).",
+  "imdb_id": "tt1254207",
+  "media_type": "movie",
+  "is_movie": true,
+  "intro": null,
+  "recap": null,
+  "outro": null
+}

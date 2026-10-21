@@ -67,11 +67,13 @@ function binary(pkg: "mq-bridge" | "mq-sync-server", env: string): string {
 
 export const bridgeBinary = () => binary("mq-bridge", "MQ_BRIDGE_BIN");
 
-/** A core on `port` with a data directory of its own; `env` adds variables such as MQ_DEV_TRAKT. */
+/** A core on `port` with a data directory of its own; `env` adds variables such as MQ_DEV_TRAKT. Skip
+ * segments come from the source server's recorded answers, never a live service. */
 export function startBridge(port = PORTS.bridge, env: Record<string, string> = {}): Promise<{ proc: ChildProcess; data: string }> {
   const data = mkdtempSync(join(tmpdir(), "mq-e2e-"));
+  const segments = `http://127.0.0.1:${PORTS.source}/segments`;
   const proc = spawn(bridgeBinary(), [], {
-    env: { ...process.env, ...env, MQ_DATA: data, MQ_BRIDGE_PORT: String(port) },
+    env: { ...process.env, MQ_DEV_SEGMENTS: segments, ...env, MQ_DATA: data, MQ_BRIDGE_PORT: String(port) },
     stdio: ["ignore", "pipe", "inherit"],
   });
   return ready(proc, "bridge_ready", data);

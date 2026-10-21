@@ -113,7 +113,7 @@ test("plays a direct source through the core's stream server", async ({ page }) 
   await expect(page).toHaveURL(new RegExp(`/title/movie/${BBB_ID}`));
 });
 
-test("Skip credits from live skip data, by remote, only on a press", async ({ page }) => {
+test("Skip credits from skip data in TheIntroDB's shape, by remote, only on a press", async ({ page }) => {
   await page.goto(`/play/movie/${BBB_ID}/${BBB_ID}?form=tv`);
   await expect(page.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
   await startIfPaused(page);
@@ -144,8 +144,9 @@ async function skipCredits(page: Page, time: () => Promise<number>, seekTo: (s: 
   const skip = page.locator('[data-f="player:skip"]');
   await expect(skip).toHaveCount(0);
 
-  // TheIntroDB marks this release's credits from 8:10.458 to 9:40.917; the
-  // core looks them up once the player reports the file's length.
+  // The skip fixture (synthetic, in TheIntroDB's shape) marks the credits
+  // from 8:10 to 9:41; the core looks them up once the player reports the
+  // file's length.
   await seekTo(493);
   await expect(skip).toHaveText("Skip credits", { timeout: 30_000 });
   await expect.poll(() => focused(page)).toBe("player:skip");
