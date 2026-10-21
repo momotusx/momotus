@@ -201,7 +201,12 @@ The web token scale (web vars, weight size/line height): `--large-title` 400 26/
 
 ### Player chrome (stills only)
 
-Not captured: a still of the player needs playback, which neither the web pass nor the iPhone walk did (no Play). What Apple publishes (HIG video): on tvOS the system player shows transport controls (subtitles, audio language, actions such as add to library) and, below them, content tabs (Info, Episodes, Chapters); keep custom actions to a step or two; wait at least 0.5 s before pausing for an interactive overlay; keep logos and noninteractive overlays small and translucent; scrubbing thumbnails are 160 px wide. The web keeps a white progress fill (`--progressBarFillColor` #FFF) and a dark player panel (`--playerBackground` #2D2D2DE0, `--playbackOverlayBackgroundColor` #333333B3) (web vars).
+Not captured. The full capture on 2026-10-21 tried to play a free trailer on the iPhone with the media volume at zero, and stopped before playback because silence could not be guaranteed:
+- The phone's media volume read 0.4. That is not one of the 16 button steps, so the exact value could not be restored with the volume buttons.
+- A volume-down press from the Home Screen did not move the media volume; it went to the ringer, and was undone with one press up.
+- Setting the volume through an `MPVolumeView` slider in the test runner did not change the reading, even with the runner in the foreground.
+
+The web pass did not play either. What Apple publishes (HIG video): on tvOS the system player shows transport controls (subtitles, audio language, actions such as add to library) and, below them, content tabs (Info, Episodes, Chapters); keep custom actions to a step or two; wait at least 0.5 s before pausing for an interactive overlay; keep logos and noninteractive overlays small and translucent; scrubbing thumbnails are 160 px wide. The web keeps a white progress fill (`--progressBarFillColor` #FFF) and a dark player panel (`--playerBackground` #2D2D2DE0, `--playbackOverlayBackgroundColor` #333333B3) (web vars).
 
 ### Search
 
@@ -308,6 +313,69 @@ How to read these numbers: frames (x, y, width, height) are points from the acce
 - Colors match iOS's semantic dark palette: label #FFFFFF, secondary label #98989F on #1C1C1E (rgba(235,235,245,.6)), tertiary #5A5A5E (rgba(235,235,245,.3)), grouped background #000000 and #1C1C1E, the sheet's inner groups #2C2C2E.
 - Apple Account page: inline title "Apple Account" about 17 pt semibold (box 20.7) centered in a 54 pt bar with a 44 pt Back glass circle; a 100 pt contact photo centered at y 121, the name about 27 pt bold (box 32.3) and the email about 16 pt grey under it; rows 52 pt tall in 358 wide cards, radius about 26 pt (shot `ios-settings-apple-account.png`; it shows the owner's personal data and stays private).
 - General: inline title as above; a header card 358x195.7 with a 60 pt icon, "General" about 21 pt bold (box 25.3) and a four line description about 13 pt; then 51 pt rows in groups (three, one, then a longer one), 35 pt apart (shot `ios-settings-general.png`).
+
+### Full capture, second pass (2026-10-21)
+
+Every reachable screen of the TV app on iphone-a, numbered and indexed in `ref/apple-tv-iphone/` (143 screenshots, `index.md`), and tv.apple.com at 1440 in `ref/apple-tv-web/` (34 screenshots, `index.md`). Both folders are gitignored. The iPhone pass covers: Home (19 screens), the Apple TV channel tab (17), Store (17), Search with categories, a category page, suggestions, results and scopes, Slow Horses with the season menu and Season 2, F1 The Movie, badge rows on Severance, Napoleon, Oppenheimer and Dune, Library, the account sheet with Privacy & Access and Sports, and Settings > Apps > TV. Frames below come from the accessibility trees of that pass.
+
+#### Badge row (title page meta line)
+
+iPhone (shots `ref/apple-tv-iphone/070-show-top.png`, `105-badges-oppenheimer-top.png`, `101-badges-severance-top.png`, `103-badges-napoleon-top.png`; trees `show-top`, `badges-*-top`):
+- One line under the synopsis at x 20, text about 14 pt (box 17.0) in light grey over the faded art, then glyphs 13 pt tall, vertically centered on the text (y +2), 8 pt apart. The line wraps at the 350 pt column with a 23 pt line pitch: on a phone AD usually drops to the second line.
+- Order, as measured on four titles:
+  1. Year.
+  2. A centered dot separator (4.3 pt box).
+  3. Duration ("53m", "2h 37m", "3h").
+  4. On store titles only: the Rotten Tomatoes glyph (13x13) and the score ("%93", 14 pt).
+  5. The age rating glyph (13x13: `tr-18plus`, `tr-13plus`).
+  6. Content advisory glyphs (13x13 each; three on Slow Horses).
+  7. 4K (22.5x13).
+  8. Dolby Vision (30.7x13).
+  9. Dolby Atmos (30.7x13), absent on Oppenheimer.
+  10. CC (22.5x13).
+  11. SDH (24.8x13).
+  12. AD (22.5x13).
+- The accessibility labels spell each badge out ("Closed Captions Available", "Subtitles for the Deaf and Hard of Hearing Available", "Audio Descriptions Available").
+- HDR10, HD and 5.1 did not appear on these titles in this storefront; Dolby 5.1 shows only in the Languages section ("English (Dolby 5.1, AAC, AD)").
+
+web (web, Slow Horses and Napoleon at 1440):
+- `ul.badge-row` is flex with a 6 px gap. Every badge is 13 px tall at opacity .8 in 64 percent white.
+- The age rating badge (13x13, opacity 1) sits at the end of the genres line, 6 px after it.
+- On the year line ("2022 · 53m", 13/600 at 64 percent) come content advisories (13x13 each), then 4K (22.5x13), Dolby Vision (30.7x13), Dolby Atmos (30.7x13), CC (22.5x13), SDH (27.7x13) and AD (22.5x13).
+- Same order and the same widths as on the iPhone, except SDH (27.7 vs 24.8) and the web's 6 px gap against the phone's 8 pt.
+
+#### Title page sections, top to bottom
+
+- Apple Original show (iPhone and web): hero and buttons, the badge row, the Season picker with episode cards, Trailers, Related, Cast and Crew, How to Watch, About, Information (Released, Rated, Content Advisories, Region of Origin), Languages (Original Audio, Audio, Subtitles), Accessibility (one paragraph per badge: CC, SDH, AD, each led by its glyph).
+- Store movie on iPhone (Oppenheimer, shots 105 to 116):
+  - The hero buttons become two off-white pills, "Buy ₺169,99" (one row) and "Rent ₺24,99" with the + circle (the next row), both 48 pt tall.
+  - Then Trailers, Related, How to Watch, Cast and Crew, About and Information.
+  - About scrolls sideways: the title card, then a second card.
+  - Information lists Studio, Released, Run Time, Rated and Region of Origin, then a copyright line in grey, about 12 pt.
+  - Languages and Accessibility follow, as on the show.
+  - There is no separate Ratings section: the critic score lives only in the badge row.
+- Section titles about 22 pt bold (box 26.0); each Information item is a 12 pt white term over a grey value, one item every 49 to 50 pt (iPhone trees).
+
+#### Season picker and episodes
+
+- iPhone: the 98.7x32 "Season 1" button opens a glass menu 250x260 anchored under it at x 8, with one 40 pt row per season (Season 1 to 6). Choosing Season 2 swaps the episode row in place and the button reads "Season 2"; nothing else on the page moves (shots `071-show-season-picker.png`, `072-show-season-2.png`).
+- web: the season select opens a menu over the page (`ref/apple-tv-web/033-show-season-menu.png`). The "..." on an episode card opens a 185x96 menu with Go to Episode, Share and Copy Link (radius 6) (`034-show-episode-card-menu.png`). An episode has its own page (`027`, `028`).
+
+#### Search
+
+- iPhone suggestions while typing (shot `066-search-suggestions.png`): the field moves into the top bar with a Close circle; text hints come first as full-width 45 pt rows (a magnifier glyph, the hint about 15 pt at x 46.7), then title rows (350x92.3, as in results), over the keyboard.
+- iPhone category page (Search > Drama, `059` onward): a header image with the category name, then a large feature card and shelves.
+- web suggestions (`032-search-suggestions.png`): a dropdown under the header field, x 1010 and 288 px wide. Three text hints come first (23 px rows, 13/400 at 92 percent), then title rows 66 px tall with a thumbnail, title and "TV Show · Thriller".
+
+#### Apple TV channel tab and Store (iPhone, browse only)
+
+- Apple TV tab: large title "Apple TV", a collage hero with "Watch Apple Originals", the same 178x48 pill, then shelves (shots `020` to `036`).
+- Store tab: large title "Store", a full-bleed hero for one film (logo, "Movie · Horror", a three-line synopsis, a "More Info" pill with an info glyph and the + circle), then "Top Movies Chart" with ordinal posters and further rows (shots `037` to `053`).
+
+#### Account sheet subpages and TV app settings
+
+- Privacy & Access shows a single destructive row "Clear Play History" in red (not tapped) with a footnote; Sports is one toggle row, "Sync My Sports", with a footnote and a link (shots `128` to `135`).
+- iOS Settings > Apps > TV (shots `137` to `143`) uses the standard inset grouped style measured above, in these groups: Allow TV to Access (Siri, Search, Live Activities, Cellular Data), Streaming Options (Use Cellular Data, Wi-Fi: High Quality), Download Options (Use Cellular Data, Wi-Fi: Fast Downloads, Languages), Automatic Downloads with a footnote, Audio (Audio Language: Auto, with a footnote), Appearance (Dark), Device Preferences (Show Sports Scores, Use Play History) and more below.
 
 ### What the iPhone adds to the web and HIG picture
 
