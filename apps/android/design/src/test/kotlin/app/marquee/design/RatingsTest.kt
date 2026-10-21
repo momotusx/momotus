@@ -36,6 +36,11 @@ class RatingsTest {
         // TalkBack says the name, not "R T".
         compose.onNodeWithContentDescription("Rotten Tomatoes 87 percent", useUnmergedTree = true).assertExists()
         compose.onNodeWithContentDescription("IMDb 8.8", useUnmergedTree = true).assertExists()
+        // The Rotten Tomatoes addon's mark has no number.
+        ratings = listOf("IMDb 8.8", "RT Fresh")
+        compose.waitForIdle()
+        assertEquals(1, count("RT Fresh"))
+        compose.onNodeWithContentDescription("Rotten Tomatoes: Fresh", useUnmergedTree = true).assertExists()
         ratings = listOf("RT 87%")
         compose.waitForIdle()
         assertEquals(0, count("IMDb 8.8"))

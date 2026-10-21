@@ -19,7 +19,8 @@ import kotlin.test.assertTrue
 /**
  * The widest scores there are ("IMDb 10.0", "RT 100%") measured with real text layout: on a poster
  * they fit inside the art (stacked on a phone, side by side on TV), and on the meta line each stays
- * one whole line. The widths print as `ratings-measure` lines for bench/core/ratings.jsonl.
+ * one whole line. The Rotten Tomatoes addon's mark ("RT Fresh") is held to the same. The widths print
+ * as `ratings-measure` lines for bench/core/ratings.jsonl.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -29,6 +30,7 @@ class RatingsMeasureTest {
     val compose = createComposeRule()
 
     private val widest = listOf("IMDb 10.0", "RT 100%")
+    private val fresh = listOf("IMDb 10.0", "RT Fresh")
 
     private fun layout(node: SemanticsNode): TextLayoutResult {
         val results = mutableListOf<TextLayoutResult>()
@@ -71,17 +73,19 @@ class RatingsMeasureTest {
         )
     }
 
-    private fun line(form: Form) {
+    private fun line(
+        form: Form,
+        ratings: List<String> = widest,
+    ) {
         compose.setContent {
-            MarqueeTheme(form) { RatingLine(widest, "2011–2019 · 148 min · Drama, Science Fiction", onFirst = {}) }
+            MarqueeTheme(form) { RatingLine(ratings, "2011–2019 · 148 min · Drama, Science Fiction", onFirst = {}) }
         }
-        widest.forEach(::whole)
-        val (imdb, rt) = widest.map { score(it).boundsInRoot }
+        ratings.forEach(::whole)
+        val (imdb, rt) = ratings.map { score(it).boundsInRoot }
         assertEquals(imdb.center.y, rt.center.y, 0.5f, "$form: the scores are not side by side")
         println(
-            "ratings-measure {\"platform\":\"android\",\"form\":\"$form\",\"where\":\"meta line\",\"parts\":[${dp(
-                imdb.width,
-            )},${dp(rt.width)}]}",
+            "ratings-measure {\"platform\":\"android\",\"form\":\"$form\",\"where\":\"meta line\"," +
+                "\"scores\":\"${ratings.joinToString(" ")}\",\"parts\":[${dp(imdb.width)},${dp(rt.width)}]}",
         )
     }
 
@@ -102,7 +106,24 @@ class RatingsMeasureTest {
         poster(Form.Tv, listOf("IMDb 8.8", "RT 100%"), stacked = true)
 
     @Test
+    fun `on a phone poster RT Fresh stacks and fits`() = poster(Form.Phone, fresh, stacked = true)
+
+    @Test
+    fun `on a TV poster RT Fresh beside the widest IMDb score goes on two lines and fits`() =
+        poster(Form.Tv, fresh, stacked = true)
+
+    @Test
+    fun `on a TV poster RT Fresh with a usual IMDb score stacks and fits`() =
+        poster(Form.Tv, listOf("IMDb 8.8", "RT Fresh"), stacked = true)
+
+    @Test
     fun `the phone meta line keeps both scores whole`() = line(Form.Phone)
+
+    @Test
+    fun `the phone meta line keeps RT Fresh whole`() = line(Form.Phone, fresh)
+
+    @Test
+    fun `the TV meta line keeps RT Fresh whole`() = line(Form.Tv, fresh)
 
     @Test
     fun `the TV meta line keeps both scores whole`() = line(Form.Tv)

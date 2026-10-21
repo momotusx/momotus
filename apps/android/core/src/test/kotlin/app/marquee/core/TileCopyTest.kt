@@ -112,6 +112,8 @@ class TileCopyTest {
         assertEquals(listOf("IMDb 8.8", "RT 87%"), TileCopy.ratings(Ratings(imdb = "8.8", rottenTomatoes = "87%")))
         assertEquals(listOf("IMDb 8.8"), TileCopy.ratings(Ratings(imdb = "8.8")))
         assertEquals(listOf("RT 0%"), TileCopy.ratings(Ratings(rottenTomatoes = "0%")))
+        // The Rotten Tomatoes addon's mark: a word, shown as the core wrote it.
+        assertEquals(listOf("IMDb 8.8", "RT Fresh"), TileCopy.ratings(Ratings(imdb = "8.8", rottenTomatoes = "Fresh")))
         assertEquals(emptyList(), TileCopy.ratings(Ratings()))
         // A recording from before the field decodes to no scores, never a placeholder.
         assertEquals(emptyList(), TileCopy.ratings(tile().ratings))

@@ -186,9 +186,16 @@ private fun RatingChip(
     }
 }
 
-/** What a screen reader says for a score: "IMDb 8.8", "Rotten Tomatoes 87 percent", never "R T". */
-fun spokenScore(score: String): String =
-    score.removePrefix("RT ").takeIf { it != score }?.let { "Rotten Tomatoes ${it.replace("%", " percent")}" } ?: score
+/**
+ * What a screen reader says for a score: "IMDb 8.8", "Rotten Tomatoes 87 percent", never "R T". The Rotten
+ * Tomatoes addon's mark is a word, not a number: "Rotten Tomatoes: Fresh".
+ */
+fun spokenScore(score: String): String {
+    val rt = score.removePrefix("RT ").takeIf { it != score } ?: return score
+    return if (PERCENT.matches(rt)) "Rotten Tomatoes ${rt.replace("%", " percent")}" else "Rotten Tomatoes: $rt"
+}
+
+private val PERCENT = Regex("\\d+%")
 
 /**
  * An episode on a card (design/DECISION.md v2, Episodes): a 16:9 still with the number at its
