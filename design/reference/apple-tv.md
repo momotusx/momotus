@@ -199,14 +199,56 @@ The web token scale (web vars, weight size/line height): `--large-title` 400 26/
 - web: episode cards 256x197, radius 14, the still fills the whole card and the text sits on it, bottom aligned, 12 px from the left: tag, title, two lines of synopsis, duration, a More button at the bottom right. Under the text a legibility gradient over the bottom 141 px: `linear-gradient(transparent 0, rgba(0,0,0,.13) 16px, .21 27px, .30 40px, .40)`. Shot: `web-show-episode-hover.png`.
 - Every artwork carries a keyline: `::after` with four 0.5 px inset white box shadows at opacity .25 and radius 13 inside the 14 px card (web). On search posters the same idea is a 1 px border at 16 percent white.
 
-### Player chrome (stills only)
+### Player chrome
 
-Not captured. The full capture on 2026-10-21 tried to play a free trailer on the iPhone with the media volume at zero, and stopped before playback because silence could not be guaranteed:
+iPhone: not captured. The full capture on 2026-10-21 tried to play a free trailer on the iPhone with the media volume at zero, and stopped before playback because silence could not be guaranteed:
 - The phone's media volume read 0.4. That is not one of the 16 button steps, so the exact value could not be restored with the volume buttons.
 - A volume-down press from the Home Screen did not move the media volume; it went to the ringer, and was undone with one press up.
 - Setting the volume through an `MPVolumeView` slider in the test runner did not change the reading, even with the runner in the foreground.
 
-The web pass did not play either. What Apple publishes (HIG video): on tvOS the system player shows transport controls (subtitles, audio language, actions such as add to library) and, below them, content tabs (Info, Episodes, Chapters); keep custom actions to a step or two; wait at least 0.5 s before pausing for an interactive overlay; keep logos and noninteractive overlays small and translucent; scrubbing thumbnails are 160 px wide. The web keeps a white progress fill (`--progressBarFillColor` #FFF) and a dark player panel (`--playerBackground` #2D2D2DE0, `--playbackOverlayBackgroundColor` #333333B3) (web vars).
+web (measured 2026-10-21, `ref/apple-tv-web/player/`, values from `desktop-dump.json` and `phone-dump.json`). Setup: a free trailer (Slow Horses, "Destabilize: Season 5", 2 min) played in headless Chrome with `--mute-audio` and every media element muted, at 1440x900 and 390x844. Chrome's Widevine CDM has to load (Playwright's default `--disable-component-update` blocks it): without it the player stays on its loading spinner, even though the trailer playlist loads.
+
+What the player shows:
+- **Opening:** a full-viewport black `dialog` that slides up (`animation` 0.4 s ease; the host sets `--animation-duration: 500ms`, `--animation-easing: cubic-bezier(0.11, 0.37, 0.36, 1)` and `--animation-delay: 420ms`) with a small centered spinner (`desktop-01-loading.png`).
+- **Trailers playlist overlay:** trailers first play inside it. A Close X and "Trailers" (17/700) sit at the top left, the age rating glyph at the top left of the video, a Next Page arrow fills the right edge (30 px wide), "SLOW HORSES" (13/600 at 64 percent) and the trailer title (13/400 at 92 percent) sit at the bottom left, and the pagination dots (20 px targets) at the bottom center. One tap ("Show media controls") reveals the transport (`desktop-02`, `phone-02`).
+
+Transport layout:
+- The video letterboxes in black, under a full-height gradient `linear-gradient(transparent, rgba(0,0,0,.6) 44.64%, rgba(0,0,0,.7) 75%, #000)`.
+- The scrim is a grid with 20 px top margin and side margins of 40 px, 30 px under 1680, 25 px under 1000 and 20 px under 740 (measured: 30 at 1440, 20 at 390); content is capped at 1680 px.
+- **Header row (26 px):** Close X (18x21) at the left. At the right the volume group is 136 px wide: a 100x5 slider, then a 26 px speaker glyph.
+- **Body, centered:**
+
+  | Control | Desktop | Phone |
+  |---|---|---|
+  | Skip back 10 s | 40 px button, 32 px glyph | 32 px button |
+  | Play / pause | 66 px button, 50 px glyph | 56 px button |
+  | Skip forward 10 s | 40 px button, 32 px glyph | 32 px button |
+  | Gap between them | 36 px | 38 px |
+
+  Glyphs are white at 90 percent, with no plates or circles behind them.
+- **Footer:**
+  - Height: 121 px on desktop, 109 px on phone.
+  - Title, left: 26/700 white on desktop, 17/700 on phone, truncated with an ellipsis.
+  - Control group, right: 24 px targets, 14 px gap (10 px on small screens), white at 90 percent, in this order:
+    1. Subtitles (20 px glyph in a speech bubble).
+    2. Audio (a native `select` under a waveform glyph).
+    3. Share.
+    4. Full screen (24x22).
+  - There is a jump-to-live control, marked unsupported here. There is no AirPlay and no Picture in Picture button in Chrome.
+- **Scrubber:** the full content width (1380 px at 1440).
+  - Track: 5 px tall; the played part #FFFFFF, the rest about #5A5B5C (white at about 35 percent over black, sampled).
+  - Thumb: a white 11 px circle.
+  - Times sit under the track, elapsed at the left and remaining as "-1:54" at the right: 11/500, tabular numbers, white at 55 percent.
+  - A hover preview (230 px wide, radius 12, time 11/600 at 85 percent) exists but showed no thumbnail for this trailer (`desktop-04`).
+  - A "LIVE" capsule (#FF5066, radius 18, 10/600) exists for live streams.
+- **Under the scrubber:** a "Trailers" tab button (81x32, radius 6, 15/600 white, `backdrop-filter: blur(30px)`) with a 1 px white outline. It reopens the playlist (`desktop-03`, `phone-03`).
+- **Subtitles menu:** a dark rounded popover above the button. It has a grey "Subtitles" header, then On, Off (with a check when selected), and a "Language" row with the current language (English) in small grey and a chevron. It is about 183 px wide on desktop and about 267 px on phone (by eye from `desktop-05`, `phone-05`).
+- **Paused:** the center glyph turns into Play and the controls stay up (`desktop-06`, `desktop-07`). While playing they fade:
+  - footer: opacity over 0.4 s `cubic-bezier(0.4, 0, 0.6, 1)` after 0.05 s, plus `translateY(20px)` over 0.5 s;
+  - header: `translateY(-20px)`;
+  - body and controls fade over 0.35 to 0.65 s.
+
+What Apple publishes (HIG video): on tvOS the system player shows transport controls (subtitles, audio language, actions such as add to library) and, below them, content tabs (Info, Episodes, Chapters); keep custom actions to a step or two; wait at least 0.5 s before pausing for an interactive overlay; keep logos and noninteractive overlays small and translucent; scrubbing thumbnails are 160 px wide. The web keeps a white progress fill (`--progressBarFillColor` #FFF) and a dark player panel (`--playerBackground` #2D2D2DE0, `--playbackOverlayBackgroundColor` #333333B3) (web vars).
 
 ### Search
 
