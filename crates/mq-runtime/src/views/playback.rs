@@ -1762,10 +1762,19 @@ async fn resolve_next(
                     .clone()
                     .unwrap_or_else(|| format!("{}.mkv", target.video_id));
                 let probe = within_budget(&state, PROBE_TIMEOUT);
-                match server
-                    .open_for(upstream.clone(), &name, probe, &plays)
-                    .await
-                {
+                let open = server.open_for(upstream.clone(), &name, probe, &plays);
+                tokio::pin!(open);
+                // A link has no samples of its own: its words come when it
+                // has taken long, as a torrent's do (LONG_STAGE).
+                let long = lock(&state).source_since + LONG_STAGE;
+                let open = tokio::select! {
+                    open = &mut open => open,
+                    () = tokio::time::sleep_until(long) => {
+                        show_opening(&state, &snapshot, run);
+                        open.await
+                    }
+                };
+                match open {
                     Ok(lease) => shows_picture(&core, &stream, &lease, hvc1_only, &state)
                         .await
                         .map(|()| (upstream, filename, size, lease)),

@@ -1498,6 +1498,52 @@ async fn a_picked_subtitle_language_starts_the_next_titles() {
     assert_eq!(owner.prefs().subtitle_languages, ["de", "tr"]);
 }
 
+/// A link slow to send its first byte says "Opening the video" once its
+/// start has taken 3 s (plans/core-protocol.md, Playback `start`), as a
+/// torrent's stage does, and still plays when the byte comes.
+#[tokio::test]
+async fn a_link_slow_to_send_its_first_byte_says_it_opens_the_video() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let asked = Arc::new(AtomicUsize::new(0));
+    let count = asked.clone();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let first = count.fetch_add(1, Ordering::SeqCst) == 0;
+            tokio::spawn(async move {
+                let mut buf = [0u8; 4096];
+                let _ = socket.read(&mut buf).await;
+                // The first read waits 5 s for its first byte.
+                if first {
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                }
+                let _ = socket
+                    .write_all(b"HTTP/1.1 206 Partial Content\r\nContent-Range: bytes 0-0/10\r\nContent-Length: 1\r\nConnection: close\r\n\r\nM")
+                    .await;
+            });
+        }
+    });
+    let core = Core::temporary("p").unwrap();
+    let streams = serde_json::json!({"streams": [{"url": format!("{base}/v.mkv"), "title": "Film.2020.1080p.WEB"}]})
+        .to_string();
+    let began = std::time::Instant::now();
+    let view = PlaybackView::open(&core, setup(&core, &streams), target());
+    let caption = |s: &PlaybackSnapshot| s.start.as_ref().and_then(|p| p.caption.clone());
+    let s = until(&view, "the opening words or the end of the start", |s| {
+        caption(s).is_some() || s.phase != PlaybackPhase::Resolving
+    })
+    .await;
+    assert_eq!(caption(&s).as_deref(), Some("Opening the video"), "{s:?}");
+    assert_eq!(s.start.as_ref().map(|p| p.stage), Some(StartStage::Opening));
+    assert!(
+        began.elapsed() >= Duration::from_secs(3),
+        "{:?}",
+        began.elapsed()
+    );
+    let s = until(&view, "the play", |s| s.phase != PlaybackPhase::Resolving).await;
+    assert_eq!(s.phase, PlaybackPhase::Ready, "{s:?}");
+}
+
 async fn settled_list(view: &PlaybackView) -> PlaybackSnapshot {
     until(view, "the list", |s| {
         s.phase == PlaybackPhase::Ready && !s.subtitles_pending
