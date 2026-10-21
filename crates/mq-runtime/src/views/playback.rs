@@ -1907,7 +1907,8 @@ async fn open_torrent(
 ) -> Result<Opened, String> {
     use mq_engine::FileHint;
     let state = run.0;
-    let hash = info_hash.to_ascii_lowercase();
+    let hash = torrent_id(info_hash);
+    let begun = tokio::time::Instant::now();
     {
         let mut s = lock(state);
         if s.failed_hashes.contains(&hash) {
@@ -1941,13 +1942,19 @@ async fn open_torrent(
             "torrent did not start"
         );
     };
-    let ahead = {
-        let mut s = lock(state);
-        look_ahead(core, &engine, &mut s, &hash);
-        s.ahead
-            .iter()
-            .find(|a| a.hash == hash)
-            .map(|a| a.done.clone())
+    // Fetched ahead while an earlier candidate waited: its answer first.
+    let ahead = lock(state)
+        .ahead
+        .iter()
+        .find(|a| a.hash == hash)
+        .map(|a| a.done.clone());
+    // Once this candidate has waited LONG_STAGE with no details or Ready,
+    // the next torrent's details start (review P2-2: a start that goes at
+    // once asks nothing of another swarm).
+    let ahead_now = || {
+        if begun.elapsed() >= LONG_STAGE {
+            look_ahead(core, &engine, &mut lock(state), &hash);
+        }
     };
     let add = async {
         // Fetched ahead: its answer first, so the swarm is asked once.
@@ -1961,7 +1968,11 @@ async fn open_torrent(
         ..Sample::default()
     };
     let wait = within_budget(state, METADATA_TIMEOUT);
-    let torrent = tokio::time::timeout(wait, ticking(add, || publish_start(run, details)))
+    let tick = || {
+        publish_start(run, details);
+        ahead_now();
+    };
+    let torrent = tokio::time::timeout(wait, ticking(add, tick))
         .await
         .map_err(|_| {
             did_not_start();
@@ -1995,10 +2006,16 @@ async fn open_torrent(
             return Err("The playback was stopped".into());
         }
         s.torrents.push(torrent);
-        // This start's now: its own failure removes it, never the fetch.
-        for a in s.ahead.iter().filter(|a| a.hash == hash) {
-            a.taken.store(true, std::sync::atomic::Ordering::Relaxed);
-        }
+        // This start's now: its own failure removes it, never the fetch,
+        // and a later turn (Try again, another version) may fetch it ahead
+        // again.
+        s.ahead.retain(|a| {
+            let mine = a.hash == hash;
+            if mine {
+                a.taken.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+            !mine
+        });
     }
     publish_start(
         run,
@@ -2086,6 +2103,7 @@ async fn open_torrent(
         let progress = || async {
             let s = engine.stats(torrent).await.ok()?;
             publish_start(run, sample(&s));
+            ahead_now();
             Some(Progress {
                 received: s.received_bytes,
                 unchoked: s.unchoked_ms.is_some(),
@@ -2249,13 +2267,25 @@ struct Ahead {
     taken: Arc<std::sync::atomic::AtomicBool>,
 }
 
-/// A fetch ahead gives up after the longest one candidate holds the start
-/// (its details, then its deadline): its own turn then asks again.
+/// A fetch ahead gives up after the longest one candidate holds the start:
+/// its details, then three deadlines for a swarm that keeps sending with
+/// nothing else to play (`start_rule`'s cap). Its own turn then asks again.
 #[cfg(feature = "torrent")]
-const AHEAD_FOR: Duration = METADATA_TIMEOUT.saturating_add(TORRENT_READY_TIMEOUT);
+const AHEAD_FOR: Duration =
+    Duration::from_secs(METADATA_TIMEOUT.as_secs() + 3 * TORRENT_READY_TIMEOUT.as_secs());
+
+/// A torrent's info hash as the engine spells it (40 lowercase hex), from
+/// hex or base32 (review P3-10); the text lowercased when it is neither.
+#[cfg(feature = "torrent")]
+fn torrent_id(hash: &str) -> String {
+    use std::str::FromStr;
+    let hash = hash.trim();
+    mq_engine::librqbit::dht::Id20::from_str(&hash.to_ascii_uppercase())
+        .map_or_else(|_| hash.to_ascii_lowercase(), |id| id.as_string())
+}
 
 /// Starts the metadata of the next torrent candidate after the one opening
-/// now (`current`, a lowercase hash), when it is another torrent that has
+/// now (`current`, as `torrent_id` spells it), when it is another torrent that has
 /// not failed in this view and nothing fetches it yet (start-latency 4.1).
 /// Metadata only: nothing downloads before its file is chosen, and the
 /// candidate's own `add_magnet` then finds it known. When the view closes,
@@ -2272,7 +2302,7 @@ fn look_ahead(core: &Core, engine: &mq_engine::Engine, s: &mut State, current: &
                 trackers,
                 ..
             } if by_engine(c, account, true) => {
-                let hash = info_hash.to_ascii_lowercase();
+                let hash = torrent_id(info_hash);
                 (hash != current && !s.failed_hashes.contains(&hash)).then_some((hash, trackers))
             }
             _ => None,
@@ -4497,12 +4527,23 @@ mod tests {
             s.info_hash, tracker.url
         ));
         let mut st = State::new(vec![dead, next], None);
-        // The first gets 3 s for its details, then the run's budget is spent.
-        st.retry_until = Some(tokio::time::Instant::now() + Duration::from_secs(3));
+        // The first gets 6 s for its details, then the run's budget is spent.
+        st.retry_until = Some(tokio::time::Instant::now() + Duration::from_secs(6));
         let snapshot = SharedObservable::new(st.snapshot.clone());
         let state = Arc::new(Mutex::new(st));
         let target = Arc::new(PlayTarget::default());
-        resolve_next(core, target, Arc::from([]), state.clone(), snapshot, 0).await;
+        let run = tokio::spawn(resolve_next(
+            core,
+            target,
+            Arc::from([]),
+            state.clone(),
+            snapshot,
+            0,
+        ));
+        // Review P2-2: nothing is asked of the next swarm in the first 3 s.
+        tokio::time::sleep(Duration::from_millis(1500)).await;
+        assert_eq!(tracker.requests(), 0, "the next torrent was asked at once");
+        run.await.unwrap();
         let errors: Vec<String> = lock(&state)
             .snapshot
             .attempts
@@ -4516,6 +4557,11 @@ mod tests {
         assert!(
             tracker.requests() > 0,
             "the next torrent's tracker was asked"
+        );
+        assert_eq!(
+            lock(&state).snapshot.start,
+            None,
+            "cleared as the budget ran out"
         );
         let known = tokio::time::timeout(
             Duration::from_millis(200),
@@ -4533,6 +4579,185 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
         panic!("the torrent fetched ahead outlived the view");
+    }
+
+    /// A tracker on `[::1]` that answers each announce with `peer` after
+    /// 1.5 s, counting the announces as they come.
+    #[cfg(feature = "torrent")]
+    fn slow_tracker(peer: std::net::SocketAddr) -> (String, Arc<Mutex<usize>>) {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind((std::net::Ipv6Addr::LOCALHOST, 0)).unwrap();
+        let url = format!("http://{}/announce", listener.local_addr().unwrap());
+        let asked = Arc::new(Mutex::new(0));
+        let count = asked.clone();
+        std::thread::spawn(move || {
+            for mut socket in listener.incoming().flatten() {
+                let count = count.clone();
+                std::thread::spawn(move || {
+                    let mut buf = [0u8; 2048];
+                    let _ = socket.read(&mut buf);
+                    *lock(&count) += 1;
+                    std::thread::sleep(Duration::from_millis(1500));
+                    let _ = socket.write_all(&announce(Some(peer)));
+                });
+            }
+        });
+        (url, asked)
+    }
+
+    /// Review P2-3, P3-1: a candidate whose details are being fetched ahead
+    /// waits for that fetch instead of asking its swarm again, takes the
+    /// torrent (the view's close then leaves it), and drops the entry.
+    #[cfg(feature = "torrent")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn a_candidates_own_turn_waits_for_its_fetch_ahead() {
+        let s = super::engine_support::swarm_on(std::net::Ipv6Addr::LOCALHOST.into(), true).await;
+        let (url, asked) = slow_tracker(s.seeder_addr);
+        let core = Core::temporary("default").unwrap();
+        core.set_torrent_engine(s.leecher.clone());
+        let next = stream(&format!(
+            r#"{{"infoHash":"{}","sources":["tracker:{url}"]}}"#,
+            s.info_hash
+        ));
+        let mut st = State::new(vec![next], None);
+        // As when an earlier candidate waited: its fetch is in flight.
+        look_ahead(&core, &s.leecher, &mut st, "an earlier one");
+        assert_eq!(st.ahead.len(), 1);
+        let snapshot = SharedObservable::new(st.snapshot.clone());
+        let state = Arc::new(Mutex::new(st));
+        let target = Arc::new(PlayTarget::default());
+        let run = tokio::spawn(resolve_next(
+            core,
+            target,
+            Arc::from([]),
+            state.clone(),
+            snapshot,
+            0,
+        ));
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+        assert_eq!(*lock(&asked), 1, "its own turn asked the swarm again");
+        run.await.unwrap();
+        {
+            let s2 = lock(&state);
+            assert_eq!(s2.snapshot.phase, PlaybackPhase::Ready, "{:?}", s2.snapshot);
+            assert!(s2.ahead.is_empty(), "the taken entry stays");
+            s2.closing.cancel();
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        let torrent = tokio::time::timeout(
+            Duration::from_millis(200),
+            s.leecher.add_magnet(&s.info_hash, &[], &[]),
+        )
+        .await
+        .expect("the taken torrent was removed at close")
+        .unwrap();
+        assert!(s.leecher.files(torrent).is_ok());
+    }
+
+    /// Review P2-3: "Try again" gives a torrent that did not start its full
+    /// wait again: it is not skipped as one that failed in this run.
+    #[cfg(feature = "torrent")]
+    #[tokio::test(start_paused = true)]
+    async fn try_again_waits_on_a_torrent_that_did_not_start_again() {
+        let ((engine, _dir), silent) = (own_engine().await, silent_tracker());
+        let core = Core::temporary("default").unwrap();
+        core.set_torrent_engine(engine);
+        let view = PlaybackView::open(&core, vec![dead_torrent(&silent)], PlayTarget::default());
+        let failed = || async {
+            for _ in 0..1200 {
+                if view.snapshot().phase == PlaybackPhase::Failed {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            panic!("never failed: {:?}", view.snapshot());
+        };
+        failed().await;
+        view.retry();
+        failed().await;
+        let errors: Vec<String> = view
+            .snapshot()
+            .attempts
+            .iter()
+            .map(|a| a.error.clone())
+            .collect();
+        assert_eq!(errors, ["No peer sent the torrent's details in time"]);
+    }
+
+    /// Review P2-3: a torrent whose details are known but that sends nothing
+    /// by the deadline (`Late`) is skipped from another source too.
+    #[cfg(feature = "torrent")]
+    #[tokio::test]
+    async fn a_torrent_late_at_its_deadline_is_skipped_from_another_source() {
+        let (engine, dir) = own_engine().await;
+        let src = dir.path().join("src");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(src.join("movie.mkv"), vec![7u8; 1 << 20]).unwrap();
+        let spawner = mq_engine::librqbit::spawn_utils::BlockingSpawner::new(2);
+        let options = mq_engine::librqbit::CreateTorrentOptions {
+            name: Some("Movie"),
+            trackers: vec![],
+            piece_length: Some(256 << 10),
+        };
+        let created = mq_engine::librqbit::create_torrent(&src, options, &spawner)
+            .await
+            .unwrap();
+        let hash = created.info_hash().as_string();
+        // Its details known, no peer to send it.
+        engine
+            .add_torrent_bytes(created.as_bytes().unwrap().to_vec(), &[])
+            .await
+            .unwrap();
+        let core = Core::temporary("default").unwrap();
+        core.set_torrent_engine(engine);
+        let known = stream(&format!(r#"{{"infoHash":"{hash}","fileIdx":0}}"#));
+        tokio::time::pause();
+        let view = PlaybackView::open(&core, vec![known.clone(), known], PlayTarget::default());
+        for _ in 0..3000 {
+            if view.snapshot().phase == PlaybackPhase::Failed {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        let errors: Vec<String> = view
+            .snapshot()
+            .attempts
+            .iter()
+            .map(|a| a.error.clone())
+            .collect();
+        assert_eq!(
+            errors,
+            [
+                "the swarm did not send the start of the video in time",
+                SAME_TORRENT
+            ]
+        );
+    }
+
+    /// Review P2-3: a start's tick from a run the view moved on from, or one
+    /// that lands after Ready, never touches the start shown.
+    #[cfg(feature = "torrent")]
+    #[test]
+    fn a_late_or_stale_tick_never_shows_a_start() {
+        let mut st = State::new(vec![stream(r#"{"url":"http://127.0.0.1:9/a.mkv"}"#)], None);
+        st.next = 1;
+        begin_start(&mut st, StartStage::Details);
+        st.run = 2;
+        let shown = st.snapshot.start.clone();
+        let snapshot = SharedObservable::new(st.snapshot.clone());
+        let state = Mutex::new(st);
+        let buffering = Sample {
+            stage: StartStage::Buffering,
+            peers: 5,
+            have: 1 << 20,
+            need: 2 << 20,
+            rate: 1 << 20,
+        };
+        publish_start((&state, &snapshot, 1), buffering);
+        assert_eq!(lock(&state).snapshot.start, shown, "a stale run");
+        lock(&state).snapshot.phase = PlaybackPhase::Ready;
+        publish_start((&state, &snapshot, 2), buffering);
+        assert_eq!(lock(&state).snapshot.start, shown, "after Ready");
     }
 }
 

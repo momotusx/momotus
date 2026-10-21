@@ -386,8 +386,12 @@ async fn the_frame_rate_read_from_the_video_ranks_the_files() {
     let own = format!("{video}/manifest.json");
     install(&core, &[built_in_row(), row(&own, "own", "stream", true)]);
     // No group or source in the name: only the frame rate tells them apart.
-    let streams =
-        format!(r#"{{"streams":[{{"url":"{video}/video.mkv","title":"Breaking Bad S01E01"}}]}}"#);
+    // The stream's own Turkish file comes before every source, with no
+    // frame rate of its own.
+    let streams = format!(
+        r#"{{"streams":[{{"url":"{video}/video.mkv","title":"Breaking Bad S01E01",
+            "subtitles":[{{"id":"own","lang":"tur","label":"own","url":"https://subs.test/own.srt"}}]}}]}}"#
+    );
     let view = PlaybackView::open(&core, listed(&own, &streams), s01e01());
     let s = until(&view, "subtitles", settled).await;
     let labels: Vec<&str> = s
@@ -396,7 +400,12 @@ async fn the_frame_rate_read_from_the_video_ranks_the_files() {
         .filter_map(|t| t.label.as_deref())
         .collect();
     // At 25 fps the BiA file (25 fps) leads; unread, the 23.976 ones would.
+    // The measured rate counts in the whole language's release match (review
+    // P2-3): BiA leads the stream's own file, listed first but of no known
+    // rate.
     assert_eq!(labels.first(), Some(&"BiA, 25 fps, by F471H"), "{labels:?}");
+    let own = labels.iter().position(|l| *l == "own");
+    assert!(own.is_some_and(|at| at > 0), "{labels:?}");
 }
 
 #[tokio::test]
