@@ -60,6 +60,27 @@ pub fn dev_segments(core: &Core) {
 #[cfg(not(debug_assertions))]
 pub fn dev_segments(_: &Core) {}
 
+/// Development builds only, on the same rule: `MQ_DEV_REPLAY=<loopback base
+/// url>` sends every request the core makes to a host off this machine
+/// (addons, subtitles, any source) to a local recorder, as
+/// `<base>/<scheme>/<host><path>`: the web e2e records each answer once and
+/// then runs with the network off.
+#[cfg(debug_assertions)]
+pub fn dev_replay() {
+    let Ok(url) = std::env::var("MQ_DEV_REPLAY") else {
+        return;
+    };
+    if !loopback_url(&url) {
+        tracing::warn!("MQ_DEV_REPLAY ignored: only an http URL on this machine is taken");
+        eprintln!("MQ_DEV_REPLAY ignored: only an http URL on this machine is taken");
+        return;
+    }
+    mq_http::set_dev_replay(&url);
+}
+
+#[cfg(not(debug_assertions))]
+pub fn dev_replay() {}
+
 /// Development builds only, on the same rule: `MQ_DEV_CINEMETA=<loopback
 /// manifest url>` reads Find addons' two lists from a local fake (walks of
 /// the empty and filter-empty states, which the live lists never show).

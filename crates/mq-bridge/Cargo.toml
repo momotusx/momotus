@@ -16,6 +16,7 @@ path = "src/main.rs"
 torrent = ["mq-runtime/torrent"]
 
 [dependencies]
+mq-http = { path = "../mq-http" }
 mq-library = { path = "../mq-library" }
 mq-runtime = { path = "../mq-runtime" }
 mq-streams = { path = "../mq-streams" }

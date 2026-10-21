@@ -32,6 +32,35 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
 }
 
+/// Development builds only: the loopback recorder every request to a host
+/// off this machine goes to instead (the web e2e, `MQ_DEV_REPLAY`).
+#[cfg(debug_assertions)]
+static DEV_REPLAY: RwLock<Option<String>> = RwLock::new(None);
+
+/// Development builds only: sends every request to a host off this machine
+/// to `base` (a loopback http URL) as `<base>/<scheme>/<host>[:port]<path>`
+/// with its query, so a test run never reaches the internet. The caller
+/// checks `base` is on this machine.
+#[cfg(debug_assertions)]
+pub fn set_dev_replay(base: &str) {
+    *DEV_REPLAY.write().unwrap_or_else(|e| e.into_inner()) =
+        Some(base.trim_end_matches('/').to_owned());
+}
+
+/// `url` as the recorder at `base` takes it; `None` for a host on this
+/// machine or the LAN, which is asked as it is.
+#[cfg_attr(not(any(debug_assertions, test)), allow(dead_code))]
+fn replay_url(base: &str, url: &Url) -> Option<Url> {
+    let host = url.host_str()?;
+    if is_private_host(host) {
+        return None;
+    }
+    let port = url.port().map(|p| format!(":{p}")).unwrap_or_default();
+    let query = url.query().map(|q| format!("?{q}")).unwrap_or_default();
+    let to = format!("{base}/{}/{host}{port}{}{query}", url.scheme(), url.path());
+    Url::parse(&to).ok()
+}
+
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum HttpError {
     #[error("invalid url: {0}")]
@@ -1004,15 +1033,64 @@ impl HttpClient {
         range: Option<String>,
     ) -> Result<Response, HttpError> {
         let url = Url::parse(raw).map_err(|_| HttpError::InvalidUrl(redact_str(raw)))?;
+        let replay = self.replayed(&url, opts);
+        let (sent, opts) = match &replay {
+            Some((to, replay_opts)) => (to.clone(), replay_opts),
+            None => (url.clone(), opts),
+        };
         let request = Request {
             method,
-            url,
+            url: sent,
             body,
             range,
             timeout: Some(opts.timeout),
         };
-        let (response, _permit) = self.fetch(request, opts).await?;
-        read_capped(response, opts).await
+        let via = self.via(replay.is_some());
+        let (response, _permit) = via.fetch(request, opts).await?;
+        let mut response = read_capped(response, opts).await?;
+        if replay.is_some() {
+            response.final_url = url;
+        }
+        Ok(response)
+    }
+
+    /// Development builds only (`set_dev_replay`): where a request to a host
+    /// off this machine goes instead, `<base>/<scheme>/<host>[:port]<path>`
+    /// with its query, and the options that let it reach the loopback
+    /// recorder, a playback's scoped requests too (`via`). A shipped build
+    /// never rewrites anything.
+    fn replayed(&self, url: &Url, opts: &RequestOptions) -> Option<(Url, RequestOptions)> {
+        #[cfg(debug_assertions)]
+        {
+            let base = DEV_REPLAY
+                .read()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone()?;
+            let opts = RequestOptions {
+                allow_private: true,
+                no_proxy: false,
+                ..opts.clone()
+            };
+            Some((replay_url(&base, url)?, opts))
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            let _ = (url, opts);
+            None
+        }
+    }
+
+    /// The handle a request goes out on: a replayed one leaves a playback's
+    /// scope, whose rule would refuse the recorder on this machine.
+    fn via(&self, replayed: bool) -> std::borrow::Cow<'_, HttpClient> {
+        if replayed && self.scope.is_some() {
+            std::borrow::Cow::Owned(HttpClient {
+                scope: None,
+                ..self.clone()
+            })
+        } else {
+            std::borrow::Cow::Borrowed(self)
+        }
     }
 
     /// Streams a response body without buffering it, for playback. The
@@ -1026,18 +1104,27 @@ impl HttpClient {
         opts: &RequestOptions,
     ) -> Result<StreamingResponse, HttpError> {
         let parsed = Url::parse(url).map_err(|_| HttpError::InvalidUrl(redact_str(url)))?;
+        let replay = self.replayed(&parsed, opts);
+        let (sent, opts) = match &replay {
+            Some((to, replay_opts)) => (to.clone(), replay_opts),
+            None => (parsed.clone(), opts),
+        };
         let request = Request {
             method: Method::GET,
-            url: parsed,
+            url: sent,
             body: None,
             range,
             timeout: None,
         };
-        let (response, permit) = self.fetch(request, opts).await?;
+        let via = self.via(replay.is_some());
+        let (response, permit) = via.fetch(request, opts).await?;
         let status = response.status().as_u16();
         let headers = response.headers().clone();
         let idle = opts.timeout;
-        let final_url = response.url().clone();
+        let final_url = match replay {
+            Some(_) => parsed,
+            None => response.url().clone(),
+        };
         let body = response
             .bytes_stream()
             .map(move |chunk| chunk.map_err(|e| HttpError::from_reqwest(e, idle)));
@@ -1399,6 +1486,32 @@ fn over_limit(len: u64, max_bytes: usize) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The dev recorder takes a public host's request whole (path encoding,
+    /// port, query), and never one for this machine or the LAN.
+    #[test]
+    fn the_dev_recorder_takes_public_hosts_only() {
+        let base = "http://127.0.0.1:17802/replay";
+        let url = |u: &str| Url::parse(u).unwrap();
+        let catalog =
+            url("https://v3-cinemeta.strem.io/catalog/movie/top/search=game%20of.json?x=1");
+        assert_eq!(
+            replay_url(base, &catalog).unwrap().as_str(),
+            "http://127.0.0.1:17802/replay/https/v3-cinemeta.strem.io/catalog/movie/top/search=game%20of.json?x=1"
+        );
+        let port = url("http://addon.example:8080/manifest.json");
+        assert_eq!(
+            replay_url(base, &port).unwrap().as_str(),
+            "http://127.0.0.1:17802/replay/http/addon.example:8080/manifest.json"
+        );
+        for local in [
+            "http://127.0.0.1:9/a",
+            "http://localhost/a",
+            "http://192.168.1.5/m.json",
+        ] {
+            assert_eq!(replay_url(base, &url(local)), None, "{local}");
+        }
+    }
 
     #[test]
     fn a_length_past_4_gib_is_over_any_limit_on_any_width() {
