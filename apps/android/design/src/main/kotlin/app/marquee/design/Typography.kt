@@ -82,6 +82,8 @@ fun MqText(
     overflow: TextOverflow = TextOverflow.Ellipsis,
     /** [TextDirection.Content] for text from elsewhere (an addon's name): a Hebrew one reads right to left. */
     textDirection: TextDirection = TextDirection.Unspecified,
+    /** False keeps the text on one line whatever the width (a score), never broken inside. */
+    softWrap: Boolean = true,
 ) {
     val size = Marquee.type.size(role)
     BasicText(
@@ -109,5 +111,6 @@ fun MqText(
         maxLines = maxLines,
         minLines = minLines,
         overflow = overflow,
+        softWrap = softWrap,
     )
 }

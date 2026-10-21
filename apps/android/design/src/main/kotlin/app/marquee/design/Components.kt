@@ -67,6 +67,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -760,20 +761,28 @@ fun RatingLine(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ratings.forEachIndexed { index, score ->
-            MqText(
-                score,
-                modifier =
-                    if (index == 0 &&
-                        onFirst != null
-                    ) {
-                        Modifier.focusClickable(onFirst, Role.Button)
-                    } else {
-                        Modifier
-                    },
-                role = TextRole.Callout,
-                weight = FontWeight.Bold,
-                maxLines = 1,
-            )
+            val text: @Composable (Modifier) -> Unit = {
+                MqText(
+                    score,
+                    modifier = it.semantics { contentDescription = spokenScore(score) },
+                    role = TextRole.Callout,
+                    weight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Visible,
+                    softWrap = false,
+                )
+            }
+            if (index == 0 && onFirst != null) {
+                // A link a finger can hit: 48 dp tall, the text centred in it.
+                Box(
+                    Modifier.heightIn(min = 48.dp).focusClickable(onFirst, Role.Button),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    text(Modifier)
+                }
+            } else {
+                text(Modifier)
+            }
             MqText("·", modifier = Modifier.clearAndSetSemantics { }, role = TextRole.Callout, color = colors.dim)
         }
         MqText(facts, role = TextRole.Callout, color = colors.muted, weight = FontWeight.SemiBold, maxLines = 1)

@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -20,12 +21,14 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
@@ -141,7 +144,12 @@ fun PosterTile(
     }
 }
 
-/** The scores as plain text on strong glass, at the top right of a poster. */
+/**
+ * The scores as plain text on strong glass, at the top right of a poster: on a phone's narrow
+ * poster one above the other; elsewhere side by side, and one above the other only when the pair
+ * is wider than the poster (TV's 23 sp floor puts "IMDb 10.0  RT 100%" past 240 dp). A score never
+ * wraps and is never cut.
+ */
 @Composable
 private fun RatingChip(
     ratings: List<String>,
@@ -149,20 +157,39 @@ private fun RatingChip(
 ) {
     val tv = Marquee.form == Form.Tv
     val colors = Marquee.colors
-    Row(
+    val chip =
         modifier
+            .testTag("rating-chip")
             .padding(if (tv) 10.dp else 6.dp)
             .clip(RoundedCornerShape(Marquee.radius.pill))
             .background(colors.glassStrong)
-            .padding(horizontal = if (tv) 10.dp else 6.dp, vertical = if (tv) 4.dp else 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(if (tv) 6.dp else 3.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ratings.forEach {
-            MqText(it, role = TextRole.Caption, weight = FontWeight.Bold, color = colors.text, maxLines = 1)
-        }
+            .padding(horizontal = if (tv) 10.dp else 6.dp, vertical = if (tv) 4.dp else 2.dp)
+    val score: @Composable (String) -> Unit = {
+        MqText(
+            it,
+            modifier = Modifier.semantics { contentDescription = spokenScore(it) },
+            role = TextRole.Caption,
+            weight = FontWeight.Bold,
+            color = colors.text,
+            maxLines = 1,
+            overflow = TextOverflow.Visible,
+            softWrap = false,
+        )
+    }
+    if (Marquee.form == Form.Phone) {
+        Column(chip, horizontalAlignment = Alignment.End) { ratings.forEach { score(it) } }
+    } else {
+        FlowRow(
+            chip,
+            horizontalArrangement = Arrangement.spacedBy(if (tv) 6.dp else 3.dp, Alignment.End),
+            itemVerticalAlignment = Alignment.CenterVertically,
+        ) { ratings.forEach { score(it) } }
     }
 }
+
+/** What a screen reader says for a score: "IMDb 8.8", "Rotten Tomatoes 87 percent", never "R T". */
+fun spokenScore(score: String): String =
+    score.removePrefix("RT ").takeIf { it != score }?.let { "Rotten Tomatoes ${it.replace("%", " percent")}" } ?: score
 
 /**
  * An episode on a card (design/DECISION.md v2, Episodes): a 16:9 still with the number at its

@@ -7,6 +7,7 @@ import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import org.junit.Rule
@@ -32,6 +33,9 @@ class RatingsTest {
         compose.setContent { MarqueeTheme(Form.Phone) { RatingLine(ratings, "2010 · 148 min") } }
         assertEquals(1, count("IMDb 8.8"))
         assertEquals(1, count("RT 87%"))
+        // TalkBack says the name, not "R T".
+        compose.onNodeWithContentDescription("Rotten Tomatoes 87 percent", useUnmergedTree = true).assertExists()
+        compose.onNodeWithContentDescription("IMDb 8.8", useUnmergedTree = true).assertExists()
         ratings = listOf("RT 87%")
         compose.waitForIdle()
         assertEquals(0, count("IMDb 8.8"))

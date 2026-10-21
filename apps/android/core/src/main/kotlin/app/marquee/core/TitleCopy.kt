@@ -141,6 +141,7 @@ object TitleCopy {
             "Directed by" to details.directors.take(2).joinToString(", "),
             "Starring" to details.cast.take(3).joinToString(", "),
             "Details from" to details.source,
+            "Ratings from" to (details.ratingsFrom ?: ""),
         ).filter { it.second.isNotBlank() }
 
     /** "Watched, S1:E2, The Kingsroad" (and "Airs Nov 3, 2026" when it is not out): what a screen reader says for an episode. */

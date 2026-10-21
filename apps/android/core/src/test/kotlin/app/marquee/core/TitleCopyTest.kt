@@ -120,6 +120,11 @@ class TitleCopyTest {
                 details(releaseInfo = null, runtime = null).copy(cast = emptyList(), directors = emptyList()),
             ),
         )
+        // The scores' credit, when MDBList gave one.
+        assertEquals(
+            "Ratings from" to "IMDb and Rotten Tomatoes via MDBList",
+            TitleCopy.facts(details().copy(ratingsFrom = "IMDb and Rotten Tomatoes via MDBList")).last(),
+        )
     }
 
     @Test
