@@ -39,8 +39,10 @@ enum BackdropStops {
         size.height > 0 ? held(heroFoot, scale: box.height / size.height) : heroFoot
     }
     /// Home's hero on the phone (the frames' iPhone shade): from the foot up into the black page, and
-    /// a light wash from the top so the status bar and the large title read on any art.
-    static let heroPhoneFoot = [Stop(at: 0, alpha: 1), Stop(at: 0.09, alpha: 0.92), Stop(at: 0.2, alpha: 0.7), Stop(at: 0.33, alpha: 0.4), Stop(at: 0.46, alpha: 0.12), Stop(at: 0.56, alpha: 0)]
+    /// a light wash from the top so the status bar and the large title read on any art. Deepened in
+    /// phase 3 so the highest line over art holds 4.5:1 on white art: the title page's genre line, about
+    /// 222 above the foot, and Home's genre line stacked over its ratings beside a two-line reason.
+    static let heroPhoneFoot = [Stop(at: 0, alpha: 1), Stop(at: 0.09, alpha: 0.92), Stop(at: 0.2, alpha: 0.76), Stop(at: 0.33, alpha: 0.58), Stop(at: 0.46, alpha: 0.24), Stop(at: 0.6, alpha: 0)]
     static let heroPhoneTop = [Stop(at: 0, alpha: 0.5), Stop(at: 0.11, alpha: 0.2), Stop(at: 0.2, alpha: 0)]
     /// The foot ramp's stops are shares of the 680 pt portrait hero and hold in points from the foot:
     /// a shorter hero (a landscape phone, down to 280) keeps the same darkness at the same height

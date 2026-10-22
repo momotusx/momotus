@@ -151,6 +151,13 @@ private let spots = [
     // A landscape phone shortens the hero to most of its height, never under 280 (HomeScreen.heroHeight);
     // Details keeps its place, 104 pt above the foot.
     Spot(name: "home hero, iPhone landscape", page: "bgPhone", layers: [(true, BackdropStops.alpha(BackdropStops.heroPhoneFoot(height: 280), at: 104.0 / 280))], word: false),
+    // The phone hero's text over art, bottom up in the 680 pt hero. Home: the foot (56), the 48 pt
+    // buttons, 16 to a two-line reason (13 pt, 16 a line) and 6 more, the ratings (16) and 4, then the
+    // genre line (15/600, 20 tall) stacked over them: its top about 198. The title page, as the iPhone
+    // frame draws it: the genre line's top about 222, "31 min left" (13 pt, 70 percent white) about 134.
+    Spot(name: "home hero, iPhone, genre stacked", page: "bgPhone", layers: [(true, BackdropStops.alpha(BackdropStops.heroPhoneFoot(height: 680), at: 198.0 / 680))], word: false, text: 0.92),
+    Spot(name: "title, iPhone, genre", page: "bgPhone", layers: [(true, BackdropStops.alpha(BackdropStops.heroPhoneFoot(height: 680), at: 222.0 / 680))], word: false, text: 0.92),
+    Spot(name: "title, iPhone, resume sub", page: "bgPhone", layers: [(true, BackdropStops.alpha(BackdropStops.heroPhoneFoot(height: 680), at: 134.0 / 680))], word: false, text: 0.7),
     // The title's round row, at the far edge of its 580 pt column (620 pt in), the hero at its 420 floor.
     Spot(name: "title, Mac", page: "bgDesktop", layers: titlePage(width: narrowestMac, height: 420, end: 620, top: 96)),
     // Start over beside Resume, above the version line and the round row: the widest Resume row
