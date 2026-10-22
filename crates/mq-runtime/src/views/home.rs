@@ -300,13 +300,7 @@ fn catalog_slots(addons: &[InstalledAddon]) -> Vec<CatalogSlot> {
                 continue;
             };
             slots.push(CatalogSlot {
-                row_id: format!(
-                    "{}@{}:{}:{}",
-                    addon.id(),
-                    install_tag(addon.transport_url.as_str()),
-                    catalog.r#type,
-                    catalog.id
-                ),
+                row_id: row_id(addon, &catalog.r#type, &catalog.id),
                 addon: addon.clone(),
                 path: ResourcePath {
                     resource: "catalog".into(),
@@ -473,7 +467,9 @@ impl Core {
 }
 
 /// Home follows addon changes and the user's row choices (a preference).
-async fn home_changed(changes: &mut tokio::sync::broadcast::Receiver<Vec<Table>>) -> bool {
+pub(crate) async fn home_changed(
+    changes: &mut tokio::sync::broadcast::Receiver<Vec<Table>>,
+) -> bool {
     use tokio::sync::broadcast::error::RecvError;
     loop {
         match changes.recv().await {
@@ -489,6 +485,15 @@ async fn home_changed(changes: &mut tokio::sync::broadcast::Receiver<Vec<Table>>
             Err(RecvError::Closed) => return false,
         }
     }
+}
+
+/// A Home row's id: the addon, its installation, the kind and the catalog.
+pub(crate) fn row_id(addon: &InstalledAddon, kind: &str, catalog: &str) -> String {
+    format!(
+        "{}@{}:{kind}:{catalog}",
+        addon.id(),
+        install_tag(addon.transport_url.as_str())
+    )
 }
 
 /// Tells installations of the same addon apart (two configurations share a
@@ -586,7 +591,7 @@ fn row_title(slot: &CatalogSlot) -> String {
 /// the addon's name ("trakt - Popular movies" from Trakt Tv) drops that start, and a kind the name already
 /// says, or a custom kind that only repeats the addon's name (Trakt Tv's type "trakt"), is not added. A
 /// known kind stays even when the addon's name holds it (The Movie Database Addon's "Popular Movies").
-fn catalog_title(name: &str, kind: &str, source: &str) -> String {
+pub(crate) fn catalog_title(name: &str, kind: &str, source: &str) -> String {
     let name = without_source(
         &name.split_whitespace().collect::<Vec<_>>().join(" "),
         source,

@@ -199,10 +199,12 @@ async fn discover_follows_addon_changes() {
     other.transport_url = other
         .transport_url
         .replace("/manifest.json", "/other/manifest.json");
+    // Titled apart from Cat's, so no catalog of it is a twin.
     other.manifest_json = other
         .manifest_json
         .replace("\"cat\"", "\"other\"")
-        .replace("\"Cat\"", "\"Other\"");
+        .replace("\"Cat\"", "\"Other\"")
+        .replace("\"Popular\"", "\"Trending\"");
     core.library()
         .set_addons("p", &[cat.clone(), other.clone()], &core.hlc())
         .unwrap();
@@ -227,6 +229,58 @@ async fn discover_follows_addon_changes() {
         empty.kinds.is_empty() && empty.items.is_empty(),
         "{empty:?}"
     );
+}
+
+/// A catalog titled as one before it in addon order shows no chip, as its
+/// row is off Home: only the addon's name would tell the two apart (the
+/// owner, 2026-10-22). Turned on in Customize Home, it gets its chip.
+#[tokio::test]
+async fn a_twin_catalog_shows_only_once_it_is_turned_on_in_customize_home() {
+    let core = Core::temporary("p").unwrap();
+    let (cat, _) = addon().await;
+    let mut other = cat.clone();
+    other.transport_url = other
+        .transport_url
+        .replace("/manifest.json", "/other/manifest.json");
+    other.manifest_json = other
+        .manifest_json
+        .replace("\"cat\"", "\"other\"")
+        .replace("\"Cat\"", "\"Other\"");
+    core.library()
+        .set_addons("p", &[cat, other], &core.hlc())
+        .unwrap();
+    let view = DiscoverView::open(&core);
+    settle(&view).await;
+    let names = |s: &mq_runtime::DiscoverSnapshot| {
+        s.catalogs
+            .iter()
+            .map(|c| (c.id.clone(), c.name.clone()))
+            .collect::<Vec<_>>()
+    };
+    // Other's "Cat: New" is no twin: its name does not start with its own addon's.
+    assert_eq!(
+        names(&view.snapshot()),
+        [
+            ("cat|movie|top".to_owned(), "Popular".to_owned()),
+            ("cat|movie|new".to_owned(), "New".to_owned()),
+            ("other|movie|new".to_owned(), "Cat: New".to_owned()),
+        ]
+    );
+
+    let twin = core
+        .home_catalogs()
+        .into_iter()
+        .find(|c| c.source == "Other" && c.title == "Popular Movies")
+        .unwrap();
+    assert!(twin.hidden, "the twin's row is off Home too");
+    core.set_home_row_hidden(&twin.row_id, false).unwrap();
+    until(&view, |s| s.catalogs.len() == 4).await;
+    assert_eq!(
+        names(&view.snapshot())[2],
+        ("other|movie|top".to_owned(), "Popular".to_owned()),
+        "in addon order"
+    );
+    assert_eq!(view.snapshot().catalog.as_deref(), Some("cat|movie|top"));
 }
 
 /// A paging catalog whose every page fails once, then answers: the first

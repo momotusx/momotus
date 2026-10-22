@@ -3,8 +3,10 @@
 
 use crate::Core;
 use crate::live::{FRAME, coalesce};
-use crate::views::addons_changed;
-use crate::views::home::{Tile, tile_from_preview, type_label, without_source};
+use crate::views::home::{
+    Tile, catalog_title, home_changed, row_id, tile_from_preview, type_label, without_source,
+};
+use crate::views::settings::HomeRows;
 use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
 use mq_addons::InstalledAddon;
@@ -133,7 +135,10 @@ impl DiscoverView {
     pub fn open(core: &Core) -> Self {
         // Subscribed before reading, so no addon change falls in between.
         let changes = core.library().subscribe();
-        let catalogs = browsable(&core.installed_addons().unwrap_or_default());
+        let catalogs = browsable(
+            &core.installed_addons().unwrap_or_default(),
+            &core.prefs().home_rows,
+        );
         let snapshot = empty_snapshot(&catalogs);
         let inner = Arc::new(Inner {
             core: core.clone(),
@@ -188,11 +193,15 @@ impl DiscoverView {
     }
 }
 
-/// Follows the installed addons: the catalog on screen stays when it is
-/// still there (no reload); otherwise Discover starts again on the first.
+/// Follows the installed addons and the twins turned on in Customize Home:
+/// the catalog on screen stays when it is still there (no reload);
+/// otherwise Discover starts again on the first.
 async fn watch_addons(inner: Arc<Inner>, mut changes: Receiver<Vec<Table>>) {
-    while addons_changed(&mut changes).await {
-        let catalogs = browsable(&inner.core.installed_addons().unwrap_or_default());
+    while home_changed(&mut changes).await {
+        let catalogs = browsable(
+            &inner.core.installed_addons().unwrap_or_default(),
+            &inner.core.prefs().home_rows,
+        );
         let kept = {
             let mut s = lock(&inner.state);
             let ids = |c: &[Catalog]| c.iter().map(|c| c.choice.id.clone()).collect::<Vec<_>>();
@@ -343,33 +352,39 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 }
 
 /// Catalogs a user can browse: every required extra has options to pick
-/// from (so search-only catalogs and id-list feeds are left out).
-fn browsable(addons: &[InstalledAddon]) -> Vec<Catalog> {
+/// from (so search-only catalogs and id-list feeds are left out). A twin,
+/// titled as a catalog before it in addon order, is left out as on Home
+/// unless the user turned its row on in Customize Home: no addon's name
+/// tells the two apart (the owner, 2026-10-22).
+fn browsable(addons: &[InstalledAddon], rows: &HomeRows) -> Vec<Catalog> {
+    let mut titles = HashSet::new();
     addons
         .iter()
-        .flat_map(|addon| {
-            addon.manifest.catalogs.iter().filter_map(|c| {
-                c.default_required_extra()?;
-                let genre = c.extra.iter().find(|e| e.name == "genre");
-                Some(Catalog {
-                    choice: CatalogChoice {
-                        id: format!("{}|{}|{}", addon.id(), c.r#type, c.id),
-                        name: without_source(
-                            c.name.as_deref().unwrap_or(&c.id),
-                            &addon.manifest.name,
-                        ),
-                        source: addon.manifest.name.clone(),
-                    },
-                    addon: addon.clone(),
-                    kind: c.r#type.clone(),
-                    id: c.id.clone(),
-                    genres: genre
-                        .as_ref()
-                        .map(|g| g.options.clone())
-                        .unwrap_or_default(),
-                    genre_required: genre.is_some_and(|g| g.is_required),
-                    pages: c.extra.iter().any(|e| e.name == "skip"),
-                })
+        .flat_map(|addon| addon.manifest.catalogs.iter().map(move |c| (addon, c)))
+        .filter_map(|(addon, c)| {
+            c.default_required_extra()?;
+            let name = c.name.as_deref().unwrap_or(&c.id);
+            let title = catalog_title(name, &c.r#type, &addon.manifest.name).to_lowercase();
+            // Inserted first, so the first of a title counts even when a later one is shown.
+            if !titles.insert(title) && !rows.shown.contains(&row_id(addon, &c.r#type, &c.id)) {
+                return None;
+            }
+            let genre = c.extra.iter().find(|e| e.name == "genre");
+            Some(Catalog {
+                choice: CatalogChoice {
+                    id: format!("{}|{}|{}", addon.id(), c.r#type, c.id),
+                    name: without_source(name, &addon.manifest.name),
+                    source: addon.manifest.name.clone(),
+                },
+                addon: addon.clone(),
+                kind: c.r#type.clone(),
+                id: c.id.clone(),
+                genres: genre
+                    .as_ref()
+                    .map(|g| g.options.clone())
+                    .unwrap_or_default(),
+                genre_required: genre.is_some_and(|g| g.is_required),
+                pages: c.extra.iter().any(|e| e.name == "skip"),
             })
         })
         .collect()
