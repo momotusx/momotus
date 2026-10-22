@@ -140,6 +140,25 @@ class BackgroundStartTest {
     }
 
     @Test
+    fun `Home while a film plays starts no service and leaves it paused`() {
+        compose.setContent {
+            MarqueeTheme(Form.Phone) {
+                PlayerLifecycle(controller)
+                PhonePlayer(controller, false, false, {}, null, { _, _ -> }, {}, {})
+            }
+        }
+        compose.runOnIdle { player.open() }
+        until { controller.stage == PlaybackController.Stage.Playing }
+        compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        assertFalse(StartService.keeping, "nothing to prepare: the film was showing")
+        assertEquals(null, shadowOf(compose.activity.application).nextStartedService)
+        assertFalse(player.playWhenReady, "paused, no sound")
+        compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        compose.waitForIdle()
+        assertFalse(player.playWhenReady, "a film the viewer left stays paused")
+    }
+
+    @Test
     fun `back while still resolving, the service goes and the start goes on in front`() {
         compose.setContent { MarqueeTheme(Form.Phone) { PlayerLifecycle(controller) } }
         compose.runOnIdle { controller.attach(view(RESOLVING)) }

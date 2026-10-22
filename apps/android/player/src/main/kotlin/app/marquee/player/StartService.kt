@@ -58,6 +58,9 @@ class StartService : Service() {
         return START_NOT_STICKY
     }
 
+    // Swiped away from Recents: nothing is left to prepare for.
+    override fun onTaskRemoved(rootIntent: Intent?) = release()
+
     override fun onDestroy() {
         handler.removeCallbacks(limit)
         wake?.takeIf { it.isHeld }?.release()
