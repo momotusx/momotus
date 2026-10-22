@@ -75,14 +75,14 @@ private func row(_ state: RowState, _ tiles: String...) -> HomeRow {
 
 @Test func homeSearchDiscoverAndTheTitleNeverReadAnAddonsName() throws {
     // The rows, the hero, Search's groups, Discover's catalog chips and the title page never read
-    // `source` or the ratings' credit (`ratingsFrom`, which names addons); only the Addons pages and
-    // Settings > Home rows name an addon (design/DECISION.md, Shelves).
+    // `source`, the ratings' credit (`ratingsFrom`) or a version's addon (`via`); only the Addons pages,
+    // Settings > Home rows and the Versions page name an addon (design/DECISION.md, Shelves).
     let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
     var read = 0
     for folder in ["Home", "Search", "Discover", "Title"] {
         for name in try FileManager.default.contentsOfDirectory(atPath: app.appending(path: folder).path) where name.hasSuffix(".swift") {
             let text = try String(contentsOf: app.appending(path: "\(folder)/\(name)"), encoding: .utf8)
-            #expect(text.range(of: #"\.source\b|ratingsFrom"#, options: .regularExpression) == nil, "\(folder)/\(name) reads an addon's name")
+            #expect(text.range(of: #"\.source\b|ratingsFrom|\.via\b"#, options: .regularExpression) == nil, "\(folder)/\(name) reads an addon's name")
             read += 1
         }
     }

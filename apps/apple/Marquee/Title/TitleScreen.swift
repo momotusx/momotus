@@ -602,17 +602,17 @@ private struct PlayBlock: View {
     }
 }
 
-/// "720p  472 MB  (dot) Torrent, 153 seeds  via Torrentio", or why there is none yet.
+/// "720p  472 MB  (dot) Torrent, 153 seeds", or why there is none yet. No addon's name: it shows on
+/// the Addons pages alone (design/DECISION.md, Shelves).
 private struct VersionLine: View {
     let versions: VersionsSnapshot?
 
     var body: some View {
         if let best = versions?.recommended {
             let dot = Text("\u{25CF}").font(.system(size: 9)).foregroundStyle(VersionWords.tone(best.status).color)
-            let via = Text("via \(best.via)").foregroundStyle(Theme.Palette.muted)
-            Text("\(VersionWords.line(best))   \(dot) \(VersionWords.status(best.status))   \(via)")
+            Text("\(VersionWords.line(best))   \(dot) \(VersionWords.status(best.status))")
                 .foregroundStyle(Theme.Palette.text)
-                .accessibilityLabel("\(VersionWords.line(best)), \(VersionWords.status(best.status)), via \(best.via)")
+                .accessibilityLabel("\(VersionWords.line(best)), \(VersionWords.status(best.status))")
         } else if let versions, versions.done {
             Label(VersionWords.none(versions), glyph: "circle-alert")
                 .foregroundStyle(Theme.Palette.muted)
