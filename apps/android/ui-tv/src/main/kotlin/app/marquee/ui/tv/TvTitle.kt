@@ -384,7 +384,6 @@ private fun VersionStatus(
                 line.facts,
                 line.status,
                 if (line.good) Status.Ok else Status.Warn,
-                line.via,
                 line.spoken,
                 modifier,
             )

@@ -10,8 +10,10 @@ import app.marquee.core.model.Tuple2
 import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionStatus
 import app.marquee.core.model.VersionsSnapshot
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -78,7 +80,7 @@ class VersionsCopyTest {
         assertEquals(listOf("4K", "HDR10", "1.2 GB"), chosen.facts)
         assertEquals("Ready on Real-Debrid", chosen.status)
         assertEquals(true, chosen.good)
-        assertEquals("4K, HDR10, 1.2 GB, Ready on Real-Debrid, via Real-Debrid", chosen.spoken)
+        assertEquals("4K, HDR10, 1.2 GB, Ready on Real-Debrid", chosen.spoken)
         val torrent =
             row().copy(
                 status = VersionStatus.Torrent(10),
@@ -87,7 +89,7 @@ class VersionsCopyTest {
                 via = "Torrentio",
             )
         assertEquals(
-            VersionLine.Chosen(listOf("4K"), "Torrent, 10 seeds", good = false, via = "Torrentio"),
+            VersionLine.Chosen(listOf("4K"), "Torrent, 10 seeds", good = false),
             VersionsCopy.line(snapshot(recommended = torrent)),
         )
     }
@@ -256,5 +258,18 @@ class VersionsCopyTest {
             "Nothing is ready to play yet" to "Choose a version to start it.",
             VersionsCopy.waitingTitle(unready) to VersionsCopy.waitingBody(unready),
         )
+    }
+
+    @Test
+    fun `a title page never names the addon a version comes from, the Versions screens do`() {
+        // The owner, 2026-10-22 (design/DECISION.md, Shelves): addon names only on the Addons pages and in Versions.
+        val pages =
+            listOf(
+                "../ui-tv/src/main/kotlin/app/marquee/ui/tv/TvTitle.kt",
+                "../ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneTitle.kt",
+            )
+        for (path in pages) {
+            assertFalse(Regex("""\.via\b|\bvia \$""").containsMatchIn(File(path).readText()), "$path names the addon")
+        }
     }
 }

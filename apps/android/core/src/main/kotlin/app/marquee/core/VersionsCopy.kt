@@ -15,17 +15,17 @@ sealed interface VersionLine {
     data object Finding : VersionLine
 
     /**
-     * The recommended version, as the web writes it: the [facts] (quality, features, size), a [status]
-     * with a dot ([good] when it can play now), and where it comes from.
+     * The recommended version: the [facts] (quality, features, size) and a [status] with a dot ([good] when it
+     * can play now). Not the addon it comes from: no addon's name on a title page (design/DECISION.md, Shelves);
+     * the Versions screens name it.
      */
     data class Chosen(
         val facts: List<String>,
         val status: String,
         val good: Boolean,
-        val via: String,
     ) : VersionLine {
         /** One sentence for a screen reader. */
-        val spoken: String get() = (facts + status + "via $via").joinToString(", ")
+        val spoken: String get() = (facts + status).joinToString(", ")
     }
 
     /** Why there is nothing to play. */
@@ -136,7 +136,6 @@ object VersionsCopy {
                         listOfNotNull(best.quality) + best.features + listOfNotNull(best.sizeBytes?.let(Format::bytes)),
                     status = status(best.status),
                     good = good(best.status),
-                    via = best.via,
                 )
             }
 

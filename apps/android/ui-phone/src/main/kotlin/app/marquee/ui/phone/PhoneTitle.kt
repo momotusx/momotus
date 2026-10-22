@@ -421,7 +421,7 @@ private fun VersionStatus(line: VersionLine) {
         }
 
         is VersionLine.Chosen -> {
-            ChosenVersion(line.facts, line.status, if (line.good) Status.Ok else Status.Warn, line.via, line.spoken)
+            ChosenVersion(line.facts, line.status, if (line.good) Status.Ok else Status.Warn, line.spoken)
         }
 
         is VersionLine.Problem -> {

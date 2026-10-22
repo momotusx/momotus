@@ -610,8 +610,8 @@ fun StatusWord(
 }
 
 /**
- * The version a title will play, under its Play button, as the web writes it: the facts, then a status
- * with a dot, then the source ("1080p  1.6 GB  ● Torrent, 10 seeds  via Torrentio"). It wraps at
+ * The version a title will play, under its Play button: the facts, then a status with a dot ("1080p  1.6 GB
+ * ● Torrent, 10 seeds"), never the addon it comes from (design/DECISION.md, Shelves). It wraps at
  * the gaps and never inside a fact. Screen readers get [spoken] as one sentence.
  */
 @Composable
@@ -619,7 +619,6 @@ fun ChosenVersion(
     facts: List<String>,
     status: String,
     tone: Status,
-    via: String,
     spoken: String,
     modifier: Modifier = Modifier,
 ) {
@@ -632,7 +631,6 @@ fun ChosenVersion(
     ) {
         for (fact in facts) MqText(fact, role = TextRole.Callout, maxLines = 1)
         StatusWord(status, tone)
-        MqText("via $via", role = TextRole.Callout, color = Marquee.colors.muted, maxLines = 1)
     }
 }
 

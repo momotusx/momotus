@@ -124,15 +124,13 @@ private fun Gallery() {
                     facts = listOf("1080p", "1.6 GB"),
                     status = "Torrent, 10 seeds",
                     tone = Status.Warn,
-                    via = "Torrentio",
-                    spoken = "1080p, 1.6 GB, Torrent, 10 seeds, via Torrentio",
+                    spoken = "1080p, 1.6 GB, Torrent, 10 seeds",
                 )
                 ChosenVersion(
                     facts = listOf("4K", "Dolby Vision", "18 GB"),
                     status = "Ready on Real-Debrid",
                     tone = Status.Ok,
-                    via = "Real-Debrid",
-                    spoken = "4K, Dolby Vision, 18 GB, Ready on Real-Debrid, via Real-Debrid",
+                    spoken = "4K, Dolby Vision, 18 GB, Ready on Real-Debrid",
                 )
                 StatusNote("Finding versions", busy = true)
                 StatusNote(
