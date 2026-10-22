@@ -7,8 +7,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The baseline profile: a start to Home and its scroll, then a start onto a title page. The plugin writes the
- * rules to app/src/main/generated/baselineProfiles (`scripts/gw.sh :app:generateBaselineProfile`).
+ * The baseline profile: a start to Home and its scroll, a start onto a title page, then the TV tree's Home and
+ * Discover moved through with the D-pad. The plugin writes the rules to app/src/main/generated/baselineProfiles
+ * (`scripts/gw.sh :app:generateBaselineProfile`).
  */
 @RunWith(AndroidJUnit4::class)
 class BaselineProfileGenerator {
@@ -25,5 +26,12 @@ class BaselineProfileGenerator {
             scrollHome()
             killProcess()
             openTitle()
+            // The TV tree: Home row by row and Discover's grid with the D-pad.
+            killProcess()
+            startTv()
+            openHome()
+            scrollTvHome()
+            openTvDiscover()
+            scrollTvGrid()
         }
 }

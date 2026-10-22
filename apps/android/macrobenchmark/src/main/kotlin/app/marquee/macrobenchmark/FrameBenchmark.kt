@@ -8,7 +8,10 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Frames and jank of a Home scroll and of a playback start; each run leaves a Perfetto trace. */
+/**
+ * Frames and jank of a Home scroll, of TV Home and Discover's grid with the D-pad, and of a playback start; each
+ * run leaves a Perfetto trace.
+ */
 @RunWith(AndroidJUnit4::class)
 class FrameBenchmark {
     @get:Rule
@@ -30,6 +33,39 @@ class FrameBenchmark {
                 openHome()
             },
         ) { scrollHome() }
+
+    /** TV Home in the TV tree, row by row with the D-pad (the owner, 2026-10-22: the rows caught on the way down). */
+    @Test
+    fun tvHomeScroll() =
+        rule.measureRepeated(
+            packageName = PACKAGE,
+            metrics = listOf(FrameTimingMetric()),
+            iterations = 5,
+            startupMode = null,
+            compilationMode = CompilationMode.Partial(),
+            setupBlock = {
+                killProcess()
+                startTv()
+                openHome()
+            },
+        ) { scrollTvHome() }
+
+    /** Discover's poster grid in the TV tree, row by row with the D-pad. */
+    @Test
+    fun tvGridScroll() =
+        rule.measureRepeated(
+            packageName = PACKAGE,
+            metrics = listOf(FrameTimingMetric()),
+            iterations = 5,
+            startupMode = null,
+            compilationMode = CompilationMode.Partial(),
+            setupBlock = {
+                killProcess()
+                startTv()
+                openHome()
+                openTvDiscover()
+            },
+        ) { scrollTvGrid() }
 
     @Test
     fun playbackStart() =

@@ -78,3 +78,51 @@ fun MacrobenchmarkScope.startPlayback() {
     device.wait(Until.hasObject(By.text("Audio")), 20_000)
     device.waitForIdle()
 }
+
+/** A start in the TV tree (`form=tv`, read by debug and benchmark builds), on a phone as on a TV. */
+fun MacrobenchmarkScope.startTv() {
+    startActivityAndWait { it.putExtra("form", "tv") }
+}
+
+/** [times] D-pad presses [gapMs] apart, then a wait until the screen settles. */
+private fun MacrobenchmarkScope.dpad(
+    down: Boolean,
+    times: Int,
+    gapMs: Long,
+) {
+    repeat(times) {
+        if (down) device.pressDPadDown() else device.pressDPadUp()
+        Thread.sleep(gapMs)
+    }
+    device.waitForIdle()
+}
+
+/** A viewer stepping through rows: each move lands before the next press. */
+private const val STEP_MS = 400L
+
+/** A held arrow key: the system repeats it about every 50 ms, and the TV shell lets one through every 112. */
+private const val HELD_MS = 50L
+
+/** TV Home with the D-pad: down through the lanes a row at a time, on down with the key held, and back up held. */
+fun MacrobenchmarkScope.scrollTvHome() {
+    dpad(down = true, times = 4, gapMs = STEP_MS)
+    dpad(down = true, times = 12, gapMs = HELD_MS)
+    dpad(down = false, times = 24, gapMs = HELD_MS)
+}
+
+/** Discover on TV (a long poster grid), chosen in the top pill, once its header is up and its first page came. */
+fun MacrobenchmarkScope.openTvDiscover() {
+    device.wait(Until.findObject(By.text("Discover")), 10_000)?.click() ?: error("the pill has no Discover")
+    // The pill's word and the page's header.
+    val deadline = System.currentTimeMillis() + 10_000
+    while (device.findObjects(By.text("Discover")).size < 2 && System.currentTimeMillis() < deadline) Thread.sleep(500)
+    Thread.sleep(3_000)
+    device.waitForIdle()
+}
+
+/** Discover's grid with the D-pad: down a row at a time, on down held, and back up held. */
+fun MacrobenchmarkScope.scrollTvGrid() {
+    dpad(down = true, times = 4, gapMs = STEP_MS)
+    dpad(down = true, times = 16, gapMs = HELD_MS)
+    dpad(down = false, times = 24, gapMs = HELD_MS)
+}

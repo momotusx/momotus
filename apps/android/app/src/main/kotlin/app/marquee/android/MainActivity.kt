@@ -29,7 +29,9 @@ class MainActivity : ComponentActivity() {
         // The Auth Tab's launcher is registered before the activity starts, as the result API needs.
         (application as MarqueeApp).accountPlatform.attach(this)
         val debuggable = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
-        val form = FormFactor.detect(this, if (debuggable) intent.getStringExtra("form") else null)
+        // Debug and benchmark builds take the tree from `form=tv` (the TV benchmarks run on a phone).
+        val asked = intent.getStringExtra("form")?.takeIf { debuggable || BuildConfig.BENCHMARK }
+        val form = FormFactor.detect(this, asked)
         applyBars()
         // The first frame shows the form's page color.
         window.setBackgroundDrawable(
