@@ -263,6 +263,13 @@ pub struct SubtitleTrack {
     /// The track names the playing release's group: show "Same release
     /// group" for it.
     pub fits: bool,
+    /// OpenSubtitles says it was made for this very file (its hash): show
+    /// "Matches this file".
+    pub hash_match: bool,
+    /// The frame rate it was made for, set only when one of it and the
+    /// playing file's is PAL (25) and the other is not: show "Made for 25
+    /// fps".
+    pub made_for_fps: Option<f32>,
     /// The release text the addon names for the track (its label, file
     /// name or release name), for a detail line; null when it names none.
     pub release: Option<String>,
@@ -319,11 +326,14 @@ impl SubtitleTrack {
             forced: false,
             hearing_impaired: marked,
             fits: false,
+            hash_match: false,
+            made_for_fps: None,
             made: Made {
                 family: fit::family(parsed.quality),
                 cut: parsed.cut,
-                fps: None,
+                hearing: marked,
                 text: plain,
+                ..Made::default()
             },
             release,
         }
@@ -436,6 +446,9 @@ struct Made {
     family: Option<fit::Family>,
     cut: Option<mq_relparse::Cut>,
     fps: Option<f32>,
+    hash: bool,
+    forced: bool,
+    hearing: bool,
 }
 
 impl Made {
@@ -445,6 +458,9 @@ impl Made {
             family: made.family,
             cut: made.cut,
             fps: made.fps,
+            hash: made.hash,
+            forced: made.forced,
+            hearing: made.hearing,
         }
     }
 
@@ -454,6 +470,9 @@ impl Made {
             family: self.family,
             cut: self.cut,
             fps: self.fps,
+            hash: self.hash,
+            forced: self.forced,
+            hearing: self.hearing,
         }
     }
 }
@@ -1670,7 +1689,7 @@ async fn resolve_next(
                     .iter()
                     .filter_map(|w| {
                         let url = slot.add(w.url.as_str(), &w.lang, addon_url)?;
-                        Some(track(w, &stream.addon_name, url))
+                        Some(track(w, &stream.addon_name, "", url))
                     })
                     .collect();
                 let proven = {
@@ -1725,11 +1744,21 @@ async fn resolve_next(
                     let installed = core.installed_addons().unwrap_or_default();
                     let reader = video_reader(&upstream, reader).await;
                     let reader = reader.as_deref();
-                    // Read once, for the built-in source's ranking and the
-                    // audio language, only when one of them needs it.
-                    let needed = installed.iter().any(is_built_in)
-                        || !core.prefs().subtitle_languages.is_empty();
-                    let probed = probe_video(reader.filter(|_| needed)).shared();
+                    // Read once, for every track's release match (the
+                    // frame rate) and the audio language.
+                    let probed = probe_video(reader).shared();
+                    // The measured rate counts in the order as soon as it is
+                    // read, whichever source answers first.
+                    let rated = async {
+                        let fps = probed.clone().await.fps.map(|fps| fps as f32);
+                        let wanted = preferred_languages(&core, &state);
+                        let mut s = lock(&state);
+                        if fps.is_some() && current(&s, run) && s.playing.fps != fps {
+                            s.playing.fps = fps;
+                            reorder(&mut s, &wanted);
+                            snapshot.set(s.snapshot.clone());
+                        }
+                    };
                     let addons = async {
                         let extra = video_extra(reader, filename.as_deref()).await;
                         let found = (&slot, run, &*state, &snapshot);
@@ -1746,7 +1775,7 @@ async fn resolve_next(
                         &state,
                         &snapshot,
                     );
-                    tokio::join!(addons, built_in);
+                    tokio::join!(addons, built_in, rated);
                     // The release's languages when the file says none.
                     let mut audio = probed.await.audio;
                     if audio.is_empty() {
@@ -3370,14 +3399,40 @@ fn problem(p: mq_turkcealtyazi::Problem) -> SubtitleProblem {
 /// A track served through the loopback server as UTF-8 WebVTT, whatever
 /// format and charset the addon's file has; `None` once its playback is
 /// released.
-fn track(w: &mq_protocol::WireSubtitle, source: &str, url: String) -> SubtitleTrack {
+fn track(
+    w: &mq_protocol::WireSubtitle,
+    source: &str,
+    addon_id: &str,
+    url: String,
+) -> SubtitleTrack {
     let t = SubtitleTrack::new(url, &w.lang, w.label.clone(), source, release(w));
+    let hearing_impaired = w.hearing_impaired || t.hearing_impaired;
+    // OpenSubtitles marks a match on the hash we sent with `"m": "h"`; any
+    // other addon could mark every row, so only its mark counts. Its
+    // `fpsMilli` is the rate the file was timed for.
+    let hash = addon_id == OPENSUBTITLES && w.extra.get("m").and_then(|m| m.as_str()) == Some("h");
+    let fps = w
+        .extra
+        .get("fpsMilli")
+        .and_then(|f| f.as_f64())
+        .filter(|f| *f > 0.0)
+        .map(|f| (f / 1000.0) as f32);
     SubtitleTrack {
         forced: w.forced,
-        hearing_impaired: w.hearing_impaired || t.hearing_impaired,
+        hearing_impaired,
+        made: Made {
+            hash,
+            fps,
+            forced: w.forced,
+            hearing: hearing_impaired,
+            ..t.made.clone()
+        },
         ..t
     }
 }
+
+/// The OpenSubtitles v3 addon's manifest id: the one whose hash match counts.
+const OPENSUBTITLES: &str = "org.stremio.opensubtitlesv3";
 
 /// The release a file was made for, as the addon names it: its label, or
 /// OpenSubtitles' file name (without its extension) or release name.
@@ -3593,7 +3648,7 @@ async fn find_subtitles(
         let fresh: Vec<SubtitleTrack> = listed
             .iter()
             .filter(|(_, url, _)| !known.contains(url))
-            .map(|(_, url, w)| track(w, &source, url.clone()))
+            .map(|(_, url, w)| track(w, &source, &addon_id, url.clone()))
             .collect();
         let mut s = lock(state);
         if !current(&s, run) {
@@ -3644,9 +3699,10 @@ fn preferred_languages(core: &Core, state: &Mutex<State>) -> Vec<String> {
 /// Tracks grouped by language: the preferred languages first in their
 /// order (a regional one, "pt-BR", counts with its language), then the
 /// others by English name. Within a language, by the release match against
-/// the playing release (`fit::misses`: its group, the measured frame rate,
-/// the source family, the cut), a track for the hard of hearing after a
-/// plain one that matches as well, then by the source's place in the
+/// the playing release (`fit::misses`, plans/player-polish.md 2g: forced
+/// and split files last, then the file's own hash, the group, a capture, a
+/// PAL rate, the cut, the source family, a track for the hard of hearing
+/// after a plain one, the same rate), then by the source's place in the
 /// installed list (the stream's own first), then the source's own rank,
 /// whenever each answered. Then each track's `name`: two that would read
 /// the same in one language are numbered in that order. A track `fits`
@@ -3673,7 +3729,6 @@ fn reorder(s: &mut State, preferred: &[String]) {
             t.language_name.to_lowercase(),
             t.language.clone(),
             fit::misses(&t.made.get(), &playing),
-            t.hearing_impaired,
             order.get(&t.url).copied().unwrap_or((usize::MAX, 0)),
         )
     });
@@ -3693,6 +3748,11 @@ fn reorder(s: &mut State, preferred: &[String]) {
             key.1
         };
         t.fits = fit::same_group(&t.made.text, playing.group);
+        t.hash_match = t.made.hash;
+        t.made_for_fps = fit::misses(&t.made.get(), &playing)
+            .rate
+            .then_some(t.made.fps)
+            .flatten();
     }
 }
 
@@ -4738,7 +4798,7 @@ mod tests {
             release(w).as_deref(),
             Some("Film.2020.1080p.WEB.h264-CAKES")
         );
-        assert_eq!(track(w, "Subs", "u".into()).name, "CAKES, WEB 1080p");
+        assert_eq!(track(w, "Subs", "", "u".into()).name, "CAKES, WEB 1080p");
     }
 
     /// Review P3-8: while the first byte is read through the server the
@@ -5219,5 +5279,203 @@ mod auto_subtitle_tests {
                 "{remembered:?} {explicit:?} {audio:?}"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod subtitle_order_tests {
+    use super::*;
+
+    /// One OpenSubtitles v3 or SubSense row as it arrives.
+    fn row(addon: &str, n: usize, file: &str, fps: Option<u32>, m: &str) -> SubtitleTrack {
+        let mut json = serde_json::json!({
+            "id": n.to_string(),
+            "url": format!("https://subs.example/{n}"),
+            "lang": "eng",
+            "m": m,
+            "subtitleFileName": file,
+        });
+        if let Some(fps) = fps {
+            json["fpsMilli"] = fps.into();
+        }
+        let w: mq_protocol::WireSubtitle = serde_json::from_value(json).unwrap();
+        track(&w, addon, addon, format!("u{n}"))
+    }
+
+    fn ordered(playing: &str, fps: f32, rows: Vec<(usize, SubtitleTrack)>) -> Vec<String> {
+        let mut s = State::new(Vec::new(), None);
+        s.playing = OwnedPlaying {
+            fps: Some(fps),
+            ..OwnedPlaying::of(&mq_relparse::parse(playing))
+        };
+        for (position, t) in rows {
+            s.order.insert(t.url.clone(), (position, s.order.len()));
+            s.snapshot.subtitles.push(t);
+        }
+        reorder(&mut s, &["en".to_owned()]);
+        s.snapshot.subtitles.iter().map(|t| t.url.clone()).collect()
+    }
+
+    const V3: &str = OPENSUBTITLES;
+
+    /// Plans/research/subtitle-pick.md 5, case A: Inception, v3 only, a
+    /// 23.976 BluRay playing. Today a 25 fps CAM led; now the 30 fps rip
+    /// (NTSC keeps film time) leads the 23.976 TS, and both lead the 25 fps
+    /// captures, which keep the addon's order.
+    #[test]
+    fn inception_from_v3_puts_film_rates_before_pal_captures() {
+        let rows = vec![
+            (
+                1,
+                row(V3, 0, "Inception.2010.CAM.Xvid-LKRG.srt", Some(25000), "i"),
+            ),
+            (
+                1,
+                row(
+                    V3,
+                    1,
+                    "Inception.2010.TS.V2.XVID.FEEL-FREE.srt",
+                    Some(25000),
+                    "i",
+                ),
+            ),
+            (1, row(V3, 2, "Inception.TS.XviD-KiK.srt", Some(23976), "i")),
+            (
+                1,
+                row(
+                    V3,
+                    3,
+                    "Inception.2010.480p.TS.XviD-ViSiON.srt",
+                    Some(25000),
+                    "i",
+                ),
+            ),
+            (
+                1,
+                row(
+                    V3,
+                    4,
+                    "Inception.2010.XviD-Ripped By IndrashekharC.srt",
+                    Some(30000),
+                    "i",
+                ),
+            ),
+        ];
+        let order = ordered("Inception.2010.1080p.BluRay.x264-SPARKS.mkv", 23.976, rows);
+        assert_eq!(order, ["u4", "u2", "u0", "u1", "u3"]);
+    }
+
+    /// Case B: SubSense's BluRay row (no rate) leads every v3 row.
+    #[test]
+    fn inception_with_subsense_puts_the_bluray_row_first() {
+        let rows = vec![
+            (1, row(V3, 2, "Inception.TS.XviD-KiK.srt", Some(23976), "i")),
+            (
+                1,
+                row(
+                    V3,
+                    4,
+                    "Inception.2010.XviD-Ripped By IndrashekharC.srt",
+                    Some(30000),
+                    "i",
+                ),
+            ),
+            (
+                2,
+                row(
+                    "com.subsense",
+                    9,
+                    "Inception.2010.1080p.BluRay.DTS.x264-CtrlHD.srt",
+                    None,
+                    "",
+                ),
+            ),
+        ];
+        let order = ordered("Inception.2010.1080p.BluRay.x264-SPARKS.mkv", 23.976, rows);
+        assert_eq!(order[0], "u9");
+    }
+
+    /// Case C: Sintel's VODO 2K release. Today the row naming VODO, 10.5 s
+    /// late, led; now the hash rows lead, the one at the playing rate first.
+    /// A hash mark from another addon counts for nothing.
+    #[test]
+    fn sintel_vodo_puts_the_hash_rows_first() {
+        let rows = vec![
+            (1, row(V3, 0, "", Some(24000), "h")),
+            (1, row(V3, 1, "sintel.srt", None, "h")),
+            (1, row(V3, 2, "Sintel (2010).srt", None, "i")),
+            (1, row(V3, 3, "Sintel.2010.Xvid-VODO.srt", Some(24000), "i")),
+            (2, row("other.addon", 4, "Sintel.2010.srt", None, "h")),
+        ];
+        let order = ordered("Sintel.2010.2K.SURROUND.x264-VODO.mp4", 24.0, rows);
+        assert_eq!(order, ["u0", "u1", "u3", "u2", "u4"]);
+    }
+
+    /// What the picker shows: "Matches this file" for a trusted hash, "Made
+    /// for 25 fps" only on a PAL conflict; a forced row and a CD2 row never
+    /// lead their language.
+    #[test]
+    fn the_flags_the_picker_shows_and_the_rows_that_never_lead() {
+        let mut forced = row(
+            V3,
+            5,
+            "Inception.2010.1080p.BluRay.x264-SPARKS.forced.srt",
+            Some(23976),
+            "h",
+        );
+        forced.forced = true;
+        forced.made.forced = true;
+        let rows = vec![
+            (1, forced),
+            (
+                1,
+                row(
+                    V3,
+                    6,
+                    "Inception.2010.1080p.BluRay.x264-SPARKS.CD2.srt",
+                    Some(23976),
+                    "i",
+                ),
+            ),
+            (
+                1,
+                row(V3, 7, "Inception.2010.CAM.Xvid-LKRG.srt", Some(25000), "i"),
+            ),
+            (
+                1,
+                row(
+                    V3,
+                    8,
+                    "Inception.2010.1080p.BluRay.x264-OTHER.srt",
+                    Some(23976),
+                    "h",
+                ),
+            ),
+        ];
+        let mut s = State::new(Vec::new(), None);
+        s.playing = OwnedPlaying {
+            fps: Some(23.976),
+            ..OwnedPlaying::of(&mq_relparse::parse(
+                "Inception.2010.1080p.BluRay.x264-SPARKS.mkv",
+            ))
+        };
+        for (position, t) in rows {
+            s.order.insert(t.url.clone(), (position, s.order.len()));
+            s.snapshot.subtitles.push(t);
+        }
+        reorder(&mut s, &["en".to_owned()]);
+        let urls: Vec<&str> = s
+            .snapshot
+            .subtitles
+            .iter()
+            .map(|t| t.url.as_str())
+            .collect();
+        assert_eq!(urls, ["u8", "u7", "u6", "u5"]);
+        let of = |url: &str| s.snapshot.subtitles.iter().find(|t| t.url == url).unwrap();
+        assert!(of("u8").hash_match && of("u8").made_for_fps.is_none());
+        assert_eq!(of("u7").made_for_fps, Some(25.0));
+        let wire = serde_json::to_value(of("u7")).unwrap();
+        assert_eq!(wire["hashMatch"], false);
+        assert_eq!(wire["madeForFps"], 25.0);
     }
 }

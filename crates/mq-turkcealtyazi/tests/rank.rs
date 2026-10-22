@@ -284,8 +284,11 @@ fn the_playing_source_family_comes_right_after_the_group() {
         web[0].label
     );
     assert_eq!(from(Quality::WebRip, None)[0].row.altid, 725317);
-    // No BluRay or BDRip row here, and HD says nothing: the order stays.
-    assert_eq!(
+    // No BluRay or BDRip row here, but a WEB file is often cut from the
+    // disc's master: near, so the WEB pack leads for a BluRay too
+    // (plans/player-polish.md 2g); HD says nothing, so its order differs.
+    assert_eq!(from(Quality::BluRay, None)[0].row.altid, 725317);
+    assert_ne!(
         ids(&from(Quality::BluRay, None)),
         ids(&from(Quality::Unknown, None))
     );

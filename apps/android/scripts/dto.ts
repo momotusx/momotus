@@ -54,7 +54,7 @@ const LONG = new Set([
   "needBytes",
   "bytesPerS",
 ]);
-const FLOAT = new Set(["progress", "bitrateMbps", "needMbps", "haveMbps", "mbps"]);
+const FLOAT = new Set(["progress", "bitrateMbps", "needMbps", "haveMbps", "mbps", "madeForFps"]);
 /** Scalar fields the core added after the golden traces were recorded, as `Type.field`, with the
  * value the core uses when the key is absent. It must equal the core's serde default: kotlinx
  * leaves a field at its default out when encoding, and the core then fills in its own. */
@@ -85,6 +85,8 @@ const DEFAULTED = new Map([
   // The subtitle picker (plans/player-polish.md 2): an older core names no language of its own and no fit.
   ["SubtitleTrack.nativeName", "\"\""],
   ["SubtitleTrack.fits", "false"],
+  // The best-timed subtitle (plans/player-polish.md 2g): an older core marks no hash match.
+  ["SubtitleTrack.hashMatch", "false"],
 ]);
 const INT = new Set([
   "overCount",

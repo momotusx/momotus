@@ -1508,6 +1508,10 @@ data class SubtitleTrack(
     val hearingImpaired: Boolean,
     /** The track names the playing release's group: show "Same release group" for it. */
     val fits: Boolean = false,
+    /** OpenSubtitles says it was made for this very file (its hash): show "Matches this file". */
+    val hashMatch: Boolean = false,
+    /** The frame rate it was made for, set only when one of it and the playing file's is PAL (25) and the other is not: show "Made for 25 fps". */
+    val madeForFps: Float? = null,
     /** The release text the addon names for the track (its label, file name or release name), for a detail line; null when it names none. */
     val release: String? = null,
 )

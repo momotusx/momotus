@@ -97,6 +97,7 @@ impl Row {
             family: self.source.and_then(source_family),
             cut: mq_relparse::parse(&self.release).cut,
             fps: self.fps,
+            ..Made::default()
         }
     }
 }

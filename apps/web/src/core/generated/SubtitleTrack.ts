@@ -45,6 +45,17 @@ hearingImpaired: boolean,
  */
 fits: boolean, 
 /**
+ * OpenSubtitles says it was made for this very file (its hash): show
+ * "Matches this file".
+ */
+hashMatch: boolean, 
+/**
+ * The frame rate it was made for, set only when one of it and the
+ * playing file's is PAL (25) and the other is not: show "Made for 25
+ * fps".
+ */
+madeForFps: number | null, 
+/**
  * The release text the addon names for the track (its label, file
  * name or release name), for a detail line; null when it names none.
  */
