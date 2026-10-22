@@ -3,6 +3,9 @@ package app.marquee.design
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -16,8 +19,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
-/** IMDb and Rotten Tomatoes side by side: the meta line and the poster chip show each score there is, and nothing else. */
+/** IMDb and Rotten Tomatoes side by side: the meta line and a poster's caption show each score there is, and nothing else. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class RatingsTest {
@@ -63,17 +67,33 @@ class RatingsTest {
     }
 
     @Test
-    fun `a poster chip shows the scores there are and no chip without any`() {
+    fun `a poster's caption carries the scores under the art, read with the title, and a bare poster has none`() {
         var ratings by mutableStateOf(listOf("IMDb 8.8", "RT 87%"))
-        compose.setContent { MarqueeTheme(Form.Phone) { PosterTile("Inception", null, {}, ratings = ratings) } }
+        var captioned by mutableStateOf(true)
+        compose.setContent {
+            MarqueeTheme(
+                Form.Tv,
+            ) { PosterTile("Inception", null, {}, caption = "2010", ratings = ratings, captioned = captioned) }
+        }
         assertEquals(1, count("IMDb 8.8"))
         assertEquals(1, count("RT 87%"))
+        val art = compose.onNodeWithContentDescription("Inception").fetchSemanticsNode().boundsInRoot
+        val score = compose.onNodeWithText("IMDb 8.8", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue(score.top >= art.bottom, "the score sits on the art")
+        // The scores are read with the title, after the year.
+        compose.onNodeWithContentDescription("Inception").assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.StateDescription,
+                "2010, IMDb 8.8, Rotten Tomatoes 87 percent",
+            ),
+        )
         ratings = listOf("IMDb 8.8")
         compose.waitForIdle()
-        assertEquals(1, count("IMDb 8.8"))
         assertEquals(0, count("RT 87%"))
-        ratings = emptyList()
+        // The phone's Home posters are the art alone: no name, no year, no scores.
+        captioned = false
         compose.waitForIdle()
         assertEquals(0, count("IMDb 8.8"))
+        assertEquals(0, count("2010"))
     }
 }

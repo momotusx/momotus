@@ -113,6 +113,8 @@ fun RemoteImage(
     fallbackText: String,
     modifier: Modifier = Modifier,
     fallbackUrl: String? = null,
+    /** Where the crop keeps the picture: a poster in a 16:9 slot keeps its upper part (design/DECISION.md, Shelves). */
+    alignment: Alignment = Alignment.Center,
     overlay: @Composable BoxScope.() -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -148,6 +150,7 @@ fun RemoteImage(
                 model = request,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
+                alignment = alignment,
                 onError = { tried++ },
                 modifier = Modifier.size(width, height),
             )

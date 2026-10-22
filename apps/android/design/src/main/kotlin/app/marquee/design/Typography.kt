@@ -4,6 +4,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -83,6 +84,42 @@ fun MqText(
     /** [TextDirection.Content] for text from elsewhere (an addon's name): a Hebrew one reads right to left. */
     textDirection: TextDirection = TextDirection.Unspecified,
     /** False keeps the text on one line whatever the width (a score), never broken inside. */
+    softWrap: Boolean = true,
+) {
+    MqText(
+        AnnotatedString(text),
+        modifier,
+        role,
+        color,
+        weight,
+        maxLines,
+        minLines,
+        textAlign,
+        onTextLayout,
+        letterSpacing,
+        fontFamily,
+        overflow,
+        textDirection,
+        softWrap,
+    )
+}
+
+/** [MqText] with styled spans: a score's word and number at their own weights and levels, one line. */
+@Composable
+fun MqText(
+    text: AnnotatedString,
+    modifier: Modifier = Modifier,
+    role: TextRole = TextRole.Body,
+    color: Color = Marquee.colors.text,
+    weight: FontWeight? = null,
+    maxLines: Int = Int.MAX_VALUE,
+    minLines: Int = 1,
+    textAlign: TextAlign? = null,
+    onTextLayout: ((TextLayoutResult) -> Unit)? = null,
+    letterSpacing: TextUnit = TextUnit.Unspecified,
+    fontFamily: FontFamily? = null,
+    overflow: TextOverflow = TextOverflow.Ellipsis,
+    textDirection: TextDirection = TextDirection.Unspecified,
     softWrap: Boolean = true,
 ) {
     val size = Marquee.type.size(role)

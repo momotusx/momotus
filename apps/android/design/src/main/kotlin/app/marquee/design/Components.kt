@@ -65,10 +65,13 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -795,9 +798,9 @@ fun RowHeader(
 }
 
 /**
- * The scores side by side as plain text ("IMDb 8.8", "RT 87%"), then the facts ("2026 · 145 min ·
- * Action, Adventure"): the meta line of a hero and a title page. Without scores it is the facts
- * alone. [onFirst] makes the first score a link (the title page's IMDb score, never on TV).
+ * The facts ("2026 · 145 min"), then the ratings row ([RatingsRow]): the meta line of a hero and a title page,
+ * the year first (design/DECISION.md, Title page). Without scores it is the facts alone. [onFirst] makes the
+ * first score a link (the title page's IMDb score, never on TV).
  */
 @Composable
 fun RatingLine(
@@ -805,21 +808,64 @@ fun RatingLine(
     facts: String,
     modifier: Modifier = Modifier,
     onFirst: (() -> Unit)? = null,
+    role: TextRole = TextRole.Callout,
+    factsColor: Color = Marquee.colors.muted,
 ) {
-    val colors = Marquee.colors
-    val tv = Marquee.form == Form.Tv
     Row(
         modifier,
-        horizontalArrangement = Arrangement.spacedBy(if (tv) 12.dp else 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (Marquee.form == Form.Tv) 24.dp else 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Measured after the scores (a weight), so a long line of facts is what gets cut, never a score.
+        if (facts.isNotEmpty()) {
+            MqText(
+                facts,
+                Modifier.weight(1f, fill = false),
+                role = role,
+                color = factsColor,
+                weight = FontWeight.SemiBold,
+                maxLines = 1,
+            )
+        }
+        RatingsRow(ratings, role = role, onFirst = onFirst)
+    }
+}
+
+/**
+ * IMDb and Rotten Tomatoes side by side (design/DECISION.md, Status and ratings): each source's name at 70
+ * percent and 400, its score in white at 600, as one unbroken line ("IMDb 8.4", "RT Fresh"); no star, no logo,
+ * no dot between them. A score the data lacks has no slot. Read out as "Rotten Tomatoes 87 percent", never
+ * "R T". [onFirst] makes the first score a link a finger can hit. [wrap] lets a pair go to the next line when
+ * both do not fit (a narrow poster's caption): a score is never cut and never runs past its column.
+ */
+@Composable
+fun RatingsRow(
+    ratings: List<String>,
+    modifier: Modifier = Modifier,
+    role: TextRole = TextRole.Caption,
+    onFirst: (() -> Unit)? = null,
+    wrap: Boolean = false,
+) {
+    if (ratings.isEmpty()) return
+    val source = Marquee.colors.muted
+    val gap = Arrangement.spacedBy(if (Marquee.form == Form.Tv) 14.dp else 8.dp)
+    val pairs: @Composable () -> Unit = {
         ratings.forEachIndexed { index, score ->
-            val text: @Composable (Modifier) -> Unit = {
+            val text =
+                buildAnnotatedString {
+                    withStyle(
+                        SpanStyle(color = source, fontWeight = FontWeight.Normal),
+                    ) { append(score.substringBefore(' ')) }
+                    append(" ")
+                    withStyle(SpanStyle(color = Color.White, fontWeight = FontWeight.SemiBold)) {
+                        append(score.substringAfter(' '))
+                    }
+                }
+            val line: @Composable (Modifier) -> Unit = {
                 MqText(
-                    score,
+                    text,
                     modifier = it.semantics { contentDescription = spokenScore(score) },
-                    role = TextRole.Callout,
-                    weight = FontWeight.Bold,
+                    role = role,
                     maxLines = 1,
                     overflow = TextOverflow.Visible,
                     softWrap = false,
@@ -830,15 +876,16 @@ fun RatingLine(
                 Box(
                     Modifier.heightIn(min = 48.dp).focusClickable(onFirst, Role.Button),
                     contentAlignment = Alignment.Center,
-                ) {
-                    text(Modifier)
-                }
+                ) { line(Modifier) }
             } else {
-                text(Modifier)
+                line(Modifier)
             }
-            MqText("·", modifier = Modifier.clearAndSetSemantics { }, role = TextRole.Callout, color = colors.dim)
         }
-        MqText(facts, role = TextRole.Callout, color = colors.muted, weight = FontWeight.SemiBold, maxLines = 1)
+    }
+    if (wrap) {
+        FlowRow(modifier, horizontalArrangement = gap, itemVerticalAlignment = Alignment.CenterVertically) { pairs() }
+    } else {
+        Row(modifier, horizontalArrangement = gap, verticalAlignment = Alignment.CenterVertically) { pairs() }
     }
 }
 

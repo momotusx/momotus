@@ -4,7 +4,6 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.text.TextLayoutResult
 import org.junit.Rule
@@ -17,9 +16,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * The widest scores there are ("IMDb 10.0", "RT 100%") measured with real text layout: on a poster
- * they fit inside the art (stacked on a phone, side by side on TV), and on the meta line each stays
- * one whole line. The Rotten Tomatoes addon's mark ("RT Fresh") is held to the same. The widths print
+ * The widest scores there are ("IMDb 10.0", "RT 100%") measured with real text layout: under a poster they
+ * stay in its column (side by side, or the second on the next line), and on the meta line each stays one
+ * whole line. The Rotten Tomatoes addon's mark ("RT Fresh") is held to the same. The widths print
  * as `ratings-measure` lines for bench/core/ratings.jsonl.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -53,23 +52,31 @@ class RatingsMeasureTest {
     private fun poster(
         form: Form,
         ratings: List<String> = widest,
-        stacked: Boolean,
+        /** True: one line; false: the pair wraps; null: either. */
+        sideBySide: Boolean? = null,
     ) {
         compose.setContent { MarqueeTheme(form) { PosterTile("Widest", null, {}, ratings = ratings) } }
         val art = compose.onNodeWithContentDescription("Widest").fetchSemanticsNode().boundsInRoot
-        val chip = compose.onNodeWithTag("rating-chip", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         ratings.forEach(::whole)
-        assertTrue(chip.left >= art.left && chip.right <= art.right, "$form: the chip leaves the poster")
         val (imdb, rt) = ratings.map { score(it).boundsInRoot }
-        if (stacked) {
-            assertTrue(rt.top >= imdb.bottom - 0.5f, "$form: the scores are not stacked")
-        } else {
-            assertEquals(imdb.center.y, rt.center.y, 0.5f, "$form: the scores are not side by side")
+        for (part in listOf(imdb, rt)) {
+            assertTrue(part.top >= art.bottom, "$form: a score sits on the art")
+            assertTrue(
+                part.left >= art.left - 0.5f && part.right <= art.right + 0.5f,
+                "$form: a score runs past the poster",
+            )
         }
+        when (sideBySide) {
+            true -> assertEquals(imdb.center.y, rt.center.y, 0.5f, "$form: the scores are not side by side")
+            false -> assertTrue(rt.top >= imdb.bottom - 0.5f, "$form: the scores did not wrap")
+            null -> Unit
+        }
+        // The width the scores take under the poster, on one line or two.
+        val row = dp(maxOf(imdb.right, rt.right) - minOf(imdb.left, rt.left))
         println(
-            "ratings-measure {\"platform\":\"android\",\"form\":\"$form\",\"where\":\"poster chip\"," +
-                "\"scores\":\"${ratings.joinToString(" ")}\"," +
-                "\"chip\":${dp(chip.width)},\"poster\":${dp(art.width)},\"parts\":[${dp(imdb.width)},${dp(rt.width)}]}",
+            "ratings-measure {\"platform\":\"android\",\"form\":\"$form\",\"where\":\"poster caption\"," +
+                "\"scores\":\"${ratings.joinToString(" ")}\",\"row\":$row," +
+                "\"poster\":${dp(art.width)},\"parts\":[${dp(imdb.width)},${dp(rt.width)}]}",
         )
     }
 
@@ -90,31 +97,25 @@ class RatingsMeasureTest {
     }
 
     @Test
-    fun `on a phone poster the widest scores stack and fit`() = poster(Form.Phone, stacked = true)
+    fun `under a phone poster the widest scores wrap and stay in its column`() = poster(Form.Phone, sideBySide = false)
 
     @Test
-    fun `on a TV poster the widest pair goes on two lines and fits`() = poster(Form.Tv, stacked = true)
+    fun `under a TV poster the widest pair stays in its column`() = poster(Form.Tv)
 
     @Test
-    fun `on a TV poster a usual pair sits side by side and fits`() =
-        poster(Form.Tv, listOf("IMDb 8.8", "RT 87%"), stacked = false)
+    fun `under a TV poster a usual pair sits side by side`() =
+        poster(Form.Tv, listOf("IMDb 8.8", "RT 87%"), sideBySide = true)
 
-    // The v3 TV poster is 217 dp wide (240 in v2), so RT 100 percent with a usual IMDb score stacks
-    // until phase 1 moves the scores under the art (design/exploration/v3 frames).
+    // The frames' check (tv.ts:131): at the 23 floor with a 14 gap "IMDb 8.0  RT Fresh" fits the 217 poster.
     @Test
-    fun `on a TV poster RT 100 percent with a usual IMDb score stacks and fits`() =
-        poster(Form.Tv, listOf("IMDb 8.8", "RT 100%"), stacked = true)
-
-    @Test
-    fun `on a phone poster RT Fresh stacks and fits`() = poster(Form.Phone, fresh, stacked = true)
+    fun `under a TV poster RT Fresh with a usual IMDb score sits side by side`() =
+        poster(Form.Tv, listOf("IMDb 8.8", "RT Fresh"), sideBySide = true)
 
     @Test
-    fun `on a TV poster RT Fresh beside the widest IMDb score goes on two lines and fits`() =
-        poster(Form.Tv, fresh, stacked = true)
+    fun `under a TV poster RT Fresh beside the widest IMDb score stays in its column`() = poster(Form.Tv, fresh)
 
     @Test
-    fun `on a TV poster RT Fresh with a usual IMDb score stacks and fits`() =
-        poster(Form.Tv, listOf("IMDb 8.8", "RT Fresh"), stacked = true)
+    fun `under a phone poster RT Fresh stays in its column`() = poster(Form.Phone, fresh)
 
     @Test
     fun `the phone meta line keeps both scores whole`() = line(Form.Phone)

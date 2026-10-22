@@ -5,7 +5,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -21,14 +20,12 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
@@ -56,18 +53,37 @@ fun captionHeight(): Dp {
     return with(LocalDensity.current) { type.callout.toDp() * LINE + type.caption.toDp() * LINE } + 2.dp
 }
 
-/** The height of a row of [shape] tiles: room for the focus scale above and below, then the caption. */
+/**
+ * The height of a row of [shape] tiles: room for the focus scale above and below, then the caption, which on a
+ * poster is three lines (the name, the year, the ratings row; [PosterTile]). A [captioned] false row is the art
+ * alone (the phone's Home posters).
+ */
 @Composable
-fun TileMetrics.laneHeight(shape: TileShape): Dp = pad * 2 + heightOf(shape) + Marquee.space.s + captionHeight()
+fun TileMetrics.laneHeight(
+    shape: TileShape,
+    captioned: Boolean = true,
+): Dp {
+    if (!captioned) return pad * 2 + heightOf(shape)
+    val poster =
+        if (shape ==
+            TileShape.Poster
+        ) {
+            with(LocalDensity.current) { Marquee.type.caption.toDp() * LINE }
+        } else {
+            0.dp
+        }
+    return pad * 2 + heightOf(shape) + Marquee.space.s + captionHeight() + poster
+}
 
 /** `MqText`'s line height for text roles. */
 private const val LINE = 1.4f
 
 /**
- * A title in a row or grid (design/DECISION.md v2, Cards): the picture with a rating chip, then
- * the name and a secondary line under it, never over it. [caption] is that line: the core's own
- * words (Continue Watching, Library) or the year: the name at 600, the line at 64 percent, neither
- * changing on focus. The art carries the 25 percent inner keyline (design/DECISION.md, Lines). Focus
+ * A title in a row or grid (design/DECISION.md, Shelves and cards): the picture, then the name and its lines
+ * under it, never over it. [caption] is the core's own words (Continue Watching, Library) or the year. A
+ * poster's caption is always two lines, the year and then the ratings row ([RatingsRow]), so a row's captions
+ * align; a 16:9 card puts the ratings after its line. The name at 600, the lines at 64 percent, neither
+ * changing on focus. [captioned] false is the art alone (the phone's Home posters). The art carries the 25 percent inner keyline (design/DECISION.md, Lines). Focus
  * lifts the card (on TV with its shadow and the sheen on the art, on a phone with the key ring).
  * Everything is a plain value, so the design module knows nothing of the core.
  */
@@ -82,8 +98,12 @@ fun PosterTile(
     fallbackImageUrl: String? = null,
     progress: Float? = null,
     caption: String? = null,
-    /** The scores side by side as plain text ("IMDb 8.4", "RT 87%"), in a chip on the art; none, no chip. */
+    /** The scores side by side as plain text ("IMDb 8.4", "RT 87%"), in the caption under the art. */
     ratings: List<String> = emptyList(),
+    /** False leaves the caption out: the art alone. */
+    captioned: Boolean = true,
+    /** Where the crop keeps the picture: a poster in a 16:9 card keeps its upper part. */
+    artAlignment: Alignment = Alignment.Center,
     /** A Watched chip at the top left of the art, as on episode cards. */
     watched: Boolean = false,
     focusRequester: FocusRequester? = null,
@@ -97,11 +117,12 @@ fun PosterTile(
     val size = metrics.sizeOf(shape)
     val corner = Marquee.radius.m
     val lift = remember { mutableStateOf(forceFocus) }
-    // What a screen reader says after the title: the caption, or the watched share; and Watched.
+    // What a screen reader says after the title: the caption, or the watched share; the scores; and Watched.
     val state =
-        listOfNotNull(
-            caption ?: progress?.let { "${(it * 100).roundToInt()}% watched" },
-            "Watched".takeIf { watched },
+        (
+            listOfNotNull(caption ?: progress?.let { "${(it * 100).roundToInt()}% watched" }) +
+                ratings.map(::spokenScore) +
+                listOfNotNull("Watched".takeIf { watched })
         ).joinToString(", ").ifEmpty { null }
     Column(
         // First in the chain: the focused tile draws above its neighbours in the row.
@@ -122,63 +143,39 @@ fun PosterTile(
                     if (state != null) stateDescription = state
                 }.focusClickable(onClick, Role.Button, onLongClick = onLongClick, longClickLabel = longClickLabel),
         ) {
-            RemoteImage(imageUrl, size.width, size.height, fallbackText = title, fallbackUrl = fallbackImageUrl) {
+            RemoteImage(
+                imageUrl,
+                size.width,
+                size.height,
+                fallbackText = title,
+                fallbackUrl = fallbackImageUrl,
+                alignment = artAlignment,
+            ) {
                 if (watched) WatchedChip(Modifier.align(Alignment.TopStart))
-                if (ratings.isNotEmpty()) RatingChip(ratings, Modifier.align(Alignment.TopEnd))
                 if (progress != null) ProgressBar(progress, Modifier.align(Alignment.BottomStart))
             }
         }
+        if (!captioned) return@Column
         // Read as part of the tile above.
         Column(Modifier.clearAndSetSemantics { }) {
             MqText(title, role = TextRole.Callout, weight = FontWeight.SemiBold, maxLines = 1)
-            if (caption != null) {
-                MqText(caption, role = TextRole.Caption, color = colors.dim, weight = FontWeight.Medium, maxLines = 1)
+            val line: @Composable (String) -> Unit = {
+                MqText(it, role = TextRole.Caption, color = colors.dim, weight = FontWeight.Medium, maxLines = 1)
+            }
+            if (shape == TileShape.Poster) {
+                // Two lines whatever the title has, so every poster of a row ends level.
+                line(caption.orEmpty())
+                if (ratings.isNotEmpty()) RatingsRow(ratings, wrap = true) else line("")
+            } else {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (caption != null) line(caption)
+                    RatingsRow(ratings)
+                }
             }
         }
-    }
-}
-
-/**
- * The scores as plain text on strong glass, at the top right of a poster: on a phone's narrow
- * poster one above the other; elsewhere side by side, and one above the other only when the pair
- * is wider than the poster (at TV's 23 sp floor only "IMDb 10.0  RT 100%" is, about 243 dp of 240). A score never
- * wraps and is never cut.
- */
-@Composable
-private fun RatingChip(
-    ratings: List<String>,
-    modifier: Modifier,
-) {
-    val tv = Marquee.form == Form.Tv
-    val colors = Marquee.colors
-    val chip =
-        modifier
-            .testTag("rating-chip")
-            // 6 dp in and out on TV too: "IMDb 8.8  RT 100%" stays on one line in 240 dp.
-            .padding(6.dp)
-            .clip(RoundedCornerShape(Marquee.radius.pill))
-            .background(colors.glassStrong)
-            .padding(horizontal = 6.dp, vertical = if (tv) 4.dp else 2.dp)
-    val score: @Composable (String) -> Unit = {
-        MqText(
-            it,
-            modifier = Modifier.semantics { contentDescription = spokenScore(it) },
-            role = TextRole.Caption,
-            weight = FontWeight.Bold,
-            color = colors.text,
-            maxLines = 1,
-            overflow = TextOverflow.Visible,
-            softWrap = false,
-        )
-    }
-    if (Marquee.form == Form.Phone) {
-        Column(chip, horizontalAlignment = Alignment.End) { ratings.forEach { score(it) } }
-    } else {
-        FlowRow(
-            chip,
-            horizontalArrangement = Arrangement.spacedBy(if (tv) 6.dp else 3.dp, Alignment.End),
-            itemVerticalAlignment = Alignment.CenterVertically,
-        ) { ratings.forEach { score(it) } }
     }
 }
 
