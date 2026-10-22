@@ -74,6 +74,8 @@ function leave(navigate: (to: string, o?: { replace?: boolean }) => void, to: st
 
 /** The subtitles step, after the stream question: Home or the setup check next, as the question's `then` says. */
 const subsStep = (then: string | undefined) => `/welcome?step=subs${then ? `&then=${then}` : ""}`;
+/** The subtitles step's Continue is saving: its Skip waits, so the step never leaves twice. */
+const [subsSaving, setSubsSaving] = createSignal(false);
 
 export default function Onboarding() {
   const [query, setQuery] = useSearchParams();
@@ -120,7 +122,11 @@ export default function Onboarding() {
             class="skip"
             href={afterContinue(query.then as string | undefined)}
             replace
-            onClick={() => query.then === "home" && resetHistoryBase()}
+            aria-disabled={subsSaving()}
+            onClick={(e) => {
+              if (subsSaving()) e.preventDefault();
+              else if (query.then === "home") resetHistoryBase();
+            }}
             data-f="welcome:skip"
           >
             Skip
@@ -437,19 +443,21 @@ function Question(props: { then?: string }) {
 }
 
 /** The language subtitles start in, one choice: this device's language
- * chosen, then the common ones and No subtitles, every other language behind
- * More languages. Continue writes it as the profile's subtitle languages;
- * Skip writes nothing. A profile that has languages already passes by. */
+ * chosen (No subtitles on an English device: most titles are in English, and
+ * English audio the file does not tag would get English subtitles over it),
+ * then the common ones and No subtitles, every other language behind More
+ * languages. Continue writes it as the profile's subtitle languages; Skip
+ * writes nothing. A profile that has languages already passes by. */
 function Subtitles(props: { then?: string }) {
   const navigate = useNavigate();
   const prefs = prefsView();
   const next = () => leave(navigate, afterContinue(props.then));
   // Once, when the preferences are in: a Continue here must not pass twice.
   createEffect(on(() => prefs.state.data !== null, (ready) => ready && (prefs.state.data?.subtitleLanguages.length ?? 0) > 0 && next()));
-  const device = (navigator.language || "en").slice(0, 2).toLowerCase();
+  const device = (navigator.language || "en").split("-")[0]?.toLowerCase() || "en";
   const [all, setAll] = createSignal<LanguageChoice[]>([]);
   onMount(() => void allLanguages().then(setAll, () => undefined));
-  const [chosen, setChosen] = createSignal<string | null>(device);
+  const [chosen, setChosen] = createSignal<string | null>(device === "en" ? null : device);
   const [more, setMore] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
   const [problem, setProblem] = createSignal<string | null>(null);
@@ -460,6 +468,7 @@ function Subtitles(props: { then?: string }) {
   const go = async () => {
     if (busy()) return;
     setBusy(true);
+    setSubsSaving(true);
     setProblem(null);
     try {
       const code = chosen();
@@ -469,6 +478,7 @@ function Subtitles(props: { then?: string }) {
       setProblem(`Could not save the language: ${reasonOf(e)}`);
     } finally {
       setBusy(false);
+      setSubsSaving(false);
     }
   };
   const row = (code: string | null, name: string, line?: string) => (

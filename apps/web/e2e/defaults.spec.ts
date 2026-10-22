@@ -48,7 +48,7 @@ test.afterEach(async () => {
 
 /** A page whose socket reaches this walk's core. With `importDone` the import
  * view answers as a finished import. */
-async function device(browser: Browser, form: Form, opts: { importDone?: boolean; locale?: string } = {}): Promise<Page> {
+async function device(browser: Browser, form: Form, opts: { importDone?: boolean; locale?: string; slowSubtitles?: number } = {}): Promise<Page> {
   const context = await browser.newContext({ ...FORMS[form], locale: opts.locale, colorScheme: "dark", baseURL: `http://127.0.0.1:${PORTS.vite}` });
   await context.routeWebSocket(/\/ws$/, (ws) => {
     const upstream = new WebSocket(`ws://127.0.0.1:${DEFAULTS_PORT}/ws`);
@@ -68,6 +68,11 @@ async function device(browser: Browser, form: Form, opts: { importDone?: boolean
       }
       if (msg.op === "unsubscribe" && msg.sub === IMPORT_SUB) {
         ws.send(JSON.stringify({ id: msg.id, ok: true, result: {} }));
+        return;
+      }
+      // A slow save of the subtitle language, for Skip while it runs.
+      if (opts.slowSubtitles && msg.op === "setPrefs" && JSON.stringify(msg).includes("subtitleLanguages")) {
+        setTimeout(() => upstream.send(String(m)), opts.slowSubtitles);
         return;
       }
       if (upstream.readyState === WebSocket.OPEN) upstream.send(String(m));
@@ -135,13 +140,16 @@ test("Start fresh: nothing installed before Continue, two switches turned off st
   await expect(page.locator("h1")).toHaveText("How should Marquee pick what to play?");
   await shot(page, "stream-choice-question", "desktop");
   await page.locator('[data-f="welcome:best"]').click();
-  // Then the subtitle language, this browser's chosen.
+  // Then the subtitle language: on an English browser English leads the
+  // list, and No subtitles is chosen (most titles are in English).
   await expect(page).toHaveURL(/step=subs/);
-  await expect(page.locator('[data-f="welcome:sub:en"]')).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator('.langs[data-fgroup="subs"] .subrow').first()).toHaveAttribute("data-f", "welcome:sub:en");
+  await expect(page.locator('[data-f="welcome:sub:en"]')).toHaveAttribute("aria-checked", "false");
+  await expect(page.locator('[data-f="welcome:sub:none"]')).toHaveAttribute("aria-checked", "true");
   await page.locator('[data-f="welcome:next"]').click();
   await expect(page).toHaveURL(/step=3/);
   expect((await client.req<Prefs>("setPrefs", { patch: {} })).streams).toMatchObject({ sizeLimitBytes: null, minSeeders: 20 });
-  expect((await client.req<Prefs>("setPrefs", { patch: {} })).subtitleLanguages).toEqual(["en"]);
+  expect((await client.req<Prefs>("setPrefs", { patch: {} })).subtitleLanguages).toEqual([]);
   const choices = sent.find((m) => m.op === "installDefaults")?.choices as { key: string; on: boolean }[];
   expect(choices).toHaveLength(9);
   expect(choices.filter((c) => !c.on).map((c) => c.key)).toEqual(["torrentio", "trakt"]);
@@ -409,6 +417,22 @@ test("Subtitles: the device's language is chosen; the pick is the profile's; a p
   await tv.keyboard.press("Enter");
   await expect(tv).toHaveURL(/step=3/);
   expect(await languages()).toEqual(["tr"]);
+});
+
+test("Subtitles: Skip waits while Continue saves, so the step leaves once", async ({ browser }) => {
+  const page = await device(browser, "desktop", { locale: "de-DE", slowSubtitles: 1500 });
+  await page.goto("/welcome?step=subs&form=desktop");
+  await expect(page.locator('[data-f="welcome:sub:de"]')).toHaveAttribute("aria-checked", "true");
+  await page.locator('[data-f="welcome:next"]').click();
+  const skip = page.locator('[data-f="welcome:skip"]');
+  await expect(skip).toHaveAttribute("aria-disabled", "true");
+  // A press anyway (a remote's select reaches it): it goes nowhere.
+  await skip.dispatchEvent("click");
+  await page.waitForTimeout(300);
+  await expect(page).toHaveURL(/step=subs/);
+  // The save lands, and the step leaves once, to the setup check.
+  await expect(page).toHaveURL(/step=3/, { timeout: 10_000 });
+  expect((await client.req<Prefs>("setPrefs", { patch: {} })).subtitleLanguages).toEqual(["de"]);
 });
 
 test("after an import, Back from the setup check does not call Marquee's own installs From Stremio", async ({ browser }) => {
