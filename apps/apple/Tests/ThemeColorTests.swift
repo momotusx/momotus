@@ -110,13 +110,13 @@ private struct Spot {
 /// Home's wide hero as HeroScrims draws it, at a label ending `end` pt from the leading edge with its
 /// top `top` pt above the foot of a `width` by `height` hero: the vignette and the 80 degree wash in
 /// black, then the foot in the page color, the last two laid out in the desktop frame's box off TV.
-private func wideHome(width: Double, height: Double, end: Double, top: Double, held: Bool = true) -> [(page: Bool, alpha: Double)] {
+private func wideHome(width: Double, height: Double, end: Double, top: Double, held: Bool = true, wash: [BackdropStops.Stop] = BackdropStops.heroSide) -> [(page: Bool, alpha: Double)] {
     let size = CGSize(width: width, height: height)
     let box = BackdropStops.rampBox(size, held: held)
     let y = height - top
     return [
         (false, BackdropStops.vignetteAlpha(x: end / width, y: y / height)),
-        (false, BackdropStops.alpha(BackdropStops.heroSide, at: BackdropStops.washT(x: end, y: y, size: size, box: box))),
+        (false, BackdropStops.alpha(wash, at: BackdropStops.washT(x: end, y: y, size: size, box: box))),
         (true, BackdropStops.alpha(BackdropStops.heroFoot(size, box: box), at: top / height)),
     ]
 }
@@ -129,6 +129,26 @@ private func titlePage(width: Double, height: Double, end: Double, top: Double) 
 }
 
 private let narrowestMac = Double(BackdropStops.macMinWidth)
+
+/// Where the Mac title hero's parts sit, in points above the foot: tops no lower than TitleHeroTests
+/// measures them on the real hero at 720 and 1440, so each spot reads a part at or above its real
+/// place (less cover there). The column ends 40 + `heroSynopsisWidth` in.
+enum TitleSpots {
+    /// The action row at 720 wraps into two rows of 40, 12 apart, over the 75 pt foot.
+    static let lowerRow: CGFloat = 75 + 10.5
+    static let upperRow: CGFloat = 75 + 40 + 12 + 10.5
+    static let synopsis: CGFloat = 246
+    static let chips: CGFloat = 324
+    static let meta: CGFloat = 356
+    /// The hero at 720 grown by `heroFrame` to hold the column, logo at the top (445 measured).
+    static let grown: CGFloat = 445
+    static var end: Double { 40 + Double(BackdropStops.heroSynopsisWidth) }
+}
+
+/// The title page's hero (iOS and macOS): Home's ramps with the title's deeper wash.
+private func titleHero(width: Double, height: Double, end: Double, top: CGFloat) -> [(page: Bool, alpha: Double)] {
+    wideHome(width: width, height: height, end: end, top: Double(top), wash: BackdropStops.titleWash)
+}
 
 private let spots = [
     // Home's Details on the Mac: the 40 pt pill's 15 pt label (19 tall) ends 271 pt in (the 40 pt
@@ -158,11 +178,20 @@ private let spots = [
     Spot(name: "home hero, iPhone, genre stacked", page: "bgPhone", layers: [(true, BackdropStops.alpha(BackdropStops.heroPhoneFoot(height: 680), at: 198.0 / 680))], word: false, text: 0.92),
     Spot(name: "title, iPhone, genre", page: "bgPhone", layers: [(true, BackdropStops.alpha(BackdropStops.heroPhoneFoot(height: 680), at: 222.0 / 680))], word: false, text: 0.92),
     Spot(name: "title, iPhone, resume sub", page: "bgPhone", layers: [(true, BackdropStops.alpha(BackdropStops.heroPhoneFoot(height: 680), at: 134.0 / 680))], word: false, text: 0.7),
-    // The title's round row, at the far edge of its 580 pt column (620 pt in), the hero at its 420 floor.
-    Spot(name: "title, Mac", page: "bgDesktop", layers: titlePage(width: narrowestMac, height: 420, end: 620, top: 96)),
-    // Start over beside Resume, above the version line and the round row: the widest Resume row
-    // ends 548 pt in (measured in 1b).
-    Spot(name: "title, Mac, Start over", page: "bgDesktop", layers: titlePage(width: narrowestMac, height: 420, end: 548, top: 190), word: false),
+    // The Mac title hero (TitleSpots), at the narrowest window grown to hold its words and at 1440:
+    // the pills of both action rows (a white label on the 16 percent fill), the synopsis (70 percent),
+    // the chips (white on the fill) and the meta row (64 percent), each ending 520 in.
+    Spot(name: "title, Mac, lower row", page: "bgDesktop", layers: titleHero(width: narrowestMac, height: TitleSpots.grown, end: TitleSpots.end, top: TitleSpots.lowerRow), word: false),
+    Spot(name: "title, Mac, upper row", page: "bgDesktop", layers: titleHero(width: narrowestMac, height: TitleSpots.grown, end: TitleSpots.end, top: TitleSpots.upperRow), word: false),
+    Spot(name: "title, Mac, synopsis", page: "bgDesktop", layers: titleHero(width: narrowestMac, height: TitleSpots.grown, end: TitleSpots.end, top: TitleSpots.synopsis), word: false, text: 0.7),
+    Spot(name: "title, Mac, chips", page: "bgDesktop", layers: titleHero(width: narrowestMac, height: TitleSpots.grown, end: TitleSpots.end, top: TitleSpots.chips), word: false),
+    Spot(name: "title, Mac, meta", page: "bgDesktop", layers: titleHero(width: narrowestMac, height: TitleSpots.grown, end: TitleSpots.end, top: TitleSpots.meta), word: false, text: 0.64),
+    Spot(name: "title, Mac 1440, meta", page: "bgDesktop", layers: titleHero(width: 1440, height: 810, end: TitleSpots.end, top: TitleSpots.meta), word: false, text: 0.64),
+    Spot(name: "title, Mac 1440, chips", page: "bgDesktop", layers: titleHero(width: 1440, height: 810, end: TitleSpots.end, top: TitleSpots.chips), word: false),
+    // Starring at the right, 75 above the foot, three lines of 18 (top 129), its "Starring" key at 64
+    // percent, read where it first shows (WideLayout.starringFits, 1240) and at 1440.
+    Spot(name: "title, Mac, Starring 1240", page: "bgDesktop", layers: titleHero(width: 1240, height: Double(WideLayout.titleHeroHeight(width: 1240, height: 800)), end: 1200, top: 129), word: false, text: 0.64),
+    Spot(name: "title, Mac, Starring 1440", page: "bgDesktop", layers: titleHero(width: 1440, height: 810, end: 1400, top: 129), word: false, text: 0.64),
     Spot(name: "title, TV", page: "bg", layers: titlePage(width: 1920, height: 640, end: 653, top: 134)),
 ]
 

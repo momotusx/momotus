@@ -31,6 +31,10 @@ struct TitleScreen: View {
     /// Play was pressed and the pick is still settling: the button says Starting.
     @State private var startingPlay = false
     @State private var startFailure: EpisodeFailure?
+    /// MORE: the whole synopsis in a sheet (iOS and macOS).
+    @State private var reading = false
+    @Environment(\.linkRequests) private var links
+    @Environment(\.openTab) private var openTab
 
     init(route: TitleRoute, core: CoreClient) {
         _model = State(initialValue: TitleModel(route: route, core: core))
@@ -38,7 +42,7 @@ struct TitleScreen: View {
     }
 
     var body: some View {
-        tvBody
+        page
         .onGeometryChange(for: CGSize.self) { $0.size } action: { (width, height) = ($0.width, $0.height) }
         .task(id: core.generation) {
             model.start()
@@ -81,7 +85,16 @@ struct TitleScreen: View {
         #endif
     }
 
-    /// Today's page: tvOS keeps it (D9); iOS and macOS move to the v3 page in phase 3.
+    @ViewBuilder private var page: some View {
+        #if os(tvOS)
+        tvBody
+        #else
+        v3Body
+        #endif
+    }
+
+    #if os(tvOS)
+    /// Today's page: tvOS keeps it (D9).
     private var tvBody: some View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: Theme.Space.l) {
@@ -97,6 +110,178 @@ struct TitleScreen: View {
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
     }
+    #else
+    /// The v3 page on iOS and macOS (plans/design-v3-phase3-apple.md): the full-bleed hero, then today's
+    /// credits and episodes until the episodes commit.
+    private var v3Body: some View {
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: Theme.Space.l) {
+                v3Hero
+                VStack(alignment: .leading, spacing: Theme.Space.s) {
+                    if !metrics.wide, let details { phoneWords(details) }
+                    // Why Resume cannot start, under the hero, never over the art.
+                    VersionNote(target: model.header?.playTarget, versions: versions?.snapshot, failure: versions?.failure)
+                    if let failure = model.failure {
+                        StateLine(symbol: "triangle-alert", text: failure)
+                    }
+                }
+                .padding(.horizontal, metrics.wide ? metrics.gutter : 20)
+                lower
+            }
+            .padding(.bottom, Theme.Space.xl)
+        }
+        .scrollIndicators(.hidden)
+        .background(Theme.Palette.bg)
+        .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > 8 } action: { underBar = $1 }
+        .sheet(isPresented: $reading) {
+            SynopsisSheet(title: details?.name ?? model.route.name, text: details?.description ?? "")
+        }
+    }
+
+    private var v3HeroHeight: CGFloat {
+        if metrics.wide { return WideLayout.titleHeroHeight(width: width, height: height) }
+        guard width > 0, height > 0 else { return 633 }
+        // The iPhone's 390x680 hero, its status bar under the art's top, held to most of a short window.
+        return min(width * 633 / 390, max(height * 0.85, 280))
+    }
+
+    @ViewBuilder private var v3Hero: some View {
+        if let details {
+            let facts = TitleHeroFacts(details)
+            Group {
+                if metrics.wide {
+                    TitleHeroWide(facts: facts, open: openLink, more: { reading = true }) { wideActions(details) }
+                } else {
+                    TitleHeroPhone(facts: facts) { phoneButtons() } secondaries: { phoneSecondaries(details) }
+                }
+            }
+            .heroFrame(height: v3HeroHeight, alignment: metrics.wide ? .bottomLeading : .bottom) { EmptyView() }
+            .overlay(alignment: .bottomTrailing) {
+                if metrics.wide, WideLayout.starringFits(window: width), !facts.cast.isEmpty {
+                    HeroStarring(cast: facts.cast)
+                        .padding(.trailing, metrics.gutter)
+                        .padding(.bottom, HeroLayout.foot)
+                }
+            }
+            .background {
+                // The phone's art runs up under the status bar; the Mac's starts under the black header.
+                ZStack {
+                    ArtImage(url: details.background ?? details.poster, maxPixels: ArtSize.backdrop, alignment: details.background == nil ? .top : .center)
+                        .accessibilityHidden(true)
+                    HeroScrims(wide: metrics.wide, page: Theme.Palette.bg, wash: BackdropStops.titleWash)
+                }
+                .ignoresSafeArea(edges: metrics.wide ? [] : .top)
+            }
+        } else if case .failed(let reason) = model.header?.state {
+            StateLine(symbol: "triangle-alert", text: reason, action: ("Try again", model.retry))
+                .padding(.horizontal, metrics.gutter)
+                .padding(.top, Theme.Space.xl)
+        } else {
+            Text("Loading details")
+                .textFont(Theme.type.callout, relativeTo: .callout)
+                .foregroundStyle(Theme.Palette.muted)
+                .frame(maxWidth: .infinity, minHeight: v3HeroHeight)
+        }
+    }
+
+    /// The Mac's action row: the primary, Trailer, the Library and Watched capsule, Versions.
+    private func wideActions(_ details: TitleDetails) -> some View {
+        FlowRow(spacing: 12) {
+            playBlock(details)
+            if let trailer = details.trailers.first, let url = URL(string: trailer.url) {
+                Button { openURL(url) } label: { Label("Trailer", glyph: "film", size: HeroLayout.icon) }
+                    .buttonStyle(PillButtonStyle())
+            }
+            MarkCapsule(marks: titleMarks(kind: details.kind, inLibrary: model.header?.inLibrary ?? false, watched: model.header?.watched ?? false)) { mark in
+                toggle(mark, details)
+            }
+            Button { showVersions = true } label: { Label("Versions", glyph: "layers", size: HeroLayout.icon) }
+                .buttonStyle(PillButtonStyle())
+                .disabled(versions == nil)
+        }
+    }
+
+    /// The iPhone's primary, 178 wide with the time left under it, and Apple's Library control.
+    private func phoneButtons() -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(spacing: 6) {
+                if let details { playBlock(details) }
+                if let target = model.header?.playTarget, let resume = target.resumeMs, resume > 0 {
+                    Text(resumeText(resumeMs: resume, leftMs: target.leftMs, runtime: details?.runtime))
+                        .textFont(13, relativeTo: .footnote)
+                        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                        .foregroundStyle(Theme.Palette.muted)
+                }
+            }
+            LibraryControl(on: model.header?.inLibrary ?? false) {
+                model.setInLibrary(!(model.header?.inLibrary ?? false))
+                sync.schedule()
+            }
+        }
+    }
+
+    /// Trailer, Versions and, for a movie, Mark as watched: secondaries with their words, wrapping to a
+    /// second centered line when they do not fit.
+    private func phoneSecondaries(_ details: TitleDetails) -> some View {
+        FlowRow(spacing: 8, centered: true) {
+            if let trailer = details.trailers.first, let url = URL(string: trailer.url) {
+                Button { openURL(url) } label: { Label("Trailer", glyph: "film") }
+                    .buttonStyle(PillButtonStyle())
+            }
+            Button { showVersions = true } label: { Label("Versions", glyph: "layers") }
+                .buttonStyle(PillButtonStyle())
+                .disabled(versions == nil)
+            if details.kind == "movie" {
+                let watched = model.header?.watched ?? false
+                Button { toggle(.watched(on: watched), details) } label: {
+                    Label(watched ? "Watched" : "Mark as watched", glyph: watched ? "eye-off" : "eye")
+                }
+                .buttonStyle(PillButtonStyle())
+                .accessibilityLabel("Watched")
+                .accessibilityAddTraits(.isToggle)
+                .accessibilityValue(watched ? "On" : "Off")
+            }
+        }
+    }
+
+    /// The iPhone's synopsis with MORE and its meta row, under the hero on the page.
+    private func phoneWords(_ details: TitleDetails) -> some View {
+        let facts = TitleHeroFacts(details)
+        return VStack(alignment: .leading, spacing: 8) {
+            if let synopsis = facts.synopsis { HeroSynopsis(text: synopsis, lines: 2, more: { reading = true }) }
+            MetaLine(ratings: facts.ratings, parts: facts.meta, size: 13, imdbLink: facts.imdbLink)
+                .foregroundStyle(Theme.Palette.muted)
+        }
+    }
+
+    private func playBlock(_ details: TitleDetails) -> some View {
+        PlayBlock(
+            target: model.header?.playTarget, nextAirs: model.header?.nextAirs, hasEpisodes: !model.episodes.isEmpty,
+            runtime: details.runtime, versions: versions?.snapshot, failure: versions?.failure, wide: metrics.wide,
+            starting: startingPlay, play: { play(fromStart: $0) },
+            addSource: { showAddons = true }, addAccount: { showAccount = true }, focus: $primaryFocused, v3: true)
+    }
+
+    private func toggle(_ mark: TitleMark, _ details: TitleDetails) {
+        switch mark {
+        case .library(let on): model.setInLibrary(!on)
+        case .watched(let on): model.setWatched(details.id, !on)
+        }
+        sync.schedule()
+    }
+
+    /// A linked chip: a genre opens Discover on the title's kind, a director opens Search.
+    private func openLink(_ link: TitleLink) {
+        switch link {
+        case .genre(let genre):
+            links?.discover = DiscoverRequest(kind: details?.kind ?? "movie", genre: genre)
+            openTab(.discover)
+        case .director(let name):
+            links?.search = name
+            openTab(.search)
+        }
+    }
+    #endif
 
     private var details: TitleDetails? { model.header?.details }
 
@@ -227,6 +412,7 @@ struct TitleScreen: View {
         #endif
     }
 
+    #if os(tvOS)
     @ViewBuilder private var hero: some View {
         if wideHero {
             ZStack(alignment: .bottomLeading) {
@@ -251,6 +437,8 @@ struct TitleScreen: View {
             }
         }
     }
+
+    #endif
 
     private var logo: some View {
         TitleLogo(
@@ -486,6 +674,7 @@ private struct SynopsisReader: View {
 }
 #endif
 
+#if os(tvOS)
 /// Backdrop art faded into the page; with no backdrop, the poster blurred at
 /// 35% over the page colour, so the right side is never a blank band.
 private struct Backdrop: View {
@@ -524,6 +713,8 @@ private struct Backdrop: View {
     }
 }
 
+#endif
+
 /// Play or Resume with the resume point, and the chosen version under it.
 /// Never a Play that can only fail: with no version at all the primary
 /// becomes Add a source; while sources still answer, Play waits for the pick.
@@ -547,6 +738,9 @@ private struct PlayBlock: View {
     let addAccount: () -> Void
     /// TV: the page enters on this block's primary.
     var focus: FocusState<Bool>.Binding
+    /// The v3 page (iOS and macOS): no note under the button (the page shows `VersionNote` under
+    /// the hero), and on the iPhone the 178 pt pill with its time left under it.
+    var v3 = false
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
@@ -585,7 +779,7 @@ private struct PlayBlock: View {
                             } else {
                                 Glyph("play-fill")
                                 Text(target?.label ?? "Play")
-                                if let resume = target?.resumeMs, resume > 0 {
+                                if let resume = target?.resumeMs, resume > 0, !(v3 && !wide) {
                                     #if os(tvOS)
                                     Text(resumeText(resumeMs: resume, leftMs: target?.leftMs, runtime: runtime)).fontWeight(.regular).opacity(0.8)
                                     #else
@@ -596,7 +790,7 @@ private struct PlayBlock: View {
                                 }
                             }
                         }
-                        .lineLimit(wide ? 1 : nil)
+                        .lineLimit(wide || v3 ? 1 : nil)
                         .frame(minWidth: wide ? 160 : nil, maxWidth: wide ? nil : .infinity)
                     }
                     .buttonStyle(PillButtonStyle(prominent: true))
@@ -634,6 +828,7 @@ private struct PlayBlock: View {
                     #endif
                 }
             }
+            #if os(tvOS)
             Group {
                 if let failure {
                     Label("Versions could not load: \(failure)", glyph: "triangle-alert")
@@ -645,6 +840,7 @@ private struct PlayBlock: View {
             // Wraps whole on a small phone or a large text size: the status and source decide the pick.
             .textFont(Theme.type.callout, relativeTo: .callout)
             .fixedSize(horizontal: false, vertical: true)
+            #endif
         }
     }
 
@@ -656,6 +852,8 @@ private struct PlayBlock: View {
     }
 }
 
+
+#if os(tvOS)
 /// "720p  472 MB  (dot) Torrent, 153 seeds", or why there is none yet. No addon's name: it shows on
 /// the Addons pages alone (design/DECISION.md, Shelves).
 private struct VersionLine: View {
@@ -680,3 +878,27 @@ private struct VersionLine: View {
         }
     }
 }
+#endif
+
+#if !os(tvOS)
+/// Why Resume cannot start, under the v3 hero: the versions did not load, or none can play here. The
+/// finding and found states show nothing, as the frames draw (plans/design-v3-phase3-apple.md 2.1).
+private struct VersionNote: View {
+    let target: PlayTarget?
+    let versions: VersionsSnapshot?
+    let failure: String?
+
+    var body: some View {
+        Group {
+            if let failure {
+                Label("Versions could not load: \(failure)", glyph: "triangle-alert")
+            } else if target != nil, let versions, versions.done, versions.recommended == nil {
+                Label(VersionWords.none(versions), glyph: "circle-alert")
+            }
+        }
+        .textFont(Theme.type.callout, relativeTo: .callout)
+        .foregroundStyle(Theme.Palette.muted)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+#endif

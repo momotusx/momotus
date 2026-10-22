@@ -192,6 +192,12 @@ targets:
       - path: Marquee/Theme/BackdropStops.swift
       # The hero box, laid out for real in Tests/HeroFrameTests.swift.
       - path: Marquee/Home/HeroFrame.swift
+      # The title hero, laid out from plain values in Tests/TitleHeroTests.swift, with what it draws with.
+      - path: Marquee/Home/HeroLayout.swift
+      - path: Marquee/Home/HeroText.swift
+      - path: Marquee/Theme/Glyph.swift
+      - path: Marquee/Title/TitleHero.swift
+      - path: Marquee/Theme/Components.swift
       - path: Marquee/Player/CaptionStyle.swift
       - path: Marquee/Sync/SyncWords.swift
       - path: Marquee/Settings/FindAddonsWords.swift

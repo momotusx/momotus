@@ -14,6 +14,9 @@ enum BackdropStops {
     /// Home's full-bleed hero, wide (the frames' desktop ramps): the black wash along `washAngle`,
     /// and the page color from the foot up, where it reaches the page.
     static let heroSide = [Stop(at: 0, alpha: 0.74), Stop(at: 0.22, alpha: 0.56), Stop(at: 0.4, alpha: 0.24), Stop(at: 0.56, alpha: 0)]
+    /// The title page's wash: deeper and wider than Home's, because its column carries more lines (the
+    /// meta row, the chips, three of synopsis) up to about 360 pt above the foot; the glass check sets it.
+    static let titleWash = [Stop(at: 0, alpha: 0.9), Stop(at: 0.32, alpha: 0.84), Stop(at: 0.45, alpha: 0.5), Stop(at: 0.62, alpha: 0)]
     static let heroFoot = [Stop(at: 0, alpha: 1), Stop(at: 0.07, alpha: 0.9), Stop(at: 0.2, alpha: 0.72), Stop(at: 0.36, alpha: 0.4), Stop(at: 0.5, alpha: 0.12), Stop(at: 0.6, alpha: 0)]
     /// The wash's direction as CSS gives it (`linear-gradient(80deg, ...)`): 0 points up, 90 to the right.
     static let washAngle = 80.0
@@ -116,12 +119,12 @@ enum BackdropStops {
 
     /// The wash as HeroScrims draws it in a `size` hero, laid out in `box` from the foot and the
     /// leading edge, so the glass check reads what is drawn.
-    static func wash(_ size: CGSize, box: CGSize) -> LinearGradient {
+    static func wash(_ size: CGSize, box: CGSize, stops: [Stop] = heroSide) -> LinearGradient {
         let line = washLine(width: box.width, height: box.height)
-        guard size.width > 0, size.height > 0 else { return LinearGradient(stops: gradient(heroSide, .black), startPoint: line.start, endPoint: line.end) }
+        guard size.width > 0, size.height > 0 else { return LinearGradient(stops: gradient(stops, .black), startPoint: line.start, endPoint: line.end) }
         let lift = box.height - size.height
         func unit(_ p: UnitPoint) -> UnitPoint { UnitPoint(x: p.x * box.width / size.width, y: (p.y * box.height - lift) / size.height) }
-        return LinearGradient(stops: gradient(heroSide, .black), startPoint: unit(line.start), endPoint: unit(line.end))
+        return LinearGradient(stops: gradient(stops, .black), startPoint: unit(line.start), endPoint: unit(line.end))
     }
 
     /// The phone's foot ramp as HeroView draws it in a `size` box, in the page color.

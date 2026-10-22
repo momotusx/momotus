@@ -442,6 +442,8 @@ struct PillLabelStyle: LabelStyle {
 /// Lays children out left to right, wrapping onto new lines when they do not fit.
 struct FlowRow: Layout {
     var spacing: CGFloat = 12
+    /// Each line centered in the row (the iPhone title's secondaries), else from the leading edge.
+    var centered = false
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let frames = place(subviews, width: proposal.width ?? .infinity)
@@ -449,8 +451,12 @@ struct FlowRow: Layout {
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        for (subview, frame) in zip(subviews, place(subviews, width: bounds.width)) {
-            subview.place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY), proposal: ProposedViewSize(frame.size))
+        let frames = place(subviews, width: bounds.width)
+        // A line's shift to center it: the room its last frame leaves.
+        let ends = Dictionary(frames.map { ($0.minY, $0.maxX) }, uniquingKeysWith: max)
+        for (subview, frame) in zip(subviews, frames) {
+            let shift = centered ? (bounds.width - (ends[frame.minY] ?? bounds.width)) / 2 : 0
+            subview.place(at: CGPoint(x: bounds.minX + frame.minX + shift, y: bounds.minY + frame.minY), proposal: ProposedViewSize(frame.size))
         }
     }
 

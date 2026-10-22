@@ -127,3 +127,17 @@ private func snapshot(
     #expect(VersionWords.none(s) == "Found 3 versions, but none plays on this device.")
     #expect(VersionWords.progress(s) == ("3 versions", .warn))
 }
+
+@Test func theMacTitleHeroIsSixteenByNineHeldToTheWindowNeverUnder400() {
+    #expect(WideLayout.titleHeroHeight(width: 1440, height: 900) == 810)
+    // A short window keeps the first shelf's title on screen, down to the 400 floor.
+    #expect(WideLayout.titleHeroHeight(width: 1440, height: 700) == 610)
+    #expect(WideLayout.titleHeroHeight(width: 720, height: 400) == 400)
+    #expect(WideLayout.titleHeroHeight(width: 0, height: 0) == 506)
+}
+
+@Test func starringShowsOnlyWhereItClearsAFullActionRow() {
+    #expect(!WideLayout.starringFits(window: 1239))
+    #expect(WideLayout.starringFits(window: 1240))
+    #expect(!WideLayout.starringFits(window: 720))
+}

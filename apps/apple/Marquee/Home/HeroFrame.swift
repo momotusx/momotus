@@ -20,6 +20,8 @@ extension View {
 struct HeroScrims: View {
     let wide: Bool
     let page: Color
+    /// The wide wash's stops: Home's, or the title page's deeper one.
+    var wash: [BackdropStops.Stop] = BackdropStops.heroSide
     #if os(tvOS)
     private let held = false
     #else
@@ -32,7 +34,7 @@ struct HeroScrims: View {
                 let box = BackdropStops.rampBox(geo.size, held: held)
                 ZStack {
                     BackdropStops.vignetteGradient
-                    BackdropStops.wash(geo.size, box: box)
+                    BackdropStops.wash(geo.size, box: box, stops: wash)
                     LinearGradient(stops: BackdropStops.gradient(BackdropStops.heroFoot(geo.size, box: box), page), startPoint: .bottom, endPoint: .top)
                 }
             } else {

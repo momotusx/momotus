@@ -15,6 +15,14 @@ enum WideLayout {
     /// A short one (a large phone in landscape, a short iPad split) stacks them
     /// under the art, as a phone does, with the art held to the window.
     static func titleOverArt(wide: Bool, window: CGFloat) -> Bool { wide && !(window > 0 && window < 500) }
+    /// The Mac title hero, as Home's: 16:9, held so the first shelf's title shows on the first screen,
+    /// never under 400; `heroFrame` grows it when its words need more.
+    static func titleHeroHeight(width: CGFloat, height: CGFloat) -> CGFloat {
+        guard width > 0, height > 0 else { return 506 }
+        return max(min(width * 0.5625, height - 90), 400)
+    }
+    /// Starring (360 pt at the right) clears a full action row (about 760) with 40 on every side.
+    static func starringFits(window: CGFloat) -> Bool { window >= 40 + 760 + 40 + 360 + 40 }
 }
 
 /// Plain words for what the core says about a version, equal to the web's
