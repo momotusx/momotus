@@ -78,17 +78,19 @@ const RPDB_KEY: &str = "t0-free-rpdb";
 const RPDB: &str = "https://api.ratingposterdb.com/";
 
 impl Tile {
-    /// The cover every poster-shaped tile of an IMDb title shows (the
-    /// owner, 2026-10-22): RPDB's poster with the IMDb, Metacritic and
-    /// Rotten Tomatoes band drawn in, the addon's own poster kept in
-    /// `poster_fallback` for when it does not load. `?fallback=true` makes
-    /// RPDB answer its plain poster for a title it has no ratings for; an
-    /// id it does not know still answers 404. Any other tile keeps the
-    /// addon's poster. A poster that is RPDB's already (an app sent a
-    /// cover back, as `playback`'s `poster`) is no fallback. Every tile
-    /// builder ends here.
+    /// The cover every tile of an IMDb title shows, whatever shape its
+    /// addon gave (the owner, 2026-10-22): RPDB's 2:3 poster with the IMDb,
+    /// Metacritic and Rotten Tomatoes band drawn in, so its shape becomes
+    /// "poster"; the addon's own poster is kept in `poster_fallback` for
+    /// when it does not load. `?fallback=true` makes RPDB answer its plain
+    /// poster for a title it has no ratings for; an id it does not know
+    /// still answers 404. Any other tile keeps the addon's poster and
+    /// shape. A poster that is RPDB's already (an app sent a cover back, as
+    /// `playback`'s `poster`) is no fallback. Background and still are never
+    /// touched (Continue Watching's 16:9 art). Every tile builder ends here.
     pub(crate) fn rated_cover(mut self) -> Self {
-        if self.poster_shape == "poster" && crate::segments::is_imdb(&self.id) {
+        if crate::segments::is_imdb(&self.id) {
+            "poster".clone_into(&mut self.poster_shape);
             self.poster_fallback = self.poster.take().filter(|p| !p.starts_with(RPDB));
             self.poster = Some(format!(
                 "{RPDB}{RPDB_KEY}/imdb/poster-default/{}.jpg?fallback=true",
@@ -1428,16 +1430,25 @@ mod tests {
         assert_eq!(cover.poster_fallback.as_deref(), Some(own));
         // An IMDb title with no poster of its own still gets the cover.
         assert!(tile("tt1", "poster", None).poster.is_some());
-        // Not an IMDb id, or not a poster: the addon's, no fallback.
+        // Whatever the addon's shape, an IMDb title's cover is RPDB's 2:3.
+        let wide = tile("tt0111161", "landscape", Some(own));
+        assert_eq!(wide.poster, cover.poster);
+        assert_eq!(wide.poster_shape, "poster");
+        assert_eq!(wide.poster_fallback.as_deref(), Some(own));
+        // Not an IMDb id: the addon's poster and shape, no fallback.
         for (id, shape) in [
             ("kitsu:1", "poster"),
-            ("tt0111161", "landscape"),
+            ("kitsu:2", "landscape"),
             ("tt", "poster"),
         ] {
             let t = tile(id, shape, Some(own));
             assert_eq!(
-                (t.poster.as_deref(), t.poster_fallback),
-                (Some(own), None),
+                (
+                    t.poster.as_deref(),
+                    t.poster_fallback,
+                    t.poster_shape.as_str()
+                ),
+                (Some(own), None, shape),
                 "{id} {shape}"
             );
         }

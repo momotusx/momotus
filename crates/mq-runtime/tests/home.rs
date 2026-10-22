@@ -1265,3 +1265,42 @@ async fn an_empty_answer_is_an_empty_row_and_an_error_object_fails_it() {
         RowState::Failed { .. }
     ));
 }
+
+/// A catalog that gives its IMDb titles a landscape shape still shows each
+/// as RPDB's 2:3 cover with the ratings band, shape "poster", its own wide
+/// image kept as the fallback and its background untouched.
+#[tokio::test]
+async fn a_landscape_catalog_tile_of_an_imdb_title_gets_the_cover() {
+    const WIDE: &str = r#"{"metas":[
+  {"id":"tt0111161","type":"movie","name":"The Shawshank Redemption","posterShape":"landscape",
+   "poster":"https://img.example/wide.jpg","background":"https://img.example/bg.jpg"}
+]}"#;
+    let core = Core::temporary("p").unwrap();
+    let addon = catalog_addon("wide", Duration::ZERO, 200, WIDE).await;
+    core.library()
+        .set_addons("p", &[addon], &core.hlc())
+        .unwrap();
+    let view = HomeView::open(&core);
+    for _ in 0..300 {
+        if view.snapshot().rows[0].state == RowState::Ready {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let tile = view.snapshot().rows[0].tiles[0].clone();
+    assert_eq!(
+        tile.poster.as_deref(),
+        Some(
+            "https://api.ratingposterdb.com/t0-free-rpdb/imdb/poster-default/tt0111161.jpg?fallback=true"
+        )
+    );
+    assert_eq!(tile.poster_shape, "poster");
+    assert_eq!(
+        tile.poster_fallback.as_deref(),
+        Some("https://img.example/wide.jpg")
+    );
+    assert_eq!(
+        tile.background.as_deref(),
+        Some("https://img.example/bg.jpg")
+    );
+}
