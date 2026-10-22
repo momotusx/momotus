@@ -144,12 +144,14 @@ class TvHomeState {
     val focus = FocusMemory()
 
     /**
-     * The lanes a screen ahead are composed while the page is idle, tile by tile: a Down brings the next lane
-     * into view within its first frames, too soon for the default prefetch, which starts with the scroll, so
-     * the lane's tiles composed inside those frames.
+     * The lanes ahead are composed while the page is idle, tile by tile: a Down brings the next lane into view
+     * within its first frames, too soon for the default prefetch, which starts with the scroll, so the lane's
+     * tiles composed inside those frames. The smallest window that has that lane composed before every Down
+     * (TvHomeScrollTest): 0.9 of a screen ahead for the first Down from Home's top, which moves two lanes, and
+     * 0.3 behind for a Down right after an Up.
      */
     @OptIn(ExperimentalFoundationApi::class)
-    val page = LazyListState(LazyLayoutCacheWindow(aheadFraction = 1f, behindFraction = 0.5f))
+    val page = LazyListState(LazyLayoutCacheWindow(aheadFraction = 0.9f, behindFraction = 0.3f))
     private val rows = HashMap<String, LazyListState>()
 
     fun rowState(rowId: String): LazyListState = rows.getOrPut(rowId) { LazyListState() }

@@ -5,6 +5,7 @@ import android.os.Looper
 import android.view.View
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composer
 import androidx.compose.runtime.CompositionTracer
 import androidx.compose.runtime.InternalComposeTracingApi
@@ -253,9 +254,7 @@ class TvHomeScrollTest {
             .top.value
 
     /** Where the page's items sit now, by key, in px. */
-    private fun items() =
-        state.page.layoutInfo.visibleItemsInfo
-            .associate { it.key to it.offset }
+    private fun items(list: LazyListState) = list.layoutInfo.visibleItemsInfo.associate { it.key to it.offset }
 
     /** How far the page moved between two looks, in points (the TV canvas is 1920 points wide). */
     private fun moved(
@@ -277,19 +276,20 @@ class TvHomeScrollTest {
         key: Key,
         times: Int = 1,
         gap: Int = FRAMES,
+        list: LazyListState = state.page,
     ): Move {
         tilesInFrame = 0
         tilesAhead = 0
         homeBodies = 0
         compose.mainClock.autoAdvance = false
-        var last = items()
+        var last = items(list)
         val frames = mutableListOf<Float>()
         repeat((times - 1) * gap + FRAMES) { frame ->
             if (frame % gap == 0 && frame / gap < times) compose.onNode(isFocused()).performKeyInput { keyDown(key) }
             if (frame % gap == 3 && frame / gap < times) compose.onRoot().performKeyInput { keyUp(key) }
             compose.mainClock.advanceTimeByFrame()
             compose.waitForIdle()
-            val now = items()
+            val now = items(list)
             frames += moved(last, now)
             last = now
         }
@@ -383,6 +383,38 @@ class TvHomeScrollTest {
         val anchor = PILL + Tokens.space.m.value
         val header = headerTop("Row ${SETTLED + 4}")
         assertTrue(abs(header - anchor) < ANCHOR_SLACK, "the last row rests at $header, the anchor is $anchor")
+    }
+
+    @Test
+    fun `Right along a lane glides each tile in with the next one peeking past it`() {
+        show()
+        downTo(SETTLED)
+        val lane = state.rowState("walk:row:$SETTLED")
+        val moves =
+            (2..12).map { tile ->
+                press(Key.DirectionRight, list = lane).also {
+                    assertTrue(focused("Title $SETTLED.$tile"), "focus went to tile $tile")
+                }
+            }
+        moves.forEachIndexed { i, move ->
+            println(
+                "BENCH lane step=${i + 1} total=${"%.0f".format(move.total)} moving=${move.moving.count()} " +
+                    move.frames.take(16).joinToString(",") { "%.0f".format(it) },
+            )
+        }
+        val next = lane.layoutInfo.visibleItemsInfo.first { it.key == "tile:walk:row:$SETTLED:${SETTLED}13" }
+        // How much of the tile after the focused one shows, in points.
+        val peek = (lane.layoutInfo.viewportEndOffset - next.offset) * TV_WIDTH / view!!.width
+        println("BENCH lane peek=${"%.0f".format(peek)}")
+        // Before: the lane stopped as soon as the focused tile showed, at the edge and at speed, and the next one
+        // did not show. Now it peeks: the inset and peek clear of the end, less the gap and the focus scale.
+        assertTrue(peek >= Tokens.tvTiles.peek.value - Tokens.tvTiles.gap.value, "the next tile shows $peek points")
+        val glides = moves.filter { abs(it.total) > 1f }
+        assertTrue(glides.isNotEmpty(), "the lane never moved")
+        glides.forEach { move ->
+            assertTrue(move.moving.count() >= 6, "the lane moved in ${move.moving.count()} frames: ${move.frames}")
+            assertTrue(move.landing < 0.1f, "the lane stopped at speed: ${move.frames}")
+        }
     }
 
     @Test
