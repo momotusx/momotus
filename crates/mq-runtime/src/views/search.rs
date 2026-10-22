@@ -500,18 +500,19 @@ fn render(
 }
 
 /// One group from its catalogs' answers, in addon order: the results of
-/// those that answered before the first still asked, so a later catalog
-/// only adds at the end. Ready once those hold results or every catalog
-/// answered; failed only when every one failed.
+/// those that answered before the first still loading, so a later catalog
+/// only adds at the end. A catalog past the soft deadline (`Slow`) holds
+/// none after it back: its answer, if it comes, adds at the end too. Ready
+/// once there are results, slow while a slow catalog may still bring some,
+/// failed only when every catalog failed.
 fn merged<'a>(members: impl Iterator<Item = &'a (RowState, Vec<Tile>)>) -> (RowState, Vec<Tile>) {
     let mut tiles = Vec::new();
-    let (mut ready, mut failed) = (false, None);
+    let (mut ready, mut slow, mut failed) = (false, false, None);
     for (state, own) in members {
         match state {
-            RowState::Loading | RowState::Slow if tiles.is_empty() => {
-                return (state.clone(), tiles);
-            }
-            RowState::Loading | RowState::Slow => break,
+            RowState::Loading if tiles.is_empty() => return (state.clone(), tiles),
+            RowState::Loading => break,
+            RowState::Slow => slow = true,
             RowState::Ready => {
                 ready = true;
                 tiles.extend(own.iter().cloned());
@@ -521,10 +522,13 @@ fn merged<'a>(members: impl Iterator<Item = &'a (RowState, Vec<Tile>)>) -> (RowS
             }
         }
     }
-    match failed {
-        Some(state) if !ready => (state, tiles),
-        _ => (RowState::Ready, tiles),
-    }
+    let state = match failed {
+        _ if !tiles.is_empty() => RowState::Ready,
+        _ if slow => RowState::Slow,
+        Some(state) if !ready => state,
+        _ => RowState::Ready,
+    };
+    (state, tiles)
 }
 
 /// What each row showed once it filled, so the layout holds while the
@@ -617,6 +621,78 @@ mod tests {
 
     /// Exact names first, then names that start with the query, in Trakt's
     /// order, at most five; with neither, Trakt's first hit alone.
+    fn answer(ids: &[&str]) -> (RowState, Vec<Tile>) {
+        let tiles = ids
+            .iter()
+            .map(|id| {
+                tile_from_preview(
+                    serde_json::from_value(
+                        serde_json::json!({"id": id, "type": "movie", "name": id}),
+                    )
+                    .unwrap(),
+                )
+            })
+            .collect();
+        (RowState::Ready, tiles)
+    }
+
+    fn failed() -> (RowState, Vec<Tile>) {
+        (
+            RowState::Failed {
+                reason: "timed out".into(),
+            },
+            Vec::new(),
+        )
+    }
+
+    fn waiting(state: RowState) -> (RowState, Vec<Tile>) {
+        (state, Vec::new())
+    }
+
+    fn group(members: &[(RowState, Vec<Tile>)]) -> (RowState, Vec<String>) {
+        let (state, tiles) = merged(members.iter());
+        (state, tiles.into_iter().map(|t| t.id).collect())
+    }
+
+    /// A group fails only when every catalog failed, waits on a catalog
+    /// still loading before it, and past the soft deadline a slow catalog
+    /// no longer holds the ones after it back.
+    #[test]
+    fn a_group_fails_only_whole_and_a_slow_catalog_holds_nothing_back() {
+        let none: Vec<String> = Vec::new();
+        assert_eq!(group(&[failed(), failed()]), (failed().0, none.clone()));
+        assert_eq!(
+            group(&[failed(), answer(&["tt1"])]),
+            (RowState::Ready, vec!["tt1".into()])
+        );
+        assert_eq!(
+            group(&[answer(&["tt1"]), waiting(RowState::Loading)]),
+            (RowState::Ready, vec!["tt1".into()])
+        );
+        assert_eq!(
+            group(&[failed(), waiting(RowState::Loading)]),
+            (RowState::Loading, none.clone())
+        );
+        assert_eq!(
+            group(&[waiting(RowState::Loading), answer(&["tt2"])]),
+            (RowState::Loading, none.clone())
+        );
+        // Past the soft deadline: the later answers show, in their order.
+        assert_eq!(
+            group(&[waiting(RowState::Slow), answer(&["tt2"]), answer(&["tt3"])]),
+            (RowState::Ready, vec!["tt2".into(), "tt3".into()])
+        );
+        // A slow catalog may still answer: the group waits slow, not failed.
+        assert_eq!(
+            group(&[waiting(RowState::Slow), failed()]),
+            (RowState::Slow, none.clone())
+        );
+        assert_eq!(
+            group(&[answer(&[]), waiting(RowState::Slow)]),
+            (RowState::Slow, none)
+        );
+    }
+
     #[test]
     fn the_lead_is_exact_names_then_prefixes_else_the_first_hit() {
         let hits = [
