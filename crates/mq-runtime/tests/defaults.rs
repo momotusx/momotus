@@ -426,8 +426,7 @@ async fn get(url: &str) -> (u16, String, Vec<u8>) {
 
 /// The logos come from the core's own loopback server, so the first-run
 /// step asks no logo host: every default but Cinemeta (it publishes none)
-/// and Streaming Catalogs (not fetched yet) has one, and an unknown key or
-/// another token is not found.
+/// has one, and an unknown key or another token is not found.
 #[tokio::test]
 async fn every_default_logo_is_served_on_loopback_and_nothing_else() {
     let core = Core::temporary(OWNER).unwrap();
@@ -435,7 +434,7 @@ async fn every_default_logo_is_served_on_loopback_and_nothing_else() {
     let mut served = Vec::new();
     for d in &shown.addons {
         let Some(url) = &d.logo else {
-            assert!(["cinemeta", "streamingcatalogs"].contains(&d.key.as_str()));
+            assert_eq!(d.key, "cinemeta");
             continue;
         };
         assert!(url.starts_with("http://127.0.0.1:"), "{url}");
@@ -447,7 +446,7 @@ async fn every_default_logo_is_served_on_loopback_and_nothing_else() {
         assert!(image, "{}: {mime}, {} bytes", d.key, body.len());
         served.push(d.key.clone());
     }
-    assert_eq!(served.len(), 8, "{served:?}");
+    assert_eq!(served.len(), 9, "{served:?}");
     let torrentio = shown.addons[1].logo.clone().unwrap();
     let unknown = torrentio.replace("/torrentio", "/nope");
     assert_eq!(get(&unknown).await.0, 404);

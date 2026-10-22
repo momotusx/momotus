@@ -72,6 +72,11 @@ pub(crate) static LOGOS: &[mq_server::Logo] = &[
         "image/png",
         include_bytes!("../assets/defaults/kitsu.png"),
     ),
+    logo(
+        "streamingcatalogs",
+        "image/png",
+        include_bytes!("../assets/defaults/streamingcatalogs.png"),
+    ),
 ];
 
 const fn logo(key: &'static str, mime: &'static str, bytes: &'static [u8]) -> mq_server::Logo {
