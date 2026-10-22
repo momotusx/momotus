@@ -360,7 +360,8 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
                         </li>
                       )}
                     </Show>
-                    <For each={p().reasons.slice(0, 3)}>
+                    {/* At most three lines, On this device among them. */}
+                    <For each={p().reasons.slice(0, p().onDevice ? 2 : 3)}>
                       {(r) => (
                         <li>
                           <Check aria-hidden />
@@ -481,7 +482,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
                               </Show>
                               <span class="via">{r.via}</span>
                               <span class="more">
-                                <Show when={lineWords(r.line).details}>
+                                <Show when={!r.onDevice && lineWords(r.line).details}>
                                   {(d) => <span class="detail">{d()}</span>}
                                 </Show>
                                 <span class="rel">
@@ -492,7 +493,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
                             </button>
                             <Show when={form() === "phone" && opened() === r.key}>
                               <div class="vrow-open">
-                                <Show when={lineWords(r.line).details}>
+                                <Show when={!r.onDevice && lineWords(r.line).details}>
                                   {(d) => <p class="detail">{d()}</p>}
                                 </Show>
                                 <p class="rel">
