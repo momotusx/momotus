@@ -720,12 +720,13 @@ async fn a_pick_before_the_frame_rate_moves_no_section() {
     install(&core, &[row(&own, "own", "stream", true)]);
     let streams = format!(
         r#"{{"streams":[{{"url":"{video}/video.mkv","title":"Breaking Bad S01E01",
-            "subtitles":[{{"id":"t","lang":"tur","url":"https://subs.test/tur.srt"}},
+            "subtitles":[{{"id":"t24","lang":"tur","url":"https://subs.test/tur24.srt","fpsMilli":23976}},
+            {{"id":"t25","lang":"tur","url":"https://subs.test/tur25.srt","fpsMilli":25000}},
             {{"id":"u","lang":"ukr","url":"https://subs.test/ukr.srt"}}]}}]}}"#
     );
     let view = PlaybackView::open(&core, listed(&own, &streams), s01e01());
     let s = until(&view, "the stream's own tracks", |s| {
-        s.phase == PlaybackPhase::Ready && s.subtitles.len() == 2
+        s.phase == PlaybackPhase::Ready && s.subtitles.len() == 3
     })
     .await;
     assert!(s.subtitles_pending, "{s:?}");
@@ -735,5 +736,10 @@ async fn a_pick_before_the_frame_rate_moves_no_section() {
     hold.notify_one();
     let s = until(&view, "subtitles", settled).await;
     let languages: Vec<&str> = s.subtitles.iter().map(|t| t.language.as_str()).collect();
-    assert_eq!(languages, ["tr", "uk"]);
+    assert_eq!(languages, ["tr", "tr", "uk"]);
+    // The rate was read (no probe timeout passes this): at 25 fps the file
+    // timed for 25 leads its language, and the 23.976 one says what it was
+    // made for.
+    let made: Vec<Option<f32>> = s.subtitles[..2].iter().map(|t| t.made_for_fps).collect();
+    assert_eq!(made, [None, Some(23.976)]);
 }
