@@ -33,7 +33,12 @@ class MainActivity : ComponentActivity() {
         // Debug and benchmark builds take the tree from `form=tv` (the TV benchmarks run on a phone).
         val asked = intent.getStringExtra("form")?.takeIf { debuggable || BuildConfig.BENCHMARK }
         val form = FormFactor.detect(this, asked)
-        if (intent.walkLandscape(debuggable)) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        // A walk's landscape window, or a TV benchmark on a phone: the TV canvas in a landscape window, as on a TV,
+        // not shrunk into portrait where every lane fits and nothing scrolls. The app asks; the device's own
+        // rotation setting is untouched.
+        if (intent.walkLandscape(debuggable) || (BuildConfig.BENCHMARK && asked == "tv")) {
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
         applyBars()
         // The first frame shows the form's page color.
         window.setBackgroundDrawable(

@@ -114,13 +114,18 @@ fun MacrobenchmarkScope.scrollTvHome() {
     dpad(down = false, times = 24, gapMs = HELD_MS)
 }
 
-/** Discover on TV (a long poster grid), chosen in the top pill, once its header is up and its first page came. */
+/**
+ * Discover on TV (a long poster grid), reached as a remote does: Up from Home's first focus into the pill on Home,
+ * Right to Discover, select (a search for the word Discover found nothing on the Pixel, 2026-10-22).
+ */
 fun MacrobenchmarkScope.openTvDiscover() {
-    device.wait(Until.findObject(By.text("Discover")), 10_000)?.click() ?: error("the pill has no Discover")
-    // The pill's word and the page's header.
-    val deadline = System.currentTimeMillis() + 10_000
-    while (device.findObjects(By.text("Discover")).size < 2 && System.currentTimeMillis() < deadline) Thread.sleep(500)
-    Thread.sleep(3_000)
+    device.pressDPadUp()
+    Thread.sleep(STEP_MS)
+    device.pressDPadRight()
+    Thread.sleep(STEP_MS)
+    device.pressDPadCenter()
+    // The first page of the grid comes from the network.
+    Thread.sleep(4_000)
     device.waitForIdle()
 }
 
