@@ -7,7 +7,7 @@ use mq_http::{ClientConfig, HttpClient};
 use mq_library::{
     AddonRow, DEFAULTS_ERA, Hlc, HlcClock, Library, OWNER, OWNER_NAME, Policy, Table,
 };
-use mq_protocol::{Manifest, MetaItem, ResourcePath, ResourceResponse};
+use mq_protocol::{Manifest, MetaItem, ResourcePath, ResourceResponse, decode_meta};
 use mq_server::StreamServer;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -915,7 +915,7 @@ impl Core {
             let name = &addon.manifest.name;
             asked += 1;
             match self.addons().fetch(addon, &path, META_TIMEOUT).await {
-                Ok(fetched) => match serde_json::from_slice::<ResourceResponse>(&fetched.body) {
+                Ok(fetched) => match decode_meta(&fetched.body) {
                     Ok(ResourceResponse::Meta { meta })
                         if kids && (meta.preview.id != id || meta.preview.r#type != kind) =>
                     {

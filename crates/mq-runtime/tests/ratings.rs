@@ -1694,3 +1694,39 @@ fn a_read_that_never_ends_lets_the_next_one_start() {
         panic!("the new read asked nothing");
     });
 }
+
+/// The library's tiles carry both scores as every other tile does: what the
+/// cache holds at once, MDBList's when its lookup lands.
+#[tokio::test]
+async fn library_tiles_show_both_scores() {
+    let (core, _fake) = setup().await;
+    for (id, name) in [
+        ("tt0111161", "The Shawshank Redemption"),
+        ("tt0068646", "The Godfather"),
+    ] {
+        let row = mq_library::LibraryItemRow {
+            item_id: id.into(),
+            kind: "movie".into(),
+            name: name.into(),
+            poster: None,
+            poster_shape: None,
+            added_ms: 1,
+        };
+        core.library()
+            .upsert_item(core.profile(), &row, true, &core.hlc())
+            .unwrap();
+    }
+    let view = mq_runtime::LibraryView::open(&core);
+    let scores = |id: &str| {
+        view.snapshot()
+            .items
+            .iter()
+            .find(|t| t.id == id)
+            .map(|t| serde_json::to_value(&t.ratings).unwrap())
+    };
+    until("the library's tiles are rated", || {
+        scores("tt0111161") == Some(pair(Some("9.2"), Some("89%")))
+            && scores("tt0068646") == Some(pair(None, Some("97%")))
+    })
+    .await;
+}

@@ -1010,7 +1010,7 @@ async fn watch_kids_row(
 /// "Your shows and movies": the 20 most recently allowed of the counted list.
 fn kids_row(core: &Core) -> HomeRow {
     let list = core.library().allowed_list(core.profile());
-    let tiles: Vec<Tile> = list
+    let mut tiles: Vec<Tile> = list
         .map(|l| l.counted)
         .unwrap_or_default()
         .iter()
@@ -1018,6 +1018,9 @@ fn kids_row(core: &Core) -> HomeRow {
         .take(ROW_TILES)
         .map(kids_tile)
         .collect();
+    // What the ratings cache holds, as on every other row (a kids profile
+    // asks nothing itself).
+    core.ratings().fill(&mut tiles);
     HomeRow {
         row_id: KIDS_ROW_ID.into(),
         title: "Your shows and movies".into(),

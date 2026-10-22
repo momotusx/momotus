@@ -718,3 +718,48 @@ async fn a_kids_search_shows_no_recent_names() {
     owners.set_query("");
     assert_eq!(owners.snapshot().recent, ["up"]);
 }
+
+/// A kids profile asks no one for ratings, but its own tiles carry what the
+/// device's ratings cache holds, on Home, in Search and in its library, as
+/// every other tile does.
+#[tokio::test]
+async fn a_kids_tiles_show_what_the_ratings_cache_holds() {
+    let fixture = Fixture::default();
+    let (owner, kid) = kid(&fixture).await;
+    let now = mq_library::hlc::now_ms() as i64;
+    let lib = owner.library();
+    let row = mq_library::RatingRow {
+        imdb_id: "tt1".into(),
+        kind: "movie".into(),
+        imdb: Some(8.3),
+        rt: Some(98),
+        fetched_ms: now,
+    };
+    assert!(lib.put_ratings(&[row], 0, lib.removals()).unwrap());
+    allow(&kid, "tt1", "movie", "Up", 1);
+    let rated = |tiles: &[mq_runtime::views::home::Tile]| {
+        tiles.iter().find(|t| t.id == "tt1").is_some_and(|t| {
+            t.ratings.imdb.as_deref() == Some("8.3")
+                && t.ratings.rotten_tomatoes.as_deref() == Some("98%")
+        })
+    };
+    let home = HomeView::open(&kid);
+    until("the kids row is rated", || {
+        home.snapshot()
+            .rows
+            .iter()
+            .any(|r| r.row_id == KIDS_ROW_ID && rated(&r.tiles))
+    })
+    .await;
+    let search = SearchView::open(&kid);
+    search.set_query("up");
+    until("the kids search is rated", || {
+        search.snapshot().rows.iter().any(|r| rated(&r.tiles))
+    })
+    .await;
+    let library = LibraryView::open(&kid);
+    until("the kids library is rated", || {
+        rated(&library.snapshot().items)
+    })
+    .await;
+}

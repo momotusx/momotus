@@ -63,3 +63,62 @@ fn a_body_that_is_not_an_object_stays_an_error() {
     assert!(decode_catalog(b"[]").is_err());
     assert!(decode_catalog(b"not json").is_err());
 }
+
+/// An item's `imdbRating` reads as its IMDb rating (an IMDb link, the form
+/// every reader takes it from) also when the item has `links` of its own:
+/// stremio-core turns the field into a link only when `links` is absent.
+/// A string or a number; an IMDb link already there wins; no usable rating
+/// adds nothing (stremio-core's own link for an absent `links` is kept, and
+/// the tile reads only a number from it).
+#[test]
+fn an_items_imdb_rating_reads_as_its_imdb_link() {
+    let imdb = |body: &[u8]| -> Vec<Vec<String>> {
+        match decode_catalog(body).expect("decodes") {
+            ResourceResponse::Metas { metas } => metas
+                .into_iter()
+                .map(|m| {
+                    m.links
+                        .into_iter()
+                        .filter(|l| l.category == "imdb")
+                        .map(|l| l.name)
+                        .collect()
+                })
+                .collect(),
+            other => panic!("expected metas, got {other:?}"),
+        }
+    };
+    let body = br#"{"metas": [
+        {"id": "tt1", "type": "movie", "name": "One", "imdbRating": "5.6",
+         "links": [{"name": "Drama", "category": "Genres", "url": "stremio:///discover"}]},
+        {"id": "tt2", "type": "movie", "name": "Two", "imdbRating": 7, "links": []},
+        {"id": "tt3", "type": "movie", "name": "Three", "imdbRating": "8.1",
+         "links": [{"name": "8.0", "category": "imdb", "url": "https://imdb.com/title/tt3"}]},
+        {"id": "tt4", "type": "movie", "name": "Four", "imdbRating": "N/A", "links": []},
+        {"id": "kitsu:5", "type": "series", "name": "Five", "imdbRating": "6.5", "links": null}
+    ]}"#;
+    assert_eq!(
+        imdb(body),
+        [
+            vec!["5.6".to_string()],
+            vec!["7.0".into()],
+            vec!["8.0".into()],
+            vec![],
+            vec!["6.5".into()]
+        ]
+    );
+    // A meta answer too.
+    let meta = br#"{"meta": {"id": "tt1", "type": "movie", "name": "One", "imdbRating": "5.6", "links": []}}"#;
+    match mq_protocol::decode_meta(meta).expect("decodes") {
+        ResourceResponse::Meta { meta } => {
+            let names: Vec<String> = meta
+                .preview
+                .links
+                .into_iter()
+                .filter(|l| l.category == "imdb")
+                .map(|l| l.name)
+                .collect();
+            assert_eq!(names, ["5.6"]);
+        }
+        other => panic!("expected a meta, got {other:?}"),
+    }
+}

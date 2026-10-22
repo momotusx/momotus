@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
-use tokio::task::JoinHandle;
+use tokio::task::{JoinHandle, JoinSet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[cfg_attr(
@@ -77,11 +77,13 @@ impl LibraryView {
     pub fn open(core: &Core) -> Self {
         // Subscribe before the first read so no change slips in between.
         let changes = core.library().subscribe();
+        // Taken before the first read of the ratings (`on_listed`).
+        let listed = core.ratings().listed();
         let query = Arc::new(Mutex::new(Query::default()));
         let snapshot = SharedObservable::new(render(core, &Query::default()));
         let task = tokio::spawn(watch(
             core.clone(),
-            changes,
+            (changes, listed),
             query.clone(),
             snapshot.clone(),
         ));
@@ -140,22 +142,45 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 
 // ponytail: every change re-reads and re-sends the whole library; fine for a
 // few hundred titles, move to list diffs if libraries grow into thousands.
+/// Follows the library, and puts the ratings on as Home does: what the
+/// ratings cache holds at each render, then again when a lookup of the
+/// titles shown lands or a read of the Rotten Tomatoes lists ends.
 async fn watch(
     core: Core,
-    mut changes: broadcast::Receiver<Vec<Table>>,
+    (mut changes, mut listed): (
+        broadcast::Receiver<Vec<Table>>,
+        tokio::sync::watch::Receiver<u64>,
+    ),
     query: Arc<Mutex<Query>>,
     snapshot: SharedObservable<LibrarySnapshot>,
 ) {
-    while let Some(tables) = crate::views::next_change(&mut changes).await {
-        if tables
-            .iter()
-            .any(|t| matches!(t, Table::LibraryItems | Table::Progress | Table::Access))
-        {
-            let query = lock(&query).clone();
-            let next = render(&core, &query);
-            if next != snapshot.get() {
-                snapshot.set(next);
+    let again = |snapshot: &SharedObservable<LibrarySnapshot>| {
+        let next = render(&core, &lock(&query).clone());
+        if next != snapshot.get() {
+            snapshot.set(next);
+        }
+    };
+    let mut lookup = JoinSet::new();
+    let ask = |lookup: &mut JoinSet<bool>, shown: &LibrarySnapshot| {
+        let (core, titles) = (core.clone(), crate::ratings::titles(&shown.items));
+        lookup.abort_all();
+        lookup.spawn(async move { core.ratings().lookup(&titles).await.is_some() });
+    };
+    ask(&mut lookup, &snapshot.get());
+    loop {
+        tokio::select! {
+            tables = crate::views::next_change(&mut changes) => {
+                let Some(tables) = tables else { return };
+                if tables
+                    .iter()
+                    .any(|t| matches!(t, Table::LibraryItems | Table::Progress | Table::Access))
+                {
+                    again(&snapshot);
+                    ask(&mut lookup, &snapshot.get());
+                }
             }
+            Some(Ok(true)) = lookup.join_next() => again(&snapshot),
+            Ok(()) = listed.changed() => again(&snapshot),
         }
     }
 }
@@ -202,11 +227,13 @@ fn render(core: &Core, query: &Query) -> LibrarySnapshot {
         LibrarySort::Added => items.sort_by_key(|e| std::cmp::Reverse(e.item.added_ms)),
         LibrarySort::Name => items.sort_by_cached_key(|e| e.item.name.to_lowercase()),
     }
+    let mut items: Vec<Tile> = items.into_iter().map(tile).collect();
+    core.ratings().fill(&mut items);
     LibrarySnapshot {
         kind: query.kind.clone(),
         sort: query.sort,
         kinds,
-        items: items.into_iter().map(tile).collect(),
+        items,
     }
 }
 

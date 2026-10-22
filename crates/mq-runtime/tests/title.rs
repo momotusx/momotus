@@ -280,3 +280,18 @@ async fn a_title_that_cannot_load_says_why() {
         "Meta Test sent details Marquee cannot read"
     );
 }
+
+/// A meta that gives its IMDb rating as `imdbRating` beside links of its own
+/// (genres) still shows it: stremio-core reads the field only when there are
+/// no links.
+#[tokio::test]
+async fn an_imdb_rating_field_beside_links_shows() {
+    const RATED: &str = r#"{"meta":{"id":"tt1727587","type":"movie","name":"Sintel","imdbRating":"7.4","links":[{"name":"Animation","category":"Genres","url":"stremio:///discover"}]}}"#;
+    let core = Core::temporary("p").unwrap();
+    core.library()
+        .set_addons("p", &[meta_addon(RATED).await], &core.hlc())
+        .unwrap();
+    let view = TitleView::open(&core, "movie", "tt1727587");
+    let details = settle(&view).await.header.details.expect("details");
+    assert_eq!(details.ratings.imdb.as_deref(), Some("7.4"));
+}

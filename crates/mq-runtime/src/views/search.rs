@@ -659,7 +659,12 @@ fn kids_matches(core: &Core, query: &str) -> Vec<HomeRow> {
         title: "Your shows and movies".into(),
         source: "Your list".into(),
         state: RowState::Ready,
-        tiles: found.into_iter().map(|(_, t)| t).collect(),
+        tiles: {
+            let mut tiles: Vec<Tile> = found.into_iter().map(|(_, t)| t).collect();
+            // What the ratings cache holds, as on every other row.
+            core.ratings().fill(&mut tiles);
+            tiles
+        },
     }]
 }
 
