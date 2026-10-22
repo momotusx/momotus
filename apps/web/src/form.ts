@@ -6,6 +6,7 @@
  * detection and is remembered on this device. */
 
 import { createSignal } from "solid-js";
+import { pageColor } from "./theme/page";
 
 export type Form = "tv" | "desktop" | "phone";
 const forms: readonly Form[] = ["tv", "desktop", "phone"];
@@ -67,6 +68,8 @@ export function fit() {
   const current = pin ?? detect();
   if (current !== form()) setForm(current);
   root.dataset.form = current;
+  // The browser bar takes this form's page color (the phone's page is black).
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", pageColor(current));
   const w = window.innerWidth;
   const h = window.innerHeight;
   let k = 1;

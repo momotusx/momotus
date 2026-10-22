@@ -17,6 +17,9 @@ test("tokens.css matches design/tokens.json (run `bun run tokens`)", () => {
   // tv.apple.com's hover over a desktop poster.
   expect(css).toContain("--scrim-hover: rgba(51, 51, 51, 0.3);");
   expect(css).toMatch(/:root\[data-form="phone"\] \{\n {2}--type-hero: 34px;/);
+  // Per-form page colors (D10): the phone's black page and grey groups, desktop's #1F1F1F.
+  expect(css).toMatch(/:root\[data-form="phone"\] \{[^}]*--bg: var\(--bg-phone\);\n {2}--surface: var\(--surface-phone\);\n {2}--raised: var\(--raised-phone\);\n {2}--dim: var\(--dim-phone\);\n {2}--primary: var\(--primary-phone\);\n\}/);
+  expect(css).toContain(':root[data-form="desktop"] {\n  --bg: var(--bg-desktop);\n}');
   // Dark only: no light theme block; the halo is the lift's soft 30 px shadow.
   expect(css).not.toContain('data-theme="light"');
   expect(css).toMatch(/:root \{[^}]*--focus-halo: 30px;/);

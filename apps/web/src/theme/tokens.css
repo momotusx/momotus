@@ -117,6 +117,15 @@
   --safe-top: 12px;
   --safe-bottom: 12px;
   --safe-side: 20px;
+  --bg: var(--bg-phone);
+  --surface: var(--surface-phone);
+  --raised: var(--raised-phone);
+  --dim: var(--dim-phone);
+  --primary: var(--primary-phone);
+}
+
+:root[data-form="desktop"] {
+  --bg: var(--bg-desktop);
 }
 
 [data-scheme="dark"] {
