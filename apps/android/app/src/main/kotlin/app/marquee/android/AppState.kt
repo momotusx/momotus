@@ -37,6 +37,8 @@ class AppState(
     caps: CapsSource,
     /** The gate's shuts before this state existed (a new activity in a running process): nothing to reset. */
     shutsBefore: Int,
+    /** A device short of memory: TV Home composes fewer lanes ahead ([lowMemory]). */
+    private val lowMemory: Boolean = false,
 ) : ViewModel() {
     var start: Start by mutableStateOf(Start.Loading)
         private set
@@ -64,7 +66,7 @@ class AppState(
 
     /** Opened on first use (main thread only), so a launch that never reaches Home never subscribes. */
     val home: HomeView get() = homeView ?: session.home().also { homeView = it }
-    var tvHome by mutableStateOf(TvHomeState())
+    var tvHome by mutableStateOf(TvHomeState(lowMemory))
         private set
 
     /** "Remove from Continue Watching" on a held tile, with five seconds for Undo before it goes to the core. */
@@ -100,7 +102,7 @@ class AppState(
         versions.closeAll()
         homeView?.close()
         homeView = null
-        tvHome = TvHomeState()
+        tvHome = TvHomeState(lowMemory)
         installCards.forgetAll()
         linkInstall.forget()
         defaultsCard.forget()

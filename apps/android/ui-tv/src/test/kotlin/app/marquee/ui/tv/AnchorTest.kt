@@ -91,4 +91,14 @@ class AnchorTest {
         assertEquals(0f, spec.calculateScrollDistance(174f, 1700f, 1920f))
         assertEquals(-26f, spec.calculateScrollDistance(148f, 1700f, 1920f))
     }
+
+    @Test
+    fun `a TV stick short of memory composes fewer lanes ahead`() {
+        assertEquals(1f, aheadFraction(lowMemory = false))
+        assertEquals(0.5f, aheadFraction(lowMemory = true))
+        // Low-RAM by the system's word, or 192 MB of heap or less (most sticks); a phone's 256 or more is not.
+        assertEquals(true, lowMemory(lowRamDevice = true, memoryClassMb = 512))
+        assertEquals(true, lowMemory(lowRamDevice = false, memoryClassMb = 192))
+        assertEquals(false, lowMemory(lowRamDevice = false, memoryClassMb = 256))
+    }
 }

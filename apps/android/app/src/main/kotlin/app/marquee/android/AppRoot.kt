@@ -88,7 +88,17 @@ fun MarqueeRoot(
     val gate = marquee.profiles
     val app =
         viewModel<AppState>(
-            factory = viewModelFactory { initializer { AppState(session, marquee.deviceCaps, gate.shutCount) } },
+            factory =
+                viewModelFactory {
+                    initializer {
+                        AppState(
+                            session,
+                            marquee.deviceCaps,
+                            gate.shutCount,
+                            marquee.lowMemory,
+                        )
+                    }
+                },
         )
     // Each shut of the gate (a switch, a lock, a core that stopped): once the screens have left
     // composition, everything of the old profile goes, and the gate hears so. The count lives in

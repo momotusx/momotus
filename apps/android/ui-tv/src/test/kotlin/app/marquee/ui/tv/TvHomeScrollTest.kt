@@ -89,7 +89,7 @@ class TvHomeScrollTest {
             }
         }
     private val scope = CoroutineScope(SupervisorJob() + main)
-    private val state = TvHomeState()
+    private var state = TvHomeState()
     private var view: View? = null
 
     private var tilesInFrame = 0
@@ -344,7 +344,33 @@ class TvHomeScrollTest {
     }
 
     @Test
-    fun `a Down finds the lane it brings into view composed, and recomposes nothing on screen`() {
+    fun `a Down finds the lane it brings into view composed, and recomposes nothing on screen`() = lanesReady()
+
+    @Test
+    fun `on a low-memory TV, with fewer lanes ahead, a Down still finds its lane composed`() {
+        state = TvHomeState(lowMemory = true)
+        lanesReady()
+    }
+
+    @Test
+    fun `from the hero's Play, every Down finds its lane composed`() = heroLanesReady(low = false)
+
+    @Test
+    fun `from the hero's Play on a low-memory TV, every Down finds its lane composed`() = heroLanesReady(low = true)
+
+    /** From the hero's Play down five lanes: the lane each Down brings into view was composed before it. */
+    private fun heroLanesReady(low: Boolean) {
+        state = TvHomeState(lowMemory = low)
+        show(hero = true, start = "Play Sintel")
+        val ready =
+            (1..5).map { row ->
+                composed(row).also { press(Key.DirectionDown) }
+            }
+        println("BENCH hero-ready low=$low $ready")
+        assertTrue(ready.all { it }, "a lane coming into view from the hero was not composed (low memory $low): $ready")
+    }
+
+    private fun lanesReady() {
         show()
         // Every Down from Home's first screen, then two Ups and a Down again (the prefetch follows the direction).
         val last = SETTLED + STEPS

@@ -1,5 +1,6 @@
 package app.marquee.android
 
+import android.app.ActivityManager
 import android.app.Application
 import android.content.pm.ApplicationInfo
 import android.os.Build
@@ -14,6 +15,7 @@ import app.marquee.core.session.CoreSession
 import app.marquee.core.trakt.SecretTraktRecords
 import app.marquee.core.trakt.TraktAccount
 import app.marquee.design.createImageLoader
+import app.marquee.ui.tv.lowMemory
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
@@ -68,6 +70,11 @@ class MarqueeApp :
      */
     lateinit var deviceCaps: CapsSource
         private set
+
+    /** Short of memory (most TV sticks): TV Home composes fewer lanes ahead. */
+    val lowMemory: Boolean by lazy {
+        getSystemService(ActivityManager::class.java).let { lowMemory(it.isLowRamDevice, it.memoryClass) }
+    }
 
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)

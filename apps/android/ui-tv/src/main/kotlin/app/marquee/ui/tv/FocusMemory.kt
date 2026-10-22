@@ -140,18 +140,23 @@ fun FocusMemory.watch(
  * What Home keeps while it is not on screen: scroll positions and focus memory. Lives in the
  * screen's view model; the lists are plain objects so their positions survive the composition.
  */
-class TvHomeState {
+class TvHomeState(
+    /** A device short of memory (a TV stick, [lowMemory]): Home keeps fewer lanes composed ahead. */
+    lowMemory: Boolean = false,
+) {
     val focus = FocusMemory()
 
     /**
      * The lanes ahead are composed while the page is idle, tile by tile: a Down brings the next lane into view
      * within its first frames, too soon for the default prefetch, which starts with the scroll, so the lane's
-     * tiles composed inside those frames. A screen ahead: the first Down from Home's top moves two lanes and
-     * needs about 0.84 of one (TvHomeScrollTest), so a taller caption cannot make that lane late. 0.3 behind
-     * for a Down right after an Up.
+     * tiles composed inside those frames. A screen ahead and 0.3 behind (for a Down right after an Up). On the
+     * top shelf layout every Down finds its lane composed from 0.4 ahead, from the hero too, but not at 0.9 nor
+     * below 0.4 (TvHomeScrollTest): the margin is not monotonic, so a change here needs those tests.
+     * ponytail: on the Pixel in TV form the window cost +21.9 MB PSS at Row 5 (bench/android/scroll.jsonl,
+     * 2026-10-23), so a low-memory device keeps 0.5 ahead; none at all there if a stick still runs short.
      */
     @OptIn(ExperimentalFoundationApi::class)
-    val page = LazyListState(LazyLayoutCacheWindow(aheadFraction = 1f, behindFraction = 0.3f))
+    val page = LazyListState(LazyLayoutCacheWindow(aheadFraction = aheadFraction(lowMemory), behindFraction = 0.3f))
     private val rows = HashMap<String, LazyListState>()
 
     fun rowState(rowId: String): LazyListState = rows.getOrPut(rowId) { LazyListState() }
@@ -159,6 +164,20 @@ class TvHomeState {
     /** Home shows a card between its lanes (the recommended addons card): the lanes under it sit one item lower. */
     var cardShown = false
 }
+
+/** How far ahead of the screen Home composes lanes, in screens: see [TvHomeState.page]. */
+internal fun aheadFraction(lowMemory: Boolean): Float = if (lowMemory) 0.5f else 1f
+
+/**
+ * A device short of memory, where Home composes fewer lanes ahead: one the system calls low on RAM, or one
+ * that gives an app [memoryClassMb] or less of heap, which most TV sticks do.
+ */
+fun lowMemory(
+    lowRamDevice: Boolean,
+    memoryClassMb: Int,
+): Boolean = lowRamDevice || memoryClassMb <= LOW_MEMORY_CLASS_MB
+
+private const val LOW_MEMORY_CLASS_MB = 192
 
 /**
  * A screen's first focus: on [target] once there is one (it often comes late, with the data), or on
