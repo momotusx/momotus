@@ -340,10 +340,6 @@ class TvHomeShelfTest {
     @Test
     fun `a Continue Watching card focused from Play is whole on the screen, with its line`() {
         show()
-        println(
-            "DBG focused " +
-                compose.onAllNodes(isFocused(), useUnmergedTree = true).fetchSemanticsNodes().map { it.config },
-        )
         // The first focus is Play (FirstTargetTest); a test's clock runs out the screen's own wait, so it is asked here.
         compose
             .onNodeWithContentDescription(

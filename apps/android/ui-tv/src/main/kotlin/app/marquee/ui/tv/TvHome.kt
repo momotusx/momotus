@@ -379,9 +379,8 @@ private fun TopShelfArt(
     page: LazyListState,
 ) {
     val room = TvNavRoom.current
-    val gap = with(LocalDensity.current) { Marquee.space.s.roundToPx() }
-    // The hero item's height, kept while it is laid out: the art goes on following it from the row below.
-    val hero = remember { intArrayOf(0) }
+    // Known without seeing the hero: back from a title page the list can come back with the hero already gone.
+    val (gap, hero) = with(LocalDensity.current) { Marquee.space.s.roundToPx() to heroHeight().roundToPx() }
     Backdrop(
         tile.background ?: tile.poster,
         Modifier
@@ -396,11 +395,10 @@ private fun TopShelfArt(
                 val items = page.layoutInfo.visibleItemsInfo
                 val top = items.firstOrNull { it.index == 0 }
                 val next = items.firstOrNull { it.index == 1 }
-                if (top != null) hero[0] = top.size
                 translationY =
                     when {
                         top != null -> top.offset.toFloat()
-                        next != null && hero[0] > 0 -> (next.offset - gap - hero[0]).toFloat()
+                        next != null -> (next.offset - gap - hero).toFloat()
                         else -> -size.height
                     }
             }.testTag(TOP_SHELF_ART),
@@ -409,6 +407,10 @@ private fun TopShelfArt(
         alignment = if (tile.background == null) Alignment.TopCenter else Alignment.Center,
     )
 }
+
+/** The hero item's height: the first shelf starts [FIRST_SHELF] down the screen, a list gap under it. */
+@Composable
+private fun heroHeight(): Dp = FIRST_SHELF - TvNavRoom.current - tvContentTop() - Marquee.space.s
 
 /** The top shelf's art, for tests of where it sits. */
 internal const val TOP_SHELF_ART = "top-shelf-art"
@@ -429,7 +431,7 @@ private fun TvHero(
     val tile = hero.tile
     val playRequester = state.focus.requesterFor(HERO_PLAY)
     val detailsRequester = state.focus.requesterFor(HERO_DETAILS)
-    Box(Modifier.fillMaxWidth().height(FIRST_SHELF - TvNavRoom.current - tvContentTop() - Marquee.space.s)) {
+    Box(Modifier.fillMaxWidth().height(heroHeight())) {
         Column(
             Modifier
                 .align(Alignment.BottomStart)
