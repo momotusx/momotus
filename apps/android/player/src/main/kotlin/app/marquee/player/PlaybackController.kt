@@ -18,6 +18,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
+import androidx.media3.common.text.Cue
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlaybackException
 import app.marquee.core.client.CoreLog
@@ -34,11 +35,14 @@ import app.marquee.core.model.SubtitleTrack
 import app.marquee.core.model.TraktPlayback
 import app.marquee.core.views.PlaybackView
 import app.marquee.core.views.ViewStatus
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * The glue between the core's `playback` view and the ExoPlayer, and the one state both OSDs read.
@@ -52,8 +56,8 @@ import kotlinx.coroutines.launch
  * - A playback error stops the player first and only then tells the core (`failOver`), because the
  *   core answers with another source and a late error from the dead one must not fail the new one;
  *   the new source starts at the position the old one reached.
- * - Subtitles the core finds after the media item was set cannot be added to it, so choosing one
- *   sets the item again at the current position with the longer list.
+ * - The core's (addon) subtitles are drawn over the picture from their own files ([addonCues]): a pick,
+ *   Off or a delay step never sets the media item again. The file's own tracks go through track selection.
  *
  * @param openedAtMs [SystemClock.elapsedRealtime] when Play was chosen, for the time to first frame.
  */
@@ -65,8 +69,10 @@ class PlaybackController(
     val episode: String?,
     private val artwork: String?,
     private val openedAtMs: Long,
-    /** What the subtitle parsers read for this play's delay ([PlayerHost.subtitleDelay]). */
+    /** What the subtitle parsers read for this play's delay ([PlayerHost.subtitleDelay]): the file's own tracks. */
     private val subtitleDelay: SubtitleDelay = SubtitleDelay(),
+    /** An addon subtitle file from its loopback address ([fetchSubtitle]). */
+    private val fetch: suspend (String) -> ByteArray = ::fetchSubtitle,
 ) {
     enum class Stage { Opening, Buffering, Playing, Paused, Ended, Failed }
 
@@ -233,7 +239,13 @@ class PlaybackController(
 
     private var view: PlaybackView? = null
     private var loadedUrl: String? = null
-    private var loadedSubs: List<SubtitleTrack> = emptyList()
+
+    /** The addon track drawn over the picture, once its file is in; null with none on. */
+    private var shown: AddonCues? by mutableStateOf(null)
+
+    /** Addon files already parsed in this play: a pick back to one shows at once. */
+    private val fetched = HashMap<String, AddonCues>()
+    private var fetching: Job? = null
     private var snapshotSubs: List<SubtitleTrack> = emptyList()
     private var firstFrame = false
     private var raised = false
@@ -246,8 +258,8 @@ class PlaybackController(
     private var pick: TextPick? = null
         set(value) {
             field = value
-            // A track comes on with its own delay. Off keeps the last one: nothing shows, and the same track
-            // back on needs no new item.
+            // A track comes on with its own delay. Off keeps the last one: nothing shows, and the same file's
+            // track back on needs no new item.
             if (value != null) applyDelay(delays[value.delayKey] ?: 0L)
         }
 
@@ -257,7 +269,7 @@ class PlaybackController(
     /** The start subtitle already turned on, so a repeat of it does nothing. */
     private var started: String? = null
 
-    /** Addon subtitle files that did not load in this play: not side-loaded or offered again. */
+    /** Addon subtitle files that did not load in this play: not offered again. */
     private val dead = HashSet<String>()
     private var released = false
     private var durationSentFor: String? = null
@@ -405,11 +417,10 @@ class PlaybackController(
         subtitleNotes = s.subtitleNotes
         // A note while one of the core's tracks is on is about it (only the picked file is fetched).
         if (pick?.external == true) added.lastOrNull()?.let { announce(subtitleNoteWords(it)) }
-        // A side-loaded file that left the list (the core could not read it) leaves this item too, quietly:
-        // the note above already said so. Not on a new source, whose files the load below takes.
+        // The picked file left the list (the core could not read it): it goes off quietly, as the note above
+        // already said so. Not on a new source, whose list the load below carries the pick over to.
         if (s.url != null && s.url == loadedUrl) {
-            val gone = loadedSubs.filter { sub -> s.subtitles.none { it.url == sub.url } }
-            if (gone.isNotEmpty()) dropSubtitles(gone, words = null)
+            pick?.url?.takeIf { url -> s.subtitles.none { it.url == url } }?.let { dropTrack(it, words = null) }
         }
         // The core's start subtitle, once, as if picked; nothing goes back to the core.
         startSubtitle(s.autoSubtitle, chose, pick != null, started)?.let { url ->
@@ -470,8 +481,6 @@ class PlaybackController(
         val again = loadedUrl != null || handlingFailure
         val from = if (again) lastPositionMs else s.resumeMs ?: 0L
         loadedUrl = url
-        val carried = pick?.takeIf { it.external }
-        loadedSubs = upfrontSubtitles(s.subtitles.filterNot { it.url in dead }, carried?.language, carried?.url)
         playingKey = s.key
         playingAttempt = s.attempt
         durationMs = 0L
@@ -485,18 +494,24 @@ class PlaybackController(
         fillBase = loadingFill
         pictureWait.reset()
         mark("url ready")
-        player.setMediaItem(item(url, loadedSubs), from.coerceAtLeast(0L))
+        player.setMediaItem(item(url), from.coerceAtLeast(0L))
         player.playWhenReady = false
         player.prepare()
         stage = Stage.Buffering
+        // A new source lists its files at new addresses: the addon pick goes over to the same file, else the
+        // best one in its language, else off.
+        pick?.takeIf { it.external }?.let { carried ->
+            val next = carriedSubtitle(s.subtitles.filterNot { it.url in dead }, carried.language, carried.url)
+            when {
+                next == null -> choose(TRACK_OFF)
+                next.url != carried.url -> turnOn(next)
+            }
+        }
         if (again && !reopening) announce("Playing a different source")
         reopening = false
     }
 
-    private fun item(
-        url: String,
-        subs: List<SubtitleTrack>,
-    ): MediaItem =
+    private fun item(url: String): MediaItem =
         MediaItem
             .Builder()
             .setUri(url)
@@ -507,16 +522,6 @@ class PlaybackController(
                     .setSubtitle(episode)
                     .setArtworkUri(artwork?.toUri())
                     .build(),
-            ).setSubtitleConfigurations(
-                subs.mapIndexed { i, t ->
-                    MediaItem.SubtitleConfiguration
-                        .Builder(t.url.toUri())
-                        .setId("$EXTERNAL$i")
-                        .setMimeType(subtitleMime(t.url))
-                        .setLanguage(t.lang)
-                        .setLabel(t.label)
-                        .build()
-                },
             ).build()
 
     /** The card's "Trying again" for a moment, when the core took a Try again and the play failed again at once. */
@@ -617,11 +622,6 @@ class PlaybackController(
         // A late error from a source already given up on must not fail the next one.
         val playback = view
         if (handlingFailure || playback == null || released) return
-        // A subtitle file that did not load costs that track, never the video.
-        failedSubtitle(error, loadedSubs)?.let {
-            dropSubtitles(listOf(it), "Subtitles from ${it.source} did not load")
-            return
-        }
         val cause = error.cause as? HttpDataSource.InvalidResponseCodeException
         // How the renderer that raised it supports the file: past the decoder, a decoder that did not start is decode.
         val support =
@@ -656,30 +656,21 @@ class PlaybackController(
     }
 
     /**
-     * Sets the item again without [subs] at the same position; if one of them was on, subtitles go off. Says
-     * [words] for a few seconds when given. The files are not side-loaded or offered again in this play.
+     * An addon file that did not load, or that the core could not read: off if it was on, not offered again in this
+     * play, and [words] said for a few seconds when given. The video goes on.
      */
-    private fun dropSubtitles(
-        subs: List<SubtitleTrack>,
+    private fun dropTrack(
+        url: String,
         words: String?,
     ) {
-        CoreLog.w("${subs.size} subtitle file(s) could not be read: dropped, the video goes on")
-        val urls = subs.map { it.url }.toSet()
-        dead += urls
-        if (pick?.url in urls) {
+        CoreLog.w("a subtitle file could not be read: dropped, the video goes on")
+        dead += url
+        fetched.remove(url)
+        if (pick?.url == url) {
             pick = null
-            player.trackSelectionParameters =
-                player.trackSelectionParameters
-                    .buildUpon()
-                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-                    .build()
+            hideAddon()
         }
-        val url = loadedUrl ?: return
-        val at = player.currentPosition.coerceAtLeast(0L)
-        reloadedAt = SystemClock.elapsedRealtime()
-        loadedSubs = loadedSubs.filter { it.url !in urls }
-        player.setMediaItem(item(url, loadedSubs), at)
-        player.prepare()
+        refreshTracks()
         words?.let(::announce)
     }
 
@@ -709,7 +700,6 @@ class PlaybackController(
                 noPicture()
                 continue
             }
-            if (player.isPlaying && ranPastEnd(positionMs, player.duration, loadedSubs.isNotEmpty())) endAtVideoEnd()
             if (player.isPlaying) {
                 sinceReport += TICK_MS
                 if (sinceReport >= REPORT_MS) {
@@ -720,14 +710,6 @@ class PlaybackController(
                 sinceReport = 0
             }
         }
-    }
-
-    /** The video ended but a longer subtitle would keep the player going on black ([ranPastEnd]): the play is over. */
-    private fun endAtVideoEnd() {
-        CoreLog.d("a subtitle runs past the video's end at ${player.duration} ms: the play ends there")
-        // Heard as a pause first (and reported so), then it is the end.
-        player.playWhenReady = false
-        stage = Stage.Ended
     }
 
     /** The core looks skip segments up by the length of the version that plays: tell it once per version. */
@@ -831,32 +813,14 @@ class PlaybackController(
     /**
      * The viewer's pick from the subtitle menu (or Off): it wins for the rest of the play, and a core track
      * or Off goes back to the core, which remembers it for the title (`subtitleChosen`). A track in the
-     * file is the viewer's pick too, but the core does not know it.
+     * file is the viewer's pick too, but the core does not know it. Nothing here sets the media item again.
      */
     fun selectText(id: String) {
         chose = true
-        val url =
-            when {
-                id == TRACK_OFF -> {
-                    null
-                }
-
-                id.startsWith(LATE) -> {
-                    id.removePrefix(LATE)
-                }
-
-                id.startsWith(EXTERNAL) -> {
-                    find(C.TRACK_TYPE_TEXT, id)?.let { (g, i) ->
-                        externalUrl(g.getTrackFormat(i).id)
-                    }
-                }
-
-                else -> {
-                    return choose(id)
-                }
-            }
-        if (id != TRACK_OFF && url == null) return choose(id)
-        view?.subtitleChosen(url)
+        when {
+            id == TRACK_OFF -> view?.subtitleChosen(null)
+            id.startsWith(LATE) -> view?.subtitleChosen(id.removePrefix(LATE))
+        }
         choose(id)
     }
 
@@ -877,32 +841,71 @@ class PlaybackController(
         fileTakesOver(languageKey(track.language.ifEmpty { track.lang }), text)?.let { choose(it.id) }
     }
 
-    /** Turns one of the core's tracks on: picked from the menu, or the start subtitle. */
+    /**
+     * Turns one of the core's tracks on, picked from the menu or the start subtitle: drawn over the picture, the
+     * file's own tracks off under it.
+     */
     private fun turnOn(track: SubtitleTrack) {
         pick = TextPick(track.lang, external = true, url = track.url)
-        // Before a source is loaded, the load takes the picked file with it.
-        if (loadedUrl == null) return
-        if (loadedSubs.any { it.url == track.url }) {
-            applyPick(player.currentTracks)
-            refreshTracks()
-            return
-        }
-        // The override of an earlier pick would still match after the reload and keep the old track on.
         player.trackSelectionParameters =
             player.trackSelectionParameters
                 .buildUpon()
-                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
-                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
                 .build()
-        reloadWith(loadedSubs + track)
+        showAddon(track)
         refreshTracks()
     }
+
+    /** Draws [track] from its file: at once when this play parsed it already, else once it is in. */
+    private fun showAddon(track: SubtitleTrack) {
+        fetching?.cancel()
+        fetched[track.url]?.let {
+            shown = it
+            return
+        }
+        shown = null
+        fetching =
+            scope.launch {
+                val cues =
+                    try {
+                        val bytes = fetch(track.url)
+                        withContext(Dispatchers.Default) { parseAddonCues(bytes, subtitleMime(track.url)) }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        CoreLog.w("subtitle file ${track.source}: ${e.message}")
+                        null
+                    }
+                if (cues == null) {
+                    dropTrack(track.url, "Subtitles from ${track.source} did not load")
+                    return@launch
+                }
+                fetched[track.url] = cues
+                if (pick?.url == track.url) shown = cues
+            }
+    }
+
+    private fun hideAddon() {
+        fetching?.cancel()
+        shown = null
+    }
+
+    /** An addon track is drawn over the picture: the player's own cues give way to [addonCues]. */
+    val addonOn: Boolean get() = shown != null
+
+    /**
+     * The addon track's cues at [positionMs], moved by the track's delay (later when positive); none with no addon
+     * track on. The picture's subtitles read it every frame while [addonOn].
+     */
+    fun addonCues(positionMs: Long = player.currentPosition): List<Cue> =
+        shown?.at((positionMs - subtitleDelayMs) * 1000) ?: emptyList()
 
     private fun choose(id: String) {
         val params = player.trackSelectionParameters.buildUpon()
         when {
             id == TRACK_OFF -> {
                 pick = null
+                hideAddon()
                 player.trackSelectionParameters = params.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
             }
 
@@ -915,11 +918,11 @@ class PlaybackController(
             else -> {
                 val (group, index) = find(C.TRACK_TYPE_TEXT, id) ?: return
                 val format = group.getTrackFormat(index)
+                hideAddon()
                 pick =
                     TextPick(
                         language = format.language.orEmpty(),
-                        external = id.startsWith(EXTERNAL),
-                        url = id.takeIf { it.startsWith(EXTERNAL) }?.let { externalUrl(format.id) },
+                        external = false,
                         group = group.mediaTrackGroup.id,
                         kind = format.codecs ?: format.sampleMimeType,
                     )
@@ -934,21 +937,18 @@ class PlaybackController(
     }
 
     /**
-     * Sets the item again at the same position with a longer subtitle list; a short hitch. After
-     * the end the position is the end, which would play nothing, so it starts over paused instead.
+     * Sets the item again at the same position, for a delay on one of the file's own tracks (its parsers read the
+     * delay when the item is set); a short hitch. After the end the position is the end, which would play nothing,
+     * so it starts over paused instead.
      */
-    private fun reloadWith(subs: List<SubtitleTrack>) {
+    private fun reload() {
         val url = loadedUrl ?: return
-        // A source that was given up on or a player that was let go is not set again (the next
-        // `ready` carries the whole list anyway).
+        // A source that was given up on or a player that was let go is not set again.
         if (handlingFailure || released) return
-        // This item takes the delay as it is now: a Timing reload still waiting has nothing left to do.
-        timing?.cancel()
         val ended = stage == Stage.Ended
         val at = if (ended) 0L else player.currentPosition.coerceAtLeast(0L)
         reloadedAt = SystemClock.elapsedRealtime()
-        loadedSubs = subs
-        player.setMediaItem(item(url, subs), at)
+        player.setMediaItem(item(url), at)
         if (ended) pause()
         player.prepare()
     }
@@ -984,20 +984,21 @@ class PlaybackController(
     private val TextPick.delayKey: String get() = url ?: group ?: language
 
     /**
-     * The parsers read [ms] from now on. They read the delay when the item is set, so with a subtitle on the item is
-     * set again at the same position: once, after the last of a run of changes, as the words change at once.
+     * The chosen track's delay is [ms]. An addon track reads it as it draws, at once. The file's own tracks are
+     * shifted by their parsers, which read it when the item is set: the item is set again at the same position,
+     * once, after the last of a run of changes.
      */
     private fun applyDelay(ms: Long) {
-        if (ms == subtitleDelayMs) return
         subtitleDelayMs = ms
+        if (pick?.external != false || ms == subtitleDelay.ms) return
         subtitleDelay.ms = ms
         timing?.cancel()
-        if (pick == null || loadedUrl == null) return
+        if (loadedUrl == null) return
         timing =
             scope.launch {
                 delay(TIMING_SETTLE_MS)
                 retiming = true
-                reloadWith(loadedSubs)
+                reload()
             }
     }
 
@@ -1057,10 +1058,7 @@ class PlaybackController(
         groupIndex: Int,
         trackIndex: Int,
         group: Tracks.Group,
-    ): String {
-        val external = externalIndex(group.getTrackFormat(trackIndex).id)
-        return if (external != null) "$EXTERNAL$external" else "$groupIndex:$trackIndex"
-    }
+    ): String = "$groupIndex:$trackIndex"
 
     private fun refreshTracks(tracks: Tracks = player.currentTracks) {
         // A Timing reload sets the same item again, and Media3 reports no tracks until it has selected them
@@ -1069,7 +1067,6 @@ class PlaybackController(
         if (!tracks.isEmpty) retiming = false
         val audioRows = ArrayList<TrackChoice>()
         val fileRows = ArrayList<TrackChoice>()
-        val loaded = HashMap<String, TrackChoice>()
         tracks.groups.forEachIndexed { gi, group ->
             for (ti in 0 until group.length) {
                 if (!group.isTrackSupported(ti)) continue
@@ -1082,36 +1079,27 @@ class PlaybackController(
                     }
 
                     C.TRACK_TYPE_TEXT -> {
-                        // A side-loaded file is one of the core's tracks: listed with them, by its address.
-                        val url = externalUrl(format.id)
-                        if (url != null) {
-                            loaded[url] = TrackChoice(id, "", selected = selected)
-                        } else {
-                            fileRows += textChoice(id, format, selected)
-                        }
+                        fileRows += textChoice(id, format, selected)
                     }
                 }
             }
         }
-        // The snapshot's order, then a loaded file the snapshot no longer lists (it leaves with the next reload).
-        val core = snapshotSubs + loadedSubs.filter { sub -> snapshotSubs.none { it.url == sub.url } }
-        // Left out: files that did not load, and side-loaded ones the player has not listed yet.
-        val hidden = dead + loadedSubs.map { it.url }.filter { it !in loaded }
+        // The addon pick is on from the moment it is picked, while its file comes in.
+        val on = pick?.takeIf { it.external }?.url
+        val loaded = on?.let { mapOf(it to TrackChoice("$LATE$it", "", selected = true)) } ?: emptyMap()
         audio = audioRows
-        text = subtitleRows(core, loaded, hidden, fileRows, LATE)
+        text = subtitleRows(snapshotSubs, loaded, dead, fileRows, LATE)
         applyPick(tracks)
         fileTakesOverStart()
     }
-
-    /** The address of the addon subtitle file behind a loaded track's `ext:N` id, or null. */
-    private fun externalUrl(formatId: String?): String? = externalIndex(formatId)?.let { loadedSubs.getOrNull(it)?.url }
 
     /**
      * When the tracks change (a failover, a reload, or the track list of this item filling in) the
      * viewer's subtitle is found again with [findPick]. Does nothing when it is already the one on.
      */
     private fun applyPick(tracks: Tracks) {
-        val wanted = pick ?: return
+        // An addon pick is drawn over the picture: nothing in the player to find.
+        val wanted = pick?.takeUnless { it.external } ?: return
         val refs = ArrayList<Pair<Tracks.Group, Int>>()
         val found = ArrayList<TextCandidate>()
         tracks.groups.forEach { group ->
@@ -1122,8 +1110,8 @@ class PlaybackController(
                 refs += group to ti
                 found +=
                     TextCandidate(
-                        external = externalIndex(format.id) != null,
-                        url = externalUrl(format.id),
+                        external = false,
+                        url = null,
                         group = group.mediaTrackGroup.id,
                         kind = format.codecs ?: format.sampleMimeType,
                         language = format.language,
@@ -1148,6 +1136,7 @@ class PlaybackController(
         StartService.release()
         ticker?.cancel()
         noticeJob?.cancel()
+        fetching?.cancel()
         tryingAgainJob?.cancel()
         player.removeListener(listener)
         view?.close()

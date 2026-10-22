@@ -3,6 +3,9 @@ package app.marquee.ui.tv
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.view.View
+import android.view.ViewGroup
+import androidx.activity.ComponentActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.setValue
@@ -15,7 +18,7 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isFocused
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -23,6 +26,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
+import androidx.media3.common.text.Cue
+import androidx.media3.ui.SubtitleView
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
 import app.marquee.core.views.PlaybackView
@@ -32,6 +37,7 @@ import app.marquee.player.LOADING_TAG
 import app.marquee.player.LoadingLayer
 import app.marquee.player.PlaybackController
 import app.marquee.player.SUBTITLE_PICKER_TAG
+import app.marquee.player.SubtitleDelay
 import app.marquee.player.TitleMark
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -49,6 +55,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
@@ -62,7 +69,7 @@ import kotlin.test.assertEquals
 @Config(sdk = [36], qualifiers = "w960dp-h540dp")
 class TvLoadingTest {
     @get:Rule
-    val compose = createComposeRule()
+    val compose = createAndroidComposeRule<ComponentActivity>()
 
     private val main =
         object : CoroutineDispatcher() {
@@ -77,7 +84,14 @@ class TvLoadingTest {
         }
     private val scope = CoroutineScope(SupervisorJob() + main)
     private val player = PlayingPlayer()
-    private val controller = PlaybackController(player, scope, "Sintel", null, null, SystemClock.elapsedRealtime())
+
+    /** The addon files the controller fetched; every one holds a line from 1:00.5 to 1:03. */
+    private val fetches = CopyOnWriteArrayList<String>()
+    private val controller =
+        PlaybackController(player, scope, "Sintel", null, null, SystemClock.elapsedRealtime(), SubtitleDelay()) {
+            fetches += it
+            "1\n00:01:00,500 --> 00:01:03,000\nWho goes there\n".toByteArray()
+        }
 
     private val executor = Executors.newSingleThreadExecutor { Thread(it, "test-core") }
     private val client = CoreClient(executor.asCoroutineDispatcher())
@@ -210,6 +224,60 @@ class TvLoadingTest {
                 .config[SemanticsProperties.ProgressBarRangeInfo]
         assertEquals(0.7f, heard.current, "the easing toward 0.7 has only begun")
         compose.mainClock.autoAdvance = true
+    }
+
+    /** The cues the picture's subtitle view holds now. */
+    private fun drawn(): List<String> {
+        fun find(view: View): SubtitleView? =
+            view as? SubtitleView ?: (view as? ViewGroup)?.let { group ->
+                (0 until group.childCount).firstNotNullOfOrNull { find(group.getChildAt(it)) }
+            }
+        val view = requireNotNull(find(compose.activity.window.decorView)) { "no subtitle view" }
+        // Media3 keeps the cues in a private field (as the cue tests read them).
+        val field = SubtitleView::class.java.getDeclaredField("cues").apply { isAccessible = true }
+
+        @Suppress("UNCHECKED_CAST")
+        return (field.get(view) as List<Cue>).map { it.text.toString() }
+    }
+
+    @Test
+    fun `an addon pick draws over the picture at once, follows the position and the delay, leaves with Off`() {
+        compose.setContent { MarqueeTheme(Form.Tv) { TvPlayer(controller, false, {}, null, { _, _ -> }, {}) } }
+        compose.runOnIdle { controller.attach(readyView(WITH_SUBTITLES)) }
+        compose.waitUntil(10_000) {
+            Snapshot.sendApplyNotifications()
+            shadowOf(Looper.getMainLooper()).idle()
+            controller.stage == PlaybackController.Stage.Buffering
+        }
+        compose.runOnIdle { player.open() }
+        compose.waitUntil(10_000) { controller.stage == PlaybackController.Stage.Playing }
+        compose.onNodeWithContentDescription("Subtitles, Off, 2 languages").performClick()
+        compose.waitForIdle()
+        compose.onNode(isFocused()).performKeyInput { pressKey(Key.DirectionDown) }
+        compose
+            .onNodeWithContentDescription(
+                "English, 1 option",
+            ).assertIsFocused()
+            .performKeyInput { pressKey(Key.Enter) }
+        // The file is parsed off the main thread, and the controller takes it on the main looper.
+        compose.waitUntil(10_000) {
+            shadowOf(Looper.getMainLooper()).idle()
+            controller.addonOn
+        }
+        compose.runOnIdle { assertEquals(listOf("http://127.0.0.1:7781/en.srt"), fetches) }
+        // 1:00, before the line; then 1:01, in it.
+        compose.waitForIdle()
+        assertEquals(emptyList(), drawn())
+        compose.runOnIdle { controller.seekTo(61_000) }
+        compose.waitUntil(10_000) { drawn() == listOf("Who goes there") }
+        // A second later: the line has not started yet at 1:01.
+        compose.runOnIdle { controller.setSubtitleDelay(1_000) }
+        compose.waitUntil(10_000) { drawn().isEmpty() }
+        compose.runOnIdle { controller.selectText("off") }
+        compose.waitForIdle()
+        assertEquals(emptyList(), drawn())
+        assertEquals(1, player.items, "the item was set again")
+        assertEquals(1, player.prepares, "the item was prepared again")
     }
 
     @Test

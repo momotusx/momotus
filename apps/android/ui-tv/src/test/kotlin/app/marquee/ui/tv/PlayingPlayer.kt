@@ -3,6 +3,7 @@ package app.marquee.ui.tv
 import android.os.Looper
 import androidx.media3.common.Player
 import androidx.media3.common.SimpleBasePlayer
+import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.common.text.Cue
 import androidx.media3.common.text.CueGroup
 import com.google.common.util.concurrent.Futures
@@ -18,6 +19,7 @@ internal class PlayingPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
     /** A source was set and prepared before the file opens: Media3 buffers it. */
     private var prepared = false
     private var cues = emptyList<Cue>()
+    private var tracks = TrackSelectionParameters.DEFAULT
 
     override fun getState(): State {
         val state =
@@ -33,6 +35,7 @@ internal class PlayingPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
                 .setContentPositionMs(PositionSupplier.getConstant(at))
                 .setNewlyRenderedFirstFrame(firstFrame)
                 .setCurrentCues(CueGroup(cues, at * 1000))
+                .setTrackSelectionParameters(tracks)
         if (!ready && prepared) {
             return state
                 .setPlaylist(listOf(MediaItemData.Builder("film").build()))
@@ -86,10 +89,23 @@ internal class PlayingPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
         mediaItems: List<androidx.media3.common.MediaItem>,
         startIndex: Int,
         startPositionMs: Long,
-    ): ListenableFuture<*> = Futures.immediateVoidFuture()
+    ): ListenableFuture<*> {
+        items++
+        return Futures.immediateVoidFuture()
+    }
+
+    /** How often an item was set, and prepared: a subtitle pick or a delay step does neither. */
+    var items = 0
+    var prepares = 0
+
+    override fun handleSetTrackSelectionParameters(parameters: TrackSelectionParameters): ListenableFuture<*> {
+        tracks = parameters
+        return Futures.immediateVoidFuture()
+    }
 
     override fun handlePrepare(): ListenableFuture<*> {
         prepared = true
+        prepares++
         return Futures.immediateVoidFuture()
     }
 

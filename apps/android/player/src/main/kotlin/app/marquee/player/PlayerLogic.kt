@@ -3,7 +3,6 @@ package app.marquee.player
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.util.Util
-import androidx.media3.datasource.HttpDataSource
 import app.marquee.core.model.Attempt
 import app.marquee.core.model.Segment
 import app.marquee.core.model.SegmentKind
@@ -151,19 +150,6 @@ class PictureWait {
         since = -1L
     }
 }
-
-/** How far past the video's own end a play may run before it is ended. */
-const val OVERRUN_MS = 1_000L
-
-/**
- * A side-loaded subtitle with cues past the video's end keeps Media3 playing on black until its last cue (the
- * text renderer has not ended). Past the video's end by [OVERRUN_MS], the play is over.
- */
-fun ranPastEnd(
-    positionMs: Long,
-    durationMs: Long,
-    sideLoaded: Boolean,
-): Boolean = sideLoaded && durationMs > 0 && positionMs >= durationMs + OVERRUN_MS
 
 /**
  * The failure card's headline: when the core offers another version, only this one failed; otherwise every
@@ -316,38 +302,15 @@ fun subtitleMime(url: String): String {
     }
 }
 
-/** The format id of an addon subtitle side-loaded with the media item: `ext:N` is the item's Nth file. */
-const val EXTERNAL = "ext:"
-
-private val externalId = Regex("""(?:\d+:)?ext:(\d+)""")
-
 /**
- * The N of an addon subtitle's `ext:N` format id, or null for any other track. Once an item has
- * side-loaded subtitles Media3 merges sources and puts the source's index in front (`1:ext:0`).
+ * The addon file a new source carries the viewer's addon pick over to: its own file, else the best one in its
+ * language; null when the new source has neither.
  */
-fun externalIndex(formatId: String?): Int? =
-    formatId
-        ?.let(externalId::matchEntire)
-        ?.groupValues
-        ?.get(1)
-        ?.toIntOrNull()
-
-/**
- * The addon subtitles to side-load with a new media item: only the one carrying the viewer's addon pick
- * over (its file, else one in its language). Media3 downloads and parses every side-loaded file before
- * the first frame (86 OpenSubtitles files held it for 17.6 s on the emulator); the others are listed
- * and load when chosen.
- */
-fun upfrontSubtitles(
+fun carriedSubtitle(
     subs: List<SubtitleTrack>,
     pickLanguage: String?,
     pickUrl: String?,
-): List<SubtitleTrack> {
-    val carried =
-        subs.firstOrNull { pickUrl != null && it.url == pickUrl }
-            ?: bestInLanguage(subs, pickLanguage)
-    return listOfNotNull(carried)
-}
+): SubtitleTrack? = subs.firstOrNull { pickUrl != null && it.url == pickUrl } ?: bestInLanguage(subs, pickLanguage)
 
 /**
  * The best track in [language]: the core lists each language's tracks in its own ranking (addon order),
@@ -362,25 +325,6 @@ fun bestInLanguage(
     return subs
         .filter { sameLanguage(it.lang, language) }
         .minByOrNull { (if (it.forced) 2 else 0) + (if (it.hearingImpaired) 1 else 0) }
-}
-
-/**
- * The side-loaded subtitle behind a player error, or null when the error is the video's. Media3 turns a
- * subtitle file that does not load (the addon answered 502, timed out) into an error of the whole item;
- * the HTTP failure in its causes names the file.
- */
-fun failedSubtitle(
-    error: Throwable,
-    loaded: List<SubtitleTrack>,
-): SubtitleTrack? {
-    val uri =
-        generateSequence(error) { it.cause }
-            .filterIsInstance<HttpDataSource.HttpDataSourceException>()
-            .firstOrNull()
-            ?.dataSpec
-            ?.uri
-            ?.toString() ?: return null
-    return loaded.firstOrNull { it.url == uri }
 }
 
 /** A subtitle the viewer chose, as [findPick] looks for it again when the tracks change. */

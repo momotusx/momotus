@@ -42,6 +42,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import java.io.IOException
 import java.time.Duration
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
@@ -82,6 +83,24 @@ class SubtitleFailureTest {
 
     private val other = "http://127.0.0.1:7781/opensubtitles/tur.srt"
 
+    /** What the loopback serves for each addon file; a file not here answers 502. */
+    private val files =
+        mutableMapOf(
+            subtitle to "1\n00:00:01,000 --> 00:00:03,000\nMerhaba\n\n2\n00:00:05,000 --> 00:00:06,000\nHoşça kal\n",
+            other to "1\n00:00:01,000 --> 00:00:02,000\nSelam\n",
+        )
+
+    /** The addon files the controller fetched, in order. */
+    private val fetches = CopyOnWriteArrayList<String>()
+
+    private val fetch: suspend (String) -> ByteArray = { url ->
+        fetches += url
+        files[url]?.toByteArray() ?: throw IOException("502 for $url")
+    }
+
+    /** What the addon track on draws at [ms]. */
+    private fun PlaybackController.drawnAt(ms: Long) = addonCues(ms).map { it.text.toString() }
+
     /** The core's playback snapshot with these subtitle files and notes, and [extra] fields ending in a comma. */
     private fun snapshot(
         subtitles: List<String> = listOf(subtitle),
@@ -121,7 +140,8 @@ class SubtitleFailureTest {
             client.onMessage("""{"id":$id,"ok":true,"result":$result}""")
         }
         val player = FakePlayer()
-        val controller = PlaybackController(player, scope, "Sintel", null, null, SystemClock.elapsedRealtime(), delay)
+        val controller =
+            PlaybackController(player, scope, "Sintel", null, null, SystemClock.elapsedRealtime(), delay, fetch)
         controller.attach(PlaybackView(client, scope, JsonObject(emptyMap())).also { it.open() })
         if (loads) until("the stream loads") { player.items.size == 1 }
         return player to controller
@@ -213,37 +233,14 @@ class SubtitleFailureTest {
 
     @Test
     fun `a subtitle that does not load drops that track and the same stream plays on`() {
-        client.attach { text ->
-            val msg = CoreJson.parseToJsonElement(text).jsonObject
-            sent += msg
-            val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
-            val result =
-                if (msg["op"]?.jsonPrimitive?.content ==
-                    "subscribe"
-                ) {
-                    """{"sub":7,"snapshot":$snapshot}"""
-                } else {
-                    "{}"
-                }
-            client.onMessage("""{"id":$id,"ok":true,"result":$result}""")
-        }
-        val player = FakePlayer()
-        val controller = PlaybackController(player, scope, "Sintel", null, null, SystemClock.elapsedRealtime())
-        val view = PlaybackView(client, scope, JsonObject(emptyMap())).also { it.open() }
-        controller.attach(view)
-        until("the stream loads") { player.items.size == 1 }
-        assertEquals(video, player.items.last().uri)
-
-        // The viewer picks the Turkish file: the item is set again with it side-loaded.
+        files.remove(subtitle)
+        val (player, controller) = open()
+        // The viewer picks the Turkish file; the addon answers 502 for it.
         controller.selectText("late:$subtitle")
-        until("the subtitle is side-loaded") { player.items.size == 2 }
-        assertEquals(listOf(subtitle), player.items.last().subtitles)
-
-        // The addon answers 502 for the file: Media3 fails the whole item.
-        player.fail(httpError(subtitle, 502))
-        until("the item is set again without the file") { player.items.size == 3 }
-        assertEquals(video, player.items.last().uri)
-        assertEquals(emptyList(), player.items.last().subtitles)
+        until("the track is dropped") { controller.text.none { it.id == "late:$subtitle" } }
+        assertEquals(listOf(subtitle), fetches)
+        assertFalse(controller.addonOn)
+        assertEquals(1, player.items.size, "the item was set again")
         assertEquals(0, player.stops, "the video was stopped")
         assertTrue(failOvers().isEmpty(), "a subtitle failed the video over")
         assertNotEquals(PlaybackController.Stage.Failed, controller.stage)
@@ -260,13 +257,13 @@ class SubtitleFailureTest {
     fun `a note while one of the core's tracks is on says so for a few seconds, and nothing else changes`() {
         val (player, controller) = open()
         controller.selectText("late:$subtitle")
-        until("the subtitle is side-loaded") { player.items.size == 2 }
+        until("the subtitle is drawn") { controller.addonOn }
         push(snapshot(notes = """[{"source":"SubSense","problem":"unreachable"}]"""))
         until(
             "the note is said",
         ) { controller.notice == "SubSense did not answer. Try its subtitles again in a moment." }
         assertEquals(null, controller.status, "the note came with the waiting mark")
-        assertEquals(2, player.items.size, "the item was set again")
+        assertEquals(1, player.items.size, "the item was set again")
         assertEquals("SubSense did not answer. Try its subtitles again in a moment.", controller.subtitlePanelNote)
         assertTrue(failOvers().isEmpty())
         // After its few seconds (four, timed on the real clock here) the line goes; the panel keeps the note.
@@ -290,19 +287,15 @@ class SubtitleFailureTest {
     fun `a track the core could not read leaves the list, subtitles go off, the same stream plays on`() {
         val (player, controller) = open(snapshot(subtitles = listOf(subtitle, other)))
         controller.selectText("late:$subtitle")
-        until("the subtitle is side-loaded") { player.items.size == 2 }
+        until("the subtitle is drawn") { controller.addonOn }
         // The core answered empty WebVTT and took the file out of the list, with a note.
         push(snapshot(subtitles = listOf(other), notes = """[{"source":"SubSense","problem":"trackFailed"}]"""))
-        until("the item is set again without the file") { player.items.size == 3 }
-        // The item set again shows its first frame at once: the note stays its few seconds.
-        player.renderFirstFrame()
-        until("the first frame is heard") { true }
-        assertEquals(video, player.items.last().uri)
-        assertEquals(emptyList(), player.items.last().subtitles)
+        until("subtitles go off") { !controller.addonOn }
+        assertEquals(1, player.items.size, "the item was set again")
         assertTrue(
             player.current.trackSelectionParameters.disabledTrackTypes
                 .contains(C.TRACK_TYPE_TEXT),
-            "subtitles stayed on",
+            "the file's own tracks came on",
         )
         // One message, the note's: no "did not load" on top.
         assertEquals("A subtitle file from SubSense could not be read. Pick another one.", controller.notice)
@@ -310,14 +303,15 @@ class SubtitleFailureTest {
         assertEquals(0, player.stops)
         assertTrue(failOvers().isEmpty())
         assertTrue(controller.text.none { it.id == "late:$subtitle" }, "the file is still offered")
+        assertFalse(controller.subtitleOn)
         controller.release()
     }
 
     @Test
-    fun `a new source sets its own item once, with no drop on top`() {
+    fun `a new source sets its own item once, and the addon pick goes over to its file in the same language`() {
         val (player, controller) = open()
         controller.selectText("late:$subtitle")
-        until("the subtitle is side-loaded") { player.items.size == 2 }
+        until("the subtitle is drawn") { controller.addonOn }
         // A failover: a new loopback URL, and the subtitle files under new addresses.
         val failedOver =
             snapshot(subtitles = listOf(other))
@@ -325,13 +319,15 @@ class SubtitleFailureTest {
                 .replace("\"attempt\":1", "\"attempt\":2")
         push(failedOver)
         until("the new source loads") { player.items.lastOrNull()?.uri == "http://127.0.0.1:7780/second.mp4" }
+        until("the Turkish file of the new source is drawn") { controller.drawnAt(1_500) == listOf("Selam") }
         repeat(20) { until("the looper idles") { true } }
-        assertEquals(3, player.items.size, "the old item was set again before the new one")
+        assertEquals(2, player.items.size, "the old item was set again before the new one")
+        assertTrue(controller.text.any { it.id == "late:$other" && it.selected })
         controller.release()
     }
 
     @Test
-    fun `a buffer that runs dry during play is logged as a stall, a subtitle reload is not`() {
+    fun `a buffer that runs dry during play is logged as a stall, a Timing reload is not`() {
         val lines = CopyOnWriteArrayList<String>()
         CoreLog.sink = { _, message, _ -> lines += message }
         try {
@@ -349,12 +345,13 @@ class SubtitleFailureTest {
             player.state(Player.STATE_READY)
             until("the stall is logged") { lines.any { it.startsWith("stall ") } }
             assertEquals(listOf("stall 1200 ms"), lines.filter { it.startsWith("stall ") })
-            // A side-loaded file that does not load sets the item again: that wait is no stall.
-            controller.selectText("late:$subtitle")
-            until("the subtitle is side-loaded") { player.items.size == 2 }
-            player.state(Player.STATE_READY)
-            player.fail(httpError(subtitle, 502))
-            until("the item is set again without the file") { player.items.size == 3 }
+            // A delay on the file's own track sets the item again: that wait is no stall.
+            player.media(withOwnTrack, 10_000_000L)
+            controller.selectText(OWN)
+            until("the file's track is on") { controller.subtitleOn }
+            controller.setSubtitleDelay(SUBTITLE_STEP_MS)
+            until("the item is set again") { player.items.size == 2 }
+            player.state(Player.STATE_BUFFERING)
             player.state(Player.STATE_READY)
             until("the reload is logged") { lines.any { it.startsWith("subtitle reload") } }
             assertEquals(1, lines.count { it.startsWith("stall ") })
@@ -368,13 +365,13 @@ class SubtitleFailureTest {
     fun `the core's start subtitle turns on once by itself, and nothing goes back`() {
         val (player, controller) = open(snapshot(subtitles = listOf(subtitle, other)))
         push(snapshot(subtitles = listOf(subtitle, other), extra = "\"autoSubtitle\":\"$subtitle\","))
-        until("the start subtitle is side-loaded") { player.items.size == 2 }
-        assertEquals(listOf(subtitle), player.items.last().subtitles)
+        until("the start subtitle is drawn") { controller.drawnAt(2_000) == listOf("Merhaba") }
         // Once: the same snapshot again changes nothing (the note marks it as heard).
         val note = """[{"source":"SubSense","problem":"blocked"}]"""
         push(snapshot(subtitles = listOf(subtitle, other), notes = note, extra = "\"autoSubtitle\":\"$subtitle\","))
         until("the snapshot is heard") { controller.subtitlePanelNote != null }
-        assertEquals(2, player.items.size)
+        assertEquals(1, player.items.size)
+        assertEquals(listOf(subtitle), fetches)
         assertEquals(emptyList(), chosen(), "the start subtitle is not the viewer's pick")
         controller.release()
     }
@@ -383,7 +380,7 @@ class SubtitleFailureTest {
     fun `once the file opens, its own track in the start subtitle's language takes over, and nothing goes back`() {
         val (player, controller) = open(snapshot(subtitles = listOf(subtitle, other)))
         push(snapshot(subtitles = listOf(subtitle, other), extra = "\"autoSubtitle\":\"$subtitle\","))
-        until("the start subtitle is side-loaded") { player.items.size == 2 }
+        until("the start subtitle is drawn") { controller.addonOn }
         // The file turns out to hold a Turkish track (and a forced one, which never takes over).
         player.media(withText(listOf(true, false), "tr"), 600_000_000L)
         until("the file's track is on") {
@@ -530,8 +527,9 @@ class SubtitleFailureTest {
         assertEquals(1, player.items.size, "the start subtitle turned on after Off")
         // A pick of a file not loaded yet: it loads, and its address goes to the core.
         controller.selectText("late:$other")
-        until("the pick is side-loaded") { player.items.size == 2 }
+        until("the pick is drawn") { controller.addonOn }
         until("the pick goes to the core") { chosen() == listOf(null, other) }
+        assertEquals(1, player.items.size)
         controller.release()
     }
 
@@ -722,111 +720,114 @@ class SubtitleFailureTest {
     }
 
     @Test
-    fun `a subtitle longer than the video ends the play at the video's end`() {
-        val (player, controller) = open()
-        controller.selectText("late:$subtitle")
-        until("the subtitle is side-loaded") { player.items.size == 2 }
-        player.media(video264, 52_209_000L)
-        player.state(Player.STATE_READY)
-        player.renderFirstFrame()
-        until("it plays") { player.isPlaying }
-        // The video's end passed a second ago; the subtitle has cues for minutes more.
-        player.position(53_300)
-        until("the play ends") { controller.stage == PlaybackController.Stage.Ended }
-        assertFalse(player.playWhenReady)
-        controller.release()
-    }
-
-    @Test
-    fun `a delay moves the chosen track's subtitles and sets the item again where it was, once a run settles`() {
-        val delay = SubtitleDelay()
-        val (player, controller) = open(delay = delay)
+    fun `a pick, Off and every delay step on an addon track are instant and never set the item again`() {
+        val (player, controller) = open(snapshot(subtitles = listOf(subtitle, other)))
         // With subtitles off there is no track to time.
         controller.setSubtitleDelay(500)
-        runFor(1_000)
         assertEquals(0L, controller.subtitleDelayMs)
-        assertEquals(0L, delay.ms)
-        assertEquals(1, player.items.size, "set again with subtitles off")
         controller.selectText("late:$subtitle")
-        until("the subtitle is side-loaded") { player.items.size == 2 }
-        player.position(42_000)
-        controller.setSubtitleDelay(500)
+        until("the subtitle is drawn") { controller.addonOn }
+        // Its cues follow the position: 1 to 3 s and 5 to 6 s of the file.
+        assertEquals(listOf("Merhaba"), controller.drawnAt(2_000))
+        assertEquals(emptyList(), controller.drawnAt(4_000))
+        assertEquals(listOf("Hoşça kal"), controller.drawnAt(5_500))
+        // A second later: what the file has at 2.5 s shows at 3.5 s, at once.
         controller.setSubtitleDelay(1_000)
-        controller.setSubtitleDelay(1_500)
-        assertEquals(1_500L, controller.subtitleDelayMs)
-        until("the item is set again") { player.items.size == 3 }
-        runFor(1_500)
-        assertEquals(3, player.items.size, "a run of changes set the stream again more than once")
-        assertEquals(1_500L, delay.ms, "the parsers read the new delay")
-        assertEquals(video, player.items.last().uri)
-        assertEquals(42_000L, player.items.last().startMs)
+        assertEquals(listOf("Merhaba"), controller.drawnAt(3_500))
+        assertEquals(emptyList(), controller.drawnAt(1_500))
+        // Two seconds earlier: the file's 5.5 s at 3.5 s.
+        controller.setSubtitleDelay(-2_000)
+        assertEquals(listOf("Hoşça kal"), controller.drawnAt(3_500))
         // Within a minute either way.
         controller.setSubtitleDelay(90_000)
         assertEquals(SUBTITLE_MAX_MS, controller.subtitleDelayMs)
-        controller.setSubtitleDelay(-90_000)
-        assertEquals(-SUBTITLE_MAX_MS, controller.subtitleDelayMs)
+        controller.setSubtitleDelay(1_000)
+        // Off clears the cues; the same track on again is back at once with its delay, its file not fetched again.
+        controller.selectText(TRACK_OFF)
+        assertFalse(controller.addonOn)
+        assertEquals(emptyList(), controller.drawnAt(2_000))
+        controller.selectText("late:$subtitle")
+        assertTrue(controller.addonOn, "on again at once")
+        assertEquals(listOf("Merhaba"), controller.drawnAt(3_500))
+        runFor(1_000)
+        assertEquals(listOf(subtitle), fetches)
+        assertEquals(1, player.items.size, "the item was set again")
+        assertEquals(1, player.prepares, "the item was prepared again")
         controller.release()
     }
 
     @Test
     fun `each track keeps its own delay, and Off and on again keeps it`() {
-        val delay = SubtitleDelay()
-        val (player, controller) = open(snapshot(subtitles = listOf(subtitle, other)), delay = delay)
+        val (player, controller) = open(snapshot(subtitles = listOf(subtitle, other)))
         controller.selectText("late:$subtitle")
-        until("the subtitle is side-loaded") { player.items.size == 2 }
+        until("the subtitle is drawn") { controller.addonOn }
         controller.setSubtitleDelay(1_500)
-        until("the item is set again") { player.items.size == 3 }
-        // Another track starts on time: its own load takes the delay, with no Timing reload after it.
+        // Another track starts on time.
         controller.selectText("late:$other")
         assertEquals(0L, controller.subtitleDelayMs)
-        until("the other is side-loaded") { player.items.size == 4 }
-        assertEquals(0L, delay.ms)
-        runFor(1_000)
-        assertEquals(4, player.items.size, "a Timing reload after the pick's own")
-        // Back to the first: its delay comes back, and the item is set again for it.
+        until("the other is drawn") { controller.drawnAt(1_500) == listOf("Selam") }
+        // Back to the first: its delay comes back.
         controller.selectText("late:$subtitle")
         assertEquals(1_500L, controller.subtitleDelayMs)
-        until("the item is set again with its delay") { player.items.size == 5 }
-        assertEquals(1_500L, delay.ms)
-        // Off and the same track on again: the same delay, nothing set again.
+        assertEquals(listOf("Merhaba"), controller.drawnAt(3_000))
         controller.selectText(TRACK_OFF)
         controller.selectText("late:$subtitle")
         assertEquals(1_500L, controller.subtitleDelayMs)
         runFor(1_000)
-        assertEquals(5, player.items.size)
+        assertEquals(1, player.items.size, "the item was set again")
+        controller.release()
+    }
+
+    @Test
+    fun `a delay on the file's own track sets the item again where it was, once a run settles`() {
+        val delay = SubtitleDelay()
+        val (player, controller) = open(delay = delay)
+        player.media(withOwnTrack, 10_000_000L)
+        controller.selectText(OWN)
+        until("the file's track is on") { controller.subtitleOn }
+        player.position(42_000)
+        controller.setSubtitleDelay(500)
+        controller.setSubtitleDelay(1_000)
+        controller.setSubtitleDelay(1_500)
+        assertEquals(1_500L, controller.subtitleDelayMs)
+        until("the item is set again") { player.items.size == 2 }
+        runFor(1_500)
+        assertEquals(2, player.items.size, "a run of changes set the stream again more than once")
+        assertEquals(1_500L, delay.ms, "the parsers read the new delay")
+        assertEquals(video, player.items.last().uri)
+        assertEquals(42_000L, player.items.last().startMs)
         controller.release()
     }
 
     @Test
     fun `a Timing reload keeps the subtitle rows and the choice while the new item has no tracks yet`() {
         val (player, controller) = open()
-        controller.selectText("late:$subtitle")
-        until("the subtitle is side-loaded") { player.items.size == 2 }
-        player.media(withLoadedSubtitle, 10_000_000L)
-        player.state(Player.STATE_READY)
-        until("the loaded subtitle is on") { controller.subtitleOn }
+        player.media(withOwnTrack, 10_000_000L)
+        controller.selectText(OWN)
+        until("the file's track is on") { controller.subtitleOn }
         controller.setSubtitleDelay(SUBTITLE_STEP_MS)
-        until("the item is set again") { player.items.size == 3 }
+        until("the item is set again") { player.items.size == 2 }
         // Media3 masks the new item with no tracks until it has selected them again.
         player.media(Tracks.EMPTY, 10_000_000L)
         runFor(300)
         assertTrue(controller.subtitleOn, "the Timing row left the panel during the reload")
-        player.media(withLoadedSubtitle, 10_000_000L)
+        player.media(withOwnTrack, 10_000_000L)
         player.state(Player.STATE_READY)
         runFor(300)
         assertTrue(controller.subtitleOn)
         controller.release()
     }
 
-    /** The video and the side-loaded subtitle file (the item's first, `ext:0`), on. */
-    private val withLoadedSubtitle =
+    /** The video and a Turkish text track of the file's own, on: the track's id in the menu is [OWN]. */
+    private val withOwnTrack =
         Tracks(
             video264.groups +
                 Tracks.Group(
                     TrackGroup(
+                        "text:own",
                         Format
                             .Builder()
-                            .setId("ext:0")
+                            .setId("0")
                             .setSampleMimeType(MimeTypes.APPLICATION_SUBRIP)
                             .setLanguage("tr")
                             .build(),
@@ -887,6 +888,11 @@ class SubtitleFailureTest {
     }
 
     /** A player that records the items it is given and raises the errors a test hands it. */
+    private companion object {
+        /** The menu's id of [withOwnTrack]'s text track: the second group, its first track. */
+        const val OWN = "1:0"
+    }
+
     private class FakePlayer : SimpleBasePlayer(Looper.getMainLooper()) {
         class Item(
             val uri: String,
@@ -896,6 +902,7 @@ class SubtitleFailureTest {
 
         val items = ArrayList<Item>()
         var stops = 0
+        var prepares = 0
         private var tracks = Tracks.EMPTY
         private var durationUs = C.TIME_UNSET
 
@@ -994,6 +1001,7 @@ class SubtitleFailureTest {
         }
 
         override fun handlePrepare(): ListenableFuture<*> {
+            prepares++
             current =
                 current
                     .buildUpon()

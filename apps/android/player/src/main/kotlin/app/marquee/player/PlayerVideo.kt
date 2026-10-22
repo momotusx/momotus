@@ -7,9 +7,11 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
@@ -28,6 +30,7 @@ import androidx.media3.ui.SubtitleView
 import androidx.media3.ui.compose.ContentFrame
 import androidx.media3.ui.compose.SURFACE_TYPE_SURFACE_VIEW
 import app.marquee.core.model.SubtitleSize
+import kotlinx.coroutines.delay
 import kotlin.math.ceil
 import kotlin.math.max
 
@@ -54,6 +57,8 @@ fun PlayerVideo(
     subtitleCeiling: Dp = 0.dp,
     /** A control in the bottom corner (Skip, Up Next), in px: the subtitles' lines keep clear of it. */
     subtitleCorner: Rect? = null,
+    /** An addon track drawn by the app ([PlaybackController.addonCues]): its cues now, read every frame; null for none. */
+    addonCues: (() -> List<Cue>)? = null,
 ) {
     BoxWithConstraints(modifier.background(Color.Black)) {
         ContentFrame(
@@ -62,17 +67,31 @@ fun PlayerVideo(
             surfaceType = SURFACE_TYPE_SURFACE_VIEW,
             contentScale = ContentScale.Fit,
         )
-        // The cues on screen: the frame is set for the lines they take.
-        var cues by remember(player) { mutableStateOf(player.currentCues.cues) }
+        // The cues on screen: the frame is set for the lines they take. The player's, or an addon track's.
+        var cues by remember(player) { mutableStateOf<List<Cue>>(player.currentCues.cues) }
+        val addon = rememberUpdatedState(addonCues)
         DisposableEffect(player) {
             val listener =
                 object : Player.Listener {
                     override fun onCues(cueGroup: CueGroup) {
-                        cues = cueGroup.cues
+                        if (addon.value == null) cues = cueGroup.cues
                     }
                 }
             player.addListener(listener)
             onDispose { player.removeListener(listener) }
+        }
+        LaunchedEffect(player, addonCues != null) {
+            if (addonCues == null) {
+                cues = player.currentCues.cues
+                return@LaunchedEffect
+            }
+            // ponytail: a look every 40 ms, near a frame's worth for a subtitle; a wait until the next cue's start or
+            // end if the polling ever shows in a profile.
+            while (true) {
+                val now = addon.value?.invoke() ?: break
+                if (now != cues) cues = now
+                delay(ADDON_POLL_MS)
+            }
         }
         // The system caption size (as setUserDefaultTextSize reads it) times the profile's size.
         val text =
@@ -268,6 +287,9 @@ private fun captionScale(context: Context): Float {
     val captions = context.getSystemService(CaptioningManager::class.java) ?: return 1f
     return if (captions.isEnabled) captions.fontScale else 1f
 }
+
+/** How often an addon track's cues are looked up while it is on. */
+private const val ADDON_POLL_MS = 40L
 
 /** The subtitles' area, for tests of where they sit. */
 const val SUBTITLES_TAG = "subtitles"

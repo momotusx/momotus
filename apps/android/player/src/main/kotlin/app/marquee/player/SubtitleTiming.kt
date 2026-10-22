@@ -7,19 +7,17 @@ import androidx.media3.extractor.text.CuesWithTiming
 import androidx.media3.extractor.text.SubtitleParser
 
 /**
- * The subtitle delay of one play, in milliseconds (positive: the words come later). Media3 has no delay
- * setting, so the parsers read it when an item is set ([DelayedSubtitles]), and a change sets the item
- * again at the same position. Written on the main thread, read on the loader's.
+ * The delay of the file's own subtitle track that is on, in milliseconds (positive: the words come later). Media3
+ * has no delay setting, so the parsers read it when an item is set ([DelayedSubtitles]), and a change sets the item
+ * again at the same position. An addon track is drawn by the app and reads its delay as it draws
+ * ([PlaybackController.addonCues]). Written on the main thread, read on the loader's.
  */
 class SubtitleDelay {
     @Volatile
     var ms = 0L
 }
 
-/**
- * Subtitle parsers whose cues are shifted by the play's [delay]: for files fetched beside the video (an
- * addon's subtitles) and the tracks parsed out of the file (Media3 hands this factory to the extractors too).
- */
+/** Subtitle parsers whose cues are shifted by [delay]: the tracks parsed out of the file (the extractors use it). */
 class DelayedSubtitles(
     private val base: SubtitleParser.Factory,
     private val delay: SubtitleDelay,
@@ -62,7 +60,7 @@ internal fun shifted(
     return CuesWithTiming(cues.cues, start, cues.durationUs)
 }
 
-/** How long the Timing row waits after the last press before setting the stream again with the new delay. */
+/** For the file's own track: how long after the last press of the Timing row the stream is set again with it. */
 internal const val TIMING_SETTLE_MS = 700L
 
 /** How far one press of the Timing row's minus or plus moves the subtitles, as Stremio's delay steps. */

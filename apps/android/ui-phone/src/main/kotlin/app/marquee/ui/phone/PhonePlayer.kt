@@ -257,6 +257,7 @@ fun PhonePlayer(
             subtitleLift = if (showControls) controlsHeight else 0.dp,
             subtitleCeiling = if (showControls) maxOf(titleFoot, transportFoot) else 0.dp,
             subtitleCorner = corner.takeIf { showSkip || showNextCard },
+            addonCues = { controller.addonCues() }.takeIf { controller.addonOn },
         )
 
         // The loading screen until the picture comes, and over the paused picture while it stalls with the controls

@@ -267,29 +267,17 @@ class PlayerLogicTest {
     }
 
     @Test
-    fun `an addon subtitle is known by its id with or without Media3's source index`() {
-        assertEquals(0, externalIndex("ext:0"))
-        assertEquals(7, externalIndex("1:ext:7"))
-        assertEquals(12, externalIndex("23:ext:12"))
-        assertNull(externalIndex(null))
-        assertNull(externalIndex("0:"))
-        assertNull(externalIndex("2"))
-        assertNull(externalIndex("ext:"))
-        assertNull(externalIndex("1:ext:7:x"))
-    }
-
-    @Test
-    fun `only the subtitle carrying the viewer's pick is side-loaded`() {
+    fun `a new source carries the addon pick over to its file, else the best one in its language`() {
         fun sub(
             url: String,
             lang: String,
         ) = SubtitleTrack(url = url, lang = lang, source = "OpenSubtitles", forced = false, hearingImpaired = false)
         val subs = listOf(sub("a", "pob"), sub("b", "eng"), sub("c", "eng"), sub("d", "fre"))
-        assertEquals(emptyList(), upfrontSubtitles(subs, pickLanguage = null, pickUrl = null))
-        assertEquals(emptyList(), upfrontSubtitles(subs, pickLanguage = "", pickUrl = null))
-        assertEquals(listOf(subs[2]), upfrontSubtitles(subs, pickLanguage = "en", pickUrl = "c"))
-        assertEquals(listOf(subs[1]), upfrontSubtitles(subs, pickLanguage = "en", pickUrl = "gone"))
-        assertEquals(emptyList(), upfrontSubtitles(subs, pickLanguage = "de", pickUrl = "gone"))
+        assertNull(carriedSubtitle(subs, pickLanguage = null, pickUrl = null))
+        assertNull(carriedSubtitle(subs, pickLanguage = "", pickUrl = null))
+        assertEquals(subs[2], carriedSubtitle(subs, pickLanguage = "en", pickUrl = "c"))
+        assertEquals(subs[1], carriedSubtitle(subs, pickLanguage = "en", pickUrl = "gone"))
+        assertNull(carriedSubtitle(subs, pickLanguage = "de", pickUrl = "gone"))
     }
 
     @Test
@@ -315,7 +303,7 @@ class PlayerLogicTest {
                 sub("full1", "tur"),
                 sub("full2", "tur"),
             )
-        assertEquals(listOf(subs[3]), upfrontSubtitles(subs, pickLanguage = "tr", pickUrl = "gone"))
+        assertEquals(subs[3], carriedSubtitle(subs, pickLanguage = "tr", pickUrl = "gone"))
         // With no full file, a hearing-impaired one beats a forced one.
         assertEquals(subs[2], bestInLanguage(subs.take(3), "tur"))
         assertEquals(subs[1], bestInLanguage(subs.take(2), "tur"))
@@ -350,14 +338,5 @@ class PlayerLogicTest {
         assertFalse(wait.outOfTime(true, 7_000 + NO_PICTURE_MS - 1))
         wait.reset()
         assertFalse(wait.outOfTime(true, 20_000))
-    }
-
-    @Test
-    fun `a play with a side-loaded subtitle ends a second past the video's end`() {
-        assertTrue(ranPastEnd(positionMs = 53_209, durationMs = 52_209, sideLoaded = true))
-        assertFalse(ranPastEnd(positionMs = 53_208, durationMs = 52_209, sideLoaded = true))
-        // Media3 ends by itself without one; an unknown length is not an end.
-        assertFalse(ranPastEnd(positionMs = 60_000, durationMs = 52_209, sideLoaded = false))
-        assertFalse(ranPastEnd(positionMs = 60_000, durationMs = C.TIME_UNSET, sideLoaded = true))
     }
 }
