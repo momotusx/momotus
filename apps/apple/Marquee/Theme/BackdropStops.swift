@@ -2,24 +2,32 @@ import SwiftUI
 
 /// The backdrop's scrims as numbers, the one source for the hero and the title page and for the
 /// glass check (ThemeColorTests): a stop is a location along its gradient (0 at the start edge) and
-/// how much of the page color covers the art there. Over white art, a secondary's white label on
-/// its 16 percent fill must keep 4.5:1 wherever a secondary row sits.
+/// how much of its color (the page's, or black for Home's wash and vignette) covers the art there.
+/// Over white art, a secondary's white label on its 16 percent fill must keep 4.5:1 wherever a
+/// secondary row sits.
 enum BackdropStops {
     struct Stop: Sendable, Equatable {
         let at: Double
         let alpha: Double
     }
 
-    /// Home hero, wide: from the leading edge, and from the bottom up.
-    static let heroSide = [Stop(at: 0, alpha: 0.94), Stop(at: 0.28, alpha: 0.72), Stop(at: 0.58, alpha: 0.18), Stop(at: 0.72, alpha: 0)]
-    // Deepened in 1b (the glass check): the Mac hero at its 400 pt floor held In Library at 4.36.
-    static let heroFoot = [Stop(at: 0, alpha: 0.92), Stop(at: 0.34, alpha: 0.4), Stop(at: 0.6, alpha: 0)]
-    /// Home hero, phone: from the bottom up, and a band under the wordmark from the top down
-    /// (72 pt deep, gone by 140 pt), so the white mark reads on bright art too.
-    static let heroPhoneFoot = [Stop(at: 0, alpha: 0.96), Stop(at: 0.38, alpha: 0.55), Stop(at: 0.62, alpha: 0)]
-    static func heroPhoneTop(height: Double) -> [Stop] {
-        [Stop(at: 0, alpha: 0.78), Stop(at: 72 / height, alpha: 0.6), Stop(at: 140 / height, alpha: 0)]
-    }
+    /// Home's full-bleed hero, wide (the frames' desktop ramps): the black wash along `washAngle`,
+    /// and the page color from the foot up, where it reaches the page.
+    static let heroSide = [Stop(at: 0, alpha: 0.74), Stop(at: 0.22, alpha: 0.56), Stop(at: 0.4, alpha: 0.24), Stop(at: 0.56, alpha: 0)]
+    static let heroFoot = [Stop(at: 0, alpha: 1), Stop(at: 0.07, alpha: 0.9), Stop(at: 0.2, alpha: 0.72), Stop(at: 0.36, alpha: 0.4), Stop(at: 0.5, alpha: 0.12), Stop(at: 0.6, alpha: 0)]
+    /// The wash's direction as CSS gives it (`linear-gradient(80deg, ...)`): 0 points up, 90 to the right.
+    static let washAngle = 80.0
+    /// Under the wash, the frames' light vignette (`radial-gradient(100% 100% at 66.7% 0%, ...)`): black,
+    /// by the distance from `vignetteCenter` as a share of the box's own width and height.
+    static let vignette = [Stop(at: 0.4, alpha: 0), Stop(at: 1, alpha: 0.28)]
+    static let vignetteCenter = UnitPoint(x: 0.667, y: 0)
+    /// The Mac window's narrowest width: below it a secondary over art (Home's Details, the title
+    /// page's Start over) falls under 4.5:1 on white art; the glass check holds every spot here.
+    static let macMinWidth: CGFloat = 900
+    /// Home's hero on the phone (the frames' iPhone shade): from the foot up into the black page, and
+    /// a light wash from the top so the status bar and the large title read on any art.
+    static let heroPhoneFoot = [Stop(at: 0, alpha: 1), Stop(at: 0.09, alpha: 0.92), Stop(at: 0.2, alpha: 0.7), Stop(at: 0.33, alpha: 0.4), Stop(at: 0.46, alpha: 0.12), Stop(at: 0.56, alpha: 0)]
+    static let heroPhoneTop = [Stop(at: 0, alpha: 0.5), Stop(at: 0.11, alpha: 0.2), Stop(at: 0.2, alpha: 0)]
 
     /// Title page, wide: from the leading edge, and from the top down; on a phone only the second,
     /// darker at the top under the status bar.
@@ -37,6 +45,41 @@ enum BackdropStops {
         let i = stops.firstIndex { $0.at >= t }!
         let (a, b) = (stops[i - 1], stops[i])
         return a.alpha + (b.alpha - a.alpha) * (t - a.at) / (b.at - a.at)
+    }
+
+    /// The wash's line in a `width` by `height` box, as CSS lays an angled gradient: through the
+    /// center, its ends where the perpendiculars through the far corners cross it.
+    static func washLine(width: Double, height: Double) -> (start: UnitPoint, end: UnitPoint) {
+        guard width > 0, height > 0 else { return (.leading, .trailing) }
+        let angle = washAngle * .pi / 180
+        let (dx, dy) = (sin(angle), -cos(angle))
+        let half = (width * abs(dx) + height * abs(dy)) / 2
+        return (UnitPoint(x: 0.5 - dx * half / width, y: 0.5 - dy * half / height),
+                UnitPoint(x: 0.5 + dx * half / width, y: 0.5 + dy * half / height))
+    }
+
+    /// Where a point (`x`, `y` from the box's top leading corner) falls along the wash's line.
+    static func washT(x: Double, y: Double, width: Double, height: Double) -> Double {
+        let (start, end) = washLine(width: width, height: height)
+        let (sx, sy) = (start.x * width, start.y * height)
+        let (ex, ey) = (end.x * width - sx, end.y * height - sy)
+        return ((x - sx) * ex + (y - sy) * ey) / (ex * ex + ey * ey)
+    }
+
+    /// The vignette's cover at a point given as shares of the box (0 to 1 from the top leading corner).
+    static func vignetteAlpha(x: Double, y: Double) -> Double {
+        let (dx, dy) = (x - vignetteCenter.x, y - vignetteCenter.y)
+        return alpha(vignette, at: (dx * dx + dy * dy).squareRoot())
+    }
+
+    /// The wash and the vignette as HeroView draws them, so the glass check reads what is drawn.
+    static func wash(_ size: CGSize) -> LinearGradient {
+        let line = washLine(width: size.width, height: size.height)
+        return LinearGradient(stops: gradient(heroSide, .black), startPoint: line.start, endPoint: line.end)
+    }
+
+    static var vignetteGradient: EllipticalGradient {
+        EllipticalGradient(stops: gradient(vignette, .black), center: vignetteCenter, startRadiusFraction: 0, endRadiusFraction: 1)
     }
 
     /// Two scrims over each other: what is left of the art is what both leave.

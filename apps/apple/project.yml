@@ -190,6 +190,8 @@ targets:
       - path: Marquee/Player/PlayerLayout.swift
       - path: Marquee/Theme/FocusRule.swift
       - path: Marquee/Theme/BackdropStops.swift
+      # The hero box, laid out for real in Tests/HeroFrameTests.swift.
+      - path: Marquee/Home/HeroFrame.swift
       - path: Marquee/Player/CaptionStyle.swift
       - path: Marquee/Sync/SyncWords.swift
       - path: Marquee/Settings/FindAddonsWords.swift

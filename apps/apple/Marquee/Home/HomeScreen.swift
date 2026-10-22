@@ -45,9 +45,11 @@ struct HomeScreen: View {
                         // Phone and tablet: the profile button, with Sign in another device
                         // in its menu (4.2), sits at the header's top right.
                         .overlay(alignment: .topTrailing) {
-                            if showsProfileButton { ProfileButton(signInAnother: signInAnother) { showProfiles = true }.padding(.trailing, 24).padding(.top, 10) }
+                            if showsProfileButton { ProfileButton(signInAnother: signInAnother) { showProfiles = true }.padding(.trailing, 14).padding(.top, 5) }
                         }
-                        .padding(.top, cardTop)
+                        // The first shelf follows the hero's foot as the frames have it: 12 pt on a wide
+                        // screen, none on the phone, where the ramp has reached the black page.
+                        .padding(.bottom, (metrics.wide ? 12 : 0) - metrics.rowSpacing)
                 }
                 // One account card, by priority (plans/accounts.md 4.3).
                 AccountCard { showAccount = true }
@@ -58,7 +60,7 @@ struct HomeScreen: View {
         }
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
-        .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > cardTop } action: { underBar = $1 }
+        .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > 0 } action: { underBar = $1 }
         #if os(tvOS)
         .scrollPosition($position)
         .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > 8 } action: { scrolled.wrappedValue = $1 }
@@ -237,26 +239,19 @@ struct HomeScreen: View {
         #endif
     }
 
-    /// The card's gap to the top: under the status bar on a phone, under
-    /// the window toolbar on the Mac.
-    private var cardTop: CGFloat {
-        #if os(macOS)
-        return 12
-        #elseif os(tvOS)
-        return 0
-        #else
-        return 8
-        #endif
-    }
-
     private var heroHeight: CGFloat {
         #if os(tvOS)
         return 600
         #else
-        guard width > 0, height > 0 else { return metrics.wide ? 460 : 520 }
-        // Held to 60% of the window, so Continue Watching shows on an SE and Play in landscape.
-        let window = height * 0.6
-        return metrics.wide ? min(max(width * 0.36, 400), 560, max(window, 300)) : min(520, max(window, 280))
+        guard width > 0, height > 0 else { return metrics.wide ? 506 : 633 }
+        if metrics.wide {
+            // tv.apple.com's 16:9 hero under the black header, held so the first shelf's title shows
+            // on the first screen; never under 400, the glass check's floor.
+            return max(min(width * 0.5625, height - 90), 400)
+        }
+        // The iPhone's 390x680 hero, its 47 pt status bar under the art's top, held to most of a
+        // short window (a landscape phone).
+        return min(width * 633 / 390, max(height * 0.85, 280))
         #endif
     }
 }

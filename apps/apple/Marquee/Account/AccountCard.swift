@@ -39,7 +39,8 @@ struct AccountCard: View {
             }
             .padding(Theme.Space.s)
             .frame(maxWidth: 760, alignment: .leading)
-            .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+            // A solid surface with no edge: content, not glass (design/DECISION.md, Surfaces).
+            .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
         }
     }
 

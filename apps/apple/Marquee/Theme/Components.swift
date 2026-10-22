@@ -86,9 +86,11 @@ let touch = true
 let touch = false
 #endif
 
-/// What a card shows of its state: focus rings its art.
+/// What a card shows of its state: focus rings its art; under the Mac's pointer the art takes
+/// tv.apple.com's grey hover scrim instead of a lift.
 struct CardState: Equatable {
     var focused = false
+    var hovered = false
 }
 
 extension EnvironmentValues {
@@ -125,12 +127,13 @@ private struct Interactive<S: InsettableShape>: View {
 
     var body: some View {
         content
-            .environment(\.card, CardState(focused: focused))
+            .environment(\.card, CardState(focused: focused, hovered: hovered))
             .pressVeil(shape, pressed: configuration.isPressed)
             .modifier(FocusRing(shape: shape, active: focused && !card))
             .brightness(hovered && !focused && !card ? 0.04 : 0)
             .scaleEffect(reduceMotion ? 1 : scale, anchor: card ? .bottom : .center)
-            .offset(y: card && !reduceMotion && (focused || hovered) ? -6 : 0)
+            // A card lifts for focus; the pointer only greys its art, as tv.apple.com.
+            .offset(y: card && !reduceMotion && focused ? -6 : 0)
             .animation(Theme.Motion.focus, value: focused)
             .animation(Theme.Motion.focus, value: hovered)
             .animation(Theme.Motion.focus, value: configuration.isPressed)
@@ -184,6 +187,10 @@ private struct CardArt: ViewModifier {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         content
             .clipShape(shape)
+            .overlay {
+                // tv.apple.com's hover: rgba(51,51,51,.3) over the art.
+                if card.hovered && !card.focused { shape.fill(Color(white: 0.2).opacity(0.3)).allowsHitTesting(false) }
+            }
             .overlay { shape.strokeBorder(Theme.Palette.lineStrong, lineWidth: CardArt.keyline).allowsHitTesting(false) }
             .modifier(FocusRing(shape: shape, active: card.focused))
     }
@@ -220,7 +227,7 @@ struct PillButtonStyle: ButtonStyle {
             focusScale: Theme.Focus.scaleTile,
             content: AnyView(
                 configuration.label
-                    .labelFont(Theme.type.headline)
+                    .labelFont(Self.label)
                     .labelStyle(PillLabelStyle())
                     .foregroundStyle(prominent ? Theme.Palette.onPrimary : .white)
                     .padding(.horizontal, Self.horizontal)
@@ -239,9 +246,16 @@ struct PillButtonStyle: ButtonStyle {
     }
 
     #if os(tvOS)
+    static let label = Theme.type.headline
     static let horizontal: CGFloat = 32
     static let vertical: CGFloat = 18
+    #elseif os(macOS)
+    // tv.apple.com's 40 pt button row: a 15 pt label 30 from each side (the desktop frames' .btn).
+    static let label: CGFloat = 15
+    static let horizontal: CGFloat = 30
+    static let vertical: CGFloat = 10.5
     #else
+    static let label = Theme.type.headline
     static let horizontal: CGFloat = 20
     static let vertical: CGFloat = 13
     #endif

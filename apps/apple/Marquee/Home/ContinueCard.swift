@@ -14,16 +14,26 @@ struct ContinueCard: View {
                     if let progress = tile.progress { EdgeProgress(value: progress) }
                 }
                 .frame(width: size.width, height: size.height)
-                .cardArt()
+                .cardArt(radius: radius)
             CardCaption(name: tile.name, info: caption).frame(width: size.width)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(tile.name), \(spokenCodes(caption))")
     }
 
+    /// 16:9 lockups: TV's 410, tv.apple.com's 256 on the Mac, the iPhone's 239.
     private var size: CGSize {
-        let width: CGFloat = metrics.wide ? (metrics.poster.width >= Theme.Poster.tv.width ? Theme.Poster.landscape.width : 320) : 240
+        let width: CGFloat = metrics.wide ? (metrics.poster.width >= Theme.Poster.tv.width ? Theme.Poster.landscape.width : 256) : Theme.Tile.landscape.width
         return CGSize(width: width, height: width * 9 / 16)
+    }
+
+    /// Apple's corners: 14 on the web and the Mac, 13 on the iPhone, the token on TV.
+    private var radius: CGFloat {
+        #if os(tvOS)
+        return Theme.Radius.m
+        #else
+        return metrics.wide ? 14 : 13
+        #endif
     }
 
     /// The core's one caption, as is: "S2:E3 · 36 min left", "36 min left", "Next: S1:E2".

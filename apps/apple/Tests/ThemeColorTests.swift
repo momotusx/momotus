@@ -93,45 +93,66 @@ private let selectedFill: Tone = {
 // The glass check (plans/design-v3-rollout.md, section 6): white art under the backdrop's scrims at
 // each secondary over art, then its fill at rest and held (SecondaryFillLevel). The pure white label
 // the code draws keeps 4.5:1 on either, and so does the word under a round button (70 percent) on
-// the bare scrim. The spots are the layouts' least dark cases (HeroView, TitleScreen): the label's
-// top edge in points from the hero's foot, the hero's height at its floor, and the row's far edge as
-// a share of the width.
+// the bare scrim. Each spot is its layout's least dark case: the label's top trailing corner in
+// points, the hero at its floor, and on the Mac the narrowest window (BackdropStops.macMinWidth).
 private struct Spot {
     let name: String
     let page: String
-    let side: [BackdropStops.Stop]?
-    let x: Double
-    let foot: [BackdropStops.Stop]
-    /// The foot gradient starts at the bottom (the hero) or at the top (the title page).
-    let fromTop: Bool
-    let top: Double
-    let height: Double
+    /// What covers the white art at the label, bottom first: the page color (or black), and how much.
+    let layers: [(page: Bool, alpha: Double)]
     /// A round button has its word under the circle, on the bare scrim; a pill has none.
     var word = true
 }
 
+/// Home's wide hero as HeroView draws it, at a label ending `end` pt from the leading edge with its
+/// top `top` pt above the foot of a `width` by `height` hero: the vignette and the 80 degree wash in
+/// black, then the foot in the page color.
+private func wideHome(width: Double, height: Double, end: Double, top: Double) -> [(page: Bool, alpha: Double)] {
+    let y = height - top
+    return [
+        (false, BackdropStops.vignetteAlpha(x: end / width, y: y / height)),
+        (false, BackdropStops.alpha(BackdropStops.heroSide, at: BackdropStops.washT(x: end, y: y, width: width, height: height))),
+        (true, BackdropStops.alpha(BackdropStops.heroFoot, at: top / height)),
+    ]
+}
+
+/// The wide title page as TitleScreen draws it: the side ramp, then the foot from the top, both in
+/// the page color, at a label ending `end` pt in with its top `top` pt below the hero's top.
+private func titlePage(width: Double, height: Double, end: Double, top: Double) -> [(page: Bool, alpha: Double)] {
+    [(true, BackdropStops.alpha(BackdropStops.titleSide, at: end / width)),
+     (true, BackdropStops.alpha(BackdropStops.titleFoot(wide: true), at: (height - top) / height))]
+}
+
+private let narrowestMac = Double(BackdropStops.macMinWidth)
+
 private let spots = [
-    // The Mac hero's 400 pt floor holds below a 1111 pt window (HomeScreen.heroHeight).
-    Spot(name: "home hero, Mac", page: "bgDesktop", side: BackdropStops.heroSide, x: 0.36, foot: BackdropStops.heroFoot, fromTop: false, top: 112, height: 400),
-    Spot(name: "home hero, TV", page: "bg", side: BackdropStops.heroSide, x: 0.24, foot: BackdropStops.heroFoot, fromTop: false, top: 151, height: 600),
-    Spot(name: "home hero, iPhone", page: "bgPhone", side: nil, x: 0, foot: BackdropStops.heroPhoneFoot, fromTop: false, top: 85, height: 520),
-    Spot(name: "title, Mac", page: "bgDesktop", side: BackdropStops.titleSide, x: 0.69, foot: BackdropStops.titleFoot(wide: true), fromTop: true, top: 96, height: 420),
+    // Home's Details on the Mac: the 40 pt pill's 15 pt label (19 tall) ends 271 pt in (the 40 pt
+    // margin, Play 115, 12, Details 134 less its 30), its top 104.5 above the foot (75, 10.5, 19),
+    // in the hero's 400 pt floor.
+    Spot(name: "home hero, Mac", page: "bgDesktop", layers: wideHome(width: narrowestMac, height: 400, end: 271, top: 104.5), word: false),
+    // tvOS draws the same hero at 1920 by 600: Details ends at about a third of the width.
+    Spot(name: "home hero, TV", page: "bg", layers: wideHome(width: 1920, height: 600, end: 634, top: 130), word: false),
+    // The iPhone's 48 pt glass Details, its top 104 pt above the foot of the 680 pt hero.
+    Spot(name: "home hero, iPhone", page: "bgPhone", layers: [(true, BackdropStops.alpha(BackdropStops.heroPhoneFoot, at: 104.0 / 680))], word: false),
+    // The title's round row, at the far edge of its 580 pt column (620 pt in), the hero at its 420 floor.
+    Spot(name: "title, Mac", page: "bgDesktop", layers: titlePage(width: narrowestMac, height: 420, end: 620, top: 96)),
     // Start over beside Resume, above the version line and the round row: the widest Resume row
-    // ends near .6 of a 913 pt window, where the title hero is at its 420 pt floor.
-    Spot(name: "title, Mac, Start over", page: "bgDesktop", side: BackdropStops.titleSide, x: 0.6, foot: BackdropStops.titleFoot(wide: true), fromTop: true, top: 190, height: 420, word: false),
-    Spot(name: "title, TV", page: "bg", side: BackdropStops.titleSide, x: 0.34, foot: BackdropStops.titleFoot(wide: true), fromTop: true, top: 134, height: 640),
+    // ends 548 pt in (measured in 1b).
+    Spot(name: "title, Mac, Start over", page: "bgDesktop", layers: titlePage(width: narrowestMac, height: 420, end: 548, top: 190), word: false),
+    Spot(name: "title, TV", page: "bg", layers: titlePage(width: 1920, height: 640, end: 653, top: 134)),
 ]
 
 @Test(arguments: spots.map(\.name)) func aSecondaryOverWhiteArtKeepsItsLabel(_ name: String) {
     let s = spots.first { $0.name == name }!
-    let t = s.fromTop ? (s.height - s.top) / s.height : s.top / s.height
-    let foot = BackdropStops.alpha(s.foot, at: t)
-    let cover = s.side.map { BackdropStops.covered(foot, BackdropStops.alpha($0, at: s.x)) } ?? foot
     let page = tone(palette[s.page]!)
-    let under = over(Tone(r: page.r, g: page.g, b: page.b, a: cover), Tone(r: 255, g: 255, b: 255, a: 1))
+    let under = s.layers.reduce(Tone(r: 255, g: 255, b: 255, a: 1)) { art, layer in
+        over(layer.page ? Tone(r: page.r, g: page.g, b: page.b, a: layer.alpha) : Tone(r: 0, g: 0, b: 0, a: layer.alpha), art)
+    }
     // A round button can hold a state (In Library, Watched); a pill does not.
     for fill in s.word ? [SecondaryFillLevel.rest, SecondaryFillLevel.held] : [SecondaryFillLevel.rest] {
-        #expect(contrast(Tone(r: 255, g: 255, b: 255, a: 1), on: Tone(r: 255, g: 255, b: 255, a: fill), page: under) >= 4.5, "label on \(fill), \(name)")
+        let ratio = contrast(Tone(r: 255, g: 255, b: 255, a: 1), on: Tone(r: 255, g: 255, b: 255, a: fill), page: under)
+        print(#"glass-measure {"spot":"\#(name)","fill":\#(fill),"ratio":\#((ratio * 100).rounded() / 100)}"#)
+        #expect(ratio >= 4.5, "label on \(fill), \(name)")
     }
     if s.word {
         #expect(contrast(Tone(r: 255, g: 255, b: 255, a: 0.7), on: Tone(r: 0, g: 0, b: 0, a: 0), page: under) >= 4.5, "word, \(name)")

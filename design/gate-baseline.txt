@@ -189,11 +189,9 @@ apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneTitle.kt :: .bor
 apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: .border(1.dp, colors.edge, shape)
 apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvHome.kt :: .border(1.dp, colors.edge, shape),
 apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvVersions.kt :: .border(1.dp, colors.edge, shape)
-apps/apple/Marquee/Account/AccountCard.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/Account/AccountSections.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/App/RootView.swift :: .glass(Capsule(), shadow: true)
 apps/apple/Marquee/App/RootView.swift :: Capsule().fill(.white.opacity(0.12)).overlay(Capsule().strokeBorder(Theme.Palette.edge, lineWidth: 1))
-apps/apple/Marquee/Home/HeroView.swift :: .overlay { card.strokeBorder(Theme.Palette.edge, lineWidth: 1).allowsHitTesting(false) }
 apps/apple/Marquee/Library/CalendarScreen.swift :: .foregroundStyle(day.date == today ? Theme.Palette.accent : Theme.Palette.text)
 apps/apple/Marquee/Library/CalendarScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/Onboarding/OnboardingScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))

@@ -188,7 +188,8 @@ struct Metrics: Sendable {
         poster: Theme.Poster.tv, gutter: Theme.safeArea.side, rowSpacing: Theme.Space.l, wide: true,
         cardName: Theme.type.caption, cardInfo: Theme.type.caption, chip: 20)
     static let regular = Metrics(
-        poster: CGSize(width: 160, height: 240), gutter: Theme.Space.l, rowSpacing: Theme.Space.l, wide: true,
+        // tv.apple.com's posters at 1440: eight a row, 20 apart, at a 40 margin.
+        poster: CGSize(width: 153, height: 228), gutter: Theme.Space.l, rowSpacing: Theme.Space.l, wide: true,
         cardName: 15, cardInfo: 13, chip: 12)
     static let compact = Metrics(
         poster: Theme.Tile.poster, gutter: 16, rowSpacing: Theme.Space.m, wide: false,

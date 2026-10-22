@@ -69,6 +69,10 @@ struct MarqueeApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                #if os(macOS)
+                // The narrowest window at which every secondary over art still reads (the glass check).
+                .frame(minWidth: BackdropStops.macMinWidth)
+                #endif
                 .environment(core)
                 .environment(sync)
                 .environment(profiles)
@@ -105,6 +109,7 @@ struct MarqueeApp: App {
         }
         #if os(macOS)
         .defaultSize(width: 1440, height: 900)
+        .windowResizability(.contentMinSize)
         .windowToolbarStyle(.unified(showsTitle: false))
         .commands { AppCommands() }
         #endif
