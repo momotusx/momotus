@@ -775,7 +775,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       class="player-scr"
       data-scheme="dark"
       data-subsize={prefs.state.data?.subtitleSize ?? "medium"}
-      classList={{ idle: !osd() && !!url(), started: started(), paused: pausedNow(), loading: wait() === "start" }}
+      // Not idle while the loading screen waits: Back, its one control, stays.
+      classList={{ idle: !osd() && !!url() && wait() !== "start", started: started(), paused: pausedNow(), loading: wait() === "start" }}
       onPointerMove={wake}
       onPointerDown={(e) => {
         // While the controls are hidden, a click only brings them back.

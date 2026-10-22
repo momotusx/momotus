@@ -13,7 +13,8 @@ export const STALL_AHEAD_S = 3;
 /** The share of `need` seconds buffered ahead of `at`, 0 to 1. */
 export function bufferShare(buffered: [number, number][], at: number, need = START_AHEAD_S): number {
   const range = buffered.find(([a, b]) => at >= a - 0.25 && at <= b);
-  return range ? Math.min(1, Math.max(0, (range[1] - at) / need)) : 0;
+  // Counted from the playhead, or from the range when the playhead sits a hair before it.
+  return range ? Math.min(1, Math.max(0, (range[1] - Math.max(at, range[0])) / need)) : 0;
 }
 
 /** The fill: the core's progress (`held`, the last it sent) until the player

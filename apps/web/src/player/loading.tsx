@@ -36,50 +36,56 @@ export function Loading(props: {
   const asName = () => !props.logo || logo() === null;
 
   return (
-    <div class="ld" classList={{ on: !!props.wait, stall: props.wait === "stall" }} aria-hidden={!props.wait || undefined}>
-      <Show when={props.background}>
-        {(src) => <img class="ld-bd" src={src()} alt="" decoding="async" onLoad={(e) => e.currentTarget.classList.add("in")} />}
-      </Show>
-      <div class="ld-body">
-        <Show when={wait().n} keyed>
-          {(n) => (
-            <div class="ld-mark" data-wait={n} style={{ "--p": String(fill().at) }}>
-              <Show
-                when={!asName() && logo()}
-                fallback={
-                  <Show when={asName() && props.name}>
-                    {(name) => (
-                      <>
-                        <span class="ld-name ld-faint" aria-hidden="true">
-                          {name()}
-                        </span>
-                        <span class="ld-name ld-solid">{name()}</span>
-                      </>
-                    )}
-                  </Show>
-                }
-              >
-                {(src) => (
-                  <>
-                    <img
-                      class="ld-logo ld-faint"
-                      src={src()}
-                      alt=""
-                      decoding="async"
-                      // Its shape sizes it: a wide logo by the width, a stacked one by its height.
-                      onLoad={(e) => (e.currentTarget.parentElement as HTMLElement).style.setProperty("--r", (e.currentTarget.naturalWidth / e.currentTarget.naturalHeight).toFixed(3))}
-                    />
-                    <img class="ld-logo ld-solid" src={src()} alt={props.name ?? ""} decoding="async" />
-                  </>
-                )}
-              </Show>
-            </div>
-          )}
+    <>
+      <div class="ld" classList={{ on: !!props.wait, stall: props.wait === "stall" }} aria-hidden="true">
+        <Show when={props.background}>
+          {(src) => <img class="ld-bd" src={src()} alt="" decoding="async" onLoad={(e) => e.currentTarget.classList.add("in")} />}
         </Show>
-        <p class="ld-cap" role="status">
-          <For each={props.lines}>{(l) => <span>{l}</span>}</For>
-        </p>
+        <div class="ld-body">
+          <Show when={wait().n} keyed>
+            {(n) => (
+              <div class="ld-mark" data-wait={n} style={{ "--p": String(fill().at) }}>
+                <Show
+                  when={!asName() && logo()}
+                  fallback={
+                    <Show when={asName() && props.name}>
+                      {(name) => (
+                        <>
+                          <span class="ld-name ld-faint" aria-hidden="true">
+                            {name()}
+                          </span>
+                          <span class="ld-name ld-solid">{name()}</span>
+                        </>
+                      )}
+                    </Show>
+                  }
+                >
+                  {(src) => (
+                    <>
+                      <img
+                        class="ld-logo ld-faint"
+                        src={src()}
+                        alt=""
+                        decoding="async"
+                        // Its shape sizes it: a wide logo by the width, a stacked one by its height.
+                        onLoad={(e) => (e.currentTarget.parentElement as HTMLElement).style.setProperty("--r", (e.currentTarget.naturalWidth / e.currentTarget.naturalHeight).toFixed(3))}
+                      />
+                      <img class="ld-logo ld-solid" src={src()} alt={props.name ?? ""} decoding="async" />
+                    </>
+                  )}
+                </Show>
+              </div>
+            )}
+          </Show>
+          <p class="ld-cap">
+            <For each={props.lines}>{(l) => <span>{l}</span>}</For>
+          </p>
+        </div>
       </div>
-    </div>
+      {/* Read out from a region that is always there: one inside the hidden layer may miss its first words. */}
+      <p class="sr" role="status">
+        {props.wait ? props.lines.join(". ") : ""}
+      </p>
+    </>
   );
 }

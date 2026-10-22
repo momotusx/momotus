@@ -11,8 +11,9 @@ test("the buffer's share: seconds ahead of the playhead over what the player wan
   // A resume: the range around the start point counts, not the one before it.
   expect(bufferShare([[0, 5], [600, 601.5]], 600, 3)).toBe(0.5);
   expect(bufferShare([[0, 5]], 600, 3)).toBe(0);
-  // A playhead a hair before its range (the element rounds) still counts it.
+  // A playhead a hair before its range (the element rounds) still counts it, from the range's start.
   expect(bufferShare([[600.1, 603.1]], 600, 3)).toBeCloseTo(1, 5);
+  expect(bufferShare([[0.2, 1.0]], 0, 1)).toBeCloseTo(0.8, 5);
 });
 
 test("the fill: the core's progress, then the player's buffer fills the rest, never 1", () => {
