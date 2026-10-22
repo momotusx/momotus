@@ -4315,6 +4315,46 @@ mod tests {
         assert_eq!(s.offer.map(|o| o.key), Some(next));
     }
 
+    /// A swarm that did not start reads "did not start here", unless the
+    /// version already did not play here: that reason stays, and the first
+    /// move keeps it as why the announced version was left.
+    #[cfg(feature = "torrent")]
+    #[tokio::test]
+    async fn a_reason_it_did_not_play_here_outlasts_a_swarm_failure() {
+        let core = Core::temporary("default").unwrap();
+        let versions = crate::views::versions::VersionsView::open(
+            &core,
+            crate::views::versions::film_params(),
+        );
+        let link = |name: &str, n: u32| {
+            stream(&format!(
+                r#"{{"title":"{name}","url":"http://127.0.0.1:9/{n}.mkv"}}"#
+            ))
+        };
+        let rows = crate::views::versions::rank_for_tests(vec![
+            link("Movie.2020.1080p.WEB-DL.x264-FIRST", 1),
+            link("Movie.2020.720p.WEB-DL.x264-NEXT", 2),
+        ]);
+        let first = rows[0].stream.key.clone();
+        while !versions.snapshot().done {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        versions.rows_for_tests(rows);
+        versions.recommend_first_for_tests();
+
+        let mut s = State::new(Vec::new(), None);
+        failed_to_start(&mut s);
+        assert_eq!(s.version_failed, Some(NOT_STARTED));
+        s.version_failed = Some(NOT_HERE);
+        failed_to_start(&mut s);
+        assert_eq!(s.version_failed, Some(NOT_HERE), "kept over the swarm");
+        s.pick = Some(versions.pick(&first).handle);
+        s.tried = vec![first];
+        assert!(move_on(&mut s));
+        assert_eq!(s.left_because, Some(NOT_HERE));
+        assert_eq!((s.version_failed, s.hops), (None, 1));
+    }
+
     /// A run that ended on the budget never reached `move_on`, so the
     /// version's failure and its words are still held: Try again drops them
     /// with the rest, so a later failure that is not the version's never

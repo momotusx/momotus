@@ -2008,6 +2008,13 @@ impl VersionsView {
         };
         s.recommended = None;
     }
+
+    /// The first listed row is the recommendation.
+    #[cfg(feature = "torrent")]
+    pub(crate) fn recommend_first_for_tests(&self) {
+        let mut s = lock(&self.state);
+        s.recommended = s.ranked.rows.first().cloned();
+    }
 }
 
 /// Tests: the parameters of a film for a 1080p stick.
