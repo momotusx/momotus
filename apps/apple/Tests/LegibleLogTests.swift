@@ -6,7 +6,7 @@ import Testing
 
 private func log(_ deliveries: [(Double, String)]) -> LegibleLog {
     var log = LegibleLog()
-    for (time, text) in deliveries { log.deliver(text, at: time) }
+    for (time, text) in deliveries { log.deliver(text.isEmpty ? [] : [text], at: time) }
     return log
 }
 
@@ -25,31 +25,66 @@ private func log(_ deliveries: [(Double, String)]) -> LegibleLog {
     // mov_text gives two deliveries at 20.00 (AFS4); a seek back delivers them again.
     var file = log([(20, "line at 20"), (20, "four second line"), (22, "line at 22")])
     #expect(file.text(at: 21) == "line at 20\nfour second line")
-    file.deliver("line at 20", at: 20)
-    file.deliver("four second line", at: 20)
+    file.deliver(["line at 20"], at: 20)
+    file.deliver(["four second line"], at: 20)
     #expect(file.text(at: 21) == "line at 20\nfour second line")
-    file.deliver("", at: 20)
-    #expect(file.text(at: 21) == nil)
+}
+
+@Test func aTwoLineCueRedeliveredShowsOnce() {
+    // A two-line cue is one string with its line break (AFS6); a redelivery after a seek must not draw it twice.
+    var file = LegibleLog()
+    file.deliver(["Where are you going?\nHome."], at: 30)
+    file.deliver([], at: 32)
+    file.seek()
+    file.deliver(["Where are you going?\nHome."], at: 30)
+    #expect(file.text(at: 31) == "Where are you going?\nHome.")
+    // A cue that repeats one of its own lines keeps both.
+    file.deliver(["- Yes\n- Yes"], at: 40)
+    file.deliver(["- Yes\n- Yes"], at: 40)
+    #expect(file.text(at: 40.5) == "- Yes\n- Yes")
+}
+
+@Test func anEmptyDeliveryNeverErasesACueAtItsOwnTime() {
+    // Abutting cues: the last one's end and the next one's start share a time, in either order (AFS6 saw one delivery).
+    var file = log([(10, "first")])
+    file.deliver(["second"], at: 12)
+    file.deliver([], at: 12)
+    #expect(file.text(at: 12.5) == "second")
+    var other = log([(10, "first")])
+    other.deliver([], at: 12)
+    other.deliver(["second"], at: 12)
+    #expect(other.text(at: 12.5) == "second")
+    #expect(other.text(at: 11) == "first")
+}
+
+@Test func aForwardSeekWithALaterTimingShowsNoStaleLine() {
+    // At +2.0 s while playing at 100 s the log ends with a cue whose end was never delivered (the frontier, 60 s ahead).
+    var file = log([(150, "old"), (151.5, ""), (159.5, "frontier")])
+    file.seek()
+    #expect(file.text(at: PlayerLayout.cueTime(position: 1001, delay: 2)) == nil)
+    #expect(file.text(at: PlayerLayout.cueTime(position: 1001, delay: 60)) == nil)
+    // Facts before the frontier stay.
+    #expect(file.text(at: 150.5) == "old")
 }
 
 @Test func aSeekIntoACueShowsItOnceTheOutputSaysSoAsMP4AndHLSDo() {
     // An open cue (its end not delivered yet) must not show through a jump.
     var file = log([(10, "long A")])
-    file.seek(to: 30)
+    file.seek()
     #expect(file.text(at: 30.2) == nil, "nothing from before the seek")
     // MP4 redelivers the cue at the landing (AFS4).
-    file.deliver("in progress", at: 30)
+    file.deliver(["in progress"], at: 30)
     #expect(file.text(at: 30.2) == "in progress")
     // HLS redelivers it at its own start, before the landing.
     var hls = log([(10, "long A")])
-    hls.seek(to: 31)
-    hls.deliver("line 16", at: 30.6)
-    hls.deliver("", at: 32.1)
+    hls.seek()
+    hls.deliver(["line 16"], at: 30.6)
+    hls.deliver([], at: 32.1)
     #expect(hls.text(at: 31.2) == "line 16")
     // A delivery after the landing first leaves the landing empty (no cue was on there).
     var none = log([(10, "long A")])
-    none.seek(to: 40)
-    none.deliver("next", at: 42)
+    none.seek()
+    none.deliver(["next"], at: 42)
     #expect(none.text(at: 40.5) == nil)
     #expect(none.text(at: 42.5) == "next")
     none.reset()
@@ -99,19 +134,32 @@ private func log(_ deliveries: [(Double, String)]) -> LegibleLog {
     #expect(PlayerLayout.pipSubtitleNote(addonSubtitle: false, fileSubtitle: false, told: false) == nil)
 }
 
-@Test func theItemsOutputIsMadeWithItMutingAndTheFileTimingRuleHolds() throws {
-    // Read from the source: the model needs a live player.
+@Test func theFileTimingRulesHold() {
+    // The file's timing applies with no addon track on (a forced line beside an addon track keeps its time) and to a
+    // timeable track only.
+    #expect(PlayerLayout.fileDelay(addonOn: false, timeable: true, delay: 1.5) == 1.5)
+    #expect(PlayerLayout.fileDelay(addonOn: true, timeable: true, delay: 1.5) == 0)
+    #expect(PlayerLayout.fileDelay(addonOn: false, timeable: false, delay: 1.5) == 0)
+    // A track starts where it was left this play, else none: another version or source never inherits a timing.
+    #expect(PlayerLayout.startFileDelay(textTrack: 1, kept: ["file:1": 1.5, "file:0": -0.4]) == 1.5)
+    #expect(PlayerLayout.startFileDelay(textTrack: 2, kept: ["file:1": 1.5]) == 0)
+    #expect(PlayerLayout.startFileDelay(textTrack: nil, kept: ["file:1": 1.5]) == 0)
+    // The overlay: the file's line, then the addon track's.
+    #expect(PlayerLayout.overlayText(file: "forced", addon: "addon") == "forced\naddon")
+    #expect(PlayerLayout.overlayText(file: nil, addon: "addon") == "addon")
+    #expect(PlayerLayout.overlayText(file: "file", addon: nil) == "file")
+    #expect(PlayerLayout.overlayText(file: nil, addon: nil) == nil)
+}
+
+@Test func theItemsMutingOutputIsMadeInLoadAndNowhereElse() throws {
+    // Read from the source: the model needs a live player. An output added later gets no delivery (AFS3).
     let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player/PlayerModel.swift")
     let text = try String(contentsOf: file, encoding: .utf8)
+    let made = text.components(separatedBy: "AVPlayerItemLegibleOutput()")
+    #expect(made.count == 2, "one output, made once")
+    let load = try #require(text.range(of: "private func load("))
+    let tail = try #require(text.range(of: "AVPlayerItemLegibleOutput()"))
+    let next = text[load.upperBound...].range(of: "\n    func ") ?? text[load.upperBound...].range(of: "\n    private func ")
+    #expect(tail.lowerBound > load.lowerBound && tail.lowerBound < (next?.lowerBound ?? text.endIndex), "made in load()")
     #expect(text.contains("legible.suppressesPlayerRendering = true"))
-    #expect(text.contains("legible.advanceIntervalForDelegateInvocation = PlayerLayout.maxSubtitleDelay"))
-    #expect(text.contains("item.add(legible)"))
-    // One output per item: never added anywhere else.
-    #expect(text.components(separatedBy: ".add(").count == 2)
-    #expect(text.contains("var fileDelay: Double { subtitle == nil && textTrackTimeable ? subtitleDelay : 0 }"))
-    #expect(text.contains("subtitleDelay = outbox.kept[PlayerLayout.fileTrackKey(index)] ?? 0"))
-    #expect(text.contains("legibleLog.seek(to: target.seconds)"))
-    // Another track starts with nothing delivered and where it was left; another version forgets the file's keys.
-    #expect(text.contains("legibleLog.reset()\n        subtitleDelay = outbox.kept[PlayerLayout.fileTrackKey(index)] ?? 0"))
-    #expect(text.contains("outbox.forget(prefix: PlayerLayout.fileTrackPrefix)"))
 }

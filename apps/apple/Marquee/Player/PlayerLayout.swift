@@ -171,6 +171,23 @@ enum PlayerLayout {
     /// The timing key of a file's own track: its place in the menu. In-file tracks have no core
     /// identity, so their value is kept for the play only, never sent.
     static func fileTrackKey(_ index: Int) -> String { fileTrackPrefix + "\(index)" }
+
+    /// Where a file track's timing starts: where it was left this play, else none.
+    static func startFileDelay(textTrack: Int?, kept: [String: Double]) -> Double {
+        textTrack.flatMap { kept[fileTrackKey($0)] } ?? 0
+    }
+
+    /// The file's timing applies to a timeable file track with no addon track on: an addon track has its own, and a
+    /// forced line the player shows beside it keeps its time.
+    static func fileDelay(addonOn: Bool, timeable: Bool, delay: Double) -> Double {
+        !addonOn && timeable ? delay : 0
+    }
+
+    /// The overlay's text: the file's line, then the addon track's, each already at its own timing.
+    static func overlayText(file: String?, addon: String?) -> String? {
+        let lines = [file, addon].compactMap { $0 }
+        return lines.isEmpty ? nil : lines.joined(separator: "\n")
+    }
     static let fileTrackPrefix = "file:"
 
     /// "Plus 1.5 seconds", "Minus 0.3 seconds", "0.0 seconds": the signed value as VoiceOver says it,

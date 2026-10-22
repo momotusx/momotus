@@ -1,56 +1,45 @@
 import Foundation
 
 /// The item's legible text as AVPlayerItemLegibleOutput delivers it (plans/apple-file-subtitle-timing.md): facts keyed by
-/// item time, each "from here this shows" (an empty text: nothing). What shows at a time is the last entry at or before
-/// it, so a timing either way reads the same log: an earlier one in what arrived ahead (up to the output's advance over
-/// HTTP), a later one in what came before.
+/// item time, each "from here these cues show" (none: nothing). What shows at a time is the last entry at or before it, so
+/// a timing either way reads the same log: an earlier one in what arrived ahead (up to the output's advance over HTTP), a
+/// later one in what came before.
 struct LegibleLog {
-    private var entries: [(time: Double, text: String)] = []
-    /// The landing of the last seek, written as an empty entry until a delivery covers it.
-    private var marker: Double?
+    /// Each delivery's strings as they came: one string per cue, a two-line cue being one string with its line break.
+    private var entries: [(time: Double, cues: [String])] = []
 
-    /// A delivery. Two cues at one time come as two deliveries, so a second text at an existing time is added as a line;
-    /// a redelivery of a line already there adds nothing.
-    mutating func deliver(_ text: String, at time: Double) {
+    /// A delivery. Two cues at one time can come as two deliveries, so cues at an existing time are added; one already
+    /// there (a redelivery after a seek) adds nothing. An empty delivery never erases cues at its own time: the same
+    /// instant cannot be both a cue and nothing, and the output may tell an abutting cue's start and the last one's end
+    /// in either order.
+    mutating func deliver(_ cues: [String], at time: Double) {
         guard time.isFinite else { return }
-        // A delivery at or before a seek's landing (MP4: at it; HLS: the cue's own start) tells what shows there: the
-        // marker goes. Deliveries after the landing leave it: until one comes, nothing showed at the landing.
-        if let landing = marker, time <= landing {
-            marker = nil
-            entries.removeAll { $0.time == landing && $0.text.isEmpty }
-        }
+        let cues = cues.filter { !$0.isEmpty }
         let at = entries.firstIndex { $0.time >= time } ?? entries.endIndex
         guard at < entries.endIndex, entries[at].time == time else {
-            entries.insert((time, text), at: at)
+            entries.insert((time, cues), at: at)
             return
         }
-        let old = entries[at].text
-        if old.isEmpty || text.isEmpty {
-            entries[at].text = text
-        } else if !old.split(separator: "\n").contains(Substring(text)) {
-            entries[at].text = old + "\n" + text
-        }
+        entries[at].cues += cues.filter { !entries[at].cues.contains($0) }
     }
 
     /// What shows at `time`: nil for nothing.
     func text(at time: Double) -> String? {
-        guard let last = entries.last(where: { $0.time <= time }), !last.text.isEmpty else { return nil }
-        return last.text
+        guard let last = entries.last(where: { $0.time <= time }), !last.cues.isEmpty else { return nil }
+        return last.cues.joined(separator: "\n")
     }
 
-    /// A seek: nothing delivered before tells what shows at the landing (a cue whose end was never delivered would
-    /// show through the whole jump), so the landing reads empty until the output says otherwise.
-    mutating func seek(to landing: Double) {
-        guard landing.isFinite else { return }
-        entries.removeAll { $0.time == landing && $0.text.isEmpty }
-        deliver("", at: landing)
-        marker = landing
+    /// A seek. Every entry but the last is ended by the next one, so what the log says stays true across a jump; only the
+    /// last, if it shows cues, is an open frontier whose end never came: it goes, or a seek past it would show its line
+    /// through the jump (at any timing). The output delivers it again if it still applies (MP4 at the landing, HLS at
+    /// the cue's own start, both measured).
+    mutating func seek() {
+        if let last = entries.last, !last.cues.isEmpty { entries.removeLast() }
     }
 
     /// A new item or another track: nothing delivered before holds.
     mutating func reset() {
         entries = []
-        marker = nil
     }
 
     /// The times the shown text changes, shifted by `delay`, from `from` and up to `ahead` seconds later: for the

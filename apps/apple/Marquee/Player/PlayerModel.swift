@@ -77,6 +77,11 @@ final class PlayerModel {
     /// Bumped when the log changes, so the overlay reads it again.
     private(set) var legibleLines = 0
     @ObservationIgnored private var edgesQueued = false
+    /// The boundary observer covers file edges up to here; the tick rebuilds it before the playhead gets there.
+    @ObservationIgnored private var edgesUntil = 0.0
+    /// Deliveries queued on the main queue before a pick or a reset belong to the old track: they are dropped until a
+    /// block enqueued at the pick runs (the main queue keeps order).
+    @ObservationIgnored private var legibleOpen = true
 
     @ObservationIgnored private let core: CoreClient
     @ObservationIgnored private let prefs: LiveRecord<Prefs>
@@ -201,9 +206,8 @@ final class PlayerModel {
         player.currentItem?.select(textOptions[index], in: group)
         textTrack = index
         // Another track: nothing delivered for the last one holds; this one starts where it was left this play.
-        legibleLog.reset()
-        subtitleDelay = outbox.kept[PlayerLayout.fileTrackKey(index)] ?? 0
-        linesChanged()
+        resetLegible()
+        subtitleDelay = PlayerLayout.startFileDelay(textTrack: index, kept: outbox.kept)
     }
 
     /// The file track on takes timing (`PlayerLayout.fileTrackTimeable`).
@@ -220,10 +224,19 @@ final class PlayerModel {
 
     /// The file's timing applies to a timeable file track with no addon track on (an addon track has its own, and a
     /// forced line the player picks beside it keeps its time).
-    var fileDelay: Double { subtitle == nil && textTrackTimeable ? subtitleDelay : 0 }
+    var fileDelay: Double { PlayerLayout.fileDelay(addonOn: subtitle != nil, timeable: textTrackTimeable, delay: subtitleDelay) }
 
-    private func legibleDelivered(_ text: String, at time: Double) {
-        legibleLog.deliver(text, at: time)
+    private func legibleDelivered(_ cues: [String], at time: Double) {
+        guard legibleOpen else { return }
+        legibleLog.deliver(cues, at: time)
+        linesChanged()
+    }
+
+    /// Nothing delivered for the last track holds, and what the old track still has queued is dropped.
+    private func resetLegible() {
+        legibleLog.reset()
+        legibleOpen = false
+        DispatchQueue.main.async { [weak self] in self?.legibleOpen = true }
         linesChanged()
     }
 
@@ -264,6 +277,9 @@ final class PlayerModel {
             textTimeable = options.map { PlayerLayout.fileTrackTimeable(mediaType: $0.mediaType.rawValue) }
             textTracks = Self.names(options, one: "Subtitles", many: "Subtitles")
             textTrack = item.currentMediaSelection.selectedMediaOption(in: group).flatMap { options.firstIndex(of: $0) }
+            // The live timing follows the new item's track: where that track was left this play, else none (another
+            // version or source never plays at the last file's timing).
+            if subtitle == nil { subtitleDelay = PlayerLayout.startFileDelay(textTrack: textTrack, kept: outbox.kept) }
 
             if let index = carriedTracks?.text { selectText(index) }
             carriedTracks?.text = nil
@@ -486,7 +502,7 @@ final class PlayerModel {
         pendingStart = target.seconds
         ended = false
         // The output delivers again from the landing; until it does, the landing reads empty.
-        legibleLog.seek(to: target.seconds)
+        legibleLog.seek()
         linesChanged()
         seekToken += 1
         let (token, generation) = (seekToken, generation)
@@ -577,8 +593,7 @@ final class PlayerModel {
         if textTrack != nil, let group = textGroup, group.allowsEmptySelection {
             player.currentItem?.select(nil, in: group)
             textTrack = nil
-            legibleLog.reset()
-            linesChanged()
+            resetLegible()
         }
         guard let track, let url = URL(string: track.url) else { return }
         Task {
@@ -594,6 +609,7 @@ final class PlayerModel {
         cueObserver = nil
         let edges = PlayerLayout.cueEdges(cues, delay: subtitleDelay)
             + legibleLog.edges(delay: fileDelay, from: position, ahead: PlayerLayout.maxSubtitleDelay + 10)
+        edgesUntil = position + PlayerLayout.maxSubtitleDelay
         guard !edges.isEmpty else { return }
         let times = edges.map { NSValue(time: CMTime(seconds: $0, preferredTimescale: 600)) }
         cueObserver = player.addBoundaryTimeObserver(forTimes: times, queue: .main) { [weak self] in
@@ -608,10 +624,9 @@ final class PlayerModel {
     /// beside an addon track.
     var subtitleText: String? {
         _ = legibleLines
-        let file = legibleLog.text(at: PlayerLayout.cueTime(position: position, delay: fileDelay))
-        let addon = WebVTT.text(at: PlayerLayout.cueTime(position: position, delay: subtitleDelay), in: cues)
-        let lines = [file, addon].compactMap { $0 }
-        return lines.isEmpty ? nil : lines.joined(separator: "\n")
+        return PlayerLayout.overlayText(
+            file: legibleLog.text(at: PlayerLayout.cueTime(position: position, delay: fileDelay)),
+            addon: WebVTT.text(at: PlayerLayout.cueTime(position: position, delay: subtitleDelay), in: cues))
     }
 
     private func showSubtitleStatus(_ words: String) {
@@ -694,9 +709,9 @@ final class PlayerModel {
         textSize(item)
         // Made with the item and never removed: an output added later gets no delivery, and any legible output stops
         // the player drawing the track (bench AFS2, AFS3), so the app draws the item's legible text itself.
-        let sink = LegibleSink { [weak self] text, time in
+        let sink = LegibleSink { [weak self] cues, time in
             guard let self, generation == self.generation else { return }
-            self.legibleDelivered(text, at: time)
+            self.legibleDelivered(cues, at: time)
         }
         let legible = AVPlayerItemLegibleOutput()
         legible.advanceIntervalForDelegateInvocation = PlayerLayout.maxSubtitleDelay
@@ -838,6 +853,8 @@ final class PlayerModel {
     private func tick(_ time: CMTime) {
         guard time.isNumeric else { return }
         if let now = ticked(time: time.seconds, pending: pendingStart) { position = now }
+        // A track delivered whole (HLS) sends nothing more: the observer moves on with the playhead.
+        if position > edgesUntil { watchCueEdges() }
         let watched = PlayerLayout.pictureWatched(floating: floating, windowWatches: windowWatchesFrames(), onScreen: appOnScreen)
         (loadStart, playingSince) = PlayerLayout.pictureClocks(
             watched: watched, position: position, loadStart: loadStart, playingSince: playingSince, now: .now)
@@ -891,16 +908,16 @@ final class PlayerModel {
     }
 }
 
-/// The item's legible output delegate: each delivery's strings as one text, on the main queue.
+/// The item's legible output delegate: each delivery's strings (one per cue), on the main queue.
 private final class LegibleSink: NSObject, AVPlayerItemLegibleOutputPushDelegate, @unchecked Sendable {
-    private let deliver: @MainActor (String, Double) -> Void
+    private let deliver: @MainActor ([String], Double) -> Void
 
-    init(deliver: @escaping @MainActor (String, Double) -> Void) { self.deliver = deliver }
+    init(deliver: @escaping @MainActor ([String], Double) -> Void) { self.deliver = deliver }
 
     func legibleOutput(_ output: AVPlayerItemLegibleOutput, didOutputAttributedStrings strings: [NSAttributedString],
                        nativeSampleBuffers nativeSamples: [Any], forItemTime itemTime: CMTime) {
-        let text = strings.map(\.string).joined(separator: "\n")
+        let cues = strings.map(\.string)
         let time = itemTime.seconds
-        MainActor.assumeIsolated { deliver(text, time) }
+        MainActor.assumeIsolated { deliver(cues, time) }
     }
 }

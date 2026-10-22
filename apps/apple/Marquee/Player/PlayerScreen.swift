@@ -124,8 +124,9 @@ struct PlayerScreen: View {
                     let place = subtitlePlace(geo.size)
                     // Its foot stays put; a larger caption style or a second line grows upward.
                     SubtitleLine(text: text, size: model.subtitleSize)
-                        // The player's own subtitles are not spoken line by line; the app's are not either.
-                        .accessibilityHidden(true)
+                        // The player's own file subtitles were never spoken line by line, so the file's are not; an
+                        // addon track's lines stay readable, as they were.
+                        .accessibilityHidden(model.subtitle == nil)
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { subtitleBox = $0 }
                         .scaleEffect(place.scale, anchor: .bottom)
                         .frame(width: geo.size.width, height: max(place.foot, 0), alignment: .bottom)
