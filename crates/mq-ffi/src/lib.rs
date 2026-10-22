@@ -44,6 +44,21 @@ mod android {
     }
 }
 
+/// Whether this core carries the torrent engine: every own build does; a
+/// store core (built with STORE=1, on purpose) does not. A Release app
+/// refuses Play on a core without it unless it is a store build.
+#[uniffi::export]
+pub fn has_engine() -> bool {
+    cfg!(feature = "torrent")
+}
+
+/// The mark the build checks look for in the library (`nm`, by this exact
+/// name): only a core built with the torrent engine has it.
+#[cfg(feature = "torrent")]
+#[unsafe(no_mangle)]
+#[used]
+pub static MQ_ENGINE_TORRENT: u8 = 1;
+
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum FfiError {
     #[error("{message}")]

@@ -2,16 +2,16 @@
 // without it; STORE=1 builds the store core, with no engine, on purpose (plans/play-every-version.md,
 // Phase 0). Run: bun test apps/apple/scripts/build-core.test.ts
 import { expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const scripts = import.meta.dir;
 
-/** A static library holding one function under `symbol`, as a Rust crate's mangled name. */
-function library(dir: string, name: string, symbol: string): string {
+/** A static library holding `code`, a few lines of C. */
+function library(dir: string, name: string, code: string): string {
   const source = join(dir, `${name}.c`);
-  writeFileSync(source, `void ${symbol}(void) {}\n`);
+  writeFileSync(source, `${code}\n`);
   const object = join(dir, `${name}.o`);
   const lib = join(dir, `${name}.a`);
   for (const args of [["clang", "-c", source, "-o", object], ["ar", "rcs", lib, object]]) {
@@ -24,24 +24,29 @@ function fixtures() {
   const dir = mkdtempSync(join(tmpdir(), "mq-engine-check-"));
   return {
     dir,
-    engine: library(dir, "engine", "_ZN9mq_engine6window17h0123456789abcdefE"),
-    // The scheduler crate is in every core; its name starts like the engine's.
-    store: library(dir, "store", "_ZN15mq_engine_sched4plan17h0123456789abcdefE"),
+    // mq-ffi's mark, as `#[unsafe(no_mangle)] pub static MQ_ENGINE_TORRENT: u8 = 1` builds it.
+    engine: library(dir, "engine", "unsigned char MQ_ENGINE_TORRENT = 1;"),
+    // Engine code with no mark, and a library that only uses the name: neither counts.
+    store: library(dir, "store", "void _ZN9mq_engine6window17h0123456789abcdefE(void) {}\nextern unsigned char MQ_ENGINE_TORRENT;\nunsigned char read(void) { return MQ_ENGINE_TORRENT; }"),
   };
 }
 
-function check(...libs: string[]) {
-  const run = Bun.spawnSync([join(scripts, "check-engine.sh"), ...libs]);
-  return { code: run.exitCode, said: run.stderr.toString() };
+function check(libs: string[], env: Record<string, string> = {}) {
+  const run = Bun.spawnSync([join(scripts, "check-engine.sh"), ...libs], { env: { ...process.env, ...env } });
+  return { code: run.exitCode, said: run.stderr.toString(), out: run.stdout.toString() };
 }
 
 test("check-engine passes a core with the engine and fails one without", () => {
   const { dir, engine, store } = fixtures();
   try {
-    expect(check(engine).code).toBe(0);
-    const without = check(engine, store);
+    expect(check([engine]).code).toBe(0);
+    const without = check([engine, store]);
     expect(without.code).toBe(1);
     expect(without.said).toContain(`${store} has no torrent engine`);
+    // STORE=1 is a store core on purpose: it passes and says so.
+    const store1 = check([store], { STORE: "1" });
+    expect(store1.code).toBe(0);
+    expect(store1.out).toContain("store core");
   } finally {
     rmSync(dir, { recursive: true });
   }
@@ -65,7 +70,12 @@ function build(lib: string, dir: string, env: Record<string, string> = {}) {
   const run = Bun.spawnSync([join(scripts, "build-core.sh")], {
     env: { ...process.env, ...env, PATH: `${bin}:${process.env.PATH}`, CARGO_TARGET_DIR: target },
   });
-  return { code: run.exitCode, said: run.stderr.toString(), cargo: readFileSync(args, "utf8").trim().split("\n") };
+  return {
+    code: run.exitCode,
+    said: run.stderr.toString(),
+    out: run.stdout.toString(),
+    cargo: readFileSync(args, "utf8").trim().split("\n"),
+  };
 }
 
 test("an own build asks for the engine and fails a slice without it", () => {
@@ -98,8 +108,20 @@ test("STORE=1 builds the store core with no engine, on purpose", () => {
     const run = build(store, dir, { STORE: "1" });
     for (const line of run.cargo) expect(line).not.toContain("--features");
     expect(run.said).not.toContain("has no torrent engine");
+    expect(run.out).toContain("store core");
     expect(run.said).toContain("stand-in: stop here");
   } finally {
     rmSync(dir, { recursive: true });
   }
+});
+
+// The libraries on disk: this checkout's linked core, when it was built, must carry the mark, as
+// the Xcode build checks it.
+const linked = join(scripts, "..", "Core", "MarqueeCore.xcframework");
+test.if(existsSync(linked))("this checkout's linked core carries the engine", () => {
+  const slices = readdirSync(linked)
+    .map((slice) => join(linked, slice, "libmarquee_core.a"))
+    .filter(existsSync);
+  expect(slices.length).toBeGreaterThan(0);
+  expect(check(slices).code).toBe(0);
 });

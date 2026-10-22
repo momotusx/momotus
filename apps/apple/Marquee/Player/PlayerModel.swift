@@ -416,6 +416,16 @@ final class PlayerModel {
         Task { await nowPlaying.loadArtwork(route.target.poster) }
         defer { if run == runs { stop() } }
         openError = nil
+        #if DEBUG
+        let release = false
+        #else
+        let release = true
+        #endif
+        let store = Bundle.main.object(forInfoDictionaryKey: "MarqueeStore") as? String == "1"
+        if let refusal = PlayerLayout.engineRefusal(hasEngine: hasEngine(), store: store, release: release) {
+            openError = refusal
+            return
+        }
         // A new view counts its own Try again presses.
         lastRetries = nil
         let target = route.target

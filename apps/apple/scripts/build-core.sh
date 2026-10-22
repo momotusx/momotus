@@ -13,8 +13,8 @@
 #            The app refuses it outside Debug (it greps every slice for the hook).
 #
 # Own installs (Xcode, TestFlight) carry the torrent engine: mq-ffi builds with
-# `--features torrent`, and an iOS or tvOS slice without it fails the build
-# (check-engine.sh). STORE=1 builds the store core, with no engine, on purpose
+# `--features torrent`, and a slice without its mark (MQ_ENGINE_TORRENT) fails the
+# build (check-engine.sh). STORE=1 builds the store core, with no engine, on purpose
 # (App Store Guideline 5.2.3; plans/play-every-version.md, Phase 0).
 #
 # Each slice is built as a staticlib alone (`cargo rustc --crate-type staticlib`): with
@@ -69,14 +69,12 @@ done
 
 # A shipped core carries no dev hook: the MQ_DEV_ variables and the e2e recorder's set_dev_replay
 # are compiled in only with debug assertions (--dev). Checked on every library built here.
-# An own build's phone and TV slices carry the engine; only STORE=1 leaves it out.
-if [[ "${STORE:-}" != 1 ]]; then
-  engine_libs=()
-  for target in "${targets[@]}"; do
-    engine_libs+=("$target_dir/$target/release/libmarquee_core.a")
-  done
-  "$apple/scripts/check-engine.sh" "${engine_libs[@]}"
-fi
+# Every slice of an own build carries the engine; STORE=1 leaves it out and says so.
+engine_libs=()
+for target in aarch64-apple-darwin "${targets[@]}"; do
+  engine_libs+=("$target_dir/$target/release/libmarquee_core.a")
+done
+"$apple/scripts/check-engine.sh" "${engine_libs[@]}"
 
 if [[ $dev_assertions == false ]]; then
   for target in aarch64-apple-darwin "${targets[@]}"; do

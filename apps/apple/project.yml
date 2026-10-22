@@ -28,6 +28,9 @@ settings:
     # owner steps 1 and 3: until then no build asks for them (an ad hoc Mac build with
     # them would not launch). Set to Marquee/Marquee.entitlements once they exist.
     MARQUEE_ENTITLEMENTS: ""
+    # 1 for a store build: its core has no torrent engine, on purpose (STORE=1 for build-core.sh).
+    # Every other build links a core with the engine, checked before it compiles.
+    MARQUEE_STORE: ""
 targetTemplates:
   App:
     type: application
@@ -70,6 +73,17 @@ targetTemplates:
               exit 1
             fi
           done
+      # An own build links a core with the torrent engine (plans/play-every-version.md, Phase 0): the
+      # xcframework is gitignored and can be stale or hand-built, so every slice is checked for the mark.
+      - name: Refuse a core without the engine
+        basedOnDependencyAnalysis: false
+        inputFiles:
+          - $(SRCROOT)/Core/MarqueeCore.xcframework/Info.plist
+        script: |
+          if ! STORE="$MARQUEE_STORE" "$SRCROOT/scripts/check-engine.sh" "$SRCROOT"/Core/MarqueeCore.xcframework/*/libmarquee_core.a; then
+            echo "error: the linked core has no torrent engine. Run apps/apple/scripts/build-core.sh, or set MARQUEE_STORE=1 for a store build."
+            exit 1
+          fi
       # The entitlements name the link host (applinks, webcredentials): never an empty one.
       - name: Refuse entitlements without a link host
         basedOnDependencyAnalysis: false
@@ -97,6 +111,7 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         MarqueeSyncServer: $(MARQUEE_SYNC_SERVER)
         MarqueeLinkHost: $(MARQUEE_LINK_HOST)
+        MarqueeStore: $(MARQUEE_STORE)
     settings:
       base:
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.entertainment
@@ -116,6 +131,7 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         MarqueeSyncServer: $(MARQUEE_SYNC_SERVER)
         MarqueeLinkHost: $(MARQUEE_LINK_HOST)
+        MarqueeStore: $(MARQUEE_STORE)
     settings:
       base:
         TARGETED_DEVICE_FAMILY: "1,2"
@@ -138,6 +154,7 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         MarqueeSyncServer: $(MARQUEE_SYNC_SERVER)
         MarqueeLinkHost: $(MARQUEE_LINK_HOST)
+        MarqueeStore: $(MARQUEE_STORE)
     settings:
       base:
         TARGETED_DEVICE_FAMILY: "3"
