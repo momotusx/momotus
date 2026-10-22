@@ -1794,7 +1794,7 @@ async fn resolve_next(
                     clear_segments(&mut s);
                     s.snapshot.phase = PlaybackPhase::Ready;
                     s.snapshot.start = None;
-                    s.playing = OwnedPlaying::of(&stream.release);
+                    s.playing = OwnedPlaying::of_stream(&stream);
                     s.delay = delay;
                     s.snapshot.key = Some(stream.key.clone());
                     s.snapshot.filename = filename.clone();
@@ -3315,6 +3315,7 @@ async fn built_in_tracks(
         source: release.quality,
         cut: release.cut,
         fps: None,
+        part: fit::part(stream_name(stream)),
     };
     let probe = async { probed.await.fps };
     let listed = tokio::time::timeout(Deadlines::default().hard, async {
@@ -3334,6 +3335,7 @@ async fn built_in_tracks(
         source: playing.source,
         cut: playing.cut,
         fps: playing.fps,
+        part: playing.part,
     };
     let mut s = lock(state);
     if !current(&s, run) {
@@ -3397,16 +3399,27 @@ struct OwnedPlaying {
     source: mq_relparse::Quality,
     cut: Option<mq_relparse::Cut>,
     fps: Option<f32>,
+    part: Option<u8>,
 }
 
 impl OwnedPlaying {
-    /// What its release name says; the frame rate comes from the probe.
+    /// What its release name says; the frame rate comes from the probe,
+    /// the disc from the file name (`fit::part`).
     fn of(release: &mq_relparse::ParsedRelease) -> Self {
         Self {
             group: release_group(release).map(str::to_owned),
             source: release.quality,
             cut: release.cut,
             fps: None,
+            part: None,
+        }
+    }
+
+    /// The playing stream's: its release, and the disc its name says.
+    fn of_stream(stream: &ParsedStream) -> Self {
+        Self {
+            part: fit::part(stream_name(stream)),
+            ..Self::of(&stream.release)
         }
     }
 
@@ -3416,6 +3429,7 @@ impl OwnedPlaying {
             source: self.source,
             cut: self.cut,
             fps: self.fps,
+            part: self.part,
         }
     }
 }
@@ -3507,6 +3521,7 @@ fn track(
 ) -> SubtitleTrack {
     let t = SubtitleTrack::new(url, &w.lang, w.label.clone(), source, release(w));
     let hearing_impaired = w.hearing_impaired || t.hearing_impaired;
+    let forced = w.forced || t.release.as_deref().is_some_and(forced_mark);
     // OpenSubtitles marks a match on the hash we sent with `"m": "h"`; any
     // other addon could mark every row, so only its mark counts. Its
     // `fpsMilli` is the rate the file was timed for.
@@ -3523,7 +3538,7 @@ fn track(
         format!("{addon_id}:{}", w.id)
     };
     SubtitleTrack {
-        forced: w.forced,
+        forced,
         hearing_impaired,
         origin,
         made: Made {
@@ -3533,6 +3548,14 @@ fn track(
         },
         ..t
     }
+}
+
+/// A release text that marks a forced track as a word of its own
+/// ("Film.2020.forced.srt", "English (Forced)"): OpenSubtitles' rows carry
+/// it in the file name, not in the flag.
+fn forced_mark(text: &str) -> bool {
+    text.split(|c: char| !c.is_alphanumeric())
+        .any(|w| w.eq_ignore_ascii_case("forced"))
 }
 
 /// The OpenSubtitles v3 addon's manifest id: the one whose hash match counts.
@@ -3965,6 +3988,11 @@ fn resume_point(progress: Option<(i64, i64)>) -> Option<u64> {
         .map(|(pos, _)| pos as u64)
 }
 
+/// The name a stream's file goes by: its file name, else the addon's.
+fn stream_name(stream: &ParsedStream) -> &str {
+    stream.filename.as_deref().unwrap_or(&stream.raw_name)
+}
+
 /// Keeps the stream that started playing for this title, so Versions for its
 /// next episode prefers the same release line; for a torrent, the file it
 /// played (`played`: its index and length) and the video, for "On this
@@ -3978,7 +4006,7 @@ fn remember_stream(
     let mut memory = serde_json::json!({
         "key": stream.key,
         "addonId": stream.addon_id,
-        "release": stream.filename.as_deref().unwrap_or(&stream.raw_name),
+        "release": stream_name(stream),
     });
     if let (Some((file, len)), Source::Torrent { info_hash, .. }) = (played, &stream.source) {
         memory["torrent"] = serde_json::json!({
@@ -5491,6 +5519,15 @@ mod subtitle_order_tests {
     }
 
     const V3: &str = OPENSUBTITLES;
+
+    /// OpenSubtitles marks a forced file in its name, not in the flag: the
+    /// word counts on its own, not inside another.
+    #[test]
+    fn a_forced_file_name_marks_the_track_forced() {
+        let named = row(V3, 1, "Film.2020.1080p.WEB-DL-FLUX.forced.srt", None, "h");
+        assert!(named.forced);
+        assert!(!row(V3, 2, "Forcedly.2020.1080p.WEB-DL-FLUX.srt", None, "h").forced);
+    }
 
     /// Review of feat/subtitle-best P2-1: the built-in source marks the
     /// hard of hearing on its row, not in the release text; that row still

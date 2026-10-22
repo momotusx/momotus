@@ -359,3 +359,31 @@ fn a_measured_frame_rate_outranks_the_source_and_the_stand_in_ties_to_the_first(
     let plain = tracks(&rows, Target::Movie, &Playing::default());
     assert_eq!(ids(&plain), [1, 2], "the first seen rate stands in");
 }
+
+/// The built-in source's own rank, which picks its few tracks, keeps a
+/// plain file before one for the hard of hearing that fits as well, however
+/// downloaded.
+#[test]
+fn a_plain_file_leads_one_for_the_hard_of_hearing() {
+    let row = |altid, hearing_impaired, downloads| Row {
+        altid,
+        path: format!("/sub/{altid}/x.html"),
+        lang: Lang::Turkish,
+        kind: Kind::Episode {
+            season: 1,
+            episode: 1,
+        },
+        release: "ORPHEUS".into(),
+        source: None,
+        fps: None,
+        downloads,
+        translator: None,
+        hearing_impaired,
+    };
+    let ranked = tracks(
+        &[row(1, true, 900), row(2, false, 10)],
+        S01E01,
+        &Playing::default(),
+    );
+    assert_eq!(ids(&ranked), [2, 1]);
+}

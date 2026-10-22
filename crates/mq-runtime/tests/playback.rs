@@ -1733,3 +1733,35 @@ async fn after_a_failover_the_remembered_choice_turns_on_again() {
     .await;
     assert_eq!(next.auto_subtitle, Some(next.subtitles[0].url.clone()));
 }
+
+/// A film split over discs, its first one playing: that disc's subtitle
+/// fits, the whole film's too (its start is that disc's), the other disc's
+/// sorts last as before.
+#[tokio::test]
+async fn the_disc_playing_keeps_its_own_subtitle_first() {
+    let (video, _) = counted_origin().await;
+    let core = Core::temporary("p").unwrap();
+    let sub = |id: &str, file: &str| {
+        serde_json::json!({"id": id, "lang": "eng", "url": format!("https://subs.test/{id}.srt"),
+            "subtitleFileName": file})
+    };
+    let streams = serde_json::json!({"streams": [{
+        "url": format!("{video}/v.avi"),
+        "behaviorHints": {"filename": "Shawshank.1994.DVDRip.CD1-aFLDp.avi"},
+        "subtitles": [
+            sub("2", "Shawshank.1994.DVDRip.CD2-aFLDp.srt"),
+            sub("1", "Shawshank.1994.DVDRip.CD1-aFLDp.srt"),
+            sub("all", "Shawshank.1994.DVDRip-aFLDp.srt"),
+        ],
+    }]});
+    let view = PlaybackView::open(&core, setup(&core, &streams.to_string()), target());
+    let s = settled_list(&view).await;
+    assert_eq!(
+        releases(&s),
+        [
+            "Shawshank.1994.DVDRip.CD1-aFLDp",
+            "Shawshank.1994.DVDRip-aFLDp",
+            "Shawshank.1994.DVDRip.CD2-aFLDp",
+        ]
+    );
+}

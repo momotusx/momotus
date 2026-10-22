@@ -13,6 +13,9 @@ pub struct Playing<'a> {
     pub source: Quality,
     pub cut: Option<Cut>,
     pub fps: Option<f32>,
+    /// The disc it is of a film split over several ("CD1"), when its name
+    /// says so (`part`).
+    pub part: Option<u8>,
 }
 
 /// What a subtitle says of the release it was made for.
@@ -52,8 +55,8 @@ impl<'a> Made<'a> {
 pub struct Misses {
     /// It is forced: never a language's best.
     pub forced: bool,
-    /// It is one part of a film split over discs ("CD2"): its times start
-    /// at that part.
+    /// It is one part of a film split over discs ("CD2") and not the
+    /// part playing: its times start at that part.
     pub part: bool,
     /// No trusted hash match.
     pub hash: bool,
@@ -81,7 +84,7 @@ pub fn misses(made: &Made, playing: &Playing) -> Misses {
     let given = rate(made.fps);
     Misses {
         forced: made.forced,
-        part: is_part(made.text),
+        part: part(made.text).is_some_and(|p| playing.part != Some(p)),
         hash: !made.hash,
         group: !same_group(made.text, playing.group),
         capture: is_capture(made.family) != is_capture(mine),
@@ -158,17 +161,23 @@ pub fn same_cut(a: Option<Cut>, b: Option<Cut>) -> bool {
     plain(a) == plain(b)
 }
 
-/// Whether `text` names a disc of a film split over several ("CD2",
-/// "2of2"); the built-in source refuses those outright.
-pub fn is_part(text: &str) -> bool {
-    text.split(|c: char| !c.is_alphanumeric()).any(|word| {
+/// The disc `text` (a release line or a file name) names of a film split
+/// over several ("CD2", "2of2"); the built-in source refuses those
+/// outright. "Part 2" is a title's own word ("Deathly Hallows Part 2"), not
+/// a disc.
+pub fn part(text: &str) -> Option<u8> {
+    text.split(|c: char| !c.is_alphanumeric()).find_map(|word| {
         let w = word.to_ascii_lowercase();
-        let cd = w.len() == 3 && w.starts_with("cd") && w.as_bytes()[2].is_ascii_digit();
+        let cd = w
+            .strip_prefix("cd")
+            .filter(|n| n.len() == 1)
+            .and_then(|n| n.parse().ok());
         let of = w
             .split_once("of")
             .and_then(|(a, b)| Some((a.parse::<u8>().ok()?, b.parse::<u8>().ok()?)))
-            .is_some_and(|(part, all)| all > 1 && part <= all);
-        cd || of
+            .filter(|&(part, all)| all > 1 && part <= all)
+            .map(|(part, _)| part);
+        cd.or(of)
     })
 }
 
@@ -217,6 +226,7 @@ mod tests {
         source: Quality::WebDl,
         cut: None,
         fps: None,
+        part: None,
     };
 
     fn of(text: &str) -> Misses {
@@ -341,14 +351,33 @@ mod tests {
 
     #[test]
     fn parts_are_disc_markers_only() {
-        assert!(is_part("The_Shawshank_Redemption_(1994).CD1.aFLDp"));
-        assert!(is_part("The Shawshank Redemption SBC AC3 aFLDp CD2.eng"));
-        assert!(is_part("Film.2020.DVDRip.2of2"));
-        assert!(!is_part("Film.2020.1of1.WEB"));
-        assert!(!is_part(
-            "Harry.Potter.and.the.Deathly.Hallows.Part.2.2011.1080p"
-        ));
-        assert!(!is_part("Film.2020.CDROM"));
+        assert_eq!(part("The_Shawshank_Redemption_(1994).CD1.aFLDp"), Some(1));
+        assert_eq!(
+            part("The Shawshank Redemption SBC AC3 aFLDp CD2.eng"),
+            Some(2)
+        );
+        assert_eq!(part("Film.2020.DVDRip.2of2"), Some(2));
+        assert_eq!(part("Film.2020.1of1.WEB"), None);
+        assert_eq!(
+            part("Harry.Potter.and.the.Deathly.Hallows.Part.2.2011.1080p"),
+            None
+        );
+        assert_eq!(part("Film.2020.CDROM"), None);
+    }
+
+    /// The part playing: its own disc's subtitle fits; another disc's does
+    /// not, nor any disc's when the whole film plays.
+    #[test]
+    fn a_disc_of_the_part_playing_is_no_miss() {
+        let cd1 = Playing {
+            part: Some(1),
+            ..PLAYING
+        };
+        let at = |text: &str, playing: &Playing| misses(&Made::read(text), playing);
+        assert!(!at("Film.2020.DVDRip.CD1-X", &cd1).part);
+        assert!(at("Film.2020.DVDRip.CD2-X", &cd1).part);
+        assert!(!at("Film.2020.DVDRip-X", &cd1).part, "the whole film");
+        assert!(at("Film.2020.DVDRip.CD1-X", &PLAYING).part);
     }
 
     #[test]
