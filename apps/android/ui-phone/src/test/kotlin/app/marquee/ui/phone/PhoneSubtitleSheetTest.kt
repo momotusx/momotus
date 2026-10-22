@@ -215,8 +215,8 @@ class PhoneSubtitleSheetTest {
     }
 
     @Test
-    fun `the delay steps a tenth of a second a press, repeats while held, and resets to 0 when pressed`() {
-        val shifts = mutableListOf<Long>()
+    fun `the delay steps a tenth of a second a press, 0_3 s a tick while held, and Reset or the delay puts it to 0`() {
+        val delays = mutableListOf<Long>()
         var delay by mutableStateOf(300L)
         compose.setContent {
             MarqueeTheme(Form.Phone) {
@@ -228,9 +228,9 @@ class PhoneSubtitleSheetTest {
                     onDone = {},
                     modifier = Modifier.width(420.dp).fillMaxHeight(),
                     timing = delay,
-                    onShift = {
-                        shifts += it
-                        delay += it
+                    onDelay = {
+                        delays += it
+                        delay = it
                     },
                 )
             }
@@ -238,18 +238,24 @@ class PhoneSubtitleSheetTest {
         compose.onNodeWithText("+0.3 s").assertExists()
         compose.onNodeWithContentDescription("Show subtitles later").performClick()
         compose.onNodeWithText("+0.4 s").assertExists()
-        compose.runOnIdle { assertEquals(listOf(100L), shifts) }
-        // Held for a second: the press, then a step every tenth of a second once the hold starts.
+        compose.runOnIdle { assertEquals(listOf(400L), delays) }
+        // Held for a second: no step at the press, then 0.3 s a tick every 100 ms from 250 ms, none at the release.
         compose.mainClock.autoAdvance = false
         compose.onNodeWithContentDescription("Show subtitles earlier").performTouchInput { down(center) }
         compose.mainClock.advanceTimeBy(1_000)
         compose.onNodeWithContentDescription("Show subtitles earlier").performTouchInput { up() }
         compose.mainClock.advanceTimeBy(1_000)
         compose.mainClock.autoAdvance = true
-        val held = shifts.drop(1)
-        assertTrue(held.size in 6..9, "a press and repeats while held: $held")
-        assertTrue(held.all { it == -100L })
-        // The delay itself puts it back to 0.
+        val held = delays.drop(1)
+        assertTrue(held.size in 7..9, "repeats while held: $held")
+        assertEquals((1..held.size).map { 400L - 300L * it }, held)
+        // Reset shows while the delay is not 0, and puts it back.
+        compose.onNodeWithText("Reset").performClick()
+        compose.onNodeWithText("0.0 s").assertExists()
+        compose.onNodeWithText("Reset").assertDoesNotExist()
+        // The delay itself resets it too.
+        compose.onNodeWithContentDescription("Show subtitles later").performClick()
+        compose.onNodeWithText("+0.1 s").assertExists()
         compose.onNodeWithContentDescription("Timing").performClick()
         compose.onNodeWithText("0.0 s").assertExists()
     }

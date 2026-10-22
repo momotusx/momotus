@@ -452,7 +452,7 @@ fun PhonePlayer(
                                 .pointerInput(Unit) { detectTapGestures { } },
                         note = controller.subtitlePanelNote,
                         timing = controller.subtitleDelayMs.takeIf { controller.subtitleOn },
-                        onShift = controller::shiftSubtitles,
+                        onDelay = controller::setSubtitleDelay,
                         textSize = controller.subtitleSize,
                         onSize = onSubtitleSize,
                     )

@@ -738,27 +738,62 @@ class SubtitleFailureTest {
     }
 
     @Test
-    fun `a shift moves this play's subtitles and sets the item again where it was`() {
+    fun `a delay moves the chosen track's subtitles and sets the item again where it was, once a run settles`() {
         val delay = SubtitleDelay()
         val (player, controller) = open(delay = delay)
-        // With subtitles off a press only changes the words: the stream is not set again.
-        controller.shiftSubtitles(500)
-        runFor(1_500)
+        // With subtitles off there is no track to time.
+        controller.setSubtitleDelay(500)
+        runFor(1_000)
+        assertEquals(0L, controller.subtitleDelayMs)
+        assertEquals(0L, delay.ms)
         assertEquals(1, player.items.size, "set again with subtitles off")
-        assertEquals(500L, delay.ms, "the next load takes the delay")
-        // A subtitle on: a run of presses sets the stream again once, after the last, where it was.
         controller.selectText("late:$subtitle")
         until("the subtitle is side-loaded") { player.items.size == 2 }
         player.position(42_000)
-        controller.shiftSubtitles(500)
-        controller.shiftSubtitles(500)
+        controller.setSubtitleDelay(500)
+        controller.setSubtitleDelay(1_000)
+        controller.setSubtitleDelay(1_500)
         assertEquals(1_500L, controller.subtitleDelayMs)
         until("the item is set again") { player.items.size == 3 }
         runFor(1_500)
-        assertEquals(3, player.items.size, "a run of presses set the stream again more than once")
+        assertEquals(3, player.items.size, "a run of changes set the stream again more than once")
         assertEquals(1_500L, delay.ms, "the parsers read the new delay")
         assertEquals(video, player.items.last().uri)
         assertEquals(42_000L, player.items.last().startMs)
+        // Within a minute either way.
+        controller.setSubtitleDelay(90_000)
+        assertEquals(SUBTITLE_MAX_MS, controller.subtitleDelayMs)
+        controller.setSubtitleDelay(-90_000)
+        assertEquals(-SUBTITLE_MAX_MS, controller.subtitleDelayMs)
+        controller.release()
+    }
+
+    @Test
+    fun `each track keeps its own delay, and Off and on again keeps it`() {
+        val delay = SubtitleDelay()
+        val (player, controller) = open(snapshot(subtitles = listOf(subtitle, other)), delay = delay)
+        controller.selectText("late:$subtitle")
+        until("the subtitle is side-loaded") { player.items.size == 2 }
+        controller.setSubtitleDelay(1_500)
+        until("the item is set again") { player.items.size == 3 }
+        // Another track starts on time: its own load takes the delay, with no Timing reload after it.
+        controller.selectText("late:$other")
+        assertEquals(0L, controller.subtitleDelayMs)
+        until("the other is side-loaded") { player.items.size == 4 }
+        assertEquals(0L, delay.ms)
+        runFor(1_000)
+        assertEquals(4, player.items.size, "a Timing reload after the pick's own")
+        // Back to the first: its delay comes back, and the item is set again for it.
+        controller.selectText("late:$subtitle")
+        assertEquals(1_500L, controller.subtitleDelayMs)
+        until("the item is set again with its delay") { player.items.size == 5 }
+        assertEquals(1_500L, delay.ms)
+        // Off and the same track on again: the same delay, nothing set again.
+        controller.selectText(TRACK_OFF)
+        controller.selectText("late:$subtitle")
+        assertEquals(1_500L, controller.subtitleDelayMs)
+        runFor(1_000)
+        assertEquals(5, player.items.size)
         controller.release()
     }
 
@@ -770,7 +805,7 @@ class SubtitleFailureTest {
         player.media(withLoadedSubtitle, 10_000_000L)
         player.state(Player.STATE_READY)
         until("the loaded subtitle is on") { controller.subtitleOn }
-        controller.shiftSubtitles(SUBTITLE_STEP_MS)
+        controller.setSubtitleDelay(SUBTITLE_STEP_MS)
         until("the item is set again") { player.items.size == 3 }
         // Media3 masks the new item with no tracks until it has selected them again.
         player.media(Tracks.EMPTY, 10_000_000L)

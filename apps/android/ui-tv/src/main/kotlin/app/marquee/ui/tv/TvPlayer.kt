@@ -471,7 +471,7 @@ fun TvPlayer(
                     modifier = Modifier.align(Alignment.TopEnd).padding(end = safe.side, top = 96.dp),
                     note = controller.subtitlePanelNote,
                     timing = controller.subtitleDelayMs.takeIf { controller.subtitleOn },
-                    onShift = controller::shiftSubtitles,
+                    onDelay = controller::setSubtitleDelay,
                     textSize = controller.subtitleSize,
                     onSize = onSubtitleSize,
                 )

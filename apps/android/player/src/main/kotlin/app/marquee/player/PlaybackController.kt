@@ -221,9 +221,15 @@ class PlaybackController(
     /** How big subtitles show, from the profile's settings; the screen sets it. */
     var subtitleSize: SubtitleSize by mutableStateOf(SubtitleSize.Medium)
 
-    /** This play's subtitle delay (positive: later), from the subtitle menu's Timing row; it starts at zero. */
+    /**
+     * The chosen track's subtitle delay (positive: later), from the subtitle menu's Timing row. Each track keeps its
+     * own for the rest of the play ([delays]); a track not timed yet starts at zero.
+     */
     var subtitleDelayMs by mutableLongStateOf(0L)
         private set
+
+    /** Each track's delay in this play, by [delayKey]. */
+    private val delays = mutableMapOf<String, Long>()
 
     private var view: PlaybackView? = null
     private var loadedUrl: String? = null
@@ -238,6 +244,12 @@ class PlaybackController(
     private var handlingFailure = false
     private var lastPositionMs = 0L
     private var pick: TextPick? = null
+        set(value) {
+            field = value
+            // A track comes on with its own delay. Off keeps the last one: nothing shows, and the same track
+            // back on needs no new item.
+            if (value != null) applyDelay(delays[value.delayKey] ?: 0L)
+        }
 
     /** The viewer picked a subtitle or Off in this play: the core's start subtitle no longer turns on. */
     private var chose = false
@@ -930,6 +942,8 @@ class PlaybackController(
         // A source that was given up on or a player that was let go is not set again (the next
         // `ready` carries the whole list anyway).
         if (handlingFailure || released) return
+        // This item takes the delay as it is now: a Timing reload still waiting has nothing left to do.
+        timing?.cancel()
         val ended = stage == Stage.Ended
         val at = if (ended) 0L else player.currentPosition.coerceAtLeast(0L)
         reloadedAt = SystemClock.elapsedRealtime()
@@ -956,18 +970,29 @@ class PlaybackController(
     }
 
     /**
-     * Earlier or Later in the subtitle menu: the words move by [byMs] for the rest of this play. The
-     * parsers read the delay when the item is set, so it is set again at the same position.
+     * The Timing row: the chosen track's subtitles show [ms] later (earlier when negative) for the rest of this play,
+     * within [SUBTITLE_MAX_MS]. With no subtitle on there is no track to time, and nothing changes.
      */
-    fun shiftSubtitles(byMs: Long) {
-        val next = (subtitleDelayMs + byMs).coerceIn(-SUBTITLE_MAX_MS, SUBTITLE_MAX_MS)
-        if (next == subtitleDelayMs) return
-        subtitleDelayMs = next
-        subtitleDelay.ms = next
-        // The words change at once; the stream is set again once, after the last of a run of presses, and
-        // not at all with subtitles off (the next load takes the delay with it).
+    fun setSubtitleDelay(ms: Long) {
+        val key = pick?.delayKey ?: return
+        val next = ms.coerceIn(-SUBTITLE_MAX_MS, SUBTITLE_MAX_MS)
+        delays[key] = next
+        applyDelay(next)
+    }
+
+    /** A track's identity for its delay: the addon file's address, or the file's own track group. */
+    private val TextPick.delayKey: String get() = url ?: group ?: language
+
+    /**
+     * The parsers read [ms] from now on. They read the delay when the item is set, so with a subtitle on the item is
+     * set again at the same position: once, after the last of a run of changes, as the words change at once.
+     */
+    private fun applyDelay(ms: Long) {
+        if (ms == subtitleDelayMs) return
+        subtitleDelayMs = ms
+        subtitleDelay.ms = ms
         timing?.cancel()
-        if (pick == null) return
+        if (pick == null || loadedUrl == null) return
         timing =
             scope.launch {
                 delay(TIMING_SETTLE_MS)

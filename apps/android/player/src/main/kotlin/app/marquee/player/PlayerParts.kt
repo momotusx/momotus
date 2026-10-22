@@ -27,6 +27,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -103,6 +104,8 @@ import app.marquee.design.focusPalette
 import app.marquee.design.marqueeFocus
 import app.marquee.design.scrollByKey
 import app.marquee.design.windowDp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -233,19 +236,25 @@ fun TrackPanel(
 }
 
 /**
- * This play's subtitle timing, under a language's options, as Stremio's delay: minus and plus around the delay
- * ("+0.3 s"), a tenth of a second a press, faster while held ([delayStepMs]); the delay itself resets it to 0. On a
- * TV the delay takes the focus: Left and Right step it (a held key speeds up), select resets. The picker stays open.
+ * The chosen track's subtitle timing, under a language's options, as Stremio's delay: minus and plus around the delay
+ * ("+0.3 s"), a tenth of a second a press, faster while held ([DelayHold]); Reset, or a press on the delay itself,
+ * puts it back to 0. On a TV the delay takes the focus: Left and Right step it the same way, select resets, and Down
+ * reaches Reset. The picker stays open.
  */
 @Composable
 fun TimingRow(
     delayMs: Long,
-    onShift: (Long) -> Unit,
+    onDelay: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val tv = Marquee.form == Form.Tv
-    val shift = rememberUpdatedState(onShift)
-    val reset = { if (delayMs != 0L) shift.value(-delayMs) }
+    val delay = rememberUpdatedState(delayMs)
+    val set = rememberUpdatedState(onDelay)
+    val scope = rememberCoroutineScope()
+    val hold = remember { DelayHold(scope, delay, set) }
+    val reset = { if (delay.value != 0L) set.value(0L) }
+    val resetFocus = remember { FocusRequester() }
+    val valueFocus = remember { FocusRequester() }
     Row(
         modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(if (tv) 14.dp else 8.dp),
@@ -254,20 +263,81 @@ fun TimingRow(
         MqText("Timing", Modifier.weight(1f), role = TextRole.Callout, weight = FontWeight.SemiBold, maxLines = 1)
         if (tv) {
             MqIcon(MINUS, tint = Marquee.colors.dim, size = 26.dp)
-            DelayValue(delayMs, reset, Modifier.onPreviewKeyEvent { delayKey(it, shift.value) })
+            DelayValue(
+                delayMs,
+                reset,
+                Modifier
+                    .onPreviewKeyEvent { delayKey(it, hold) }
+                    .onFocusChanged { if (!it.isFocused) hold.release(step = false) }
+                    .focusRequester(valueFocus)
+                    .focusProperties { if (delayMs != 0L) down = resetFocus },
+            )
             MqIcon(Icons.Plus, tint = Marquee.colors.dim, size = 26.dp)
         } else {
-            HoldButton(MINUS, "Show subtitles earlier") { shift.value(-delayStepMs(it)) }
+            HoldButton(MINUS, "Show subtitles earlier", -1, hold)
             DelayValue(delayMs, reset)
-            HoldButton(Icons.Plus, "Show subtitles later") { shift.value(delayStepMs(it)) }
+            HoldButton(Icons.Plus, "Show subtitles later", 1, hold)
+        }
+        if (delayMs != 0L) {
+            SecondaryButton(
+                "Reset",
+                {
+                    // Reset leaves with the press: on a TV the focus goes back to the delay.
+                    if (tv) runCatching { valueFocus.requestFocus() }
+                    reset()
+                },
+                Modifier.focusRequester(resetFocus).focusProperties { right = FocusRequester.Cancel },
+            )
         }
     }
 }
 
-/** Left and Right on the TV's focused delay: a step each way, longer while the key is held; the rest goes on. */
+/**
+ * Minus or plus held, or a TV's Left or Right on the delay, as stremio-web's: a release before the first repeat is one
+ * press; held, it steps after [HOLD_START_MS] and every [HOLD_EVERY_MS] after that, faster as it goes ([steppedDelay]).
+ * The hold counts its own time, so a slow frame does not speed it up.
+ */
+private class DelayHold(
+    private val scope: CoroutineScope,
+    private val delayMs: State<Long>,
+    private val onDelay: State<(Long) -> Unit>,
+) {
+    private var job: Job? = null
+    private var direction = 0
+    private var repeated = false
+
+    fun press(direction: Int) {
+        if (job != null) return
+        this.direction = direction
+        repeated = false
+        job =
+            scope.launch {
+                delay(HOLD_START_MS)
+                repeated = true
+                var at = delayMs.value
+                var held = HOLD_START_MS
+                while (true) {
+                    at = steppedDelay(at, direction, held)
+                    onDelay.value(at)
+                    delay(HOLD_EVERY_MS)
+                    held += HOLD_EVERY_MS
+                }
+            }
+    }
+
+    /** Let go: one step if it never repeated; none when the touch was cancelled or the focus left ([step] false). */
+    fun release(step: Boolean = true) {
+        val held = job ?: return
+        held.cancel()
+        job = null
+        if (step && !repeated) onDelay.value(steppedDelay(delayMs.value, direction))
+    }
+}
+
+/** Left and Right on the TV's focused delay, held or pressed ([DelayHold]); the rest goes on. */
 private fun delayKey(
     event: KeyEvent,
-    onShift: (Long) -> Unit,
+    hold: DelayHold,
 ): Boolean {
     val direction =
         when (event.key) {
@@ -275,7 +345,11 @@ private fun delayKey(
             Key.DirectionRight -> 1
             else -> return false
         }
-    if (event.type == KeyEventType.KeyDown) onShift(direction * delayStepMs(event.nativeKeyEvent.repeatCount))
+    // The system's own repeats of a held key are ignored: the hold keeps its own pace.
+    when (event.type) {
+        KeyEventType.KeyDown -> hold.press(direction)
+        KeyEventType.KeyUp -> hold.release()
+    }
     return true
 }
 
@@ -313,18 +387,14 @@ private fun DelayValue(
     }
 }
 
-/**
- * A round minus or plus that steps on the press and again while held, faster as it goes ([HOLD_START_MS],
- * [HOLD_EVERY_MS]); [onStep] is told which repeat it is (0 for the press). A screen reader presses it once.
- */
+/** A round minus or plus that steps [direction] on a press and faster while held ([DelayHold]). A screen reader presses it once. */
 @Composable
 private fun HoldButton(
     icon: ImageVector,
     spoken: String,
-    onStep: (Int) -> Unit,
+    direction: Int,
+    hold: DelayHold,
 ) {
-    val step = rememberUpdatedState(onStep)
-    val scope = rememberCoroutineScope()
     Box(
         Modifier
             .size(44.dp)
@@ -334,24 +404,15 @@ private fun HoldButton(
                 contentDescription = spoken
                 role = Role.Button
                 onClick {
-                    step.value(0)
+                    hold.press(direction)
+                    hold.release()
                     true
                 }
             }.pointerInput(Unit) {
                 detectTapGestures(
                     onPress = {
-                        step.value(0)
-                        val held =
-                            scope.launch {
-                                delay(HOLD_START_MS)
-                                var repeat = 1
-                                while (true) {
-                                    step.value(repeat++)
-                                    delay(HOLD_EVERY_MS)
-                                }
-                            }
-                        tryAwaitRelease()
-                        held.cancel()
+                        hold.press(direction)
+                        hold.release(step = tryAwaitRelease())
                     },
                 )
             },

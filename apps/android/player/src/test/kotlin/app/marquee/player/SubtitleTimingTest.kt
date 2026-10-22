@@ -10,7 +10,6 @@ import androidx.media3.extractor.text.SubtitleParser
 import app.marquee.core.model.SubtitleSize
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 /** The per-play subtitle delay and the profile's subtitle size (journey reviews 2026-10-20). */
 class SubtitleTimingTest {
@@ -78,15 +77,33 @@ class SubtitleTimingTest {
     }
 
     @Test
-    fun `a press steps a tenth of a second, and a held one steps further as it goes`() {
+    fun `a press steps a tenth of a second and snaps to one, a hold steps 0_3 s rising to 0_6 s, within a minute`() {
         assertEquals(100L, SUBTITLE_STEP_MS)
-        assertEquals(100L, delayStepMs(0))
-        assertEquals(100L, delayStepMs(9))
-        assertEquals(200L, delayStepMs(10))
-        assertEquals(500L, delayStepMs(30))
-        // Half a minute is a few seconds of holding at the touch repeat.
-        val held = (1..200).runningFold(0L) { at, n -> at + delayStepMs(n) }.indexOfFirst { it >= SUBTITLE_MAX_MS }
-        assertTrue(held * HOLD_EVERY_MS + HOLD_START_MS < 10_000, "held for ${held * HOLD_EVERY_MS + HOLD_START_MS} ms")
+        assertEquals(100L, steppedDelay(0, 1))
+        assertEquals(-100L, steppedDelay(0, -1))
+        // A delay off the tenths (a remembered one) lands on a tenth at the first press, short of the full step.
+        assertEquals(300L, steppedDelay(250, 1))
+        assertEquals(200L, steppedDelay(250, -1))
+        assertEquals(-300L, steppedDelay(-250, -1))
+        // Held: the first repeat after 250 ms, then every 100 ms; 0.3 s a tick in the first second, then 0.4, 0.5, 0.6.
+        assertEquals(250L, HOLD_START_MS)
+        assertEquals(100L, HOLD_EVERY_MS)
+        assertEquals(300L, steppedDelay(0, 1, heldMs = 250))
+        assertEquals(300L, steppedDelay(0, 1, heldMs = 950))
+        assertEquals(400L, steppedDelay(0, 1, heldMs = 1_050))
+        assertEquals(500L, steppedDelay(0, 1, heldMs = 2_050))
+        assertEquals(-600L, steppedDelay(0, -1, heldMs = 3_050))
+        assertEquals(600L, steppedDelay(0, 1, heldMs = 60_000))
+        // Plus or minus a minute at most.
+        assertEquals(60_000L, SUBTITLE_MAX_MS)
+        assertEquals(60_000L, steppedDelay(59_900, 1, heldMs = 5_000))
+        assertEquals(-60_000L, steppedDelay(-60_000, -1))
+        // Held from 0, a minute is 109 ticks away: 11 s of holding.
+        val ticks =
+            generateSequence(HOLD_START_MS) { it + HOLD_EVERY_MS }
+                .runningFold(0L) { at, held -> steppedDelay(at, 1, held) }
+                .indexOfFirst { it == SUBTITLE_MAX_MS }
+        assertEquals(109, ticks)
     }
 
     @Test

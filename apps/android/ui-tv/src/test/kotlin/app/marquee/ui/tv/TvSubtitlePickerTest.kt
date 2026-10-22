@@ -84,7 +84,7 @@ class TvSubtitlePickerTest {
                     rows,
                     onPick = { picks += it },
                     timing = timing?.let { delay },
-                    onShift = { delay += it },
+                    onDelay = { delay = it },
                 )
             }
         }
@@ -183,7 +183,7 @@ class TvSubtitlePickerTest {
     }
 
     @Test
-    fun `Down from the last option reaches the delay, where Left and Right step it and select resets`() {
+    fun `Down from the last option reaches the delay, where Left and Right step it, held faster, and select resets`() {
         open(timing = 0L)
         row("English, 3 options").press(Key.DirectionRight)
         compose.onNode(isFocused()).press(Key.DirectionDown)
@@ -198,5 +198,19 @@ class TvSubtitlePickerTest {
         // The focus stayed on the delay all along; select puts it back to 0.
         compose.onNode(isFocused() and hasContentDescription("Timing")).press(Key.Enter)
         compose.onNodeWithText("0.0 s").assertExists()
+        // Right held for a second: 0.3 s a tick from 250 ms, every 100 ms, whatever the system's own key repeats.
+        compose.mainClock.autoAdvance = false
+        compose.onNode(isFocused()).performKeyInput { keyDown(Key.DirectionRight) }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.onNode(isFocused()).performKeyInput { keyUp(Key.DirectionRight) }
+        compose.mainClock.advanceTimeBy(500)
+        compose.mainClock.autoAdvance = true
+        compose.onNodeWithText("+2.4 s").assertExists()
+        // Down from the delay reaches Reset, shown while it is not 0.
+        compose.onNode(isFocused()).press(Key.DirectionDown)
+        compose.onNode(isFocused() and hasText("Reset")).assertExists().press(Key.Enter)
+        compose.onNodeWithText("0.0 s").assertExists()
+        compose.onNodeWithText("Reset").assertDoesNotExist()
+        compose.onNode(isFocused() and hasContentDescription("Timing")).assertExists()
     }
 }

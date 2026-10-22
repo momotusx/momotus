@@ -204,9 +204,8 @@ private fun spoken(language: SubtitleLanguage): String =
 /**
  * The phone's picker, one level at a time in a sheet over the dimmed player: the languages, or the options of
  * [opened] (a language's key). The screen keeps [opened] so its Back steps out of the options first. [timing] is
- * this play's subtitle delay while a subtitle is on (the options level shows its row, and the profile's [textSize]
- * under it, changed through [onSize]); [note] what the core still
- * waits for or could not reach.
+ * the chosen track's subtitle delay while a subtitle is on (the options level shows its row, and the profile's
+ * [textSize] under it, changed through [onSize]); [note] what the core still waits for or could not reach.
  */
 @Composable
 fun PhoneSubtitleSheet(
@@ -218,7 +217,7 @@ fun PhoneSubtitleSheet(
     modifier: Modifier = Modifier,
     note: String? = null,
     timing: Long? = null,
-    onShift: (Long) -> Unit = {},
+    onDelay: (Long) -> Unit = {},
     textSize: SubtitleSize = SubtitleSize.Medium,
     onSize: (SubtitleSize) -> Unit = {},
 ) {
@@ -282,7 +281,7 @@ fun PhoneSubtitleSheet(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (timing != null) TimingRow(timing, onShift)
+                if (timing != null) TimingRow(timing, onDelay)
                 SizeRow(textSize, onSize)
             }
         }
@@ -459,7 +458,7 @@ fun TvSubtitlePicker(
     modifier: Modifier = Modifier,
     note: String? = null,
     timing: Long? = null,
-    onShift: (Long) -> Unit = {},
+    onDelay: (Long) -> Unit = {},
     textSize: SubtitleSize = SubtitleSize.Medium,
     onSize: (SubtitleSize) -> Unit = {},
 ) {
@@ -605,7 +604,7 @@ fun TvSubtitlePicker(
                     if (timing != null) {
                         TimingRow(
                             timing,
-                            onShift,
+                            onDelay,
                             Modifier.padding(start = 16.dp, top = 12.dp),
                         )
                     }
