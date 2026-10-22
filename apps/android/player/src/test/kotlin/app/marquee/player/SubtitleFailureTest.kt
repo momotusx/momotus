@@ -34,6 +34,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import kotlinx.serialization.json.longOrNull
 import org.junit.After
 import org.junit.Test
@@ -109,11 +110,13 @@ class SubtitleFailureTest {
         extra: String = "",
         url: String = video,
         pending: Boolean = false,
+        /** The delay the viewer last left on a track, by its address (`delayMs`). */
+        delays: Map<String, Int> = emptyMap(),
     ) = """{"phase":"$phase","url":"$url","key":"k1","attempt":1,"manifest":false,"subtitlesPending":$pending,""" +
         """"trakt":"off","subtitleNotes":$notes,$extra"subtitles":[""" +
         subtitles.joinToString(",") {
             """{"url":"$it","lang":"tur","source":"${if (it == subtitle) "SubSense" else "OpenSubtitles v3"}",""" +
-                """"forced":false,"hearingImpaired":false}"""
+                """"forced":false,"hearingImpaired":false,"delayMs":${delays[it] ?: 0}}"""
         } + "]}"
 
     private val snapshot = snapshot()
@@ -744,6 +747,50 @@ class SubtitleFailureTest {
         assertEquals(1, player.items.size, "the item was set again")
         assertEquals(1, player.prepares, "the item was prepared again")
         controller.release()
+    }
+
+    /** What each `subtitleDelay` sent: a track's address and ms. */
+    private fun delaysSent() =
+        commands("subtitleDelay").map {
+            val command = it["command"]!!.jsonObject
+            command["url"]!!.jsonPrimitive.content to command["ms"]!!.jsonPrimitive.long
+        }
+
+    @Test
+    fun `a core track starts where the viewer left its delay, and a new delay goes to the core once it settles`() {
+        val (player, controller) =
+            open(snapshot(subtitles = listOf(subtitle, other), delays = mapOf(subtitle to 1_200)))
+        controller.selectText("late:$subtitle")
+        until("the subtitle is drawn") { controller.addonOn }
+        assertEquals(1_200L, controller.subtitleDelayMs)
+        assertEquals(listOf("Merhaba"), controller.drawnAt(2_500))
+        runFor(1_000)
+        assertEquals(emptyList(), delaysSent(), "the core's own delay went back to it")
+        // A run of presses: once, after it settles.
+        controller.setSubtitleDelay(1_300)
+        controller.setSubtitleDelay(1_400)
+        until("the delay goes to the core") { delaysSent().isNotEmpty() }
+        runFor(1_000)
+        assertEquals(listOf(subtitle to 1_400L), delaysSent())
+        // Another track before it settles: the first one's goes at once.
+        controller.setSubtitleDelay(300)
+        controller.selectText("late:$other")
+        until("the first track's delay goes") { delaysSent().size == 2 }
+        assertEquals(subtitle to 300L, delaysSent().last())
+        // The file's own track has no core identity: nothing goes.
+        player.media(withOwnTrack, 10_000_000L)
+        controller.selectText(OWN)
+        until("the file's track is on") { controller.subtitleOn }
+        controller.setSubtitleDelay(900)
+        runFor(1_000)
+        assertEquals(2, delaysSent().size)
+        // On close, a delay not sent yet goes.
+        controller.selectText("late:$other")
+        until("the other is drawn") { controller.addonOn }
+        controller.setSubtitleDelay(-500)
+        controller.release()
+        until("the last delay goes on close") { delaysSent().size == 3 }
+        assertEquals(other to -500L, delaysSent().last())
     }
 
     @Test

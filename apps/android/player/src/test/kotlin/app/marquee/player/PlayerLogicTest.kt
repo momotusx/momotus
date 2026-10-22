@@ -306,7 +306,8 @@ class PlayerLogicTest {
         assertEquals(subs[3], carriedSubtitle(subs, pickLanguage = "tr", pickUrl = "gone"))
         // With no full file, a hearing-impaired one beats a forced one.
         assertEquals(subs[2], bestInLanguage(subs.take(3), "tur"))
-        assertEquals(subs[1], bestInLanguage(subs.take(2), "tur"))
+        // A forced file is never picked for the viewer: with nothing else, none.
+        assertNull(bestInLanguage(subs.take(2), "tur"))
         assertNull(bestInLanguage(subs, ""))
     }
 

@@ -83,15 +83,20 @@ fun flagLetters(key: String): String = key.take(2).uppercase().ifEmpty { "?" }
 fun flagFor(key: String): Int? = FLAGS[key] ?: FLAGS[key.substringBefore('-')]
 
 /**
- * An option's quiet line: where it is from and what it is ([TrackChoice.detail]), "Same release group" where the
- * core's match fits, then the release text cut in the middle ([middleCut]) as long as [fits] lets one line be: on the
+ * An option's quiet line: where it is from and what it is ([TrackChoice.detail]), the core's match ("Matches this
+ * file", else "Same release group"), "Made for 25 fps" on a frame rate that does not fit, then the release text cut in the middle ([middleCut]) as long as [fits] lets one line be: on the
  * same line while at least [MIN_RELEASE] characters of it fit there, else alone on the next.
  */
 fun optionLine(
     option: TrackChoice,
     fits: (String) -> Boolean,
 ): String {
-    val head = listOfNotNull(option.detail, SAME_GROUP.takeIf { option.fits }).joinToString(DOT)
+    val head =
+        listOfNotNull(
+            option.detail,
+            matchWords(option),
+            option.madeForFps?.let(::madeForWords),
+        ).joinToString(DOT)
     val release = option.release ?: return head
     val alone = { longest(release, SHORTEST) { fits(middleCut(release, it)) }!! }
     if (head.isEmpty()) return alone()
@@ -119,6 +124,22 @@ private fun longest(
 
 /** The core's caption for a track that names the playing release's group (plans/player-polish.md 2.2). */
 const val SAME_GROUP = "Same release group"
+
+/** The core's caption for a track made for this very file (its hash): it says more than the group. */
+const val SAME_FILE = "Matches this file"
+
+private fun matchWords(option: TrackChoice): String? =
+    when {
+        option.hashMatch -> SAME_FILE
+        option.fits -> SAME_GROUP
+        else -> null
+    }
+
+/** "Made for 25 fps", "Made for 23.976 fps". */
+fun madeForWords(fps: Float): String {
+    val rate = if (fps % 1f == 0f) "${fps.toInt()}" else "%.3f".format(java.util.Locale.ROOT, fps).trimEnd('0')
+    return "Made for $rate fps"
+}
 
 /** Below this many characters left on the line, the release text takes a whole line's measure (it wraps). */
 private const val MIN_RELEASE = 24

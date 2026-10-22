@@ -26,6 +26,10 @@ data class TrackChoice(
     val forced: Boolean = false,
     /** The core's match: the track names the playing release's group ("Same release group"). */
     val fits: Boolean = false,
+    /** Made for this very file, by its hash ("Matches this file"). */
+    val hashMatch: Boolean = false,
+    /** The frame rate it was made for, when one of it and the file's is PAL and the other not ("Made for 25 fps"). */
+    val madeForFps: Float? = null,
     /** The release text the addon names for the track, for the detail line. */
     val release: String? = null,
 )
@@ -100,6 +104,8 @@ internal fun subtitleRows(
                 nativeName = t.nativeName.takeIf { it.isNotEmpty() && it != section },
                 forced = t.forced,
                 fits = t.fits,
+                hashMatch = t.hashMatch,
+                madeForFps = t.madeForFps,
                 release = t.release?.takeIf { it != name },
             )
         }

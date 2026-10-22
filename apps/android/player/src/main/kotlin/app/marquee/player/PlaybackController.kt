@@ -259,8 +259,11 @@ class PlaybackController(
     private var pick: TextPick? = null
         set(value) {
             field = value
-            // A track comes on with its own delay; Off keeps the last one, as nothing shows.
-            if (value != null) applyDelay(delays[value.delayKey] ?: 0L)
+            // A delay the viewer set belongs to the track it was set on: it goes to the core before another comes.
+            if (value?.url != unsentDelay?.first) sendDelay()
+            // A track comes on with its own delay (a core track where the viewer last left it); Off keeps the last
+            // one, as nothing shows.
+            if (value != null) applyDelay(delays[value.delayKey] ?: startDelay(value))
         }
 
     /** The viewer picked a subtitle or Off in this play: the core's start subtitle no longer turns on. */
@@ -951,11 +954,38 @@ class PlaybackController(
      * within [SUBTITLE_MAX_MS]. With no subtitle on there is no track to time, and nothing changes.
      */
     fun setSubtitleDelay(ms: Long) {
-        val key = pick?.delayKey ?: return
+        val chosen = pick ?: return
         val next = ms.coerceIn(-SUBTITLE_MAX_MS, SUBTITLE_MAX_MS)
-        delays[key] = next
+        delays[chosen.delayKey] = next
         applyDelay(next)
+        // A core track's delay goes to the core once a run of presses settles, so its next play starts there.
+        val url = chosen.url?.takeIf { chosen.external } ?: return
+        unsentDelay = url to next
+        delaySend?.cancel()
+        delaySend =
+            scope.launch {
+                delay(DELAY_SETTLE_MS)
+                sendDelay()
+            }
     }
+
+    /** The delay set on a core track and not yet told to the core: its address and ms. */
+    private var unsentDelay: Pair<String, Long>? = null
+    private var delaySend: Job? = null
+
+    private fun sendDelay() {
+        val (url, ms) = unsentDelay ?: return
+        unsentDelay = null
+        delaySend?.cancel()
+        view?.subtitleDelay(url, ms)
+    }
+
+    /** Where a track's delay starts in this play: a core track's where the viewer last left it (`delayMs`). */
+    private fun startDelay(pick: TextPick): Long =
+        pick.url
+            ?.let { url -> snapshotSubs.firstOrNull { it.url == url } }
+            ?.delayMs
+            ?.toLong() ?: 0L
 
     /** A track's identity for its delay: the addon file's address, or the file's own track group. */
     private val TextPick.delayKey: String get() = url ?: group ?: language
@@ -1087,6 +1117,7 @@ class PlaybackController(
     fun release() {
         if (released) return
         report()
+        sendDelay()
         released = true
         StartService.release()
         ticker?.cancel()
@@ -1104,5 +1135,8 @@ class PlaybackController(
         const val NOTICE_MS = 4_000L
         const val TRYING_AGAIN_MS = 1_500L
         const val LATE = "late:"
+
+        /** How long after the last delay press a core track's delay goes to the core. */
+        const val DELAY_SETTLE_MS = 700L
     }
 }

@@ -160,6 +160,10 @@ class SubtitleLanguagesTest {
         assertEquals("OpenSubtitles v3 · Slow…1080p.WEB.H264-CAKES", optionLine(en.getValue("late:u/en1"), line))
         assertEquals("OpenSubtitles v3 · Same release group", optionLine(en.getValue("late:u/en2"), line))
         assertEquals("In the file · Forced", optionLine(en.getValue("0:0"), line))
+        // Made for this very file says more than the group; a frame rate that does not fit is said too.
+        val hashed = en.getValue("late:u/en2").copy(hashMatch = true, madeForFps = 25f)
+        assertEquals("OpenSubtitles v3 · Matches this file · Made for 25 fps", optionLine(hashed, line))
+        assertEquals("Made for 23.976 fps", madeForWords(23.976f))
         // Too little room left on the line: the release goes alone on the next, as much of it as a line holds.
         val long = en.getValue("late:u/en1").copy(detail = "OpenSubtitles v3 · For the hard of hearing")
         assertEquals(

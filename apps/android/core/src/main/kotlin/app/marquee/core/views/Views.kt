@@ -410,6 +410,20 @@ class PlaybackView(
     fun subtitleChosen(url: String?) = post(command("subtitleChosen") { put("url", url) })
 
     /**
+     * The viewer's delay for a core track ([url]), in ms (positive shows the text later): the title remembers it
+     * for this version and video, and the track's `delayMs` starts there next time.
+     */
+    fun subtitleDelay(
+        url: String,
+        ms: Long,
+    ) = post(
+        command("subtitleDelay") {
+            put("url", url)
+            put("ms", ms)
+        },
+    )
+
+    /**
      * "Try again" on the failure card (the core's `retry`): the same versions again from the first pick. Not
      * [retry], which opens a failed view again.
      */

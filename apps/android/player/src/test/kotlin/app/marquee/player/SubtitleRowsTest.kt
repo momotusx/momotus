@@ -74,6 +74,14 @@ class SubtitleRowsTest {
     }
 
     @Test
+    fun `a row carries the core's hash match and the frame rate the track was made for`() {
+        val hashed = core[1].copy(hashMatch = true, madeForFps = 25f)
+        val row = subtitleRows(listOf(hashed), emptyMap(), emptySet(), emptyList(), "late:")[1]
+        assertEquals(true, row.hashMatch)
+        assertEquals(25f, row.madeForFps)
+    }
+
+    @Test
     fun `nothing chosen leaves Off on, and a file that did not load is left out`() {
         val rows = subtitleRows(core, emptyMap(), setOf("u/tur"), emptyList(), "late:")
         assertEquals(true, rows.first().selected)

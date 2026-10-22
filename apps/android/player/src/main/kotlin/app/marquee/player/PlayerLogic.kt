@@ -314,8 +314,8 @@ fun carriedSubtitle(
 
 /**
  * The best track in [language]: the core lists each language's tracks in its own ranking (addon order),
- * and a full regular file beats a hearing-impaired one, which beats a forced file (only the lines in other
- * languages). Ties keep the core's order.
+ * and a full regular file beats a hearing-impaired one. A forced file (only the lines in other languages) is
+ * never picked for the viewer. Ties keep the core's order.
  */
 fun bestInLanguage(
     subs: List<SubtitleTrack>,
@@ -323,8 +323,8 @@ fun bestInLanguage(
 ): SubtitleTrack? {
     if (language.isNullOrEmpty()) return null
     return subs
-        .filter { sameLanguage(it.lang, language) }
-        .minByOrNull { (if (it.forced) 2 else 0) + (if (it.hearingImpaired) 1 else 0) }
+        .filter { sameLanguage(it.lang, language) && !it.forced }
+        .minByOrNull { if (it.hearingImpaired) 1 else 0 }
 }
 
 /** A subtitle the viewer chose, as [findPick] looks for it again when the tracks change. */
