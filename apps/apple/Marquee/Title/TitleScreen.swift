@@ -243,10 +243,7 @@ struct TitleScreen: View {
     /// An episode whose version is being found, or why it could not start, with the way forward.
     @ViewBuilder private var episodeStatus: some View {
         if let failure = startFailure {
-            StateLine(symbol: "circle-alert", text: failure.text,
-                      action: failure.noVersion ? ("Add a source", { showAddons = true })
-                          : ("Choose a version", { if let episode = model.episodes.first(where: { $0.videoId == failure.videoId }) { chooseVersion(episode) } }),
-                      primary: false)
+            StateLine(symbol: "circle-alert", text: failure.text, action: (failure.way.words, { proceed(failure) }), primary: false)
         } else if starting != nil {
             Label("Finding a version", glyph: "clock")
                 .textFont(Theme.type.callout, relativeTo: .callout)
@@ -505,8 +502,17 @@ struct TitleScreen: View {
         if let route {
             playing = route
         } else {
-            let text = model.snapshot.flatMap { $0.done ? VersionWords.none($0) : nil }
-            startFailure = EpisodeFailure(videoId: episode.videoId, text: text ?? "No version answered yet. Choose a version to keep waiting.", noVersion: text != nil)
+            startFailure = EpisodeFailure(videoId: episode.videoId, versions: model.snapshot)
+        }
+    }
+
+    /// An episode's way forward once it could not start, on every form (the panel, the Episodes page, TV).
+    private func proceed(_ failure: EpisodeFailure) {
+        switch failure.way {
+        case .addAccount: showAccount = true
+        case .addSource: showAddons = true
+        case .chooseVersion:
+            if let episode = model.episodes.first(where: { $0.videoId == failure.videoId }) { chooseVersion(episode) }
         }
     }
 
@@ -718,7 +724,7 @@ struct TitleScreen: View {
             select: model.selectSeason,
             play: { episode in Task { await play(episode) } },
             chooseVersion: chooseVersion,
-            addSource: { showAddons = true },
+            proceed: proceed,
             setWatched: { model.setWatched($0, $1); sync.schedule() })
     }
     #endif

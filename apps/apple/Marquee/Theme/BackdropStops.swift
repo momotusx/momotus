@@ -18,6 +18,8 @@ enum BackdropStops {
     /// the Mac, 170 on the iPhone): the card's words sit on it, the tag line about 70 percent up, where
     /// 70 percent white needs .66 over white art (the glass check's card spots).
     static let cardRamp = [Stop(at: 0, alpha: 0.82), Stop(at: 0.5, alpha: 0.76), Stop(at: 0.8, alpha: 0.7), Stop(at: 1, alpha: 0)]
+    /// The black disc under the Mac card's "...": the white glyph keeps 3:1 over a bright still.
+    static let cardMoreBacking = 0.55
     /// The card's ramp as drawn, black from the card's foot up.
     static var cardRampGradient: LinearGradient {
         LinearGradient(stops: gradient(cardRamp, .black), startPoint: .bottom, endPoint: .top)

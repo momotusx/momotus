@@ -76,7 +76,8 @@ struct TitleHeroFacts {
     let name: String
     let logo: String?
     /// "Series · Drama · Thriller": the kind, then two genres (the iPhone's line).
-    let kindLine: String
+    /// "Series · Drama · Thriller", then with fewer genres: the phone shows the longest that fits one line.
+    let kindLines: [String]
     let genres: [String]
     let directors: [String]
     /// The years, then the runtime.
@@ -90,7 +91,7 @@ struct TitleHeroFacts {
         name = details.name
         logo = details.logo
         let kind = details.kind == "movie" ? "Movie" : details.kind == "series" ? "Series" : details.kind.capitalized
-        kindLine = ([kind] + details.genres.prefix(2)).joined(separator: " \u{B7} ")
+        kindLines = (0...min(2, details.genres.count)).reversed().map { ([kind] + details.genres.prefix($0)).joined(separator: " \u{B7} ") }
         genres = Array(details.genres.prefix(3))
         directors = Array(details.directors.prefix(3))
         meta = [details.releaseInfo, details.runtime].compactMap { $0 }
@@ -108,7 +109,7 @@ enum TitleLink: Equatable {
 }
 
 /// A part of the hero a test measures (TitleHeroTests); nothing reads it in the app.
-enum HeroPart: Hashable { case meta, chips, synopsis, actions, kindLine, box }
+enum HeroPart: Hashable { case meta, chips, synopsis, actions, kindLine, box, chip(String) }
 
 /// Where a test hears a hero part's frame; a class, so the environment compares it by identity.
 final class HeroProbeSink {
@@ -191,11 +192,13 @@ struct TitleHeroPhone<Buttons: View, Secondaries: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             TitleLogo(logo: facts.logo, name: facts.name, maxWidth: 300, height: 86, nameSize: Theme.type.title1, alignment: .bottom)
-            Text(facts.kindLine)
-                .textFont(15, weight: .semibold, relativeTo: .callout)
-                .foregroundStyle(Theme.Palette.text)
-                .multilineTextAlignment(.center)
-                .padding(.top, 12)
+            // One line, where the glass check reads it: genres drop before the line wraps (review r2 P3-5).
+            ViewThatFits(in: .horizontal) {
+                ForEach(facts.kindLines, id: \.self) { Text($0).lineLimit(1) }
+            }
+            .textFont(15, weight: .semibold, relativeTo: .callout)
+            .foregroundStyle(Theme.Palette.text)
+            .padding(.top, 12)
                 .heroProbe(.kindLine)
             buttons.padding(.top, 14)
             secondaries.padding(.top, 8)
@@ -247,6 +250,7 @@ struct ChipGroups: View {
                         .padding(.horizontal, 12)
                         .frame(height: 28)
                         .background(SecondaryFill(shape: Capsule()))
+                        .heroProbe(.chip(name))
                 }
                 .buttonStyle(FocusPlainStyle(shape: Capsule(), scale: 1))
                 .accessibilityHint(hint)

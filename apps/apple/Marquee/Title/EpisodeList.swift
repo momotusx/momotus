@@ -18,7 +18,8 @@ struct EpisodeList: View {
     let select: (Int) -> Void
     let play: (Episode) -> Void
     let chooseVersion: (Episode) -> Void
-    let addSource: () -> Void
+    /// The failure's way forward: an account, a source or a version.
+    let proceed: (EpisodeFailure) -> Void
     let setWatched: (String, Bool) -> Void
     @Environment(\.metrics) private var metrics
 
@@ -59,13 +60,7 @@ struct EpisodeList: View {
                     }
                     // A reason is never the end: the way forward sits under it.
                     if let failure, failure.videoId == episode.videoId {
-                        Group {
-                            if failure.noVersion {
-                                Button(action: addSource) { Label("Add a source", glyph: "plus") }
-                            } else {
-                                Button { chooseVersion(episode) } label: { Label("Choose a version", glyph: "layers") }
-                            }
-                        }
+                        Button { proceed(failure) } label: { Label(failure.way.words, glyph: failure.way.glyph) }
                         .buttonStyle(PillButtonStyle(prominent: true))
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -81,14 +76,6 @@ struct EpisodeList: View {
 }
 
 #endif
-
-/// Why an episode from the list could not start, and whether any version exists at all.
-struct EpisodeFailure: Equatable {
-    let videoId: String
-    let text: String
-    /// Every addon answered with nothing playable: the way forward is a source.
-    let noVersion: Bool
-}
 
 #if os(tvOS)
 /// "SEASON (1) [2] (3) Specials": pills with a control edge; the selected

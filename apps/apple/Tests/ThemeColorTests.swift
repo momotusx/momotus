@@ -197,6 +197,8 @@ private let spots = [
     // points above the card's foot: 12 in, the caption (12/600, 15 tall, 2 above it), the overview
     // (13 pt, 16 a line: two on the Mac, three on the iPhone), the name (15/600) and the tag (11 pt).
     // The ramp covers the Mac card's lower 141 and the iPhone card's lower 170.
+    // The Mac card's "..." glyph over the still's top, past the ramp: on its black disc alone.
+    Spot(name: "card, Mac, more", page: "bgDesktop", layers: [(false, BackdropStops.cardMoreBacking)], word: false, text: 1),
     Spot(name: "card, Mac, tag", page: "bgDesktop", layers: [(false, BackdropStops.alpha(BackdropStops.cardRamp, at: 98.0 / 141))], word: false, text: 0.7),
     Spot(name: "card, Mac, name", page: "bgDesktop", layers: [(false, BackdropStops.alpha(BackdropStops.cardRamp, at: 83.0 / 141))], word: false, text: 1),
     Spot(name: "card, Mac, overview", page: "bgDesktop", layers: [(false, BackdropStops.alpha(BackdropStops.cardRamp, at: 63.0 / 141))], word: false, text: 0.7),

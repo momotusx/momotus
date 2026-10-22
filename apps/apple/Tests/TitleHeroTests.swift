@@ -196,3 +196,42 @@ private func spot(_ part: CGRect, in box: CGRect) -> (top: CGFloat, end: CGFloat
         #expect(seen.enabled == [!on], "inert(\(on)) left the page enabled: \(seen.enabled)")
     }
 }
+
+@MainActor @Test func aChipGroupDropsTheNamesThatDoNotFitAndCutsNone() throws {
+    // Drop, never truncate: every drawn chip is as wide as its whole name (review r2).
+    let names = ["Florian Henckel von Donnersmarck", "Alejandro González Iñárritu", "Apichatpong Weerasethakul"]
+    let parts = Parts()
+    let host = NSHostingView(rootView: ChipGroups(genres: [], directors: names, open: { _ in })
+        .frame(width: BackdropStops.heroSynopsisWidth, alignment: .leading)
+        .environment(\.heroProbe, HeroProbeSink { part, frame in parts.frames[part] = frame }))
+    host.frame = CGRect(x: 0, y: 0, width: BackdropStops.heroSynopsisWidth, height: 200)
+    for _ in 0..<50 {
+        host.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+    }
+    let drawn = names.filter { (parts.frames[.chip($0)]?.width ?? 0) > 0 }
+    #expect((1..<names.count).contains(drawn.count), "drawn: \(drawn)")
+    for name in drawn {
+        let whole = NSHostingView(rootView: Text(name).textFont(13, weight: .medium, relativeTo: .footnote).lineLimit(1).padding(.horizontal, 12).fixedSize()).fittingSize.width
+        #expect(abs((parts.frames[.chip(name)]?.width ?? 0) - whole) < 1, "\(name) drawn \(parts.frames[.chip(name)]?.width ?? 0), whole \(whole)")
+    }
+}
+
+@MainActor @Test func theIPhoneKindLineStaysOneLine() throws {
+    // At the narrowest phone width the long genres drop before the line wraps (review r2 P3-5).
+    let facts = TitleHeroFacts(try details(["genres": ["Action & Adventure", "Sci-Fi & Fantasy", "Drama"]]))
+    #expect(facts.kindLines.first == "Series \u{B7} Action & Adventure \u{B7} Sci-Fi & Fantasy")
+    let parts = Parts()
+    let host = NSHostingView(rootView: TitleHeroPhone(facts: facts) { EmptyView() } secondaries: { EmptyView() }
+        .frame(width: 320)
+        .environment(\.heroProbe, HeroProbeSink { part, frame in parts.frames[part] = frame }))
+    host.frame = CGRect(x: 0, y: 0, width: 320, height: 400)
+    for _ in 0..<50 {
+        host.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+    }
+    let line = try #require(parts.frames[.kindLine])
+    // 12 above it, then one 15 pt line.
+    #expect(line.height < 12 + 15 * 1.6, "kind line \(line)")
+    #expect(line.width <= 320 - 40 + 1)
+}

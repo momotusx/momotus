@@ -55,6 +55,8 @@ struct EpisodeCard: View {
             Menu { menuItems } label: {
                 Glyph("ellipsis", size: 20)
                     .foregroundStyle(.white)
+                    // The Mac's shows over the still's top, past the ramp (the glass check's card spots).
+                    .background { if metrics.wide { Circle().fill(.black.opacity(BackdropStops.cardMoreBacking)).frame(width: 30, height: 30) } }
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }

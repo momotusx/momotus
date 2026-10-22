@@ -163,3 +163,22 @@ private func ep(_ number: Int, _ title: String, released: String? = "2022-02-18"
     #expect(commands.range(of: #"Button\("Start Over"\) \{ startOver\?\.run\(\) \}\s+\.keyboardShortcut\("r", modifiers: \[\.command, \.shift\]\)\s+\.disabled\(startOver == nil\)"#, options: .regularExpression) != nil)
     #expect(title.range(of: #"\.focusedSceneValue\(\\\.startOver, startOverAvailable\("#, options: .regularExpression) != nil)
 }
+
+@Test func anEpisodeThatCouldNotStartOffersTheWayItsVersionsNeed() throws {
+    func versions(done: Bool, blocked reason: String? = nil) throws -> VersionsSnapshot {
+        let blocked = try reason.map { try JSONDecoder().decode(BlockedVersions.self, from: Data(#"{"reason": "\#($0)", "count": 4, "rows": []}"#.utf8)) }
+        return VersionsSnapshot(
+            recommended: nil, rows: [], hidden: HiddenSummary(count: 0, byReason: []), pendingAddons: [], slowAddons: [],
+            failedAddons: [], done: done, frozen: false, conditions: nil, blocked: blocked, note: nil)
+    }
+    // Every version needs a streaming service account: the account, as the hero's primary says (review r2 P2-6).
+    let account = EpisodeFailure(videoId: "e", versions: try versions(done: true, blocked: "needsAccount"))
+    #expect(account.way == .addAccount)
+    #expect(account.way.words == "Add an account")
+    #expect(account.text.contains("streaming service account"))
+    #expect(EpisodeFailure(videoId: "e", versions: try versions(done: true)).way == .addSource)
+    #expect(EpisodeFailure(videoId: "e", versions: try versions(done: true, blocked: "nothingPlaysHere")).way == .addSource)
+    // Sources still answering: Choose a version keeps waiting.
+    #expect(EpisodeFailure(videoId: "e", versions: try versions(done: false)).way == .chooseVersion)
+    #expect(EpisodeFailure(videoId: "e", versions: nil).text == "No version answered yet. Choose a version to keep waiting.")
+}

@@ -200,6 +200,45 @@ enum TitleMark: Equatable {
     case watched(on: Bool)
 }
 
+/// Why an episode could not start, and the way forward, read from its versions as they stand: every
+/// version needs a streaming service account (Add an account, as the hero says), none plays at all
+/// (Add a source), or sources still answer (Choose a version keeps waiting).
+struct EpisodeFailure: Equatable {
+    enum Way: Equatable {
+        case addAccount, addSource, chooseVersion
+
+        var words: String {
+            switch self {
+            case .addAccount: StreamChoice.words.blocked.needsAccount.action
+            case .addSource: "Add a source"
+            case .chooseVersion: "Choose a version"
+            }
+        }
+
+        var glyph: String {
+            switch self {
+            case .addAccount: "key-round"
+            case .addSource: "plus"
+            case .chooseVersion: "layers"
+            }
+        }
+    }
+
+    let videoId: String
+    let text: String
+    let way: Way
+
+    init(videoId: String, versions: VersionsSnapshot?) {
+        self.videoId = videoId
+        guard let done = versions, done.done else {
+            (text, way) = ("No version answered yet. Choose a version to keep waiting.", .chooseVersion)
+            return
+        }
+        text = VersionWords.none(done)
+        way = done.blocked?.reason == "needsAccount" ? .addAccount : .addSource
+    }
+}
+
 /// The title's marks in the order they show: Library always, Watched only for a movie. The core keeps
 /// no watched mark for a whole series (C14, C41), so a series shows Library alone.
 func titleMarks(kind: String, inLibrary: Bool, watched: Bool) -> [TitleMark] {
