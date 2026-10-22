@@ -1795,7 +1795,8 @@ async fn resolve_next(
         match opened {
             Ok((upstream, filename, size, lease)) => {
                 // Read once: a pick while the list fills reorders nothing
-                // under it (the built-in source and the addons rank alike).
+                // under it (the built-in source, the addons and the frame
+                // rate rank alike).
                 let wanted = preferred_languages(&core, &state);
                 // The stream's own tracks come from its addon.
                 let addon_url = stream.addon_url.as_ref();
@@ -1879,7 +1880,6 @@ async fn resolve_next(
                     // read, whichever source answers first.
                     let rated = async {
                         let fps = probed.clone().await.fps.map(|fps| fps as f32);
-                        let wanted = preferred_languages(&core, &state);
                         let mut s = lock(&state);
                         // The one writer of the rate.
                         if fps.is_some() && current(&s, run) {

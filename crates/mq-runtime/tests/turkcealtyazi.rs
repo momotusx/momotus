@@ -185,12 +185,24 @@ fn s01e01() -> PlayTarget {
 /// A loopback origin serving `video` with ranges, or ignoring them (no
 /// hash, no frame rate) when `video` is empty.
 async fn video_origin(video: Vec<u8>) -> String {
+    slow_video_origin(video, Duration::ZERO).await
+}
+
+/// As `video_origin`, the first answer's body past its first byte `late`:
+/// the source opens at once, and whatever reads past it waits.
+async fn slow_video_origin(video: Vec<u8>, late: Duration) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     let video = Arc::new(video);
+    let mut first = true;
     tokio::spawn(async move {
         while let Ok((mut socket, _)) = listener.accept().await {
             let video = video.clone();
+            let wait = if std::mem::take(&mut first) {
+                late
+            } else {
+                Duration::ZERO
+            };
             tokio::spawn(async move {
                 let mut buf = [0u8; 4096];
                 let n = socket.read(&mut buf).await.unwrap_or(0);
@@ -216,7 +228,15 @@ async fn video_origin(video: Vec<u8>) -> String {
                     _ => b"HTTP/1.1 200 OK\r\nContent-Length: 1\r\nConnection: close\r\n\r\nM"
                         .to_vec(),
                 };
-                let _ = socket.write_all(&out).await;
+                // The head and the first 64 KiB (what the open sniffs), then the rest.
+                let at = out
+                    .windows(4)
+                    .position(|w| w == b"\r\n\r\n")
+                    .map_or(0, |h| h + 4 + 64 * 1024);
+                let (now, later) = out.split_at(at.min(out.len()));
+                let _ = socket.write_all(now).await;
+                tokio::time::sleep(wait).await;
+                let _ = socket.write_all(later).await;
             });
         }
     });
@@ -226,6 +246,11 @@ async fn video_origin(video: Vec<u8>) -> String {
 /// A Matroska header whose video track says 25 fps (DefaultDuration 40 ms),
 /// padded to 256 KiB.
 fn mkv_at_25_fps() -> Vec<u8> {
+    mkv_at_25_fps_past(0)
+}
+
+/// As `mkv_at_25_fps`, its tracks past a Void of `void` bytes.
+fn mkv_at_25_fps_past(void: usize) -> Vec<u8> {
     fn el(id: &[u8], body: &[u8]) -> Vec<u8> {
         let mut v = id.to_vec();
         v.push(0x01);
@@ -257,9 +282,17 @@ fn mkv_at_25_fps() -> Vec<u8> {
         &[0x1F, 0x43, 0xB6, 0x75],
         &[uint(&[0xE7], 0), el(&[0xA3], &[0x55; 64])].concat(),
     );
+    let void = if void > 0 {
+        el(&[0xEC], &vec![0; void])
+    } else {
+        Vec::new()
+    };
     let mut file = [
         header,
-        el(&[0x18, 0x53, 0x80, 0x67], &[info, tracks, cluster].concat()),
+        el(
+            &[0x18, 0x53, 0x80, 0x67],
+            &[info, void, tracks, cluster].concat(),
+        ),
     ]
     .concat();
     file.resize(256 * 1024, 0);
@@ -667,4 +700,33 @@ async fn a_pick_while_it_lists_moves_no_section() {
     // Turkish before Ukrainian by name, as when the playback opened.
     assert_eq!(languages.first(), Some(&"tr"), "{languages:?}");
     assert_eq!(languages.last(), Some(&"uk"), "{languages:?}");
+}
+
+/// The frame rate read after a pick ranks with the languages the playback
+/// opened with too: the sections stay as they were.
+#[tokio::test]
+async fn a_pick_before_the_frame_rate_moves_no_section() {
+    // Its tracks come 600 ms after the first 64 KiB the open reads (within
+    // the probe's 1.5 s), so the pick lands before the rate is read.
+    let video = slow_video_origin(mkv_at_25_fps_past(96 * 1024), Duration::from_millis(600)).await;
+    let (port, _) = site(|_| None);
+    let core = core_at(port);
+    let own = format!("{video}/manifest.json");
+    install(&core, &[row(&own, "own", "stream", true)]);
+    let streams = format!(
+        r#"{{"streams":[{{"url":"{video}/video.mkv","title":"Breaking Bad S01E01",
+            "subtitles":[{{"id":"t","lang":"tur","url":"https://subs.test/tur.srt"}},
+            {{"id":"u","lang":"ukr","url":"https://subs.test/ukr.srt"}}]}}]}}"#
+    );
+    let view = PlaybackView::open(&core, listed(&own, &streams), s01e01());
+    let s = until(&view, "the stream's own tracks", |s| {
+        s.phase == PlaybackPhase::Ready && s.subtitles.len() == 2
+    })
+    .await;
+    assert!(s.subtitles_pending, "{s:?}");
+    view.subtitle_chosen(None, Some("ukr"));
+    assert_eq!(core.prefs().subtitle_languages, ["uk"]);
+    let s = until(&view, "subtitles", settled).await;
+    let languages: Vec<&str> = s.subtitles.iter().map(|t| t.language.as_str()).collect();
+    assert_eq!(languages, ["tr", "uk"]);
 }
