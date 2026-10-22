@@ -5,6 +5,7 @@ import Captions from "lucide-solid/icons/captions";
 import Check from "lucide-solid/icons/check";
 import CircleAlert from "lucide-solid/icons/circle-alert";
 import Gauge from "lucide-solid/icons/gauge";
+import KeyRound from "lucide-solid/icons/key-round";
 import Layers from "lucide-solid/icons/layers";
 import ListVideo from "lucide-solid/icons/list-video";
 import LoaderCircle from "lucide-solid/icons/loader-circle";
@@ -41,7 +42,7 @@ import { bytes, clock, decoded, startsText, episodeLabel, groupFailures, playPat
 import { DELAY_SETTLE_MS } from "../lib/delay";
 import { bufferShare, loadingLines, STALL_AHEAD_S, startFill } from "../lib/loading";
 import { fileChoice, offSummary, pickerLanguages, startOption } from "../lib/subtitles";
-import { blockedWords, languageName, nextVersion, noVersionWords, qualityCell, qualityText, restartLine, subtitleNote } from "../lib/words";
+import { blockedWords, choiceWords, languageName, nextVersion, noVersionWords, qualityCell, qualityText, restartLine, subtitleNote } from "../lib/words";
 import "./player.css";
 
 const SPEEDS = [1, 1.25, 1.5, 2, 0.75];
@@ -723,15 +724,18 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   };
   const pct = (x: number) => `${duration() ? Math.min(100, (x / duration()) * 100) : 0}%`;
   // The failure card's Choose a version: the way on when nothing else is (primary and focused then).
+  // Every version needs a streaming service account: adding one comes first,
+  // as on the title page and in Versions; Choose a version stays beside it.
+  const needsAccount = () => !status()?.busy && versions()?.blocked?.reason === "needsAccount";
   const chooseVersion = () => (
     <A
       class="btn big"
-      classList={{ primary: !snap()?.offer && !failed() }}
+      classList={{ primary: !snap()?.offer && !failed() && !needsAccount() }}
       href={versionsPath(props.kind, props.id, props.videoId)}
       replace
       on:click={toVersions}
       data-f="player:versions"
-      data-autofocus={snap()?.offer || failed() ? undefined : ""}
+      data-autofocus={snap()?.offer || failed() || needsAccount() ? undefined : ""}
     >
       <Layers aria-hidden />
       Choose a version
@@ -922,6 +926,12 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                       longer listed, which Try again cannot bring back, so
                       Choose a version comes first and has the focus. */}
                   <Show when={openError() && !titleError()}>{chooseVersion()}</Show>
+                  <Show when={needsAccount()}>
+                    <A class="btn primary big" href="/debrid" data-f="player:account" data-autofocus>
+                      <KeyRound aria-hidden />
+                      {choiceWords.blocked.needsAccount.action}
+                    </A>
+                  </Show>
                   {/* This play again from its first pick (`retry`), or the
                       playback opened again: what failed may be the moment. */}
                   <Show when={failed() || openError() || titleError()}>

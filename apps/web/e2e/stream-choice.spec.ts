@@ -323,6 +323,11 @@ test.describe("Versions", () => {
       await show.click();
       await expect(show).toHaveAttribute("aria-expanded", "true");
       await expect(page.locator(".vrow").first()).toBeVisible();
+      // The player sends this reason to Versions, where Show them is: no account to add.
+      await page.goto(`/play/series/${GOT.id}/${GOT.resume}?form=${form}`);
+      await expect(page.locator(".player-scr")).toContainText("none plays on this device", { timeout: 60_000 });
+      await expect(page.locator('[data-f="player:account"]')).toHaveCount(0);
+      await expect(page.locator('[data-f="player:versions"]')).toHaveClass(/\bprimary\b/);
       await page.context().close();
     }
   });
@@ -352,9 +357,24 @@ test.describe("Versions", () => {
     await page.goto(`/title/movie/${SHAWSHANK}?form=desktop`);
     await expect(page.locator('[data-f="title:addaccount"]')).toHaveText("Add an account", { timeout: 60_000 });
     await expect(page.locator(".vline")).toContainText("only through a streaming service account");
-    // The player, opened straight (a deep link), says the same (no playback is opened).
+    // The player, opened straight (a deep link), says the same (no playback is opened), and
+    // Add an account leads to the accounts screen, with Choose a version beside it.
     await page.goto(`/play/movie/${SHAWSHANK}/${SHAWSHANK}?form=desktop`);
     await expect(page.locator(".player-scr")).toContainText("only through a streaming service account", { timeout: 60_000 });
+    const add = page.locator('[data-f="player:account"]');
+    await expect(add).toHaveText("Add an account");
+    await expect(add).toHaveAttribute("href", "/debrid");
+    await expect(page.locator('[data-f="player:versions"]')).not.toHaveClass(/\bprimary\b/);
+    await add.click();
+    await expect(page).toHaveURL(/\/debrid/);
+    await page.context().close();
+    // TV: the remote starts on it, and select opens the accounts screen.
+    const tv = await device(browser, "tv", PORTS.bridge);
+    await tv.goto(`/play/movie/${SHAWSHANK}/${SHAWSHANK}?form=tv`);
+    await expect.poll(() => focused(tv), { timeout: 60_000 }).toBe("player:account");
+    await tv.keyboard.press("Enter");
+    await expect(tv).toHaveURL(/\/debrid/);
+    await tv.context().close();
   });
 
   test("almost nobody sharing is said once: on the card before Play, over the list only with no card", async ({ browser }) => {
