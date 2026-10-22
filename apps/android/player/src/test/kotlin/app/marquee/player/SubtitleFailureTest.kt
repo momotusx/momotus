@@ -933,9 +933,8 @@ class SubtitleFailureTest {
                 ),
         )
 
-    @Test
-    fun `a stream server that moved while the app was away opens the play again at its new address`() {
-        val moved = "http://127.0.0.1:7790/video.mp4"
+    /** The core answers the first subscribe with [snapshot], each later one with the stream at [moved]: how many came. */
+    private fun movesTo(moved: String): java.util.concurrent.atomic.AtomicInteger {
         val subscribes =
             java.util.concurrent.atomic
                 .AtomicInteger()
@@ -952,6 +951,13 @@ class SubtitleFailureTest {
                 }
             client.onMessage("""{"id":$id,"ok":true,"result":$result}""")
         }
+        return subscribes
+    }
+
+    @Test
+    fun `a stream server that moved while the app was away opens the play again at its new address`() {
+        val moved = "http://127.0.0.1:7790/video.mp4"
+        val subscribes = movesTo(moved)
         val player = FakePlayer()
         val controller = PlaybackController(player, scope, "Sintel", null, null, SystemClock.elapsedRealtime())
         controller.attach(PlaybackView(client, scope, JsonObject(emptyMap())).also { it.open() })
@@ -963,6 +969,42 @@ class SubtitleFailureTest {
         assertEquals(42_000L, player.items.last().startMs, "opened again where it was")
         assertEquals(2, subscribes.get())
         assertNotEquals("Playing a different source", controller.notice)
+        controller.release()
+    }
+
+    @Test
+    fun `a moved server opens the same file again, so its tracks keep their delays`() {
+        movesTo("http://127.0.0.1:7790/video.mp4")
+        val delay = SubtitleDelay()
+        val player = FakePlayer()
+        val controller =
+            PlaybackController(player, scope, "Sintel", null, null, SystemClock.elapsedRealtime(), delay, fetch)
+        controller.attach(PlaybackView(client, scope, JsonObject(emptyMap())).also { it.open() })
+        until("the stream loads") { player.items.size == 1 }
+        player.media(withOwnTrack, 10_000_000L)
+        controller.selectText(OWN)
+        until("the file's track is on") { controller.subtitleOn }
+        controller.setSubtitleDelay(1_500)
+        controller.serverMoved()
+        until("the play opens again at the new address") { player.items.size == 2 }
+        assertEquals(1_500L, controller.subtitleDelayMs)
+        assertEquals(1_500L, delay.ms)
+        controller.release()
+    }
+
+    @Test
+    fun `a delay not sent yet goes to the core before the failover, under the source that failed`() {
+        val (player, controller) = open()
+        controller.selectText("late:$subtitle")
+        until("the subtitle is drawn") { controller.addonOn }
+        controller.setSubtitleDelay(800)
+        player.fail(httpError(video, 503))
+        until("the next source is asked for") { failOvers().size == 1 }
+        assertEquals(listOf(subtitle to 800L), delaysSent())
+        assertTrue(
+            sent.indexOf(commands("subtitleDelay").single()) < sent.indexOf(failOvers().single()),
+            "the delay went after the failover, under the next source",
+        )
         controller.release()
     }
 

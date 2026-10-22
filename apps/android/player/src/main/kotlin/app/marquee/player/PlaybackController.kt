@@ -502,8 +502,9 @@ class PlaybackController(
         player.prepare()
         stage = Stage.Buffering
         // Another source is another file: the delays set on this one's tracks (the file's own are known by their
-        // group, "0", "1") do not carry over. A delay not told to the core yet goes first.
-        if (again) {
+        // group, "0", "1") do not carry over. A delay not told to the core yet goes first. The same source at a
+        // new address (the server moved) is the same file: its delays stay.
+        if (again && !reopening) {
             sendDelay()
             delays.clear()
             pick?.let { applyDelay(startDelay(it)) }
@@ -657,6 +658,8 @@ class PlaybackController(
         startOver()
         stage = Stage.Buffering
         status = "${failure.message}, trying the next source"
+        // While this source's key is still the view's: after the failover the delay would go to the next one.
+        sendDelay()
         playback.failOver(failure.message, playingAttempt, failure.kind.wire, failure.status)
     }
 
