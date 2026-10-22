@@ -284,6 +284,11 @@ pub fn all(device: Option<&str>) -> Vec<LanguageChoice> {
     all
 }
 
+/// The tag the core reads `code` by ("no" for a Norwegian device's "nb").
+pub fn tag(code: &str) -> String {
+    language(code).tag
+}
+
 /// Whether `word` names a language the core knows, as a code ("EN", "ger")
 /// or an English name ("English").
 pub(crate) fn is_known(word: &str) -> bool {

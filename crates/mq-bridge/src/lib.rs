@@ -2292,12 +2292,14 @@ async fn watch_gone(
 /// ("2013-09-16") and `episodesInSeason`; the core reads the meta for what
 /// is left out. `network` (`wifi`, `ethernet`, `cellular`, `other`) is
 /// read by `versions_network`.
-/// `language` (ISO 639-1, the device's) stands in for audio preferences the
-/// user has not set: that language first, then English.
+/// `language` (the device's, read as the core's tag: "nb" is "no") stands in
+/// for audio preferences the user has not set: that language first, then
+/// English.
 fn versions_params(params: &Value, mut prefs: StreamPrefs) -> Result<VersionsParams, String> {
     let num = |key: &str| params.get(key).and_then(Value::as_u64).map(|n| n as u32);
     if prefs.languages.is_empty() {
         let device: Option<String> = field(params, "language")?;
+        let device = device.map(|code| mq_runtime::languages::tag(&code));
         prefs.languages = device.into_iter().chain(["en".to_owned()]).collect();
         prefs.languages.dedup();
     }
@@ -2398,6 +2400,12 @@ mod tests {
             ["tr", "en"],
             "device language, then English"
         );
+
+        // A device's own code reads as the core's tag: Bokmål is Norwegian.
+        let mut norway = params.clone();
+        norway["language"] = json!("nb");
+        let parsed = versions_params(&norway, StreamPrefs::default()).unwrap();
+        assert_eq!(parsed.prefs.languages, ["no", "en"]);
 
         // Languages the user chose win over the device's.
         let chosen = StreamPrefs {
