@@ -2,6 +2,8 @@ package app.marquee.android
 
 import android.app.Application
 import android.graphics.Bitmap
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +18,7 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -29,8 +32,8 @@ import app.marquee.core.session.CoreOps
 import app.marquee.design.Form
 import app.marquee.design.Marquee
 import app.marquee.design.MarqueeTheme
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
@@ -47,6 +50,7 @@ import org.robolectric.annotation.GraphicsMode
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
+import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -63,7 +67,22 @@ class SubtitleStepScreenTest {
 
     private val executor = Executors.newSingleThreadExecutor { Thread(it, "test-state") }
     private val client = CoreClient(executor.asCoroutineDispatcher())
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    // The step runs on the main looper, as on viewModelScope: SubtitleStep is main-thread only, and its state
+    // written from another thread reached the composition late or, now and then, not before a check gave up.
+    // Its work then runs only while the test idles the looper: see [until].
+    private val main =
+        object : CoroutineDispatcher() {
+            private val handler = Handler(Looper.getMainLooper())
+
+            override fun dispatch(
+                context: CoroutineContext,
+                block: Runnable,
+            ) {
+                handler.post(block)
+            }
+        }
+    private val scope = CoroutineScope(SupervisorJob() + main)
     private val sent = CopyOnWriteArrayList<String>()
 
     @After
@@ -129,6 +148,20 @@ class SubtitleStepScreenTest {
         File(dir, "$name.png").outputStream().use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
+    /** Waits for [condition], idling the main looper between checks: a bare waitUntil does not, so work the
+     * step posted there (a save, a list that came) would never run. */
+    private fun until(condition: () -> Boolean) =
+        compose.waitUntil(5_000) {
+            compose.waitForIdle()
+            condition()
+        }
+
+    /** The page shows [text] now. */
+    private fun shows(text: String) = compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
+
+    /** The page has the list in: Continue is enabled. */
+    private fun ready() = runCatching { compose.onNodeWithText("Continue").assertIsEnabled() }.isSuccess
+
     private fun wrote(languages: String) = sent.any { "\"setPrefs\"" in it && "\"subtitleLanguages\":$languages" in it }
 
     @Test
@@ -138,13 +171,12 @@ class SubtitleStepScreenTest {
         val step = step("tr")
         var done = 0
         page(Form.Phone) { SubtitleStepPage(step) { done++ } }
-        compose.waitUntil(5_000) { step.loaded }
-        compose.onNodeWithText("This device's language").assertExists()
+        until { shows("This device's language") && ready() }
         compose.onNodeWithText("Turkish").assertExists()
         shot("subtitle-step-phone")
         compose.onNodeWithText(SubtitleStep.NONE).performClick()
         compose.onNodeWithText("Continue").performClick()
-        compose.waitUntil(5_000) { done == 1 }
+        until { done == 1 }
         assertTrue(wrote("[]"), "No subtitles writes an empty list: $sent")
     }
 
@@ -154,10 +186,10 @@ class SubtitleStepScreenTest {
         val step = step("tr")
         var done = 0
         page(Form.Tv) { SubtitleStepPage(step) { done++ } }
-        compose.waitUntil(5_000) { step.loaded }
-        compose.waitUntil(5_000) { runCatching { compose.onNode(isFocused()).assert(hasText("Continue")) }.isSuccess }
+        until { ready() }
+        until { runCatching { compose.onNode(isFocused()).assert(hasText("Continue")) }.isSuccess }
         compose.onNode(isFocused()).performClick()
-        compose.waitUntil(5_000) { done == 1 }
+        until { done == 1 }
         assertTrue(wrote("""["tr"]"""), "Continue writes the device's language: $sent")
     }
 
@@ -167,7 +199,7 @@ class SubtitleStepScreenTest {
         val step = step("tr")
         var done = 0
         page(Form.Phone) { SubtitleStepGate({ false }, step) { done++ } }
-        compose.waitUntil(5_000) { done == 1 }
+        until { done == 1 }
         // A second leave would arrive at Home twice.
         compose.mainClock.advanceTimeBy(1_000)
         compose.onNodeWithText(SubtitleStep.TITLE).assertDoesNotExist()
@@ -180,9 +212,9 @@ class SubtitleStepScreenTest {
         val step = step("tr")
         var done = 0
         page(Form.Phone) { SubtitleStepGate({ true }, step) { done++ } }
-        compose.waitUntil(5_000) { runCatching { compose.onNodeWithText(SubtitleStep.TITLE).assertExists() }.isSuccess }
+        until { runCatching { compose.onNodeWithText(SubtitleStep.TITLE).assertExists() }.isSuccess }
         compose.onNodeWithText(SubtitleStep.SKIP).performClick()
-        compose.waitUntil(5_000) { done == 1 }
+        until { done == 1 }
         assertTrue(sent.none { "\"setPrefs\"" in it }, "Skip writes nothing: $sent")
     }
 
@@ -192,10 +224,10 @@ class SubtitleStepScreenTest {
         holdList = true
         val step = step("tr")
         page(Form.Phone) { SubtitleStepPage(step) {} }
-        compose.waitUntil(5_000) { heldList != null }
+        until { heldList != null }
         compose.onNodeWithText("Continue").assertIsNotEnabled()
         heldList?.invoke()
-        compose.waitUntil(5_000) { step.loaded }
+        until { ready() }
         compose.onNodeWithText("Continue").assertIsEnabled()
     }
 
@@ -206,14 +238,14 @@ class SubtitleStepScreenTest {
         val step = step("tr")
         var done = 0
         page(Form.Tv) { SubtitleStepPage(step) { done++ } }
-        compose.waitUntil(5_000) { heldList != null }
+        until { heldList != null }
         // Past the first focus request's frames: a disabled Continue could not take it.
         compose.mainClock.advanceTimeBy(2_000)
         heldList?.invoke()
-        compose.waitUntil(5_000) { step.loaded }
-        compose.waitUntil(5_000) { runCatching { compose.onNode(isFocused()).assert(hasText("Continue")) }.isSuccess }
+        until { ready() }
+        until { runCatching { compose.onNode(isFocused()).assert(hasText("Continue")) }.isSuccess }
         compose.onNode(isFocused()).performClick()
-        compose.waitUntil(5_000) { done == 1 }
+        until { done == 1 }
         assertTrue(wrote("""["tr"]"""), "one press keeps the device's language: $sent")
     }
 
@@ -224,14 +256,14 @@ class SubtitleStepScreenTest {
         val step = step("tr")
         var done = 0
         page(Form.Phone) { SubtitleStepPage(step) { done++ } }
-        compose.waitUntil(5_000) { step.loaded }
+        until { ready() }
         compose.onNodeWithText("Continue").performClick()
-        compose.waitUntil(5_000) { held != null }
+        until { held != null }
         compose.onNodeWithText(SubtitleStep.SKIP).performClick()
         compose.waitForIdle()
         assertEquals(0, done, "Skip went while the save ran")
         held?.invoke()
-        compose.waitUntil(5_000) { done == 1 }
+        until { done == 1 }
         compose.waitForIdle()
         assertEquals(1, done)
     }
@@ -242,8 +274,7 @@ class SubtitleStepScreenTest {
     fun `TV render of the step`() {
         val step = step("tr")
         page(Form.Tv) { SubtitleStepPage(step) {} }
-        compose.waitUntil(5_000) { step.loaded }
-        compose.onNodeWithText("This device's language").assertExists()
+        until { shows("This device's language") }
         shot("subtitle-step-tv")
     }
 
@@ -264,7 +295,7 @@ class SubtitleStepScreenTest {
         name: String,
     ) {
         page(form) { Column(Modifier.padding(24.dp)) { SubtitleLanguage(listOf("tr", "eng"), { languages }, {}) } }
-        compose.waitUntil(5_000) { runCatching { compose.onNodeWithText("Turkish first").assertExists() }.isSuccess }
+        until { runCatching { compose.onNodeWithText("Turkish first").assertExists() }.isSuccess }
         compose.onNodeWithText("Subtitle language").assertExists()
         shot(name)
     }

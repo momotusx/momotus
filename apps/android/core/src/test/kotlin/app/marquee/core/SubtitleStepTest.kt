@@ -35,6 +35,7 @@ class SubtitleStepTest {
             """{"code":"$code","name":"$name","device":${code == mine}}"""
         }
     }
+
     private val zero = """{"ready":0,"height":0,"hdr":0,"size":0,"picks":0,"epoch":0,"atMs":0}"""
     private val prefs =
         """{"streams":{"quality":"balanced","minSeeders":50,"hdr":true,"preferReady":true,"learn":true},""" +
