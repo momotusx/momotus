@@ -1,3 +1,4 @@
+import Accessibility
 import AVFoundation
 import Combine
 import Observation
@@ -31,9 +32,14 @@ final class PlayerModel {
     /// The loaded stream can go to an AirPlay receiver (not the core's loopback
     /// server): only then does the player offer AirPlay, which sends the picture.
     private(set) var airPlayable = false
-    /// Seconds the addon subtitles show later (negative: earlier), for this
-    /// play and this track: a new track starts on time.
-    var subtitleDelay: Double = 0 { didSet { watchCueEdges() } }
+    /// Seconds the addon subtitles show later (negative: earlier). A track starts where the core
+    /// remembers the viewer left it (`delayMs`); `setSubtitleDelay` changes it.
+    private(set) var subtitleDelay: Double = 0 { didSet { watchCueEdges() } }
+    /// The stepper's value not yet sent to the core: it goes once it rests, on another track and on close.
+    @ObservationIgnored private var unsentDelay: [String: any Sendable]?
+    @ObservationIgnored private var delaySettle: Task<Void, Never>?
+    /// Each track's timing in this play, by URL: going back to a track finds it where it was.
+    @ObservationIgnored private var keptDelays: [String: Double] = [:]
     private(set) var cues: [WebVTT.Cue] = [] { didSet { watchCueEdges() } }
     var rate: Float = 1 {
         // The Lock Screen extrapolates the playhead from the rate: it hears every change at once.
@@ -466,8 +472,35 @@ final class PlayerModel {
         choices.retry()
     }
 
+    /// The stepper's value for the addon track on: drawn at once, sent to the core (which keeps it for
+    /// this track) once it rests, and said to VoiceOver then, never on each tick of a hold.
+    func setSubtitleDelay(_ seconds: Double) {
+        guard let url = subtitle?.url else { return }
+        subtitleDelay = seconds
+        keptDelays[url] = seconds
+        unsentDelay = PlayerLayout.delayCommand(url: url, seconds: seconds)
+        delaySettle?.cancel()
+        delaySettle = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(PlayerLayout.delaySettleMs))
+            guard !Task.isCancelled, let self else { return }
+            sendDelay()
+            AccessibilityNotification.Announcement(PlayerLayout.delayWords(subtitleDelay)).post()
+        }
+    }
+
+    private func sendDelay() {
+        delaySettle?.cancel()
+        guard let unsent = unsentDelay, let sub else { return }
+        unsentDelay = nil
+        Task { [unsent] in try? await core.command(sub, unsent) }
+    }
+
     func selectSubtitle(_ track: SubtitleTrack?) {
-        if track != subtitle { subtitleDelay = 0 }
+        if track?.url != subtitle?.url {
+            // Another track's change still waiting goes first; the new one starts where it was left.
+            sendDelay()
+            subtitleDelay = PlayerLayout.startDelay(track, kept: keptDelays)
+        }
         subtitle = track
         cues = []
         if textTrack != nil, let group = textGroup, group.allowsEmptySelection {
@@ -648,6 +681,8 @@ final class PlayerModel {
         generation += 1
         player.pause()
         player.replaceCurrentItem(with: nil)
+        // A delay not sent yet goes first, while the failed source's version is the current one.
+        sendDelay()
         let command = failOverCommand(failure, attempt: loadedAttempt)
         stoppedAt = stoppedPosition(pendingStart: pendingStart, position: position)
         pendingStart = nil
@@ -743,11 +778,13 @@ final class PlayerModel {
 
     /// Saves the position before the view goes away (Back, close).
     func close() {
+        sendDelay()
         report()
         player.pause()
     }
 
     private func stop() {
+        sendDelay()
         report()
         nowPlaying.stop()
         NowPlaying.deactivate()

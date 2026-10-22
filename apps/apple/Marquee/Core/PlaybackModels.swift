@@ -440,6 +440,13 @@ struct SubtitleTrack: Decodable, Hashable, Sendable, Identifiable {
     var fits: Bool?
     /// The release text the addon names, for a detail line; older cores send none.
     var release: String?
+    /// OpenSubtitles says it was made for this very file (its hash): "Matches this file".
+    var hashMatch: Bool?
+    /// The frame rate it was made for, when one of it and the playing file's is PAL (25) and the
+    /// other is not: "Made for 25 fps".
+    var madeForFps: Double?
+    /// The delay the viewer last left this track at on this version and video, in ms (positive: later).
+    var delayMs: Int?
 
     var id: String { url }
 }
@@ -505,14 +512,51 @@ enum SubtitleMenu {
         nonEmpty(track.name) ?? nonEmpty(track.label) ?? track.source
     }
 
-    /// Beneath the line: the source unless the line starts with it, then Forced and SDH.
-    static func detail(_ track: SubtitleTrack) -> String? {
-        let parts = [
+    /// Beneath the line, as the web and Android say it: the source unless the line starts with it,
+    /// Forced, SDH, the core's match ("Matches this file", else "Same release group"), "Made for 25
+    /// fps", then the release text cut in the middle to the line's `max` characters.
+    static func detail(_ track: SubtitleTrack, max: Int = 46) -> String? {
+        var parts = [
             title(track).hasPrefix(track.source) ? nil : track.source,
             track.forced ? "Forced" : nil,
             track.hearingImpaired ? "For the hard of hearing" : nil,
+            track.hashMatch == true ? "Matches this file" : track.fits == true ? "Same release group" : nil,
+            track.madeForFps.map(madeFor),
         ].compactMap { $0 }
+        if let release = nonEmpty(track.release), release != title(track) {
+            let room = max - parts.joined(separator: ", ").count - 2
+            parts.append(middle(release, max: room >= 24 ? room : max))
+        }
         return parts.isEmpty ? nil : parts.joined(separator: ", ")
+    }
+
+    /// "Made for 25 fps", "Made for 23.976 fps": the rate as written, not the core's float.
+    static func madeFor(_ fps: Double) -> String {
+        var rate = String(format: "%.3f", fps)
+        while rate.hasSuffix("0") { rate.removeLast() }
+        if rate.hasSuffix(".") { rate.removeLast() }
+        return "Made for \(rate) fps"
+    }
+
+    /// `text` cut to `max` characters in the middle, at a dot or a space, so a release's start and
+    /// its group at the end both stay in view (the web's `middle`).
+    static func middle(_ text: String, max: Int) -> String {
+        let c = Array(text)
+        guard c.count > max else { return text }
+        let at = { (j: Int) in j >= 0 && j < c.count && (c[j] == "." || c[j] == " ") }
+        var from = c.count - Swift.max(1, max - 1 - (max - 1) * 45 / 100)
+        while from > 0 && !at(from - 1) { from -= 1 }
+        // A tail with no boundary near enough keeps its share and starts at the next boundary instead.
+        if c.count - from > max - 5 {
+            from = c.count - (max - 5)
+            while from < c.count && !at(from - 1) { from += 1 }
+        }
+        let tail = String(c[from...]).drop { $0 == "." || $0 == " " }
+        var cut = max - 1 - tail.count
+        while cut > 0 && !at(cut) { cut -= 1 }
+        var head = String(c[..<(cut > 0 ? cut : Swift.max(0, max - 1 - tail.count))])
+        while head.hasSuffix(".") || head.hasSuffix(" ") { head.removeLast() }
+        return "\(head)\u{2026}\(tail)"
     }
 
     /// The language without its region or script, any ISO 639 spelling: "ger",

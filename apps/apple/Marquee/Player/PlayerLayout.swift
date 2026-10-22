@@ -5,7 +5,7 @@ import SwiftUI
 /// Where the phone player puts its parts, as Android settled after three
 /// review rounds (plans/android-design-v2.md, slices 14 to 16). Heights are
 /// the real window's, bars included, since the player hides them.
-enum FailureAction: Hashable { case offer, retry, choose, back }
+enum FailureAction: Hashable { case account, offer, retry, choose, back }
 
 /// What the player shows over the picture, first match.
 enum PlayerStatus: Equatable {
@@ -95,9 +95,47 @@ enum PlayerLayout {
         return !(host == "localhost" || host == "::1" || host == "[::1]" || host.hasPrefix("127."))
     }
 
-    /// Subtitle timing moves in half seconds, kept for the play (review
-    /// apple-journey P2-6).
-    static let subtitleStep = 0.5
+    /// The subtitle timing stepper, as Stremio's (stremio-web subtitleDelay.ts; the web's lib/delay.ts
+    /// and Android's SubtitleTiming.kt): 0.1 s a press; held, the first repeat comes at 350 ms, then one
+    /// every 100 ms moving 0.1 s times min(whole seconds held + 3, 6); within 60 s either way. Plus
+    /// shows the words later. The core keeps the value per track once it rests for 700 ms.
+    static let subtitleStep = 0.1
+    static let maxSubtitleDelay = 60.0
+    static let firstRepeatMs = 350
+    static let repeatMs = 100
+    static let delaySettleMs = 700
+
+    /// What one repeat moves after `heldMs` of holding: 0.3 s a tick in the first second, 0.4 and 0.5
+    /// in the next two, 0.6 from the third on.
+    static func holdStep(heldMs: Int) -> Double {
+        subtitleStep * Double(min(heldMs / 1000 + 3, 6))
+    }
+
+    /// `value` moved by `by`, snapped to 0.1 s and kept within 60 s either way.
+    static func nudge(_ value: Double, by: Double) -> Double {
+        let next = ((value + by) * 10).rounded() / 10
+        let kept = min(maxSubtitleDelay, max(-maxSubtitleDelay, next))
+        return kept == 0 ? 0 : kept
+    }
+
+    /// Where a track's timing starts: where the viewer left it earlier in this play (`kept`, by URL),
+    /// else where the core remembers it from the last play (`delayMs`, one track at a time); on time
+    /// for none.
+    static func startDelay(_ track: SubtitleTrack?, kept: [String: Double] = [:]) -> Double {
+        guard let track else { return 0 }
+        return kept[track.url] ?? Double(track.delayMs ?? 0) / 1000
+    }
+
+    /// The core's `subtitleDelay` for a settled value: the track's URL and the value in ms.
+    static func delayCommand(url: String, seconds: Double) -> [String: any Sendable] {
+        ["type": "subtitleDelay", "url": url, "ms": Int((seconds * 1000).rounded())]
+    }
+
+    /// The value as the stepper shows it: "+0.3 s", "\u{2212}1.2 s" (a true minus), "0.0 s".
+    static func delayText(_ delay: Double) -> String {
+        let sign = delay > 0 ? "+" : delay < 0 ? "\u{2212}" : ""
+        return sign + String(format: "%.1f s", abs(delay))
+    }
 
     /// Where the cues are read: a positive delay shows each line later.
     static func cueTime(position: Double, delay: Double) -> Double {
@@ -110,10 +148,10 @@ enum PlayerLayout {
         Array(Set(cues.flatMap { [$0.start + delay, $0.end + delay] }.filter { $0 >= 0 })).sorted()
     }
 
-    /// "On time", "1.5 s later", "0.5 s earlier".
+    /// "On time", "1.5 s later", "0.3 s earlier": the value in words, said once it settles.
     static func delayWords(_ delay: Double) -> String {
         guard abs(delay) >= 0.05 else { return "On time" }
-        let amount = String(format: "%g", abs(delay))
+        let amount = String(format: "%.1f", abs(delay))
         return delay > 0 ? "\(amount) s later" : "\(amount) s earlier"
     }
 
@@ -166,6 +204,7 @@ enum PlayerLayout {
     /// The failure card's buttons, in the words the web and Android use.
     static func failureLabel(_ action: FailureAction, offer: String?) -> String {
         switch action {
+        case .account: StreamChoice.words.blocked.needsAccount.action
         case .offer: "Play \(offer ?? "the next version")"
         case .retry: "Try again"
         case .choose: "Choose a version"
@@ -177,15 +216,22 @@ enum PlayerLayout {
         offer ? "This version could not be played" : "None of the sources could be played"
     }
 
-    static func failureActions(offer: Bool, canChoose: Bool) -> [FailureAction] {
-        (offer ? [.offer] : []) + [.retry] + (canChoose ? [.choose] : []) + [.back]
+    /// Every version needs a streaming service account (`needsAccount`): adding one comes first, as
+    /// the title page's primary and Versions say it; Choose a version stays beside it.
+    static func failureActions(offer: Bool, canChoose: Bool, needsAccount: Bool = false) -> [FailureAction] {
+        (needsAccount ? [.account] : []) + (offer ? [.offer] : []) + [.retry] + (canChoose ? [.choose] : []) + [.back]
+    }
+
+    /// The versions as they stand say every one needs a streaming service account.
+    static func needsAccount(_ versions: VersionsSnapshot?) -> Bool {
+        versions?.done == true && versions?.recommended == nil && versions?.blocked?.reason == "needsAccount"
     }
 
     /// A view that could not open: mostly "that version is no longer listed",
     /// where Try again opens the same key again, so another version comes
     /// first; Try again stays for a lost subscription (review r4 P3-6).
-    static func cannotOpenActions(canChoose: Bool) -> [FailureAction] {
-        (canChoose ? [.choose] : []) + [.retry, .back]
+    static func cannotOpenActions(canChoose: Bool, needsAccount: Bool = false) -> [FailureAction] {
+        (needsAccount ? [.account] : []) + (canChoose ? [.choose] : []) + [.retry, .back]
     }
 
     /// The Subtitles value. The core asks the subtitle addons once it has a
@@ -393,5 +439,39 @@ struct PhoneOSD<Top: View, Bottom: View>: View {
         }
         .padding(.top, PhoneFrame.topGap)
         .padding(.bottom, PhoneFrame.bottomGap)
+    }
+}
+
+/// A press or hold on the timing stepper's minus or plus by `PlayerLayout`'s rules: `start` on the
+/// press, `stop(single: true)` on its release (one 0.1 s step when no repeat came yet), `stop(single:
+/// false)` when it is cut off. `move` gets each step with its sign.
+@MainActor final class TimingHold {
+    private let move: (Double) -> Void
+    private var task: Task<Void, Never>?
+    private var direction = 0
+    private var repeated = false
+
+    init(move: @escaping (Double) -> Void) { self.move = move }
+
+    func start(_ direction: Int) {
+        stop(single: false)
+        (self.direction, repeated) = (direction, false)
+        let since = ContinuousClock.now
+        task = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(PlayerLayout.firstRepeatMs))
+            while !Task.isCancelled, let self {
+                repeated = true
+                let held = Int((ContinuousClock.now - since) / .milliseconds(1))
+                move(Double(direction) * PlayerLayout.holdStep(heldMs: held))
+                try? await Task.sleep(for: .milliseconds(PlayerLayout.repeatMs))
+            }
+        }
+    }
+
+    func stop(single: Bool) {
+        task?.cancel()
+        task = nil
+        if direction != 0, single, !repeated { move(Double(direction) * PlayerLayout.subtitleStep) }
+        direction = 0
     }
 }

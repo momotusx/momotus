@@ -12,6 +12,8 @@ struct PlayerScreen: View {
     @State private var showNextVersions = false
     /// This title's Versions, after every source of the pick failed.
     @State private var showVersions = false
+    /// The failure's Add an account: where one is added, as from the title page.
+    @State private var showAccount = false
     /// When an OSD menu opened; a pick or the next touch clears it.
     @State private var menuOpenedAt: ContinuousClock.Instant?
     /// The controls stay up and Up Next waits while this holds (`PlayerLayout.menuHolds`).
@@ -91,6 +93,7 @@ struct PlayerScreen: View {
             #endif
             StatusOverlay(
                 model: model, back: close, chooseVersion: model.versions == nil ? nil : { showVersions = true },
+                addAccount: { showAccount = true },
                 overControls: phoneControls
                     ? PlayerLayout.statusOverTransport(windowHeight: windowHeight, safeBottom: safeBottom)
                     : PlayerLayout.statusOverControls(controlsShown: controlsShown, windowHeight: windowHeight, controlsHeight: controlsHeight),
@@ -183,6 +186,7 @@ struct PlayerScreen: View {
         .onChange(of: model.playback?.trakt) { _, now in
             if let mark = TraktRules.playbackMark(now), mark.warn { announce(mark.label) }
         }
+        .navigationDestination(isPresented: $showAccount) { DebridScreen(core: core) }
         .navigationDestination(isPresented: $showVersions) {
             if let versions = model.versions {
                 VersionsScreen(model: versions, heading: model.route.target.title, core: core)
@@ -458,6 +462,8 @@ private struct StatusOverlay: View {
     /// Opens this title's Versions: failover only tries the same release from
     /// other sources, so another version is the way on.
     let chooseVersion: (() -> Void)?
+    /// Goes where a streaming service account is added.
+    let addAccount: () -> Void
     /// Set when the shown controls reach the middle: the waiting status sits
     /// this far up, just over them (PlayerLayout.statusOverControls).
     var overControls: CGFloat?
@@ -482,6 +488,7 @@ private struct StatusOverlay: View {
     private func button(_ action: FailureAction, cannotOpen: Bool) -> Button<Text> {
         let label = PlayerLayout.failureLabel(action, offer: model.playback?.offer?.label)
         return switch action {
+        case .account: Button(label, action: addAccount)
         case .offer: Button(label) { if let key = model.playback?.offer?.key { model.switchVersion(key) } }
         case .retry: Button(label) { if cannotOpen { model.reopen() } else { model.retry() } }
         case .choose: Button(label) { chooseVersion?() }
@@ -522,9 +529,10 @@ private struct StatusOverlay: View {
     }
 
     private func actionOrder(cannotOpen: Bool) -> [FailureAction] {
-        cannotOpen
-            ? PlayerLayout.cannotOpenActions(canChoose: chooseVersion != nil)
-            : PlayerLayout.failureActions(offer: model.playback?.offer != nil, canChoose: chooseVersion != nil)
+        let account = PlayerLayout.needsAccount(model.versions?.snapshot)
+        return cannotOpen
+            ? PlayerLayout.cannotOpenActions(canChoose: chooseVersion != nil, needsAccount: account)
+            : PlayerLayout.failureActions(offer: model.playback?.offer != nil, canChoose: chooseVersion != nil, needsAccount: account)
     }
 
     private var waitingWords: some View {

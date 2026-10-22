@@ -630,8 +630,8 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
 
 @Test func subtitleTimingMovesTheCuesForThisPlay() {
     let cues = WebVTT.parse("WEBVTT\n\n00:00:10.000 --> 00:00:12.000\nHello\n")
-    // Two seconds late in the file: two presses of Earlier show the line at 8 s.
-    let earlier = -2 * PlayerLayout.subtitleStep * 2
+    // Two seconds late in the file: Earlier by 2 s shows the line at 8 s.
+    let earlier = -20 * PlayerLayout.subtitleStep
     #expect(WebVTT.text(at: PlayerLayout.cueTime(position: 8.5, delay: earlier), in: cues) == "Hello")
     #expect(WebVTT.text(at: PlayerLayout.cueTime(position: 8.5, delay: 0), in: cues) == nil)
     // Later holds a line back.
@@ -639,7 +639,46 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     #expect(PlayerLayout.delayWords(0) == "On time")
     #expect(PlayerLayout.delayWords(1.5) == "1.5 s later")
     #expect(PlayerLayout.delayWords(-0.5) == "0.5 s earlier")
-    #expect(PlayerLayout.delayWords(-2) == "2 s earlier")
+    #expect(PlayerLayout.delayWords(-2) == "2.0 s earlier")
+}
+
+@Test func theTimingStepperMovesAsStremiosDoes() {
+    // A press is 0.1 s; a hold repeats from 350 ms, every 100 ms, 0.3 s a tick in the first second,
+    // then 0.4 and 0.5, and 0.6 from the third second on.
+    #expect(PlayerLayout.subtitleStep == 0.1)
+    #expect(PlayerLayout.firstRepeatMs == 350 && PlayerLayout.repeatMs == 100 && PlayerLayout.delaySettleMs == 700)
+    #expect([350, 999, 1000, 2500, 3000, 9000].map { PlayerLayout.holdStep(heldMs: $0) }.map { ($0 * 10).rounded() / 10 } == [0.3, 0.3, 0.4, 0.5, 0.6, 0.6])
+    // Snapped to tenths, within a minute either way, never a negative zero.
+    #expect(PlayerLayout.nudge(0.25, by: 0.1) == 0.4)
+    #expect(PlayerLayout.nudge(59.8, by: 0.6) == 60)
+    #expect(PlayerLayout.nudge(-59.9, by: -0.6) == -60)
+    #expect(PlayerLayout.nudge(0.1, by: -0.1).sign == .plus)
+    #expect(PlayerLayout.delayText(0.3) == "+0.3 s")
+    #expect(PlayerLayout.delayText(-1.2) == "\u{2212}1.2 s")
+    #expect(PlayerLayout.delayText(0) == "0.0 s")
+}
+
+@MainActor @Test func aPressIsOneStepAndACutHoldNone() {
+    var moves: [Double] = []
+    let hold = TimingHold { moves.append($0) }
+    hold.start(1)
+    hold.stop(single: true)
+    #expect(moves == [0.1])
+    hold.start(-1)
+    hold.stop(single: false)
+    #expect(moves == [0.1])
+}
+
+@MainActor @Test func aHeldPlusRepeatsAfterItsFirstWait() async throws {
+    var moves: [Double] = []
+    let hold = TimingHold { moves.append($0) }
+    hold.start(1)
+    try await Task.sleep(for: .milliseconds(200))
+    #expect(moves.isEmpty, "no repeat before 350 ms")
+    try await Task.sleep(for: .milliseconds(450))
+    hold.stop(single: true)
+    // Repeats at about 350, 450, 550: 0.3 s each, and the release adds no single step.
+    #expect(moves.count >= 2 && moves.allSatisfy { abs($0 - 0.3) < 1e-9 }, "\(moves)")
 }
 
 @Test func theProfilesSubtitleSizeScalesTheDrawnLines() {
@@ -821,4 +860,72 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     // Upright in the band, Skip lower down changes nothing.
     let band = PhoneFrame.subtitle(screenHeight: 874, pictureHeight: 226, safeBottom: 34, controlsShown: true, scrubberTop: 755, boxHeight: 60, pillTop: 683)
     #expect(band.foot == 618)
+}
+
+@Test func aSubtitlesDetailSaysTheCoresMarksAsTheWebAndAndroidDo() {
+    func track(_ name: String, fits: Bool? = nil, hash: Bool? = nil, fps: Double? = nil, release: String? = nil, hi: Bool = false) -> SubtitleTrack {
+        var t = sub(1, "eng", "en", "English", name, hi: hi)
+        (t.fits, t.hashMatch, t.madeForFps, t.release) = (fits, hash, fps, release)
+        return t
+    }
+    // A hash match says so before the group; a file timed for another frame rate says which, as written.
+    #expect(SubtitleMenu.detail(track("OpenSubtitles v3", fits: true, hash: true)) == "Matches this file")
+    #expect(SubtitleMenu.detail(track("OpenSubtitles v3", fits: true)) == "Same release group")
+    #expect(SubtitleMenu.detail(track("OpenSubtitles v3", fps: 25)) == "Made for 25 fps")
+    #expect(SubtitleMenu.detail(track("OpenSubtitles v3", fps: Double(Float(23.976)))) == "Made for 23.976 fps")
+    // The release, cut in the middle at a dot with its group kept; said once when it is the name.
+    let release = "Slow.Horses.S06E02.1080p.WEB.H264-CAKES"
+    #expect(SubtitleMenu.middle(release, max: 34) == "Slow.Horses\u{2026}1080p.WEB.H264-CAKES")
+    #expect(SubtitleMenu.detail(track("CAKES, WEB 1080p", fits: true, release: release)) == "OpenSubtitles v3, Same release group, \(release)")
+    #expect(SubtitleMenu.detail(track(release, release: release)) == "OpenSubtitles v3")
+    let raw = "Slow.Horses.S06E02.Daddy.Issues.1080p.ATVP.WEB-DL.DDP5.1.Atmos.H.264-FLUX"
+    let cut = SubtitleMenu.middle(raw, max: 46)
+    #expect(cut.count <= 46 && cut.hasPrefix("Slow.Horses") && cut.hasSuffix("-FLUX") && cut.contains("\u{2026}"), "\(cut)")
+    #expect(SubtitleMenu.middle("short.name", max: 46) == "short.name")
+}
+
+@Test func aFailureWhereEveryVersionNeedsAnAccountOffersOneFirst() throws {
+    // The hero's words and destination (review r2 P2-6, the web's player:account).
+    let blocked = try JSONDecoder().decode(BlockedVersions.self, from: Data(#"{"reason": "needsAccount", "count": 4, "rows": []}"#.utf8))
+    let versions = VersionsSnapshot(
+        recommended: nil, rows: [], hidden: HiddenSummary(count: 0, byReason: []), pendingAddons: [], slowAddons: [],
+        failedAddons: [], done: true, frozen: false, conditions: nil, blocked: blocked, note: nil)
+    #expect(PlayerLayout.needsAccount(versions))
+    #expect(!PlayerLayout.needsAccount(nil))
+    #expect(PlayerLayout.failureActions(offer: false, canChoose: true, needsAccount: true) == [.account, .retry, .choose, .back])
+    #expect(PlayerLayout.cannotOpenActions(canChoose: true, needsAccount: true) == [.account, .choose, .retry, .back])
+    #expect(PlayerLayout.failureLabel(.account, offer: nil) == "Add an account")
+    #expect(PlayerLayout.failureFocus(PlayerLayout.failureActions(offer: false, canChoose: true, needsAccount: true)) == .account)
+}
+
+@Test func aTracksTimingStartsWhereTheCoreKeptItAndSettlesAsOneCommand() throws {
+    var track = sub(1, "eng", "en", "English", "Walk Clips")
+    #expect(PlayerLayout.startDelay(nil) == 0)
+    #expect(PlayerLayout.startDelay(track) == 0)
+    track.delayMs = 300
+    #expect(PlayerLayout.startDelay(track) == 0.3)
+    // Earlier in this play wins: the core keeps one track's delay, the play each track's.
+    #expect(PlayerLayout.startDelay(track, kept: [track.url: -1.5]) == -1.5)
+    #expect(PlayerLayout.startDelay(track, kept: ["other": 2]) == 0.3)
+    let command = PlayerLayout.delayCommand(url: track.url, seconds: -1.2)
+    #expect(command["type"] as? String == "subtitleDelay")
+    #expect(command["url"] as? String == track.url)
+    #expect(command["ms"] as? Int == -1200)
+    // The core's own field, as it sends it.
+    let decoded = try JSONDecoder().decode(SubtitleTrack.self, from: Data(#"{"url": "u", "lang": "eng", "label": null, "source": "Walk", "forced": false, "hearingImpaired": false, "hashMatch": true, "madeForFps": 25.0, "delayMs": -500}"#.utf8))
+    #expect(decoded.hashMatch == true && decoded.madeForFps == 25 && decoded.delayMs == -500)
+}
+
+@Test func aSubtitlePickOrATimingStepNeverSetsThePictureAgain() throws {
+    // The picture stays up while tracks change (the web's and Android's rule): the pick, the file's
+    // own tracks and the timing only change cues or a media selection, never the player's item.
+    // Read from the source: the player needs a live stream.
+    let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player/PlayerModel.swift")
+    let text = try String(contentsOf: file, encoding: .utf8)
+    for (from, to) in [("func selectText(", "/// Reads the audio and subtitle tracks"), ("func setSubtitleDelay(", "private func watchCueEdges(")] {
+        let start = try #require(text.range(of: from))
+        let end = try #require(text.range(of: to, range: start.upperBound..<text.endIndex))
+        let body = text[start.lowerBound..<end.lowerBound]
+        #expect(!body.contains("replaceCurrentItem") && !body.contains("AVPlayerItem(") && !body.contains("seek("), "\(from)")
+    }
 }

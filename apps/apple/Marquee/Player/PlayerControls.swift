@@ -28,6 +28,8 @@ struct PlayerControls: View {
     var measured: (CGFloat) -> Void = { _ in }
     @State private var actionsWidth: CGFloat = 0
     @State private var moreAfter = false
+    /// The subtitle Timing stepper is open over the actions.
+    @State private var timingShown = false
     /// TV seeking: how many quick presses in a row, and the last one's direction and time.
     @State private var seekRun = 0
     @State private var lastSeek: (direction: Int, at: ContinuousClock.Instant)?
@@ -330,15 +332,37 @@ struct PlayerControls: View {
     /// never cut: when the row is short the values go first (Default, 720p,
     /// 1x), then it scrolls (the iPhone walk, round 3: "Vers...", "S...").
     @ViewBuilder private var actions: some View {
-        if Self.phone {
-            ViewThatFits(in: .horizontal) {
-                padded(actionRow(values: true)).fixedSize()
-                padded(actionRow(values: false)).fixedSize()
-                scrolling(actionRow(values: false))
+        Group {
+            if Self.phone {
+                ViewThatFits(in: .horizontal) {
+                    padded(actionRow(values: true)).fixedSize()
+                    padded(actionRow(values: false)).fixedSize()
+                    scrolling(actionRow(values: false))
+                }
+            } else {
+                scrolling(actionRow(values: true))
             }
-        } else {
-            scrolling(actionRow(values: true))
         }
+        #if !os(tvOS)
+        // Over the actions, not on one of the row's copies above (only one is drawn).
+        .popover(isPresented: $timingShown, arrowEdge: .top) {
+            SubtitleTimingStepper(value: model.subtitleDelay, track: model.subtitle?.url ?? "") { by in
+                model.setSubtitleDelay(PlayerLayout.nudge(model.subtitleDelay, by: by))
+                hold(true)
+            } reset: {
+                model.setSubtitleDelay(0)
+                hold(true)
+            }
+            .padding(Theme.Space.m)
+            // Solid: the system's glass let a bright picture wash out Reset (the Mac walk).
+            .presentationBackground(Theme.Palette.raised)
+            .presentationCompactAdaptation(.popover)
+        }
+        // Open, it keeps the controls up; closed, they hide as usual again.
+        .onChange(of: timingShown) { _, open in hold(open) }
+        // Its track went off: nothing left to time.
+        .onChange(of: model.subtitle == nil) { _, off in if off { timingShown = false } }
+        #endif
     }
 
     /// Room for a focus ring and the lift, which a scroll view would clip.
@@ -391,23 +415,26 @@ struct PlayerControls: View {
                             .onAppear { hold(true) }
                     }
                 }
-                // An addon track's timing, half a second a press, for this play;
-                // the menu stays open for the next press, and each press holds the
-                // controls up again: finding the timing takes listening between presses.
+                // An addon track's timing: Stremio's stepper, which a menu item cannot be (no hold),
+                // so the item opens it over the actions. The core keeps the value for the track.
                 if model.subtitle != nil {
-                    Section("Timing: \(PlayerLayout.delayWords(model.subtitleDelay))") {
-                        Button { model.subtitleDelay -= PlayerLayout.subtitleStep; hold(true) } label: {
-                            Label("Earlier by 0.5 s", glyph: "chevron-left")
+                    #if os(tvOS)
+                    Section("Timing: \(PlayerLayout.delayText(model.subtitleDelay))") {
+                        Button { model.setSubtitleDelay(PlayerLayout.nudge(model.subtitleDelay, by: -PlayerLayout.subtitleStep)); hold(true) } label: {
+                            Label("Earlier by 0.1 s", glyph: "chevron-left")
                         }
-                        .keepsMenuOpen()
-                        Button { model.subtitleDelay += PlayerLayout.subtitleStep; hold(true) } label: {
-                            Label("Later by 0.5 s", glyph: "chevron-right")
+                        Button { model.setSubtitleDelay(PlayerLayout.nudge(model.subtitleDelay, by: PlayerLayout.subtitleStep)); hold(true) } label: {
+                            Label("Later by 0.1 s", glyph: "chevron-right")
                         }
-                        .keepsMenuOpen()
                         if model.subtitleDelay != 0 {
-                            Button { model.subtitleDelay = 0; hold(false) } label: { Label("Back on time", glyph: "rotate-ccw") }
+                            Button { model.setSubtitleDelay(0); hold(false) } label: { Label("Reset", glyph: "rotate-ccw") }
                         }
                     }
+                    #else
+                    Button { timingShown = true } label: {
+                        Label("Timing: \(PlayerLayout.delayText(model.subtitleDelay))", glyph: "clock")
+                    }
+                    #endif
                 }
                 // A file's own track is drawn by AVFoundation, which takes the size but no timing.
                 if model.subtitle == nil, model.textTrack != nil {
@@ -475,7 +502,8 @@ struct PlayerControls: View {
         Menu {
             Group { items() }
                 .onAppear { hold(true) }
-                .onDisappear { hold(false) }
+                // Timing closes the menu as it opens its stepper, which holds on.
+                .onDisappear { hold(timingShown) }
         } label: {
             action(title, symbol, value, searching: searching, shown: values)
         }
@@ -586,15 +614,92 @@ private struct Choice: View {
     }
 }
 
-private extension View {
-    /// A menu item that leaves its menu open for the next press, where the
-    /// platform can (a Mac menu closes on every pick).
-    @ViewBuilder func keepsMenuOpen() -> some View {
-        #if os(macOS)
-        self
-        #else
-        menuActionDismissBehavior(.disabled)
-        #endif
+#if !os(tvOS)
+/// The subtitle Timing row, as Stremio's stepper (`PlayerLayout`, the web's delay-stepper.tsx): minus,
+/// the value, plus, and Reset while it is not 0; a click on the value resets too. A press is 0.1 s;
+/// held, it repeats and speeds up. The focused value takes Left and Right held the same way, and
+/// VoiceOver adjusts it a step at a time; the model says the value once it settles.
+struct SubtitleTimingStepper: View {
+    let value: Double
+    /// The track the value is for: a new one ends a hold under way.
+    let track: String
+    let move: (Double) -> Void
+    let reset: () -> Void
+    @State private var hold: TimingHold?
+    @State private var pressing = 0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Timing").textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
+                Spacer(minLength: 16)
+                // By the label, so minus and plus stay put while it comes and goes.
+                if value != 0 {
+                    Button("Reset", action: reset)
+                        .buttonStyle(.plain)
+                        .textFont(Theme.type.callout, relativeTo: .callout)
+                        .foregroundStyle(Theme.Palette.key)
+                }
+            }
+            HStack(spacing: 12) {
+                step(-1, glyph: "minus", label: "Show subtitles 0.1 seconds earlier")
+                Button(action: reset) {
+                    Text(PlayerLayout.delayText(value))
+                        .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
+                        .monospacedDigit()
+                        .frame(minWidth: 88)
+                }
+                .buttonStyle(.plain)
+                .onKeyPress(keys: [.leftArrow, .rightArrow], phases: [.down, .repeat, .up]) { press in
+                    switch press.phase {
+                    case .down: start(press.key == .leftArrow ? -1 : 1)
+                    case .up: stop(single: true)
+                    default: break
+                    }
+                    return .handled
+                }
+                .accessibilityLabel("Subtitle timing")
+                .accessibilityValue(PlayerLayout.delayWords(value))
+                .accessibilityHint(value == 0 ? "" : "Resets to on time")
+                .accessibilityAdjustableAction { direction in
+                    move(direction == .increment ? PlayerLayout.subtitleStep : -PlayerLayout.subtitleStep)
+                }
+                step(1, glyph: "plus", label: "Show subtitles 0.1 seconds later")
+            }
+        }
+        .foregroundStyle(Theme.Palette.text)
+        .frame(minWidth: 240)
+        .onAppear { hold = TimingHold(move: move) }
+        .onDisappear { hold?.stop(single: false) }
+        .onChange(of: track) { stop(single: false) }
+    }
+
+    private func start(_ direction: Int) {
+        pressing = direction
+        hold?.start(direction)
+    }
+
+    private func stop(single: Bool) {
+        pressing = 0
+        hold?.stop(single: single)
+    }
+
+    /// Minus or plus: a press and hold by the stepper's rules, not the system's repeat; an
+    /// accessibility activation is one step.
+    private func step(_ direction: Int, glyph: String, label: String) -> some View {
+        Glyph(glyph, size: 18)
+            .frame(width: 44, height: 44)
+            .background(.white.opacity(pressing == direction ? 0.24 : 0.12), in: Circle())
+            .contentShape(Circle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in if pressing != direction { start(direction) } }
+                    .onEnded { _ in stop(single: true) }
+            )
+            .accessibilityElement()
+            .accessibilityLabel(label)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { move(Double(direction) * PlayerLayout.subtitleStep) }
     }
 }
-
+#endif
