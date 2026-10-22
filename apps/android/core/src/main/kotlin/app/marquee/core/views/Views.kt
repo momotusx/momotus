@@ -27,6 +27,7 @@ import app.marquee.core.model.PairingSnapshot
 import app.marquee.core.model.PlaybackSnapshot
 import app.marquee.core.model.Prefs
 import app.marquee.core.model.ProfilesSnapshot
+import app.marquee.core.model.RowState
 import app.marquee.core.model.SearchSnapshot
 import app.marquee.core.model.SignInSnapshot
 import app.marquee.core.model.TitleHeader
@@ -65,6 +66,24 @@ class HomeView(
         hero = snapshot.header.hero
         rows.clear()
         rows.addAll(snapshot.rows)
+        logFailures()
+    }
+
+    /** The rows whose failure is in the log: each failure once, again only after the row loaded or loads anew. */
+    private val failedLogged = mutableSetOf<String>()
+
+    /** A failed row says only "This row did not load": why goes to the log, without any address in it. */
+    private fun logFailures() {
+        val failed = rows.mapNotNull { row -> (row.state as? RowState.Failed)?.let { row.rowId to it.reason } }
+        failedLogged.retainAll(failed.map { it.first }.toSet())
+        for ((rowId, reason) in failed) {
+            if (failedLogged.add(
+                    rowId,
+                )
+            ) {
+                CoreLog.w("home row $rowId did not load: ${reason.replace(ADDRESS, "<address>")}")
+            }
+        }
     }
 
     /** A failed catalog row's Try again: only that catalog is asked again (the row turns loading, then answers). */
@@ -77,8 +96,12 @@ class HomeView(
                 is HomeUpdate.Rows -> rows.applyDiffs(update.diffs)
             }
         }
+        logFailures()
     }
 }
+
+/** A web address in a core's words (the core already takes the keys out; the log keeps no host either). */
+private val ADDRESS = Regex("""\b[a-zA-Z][a-zA-Z0-9+.-]*://[^\s)]+""")
 
 /** One title: header (details, play target, seasons) and the episodes of the selected season. */
 class TitleView(

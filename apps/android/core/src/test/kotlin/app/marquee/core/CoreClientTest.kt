@@ -104,6 +104,53 @@ class CoreClientTest {
         }
 
     @Test
+    fun `a failed Home row's reason goes to the log once, without its address`() =
+        runBlocking {
+            val logs = CopyOnWriteArrayList<String>()
+            app.marquee.core.client.CoreLog.sink = { level, message, _ -> logs += "$level $message" }
+            val address = "https://addon.example/k3y/catalog/movie/top.json"
+            val failed = """{"state":"failed","reason":"network: error sending request ($address)"}"""
+
+            fun row(state: String) =
+                """{"rowId":"a@1:movie:top","source":"A","state":$state,"tiles":[],"title":"Popular Movies"}"""
+
+            fun push(state: String) =
+                client.onMessage(
+                    """{"sub":5,"updates":[{"kind":"rows","diffs":[{"index":0,"op":"set","value":${row(state)}}]}]}""",
+                )
+            client.attach { text ->
+                if (opOf(text) == "subscribe") {
+                    client.onMessage(
+                        """{"id":${idOf(
+                            text,
+                        )},"ok":true,"result":{"sub":5,"snapshot":{"header":{"hero":null},"rows":[${row(failed)}]}}}""",
+                    )
+                }
+            }
+            try {
+                val view = HomeView(client, scope).also { it.open() }
+                view.opened.await()
+                until("the failure is logged") { logs.isNotEmpty() }
+                assertEquals(
+                    listOf("w home row a@1:movie:top did not load: network: error sending request (<address>)"),
+                    logs.toList(),
+                )
+                // Still failed: not again. Loaded, then failed anew: once more.
+                push(failed)
+                push("""{"state":"loading"}""")
+                until("the row loads again") { view.rows.single().state == RowState.Loading }
+                push(failed)
+                until("the new failure is logged") { logs.size == 2 }
+                push(failed)
+                delay(200)
+                assertEquals(2, logs.size, logs.toString())
+                view.close()
+            } finally {
+                app.marquee.core.client.CoreLog.sink = { _, _, _ -> }
+            }
+        }
+
+    @Test
     fun `replaying the same trace again and again with new subscription ids keeps working`() =
         runBlocking {
             val recorded = trace("home")

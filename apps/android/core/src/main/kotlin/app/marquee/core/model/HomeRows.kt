@@ -66,7 +66,7 @@ fun HomeRow.notice(): RowNotice? =
             if (tiles.isEmpty()) {
                 RowNotice.Explained(
                     ROW_FAILED,
-                    // The reason stays in the log: it can name the addon's host (a blocked private address).
+                    // The reason goes to the log (HomeView logs it once), never on screen: it can name the addon's host.
                     "Check the network, then try again.",
                     failed = true,
                 )
