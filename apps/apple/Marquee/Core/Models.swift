@@ -5,7 +5,12 @@ struct Tile: Decodable, Hashable, Sendable {
     let id: String
     let kind: String
     let name: String
+    /// For a poster of an IMDb title, RPDB's cover with the IMDb, Metacritic and Rotten Tomatoes band drawn in;
+    /// otherwise the addon's poster.
     let poster: String?
+    /// The addon's own poster, for when `poster` is RPDB's and does not load (an id RPDB does not know answers
+    /// 404); nil when `poster` is the addon's own already. Older cores send none.
+    let posterFallback: String?
     let background: String?
     let logo: String?
     let posterShape: String
@@ -19,6 +24,10 @@ struct Tile: Decodable, Hashable, Sendable {
     /// The IMDb and Rotten Tomatoes scores to show side by side. Optional here
     /// only so replies recorded before the field existed still decode.
     let ratings: Ratings?
+
+    /// The addon's own poster: what goes anywhere but a cover (a backdrop stand-in, the player, the core's
+    /// play target), as a ratings band belongs on a cover only.
+    var plainPoster: String? { posterFallback ?? poster }
 
     /// What Play on this tile plays, as the web and Android have it: the
     /// video it names (an episode in progress), else a movie itself. A series

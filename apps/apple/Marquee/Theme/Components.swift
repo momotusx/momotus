@@ -3,6 +3,8 @@ import SwiftUI
 /// Remote artwork with a calm placeholder; it fades in unless it was cached.
 struct ArtImage: View {
     let url: String?
+    /// Loaded when `url` does not: a cover's addon poster when RPDB has no image for the id (404).
+    var fallbackURL: String?
     var mode: ContentMode = .fill
     var maxPixels = ArtSize.poster
     /// Shown in the display face when there is no art or it cannot load.
@@ -34,10 +36,11 @@ struct ArtImage: View {
                 }
             }
             .clipped()
-            .task(id: url) {
+            .task(id: [url, fallbackURL]) {
                 missing = false
                 let start = ContinuousClock.now
-                let loaded = await ArtLoader.shared.image(url, maxPixels: maxPixels)
+                let maxPixels = maxPixels
+                let loaded = await ArtLoader.firstLoaded([url, fallbackURL]) { await ArtLoader.shared.image($0, maxPixels: maxPixels) }
                 withAnimation(reveal(since: start)) {
                     art = loaded
                     missing = loaded == nil

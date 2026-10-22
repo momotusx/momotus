@@ -158,7 +158,7 @@ struct HomeScreen: View {
     private func playHero(_ tile: Tile) {
         guard !starting, let videoId = tile.playVideoId else { return }
         let tapped = ContinuousClock.now
-        let target = PlayTargetInfo(kind: tile.kind, itemId: tile.id, videoId: videoId, title: tile.name, poster: tile.poster, resumeMs: nil)
+        let target = PlayTargetInfo(kind: tile.kind, itemId: tile.id, videoId: videoId, title: tile.name, poster: tile.plainPoster, resumeMs: nil)
         let versions = heroVersions?.target == target ? heroVersions! : VersionsModel(target: target, core: core)
         heroVersions = versions
         starting = true

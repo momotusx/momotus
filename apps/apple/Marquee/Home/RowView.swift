@@ -119,10 +119,9 @@ struct RowHeader: View {
     }
 }
 
-/// A catalog poster. The iPhone's and tv.apple.com's shelves show the art
-/// alone, with no caption and no chip; VoiceOver still says the name, the
-/// year and the scores. tvOS keeps its v2 tile (D9): the rating chip on the
-/// art, the name and the year under it.
+/// A catalog poster: the cover, which for an IMDb title is RPDB's with the ratings band drawn in (the addon's
+/// poster when RPDB has none). The iPhone's and tv.apple.com's shelves show the art alone; VoiceOver still says
+/// the name, the year and the scores. tvOS keeps its v2 tile (D9): the name and the year under the art.
 struct PosterTile: View {
     let tile: Tile
     @Environment(\.metrics) private var metrics
@@ -134,13 +133,10 @@ struct PosterTile: View {
     }
 
     @ViewBuilder private var content: some View {
-        let art = ArtImage(url: tile.poster, fallback: tile.name).frame(width: size.width, height: size.height)
+        let art = ArtImage(url: tile.poster, fallbackURL: tile.posterFallback, fallback: tile.name).frame(width: size.width, height: size.height)
         #if os(tvOS)
         VStack(alignment: .leading, spacing: metrics.wide ? 10 : 6) {
             art
-                .overlay(alignment: .topTrailing) {
-                    if !ratingParts(tile.ratings).isEmpty { RatingChip(ratings: ratingParts(tile.ratings)).padding(metrics.chip * 0.55) }
-                }
                 .cardArt(radius: metrics.posterRadius)
             CardCaption(name: tile.name, info: tile.releaseInfo).frame(width: size.width, alignment: .leading)
         }

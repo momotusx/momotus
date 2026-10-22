@@ -134,11 +134,9 @@ struct PosterGrid: View {
             ForEach(keyed, id: \.key) { key, tile in
                 NavigationLink(value: TitleRoute(tile)) {
                     VStack(alignment: .leading, spacing: metrics.wide ? 10 : 6) {
-                        ArtImage(url: tile.poster, fallback: tile.name)
+                        // The cover carries the ratings band (RPDB's); the addon's poster when RPDB has none.
+                        ArtImage(url: tile.poster, fallbackURL: tile.posterFallback, fallback: tile.name)
                             .aspectRatio(2 / 3, contentMode: .fit)
-                            .overlay(alignment: .topTrailing) {
-                                if !ratingParts(tile.ratings).isEmpty { RatingChip(ratings: ratingParts(tile.ratings)).padding(metrics.chip * 0.55) }
-                            }
                             .overlay(alignment: .bottom) {
                                 if let progress = tile.progress { EdgeProgress(value: progress) }
                             }

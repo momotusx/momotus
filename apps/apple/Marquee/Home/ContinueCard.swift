@@ -9,7 +9,7 @@ struct ContinueCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: metrics.wide ? 10 : 6) {
-            ArtImage(url: tile.background ?? tile.poster, maxPixels: ArtSize.backdrop / 2, fallback: tile.name, alignment: tile.background == nil ? .top : .center)
+            ArtImage(url: tile.background ?? tile.plainPoster, maxPixels: ArtSize.backdrop / 2, fallback: tile.name, alignment: tile.background == nil ? .top : .center)
                 .overlay(alignment: .bottom) {
                     if let progress = tile.progress { EdgeProgress(value: progress) }
                 }

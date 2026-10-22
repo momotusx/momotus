@@ -17,10 +17,29 @@ actor ArtLoader {
     private let session: URLSession = {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 12
-        config.urlCache = .shared
+        config.urlCache = cache
         config.requestCachePolicy = .returnCacheDataElseLoad
         return URLSession(configuration: config)
     }()
+
+    /// Its own disk cache, sized for covers: RPDB's are about 120 KB with a 45-day max-age and may be kept for
+    /// personal use (its terms), and a rated cover costs a request on its free tier, so a scroll back never asks
+    /// again. The shared cache's default holds a few dozen; this holds about 2,500.
+    static let cacheDisk = 300 << 20
+    static let cacheMemory = 16 << 20
+    /// Under the app's own caches folder: a Mac app outside a sandbox shares ~/Library/Caches with every other app.
+    static let cacheFolder = URL.cachesDirectory.appending(path: Bundle.main.bundleIdentifier ?? "Marquee").appending(path: "art")
+    static let cache = URLCache(memoryCapacity: cacheMemory, diskCapacity: cacheDisk, directory: cacheFolder)
+
+    /// The first of `urls` that loads, tried in order; a later one is asked only when the ones before it fail.
+    static func firstLoaded<Art>(
+        _ urls: [String?], isolation: isolated (any Actor)? = #isolation, load: (String) async -> Art?
+    ) async -> Art? {
+        for url in urls.compactMap({ $0 }) {
+            if let art = await load(url) { return art }
+        }
+        return nil
+    }
     private let memory: NSCache<NSString, DecodedArt> = {
         let cache = NSCache<NSString, DecodedArt>()
         cache.totalCostLimit = 192 << 20

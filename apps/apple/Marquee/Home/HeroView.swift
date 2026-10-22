@@ -42,7 +42,7 @@ struct HeroView: View {
         .background {
             // The phone's art runs up under the status bar; the Mac's starts under the black header.
             ZStack {
-                ArtImage(url: hero?.tile.background ?? hero?.tile.poster, maxPixels: ArtSize.backdrop)
+                ArtImage(url: hero?.tile.background ?? hero?.tile.plainPoster, maxPixels: ArtSize.backdrop)
                     .accessibilityHidden(true)
                 HeroScrims(wide: metrics.wide, page: Theme.Palette.bg)
             }

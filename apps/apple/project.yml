@@ -170,8 +170,6 @@ targets:
       - path: Marquee/Account/SignInSheets.swift
       - path: Marquee/Versions/StreamChoice.swift
       - path: Marquee/Core/Models.swift
-      # The rating chip, measured with real text layout (Tests/RatingChipTests.swift).
-      - path: Marquee/Common/RatingChip.swift
       - path: Marquee/Theme/ThemeSupport.swift
       - path: Marquee/Theme/Theme.generated.swift
       - path: Marquee/Core/PlaybackModels.swift

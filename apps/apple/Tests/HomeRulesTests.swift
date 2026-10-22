@@ -8,7 +8,7 @@ private func row(_ state: RowState, _ tiles: String...) -> HomeRow {
         rowId: "r\(tiles.count)", title: "Popular", source: "Cinemeta", state: state,
         tiles: tiles.map {
             Tile(
-                id: $0, kind: "movie", name: $0, poster: nil, background: nil, logo: nil, posterShape: "poster",
+                id: $0, kind: "movie", name: $0, poster: nil, posterFallback: nil, background: nil, logo: nil, posterShape: "poster",
                 releaseInfo: nil, progress: nil, videoId: nil, rating: nil, ratings: nil)
         })
 }
@@ -16,7 +16,7 @@ private func row(_ state: RowState, _ tiles: String...) -> HomeRow {
 @Test func heroPlayPlaysAVideoOrAMovieAndNothingElse() {
     func tile(_ kind: String, videoId: String?) -> Tile {
         Tile(
-            id: "tt1", kind: kind, name: "A", poster: nil, background: nil, logo: nil, posterShape: "poster",
+            id: "tt1", kind: kind, name: "A", poster: nil, posterFallback: nil, background: nil, logo: nil, posterShape: "poster",
             releaseInfo: nil, progress: nil, videoId: videoId, rating: nil, ratings: nil)
     }
     #expect(tile("movie", videoId: nil).playVideoId == "tt1")
