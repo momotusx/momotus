@@ -22,6 +22,7 @@
 /apps/android/core/src/main/jniLibs/
 /apps/android/core/src/debug/jniLibs/
 /apps/android/core/src/main/generated/
+/apps/android/core/core-build.properties
 /apps/android/local.properties
 /apps/android/.kotlin/
 

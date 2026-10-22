@@ -19,16 +19,17 @@
 #   this machine, `MQ_DEV_TRAKT`, for walks), in its own target dir, into src/debug/jniLibs: only debug
 #   builds of the app package it. It builds arm64, or armv7 when named. The plain build has no debug
 #   assertions and so no hook.
-# The torrent engine is in every own build (plans/play-every-version.md, Phase 0); its size is measured
-# against its own budget (plans/core-backlog.md C11). STORE=1 builds the store core without it, on purpose;
-# MQ_FEATURES names the features outright. The build fails when a library is not the core it should be
-# (scripts/core-engine.sh).
+# The torrent engine is in every own build's arm64-v8a core (plans/play-every-version.md, Step 0); armeabi-v7a
+# stays without it until its engine slice is shown to work (Step 0b). Its size is measured against its own
+# budget (plans/core-backlog.md C11). STORE=1 builds the store core without it, on purpose; MQ_FEATURES names
+# the arm64 features outright. The build fails when a library is not the core it should be, and it tells the
+# app which it is in core-build.properties (BuildConfig.CORE_BUILD). Rules: scripts/core-engine.sh.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
 # shellcheck source=apps/android/scripts/core-engine.sh
 source "$ROOT/apps/android/scripts/core-engine.sh"
-FEATURES=$(core_features)
+if [ "$(core_kind)" = store ]; then echo "build-core.sh: store core (STORE=1): no torrent engine"; fi
 # The Trakt app (client id and redirect URI, read by `option_env!`) when this machine has it:
 # .env.trakt.local at the repository root, gitignored. Without the file the core has no Trakt app
 # (notConfigured), as in CI or a fresh clone. The MDBList key (MARQUEE_MDBLIST_KEY) the same way,
@@ -44,7 +45,6 @@ TARGET=${CARGO_TARGET_DIR:-$HOME/.cargo-targets/marquee-android}
 NDK=${ANDROID_NDK_HOME:-/opt/homebrew/share/android-commandlinetools/ndk/27.1.12297006}
 STRIP=$NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip
 OUT=$ROOT/apps/android/core/src/main
-ABIS=(-t arm64-v8a -t armeabi-v7a)
 TRIPLES=(aarch64-linux-android:arm64-v8a armv7-linux-androideabi:armeabi-v7a)
 DEV_ASSERTIONS=false
 LIBS=$OUT/jniLibs
@@ -56,11 +56,9 @@ usage() {
 one() {
   case "$1" in
     arm64)
-      ABIS=(-t arm64-v8a)
       TRIPLES=(aarch64-linux-android:arm64-v8a)
       ;;
     armv7)
-      ABIS=(-t armeabi-v7a)
       TRIPLES=(armv7-linux-androideabi:armeabi-v7a)
       ;;
     *) usage ;;
@@ -87,11 +85,15 @@ PACKED="-C link-arg=-Wl,--pack-dyn-relocs=android"
 # no `-C lto`, so the profile's thin LTO never applied; the cdylib alone gets it. At 39e3b7ae the
 # store library went from 12,123,488 to 10,989,256 bytes and the full one from 15,362,864 to
 # 13,977,216 (bench/torrent/size.jsonl).
-CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS=$PACKED CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_RUSTFLAGS=$PACKED \
-CARGO_TARGET_DIR=$TARGET CARGO_INCREMENTAL=0 CARGO_PROFILE_RELEASE_STRIP=none ANDROID_NDK_HOME=$NDK \
-  CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=$DEV_ASSERTIONS \
-  cargo ndk "${ABIS[@]}" --platform 24 rustc --release -p mq-ffi -j 4 --crate-type cdylib \
-  ${FEATURES:+--features "$FEATURES"}
+# One cargo-ndk call per ABI: each ABI gets its own features (the engine on arm64-v8a only).
+for pair in "${TRIPLES[@]}"; do
+  features=$(core_features "${pair##*:}")
+  CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS=$PACKED CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_RUSTFLAGS=$PACKED \
+  CARGO_TARGET_DIR=$TARGET CARGO_INCREMENTAL=0 CARGO_PROFILE_RELEASE_STRIP=none ANDROID_NDK_HOME=$NDK \
+    CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=$DEV_ASSERTIONS \
+    cargo ndk -t "${pair##*:}" --platform 24 rustc --release -p mq-ffi -j 4 --crate-type cdylib \
+    ${features:+--features "$features"}
+done
 
 # The bindings come from the first ABI's library. Each further ABI's are generated too and must be the
 # same, so a `cfg(target_pointer_width)` that ever reached the FFI surface fails here, not on a device.
@@ -124,10 +126,12 @@ if [ "$DEV_ASSERTIONS" = false ]; then
   done
 fi
 
-# The engine in an own build, none in a store build: checked on each library before it is stripped.
+# The engine in an own build's arm64-v8a core, none in a store build or on armeabi-v7a: checked on each library
+# before it is stripped.
 for pair in "${TRIPLES[@]}"; do
-  core_check_engine "$TARGET/${pair%%:*}/release/libmarquee_core.so"
+  core_check_engine "$TARGET/${pair%%:*}/release/libmarquee_core.so" "${pair##*:}"
 done
+echo "kind=$(core_kind)" > "$ROOT/apps/android/core/core-build.properties"
 
 rm -rf "$LIBS"
 # A plain build drops a dev library left from before, which debug builds would otherwise package.
