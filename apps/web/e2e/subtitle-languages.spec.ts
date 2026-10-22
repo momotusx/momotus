@@ -403,9 +403,9 @@ test("TV: two columns, the right one follows the focused language, Right moves i
   await page.keyboard.press("ArrowLeft");
   await expect(timing).toHaveText("−0.1 s");
   await expect.poll(() => focusedKey(page)).toBe("sub:delay");
-  // Held 700 ms: 0.3 s a tick from 250 ms on, so about +1.4 s, far past one press.
+  // Held 800 ms: 0.3 s a tick from 350 ms on, so about +1.4 s, far past one press.
   await page.keyboard.down("ArrowRight");
-  await page.waitForTimeout(700);
+  await page.waitForTimeout(800);
   await page.keyboard.up("ArrowRight");
   expect(Number((await timing.textContent())?.replace(" s", ""))).toBeGreaterThanOrEqual(1);
   await page.keyboard.press("Enter");

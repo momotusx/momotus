@@ -1202,7 +1202,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
           notes={(snap()?.subtitleNotes ?? []).map(subtitleNote)}
           open={subLanguage()}
           setOpen={setSubLanguage}
-          timing={track() ? { value: subDelay(), set: setSubDelay } : null}
+          timing={track() ? { value: subDelay(), set: setSubDelay, track: track()?.url ?? "" } : null}
           size={{
             text: SIZES[sizeAt()]?.text ?? "100%",
             less: sizeAt() > 0 ? () => setSize(sizeAt() - 1) : undefined,

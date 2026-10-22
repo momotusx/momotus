@@ -6,11 +6,12 @@
 
 import Minus from "lucide-solid/icons/minus";
 import Plus from "lucide-solid/icons/plus";
-import { onCleanup, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, on, onCleanup, Show } from "solid-js";
 import { form } from "../form";
-import { DELAY_STEP, delayText, delayWords, FIRST_REPEAT_MS, holdStep, nudge, REPEAT_MS } from "../lib/delay";
+import { DELAY_STEP, delayText, delayWords, hold, nudge } from "../lib/delay";
 
-export function DelayStepper(props: { value: number; set: (sec: number) => void }) {
+/** `track` names the track the value is for: a new one ends a hold under way. */
+export function DelayStepper(props: { value: number; set: (sec: number) => void; track: string }) {
   const tv = () => form() === "tv";
   const step = (by: number) => props.set(nudge(props.value, by));
   let val!: HTMLButtonElement;
@@ -22,31 +23,25 @@ export function DelayStepper(props: { value: number; set: (sec: number) => void 
   };
 
   // One hold at a time, on the button it began on (its blur ends it, not the
-  // blur a press on another button causes): a release before the first repeat is one step.
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  // blur a press on another button causes); another track or a lost pointer ends it too.
+  const rule = hold(step);
   let holder: EventTarget | null = null;
-  let dir = 0;
-  let since = 0;
-  let repeated = false;
+  const [holding, setHolding] = createSignal(false);
   const stop = (single: boolean) => {
-    clearTimeout(timer);
-    if (dir && single && !repeated) step(dir * DELAY_STEP);
-    dir = 0;
+    rule.stop(single);
+    setHolding(false);
   };
-  const start = (d: number, on: EventTarget | null) => {
-    stop(false);
-    holder = on;
-    dir = d;
-    since = performance.now();
-    repeated = false;
-    const tick = () => {
-      repeated = true;
-      step(d * holdStep(performance.now() - since));
-      timer = setTimeout(tick, REPEAT_MS);
-    };
-    timer = setTimeout(tick, FIRST_REPEAT_MS);
+  const start = (d: number, el: EventTarget | null) => {
+    holder = el;
+    setHolding(true);
+    rule.start(d);
   };
-  onCleanup(() => clearTimeout(timer));
+  // A memo, so a new value for the same track (each tick) is no change of track.
+  const track = createMemo(() => props.track);
+  createEffect(on(track, () => stop(false), { defer: true }));
+  onCleanup(() => rule.stop(false));
+  // A screen reader hears the value once it settles, not every tick of a hold.
+  const spoken = createMemo<string>((was) => (holding() ? was : delayWords(props.value)), delayWords(props.value));
 
   /** Minus or plus: the pointer and Enter or Space hold by the stepper's rules (not the
    * system's key repeat); a click with no press behind it (a screen reader's) is one step. */
@@ -59,6 +54,7 @@ export function DelayStepper(props: { value: number; set: (sec: number) => void 
     },
     onPointerUp: () => stop(true),
     onPointerCancel: () => stop(false),
+    onLostPointerCapture: () => stop(false),
     onContextMenu: (e: MouseEvent) => e.preventDefault(),
     onKeyDown: (e: KeyboardEvent) => {
       if (e.key !== "Enter" && e.key !== " ") return;
@@ -111,7 +107,7 @@ export function DelayStepper(props: { value: number; set: (sec: number) => void 
         <Plus aria-hidden />
       </button>
       <span class="sr" aria-live="polite">
-        {delayWords(props.value)}
+        {spoken()}
       </span>
     </div>
   );

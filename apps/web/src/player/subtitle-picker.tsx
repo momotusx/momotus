@@ -43,7 +43,7 @@ export function SubtitlePicker(props: {
   setOpen: (language: string | null) => void;
   /** Timing, while a track is on; size, always. */
   /** The playing track's delay in seconds, or null when no core track plays. */
-  timing: { value: number; set: (sec: number) => void } | null;
+  timing: { value: number; set: (sec: number) => void; track: string } | null;
   size: Tune;
   pick: (t: SubtitleTrack | null) => void;
   pickFile: (id: string) => void;
@@ -310,7 +310,7 @@ export function SubtitlePicker(props: {
             </div>
             {/* Timing for a subtitle out of step with the speech (per track, this play only), and the profile's size. */}
             <div class="subp-tune">
-              <Show when={props.timing}>{(d) => <DelayStepper value={d().value} set={d().set} />}</Show>
+              <Show when={props.timing}>{(d) => <DelayStepper value={d().value} set={d().set} track={d().track} />}</Show>
               <div class="sub-size" role="group" aria-label="Subtitle size">
                 <span>Size</span>
                 <button class="sub-step" data-f="sub:smaller" aria-label="Smaller subtitles" disabled={!props.size.less} onClick={() => props.size.less?.()}>

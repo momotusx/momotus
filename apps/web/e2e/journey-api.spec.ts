@@ -332,15 +332,19 @@ test("subtitle size is the profile's; timing steps, holds and resets, and moves 
   await expect(reset).toHaveCount(0);
   await expect(timing).toBeFocused();
   await expect.poll(cue).toEqual([1, 30]);
-  // Held about 1.3 s: repeats from 250 ms, every 100 ms, 0.3 s a tick in the
-  // first second and 0.4 after: about 3.6 s, far past a press or 13 plain steps.
+  // Held about 1.3 s: repeats from 350 ms, every 100 ms, 0.3 s a tick in the
+  // first second and 0.4 after: about 3.3 s, far past a press or 13 plain steps.
   const box = await earlier.boundingBox();
   if (!box) throw new Error("no minus button");
   await p.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await p.mouse.down();
   await p.waitForTimeout(1300);
+  // A screen reader hears the value once it settles, not every tick.
+  await expect(timing).not.toHaveText("0.0 s");
+  await expect(p.locator(".sub-delay .sr")).toHaveText("Subtitles in step");
   await p.mouse.up();
   const held = Number((await timing.textContent())?.replace("−", "-").replace(" s", ""));
+  await expect(p.locator(".sub-delay .sr")).toHaveText(`Subtitles ${(-held).toFixed(1)} seconds earlier`);
   expect(held).toBeLessThanOrEqual(-2.5);
   expect(held).toBeGreaterThanOrEqual(-5);
   expect(Math.round(held * 10)).toBeCloseTo(held * 10, 6);
