@@ -1778,7 +1778,14 @@ async fn resolve_next(
                     .iter()
                     .filter_map(|w| {
                         let url = slot.add(w.url.as_str(), &w.lang, addon_url)?;
-                        Some(track(w, &stream.addon_name, &stream.addon_id, url))
+                        let title_forced = forced_mark(stream_name(&stream));
+                        Some(track(
+                            w,
+                            &stream.addon_name,
+                            &stream.addon_id,
+                            url,
+                            title_forced,
+                        ))
                     })
                     .collect();
                 let delay = remembered_delay(&core, &target, &stream.key);
@@ -3336,6 +3343,7 @@ async fn built_in_tracks(
         cut: playing.cut,
         fps: playing.fps,
         part: playing.part,
+        ..OwnedPlaying::default()
     };
     let mut s = lock(state);
     if !current(&s, run) {
@@ -3400,6 +3408,9 @@ struct OwnedPlaying {
     cut: Option<mq_relparse::Cut>,
     fps: Option<f32>,
     part: Option<u8>,
+    /// Its file name has the word "forced": a title's word, so a
+    /// subtitle's name saying it marks nothing.
+    title_forced: bool,
 }
 
 impl OwnedPlaying {
@@ -3412,6 +3423,7 @@ impl OwnedPlaying {
             cut: release.cut,
             fps: None,
             part: None,
+            title_forced: false,
         }
     }
 
@@ -3419,6 +3431,7 @@ impl OwnedPlaying {
     fn of_stream(stream: &ParsedStream) -> Self {
         Self {
             part: fit::part(stream_name(stream)),
+            title_forced: forced_mark(stream_name(stream)),
             ..Self::of(&stream.release)
         }
     }
@@ -3512,16 +3525,22 @@ fn problem(p: mq_turkcealtyazi::Problem) -> SubtitleProblem {
 
 /// A track served through the loopback server as UTF-8 WebVTT, whatever
 /// format and charset the addon's file has; `None` once its playback is
-/// released.
+/// released. `title_forced`: the playing file's name has the word
+/// "forced" (`OwnedPlaying::title_forced`).
 fn track(
     w: &mq_protocol::WireSubtitle,
     source: &str,
     addon_id: &str,
     url: String,
+    title_forced: bool,
 ) -> SubtitleTrack {
     let t = SubtitleTrack::new(url, &w.lang, w.label.clone(), source, release(w));
     let hearing_impaired = w.hearing_impaired || t.hearing_impaired;
-    let forced = w.forced || t.release.as_deref().is_some_and(forced_mark);
+    // The word in a film's own title ("Forced Vengeance") is in every
+    // file's name: then only the flag counts.
+    // ponytail: a real forced file of such a film needs the addon's flag.
+    let named = !title_forced && t.release.as_deref().is_some_and(forced_mark);
+    let forced = w.forced || named;
     // OpenSubtitles marks a match on the hash we sent with `"m": "h"`; any
     // other addon could mark every row, so only its mark counts. Its
     // `fpsMilli` is the rate the file was timed for.
@@ -3805,17 +3824,18 @@ async fn find_subtitles(
             listed.push((rank, url, w));
         }
         // Read outside the playback's lock, once per file not listed yet.
-        let known: std::collections::HashSet<String> = {
+        let (known, title_forced): (std::collections::HashSet<String>, bool) = {
             let s = lock(state);
             if !current(&s, run) {
                 return;
             }
-            s.snapshot.subtitles.iter().map(|t| t.url.clone()).collect()
+            let known = s.snapshot.subtitles.iter().map(|t| t.url.clone()).collect();
+            (known, s.playing.title_forced)
         };
         let fresh: Vec<SubtitleTrack> = listed
             .iter()
             .filter(|(_, url, _)| !known.contains(url))
-            .map(|(_, url, w)| track(w, &source, &addon_id, url.clone()))
+            .map(|(_, url, w)| track(w, &source, &addon_id, url.clone(), title_forced))
             .collect();
         let mut s = lock(state);
         if !current(&s, run) {
@@ -4980,7 +5000,10 @@ mod tests {
             release(w).as_deref(),
             Some("Film.2020.1080p.WEB.h264-CAKES")
         );
-        assert_eq!(track(w, "Subs", "", "u".into()).name, "CAKES, WEB 1080p");
+        assert_eq!(
+            track(w, "Subs", "", "u".into(), false).name,
+            "CAKES, WEB 1080p"
+        );
     }
 
     /// Review P3-8: while the first byte is read through the server the
@@ -5501,7 +5524,7 @@ mod subtitle_order_tests {
             json["fpsMilli"] = fps.into();
         }
         let w: mq_protocol::WireSubtitle = serde_json::from_value(json).unwrap();
-        track(&w, addon, addon, format!("u{n}"))
+        track(&w, addon, addon, format!("u{n}"), false)
     }
 
     fn ordered(playing: &str, fps: f32, rows: Vec<(usize, SubtitleTrack)>) -> Vec<String> {
@@ -5527,6 +5550,17 @@ mod subtitle_order_tests {
         let named = row(V3, 1, "Film.2020.1080p.WEB-DL-FLUX.forced.srt", None, "h");
         assert!(named.forced);
         assert!(!row(V3, 2, "Forcedly.2020.1080p.WEB-DL-FLUX.srt", None, "h").forced);
+        // A film called "Forced Vengeance": the word is its title's, in
+        // every file's name; the addon's flag still counts.
+        let w: mq_protocol::WireSubtitle = serde_json::from_value(serde_json::json!({
+            "id": "3", "url": "https://subs.example/3", "lang": "eng",
+            "subtitleFileName": "Forced.Vengeance.1982.1080p.BluRay.x264-GRP.srt",
+        }))
+        .unwrap();
+        assert!(!track(&w, V3, V3, "u3".into(), true).forced);
+        assert!(track(&w, V3, V3, "u3".into(), false).forced);
+        let flagged = mq_protocol::WireSubtitle { forced: true, ..w };
+        assert!(track(&flagged, V3, V3, "u3".into(), true).forced);
     }
 
     /// Review of feat/subtitle-best P2-1: the built-in source marks the
@@ -5676,7 +5710,7 @@ mod subtitle_order_tests {
             "subtitleFileName": "Inception.2010.1080p.BluRay.x264-SPARKS.forced.srt",
         }))
         .unwrap();
-        let forced = track(&forced, V3, V3, "u5".into());
+        let forced = track(&forced, V3, V3, "u5".into(), false);
         let rows = vec![
             (1, forced),
             (

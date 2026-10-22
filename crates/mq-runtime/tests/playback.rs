@@ -1765,3 +1765,70 @@ async fn the_disc_playing_keeps_its_own_subtitle_first() {
         ]
     );
 }
+
+/// A film whose title says "forced" ("Forced Vengeance"): the word is in
+/// every file's name, the stream's own tracks and an addon's alike, so it
+/// marks none of them forced and the start pick still turns one on.
+#[tokio::test]
+async fn a_title_with_the_word_forced_still_gets_a_subtitle() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                let mut buf = [0u8; 4096];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                let head = String::from_utf8_lossy(&buf[..n]).into_owned();
+                let (status, body) = if head.starts_with("GET /subtitles/") {
+                    let list = serde_json::json!({"subtitles": [{"id": "1", "lang": "eng",
+                        "url": "https://subs.test/addon.srt",
+                        "subtitleFileName": "Forced.Vengeance.1982.720p.WEB.x264-ADD.srt"}]});
+                    ("200 OK", list.to_string())
+                } else {
+                    (
+                        "206 Partial Content\r\nContent-Range: bytes 0-0/10",
+                        "M".into(),
+                    )
+                };
+                let reply = format!(
+                    "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(reply.as_bytes()).await;
+            });
+        }
+    });
+    let core = Core::temporary("p").unwrap();
+    core.set_prefs(&serde_json::json!({ "subtitleLanguages": ["eng"] }))
+        .unwrap();
+    let stream_addon = format!("{base}/own/manifest.json");
+    install(
+        &core,
+        &[
+            row(&format!("{base}/manifest.json"), "subs", "subtitles", true),
+            row(&stream_addon, "own", "stream", true),
+        ],
+    );
+    let streams = serde_json::json!({"streams": [{
+        "url": format!("{base}/v.mkv"),
+        "behaviorHints": {"filename": "Forced.Vengeance.1982.1080p.BluRay.x264-GRP.mkv"},
+        "subtitles": [{"id": "own", "lang": "eng", "url": "https://subs.test/own.srt",
+            "subtitleFileName": "Forced.Vengeance.1982.1080p.BluRay.x264-GRP.srt"}],
+    }]});
+    let view = PlaybackView::open(
+        &core,
+        listed(&stream_addon, "own", "Own", &streams.to_string()),
+        target(),
+    );
+    let s = settled_list(&view).await;
+    let sources: Vec<(&str, bool)> = s
+        .subtitles
+        .iter()
+        .map(|t| (t.source.as_str(), t.forced))
+        .collect();
+    assert_eq!(sources, [("Own", false), ("subs", false)]);
+    assert_eq!(
+        s.auto_subtitle.as_deref(),
+        Some(s.subtitles[0].url.as_str())
+    );
+}
