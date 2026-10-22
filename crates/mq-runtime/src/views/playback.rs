@@ -547,6 +547,10 @@ struct State {
     /// What the failing version did not play on here (a decode or an
     /// audio failure), which the next version should not share.
     failed_on: Option<FailedOn>,
+    /// The failing version did not play here (its decode or audio, no
+    /// picture, a container never opened, the wrong file), as against not
+    /// starting: the words of `moved` say which.
+    not_here: bool,
     /// Why the announced version was left, once the recommendation moved
     /// on: "did not start here", "did not play on this device".
     left_because: Option<&'static str>,
@@ -689,6 +693,7 @@ impl State {
             version_failed: false,
             hops: 0,
             failed_on: None,
+            not_here: false,
             left_because: None,
             progressed: false,
             reported_ms: None,
@@ -859,6 +864,7 @@ impl PlaybackView {
             s.next = 0;
             s.version_failed = false;
             s.failed_on = None;
+            s.not_here = false;
             s.left_because = None;
             s.snapshot.moved = None;
             s.patient = true;
@@ -976,7 +982,7 @@ impl PlaybackView {
     ) {
         let error = mq_server::failure_words(kind, status, error);
         let error = error.as_str();
-        let (failed, pick, decode) = {
+        let (failed, pick, kept) = {
             let mut s = lock(&self.state);
             let other = failed.is_some_and(|failed| failed != s.snapshot.attempt);
             // A stopped view opens no other source (a debrid one would
@@ -1001,12 +1007,23 @@ impl PlaybackView {
             // good playback is not the version's (code review 2026-10-20
             // P2-2).
             let decode = kind == Some("decode") && !s.progressed;
-            // An audio output that failed before it played is the version's
-            // too (a format the output refuses), for this playback only:
-            // the next version takes another audio codec.
-            let audio = kind == Some("audio") && !s.progressed;
+            // An audio output that failed on the version's own bitstream (a
+            // format this device passes through, E-AC-3 to a receiver that
+            // will not take it) before the source played at all is the
+            // version's for this playback: the next version takes another
+            // audio codec, and nothing is kept. Decoded audio failing, or an
+            // output failing once playing (a route change), is the moment's.
+            let caps = s.pick.as_ref().map(|p| &p.caps);
+            let passed = failed.as_ref().zip(caps).is_some_and(|(st, caps)| {
+                st.release
+                    .audio
+                    .iter()
+                    .any(|a| caps.passthrough.contains(a))
+            });
+            let audio = kind == Some("audio") && s.reported_ms.is_none() && passed;
             if decode || audio {
                 s.version_failed = true;
+                s.not_here = true;
                 s.failed_on = failed.as_ref().map(|st| {
                     let release = st.release.clone();
                     if decode {
@@ -1015,19 +1032,37 @@ impl PlaybackView {
                         FailedOn::Audio(release)
                     }
                 });
+                // The version's other sources carry the same file, codecs
+                // and all: when another version follows, it starts at once.
+                let follows = s.pick.as_ref().is_some_and(|p| {
+                    p.recommended()
+                        && s.hops < HOPS
+                        && p.next_version(&s.tried, s.failed_on.as_ref()).is_some()
+                });
+                if follows {
+                    s.next = s.candidates.len();
+                }
             }
             s.snapshot.phase = PlaybackPhase::Resolving;
             s.snapshot.key = None;
+            s.snapshot.moved = None;
             s.snapshot.subtitles_pending = false;
             clear_segments(&mut s);
             self.snapshot.set(s.snapshot.clone());
-            (failed, s.pick.clone(), decode)
+            // A decode failure is kept against every source of the version:
+            // they carry the same file.
+            let kept: Vec<String> = if decode {
+                s.candidates.iter().map(|c| c.key.clone()).collect()
+            } else {
+                Vec::new()
+            };
+            (failed, s.pick.clone(), kept)
         };
         // Written and reported outside the playback's lock.
         if let Some(stream) = &failed {
-            if decode {
-                let now = mq_library::hlc::now_ms();
-                crate::speed::record_did_not_play(self.core.library(), &stream.key, now);
+            let now = mq_library::hlc::now_ms();
+            for key in &kept {
+                crate::speed::record_did_not_play(self.core.library(), key, now);
             }
             if let Some(pick) = &pick {
                 pick.failed(&stream.key);
@@ -1353,6 +1388,13 @@ fn current(s: &State, run: u64) -> bool {
     !s.closed && s.run == run
 }
 
+/// The version did not play here, for a reason of its own.
+fn not_here(state: &Mutex<State>) {
+    let mut s = lock(state);
+    s.version_failed = true;
+    s.not_here = true;
+}
+
 /// Keeps `lease` as the playing source's, only while the view is open and
 /// `run` is still the newest; else it is dropped here, which ends its token.
 fn adopt(s: &mut State, run: u64, lease: Lease) -> bool {
@@ -1376,6 +1418,7 @@ fn adopt(s: &mut State, run: u64, lease: Lease) -> bool {
     s.patient = false;
     s.snapshot.trying = None;
     s.failed_on = None;
+    s.not_here = false;
     s.snapshot.moved = s.left_because.and_then(|why| {
         let playing = s.candidates.get(s.next.checked_sub(1)?)?;
         let announced = s.first.first()?;
@@ -1383,13 +1426,19 @@ fn adopt(s: &mut State, run: u64, lease: Lease) -> bool {
             version_label(&playing.release),
             version_label(&announced.release),
         );
-        Some(if now == then {
-            format!("Playing another {now}: the first one {why}")
-        } else {
-            format!("Playing {now}: the {then} {why}")
-        })
+        Some(moved_words(&now, &then, why))
     });
     true
+}
+
+/// `moved`: the version playing (`now`), the one announced (`then`) and
+/// why it was left.
+fn moved_words(now: &str, then: &str, why: &str) -> String {
+    if now == then {
+        format!("Playing another {now}: the first one {why}")
+    } else {
+        format!("Playing {now}: the {then} {why}")
+    }
 }
 
 /// Swarms that failed to start in one playback's chain, remembered as dead
@@ -1768,7 +1817,7 @@ async fn shows_picture(
     if !hvc1_only || !lease.picture_missing_on_apple().await {
         return Ok(());
     }
-    lock(state).version_failed = true;
+    not_here(state);
     let now = mq_library::hlc::now_ms();
     crate::speed::record_no_picture(core.library(), &stream.key, now);
     Err("This file's video shows no picture on this device".into())
@@ -1886,7 +1935,7 @@ fn move_on(s: &mut State) -> bool {
         return false;
     }
     if s.hops == 0 {
-        s.left_because = Some(if s.failed_on.is_some() {
+        s.left_because = Some(if s.not_here {
             "did not play on this device"
         } else {
             "did not start here"
@@ -1974,7 +2023,7 @@ async fn open_source(
             }
             let link = resolved?;
             if let Some(why) = never_opens(core, stream, target, state, &link.filename) {
-                lock(state).version_failed = true;
+                not_here(state);
                 return Err(why);
             }
             // The provider's link, not the addon's: no install scope.
@@ -2279,7 +2328,7 @@ async fn open_torrent(
             "the swarm sent almost nothing".to_owned()
         }
         Ok((_, _, Started::Wrong(why))) => {
-            lock(state).version_failed = true;
+            not_here(state);
             why
         }
         Ok((_, _, Started::Ready(Err(e)))) | Err(e) => e.to_string(),
@@ -3796,6 +3845,24 @@ pub(crate) async fn kept_start(core: &Core, item_id: &str, video_id: &str) -> Op
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The words for a move: the version left and why, or "another" when
+    /// both versions read the same.
+    #[test]
+    fn moved_words_name_both_versions_and_why() {
+        assert_eq!(
+            moved_words("720p WEB", "1080p Blu-ray", "did not start here"),
+            "Playing 720p WEB: the 1080p Blu-ray did not start here"
+        );
+        assert_eq!(
+            moved_words("720p WEB", "1080p WEB", "did not play on this device"),
+            "Playing 720p WEB: the 1080p WEB did not play on this device"
+        );
+        assert_eq!(
+            moved_words("1080p WEB", "1080p WEB", "did not start here"),
+            "Playing another 1080p WEB: the first one did not start here"
+        );
+    }
 
     fn stream(json: &str) -> ParsedStream {
         let body = format!(r#"{{"streams":[{json}]}}"#);

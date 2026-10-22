@@ -16,8 +16,9 @@ use mq_addons::{AddonEvent, Deadlines, InstalledAddon};
 use mq_library::{Policy, Table};
 use mq_protocol::{ResourcePath, decode_streams};
 use mq_streams::{
-    Conditions, DeviceCaps, Group, HideReason, ParsedStream, RankInput, RankKey, Ranked, RankedRow,
-    Reason, ReasonLine, SourceClass, Speed, StreamPrefs, Target, normalize, rank, screen_class,
+    Conditions, DeviceCaps, Group, HideReason, ParsedStream, Playability, RankInput, RankKey,
+    Ranked, RankedRow, Reason, ReasonLine, SourceClass, Speed, StreamPrefs, Target, normalize,
+    rank, screen_class,
 };
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
@@ -342,9 +343,12 @@ impl PickHandle {
     /// keys): the first listed row that can start and holds none of them,
     /// with its failover chain. A row a folded pick played through is a
     /// tried row (code review 2026-10-20 r3 P3-6). After a version that
-    /// did not play here (`unlike`), the first of those that differs most
-    /// from it in what failed, so two moves do not die on the same E-AC-3
-    /// or 10-bit HEVC (pick audit 8.3). None once the view is gone.
+    /// did not play here (`unlike`), the row that differs most from it in
+    /// what failed among those on the same footing as that first one (all
+    /// but the resolution, `same_footing`), the first of them on a tie, so
+    /// two moves do not die on the same E-AC-3 or 10-bit HEVC (pick audit
+    /// 8.3) and difference alone never lifts a worse row. None once the
+    /// view is gone.
     pub fn next_version(&self, tried: &[String], unlike: Option<&FailedOn>) -> Option<NextVersion> {
         let state = self.state.upgrade()?;
         let s = lock(&state);
@@ -353,16 +357,21 @@ impl PickHandle {
                 .chain(&r.failover)
                 .any(|st| tried.contains(&st.key))
         };
-        let apart = |r: &RankedRow| unlike.map_or(0, |f| f.apart(&r.stream.release));
-        let row = s
+        let mut open = s
             .ranked
             .rows
             .iter()
             .filter(|r| r.key.viable)
-            .filter(untried)
-            .enumerate()
-            .max_by_key(|(i, r)| (apart(r), std::cmp::Reverse(*i)))
-            .map(|(_, r)| r)?;
+            .filter(untried);
+        let first = open.next()?;
+        let row = match unlike {
+            None => first,
+            Some(failed) => std::iter::once(first)
+                .chain(open.filter(|r| same_footing(&r.key, &first.key)))
+                .enumerate()
+                .max_by_key(|(i, r)| (failed.apart(&r.stream.release), std::cmp::Reverse(*i)))
+                .map_or(first, |(_, r)| r),
+        };
         Some(NextVersion {
             key: row.stream.key.clone(),
             label: version_label(&row.stream.release),
@@ -372,6 +381,38 @@ impl PickHandle {
                 .collect(),
         })
     }
+}
+
+/// A ready file the user prefers with every field before the start tier at
+/// its best: a swarm passes it only through one of those, so no live count
+/// can move it from the lead.
+fn unbeatable(k: &RankKey) -> bool {
+    k.tier == 3
+        && k.language
+        && k.legit
+        && k.year_ok
+        && k.sustains
+        && k.size_ok
+        && k.playability == Playability::Native
+}
+
+/// Two rows the ranking holds equal on everything but the resolution and
+/// what breaks ties under it: the same language, a real release, the
+/// year, keeping up, pace, how it plays, the size and the start tier.
+fn same_footing(a: &RankKey, b: &RankKey) -> bool {
+    let footing = |k: &RankKey| {
+        (
+            k.language,
+            k.legit,
+            k.year_ok,
+            k.sustains,
+            k.pace,
+            k.playability,
+            k.size_ok,
+            k.tier,
+        )
+    };
+    footing(a) == footing(b)
 }
 
 /// What a version failed on when it did not play here, which the next
@@ -410,11 +451,20 @@ fn video_apart(failed: &mq_relparse::ParsedRelease, next: &mq_relparse::ParsedRe
     }
 }
 
-/// Atmos rides on TrueHD or E-AC-3, so it is not an audio codec of its own.
+/// Atmos rides on TrueHD or E-AC-3, so it is not an audio codec of its
+/// own; DTS, DTS-HD, DTS-HD MA and DTS:X are one family, each carrying the
+/// core the others decode.
 fn audio_apart(failed: &mq_relparse::ParsedRelease, next: &mq_relparse::ParsedRelease) -> u8 {
-    use mq_relparse::Audio::Atmos;
+    use mq_relparse::Audio::{Atmos, Dts, DtsHd, DtsHdMa, DtsX};
     let codecs = |r: &mq_relparse::ParsedRelease| -> Vec<mq_relparse::Audio> {
-        r.audio.iter().copied().filter(|a| *a != Atmos).collect()
+        r.audio
+            .iter()
+            .filter(|a| **a != Atmos)
+            .map(|a| match a {
+                DtsHd | DtsHdMa | DtsX => Dts,
+                a => *a,
+            })
+            .collect()
     };
     let (failed, next) = (codecs(failed), codecs(next));
     if failed.is_empty() || next.is_empty() {
@@ -1158,8 +1208,8 @@ async fn collect(
                 if let Ok(found) = joined {
                     found.apply(&mut s);
                 }
-                let done = finished(answered && side.is_empty(), &live, &mut hold, held_out);
-                settle(&core, &mut s, &ranking, done);
+                let counting = awaited(answered && side.is_empty(), &live, &mut hold, held_out);
+                settle(&core, &mut s, &ranking, answered && side.is_empty(), counting);
                 snapshot.set(render(&s));
                 continue;
             }
@@ -1169,8 +1219,8 @@ async fn collect(
                 if let Ok(found) = joined {
                     found.apply(&mut s);
                 }
-                let done = finished(answered && side.is_empty(), &live, &mut hold, held_out);
-                settle(&core, &mut s, &ranking, done);
+                let counting = awaited(answered && side.is_empty(), &live, &mut hold, held_out);
+                settle(&core, &mut s, &ranking, answered && side.is_empty(), counting);
                 snapshot.set(render(&s));
                 continue;
             }
@@ -1178,7 +1228,7 @@ async fn collect(
                 if hold.is_some() && !held_out && !live.is_empty() => {
                 held_out = true;
                 let mut s = lock(&state);
-                settle(&core, &mut s, &ranking, true);
+                settle(&core, &mut s, &ranking, true, false);
                 snapshot.set(render(&s));
                 continue;
             }
@@ -1264,15 +1314,22 @@ async fn collect(
             }
             AddonEvent::Done => answered = true,
         }
-        let done = finished(answered && side.is_empty(), &live, &mut hold, held_out);
-        settle(&core, &mut s, &ranking, done);
+        let counting = awaited(answered && side.is_empty(), &live, &mut hold, held_out);
+        settle(
+            &core,
+            &mut s,
+            &ranking,
+            answered && side.is_empty(),
+            counting,
+        );
         snapshot.set(render(&s));
     }
 }
 
-/// `done`: every addon and side check is in (`rest`), and the live counts
-/// too or `SIDE_WAIT` passed since the rest was; the wait starts here.
-fn finished(
+/// Live counts `done` still waits for: some are on the way and
+/// `SIDE_WAIT` has not passed since every addon and side check was in
+/// (`rest`); the wait starts here.
+fn awaited(
     rest: bool,
     live: &JoinSet<Side>,
     hold: &mut Option<tokio::time::Instant>,
@@ -1281,17 +1338,20 @@ fn finished(
     if rest && hold.is_none() {
         *hold = Some(tokio::time::Instant::now() + SIDE_WAIT);
     }
-    rest && (live.is_empty() || held_out)
+    !live.is_empty() && !held_out
 }
 
 /// Ranks again with what is known now; once `done`, warms the pick's
 /// link and says why nothing is listed when nothing is.
-fn settle(core: &Core, s: &mut State, ranking: &Ranking, done: bool) {
-    s.done = done;
+/// `done` once every addon and side check is in (`rest`) and no live count
+/// is `counting`, or the lead cannot be overtaken by them.
+fn settle(core: &Core, s: &mut State, ranking: &Ranking, rest: bool, counting: bool) {
     let stores = core.debrid().map(|r| r.stores()).unwrap_or_default();
     apply_cache(&mut s.streams, &s.cache, &stores);
     apply_live(&mut s.streams, &s.live);
     rerank(s, ranking);
+    let settled = s.recommended.as_ref().is_some_and(|r| unbeatable(&r.key));
+    s.done = rest && (!counting || settled);
     let target = &ranking.params.target;
     if s.done {
         maybe_prefetch(core, s, (target.season, target.episode));
@@ -1411,8 +1471,8 @@ fn cache_asks(
     asks
 }
 
-/// How long one scrape may take, the engine's first start included; the
-/// counts never hold `done`.
+/// How long one scrape may take, the engine's first start included; `done`
+/// waits for the counts at most `SIDE_WAIT` of it.
 const LIVE_WAIT: Duration = Duration::from_secs(10);
 /// The pause before asking again when no tracker answered at all.
 const LIVE_RETRY: Duration = Duration::from_secs(1);
@@ -1451,11 +1511,12 @@ fn live_asks(
 
 /// One scrape of the trackers: an ask takes at most 10 s, and one that
 /// answers nothing at all is asked again a second later, so counts can come
-/// up to about 21 s after an answer; they never hold `done`. A swarm no
-/// answer told anything about keeps the addon's number: the engine gives no
-/// count for a default tracker's 0/0, the answer for a swarm it does not
-/// track, and gives a zero that a tracker counting leechers, or the
-/// stream's own tracker, reported (`Engine::scrape`).
+/// up to about 21 s after an answer; `done` holds for them at most
+/// `SIDE_WAIT` once the rest is in, and later ones rank the rows again. A
+/// swarm no answer told anything about keeps the addon's number: the
+/// engine gives no count for a default tracker's 0/0, the answer for a
+/// swarm it does not track, and gives a zero that a tracker counting
+/// leechers, or the stream's own tracker, reported (`Engine::scrape`).
 async fn live_check(core: Core, swarms: Vec<(String, Vec<String>)>) -> Side {
     let ask = || async {
         let counts = tokio::time::timeout(LIVE_WAIT, core.live_seeders(&swarms)).await;
@@ -2035,6 +2096,59 @@ mod tests {
         assert_eq!(said(false).as_deref(), Some("On this device"));
         assert_eq!(said(true), None, "a service may take it");
         assert_eq!(row_dto(row, Some("another"), false).on_device, None);
+    }
+
+    /// How far a version is from one that did not play here: 2 a part
+    /// surely apart, 1 one not stated, 0 the same; after a decode failure
+    /// the video and the audio, after an audio failure the audio.
+    #[test]
+    fn how_far_apart_a_version_is_from_what_failed() {
+        let rel = mq_relparse::parse;
+        let failed = rel("Show.S01E01.1080p.WEB-DL.DDP5.1.Atmos.HEVC.10bit-A");
+        let decode = FailedOn::Decode(failed.clone());
+        let audio = FailedOn::Audio(failed);
+        for (name, after_decode, after_audio) in [
+            ("Show.S01E01.1080p.WEB-DL.DDP5.1.HEVC.10bit-SAME", 0, 0),
+            ("Show.S01E01.720p.WEB-DL.AAC.x264-BOTH", 4, 2),
+            ("Show.S01E01.1080p.WEB-DL.AC3.x264-AC3", 4, 2),
+            ("Show.S01E01.1080p.WEB-DL.DDP5.1.H.264-VIDEO", 2, 0),
+            ("Show.S01E01.1080p.WEB-DL.TrueHD.HEVC.10bit-AUDIO", 2, 2),
+            // Atmos is no codec: TrueHD with Atmos is apart from E-AC-3
+            // with Atmos.
+            (
+                "Show.S01E01.1080p.WEB-DL.TrueHD.Atmos.HEVC.10bit-ATMOS",
+                2,
+                2,
+            ),
+            ("Show.S01E01.1080p.WEB-DL.HEVC-UNSTATED", 2, 1),
+            ("Show.S01E01.1080p.WEB-DL-NOTHING", 2, 1),
+        ] {
+            assert_eq!(decode.apart(&rel(name)), after_decode, "decode, {name}");
+            assert_eq!(audio.apart(&rel(name)), after_audio, "audio, {name}");
+        }
+        // A stated bit depth apart is apart; one family of DTS is one codec.
+        use mq_relparse::{Audio, ParsedRelease, VideoCodec};
+        let file = |codec, bit_depth, audio: &[Audio]| ParsedRelease {
+            codec,
+            bit_depth,
+            audio: audio.to_vec(),
+            ..ParsedRelease::default()
+        };
+        let ten = FailedOn::Decode(file(VideoCodec::H265, Some(10), &[Audio::DtsHdMa]));
+        assert_eq!(
+            ten.apart(&file(VideoCodec::H265, Some(8), &[Audio::Dts])),
+            2
+        );
+        assert_eq!(
+            ten.apart(&file(VideoCodec::H265, Some(10), &[Audio::DtsX])),
+            0
+        );
+        assert_eq!(ten.apart(&file(VideoCodec::Unknown, None, &[])), 2);
+        let atmos_only = FailedOn::Audio(file(VideoCodec::H264, None, &[Audio::Atmos]));
+        assert_eq!(
+            atmos_only.apart(&file(VideoCodec::H264, None, &[Audio::Eac3])),
+            1
+        );
     }
 
     /// Code review r1 P3: with two accounts, one store's cache answer

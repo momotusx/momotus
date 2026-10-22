@@ -874,6 +874,26 @@ async fn the_recommendation_moves_on_at_most_twice() {
     assert!(s.offer.is_none());
 }
 
+/// A version that showed no picture here did not play on this device, as
+/// a decode failure did not: `moved` says so, not "did not start here".
+#[tokio::test]
+async fn a_move_past_no_picture_says_it_did_not_play_here() {
+    let (core, _server, keys) = direct_rows(vec![
+        ("Show.S01E01.1080p.WEB-DL.HEVC-A", bare_hev1()),
+        ("Show.S01E01.720p.WEB-DL.HEVC-B", media_fixture("hvc1.mp4")),
+    ])
+    .await;
+    let view = versions_for(&core, apple()).await;
+    let playback = play(&core, &view, &keys[0]);
+    until("the next version", || playback.snapshot().url.is_some()).await;
+    let s = playback.snapshot();
+    assert_eq!(s.key.as_ref(), Some(&keys[1]));
+    assert_eq!(
+        s.moved.as_deref(),
+        Some("Playing 720p WEB: the 1080p WEB did not play on this device")
+    );
+}
+
 /// Only a failure of the version's own moves on: the player's "decode"
 /// does; a network failure, the kinds the apps send for a fetch that
 /// failed or a busy decoder ("unreadable", "other") and a kind this core
@@ -919,47 +939,248 @@ async fn only_a_failure_of_the_versions_own_moves_on() {
     assert_eq!(s.attempts.len(), 1, "the decode failure, then the next");
 }
 
+/// Five direct versions: the pick from two sources of one release, a
+/// second 1080p sharing its 10-bit HEVC and E-AC-3, a cam copy and a 720p
+/// H.264 with AAC.
+async fn apart_rows() -> (Core, Server, Vec<String>) {
+    let row = |name| (name, media_fixture("h264.mp4"));
+    direct_rows(vec![
+        row("Show.S01E01.1080p.WEB-DL.DDP5.1.HEVC.10bit-ONE"),
+        row("Show.S01E01.1080p.WEB-DL.DDP5.1.HEVC.10bit-ONE"),
+        row("Show.S01E01.1080p.WEB-DL.DDP5.1.HEVC.10bit-TWO"),
+        row("Show.S01E01.720p.HDCAM.x264.AAC-CAM"),
+        row("Show.S01E01.720p.WEB-DL.AAC.x264-THREE"),
+    ])
+    .await
+}
+
+/// The line of row `key` in a view.
+fn line_of(view: &VersionsView, key: &str) -> mq_streams::ReasonLine {
+    let s = view.snapshot();
+    s.recommended
+        .into_iter()
+        .chain(s.rows)
+        .find(|r| r.key == key)
+        .unwrap_or_else(|| panic!("no row {key}"))
+        .line
+}
+
+/// A device whose output takes E-AC-3 as it is (a receiver).
+fn passing_eac3() -> DeviceCaps {
+    DeviceCaps {
+        passthrough: vec![mq_relparse::Audio::Eac3],
+        ..DeviceCaps::basic_1080p()
+    }
+}
+
 /// After a version that did not play here, the next one differs in what
 /// failed (pick audit 8.3, Ted Lasso S1:E1: its first two 1080p versions
 /// share 10-bit HEVC and E-AC-3): a decode failure passes over the next
 /// 1080p that shares the video and the audio for one that shares neither,
-/// an audio failure for another audio codec. Once it plays, the playback
-/// says the version playing is not the one announced.
+/// an audio failure of a format the output takes as it is for another
+/// audio codec. The version's other source, the same file, is not tried.
+/// Once it plays, the playback says the version playing is not the one
+/// announced; a Try again clears it and starts the pick afresh. Only the
+/// decode failure is kept on the device, against every source of the
+/// version, since they carry the same file.
 #[tokio::test]
 async fn the_next_version_differs_in_what_did_not_play() {
     for kind in ["decode", "audio"] {
-        let (core, _server, keys) = direct_rows(vec![
-            (
-                "Show.S01E01.1080p.WEB-DL.DDP5.1.HEVC.10bit-ONE",
-                media_fixture("h264.mp4"),
-            ),
-            (
-                "Show.S01E01.1080p.WEB-DL.DDP5.1.HEVC.10bit-TWO",
-                media_fixture("h264.mp4"),
-            ),
-            (
-                "Show.S01E01.720p.WEB-DL.AAC.x264-THREE",
-                media_fixture("h264.mp4"),
-            ),
-        ])
-        .await;
-        let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+        let (core, _server, keys) = apart_rows().await;
+        let view = versions_for(&core, passing_eac3()).await;
         let s = view.snapshot();
         assert_eq!(s.recommended.unwrap().key, keys[0], "{kind}");
-        assert_eq!(s.rows[0].key, keys[1], "{kind}: the next 1080p ranks next");
+        assert_eq!(s.rows[0].key, keys[2], "{kind}: the next 1080p ranks next");
         let playback = play(&core, &view, &keys[0]);
         until("ready", || playback.snapshot().url.is_some()).await;
         assert_eq!(playback.snapshot().moved, None, "{kind}: the announced one");
         playback.fail_over(None, Some(kind), None, "no frame");
         let moved = || playback.snapshot().key.is_some_and(|k| k != keys[0]);
         until("the next version", moved).await;
-        assert_eq!(playback.snapshot().key.as_ref(), Some(&keys[2]), "{kind}");
+        let s = playback.snapshot();
+        assert_eq!(s.key.as_ref(), Some(&keys[4]), "{kind}");
+        let tried: Vec<&String> = s.attempts.iter().map(|a| &a.key).collect();
         assert_eq!(
-            playback.snapshot().moved.as_deref(),
+            tried,
+            [&keys[0]],
+            "{kind}: the same file from its other source"
+        );
+        assert_eq!(
+            s.moved.as_deref(),
             Some("Playing 720p WEB: the 1080p WEB did not play on this device"),
             "{kind}"
         );
+        let next = versions_for(&core, passing_eac3()).await;
+        let kept = line_of(&next, &keys[0]);
+        let did_not_play = kept == mq_streams::ReasonLine::DidNotPlay;
+        assert_eq!(did_not_play, kind == "decode", "{kind}: {kept:?}");
+        // Kept against the version's other source too: the same file.
+        let pick = next.snapshot().recommended.unwrap().key;
+        assert_ne!(pick, keys[1], "{kind}: the same file recommended");
+        playback.fail_over(None, Some("network"), None, "gone");
+        let failed = || playback.snapshot().phase == mq_runtime::PlaybackPhase::Failed;
+        until("the playback to fail", failed).await;
+        assert_eq!(playback.snapshot().moved, None, "{kind}: none while failed");
+        playback.retry();
+        assert_eq!(
+            playback.snapshot().moved,
+            None,
+            "{kind}: Try again clears it"
+        );
+        let again = || playback.snapshot().key.as_ref() == Some(&keys[0]);
+        until("the pick again", again).await;
+        assert_eq!(playback.snapshot().moved, None, "{kind}: the pick plays");
     }
+}
+
+/// With no other version to move to, a version that did not play here
+/// still tries its other sources.
+#[tokio::test]
+async fn with_no_other_version_the_other_sources_are_tried() {
+    let row = || {
+        (
+            "Show.S01E01.1080p.WEB-DL.DDP5.1.HEVC.10bit-ONE",
+            media_fixture("h264.mp4"),
+        )
+    };
+    let (core, _server, keys) = direct_rows(vec![row(), row()]).await;
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    let playback = play(&core, &view, &keys[0]);
+    until("ready", || playback.snapshot().url.is_some()).await;
+    playback.fail_over(None, Some("decode"), None, "no frame");
+    let other = || playback.snapshot().key.as_ref() == Some(&keys[1]);
+    until("the version's other source", other).await;
+}
+
+/// An audio output that fails on decoded audio is the moment's (another
+/// app, a route change): the playback does not move on. One that fails on
+/// a format the device passes through, before the source played, moves on,
+/// and nothing is kept: the next view still recommends that version. Once
+/// the source played, an audio failure is the moment's again.
+#[tokio::test]
+async fn an_audio_failure_moves_on_only_for_a_passed_format_and_is_not_kept() {
+    let (core, _server, keys) = apart_rows().await;
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    let playback = play(&core, &view, &keys[0]);
+    until("ready", || playback.snapshot().url.is_some()).await;
+    playback.fail_over(None, Some("audio"), None, "audio track");
+    let other = || playback.snapshot().key.as_ref() == Some(&keys[1]);
+    until("the version's other source", other).await;
+    assert!(
+        playback.snapshot().trying.is_none(),
+        "decoded audio moved on"
+    );
+
+    let view = versions_for(&core, passing_eac3()).await;
+    let playback = play(&core, &view, &keys[0]);
+    until("ready", || playback.snapshot().url.is_some()).await;
+    playback.fail_over(None, Some("audio"), None, "audio track");
+    let moved = || playback.snapshot().key.as_ref() == Some(&keys[4]);
+    until("the next version", moved).await;
+    let view = versions_for(&core, passing_eac3()).await;
+    assert_eq!(
+        view.snapshot().recommended.unwrap().key,
+        keys[0],
+        "an audio failure was kept"
+    );
+
+    // Once the source has played, its audio failing is the moment's.
+    let playback = play(&core, &view, &keys[0]);
+    until("ready", || playback.snapshot().url.is_some()).await;
+    playback.report_progress(1_000, 2_700_000, false);
+    playback.fail_over(None, Some("audio"), None, "audio track");
+    let other = || playback.snapshot().key.as_ref() == Some(&keys[1]);
+    until("the version's other source", other).await;
+    assert!(
+        playback.snapshot().trying.is_none(),
+        "a route change moved on"
+    );
+}
+
+/// The version that differs most is chosen only among rows on the same
+/// footing as the ranking's next: a cam copy that shares nothing with the
+/// failed version never wins on difference alone.
+#[tokio::test]
+async fn the_next_version_apart_stays_on_the_same_footing() {
+    let (core, _server, keys) = apart_rows().await;
+    let view = versions_for(&core, passing_eac3()).await;
+    let failed = view.candidates(&keys[0]).remove(0).release;
+    let pick = view.pick(&keys[0]);
+    let unlike = mq_runtime::views::versions::FailedOn::Decode(failed);
+    // Past the pick and the 720p WEB: the second 1080p, which shares
+    // everything, stays ahead of the cam, which shares nothing.
+    let tried = [keys[0].clone(), keys[1].clone(), keys[4].clone()];
+    let next = pick.handle.next_version(&tried, Some(&unlike)).unwrap();
+    assert_eq!(next.key, keys[2]);
+}
+
+/// `done` waits for the live counts at most 3 s (`SIDE_WAIT`) once every
+/// addon is in; counts that come later still rank the rows.
+#[tokio::test]
+async fn done_waits_three_seconds_at_most_for_the_live_counts() {
+    let server = Server::start(vec![
+        route("GET", "/stream/series/tt1%3A1%3A1.json", 200, &torrents()),
+        route("GET", "/meta/series/tt1.json", 200, &meta()),
+    ])
+    .await;
+    let core = core_with(&server);
+    core.set_debrid_keys(&[(StoreId::RealDebrid, "rd".into())]);
+    core.set_live_seeders(std::collections::HashMap::from([(HASH_A.to_owned(), 0)]));
+    core.delay_live_seeders(Duration::from_secs(5));
+    let opened = Instant::now();
+    let view = VersionsView::open(&core, params(TitleFacts::default()));
+    until("done", || view.snapshot().done).await;
+    let waited = opened.elapsed();
+    assert!(
+        (Duration::from_millis(2500)..Duration::from_millis(4500)).contains(&waited),
+        "{waited:?}"
+    );
+    assert!(view.counting(), "the counts are still on the way");
+    let name = |view: &VersionsView| view.snapshot().recommended.unwrap().release_name;
+    assert_eq!(
+        name(&view),
+        "Show.S01E01.1080p.WEB-DL.x264-AAA",
+        "the listed 900"
+    );
+    until("the counts", || !view.counting()).await;
+    assert_eq!(name(&view), "Show.S01E01.1080p.WEB-DL.x264-BBB");
+}
+
+/// A ready file leading the list is not held for the live counts: they rank
+/// torrents, which come after it.
+#[tokio::test]
+async fn done_does_not_wait_for_the_counts_when_a_ready_file_leads() {
+    let streams = serde_json::json!({ "streams": [
+        { "name": "Direct", "title": "Show.S01E01.1080p.WEB-DL.x264-LINK",
+          "url": "https://cdn.example/link.mkv" },
+        { "name": "Torrentio\n1080p", "title": "Show.S01E01.1080p.WEB-DL.x264-AAA\n👤 900 💾 2.0 GB",
+          "infoHash": HASH_A, "fileIdx": 0 },
+    ]});
+    let server = Server::start(vec![
+        route(
+            "GET",
+            "/stream/series/tt1%3A1%3A1.json",
+            200,
+            &streams.to_string(),
+        ),
+        route("GET", "/meta/series/tt1.json", 200, &meta()),
+    ])
+    .await;
+    let core = core_with(&server);
+    core.set_debrid_keys(&[(StoreId::RealDebrid, "rd".into())]);
+    core.set_live_seeders(std::collections::HashMap::from([(HASH_A.to_owned(), 0)]));
+    core.delay_live_seeders(Duration::from_secs(5));
+    let opened = Instant::now();
+    let view = VersionsView::open(&core, params(TitleFacts::default()));
+    until("done", || view.snapshot().done).await;
+    let s = view.snapshot();
+    assert_eq!(s.recommended.unwrap().source_class, SourceClass::Ready);
+    assert!(
+        opened.elapsed() < Duration::from_millis(2000),
+        "{:?}",
+        opened.elapsed()
+    );
+    assert!(view.counting(), "the counts are still on the way");
 }
 
 /// Code review 2026-10-20 P1-1: "Try again" is a fresh start of the pick

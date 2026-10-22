@@ -532,7 +532,11 @@ impl Core {
     /// opening a view.
     #[doc(hidden)]
     pub fn set_live_seeders(&self, counts: HashMap<String, u32>) {
-        *self.fake_seeders() = Some(FakeSeeders { counts, misses: 0 });
+        *self.fake_seeders() = Some(FakeSeeders {
+            counts,
+            misses: 0,
+            delay: std::time::Duration::ZERO,
+        });
     }
 
     /// Tests: the next `times` asks of the fake counts answer nothing, as
@@ -541,6 +545,15 @@ impl Core {
     pub fn miss_live_seeders(&self, times: u32) {
         if let Some(fake) = self.fake_seeders().as_mut() {
             fake.misses = times;
+        }
+    }
+
+    /// Tests: each ask of the fake counts takes `delay`, as a slow
+    /// tracker does.
+    #[doc(hidden)]
+    pub fn delay_live_seeders(&self, delay: std::time::Duration) {
+        if let Some(fake) = self.fake_seeders().as_mut() {
+            fake.delay = delay;
         }
     }
 
@@ -561,15 +574,21 @@ impl Core {
     /// `None` where no answer told anything (`Engine::scrape`: a default
     /// tracker's 0/0 does not), and for every one without the engine.
     pub async fn live_seeders(&self, torrents: &[(String, Vec<String>)]) -> Vec<Option<u32>> {
-        if let Some(fake) = self.fake_seeders().as_mut() {
-            if fake.misses > 0 {
+        let fake = self.fake_seeders().as_mut().map(|fake| {
+            let answer = if fake.misses > 0 {
                 fake.misses -= 1;
-                return vec![None; torrents.len()];
-            }
-            return torrents
-                .iter()
-                .map(|(h, _)| fake.counts.get(h).copied())
-                .collect();
+                vec![None; torrents.len()]
+            } else {
+                torrents
+                    .iter()
+                    .map(|(h, _)| fake.counts.get(h).copied())
+                    .collect()
+            };
+            (fake.delay, answer)
+        });
+        if let Some((delay, answer)) = fake {
+            tokio::time::sleep(delay).await;
+            return answer;
         }
         #[cfg(feature = "torrent")]
         if let Ok(engine) = self.torrent_engine().await {
@@ -1501,6 +1520,8 @@ struct FakeSeeders {
     counts: HashMap<String, u32>,
     /// Asks still to answer with nothing.
     misses: u32,
+    /// How long each ask takes.
+    delay: std::time::Duration,
 }
 
 /// No answer came at all: no connection (no network, no route, a name that
