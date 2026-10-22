@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -85,6 +86,26 @@ class RatingsTest {
         val results = mutableListOf<TextLayoutResult>()
         facts.config[SemanticsActions.GetTextLayoutResult].action?.invoke(results)
         assertTrue(results.single().hasVisualOverflow, "the facts were not cut")
+    }
+
+    @Test
+    fun `a score is pure white over art and the text level on the page`() {
+        var onArt by mutableStateOf(true)
+        compose.setContent { MarqueeTheme(Form.Tv) { RatingsRow(listOf("IMDb 8.8"), onArt = onArt) } }
+        val number = {
+            compose
+                .onNodeWithText("IMDb 8.8", useUnmergedTree = true)
+                .fetchSemanticsNode()
+                .config[SemanticsProperties.Text]
+                .single()
+                .spanStyles
+                .last()
+                .item.color
+        }
+        assertEquals(Color.White, number())
+        onArt = false
+        compose.waitForIdle()
+        assertEquals(formPalette(Form.Tv).text, number())
     }
 
     @Test
