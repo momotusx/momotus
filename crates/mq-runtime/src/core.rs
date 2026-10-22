@@ -4,7 +4,9 @@ use mq_addons::{
     StoredResponse,
 };
 use mq_http::{ClientConfig, HttpClient};
-use mq_library::{AddonRow, Hlc, HlcClock, Library, OWNER, OWNER_NAME, Policy, Table};
+use mq_library::{
+    AddonRow, DEFAULTS_ERA, Hlc, HlcClock, Library, OWNER, OWNER_NAME, Policy, Table,
+};
 use mq_protocol::{Manifest, MetaItem, ResourcePath, ResourceResponse};
 use mq_server::StreamServer;
 use std::collections::HashMap;
@@ -1325,10 +1327,6 @@ impl Core {
 
 /// Device state key of the time installed manifests were last refreshed.
 const ADDONS_REFRESHED: &str = "addons_refreshed_ms";
-/// Device state key: "fresh" on a device first opened with default addons,
-/// "legacy" on one that existed before (its profiles never start at the
-/// defaults step; Home offers the new ones once).
-const DEFAULTS_ERA: &str = "addon_defaults";
 /// D13's removal, recorded before the leave and gone with the wipe (which
 /// empties `device_state`) or a join: `debrid` or `keep`.
 const REMOVAL: &str = "removal_pending";

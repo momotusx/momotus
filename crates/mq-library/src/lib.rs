@@ -22,7 +22,8 @@ pub use store::{
     LibraryItemRow, ProgressRow, RatingRow, Table, sweep_temporaries,
 };
 pub use sync::{
-    OWNER, OWNER_NAME, OutboxPage, SignedEntry, Stamp, SyncCursor, SyncRecord, coll, valid_avatar,
+    DEFAULTS_ERA, OWNER, OWNER_NAME, OutboxPage, SignedEntry, Stamp, SyncCursor, SyncRecord, coll,
+    valid_avatar,
 };
 pub use tracker::{
     ImportReport, ImportedPlay, ImportedResume, Intent, IntentOp, NewIntent, TrackerKey,

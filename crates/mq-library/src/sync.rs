@@ -602,19 +602,34 @@ impl Library {
         self.replace_roster(genesis, &[])
     }
 
-    /// Forgets everything sync knew (this device was dropped from the
-    /// account): queue, cursors and roster. The library itself stays, and
-    /// so do this device's id and the hosts relay ids were pinned to.
+    /// Forgets everything sync knew (this device signed out, left here,
+    /// deleted the account or was dropped from it): queue, cursors and
+    /// roster, and the defaults era that said the device joined or made an
+    /// account (`DEFAULTS_ERA`, now "legacy", as a reopen would read it).
+    /// The library itself stays, and so do this device's id and the hosts
+    /// relay ids were pinned to.
     pub fn forget_sync(&self) -> Result<(), LibraryError> {
         self.write(|c| {
             c.execute_batch(
                 "DELETE FROM sync_outbox;
                  DELETE FROM sync_state WHERE key != 'device_id' AND substr(key, 1, 6) != 'relay:';
                  DELETE FROM sync_roster;",
+            )?;
+            c.execute(
+                "UPDATE device_state SET value = 'legacy'
+                 WHERE key = ?1 AND value IN ('joined', 'created')",
+                params![DEFAULTS_ERA],
             )
+            .map(drop)
         })
     }
 }
+
+/// Device state key of the device's defaults era (mq-runtime): "fresh" on a
+/// device first opened with default addons, "legacy" on one from before,
+/// "joined" or "created" while it belongs to a sync account it joined or
+/// made.
+pub const DEFAULTS_ERA: &str = "addon_defaults";
 
 /// A roster entry as stored: body and signature.
 pub type SignedEntry = (Vec<u8>, Vec<u8>);

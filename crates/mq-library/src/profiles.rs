@@ -372,7 +372,6 @@ fn owner_has_pin(c: &rusqlite::Connection) -> rusqlite::Result<bool> {
     )
 }
 
-/// Writes a copy of the owner's addon list as `id`'s list.
 /// Settings keys under this prefix, one per default addon key, record the
 /// defaults a profile has had (mq-runtime's defaults rule). One register
 /// each, so two devices that recorded different ones keep both; they travel

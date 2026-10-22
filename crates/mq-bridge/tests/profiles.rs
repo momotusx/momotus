@@ -1038,3 +1038,61 @@ async fn in_a_sync_account_new_defaults_wait_for_the_runs_first_pull() {
     let _ = std::fs::remove_dir_all(&data);
     let _ = std::fs::remove_dir_all(&relay_dir);
 }
+
+/// A device that signed out of its account is no longer in one: the next
+/// start gives its profiles the defaults they never had, as on any device
+/// outside an account.
+#[tokio::test]
+async fn a_device_signed_out_of_its_account_gets_new_defaults_again() {
+    let relay_dir = temp_dir("signed-out-relay");
+    let app = mq_sync_server::router(&relay_dir.join("relay.sqlite"), Default::default()).unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+    let data = temp_dir("signed-out");
+    let open = || {
+        Core::open(CoreConfig {
+            data_dir: data.clone(),
+            profile_id: "default".into(),
+            device_id: 12,
+        })
+        .unwrap()
+    };
+    let core = open();
+    let mut c = Client::new(core.clone());
+    let record = c
+        .ok(json!({"op": "createSyncAccount", "server": server, "name": "TV"}))
+        .await;
+    let six = [
+        "cinemeta",
+        "kitsu",
+        "torrentio",
+        "turkcealtyazi",
+        "subsense",
+        "opensubtitles",
+    ];
+    let rows: Vec<mq_library::AddonRow> = mq_runtime::defaults::list()
+        .iter()
+        .filter(|d| six.contains(&d.key.as_str()))
+        .enumerate()
+        .map(|(position, d)| mq_library::AddonRow {
+            transport_url: d.url.clone(),
+            manifest_json: serde_json::to_string(&d.manifest).unwrap(),
+            position: position as i64,
+            enabled: true,
+            allow_private: false,
+        })
+        .collect();
+    core.library()
+        .set_addons("default", &rows, &core.hlc())
+        .unwrap();
+    c.ok(json!({"op": "signOut", "record": record})).await;
+    drop(c);
+    drop(core);
+
+    let core = open();
+    assert_eq!(core.library().addons("default").unwrap().len(), 9);
+    drop(core);
+    let _ = std::fs::remove_dir_all(&data);
+    let _ = std::fs::remove_dir_all(&relay_dir);
+}
