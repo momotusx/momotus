@@ -1,6 +1,7 @@
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { GOT } from "./core";
 import { BBB_ID } from "./source";
+import { type Layer, ramps } from "../src/components/ramps";
 
 /** The shared pieces of design v3 (plans/design-v3-rollout.md, 6; design/DECISION.md): buttons,
  * the backdrop ramps, the per-form page colors and navigation, rows, progress, the segmented
@@ -451,6 +452,40 @@ test("the hero's foot meets the page with no seam, on every form", async ({ brow
     }
     await context.close();
   }
+});
+
+test("TV: over white art, the genre line's spot reads as the legibility check computes it", async ({ browser }) => {
+  // The check (art.test.ts) composites the ramps by hand; here the browser paints them over a white backdrop
+  // and the pixel under the genre line's spot (TV_EDGE 0.4688, 0.4083) is read with the column's words hidden.
+  const { context, page } = await open(browser, "tv", "/");
+  await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+  await page.evaluate((white) => {
+    const img = document.querySelector<HTMLImageElement>(".hero-bd img");
+    if (img) img.src = white;
+    for (const el of document.querySelectorAll<HTMLElement>(".hero-body")) el.style.visibility = "hidden";
+  }, "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC");
+  await page.waitForTimeout(500);
+  const [x, y] = [Math.round(0.4688 * 1920), Math.round(0.4083 * 1080)];
+  const got = await pixel(page, x, y);
+  // The model: white art under the hero ramps in TV's page color, the bottom layer first.
+  const page_ = [28, 28, 30];
+  const alphaAt = ({ deg, stops }: Layer) => {
+    const r = (deg * Math.PI) / 180;
+    const len = Math.abs(1920 * Math.sin(r)) + Math.abs(1080 * Math.cos(r));
+    const t = 0.5 + ((x / 1920 - 0.5) * 1920 * Math.sin(r) - (y / 1080 - 0.5) * 1080 * Math.cos(r)) / len;
+    const i = stops.findIndex(([at]) => at >= t);
+    if (i === 0) return stops[0]![1];
+    if (i === -1) return stops[stops.length - 1]![1];
+    const [[p0, a0], [p1, a1]] = [stops[i - 1]!, stops[i]!];
+    return a0 + ((t - p0) / (p1 - p0)) * (a1 - a0);
+  };
+  const model = [...ramps.hero].reverse().reduce((c, l) => c.map((v, j) => page_[j]! * alphaAt(l) + v * (1 - alphaAt(l))), [255, 255, 255]);
+  // The vignette only darkens: the painted pixel is no lighter than the model, and not far darker.
+  for (let j = 0; j < 3; j++) {
+    expect(got[j]!, `${got} against the model ${model.map(Math.round)}`).toBeLessThanOrEqual(model[j]! + 3);
+    expect(got[j]!, `${got} against the model ${model.map(Math.round)}`).toBeGreaterThanOrEqual(model[j]! - 30);
+  }
+  await context.close();
 });
 
 test("phone: the iPhone's hero at every screen, the large title and the profile button over it", async ({ browser }) => {

@@ -130,8 +130,8 @@ test("phone: a fling down Home and back paints little", async ({ browser }) => {
   });
   report("phone-home-fling", { ...result, scrolled });
   expect(scrolled).toBeGreaterThan(400);
-  // Baseline 3 ms of paint and 1.8 to 1.9 passes (step 4).
-  expect(result.paintMs, JSON.stringify(result)).toBeLessThan(30);
+  // Baseline 3 to 3.5 ms of paint and 1.8 to 1.9 passes (phase 2 step 4).
+  expect(result.paintMs, JSON.stringify(result)).toBeLessThan(12);
   // The floating tab bar's glass is the one live blur, kept (cheap: 3 ms): 1.8 to 1.9 passes a frame.
   expect(result.passesPerFrame, JSON.stringify(result)).toBeLessThanOrEqual(2.5);
   await context.close();
