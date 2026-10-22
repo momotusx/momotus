@@ -579,6 +579,8 @@ private struct NavToolbar: ToolbarContent {
         HStack(spacing: 16) {
             Button { select(.search) } label: { Label("Search", glyph: "search") }
                 .buttonStyle(SearchFieldStyle(narrow: narrow))
+                // The glyph alone on a narrow window: the pointer still names it.
+                .help("Search")
                 .accessibilityAddTraits(selection == .search ? .isSelected : [])
             ProfileButton(size: 28, action: profiles)
         }
