@@ -84,6 +84,8 @@ const DEFAULTED = new Map([
   ["TitleDetails.ratings", "Ratings()"],
   // The subtitle picker (plans/player-polish.md 2): an older core names no language of its own and no fit.
   ["SubtitleTrack.nativeName", "\"\""],
+  // The device's language in the pickers: an older core marks none.
+  ["LanguageChoice.device", "false"],
   ["SubtitleTrack.fits", "false"],
   // The best-timed subtitle (plans/player-polish.md 2g): an older core marks no hash match.
   ["SubtitleTrack.hashMatch", "false"],

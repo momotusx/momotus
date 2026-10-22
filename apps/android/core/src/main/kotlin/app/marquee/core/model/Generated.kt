@@ -677,6 +677,8 @@ data class KindCount(
 data class LanguageChoice(
     val code: String,
     val name: String,
+    /** The language the device's own code reads as ("nb" is Norwegian, "no"): the one a picker offers and chooses as the device's. */
+    val device: Boolean = false,
 )
 
 /** The counters of one screen class, each in -5..5. A counter stamped with an older epoch than the profile's reads as zero. */

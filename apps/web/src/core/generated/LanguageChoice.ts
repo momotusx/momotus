@@ -5,4 +5,9 @@
  * P2-11, Android P2-4): `code` is the tag the core reads it by, `name`
  * its English name.
  */
-export type LanguageChoice = { code: string, name: string, };
+export type LanguageChoice = { code: string, name: string, 
+/**
+ * The language the device's own code reads as ("nb" is Norwegian,
+ * "no"): the one a picker offers and chooses as the device's.
+ */
+device: boolean, };

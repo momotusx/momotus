@@ -404,9 +404,12 @@ enum Request {
         item_id: String,
     },
     /// Every language the core knows, for the language pickers. Replies
-    /// `[{code, name}]`.
+    /// `[{code, name, device}]`, `device` on the one the device's code
+    /// (`device`, "nb") reads as.
     Languages {
         id: u64,
+        #[serde(default)]
+        device: Option<String>,
     },
     /// Every Home catalog in Home's order, hidden ones included, for the
     /// "Customize Home" screen.
@@ -1287,8 +1290,9 @@ impl Session {
                 let result = core.remove_from_continue(&item_id);
                 self.reply(json!(id), done(result));
             }
-            Request::Languages { id } => {
-                self.reply(json!(id), Ok(json!(mq_runtime::languages::all())));
+            Request::Languages { id, device } => {
+                let all = mq_runtime::languages::all(device.as_deref());
+                self.reply(json!(id), Ok(json!(all)));
             }
             Request::SetTrakt { id, record } => {
                 self.spawn_fenced(id, async move {

@@ -263,15 +263,21 @@ pub(crate) fn language(code: &str) -> Language {
 pub struct LanguageChoice {
     pub code: String,
     pub name: String,
+    /// The language the device's own code reads as ("nb" is Norwegian,
+    /// "no"): the one a picker offers and chooses as the device's.
+    pub device: bool,
 }
 
-/// Every language the core knows (OpenSubtitles' list), by English name.
-pub fn all() -> Vec<LanguageChoice> {
+/// Every language the core knows (OpenSubtitles' list), by English name;
+/// `device` marks the one the device's code reads as, if the list has it.
+pub fn all(device: Option<&str>) -> Vec<LanguageChoice> {
+    let mine = device.map(|code| language(code).tag);
     let mut all: Vec<LanguageChoice> = OPENSUBTITLES
         .iter()
         .map(|&(_, tag, name, _)| LanguageChoice {
             code: tag.to_owned(),
             name: name.to_owned(),
+            device: mine.as_deref() == Some(tag),
         })
         .collect();
     all.sort_by(|a, b| a.name.cmp(&b.name));
@@ -343,6 +349,21 @@ mod tests {
             assert_eq!(read(code), ("tl".into(), "Tagalog".into()), "{code}");
         }
         assert!(is_known("nb") && is_known("fil"));
+        // The pickers mark the listed language a device's code reads as.
+        let mine = |code: &str| {
+            let all = all(Some(code));
+            let marked: Vec<String> = all
+                .into_iter()
+                .filter(|l| l.device)
+                .map(|l| l.code)
+                .collect();
+            marked
+        };
+        assert_eq!(mine("nb"), ["no"]);
+        assert_eq!(mine("fil"), ["tl"]);
+        assert_eq!(mine("tr"), ["tr"]);
+        assert!(mine("xx").is_empty());
+        assert!(all(None).iter().all(|l| !l.device));
     }
 
     #[test]
@@ -356,7 +377,7 @@ mod tests {
     /// and each code reads back as itself.
     #[test]
     fn the_pickers_list_every_known_language() {
-        let all = all();
+        let all = all(None);
         assert_eq!(all.len(), OPENSUBTITLES.len());
         assert!(all.windows(2).all(|w| w[0].name < w[1].name));
         for choice in &all {

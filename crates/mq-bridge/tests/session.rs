@@ -75,6 +75,30 @@ async fn subscribe_command_unsubscribe_and_errors() {
     assert_eq!(next(&mut rx).await["error"], "unknown debrid service: nope");
 }
 
+/// The language list marks the one the device's code reads as, so a
+/// Norwegian device ("nb") gets Norwegian ("no") chosen.
+#[tokio::test]
+async fn languages_mark_the_devices_own() {
+    let core = Core::temporary("p").unwrap();
+    let (tx, mut rx) = Output::channel();
+    let mut session = Session::new(core, tx);
+    let marked = |reply: &Value| -> Vec<String> {
+        let all = reply["result"].as_array().unwrap();
+        all.iter()
+            .filter(|l| l["device"] == true)
+            .map(|l| l["code"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    session
+        .handle_text(&json!({"id": 1, "op": "languages", "device": "nb"}).to_string())
+        .await;
+    assert_eq!(marked(&reply_to(&mut rx, 1).await), ["no"]);
+    session
+        .handle_text(&json!({"id": 2, "op": "languages"}).to_string())
+        .await;
+    assert!(marked(&reply_to(&mut rx, 2).await).is_empty());
+}
+
 #[tokio::test]
 #[ignore = "network"]
 async fn live_home_and_title_over_the_protocol() {
