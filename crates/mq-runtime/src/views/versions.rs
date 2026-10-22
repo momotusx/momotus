@@ -398,7 +398,8 @@ fn unbeatable(k: &RankKey) -> bool {
 
 /// Two rows the ranking holds equal on everything but the resolution and
 /// what breaks ties under it: the same language, a real release, the
-/// year, keeping up, pace, how it plays, the size and the start tier.
+/// year, keeping up, pace and, past the speed, how far past it
+/// (`covered`), how it plays, the size and the start tier.
 fn same_footing(a: &RankKey, b: &RankKey) -> bool {
     let footing = |k: &RankKey| {
         (
@@ -407,6 +408,7 @@ fn same_footing(a: &RankKey, b: &RankKey) -> bool {
             k.year_ok,
             k.sustains,
             k.pace,
+            k.covered,
             k.playability,
             k.size_ok,
             k.tier,
@@ -2096,6 +2098,70 @@ mod tests {
         assert_eq!(said(false).as_deref(), Some("On this device"));
         assert_eq!(said(true), None, "a service may take it");
         assert_eq!(row_dto(row, Some("another"), false).on_device, None);
+    }
+
+    /// A preferred ready file at its best on every field before the start
+    /// tier.
+    fn best_ready() -> RankKey {
+        RankKey {
+            language: true,
+            legit: true,
+            viable: true,
+            year_ok: true,
+            sustains: true,
+            pace: 3,
+            covered: 0,
+            playability: Playability::Native,
+            size_ok: true,
+            tier: 3,
+            binge: false,
+            effective_height: 1080,
+            start: 4,
+            within: 500,
+        }
+    }
+
+    /// Only a ready file at its best on every field a swarm could pass it
+    /// through holds the lead against any live count.
+    #[test]
+    fn only_a_ready_file_at_its_best_is_unbeatable() {
+        assert!(unbeatable(&best_ready()));
+        let worse: [fn(&mut RankKey); 7] = [
+            |k| k.tier = 2,
+            |k| k.language = false,
+            |k| k.legit = false,
+            |k| k.year_ok = false,
+            |k| k.sustains = false,
+            |k| k.size_ok = false,
+            |k| k.playability = Playability::Unstated,
+        ];
+        for (i, worse) in worse.iter().enumerate() {
+            let mut k = best_ready();
+            worse(&mut k);
+            assert!(!unbeatable(&k), "field {i}");
+        }
+    }
+
+    /// Rows on the same footing differ only in the resolution and what
+    /// breaks ties under it; past the speed, how far past it counts too.
+    #[test]
+    fn the_same_footing_leaves_out_only_the_resolution_and_ties() {
+        let a = RankKey {
+            tier: 2,
+            pace: 0,
+            covered: 500,
+            ..best_ready()
+        };
+        let same = RankKey {
+            effective_height: 720,
+            start: 2,
+            within: 900,
+            binge: true,
+            ..a
+        };
+        assert!(same_footing(&a, &same));
+        assert!(!same_footing(&a, &RankKey { covered: 400, ..a }));
+        assert!(!same_footing(&a, &RankKey { tier: 1, ..a }));
     }
 
     /// How far a version is from one that did not play here: 2 a part

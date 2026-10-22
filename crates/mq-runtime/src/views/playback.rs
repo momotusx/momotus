@@ -536,9 +536,11 @@ struct State {
     runtime_s: Option<u32>,
     candidates: Vec<ParsedStream>,
     next: usize,
-    /// A source of the version failed for a reason of the version's own:
-    /// no picture here, a dead swarm, the wrong file.
-    version_failed: bool,
+    /// A source of the version failed for a reason of the version's own,
+    /// in the words of `moved`: `NOT_HERE` when it did not play here (its
+    /// decode or audio, no picture, a container never opened, the wrong
+    /// file), else `NOT_STARTED` (a swarm that did not start).
+    version_failed: Option<&'static str>,
     /// Every source key of every chain this view started (the pick's and
     /// each version it moved on to), and how many times it moved on by
     /// itself.
@@ -547,10 +549,6 @@ struct State {
     /// What the failing version did not play on here (a decode or an
     /// audio failure), which the next version should not share.
     failed_on: Option<FailedOn>,
-    /// The failing version did not play here (its decode or audio, no
-    /// picture, a container never opened, the wrong file), as against not
-    /// starting: the words of `moved` say which.
-    not_here: bool,
     /// Why the announced version was left, once the recommendation moved
     /// on: "did not start here", "did not play on this device".
     left_because: Option<&'static str>,
@@ -690,10 +688,9 @@ impl State {
             first: candidates.clone(),
             candidates,
             next: 0,
-            version_failed: false,
+            version_failed: None,
             hops: 0,
             failed_on: None,
-            not_here: false,
             left_because: None,
             progressed: false,
             reported_ms: None,
@@ -862,9 +859,8 @@ impl PlaybackView {
             s.retry_until = Some(tokio::time::Instant::now() + RETRY_BUDGET);
             s.hops = 0;
             s.next = 0;
-            s.version_failed = false;
+            s.version_failed = None;
             s.failed_on = None;
-            s.not_here = false;
             s.left_because = None;
             s.snapshot.moved = None;
             s.patient = true;
@@ -1021,9 +1017,9 @@ impl PlaybackView {
                     .any(|a| caps.passthrough.contains(a))
             });
             let audio = kind == Some("audio") && s.reported_ms.is_none() && passed;
+            let mut follows = false;
             if decode || audio {
-                s.version_failed = true;
-                s.not_here = true;
+                s.version_failed = Some(NOT_HERE);
                 s.failed_on = failed.as_ref().map(|st| {
                     let release = st.release.clone();
                     if decode {
@@ -1034,7 +1030,7 @@ impl PlaybackView {
                 });
                 // The version's other sources carry the same file, codecs
                 // and all: when another version follows, it starts at once.
-                let follows = s.pick.as_ref().is_some_and(|p| {
+                follows = s.pick.as_ref().is_some_and(|p| {
                     p.recommended()
                         && s.hops < HOPS
                         && p.next_version(&s.tried, s.failed_on.as_ref()).is_some()
@@ -1049,12 +1045,16 @@ impl PlaybackView {
             s.snapshot.subtitles_pending = false;
             clear_segments(&mut s);
             self.snapshot.set(s.snapshot.clone());
-            // A decode failure is kept against every source of the version:
-            // they carry the same file.
-            let kept: Vec<String> = if decode {
-                s.candidates.iter().map(|c| c.key.clone()).collect()
-            } else {
-                Vec::new()
+            // A decode failure is kept against the failed source, and against
+            // every source of the version when they are skipped for the next
+            // version (the same file). Another source that is tried and plays
+            // must not read as one that did not.
+            let kept: Vec<String> = match &failed {
+                Some(_) if decode && follows => {
+                    s.candidates.iter().map(|c| c.key.clone()).collect()
+                }
+                Some(stream) if decode => vec![stream.key.clone()],
+                _ => Vec::new(),
             };
             (failed, s.pick.clone(), kept)
         };
@@ -1390,9 +1390,14 @@ fn current(s: &State, run: u64) -> bool {
 
 /// The version did not play here, for a reason of its own.
 fn not_here(state: &Mutex<State>) {
-    let mut s = lock(state);
-    s.version_failed = true;
-    s.not_here = true;
+    lock(state).version_failed = Some(NOT_HERE);
+}
+
+/// The version did not start here (a swarm); a reason it did not play
+/// here, found first, stays.
+#[cfg(feature = "torrent")]
+fn failed_to_start(s: &mut State) {
+    s.version_failed.get_or_insert(NOT_STARTED);
 }
 
 /// Keeps `lease` as the playing source's, only while the view is open and
@@ -1408,7 +1413,7 @@ fn adopt(s: &mut State, run: u64, lease: Lease) -> bool {
     // A source plays: what failed before it says nothing about a later
     // failure, and the move on that led here is over (code review
     // 2026-10-20 P3: a later source failover is not a next version).
-    s.version_failed = false;
+    s.version_failed = None;
     s.progressed = false;
     s.reported_ms = None;
     s.played_ms = 0;
@@ -1418,7 +1423,6 @@ fn adopt(s: &mut State, run: u64, lease: Lease) -> bool {
     s.patient = false;
     s.snapshot.trying = None;
     s.failed_on = None;
-    s.not_here = false;
     s.snapshot.moved = s.left_because.and_then(|why| {
         let playing = s.candidates.get(s.next.checked_sub(1)?)?;
         let announced = s.first.first()?;
@@ -1849,6 +1853,10 @@ fn within_budget(state: &Mutex<State>, wait: Duration) -> Duration {
 
 /// The recommendation moves on by itself at most this many times.
 const HOPS: u8 = 2;
+/// Why a version was left, in the words of `moved`.
+const NOT_HERE: &str = "did not play on this device";
+#[cfg(feature = "torrent")]
+const NOT_STARTED: &str = "did not start here";
 
 /// How a torrent's start is judged: whether a swarm that falls short may be
 /// cut at its first window, the deadline, and how long a swarm where no
@@ -1914,9 +1922,9 @@ fn may_cut_early(s: &State) -> bool {
 /// failure card's offer when the user picked the version by hand. Whether
 /// a version is next comes from the Versions view, read now.
 fn move_on(s: &mut State) -> bool {
-    if !std::mem::take(&mut s.version_failed) {
+    let Some(why) = s.version_failed.take() else {
         return false;
-    }
+    };
     let Some(pick) = &s.pick else {
         return false;
     };
@@ -1935,11 +1943,7 @@ fn move_on(s: &mut State) -> bool {
         return false;
     }
     if s.hops == 0 {
-        s.left_because = Some(if s.not_here {
-            "did not play on this device"
-        } else {
-            "did not start here"
-        });
+        s.left_because = Some(why);
     }
     s.hops += 1;
     s.tried
@@ -2066,7 +2070,7 @@ async fn open_torrent(
     {
         let mut s = lock(state);
         if s.failed_hashes.contains(&hash) {
-            s.version_failed = true;
+            failed_to_start(&mut s);
             return Err(SAME_TORRENT.into());
         }
     }
@@ -2136,7 +2140,7 @@ async fn open_torrent(
             // P3-1).
             let now = {
                 let mut s = lock(state);
-                s.version_failed = true;
+                failed_to_start(&mut s);
                 s.failed_hashes.push(hash.clone());
                 if wait == METADATA_TIMEOUT {
                     s.dead.failed(info_hash, false)
@@ -2303,7 +2307,7 @@ async fn open_torrent(
         Err(mq_engine::EngineError::Held) => return Err("This title is not on the list".into()),
         Ok((_, _, Started::Late { unchoked })) => {
             did_not_start();
-            lock(state).version_failed = true;
+            failed_to_start(&mut lock(state));
             if unchoked {
                 let now = lock(state).dead.reached();
                 remember_dead(core, now);
@@ -2317,7 +2321,7 @@ async fn open_torrent(
             // its unchoke proves the connection either way.
             let now = {
                 let mut s = lock(state);
-                s.version_failed = true;
+                failed_to_start(&mut s);
                 if nothing {
                     s.dead.failed(info_hash, true)
                 } else {
@@ -4300,15 +4304,31 @@ mod tests {
         view.retry();
         {
             // As when the hand pick's source failed for a reason of its own
-            // (a stall) just as the 3 minutes ran out.
+            // (no picture) just as the 3 minutes ran out.
             let mut s = lock(&view.state);
-            s.version_failed = true;
+            s.version_failed = Some(NOT_HERE);
             s.retry_until = Some(tokio::time::Instant::now());
         }
         failed().await;
         let s = view.snapshot();
         assert_eq!(s.attempts.last().unwrap().error, RETRY_GAVE_UP);
         assert_eq!(s.offer.map(|o| o.key), Some(next));
+    }
+
+    /// A run that ended on the budget never reached `move_on`, so the
+    /// version's failure and its words are still held: Try again drops them
+    /// with the rest, so a later failure that is not the version's never
+    /// moves on in their name.
+    #[tokio::test]
+    async fn try_again_drops_a_version_failure_left_held() {
+        let core = Core::temporary("default").unwrap();
+        let view = PlaybackView::open(&core, Vec::new(), PlayTarget::default());
+        while view.snapshot().phase != PlaybackPhase::Failed {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        lock(&view.state).version_failed = Some(NOT_HERE);
+        view.retry();
+        assert_eq!(lock(&view.state).version_failed, None);
     }
 
     /// Code review 2026-10-20 r4 P3-8: in a "Try again" run with 20 s left,

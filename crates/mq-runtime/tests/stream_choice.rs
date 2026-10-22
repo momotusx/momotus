@@ -1034,7 +1034,9 @@ async fn the_next_version_differs_in_what_did_not_play() {
 }
 
 /// With no other version to move to, a version that did not play here
-/// still tries its other sources.
+/// still tries its other sources, and the decode failure is kept against
+/// the failed one only: the other source played (the chain is one release
+/// name, not one set of codecs).
 #[tokio::test]
 async fn with_no_other_version_the_other_sources_are_tried() {
     let row = || {
@@ -1050,6 +1052,62 @@ async fn with_no_other_version_the_other_sources_are_tried() {
     playback.fail_over(None, Some("decode"), None, "no frame");
     let other = || playback.snapshot().key.as_ref() == Some(&keys[1]);
     until("the version's other source", other).await;
+    let next = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    assert_ne!(
+        line_of(&next, &keys[1]),
+        mq_streams::ReasonLine::DidNotPlay,
+        "the source that played"
+    );
+}
+
+/// A move has settled: the playback plays a source or has failed.
+fn settled(playback: &mq_runtime::PlaybackView) -> bool {
+    let s = playback.snapshot();
+    s.key.is_some() || s.phase == mq_runtime::PlaybackPhase::Failed
+}
+
+/// After the second move no other version follows, so a version that did
+/// not play here still tries its other sources.
+#[tokio::test]
+async fn after_the_last_move_the_other_sources_are_tried() {
+    let row = |name| (name, media_fixture("h264.mp4"));
+    let (core, _server, keys) = direct_rows(vec![
+        row("Show.S01E01.1080p.WEB-DL.AAC.x264-A"),
+        row("Show.S01E01.720p.WEB-DL.AAC.x264-B"),
+        row("Show.S01E01.480p.WEB-DL.AAC.x264-C"),
+        row("Show.S01E01.480p.WEB-DL.AAC.x264-C"),
+        row("Show.S01E01.360p.WEB-DL.AAC.x264-D"),
+    ])
+    .await;
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    let playback = play(&core, &view, &keys[0]);
+    for key in [&keys[0], &keys[1], &keys[2]] {
+        let on = || playback.snapshot().key.as_ref() == Some(key);
+        until("the next version", on).await;
+        playback.fail_over(None, Some("decode"), None, "no frame");
+    }
+    until("a source or the failure", || settled(&playback)).await;
+    assert_eq!(playback.snapshot().key.as_ref(), Some(&keys[3]));
+}
+
+/// A version picked by hand that did not play here tries its other
+/// sources: it never moves on by itself, so nothing follows them.
+#[tokio::test]
+async fn a_hand_pick_that_did_not_play_tries_its_other_sources() {
+    let row = |name| (name, media_fixture("h264.mp4"));
+    let (core, _server, keys) = direct_rows(vec![
+        row("Show.S01E01.1080p.WEB-DL.AAC.x264-A"),
+        row("Show.S01E01.720p.WEB-DL.DDP5.1.HEVC.10bit-B"),
+        row("Show.S01E01.720p.WEB-DL.DDP5.1.HEVC.10bit-B"),
+    ])
+    .await;
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    assert_eq!(view.snapshot().recommended.unwrap().key, keys[0]);
+    let playback = play(&core, &view, &keys[1]);
+    until("ready", || playback.snapshot().url.is_some()).await;
+    playback.fail_over(None, Some("decode"), None, "no frame");
+    until("a source or the failure", || settled(&playback)).await;
+    assert_eq!(playback.snapshot().key.as_ref(), Some(&keys[2]));
 }
 
 /// An audio output that fails on decoded audio is the moment's (another
