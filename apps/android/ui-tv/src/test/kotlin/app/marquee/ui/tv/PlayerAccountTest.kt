@@ -59,7 +59,10 @@ class PlayerAccountTest {
 
     private fun failed(blocked: BlockedReason?): MutableList<String> {
         val events = mutableListOf<String>()
-        controller.cannotPlay(PlayPick.None("Marquee found 3 versions.", blocked))
+        assertEquals(
+            blocked == BlockedReason.NeedsAccount,
+            controller.cannotPlay(PlayPick.None("Marquee found 3 versions.", blocked)),
+        )
         compose.setContent {
             MarqueeTheme(Form.Tv) {
                 TvPlayer(
@@ -82,6 +85,16 @@ class PlayerAccountTest {
         compose.onNodeWithText("Add an account").performClick()
         compose.onNodeWithText("Choose a version").performClick()
         assertEquals(listOf("account", "versions"), events)
+    }
+
+    @Test
+    fun `once an account makes a version playable, the card goes and the loading screen comes back`() {
+        failed(BlockedReason.NeedsAccount)
+        compose.onNodeWithText("Add an account").assertExists()
+        compose.runOnIdle { controller.picked() }
+        compose.onAllNodesWithText("Add an account").assertCountEquals(0)
+        assertEquals(PlaybackController.Stage.Opening, controller.stage)
+        assertEquals(false, controller.waitsForAccount)
     }
 
     @Test

@@ -399,10 +399,29 @@ class PlaybackController(
         status = null
     }
 
-    /** The versions gave nothing to play: why, and when versions were found that none plays here, the reason's way on. */
-    fun cannotPlay(pick: PlayPick.None) {
+    /**
+     * The versions gave nothing to play: why, and when versions were found that none plays here, the reason's way on.
+     * True when the player should keep following the versions ([waitsForAccount]).
+     */
+    fun cannotPlay(pick: PlayPick.None): Boolean {
         fail(pick.reason)
         blocked = pick.blocked
+        return waitsForAccount
+    }
+
+    /**
+     * Every version found needs an account: the versions stay asked, as the core ranks them again once one is
+     * added (Add an account, then Back), and [picked] starts the play then.
+     */
+    val waitsForAccount: Boolean get() = blocked == BlockedReason.NeedsAccount
+
+    /** The versions gave one to play: a card that waited for an account goes, and the loading screen comes back. */
+    fun picked() {
+        if (blocked == null) return
+        blocked = null
+        problem = null
+        stage = Stage.Opening
+        status = null
     }
 
     fun mark(name: String) {

@@ -188,18 +188,20 @@ class PlayerHolder(
                     while (true) {
                         when (val pick = pickVersion(snapshot, route.key, settled)) {
                             is PlayPick.Use -> {
+                                controller.picked()
                                 chosen.complete(Choice(pick.row.key, pick.row))
                                 return@collectLatest
                             }
 
                             is PlayPick.Open -> {
+                                controller.picked()
                                 chosen.complete(Choice(pick.key, null))
                                 return@collectLatest
                             }
 
                             is PlayPick.None -> {
-                                controller.cannotPlay(pick)
-                                chosen.complete(null)
+                                // Waiting for an account, the list stays followed: one added makes it playable.
+                                if (!controller.cannotPlay(pick)) chosen.complete(null)
                                 return@collectLatest
                             }
 
