@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
@@ -84,6 +86,11 @@ class SubtitleStepScreenTest {
 
     @Volatile private var holdSaves = false
 
+    /** Holds the language list until it is released (a slow core). */
+    @Volatile private var heldList: (() -> Unit)? = null
+
+    @Volatile private var holdList = false
+
     /** A step over a core that knows [languages] and takes every write. */
     private fun step(device: String): SubtitleStep {
         // As the core answers: the device's language marked.
@@ -99,7 +106,11 @@ class SubtitleStepScreenTest {
                 val op = request.getValue("op").jsonPrimitive.content
                 val result = if (op == "languages") list else PREFS
                 val answer = { client.onMessage("""{"id":$id,"ok":true,"result":$result}""") }
-                if (holdSaves && op == "setPrefs") held = answer else answer()
+                when {
+                    holdSaves && op == "setPrefs" -> held = answer
+                    holdList && op == "languages" -> heldList = answer
+                    else -> answer()
+                }
             },
         )
         return SubtitleStep(CoreOps(client), scope, device).also { it.load() }
@@ -126,8 +137,8 @@ class SubtitleStepScreenTest {
     fun `phone, the device's language leads and is chosen, and No subtitles writes none`() {
         val step = step("tr")
         var done = 0
-        page(Form.Phone) { SubtitleStepPage(step, "tr") { done++ } }
-        compose.waitUntil(5_000) { step.all.isNotEmpty() }
+        page(Form.Phone) { SubtitleStepPage(step) { done++ } }
+        compose.waitUntil(5_000) { step.loaded }
         compose.onNodeWithText("This device's language").assertExists()
         compose.onNodeWithText("Turkish").assertExists()
         shot("subtitle-step-phone")
@@ -142,8 +153,8 @@ class SubtitleStepScreenTest {
     fun `TV, Continue has the focus, so one press keeps the device's language`() {
         val step = step("tr")
         var done = 0
-        page(Form.Tv) { SubtitleStepPage(step, "tr") { done++ } }
-        compose.waitUntil(5_000) { step.all.isNotEmpty() }
+        page(Form.Tv) { SubtitleStepPage(step) { done++ } }
+        compose.waitUntil(5_000) { step.loaded }
         compose.waitUntil(5_000) { runCatching { compose.onNode(isFocused()).assert(hasText("Continue")) }.isSuccess }
         compose.onNode(isFocused()).performClick()
         compose.waitUntil(5_000) { done == 1 }
@@ -155,7 +166,7 @@ class SubtitleStepScreenTest {
     fun `a profile with languages passes by, once, and shows nothing`() {
         val step = step("tr")
         var done = 0
-        page(Form.Phone) { SubtitleStepGate({ false }, step, "tr") { done++ } }
+        page(Form.Phone) { SubtitleStepGate({ false }, step) { done++ } }
         compose.waitUntil(5_000) { done == 1 }
         // A second leave would arrive at Home twice.
         compose.mainClock.advanceTimeBy(1_000)
@@ -168,7 +179,7 @@ class SubtitleStepScreenTest {
     fun `Skip leaves at once and writes nothing`() {
         val step = step("tr")
         var done = 0
-        page(Form.Phone) { SubtitleStepGate({ true }, step, "tr") { done++ } }
+        page(Form.Phone) { SubtitleStepGate({ true }, step) { done++ } }
         compose.waitUntil(5_000) { runCatching { compose.onNodeWithText(SubtitleStep.TITLE).assertExists() }.isSuccess }
         compose.onNodeWithText(SubtitleStep.SKIP).performClick()
         compose.waitUntil(5_000) { done == 1 }
@@ -177,12 +188,25 @@ class SubtitleStepScreenTest {
 
     @Test
     @Config(qualifiers = "w412dp-h915dp-xxhdpi")
+    fun `Continue waits for the language list`() {
+        holdList = true
+        val step = step("tr")
+        page(Form.Phone) { SubtitleStepPage(step) {} }
+        compose.waitUntil(5_000) { heldList != null }
+        compose.onNodeWithText("Continue").assertIsNotEnabled()
+        heldList?.invoke()
+        compose.waitUntil(5_000) { step.loaded }
+        compose.onNodeWithText("Continue").assertIsEnabled()
+    }
+
+    @Test
+    @Config(qualifiers = "w412dp-h915dp-xxhdpi")
     fun `Skip waits while Continue saves, so the step leaves once`() {
         holdSaves = true
         val step = step("tr")
         var done = 0
-        page(Form.Phone) { SubtitleStepPage(step, "tr") { done++ } }
-        compose.waitUntil(5_000) { step.all.isNotEmpty() }
+        page(Form.Phone) { SubtitleStepPage(step) { done++ } }
+        compose.waitUntil(5_000) { step.loaded }
         compose.onNodeWithText("Continue").performClick()
         compose.waitUntil(5_000) { held != null }
         compose.onNodeWithText(SubtitleStep.SKIP).performClick()
@@ -199,8 +223,8 @@ class SubtitleStepScreenTest {
     @Config(qualifiers = "w960dp-h540dp-xhdpi")
     fun `TV render of the step`() {
         val step = step("tr")
-        page(Form.Tv) { SubtitleStepPage(step, "tr") {} }
-        compose.waitUntil(5_000) { step.all.isNotEmpty() }
+        page(Form.Tv) { SubtitleStepPage(step) {} }
+        compose.waitUntil(5_000) { step.loaded }
         compose.onNodeWithText("This device's language").assertExists()
         shot("subtitle-step-tv")
     }

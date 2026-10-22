@@ -47,8 +47,13 @@ test.afterEach(async () => {
 });
 
 /** A page whose socket reaches this walk's core. With `importDone` the import
- * view answers as a finished import. */
-async function device(browser: Browser, form: Form, opts: { importDone?: boolean; locale?: string; slowSubtitles?: number } = {}): Promise<Page> {
+ * view answers as a finished import; `languages` holds the language list
+ * back that long, or answers it with an error ("fail"). */
+async function device(
+  browser: Browser,
+  form: Form,
+  opts: { importDone?: boolean; locale?: string; slowSubtitles?: number; languages?: number | "fail" } = {},
+): Promise<Page> {
   const context = await browser.newContext({ ...FORMS[form], locale: opts.locale, colorScheme: "dark", baseURL: `http://127.0.0.1:${PORTS.vite}` });
   await context.routeWebSocket(/\/ws$/, (ws) => {
     const upstream = new WebSocket(`ws://127.0.0.1:${DEFAULTS_PORT}/ws`);
@@ -68,6 +73,14 @@ async function device(browser: Browser, form: Form, opts: { importDone?: boolean
       }
       if (msg.op === "unsubscribe" && msg.sub === IMPORT_SUB) {
         ws.send(JSON.stringify({ id: msg.id, ok: true, result: {} }));
+        return;
+      }
+      if (opts.languages === "fail" && msg.op === "languages") {
+        ws.send(JSON.stringify({ id: msg.id, ok: false, error: "the core is busy" }));
+        return;
+      }
+      if (typeof opts.languages === "number" && msg.op === "languages") {
+        setTimeout(() => upstream.send(String(m)), opts.languages);
         return;
       }
       // A slow save of the subtitle language, for Skip while it runs.
@@ -432,6 +445,33 @@ test("Subtitles: a device language reads as the one the core lists", async ({ br
   await page.locator('[data-f="welcome:next"]').click();
   await expect(page).toHaveURL(/step=3/);
   expect((await client.req<Prefs>("setPrefs", { patch: {} })).subtitleLanguages).toEqual(["no"]);
+});
+
+test("Subtitles: Continue waits for the language list, and a choice made before it stays", async ({ browser }) => {
+  const page = await device(browser, "desktop", { locale: "de-DE", languages: 2000 });
+  await page.goto("/welcome?step=subs&form=desktop");
+  const next = page.locator('[data-f="welcome:next"]');
+  await expect(next).toHaveAttribute("aria-disabled", "true");
+  // A press before the list goes nowhere; No subtitles, chosen now, stays.
+  await next.dispatchEvent("click");
+  await page.locator('[data-f="welcome:sub:none"]').click();
+  await expect(page).toHaveURL(/step=subs/);
+  await expect(next).toHaveAttribute("aria-disabled", "false", { timeout: 10_000 });
+  await expect(page.locator('[data-f="welcome:sub:de"]')).toHaveAttribute("aria-checked", "false");
+  await expect(page.locator('[data-f="welcome:sub:none"]')).toHaveAttribute("aria-checked", "true");
+  await next.click();
+  await expect(page).toHaveURL(/step=3/);
+  expect((await client.req<Prefs>("setPrefs", { patch: {} })).subtitleLanguages).toEqual([]);
+});
+
+test("Subtitles: a language list that fails says so, and Continue still goes on", async ({ browser }) => {
+  const page = await device(browser, "desktop", { locale: "de-DE", languages: "fail" });
+  await page.goto("/welcome?step=subs&form=desktop");
+  await expect(page.locator('section[aria-label="Subtitles"] .st.bad')).toContainText("Could not load the languages: the core is busy");
+  await expect(page.locator('[data-f="welcome:sub:none"]')).toHaveAttribute("aria-checked", "true");
+  await page.locator('[data-f="welcome:next"]').click();
+  await expect(page).toHaveURL(/step=3/);
+  expect((await client.req<Prefs>("setPrefs", { patch: {} })).subtitleLanguages).toEqual([]);
 });
 
 test("Subtitles: Skip waits while Continue saves, so the step leaves once", async ({ browser }) => {

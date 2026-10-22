@@ -464,21 +464,30 @@ function Subtitles(props: { then?: string }) {
     touched = true;
     setChosen(code);
   };
+  // Continue waits for the list: before it, the device's language is unknown.
+  const [loaded, setLoaded] = createSignal(false);
+  const [more, setMore] = createSignal(false);
+  const [busy, setBusy] = createSignal(false);
+  const [problem, setProblem] = createSignal<string | null>(null);
   const load = (list: LanguageChoice[]) => {
     setAll(list);
     const mine = device();
     if (!touched && mine !== "en") setChosen(mine);
+    setLoaded(true);
   };
-  onMount(() => void allLanguages().then(load, () => load([])));
-  const [more, setMore] = createSignal(false);
-  const [busy, setBusy] = createSignal(false);
-  const [problem, setProblem] = createSignal<string | null>(null);
+  onMount(
+    () =>
+      void allLanguages().then(load, (e: unknown) => {
+        setProblem(`Could not load the languages: ${reasonOf(e)}`);
+        load([]);
+      }),
+  );
   const nameOf = (code: string) => all().find((l) => l.code === code)?.name ?? languageName(code);
   const common = () => [...new Set([device(), ...QUICK].filter((c): c is string => c !== null))];
   // The core's list comes sorted by name.
   const rest = () => all().filter((l) => !common().includes(l.code));
   const go = async () => {
-    if (busy()) return;
+    if (busy() || !loaded()) return;
     setBusy(true);
     setSubsSaving(true);
     setProblem(null);
@@ -522,7 +531,7 @@ function Subtitles(props: { then?: string }) {
         )}
       </Show>
       <div class="acts">
-        <button class="btn primary" data-f="welcome:next" data-autofocus aria-disabled={busy()} onClick={() => void go()}>
+        <button class="btn primary" data-f="welcome:next" data-autofocus aria-disabled={busy() || !loaded()} onClick={() => void go()}>
           Continue
           <ChevronRight aria-hidden />
         </button>

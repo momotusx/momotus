@@ -2,12 +2,14 @@ package app.marquee.core
 
 import app.marquee.core.ScriptedCore.Companion.fail
 import app.marquee.core.ScriptedCore.Companion.ok
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** The first run's subtitles step: the order it lists, the device's language chosen, and what Continue writes. */
 class SubtitleStepTest {
@@ -42,7 +44,7 @@ class SubtitleStepTest {
         core.answers["languages"] = { request -> ok(answer(request["device"]?.jsonPrimitive?.content)) }
         return SubtitleStep(core.ops, core.scope, device).also {
             it.load()
-            core.waitFor("the languages") { it.all.isNotEmpty() }
+            core.waitFor("the languages") { it.loaded }
         }
     }
 
@@ -101,9 +103,48 @@ class SubtitleStepTest {
         step.save { done++ }
         core.waitFor("the write") { done == 1 }
         assertEquals("""["de"]""", written())
-        step.chosen = null
+        step.choose(null)
         step.save { done++ }
         core.waitFor("the second write") { done == 2 }
+        assertEquals("[]", written())
+    }
+
+    @Test
+    fun continue_waits_for_the_list_and_a_choice_made_before_it_stays() {
+        core.answers["setPrefs"] = { ok(prefs) }
+        val list = CompletableDeferred<Unit>()
+        core.answers["languages"] = { request ->
+            list.await()
+            ok(answer(request["device"]?.jsonPrimitive?.content))
+        }
+        val step = SubtitleStep(core.ops, core.scope, "tr").also { it.load() }
+        // No subtitles, chosen before the list: Continue does nothing yet.
+        step.choose(null)
+        var done = false
+        step.save { done = true }
+        assertEquals(false, step.loaded)
+        list.complete(Unit)
+        core.waitFor("the languages") { step.loaded }
+        // The choice stays over the device's Turkish, and nothing was written before.
+        assertNull(step.chosen)
+        assertEquals(false, done)
+        assertTrue(core.asked.none { it.getValue("op").jsonPrimitive.content == "setPrefs" })
+        step.save { done = true }
+        core.waitFor("the write") { done }
+        assertEquals("[]", written())
+    }
+
+    @Test
+    fun a_list_that_fails_says_why_and_continue_still_goes_on() {
+        core.answers["setPrefs"] = { ok(prefs) }
+        core.answers["languages"] = { fail(null, "the core is busy") }
+        val step = SubtitleStep(core.ops, core.scope, "tr").also { it.load() }
+        core.waitFor("the failure") { step.loaded }
+        assertEquals("the core is busy", step.listProblem)
+        assertNull(step.chosen)
+        var done = false
+        step.save { done = true }
+        core.waitFor("the write") { done }
         assertEquals("[]", written())
     }
 

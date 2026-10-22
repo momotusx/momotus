@@ -281,7 +281,7 @@ fun SubtitleStepScreen(
             key = "subtitle-step",
             factory = viewModelFactory { initializer { SubtitleStepHolder(session, device) } },
         )
-    SubtitleStepGate({ prefsNow(session)?.subtitleLanguages.isNullOrEmpty() }, holder.step, device, onDone)
+    SubtitleStepGate({ prefsNow(session)?.subtitleLanguages.isNullOrEmpty() }, holder.step, onDone)
 }
 
 /** Asks [asks] once, before anything shows: the page when it says yes, else [onDone] at once. */
@@ -289,20 +289,18 @@ fun SubtitleStepScreen(
 internal fun SubtitleStepGate(
     asks: suspend () -> Boolean,
     step: SubtitleStep,
-    device: String?,
     onDone: () -> Unit,
 ) {
     val leave by rememberUpdatedState(onDone)
     // Answered once: a step that passes by leaves once.
     val shows by produceState<Boolean?>(null) { value = asks().also { if (!it) leave() } }
-    if (shows == true) SubtitleStepPage(step, device, onDone)
+    if (shows == true) SubtitleStepPage(step, onDone)
 }
 
 /** The subtitles step's page over [step]: the rows, Continue and More languages. */
 @Composable
 internal fun SubtitleStepPage(
     step: SubtitleStep,
-    device: String?,
     onDone: () -> Unit,
 ) {
     val tv = Marquee.form == Form.Tv
@@ -332,19 +330,20 @@ internal fun SubtitleStepPage(
             for (language in step.common) {
                 LanguageRow(
                     language.name,
-                    SubtitleStep.DEVICE.takeIf { language.code == device },
+                    SubtitleStep.DEVICE.takeIf { language.code == step.mine },
                     step.chosen == language.code,
                 ) {
-                    step.chosen = language.code
+                    step.choose(language.code)
                 }
             }
-            LanguageRow(SubtitleStep.NONE, SubtitleStep.NONE_LINE, step.chosen == null) { step.chosen = null }
+            LanguageRow(SubtitleStep.NONE, SubtitleStep.NONE_LINE, step.chosen == null) { step.choose(null) }
             if (more) {
                 Kicker(SubtitleStep.MORE, side = 0.dp)
                 for (language in step.rest) {
-                    LanguageRow(language.name, null, step.chosen == language.code) { step.chosen = language.code }
+                    LanguageRow(language.name, null, step.chosen == language.code) { step.choose(language.code) }
                 }
             }
+            step.listProblem?.let { StatusWord("${SubtitleStep.LIST_FAILED}: $it", Status.Bad) }
             step.problem?.let { StatusWord("${SubtitleStep.FAILED}: $it", Status.Bad) }
         }
         Row(width, horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
@@ -352,7 +351,8 @@ internal fun SubtitleStepPage(
                 DefaultsCopy.CONTINUE,
                 { step.save(onDone) },
                 icon = Icons.Check,
-                enabled = !step.busy,
+                // Not before the language list: the device's language is unknown until then.
+                enabled = !step.busy && step.loaded,
                 focusRequester = go,
             )
             SecondaryButton(if (more) SubtitleStep.FEWER else SubtitleStep.MORE, { more = !more })

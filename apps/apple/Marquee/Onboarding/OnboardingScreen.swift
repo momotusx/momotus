@@ -26,6 +26,10 @@ struct OnboardingScreen: View {
     @State private var languages: [LanguageChoice] = []
     @State private var subtitle: String? = nil
     @State private var moreLanguages = false
+    /// The core's list is in (or failed): Continue waits for it, since the
+    /// device's language is unknown before; a choice made before it stays.
+    @State private var languagesLoaded = false
+    @State private var subtitleTouched = false
     /// The recommended addons step's switches.
     @State private var defaults: DefaultsStep
     /// The defaults the check's fixes read, again whenever the list changes.
@@ -150,8 +154,13 @@ struct OnboardingScreen: View {
             if step == .defaults, defaults.list == nil { await defaults.load() }
             if step == .subtitles, languages.isEmpty {
                 let device: [String: any Sendable] = Self.device.map { ["device": $0] } ?? [:]
-                languages = (try? await core.call("languages", device, as: [LanguageChoice].self)) ?? []
-                subtitle = SubtitleStepRules.loaded(subtitle, all: languages)
+                do {
+                    languages = try await core.call("languages", device, as: [LanguageChoice].self)
+                } catch {
+                    note = (false, "\(SubtitleStepRules.listFailed): \(error.localizedDescription)")
+                }
+                subtitle = SubtitleStepRules.loaded(subtitle, touched: subtitleTouched, all: languages)
+                languagesLoaded = true
             }
         }
         .task { await pingLoop() }
@@ -262,7 +271,7 @@ struct OnboardingScreen: View {
                 Spacer()
                 Button(busy == "subtitles" ? "Saving" : "Continue") { Task { await saveSubtitle() } }
                     .buttonStyle(PillButtonStyle(prominent: true))
-                    .disabled(busy != nil)
+                    .disabled(busy != nil || !languagesLoaded)
                     .focused($onSubtitles)
             }
             .padding(.top, Theme.Space.s)
@@ -281,7 +290,10 @@ struct OnboardingScreen: View {
     private func languageRow(_ code: String?, _ name: String, line: String?) -> some View {
         let on = subtitle == code
         let shape = RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
-        return Button { subtitle = code } label: {
+        return Button {
+            subtitleTouched = true
+            subtitle = code
+        } label: {
             HStack(spacing: Theme.Space.s) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(name).textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
@@ -308,7 +320,7 @@ struct OnboardingScreen: View {
     }
 
     private func saveSubtitle() async {
-        guard busy == nil else { return }
+        guard busy == nil, languagesLoaded else { return }
         busy = "subtitles"
         note = nil
         defer { busy = nil }

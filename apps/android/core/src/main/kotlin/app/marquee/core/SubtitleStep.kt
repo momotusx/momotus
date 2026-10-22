@@ -31,8 +31,20 @@ class SubtitleStep(
     var all by mutableStateOf(emptyList<LanguageChoice>())
         private set
 
-    /** The chosen language's code; null for No subtitles. The device's, once the core's list is in. */
+    /** The chosen language's code; null for No subtitles. The device's, once the core's list is in ([choose]). */
     var chosen by mutableStateOf<String?>(null)
+        private set
+
+    /** The viewer chose: kept over the device's language when the list comes later. */
+    private var touched = false
+
+    /** The core's list is in, or failed: Continue waits for it, since the device's language is unknown before. */
+    var loaded by mutableStateOf(false)
+        private set
+
+    /** Why the list did not come, in the core's words: the step still goes on with the common languages. */
+    var listProblem by mutableStateOf<String?>(null)
+        private set
 
     /** The choice is being written: a second press sends nothing. */
     var busy by mutableStateOf(false)
@@ -44,12 +56,31 @@ class SubtitleStep(
 
     fun load() {
         scope.launch {
-            val list = runCatching { ops.languages(device) }.getOrDefault(emptyList())
+            val list =
+                try {
+                    ops.languages(device)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    listProblem = (e as? CoreError)?.message ?: CoreLog.describe(e)
+                    emptyList()
+                }
             // The device's language as the core lists it; English stays on No subtitles.
-            if (chosen == null) chosen = list.firstOrNull { it.device }?.code?.takeIf { it != "en" }
+            if (!touched) chosen = list.firstOrNull { it.device }?.code?.takeIf { it != "en" }
             all = list
+            loaded = true
         }
     }
+
+    /** The viewer picks [code] (null for No subtitles). */
+    fun choose(code: String?) {
+        touched = true
+        chosen = code
+    }
+
+    /** The device's language as the core lists it ("no" for a Norwegian "nb"), for its row's line. */
+    val mine: String?
+        get() = all.firstOrNull { it.device }?.code
 
     /** The device's language as the core lists it, then the common ones ([LanguagePicks.COMMON]). */
     val common: List<LanguageChoice>
@@ -61,7 +92,7 @@ class SubtitleStep(
 
     /** Writes the choice, then [then]. */
     fun save(then: () -> Unit) {
-        if (busy) return
+        if (busy || !loaded) return
         busy = true
         problem = null
         scope.launch {
@@ -91,5 +122,6 @@ class SubtitleStep(
         const val FEWER = "Fewer languages"
         const val SKIP = "Skip"
         const val FAILED = "Could not save the language"
+        const val LIST_FAILED = "Could not load the languages"
     }
 }

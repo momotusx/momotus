@@ -16,6 +16,7 @@ enum SubtitleStepRules {
     static let noneLine = "Turn them on while watching"
     static let more = "More languages"
     static let fewer = "Fewer languages"
+    static let listFailed = "Could not load the languages"
 
     /// The device's language as the core lists it, the one it marks ("nb"
     /// reads as Norwegian, "no"): a code it does not list would be a
@@ -54,10 +55,11 @@ enum SubtitleStepRules {
         device == "en" ? nil : device
     }
 
-    /// The choice once the core's list is in: one already made stays, else
-    /// the device's language as the core lists it (`initial`).
-    static func loaded(_ chosen: String?, all: [LanguageChoice]) -> String? {
-        chosen ?? initial(listed(all))
+    /// The choice once the core's list is in: one the viewer made before it
+    /// stays (No subtitles too), else the device's language as the core
+    /// lists it (`initial`).
+    static func loaded(_ chosen: String?, touched: Bool, all: [LanguageChoice]) -> String? {
+        touched ? chosen : initial(listed(all))
     }
 
     /// Where a first run goes after the question, and after this step.
