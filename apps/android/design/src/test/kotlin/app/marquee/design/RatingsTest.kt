@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -16,12 +17,14 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -60,6 +63,8 @@ class RatingsTest {
     }
 
     @Test
+    // Real text measure: Robolectric's stand-in fonts are a few pixels a word.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun `on a narrow meta line the facts are cut and both scores stay whole`() {
         compose.setContent {
             MarqueeTheme(Form.Phone) {
@@ -68,15 +73,18 @@ class RatingsTest {
                 }
             }
         }
-        val line = compose.onNodeWithText("2011–2019", substring = true, useUnmergedTree = true).fetchSemanticsNode()
         for (score in listOf("IMDb 8.8", "RT 87%")) {
             val node = compose.onNodeWithText(score, useUnmergedTree = true).fetchSemanticsNode()
-            assertTrue(
-                node.size.width > 0 && node.boundsInRoot.right <= 220 * compose.density.density + 1,
-                "$score is cut",
-            )
+            val results = mutableListOf<TextLayoutResult>()
+            node.config[SemanticsActions.GetTextLayoutResult].action?.invoke(results)
+            val layout = results.single()
+            assertTrue(layout.size.width + 0.5f >= layout.multiParagraph.maxIntrinsicWidth, "$score is cut")
         }
-        assertTrue(line.size.width < 220 * compose.density.density, "the facts took the line")
+        // The facts gave way: cut, not the scores.
+        val facts = compose.onNodeWithText("2011–2019", substring = true, useUnmergedTree = true).fetchSemanticsNode()
+        val results = mutableListOf<TextLayoutResult>()
+        facts.config[SemanticsActions.GetTextLayoutResult].action?.invoke(results)
+        assertTrue(results.single().hasVisualOverflow, "the facts were not cut")
     }
 
     @Test
