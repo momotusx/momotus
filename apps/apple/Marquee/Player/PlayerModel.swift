@@ -262,7 +262,7 @@ final class PlayerModel {
         SubtitleMenu.preferred(
             subtitle: prefs.snapshot?.subtitleLanguages ?? [],
             audio: prefs.snapshot?.streams.languages ?? [],
-            device: Locale.current.language.languageCode?.identifier
+            device: DeviceCaps.language
         )
     }
 

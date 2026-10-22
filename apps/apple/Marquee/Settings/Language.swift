@@ -34,9 +34,11 @@ struct Language {
         return chosen + all.map(\.audio).filter { !chosen.contains($0) }
     }
 
-    /// Adds a language at the end as its tag, or takes it out in every spelling.
+    /// Adds a language at the end, or takes it out in every spelling: the
+    /// list written back holds each language once, as its tag.
     static func toggled(_ stored: [String], _ tag: String) -> [String] {
-        stored.contains { Self.tag($0) == tag } ? stored.filter { Self.tag($0) != tag } : stored + [tag]
+        let chosen = ordered(stored)
+        return chosen.contains(tag) ? chosen.filter { $0 != tag } : chosen + [tag]
     }
 
     /// A tag's name in the user's language.

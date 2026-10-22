@@ -32,8 +32,15 @@ enum DeviceCaps {
             "hasFallbackEngine": false,
             // AVFoundation shows HEVC in MP4 only from an entry with its parameter sets.
             "hvc1Only": true,
-            "language": Locale.current.language.languageCode?.identifier ?? "en",
+            "language": language ?? "en",
         ]
+    }
+
+    /// The device's first preferred language as its base code ("tr").
+    /// `Locale.current` follows the app's own localizations, English only, so
+    /// on a Turkish iPhone it says "en".
+    static var language: String? {
+        Locale.preferredLanguages.first.flatMap { Locale(identifier: $0).language.languageCode?.identifier }
     }
 
     /// AVPlayer's files, and HLS playlists (`m3u8`), which it plays natively.

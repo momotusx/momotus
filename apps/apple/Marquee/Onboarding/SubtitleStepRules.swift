@@ -2,8 +2,10 @@ import Foundation
 
 /// A first run's subtitles step, after the stream question
 /// (plans/m13-subtitle-languages.md 7): the language subtitles start in, one
-/// choice. The device's language is listed first and chosen at first, then
-/// the common ones and No subtitles; every other language waits behind More
+/// choice. The device's language is listed first and chosen at first, unless
+/// it is English (No subtitles then: most titles are in English, and English
+/// audio a file does not tag would get English subtitles over it); then the
+/// common ones and No subtitles; every other language waits behind More
 /// languages. Continue writes the choice as the profile's
 /// `subtitleLanguages` (none for No subtitles); Skip writes nothing.
 enum SubtitleStepRules {
@@ -37,5 +39,24 @@ enum SubtitleStepRules {
     /// Whether the step shows: not for a profile with languages already.
     static func asks(_ languages: [String]?) -> Bool {
         languages?.isEmpty ?? true
+    }
+
+    /// The row chosen at first: the device's language, No subtitles (nil)
+    /// on an English device.
+    static func initial(_ device: String?) -> String? {
+        device == "en" ? nil : device
+    }
+
+    /// Where a first run goes after the question, and after this step.
+    enum Next: Equatable { case subtitles, check, home }
+
+    /// This step, unless the profile has languages; then on as after it.
+    static func afterQuestion(_ languages: [String]?, thenHome: Bool) -> Next {
+        asks(languages) ? .subtitles : afterSubtitles(thenHome: thenHome)
+    }
+
+    /// Browse first goes Home; Start fresh and an import go to the setup check.
+    static func afterSubtitles(thenHome: Bool) -> Next {
+        thenHome ? .home : .check
     }
 }

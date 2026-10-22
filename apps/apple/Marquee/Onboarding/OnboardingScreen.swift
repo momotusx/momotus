@@ -69,7 +69,7 @@ struct OnboardingScreen: View {
         _step = State(initialValue: opened ?? Self.first(start))
         _addons = State(initialValue: LiveRecord("addons", core: core))
         _prefs = State(initialValue: LiveRecord("settings", core: core))
-        _subtitle = State(initialValue: Self.device)
+        _subtitle = State(initialValue: SubtitleStepRules.initial(Self.device))
         _defaults = State(initialValue: DefaultsStep(core: core, scope: .all))
         _fixer = State(initialValue: DefaultsStep(core: core, scope: .all))
     }
@@ -209,16 +209,24 @@ struct OnboardingScreen: View {
 
     /// The subtitles step next, unless the profile has languages already.
     private func afterQuestion() {
-        if SubtitleStepRules.asks(prefs.snapshot?.subtitleLanguages) { step = .subtitles } else { afterSubtitles() }
+        go(SubtitleStepRules.afterQuestion(prefs.snapshot?.subtitleLanguages, thenHome: thenHome))
     }
 
     /// Browse first goes Home; Start fresh and an import go to the setup check.
     private func afterSubtitles() {
-        if thenHome, let close { close() } else { step = .check }
+        go(SubtitleStepRules.afterSubtitles(thenHome: thenHome))
+    }
+
+    private func go(_ next: SubtitleStepRules.Next) {
+        switch next {
+        case .subtitles: step = .subtitles
+        case .home: if let close { close() } else { step = .check }
+        case .check: step = .check
+        }
     }
 
     /// This device's language, as the core's tags begin ("tr").
-    private static var device: String? { Locale.current.language.languageCode?.identifier }
+    private static var device: String? { DeviceCaps.language }
 
     /// The language subtitles start in, one choice: this device's chosen at
     /// first, then the common ones and No subtitles, the rest behind More
@@ -229,10 +237,12 @@ struct OnboardingScreen: View {
             HStack(alignment: .firstTextBaseline) {
                 Wordmark(size: 22)
                 Spacer()
+                // Not while Continue saves: the step leaves once.
                 Button("Skip") { afterSubtitles() }
                     .buttonStyle(.textLink)
                     .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.text)
+                    .disabled(busy != nil)
             }
             stepHeading(SubtitleStepRules.title, SubtitleStepRules.lead)
             LazyVGrid(columns: columns, alignment: .leading, spacing: Theme.Space.xs) {

@@ -21,6 +21,24 @@ private let known = [
     #expect(SubtitleStepRules.common(known, device: nil).map(\.code).first == "en")
 }
 
+@Test func anEnglishDeviceStartsOnNoSubtitles() {
+    #expect(SubtitleStepRules.initial("en") == nil)
+    #expect(SubtitleStepRules.initial("tr") == "tr")
+    #expect(SubtitleStepRules.initial(nil) == nil)
+    // English still leads the list on an English device.
+    #expect(SubtitleStepRules.common(known, device: "en").first?.code == "en")
+}
+
+@Test func theQuestionLeadsToTheStepUnlessTheProfileHasLanguages() {
+    #expect(SubtitleStepRules.afterQuestion([], thenHome: false) == .subtitles)
+    #expect(SubtitleStepRules.afterQuestion(nil, thenHome: true) == .subtitles)
+    #expect(SubtitleStepRules.afterQuestion(["tr"], thenHome: false) == .check)
+    #expect(SubtitleStepRules.afterQuestion(["tr"], thenHome: true) == .home)
+    // Skip and Continue go on alike.
+    #expect(SubtitleStepRules.afterSubtitles(thenHome: false) == .check)
+    #expect(SubtitleStepRules.afterSubtitles(thenHome: true) == .home)
+}
+
 @Test func continueWritesTheChoiceAndNoSubtitlesWritesNone() {
     #expect(SubtitleStepRules.patch("tr")["subtitleLanguages"] as? [String] == ["tr"])
     #expect(SubtitleStepRules.patch(nil)["subtitleLanguages"] as? [String] == [])
@@ -36,9 +54,11 @@ private let known = [
     #expect(Language.ordered(stored) == ["tr", "en"])
     #expect(Language.subtitleChips(stored) == ["tr", "en", "es", "fr", "de", "it", "pt", "ja"])
     #expect(Language.subtitleChips(["pt-BR"]).first == "pt-BR")
-    // Off takes out every spelling; on adds the tag at the end.
-    #expect(Language.toggled(stored, "tr") == ["eng"])
-    #expect(Language.toggled(["eng"], "de") == ["eng", "de"])
+    // Off takes out every spelling; on adds the tag at the end; each
+    // language is written once, as its tag.
+    #expect(Language.toggled(stored, "tr") == ["en"])
+    #expect(Language.toggled(["eng"], "de") == ["en", "de"])
+    #expect(Language.toggled(["tr", "tur"], "de") == ["tr", "de"])
     #expect(Language.firstLine(stored) == "\(Language.name("tr")) first")
     #expect(Language.firstLine([]) == "None, subtitles start off")
 }
