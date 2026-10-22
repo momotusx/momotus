@@ -166,6 +166,10 @@ const ALIASES: &[(&str, &str)] = &[
     ("cym", "wel"),
     ("gre", "ell"),
     ("srp", "scc"),
+    // Device locales: Norway says Bokmål or Nynorsk, the Philippines Filipino.
+    ("nb", "nor"),
+    ("nn", "nor"),
+    ("fil", "tgl"),
     ("pt-pt", "por"),
     ("pt-br", "pob"),
     ("zh-cn", "chi"),
@@ -325,6 +329,20 @@ mod tests {
         assert_eq!(read("zh-TW").0, "zh-Hant");
         assert_eq!(read("zho"), ("zh".into(), "Chinese".into()));
         assert_eq!(read("gre").0, "el");
+    }
+
+    /// A device's own language code reads as the language the core lists,
+    /// so a profile set from it gets subtitles: Norway's Bokmål and Nynorsk
+    /// are Norwegian, Filipino is Tagalog.
+    #[test]
+    fn a_device_language_reads_as_a_listed_one() {
+        for code in ["nb", "nn", "NB"] {
+            assert_eq!(read(code), ("no".into(), "Norwegian".into()), "{code}");
+        }
+        for code in ["fil", "FIL"] {
+            assert_eq!(read(code), ("tl".into(), "Tagalog".into()), "{code}");
+        }
+        assert!(is_known("nb") && is_known("fil"));
     }
 
     #[test]
