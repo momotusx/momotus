@@ -1,29 +1,29 @@
 package app.marquee.ui.phone
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -32,15 +32,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalWindowInfo
-import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.marquee.core.TileCopy
 import app.marquee.core.model.Hero
@@ -64,7 +61,7 @@ import app.marquee.design.MqText
 import app.marquee.design.PlayFilled
 import app.marquee.design.PosterTile
 import app.marquee.design.PrimaryButton
-import app.marquee.design.RatingLine
+import app.marquee.design.RatingsRow
 import app.marquee.design.RoundButton
 import app.marquee.design.RowHeader
 import app.marquee.design.Scrims
@@ -72,10 +69,15 @@ import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
 import app.marquee.design.TextRole
 import app.marquee.design.TileShape
+import app.marquee.design.describe
 import app.marquee.design.laneHeight
 import app.marquee.design.windowDp
 
-/** Home on a phone: a hero card, then one swipeable lane per catalog. */
+/**
+ * Home on a phone, as the iPhone TV app (design/DECISION.md, Home and Shelves): the 390 by 680 hero full bleed
+ * under the status bar, then one swipeable lane per catalog: Continue Watching as 16:9 cards with their line,
+ * the catalogs as bare 99 by 149 posters.
+ */
 @Composable
 fun PhoneHome(
     home: HomeView,
@@ -114,10 +116,12 @@ fun PhoneHome(
             listState.scrollToItem(0)
         }
     }
+    // The hero runs up under the status bar; without one the page starts below it.
+    val top = if (hasHero) 0.dp else WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + Marquee.safe.top
     LazyColumn(
         state = listState,
-        modifier = modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars),
-        contentPadding = PaddingValues(top = Marquee.safe.top, bottom = Marquee.space.l + LocalBarSpace.current),
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(top = top, bottom = Marquee.space.l + LocalBarSpace.current),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
         val hero = home.hero
@@ -212,92 +216,113 @@ private fun AllFailed(
     )
 }
 
+/**
+ * The iPhone's hero (the home-phone frame): the art full bleed, 390 by 680 on a 390 wide phone, the large title
+ * over it, and a centered column at its foot: the logo, the kind and genres with the ratings row, the core's
+ * reason, then the 178 by 48 Play pill and the 48 round Details. A tap on the art opens the details too.
+ */
 @Composable
 private fun PhoneHero(
     hero: Hero,
     onOpen: (Tile) -> Unit,
     onPlay: (Tile) -> Unit,
 ) {
-    // An inset card (design/DECISION.md v2, Home hero). The scrim is 80% from a third of the way
-    // down, where the text block begins, so white text reads at better than 8:1 on any artwork.
     val tile = hero.tile
-    // At least the art's proportion, and taller when the text needs it (a small phone, large
-    // fonts): the card grows and the page scrolls it, nothing is cut.
-    BoxWithConstraints(Modifier.padding(horizontal = Marquee.safe.side).fillMaxWidth()) {
-        val short =
-            with(LocalDensity.current) {
-                LocalWindowInfo.current.containerSize.height
-                    .toDp()
-            } < SHORT_WINDOW
-        // Held to most of the window, so a landscape phone or a tablet still shows Play.
-        val least = minOf(maxWidth / HERO_RATIO, windowDp().height * HERO_WINDOW)
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        // The frame's shape, held to most of a short window (a landscape phone) so Play still shows.
+        val height = minOf(maxWidth * HERO_RATIO, windowDp().height * HERO_WINDOW)
         Box(
             Modifier
                 .fillMaxWidth()
-                .heightIn(min = least)
-                .clip(RoundedCornerShape(Marquee.radius.hero))
-                .border(1.dp, Marquee.colors.edge, RoundedCornerShape(Marquee.radius.hero))
-                .semantics {
-                    // The buttons on the card are hidden from screen readers, so Play is an action of the card.
-                    if (tile.playable()) {
-                        val play = CustomAccessibilityAction("Play ${tile.name}") { onPlay(tile).let { true } }
-                        customActions = listOf(play)
-                    }
-                }.clickable(
-                    role = Role.Button,
-                    onClickLabel = "Details of ${tile.name}",
-                    onClick = { onOpen(tile) },
-                ),
+                .height(height)
+                .testTag(PHONE_HERO_TAG)
+                .clickable(role = Role.Button, onClickLabel = "Details of ${tile.name}") { onOpen(tile) },
         ) {
-            Backdrop(tile.background ?: tile.poster, Modifier.matchParentSize(), foot = Scrims.phoneHeroFoot)
-            Column(
-                // The text starts no higher than a third down, where the scrim has darkened.
+            Backdrop(
+                tile.background ?: tile.poster,
+                Modifier.matchParentSize(),
+                foot = Scrims.phoneHomeFoot,
+                top = Scrims.phoneHomeTop,
+                alignment = if (tile.background == null) Alignment.TopCenter else Alignment.Center,
+            )
+            MqText(
+                "Home",
                 Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(top = least * if (short) 0.15f else 0.3f)
-                    .padding(Marquee.space.m),
-                verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .padding(start = 16.dp, top = 4.dp)
+                    .semantics { heading() },
+                role = TextRole.Hero,
+                maxLines = 1,
+            )
+            Column(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(start = Marquee.safe.side, end = Marquee.safe.side, bottom = HERO_FOOT),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Logo(
                     tile.logo,
                     tile.name,
-                    height = if (short) 44.dp else 64.dp,
-                    maxWidth = 240.dp,
+                    height = 86.dp,
+                    maxWidth = 300.dp,
                     role = TextRole.Title1,
                     color = Marquee.colors.text,
                 )
-                RatingLine(TileCopy.ratings(tile.ratings), TileCopy.heroMeta(hero))
-                // A short window (a landscape phone) keeps Play above the bar: the synopsis waits on the
-                // title page.
-                if (!short) {
-                    hero.description?.let {
-                        MqText(it, role = TextRole.Caption, color = Marquee.colors.muted, maxLines = 3)
-                    }
-                }
-                // The core's reason on Apple's explainability line, over the buttons; never an eyebrow.
-                MqText(hero.reason, role = TextRole.Caption, weight = FontWeight.SemiBold, maxLines = 2)
-                // The card is the control for screen readers (it opens the details); the buttons
-                // repeat it for sighted touch.
-                Row(
-                    Modifier.padding(top = Marquee.space.xs).clearAndSetSemantics { },
-                    horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
-                    verticalAlignment = Alignment.Top,
+                FlowRow(
+                    Modifier.padding(top = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                    itemVerticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (tile.playable()) PrimaryButton(label = "Play", icon = PlayFilled, onClick = { onPlay(tile) })
-                    RoundButton(Icons.Info, "Details", { onOpen(tile) }, showLabel = true)
+                    MqText(
+                        TileCopy.heroGenres(hero),
+                        role = TextRole.Callout,
+                        weight = FontWeight.SemiBold,
+                        maxLines = 1,
+                    )
+                    RatingsRow(TileCopy.ratings(tile.ratings))
+                }
+                // The core's reason on Apple's explainability line; never an eyebrow.
+                if (hero.reason.isNotBlank()) {
+                    MqText(
+                        hero.reason,
+                        Modifier.padding(top = 6.dp),
+                        role = TextRole.Caption,
+                        weight = FontWeight.SemiBold,
+                        maxLines = 2,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+                Row(
+                    Modifier.padding(top = 18.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (tile.playable()) {
+                        PrimaryButton(
+                            label = "Play",
+                            icon = PlayFilled,
+                            onClick = { onPlay(tile) },
+                            modifier = Modifier.width(178.dp).describe("Play ${tile.name}"),
+                        )
+                    }
+                    RoundButton(Icons.Info, "Details", { onOpen(tile) })
                 }
             }
         }
     }
 }
 
-private const val HERO_RATIO = 0.95f
+/** The hero, for tests of where it sits. */
+internal const val PHONE_HERO_TAG = "home-hero"
+
+/** The frame's 390 by 680. */
+private const val HERO_RATIO = 680f / 390f
 
 /** The most of the window's height a hero takes. */
-private const val HERO_WINDOW = 0.6f
+private const val HERO_WINDOW = 0.85f
 
-/** Below this window height the hero drops its synopsis and shrinks its logo. */
-private val SHORT_WINDOW = 480.dp
+/** The buttons' foot over the hero's (the frame's 56; its carousel dots wait for a source). */
+private val HERO_FOOT = 56.dp
 
 /** Continue Watching is a lane of 16:9 stills; catalogs keep the shape their first tile has. */
 private fun shapeOf(row: HomeRow): TileShape =
@@ -307,6 +332,9 @@ private fun shapeOf(row: HomeRow): TileShape =
         row.tiles.firstOrNull()?.posterShape == "square" -> TileShape.Square
         else -> TileShape.Poster
     }
+
+/** A catalog's posters are the art alone on the phone; Continue Watching keeps its name and line. */
+private fun captioned(row: HomeRow): Boolean = TileCopy.removable(row.rowId)
 
 @Composable
 private fun PhoneRow(
@@ -322,7 +350,7 @@ private fun PhoneRow(
         RowHeader(row.title, null, Modifier.padding(horizontal = side))
         when (val notice = row.notice()) {
             is RowNotice.Waiting -> {
-                SkeletonLane(shapeOf(row))
+                SkeletonLane(shapeOf(row), captioned(row))
                 val detail = notice.detail
                 if (detail != null) {
                     MqText(
@@ -353,7 +381,10 @@ private fun PhoneRow(
 }
 
 @Composable
-private fun SkeletonLane(shape: TileShape) {
+private fun SkeletonLane(
+    shape: TileShape,
+    captioned: Boolean = true,
+) {
     val metrics = Marquee.tiles
     val size =
         if (shape ==
@@ -366,7 +397,10 @@ private fun SkeletonLane(shape: TileShape) {
             metrics.square
         }
     Row(
-        Modifier.height(Marquee.tiles.laneHeight(shape)).padding(start = Marquee.safe.side, top = metrics.pad),
+        Modifier
+            .height(
+                Marquee.tiles.laneHeight(shape, captioned),
+            ).padding(start = Marquee.safe.side, top = metrics.pad),
         horizontalArrangement = Arrangement.spacedBy(metrics.gap),
     ) {
         repeat(SKELETON_TILES) { Skeleton(Modifier.size(size.width, size.height)) }
@@ -384,8 +418,9 @@ private fun TileLane(
     val metrics = Marquee.tiles
     val shape = shapeOf(row)
     val keys = remember(row.tiles) { row.tileKeys() }
+    val captioned = captioned(row)
     LazyRow(
-        modifier = Modifier.height(Marquee.tiles.laneHeight(shape)),
+        modifier = Modifier.height(Marquee.tiles.laneHeight(shape, captioned)),
         contentPadding = PaddingValues(horizontal = Marquee.safe.side),
         horizontalArrangement = Arrangement.spacedBy(metrics.gap),
     ) {
@@ -398,7 +433,16 @@ private fun TileLane(
                 shape = shape,
                 progress = tile.progress,
                 caption = TileCopy.caption(row.rowId, tile) ?: tile.releaseInfo,
-                ratings = if (shape == TileShape.Poster) TileCopy.ratings(tile.ratings) else emptyList(),
+                // Continue Watching carries the core's line alone: no scores, no badges.
+                captioned = captioned,
+                artAlignment =
+                    if (shape == TileShape.Landscape &&
+                        tile.background == null
+                    ) {
+                        Alignment.TopCenter
+                    } else {
+                        Alignment.Center
+                    },
                 onLongClick = onHold?.let { { it(tile) } },
                 longClickLabel = "More options".takeIf { onHold != null },
             )

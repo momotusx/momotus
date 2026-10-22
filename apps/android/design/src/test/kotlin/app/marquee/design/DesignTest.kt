@@ -212,23 +212,36 @@ class DesignTest {
         val tv = formPalette(Form.Tv)
         val phone = formPalette(Form.Phone)
         val bare = Color.Transparent
-        // TvHome's 1760 by 560 hero card: the text column 640 wide from 56 in ends at x .4; from its foot the
-        // buttons sit at 48, the reason line ends by .38, the synopsis by .6 and the meta line by .69.
-        val (side, foot) = Scrims.heroSide to Scrims.heroFoot
+        // TvHome's top shelf, the whole 1920 by 1080 TV (the home-tv frame's left column, 80 in, 900 wide): each line
+        // at its far end, as a share across and up from the foot. Details' label ends by 560 with its top 380 up;
+        // the reason line by 770 and 465 up, the meta line by 860 and 505 up, the synopsis by 900 and 570 up,
+        // the genre line by 770 and 670 up. TvHomeShelfTest measures where they land.
+        val (side, foot) = Scrims.topShelfSide to Scrims.topShelfFoot
         val spots =
             listOf(
-                Spot("TV Home, Details (its glyph ends by 321)", side, 0.2f, foot, 0.27f, tv.bg),
-                Spot("TV Home, the reason line", side, 0.4f, foot, 0.38f, tv.bg, tv.text, bare),
-                Spot("TV Home, the synopsis", side, 0.4f, foot, 0.6f, tv.bg, tv.muted, bare),
-                Spot("TV Home, the meta line", side, 0.4f, foot, 0.69f, tv.bg, tv.muted, bare),
+                Spot("TV Home, Details", side, 0.29f, foot, 0.35f, tv.bg),
+                Spot("TV Home, the reason line", side, 0.4f, foot, 0.43f, tv.bg, tv.text, bare),
+                Spot("TV Home, the meta line", side, 0.45f, foot, 0.47f, tv.bg, tv.dim, bare),
+                Spot("TV Home, the synopsis", side, 0.47f, foot, 0.53f, tv.bg, tv.muted, bare),
+                Spot("TV Home, the genre line", side, 0.4f, foot, 0.62f, tv.bg, tv.text, bare),
                 // The TV title's Play and round buttons end before the middle, the row anywhere down the column;
                 // its synopsis, 640 wide from 80 in, ends by x .4.
                 Spot("TV title, its last round button", Scrims.titleSide, 0.5f, Scrims.titleFoot, 0.5f, tv.bg),
                 Spot("TV title, the synopsis", Scrims.titleSide, 0.4f, Scrims.titleFoot, 0.7f, tv.bg, tv.muted, bare),
-                // PhoneHome's hero card: Play and Details 24 from its foot, a fifth of it up (a third in landscape);
-                // its text starts no higher than .7.
-                Spot("phone Home, Play and Details", emptyList(), 0f, Scrims.phoneHeroFoot, 0.35f, phone.bg),
-                Spot("phone Home, its text", emptyList(), 0f, Scrims.phoneHeroFoot, 0.7f, phone.bg, phone.muted, bare),
+                // PhoneHome's 390 by 680 hero (the home-phone frame), each line's top as a share up from its foot:
+                // Details' glyph by 90 up, the reason by 135, the genre and ratings line by 185 (its sources at 70).
+                Spot("phone Home, Details", emptyList(), 0f, Scrims.phoneHomeFoot, 0.13f, phone.bg),
+                Spot("phone Home, the reason", emptyList(), 0f, Scrims.phoneHomeFoot, 0.2f, phone.bg, phone.text, bare),
+                Spot(
+                    "phone Home, the ratings",
+                    emptyList(),
+                    0f,
+                    Scrims.phoneHomeFoot,
+                    0.27f,
+                    phone.bg,
+                    phone.muted,
+                    bare,
+                ),
             )
         for (spot in spots) {
             val covered = 1 - (1 - Scrims.alpha(spot.side, spot.x)) * (1 - Scrims.alpha(spot.foot, spot.y))

@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,6 +41,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import app.marquee.core.route.Route
 import app.marquee.core.route.TOP_LEVEL
 import app.marquee.design.Icons
@@ -100,7 +103,14 @@ fun TvShell(
             },
     ) {
         if (showNav) {
-            TvTopNav(selected, onSelect, onNavFocus, Modifier.fillMaxWidth().padding(top = NAV_TOP), profileButton)
+            // Drawn over the screen: Home's top shelf runs its art up behind the bar (TvNavRoom).
+            TvTopNav(
+                selected,
+                onSelect,
+                onNavFocus,
+                Modifier.zIndex(1f).fillMaxWidth().padding(top = NAV_TOP),
+                profileButton,
+            )
         }
         Box(
             Modifier
@@ -108,9 +118,15 @@ fun TvShell(
                 .weight(1f)
                 .focusProperties { enter = { contentEntry() ?: FocusRequester.Default } }
                 .focusGroup(),
-        ) { content() }
+        ) { CompositionLocalProvider(TvNavRoom provides if (showNav) NAV_TOP + NAV_HEIGHT else 0.dp) { content() } }
     }
 }
+
+/**
+ * How far the bar reaches down over the top of the screen: a full-bleed backdrop (Home's top shelf) runs up this
+ * far behind it, to the top of the TV. 0 with no bar.
+ */
+val TvNavRoom = compositionLocalOf { 0.dp }
 
 /** The gap between the bar and a top-level screen's first item. */
 @Composable

@@ -142,7 +142,6 @@ apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: .backgro
 apps/android/design/src/main/kotlin/app/marquee/design/TextField.kt :: cursorBrush = SolidColor(colors.accent),
 apps/android/design/src/main/kotlin/app/marquee/design/Theme.kt :: /** Reads of the current theme, e.g. `Marquee.colors.accent`. */
 apps/android/design/src/main/kotlin/app/marquee/design/Tiles.kt :: .background(colors.glassStrong)
-apps/android/design/src/main/kotlin/app/marquee/design/Tiles.kt :: .background(colors.glassStrong)
 apps/android/player/src/main/kotlin/app/marquee/player/PlayerParts.kt :: * a glass pill. It stays while the controls hide, so a viewer who never opens them still learns it.
 apps/android/player/src/main/kotlin/app/marquee/player/PlayerParts.kt :: .background(Marquee.colors.glass)
 apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneTitle.kt :: color = Marquee.colors.accent,
@@ -184,10 +183,8 @@ apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: .border(
 apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: .border(1.dp, colors.edge, shape)
 apps/android/design/src/main/kotlin/app/marquee/design/Switch.kt :: .border(2.dp, colors.edge, shape),
 apps/android/design/src/main/kotlin/app/marquee/design/Switch.kt :: .border(1.dp, Marquee.colors.edge, shape),
-apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneHome.kt :: .border(1.dp, Marquee.colors.edge, RoundedCornerShape(Marquee.radius.hero))
 apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneTitle.kt :: .border(1.dp, colors.edge, card)
 apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: .border(1.dp, colors.edge, shape)
-apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvHome.kt :: .border(1.dp, colors.edge, shape),
 apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvVersions.kt :: .border(1.dp, colors.edge, shape)
 apps/apple/Marquee/Account/AccountSections.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/App/RootView.swift :: .glass(Capsule(), shadow: true)

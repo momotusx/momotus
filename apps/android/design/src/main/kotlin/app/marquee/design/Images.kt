@@ -173,18 +173,41 @@ data class ScrimStop(
  */
 object Scrims {
     /**
-     * TV Home's hero card: from the leading edge, and from the bottom up. Deepened in 1b (the check): the
-     * synopsis at the end of its column read 1.6:1 over white art on the v2 stops.
+     * TV Home's top shelf, the whole TV: Apple's layered ramps (a wash from the leading edge, the bottom always
+     * ending on the page), deepened by the check (DesignTest) until every word of the left column keeps 4.5:1
+     * over white art: the frame's own stops (v2.html, `.shade`) left the synopsis at 1.2:1 and Details at 2.7:1.
      */
-    val heroSide = listOf(ScrimStop(0f, 0.94f), ScrimStop(0.4f, 0.8f), ScrimStop(0.6f, 0.3f), ScrimStop(0.75f, 0f))
-    val heroFoot = listOf(ScrimStop(0f, 0.9f), ScrimStop(0.34f, 0.3f), ScrimStop(0.58f, 0f))
+    val topShelfSide =
+        listOf(ScrimStop(0f, 0.94f), ScrimStop(0.48f, 0.82f), ScrimStop(0.64f, 0.3f), ScrimStop(0.8f, 0f))
+    val topShelfFoot =
+        listOf(
+            ScrimStop(0f, 1f),
+            ScrimStop(0.05f, 1f),
+            ScrimStop(0.14f, 0.8f),
+            ScrimStop(0.3f, 0.45f),
+            ScrimStop(0.5f, 0.12f),
+            ScrimStop(0.62f, 0f),
+        )
 
     /** The TV title page: dark over the text column's half, and the art fading into the page below. */
     val titleSide = listOf(ScrimStop(0f, 0.94f), ScrimStop(0.5f, 0.8f), ScrimStop(0.75f, 0.35f), ScrimStop(1f, 0f))
     val titleFoot = listOf(ScrimStop(0f, 1f), ScrimStop(0.4f, 0f))
 
-    /** The phone's Home hero, from the bottom up: its text starts no higher than a third down. */
-    val phoneHeroFoot = listOf(ScrimStop(0f, 0.96f), ScrimStop(0.7f, 0.8f), ScrimStop(1f, 0f))
+    /**
+     * The phone's Home hero, the iPhone's 390 by 680 (the home-phone frame): the art fades into the black page
+     * from the foot, and a light wash at the top keeps the status bar and the large title readable. The foot is
+     * deepened by the check (DesignTest): on the frame's stops the ratings row's source read 3.6:1 over white art.
+     */
+    val phoneHomeFoot =
+        listOf(
+            ScrimStop(0f, 1f),
+            ScrimStop(0.12f, 0.94f),
+            ScrimStop(0.3f, 0.8f),
+            ScrimStop(0.42f, 0.5f),
+            ScrimStop(0.56f, 0.15f),
+            ScrimStop(0.66f, 0f),
+        )
+    val phoneHomeTop = listOf(ScrimStop(0f, 0.7f), ScrimStop(0.16f, 0.45f), ScrimStop(0.26f, 0f))
 
     /** The phone title's art: under the status bar from the top, and toward the logo from the bottom. */
     val phoneTitleTop = listOf(ScrimStop(0f, 0.5f), ScrimStop(0.25f, 0f))
@@ -216,6 +239,8 @@ fun Backdrop(
     side: List<ScrimStop> = emptyList(),
     foot: List<ScrimStop> = emptyList(),
     top: List<ScrimStop> = emptyList(),
+    /** Where the crop keeps the picture: a poster standing in for a backdrop keeps its upper part. */
+    alignment: Alignment = Alignment.Center,
 ) {
     val page = Marquee.colors.bg
     val scrims =
@@ -240,6 +265,7 @@ fun Backdrop(
                 model = url,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
+                alignment = alignment,
                 modifier = Modifier.matchParentSize(),
             )
         }

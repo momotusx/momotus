@@ -15,7 +15,6 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -175,7 +174,8 @@ class TvHomeHoldTest {
         compose.waitForIdle()
         home.open()
         val deadline = System.currentTimeMillis() + 60_000
-        while (compose.onAllNodesWithText("Popular").fetchSemanticsNodes().isEmpty()) {
+        // The first shelf: under a hero the others start below the screen.
+        while (compose.onAllNodesWithText("Continue Watching").fetchSemanticsNodes().isEmpty()) {
             check(System.currentTimeMillis() < deadline) { "Home never drew its rows" }
             Snapshot.sendApplyNotifications()
             compose.waitForIdle()
@@ -316,23 +316,24 @@ class TvHomeHoldTest {
 
     @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    fun `a hero with a long name and no logo keeps its Details label whole`() {
+    fun `a hero with a long name and no logo keeps Play and Details whole, over the first shelf`() {
         // The Fire TV walk (FTV4): a two-line name in place of a logo and three lines of text pushed the
-        // buttons past the card's foot, and the label under Details was cut.
+        // buttons past the hero's foot and cut the label under Details. The top shelf's column grows up from
+        // its foot instead, and the synopsis keeps to two lines.
         val tile =
             Tile(id = "tt9", kind = "movie", name = "Project Hail Mary and the Very Long Title", posterShape = "poster")
         val text = (1..60).joinToString(" ") { "word$it" }
-        show(hero = Hero(tile, "#1 in Popular Movies on Cinemeta", text, listOf("Drama"), "2 h 36 min"))
+        show(hero = Hero(tile, "#1 in Popular Movies", text, listOf("Drama"), "2 h 36 min"))
         waitFor("the hero draws") {
-            compose.onAllNodesWithContentDescription("Details").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText("Details").fetchSemanticsNodes().isNotEmpty()
         }
-        val circle = compose.onNodeWithContentDescription("Details").fetchSemanticsNode()
-        // The button's column: the ring, the 10 dp gap and the label under it.
-        val button = checkNotNull(circle.layoutInfo.parentInfo)
-        // In the TV canvas's units: the ring is 72 of them, whatever the test screen's density.
-        val unit = circle.size.height / 72f
-        val whole = button.height / unit
-        val ring = 72f
-        assertTrue(whole >= ring + 10 + 24, "the Details label got ${whole - ring - 10} dp of its line")
+        val details = compose.onNodeWithText("Details").fetchSemanticsNode()
+        val play =
+            compose.onNodeWithContentDescription("Play Project Hail Mary and the Very Long Title").fetchSemanticsNode()
+        val shelf = compose.onNodeWithText("Continue Watching").fetchSemanticsNode().boundsInRoot
+        // Both pills one height: Details is whole, whatever the test screen's density.
+        assertEquals(play.size.height.toFloat(), details.size.height.toFloat(), 0.5f, "Details is cut")
+        assertTrue(details.boundsInRoot.bottom <= shelf.top, "Details runs into Continue Watching")
+        assertTrue(play.boundsInRoot.top >= 0f, "Play is above the screen")
     }
 }
