@@ -37,4 +37,17 @@ class FlagsDrawTest {
             }
         assertEquals(emptyList(), bad)
     }
+
+    @Test
+    fun `the flags' MIT notice ships with them`() {
+        val notice =
+            RuntimeEnvironment
+                .getApplication()
+                .assets
+                .open(
+                    "licenses/circle-flags-MIT.md",
+                ).bufferedReader()
+                .readText()
+        assertTrue("MIT License" in notice && "HatScripts" in notice, notice.take(80))
+    }
 }

@@ -142,6 +142,8 @@ ${tags.map((t) => `        "${t}" to R.drawable.flag_${t.replace("-", "_")},`).j
     )
 `;
 writeFileSync(join(here, "src", "main", "kotlin", "app", "marquee", "player", "Flags.kt"), kotlin);
-mkdirSync(join(here, "licenses"), { recursive: true });
-writeFileSync(join(here, "licenses", "circle-flags-MIT.md"), readFileSync(join(pkg, "LICENSE.md"), "utf8"));
+// MIT asks for the notice in every copy: it ships in the APK beside the flags.
+const licenses = join(here, "src", "main", "assets", "licenses");
+mkdirSync(licenses, { recursive: true });
+writeFileSync(join(licenses, "circle-flags-MIT.md"), readFileSync(join(pkg, "LICENSE.md"), "utf8"));
 console.log(`${tags.length} flags from circle-flags ${VERSION}`);

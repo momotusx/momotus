@@ -907,7 +907,7 @@ private fun About() {
             MqText("Marquee ${version.orEmpty()}", role = TextRole.Headline, weight = FontWeight.Bold)
             MqText("Free software under the GPL 3.", role = TextRole.Caption, color = Marquee.colors.muted)
             MqText(
-                "Type: Inter (SIL Open Font License). Icons: Lucide (ISC).",
+                "Type: Inter (SIL Open Font License). Icons: Lucide (ISC). Flags: circle-flags (MIT).",
                 role = TextRole.Caption,
                 color = Marquee.colors.muted,
             )
