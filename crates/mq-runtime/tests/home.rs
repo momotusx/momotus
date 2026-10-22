@@ -1211,3 +1211,24 @@ async fn a_twin_installed_after_the_hero_shows_changes_nothing() {
         ("tt0111161", "#1 in Popular Movies")
     );
 }
+
+/// Trakt Tv's "Trending movies" answered `{}` (2026-10-22): an empty row,
+/// never "This row did not load".
+#[tokio::test]
+async fn an_answer_without_metas_is_an_empty_row() {
+    const TRAKT_TRENDING: &str =
+        include_str!("../../mq-protocol/tests/fixtures/trakt_trending_movies.json");
+    let core = Core::temporary("p").unwrap();
+    let trakt = catalog_addon("trakt", Duration::ZERO, 200, TRAKT_TRENDING).await;
+    core.library()
+        .set_addons("p", &[trakt], &core.hlc())
+        .unwrap();
+    let view = HomeView::open(&core);
+    for _ in 0..300 {
+        if view.snapshot().rows[0].state != RowState::Loading {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert_eq!(view.snapshot().rows[0].state, RowState::Empty);
+}

@@ -9,7 +9,7 @@ use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
 use mq_addons::InstalledAddon;
 use mq_library::Table;
-use mq_protocol::{ResourcePath, ResourceResponse};
+use mq_protocol::{ResourcePath, ResourceResponse, decode_response};
 use serde::Serialize;
 use std::collections::HashSet;
 use std::pin::Pin;
@@ -413,8 +413,7 @@ async fn load_page(
     };
     let result = core.addons().fetch(&catalog.addon, &path, TIMEOUT).await;
     let parsed = result.map_err(|e| e.to_string()).and_then(|f| {
-        serde_json::from_slice::<ResourceResponse>(&f.body)
-            .map_err(|e| format!("unreadable catalog: {e}"))
+        decode_response(&f.body, "catalog").map_err(|e| format!("unreadable catalog: {e}"))
     });
     let titles = {
         let mut s = lock(&state);

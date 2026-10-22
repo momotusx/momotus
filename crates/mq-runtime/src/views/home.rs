@@ -15,7 +15,7 @@ use eyeball_im::ObservableVector;
 use futures_util::{Stream, StreamExt};
 use mq_addons::InstalledAddon;
 use mq_library::{AllowedRow, ContinueItem, Policy, Table};
-use mq_protocol::{ResourcePath, ResourceResponse};
+use mq_protocol::{ResourcePath, ResourceResponse, decode_response};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
@@ -782,8 +782,7 @@ fn apply_catalog(
     let outcome = result
         .map_err(|e| e.to_string())
         .and_then(|f| {
-            serde_json::from_slice::<ResourceResponse>(&f.body)
-                .map_err(|e| format!("unreadable catalog: {e}"))
+            decode_response(&f.body, "catalog").map_err(|e| format!("unreadable catalog: {e}"))
         })
         .and_then(|response| match response {
             ResourceResponse::Metas { metas } => {

@@ -18,7 +18,7 @@ use futures_util::StreamExt;
 use mq_addons::{AddonClient, InstalledAddon};
 use mq_http::{HttpClient, HttpError, Priority, RequestOptions};
 use mq_library::{Library, RatingRow};
-use mq_protocol::{ResourcePath, ResourceResponse};
+use mq_protocol::{ResourcePath, ResourceResponse, decode_response};
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -833,7 +833,7 @@ async fn read_pages(
             let page = format!("{}/{}/{genre}", path.r#type, path.id);
             let titles = async {
                 let fetched = addons.fetch(addon, &path, LIST_TIMEOUT).await.ok()?;
-                match serde_json::from_slice::<ResourceResponse>(&fetched.body).ok()? {
+                match decode_response(&fetched.body, "catalog").ok()? {
                     ResourceResponse::Metas { metas } => Some(
                         metas
                             .iter()

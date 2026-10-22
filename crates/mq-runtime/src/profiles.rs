@@ -10,7 +10,7 @@ use argon2::{Algorithm, Argon2, Params, Version};
 use futures_util::StreamExt;
 use futures_util::stream::FuturesUnordered;
 use mq_library::{AllowedRow, Library, LibraryError, MAX_ALLOWED, OWNER};
-use mq_protocol::{ResourcePath, ResourceResponse};
+use mq_protocol::{ResourcePath, ResourceResponse, decode_response};
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -493,12 +493,12 @@ impl Core {
         let mut verified: Vec<Option<(String, Option<String>)>> = vec![None; addons.len()];
         let mut answered = false;
         while let Ok(Some((i, fetched))) = tokio::time::timeout_at(deadline, asked.next()).await {
-            let meta = fetched.ok().and_then(|f| {
-                match serde_json::from_slice::<ResourceResponse>(&f.body) {
+            let meta = fetched
+                .ok()
+                .and_then(|f| match decode_response(&f.body, "meta") {
                     Ok(ResourceResponse::Meta { meta }) => Some(meta),
                     _ => None,
-                }
-            });
+                });
             let Some(meta) = meta else { continue };
             answered = true;
             let p = meta.preview;

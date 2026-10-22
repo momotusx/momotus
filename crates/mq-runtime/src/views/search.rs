@@ -24,7 +24,7 @@ use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
 use mq_addons::InstalledAddon;
 use mq_library::Table;
-use mq_protocol::{ResourcePath, ResourceResponse};
+use mq_protocol::{ResourcePath, ResourceResponse, decode_response};
 use mq_tracking::trakt::search::Found;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
@@ -429,8 +429,7 @@ fn outcome(
     query: &str,
 ) -> (RowState, Vec<Tile>) {
     let parsed = result.map_err(|e| e.to_string()).and_then(|f| {
-        serde_json::from_slice::<ResourceResponse>(&f.body)
-            .map_err(|e| format!("unreadable results: {e}"))
+        decode_response(&f.body, "catalog").map_err(|e| format!("unreadable results: {e}"))
     });
     match parsed {
         Ok(ResourceResponse::Metas { metas }) => {
