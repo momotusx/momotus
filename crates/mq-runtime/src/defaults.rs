@@ -170,6 +170,10 @@ const BROUGHT: [&str; 4] = [
     "streamingcatalogs",
 ];
 
+/// Settings keys under this prefix, one per key in `MOVED`, record that the
+/// profile's old link was moved (or that it had none to move).
+const DEFAULTS_MOVED: &str = "defaultsMoved.";
+
 /// Links a default was installed with before it moved, by key. Trakt Tv's
 /// old deployment answers `{}` whenever its own call to Trakt fails, and its
 /// author points to the maintained one (the owner, 2026-10-22).
@@ -241,45 +245,44 @@ impl Core {
         Ok(added)
     }
 
-    /// A row still on a default's old link (`MOVED`) takes the default's link
-    /// and bundled manifest in place, its switch and position kept, and the
-    /// Home rows the user hid, showed or moved follow it; when the new link
-    /// is in the list already, the old row goes. Once moved there is nothing
-    /// left to move, and a profile without the old link is not touched.
+    /// Moves each default on an old link (`MOVED`) once per profile: a row
+    /// on the old link takes the default's link and bundled manifest in
+    /// place, its switch and position kept, and the Home rows the user hid,
+    /// showed or moved follow it. The Home rows go first: moving them again
+    /// changes nothing, so a stop before the list is written strands none.
+    /// When the new link is in the list already, the old row goes and the
+    /// new row's own Home choices stay. A setting per key
+    /// (`DEFAULTS_MOVED`, synced) records the move, so an old link the user
+    /// adds again later is left as they chose.
     fn move_old_links(&self) -> Result<(), CoreError> {
-        let moving = |url: &str| {
-            MOVED
-                .iter()
-                .find(|(_, old)| *old == url)
-                .and_then(|(key, _)| list().iter().find(|d| d.key == *key))
-        };
-        let rows = self.library().addons(self.profile())?;
-        if !rows.iter().any(|r| moving(&r.transport_url).is_some()) {
-            return Ok(());
-        }
-        let mut moved = Vec::new();
-        self.edit_addons(|rows| {
-            let links: Vec<String> = rows.iter().map(|r| r.transport_url.clone()).collect();
-            let mut keep = Vec::new();
-            for mut row in rows.drain(..) {
-                let Some(d) = moving(&row.transport_url) else {
-                    keep.push(row);
-                    continue;
-                };
-                moved.push((row.transport_url.clone(), d.url.clone()));
-                if links.contains(&d.url) {
-                    continue;
-                }
-                row.transport_url = d.url.clone();
-                row.manifest_json = serde_json::to_string(&d.manifest)
-                    .map_err(|e| CoreError::BadManifest(e.to_string()))?;
-                keep.push(row);
+        let settings = self.library().settings(self.profile())?;
+        for (key, old) in MOVED {
+            let done = format!("{DEFAULTS_MOVED}{key}");
+            let Some(d) = list().iter().find(|d| d.key == key) else {
+                continue;
+            };
+            if settings.iter().any(|(k, _)| *k == done) {
+                continue;
             }
-            *rows = keep;
-            Ok(())
-        })?;
-        for (old, new) in moved {
-            self.move_home_rows(&old, &new)?;
+            let rows = self.library().addons(self.profile())?;
+            if rows.iter().any(|r| r.transport_url == old) {
+                if !rows.iter().any(|r| r.transport_url == d.url) {
+                    self.move_home_rows(old, &d.url)?;
+                }
+                let json = serde_json::to_string(&d.manifest)
+                    .map_err(|e| CoreError::BadManifest(e.to_string()))?;
+                self.edit_addons(|rows| {
+                    if rows.iter().any(|r| r.transport_url == d.url) {
+                        rows.retain(|r| r.transport_url != old);
+                    } else if let Some(row) = rows.iter_mut().find(|r| r.transport_url == old) {
+                        row.transport_url = d.url.clone();
+                        row.manifest_json = json;
+                    }
+                    Ok(())
+                })?;
+            }
+            self.library()
+                .set_setting(self.profile(), &done, "true", self.clock())?;
         }
         Ok(())
     }

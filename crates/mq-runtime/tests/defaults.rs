@@ -791,6 +791,20 @@ async fn trakts_old_link_moves_to_the_maintained_one_once() {
                 })
                 .unwrap();
             assert!(moved.hidden, "the row it hid stays hidden");
+            // Only the leaf that changed is written: another device's order
+            // edit is not overwritten.
+            let written: Vec<String> = core
+                .library()
+                .settings(OWNER)
+                .unwrap()
+                .into_iter()
+                .map(|(k, _)| k)
+                .filter(|k| k.starts_with("homeRows."))
+                .collect();
+            assert!(
+                !written.iter().any(|k| k == "homeRows.order"),
+                "{written:?}"
+            );
             assert_ne!(Some(moved.row_id), hidden.map(|r| r.row_id));
         }
         let stamped = stamp(&core);
@@ -798,7 +812,57 @@ async fn trakts_old_link_moves_to_the_maintained_one_once() {
         let core = device.start();
         assert_eq!(urls(&core), rows);
         assert_eq!(stamp(&core), stamped, "nothing left to move");
+
+        // The old link added again by hand stays: the move was once.
+        let mut list = core.library().addons(OWNER).unwrap();
+        let mut again = list[2].clone();
+        again.transport_url = OLD_TRAKT.into();
+        again.position = list.len() as i64;
+        list.push(again);
+        core.library()
+            .set_addons(OWNER, &list, &core.hlc())
+            .unwrap();
+        drop(core);
+        let core = device.start();
+        assert!(
+            urls(&core).iter().any(|(u, _)| u == OLD_TRAKT),
+            "left as the user chose"
+        );
     }
+}
+
+/// Trakt's "Trending movies" rows in Home's order: (row id, hidden).
+fn trakt_trending(core: &Core) -> Vec<(String, bool)> {
+    core.home_catalogs()
+        .into_iter()
+        .filter(|c| c.row_id.starts_with("community.trakt-tv@") && c.title == "Trending movies")
+        .map(|c| (c.row_id, c.hidden))
+        .collect()
+}
+
+/// A stop between moving the Home rows and writing the list (the rows go
+/// first) strands nothing: the next start moves the list, and the row the
+/// user hid stays hidden.
+#[tokio::test]
+async fn a_move_stopped_after_the_home_rows_ends_on_the_next_start() {
+    let device = Device::new("trakt-stopped");
+    let core = device.start();
+    with_old_trakt(&core, &["cinemeta", "trakt"], true);
+    // The id the moved row will have: the same catalog on the new link
+    // (row ids depend on the link, not the device).
+    let probe = Device::new("trakt-probe");
+    let other = probe.start();
+    list_of(&other, OWNER, &["cinemeta", "trakt"], &[]);
+    let new_id = trakt_trending(&other)[0].0.clone();
+    assert_ne!(new_id, trakt_trending(&core)[0].0);
+    // As the stopped move left it: the Home rows already on the new link.
+    core.set_prefs(&serde_json::json!({"homeRows": {"hidden": [new_id.clone()]}}))
+        .unwrap();
+    drop(core);
+    let core = device.start();
+    assert_eq!(urls(&core)[1], (url("trakt"), true));
+    assert_eq!(trakt_trending(&core), [(new_id.clone(), true)]);
+    assert_eq!(core.prefs().home_rows.hidden, [new_id]);
 }
 
 /// Both links in the list (the new one installed by hand): the old row
@@ -816,8 +880,15 @@ async fn an_old_trakt_beside_the_new_one_goes_and_no_trakt_stays_none() {
     core.library()
         .set_addons(OWNER, &rows, &core.hlc())
         .unwrap();
+    // The old row's Trending hidden on purpose; the new one, a twin, waits.
+    let both = trakt_trending(&core);
+    assert_eq!(both.len(), 2);
+    core.set_home_row_hidden(&both[0].0, true).unwrap();
     drop(core);
     let core = device.start();
+    // The new row's own choice wins: the old row's is not moved onto it.
+    assert_eq!(trakt_trending(&core), [(both[1].0.clone(), false)]);
+    assert_eq!(core.prefs().home_rows.hidden, [both[0].0.clone()]);
     let trakts: Vec<_> = urls(&core)
         .into_iter()
         .filter(|(u, _)| u.contains("trakt"))

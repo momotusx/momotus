@@ -5,7 +5,10 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 /// Caching rules for one response. Addon body fields (`cacheMaxAge`,
-/// `staleRevalidate`, `staleError`, seconds) win over `Cache-Control`.
+/// `staleRevalidate`, `staleError`, seconds) win over `Cache-Control`. An
+/// empty answer (`{}`, `mq_protocol::is_empty_answer`) is never kept,
+/// whatever it says: an addon that answers so after a failure upstream
+/// (Trakt Tv's old deployment, with max-age 3600) is asked again next time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct CacheControl {
     pub max_age: Duration,
@@ -16,7 +19,11 @@ pub struct CacheControl {
 impl CacheControl {
     pub fn from_response(headers: &HeaderMap, body: &[u8]) -> Self {
         let mut control = Self::from_header(headers);
-        if let Ok(serde_json::Value::Object(root)) = serde_json::from_slice(body) {
+        let root = serde_json::from_slice::<serde_json::Value>(body);
+        if root.as_ref().is_ok_and(mq_protocol::is_empty_answer) {
+            return Self::default();
+        }
+        if let Ok(serde_json::Value::Object(root)) = root {
             let secs = |key: &str| {
                 root.get(key)
                     .and_then(|v| v.as_u64())
@@ -238,13 +245,31 @@ mod tests {
         );
         assert_eq!(c.max_age, Duration::from_secs(60));
         assert_eq!(c.stale_revalidate, Duration::from_secs(3600));
-        let c = CacheControl::from_response(&headers("max-age=120, stale-if-error=600"), b"{}");
+        let c = CacheControl::from_response(
+            &headers("max-age=120, stale-if-error=600"),
+            br#"{"metas":[]}"#,
+        );
         assert_eq!(c.max_age, Duration::from_secs(120));
         assert_eq!(c.stale_error, Duration::from_secs(600));
         assert_eq!(
             CacheControl::from_response(&headers("no-store"), b"{}"),
             CacheControl::default()
         );
+    }
+
+    /// An empty answer is never kept, whatever its header or its own hints
+    /// say; an empty list is an answer and is kept as it says.
+    #[test]
+    fn an_empty_answer_is_never_cached() {
+        for body in [&b"{}"[..], br#"{"cacheMaxAge": 3600}"#] {
+            assert_eq!(
+                CacheControl::from_response(&headers("public, max-age=3600"), body),
+                CacheControl::default()
+            );
+        }
+        let list =
+            CacheControl::from_response(&headers("public, max-age=3600"), br#"{"metas":[]}"#);
+        assert_eq!(list.max_age, Duration::from_secs(3600));
     }
 
     #[test]

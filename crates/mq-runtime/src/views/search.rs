@@ -24,7 +24,7 @@ use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
 use mq_addons::InstalledAddon;
 use mq_library::Table;
-use mq_protocol::{ResourcePath, ResourceResponse, decode_response};
+use mq_protocol::{ResourcePath, ResourceResponse, decode_catalog};
 use mq_tracking::trakt::search::Found;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
@@ -428,9 +428,9 @@ fn outcome(
     result: Result<mq_addons::Fetched, mq_addons::AddonError>,
     query: &str,
 ) -> (RowState, Vec<Tile>) {
-    let parsed = result.map_err(|e| e.to_string()).and_then(|f| {
-        decode_response(&f.body, "catalog").map_err(|e| format!("unreadable results: {e}"))
-    });
+    let parsed = result
+        .map_err(|e| e.to_string())
+        .and_then(|f| decode_catalog(&f.body).map_err(|e| format!("unreadable results: {e}")));
     match parsed {
         Ok(ResourceResponse::Metas { metas }) => {
             let mut tiles: Vec<Tile> = metas.into_iter().map(tile_from_preview).collect();

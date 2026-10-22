@@ -14,24 +14,28 @@ pub use wire::{
     WireSubtitle, decode_streams, decode_subtitles, normalize_info_hash,
 };
 
-/// The keys an empty catalog answer may carry besides nothing: caching hints.
+/// The keys an empty answer may carry besides nothing: caching hints.
 const CACHE_KEYS: [&str; 3] = ["cacheMaxAge", "staleRevalidate", "staleError"];
 
-/// An addon's answer to a "catalog" or "meta" request, read as stremio-core
-/// reads it (a null list is empty, an item that does not decode is skipped),
-/// with one deliberate departure: a catalog answer that is an object with no
-/// keys but caching hints (`{}`) is an empty list, where stremio-core
-/// refuses it. Node addons answer `res.json({ metas })` with `metas`
-/// undefined as `{}` (Trakt Tv when its own call to Trakt fails). Any other
-/// shape without `metas` (`{"error": ...}`, a list for another resource)
-/// stays an error, so a row still fails and is asked again.
-pub fn decode_response(body: &[u8], resource: &str) -> Result<ResourceResponse, serde_json::Error> {
+/// Whether an addon's answer is an object with no keys but caching hints
+/// (`{}`): Node addons send `res.json({ metas: undefined })` that way, and
+/// Trakt Tv's old deployment did whenever its own call to Trakt failed.
+/// Such an answer is never cached.
+pub fn is_empty_answer(answer: &serde_json::Value) -> bool {
+    answer
+        .as_object()
+        .is_some_and(|keys| keys.keys().all(|k| CACHE_KEYS.contains(&k.as_str())))
+}
+
+/// An addon's answer to a catalog request, read as stremio-core reads it (a
+/// null list is empty, an item that does not decode is skipped), with one
+/// deliberate departure: an empty answer (`is_empty_answer`) is an empty
+/// list, where stremio-core refuses it. Any other shape without `metas`
+/// (`{"error": ...}`, a list for another resource) reads as stremio-core
+/// reads it, so a row still fails and is asked again.
+pub fn decode_catalog(body: &[u8]) -> Result<ResourceResponse, serde_json::Error> {
     let root: serde_json::Value = serde_json::from_slice(body)?;
-    let empty = resource == "catalog"
-        && root
-            .as_object()
-            .is_some_and(|answer| answer.keys().all(|k| CACHE_KEYS.contains(&k.as_str())));
-    if empty {
+    if is_empty_answer(&root) {
         return Ok(ResourceResponse::Metas { metas: Vec::new() });
     }
     serde_json::from_value(root)

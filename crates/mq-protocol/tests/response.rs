@@ -1,7 +1,7 @@
-use mq_protocol::{ResourceResponse, decode_response};
+use mq_protocol::{ResourceResponse, decode_catalog};
 
 fn ids(body: &[u8]) -> Vec<String> {
-    match decode_response(body, "catalog").expect("decodes") {
+    match decode_catalog(body).expect("decodes") {
         ResourceResponse::Metas { metas } => metas.into_iter().map(|m| m.id).collect(),
         other => panic!("expected metas, got {other:?}"),
     }
@@ -34,7 +34,7 @@ fn an_error_object_or_another_resources_list_is_never_a_catalog() {
     ] {
         assert!(
             !matches!(
-                decode_response(body.as_bytes(), "catalog"),
+                decode_catalog(body.as_bytes()),
                 Ok(ResourceResponse::Metas { .. })
             ),
             "{body}"
@@ -57,11 +57,9 @@ fn null_lists_and_broken_items_read_as_stremio_reads_them() {
     assert_eq!(ids(body), ["tt1", "tt3"]);
 }
 
-/// A meta answer reads exactly as stremio-core reads it: `{}` is no meta,
-/// and a body that is not an object is an error for either resource.
+/// A body that is not an object is still an error.
 #[test]
-fn a_meta_answer_and_a_body_that_is_not_an_object_read_as_before() {
-    assert!(decode_response(b"{}", "meta").is_err());
-    assert!(decode_response(b"[]", "catalog").is_err());
-    assert!(decode_response(b"not json", "catalog").is_err());
+fn a_body_that_is_not_an_object_stays_an_error() {
+    assert!(decode_catalog(b"[]").is_err());
+    assert!(decode_catalog(b"not json").is_err());
 }

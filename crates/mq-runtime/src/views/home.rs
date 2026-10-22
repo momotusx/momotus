@@ -15,7 +15,7 @@ use eyeball_im::ObservableVector;
 use futures_util::{Stream, StreamExt};
 use mq_addons::InstalledAddon;
 use mq_library::{AllowedRow, ContinueItem, Policy, Table};
-use mq_protocol::{ResourcePath, ResourceResponse, decode_response};
+use mq_protocol::{ResourcePath, ResourceResponse, decode_catalog};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
@@ -430,23 +430,28 @@ impl Core {
     }
 
     /// Home's row choices follow an addon whose link changed from `old` to
-    /// `new`: the ids made from the old link take the new one's tag.
+    /// `new`: the ids made from the old link take the new one's tag. Only
+    /// the `homeRows` leaves that change are written, so another device's
+    /// edit of the others stands.
     pub(crate) fn move_home_rows(&self, old: &str, new: &str) -> Result<(), CoreError> {
         let (from, to) = (
             format!("@{}:", install_tag(old)),
             format!("@{}:", install_tag(new)),
         );
         let rows = self.prefs().home_rows;
-        let moved = |ids: &[String]| -> Vec<String> {
-            ids.iter().map(|id| id.replacen(&from, &to, 1)).collect()
-        };
-        let next = HomeRows {
-            hidden: moved(&rows.hidden),
-            order: moved(&rows.order),
-            shown: moved(&rows.shown),
-        };
-        if next != rows {
-            self.set_prefs(&serde_json::json!({ "homeRows": next }))?;
+        let mut patch = serde_json::Map::new();
+        for (leaf, ids) in [
+            ("hidden", &rows.hidden),
+            ("order", &rows.order),
+            ("shown", &rows.shown),
+        ] {
+            let moved: Vec<String> = ids.iter().map(|id| id.replacen(&from, &to, 1)).collect();
+            if moved != *ids {
+                patch.insert(leaf.into(), moved.into());
+            }
+        }
+        if !patch.is_empty() {
+            self.set_prefs(&serde_json::json!({ "homeRows": patch }))?;
         }
         Ok(())
     }
@@ -803,9 +808,7 @@ fn apply_catalog(
 ) -> Vec<Title> {
     let outcome = result
         .map_err(|e| e.to_string())
-        .and_then(|f| {
-            decode_response(&f.body, "catalog").map_err(|e| format!("unreadable catalog: {e}"))
-        })
+        .and_then(|f| decode_catalog(&f.body).map_err(|e| format!("unreadable catalog: {e}")))
         .and_then(|response| match response {
             ResourceResponse::Metas { metas } => {
                 let mut tiles: Vec<Tile> = metas
