@@ -138,8 +138,8 @@ test("Start fresh: nothing installed before Continue, two switches turned off st
   await expect(page).toHaveURL(/\/welcome/);
   await page.locator('[data-f="welcome:fresh"]').click();
   await expect(page.locator("h1")).toHaveText("Recommended addons");
-  await expect(page.locator("button.drow")).toHaveCount(9);
-  await expect(page.locator('button.drow[aria-checked="true"]')).toHaveCount(9);
+  await expect(page.locator("button.drow")).toHaveCount(10);
+  await expect(page.locator('button.drow[aria-checked="true"]')).toHaveCount(10);
   await shot(page, "defaults-step", "desktop");
   for (const key of ["torrentio", "trakt"]) await page.locator(`[data-f="welcome:default:${key}"]`).click();
   await expect(page.locator('[data-f="welcome:default:torrentio"]')).toHaveAttribute("aria-checked", "false");
@@ -164,7 +164,7 @@ test("Start fresh: nothing installed before Continue, two switches turned off st
   expect((await client.req<Prefs>("setPrefs", { patch: {} })).streams).toMatchObject({ sizeLimitBytes: null, minSeeders: 20 });
   expect((await client.req<Prefs>("setPrefs", { patch: {} })).subtitleLanguages).toEqual([]);
   const choices = sent.find((m) => m.op === "installDefaults")?.choices as { key: string; on: boolean }[];
-  expect(choices).toHaveLength(9);
+  expect(choices).toHaveLength(10);
   expect(choices.filter((c) => !c.on).map((c) => c.key)).toEqual(["torrentio", "trakt"]);
   expect(await states()).toMatchObject({ cinemeta: "on", torrentio: "off", trakt: "off", kitsu: "on", opensubtitles: "on" });
   // Torrentio is off, so the setup check offers it through the core's defaults.
@@ -198,7 +198,7 @@ test("Browse first passes the switches, then opens Home as the root", async ({ b
   await expect(page).toHaveURL(/\/welcome/);
   await page.locator('[data-f="welcome:skip"]').click();
   await expect(page).toHaveURL(/step=2&then=home/);
-  await expect(page.locator("button.drow")).toHaveCount(9);
+  await expect(page.locator("button.drow")).toHaveCount(10);
   expect(await allAbsent()).toBe(true);
   await page.waitForTimeout(500);
   await page.screenshot({ path: `${OUT}/defaults-step-phone.jpg`, type: "jpeg", quality: 80, fullPage: true });
@@ -293,7 +293,7 @@ test("a finished import leads to the step, and a restart before Continue gets th
   await page.locator('[data-f="import:next"]').click();
   await expect(page).toHaveURL(/step=2&from=import/);
   await expect(page.locator(".drow.fixed", { hasText: "Cinemeta" })).toContainText("From Stremio");
-  await expect(page.locator("button.drow")).toHaveCount(8);
+  await expect(page.locator("button.drow")).toHaveCount(9);
   await shot(page, "defaults-after-import", "desktop");
 
   // The app restarts before Continue: the profile has a list now, so Home
@@ -308,7 +308,7 @@ test("a finished import leads to the step, and a restart before Continue gets th
   await shot(page, "defaults-card", "desktop");
   await page.locator('[data-f="home:defaults:review"]').click();
   await expect(page).toHaveURL(/step=2&review=1/);
-  await expect(page.locator("button.drow")).toHaveCount(8);
+  await expect(page.locator("button.drow")).toHaveCount(9);
   await expect(page.locator(".drow.fixed")).toHaveCount(0);
   await page.locator('[data-f="welcome:next"]').click();
   await expect(page).toHaveURL(/127\.0\.0\.1:\d+\/(\?.*)?$/);
