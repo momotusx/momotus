@@ -47,8 +47,16 @@ struct OpenTabAction {
     @MainActor func callAsFunction(_ tab: AppTab) { open(tab) }
 }
 
+/// A title page's linked chips (plans/design-v3-phase3-apple.md 4.2): Discover on a kind and a
+/// genre, or Search for a name. The place reads its request once it can act on it, then clears it.
+@MainActor @Observable final class LinkRequests {
+    var discover: DiscoverRequest?
+    var search: String?
+}
+
 extension EnvironmentValues {
     @Entry var openTab = OpenTabAction { _ in }
+    @Entry var linkRequests: LinkRequests? = nil
     /// The tab this view is in is the one on screen. On a phone every opened
     /// tab stays alive behind the shown one, so its pages never disappear.
     @Entry var tabShown = true
@@ -143,6 +151,8 @@ struct MainShell: View {
     @State private var homeScrolled = false
     /// Bumped to send Home's focus back to its top row.
     @State private var homeTop = 0
+    /// A genre or a name a title page's chip asked Discover or Search to open.
+    @State private var links = LinkRequests()
     #if !os(iOS)
     /// The profile picker, from the avatar at the end of the pill.
     @State private var showProfiles = false
@@ -182,6 +192,7 @@ struct MainShell: View {
         content
             .environment(\.metrics, metrics)
             .environment(\.openTab, OpenTabAction { select($0) })
+            .environment(\.linkRequests, links)
             .environment(immersion)
             // Home stays subscribed for the profile's life, so Back lands on the same rows.
             .task(id: home.taskId) { await home.run() }

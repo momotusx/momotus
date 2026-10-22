@@ -9,6 +9,7 @@ struct SearchScreen: View {
     @Environment(\.metrics) private var metrics
     @Environment(\.tabShown) private var shown
     @Environment(\.searchRequest) private var searchRequest
+    @Environment(\.linkRequests) private var links
 
     init(core: CoreClient) {
         _search = State(initialValue: LiveRecord("search", core: core))
@@ -51,6 +52,9 @@ struct SearchScreen: View {
         #endif
         .task(id: search.taskId) { search.start() }
         .onChange(of: query) { _, value in setQuery(value) }
+        // A title page's director chip: the name, once the view can take a query.
+        .onChange(of: links?.search, initial: true) { takeLink() }
+        .onChange(of: search.snapshot == nil) { takeLink() }
         // A title opened from the results covers this page: the query goes into
         // Recent, however the tile was chosen (a tap, VoiceOver, a keyboard, a remote).
         .onDisappear { if !query.trimmingCharacters(in: .whitespaces).isEmpty { search.command(["type": "remember"]) } }
@@ -78,6 +82,12 @@ struct SearchScreen: View {
     }
 
     private static let prompt = "Search titles"
+
+    private func takeLink() {
+        guard let name = links?.search, search.snapshot != nil else { return }
+        links?.search = nil
+        if query == name { setQuery(name) } else { query = name }
+    }
 
     private func setQuery(_ value: String) {
         search.command(["type": "setQuery", "query": value])

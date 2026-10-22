@@ -28,6 +28,32 @@ struct DiscoverSnapshot: Decodable, Hashable, Sendable {
     let state: DiscoverState
 }
 
+/// A title page's genre chip: Discover on the title's kind, then the genre once that kind's snapshot
+/// lists it (plans/design-v3-phase3-apple.md 4.2). Until the core can open a genre on whichever
+/// catalog offers it (C40), a genre the default catalog does not list leaves the kind with no genre.
+struct DiscoverRequest: Equatable, Sendable {
+    let kind: String
+    let genre: String
+
+    enum Step: Equatable {
+        /// Ask for the kind, or wait for its catalog to load.
+        case wait
+        /// The genre as the catalog spells it.
+        case select(String)
+        /// The kind with no genre: the catalog does not list it, or Discover has no such kind.
+        case none
+    }
+
+    /// What to do with `snapshot`. A snapshot of another kind (the one from before the switch) only
+    /// waits; the genre is matched without case.
+    func step(_ snapshot: DiscoverSnapshot?) -> Step {
+        guard let snapshot else { return .wait }
+        guard snapshot.kinds.contains(where: { $0.id == kind }) else { return .none }
+        guard snapshot.kind == kind, snapshot.catalog != nil else { return .wait }
+        return snapshot.genres.first { $0.caseInsensitiveCompare(genre) == .orderedSame }.map(Step.select) ?? .none
+    }
+}
+
 /// A type and its label; the core sends each pair as a two-element array.
 struct KindLabel: Decodable, Hashable, Sendable {
     let id: String

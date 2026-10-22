@@ -12,6 +12,9 @@ struct DiscoverScreen: View {
     private let core: CoreClient
     @Environment(ProfileSession.self) private var profiles
     @State private var onboarding = false
+    @Environment(\.linkRequests) private var links
+    /// The request whose kind was asked for, so the kind is asked once.
+    @State private var askedKind: DiscoverRequest?
 
     init(core: CoreClient) {
         self.core = core
@@ -40,6 +43,9 @@ struct DiscoverScreen: View {
         .task(id: discover.taskId) { discover.start() }
         .task(id: addons.taskId) { addons.start() }
         .onChange(of: addons.snapshot?.fresh == true, initial: true) { _, fresh in if fresh { onboarding = true } }
+        // A title page's genre chip (DiscoverRequest).
+        .onChange(of: links?.discover, initial: true) { follow() }
+        .onChange(of: discover.snapshot) { follow() }
         .modifier(FullScreen(isPresented: $onboarding) {
             NavigationStack {
                 OnboardingScreen(core: core) { onboarding = false }
@@ -101,6 +107,25 @@ struct DiscoverScreen: View {
     /// The open catalog by its name, as the web and Android say it.
     private func catalogName(_ s: DiscoverSnapshot) -> String {
         s.catalogs.first { $0.id == s.catalog }?.name ?? "this catalog"
+    }
+
+    /// Moves Discover to a chip's kind, then its genre, as `DiscoverRequest.step` says.
+    private func follow() {
+        guard let request = links?.discover, let snapshot = discover.snapshot else { return }
+        switch request.step(snapshot) {
+        case .wait:
+            if snapshot.kind != request.kind, askedKind != request {
+                askedKind = request
+                select(["kind": request.kind])
+            }
+            return
+        case .select(let genre):
+            if snapshot.genre != genre { select(["genre": genre]) }
+        case .none:
+            if snapshot.genre != nil { select(["genre": NSNull()]) }
+        }
+        links?.discover = nil
+        askedKind = nil
     }
 
     private func select(_ fields: [String: any Sendable]) {
