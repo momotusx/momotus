@@ -1478,3 +1478,156 @@ async fn a_partial_play_after_a_finish_is_in_continue_watching() {
     let row = row.expect("Home shows Continue Watching");
     assert_eq!(row.tiles[0].video_id.as_deref(), Some("tt1727587"));
 }
+
+/// A Matroska head whose video track runs at 25 fps (DefaultDuration 40
+/// ms), its Tracks 128 KiB in, past a Void; padded to 256 KiB.
+fn mkv_at_25_fps() -> Vec<u8> {
+    fn el(id: &[u8], body: &[u8]) -> Vec<u8> {
+        let mut v = id.to_vec();
+        v.push(0x01);
+        v.extend_from_slice(&(body.len() as u64).to_be_bytes()[1..]);
+        v.extend_from_slice(body);
+        v
+    }
+    let uint = |id: &[u8], x: u64| el(id, &x.to_be_bytes());
+    let header = el(
+        &[0x1A, 0x45, 0xDF, 0xA3],
+        &[uint(&[0x42, 0x86], 1), el(&[0x42, 0x82], b"matroska")].concat(),
+    );
+    let info = el(
+        &[0x15, 0x49, 0xA9, 0x66],
+        &uint(&[0x2A, 0xD7, 0xB1], 1_000_000),
+    );
+    let void = el(&[0xEC], &vec![0; 128 * 1024]);
+    let video = el(
+        &[0xAE],
+        &[
+            uint(&[0xD7], 1),
+            uint(&[0x83], 1),
+            el(&[0x86], b"V_MPEG4/ISO/AVC"),
+            uint(&[0x23, 0xE3, 0x83], 40_000_000),
+        ]
+        .concat(),
+    );
+    let tracks = el(&[0x16, 0x54, 0xAE, 0x6B], &video);
+    let cluster = el(
+        &[0x1F, 0x43, 0xB6, 0x75],
+        &[uint(&[0xE7], 0), el(&[0xA3], &[0x55; 64])].concat(),
+    );
+    let mut file = [
+        header,
+        el(
+            &[0x18, 0x53, 0x80, 0x67],
+            &[info, void, tracks, cluster].concat(),
+        ),
+    ]
+    .concat();
+    file.resize(256 * 1024, 0);
+    file
+}
+
+/// Serves `file` by ranges. Its first 64 KiB come at once; the rest of a
+/// range that starts before the last 64 KiB comes `late`, so the probe,
+/// which needs the Tracks 128 KiB in, ends that long after Ready.
+async fn late_tracks_origin(file: Vec<u8>, late: Duration) -> String {
+    const NEAR: usize = 64 * 1024;
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let file = Arc::new(file);
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let file = file.clone();
+            tokio::spawn(async move {
+                let mut buf = vec![0u8; 4096];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                let head = String::from_utf8_lossy(&buf[..n]).to_ascii_lowercase();
+                let (start, end) = head
+                    .lines()
+                    .find_map(|l| l.strip_prefix("range: bytes="))
+                    .and_then(|r| {
+                        let (a, b) = r.trim().split_once('-')?;
+                        let a: usize = a.parse().ok()?;
+                        let b = b.parse().unwrap_or(file.len() - 1).min(file.len() - 1);
+                        Some((a, b))
+                    })
+                    .unwrap_or((0, file.len() - 1));
+                let head = format!(
+                    "HTTP/1.1 206 Partial Content\r\nContent-Range: bytes {start}-{end}/{}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    file.len(),
+                    end - start + 1
+                );
+                let cut = NEAR.clamp(start, end + 1);
+                let _ = socket.write_all(head.as_bytes()).await;
+                let _ = socket.write_all(&file[start..cut]).await;
+                let _ = socket.flush().await;
+                if cut <= end && start < file.len() - NEAR {
+                    tokio::time::sleep(late).await;
+                }
+                let _ = socket.write_all(&file[cut..=end]).await;
+            });
+        }
+    });
+    base
+}
+
+/// Two English files for one WEB release, a film-rate one listed first and
+/// a 25 fps one, as OpenSubtitles v3 rows carry them, on a 25 fps video
+/// whose rate the probe reads only after Ready.
+fn rated_rows(video: &str) -> String {
+    let sub = |id: &str, file: &str, fps: u32| {
+        serde_json::json!({"id": id, "lang": "eng", "url": format!("https://subs.test/{id}.srt"),
+            "subtitleFileName": file, "fpsMilli": fps})
+    };
+    serde_json::json!({"streams": [{
+        "url": format!("{video}/v.mkv"),
+        "title": "Sintel.2010.1080p.WEB-DL.H.264-GRP",
+        "subtitles": [
+            sub("film", "Sintel.2010.1080p.WEBRip.x264-AAA.srt", 23976),
+            sub("pal", "Sintel.2010.1080p.WEBRip.x264-BBB.srt", 25000),
+        ],
+    }]})
+    .to_string()
+}
+
+fn releases(s: &PlaybackSnapshot) -> Vec<&str> {
+    s.subtitles
+        .iter()
+        .filter_map(|t| t.release.as_deref())
+        .collect()
+}
+
+const FILM: &str = "Sintel.2010.1080p.WEBRip.x264-AAA";
+const PAL: &str = "Sintel.2010.1080p.WEBRip.x264-BBB";
+
+/// Plans/player-polish.md 2g, review P1-1: the probe runs on every play,
+/// so its frame rate orders the tracks with no built-in TurkceAltyazi.org
+/// source installed and no subtitle languages set.
+#[tokio::test]
+async fn the_probed_frame_rate_orders_subtitles_without_the_built_in_source() {
+    let video = late_tracks_origin(mkv_at_25_fps(), Duration::from_millis(300)).await;
+    let core = Core::temporary("p").unwrap();
+    let view = PlaybackView::open(&core, setup(&core, &rated_rows(&video)), target());
+    let s = settled_list(&view).await;
+    assert_eq!(releases(&s), [PAL, FILM]);
+    assert_eq!(s.subtitles[1].made_for_fps, Some(23.976));
+    assert_eq!(s.subtitles[0].made_for_fps, None);
+}
+
+/// Review P3-5: the viewer picks a track before the probe ends. The rate
+/// still reorders the list when it lands, the picked track stays, and the
+/// core turns nothing else on over the pick.
+#[tokio::test]
+async fn a_pick_before_the_probe_ends_stays_the_pick() {
+    let video = late_tracks_origin(mkv_at_25_fps(), Duration::from_millis(1000)).await;
+    let core = Core::temporary("p").unwrap();
+    let view = PlaybackView::open(&core, setup(&core, &rated_rows(&video)), target());
+    let early = until(&view, "ready", |s| s.phase == PlaybackPhase::Ready).await;
+    assert!(early.subtitles_pending);
+    assert_eq!(releases(&early), [FILM, PAL], "the rate is not read yet");
+    let picked = early.subtitles[0].url.clone();
+    view.subtitle_chosen(Some(&picked));
+    let s = settled_list(&view).await;
+    assert_eq!(releases(&s), [PAL, FILM], "the rate landed after the pick");
+    assert_eq!(s.subtitles[1].url, picked);
+    assert_eq!(s.auto_subtitle, None);
+}

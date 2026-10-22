@@ -628,6 +628,9 @@ struct State {
     /// What the playing release says of itself, for the subtitles' release
     /// match: its name's, and the frame rate once the probe read it.
     playing: OwnedPlaying,
+    /// The viewer picked a subtitle, or Off, in this view: `autoSubtitle`
+    /// stays null from then on.
+    subtitle_picked: bool,
     /// The start's progress when the source starting now began, and when
     /// it began (`start`).
     start_base: f32,
@@ -730,6 +733,7 @@ impl State {
             segments_task: None,
             order: HashMap::new(),
             playing: OwnedPlaying::default(),
+            subtitle_picked: false,
             start_base: 0.0,
             source_since: tokio::time::Instant::now(),
             languages: Vec::new(),
@@ -1105,6 +1109,7 @@ impl PlaybackView {
                 .find(|t| t.url == url)
                 .map(|t| t.language.clone()),
         };
+        s.subtitle_picked = true;
         if s.snapshot.auto_subtitle.take().is_some() {
             self.snapshot.set(s.snapshot.clone());
         }
@@ -1796,12 +1801,14 @@ async fn resolve_next(
                     let mut s = lock(&state);
                     if current(&s, run) {
                         s.snapshot.subtitles_pending = false;
+                        // A pick before the list settled stays the pick.
                         s.snapshot.auto_subtitle = auto_subtitle(
                             remembered.as_deref(),
                             &explicit,
                             &audio,
                             &s.snapshot.subtitles,
-                        );
+                        )
+                        .filter(|_| !s.subtitle_picked);
                         snapshot.set(s.snapshot.clone());
                     }
                 };
