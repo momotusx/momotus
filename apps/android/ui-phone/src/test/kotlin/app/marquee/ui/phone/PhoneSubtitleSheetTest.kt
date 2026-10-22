@@ -21,6 +21,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
@@ -198,6 +199,46 @@ class PhoneSubtitleSheetTest {
         assertEquals(0, left)
         back()
         compose.runOnIdle { assertEquals(1, left, "then the player is left") }
+    }
+
+    @Test
+    fun `the delay steps a tenth of a second a press, repeats while held, and resets to 0 when pressed`() {
+        val shifts = mutableListOf<Long>()
+        var delay by mutableStateOf(300L)
+        compose.setContent {
+            MarqueeTheme(Form.Phone) {
+                PhoneSubtitleSheet(
+                    rows,
+                    "en",
+                    {},
+                    onPick = {},
+                    onDone = {},
+                    modifier = Modifier.width(420.dp).fillMaxHeight(),
+                    timing = delay,
+                    onShift = {
+                        shifts += it
+                        delay += it
+                    },
+                )
+            }
+        }
+        compose.onNodeWithText("+0.3 s").assertExists()
+        compose.onNodeWithContentDescription("Show subtitles later").performClick()
+        compose.onNodeWithText("+0.4 s").assertExists()
+        compose.runOnIdle { assertEquals(listOf(100L), shifts) }
+        // Held for a second: the press, then a step every tenth of a second once the hold starts.
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithContentDescription("Show subtitles earlier").performTouchInput { down(center) }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.onNodeWithContentDescription("Show subtitles earlier").performTouchInput { up() }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.mainClock.autoAdvance = true
+        val held = shifts.drop(1)
+        assertTrue(held.size in 6..9, "a press and repeats while held: $held")
+        assertTrue(held.all { it == -100L })
+        // The delay itself puts it back to 0.
+        compose.onNodeWithContentDescription("Timing").performClick()
+        compose.onNodeWithText("0.0 s").assertExists()
     }
 
     @Test

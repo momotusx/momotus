@@ -711,11 +711,11 @@ class SubtitleFailureTest {
     }
 
     @Test
-    fun `Later moves this play's subtitles half a second and sets the item again where it was`() {
+    fun `a shift moves this play's subtitles and sets the item again where it was`() {
         val delay = SubtitleDelay()
         val (player, controller) = open(delay = delay)
         // With subtitles off a press only changes the words: the stream is not set again.
-        controller.shiftSubtitles(SUBTITLE_STEP_MS)
+        controller.shiftSubtitles(500)
         runFor(1_500)
         assertEquals(1, player.items.size, "set again with subtitles off")
         assertEquals(500L, delay.ms, "the next load takes the delay")
@@ -723,8 +723,8 @@ class SubtitleFailureTest {
         controller.selectText("late:$subtitle")
         until("the subtitle is side-loaded") { player.items.size == 2 }
         player.position(42_000)
-        controller.shiftSubtitles(SUBTITLE_STEP_MS)
-        controller.shiftSubtitles(SUBTITLE_STEP_MS)
+        controller.shiftSubtitles(500)
+        controller.shiftSubtitles(500)
         assertEquals(1_500L, controller.subtitleDelayMs)
         until("the item is set again") { player.items.size == 3 }
         runFor(1_500)

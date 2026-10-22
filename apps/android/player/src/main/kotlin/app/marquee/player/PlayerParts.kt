@@ -5,6 +5,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -29,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -37,12 +40,22 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.addPathNodes
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -52,8 +65,10 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
@@ -84,9 +99,12 @@ import app.marquee.design.Spinner
 import app.marquee.design.TextRole
 import app.marquee.design.endFade
 import app.marquee.design.focusClickable
+import app.marquee.design.focusPalette
 import app.marquee.design.marqueeFocus
 import app.marquee.design.scrollByKey
 import app.marquee.design.windowDp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /** 3725 s as "1:02:05". */
@@ -215,18 +233,146 @@ fun TrackPanel(
 }
 
 /**
- * This play's subtitle timing, under a language's options: Earlier and Later move the words by half a second each,
- * and the line says where they are now ("0.5 s later"). The picker stays open.
+ * This play's subtitle timing, under a language's options, as Stremio's delay: minus and plus around the delay
+ * ("+0.3 s"), a tenth of a second a press, faster while held ([delayStepMs]); the delay itself resets it to 0. On a
+ * TV the delay takes the focus: Left and Right step it (a held key speeds up), select resets. The picker stays open.
  */
 @Composable
 fun TimingRow(
     delayMs: Long,
     onShift: (Long) -> Unit,
     modifier: Modifier = Modifier,
-    first: Modifier = Modifier,
-) = StepRow("Timing", timingWords(delayMs), "Earlier", {
-    onShift(-SUBTITLE_STEP_MS)
-}, "Later", { onShift(SUBTITLE_STEP_MS) }, modifier, first)
+) {
+    val tv = Marquee.form == Form.Tv
+    val shift = rememberUpdatedState(onShift)
+    val reset = { if (delayMs != 0L) shift.value(-delayMs) }
+    Row(
+        modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(if (tv) 14.dp else 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MqText("Timing", Modifier.weight(1f), role = TextRole.Callout, weight = FontWeight.SemiBold, maxLines = 1)
+        if (tv) {
+            MqIcon(MINUS, tint = Marquee.colors.dim, size = 26.dp)
+            DelayValue(delayMs, reset, Modifier.onPreviewKeyEvent { delayKey(it, shift.value) })
+            MqIcon(Icons.Plus, tint = Marquee.colors.dim, size = 26.dp)
+        } else {
+            HoldButton(MINUS, "Show subtitles earlier") { shift.value(-delayStepMs(it)) }
+            DelayValue(delayMs, reset)
+            HoldButton(Icons.Plus, "Show subtitles later") { shift.value(delayStepMs(it)) }
+        }
+    }
+}
+
+/** Left and Right on the TV's focused delay: a step each way, longer while the key is held; the rest goes on. */
+private fun delayKey(
+    event: KeyEvent,
+    onShift: (Long) -> Unit,
+): Boolean {
+    val direction =
+        when (event.key) {
+            Key.DirectionLeft -> -1
+            Key.DirectionRight -> 1
+            else -> return false
+        }
+    if (event.type == KeyEventType.KeyDown) onShift(direction * delayStepMs(event.nativeKeyEvent.repeatCount))
+    return true
+}
+
+/** The delay ("+0.3 s"); a press resets it to 0. Read out in words ("0.3 s later"), as it changes. */
+@Composable
+private fun DelayValue(
+    delayMs: Long,
+    onReset: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val tv = Marquee.form == Form.Tv
+    var focused by remember { mutableStateOf(false) }
+    val ink = focusPalette(focused)
+    Box(
+        modifier
+            .onFocusChanged { focused = it.isFocused }
+            .clip(RoundedCornerShape(Marquee.radius.pill))
+            .background(if (focused && tv) ink.primary else Color.Transparent)
+            .focusClickable(onReset)
+            .semantics {
+                contentDescription = "Timing"
+                stateDescription = timingWords(delayMs)
+                liveRegion = LiveRegionMode.Polite
+            }.widthIn(min = if (tv) 120.dp else 64.dp)
+            .padding(horizontal = if (tv) 16.dp else 6.dp, vertical = if (tv) 10.dp else 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        MqText(
+            delayText(delayMs),
+            role = TextRole.Callout,
+            color = ink.text,
+            weight = FontWeight.SemiBold,
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * A round minus or plus that steps on the press and again while held, faster as it goes ([HOLD_START_MS],
+ * [HOLD_EVERY_MS]); [onStep] is told which repeat it is (0 for the press). A screen reader presses it once.
+ */
+@Composable
+private fun HoldButton(
+    icon: ImageVector,
+    spoken: String,
+    onStep: (Int) -> Unit,
+) {
+    val step = rememberUpdatedState(onStep)
+    val scope = rememberCoroutineScope()
+    Box(
+        Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(SECONDARY)
+            .semantics {
+                contentDescription = spoken
+                role = Role.Button
+                onClick {
+                    step.value(0)
+                    true
+                }
+            }.pointerInput(Unit) {
+                detectTapGestures(
+                    onPress = {
+                        step.value(0)
+                        val held =
+                            scope.launch {
+                                delay(HOLD_START_MS)
+                                var repeat = 1
+                                while (true) {
+                                    step.value(repeat++)
+                                    delay(HOLD_EVERY_MS)
+                                }
+                            }
+                        tryAwaitRelease()
+                        held.cancel()
+                    },
+                )
+            },
+        contentAlignment = Alignment.Center,
+    ) { MqIcon(icon, tint = Color.White, size = 20.dp) }
+}
+
+/** A secondary control's fill over the picture: white at 16 percent (design/DECISION.md, Secondary actions). */
+private val SECONDARY = Color(0x29FFFFFF)
+
+/** Lucide's "minus", which the design module's set does not carry. */
+private val MINUS: ImageVector by lazy {
+    ImageVector
+        .Builder("minus", 24.dp, 24.dp, 24f, 24f)
+        .addPath(
+            addPathNodes("M5 12h14"),
+            stroke = SolidColor(Color.Black),
+            strokeLineWidth = 2f,
+            strokeLineCap = StrokeCap.Round,
+        ).build()
+}
 
 /**
  * The profile's subtitle size, under the timing: Smaller and Larger step through its four sizes, which hold for the

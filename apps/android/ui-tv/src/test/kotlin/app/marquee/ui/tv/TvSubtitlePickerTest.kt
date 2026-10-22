@@ -183,15 +183,20 @@ class TvSubtitlePickerTest {
     }
 
     @Test
-    fun `with a subtitle on, Down from the last option reaches the Timing row, which moves the words`() {
+    fun `with a subtitle on, Down from the last option reaches the delay, where Left and Right step it and select resets`() {
         open(timing = 0L)
         row("English, 3 options").press(Key.DirectionRight)
         compose.onNode(isFocused()).press(Key.DirectionDown)
         compose.onNode(isFocused()).press(Key.DirectionDown)
-        compose.onNode(isFocused() and hasText("Earlier")).assertExists().press(Key.Enter)
-        compose.onNodeWithText("0.5 s earlier").assertExists()
-        // Left from the row goes back to the language.
+        val delay = compose.onNode(isFocused() and hasContentDescription("Timing"))
+        delay.assertExists()
+        compose.onNodeWithText("0.0 s").assertExists()
+        repeat(3) { compose.onNode(isFocused()).press(Key.DirectionRight) }
+        compose.onNodeWithText("+0.3 s").assertExists()
         compose.onNode(isFocused()).press(Key.DirectionLeft)
-        row("English, 3 options").assertIsFocused()
+        compose.onNodeWithText("+0.2 s").assertExists()
+        // The focus stayed on the delay all along; select puts it back to 0.
+        compose.onNode(isFocused() and hasContentDescription("Timing")).press(Key.Enter)
+        compose.onNodeWithText("0.0 s").assertExists()
     }
 }

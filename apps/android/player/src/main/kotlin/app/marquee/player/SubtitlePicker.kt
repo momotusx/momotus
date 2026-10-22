@@ -602,7 +602,6 @@ fun TvSubtitlePicker(
                             timing,
                             onShift,
                             Modifier.padding(start = 16.dp, top = 12.dp),
-                            first = Modifier.focusProperties { left = back },
                         )
                     }
                     SizeRow(

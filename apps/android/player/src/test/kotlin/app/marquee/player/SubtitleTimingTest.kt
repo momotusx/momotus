@@ -10,6 +10,7 @@ import androidx.media3.extractor.text.SubtitleParser
 import app.marquee.core.model.SubtitleSize
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /** The per-play subtitle delay and the profile's subtitle size (journey reviews 2026-10-20). */
 class SubtitleTimingTest {
@@ -71,6 +72,21 @@ class SubtitleTimingTest {
         assertEquals("On time", timingWords(0))
         assertEquals("0.5 s later", timingWords(500))
         assertEquals("1.5 s earlier", timingWords(-1_500))
+        assertEquals("0.0 s", delayText(0))
+        assertEquals("+0.3 s", delayText(300))
+        assertEquals("-1.2 s", delayText(-1_200))
+    }
+
+    @Test
+    fun `a press steps a tenth of a second, and a held one steps further as it goes`() {
+        assertEquals(100L, SUBTITLE_STEP_MS)
+        assertEquals(100L, delayStepMs(0))
+        assertEquals(100L, delayStepMs(9))
+        assertEquals(200L, delayStepMs(10))
+        assertEquals(500L, delayStepMs(30))
+        // Half a minute is a few seconds of holding at the touch repeat.
+        val held = (1..200).runningFold(0L) { at, n -> at + delayStepMs(n) }.indexOfFirst { it >= SUBTITLE_MAX_MS }
+        assertTrue(held * HOLD_EVERY_MS + HOLD_START_MS < 10_000, "held for ${held * HOLD_EVERY_MS + HOLD_START_MS} ms")
     }
 
     @Test

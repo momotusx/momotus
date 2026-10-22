@@ -65,13 +65,38 @@ internal fun shifted(
 /** How long the Timing row waits after the last press before setting the stream again with the new delay. */
 internal const val TIMING_SETTLE_MS = 700L
 
-/** How far one press of Earlier or Later moves the subtitles. */
-const val SUBTITLE_STEP_MS = 500L
+/** How far one press of the Timing row's minus or plus moves the subtitles, as Stremio's delay steps. */
+const val SUBTITLE_STEP_MS = 100L
 
 /** The furthest the subtitles move either way. */
 const val SUBTITLE_MAX_MS = 30_000L
 
-/** "On time", "0.5 s later", "1.5 s earlier": what the Timing row says. */
+/**
+ * How far a held minus or plus moves the subtitles on its [repeat]th repeat (0 for the press itself): a tenth of a
+ * second at first, then faster, so half a minute is a few seconds of holding.
+ */
+fun delayStepMs(repeat: Int): Long =
+    when {
+        repeat < 10 -> SUBTITLE_STEP_MS
+        repeat < 30 -> 2 * SUBTITLE_STEP_MS
+        else -> 5 * SUBTITLE_STEP_MS
+    }
+
+/** "+0.3 s", "0.0 s", "-1.2 s": the delay as the Timing row shows it, later being plus. */
+fun delayText(delayMs: Long): String {
+    val seconds = "%.1f".format(java.util.Locale.ROOT, kotlin.math.abs(delayMs) / 1000.0)
+    return when {
+        delayMs > 0 -> "+$seconds s"
+        delayMs < 0 -> "-$seconds s"
+        else -> "$seconds s"
+    }
+}
+
+/** How long a touch holds minus or plus before it repeats, and how often it repeats then. */
+internal const val HOLD_START_MS = 400L
+internal const val HOLD_EVERY_MS = 100L
+
+/** "On time", "0.5 s later", "1.5 s earlier": what the Timing row says to a screen reader. */
 fun timingWords(delayMs: Long): String {
     if (delayMs == 0L) return "On time"
     val seconds = "%.1f".format(java.util.Locale.ROOT, kotlin.math.abs(delayMs) / 1000.0)
