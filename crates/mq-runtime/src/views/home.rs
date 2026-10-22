@@ -429,6 +429,28 @@ impl Core {
         Ok(self.home_catalogs())
     }
 
+    /// Home's row choices follow an addon whose link changed from `old` to
+    /// `new`: the ids made from the old link take the new one's tag.
+    pub(crate) fn move_home_rows(&self, old: &str, new: &str) -> Result<(), CoreError> {
+        let (from, to) = (
+            format!("@{}:", install_tag(old)),
+            format!("@{}:", install_tag(new)),
+        );
+        let rows = self.prefs().home_rows;
+        let moved = |ids: &[String]| -> Vec<String> {
+            ids.iter().map(|id| id.replacen(&from, &to, 1)).collect()
+        };
+        let next = HomeRows {
+            hidden: moved(&rows.hidden),
+            order: moved(&rows.order),
+            shown: moved(&rows.shown),
+        };
+        if next != rows {
+            self.set_prefs(&serde_json::json!({ "homeRows": next }))?;
+        }
+        Ok(())
+    }
+
     /// Every Home catalog in the order Home uses, hidden ones included where
     /// they would sit.
     pub fn home_catalogs(&self) -> Vec<HomeCatalog> {

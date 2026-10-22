@@ -170,6 +170,14 @@ const BROUGHT: [&str; 4] = [
     "streamingcatalogs",
 ];
 
+/// Links a default was installed with before it moved, by key. Trakt Tv's
+/// old deployment answers `{}` whenever its own call to Trakt fails, and its
+/// author points to the maintained one (the owner, 2026-10-22).
+const MOVED: [(&str, &str); 1] = [(
+    "trakt",
+    "https://2ecbbd610840-trakt.baby-beamup.club/manifest.json",
+)];
+
 impl Core {
     /// Puts every default a profile never had in its list once, on, for
     /// each profile on this device (the owner's ruling, 2026-10-22: a new
@@ -198,6 +206,7 @@ impl Core {
         if self.policy().kids() || self.library().addon_list_hlc(self.profile())?.is_none() {
             return Ok(Vec::new());
         }
+        self.move_old_links()?;
         let mut given = self.defaults_given();
         if given.is_empty() {
             // A list from before profiles kept what they had.
@@ -230,6 +239,49 @@ impl Core {
             self.refresh_addons_soon()?;
         }
         Ok(added)
+    }
+
+    /// A row still on a default's old link (`MOVED`) takes the default's link
+    /// and bundled manifest in place, its switch and position kept, and the
+    /// Home rows the user hid, showed or moved follow it; when the new link
+    /// is in the list already, the old row goes. Once moved there is nothing
+    /// left to move, and a profile without the old link is not touched.
+    fn move_old_links(&self) -> Result<(), CoreError> {
+        let moving = |url: &str| {
+            MOVED
+                .iter()
+                .find(|(_, old)| *old == url)
+                .and_then(|(key, _)| list().iter().find(|d| d.key == *key))
+        };
+        let rows = self.library().addons(self.profile())?;
+        if !rows.iter().any(|r| moving(&r.transport_url).is_some()) {
+            return Ok(());
+        }
+        let mut moved = Vec::new();
+        self.edit_addons(|rows| {
+            let links: Vec<String> = rows.iter().map(|r| r.transport_url.clone()).collect();
+            let mut keep = Vec::new();
+            for mut row in rows.drain(..) {
+                let Some(d) = moving(&row.transport_url) else {
+                    keep.push(row);
+                    continue;
+                };
+                moved.push((row.transport_url.clone(), d.url.clone()));
+                if links.contains(&d.url) {
+                    continue;
+                }
+                row.transport_url = d.url.clone();
+                row.manifest_json = serde_json::to_string(&d.manifest)
+                    .map_err(|e| CoreError::BadManifest(e.to_string()))?;
+                keep.push(row);
+            }
+            *rows = keep;
+            Ok(())
+        })?;
+        for (old, new) in moved {
+            self.move_home_rows(&old, &new)?;
+        }
+        Ok(())
     }
 
     /// Tests: the keys of the defaults this profile has had.

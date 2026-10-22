@@ -908,22 +908,22 @@
  },
  {
   "key": "trakt",
-  "url": "https://2ecbbd610840-trakt.baby-beamup.club/manifest.json",
+  "url": "https://trakt.dexter21767.com/manifest.json",
   "name": "Trakt",
   "line": "Trending and popular on Trakt. Your own lists can be added later.",
   "group": "lists",
   "manifest": {
    "id": "community.trakt-tv",
-   "version": "0.2.7",
+   "version": "1.1.0",
    "name": "Trakt Tv",
    "description": "Addon for getting Trakt's public and user lists, recommendations and watch list.",
-   "logo": "https://2ecbbd610840-trakt.baby-beamup.club/public/logoPS.png?ver=0.2.7",
-   "background": "https://2ecbbd610840-trakt.baby-beamup.club/public/background.png?ver=0.2.7",
+   "logo": "https://trakt.dexter21767.com/public/logoPS.png",
+   "background": "https://trakt.dexter21767.com/public/background.png",
    "catalogs": [
     {
      "type": "trakt",
      "id": "trakt_popular_movies",
-     "name": "trakt - Popular movies",
+     "name": "Popular movies",
      "extra": [
       {
        "name": "genre",
@@ -974,7 +974,7 @@
     {
      "type": "trakt",
      "id": "trakt_trending_movies",
-     "name": "trakt - Trending movies",
+     "name": "Trending movies",
      "extra": [
       {
        "name": "genre",
@@ -1025,7 +1025,7 @@
     {
      "type": "trakt",
      "id": "trakt_popular_series",
-     "name": "trakt - Popular series",
+     "name": "Popular series",
      "extra": [
       {
        "name": "genre",
@@ -1076,7 +1076,7 @@
     {
      "type": "trakt",
      "id": "trakt_trending_series",
-     "name": "trakt - Trending series",
+     "name": "Trending series",
      "extra": [
       {
        "name": "genre",
@@ -1127,7 +1127,7 @@
     {
      "type": "trakt",
      "id": "trakt_search_movies",
-     "name": "trakt - search movies",
+     "name": "search movies",
      "extra": [
       {
        "name": "search",
@@ -1138,7 +1138,7 @@
     {
      "type": "trakt",
      "id": "trakt_search_series",
-     "name": "trakt - search series",
+     "name": "search series",
      "extra": [
       {
        "name": "search",

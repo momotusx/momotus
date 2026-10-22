@@ -729,3 +729,107 @@ async fn what_two_devices_gave_is_kept_whole_when_their_records_meet() {
         );
     }
 }
+
+/// Trakt Tv's old deployment, the default's link before 2026-10-22.
+const OLD_TRAKT: &str = "https://2ecbbd610840-trakt.baby-beamup.club/manifest.json";
+
+/// A list of the defaults `keys` with Trakt among them on its old link, on
+/// or off; the device then starts again.
+fn with_old_trakt(core: &Core, keys: &[&str], trakt_on: bool) {
+    let rows: Vec<AddonRow> = keys
+        .iter()
+        .enumerate()
+        .map(|(position, key)| {
+            let d = defaults::list().iter().find(|d| d.key == *key).unwrap();
+            let old = *key == "trakt";
+            AddonRow {
+                transport_url: if old { OLD_TRAKT.into() } else { d.url.clone() },
+                manifest_json: serde_json::to_string(&d.manifest).unwrap(),
+                position: position as i64,
+                enabled: !old || trakt_on,
+                allow_private: false,
+            }
+        })
+        .collect();
+    core.library()
+        .set_addons(OWNER, &rows, &core.hlc())
+        .unwrap();
+}
+
+/// The owner, 2026-10-22: a profile on Trakt Tv's old link gets the
+/// maintained one in its place once, its switch, its position and the Home
+/// rows it hid kept; a second start changes nothing.
+#[tokio::test]
+async fn trakts_old_link_moves_to_the_maintained_one_once() {
+    let four = ["cinemeta", "torrentio", "trakt", "opensubtitles"];
+    for on in [true, false] {
+        let device = Device::new(&format!("trakt-{on}"));
+        let core = device.start();
+        with_old_trakt(&core, &four, on);
+        let hidden = core
+            .home_catalogs()
+            .into_iter()
+            .find(|c| c.row_id.starts_with("community.trakt-tv@") && c.title == "Trending movies");
+        if let Some(row) = &hidden {
+            assert!(!row.hidden, "no twin: shown until hidden");
+            core.set_home_row_hidden(&row.row_id, true).unwrap();
+        }
+        assert_eq!(hidden.is_some(), on, "an addon that is off has no rows");
+        drop(core);
+
+        let core = device.start();
+        let rows = urls(&core);
+        assert_eq!(rows[2], (url("trakt"), on), "same place, same switch");
+        assert!(rows.iter().all(|(u, _)| u != OLD_TRAKT));
+        assert_eq!(rows.iter().filter(|(u, _)| *u == url("trakt")).count(), 1);
+        if on {
+            let moved = core
+                .home_catalogs()
+                .into_iter()
+                .find(|c| {
+                    c.row_id.starts_with("community.trakt-tv@") && c.title == "Trending movies"
+                })
+                .unwrap();
+            assert!(moved.hidden, "the row it hid stays hidden");
+            assert_ne!(Some(moved.row_id), hidden.map(|r| r.row_id));
+        }
+        let stamped = stamp(&core);
+        drop(core);
+        let core = device.start();
+        assert_eq!(urls(&core), rows);
+        assert_eq!(stamp(&core), stamped, "nothing left to move");
+    }
+}
+
+/// Both links in the list (the new one installed by hand): the old row
+/// goes, the new one stays once. A profile without Trakt stays without it.
+#[tokio::test]
+async fn an_old_trakt_beside_the_new_one_goes_and_no_trakt_stays_none() {
+    let device = Device::new("trakt-both");
+    let core = device.start();
+    with_old_trakt(&core, &["cinemeta", "trakt"], true);
+    let mut rows = core.library().addons(OWNER).unwrap();
+    let mut new = rows[1].clone();
+    new.transport_url = url("trakt");
+    new.position = 2;
+    rows.push(new);
+    core.library()
+        .set_addons(OWNER, &rows, &core.hlc())
+        .unwrap();
+    drop(core);
+    let core = device.start();
+    let trakts: Vec<_> = urls(&core)
+        .into_iter()
+        .filter(|(u, _)| u.contains("trakt"))
+        .collect();
+    assert_eq!(trakts, [(url("trakt"), true)]);
+    drop(core);
+
+    let device = Device::new("trakt-none");
+    let core = device.start();
+    core.install_defaults(&switches(&[])).unwrap();
+    core.remove_addon(&url("trakt")).unwrap();
+    drop(core);
+    let core = device.start();
+    assert!(urls(&core).iter().all(|(u, _)| !u.contains("trakt")));
+}
