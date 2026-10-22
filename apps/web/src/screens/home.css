@@ -102,10 +102,11 @@
 .tile:focus-visible .pic, [data-form="tv"] .tile:focus .pic {
   outline: var(--focus-ring) solid var(--key); outline-offset: var(--focus-ring); box-shadow: var(--focus-shadow); overflow: hidden; }
 [data-form="tv"] .tile:focus .pic { transform: translateY(calc(-1 * var(--focus-rise-art))) scale(var(--focus-scale-art)); box-shadow: var(--lift-focus-art); }
-@media (hover: hover) {
-  [data-form="desktop"] .tile:hover { transform: translateY(-8px); }
-  [data-form="desktop"] .tile:hover .pic { box-shadow: var(--lift-hover-edge); }
-}
+/* Hover as tv.apple.com: a 30 percent grey scrim over the art, no lift. It sets in at once: a lift
+ * with a transitioned shadow repainted the whole row on every frame as tiles slid under the
+ * pointer (about 180 ms of paint and layerize per wheel run on desktop Home, against 20 now). */
+[data-form="desktop"] .tile .pic::after { transition: none; }
+@media (hover: hover) { [data-form="desktop"] .tile:hover .pic::after { background: rgba(51, 51, 51, .3); opacity: 1; } }
 /* Continue Watching off TV: a remove button on the still's top right
  * corner, shown on hover or focus, always on touch screens. */
 .tile-x { position: absolute; z-index: 3; top: 10px; right: 10px; display: grid; place-items: center; width: 36px; height: 36px;
@@ -115,7 +116,6 @@
 .tile-slot:hover .tile-x, .tile-slot:focus-within .tile-x { opacity: 1; }
 .tile-x:focus-visible { outline: var(--focus-ring) solid var(--key); outline-offset: 2px; }
 @media (hover: none) { .tile-x { opacity: 1; } }
-@media (hover: hover) { [data-form="desktop"] .tile-slot:hover .tile-x { transform: translateY(-8px); } }
 [data-form="phone"] .tile-x { opacity: 1; top: 6px; right: 6px; width: 32px; height: 32px; }
 /* Asking, or refused: the button says it in words, over the still. */
 .tile-x.asking, .tile-x.failed { width: auto; padding: 0 14px; border-radius: 18px; opacity: 1; font: 600 15px / 1 var(--font-text); white-space: nowrap; }

@@ -158,6 +158,20 @@ test("Customize Home names each row's addon on a quiet second line; Discover's c
   await context.close();
 });
 
+test("desktop: a hovered poster takes tv.apple.com's grey scrim and does not lift", async ({ browser }) => {
+  const { context, page } = await open(browser, "desktop", "/");
+  const tile = page.locator(".row").nth(1).locator(".tile").first();
+  await expect(tile).toBeVisible({ timeout: 30_000 });
+  await tile.hover();
+  // At once, no transition: a lift with a transitioned shadow repainted the whole row on every frame of a wheel scroll.
+  const s = await tile.evaluate((el) => {
+    const after = getComputedStyle(el.querySelector(".pic") as Element, "::after");
+    return { lift: getComputedStyle(el).transform, scrim: after.backgroundColor, opacity: after.opacity, transition: after.transitionDuration };
+  });
+  expect(s).toEqual({ lift: "none", scrim: "rgba(51, 51, 51, 0.3)", opacity: "1", transition: "0s" });
+  await context.close();
+});
+
 test("TV: the solid tab bar, 68 tall at 46, every tab with its word, the active one in a white 20 percent pill", async ({ browser }) => {
   const { context, page } = await open(browser, "tv", "/");
   const bar = page.locator(".topnav .tabbar");
