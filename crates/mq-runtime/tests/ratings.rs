@@ -1,7 +1,7 @@
 //! IMDb and Rotten Tomatoes scores from MDBList (plans/research/ratings.md),
 //! against a local fake: batching, cache ages, rests, the missing-score rule,
-//! and the views that show them. Then the Rotten Tomatoes addon's "Fresh"
-//! mark, against a fake of that addon.
+//! and the views that show them. Then the Rotten Tomatoes addon's lists,
+//! against a fake of that addon: their mark stays inside and never shows.
 
 use mq_library::{AddonRow, OWNER, RatingRow};
 use mq_runtime::ratings::{BATCH, Host, Ratings, Scores, Title};
@@ -364,6 +364,7 @@ async fn a_missing_or_invalid_score_shows_no_slot() {
     let shown = |imdb: Option<&str>, rt: Option<&str>| Ratings {
         imdb: imdb.map(str::to_owned),
         rotten_tomatoes: rt.map(str::to_owned),
+        metacritic: None,
     };
     assert_eq!(row("tt1", Some("8.7")), shown(Some("8.8"), Some("87%")));
     // MDBList has no IMDb score: the addon's; it never gives the RT one.
@@ -395,7 +396,8 @@ async fn without_a_key_mdblist_is_never_asked() {
         Ratings::of(None, Some("8.4")),
         Ratings {
             imdb: Some("8.4".into()),
-            rotten_tomatoes: None
+            rotten_tomatoes: None,
+            metacritic: None
         }
     );
 }
@@ -781,7 +783,7 @@ async fn setup() -> (Core, Fake) {
 }
 
 fn pair(imdb: Option<&str>, rt: Option<&str>) -> Value {
-    json!({"imdb": imdb, "rottenTomatoes": rt})
+    json!({"imdb": imdb, "rottenTomatoes": rt, "metacritic": null})
 }
 
 async fn until(what: &str, mut done: impl FnMut() -> bool) {
@@ -1061,8 +1063,10 @@ fn show(id: &str) -> Title {
     ("show".into(), id.into())
 }
 
-fn rt_of(known: &HashMap<Title, Scores>, title: &Title) -> Option<String> {
-    Ratings::of(known.get(title), None).rotten_tomatoes
+/// Whether the Rotten Tomatoes addon's lists name the title (the mark kept
+/// inside, never shown).
+fn listed(known: &HashMap<Title, Scores>, title: &Title) -> bool {
+    known.get(title).is_some_and(|s| s.fresh)
 }
 
 fn install(core: &Core, rows: &[AddonRow]) {
@@ -1102,15 +1106,17 @@ async fn the_addons_lists_mark_their_titles_fresh_and_are_read_once_a_day() {
     assert_eq!(core.ratings().lookup(&titles).await, None);
     read(&core, &titles).await;
     let known = core.ratings().lookup(&titles).await.expect("marked");
-    assert_eq!(rt_of(&known, &movie(SHAWSHANK)).as_deref(), Some("Fresh"));
-    assert_eq!(
-        rt_of(&known, &movie(GODFATHER)).as_deref(),
-        Some("Fresh"),
-        "from the Drama page"
+    assert!(listed(&known, &movie(SHAWSHANK)));
+    assert!(listed(&known, &movie(GODFATHER)), "from the Drama page");
+    assert!(listed(&known, &show("tt0903747")));
+    assert!(!listed(&known, &movie(PART_II)), "not listed");
+    assert!(!listed(&known, &show(SHAWSHANK)), "listed as a movie");
+    // Listed or not, Rotten Tomatoes shows a number or nothing.
+    assert!(
+        known
+            .values()
+            .all(|s| Ratings::of(Some(s), None).rotten_tomatoes.is_none())
     );
-    assert_eq!(rt_of(&known, &show("tt0903747")).as_deref(), Some("Fresh"));
-    assert_eq!(rt_of(&known, &movie(PART_II)), None, "not listed");
-    assert_eq!(rt_of(&known, &show(SHAWSHANK)), None, "listed as a movie");
     let mut pages = rt.served();
     pages.sort();
     assert_eq!(
@@ -1342,16 +1348,18 @@ async fn mdblists_tomatometer_wins_over_the_mark() {
         row(&movie(SHAWSHANK)),
         Ratings {
             imdb: Some("9.2".into()),
-            rotten_tomatoes: Some("89%".into())
+            rotten_tomatoes: Some("89%".into()),
+            metacritic: None
         }
     );
     assert_eq!(
         row(&movie(GODFATHER)),
         Ratings {
             imdb: Some("9.1".into()),
-            rotten_tomatoes: Some("Fresh".into())
+            rotten_tomatoes: None,
+            metacritic: None
         },
-        "MDBList had no Tomatometer: the mark"
+        "MDBList had no Tomatometer: nothing, the mark never shows"
     );
 }
 
@@ -1396,111 +1404,76 @@ async fn a_disabled_addon_or_a_kids_profile_reads_no_list_and_shows_no_mark() {
     assert_eq!(owner.ratings().lookup(&titles).await, None);
 }
 
+/// The owner, 2026-10-23: Rotten Tomatoes shows a number or nothing. Once
+/// the addon's lists are read and name the titles, no tile, hero, title
+/// page, Discover or Search item shows a word for them, and the title page
+/// credits no list.
 #[tokio::test]
-async fn home_discover_search_and_the_title_page_show_the_mark_until_the_addon_goes() {
+async fn the_lists_mark_never_shows_on_any_view() {
     let core = Core::temporary("p").unwrap();
     let rt = rt_addon().await;
     install(&core, &[addon().await, rt.row.clone()]);
     let home = HomeView::open(&core);
-    // The lookups do not wait for the lists: Home puts the marks on when
-    // the read ends.
-    until("the mark on Home", || {
-        home.snapshot().rows.first().is_some_and(|r| {
-            r.state == RowState::Ready && r.tiles[1].ratings.rotten_tomatoes.is_some()
-        })
+    until("Home ready", || {
+        home.snapshot()
+            .rows
+            .first()
+            .is_some_and(|r| r.state == RowState::Ready)
     })
     .await;
+    read(&core, &[movie(SHAWSHANK), movie(GODFATHER)]).await;
+    let known = core.ratings().known(&[movie(SHAWSHANK), movie(GODFATHER)]);
+    assert!(listed(&known, &movie(SHAWSHANK)) && listed(&known, &movie(GODFATHER)));
+    // Give every open view the time to put on what holds after the read.
+    tokio::time::sleep(Duration::from_millis(300)).await;
     let tiles = serde_json::to_value(&home.snapshot().rows[0].tiles).unwrap();
-    assert_eq!(tiles[0]["ratings"], pair(Some("9.3"), Some("Fresh")));
-    assert_eq!(tiles[1]["ratings"], pair(None, Some("Fresh")));
-    assert_eq!(tiles[2]["ratings"], pair(Some("9.0"), None), "not listed");
-    until("the mark on the hero", || {
+    assert_eq!(tiles[0]["ratings"]["rottenTomatoes"], Value::Null);
+    assert_eq!(tiles[1]["ratings"]["rottenTomatoes"], Value::Null);
+    assert!(
         home.snapshot()
             .header
             .hero
-            .is_some_and(|h| h.tile.ratings.rotten_tomatoes.is_some())
-    })
-    .await;
-
-    let title = TitleView::open(&core, "movie", SHAWSHANK);
-    until("the mark on the title page", || {
-        title
-            .snapshot()
-            .header
-            .details
-            .is_some_and(|d| d.ratings.rotten_tomatoes.is_some())
-    })
-    .await;
-    let json = serde_json::to_value(title.snapshot().header.details.unwrap()).unwrap();
-    assert_eq!(json["ratings"], pair(Some("9.3"), Some("Fresh")));
-    assert_eq!(
-        json["ratingsFrom"], "IMDb from Local, Rotten Tomatoes from the Rotten Tomatoes addon",
-        "each source by its name"
-    );
-
-    let discover = DiscoverView::open(&core);
-    until("the mark in Discover", || {
-        let s = discover.snapshot();
-        s.state != DiscoverState::Loading
-            && s.items
-                .get(1)
-                .is_some_and(|t| t.ratings.rotten_tomatoes.is_some())
-    })
-    .await;
-    assert_eq!(discover.snapshot().items[2].ratings.rotten_tomatoes, None);
-    let search = SearchView::open(&core);
-    search.set_query("godfather");
-    until("the mark in Search", || {
-        search.snapshot().rows.first().is_some_and(|r| {
-            r.state == RowState::Ready
-                && r.tiles
-                    .iter()
-                    .any(|t| t.id == GODFATHER && t.ratings.rotten_tomatoes.is_some())
-        })
-    })
-    .await;
-
-    // A read that no longer lists The Godfather takes its mark off the
-    // open Home and gives it to Part II.
-    rt.list(RT_DRAMA, &[("movie", PART_II)]);
-    core.ratings().age_lists(DAY);
-    read(&core, &[movie(GODFATHER)]).await;
-    let shown = |i: usize| {
-        home.snapshot().rows[0].tiles[i]
-            .ratings
-            .rotten_tomatoes
-            .clone()
-    };
-    until("Home after the read", || {
-        shown(1).is_none() && shown(2).is_some()
-    })
-    .await;
-
-    // The owner turns the addon off: the open Home takes the mark away.
-    core.set_addon_enabled(rt.url(), false).unwrap();
-    until("the mark gone from Home", || {
-        let snap = home.snapshot();
-        snap.rows
-            .iter()
-            .all(|r| r.tiles.iter().all(|t| t.ratings.rotten_tomatoes.is_none()))
-            && snap
-                .header
-                .hero
-                .is_some_and(|h| h.tile.ratings.rotten_tomatoes.is_none())
-    })
-    .await;
-    assert_eq!(
-        home.snapshot().rows[0].tiles[0].ratings.imdb.as_deref(),
-        Some("9.3")
+            .is_none_or(|h| h.tile.ratings.rotten_tomatoes.is_none())
     );
     let title = TitleView::open(&core, "movie", SHAWSHANK);
-    until("the title page without the addon", || {
+    until("the title page", || {
         title.snapshot().header.details.is_some()
     })
     .await;
     let json = serde_json::to_value(title.snapshot().header.details.unwrap()).unwrap();
-    assert_eq!(json["ratings"], pair(Some("9.3"), None));
-    assert_eq!(json["ratingsFrom"], Value::Null);
+    assert_eq!(json["ratings"]["rottenTomatoes"], Value::Null);
+    assert_eq!(json["ratingsFrom"], Value::Null, "no list credited");
+    let discover = DiscoverView::open(&core);
+    until("Discover", || {
+        let s = discover.snapshot();
+        s.state != DiscoverState::Loading && !s.items.is_empty()
+    })
+    .await;
+    assert!(
+        discover
+            .snapshot()
+            .items
+            .iter()
+            .all(|t| t.ratings.rotten_tomatoes.is_none())
+    );
+    let search = SearchView::open(&core);
+    search.set_query("godfather");
+    until("Search", || {
+        search
+            .snapshot()
+            .rows
+            .first()
+            .is_some_and(|r| r.state == RowState::Ready)
+    })
+    .await;
+    assert!(
+        search
+            .snapshot()
+            .rows
+            .iter()
+            .flat_map(|r| &r.tiles)
+            .all(|t| t.ratings.rotten_tomatoes.is_none())
+    );
 }
 
 #[tokio::test]
@@ -1534,14 +1507,15 @@ async fn the_addon_turned_off_while_its_lists_are_read_never_brings_the_mark_bac
     assert_eq!(core.ratings().lookup(&titles).await, None);
 }
 
-/// The nine defaults against the real addons: how many tiles a Home of
-/// their catalogs marks Fresh. Prints one JSON line for
+/// The defaults against the real addons: how many titles of a Home of
+/// their catalogs the Rotten Tomatoes addon's lists name, and that no tile
+/// shows a word for them. Prints one JSON line for
 /// `bench/core/ratings.jsonl`.
 ///
 /// `cargo test -p mq-runtime --test ratings -- --ignored --nocapture`
 #[tokio::test]
 #[ignore = "network: the default addons"]
-async fn a_home_of_the_default_catalogs_marks_the_listed_titles_fresh() {
+async fn a_home_of_the_default_catalogs_shows_no_word_for_the_listed_titles() {
     let core = Core::temporary(OWNER).unwrap();
     let all_on: Vec<mq_runtime::defaults::DefaultChoice> = mq_runtime::defaults::list()
         .iter()
@@ -1550,12 +1524,6 @@ async fn a_home_of_the_default_catalogs_marks_the_listed_titles_fresh() {
     core.install_defaults(&all_on).unwrap();
     let started = std::time::Instant::now();
     let home = HomeView::open(&core);
-    let fresh = |tiles: &[mq_runtime::views::home::Tile]| {
-        tiles
-            .iter()
-            .filter(|t| t.ratings.rotten_tomatoes.as_deref() == Some("Fresh"))
-            .count()
-    };
     let settled = || {
         let rows = home.snapshot().rows;
         !rows.is_empty()
@@ -1566,97 +1534,42 @@ async fn a_home_of_the_default_catalogs_marks_the_listed_titles_fresh() {
     while !settled() && started.elapsed() < Duration::from_secs(60) {
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    let settled_ms = started.elapsed().as_millis();
     // Home's first lookup started the read of the lists.
     while core.ratings().reading_lists() && started.elapsed() < Duration::from_secs(120) {
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
-    let lists_ms = started.elapsed().as_millis();
-    let count = || {
-        let rows = home.snapshot().rows;
-        rows.iter().map(|r| fresh(&r.tiles)).sum::<usize>()
-    };
-    let (mut last, mut since) = (count(), std::time::Instant::now());
-    while since.elapsed() < Duration::from_secs(1) {
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        if count() != last {
-            (last, since) = (count(), std::time::Instant::now());
-        }
-    }
     let snap = home.snapshot();
-    let rows: Vec<Value> = snap
-        .rows
+    let tiles: Vec<&mq_runtime::views::home::Tile> =
+        snap.rows.iter().flat_map(|r| &r.tiles).collect();
+    let titles: Vec<Title> = tiles
         .iter()
-        .map(|r| json!({"row": r.title, "source": r.source, "tiles": r.tiles.len(), "fresh": fresh(&r.tiles)}))
+        .filter_map(|t| match t.kind.as_str() {
+            "movie" => Some(("movie".to_owned(), t.id.clone())),
+            "series" => Some(("show".to_owned(), t.id.clone())),
+            _ => None,
+        })
         .collect();
-    let tiles: usize = snap.rows.iter().map(|r| r.tiles.len()).sum();
-    let mut titles: Vec<(String, String)> = snap
-        .rows
+    let known = core.ratings().known(&titles);
+    let listed_titles = titles.iter().filter(|t| listed(&known, t)).count();
+    let words = tiles
         .iter()
-        .flat_map(|r| &r.tiles)
-        .filter(|t| t.ratings.rotten_tomatoes.as_deref() == Some("Fresh"))
-        .map(|t| (t.kind.clone(), t.id.clone()))
-        .collect();
-    titles.sort();
-    titles.dedup();
-    let hero =
-        snap.header.hero.as_ref().map(
-            |h| json!({"name": h.tile.name, "rottenTomatoes": h.tile.ratings.rotten_tomatoes}),
-        );
+        .filter(|t| {
+            t.ratings
+                .rotten_tomatoes
+                .as_deref()
+                .is_some_and(|rt| !rt.ends_with('%'))
+        })
+        .count();
     println!(
         "{}",
         json!({
-            "date": "2026-10-22", "kind": "live", "milestone": "ratings",
-            "what": "a Home of the nine defaults, all on, no MDBList key",
-            "tiles": tiles, "fresh_tiles": last, "fresh_titles": titles.len(),
-            "rows": rows, "hero": hero, "rows_settled_ms": settled_ms, "lists_read_ms": lists_ms,
+            "date": "2026-10-23", "kind": "live", "milestone": "ratings",
+            "what": "a Home of the defaults, all on, no MDBList key",
+            "tiles": tiles.len(), "listed_titles": listed_titles, "rt_words_shown": words,
         })
     );
-    assert!(last > 0, "no tile marked Fresh");
-}
-
-#[tokio::test]
-async fn a_title_page_discover_and_search_opened_before_the_read_ends_get_the_mark() {
-    // No Home: these views open first (a reload on a title page, a deep
-    // link, Search first after a cold start), while the read is slow.
-    let core = Core::temporary("p").unwrap();
-    let rt = rt_addon_with(&["Drama", "Comedy"], Duration::from_millis(500)).await;
-    install(&core, &[addon().await, rt.row.clone()]);
-    let title = TitleView::open(&core, "movie", SHAWSHANK);
-    let discover = DiscoverView::open(&core);
-    let search = SearchView::open(&core);
-    search.set_query("godfather");
-    until("the read on its way", || core.ratings().reading_lists()).await;
-    until("the read's end", || !core.ratings().reading_lists()).await;
-    until("the mark on the title page", || {
-        title
-            .snapshot()
-            .header
-            .details
-            .is_some_and(|d| d.ratings.rotten_tomatoes.as_deref() == Some("Fresh"))
-    })
-    .await;
-    let json = serde_json::to_value(title.snapshot().header.details.unwrap()).unwrap();
-    assert_eq!(
-        json["ratingsFrom"],
-        "IMDb from Local, Rotten Tomatoes from the Rotten Tomatoes addon"
-    );
-    until("the mark in Discover", || {
-        discover
-            .snapshot()
-            .items
-            .get(1)
-            .is_some_and(|t| t.ratings.rotten_tomatoes.is_some())
-    })
-    .await;
-    until("the mark in Search", || {
-        search.snapshot().rows.first().is_some_and(|r| {
-            r.tiles
-                .iter()
-                .any(|t| t.id == GODFATHER && t.ratings.rotten_tomatoes.is_some())
-        })
-    })
-    .await;
+    assert!(listed_titles > 0, "no title listed");
+    assert_eq!(words, 0, "Rotten Tomatoes shows a number or nothing");
 }
 
 /// A read whose runtime goes away (the app's, at its end, or a panic)

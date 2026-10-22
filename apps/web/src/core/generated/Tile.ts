@@ -26,9 +26,8 @@ videoId: string | null,
  */
 rating: string | null, 
 /**
- * The IMDb and Rotten Tomatoes scores to show side by side: MDBList's,
- * with the addon's own IMDb rating when MDBList has none, and "Fresh"
- * when the Rotten Tomatoes addon lists the title and MDBList gave no
- * Tomatometer.
+ * The scores to show side by side: MDBList's, with the addon's own
+ * IMDb rating when MDBList has none; Rotten Tomatoes a number or
+ * nothing, never a word.
  */
 ratings: Ratings, };

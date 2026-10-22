@@ -1088,11 +1088,13 @@ data class RankKey(
     val within: Int,
 )
 
-/** A title's IMDb and Rotten Tomatoes scores, written as shown ("8.8", "87%"); Rotten Tomatoes may be "Fresh", a title the Rotten Tomatoes addon lists with no number. A score nobody gave is null: apps show no slot for it, never a placeholder. */
+/** A title's scores, written as shown: IMDb "8.8", Rotten Tomatoes and Metacritic a number with "%" ("87%"), never a word. A score nobody gave is null: apps show no slot for it, never a placeholder. */
 @Serializable
 data class Ratings(
     val imdb: String? = null,
     val rottenTomatoes: String? = null,
+    /** Empty until a source gives it; the apps lay out its place now. */
+    val metacritic: String? = null,
 )
 
 @Serializable(with = Reason.Serializer::class)
@@ -1580,7 +1582,7 @@ data class Tile(
     val videoId: String? = null,
     /** The IMDb rating the addon gave, as written ("8.4"). */
     val rating: String? = null,
-    /** The IMDb and Rotten Tomatoes scores to show side by side: MDBList's, with the addon's own IMDb rating when MDBList has none, and "Fresh" when the Rotten Tomatoes addon lists the title and MDBList gave no Tomatometer. */
+    /** The scores to show side by side: MDBList's, with the addon's own IMDb rating when MDBList has none; Rotten Tomatoes a number or nothing, never a word. */
     val ratings: Ratings = Ratings(),
 )
 

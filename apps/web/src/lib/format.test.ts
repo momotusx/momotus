@@ -73,23 +73,23 @@ test("Up Next waits for the end, then counts the last 15 s", () => {
 
 test("ratings sit side by side as plain text, and a missing score has no slot", () => {
   const text = (r: Parameters<typeof ratingParts>[0]) => ratingParts(r).map((p) => p.text);
-  expect(text({ imdb: "8.8", rottenTomatoes: "87%" })).toEqual(["IMDb 8.8", "RT 87%"]);
-  expect(text({ imdb: "8.8", rottenTomatoes: null })).toEqual(["IMDb 8.8"]);
-  expect(text({ imdb: null, rottenTomatoes: "0%" })).toEqual(["RT 0%"]);
+  expect(text({ imdb: "8.8", rottenTomatoes: "87%", metacritic: null })).toEqual(["IMDb 8.8", "RT 87%"]);
+  expect(text({ imdb: "8.8", rottenTomatoes: null, metacritic: null })).toEqual(["IMDb 8.8"]);
+  expect(text({ imdb: null, rottenTomatoes: "0%", metacritic: null })).toEqual(["RT 0%"]);
   // The Rotten Tomatoes addon's mark has no number.
-  expect(text({ imdb: "8.8", rottenTomatoes: "Fresh" })).toEqual(["IMDb 8.8", "RT Fresh"]);
-  expect(text({ imdb: null, rottenTomatoes: null })).toEqual([]);
+  expect(text({ imdb: "8.8", rottenTomatoes: "Fresh", metacritic: null })).toEqual(["IMDb 8.8", "RT Fresh"]);
+  expect(text({ imdb: null, rottenTomatoes: null, metacritic: null })).toEqual([]);
   // A recording from before the field: nothing, never a placeholder.
   expect(text(undefined)).toEqual([]);
   // Only the IMDb score links to IMDb's page.
-  expect(ratingParts({ imdb: "8.8", rottenTomatoes: "87%" }).map((p) => p.imdb)).toEqual([true, false]);
+  expect(ratingParts({ imdb: "8.8", rottenTomatoes: "87%", metacritic: null }).map((p) => p.imdb)).toEqual([true, false]);
   // The ratings row sets the source's name apart from its score.
-  expect(ratingParts({ imdb: "8.8", rottenTomatoes: "Fresh" }).map((p) => [p.source, p.score])).toEqual([["IMDb", "8.8"], ["RT", "Fresh"]]);
+  expect(ratingParts({ imdb: "8.8", rottenTomatoes: "Fresh", metacritic: null }).map((p) => [p.source, p.score])).toEqual([["IMDb", "8.8"], ["RT", "Fresh"]]);
   // A screen reader says the names, not "R T".
-  expect(ratingParts({ imdb: "10.0", rottenTomatoes: "100%" }).map((p) => p.spoken)).toEqual(["IMDb 10.0", "Rotten Tomatoes 100 percent"]);
-  expect(ratingParts({ imdb: null, rottenTomatoes: "Fresh" }).map((p) => p.spoken)).toEqual(["Rotten Tomatoes: Fresh"]);
+  expect(ratingParts({ imdb: "10.0", rottenTomatoes: "100%", metacritic: null }).map((p) => p.spoken)).toEqual(["IMDb 10.0", "Rotten Tomatoes 100 percent"]);
+  expect(ratingParts({ imdb: null, rottenTomatoes: "Fresh", metacritic: null }).map((p) => p.spoken)).toEqual(["Rotten Tomatoes: Fresh"]);
   // A poster speaks the scores its chip shows.
-  expect(posterLabel(["Inception", "2010"], { imdb: "8.8", rottenTomatoes: "Fresh" })).toBe("Inception, 2010, IMDb 8.8, Rotten Tomatoes: Fresh");
-  expect(posterLabel(["Inception", null], { imdb: null, rottenTomatoes: "87%" })).toBe("Inception, Rotten Tomatoes 87 percent");
+  expect(posterLabel(["Inception", "2010"], { imdb: "8.8", rottenTomatoes: "Fresh", metacritic: null })).toBe("Inception, 2010, IMDb 8.8, Rotten Tomatoes: Fresh");
+  expect(posterLabel(["Inception", null], { imdb: null, rottenTomatoes: "87%", metacritic: null })).toBe("Inception, Rotten Tomatoes 87 percent");
   expect(posterLabel(["Inception"], null)).toBe("Inception");
 });

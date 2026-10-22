@@ -8,9 +8,10 @@
 //! rest in when a lookup lands.
 //!
 //! The Rotten Tomatoes addon, when a profile has it on, adds a mark with no
-//! number: a title its lists name shows "Fresh" for Rotten Tomatoes, unless
-//! MDBList gave the Tomatometer. Its lists are read once a day, on their own:
-//! no lookup waits for them, and Home puts the marks on when a read ends.
+//! number: its lists name the titles it calls Fresh. The mark stays inside
+//! (`Scores::fresh`) and is never shown: Rotten Tomatoes shows a number or
+//! nothing (the owner, 2026-10-23). Its lists are read once a day, on their
+//! own: no lookup waits for them.
 
 use crate::Core;
 use crate::views::home::Tile;
@@ -53,8 +54,6 @@ const GATHER: Duration = Duration::from_millis(200);
 /// The Rotten Tomatoes addon (a default the owner picked, 2026-10-21): its
 /// catalogs list the titles Rotten Tomatoes calls Fresh, with no number.
 pub const RT_ADDON: &str = "pw.ers.rottentomatoes";
-/// What a title its lists name shows for Rotten Tomatoes.
-const FRESH: &str = "Fresh";
 /// The addon's lists are read again after this long, or after `REST` when
 /// a page of them did not answer.
 const LISTS_FRESH: Duration = Duration::from_secs(86_400);
@@ -84,10 +83,9 @@ const fn given(value: Option<&'static str>) -> Option<&'static str> {
 /// its IMDb id.
 pub type Title = (String, String);
 
-/// A title's IMDb and Rotten Tomatoes scores, written as shown ("8.8",
-/// "87%"); Rotten Tomatoes may be "Fresh", a title the Rotten Tomatoes addon
-/// lists with no number. A score nobody gave is null: apps show no slot for
-/// it, never a placeholder.
+/// A title's scores, written as shown: IMDb "8.8", Rotten Tomatoes and
+/// Metacritic a number with "%" ("87%"), never a word. A score nobody gave
+/// is null: apps show no slot for it, never a placeholder.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 #[cfg_attr(
     feature = "ts",
@@ -98,6 +96,8 @@ pub type Title = (String, String);
 pub struct Ratings {
     pub imdb: Option<String>,
     pub rotten_tomatoes: Option<String>,
+    /// Empty until a source gives it; the apps lay out its place now.
+    pub metacritic: Option<String>,
 }
 
 /// What MDBList answered for one title: IMDb's average and the Tomatometer;
@@ -111,8 +111,8 @@ pub struct Scores {
 
 impl Ratings {
     /// The row a title shows: MDBList's IMDb score, else the addon's own
-    /// (`addon_imdb`, as the addon wrote it); the Tomatometer from MDBList,
-    /// else "Fresh" when the Rotten Tomatoes addon lists the title. A score
+    /// (`addon_imdb`, as the addon wrote it); the Tomatometer from MDBList
+    /// or nothing (the Rotten Tomatoes addon's mark is never shown). A score
     /// off its scale (null, negative, above 10 for IMDb, above 100 for
     /// Rotten Tomatoes) counts as missing.
     pub fn of(scores: Option<&Scores>, addon_imdb: Option<&str>) -> Self {
@@ -126,8 +126,8 @@ impl Ratings {
             rotten_tomatoes: scores
                 .and_then(|s| s.rt)
                 .filter(|v| rt_ok(*v))
-                .map(|v| format!("{v}%"))
-                .or_else(|| scores.is_some_and(|s| s.fresh).then(|| FRESH.to_owned())),
+                .map(|v| format!("{v}%")),
+            metacritic: None,
         }
     }
 }
@@ -144,9 +144,10 @@ fn rt_ok(v: i64) -> bool {
 
 /// The words that credit the scores on a title page ("Ratings from"), each
 /// source named for what it gave: MDBList for its numbers, the meta addon
-/// (`source`, by name) for the IMDb rating it wrote (`addon_imdb`), the
-/// Rotten Tomatoes addon for its mark. `None` when only the meta addon's
-/// IMDb rating shows ("Details from" names it) or nothing does.
+/// (`source`, by name) for the IMDb rating it wrote (`addon_imdb`); the
+/// Rotten Tomatoes addon's mark is never shown, so it is never credited.
+/// `None` when only the meta addon's IMDb rating shows ("Details from"
+/// names it) or nothing does.
 pub(crate) fn credit(
     scores: Option<&Scores>,
     addon_imdb: Option<&str>,
@@ -163,8 +164,6 @@ pub(crate) fn credit(
         .is_some_and(imdb_ok);
     let rt = if mdblist_rt {
         "Rotten Tomatoes via MDBList".to_owned()
-    } else if s.fresh {
-        "Rotten Tomatoes from the Rotten Tomatoes addon".to_owned()
     } else if mdblist_imdb {
         return Some("IMDb via MDBList".to_owned());
     } else {
@@ -909,7 +908,8 @@ mod tests {
             addon,
             Ratings {
                 imdb: Some("8.4".into()),
-                rotten_tomatoes: None
+                rotten_tomatoes: None,
+                metacritic: None
             }
         );
         assert_eq!(Ratings::of(None, Some("7")).imdb.as_deref(), Some("7.0"));
@@ -935,8 +935,11 @@ mod tests {
         );
     }
 
+    /// Rotten Tomatoes shows a number or nothing (the owner, 2026-10-23):
+    /// the addon's mark stays inside, is never a word on screen and is
+    /// never credited.
     #[test]
-    fn the_addons_mark_shows_fresh_unless_mdblist_gave_the_tomatometer() {
+    fn the_addons_mark_never_shows_as_a_word() {
         let fresh = |imdb, rt| Scores {
             fresh: true,
             ..scores(imdb, rt)
@@ -945,7 +948,8 @@ mod tests {
             Ratings::of(Some(&fresh(None, None)), Some("8.4")),
             Ratings {
                 imdb: Some("8.4".into()),
-                rotten_tomatoes: Some("Fresh".into())
+                rotten_tomatoes: None,
+                metacritic: None
             }
         );
         let number = fresh(Some(8.8), Some(87));
@@ -953,26 +957,18 @@ mod tests {
             Ratings::of(Some(&number), None).rotten_tomatoes.as_deref(),
             Some("87%")
         );
-        // A Tomatometer off its scale counts as missing: the mark shows.
+        // A Tomatometer off its scale counts as missing, mark or not.
         assert_eq!(
-            Ratings::of(Some(&fresh(None, Some(101))), None)
-                .rotten_tomatoes
-                .as_deref(),
-            Some("Fresh")
+            Ratings::of(Some(&fresh(None, Some(101))), None).rotten_tomatoes,
+            None
         );
         // Each source named for what it gave, the meta addon by its name.
         let says = |scores: Scores, addon: Option<&str>| credit(Some(&scores), addon, "Cinemeta");
-        assert_eq!(
-            says(fresh(None, None), Some("8.4")).as_deref(),
-            Some("IMDb from Cinemeta, Rotten Tomatoes from the Rotten Tomatoes addon")
-        );
-        assert_eq!(
-            says(fresh(None, None), None).as_deref(),
-            Some("Rotten Tomatoes from the Rotten Tomatoes addon")
-        );
+        assert_eq!(says(fresh(None, None), Some("8.4")), None);
+        assert_eq!(says(fresh(None, None), None), None);
         assert_eq!(
             says(fresh(Some(8.8), None), Some("8.4")).as_deref(),
-            Some("IMDb via MDBList, Rotten Tomatoes from the Rotten Tomatoes addon")
+            Some("IMDb via MDBList")
         );
         assert_eq!(
             says(number, Some("8.4")).as_deref(),
