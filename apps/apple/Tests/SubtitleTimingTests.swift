@@ -264,4 +264,8 @@ private func playerModel() throws -> String {
     #expect(text.contains("arrowEdge: PlayerLayout.timingArrowEdge(ios: Self.ios)"))
     // A menu item takes the plain image: with a glyph view VoiceOver found an empty cell.
     #expect(text.contains(#"Button("Timing: \(PlayerLayout.delayText(model.subtitleDelay))", glyph: "clock")"#))
+    #expect(text.contains(".accessibilityLabel(PlayerLayout.timingItemLabel(model.subtitleDelay))"))
+    #expect(PlayerLayout.timingItemLabel(0.3) == "Subtitle timing, plus 0.3 seconds")
+    #expect(PlayerLayout.timingItemLabel(-1.2) == "Subtitle timing, minus 1.2 seconds")
+    #expect(PlayerLayout.timingItemLabel(0) == "Subtitle timing, 0.0 seconds")
 }

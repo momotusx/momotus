@@ -196,6 +196,9 @@ enum PlayerLayout {
 
     /// "Plus 1.5 seconds", "Minus 0.3 seconds", "0.0 seconds": the signed value as VoiceOver says it,
     /// once it settles. Never "earlier" or "later" (the owner, 2026-10-22).
+    /// What VoiceOver says for the Subtitles menu's Timing item: "Subtitle timing, plus 0.3 seconds".
+    static func timingItemLabel(_ delay: Double) -> String { "Subtitle timing, " + delayWords(delay).lowercased() }
+
     static func delayWords(_ delay: Double) -> String {
         let amount = String(format: "%.1f seconds", abs(delay))
         guard abs(delay) >= 0.05 else { return "0.0 seconds" }

@@ -444,6 +444,7 @@ struct PlayerControls: View {
                     #else
                     // A menu draws only a plain image: a glyph view left the item unlabelled for VoiceOver.
                     Button("Timing: \(PlayerLayout.delayText(model.subtitleDelay))", glyph: "clock") { timingShown = true }
+                        .accessibilityLabel(PlayerLayout.timingItemLabel(model.subtitleDelay))
                     #endif
                 }
                 // Captions carried in the video: the legible output cannot hand over their layout.
