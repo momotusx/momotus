@@ -53,7 +53,7 @@ struct RowView: View {
 
     private var strip: some View {
         ScrollView(.horizontal) {
-            LazyHStack(alignment: .top, spacing: metrics.wide ? 20 : 12) {
+            LazyHStack(alignment: .top, spacing: metrics.wide ? Theme.TileDesktop.gap : Theme.Tile.gap) {
                 let tiles = row.tiles.keyed
                 ForEach(tiles, id: \.key) { key, tile in
                     NavigationLink(value: TitleRoute(tile)) {
@@ -196,7 +196,7 @@ private struct SkeletonStrip: View {
         Color.clear
             .frame(height: metrics.poster.height)
             .overlay(alignment: .leading) {
-                HStack(spacing: metrics.wide ? 20 : 12) {
+                HStack(spacing: metrics.wide ? Theme.TileDesktop.gap : Theme.Tile.gap) {
                     ForEach(0..<10, id: \.self) { _ in
                         RoundedRectangle(cornerRadius: metrics.posterRadius, style: .continuous)
                             .fill(Theme.Palette.surface)

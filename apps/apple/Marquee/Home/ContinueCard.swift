@@ -23,7 +23,7 @@ struct ContinueCard: View {
 
     /// 16:9 lockups: TV's 410, tv.apple.com's 256 on the Mac, the iPhone's 239.
     private var size: CGSize {
-        let width: CGFloat = metrics.wide ? (metrics.poster.width >= Theme.Poster.tv.width ? Theme.Poster.landscape.width : 256) : Theme.Tile.landscape.width
+        let width: CGFloat = metrics.wide ? (metrics.poster.width >= Theme.Poster.tv.width ? Theme.Poster.landscape.width : Theme.TileDesktop.landscape.width) : Theme.Tile.landscape.width
         return CGSize(width: width, height: width * 9 / 16)
     }
 
