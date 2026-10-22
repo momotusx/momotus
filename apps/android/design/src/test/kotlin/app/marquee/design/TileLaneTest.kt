@@ -15,7 +15,8 @@ import kotlin.test.assertTrue
 
 /**
  * A row's height comes from the tile tokens (the caption room, `captionPoster` for posters), the same on web
- * and Apple, and a tile's two caption lines, measured with real text, fit inside that room.
+ * and Apple, and a tile's two caption lines, measured with real text (a 16:9 card's scores after its line), fit
+ * inside that room.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -35,7 +36,14 @@ class TileLaneTest {
                 val metrics = Marquee.tiles
                 lane = metrics.laneHeight(shape)
                 room = if (shape == TileShape.Poster) metrics.captionPoster else metrics.caption
-                PosterTile("A long title that runs past the tile", null, {}, shape = shape, caption = "2010")
+                PosterTile(
+                    "A long title that runs past the tile",
+                    null,
+                    {},
+                    shape = shape,
+                    caption = "2010",
+                    ratings = listOf("IMDb 10.0", "RT 100%"),
+                )
             }
         }
         val metrics = if (form == Form.Tv) Tokens.tvTiles else Tokens.phoneTiles

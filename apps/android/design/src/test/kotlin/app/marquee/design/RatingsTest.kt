@@ -151,4 +151,29 @@ class RatingsTest {
         compose.waitForIdle()
         assertEquals(0, count("2010"))
     }
+
+    @Test
+    fun `a 16 to 9 card's art has no ratings band, so its scores follow its line under the art`() {
+        compose.setContent {
+            MarqueeTheme(Form.Tv) {
+                PosterTile(
+                    "Tenzing",
+                    null,
+                    {},
+                    shape = TileShape.Landscape,
+                    caption = "2026",
+                    ratings = listOf("IMDb 7.5", "RT Fresh"),
+                )
+            }
+        }
+        val art = compose.onNodeWithContentDescription("Tenzing").fetchSemanticsNode().boundsInRoot
+        val year = compose.onNodeWithText("2026", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        for (score in listOf("IMDb 7.5", "RT Fresh")) {
+            val at = compose.onNodeWithText(score, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            assertTrue(at.top >= art.bottom, "$score sits on the art")
+            assertEquals(year.center.y, at.center.y, 1f, "$score is not on the year's line")
+            assertTrue(at.left >= year.right, "$score comes before the year")
+            assertTrue(at.right <= art.right + 0.5f, "$score runs past the card")
+        }
+    }
 }
