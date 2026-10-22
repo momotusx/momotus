@@ -56,8 +56,9 @@ import kotlinx.coroutines.withContext
  * - A playback error stops the player first and only then tells the core (`failOver`), because the
  *   core answers with another source and a late error from the dead one must not fail the new one;
  *   the new source starts at the position the old one reached.
- * - The core's (addon) subtitles are drawn over the picture from their own files ([addonCues]): a pick,
- *   Off or a delay step never sets the media item again. The file's own tracks go through track selection.
+ * - The core's (addon) subtitles are drawn over the picture from their own files ([addonCues]); the file's own
+ *   go through track selection and draw with their delay ([DelayedTextRenderer]). A pick, Off or a delay step
+ *   never sets the media item again.
  *
  * @param openedAtMs [SystemClock.elapsedRealtime] when Play was chosen, for the time to first frame.
  */
@@ -69,7 +70,7 @@ class PlaybackController(
     val episode: String?,
     private val artwork: String?,
     private val openedAtMs: Long,
-    /** What the subtitle parsers read for this play's delay ([PlayerHost.subtitleDelay]): the file's own tracks. */
+    /** The delay the file's own tracks draw with ([PlayerHost.subtitleDelay]). */
     private val subtitleDelay: SubtitleDelay = SubtitleDelay(),
     /** An addon subtitle file from its loopback address ([fetchSubtitle]). */
     private val fetch: suspend (String) -> ByteArray = ::fetchSubtitle,
@@ -241,10 +242,10 @@ class PlaybackController(
     private var loadedUrl: String? = null
 
     /** The addon track drawn over the picture, once its file is in; null with none on. */
-    private var shown: AddonCues? by mutableStateOf(null)
+    private var shown: TimedCues? by mutableStateOf(null)
 
     /** Addon files already parsed in this play: a pick back to one shows at once. */
-    private val fetched = HashMap<String, AddonCues>()
+    private val fetched = HashMap<String, TimedCues>()
     private var fetching: Job? = null
     private var snapshotSubs: List<SubtitleTrack> = emptyList()
     private var firstFrame = false
@@ -258,8 +259,7 @@ class PlaybackController(
     private var pick: TextPick? = null
         set(value) {
             field = value
-            // A track comes on with its own delay. Off keeps the last one: nothing shows, and the same file's
-            // track back on needs no new item.
+            // A track comes on with its own delay; Off keeps the last one, as nothing shows.
             if (value != null) applyDelay(delays[value.delayKey] ?: 0L)
         }
 
@@ -273,7 +273,6 @@ class PlaybackController(
     private val dead = HashSet<String>()
     private var released = false
     private var durationSentFor: String? = null
-    private var reloadedAt = 0L
     private var ticker: Job? = null
     private var noticeJob: Job? = null
     private val marks = LinkedHashMap<String, Long>()
@@ -557,8 +556,8 @@ class PlaybackController(
                     fillBase = 0f
                 }
                 if (loadedUrl != null) stage = Stage.Buffering
-                // Not a seek, a subtitle reload or a new source: the connection fell behind the file.
-                if (firstFrame && player.playWhenReady && !seekPending && reloadedAt == 0L) {
+                // Not a seek or a new source: the connection fell behind the file.
+                if (firstFrame && player.playWhenReady && !seekPending) {
                     stalledAt = SystemClock.elapsedRealtime()
                 }
             }
@@ -574,11 +573,6 @@ class PlaybackController(
                     if (wantPlay) player.playWhenReady = true
                 }
                 stage = if (player.isPlaying || player.playWhenReady) Stage.Playing else Stage.Paused
-                if (reloadedAt != 0L) {
-                    CoreLog.d("subtitle reload ${SystemClock.elapsedRealtime() - reloadedAt} ms")
-                    reloadedAt = 0L
-                }
-                retiming = false
                 if (seekPending) {
                     seekPending = false
                     report()
@@ -937,23 +931,6 @@ class PlaybackController(
     }
 
     /**
-     * Sets the item again at the same position, for a delay on one of the file's own tracks (its parsers read the
-     * delay when the item is set); a short hitch. After the end the position is the end, which would play nothing,
-     * so it starts over paused instead.
-     */
-    private fun reload() {
-        val url = loadedUrl ?: return
-        // A source that was given up on or a player that was let go is not set again.
-        if (handlingFailure || released) return
-        val ended = stage == Stage.Ended
-        val at = if (ended) 0L else player.currentPosition.coerceAtLeast(0L)
-        reloadedAt = SystemClock.elapsedRealtime()
-        player.setMediaItem(item(url), at)
-        if (ended) pause()
-        player.prepare()
-    }
-
-    /**
      * Leaving the screen (Home, another app, the picture-in-picture window closing): stop the sound. A start under way
      * goes on, paused (plans/player-polish.md 2c), and plays when the viewer is back.
      */
@@ -983,29 +960,11 @@ class PlaybackController(
     /** A track's identity for its delay: the addon file's address, or the file's own track group. */
     private val TextPick.delayKey: String get() = url ?: group ?: language
 
-    /**
-     * The chosen track's delay is [ms]. An addon track reads it as it draws, at once. The file's own tracks are
-     * shifted by their parsers, which read it when the item is set: the item is set again at the same position,
-     * once, after the last of a run of changes.
-     */
+    /** The chosen track's delay is [ms], drawn at once: by the app for an addon track, by the text renderer else. */
     private fun applyDelay(ms: Long) {
         subtitleDelayMs = ms
-        if (pick?.external != false || ms == subtitleDelay.ms) return
         subtitleDelay.ms = ms
-        timing?.cancel()
-        if (loadedUrl == null) return
-        timing =
-            scope.launch {
-                delay(TIMING_SETTLE_MS)
-                retiming = true
-                reload()
-            }
     }
-
-    private var timing: Job? = null
-
-    // A Timing reload is setting the same item again: its empty track list until then changes nothing.
-    private var retiming = false
 
     /** A subtitle is on (a track other than Off is chosen): the subtitle panel shows its Timing row. */
     val subtitleOn: Boolean get() = text.any { it.selected && it.id != TRACK_OFF }
@@ -1061,10 +1020,6 @@ class PlaybackController(
     ): String = "$groupIndex:$trackIndex"
 
     private fun refreshTracks(tracks: Tracks = player.currentTracks) {
-        // A Timing reload sets the same item again, and Media3 reports no tracks until it has selected them
-        // again: the rows and the choice stay as they were, so the Timing row and its focus stay.
-        if (tracks.isEmpty && retiming) return
-        if (!tracks.isEmpty) retiming = false
         val audioRows = ArrayList<TrackChoice>()
         val fileRows = ArrayList<TrackChoice>()
         tracks.groups.forEachIndexed { gi, group ->

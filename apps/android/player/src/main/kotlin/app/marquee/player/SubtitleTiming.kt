@@ -1,67 +1,14 @@
 package app.marquee.player
 
-import androidx.media3.common.C
-import androidx.media3.common.Format
-import androidx.media3.common.util.Consumer
-import androidx.media3.extractor.text.CuesWithTiming
-import androidx.media3.extractor.text.SubtitleParser
-
 /**
- * The delay of the file's own subtitle track that is on, in milliseconds (positive: the words come later). Media3
- * has no delay setting, so the parsers read it when an item is set ([DelayedSubtitles]), and a change sets the item
- * again at the same position. An addon track is drawn by the app and reads its delay as it draws
- * ([PlaybackController.addonCues]). Written on the main thread, read on the loader's.
+ * The delay of the subtitle track that is on, in milliseconds (positive: the words come later). The file's own
+ * tracks read it as they draw ([DelayedTextRenderer]), on the playback thread; an addon track through
+ * [PlaybackController.addonCues]. Written on the main thread.
  */
 class SubtitleDelay {
     @Volatile
     var ms = 0L
 }
-
-/** Subtitle parsers whose cues are shifted by [delay]: the tracks parsed out of the file (the extractors use it). */
-class DelayedSubtitles(
-    private val base: SubtitleParser.Factory,
-    private val delay: SubtitleDelay,
-) : SubtitleParser.Factory {
-    override fun supportsFormat(format: Format): Boolean = base.supportsFormat(format)
-
-    override fun getCueReplacementBehavior(format: Format): Int = base.getCueReplacementBehavior(format)
-
-    override fun create(format: Format): SubtitleParser {
-        val parser = base.create(format)
-        val shiftUs = delay.ms * 1000
-        if (shiftUs == 0L) return parser
-        return object : SubtitleParser {
-            override fun parse(
-                data: ByteArray,
-                offset: Int,
-                length: Int,
-                outputOptions: SubtitleParser.OutputOptions,
-                output: Consumer<CuesWithTiming>,
-            ) = parser.parse(data, offset, length, outputOptions) { output.accept(shifted(it, shiftUs)) }
-
-            override fun getCueReplacementBehavior(): Int = parser.cueReplacementBehavior
-
-            override fun reset() = parser.reset()
-        }
-    }
-}
-
-/**
- * [cues] [shiftUs] later (earlier when negative). Cues in a file's own track carry a start relative to their
- * block (an MKV's text track starts each at 0), and Media3 adds the block's time to it, so the start may go
- * below zero: clamping it would make Earlier do nothing there. Cues with no start (picture subtitles, MP4's
- * own text) take the shift as their start, which is added the same way.
- */
-internal fun shifted(
-    cues: CuesWithTiming,
-    shiftUs: Long,
-): CuesWithTiming {
-    val start = if (cues.startTimeUs == C.TIME_UNSET) shiftUs else cues.startTimeUs + shiftUs
-    return CuesWithTiming(cues.cues, start, cues.durationUs)
-}
-
-/** For the file's own track: how long after the last press of the Timing row the stream is set again with it. */
-internal const val TIMING_SETTLE_MS = 700L
 
 /** How far one press of the Timing row's minus or plus moves the subtitles, as Stremio's delay steps. */
 const val SUBTITLE_STEP_MS = 100L

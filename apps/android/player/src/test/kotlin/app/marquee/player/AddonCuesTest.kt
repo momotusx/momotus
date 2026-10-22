@@ -22,7 +22,7 @@ class AddonCuesTest {
         Two
         """.trimIndent()
 
-    private fun AddonCues.textAt(ms: Long) = at(ms * 1000).map { it.text.toString() }.sorted()
+    private fun TimedCues.textAt(ms: Long) = at(ms * 1000).map { it.text.toString() }.sorted()
 
     @Test
     fun `what shows at a moment, overlapping cues together, nothing between or after`() {

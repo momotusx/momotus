@@ -327,7 +327,7 @@ class SubtitleFailureTest {
     }
 
     @Test
-    fun `a buffer that runs dry during play is logged as a stall, a Timing reload is not`() {
+    fun `a buffer that runs dry during play is logged as a stall`() {
         val lines = CopyOnWriteArrayList<String>()
         CoreLog.sink = { _, message, _ -> lines += message }
         try {
@@ -345,16 +345,6 @@ class SubtitleFailureTest {
             player.state(Player.STATE_READY)
             until("the stall is logged") { lines.any { it.startsWith("stall ") } }
             assertEquals(listOf("stall 1200 ms"), lines.filter { it.startsWith("stall ") })
-            // A delay on the file's own track sets the item again: that wait is no stall.
-            player.media(withOwnTrack, 10_000_000L)
-            controller.selectText(OWN)
-            until("the file's track is on") { controller.subtitleOn }
-            controller.setSubtitleDelay(SUBTITLE_STEP_MS)
-            until("the item is set again") { player.items.size == 2 }
-            player.state(Player.STATE_BUFFERING)
-            player.state(Player.STATE_READY)
-            until("the reload is logged") { lines.any { it.startsWith("subtitle reload") } }
-            assertEquals(1, lines.count { it.startsWith("stall ") })
             controller.release()
         } finally {
             CoreLog.sink = { _, _, _ -> }
@@ -779,42 +769,23 @@ class SubtitleFailureTest {
     }
 
     @Test
-    fun `a delay on the file's own track sets the item again where it was, once a run settles`() {
+    fun `a delay on the file's own track goes to its renderer at once, and never sets the item again`() {
         val delay = SubtitleDelay()
-        val (player, controller) = open(delay = delay)
+        val (player, controller) = open(snapshot(subtitles = listOf(subtitle)), delay = delay)
         player.media(withOwnTrack, 10_000_000L)
         controller.selectText(OWN)
         until("the file's track is on") { controller.subtitleOn }
-        player.position(42_000)
-        controller.setSubtitleDelay(500)
-        controller.setSubtitleDelay(1_000)
         controller.setSubtitleDelay(1_500)
-        assertEquals(1_500L, controller.subtitleDelayMs)
-        until("the item is set again") { player.items.size == 2 }
-        runFor(1_500)
-        assertEquals(2, player.items.size, "a run of changes set the stream again more than once")
-        assertEquals(1_500L, delay.ms, "the parsers read the new delay")
-        assertEquals(video, player.items.last().uri)
-        assertEquals(42_000L, player.items.last().startMs)
-        controller.release()
-    }
-
-    @Test
-    fun `a Timing reload keeps the subtitle rows and the choice while the new item has no tracks yet`() {
-        val (player, controller) = open()
-        player.media(withOwnTrack, 10_000_000L)
+        assertEquals(1_500L, delay.ms, "the renderer reads the new delay")
+        // An addon track keeps its own; back on the file's track, its delay comes back.
+        controller.selectText("late:$subtitle")
+        until("the subtitle is drawn") { controller.addonOn }
+        assertEquals(0L, controller.subtitleDelayMs)
         controller.selectText(OWN)
-        until("the file's track is on") { controller.subtitleOn }
-        controller.setSubtitleDelay(SUBTITLE_STEP_MS)
-        until("the item is set again") { player.items.size == 2 }
-        // Media3 masks the new item with no tracks until it has selected them again.
-        player.media(Tracks.EMPTY, 10_000_000L)
-        runFor(300)
-        assertTrue(controller.subtitleOn, "the Timing row left the panel during the reload")
-        player.media(withOwnTrack, 10_000_000L)
-        player.state(Player.STATE_READY)
-        runFor(300)
-        assertTrue(controller.subtitleOn)
+        assertEquals(1_500L, delay.ms)
+        runFor(1_000)
+        assertEquals(1, player.items.size, "the item was set again")
+        assertEquals(1, player.prepares, "the item was prepared again")
         controller.release()
     }
 

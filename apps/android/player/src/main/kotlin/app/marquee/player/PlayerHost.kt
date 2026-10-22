@@ -1,14 +1,15 @@
 package app.marquee.player
 
 import android.content.Context
+import android.os.Looper
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.Renderer
+import androidx.media3.exoplayer.text.TextOutput
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
-import androidx.media3.extractor.text.DefaultSubtitleParserFactory
 import androidx.media3.session.MediaSession
 
 /**
@@ -17,8 +18,8 @@ import androidx.media3.session.MediaSession
  * Choices that matter on a TV stick, each from reading the alternatives:
  * - platform decoders first, with decoder fallback on, so a broken hardware codec tries the next one;
  * - tunneling stays off (it is device specific and stalls on underruns);
- * - subtitles start off (the viewer picks, as on the web player), and their parsers take the play's
- *   delay ([subtitleDelay]);
+ * - subtitles start off (the viewer picks, as on the web player), and the file's own draw with their
+ *   track's delay ([DelayedTextRenderer]);
  * - audio focus and "becoming noisy" are handled, the screen and Wi-Fi stay awake while playing;
  * - playback starts after one second of buffer, a rebuffer waits three.
  *
@@ -30,7 +31,7 @@ class PlayerHost(
 ) {
     val player: ExoPlayer
 
-    /** The subtitle delay of this play, which the subtitle parsers read when an item is set. */
+    /** The subtitle delay of the track that is on, which the file's own tracks read as they draw. */
     val subtitleDelay = SubtitleDelay()
 
     private val session: MediaSession
@@ -39,7 +40,7 @@ class PlayerHost(
     private val walkLog: WalkLog?
 
     init {
-        val renderers = DefaultRenderersFactory(context).setEnableDecoderFallback(true)
+        val renderers = MarqueeRenderers(context, subtitleDelay).setEnableDecoderFallback(true)
         val selector =
             DefaultTrackSelector(context).apply {
                 setParameters(
@@ -63,10 +64,7 @@ class PlayerHost(
                 .Builder(context, renderers)
                 .setTrackSelector(selector)
                 .setLoadControl(loadControl)
-                .setMediaSourceFactory(
-                    DefaultMediaSourceFactory(context)
-                        .setSubtitleParserFactory(DelayedSubtitles(DefaultSubtitleParserFactory(), subtitleDelay)),
-                ).setAudioAttributes(
+                .setAudioAttributes(
                     AudioAttributes
                         .Builder()
                         .setUsage(C.USAGE_MEDIA)
@@ -99,6 +97,23 @@ class PlayerHost(
         val ids =
             java.util.concurrent.atomic
                 .AtomicInteger()
+    }
+}
+
+/** Media3's renderers, with the file's own subtitles drawn by [DelayedTextRenderer] (Media3's still takes captions). */
+internal class MarqueeRenderers(
+    context: Context,
+    private val delay: SubtitleDelay,
+) : DefaultRenderersFactory(context) {
+    override fun buildTextRenderers(
+        context: Context,
+        output: TextOutput,
+        outputLooper: Looper,
+        extensionRendererMode: Int,
+        out: ArrayList<Renderer>,
+    ) {
+        out += DelayedTextRenderer(output, outputLooper, delay)
+        super.buildTextRenderers(context, output, outputLooper, extensionRendererMode, out)
     }
 }
 
