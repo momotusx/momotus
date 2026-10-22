@@ -258,6 +258,19 @@ for (const form of Object.keys(FORMS) as Form[]) {
     await expect(page.locator(".info .meta span.rate .sr")).toHaveText(form === "tv" ? ["IMDb 10.0", "Rotten Tomatoes: Fresh"] : ["Rotten Tomatoes: Fresh"]);
     measure(form, "title page, RT Fresh", freshTitle.map((t) => t.width));
 
+    // Discover's 2:3 posters, the narrowest slot: a pair wider than the poster takes two lines,
+    // each score whole and inside the art.
+    await page.goto(`/discover?form=${form}`);
+    const freshPoster = page.locator(".grid .tile", { hasText: "Fresh widest" }).first();
+    await expect(freshPoster.locator(".chip-rate")).toHaveText("IMDb 10.0RT Fresh", { timeout: 30_000 });
+    const gridChips = await scores(page, ".grid .tile .chip-rate", ".pic");
+    const gridParts = await scores(page, ".grid .tile .chip-rate > span", ".chip-rate");
+    expect(gridChips.length).toBeGreaterThan(0);
+    for (const chip of gridChips) expect(chip, JSON.stringify(chip)).toMatchObject({ inside: true, cut: false });
+    for (const part of gridParts) expect(part, JSON.stringify(part)).toMatchObject({ lines: 1, cut: false, inside: true });
+    const gridFresh = (await scores(page, '.grid .tile:has-text("Fresh widest") .chip-rate', ".pic"))[0]!;
+    measure(form, "grid poster chip, RT Fresh", { chip: gridFresh.width, poster: gridFresh.outer });
+
     // Search: the meta line keeps every score whole.
     await page.goto(`/search?form=${form}`);
     const field = page.locator('[data-f="search:input"]');

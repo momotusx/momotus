@@ -285,7 +285,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
                   when={blocked()}
                   fallback={
                     <div class="pick-wait" aria-busy="true">
-                      <p class="kicker">Recommended for this screen</p>
+                      <p class="best">Best for this screen</p>
                       <div class="skel" />
                       <div class="skel" />
                       <div class="skel" />
@@ -327,7 +327,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
             >
               {(p) => (
                 <>
-                  <p class="kicker">Recommended for this screen</p>
+                  <p class="best">Best for this screen</p>
                   <h2>
                     {qualityText(p().quality)}
                     <Show when={p().features[0]}>{(f) => <> {f()}</>}</Show>

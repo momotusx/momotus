@@ -9,6 +9,7 @@ import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Wrench from "lucide-solid/icons/wrench";
 import X from "lucide-solid/icons/x";
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
+import tokens from "../../../../design/tokens.json";
 import { Poster } from "./art";
 import { Why } from "./why";
 import type { HomeRow } from "../core/generated/HomeRow";
@@ -35,10 +36,21 @@ interface Metrics {
   caption: number;
 }
 
-// `caption` is the room under every tile for its two lines (name, then the
-// year or the core's caption).
-const TV: Metrics = { poster: [240, 360], landscape: [384, 216], square: [300, 300], gap: 32, pad: 34, inset: 34, peek: 140, caption: 80 };
-const PHONE: Metrics = { poster: [112, 168], landscape: [240, 135], square: [140, 140], gap: 12, pad: 8, inset: 16, peek: 40, caption: 44 };
+// From the one token source (design/tokens.json `tile`); `caption` is the room under every
+// tile for its two lines (name, then the year or the core's caption).
+type TileTokens = (typeof tokens.tile)["tv"];
+const fromTokens = (t: TileTokens): Metrics => ({
+  poster: [t.poster.width, t.poster.height],
+  landscape: [t.landscape.width, t.landscape.height],
+  square: [t.square.width, t.square.height],
+  gap: t.gap,
+  pad: t.pad,
+  inset: t.inset,
+  peek: t.peek,
+  caption: t.caption,
+});
+const TV = fromTokens(tokens.tile.tv);
+const PHONE = fromTokens(tokens.tile.phone);
 export const metrics = () => (form() === "phone" ? PHONE : TV);
 
 const sizeOf = (m: Metrics, shape: string | undefined) =>
@@ -64,6 +76,8 @@ export function TileCard(props: {
   eager?: boolean;
   /** Continue Watching: a 16:9 still with the logo, Apple TV Up Next style. */
   wide?: boolean;
+  /** A 16:9 still (a TV movie row): the backdrop, else the poster from its upper part. */
+  still?: boolean;
   /** A remove button on the tile (Continue Watching off TV; TV removes from the title page). */
   onRemove?: () => Promise<unknown>;
 }) {
@@ -89,16 +103,18 @@ export function TileCard(props: {
     >
       <div class="pic" style={{ height: `${props.h}px` }}>
         <Show
-          when={props.wide}
+          when={props.wide || props.still}
           fallback={<Poster src={props.tile.poster} name={props.tile.name} w={props.w} h={props.h} eager={props.eager} />}
         >
           <Poster
             src={props.tile.background ?? props.tile.poster}
+            fallback={props.tile.background ? props.tile.poster : null}
             name={props.tile.name}
             w={props.w}
             h={props.h}
             eager={props.eager}
-            nameCard={false}
+            nameCard={!props.wide}
+            top={!props.tile.background}
           />
         </Show>
         <Show when={!props.wide && ratingParts(props.tile.ratings).length}>
@@ -173,15 +189,26 @@ export function askOnce(act: () => Promise<unknown>) {
  * Home's row updates from the core. */
 export const removeFromContinue = (itemId: string) => op("removeFromContinue", { itemId });
 
-export function Row(props: { row: HomeRow; autofocus: boolean; root: () => Element | null; onOpen?: () => void; scope?: string; onRetry?: (rowId: string) => Promise<unknown> | undefined }) {
+/** `named`: another row on the screen has the same title, so this one names its addon too. */
+export function Row(props: {
+  row: HomeRow;
+  autofocus: boolean;
+  root: () => Element | null;
+  onOpen?: () => void;
+  scope?: string;
+  named?: boolean;
+  onRetry?: (rowId: string) => Promise<unknown> | undefined;
+}) {
   let section!: HTMLElement;
   let track: HTMLDivElement | undefined;
   const m = metrics;
   // Search shows the same catalogs as Home: keep their offsets and keys apart.
   const id = () => `${props.scope ?? "home"}:${props.row.rowId}`;
-  // Continue Watching is a row of 16:9 stills; catalogs keep their shape.
+  // Continue Watching is a row of 16:9 stills; on TV a movie row is too and a series row is
+  // 2:3 posters (design/DECISION.md, Shelves); other catalogs keep the shape their addon names.
   const wide = () => props.row.rowId === CONTINUE_ROW;
-  const size = () => (wide() ? m().landscape : sizeOf(m(), props.row.tiles[0]?.posterShape));
+  const still = () => !wide() && form() === "tv" && props.row.tiles[0]?.kind === "movie";
+  const size = () => (wide() || still() ? m().landscape : sizeOf(m(), props.row.tiles[0]?.posterShape));
   const stride = () => size()[0] + m().gap;
   const bodyHeight = () => size()[1] + m().pad * 2 + m().caption;
   const [scroll, setScroll] = createSignal(offsets.get(id()) ?? 0);
@@ -226,8 +253,9 @@ export function Row(props: { row: HomeRow; autofocus: boolean; root: () => Eleme
     <section class="row" data-row data-fgroup={`row:${id()}`} ref={section} aria-label={props.row.title}>
       <header class="row-head">
         <h2>{props.row.title}</h2>
-        {/* Continue Watching comes from what was played, not from an addon: it names no source. */}
-        <Show when={props.row.rowId !== CONTINUE_ROW}>
+        {/* The title alone; an addon's name only tells two rows of one title apart. Continue
+            Watching comes from what was played, not from an addon: it names no source. */}
+        <Show when={props.named && props.row.rowId !== CONTINUE_ROW}>
           <span class="row-src">{props.row.source}</span>
         </Show>
         <Show when={state() === "slow" && !ready()}>
@@ -326,6 +354,7 @@ export function Row(props: { row: HomeRow; autofocus: boolean; root: () => Eleme
                           onOpen={props.onOpen}
                           eager
                           wide={wide()}
+                          still={still()}
                           onRemove={wide() && form() !== "tv" ? () => removeFromContinue(tile().id) : undefined}
                         />
                       )}

@@ -1,11 +1,12 @@
-/** A wrapping grid of tiles (Discover, Library) plus the chip rows that
- * filter them. Images load lazily; `onNearEnd` asks for the next page when
+/** A wrapping grid of tiles (Discover, Library) plus the filters over them:
+ * segmented controls and pull-downs. Images load lazily; `onNearEnd` asks for the next page when
  * focus or the scroll position gets within two rows of the end. */
 
 import Check from "lucide-solid/icons/check";
-import { createEffect, createSignal, For, type JSX, onCleanup, onMount, Show } from "solid-js";
+import ChevronDown from "lucide-solid/icons/chevron-down";
+import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show } from "solid-js";
 import type { Tile } from "../core/generated/Tile";
-import { remember } from "../focus/dom";
+import { focusEl, isBackKey, remember } from "../focus/dom";
 import { form } from "../form";
 import { metrics, TileCard } from "./row";
 
@@ -91,15 +92,121 @@ export function SkeletonGrid(props: { count?: number }) {
   );
 }
 
-/** One row of filter chips: one is on at a time. */
-export function Chips<T>(props: {
+type ChipsProps<T> = {
   label: string;
   group: string;
   items: { value: T; label: string; note?: string }[];
   selected: T;
   onSelect: (v: T) => void;
   autofocus?: boolean;
-}) {
+};
+
+/** A filter, one choice on at a time (design/DECISION.md, Grids): two to four choices are a
+ * segmented control, more are a pull-down. */
+export function Chips<T>(props: ChipsProps<T>) {
+  return (
+    <Show when={props.items.length > 4} fallback={<Segmented {...props} />}>
+      <PullDown {...props} />
+    </Show>
+  );
+}
+
+/** The pill names the choice; its list opens under it on the chosen one. Up and Down move in
+ * the list, Back or a press outside closes it, back on the pill. */
+function PullDown<T>(props: ChipsProps<T>) {
+  const [open, setOpen] = createSignal(false);
+  let wrap!: HTMLDivElement;
+  let pill!: HTMLButtonElement;
+  let list: HTMLDivElement | undefined;
+  const key = () => `${props.group}:menu`;
+  createEffect(() => remember(props.group, key()));
+  const current = () => props.items.find((i) => i.value === props.selected);
+  const close = () => {
+    setOpen(false);
+    focusEl(pill);
+  };
+  createEffect(
+    on(open, (o) => {
+      if (!o || !list) return;
+      const on = list.querySelector<HTMLElement>(".pull-opt.on") ?? list.querySelector<HTMLElement>(".pull-opt");
+      if (on) focusEl(on);
+    }),
+  );
+  const outside = (e: PointerEvent) => {
+    if (!wrap.contains(e.target as Node)) setOpen(false);
+  };
+  createEffect(() => {
+    if (!open()) return;
+    document.addEventListener("pointerdown", outside, true);
+    onCleanup(() => document.removeEventListener("pointerdown", outside, true));
+  });
+  // The list keeps the remote's keys: the page under it does not move.
+  const keys = (e: KeyboardEvent) => {
+    const opts = [...(list?.querySelectorAll<HTMLElement>(".pull-opt") ?? [])];
+    const at = opts.indexOf(document.activeElement as HTMLElement);
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const next = opts[Math.min(opts.length - 1, Math.max(0, at + (e.key === "ArrowDown" ? 1 : -1)))];
+      if (next) focusEl(next);
+    } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") e.preventDefault();
+    else if (isBackKey(e)) {
+      e.preventDefault();
+      close();
+    }
+  };
+  return (
+    <div class="chips-row" data-fgroup={props.group}>
+      <span class="kicker">{props.label}</span>
+      <div class="pull" ref={wrap}>
+        <button
+          class="chip pull-pill"
+          aria-haspopup="listbox"
+          aria-expanded={open()}
+          aria-label={`${props.label}: ${current()?.label ?? ""}`}
+          data-f={key()}
+          data-autofocus={props.autofocus ? "" : undefined}
+          ref={pill}
+          onClick={() => setOpen((o) => !o)}
+        >
+          {current()?.label ?? props.label}
+          <Show when={current()?.note}>
+            <small>{current()?.note}</small>
+          </Show>
+          <ChevronDown aria-hidden />
+        </button>
+        <Show when={open()}>
+          <div class="pull-list" role="listbox" aria-label={props.label} data-vscroll ref={list} onKeyDown={keys}>
+            <For each={props.items}>
+              {(item) => (
+                <button
+                  class="pull-opt"
+                  role="option"
+                  aria-selected={item.value === props.selected}
+                  classList={{ on: item.value === props.selected }}
+                  data-f={`${props.group}:${String(item.value)}`}
+                  onClick={() => {
+                    close();
+                    if (item.value !== props.selected) props.onSelect(item.value);
+                  }}
+                >
+                  <Show when={item.value === props.selected}>
+                    <Check aria-hidden class="pull-check" />
+                  </Show>
+                  <b>{item.label}</b>
+                  <Show when={item.note}>
+                    <span>{item.note}</span>
+                  </Show>
+                </button>
+              )}
+            </For>
+          </div>
+        </Show>
+      </div>
+    </div>
+  );
+}
+
+function Segmented<T>(props: ChipsProps<T>) {
   // Entering the row lands on the chip that is on.
   createEffect(() => remember(props.group, `${props.group}:${String(props.selected)}`));
   // The row fades only toward a side with chips left to scroll to; the
@@ -144,9 +251,6 @@ export function Chips<T>(props: {
               data-autofocus={props.autofocus && i() === 0 ? "" : undefined}
               onClick={() => props.onSelect(item.value)}
             >
-              <Show when={item.value === props.selected}>
-                <Check aria-hidden class="chip-check" />
-              </Show>
               {item.label}
               <Show when={item.note}>
                 <small>{item.note}</small>

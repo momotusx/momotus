@@ -8,12 +8,13 @@ import ArrowDown from "lucide-solid/icons/arrow-down";
 import ArrowUp from "lucide-solid/icons/arrow-up";
 import Eye from "lucide-solid/icons/eye";
 import EyeOff from "lucide-solid/icons/eye-off";
-import { createSignal, For, onMount, Show } from "solid-js";
+import { createMemo, createSignal, For, onMount, Show } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { op, reasonOf } from "../core/client";
 import type { HomeCatalog } from "../core/generated/HomeCatalog";
 import { focusEl } from "../focus/dom";
 import { form } from "../form";
+import { sharedTitles } from "../lib/rows";
 import "./browse.css";
 import "./settings.css";
 
@@ -24,6 +25,9 @@ const rowEl = (rowId: string) => [...document.querySelectorAll<HTMLElement>("[da
 
 export default function HomeRows() {
   const [rows, setRows] = createStore<{ list: HomeCatalog[]; loaded: boolean }>({ list: [], loaded: false });
+  // A row shows its title alone; only two of one title name their addon (lib/rows.ts).
+  const shared = createMemo(() => sharedTitles(rows.list));
+  const named = (row: HomeCatalog) => shared().has(row.title);
   const [error, setError] = createSignal<string | null>(null);
   const [moving, setMoving] = createSignal<string | null>(null);
   const apply = (list: HomeCatalog[]) => {
@@ -105,7 +109,7 @@ export default function HomeRows() {
                 when={!phone()}
                 fallback={
                   <div class="hrow-main">
-                    <RowText row={row} n={i() + 1} />
+                    <RowText row={row} n={i() + 1} named={named(row)} />
                   </div>
                 }
               >
@@ -114,7 +118,7 @@ export default function HomeRows() {
                   data-f={key(row.rowId)}
                   data-autofocus={i() === 0 ? "" : undefined}
                   aria-pressed={moving() === row.rowId}
-                  aria-label={`${row.title}, ${row.source}, ${row.hidden ? "hidden" : "shown"}, row ${i() + 1} of ${rows.list.length}`}
+                  aria-label={`${named(row) ? `${row.title}, ${row.source}` : row.title}, ${row.hidden ? "hidden" : "shown"}, row ${i() + 1} of ${rows.list.length}`}
                   onClick={() => setMoving(moving() === row.rowId ? null : row.rowId)}
                   onKeyDown={(e) => onKey(e, row.rowId)}
                   onBlur={(e) => {
@@ -122,7 +126,7 @@ export default function HomeRows() {
                     if (moving() === row.rowId && e.relatedTarget) setMoving(null);
                   }}
                 >
-                  <RowText row={row} n={i() + 1} />
+                  <RowText row={row} n={i() + 1} named={named(row)} />
                   <Show when={moving() === row.rowId}>
                     <span class="hrow-hint">Up or down to move, select to drop</span>
                   </Show>
@@ -157,16 +161,16 @@ export default function HomeRows() {
   );
 }
 
-function RowText(props: { row: HomeCatalog; n: number }) {
+/** `named`: another row has the same title, so this one names its addon. */
+function RowText(props: { row: HomeCatalog; n: number; named: boolean }) {
   return (
     <>
       <span class="hrow-n num">{props.n}</span>
       <span class="hrow-text">
         <b>{props.row.title}</b>
-        <small>
-          {props.row.source}
-          <Show when={props.row.hidden}> · Hidden from Home</Show>
-        </small>
+        <Show when={props.named || props.row.hidden}>
+          <small>{[props.named && props.row.source, props.row.hidden && "Hidden from Home"].filter(Boolean).join(" · ")}</small>
+        </Show>
       </span>
     </>
   );

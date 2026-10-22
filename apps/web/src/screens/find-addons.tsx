@@ -286,7 +286,7 @@ export default function FindAddons() {
   const tv = () => form() === "tv";
   return (
     <main class="browse page settings-page column find-addons" data-vscroll>
-      <h1 data-eyebrow={w.eyebrow}>{w.title}</h1>
+      <h1>{w.title}</h1>
       <p class="lede">{w.lede}</p>
       <Show
         when={!tv()}

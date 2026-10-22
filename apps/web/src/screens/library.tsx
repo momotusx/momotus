@@ -1,4 +1,6 @@
 import { A } from "@solidjs/router";
+import CalendarDays from "lucide-solid/icons/calendar-days";
+import ChevronRight from "lucide-solid/icons/chevron-right";
 import Compass from "lucide-solid/icons/compass";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import { createSignal, Match, Show, Switch } from "solid-js";
@@ -6,6 +8,7 @@ import { Chips, Grid, SkeletonGrid } from "../components/grid";
 import { Why } from "../components/why";
 import { libraryView } from "../core/client";
 import { onProfileReset } from "../core/profiles";
+import { form } from "../form";
 import type { LibrarySort } from "../core/generated/LibrarySort";
 import "./browse.css";
 
@@ -41,7 +44,15 @@ function LibraryPage(props: { retry: () => void }) {
 
   return (
     <main class="browse page" data-vscroll ref={attach} onScroll={(e) => (pageScroll.top = e.currentTarget.scrollTop)}>
-      <h1 data-eyebrow="Yours">Library</h1>
+      <h1>Library</h1>
+      {/* The phone's tab bar has five tabs: Calendar is a row here, and Library stays lit on it. */}
+      <Show when={form() === "phone"}>
+        <A class="cal-row" href="/calendar">
+          <CalendarDays aria-hidden />
+          <span>Calendar</span>
+          <ChevronRight aria-hidden class="chev" />
+        </A>
+      </Show>
       <Switch fallback={<SkeletonGrid />}>
         <Match when={view.state.status.state === "failed"}>
           <section class="problem">

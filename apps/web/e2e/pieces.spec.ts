@@ -1,0 +1,340 @@
+import { type Browser, expect, type Page, test } from "@playwright/test";
+import { GOT } from "./core";
+import { BBB_ID } from "./source";
+
+/** The shared pieces of design v3 (plans/design-v3-rollout.md, 6; design/DECISION.md): buttons,
+ * the backdrop ramps, the per-form page colors and navigation, rows, progress, the segmented
+ * control and the pull-down, the ratings row and tiles. */
+
+const FORMS = { tv: [1920, 1080, 1], desktop: [1440, 900, 1], phone: [390, 844, 2] } as const;
+type Form = keyof typeof FORMS;
+
+async function open(browser: Browser, form: Form, path: string) {
+  const [width, height, scale] = FORMS[form];
+  const context = await browser.newContext({
+    viewport: { width, height },
+    deviceScaleFactor: scale,
+    isMobile: form === "phone",
+    hasTouch: form === "phone",
+    reducedMotion: "reduce",
+  });
+  const page = await context.newPage();
+  await page.goto(`${path}${path.includes("?") ? "&" : "?"}form=${form}`);
+  return { context, page };
+}
+
+const style = (page: Page, selector: string, pseudo?: string) =>
+  page.locator(selector).first().evaluate((el, pseudo) => {
+    const s = getComputedStyle(el, pseudo);
+    return { background: s.backgroundColor, color: s.color, shadow: s.boxShadow, blur: s.backdropFilter, weight: s.fontWeight, content: s.content, size: s.fontSize, image: s.backgroundImage };
+  }, pseudo);
+
+const focusedKey = (page: Page) => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? null);
+
+for (const form of Object.keys(FORMS) as Form[]) {
+  test(`${form}: the primary is white with a black label, a secondary the 16 percent fill with a white label and no edge`, async ({ browser }) => {
+    const { context, page } = await open(browser, form, `/title/movie/${BBB_ID}`);
+    const play = page.locator('[data-f="title:play"], [data-f="title:startover"]').first();
+    await expect(play).toBeVisible({ timeout: 30_000 });
+    // Off the TV nothing is focused on load; on TV focus moves away from the buttons.
+    if (form === "tv") await page.locator('[data-f="title:trailer"]').focus();
+    const primary = await style(page, ".play-row .btn.primary");
+    if (form !== "tv") expect(primary).toMatchObject({ background: form === "phone" ? "rgb(245, 245, 245)" : "rgba(255, 255, 255, 0.92)", color: "rgba(0, 0, 0, 0.88)", weight: "600", shadow: "none" });
+    // The title's round secondaries over the art: the fill, a pure white glyph, the 20 px blur.
+    await page.locator('[data-f="title:versions"]').focus();
+    const trailer = await style(page, '[data-f="title:trailer"] svg');
+    expect(trailer).toMatchObject({ background: "rgba(255, 255, 255, 0.16)", color: "rgb(255, 255, 255)", shadow: "none", blur: "blur(20px)" });
+    // A secondary on a plain page: the fill and no edge, and no blur with nothing to blur.
+    await page.goto(`/addons?form=${form}`);
+    const plain = page.locator('[data-f="addons:find"]');
+    await expect(plain).toBeVisible({ timeout: 30_000 });
+    if (form === "tv") await page.locator('[data-f="addons:paste"]').focus();
+    const s = await plain.evaluate((el) => {
+      const c = getComputedStyle(el);
+      return { background: c.backgroundColor, color: c.color, shadow: c.boxShadow, blur: c.backdropFilter };
+    });
+    expect(s).toMatchObject({ background: "rgba(255, 255, 255, 0.16)", color: "rgb(255, 255, 255)", shadow: "none", blur: "none" });
+    await context.close();
+  });
+
+  test(`${form}: the page takes its form's color, and the hero's ramps fade to it`, async ({ browser }) => {
+    const { context, page } = await open(browser, form, "/");
+    await expect(page.locator(".hero .meta")).toBeVisible({ timeout: 30_000 });
+    const page_ = { tv: "rgb(28, 28, 30)", desktop: "rgb(31, 31, 31)", phone: "rgb(0, 0, 0)" }[form];
+    expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe(page_);
+    expect(await page.locator('meta[name="theme-color"]').getAttribute("content")).toBe({ tv: "#1C1C1E", desktop: "#1F1F1F", phone: "#000000" }[form]);
+    // The ramps come from components/ramps.ts in the page color, never v2's blue-black.
+    const ramp = await page.locator(".hero-bd .ramp").evaluate((el) => (el as HTMLElement).style.background);
+    expect(ramp).toContain(page_.replace("rgb(", "rgba(").replace(")", ", 0."));
+    expect(ramp).not.toContain("6, 9, 14");
+    if (form === "phone") expect((await style(page, ".row .tile .pic")).background).toBe("rgb(28, 28, 30)");
+    await context.close();
+  });
+
+  test(`${form}: shelf titles are title3 with no bar, no hairline and their caption under the art`, async ({ browser }) => {
+    const { context, page } = await open(browser, form, "/");
+    await expect(page.locator(".row .tile").first()).toBeVisible({ timeout: 30_000 });
+    expect((await style(page, ".row-head", "::before")).content).toBe("none");
+    expect((await style(page, ".row-head", "::after")).content).toBe("none");
+    expect((await style(page, ".row-head h2")).size).toBe(form === "phone" ? "20px" : "38px");
+    // The title alone: no row on this Home shares its title, so none names its addon.
+    await expect(page.locator(".row-head .row-src")).toHaveCount(0);
+    // Every artwork's 25 percent inner keyline over the picture; the name at 600 under it.
+    expect((await style(page, ".row .tile .pic", "::before")).shadow).toBe("rgba(255, 255, 255, 0.25) 0px 0px 0px 1px inset");
+    const name = page.locator(".row").nth(1).locator(".tile .cap b").first();
+    expect(await name.evaluate((el) => getComputedStyle(el).fontWeight)).toBe("600");
+    // Focus leaves the caption's color as it is.
+    const before = await name.evaluate((el) => getComputedStyle(el).color);
+    await page.locator(".row").nth(1).locator(".tile").first().focus();
+    expect(await name.evaluate((el) => getComputedStyle(el).color)).toBe(before);
+    await context.close();
+  });
+
+  test(`${form}: progress is white on a dark track`, async ({ browser }) => {
+    const { context, page } = await open(browser, form, "/");
+    const track = page.locator(".row .tile .bar-track").first();
+    await expect(track).toBeVisible({ timeout: 30_000 });
+    const s = await track.evaluate((el) => ({ track: getComputedStyle(el).backgroundColor, fill: getComputedStyle(el.firstElementChild as Element).backgroundColor, h: (el as HTMLElement).offsetHeight }));
+    expect(s).toEqual({ track: "rgba(0, 0, 0, 0.55)", fill: "rgb(255, 255, 255)", h: form === "phone" ? 4 : 8 });
+    await context.close();
+  });
+
+  test(`${form}: no eyebrow over a page title, and Versions' pick says Best for this screen`, async ({ browser }) => {
+    const { context, page } = await open(browser, form, "/discover");
+    await expect(page.locator(".browse h1")).toHaveText("Discover", { timeout: 30_000 });
+    expect((await style(page, ".browse h1", "::before")).content).toBe("none");
+    await expect(page.locator(".eyebrow, [data-eyebrow]")).toHaveCount(0);
+    await page.goto(`/title/series/${GOT.id}/versions/${GOT.resume}?form=${form}`);
+    // The pick once it is chosen (its waiting state says the same).
+    await expect(page.locator(".pick h2").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator(".pick .best")).toHaveText("Best for this screen", { timeout: 30_000 });
+    expect((await style(page, ".pick .best")).color).toBe(form === "phone" ? "rgba(235, 235, 245, 0.6)" : "rgba(255, 255, 255, 0.64)");
+    await context.close();
+  });
+
+  test(`${form}: the ratings row names its source at 70 percent and its score in white`, async ({ browser }) => {
+    const { context, page } = await open(browser, form, `/title/series/${GOT.id}`);
+    const rate = page.locator(".info .meta .rate").first();
+    await expect(rate).toBeVisible({ timeout: 30_000 });
+    expect(await rate.evaluate((el) => getComputedStyle(el).color)).toBe("rgb(255, 255, 255)");
+    expect(await rate.locator(".rate-src").evaluate((el) => getComputedStyle(el).color)).toBe("rgba(255, 255, 255, 0.7)");
+    await expect(rate.locator("[aria-hidden]").first()).toHaveText(/^(IMDb|RT) \S+$/);
+    await context.close();
+  });
+}
+
+test("Search's sections show their title alone when no two share it", async ({ browser }) => {
+  const { context, page } = await open(browser, "desktop", "/search");
+  await page.locator('[data-f="search:input"]').fill("thrones");
+  await expect(page.locator(".hits .hit").first()).toBeVisible({ timeout: 30_000 });
+  const titles = await page.locator(".hits-head .kicker").allTextContents();
+  expect(new Set(titles).size).toBe(titles.length);
+  await expect(page.locator(".hits-src")).toHaveCount(0);
+  await context.close();
+});
+
+test("Settings' Home rows and Discover's catalogs show their names alone when no two share one", async ({ browser }) => {
+  const { context, page } = await open(browser, "desktop", "/home-rows");
+  await expect(page.locator(".hrow-main").first()).toBeVisible({ timeout: 30_000 });
+  const rows = await page.locator(".hrow").evaluateAll((els) =>
+    els.map((el) => ({
+      title: el.querySelector(".hrow-text b")?.textContent ?? "",
+      label: el.querySelector(".hrow-main")?.getAttribute("aria-label") ?? "",
+      note: el.querySelector(".hrow-text small")?.textContent ?? null,
+    })),
+  );
+  expect(new Set(rows.map((r) => r.title)).size).toBe(rows.length);
+  for (const r of rows) {
+    expect(r.label.startsWith(`${r.title}, `) && /^(hidden|shown), row \d+ of \d+$/.test(r.label.slice(r.title.length + 2)), r.label).toBe(true);
+    expect([null, "Hidden from Home"]).toContain(r.note);
+  }
+  await page.goto("/discover?form=desktop");
+  const catalogs = page.locator('[data-fgroup="catalogs"] [data-f]');
+  await expect(catalogs.first()).toBeVisible({ timeout: 30_000 });
+  const names = await catalogs.allTextContents();
+  expect(new Set(names).size).toBe(names.length);
+  await expect(page.locator('[data-fgroup="catalogs"] small')).toHaveCount(0);
+  await context.close();
+});
+
+test("TV: the solid tab bar, 68 tall at 46, every tab with its word, the active one in a white 20 percent pill", async ({ browser }) => {
+  const { context, page } = await open(browser, "tv", "/");
+  const bar = page.locator(".topnav .tabbar");
+  await expect(bar).toBeVisible({ timeout: 30_000 });
+  const box = (await bar.boundingBox())!;
+  expect(Math.round(box.y)).toBe(46);
+  expect(Math.round(box.height)).toBe(68);
+  expect(Math.abs(box.x + box.width / 2 - 960)).toBeLessThanOrEqual(1);
+  expect((await style(page, ".topnav .tabbar")).background).toBe("rgb(44, 44, 46)");
+  const tabs = bar.locator(".nav:not(.pavatar)");
+  await expect(tabs).toHaveText(["Home", "Discover", "Library", "Calendar", "Search", "Settings"]);
+  // Off the active tab (focus moves to the content on load).
+  await page.locator(".row .tile").first().focus();
+  expect(await style(page, ".tabbar .nav.on")).toMatchObject({ background: "rgba(255, 255, 255, 0.2)", color: "rgb(255, 255, 255)" });
+  expect((await style(page, '.tabbar .nav[href="/discover"]')).color).toBe("rgba(255, 255, 255, 0.64)");
+  // The wordmark at the left, on the bar's middle line, with no dot.
+  const mark = (await page.locator(".topnav .brand").boundingBox())!;
+  expect(Math.round(mark.x)).toBe(80);
+  expect(Math.abs(mark.y + mark.height / 2 - 80)).toBeLessThanOrEqual(1);
+  expect((await style(page, ".topnav .brand", "::before")).content).toBe("none");
+  await context.close();
+});
+
+test("desktop: tv.apple.com's 52 px black header, text tabs centered, Search and the profile at the right", async ({ browser }) => {
+  const { context, page } = await open(browser, "desktop", "/");
+  const bar = page.locator(".topnav");
+  await expect(bar.locator(".tabbar")).toBeVisible({ timeout: 30_000 });
+  const box = (await bar.boundingBox())!;
+  expect(box).toMatchObject({ x: 0, y: 0, width: 1440 });
+  expect(Math.round(box.height)).toBe(52);
+  expect((await style(page, ".topnav")).background).toBe("rgb(0, 0, 0)");
+  const tabs = bar.locator(".tabbar .nav");
+  await expect(tabs).toHaveText(["Home", "Discover", "Library", "Calendar", "Settings"]);
+  const tabBox = (await bar.locator(".tabbar").boundingBox())!;
+  expect(Math.abs(tabBox.x + tabBox.width / 2 - 720)).toBeLessThanOrEqual(1);
+  // 16/600 in CSS pixels on the scaled canvas; the active one at 92 percent, the rest at 64.
+  const font = await tabs.first().evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return { size: parseFloat(getComputedStyle(el).fontSize) * (r.width / (el as HTMLElement).offsetWidth), weight: getComputedStyle(el).fontWeight };
+  });
+  expect(Math.abs(font.size - 16)).toBeLessThanOrEqual(0.1);
+  expect(font.weight).toBe("600");
+  expect((await style(page, ".tabbar .nav.on")).color).toBe("rgba(255, 255, 255, 0.92)");
+  expect((await style(page, '.tabbar .nav[href="/discover"]')).color).toBe("rgba(255, 255, 255, 0.64)");
+  const field = (await bar.locator('.topnav-end [data-f="nav:/search"]').boundingBox())!;
+  expect(field.x).toBeGreaterThan(tabBox.x + tabBox.width);
+  await expect(bar.locator(".topnav-end .pavatar")).toBeVisible();
+  await context.close();
+});
+
+test("phone: the floating glass capsule, 348x62 and 21 from the edges, five tabs, the selected one in key blue", async ({ browser }) => {
+  const { context, page } = await open(browser, "phone", "/");
+  const bar = page.locator("nav.tabs");
+  await expect(bar).toBeVisible({ timeout: 30_000 });
+  const box = (await bar.boundingBox())!;
+  expect(box).toMatchObject({ x: 21, width: 348, height: 62 });
+  expect(Math.round(844 - box.y - box.height)).toBe(21);
+  await expect(bar.locator("a")).toHaveText(["Home", "Discover", "Library", "Search", "Settings"]);
+  const s = await style(page, "nav.tabs");
+  expect(s.background).toBe("rgba(32, 32, 32, 0.8)");
+  expect(s.blur).toContain("blur(24px)");
+  expect(await style(page, "nav.tabs a.on")).toMatchObject({ color: "rgb(10, 132, 255)", background: "rgba(10, 10, 10, 0.92)" });
+  expect((await style(page, 'nav.tabs a[href="/library"]')).color).toBe("rgb(255, 255, 255)");
+  await context.close();
+});
+
+test("phone: Calendar is a row at the top of Library, and Library stays lit on it", async ({ browser }) => {
+  const { context, page } = await open(browser, "phone", "/library");
+  const row = page.locator(".cal-row");
+  await expect(row).toHaveText("Calendar", { timeout: 30_000 });
+  await row.tap();
+  await expect(page).toHaveURL(/\/calendar/);
+  await expect(page.locator("nav.tabs a.on")).toHaveText("Library");
+  await expect(page).toHaveTitle("Calendar · Marquee");
+  await context.close();
+});
+
+test("TV: two to four choices are the segmented control, more a pull-down whose list keeps the remote", async ({ browser }) => {
+  const { context, page } = await open(browser, "tv", "/discover");
+  const kinds = page.locator('[data-fgroup="kinds"] .chip');
+  await expect(kinds.first()).toBeVisible({ timeout: 30_000 });
+  expect(await kinds.count()).toBeLessThanOrEqual(4);
+  // The selected segment one grey step up with a white label, the rest on the track.
+  await page.locator('[data-fgroup="kinds"] .chip:not(.on)').first().focus();
+  await page.locator('[data-fgroup="catalogs"] [data-f]').first().focus();
+  expect(await style(page, '[data-fgroup="kinds"] .chip.on')).toMatchObject({ background: "rgb(99, 99, 102)", color: "rgb(255, 255, 255)", shadow: "none" });
+  expect(await style(page, '[data-fgroup="kinds"] .chip:not(.on)')).toMatchObject({ background: "rgba(118, 118, 128, 0.24)", color: "rgba(255, 255, 255, 0.64)" });
+  // More than four: a pill that names the choice.
+  const pill = page.locator('[data-f="genres:menu"]');
+  await expect(pill).toBeVisible();
+  const chosen = (await pill.textContent())?.trim();
+  await pill.focus();
+  await page.keyboard.press("Enter");
+  const list = page.locator('[data-fgroup="genres"] .pull-list');
+  await expect(list).toBeVisible();
+  // It opens on the chosen option; Down moves in the list; Right does not leave it.
+  await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute("aria-selected"))).toBe("true");
+  const first = await focusedKey(page);
+  await page.keyboard.press("ArrowDown");
+  const second = await focusedKey(page);
+  expect(second).not.toBe(first);
+  expect(second).toMatch(/^genres:/);
+  await page.keyboard.press("ArrowRight");
+  expect(await focusedKey(page)).toBe(second);
+  // Back closes it, on the pill, with the choice as it was.
+  await page.keyboard.press("Escape");
+  await expect(list).toHaveCount(0);
+  expect(await focusedKey(page)).toBe("genres:menu");
+  await expect(pill).toHaveText(chosen ?? "");
+  // Choosing one closes it and names the new choice on the pill.
+  await page.keyboard.press("Enter");
+  await expect(list).toBeVisible();
+  await page.keyboard.press("ArrowDown");
+  const picked = (await page.evaluate(() => document.activeElement?.querySelector("b")?.textContent)) ?? "";
+  await page.keyboard.press("Enter");
+  await expect(list).toHaveCount(0);
+  await expect(pill).toContainText(picked);
+  await expect.poll(() => focusedKey(page)).toBe("genres:menu");
+  await context.close();
+});
+
+test("desktop: a press outside a pull-down closes it", async ({ browser }) => {
+  const { context, page } = await open(browser, "desktop", "/discover");
+  const pill = page.locator('[data-f="genres:menu"]');
+  await expect(pill).toBeVisible({ timeout: 30_000 });
+  await pill.click();
+  await expect(page.locator(".pull-list")).toBeVisible();
+  await page.locator(".browse h1").click();
+  await expect(page.locator(".pull-list")).toHaveCount(0);
+  await context.close();
+});
+
+test("TV: movie rows are 16:9 stills and series rows 2:3 posters, from the tile tokens", async ({ browser }) => {
+  const { context, page } = await open(browser, "tv", "/");
+  await expect(page.locator(".row").nth(1).locator(".tile").first()).toBeVisible({ timeout: 30_000 });
+  const shapes = await page.evaluate(() =>
+    [...document.querySelectorAll(".row")].slice(1).map((r) => {
+      const t = r.querySelector<HTMLAnchorElement>(".tile");
+      const pic = t?.querySelector<HTMLElement>(".pic");
+      return { kind: t?.getAttribute("href")?.split("/")[2], w: pic?.offsetWidth, h: pic?.offsetHeight };
+    }),
+  );
+  const movie = shapes.find((s) => s.kind === "movie");
+  const series = shapes.find((s) => s.kind === "series");
+  expect(movie).toMatchObject({ w: 410, h: 231 });
+  expect(series).toMatchObject({ w: 217, h: 326 });
+  await context.close();
+});
+
+/** Where a secondary's label starts and ends over a backdrop, as fractions of the backdrop: the
+ * glass check (src/components/art.test.ts) composites the ramps at these spots, so a layout that
+ * moves a label past one leaves the check measuring the wrong place. */
+const spot = (page: Page, selector: string, backdrop: string, maxWidth = false) =>
+  page.evaluate(
+    ([selector, backdrop, maxWidth]) => {
+      const el = document.querySelector(selector) as HTMLElement;
+      const bd = (document.querySelector(backdrop) as HTMLElement).getBoundingClientRect();
+      const r = el.getBoundingClientRect();
+      const k = r.width / el.offsetWidth || 1;
+      const right = maxWidth ? r.left + parseFloat(getComputedStyle(el).maxWidth) * k : r.right;
+      return { x: (right - bd.left) / bd.width, y: (r.top - bd.top) / bd.height };
+    },
+    [selector, backdrop, maxWidth] as const,
+  );
+
+test("TV: the secondaries over a backdrop sit where the glass check measures them", async ({ browser }) => {
+  const { context, page } = await open(browser, "tv", "/");
+  await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+  const details = await spot(page, ".hero .rbtn .ring", ".hero-bd");
+  expect(details.x).toBeLessThanOrEqual(0.1662 + 0.002);
+  expect(details.y).toBeGreaterThanOrEqual(0.755 - 0.005);
+  const reason = await spot(page, ".hero .reason", ".hero-bd", true);
+  expect(reason.x).toBeLessThanOrEqual(0.3253 + 0.002);
+  expect(reason.y).toBeGreaterThanOrEqual(0.68 - 0.005);
+  await page.goto(`/title/series/${GOT.id}?form=tv`);
+  await expect(page.locator('[data-f="title:startover"]')).toBeVisible({ timeout: 30_000 });
+  const over = await spot(page, '[data-f="title:startover"]', ".title-bd");
+  expect(over.x).toBeLessThanOrEqual(0.4398 + 0.002);
+  expect(over.y).toBeGreaterThanOrEqual(0.4054 - 0.005);
+  await context.close();
+});

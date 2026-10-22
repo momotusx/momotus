@@ -2,11 +2,11 @@
 
 .home .page { position: absolute; inset: 0; padding-bottom: var(--safe-bottom); }
 
-/* Backdrops: art that fades in once decoded, with a scrim of the page color. */
+/* Backdrops: art that fades in once decoded, under its ramps of the page color (components/ramps.ts). */
 .bd { position: absolute; overflow: hidden; pointer-events: none; }
 .bd img { width: 100%; height: 100%; object-fit: cover; object-position: center 22%; }
 .bd.dim img { filter: brightness(.45) saturate(.85); }
-.bd::after { content: ""; position: absolute; inset: 0; }
+.bd::after, .bd .ramp { content: ""; position: absolute; inset: 0; }
 
 /* The hero: a rounded card inset from the page edges, its picture fading to
  * the page color from the left and the bottom so the words read on any art. */
@@ -15,9 +15,6 @@
 .hero { --hero-inset: 44px; position: relative; margin: 24px var(--hero-inset) 0; height: 600px; border-radius: var(--radius-hero); overflow: hidden;
   background: var(--surface); box-shadow: inset 0 0 0 1px var(--edge); isolation: isolate; }
 .hero-bd { inset: 0; z-index: -1; }
-.hero-bd::after { background:
-  linear-gradient(90deg, rgba(6, 9, 14, .94) 0%, rgba(6, 9, 14, .72) 28%, rgba(6, 9, 14, .18) 58%, rgba(6, 9, 14, 0) 72%),
-  linear-gradient(0deg, rgba(6, 9, 14, .9) 0%, rgba(6, 9, 14, .3) 34%, rgba(6, 9, 14, 0) 58%); }
 .hero-body { position: absolute; inset: 0; padding: 0 0 40px calc(var(--safe-side) - var(--hero-inset)); display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-start; }
 .logo { display: block; object-fit: contain; object-position: left bottom; }
 .logo.pending { visibility: hidden; }
@@ -29,9 +26,10 @@
  * plain height above stays for an engine without sqrt(). */
 .hero-logo { --logo-area: 36000; height: clamp(64px, calc(sqrt(var(--logo-area) / var(--r, 5.6)) * 1px), 140px); }
 .logo-text { font: var(--weight-display) var(--type-hero) / 1.0 var(--font-display); letter-spacing: var(--tracking-display); margin-bottom: 18px; max-width: 1100px; }
-/* Over artwork the reason sits in a chip on the page color, at the 70 percent level until 1b
-   drops the eyebrow (white would outshine the title under it). */
-.hero .reason { margin-bottom: 12px; align-self: flex-start; padding: 8px 14px; border-radius: var(--radius-pill); background: var(--bg); color: var(--muted); }
+/* The core's reason on Apple's explainability line, 16 px above the buttons: one line, kept
+   where the ramps are deep (art.test.ts checks it over white art). */
+.hero .reason { max-width: 560px; margin-bottom: 16px; font: 600 var(--type-caption) / 1.25 var(--font-text); color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hero .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font: 600 var(--type-callout) / 1.3 var(--font-text); color: var(--muted); margin-bottom: 14px; }
 .hero .meta b { font-weight: 400; color: var(--dim); }
 .hero-syn { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; max-width: 900px;
@@ -40,18 +38,17 @@
  * stack still clears the pill on the 600 px card. */
 :is([data-form="tv"], [data-form="desktop"]) .hero-body:has(.hero-logo[data-shape="tall"]) .hero-syn { -webkit-line-clamp: 2; }
 .acts { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 24px; }
-.hero-skel { display: grid; gap: 18px; width: 560px; }
+/* A hero on its way: the hero's own shape breathes (design/DECISION.md, States). */
+.hero .hero-skel { position: absolute; inset: 0; z-index: -1; background: var(--raised); }
 /* No hero to show and none coming: the rows start at the top. */
 .hero.closed { display: none; }
 [data-form="phone"] .hero.closed { display: block; height: 60px; background: none; box-shadow: none; }
-.hero-skel .skel { height: 110px; border-radius: var(--radius-m); }
-.hero-skel .skel + .skel { height: 72px; width: 360px; border-radius: var(--radius-pill); }
 
 .home-problem { position: relative; margin: 40px var(--safe-side); }
-/* New recommended addons, under Continue Watching: glass with a hairline edge
-   and glass pills, since the hero keeps the screen's one white pill. */
+/* New recommended addons, under Continue Watching: a solid surface with no edge and secondary
+   pills, since the hero keeps the screen's one white pill. */
 .defaults-card { display: flex; align-items: center; gap: 28px; margin: 36px var(--safe-side) 0; padding: 24px 32px; border-radius: var(--radius-l);
-  background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight); }
+  background: var(--surface); }
 .dc-icon { width: 40px; height: 40px; flex: none; color: var(--muted); }
 .dc-text { flex: 1; min-width: 0; }
 .dc-text h2 { font: 700 var(--type-title3) / 1.15 var(--font-display); }
@@ -59,11 +56,9 @@
 .defaults-card .acts { flex: none; gap: 16px; }
 .problem-icon { width: 48px; height: 48px; color: var(--bad); }
 
-/* Rows. The header is a bar, the title, its source and a hairline to the edge. */
+/* Rows. The header is the shelf title in the title3 role and its source: no bar, no hairline. */
 .row { position: relative; margin-top: 28px; }
 .row-head { display: flex; align-items: center; gap: 16px; padding: 0 var(--safe-side); }
-.row-head::before { content: ""; width: 4px; height: 34px; border-radius: 2px; background: var(--text); flex: none; }
-.row-head::after { content: ""; flex: 1; height: 1px; margin-left: 12px; background: var(--line-strong); }
 .row-head h2 { font: var(--weight-heading) var(--type-title3) / 1.2 var(--font-display); letter-spacing: var(--tracking-heading); }
 .row-src { font: 500 var(--type-callout) var(--font-text); color: var(--dim); }
 .row-note { font: 500 var(--type-caption) var(--font-text); color: var(--muted); }
@@ -76,39 +71,41 @@
 .lane { position: relative; height: 100%; }
 .skel-lane > .skel { position: absolute; border-radius: var(--radius-m); }
 
-/* Tiles: the art carries the ring and halo and lifts on focus; the name stays
- * unscaled under it (a scaled layer resamples its text a step dimmer) and turns
- * accent. The art never carries words. */
+/* Tiles: the art carries the focus and lifts; the caption stays unscaled under it (a scaled
+ * layer resamples its text a step dimmer) and keeps its colors. The art never carries words. */
 .tile { display: block; border-radius: var(--radius-m); transform-origin: center bottom; }
 .tile .pic { position: relative; border-radius: var(--radius-m); overflow: hidden; background: var(--surface);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06);
   transition: box-shadow var(--motion-focus) var(--ease), outline-color var(--motion-focus) var(--ease), transform var(--motion-focus) var(--ease); }
+/* Every artwork's 25 percent inner keyline, over the picture, so dark art never melts into the page. */
+.tile .pic::before { content: ""; position: absolute; inset: 0; z-index: 2; border-radius: inherit; box-shadow: inset 0 0 0 1px var(--line-strong); pointer-events: none; }
 /* The name card sits under the picture: it shows while the art loads and
  * stays when there is none. */
 .tile .pic img { position: relative; z-index: 1; width: 100%; height: 100%; object-fit: cover; }
+/* A poster in a 16:9 still's place: its upper part. */
+.tile .pic img.top { object-position: center top; }
 /* A picture still on its way pulses gently (the skeleton's beat), so a slow
  * image reads as coming, not as a dark hole. */
 .tile .pic:has(> img.fade:not(.in)) { animation: arriving 1.2s ease-in-out infinite alternate; }
 @media (prefers-reduced-motion: reduce) { .tile .pic:has(> img.fade:not(.in)) { animation: none; } }
 .pic-name { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center;
   font: var(--weight-heading) var(--type-headline) / 1.15 var(--font-display); letter-spacing: var(--tracking-heading); color: var(--text); overflow: hidden; overflow-wrap: anywhere; }
-.chip-rate { position: absolute; z-index: 2; top: 10px; right: 10px; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; white-space: nowrap;
-  border-radius: var(--radius-pill); font: 700 20px / 1 var(--font-text); color: var(--text);
-  background: rgba(9, 13, 19, .72); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); box-shadow: inset 0 0 0 1px var(--edge); }
+/* The poster's scores: white words on black, no glass and no edge; a pair wider than the
+   poster takes two lines, each score whole. */
+.chip-rate { position: absolute; z-index: 2; top: 10px; right: 10px; max-width: calc(100% - 20px); display: flex; flex-wrap: wrap; justify-content: flex-end;
+  align-items: center; gap: 2px 8px; padding: 6px 12px; white-space: nowrap; border-radius: 12px; font: 600 20px / 22px var(--font-text); color: #fff;
+  background: rgba(0, 0, 0, .72); }
 /* Above the art's shadow, and never scaled with it. */
 .tile .cap { position: relative; z-index: 1; margin-top: 14px; display: grid; gap: 4px; min-width: 0; }
-.tile .cap b { font: 700 var(--type-caption) / 1.25 var(--font-text); letter-spacing: var(--tracking-label); color: var(--text);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color var(--motion-focus) var(--ease); }
+.tile .cap b { font: 600 var(--type-caption) / 1.25 var(--font-text); letter-spacing: var(--tracking-label); color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tile .cap span { font: 500 21px / 1.25 var(--font-text); color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tile:focus-visible, [data-form="tv"] .tile:focus { outline: none; box-shadow: none; }
 .tile:focus-visible .pic, [data-form="tv"] .tile:focus .pic {
   outline: var(--focus-ring) solid var(--key); outline-offset: var(--focus-ring); box-shadow: var(--focus-shadow); overflow: hidden; }
 [data-form="tv"] .tile:focus .pic { transform: translateY(calc(-1 * var(--focus-rise-art))) scale(var(--focus-scale-art)); box-shadow: var(--lift-focus-art); }
-.tile:focus-visible .cap b, [data-form="tv"] .tile:focus .cap b { color: var(--accent); }
 @media (hover: hover) {
   [data-form="desktop"] .tile:hover { transform: translateY(-8px); }
   [data-form="desktop"] .tile:hover .pic { box-shadow: var(--lift-hover-edge); }
-  [data-form="desktop"] .tile:hover .cap b { color: var(--accent); }
 }
 /* Continue Watching off TV: a remove button on the still's top right
  * corner, shown on hover or focus, always on touch screens. */
@@ -129,17 +126,16 @@
 .tile-slot.failed .pic { filter: brightness(.4); }
 [data-form="phone"] .tile-x.asking, [data-form="phone"] .tile-x.failed { width: auto; font-size: 12px; padding: 0 10px; }
 [data-form="phone"] .tile-x svg { width: 18px; height: 18px; }
-/* Progress: a thin accent line on a dark strip at the art's foot, so it
- * reads on any picture. */
-.bar { position: absolute; z-index: 2; left: 0; right: 0; bottom: 0; height: 30px; display: flex; align-items: flex-end; padding: 0 12px 12px;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, .65)); }
-.bar-track { flex: 1; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, .28); overflow: hidden; }
-.bar-track i { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+/* Progress: a white line on a dark track along the art's foot (design/DECISION.md: 8 px on TV,
+ * 4 on the phone), so it reads on any picture. */
+.bar { position: absolute; z-index: 2; left: 0; right: 0; bottom: 0; }
+.bar-track { display: block; height: 8px; background: rgba(0, 0, 0, .55); overflow: hidden; }
+.bar-track i { display: block; height: 100%; background: #fff; }
 
-.row-msg { position: absolute; left: 34px; right: 114px; top: 34px; bottom: 34px; display: flex; align-items: center; gap: 28px;
-  padding: 0 44px; border-radius: var(--radius-card); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); }
+/* A row that could not load says so as text on the page (design/DECISION.md, States). */
+.row-msg { position: absolute; left: 34px; right: 114px; top: 34px; bottom: 34px; display: flex; align-items: center; gap: 28px; padding: 0; }
 .row-msg p { font-size: var(--type-body); line-height: 1.35; }
-.row-msg .why { font-size: var(--type-callout); color: var(--muted); margin-top: 6px; }
+.row-msg .why { font-size: var(--type-callout); color: var(--dim); margin-top: 6px; }
 .row-msg .row-acts { display: flex; gap: 12px; margin-left: auto; }
 .row-msg-icon { width: 40px; height: 40px; flex: none; }
 .bad-ico { color: var(--bad); }
@@ -148,22 +144,16 @@
 [data-form="phone"] .home .page { position: static; padding-bottom: 112px; }
 /* Phone: the card's edges sit on the rows' 16 px gutter; the words keep 18 px inside. */
 [data-form="phone"] .hero { margin: calc(8px + env(safe-area-inset-top)) 16px 0; height: 520px; border-radius: 26px; }
-[data-form="phone"] .hero-bd::after { background:
-  linear-gradient(180deg, rgba(6, 9, 14, .55) 0%, rgba(6, 9, 14, 0) 22%),
-  linear-gradient(0deg, rgba(6, 9, 14, .96) 0%, rgba(6, 9, 14, .55) 38%, rgba(6, 9, 14, 0) 62%); }
 [data-form="phone"] .hero-body { padding: 0 18px 20px; }
 [data-form="phone"] .hero-logo { height: 84px; max-width: 240px; margin-bottom: 12px; }
 [data-form="phone"] .hero-logo { --logo-area: 10000; height: clamp(40px, calc(sqrt(var(--logo-area) / var(--r, 5.6)) * 1px), 96px); }
 [data-form="phone"] .logo-text { font-size: var(--type-title1); margin-bottom: 8px; }
-[data-form="phone"] .hero .reason { font-size: 11px; margin-bottom: 10px; padding: 5px 10px; }
+[data-form="phone"] .hero .reason { max-width: none; font-size: 13px; margin-bottom: 12px; }
 [data-form="phone"] .hero .meta { font-size: 13px; gap: 4px 8px; margin-bottom: 10px; }
 [data-form="phone"] .hero-syn { font-size: 14px; -webkit-line-clamp: 2; margin-bottom: 16px; }
 [data-form="phone"] .acts { gap: 12px; align-items: center; }
 [data-form="phone"] .hero .acts .btn.primary { flex: 1; justify-content: center; }
 [data-form="phone"] .hero .acts .rbtn .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-[data-form="phone"] .hero-skel { width: 100%; gap: 10px; }
-[data-form="phone"] .hero-skel .skel { height: 70px; }
-[data-form="phone"] .hero-skel .skel + .skel { height: 46px; width: 180px; }
 [data-form="phone"] .home-problem { margin: 0 16px 24px; }
 [data-form="phone"] .defaults-card { flex-wrap: wrap; gap: 12px; margin: 20px 16px 0; padding: 16px; border-radius: 14px; }
 [data-form="phone"] .dc-icon { width: 22px; height: 22px; }
@@ -173,27 +163,24 @@
 [data-form="phone"] .problem-icon { width: 28px; height: 28px; }
 [data-form="phone"] .row { margin-top: 20px; }
 [data-form="phone"] .row-head { padding: 0 16px; gap: 8px; flex-wrap: nowrap; }
-[data-form="phone"] .row-head::before { width: 3px; height: 20px; }
-[data-form="phone"] .row-head h2 { font-size: 19px; white-space: nowrap; }
+[data-form="phone"] .row-head h2 { white-space: nowrap; }
 [data-form="phone"] .row-src { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-[data-form="phone"] .row-head::after { margin-left: 4px; }
 [data-form="phone"] .row-body { margin-left: 0; }
 [data-form="phone"] .track { scroll-snap-type: x proximity; scroll-padding-left: 16px; }
 [data-form="phone"] .tile { scroll-snap-align: start; border-radius: 10px; }
 [data-form="phone"] .tile .pic { border-radius: 10px; }
 /* A phone poster has room for one short score a line: the two stack, never wrap or cut. */
-[data-form="phone"] .chip-rate { top: 6px; right: 6px; height: auto; padding: 3px 7px; gap: 1px; font-size: 11px; line-height: 1.2;
+[data-form="phone"] .chip-rate { top: 6px; right: 6px; max-width: calc(100% - 12px); padding: 3px 7px; gap: 1px; border-radius: 7px; font-size: 11px; line-height: 1.2;
   flex-direction: column; align-items: flex-end; }
 [data-form="phone"] .tile .cap { margin-top: 6px; gap: 2px; }
 [data-form="phone"] .tile .cap b { font-size: 13px; }
 [data-form="phone"] .tile .cap span { font-size: 12px; }
 [data-form="phone"] .pic-name { padding: 10px; font-size: 15px; }
-[data-form="phone"] .bar { height: 20px; padding: 0 6px 6px; }
-[data-form="phone"] .bar-track { height: 3px; }
-[data-form="phone"] .row-msg { left: 16px; right: 16px; top: 8px; bottom: 8px; gap: 12px; padding: 0 16px; flex-wrap: wrap; align-content: center; }
+[data-form="phone"] .bar-track { height: 4px; }
+[data-form="phone"] .row-msg { left: 16px; right: 16px; top: 8px; bottom: 8px; gap: 12px; flex-wrap: wrap; align-content: center; }
 [data-form="phone"] .row-msg p { font-size: 15px; }
 [data-form="phone"] .row-msg .why { font-size: 13px; }
 [data-form="phone"] .row-msg .row-acts { margin-left: 0; gap: 8px; }
 [data-form="phone"] .row-msg-icon { width: 22px; height: 22px; }
 [data-form="phone"] .ph-top { position: absolute; left: 0; right: 0; top: 0; z-index: 2; padding: 16px 18px 0; }
-[data-form="phone"] .ph-top .brand { font-size: 22px; margin: 0; text-shadow: 0 1px 12px rgba(6, 9, 14, .6); }
+[data-form="phone"] .ph-top .brand { font-size: 22px; margin: 0; text-shadow: 0 1px 12px rgba(0, 0, 0, .6); }

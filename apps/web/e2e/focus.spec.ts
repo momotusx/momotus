@@ -84,8 +84,10 @@ test("TV: rows of a group taller than the list clear its pinned heading and the 
 for (const rtl of [false, true]) {
 test(`TV: a chip row fades only toward chips left to scroll to (${rtl ? "right to left" : "left to right"})`, async ({ browser }) => {
   const { context, page } = await open(browser, "/discover?form=tv", { width: 1920, height: 1080 }, rtl);
-  const genres = page.locator('[data-fgroup="genres"] .chips-track');
-  await expect(genres.locator(".chip").nth(12)).toBeAttached({ timeout: 30_000 });
+  // Four choices at most are a segmented control (more are a pull-down): one squeezed narrower
+  // than its chips scrolls, as a long one does on a phone.
+  const kinds = page.locator('[data-fgroup="kinds"] .chips-track');
+  await expect(kinds.locator(".chip").nth(1)).toBeAttached({ timeout: 30_000 });
   const mask = (row: string) =>
     page.locator(`[data-fgroup="${row}"] .chips-track`).evaluate((t) => getComputedStyle(t).maskImage || getComputedStyle(t).webkitMaskImage);
   const fadesAtEnd = (m: string) => m.endsWith("rgba(0, 0, 0, 0))");
@@ -95,14 +97,18 @@ test(`TV: a chip row fades only toward chips left to scroll to (${rtl ? "right t
 
   // Nothing to scroll to: no fade at all.
   await expect.poll(() => mask("kinds")).toBe("none");
+  await kinds.evaluate((t) => {
+    t.style.flex = "none";
+    t.style.width = `${(t.firstElementChild as HTMLElement).offsetWidth + 80}px`;
+  });
   // At the start of a long row: the end fades, the start does not.
-  await expect.poll(async () => fadesAtEnd(await mask("genres"))).toBe(true);
-  expect(fadesAtStart(await mask("genres"))).toBe(false);
-  expect((await mask("genres")).startsWith(way)).toBe(true);
+  await expect.poll(async () => fadesAtEnd(await mask("kinds"))).toBe(true);
+  expect(fadesAtStart(await mask("kinds"))).toBe(false);
+  expect((await mask("kinds")).startsWith(way)).toBe(true);
   // At its end: the last chip is not faded; the start now fades.
-  await genres.evaluate((t, rtl) => t.scrollTo({ left: rtl ? -t.scrollWidth : t.scrollWidth }), rtl);
-  await expect.poll(async () => fadesAtEnd(await mask("genres"))).toBe(false);
-  expect(fadesAtStart(await mask("genres"))).toBe(true);
+  await kinds.evaluate((t, rtl) => t.scrollTo({ left: rtl ? -t.scrollWidth : t.scrollWidth }), rtl);
+  await expect.poll(async () => fadesAtEnd(await mask("kinds"))).toBe(false);
+  expect(fadesAtStart(await mask("kinds"))).toBe(true);
   await context.close();
 });
 }

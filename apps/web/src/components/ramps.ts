@@ -1,0 +1,42 @@
+/** Every backdrop's scrim, the one stop list: Backdrop (art.tsx) draws it, art.test.ts checks it. */
+
+/** A stop of a scrim: where along its direction (0 at the edge it starts from) and how much of
+ * the page color covers the art there; past the last stop its alpha holds. */
+export type Stop = readonly [at: number, alpha: number];
+/** One layer: its CSS angle (0 starts at the bottom, 90 at the left, 180 at the top). */
+export type Layer = { deg: number; stops: readonly Stop[] };
+
+/** Every backdrop's scrim (design/DECISION.md, Backdrops and scrims), in the form's page color
+ * and the top layer first, as CSS paints them. The glass check (art.test.ts) lays them over white
+ * art: the stops are as deep as every secondary row on them needs for its white label. */
+export const ramps = {
+  /** Home's hero card: from the leading edge, and from the bottom up. */
+  hero: [
+    { deg: 90, stops: [[0, 0.94], [0.28, 0.72], [0.58, 0.18], [0.72, 0]] },
+    { deg: 0, stops: [[0, 0.9], [0.34, 0.3], [0.58, 0]] },
+  ],
+  /** The phone's hero: under the status bar, and from the bottom up. */
+  heroPhone: [
+    { deg: 180, stops: [[0, 0.55], [0.22, 0]] },
+    { deg: 0, stops: [[0, 0.96], [0.38, 0.55], [0.62, 0]] },
+  ],
+  /** A series: the episode cards sit on the right, so the art there is dimmed for their text, not to black. */
+  title: [
+    { deg: 90, stops: [[0, 1], [0.3, 0.9], [0.5, 0.7], [0.7, 0.62], [1, 0.7]] },
+    { deg: 0, stops: [[0, 1], [0.38, 0]] },
+  ],
+  titleMovie: [
+    { deg: 90, stops: [[0, 1], [0.28, 0.88], [0.55, 0.4], [0.78, 0]] },
+    { deg: 0, stops: [[0, 1], [0.22, 0.6], [0.46, 0]] },
+  ],
+  /** The phone title: the art over the logo, fading into the page under it. */
+  titlePhone: [{ deg: 0, stops: [[0.04, 1], [0.5, 0.45], [0.78, 0.1]] }],
+} satisfies Record<string, readonly Layer[]>;
+export type Ramp = keyof typeof ramps;
+
+const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ");
+/** The CSS for `layers` over a page of `page` (a #RRGGBB token). */
+export const rampCss = (layers: readonly Layer[], page: string) =>
+  layers
+    .map((l) => `linear-gradient(${l.deg}deg, ${l.stops.map(([at, a]) => `rgba(${rgb(page)}, ${a}) ${+(at * 100).toFixed(2)}%`).join(", ")})`)
+    .join(", ");

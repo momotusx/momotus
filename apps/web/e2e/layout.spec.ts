@@ -166,19 +166,19 @@ async function drawnLogo(browser: Browser, form: Form, path: string, selector: s
   await expect(logo).not.toHaveClass(/pending/);
   await page.waitForTimeout(300);
   if (shot) await page.screenshot({ path: `${SHOT}/${shot}-${form}.jpg`, type: "jpeg", quality: 80 });
-  // On Home the hero's eyebrow stays clear of the pill whatever the logo's
-  // shape, over a synopsis that runs long (the layout rhythm's rule).
+  // On Home the top of the hero's stack (its logo) stays clear of the navigation whatever the
+  // logo's shape, over a synopsis that runs long (the layout rhythm's rule).
   const clear =
     path === "/" && form !== "phone"
       ? await page.evaluate(() => {
           const syn = document.querySelector(".hero-syn");
           if (syn) syn.textContent = "A long synopsis. ".repeat(40);
-          const chip = document.querySelector(".hero .reason")?.getBoundingClientRect().top ?? 0;
-          const nav = document.querySelector(".topnav")?.getBoundingClientRect().bottom ?? 0;
-          return chip - nav;
+          const top = document.querySelector(".hero .hero-logo:not(.sr)")?.getBoundingClientRect().top ?? 0;
+          const nav = document.querySelector(".topnav .tabbar")?.getBoundingClientRect().bottom ?? 0;
+          return top - nav;
         })
       : null;
-  if (clear !== null) expect(clear, `${w}x${h} logo: eyebrow below the pill`).toBeGreaterThan(12);
+  if (clear !== null) expect(clear, `${w}x${h} logo: the stack below the navigation`).toBeGreaterThan(12);
   const box = await logo.evaluate((el) => {
     const img = el as HTMLImageElement;
     const r = img.naturalWidth / img.naturalHeight;

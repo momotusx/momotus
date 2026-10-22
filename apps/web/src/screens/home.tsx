@@ -7,8 +7,9 @@ import Wrench from "lucide-solid/icons/wrench";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Sparkle from "lucide-solid/icons/sparkle";
 import ShieldAlert from "lucide-solid/icons/shield-alert";
-import { createEffect, createSignal, For, Match, on, Show, Switch } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Match, on, Show, Switch } from "solid-js";
 import { Backdrop, Logo } from "../components/art";
+import { Ratings } from "../components/ratings";
 import { separators } from "../components/separators";
 import { CONTINUE_ROW, Row } from "../components/row";
 import { homeView, liveView, op, prefsView, retryHomeRow } from "../core/client";
@@ -21,7 +22,7 @@ import { removeHere, wipeState } from "../core/wipe";
 import { accountWords as aw, activeProfile, needsSecondWayIn, type Card, fill, homeCard, providerName } from "../lib/account";
 import { Tick } from "./sign-in";
 import { cardOffer, defaultsWords, namesLine } from "../lib/defaults";
-import { allFailed } from "../lib/rows";
+import { allFailed, sharedTitles } from "../lib/rows";
 import { form } from "../form";
 import type { Tile } from "../core/generated/Tile";
 import { playPath, ratingParts, titlePath } from "../lib/format";
@@ -253,6 +254,7 @@ export default function Home() {
   const hasContinue = () => home.rows[0]?.rowId === CONTINUE_ROW;
   const empty = () => home.status.state === "open" && home.rows.length === 0;
   const hero = () => home.hero;
+  const shared = createMemo(() => sharedTitles(home.rows));
   // Rows still on their way: only then is a missing hero still coming. When
   // every row has answered and none gave a backdrop (offline, posters only),
   // the hero closes instead of shimmering for good.
@@ -267,7 +269,7 @@ export default function Home() {
     <div class="home">
       <main class="page" data-vscroll ref={attach} onScroll={(e) => (pageScroll.top = e.currentTarget.scrollTop)}>
         <section class="hero" classList={{ closed: !hero() && !waiting() }} data-reveal-top aria-label="Featured">
-          <Backdrop src={hero()?.tile.background ?? null} class="hero-bd" />
+          <Backdrop src={hero()?.tile.background ?? null} class="hero-bd" ramp={form() === "phone" ? "heroPhone" : "hero"} />
           <Show when={form() === "phone"}>
             <header class="ph-top">
               <span class="brand">Marquee</span>
@@ -278,29 +280,18 @@ export default function Home() {
             when={hero()}
             fallback={
               <Show when={waiting()}>
-                <div class="hero-skel" aria-hidden="true">
-                  <div class="skel" />
-                  <div class="skel" />
-                </div>
+                <div class="hero-skel skel" aria-hidden="true" />
               </Show>
             }
           >
             {(h) => (
               <>
-                <p class="reason eyebrow">{h().reason}</p>
                 <Logo src={h().tile.logo} name={h().tile.name} class="hero-logo" />
                 <p class="meta" ref={separators}>
-                  <For each={ratingParts(h().tile.ratings)}>
-                    {(p) => (
-                      <>
-                        <span class="rate num">
-                          <span aria-hidden="true">{p.text}</span>
-                          <span class="sr">{p.spoken}</span>
-                        </span>
-                        <b aria-hidden="true">·</b>
-                      </>
-                    )}
-                  </For>
+                  <Ratings ratings={h().tile.ratings} sep={() => <b aria-hidden="true">·</b>} />
+                  <Show when={ratingParts(h().tile.ratings).length}>
+                    <b aria-hidden="true">·</b>
+                  </Show>
                   <Show when={h().tile.releaseInfo} fallback={kindLabel(h().tile.kind)}>
                     <span class="num">{h().tile.releaseInfo}</span>
                   </Show>
@@ -316,6 +307,7 @@ export default function Home() {
                 <Show when={h().description}>
                   <p class="hero-syn">{h().description}</p>
                 </Show>
+                <p class="reason">{h().reason}</p>
                 <div class="acts">
                   <Show when={playHref(h().tile)}>
                     {(href) => (
@@ -390,7 +382,7 @@ export default function Home() {
               <For each={home.rows}>
                 {(row, i) => (
                   <>
-                    <Row row={row} autofocus={i() === 0 && row.rowId === CONTINUE_ROW} root={page} onRetry={retryHomeRow} />
+                    <Row row={row} autofocus={i() === 0 && row.rowId === CONTINUE_ROW} root={page} named={shared().has(row.title)} onRetry={retryHomeRow} />
                     <Show when={i() === 0 && row.rowId === CONTINUE_ROW}>
                       <DefaultsCard />
                     </Show>

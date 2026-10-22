@@ -15,6 +15,7 @@ import RefreshCw from "lucide-solid/icons/refresh-cw";
 import RotateCcw from "lucide-solid/icons/rotate-ccw";
 import { createEffect, createMemo, createSignal, For, type JSX, Match, Show, Switch } from "solid-js";
 import { Backdrop, Logo } from "../components/art";
+import { Ratings } from "../components/ratings";
 import { KeyedPage } from "../components/keyed-page";
 import { Why } from "../components/why";
 import { askOnce, CONTINUE_ROW, removeFromContinue } from "../components/row";
@@ -99,7 +100,13 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
     <div class="title-scr" classList={{ movie: !series(), noart: artMissing() }}>
       {/* No backdrop (none named, or it does not load): the poster, blurred
           and faint, keeps the page from opening on a blank half. */}
-      <Backdrop src={d()?.background} fallback={d()?.poster} class="title-bd" onMissing={() => d() && setArtMissing(true)} />
+      <Backdrop
+        src={d()?.background}
+        fallback={d()?.poster}
+        class="title-bd"
+        ramp={form() === "phone" ? "titlePhone" : series() ? "title" : "titleMovie"}
+        onMissing={() => d() && setArtMissing(true)}
+      />
       <Show when={trailerOpen() && d()?.trailers.length}>
         <TrailerOverlay trailers={d()?.trailers ?? []} onClose={closeTrailer} />
       </Show>
@@ -130,30 +137,11 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                 <Logo src={x().logo} name={x().name} class="title-logo" />
                 <p class="meta" ref={separators}>
                   {/* The ratings lead, side by side as on Home; IMDb's links to its page, except on TV. */}
-                  <For each={ratingParts(x().ratings)}>
-                    {(p, i) => (
-                      <>
-                        <Show when={i() > 0}>
-                          <b aria-hidden="true"> · </b>
-                        </Show>
-                        <Show
-                          when={p.imdb && form() !== "tv" && x().imdbUrl}
-                          fallback={
-                            <span class="rate num">
-                              <span aria-hidden="true">{p.text}</span>
-                              <span class="sr">{p.spoken}</span>
-                            </span>
-                          }
-                        >
-                          {(url) => (
-                            <a class="rate num" href={url()} target="_blank" rel="noopener noreferrer" data-f="title:imdb" aria-label={`${p.spoken}, on IMDb`}>
-                              <span aria-hidden="true">{p.text}</span>
-                            </a>
-                          )}
-                        </Show>
-                      </>
-                    )}
-                  </For>
+                  <Ratings
+                    ratings={x().ratings}
+                    sep={() => <b aria-hidden="true"> · </b>}
+                    imdb={form() !== "tv" && x().imdbUrl ? { href: x().imdbUrl as string, f: "title:imdb" } : null}
+                  />
                   <Show when={ratingParts(x().ratings).length && metaLine().length}>
                     <b aria-hidden="true"> · </b>
                   </Show>

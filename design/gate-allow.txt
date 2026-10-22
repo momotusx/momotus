@@ -18,3 +18,7 @@ apps/android/design/src/main/kotlin/app/marquee/design/Focus.kt :: glassStrong =
 apps/android/design/src/main/kotlin/app/marquee/design/Focus.kt :: color = (if (ringed) colors.accent else colors.key).copy(alpha = p),
 # The phone's floating tab capsule is the frame's own glass (design/DECISION.md, Surfaces), laid opaque on the page: Android blurs nothing behind a node.
 apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneShell.kt :: .background(colors.glassStrong.compositeOver(colors.bg))
+# A secondary over artwork blurs what is behind its 16 percent fill, 20 px (design/DECISION.md, Surfaces); only over art.
+apps/web/src/theme/app.css :: :is(.hero .btn, .play-row .btn, .rbtn .ring, .info .acts .btn svg) { -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
+# The phone's floating tab capsule is glass, as the iPhone draws it (design/DECISION.md, Surfaces and Navigation).
+apps/web/src/theme/app.css :: background: rgba(32, 32, 32, .8); -webkit-backdrop-filter: blur(24px) saturate(1.8); backdrop-filter: blur(24px) saturate(1.8); }

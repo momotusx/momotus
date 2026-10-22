@@ -1,7 +1,6 @@
 # v2 leftovers the rollout removes (design/gate.ts). It only shrinks; it is empty at phase 13 (--final).
 apps/web/src/components/avatar.css :: .avatar-letter { font: 800 1em / 1 var(--font-display); letter-spacing: var(--tracking-display); }
 apps/web/src/components/trakt-mark.css :: font: 650 var(--type-caption) / 1 var(--font-text); color: var(--text); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); text-shadow: none; }
-apps/web/src/screens/browse.css :: background: linear-gradient(145deg, rgba(255, 255, 255, .1), rgba(255, 255, 255, .05)); box-shadow: inset 0 0 0 2px var(--control); }
 apps/web/src/screens/browse.css :: .chip-rank { display: grid; place-items: center; min-width: 26px; height: 26px; padding: 0 6px; border-radius: 13px; background: var(--text); color: var(--bg); font: 800 15px / 1 var(--font-text); }
 apps/web/src/screens/calendar.css :: .cal-day h2 { display: grid; gap: 8px; padding-top: 6px; font: 800 var(--type-title3) / 1.05 var(--font-display); }
 apps/web/src/screens/calendar.css :: .cal-name { padding: 0 24px; text-align: center; font: 800 var(--type-headline) / 1.15 var(--font-display); }
@@ -10,19 +9,7 @@ apps/web/src/screens/find-addons.css :: background: var(--glass); box-shadow: in
 apps/web/src/screens/find-addons.css :: box-shadow: inset 0 0 0 1px var(--edge), inset 0 1px 0 rgba(255, 255, 255, .07); }
 apps/web/src/screens/find-addons.css :: box-shadow: inset 0 0 0 2px var(--control), inset 0 1px 0 rgba(255, 255, 255, .09); }
 apps/web/src/screens/find-addons.css :: @media (hover: hover) { [data-form="desktop"] .fa-card:hover { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .24), var(--glass-highlight); } }
-apps/web/src/screens/find-addons.tsx :: <h1 data-eyebrow={w.eyebrow}>{w.title}</h1>
 apps/web/src/screens/home.css :: background: var(--surface); box-shadow: inset 0 0 0 1px var(--edge); isolation: isolate; }
-apps/web/src/screens/home.css :: linear-gradient(90deg, rgba(6, 9, 14, .94) 0%, rgba(6, 9, 14, .72) 28%, rgba(6, 9, 14, .18) 58%, rgba(6, 9, 14, 0) 72%),
-apps/web/src/screens/home.css :: linear-gradient(0deg, rgba(6, 9, 14, .9) 0%, rgba(6, 9, 14, .3) 34%, rgba(6, 9, 14, 0) 58%); }
-apps/web/src/screens/home.css :: background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight); }
-apps/web/src/screens/home.css :: background: rgba(9, 13, 19, .72); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); box-shadow: inset 0 0 0 1px var(--edge); }
-apps/web/src/screens/home.css :: .tile:focus-visible .cap b, [data-form="tv"] .tile:focus .cap b { color: var(--accent); }
-apps/web/src/screens/home.css :: [data-form="desktop"] .tile:hover .cap b { color: var(--accent); }
-apps/web/src/screens/home.css :: .bar-track i { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
-apps/web/src/screens/home.css :: padding: 0 44px; border-radius: var(--radius-card); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); }
-apps/web/src/screens/home.css :: linear-gradient(180deg, rgba(6, 9, 14, .55) 0%, rgba(6, 9, 14, 0) 22%),
-apps/web/src/screens/home.css :: linear-gradient(0deg, rgba(6, 9, 14, .96) 0%, rgba(6, 9, 14, .55) 38%, rgba(6, 9, 14, 0) 62%); }
-apps/web/src/screens/home.css :: [data-form="phone"] .ph-top .brand { font-size: 22px; margin: 0; text-shadow: 0 1px 12px rgba(6, 9, 14, .6); }
 apps/web/src/screens/onboarding.css :: .door { display: flex; align-items: center; gap: 24px; width: 100%; padding: 34px 34px; border-radius: var(--radius-l); background: var(--glass);
 apps/web/src/screens/onboarding.css :: box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight); transform-origin: center; text-align: left; }
 apps/web/src/screens/onboarding.css :: .door b { display: block; font: 800 var(--type-title3) / 1.1 var(--font-display); }
@@ -71,27 +58,14 @@ apps/web/src/screens/sync.css :: .sync-tag { padding: 6px 14px; border-radius: v
 apps/web/src/screens/sync.css :: background: rgba(255, 255, 255, .12); box-shadow: inset 0 0 0 1px var(--edge); }
 apps/web/src/screens/sync.css :: .sync-box { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; box-shadow: inset 0 0 0 2px var(--control); }
 apps/web/src/screens/sync.css :: .sync-scan video { width: min(100%, 560px); aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--radius-l); background: var(--surface); box-shadow: inset 0 0 0 1px var(--edge); }
-apps/web/src/screens/title.css :: linear-gradient(90deg, var(--bg) 0%, rgba(6, 9, 14, .9) 30%, rgba(6, 9, 14, .55) 50%, rgba(6, 9, 14, .62) 70%, rgba(6, 9, 14, .7) 100%),
-apps/web/src/screens/title.css :: linear-gradient(90deg, var(--bg) 0%, rgba(6, 9, 14, .88) 28%, rgba(6, 9, 14, .4) 55%, rgba(6, 9, 14, 0) 78%),
-apps/web/src/screens/title.css :: linear-gradient(0deg, var(--bg) 0%, rgba(6, 9, 14, .6) 22%, rgba(6, 9, 14, 0) 46%); }
-apps/web/src/screens/title.css :: box-shadow: inset 0 0 0 2px var(--control), inset 0 1px 0 rgba(255, 255, 255, .09);
 apps/web/src/screens/title.css :: border-radius: var(--radius-card); overflow: hidden; background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge);
 apps/web/src/screens/title.css :: -webkit-backdrop-filter: blur(var(--glass-blur)); backdrop-filter: blur(var(--glass-blur)); }
-apps/web/src/screens/title.css :: box-shadow: inset 0 0 0 2px var(--control); }
 apps/web/src/screens/title.css :: background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); transform-origin: center; }
-apps/web/src/screens/title.css :: font: 800 20px / 1 var(--font-text); color: var(--text); background: rgba(6, 9, 14, .72); }
-apps/web/src/screens/title.css :: font: 700 17px / 1 var(--font-text); background: rgba(6, 9, 14, .72); box-shadow: inset 0 0 0 1px var(--edge); }
-apps/web/src/screens/title.css :: .meter i { display: block; height: 100%; background: var(--accent); }
-apps/web/src/screens/title.css :: :is([data-form="tv"], [data-form="desktop"]) .ep-act { background: var(--glass-strong); }
-apps/web/src/screens/title.css :: font: 600 var(--type-caption) / 1 var(--font-text); color: var(--muted); white-space: nowrap; box-shadow: inset 0 0 0 2px var(--control); }
 apps/web/src/screens/title.css :: [data-form="desktop"] .ep-main:hover { background: var(--glass-strong); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .4); }
-apps/web/src/screens/title.css :: background: linear-gradient(0deg, var(--bg) 4%, rgba(6, 9, 14, .45) 50%, rgba(6, 9, 14, .1) 78%); }
 apps/web/src/screens/trakt.css :: .trakt-card { display: grid; gap: 24px; padding: 30px 34px; border-radius: var(--radius-l); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight); }
-apps/web/src/screens/trakt.css :: .trakt-import progress { width: min(520px, 100%); height: 6px; accent-color: var(--accent); }
 apps/web/src/screens/trakt.css :: background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); }
 apps/web/src/screens/trakt.css :: .trakt-unmapped b { font: 650 var(--type-body) / 1.25 var(--font-text); overflow-wrap: anywhere; }
 apps/web/src/screens/trakt.css :: .trakt-code .step a { color: var(--text); font-weight: 650; text-decoration: underline; text-underline-offset: 4px; overflow-wrap: anywhere; }
-apps/web/src/screens/trakt.tsx :: <h1 data-eyebrow={w.eyebrow}>{w.title}</h1>
 apps/web/src/screens/versions.css :: .crumbs .here { color: var(--text); font-weight: 650; }
 apps/web/src/screens/versions.css :: .vhead h1 { font: 800 var(--type-title1) / 1.05 var(--font-display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 apps/web/src/screens/versions.css :: border-radius: var(--radius-l); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight);
@@ -109,13 +83,6 @@ apps/web/src/theme/app.css :: .glass { background: var(--glass); -webkit-backdro
 apps/web/src/theme/app.css :: backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
 apps/web/src/theme/app.css :: box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight), var(--glass-shadow); }
 apps/web/src/theme/app.css :: .glass.strong { background: var(--glass-strong); }
-apps/web/src/theme/app.css :: box-shadow: inset 0 0 0 2px var(--control), inset 0 1px 0 rgba(255, 255, 255, .09); transform-origin: center; }
-apps/web/src/theme/app.css :: box-shadow: inset 0 0 0 2px var(--control), inset 0 1px 0 rgba(255, 255, 255, .09);
-apps/web/src/theme/app.css :: .eyebrow { font: 700 var(--type-caption) / 1 var(--font-text); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
-apps/web/src/theme/app.css :: .brand::before { content: ""; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); }
-apps/web/src/theme/app.css :: .nav.on { color: var(--text); background: rgba(255, 255, 255, .12); box-shadow: inset 0 0 0 1px var(--edge); }
-apps/web/src/theme/app.css :: padding: 16px 26px; border-radius: 16px; background: var(--glass-strong); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-shadow);
-apps/web/src/theme/app.css :: -webkit-backdrop-filter: blur(var(--glass-blur)); backdrop-filter: blur(var(--glass-blur));
 apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: // glass cards, each installed or turned on in one press. The web's screens/find-addons.tsx.
 apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: /** Community's caution, on glass. */
 apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: .background(Marquee.colors.glass)

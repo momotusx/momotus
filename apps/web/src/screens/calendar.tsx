@@ -112,7 +112,7 @@ export default function CalendarScreen() {
   return (
     <main class="browse page cal" data-vscroll>
       <header class="cal-head">
-        <h1 data-eyebrow="Coming up">Calendar</h1>
+        <h1>Calendar</h1>
         <p class="lede">New episodes of the series in your library, {span()}.</p>
         <Show when={(s()?.pending ?? 0) > 0}>
           <p class="st warn" role="status">

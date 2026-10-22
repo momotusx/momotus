@@ -3,19 +3,9 @@
 
 .title-scr { position: absolute; inset: 0; }
 .title-bd { inset: 0; }
-/* Series: the episode cards sit on the right, so the art there is dimmed
- * enough for their text, not to black. */
-.title-bd::after {
-  background:
-    linear-gradient(90deg, var(--bg) 0%, rgba(6, 9, 14, .9) 30%, rgba(6, 9, 14, .55) 50%, rgba(6, 9, 14, .62) 70%, rgba(6, 9, 14, .7) 100%),
-    linear-gradient(0deg, var(--bg) 0%, transparent 38%); }
 /* No backdrop: the poster stands in, blurred 40 px and at 35%. */
 .title-bd.blur img { filter: blur(40px); transform: scale(1.15); }
 .title-bd.blur img.in { opacity: .35; }
-.title-scr.movie .title-bd::after {
-  background:
-    linear-gradient(90deg, var(--bg) 0%, rgba(6, 9, 14, .88) 28%, rgba(6, 9, 14, .4) 55%, rgba(6, 9, 14, 0) 78%),
-    linear-gradient(0deg, var(--bg) 0%, rgba(6, 9, 14, .6) 22%, rgba(6, 9, 14, 0) 46%); }
 
 .info { position: absolute; left: var(--safe-side); top: var(--safe-top); bottom: var(--safe-bottom); width: 840px;
   display: flex; flex-direction: column; align-items: flex-start; }
@@ -47,16 +37,13 @@
  * pill with a check (selection is a fill and a check, never a ring: the ring
  * means focus). */
 .btn.watched { flex: none; font-size: var(--type-callout); }
-.btn.watched[aria-pressed="false"] { color: var(--muted); }
 .btn.watched[aria-pressed="true"] { background: var(--selected-fill); box-shadow: var(--selected-edge); }
 
-/* Secondary actions: round glass buttons with their word under the circle. */
+/* Secondary actions: the fill in a circle, the word under it. */
 .info .acts { flex-wrap: nowrap; gap: 28px; }
 .info .acts .btn { flex-direction: column; height: auto; padding: 0; gap: 10px; background: none; box-shadow: none;
   font: var(--weight-label) var(--type-caption) / 1 var(--font-text); color: var(--muted); border-radius: 18px; }
-.info .acts .btn svg { box-sizing: content-box; width: 28px; height: 28px; padding: 22px; border-radius: 50%; color: var(--text);
-  background: linear-gradient(145deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, .065));
-  box-shadow: inset 0 0 0 2px var(--control), inset 0 1px 0 rgba(255, 255, 255, .09);
+.info .acts .btn svg { box-sizing: content-box; width: 28px; height: 28px; padding: 22px; border-radius: 50%; color: #fff; background: var(--fill);
   transition: transform var(--motion-focus) var(--ease); }
 .info .acts .btn .long { max-width: 9em; white-space: normal; text-align: center; line-height: 1.2; }
 .info .acts .btn[aria-pressed="true"] svg { background: var(--selected-fill); box-shadow: var(--selected-edge); }
@@ -67,7 +54,7 @@
 [data-form="tv"] .info .acts .btn:focus svg { transform: scale(var(--focus-scale-card)); }
 @media (hover: hover) {
   [data-form="desktop"] .info .acts .btn:hover { background: none; box-shadow: none; color: var(--text); }
-  [data-form="desktop"] .info .acts .btn:hover svg { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .44); }
+  [data-form="desktop"] .info .acts .btn:hover svg { background: rgba(255, 255, 255, .24); }
 }
 .vline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; padding-left: 8px; font: 600 var(--type-callout) / 1.3 var(--font-text); }
 .vline > span { white-space: nowrap; }
@@ -104,11 +91,11 @@
 [data-form="tv"] .seasons { width: calc(100% + 132px); margin: -40px -66px -84px; padding: 40px 66px 84px; }
 .seasons .kicker { margin-right: 8px; flex: none; }
 .seasons .tab { flex: none; }
-.tab { height: 54px; padding: 0 24px; border-radius: var(--radius-pill); font: 600 var(--type-callout) / 1 var(--font-text); color: var(--muted);
-  box-shadow: inset 0 0 0 2px var(--control); }
+.tab { height: 54px; padding: 0 24px; border-radius: var(--radius-pill); font: 600 var(--type-callout) / 1 var(--font-text); color: var(--dim);
+  background: var(--track); }
 .seasons.compact .tab { min-width: 54px; padding: 0 16px; text-align: center; }
-/* Selected is a lighter fill and a bright edge; the ring is only ever focus. */
-.tab.on { color: var(--text); background: var(--selected-fill); box-shadow: var(--selected-edge); font-weight: 700; }
+/* The segmented control: the selected season a grey step up with a white label; the ring is only ever focus. */
+.tab.on { color: #fff; background: var(--selected-fill); }
 [data-form="tv"] .tab:focus { color: var(--text); transform: scale(var(--focus-scale-card)); }
 .toc { flex: 1; min-height: 0; margin: 0 -24px; padding: 14px 24px 72px; display: flex; flex-direction: column; gap: 14px; }
 .ep { position: relative; display: flex; align-items: stretch; gap: 10px; }
@@ -121,12 +108,13 @@
 /* No still: the series art, dimmed so it reads as a stand-in and the number holds. */
 .ep-still img.stand-in { object-position: center 22%; filter: brightness(.6) saturate(.85); }
 .ep-n { position: absolute; left: 10px; bottom: 8px; min-width: 32px; height: 32px; padding: 0 8px; display: grid; place-items: center; border-radius: 8px;
-  font: 800 20px / 1 var(--font-text); color: var(--text); background: rgba(6, 9, 14, .72); }
+  font: 700 20px / 1 var(--font-text); color: var(--text); background: rgba(0, 0, 0, .72); }
 .ep-chip { position: absolute; top: 8px; right: 8px; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: var(--radius-pill);
-  font: 700 17px / 1 var(--font-text); background: rgba(6, 9, 14, .72); box-shadow: inset 0 0 0 1px var(--edge); }
+  font: 700 17px / 1 var(--font-text); background: rgba(0, 0, 0, .72); }
 .ep-chip svg { width: 16px; height: 16px; }
-.meter { position: absolute; left: 0; right: 0; bottom: 0; height: 5px; background: rgba(255, 255, 255, .25); }
-.meter i { display: block; height: 100%; background: var(--accent); }
+/* Progress: white on a dark track (design/DECISION.md). */
+.meter { position: absolute; left: 0; right: 0; bottom: 0; height: 5px; background: rgba(0, 0, 0, .55); }
+.meter i { display: block; height: 100%; background: #fff; }
 .ep-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; padding-top: 4px; }
 .ep-t { font: 700 var(--type-body) / 1.2 var(--font-text); letter-spacing: var(--tracking-label); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ep-r { font: 500 var(--type-caption) / 1.2 var(--font-text); color: var(--dim); }
@@ -140,12 +128,11 @@
  * enters the strip, Left or Back returns to the card (`data-fowner`). */
 .ep-acts { flex: none; display: none; flex-direction: column; justify-content: center; align-items: stretch; gap: 6px; }
 :is([data-form="tv"], [data-form="desktop"]) .ep-acts { position: absolute; z-index: 4; right: 24px; top: 50%; transform: translateY(-50%); }
-:is([data-form="tv"], [data-form="desktop"]) .ep-act { background: var(--glass-strong); }
 :is([data-form="tv"], [data-form="desktop"]) .ep:focus-within .ep-text {
   -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 300px), transparent calc(100% - 250px));
   mask-image: linear-gradient(90deg, #000 calc(100% - 300px), transparent calc(100% - 250px)); }
 .ep-act { display: inline-flex; align-items: center; gap: 8px; height: 52px; padding: 0 18px; border-radius: var(--radius-pill);
-  font: 600 var(--type-caption) / 1 var(--font-text); color: var(--muted); white-space: nowrap; box-shadow: inset 0 0 0 2px var(--control); }
+  font: 600 var(--type-caption) / 1 var(--font-text); color: #fff; white-space: nowrap; background: var(--fill); }
 .ep-act svg { width: 22px; height: 22px; }
 [data-form="tv"] .ep-act:focus { transform: scale(var(--focus-scale-card)); }
 .ep:focus-within .ep-acts { display: flex; }
@@ -161,8 +148,6 @@
 /* Phone: one column. */
 [data-form="phone"] .title-scr { position: relative; padding-bottom: 32px; }
 [data-form="phone"] .title-bd { inset: 0 0 auto 0; height: 360px; }
-[data-form="phone"] .title-bd::after, [data-form="phone"] .title-scr.movie .title-bd::after {
-  background: linear-gradient(0deg, var(--bg) 4%, rgba(6, 9, 14, .45) 50%, rgba(6, 9, 14, .1) 78%); }
 [data-form="phone"] .info, [data-form="phone"] .title-scr.movie .info { position: relative; left: auto; top: auto; bottom: auto; width: auto; padding: 190px 16px 0; align-items: center; text-align: center; }
 [data-form="phone"] .title-logo.logo { height: 96px; max-width: 280px; margin-bottom: 14px; object-position: center; }
 [data-form="phone"] .title-logo.logo { --logo-area: 22000; height: clamp(56px, calc(sqrt(var(--logo-area) / var(--r, 3.2)) * 1px), 140px); }

@@ -2,12 +2,13 @@ import { A } from "@solidjs/router";
 import Puzzle from "lucide-solid/icons/puzzle";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Wrench from "lucide-solid/icons/wrench";
-import { createEffect, createSignal, Match, on, Show, Switch } from "solid-js";
+import { createEffect, createMemo, createSignal, Match, on, Show, Switch } from "solid-js";
 import { Chips, Grid, SkeletonGrid } from "../components/grid";
 import { Why } from "../components/why";
 import { discoverView } from "../core/client";
 import { onProfileReset } from "../core/profiles";
 import { defaultsWords } from "../lib/defaults";
+import { sharedTitles } from "../lib/rows";
 import { problemWords } from "../lib/words";
 import "./browse.css";
 
@@ -35,6 +36,8 @@ function DiscoverPage(props: { retry: () => void }) {
   const d = () => view.state.data;
   const select = (c: { kind?: string; catalog?: string; genre?: string | null }) => void view.command({ type: "select", ...c });
   const catalogName = () => d()?.catalogs.find((c) => c.id === d()?.catalog)?.name ?? "this catalog";
+  // A catalog names its addon only beside another of the same name (lib/rows.ts).
+  const sharedNames = createMemo(() => sharedTitles((d()?.catalogs ?? []).map((c) => ({ title: c.name }))));
   const loadMore = () => d()?.state.state === "ready" && void view.command({ type: "loadMore" });
   // Try again after a failed page (or a failed catalog): loadMore asks that
   // page again. Its button stays, reading "Trying again", until the answer,
@@ -55,7 +58,7 @@ function DiscoverPage(props: { retry: () => void }) {
 
   return (
     <main class="browse page" data-vscroll ref={attach} onScroll={(e) => (pageScroll.top = e.currentTarget.scrollTop)}>
-      <h1 data-eyebrow="Browse">Discover</h1>
+      <h1>Discover</h1>
       <Switch>
         <Match when={view.state.status.state === "failed"}>
           <section class="problem">
@@ -99,7 +102,7 @@ function DiscoverPage(props: { retry: () => void }) {
                 <Chips
                   label="Catalog"
                   group="catalogs"
-                  items={s().catalogs.map((c) => ({ value: c.id, label: c.name, note: c.source }))}
+                  items={s().catalogs.map((c) => ({ value: c.id, label: c.name, note: sharedNames().has(c.name) ? c.source : undefined }))}
                   selected={s().catalog}
                   onSelect={(catalog) => select({ catalog: catalog ?? undefined })}
                 />

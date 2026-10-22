@@ -13,6 +13,7 @@ import SearchIcon from "lucide-solid/icons/search";
 import X from "lucide-solid/icons/x";
 import { createEffect, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
 import { Poster } from "../components/art";
+import { Ratings } from "../components/ratings";
 import { Why } from "../components/why";
 import { liveView } from "../core/client";
 import { searchIds } from "../lib/ids";
@@ -23,6 +24,7 @@ import { onProfileReset } from "../core/profiles";
 import { focusEl, isBackKey, mayAutoFocus } from "../focus/dom";
 import { historyDepth } from "../history";
 import { ratingParts, titlePath } from "../lib/format";
+import { sharedTitles } from "../lib/rows";
 import { kindLabel, problemWords } from "../lib/words";
 import "./browse.css";
 import "./search.css";
@@ -147,6 +149,8 @@ function SearchPanel(props: { dialog?: boolean }) {
   if (lastQuery) queueMicrotask(() => send(lastQuery));
   const searching = () => text().trim().length > 0;
   const rows = () => s()?.rows ?? [];
+  // A section shows its title alone; only two of one title name their addon (lib/rows.ts).
+  const shared = createMemo(() => sharedTitles(rows()));
   // "Top results" (the core's row "top") holds its place for the query it
   // came with: a loading row, a short answer, or none at all (Trakt failed or
   // found nothing, and the core drops the row) keeps the height of three
@@ -265,7 +269,6 @@ function SearchPanel(props: { dialog?: boolean }) {
               <section class="hits top" aria-label="Top results">
                 <h3 class="hits-head">
                   <span class="kicker">Top results</span>
-                  <span class="hits-src">Trakt</span>
                 </h3>
                 <div class="hits-body">
                   <p class="palette-note">No top results for this search.</p>
@@ -275,10 +278,12 @@ function SearchPanel(props: { dialog?: boolean }) {
             <For each={rows()}>
               {(row) => (
                 <Show when={!current() || scoped(row).length > 0}>
-                  <section class="hits" classList={{ top: row.rowId === TOP }} aria-label={`${row.title}, ${row.source}`}>
+                  <section class="hits" classList={{ top: row.rowId === TOP }} aria-label={shared().has(row.title) ? `${row.title}, ${row.source}` : row.title}>
                     <h3 class="hits-head">
                       <span class="kicker">{row.title}</span>
-                      <span class="hits-src">{row.source}</span>
+                      <Show when={shared().has(row.title)}>
+                        <span class="hits-src">{row.source}</span>
+                      </Show>
                     </h3>
                     <div class="hits-body">
                       <Switch>
@@ -340,17 +345,10 @@ function Hit(props: { tile: Tile; fkey: string; onOpen: () => void }) {
             <i aria-hidden="true">·</i>
             <span>{t().releaseInfo}</span>
           </Show>
-          <For each={ratingParts(t().ratings)}>
-            {(p) => (
-              <>
-                <i aria-hidden="true">·</i>
-                <span class="rate">
-                  <span aria-hidden="true">{p.text}</span>
-                  <span class="sr">{p.spoken}</span>
-                </span>
-              </>
-            )}
-          </For>
+          <Show when={ratingParts(t().ratings).length}>
+            <i aria-hidden="true">·</i>
+          </Show>
+          <Ratings ratings={t().ratings} sep={() => <i aria-hidden="true">·</i>} />
         </span>
       </span>
       <ChevronRight aria-hidden class="hit-chev" />

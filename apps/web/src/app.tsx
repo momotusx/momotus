@@ -55,6 +55,9 @@ const settingsPages = ["/settings", "/addons", "/recommended-addons", "/find-add
 const isSettingsPage = (path: string) => settingsPages.includes(path) || path.startsWith("/profiles/") || path.startsWith("/sync/");
 const section = (path: string) => (isSettingsPage(path) ? "/settings" : path);
 const hasNav = (path: string) => destinations.some((d) => d.path === section(path));
+// The phone has five tabs: Calendar is a row at the top of Library, lit as Library (design/DECISION.md, Navigation).
+const phoneTabs = destinations.filter((d) => d.path !== "/calendar");
+const lit = (path: string) => (form() === "phone" && path === "/calendar" ? "/library" : section(path));
 
 /** Where Back goes when there is no in-app history (a deep link or reload). */
 export function parentOf(path: string): string | null {
@@ -77,25 +80,41 @@ const paletteClick = (path: string) => (e: MouseEvent) => {
   openSearch();
 };
 
-/** TV and desktop: a floating glass pill at the top. Sections are words;
- * Search and Settings, after a divider, carry their icon. */
+/** TV and desktop (design/DECISION.md, Navigation), the wordmark at the left. TV: a solid tab
+ * bar centered at the top, every tab with its word (Search and Settings with their icon too),
+ * the profile at its end. Desktop: tv.apple.com's black header, text tabs in the middle, Search
+ * and the profile at the right. */
 function TopNav() {
   const location = useLocation();
+  const tv = () => form() === "tv";
   const link = (d: Destination) => (
     <A href={d.path} end class="nav" classList={{ on: section(location.pathname) === d.path }} data-f={`nav:${d.path}`} on:click={paletteClick(d.path)}>
-      <Show when={d.tool}>
+      <Show when={d.tool && tv()}>
         <d.icon aria-hidden />
       </Show>
       <span>{d.label}</span>
     </A>
   );
+  // Desktop: Search sits at the right in the header field's place; it opens the palette.
+  const search = destinations.find((d) => d.path === "/search") as Destination;
   return (
-    <nav class="topnav glass" aria-label="Main" data-fgroup="rail" inert={searchOpen() || undefined}>
+    <nav class="topnav" aria-label="Main" data-fgroup="rail" inert={searchOpen() || undefined}>
       <span class="brand">Marquee</span>
-      <For each={destinations.filter((d) => !d.tool)}>{link}</For>
-      <span class="sep" aria-hidden="true" />
-      <For each={destinations.filter((d) => d.tool)}>{link}</For>
-      <ProfileButton />
+      <div class="tabbar">
+        <For each={tv() ? destinations : destinations.filter((d) => d !== search)}>{link}</For>
+        <Show when={tv()}>
+          <ProfileButton />
+        </Show>
+      </div>
+      <Show when={!tv()}>
+        <div class="topnav-end">
+          <A href={search.path} end class="nav nav-field" classList={{ on: section(location.pathname) === search.path }} data-f="nav:/search" on:click={paletteClick(search.path)}>
+            <search.icon aria-hidden />
+            <span>{search.label}</span>
+          </A>
+          <ProfileButton />
+        </div>
+      </Show>
     </nav>
   );
 }
@@ -114,13 +133,14 @@ function ProfileButton() {
   );
 }
 
+/** The phone: the iPhone's floating glass capsule, five tabs, the selected one in the key blue. */
 function Tabs() {
   const location = useLocation();
   return (
-    <nav class="tabs glass strong" aria-label="Main" inert={searchOpen() || undefined}>
-      <For each={destinations}>
+    <nav class="tabs" aria-label="Main" inert={searchOpen() || undefined}>
+      <For each={phoneTabs}>
         {(d) => (
-          <A href={d.path} end classList={{ on: section(location.pathname) === d.path }} on:click={paletteClick(d.path)}>
+          <A href={d.path} end classList={{ on: lit(location.pathname) === d.path }} on:click={paletteClick(d.path)}>
             <d.icon aria-hidden />
             <span>{d.label}</span>
           </A>

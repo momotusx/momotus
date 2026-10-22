@@ -2,14 +2,18 @@
  * back to the title set in the display face, posters to their name. */
 
 import { createEffect, createSignal, on, Show } from "solid-js";
+import { form } from "../form";
 import { trimmedLogo } from "../lib/trim";
+import { pageColor } from "../theme/page";
+import { type Ramp, rampCss, ramps } from "./ramps";
 
 /** The backdrop, else (none named, or it fails to load) `fallback`, shown
- * blurred; `onMissing` says the real backdrop is not there. */
+ * blurred, under its `ramp`; `onMissing` says the real backdrop is not there. */
 export function Backdrop(props: {
   src: string | null | undefined;
   class?: string;
   dim?: boolean;
+  ramp?: Ramp;
   fallback?: string | null;
   onMissing?: () => void;
 }) {
@@ -34,6 +38,7 @@ export function Backdrop(props: {
           />
         )}
       </Show>
+      <Show when={props.ramp}>{(r) => <div class="ramp" style={{ background: rampCss(ramps[r()], pageColor(form())) }} />}</Show>
     </div>
   );
 }
@@ -88,26 +93,40 @@ export function Logo(props: { src: string | null | undefined; name: string; clas
 
 /** A poster over a name card: the title's name sits centered in the surface
  * until the picture has decoded, and stays when there is none, so a tile is
- * never a blank box. */
-export function Poster(props: { src: string | null; name: string; w: number; h: number; eager?: boolean; nameCard?: boolean }) {
-  const [broken, setBroken] = createSignal(false);
+ * never a blank box. A 16:9 still that fails to load gives way to `fallback` (its poster);
+ * `top` crops a poster in a still's place from its upper part. */
+export function Poster(props: {
+  src: string | null;
+  fallback?: string | null;
+  name: string;
+  w: number;
+  h: number;
+  eager?: boolean;
+  nameCard?: boolean;
+  top?: boolean;
+}) {
+  const [failed, setFailed] = createSignal(0);
+  const src = () => [props.src, props.fallback].filter((s): s is string => !!s)[failed()];
   return (
     <>
       <Show when={props.nameCard !== false}>
         <span class="pic-name">{props.name}</span>
       </Show>
-      <Show when={props.src && !broken()}>
-        <img
-          src={props.src as string}
-          width={props.w}
-          height={props.h}
-          alt=""
-          loading={props.eager ? "eager" : "lazy"}
-          decoding="async"
-          class="fade"
-          onLoad={(e) => e.currentTarget.classList.add("in")}
-          onError={() => setBroken(true)}
-        />
+      <Show when={src()} keyed>
+        {(url) => (
+          <img
+            src={url}
+            width={props.w}
+            height={props.h}
+            alt=""
+            loading={props.eager ? "eager" : "lazy"}
+            decoding="async"
+            class="fade"
+            classList={{ top: props.top || url !== props.src }}
+            onLoad={(e) => e.currentTarget.classList.add("in")}
+            onError={() => setFailed((n) => n + 1)}
+          />
+        )}
       </Show>
     </>
   );

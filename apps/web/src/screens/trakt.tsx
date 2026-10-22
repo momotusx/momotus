@@ -52,7 +52,7 @@ export default function TraktScreen() {
   const [attempt, setAttempt] = createSignal(0);
   return (
     <main class="browse page settings-page trakt-page" data-vscroll>
-      <h1 data-eyebrow={w.eyebrow}>{w.title}</h1>
+      <h1>{w.title}</h1>
       <p class="lede">{w.lede}</p>
       <StorageNote />
       <Show when={traktLink} fallback={<Said tone="bad">{w.plainLink}</Said>}>
