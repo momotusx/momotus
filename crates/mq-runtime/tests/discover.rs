@@ -478,7 +478,7 @@ async fn a_catalog_of_an_unknown_type_is_filed_by_its_name() {
         "id": "lists", "version": "1.0.0", "name": "Lists", "types": ["movie", "trakt"],
         "resources": ["catalog"],
         "catalogs": [
-            {"type": "movie", "id": "top", "name": "Popular"},
+            {"type": "movie", "id": "top", "name": "Top"},
             {"type": "trakt", "id": "trakt_popular_movies", "name": "Popular movies"},
             {"type": "trakt", "id": "picks", "name": "Top picks"}
         ]
@@ -508,7 +508,9 @@ async fn a_catalog_of_an_unknown_type_is_filed_by_its_name() {
         .iter()
         .map(|c| c.name.clone())
         .collect();
-    assert_eq!(names, ["Popular", "Popular movies"]);
+    // "Top", not "Popular": two lists both read "Popular Movies" would be twins,
+    // and Discover shows only the first of twins.
+    assert_eq!(names, ["Top", "Popular movies"]);
     view.select(None, Some("lists|trakt|trakt_popular_movies"), None);
     settle(&view).await;
     assert_eq!(view.snapshot().kind.as_deref(), Some("movie"));
