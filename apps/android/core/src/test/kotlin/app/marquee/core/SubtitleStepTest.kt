@@ -57,6 +57,19 @@ class SubtitleStepTest {
     }
 
     @Test
+    fun a_device_language_the_core_does_not_list_is_neither_offered_nor_chosen() {
+        core.answers["setPrefs"] = { ok(prefs) }
+        // Norway's Bokmål: the core lists Norwegian as "no".
+        val step = step("nb")
+        assertNull(step.chosen)
+        assertEquals(listOf("en", "tr", "es", "fr", "de", "it", "pt", "ja"), step.common.map { it.code })
+        var done = false
+        step.save { done = true }
+        core.waitFor("the write") { done }
+        assertEquals("[]", written())
+    }
+
+    @Test
     fun turkish_comes_after_the_device_and_english() {
         assertEquals(listOf("de", "en", "tr"), step("de").common.map { it.code }.take(3))
     }

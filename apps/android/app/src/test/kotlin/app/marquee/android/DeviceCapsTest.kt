@@ -86,8 +86,9 @@ class DeviceCapsTest {
 
     @Test
     fun `the subtitle pickers take a three letter language too`() {
-        assertEquals("fil", DeviceCaps.languageCode(Locale.forLanguageTag("fil-PH")))
+        // Cantonese, a tag the core lists; Filipino goes as it is, and the core reads it as Tagalog ("tl").
         assertEquals("yue", DeviceCaps.languageCode(Locale.forLanguageTag("yue-HK")))
+        assertEquals("fil", DeviceCaps.languageCode(Locale.forLanguageTag("fil-PH")))
         assertEquals("he", DeviceCaps.languageCode(Locale("iw", "IL")))
         assertNull(DeviceCaps.languageCode(Locale.ROOT))
     }

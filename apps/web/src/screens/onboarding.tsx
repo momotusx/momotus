@@ -456,15 +456,22 @@ function Subtitles(props: { then?: string }) {
   createEffect(on(() => prefs.state.data !== null, (ready) => ready && (prefs.state.data?.subtitleLanguages.length ?? 0) > 0 && next()));
   const device = (navigator.language || "en").split("-")[0]?.toLowerCase() || "en";
   const [all, setAll] = createSignal<LanguageChoice[]>([]);
-  onMount(() => void allLanguages().then(setAll, () => undefined));
   const [chosen, setChosen] = createSignal<string | null>(device === "en" ? null : device);
+  // The device's language counts only when the core lists it: a code it
+  // does not ("haw") would be a preference no track ever matches.
+  const listed = () => all().some((l) => l.code === device);
+  const load = (list: LanguageChoice[]) => {
+    setAll(list);
+    if (chosen() === device && !listed()) setChosen(null);
+  };
+  onMount(() => void allLanguages().then(load, () => load([])));
   const [more, setMore] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
   const [problem, setProblem] = createSignal<string | null>(null);
   const nameOf = (code: string) => all().find((l) => l.code === code)?.name ?? languageName(code);
-  const common = [...new Set([device, ...QUICK])];
+  const common = () => [...new Set([...(listed() ? [device] : []), ...QUICK])];
   // The core's list comes sorted by name.
-  const rest = () => all().filter((l) => !common.includes(l.code));
+  const rest = () => all().filter((l) => !common().includes(l.code));
   const go = async () => {
     if (busy()) return;
     setBusy(true);
@@ -497,7 +504,7 @@ function Subtitles(props: { then?: string }) {
       <h1>Subtitles</h1>
       <p class="lead">Pick the language subtitles start in. They turn on when a film's audio is in another language. Change it later in Settings, under Playback.</p>
       <div class="langs" role="radiogroup" aria-label="Subtitle language" data-fgroup="subs">
-        <For each={common}>{(code) => row(code, nameOf(code), code === device ? "This device's language" : undefined)}</For>
+        <For each={common()}>{(code) => row(code, nameOf(code), code === device ? "This device's language" : undefined)}</For>
         {row(null, "No subtitles", "Turn them on while watching")}
       </div>
       <Show when={problem()}>

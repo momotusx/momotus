@@ -29,6 +29,16 @@ private let known = [
     #expect(SubtitleStepRules.common(known, device: "en").first?.code == "en")
 }
 
+@Test func aDeviceLanguageTheCoreDoesNotListIsNeitherOfferedNorChosen() {
+    // Norway's Bokmål: the core lists Norwegian as "no".
+    #expect(SubtitleStepRules.common(known, device: "nb").first?.code == "en")
+    #expect(SubtitleStepRules.listed("nb", in: known) == nil)
+    #expect(SubtitleStepRules.loaded("nb", device: "nb", all: known) == nil)
+    // A listed one stays, and so does a choice the viewer made.
+    #expect(SubtitleStepRules.loaded("tr", device: "tr", all: known) == "tr")
+    #expect(SubtitleStepRules.loaded("de", device: "nb", all: known) == "de")
+}
+
 @Test func theQuestionLeadsToTheStepUnlessTheProfileHasLanguages() {
     #expect(SubtitleStepRules.afterQuestion([], thenHome: false) == .subtitles)
     #expect(SubtitleStepRules.afterQuestion(nil, thenHome: true) == .subtitles)

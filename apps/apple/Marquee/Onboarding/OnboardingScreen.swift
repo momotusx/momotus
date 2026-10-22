@@ -151,6 +151,7 @@ struct OnboardingScreen: View {
             if step == .defaults, defaults.list == nil { await defaults.load() }
             if step == .subtitles, languages.isEmpty {
                 languages = (try? await core.call("languages", as: [LanguageChoice].self)) ?? []
+                subtitle = SubtitleStepRules.loaded(subtitle, device: Self.device, all: languages)
             }
         }
         .task { await pingLoop() }

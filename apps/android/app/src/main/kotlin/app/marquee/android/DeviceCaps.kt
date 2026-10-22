@@ -180,7 +180,10 @@ object DeviceCaps {
     /** A two letter ISO 639-1 code; `iw`, `in` and `ji` (the old Java codes) are mapped to what the core reads. */
     internal fun deviceLanguage(locale: Locale): String? = languageCode(locale)?.takeIf { it.length == 2 }
 
-    /** The locale's language as the core's tags begin, three letters too ("fil", "yue"): for the subtitle pickers. */
+    /**
+     * The locale's language as the core's tags begin, three letters too ("yue"; "fil" the core reads as Tagalog): for
+     * the subtitle pickers, which offer it only when the core lists it.
+     */
     internal fun languageCode(locale: Locale): String? =
         locale
             .toLanguageTag()
