@@ -315,7 +315,7 @@ export function displayCaps(): DeviceCaps {
     containers: CONTAINERS.filter(([, type]) => plays(type)).map(([name]) => name),
     passthrough: [],
     hasFallbackEngine: false,
-    language: (navigator.language || "en").slice(0, 2).toLowerCase(),
+    language: (navigator.language || "en").split("-")[0]?.toLowerCase() || "en",
   };
 }
 
