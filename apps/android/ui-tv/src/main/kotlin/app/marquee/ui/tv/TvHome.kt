@@ -226,8 +226,8 @@ fun TvHome(
         }
     }
     LaunchedEffect(state) { restoreFocus(home, state, state.focus.focusedKey) }
-    // On the first lane the hero shows above it: the page rests at its top. This waits for the
-    // scroll that brings the focused tile into view to end, and runs again when the hero arrives
+    // On the first lane the hero shows above it: the page rests at its top. The page's anchor leaves
+    // that move to this alone, so two scrolls never take turns; it runs again when the hero arrives
     // (the list keeps the first lane in place, so a hero that arrives later starts out of view).
     val hasHero = home.hero != null
     LaunchedEffect(state, hasHero) {
@@ -235,23 +235,26 @@ fun TvHome(
         if (hasHero && state.page.firstVisibleItemIndex <= 1 && state.page.firstVisibleItemScrollOffset == 0) {
             state.page.scrollToItem(0)
         }
+        // The one scroll of this move: the page's anchor holds while focus is on the first row.
         snapshotFlow { state.focus.onFirstRow.value }.collectLatest { onFirst ->
-            if (!onFirst) return@collectLatest
-            withFrameNanos { }
-            withFrameNanos { }
-            snapshotFlow { state.page.isScrollInProgress }.first { !it }
-            if (state.focus.onFirstRow.value) state.page.animateScrollToItem(0)
+            if (onFirst) state.page.animateScrollToItem(0)
         }
     }
 
     // A focused row rests under the pill with its header, never behind it: a focused tile comes to rest
-    // its header's room lower than the content's top (the lanes keep their own leading edge, TileLane).
+    // its header's room lower than the content's top (the lanes scroll on their own, TileLane).
     var headerRoom by remember { mutableStateOf(0.dp) }
     Box(modifier.fillMaxSize()) {
         home.hero?.let { TopShelfArt(it.tile, state.page) }
         // A focused card's art is what the page brings into view; its lines under it must show too, so the
         // page moves whenever they would be cut (a card under the top shelf).
-        AnchoredScrolling(lead = tvContentTop() + headerRoom, trail = cardLines()) {
+        val onFirst = state.focus.onFirstRow
+        AnchoredScrolling(
+            lead = tvContentTop() + headerRoom,
+            trail = cardLines(),
+            list = state.page,
+            hold = { onFirst.value },
+        ) {
             LazyColumn(
                 state = state.page,
                 modifier = Modifier.fillMaxSize(),
@@ -615,8 +618,8 @@ private fun TileLane(
     val metrics = Marquee.tiles
     val shape = shapeOf(row)
     val keys = remember(row.tiles) { row.tileKeys() }
-    // The lane's own leading edge: the page's anchor is lower by a header (TvHome).
-    AnchoredScrolling(lead = tvContentTop(), trail = 0.dp) { Lane(row, state, onOpen, onHold, metrics, shape, keys) }
+    // Room for the focused tile's lift and shadow at either end of the lane, as the menu has.
+    LaneScrolling(metrics.pad) { Lane(row, state, onOpen, onHold, metrics, shape, keys) }
 }
 
 @Composable
