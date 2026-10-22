@@ -150,16 +150,3 @@ private func log(_ deliveries: [(Double, String)]) -> LegibleLog {
     #expect(PlayerLayout.overlayText(file: "file", addon: nil) == "file")
     #expect(PlayerLayout.overlayText(file: nil, addon: nil) == nil)
 }
-
-@Test func theItemsMutingOutputIsMadeInLoadAndNowhereElse() throws {
-    // Read from the source: the model needs a live player. An output added later gets no delivery (AFS3).
-    let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player/PlayerModel.swift")
-    let text = try String(contentsOf: file, encoding: .utf8)
-    let made = text.components(separatedBy: "AVPlayerItemLegibleOutput()")
-    #expect(made.count == 2, "one output, made once")
-    let load = try #require(text.range(of: "private func load("))
-    let tail = try #require(text.range(of: "AVPlayerItemLegibleOutput()"))
-    let next = text[load.upperBound...].range(of: "\n    func ") ?? text[load.upperBound...].range(of: "\n    private func ")
-    #expect(tail.lowerBound > load.lowerBound && tail.lowerBound < (next?.lowerBound ?? text.endIndex), "made in load()")
-    #expect(text.contains("legible.suppressesPlayerRendering = true"))
-}

@@ -232,3 +232,25 @@ private func playerModel() throws -> String {
         #expect(code.contains(label), "\(label)")
     }
 }
+
+@Test func theFileSubtitleRulesAreAppliedWhereTheyBelong() throws {
+    // Each rule lives in a pure function with its own test; these pin the calls that apply them, in the model's functions
+    // (read from the source: the model needs a live player).
+    let text = try playerModel()
+    func calls(_ name: String, _ needles: [String]) throws {
+        let b = try body(of: name, in: text)
+        for needle in needles { #expect(b.contains(needle), "\(name) has no \(needle)") }
+    }
+    try calls("func switchVersion(", ["outbox.forget(prefix: PlayerLayout.fileTrackPrefix)"])
+    try calls("func selectText(", ["resetLegible()", "subtitleDelay = PlayerLayout.startFileDelay(textTrack: index, kept: outbox.kept)"])
+    try calls("func selectSubtitle(", ["resetLegible()"])
+    try calls("func seek(to", ["legibleLog.seek()"])
+    try calls("private func loadTracks(", ["subtitleDelay = PlayerLayout.startFileDelay(textTrack: textTrack, kept: outbox.kept)"])
+    try calls("private func legibleDelivered(", ["guard legibleOpen else { return }"])
+    try calls("private func resetLegible(", ["legibleLog.reset()", "legibleOpen = false", "self?.legibleOpen = true"])
+    // The item's muting output: made in load() and nowhere else (an output added later gets no delivery, bench AFS3).
+    let load = try body(of: "private func load(", in: text)
+    #expect(load.contains("AVPlayerItemLegibleOutput()") && load.contains("legible.suppressesPlayerRendering = true"))
+    #expect(load.contains("item.add(legible)"))
+    #expect(text.components(separatedBy: "AVPlayerItemLegibleOutput()").count == 2, "one output, made once")
+}

@@ -501,7 +501,7 @@ final class PlayerModel {
         // The viewer's seek replaces a start that has not landed yet, and stays pending itself.
         pendingStart = target.seconds
         ended = false
-        // The output delivers again from the landing; until it does, the landing reads empty.
+        // The log drops its open frontier; the output delivers again from the landing on (MP4 and HLS, bench AFS4, AFS7).
         legibleLog.seek()
         linesChanged()
         seekToken += 1
