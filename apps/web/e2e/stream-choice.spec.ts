@@ -377,6 +377,57 @@ test.describe("Versions", () => {
     await tv.context().close();
   });
 
+  test("blocked for an account: an account added while the card shows, or from it and Back, starts the play", async ({ browser }) => {
+    const KEY = "MQDUMMYE2EKEY1";
+    const film = `/play/movie/${SHAWSHANK}/${SHAWSHANK}?form=desktop`;
+    // Playback subscribes are held back here (no playback is opened): one for a version is the start.
+    const started = (from: number) =>
+      sent.slice(from).some((m) => m.op === "subscribe" && m.view === "playback" && typeof (m.params as { key?: unknown } | undefined)?.key === "string");
+    const connect = async (p: Page) => {
+      await p.locator('[data-f="debrid:premiumize:field"]').fill(KEY);
+      await p.locator('[data-f="debrid:premiumize:save"]').click();
+      await expect(p.locator('.dcard[aria-label="Premiumize"] .dcard-head .st')).toHaveText("Connected");
+    };
+    const disconnect = async (p: Page) => {
+      await p.goto("/debrid?form=desktop");
+      const button = p.locator('[data-f="debrid:premiumize:disconnect"]');
+      await button.click();
+      await expect(button).toHaveText("Press again to disconnect");
+      await button.click();
+      await expect(p.locator('.dcard[aria-label="Premiumize"]').getByText("Disconnected")).toBeVisible();
+    };
+    const page = await device(browser, "desktop", PORTS.bridge);
+    const screen = page.locator(".player-scr");
+    try {
+      // While the card shows: an account added elsewhere (another device, another tab) moves it on.
+      await page.goto(film);
+      await expect(screen).toContainText("only through a streaming service account", { timeout: 60_000 });
+      const before = sent.length;
+      const other = await device(browser, "desktop", PORTS.bridge);
+      await other.goto("/debrid?form=desktop");
+      await connect(other);
+      await expect(screen).not.toContainText("only through a streaming service account", { timeout: 30_000 });
+      await expect.poll(() => started(before), { timeout: 30_000 }).toBe(true);
+      await disconnect(other);
+      await other.context().close();
+      // From the card: Add an account, a key, and Back to the play, which starts.
+      await page.goto(film);
+      await expect(screen).toContainText("only through a streaming service account", { timeout: 60_000 });
+      const again = sent.length;
+      await page.locator('[data-f="player:account"]').click();
+      await expect(page).toHaveURL(/\/debrid/);
+      await connect(page);
+      await page.goBack();
+      await expect(page).toHaveURL(/\/play\/movie\//);
+      await expect(screen).not.toContainText("only through a streaming service account", { timeout: 30_000 });
+      await expect.poll(() => started(again), { timeout: 30_000 }).toBe(true);
+    } finally {
+      // The rest of this spec runs with no account.
+      await disconnect(page);
+      await page.context().close();
+    }
+  });
+
   test("almost nobody sharing is said once: on the card before Play, over the list only with no card", async ({ browser }) => {
     const words = `${choice.nobodySharing.text}${choice.nobodySharing.details}`;
     for (const form of ["desktop", "phone"] as const) {
