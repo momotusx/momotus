@@ -5,7 +5,10 @@ import type { Tile } from "./Tile";
 
 export type DiscoverSnapshot = { 
 /**
- * Types with at least one catalog: ("movie", "Movies").
+ * Kinds with at least one catalog: ("movie", "Movies"). A catalog of a
+ * type Marquee does not know (Trakt Tv's "trakt") is filed under the
+ * kind its name says ("Popular movies"), else ("other", "Other"); the
+ * raw type is never a kind here.
  */
 kinds: Array<[string, string]>, kind: string | null, 
 /**

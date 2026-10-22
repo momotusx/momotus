@@ -32,6 +32,16 @@ async fn answering_search_addon(
     body: String,
     delay: Duration,
 ) -> (AddonRow, Arc<AtomicUsize>) {
+    typed_search_addon(id, "movie", body, delay).await
+}
+
+/// `answering_search_addon` whose search catalog has the type `kind`.
+async fn typed_search_addon(
+    id: &str,
+    kind: &str,
+    body: String,
+    delay: Duration,
+) -> (AddonRow, Arc<AtomicUsize>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let hits = Arc::new(AtomicUsize::new(0));
@@ -53,8 +63,8 @@ async fn answering_search_addon(
         }
     });
     let manifest = serde_json::json!({
-        "id": id, "version": "1.0.0", "name": id, "types": ["movie"], "resources": ["catalog"],
-        "catalogs": [{"type": "movie", "id": "top", "extra": [{"name": "search", "isRequired": true}]}]
+        "id": id, "version": "1.0.0", "name": id, "types": [kind], "resources": ["catalog"],
+        "catalogs": [{"type": kind, "id": "top", "extra": [{"name": "search", "isRequired": true}]}]
     });
     let row = AddonRow {
         transport_url: format!("http://{addr}/manifest.json"),
@@ -667,4 +677,50 @@ async fn an_empty_answer_finds_nothing_and_error_objects_fail_the_group() {
     let s = answered(&core, &[&a_asked, &b_asked]).await;
     assert_eq!(s.rows.len(), 1, "{:?}", s.rows);
     assert!(matches!(s.rows[0].state, RowState::Failed { .. }));
+}
+
+/// A search catalog of a type Marquee does not know (Trakt Tv's "trakt")
+/// never titles a group with it: each result joins the group of its own
+/// kind, after the movies of a catalog before it, and a result of no known
+/// kind goes under "Other".
+#[tokio::test]
+async fn a_catalog_of_an_unknown_type_files_its_results_by_their_own_kind() {
+    let core = Core::temporary("p").unwrap();
+    let (movies, movies_asked) = search_addon("movies", &["tt1"]).await;
+    let (mut trakt, trakt_asked) = typed_search_addon(
+        "trakt",
+        "trakt",
+        serde_json::json!({"metas": [
+            {"id": "tt2", "type": "movie", "name": "Two"},
+            {"id": "tt3", "type": "series", "name": "Three"},
+            {"id": "tt4", "type": "podcast", "name": "Four"}
+        ]})
+        .to_string(),
+        Duration::ZERO,
+    )
+    .await;
+    trakt.position = 1;
+    core.library()
+        .set_addons(core.profile(), &[movies, trakt], &core.hlc())
+        .unwrap();
+    let s = answered(&core, &[&movies_asked, &trakt_asked]).await;
+    let groups: Vec<(&str, &str, Vec<&str>)> = s
+        .rows
+        .iter()
+        .map(|r| {
+            (
+                r.row_id.as_str(),
+                r.title.as_str(),
+                r.tiles.iter().map(|t| t.id.as_str()).collect(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        groups,
+        [
+            ("movies:movie:top", "Movies", vec!["tt1", "tt2"]),
+            ("kind:series", "Series", vec!["tt3"]),
+            ("kind:other", "Other", vec!["tt4"])
+        ]
+    );
 }

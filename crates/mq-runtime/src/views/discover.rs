@@ -4,7 +4,8 @@
 use crate::Core;
 use crate::live::{FRAME, coalesce};
 use crate::views::home::{
-    Tile, catalog_title, home_changed, row_id, tile_from_preview, type_label, without_source,
+    OTHER_KIND, Tile, catalog_title, home_changed, kind_label, row_id, tile_from_preview,
+    type_label, without_source,
 };
 use crate::views::settings::HomeRows;
 use eyeball::SharedObservable;
@@ -65,7 +66,10 @@ pub enum DiscoverState {
 )]
 #[serde(rename_all = "camelCase")]
 pub struct DiscoverSnapshot {
-    /// Types with at least one catalog: ("movie", "Movies").
+    /// Kinds with at least one catalog: ("movie", "Movies"). A catalog of a
+    /// type Marquee does not know (Trakt Tv's "trakt") is filed under the
+    /// kind its name says ("Popular movies"), else ("other", "Other"); the
+    /// raw type is never a kind here.
     pub kinds: Vec<(String, String)>,
     pub kind: Option<String>,
     /// Catalogs of the selected type, in addon order.
@@ -84,7 +88,10 @@ pub struct DiscoverSnapshot {
 struct Catalog {
     choice: CatalogChoice,
     addon: InstalledAddon,
+    /// The type it is asked with.
     kind: String,
+    /// The kind it is filed under (`shelf`).
+    shelf: String,
     id: String,
     genres: Vec<String>,
     genre_required: bool,
@@ -112,8 +119,8 @@ struct Inner {
 fn empty_snapshot(catalogs: &[Catalog]) -> DiscoverSnapshot {
     let mut kinds: Vec<(String, String)> = Vec::new();
     for c in catalogs {
-        if !kinds.iter().any(|(k, _)| *k == c.kind) {
-            kinds.push((c.kind.clone(), type_label(&c.kind).to_owned()));
+        if !kinds.iter().any(|(k, _)| *k == c.shelf) {
+            kinds.push((c.shelf.clone(), type_label(&c.shelf).to_owned()));
         }
     }
     DiscoverSnapshot {
@@ -220,7 +227,7 @@ async fn watch_addons(inner: Arc<Inner>, mut changes: Receiver<Vec<Table>>) {
                 s.snapshot.catalogs = s
                     .catalogs
                     .iter()
-                    .filter(|c| kind.as_deref() == Some(&c.kind))
+                    .filter(|c| kind.as_deref() == Some(&c.shelf))
                     .map(|c| c.choice.clone())
                     .collect();
                 inner.snapshot.set(s.snapshot.clone());
@@ -266,8 +273,8 @@ impl Inner {
                     kind.and_then(|k| {
                         s.catalogs
                             .iter()
-                            .find(|c| c.kind == k && current.as_deref() == Some(&c.choice.id))
-                            .or_else(|| s.catalogs.iter().find(|c| c.kind == k))
+                            .find(|c| c.shelf == k && current.as_deref() == Some(&c.choice.id))
+                            .or_else(|| s.catalogs.iter().find(|c| c.shelf == k))
                     })
                 })
                 .or_else(|| {
@@ -290,11 +297,11 @@ impl Inner {
                     .then(|| chosen.genres.first().cloned())
                     .flatten()
             });
-            s.snapshot.kind = Some(chosen.kind.clone());
+            s.snapshot.kind = Some(chosen.shelf.clone());
             s.snapshot.catalogs = s
                 .catalogs
                 .iter()
-                .filter(|c| c.kind == chosen.kind)
+                .filter(|c| c.shelf == chosen.shelf)
                 .map(|c| c.choice.clone())
                 .collect();
             s.snapshot.catalog = Some(chosen.choice.id.clone());
@@ -378,6 +385,7 @@ fn browsable(addons: &[InstalledAddon], rows: &HomeRows) -> Vec<Catalog> {
                 },
                 addon: addon.clone(),
                 kind: c.r#type.clone(),
+                shelf: shelf(&c.r#type, name),
                 id: c.id.clone(),
                 genres: genre
                     .as_ref()
@@ -388,6 +396,31 @@ fn browsable(addons: &[InstalledAddon], rows: &HomeRows) -> Vec<Catalog> {
             })
         })
         .collect()
+}
+
+/// The kind a catalog is filed under: its type when Marquee knows it, else
+/// the one kind its name says ("Popular movies" is a movie list), else
+/// "other". Its items cannot say: none is fetched before a kind is picked.
+fn shelf(kind: &str, name: &str) -> String {
+    if kind_label(kind).is_some() {
+        return kind.to_owned();
+    }
+    const NAMED: [(&str, &[&str]); 3] = [
+        ("movie", &["movie", "movies", "film", "films"]),
+        ("series", &["series", "show", "shows"]),
+        ("anime", &["anime"]),
+    ];
+    let words: Vec<String> = name
+        .split(|c: char| !c.is_alphanumeric())
+        .map(str::to_lowercase)
+        .collect();
+    let mut said = NAMED
+        .iter()
+        .filter(|(_, named)| words.iter().any(|w| named.contains(&w.as_str())));
+    match (said.next(), said.next()) {
+        (Some((kind, _)), None) => (*kind).to_owned(),
+        _ => OTHER_KIND.0.to_owned(),
+    }
 }
 
 async fn load_page(

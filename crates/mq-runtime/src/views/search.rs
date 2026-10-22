@@ -18,7 +18,7 @@ use crate::Core;
 use crate::live::{FRAME, coalesce};
 use crate::ratings;
 use crate::views::home::{
-    HomeRow, KIDS_ROW_ID, RowState, Tile, kids_tile, tile_from_preview, type_label,
+    HomeRow, KIDS_ROW_ID, OTHER_KIND, RowState, Tile, kids_tile, kind_label, tile_from_preview,
 };
 use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
@@ -77,7 +77,9 @@ pub struct SearchView {
 #[derive(Clone)]
 struct Slot {
     row_id: String,
-    title: String,
+    /// The group of a catalog of a known kind ("Movies"); `None` for any
+    /// other type, whose results go by their own kind once it answers.
+    title: Option<&'static str>,
     addon: InstalledAddon,
     path: ResourcePath,
 }
@@ -242,7 +244,7 @@ fn search_slots(addons: &[InstalledAddon], query: &str) -> Vec<Slot> {
                 .filter(|c| c.is_extra_supported(&extra))
                 .map(|c| Slot {
                     row_id: format!("{}:{}:{}", addon.id(), c.r#type, c.id),
-                    title: type_label(&c.r#type).to_owned(),
+                    title: kind_label(&c.r#type),
                     addon: addon.clone(),
                     path: ResourcePath {
                         resource: "catalog".into(),
@@ -475,27 +477,78 @@ fn render(
         };
     let top =
         top.and_then(|(state, tiles)| row(TOP_ROW_ID, "Top results", "Trakt", state, tiles, false));
-    let mut groups: Vec<Vec<usize>> = Vec::new();
-    for (i, slot) in slots.iter().enumerate() {
-        let title = slot.title.to_lowercase();
-        match groups
-            .iter_mut()
-            .find(|g| slots[g[0]].title.to_lowercase() == title)
-        {
-            Some(group) => group.push(i),
-            None => groups.push(vec![i]),
-        }
-    }
-    let addons: Vec<HomeRow> = groups
+    let addons: Vec<HomeRow> = groups(slots, rows)
         .iter()
-        .filter_map(|group| {
-            let first = &slots[group[0]];
-            let (state, tiles) = merged(group.iter().map(|&i| &rows[i]));
-            let source = &first.addon.manifest.name;
-            row(&first.row_id, &first.title, source, &state, &tiles, true)
+        .filter_map(|g| {
+            let (state, tiles) = merged(g.members.iter());
+            row(&g.row_id, g.title, &g.source, &state, &tiles, true)
         })
         .collect();
     top.into_iter().chain(addons).collect()
+}
+
+/// One search group: its title, its row id and addon (its first catalog's,
+/// or `kind:<label>` for a group only a catalog of no known kind gave) and
+/// its members' answers in slot order.
+struct Group {
+    title: &'static str,
+    row_id: String,
+    source: String,
+    members: Vec<(RowState, Vec<Tile>)>,
+}
+
+/// The groups, one per title: first those of the catalogs of a known kind,
+/// in slot order, so their place and id never move. A catalog of any other
+/// type (Trakt Tv's "trakt") gives no group of its own: once it answers,
+/// each result joins the group of its own kind ("Movies"), or "Other", and
+/// while it is asked or when it failed it holds no group back.
+fn groups(slots: &[Slot], rows: &[(RowState, Vec<Tile>)]) -> Vec<Group> {
+    let mut groups: Vec<Group> = Vec::new();
+    let at =
+        |groups: &mut Vec<Group>, title: &'static str, row_id: String, slot: &Slot| match groups
+            .iter()
+            .position(|g| g.title == title)
+        {
+            Some(i) => i,
+            None => {
+                groups.push(Group {
+                    title,
+                    row_id,
+                    source: slot.addon.manifest.name.clone(),
+                    members: Vec::new(),
+                });
+                groups.len() - 1
+            }
+        };
+    for slot in slots {
+        if let Some(title) = slot.title {
+            at(&mut groups, title, slot.row_id.clone(), slot);
+        }
+    }
+    for (slot, (state, tiles)) in slots.iter().zip(rows) {
+        if let Some(title) = slot.title {
+            let i = at(&mut groups, title, slot.row_id.clone(), slot);
+            groups[i].members.push((state.clone(), tiles.clone()));
+            continue;
+        }
+        if *state != RowState::Ready {
+            continue;
+        }
+        let mut by_kind: Vec<(&'static str, Vec<Tile>)> = Vec::new();
+        for tile in tiles {
+            let title = kind_label(&tile.kind).unwrap_or(OTHER_KIND.1);
+            match by_kind.iter_mut().find(|(t, _)| *t == title) {
+                Some((_, own)) => own.push(tile.clone()),
+                None => by_kind.push((title, vec![tile.clone()])),
+            }
+        }
+        for (title, own) in by_kind {
+            let row_id = format!("kind:{}", title.to_lowercase());
+            let i = at(&mut groups, title, row_id, slot);
+            groups[i].members.push((RowState::Ready, own));
+        }
+    }
+    groups
 }
 
 /// One group from its catalogs' answers, in addon order: the results of

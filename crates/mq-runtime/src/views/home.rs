@@ -589,19 +589,17 @@ fn row_title(slot: &CatalogSlot) -> String {
 /// A row's title: the catalog's name and the kind it lists ("Popular Movies"), with its spaces made
 /// single (Streaming Catalogs' "Prime  Video"). No addon's name shows on Home, so a name that starts with
 /// the addon's name ("trakt - Popular movies" from Trakt Tv) drops that start, and a kind the name already
-/// says, or a custom kind that only repeats the addon's name (Trakt Tv's type "trakt"), is not added. A
-/// known kind stays even when the addon's name holds it (The Movie Database Addon's "Popular Movies").
+/// says is not added. A kind Marquee does not know is never added: it is often the addon's own name
+/// (Trakt Tv's type "trakt"), and the name says what the row lists. A known kind stays even when the
+/// addon's name holds it (The Movie Database Addon's "Popular Movies").
 pub(crate) fn catalog_title(name: &str, kind: &str, source: &str) -> String {
     let name = without_source(
         &name.split_whitespace().collect::<Vec<_>>().join(" "),
         source,
     );
-    let label = type_label(kind);
-    let custom = label == kind;
-    if has_words(&name, label) || (custom && has_words(source, label)) {
-        name
-    } else {
-        format!("{name} {label}")
+    match kind_label(kind) {
+        Some(label) if !has_words(&name, label) => format!("{name} {label}"),
+        _ => name,
     }
 }
 
@@ -671,15 +669,26 @@ fn past_words(name: &str, own: &[String]) -> Option<String> {
         .then(|| rest.to_owned())
 }
 
-pub(crate) fn type_label(kind: &str) -> &str {
+/// The label of a kind Marquee knows; `None` for any other type, which is
+/// never shown as is (an addon's own type is often its name: Trakt Tv's
+/// "trakt").
+pub(crate) fn kind_label(kind: &str) -> Option<&'static str> {
     match kind {
-        "movie" => "Movies",
-        "series" => "Series",
-        "channel" => "Channels",
-        "tv" => "Live TV",
-        "anime" => "Anime",
-        other => other,
+        "movie" => Some("Movies"),
+        "series" => Some("Series"),
+        "channel" => Some("Channels"),
+        "tv" => Some("Live TV"),
+        "anime" => Some("Anime"),
+        _ => None,
     }
+}
+
+/// Where what is of no known kind is shown, in Search and Discover.
+pub(crate) const OTHER_KIND: (&str, &str) = ("other", "Other");
+
+/// The label of a known kind, else the neutral one (`OTHER_KIND`).
+pub(crate) fn type_label(kind: &str) -> &'static str {
+    kind_label(kind).unwrap_or(OTHER_KIND.1)
 }
 
 fn find_row(rows: &ObservableVector<HomeRow>, row_id: &str) -> Option<usize> {
@@ -1311,6 +1320,17 @@ mod tests {
                 "Apple TV+ Series"
             ]
         );
+    }
+
+    /// A type Marquee does not know is never shown as is: no Home title
+    /// adds it, and its label is the neutral one.
+    #[test]
+    fn a_type_marquee_does_not_know_is_never_shown() {
+        assert_eq!(catalog_title("Top picks", "trakt", "Lists"), "Top picks");
+        assert_eq!(catalog_title("Top", "podcasts", "Pod"), "Top");
+        assert_eq!(super::kind_label("trakt"), None);
+        assert_eq!(super::type_label("trakt"), "Other");
+        assert_eq!(super::type_label("series"), "Series");
     }
 
     #[test]

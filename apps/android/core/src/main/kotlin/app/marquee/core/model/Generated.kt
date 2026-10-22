@@ -379,7 +379,7 @@ data class Devices(
 
 @Serializable
 data class DiscoverSnapshot(
-    /** Types with at least one catalog: ("movie", "Movies"). */
+    /** Kinds with at least one catalog: ("movie", "Movies"). A catalog of a type Marquee does not know (Trakt Tv's "trakt") is filed under the kind its name says ("Popular movies"), else ("other", "Other"); the raw type is never a kind here. */
     val kinds: List<Tuple2<String, String>> = emptyList(),
     val kind: String? = null,
     /** Catalogs of the selected type, in addon order. */

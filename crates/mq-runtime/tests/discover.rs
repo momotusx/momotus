@@ -444,3 +444,87 @@ async fn an_empty_page_ends_the_catalog_and_an_error_object_fails_it() {
         assert_eq!(ids(&view), ["tt0", "tt1"], "{later}");
     }
 }
+
+/// A catalog of a type Marquee does not know (Trakt Tv's "trakt") is filed
+/// under the kind its name says, beside that kind's other catalogs, or
+/// under "Other": the raw type is never a kind. It is still asked with its
+/// own type.
+#[tokio::test]
+async fn a_catalog_of_an_unknown_type_is_filed_by_its_name() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let asked = Arc::new(Mutex::new(Vec::<String>::new()));
+    let log = asked.clone();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let mut buf = [0u8; 2048];
+            let n = socket.read(&mut buf).await.unwrap_or(0);
+            let head = String::from_utf8_lossy(&buf[..n]).into_owned();
+            log.lock().unwrap().push(
+                head.split_whitespace()
+                    .nth(1)
+                    .unwrap_or_default()
+                    .to_owned(),
+            );
+            let body = r#"{"metas": [{"id": "tt0", "type": "movie", "name": "M0"}]}"#;
+            let reply = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = socket.write_all(reply.as_bytes()).await;
+        }
+    });
+    let manifest = serde_json::json!({
+        "id": "lists", "version": "1.0.0", "name": "Lists", "types": ["movie", "trakt"],
+        "resources": ["catalog"],
+        "catalogs": [
+            {"type": "movie", "id": "top", "name": "Popular"},
+            {"type": "trakt", "id": "trakt_popular_movies", "name": "Popular movies"},
+            {"type": "trakt", "id": "picks", "name": "Top picks"}
+        ]
+    });
+    let row = AddonRow {
+        transport_url: format!("http://{addr}/manifest.json"),
+        manifest_json: manifest.to_string(),
+        position: 0,
+        enabled: true,
+        allow_private: true,
+    };
+    let core = Core::temporary("p").unwrap();
+    core.library().set_addons("p", &[row], &core.hlc()).unwrap();
+    let view = DiscoverView::open(&core);
+    settle(&view).await;
+    let kinds = view.snapshot().kinds;
+    assert_eq!(
+        kinds,
+        [
+            ("movie".to_string(), "Movies".to_string()),
+            ("other".into(), "Other".into())
+        ]
+    );
+    let names: Vec<String> = view
+        .snapshot()
+        .catalogs
+        .iter()
+        .map(|c| c.name.clone())
+        .collect();
+    assert_eq!(names, ["Popular", "Popular movies"]);
+    view.select(None, Some("lists|trakt|trakt_popular_movies"), None);
+    settle(&view).await;
+    assert_eq!(view.snapshot().kind.as_deref(), Some("movie"));
+    assert!(
+        asked
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|p| p.ends_with("/catalog/trakt/trakt_popular_movies.json")),
+        "{:?}",
+        asked.lock().unwrap()
+    );
+    view.select(Some("other"), None, None);
+    settle(&view).await;
+    assert_eq!(
+        view.snapshot().catalog.as_deref(),
+        Some("lists|trakt|picks")
+    );
+}
