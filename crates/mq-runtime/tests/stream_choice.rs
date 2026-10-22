@@ -919,6 +919,49 @@ async fn only_a_failure_of_the_versions_own_moves_on() {
     assert_eq!(s.attempts.len(), 1, "the decode failure, then the next");
 }
 
+/// After a version that did not play here, the next one differs in what
+/// failed (pick audit 8.3, Ted Lasso S1:E1: its first two 1080p versions
+/// share 10-bit HEVC and E-AC-3): a decode failure passes over the next
+/// 1080p that shares the video and the audio for one that shares neither,
+/// an audio failure for another audio codec. Once it plays, the playback
+/// says the version playing is not the one announced.
+#[tokio::test]
+async fn the_next_version_differs_in_what_did_not_play() {
+    for kind in ["decode", "audio"] {
+        let (core, _server, keys) = direct_rows(vec![
+            (
+                "Show.S01E01.1080p.WEB-DL.DDP5.1.HEVC.10bit-ONE",
+                media_fixture("h264.mp4"),
+            ),
+            (
+                "Show.S01E01.1080p.WEB-DL.DDP5.1.HEVC.10bit-TWO",
+                media_fixture("h264.mp4"),
+            ),
+            (
+                "Show.S01E01.720p.WEB-DL.AAC.x264-THREE",
+                media_fixture("h264.mp4"),
+            ),
+        ])
+        .await;
+        let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+        let s = view.snapshot();
+        assert_eq!(s.recommended.unwrap().key, keys[0], "{kind}");
+        assert_eq!(s.rows[0].key, keys[1], "{kind}: the next 1080p ranks next");
+        let playback = play(&core, &view, &keys[0]);
+        until("ready", || playback.snapshot().url.is_some()).await;
+        assert_eq!(playback.snapshot().moved, None, "{kind}: the announced one");
+        playback.fail_over(None, Some(kind), None, "no frame");
+        let moved = || playback.snapshot().key.is_some_and(|k| k != keys[0]);
+        until("the next version", moved).await;
+        assert_eq!(playback.snapshot().key.as_ref(), Some(&keys[2]), "{kind}");
+        assert_eq!(
+            playback.snapshot().moved.as_deref(),
+            Some("Playing 720p WEB: the 1080p WEB did not play on this device"),
+            "{kind}"
+        );
+    }
+}
+
 /// Code review 2026-10-20 P1-1: "Try again" is a fresh start of the pick
 /// itself after any moves on: its chain, nothing tried, no moves made. Here
 /// the device learned the first three have no picture, so the pick fails

@@ -341,9 +341,11 @@ impl PickHandle {
     /// The version the ranking picks after the sources `tried` (stream
     /// keys): the first listed row that can start and holds none of them,
     /// with its failover chain. A row a folded pick played through is a
-    /// tried row (code review 2026-10-20 r3 P3-6). None once the view is
-    /// gone.
-    pub fn next_version(&self, tried: &[String]) -> Option<NextVersion> {
+    /// tried row (code review 2026-10-20 r3 P3-6). After a version that
+    /// did not play here (`unlike`), the first of those that differs most
+    /// from it in what failed, so two moves do not die on the same E-AC-3
+    /// or 10-bit HEVC (pick audit 8.3). None once the view is gone.
+    pub fn next_version(&self, tried: &[String], unlike: Option<&FailedOn>) -> Option<NextVersion> {
         let state = self.state.upgrade()?;
         let s = lock(&state);
         let untried = |r: &&RankedRow| {
@@ -351,12 +353,16 @@ impl PickHandle {
                 .chain(&r.failover)
                 .any(|st| tried.contains(&st.key))
         };
+        let apart = |r: &RankedRow| unlike.map_or(0, |f| f.apart(&r.stream.release));
         let row = s
             .ranked
             .rows
             .iter()
             .filter(|r| r.key.viable)
-            .find(untried)?;
+            .filter(untried)
+            .enumerate()
+            .max_by_key(|(i, r)| (apart(r), std::cmp::Reverse(*i)))
+            .map(|(_, r)| r)?;
         Some(NextVersion {
             key: row.stream.key.clone(),
             label: version_label(&row.stream.release),
@@ -368,6 +374,58 @@ impl PickHandle {
     }
 }
 
+/// What a version failed on when it did not play here, which the next
+/// version should not share.
+#[derive(Debug, Clone)]
+pub enum FailedOn {
+    /// The player could not decode it; it does not say whether the video or
+    /// the audio, so both count.
+    Decode(mq_relparse::ParsedRelease),
+    /// Its audio output failed.
+    Audio(mq_relparse::ParsedRelease),
+}
+
+impl FailedOn {
+    /// How far `next` is from the version that failed: 2 a part surely
+    /// apart, 1 one not stated, 0 the same, summed over what failed.
+    fn apart(&self, next: &mq_relparse::ParsedRelease) -> u8 {
+        match self {
+            FailedOn::Decode(failed) => video_apart(failed, next) + audio_apart(failed, next),
+            FailedOn::Audio(failed) => audio_apart(failed, next),
+        }
+    }
+}
+
+fn video_apart(failed: &mq_relparse::ParsedRelease, next: &mq_relparse::ParsedRelease) -> u8 {
+    use mq_relparse::VideoCodec::Unknown;
+    match (failed.codec, next.codec) {
+        (Unknown, _) | (_, Unknown) => 1,
+        (a, b) if a != b => 2,
+        // The same codec: a stated bit depth apart is apart.
+        _ => match (failed.bit_depth, next.bit_depth) {
+            (Some(a), Some(b)) if a != b => 2,
+            (Some(_), None) | (None, Some(_)) => 1,
+            _ => 0,
+        },
+    }
+}
+
+/// Atmos rides on TrueHD or E-AC-3, so it is not an audio codec of its own.
+fn audio_apart(failed: &mq_relparse::ParsedRelease, next: &mq_relparse::ParsedRelease) -> u8 {
+    use mq_relparse::Audio::Atmos;
+    let codecs = |r: &mq_relparse::ParsedRelease| -> Vec<mq_relparse::Audio> {
+        r.audio.iter().copied().filter(|a| *a != Atmos).collect()
+    };
+    let (failed, next) = (codecs(failed), codecs(next));
+    if failed.is_empty() || next.is_empty() {
+        1
+    } else if next.iter().any(|a| failed.contains(a)) {
+        0
+    } else {
+        2
+    }
+}
+
 /// A version a playback can move on to.
 pub struct NextVersion {
     pub key: String,
@@ -376,7 +434,7 @@ pub struct NextVersion {
 }
 
 /// "1080p WEB", "4K Remux", "Blu-ray": the row's quality, then its source.
-fn version_label(rel: &mq_relparse::ParsedRelease) -> String {
+pub(crate) fn version_label(rel: &mq_relparse::ParsedRelease) -> String {
     use mq_relparse::Quality as Q;
     let quality = quality_word(rel.resolution.height(), rel.quality);
     let source = match rel.quality {

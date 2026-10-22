@@ -331,7 +331,7 @@ async fn a_folded_pick_never_moves_on_to_its_own_row() {
     );
     let next = pick
         .handle
-        .next_version(std::slice::from_ref(&key))
+        .next_version(std::slice::from_ref(&key), None)
         .expect("another version");
     assert_eq!(next.key, "url:https://first.example/other.mkv");
 }

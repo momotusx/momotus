@@ -9,6 +9,7 @@ use crate::Core;
 use crate::live::{FRAME, coalesce};
 use crate::segments::{self, Segment, Target};
 use crate::turkcealtyazi::{self, NAME as BUILT_IN};
+use crate::views::versions::{FailedOn, version_label};
 use eyeball::SharedObservable;
 use futures_util::{FutureExt, Stream, StreamExt};
 use mq_addons::{AddonEvent, Deadlines, InstalledAddon};
@@ -135,6 +136,12 @@ pub struct PlaybackSnapshot {
     /// screen's fill and its words (plans/player-polish.md 1.3). Null before
     /// the first source starts and from `ready` on.
     pub start: Option<StartProgress>,
+    /// The version playing is not the one the start announced: the
+    /// recommendation moved on (`trying`) and this one plays. The core's
+    /// words, for the apps to show once from `ready`: "Playing 720p WEB:
+    /// the 1080p Blu-ray did not start here", "... did not play on this
+    /// device". Null otherwise.
+    pub moved: Option<String>,
 }
 
 /// One start of the playback, from the first source it tries to `ready`
@@ -537,6 +544,12 @@ struct State {
     /// itself.
     tried: Vec<String>,
     hops: u8,
+    /// What the failing version did not play on here (a decode or an
+    /// audio failure), which the next version should not share.
+    failed_on: Option<FailedOn>,
+    /// Why the announced version was left, once the recommendation moved
+    /// on: "did not start here", "did not play on this device".
+    left_because: Option<&'static str>,
     /// The pick's own chain, for "Try again" to start afresh.
     first: Vec<ParsedStream>,
     /// The playing source played `PLAYED_PAST_START`, counted from the
@@ -667,6 +680,7 @@ impl State {
                 offer: None,
                 retries: 0,
                 start: None,
+                moved: None,
             },
             tried: candidates.iter().map(|c| c.key.clone()).collect(),
             first: candidates.clone(),
@@ -674,6 +688,8 @@ impl State {
             next: 0,
             version_failed: false,
             hops: 0,
+            failed_on: None,
+            left_because: None,
             progressed: false,
             reported_ms: None,
             played_ms: 0,
@@ -842,6 +858,9 @@ impl PlaybackView {
             s.hops = 0;
             s.next = 0;
             s.version_failed = false;
+            s.failed_on = None;
+            s.left_because = None;
+            s.snapshot.moved = None;
             s.patient = true;
             #[cfg(feature = "torrent")]
             s.failed_hashes.clear();
@@ -982,8 +1001,20 @@ impl PlaybackView {
             // good playback is not the version's (code review 2026-10-20
             // P2-2).
             let decode = kind == Some("decode") && !s.progressed;
-            if decode {
+            // An audio output that failed before it played is the version's
+            // too (a format the output refuses), for this playback only:
+            // the next version takes another audio codec.
+            let audio = kind == Some("audio") && !s.progressed;
+            if decode || audio {
                 s.version_failed = true;
+                s.failed_on = failed.as_ref().map(|st| {
+                    let release = st.release.clone();
+                    if decode {
+                        FailedOn::Decode(release)
+                    } else {
+                        FailedOn::Audio(release)
+                    }
+                });
             }
             s.snapshot.phase = PlaybackPhase::Resolving;
             s.snapshot.key = None;
@@ -1344,6 +1375,20 @@ fn adopt(s: &mut State, run: u64, lease: Lease) -> bool {
     s.retry_until = None;
     s.patient = false;
     s.snapshot.trying = None;
+    s.failed_on = None;
+    s.snapshot.moved = s.left_because.and_then(|why| {
+        let playing = s.candidates.get(s.next.checked_sub(1)?)?;
+        let announced = s.first.first()?;
+        let (now, then) = (
+            version_label(&playing.release),
+            version_label(&announced.release),
+        );
+        Some(if now == then {
+            format!("Playing another {now}: the first one {why}")
+        } else {
+            format!("Playing {now}: the {then} {why}")
+        })
+    });
     true
 }
 
@@ -1807,9 +1852,9 @@ struct Rule {
 /// Never after "Try again".
 fn may_cut_early(s: &State) -> bool {
     let next_version = || {
-        s.pick
-            .as_ref()
-            .is_some_and(|p| p.recommended() && s.hops < HOPS && p.next_version(&s.tried).is_some())
+        s.pick.as_ref().is_some_and(|p| {
+            p.recommended() && s.hops < HOPS && p.next_version(&s.tried, None).is_some()
+        })
     };
     !s.patient && (s.next < s.candidates.len() || next_version())
 }
@@ -1829,7 +1874,7 @@ fn move_on(s: &mut State) -> bool {
     if pick.recommended() && s.hops >= HOPS {
         return false;
     }
-    let Some(next) = pick.next_version(&s.tried) else {
+    let Some(next) = pick.next_version(&s.tried, s.failed_on.as_ref()) else {
         return false;
     };
     let other = OtherVersion {
@@ -1839,6 +1884,13 @@ fn move_on(s: &mut State) -> bool {
     if !pick.recommended() {
         s.snapshot.offer = Some(other);
         return false;
+    }
+    if s.hops == 0 {
+        s.left_because = Some(if s.failed_on.is_some() {
+            "did not play on this device"
+        } else {
+            "did not start here"
+        });
     }
     s.hops += 1;
     s.tried

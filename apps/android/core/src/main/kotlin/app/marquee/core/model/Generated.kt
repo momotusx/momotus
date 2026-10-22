@@ -978,6 +978,8 @@ data class PlaybackSnapshot(
     val retries: Int = 0,
     /** How far the start is while `phase` is `resolving`: the loading screen's fill and its words (plans/player-polish.md 1.3). Null before the first source starts and from `ready` on. */
     val start: StartProgress? = null,
+    /** The version playing is not the one the start announced: the recommendation moved on (`trying`) and this one plays. The core's words, for the apps to show once from `ready`: "Playing 720p WEB: the 1080p Blu-ray did not start here", "... did not play on this device". Null otherwise. */
+    val moved: String? = null,
 )
 
 @Serializable
