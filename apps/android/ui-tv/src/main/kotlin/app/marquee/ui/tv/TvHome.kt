@@ -40,6 +40,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -101,6 +102,21 @@ private val FIRST_SHELF = 850.dp
 /** The top shelf's left column: its width, and its foot over the first shelf (the frame's column, 80 in). */
 private val HERO_TEXT = 900.dp
 private val HERO_FOOT = 80.dp
+
+/**
+ * The top shelf's column as the home-tv frame (tv.ts, tvHome) sets it, in TV points. ponytail: named here, not in
+ * design/tokens.json, which has no hero group yet; a token when another platform needs the same numbers.
+ */
+private object TopShelf {
+    val LOGO = 160.dp
+    val LOGO_WIDTH = 640.dp
+    val SYNOPSIS = 820.dp
+    val UNDER_LOGO = 24.dp
+    val UNDER_GENRES = 10.dp
+    val LINE_GAP = 12.dp
+    val BUTTON_GAP = 40.dp
+}
+
 private const val FOCUS_WAIT_MS = 15_000L
 
 private fun Hero?.focusKey(): String? =
@@ -233,7 +249,9 @@ fun TvHome(
     var headerRoom by remember { mutableStateOf(0.dp) }
     Box(modifier.fillMaxSize()) {
         home.hero?.let { TopShelfArt(it.tile, state.page) }
-        AnchoredScrolling(lead = tvContentTop() + headerRoom, trail = 0.dp) {
+        // A focused card's art is what the page brings into view; its lines under it must show too, so the
+        // page moves whenever they would be cut (a card under the top shelf).
+        AnchoredScrolling(lead = tvContentTop() + headerRoom, trail = cardLines()) {
             LazyColumn(
                 state = state.page,
                 modifier = Modifier.fillMaxSize(),
@@ -361,6 +379,9 @@ private fun TopShelfArt(
     page: LazyListState,
 ) {
     val room = TvNavRoom.current
+    val gap = with(LocalDensity.current) { Marquee.space.s.roundToPx() }
+    // The hero item's height, kept while it is laid out: the art goes on following it from the row below.
+    val hero = remember { intArrayOf(0) }
     Backdrop(
         tile.background ?: tile.poster,
         Modifier
@@ -369,15 +390,28 @@ private fun TopShelfArt(
                 val art = measurable.measure(Constraints.fixed(constraints.maxWidth, constraints.maxHeight + up))
                 layout(constraints.maxWidth, constraints.maxHeight) { art.place(0, -up) }
             }.graphicsLayer {
-                // Read here, while drawing: a scroll moves the art and recomposes nothing.
+                // Read here, while drawing: a scroll moves the art and recomposes nothing. The art reaches below the
+                // hero item, behind the first row, so it follows the hero's real place, and once the hero has left the
+                // list's layout, the first row's; it goes only when both have.
+                val items = page.layoutInfo.visibleItemsInfo
+                val top = items.firstOrNull { it.index == 0 }
+                val next = items.firstOrNull { it.index == 1 }
+                if (top != null) hero[0] = top.size
                 translationY =
-                    if (page.firstVisibleItemIndex == 0) -page.firstVisibleItemScrollOffset.toFloat() else -size.height
-            },
+                    when {
+                        top != null -> top.offset.toFloat()
+                        next != null && hero[0] > 0 -> (next.offset - gap - hero[0]).toFloat()
+                        else -> -size.height
+                    }
+            }.testTag(TOP_SHELF_ART),
         side = Scrims.topShelfSide,
         foot = Scrims.topShelfFoot,
         alignment = if (tile.background == null) Alignment.TopCenter else Alignment.Center,
     )
 }
+
+/** The top shelf's art, for tests of where it sits. */
+internal const val TOP_SHELF_ART = "top-shelf-art"
 
 /**
  * The top shelf's column over its art (the home-tv frame): the logo, the kind and genres, two lines of
@@ -403,10 +437,10 @@ private fun TvHero(
                 // Held on the ramps' dark side; DesignTest checks each line over white art there.
                 .widthIn(max = HERO_TEXT),
         ) {
-            Logo(tile.logo, tile.name, height = 160.dp, maxWidth = 640.dp, color = colors.text)
+            Logo(tile.logo, tile.name, height = TopShelf.LOGO, maxWidth = TopShelf.LOGO_WIDTH, color = colors.text)
             MqText(
                 TileCopy.heroGenres(hero),
-                Modifier.padding(top = 24.dp),
+                Modifier.padding(top = TopShelf.UNDER_LOGO),
                 role = TextRole.Body,
                 weight = FontWeight.SemiBold,
                 maxLines = 1,
@@ -414,7 +448,7 @@ private fun TvHero(
             hero.description?.let {
                 MqText(
                     it,
-                    Modifier.padding(top = 10.dp).widthIn(max = 820.dp),
+                    Modifier.padding(top = TopShelf.UNDER_GENRES).widthIn(max = TopShelf.SYNOPSIS),
                     role = TextRole.Body,
                     color = colors.muted,
                     weight = FontWeight.Medium,
@@ -424,14 +458,14 @@ private fun TvHero(
             RatingLine(
                 TileCopy.ratings(tile.ratings),
                 TileCopy.heroFacts(hero).orEmpty(),
-                Modifier.padding(top = 12.dp),
+                Modifier.padding(top = TopShelf.LINE_GAP),
                 factsColor = colors.dim,
             )
             // The core's reason on Apple's explainability line, 16 over the buttons; never an eyebrow.
             if (hero.reason.isNotBlank()) {
                 MqText(
                     hero.reason,
-                    Modifier.padding(top = 12.dp),
+                    Modifier.padding(top = TopShelf.LINE_GAP),
                     role = TextRole.Caption,
                     weight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -439,7 +473,7 @@ private fun TvHero(
             }
             Row(
                 Modifier.padding(top = Marquee.space.s),
-                horizontalArrangement = Arrangement.spacedBy(40.dp),
+                horizontalArrangement = Arrangement.spacedBy(TopShelf.BUTTON_GAP),
                 verticalAlignment = Alignment.Top,
             ) {
                 if (tile.playable()) {
@@ -464,9 +498,17 @@ private fun TvHero(
     }
 }
 
+/** The room under a focused card's art: its lift, then its caption, three lines under a poster. */
+@Composable
+private fun cardLines(): Dp {
+    val metrics = Marquee.tiles
+    return metrics.laneHeight(TileShape.Poster) - metrics.pad - metrics.poster.height
+}
+
 /**
  * Continue Watching and movie rows are lanes of 16:9 cards, series rows of 2:3 posters (design/DECISION.md,
- * Shelves); a catalog whose addon draws another shape keeps it.
+ * Shelves); a catalog whose addon draws another shape keeps it. ponytail: the first tile's kind names the row; a
+ * list mixing films and series takes its first title's shape.
  */
 internal fun shapeOf(row: HomeRow): TileShape =
     when {
@@ -626,7 +668,7 @@ private fun TvTile(
         progress = tile.progress,
         caption = TileCopy.caption(rowId, tile) ?: tile.releaseInfo,
         // Continue Watching carries the core's line alone, no scores or badges; every other card its year and scores.
-        ratings = if (TileCopy.removable(rowId)) emptyList() else TileCopy.ratings(tile.ratings),
+        ratings = if (TileCopy.isContinue(rowId)) emptyList() else TileCopy.ratings(tile.ratings),
         // A poster in a 16:9 card keeps its upper part, where the title and faces are.
         artAlignment = if (wide && tile.background == null) Alignment.TopCenter else Alignment.Center,
         focusRequester = requester,
@@ -744,9 +786,9 @@ internal fun focusAfterRemove(
 }
 
 /**
- * What gets focus on first entry: the first tile of Continue Watching when that lane leads, else
- * the hero's Play when there is a hero (the web and Apple do the same), else the first tile of
- * the first lane. While the first lane is still loading and [patient], there is no target yet, so
+ * What gets focus on first entry: the hero's Play when there is a hero, with Continue Watching peeking under
+ * it as tvOS has it (the top shelf fills the first screen, so a focused card there would sit half off it),
+ * else the first tile of the first lane. While the first lane is still loading and [patient], there is no target yet, so
  * focus never lands on a lower lane just because it answered first; lanes that came back empty or
  * failed are skipped.
  */
@@ -755,7 +797,7 @@ fun firstTarget(
     hero: Hero?,
     patient: Boolean,
 ): String? {
-    if (rows.firstOrNull()?.rowId != TileCopy.CONTINUE_ROW) hero.focusKey()?.let { return it }
+    hero.focusKey()?.let { return it }
     for (row in rows) {
         row.tileKeys().firstOrNull()?.let { return it }
         if (patient && (row.state == RowState.Loading || row.state == RowState.Slow)) return null

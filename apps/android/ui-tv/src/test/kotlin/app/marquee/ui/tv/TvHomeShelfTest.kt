@@ -11,12 +11,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.pressKey
 import app.marquee.core.TileCopy
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
@@ -31,6 +40,7 @@ import app.marquee.core.route.Route
 import app.marquee.core.views.HomeView
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
+import app.marquee.design.SECONDARY_FILL
 import app.marquee.design.Scrims
 import app.marquee.design.formPalette
 import kotlinx.coroutines.CoroutineDispatcher
@@ -137,6 +147,7 @@ class TvHomeShelfTest {
          * native canvas (SIGABRT), so the shots leave the bar out.
          */
         framed: Boolean = true,
+        state: TvHomeState = TvHomeState(),
     ) {
         val snapshot =
             HomeSnapshot(
@@ -180,12 +191,17 @@ class TvHomeShelfTest {
             client.onMessage("""{"id":$id,"ok":true,"result":$result}""")
         }
         val home = HomeView(client, scope)
+        // Native graphics start the window in touch mode, where nothing takes focus; a TV has no touch mode.
+        compose.runOnUiThread {
+            compose.activity.window.decorView
+                .requestFocusFromTouch()
+        }
         compose.setContent {
             MarqueeTheme(Form.Tv) {
                 val page = @Composable {
                     TvHome(
                         home,
-                        TvHomeState(),
+                        state,
                         onOpen = {},
                         onPlay = {},
                         onSetup = {},
@@ -194,7 +210,11 @@ class TvHomeShelfTest {
                 }
                 // In its frame the top shelf's art runs up behind the bar.
                 if (framed) {
-                    TvShell(Route.Home, true, {}, { null }, {}, {}) { page() }
+                    // As AppRoot wires it: Down from the bar comes back to what had the focus.
+                    TvShell(Route.Home, true, {
+                    }, { state.focus.lastEntry() }, { state.focus.leftContent() }, { state.focus.interacted() }) {
+                        page()
+                    }
                 } else {
                     page()
                 }
@@ -233,7 +253,7 @@ class TvHomeShelfTest {
         show()
         val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
         val tv = formPalette(Form.Tv)
-        val fill = Color(0x29FFFFFF)
+        val fill = SECONDARY_FILL
         // Each line at its top trailing corner, the brightest the ramps leave it.
         val lines =
             listOf(
@@ -293,6 +313,106 @@ class TvHomeShelfTest {
                 }
         assertTrue(year.positionInRoot.y >= foot, "the year sits on the poster")
         if (out != null) save("tv-home-shelves")
+    }
+
+    private fun focused() = compose.onAllNodes(isFocused(), useUnmergedTree = true).fetchSemanticsNodes().single()
+
+    private fun focusedOn(description: String) =
+        compose.onAllNodes(isFocused() and hasContentDescription(description)).fetchSemanticsNodes().isNotEmpty()
+
+    private fun press(key: Key) {
+        compose.onNode(isFocused()).performKeyInput { pressKey(key) }
+        compose.waitForIdle()
+    }
+
+    private fun waitFor(
+        what: String,
+        check: () -> Boolean,
+    ) {
+        val deadline = System.currentTimeMillis() + 10_000
+        while (!check()) {
+            check(System.currentTimeMillis() < deadline) { "never: $what" }
+            compose.waitForIdle()
+            Thread.sleep(10)
+        }
+    }
+
+    @Test
+    fun `a Continue Watching card focused from Play is whole on the screen, with its line`() {
+        show()
+        println(
+            "DBG focused " +
+                compose.onAllNodes(isFocused(), useUnmergedTree = true).fetchSemanticsNodes().map { it.config },
+        )
+        // The first focus is Play (FirstTargetTest); a test's clock runs out the screen's own wait, so it is asked here.
+        compose
+            .onNodeWithContentDescription(
+                "Play Night of the Living Dead",
+            ).performSemanticsAction(SemanticsActions.RequestFocus)
+        waitFor("Play takes the focus") { focusedOn("Play Night of the Living Dead") }
+        press(Key.DirectionDown)
+        waitFor("the first card takes the focus") {
+            focusedOn("Severance")
+        }
+        // The page settles at the row's anchor.
+        compose.mainClock.advanceTimeBy(2_000)
+        compose.waitForIdle()
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val card = focused()
+        val line = compose.onNodeWithText("S2:E3 · 36 min left", useUnmergedTree = true).fetchSemanticsNode()
+        // Laid out, not clipped: the card's foot and its line's.
+        assertTrue(card.positionInRoot.y + card.size.height <= root.bottom, "the card's foot is off the screen")
+        assertTrue(line.positionInRoot.y + line.size.height <= root.bottom, "the card's line is off the screen")
+        assertTrue(card.positionInRoot.y >= 0f, "the card's top is off the screen")
+    }
+
+    @Test
+    fun `Up from Play reaches the bar and Down comes back to Play`() {
+        show()
+        // The first focus is Play (FirstTargetTest); a test's clock runs out the screen's own wait, so it is asked here.
+        compose
+            .onNodeWithContentDescription(
+                "Play Night of the Living Dead",
+            ).performSemanticsAction(SemanticsActions.RequestFocus)
+        waitFor("Play takes the focus") { focusedOn("Play Night of the Living Dead") }
+        press(Key.DirectionUp)
+        assertTrue(
+            compose
+                .onAllNodes(
+                    isFocused() and hasText("Home"),
+                    useUnmergedTree = false,
+                ).fetchSemanticsNodes()
+                .isNotEmpty(),
+            "Up missed the bar",
+        )
+        press(Key.DirectionDown)
+        assertTrue(
+            focusedOn("Play Night of the Living Dead"),
+            "Down did not come back to Play",
+        )
+    }
+
+    @Test
+    fun `the art follows the page without a jump, past the moment the hero item leaves the list`() {
+        val state = TvHomeState()
+        show(state = state)
+        // Where the art is laid out, its scroll included; a clipped bound would hide a jump above the screen.
+        val art = { compose.onNodeWithTag(TOP_SHELF_ART, useUnmergedTree = true).fetchSemanticsNode() }
+        assertEquals(0f, art().positionInRoot.y, 1.5f, "at rest the art starts at the top of the TV")
+        var last = 0f
+        var flipped = false
+        val step = 40f
+        repeat(60) {
+            compose.runOnIdle { state.page.dispatchRawDelta(step) }
+            compose.waitForIdle()
+            val node = art()
+            val top = node.positionInRoot.y
+            if (state.page.firstVisibleItemIndex > 0) flipped = true
+            // Each step moves the art by the step, until it has gone above the screen for good.
+            if (top + node.size.height > 0f) assertEquals(last - step, top, 1.5f, "the art jumped at step $it")
+            last = top
+        }
+        assertTrue(flipped, "the hero item never left the list's first place")
     }
 
     private fun save(name: String) {

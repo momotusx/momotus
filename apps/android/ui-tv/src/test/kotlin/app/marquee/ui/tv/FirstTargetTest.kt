@@ -56,17 +56,18 @@ class FirstTargetTest {
     }
 
     @Test
-    fun `Continue Watching leads, otherwise the hero's Play does`() {
+    fun `the hero's Play leads, Continue Watching peeking under it, and with no hero Continue Watching does`() {
         val withContinue = listOf(row(TileCopy.CONTINUE_ROW, RowState.Ready, "c"), row("b", RowState.Ready, "z"))
-        assertEquals("tile:continue-watching:c", firstTarget(withContinue, movieHero, patient = true))
-        val without = listOf(row("b", RowState.Ready, "z"))
-        assertEquals("hero:play", firstTarget(without, movieHero, patient = true))
+        assertEquals("hero:play", firstTarget(withContinue, movieHero, patient = true))
+        assertEquals("hero:play", firstTarget(listOf(row("b", RowState.Ready, "z")), movieHero, patient = true))
+        assertEquals("tile:continue-watching:c", firstTarget(withContinue, hero = null, patient = true))
     }
 
     @Test
     fun `the row Back returns to is where the first visit starts`() {
         val withContinue = listOf(row(TileCopy.CONTINUE_ROW, RowState.Ready, "c"), row("b", RowState.Ready, "z"))
-        assertEquals(TileCopy.CONTINUE_ROW, startRow(withContinue, movieHero))
+        assertEquals("hero", startRow(withContinue, movieHero))
+        assertEquals(TileCopy.CONTINUE_ROW, startRow(withContinue, hero = null))
         assertEquals("hero", startRow(listOf(row("b", RowState.Ready, "z")), movieHero))
         assertEquals("b", startRow(listOf(row("b", RowState.Ready, "z")), hero = null))
         assertNull(startRow(emptyList(), hero = null))
