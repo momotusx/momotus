@@ -2159,3 +2159,51 @@ fn a_large_file_says_whether_the_limit_was_chosen() {
         ReasonLine::Large { chosen: true, .. }
     ));
 }
+
+/// Plans/play-every-version.md 2d: the size limit hides over-limit rows
+/// only while something else is left; when it would leave nothing they
+/// come back, ranked as with no limit, and the other gates still hold.
+#[test]
+fn the_size_limit_lets_rows_back_rather_than_leave_nothing() {
+    let caps = DeviceCaps::basic_1080p();
+    let torrents = || -> Vec<ParsedStream> {
+        sample()
+            .into_iter()
+            .filter(|s| s.addon_id == "torrentio")
+            .collect()
+    };
+    let ranked = |limit_gb: u64| {
+        let prefs = StreamPrefs {
+            max_size_bytes: Some(limit_gb << 30),
+            ..StreamPrefs::default()
+        };
+        let input = RankInput {
+            caps: &caps,
+            prefs: &prefs,
+            target: &target(),
+            last_binge_group: None,
+            kids: None,
+            conditions: engine(),
+        };
+        rank(torrents(), &input)
+    };
+    let names = |r: &Ranked| -> Vec<String> {
+        r.rows
+            .iter()
+            .map(|r| r.stream.release.group.clone().unwrap_or_default())
+            .collect()
+    };
+    // 3 GB: the 2.1 GB file plays, the 8.4 GB one stays hidden.
+    let some = ranked(3);
+    assert_eq!(names(&some), ["ETHEL"]);
+    assert_eq!(hidden(&some, HideReason::TooLarge), 2);
+    // 1 GB: nothing fits, so both of this episode come back; another
+    // episode and another title stay hidden.
+    let none_fit = ranked(1);
+    let mut back = names(&none_fit);
+    back.sort();
+    assert_eq!(back, ["ETHEL", "FLUX"]);
+    assert_eq!(hidden(&none_fit, HideReason::TooLarge), 0);
+    assert_eq!(hidden(&none_fit, HideReason::WrongEpisode), 1);
+    assert_eq!(hidden(&none_fit, HideReason::WrongTitle), 1);
+}

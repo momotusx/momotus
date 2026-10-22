@@ -44,6 +44,32 @@ struct Scored {
 }
 
 pub fn rank(streams: Vec<ParsedStream>, input: &RankInput<'_>) -> Ranked {
+    let ranked = rank_within(streams, input);
+    // The size limit hides only while something else is left: over-limit
+    // rows come back when it would leave nothing (play-every-version 2d).
+    if !ranked.rows.is_empty()
+        || !ranked
+            .hidden
+            .iter()
+            .any(|h| h.reason == HideReason::TooLarge)
+    {
+        return ranked;
+    }
+    let prefs = StreamPrefs {
+        max_size_bytes: None,
+        ..input.prefs.clone()
+    };
+    let streams = ranked.hidden.into_iter().map(|h| h.stream).collect();
+    rank_within(
+        streams,
+        &RankInput {
+            prefs: &prefs,
+            ..*input
+        },
+    )
+}
+
+fn rank_within(streams: Vec<ParsedStream>, input: &RankInput<'_>) -> Ranked {
     let mut scored = Vec::new();
     let mut hidden = Vec::new();
     for stream in streams {
