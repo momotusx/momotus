@@ -416,6 +416,43 @@ test("desktop: tv.apple.com's hero at every window, its column where the glass c
   }
 });
 
+/** One pixel of the page as drawn, read back from a screenshot through a canvas. */
+async function pixel(page: Page, x: number, y: number): Promise<number[]> {
+  const png = await page.screenshot({ clip: { x, y, width: 1, height: 1 }, type: "png" });
+  return page.evaluate(async (b64) => {
+    const img = new Image();
+    img.src = `data:image/png;base64,${b64}`;
+    await img.decode();
+    const c = document.createElement("canvas");
+    c.width = c.height = 1;
+    const g = c.getContext("2d") as CanvasRenderingContext2D;
+    g.drawImage(img, 0, 0);
+    return [...g.getImageData(0, 0, 1, 1).data.slice(0, 3)];
+  }, png.toString("base64"));
+}
+
+test("the hero's foot meets the page with no seam, on every form", async ({ browser }) => {
+  for (const form of ["tv", "desktop", "phone"] as const) {
+    const { context, page } = await open(browser, form, "/");
+    await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator(".hero-bd img.in")).toBeAttached({ timeout: 30_000 });
+    await page.waitForTimeout(400);
+    const { foot, width } = await page.evaluate(() => ({ foot: document.querySelector(".hero")!.getBoundingClientRect().bottom, width: innerWidth }));
+    const bg = (await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).match(/\d+/g)!.map(Number);
+    // The hero's last row of pixels and the page under it are both the page color, across the width (the
+    // vignette is darkest at the right). TV's first row rises over its foot, so TV reads its last row only.
+    // TV: right of Continue Watching's two tiles, which rise over the foot.
+    for (const x of form === "tv" ? [Math.round(width * 0.75), width - 4] : [Math.round(width * 0.25), Math.round(width * 0.5), width - 4]) {
+      const rows = form === "tv" ? [foot - 2] : [foot - 2, foot + 2];
+      for (const y of rows) {
+        const got = await pixel(page, x, Math.round(y));
+        for (let i = 0; i < 3; i++) expect(Math.abs(got[i]! - bg[i]!), `${form} at ${x},${Math.round(y)}: ${got} against ${bg}`).toBeLessThanOrEqual(3);
+      }
+    }
+    await context.close();
+  }
+});
+
 test("phone: the iPhone's hero at every screen, the large title and the profile button over it", async ({ browser }) => {
   for (const [w, h] of [[360, 640], [375, 667], [390, 844], [430, 932]] as const) {
     const context = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, reducedMotion: "reduce" });
