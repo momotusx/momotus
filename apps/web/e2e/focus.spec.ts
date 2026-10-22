@@ -324,6 +324,9 @@ test("desktop: the mouse wheel scrolls Home over a row's heading, the gap betwee
   const row = page.locator(".row").nth(1);
   await expect(row.locator("[data-f]").first()).toBeVisible({ timeout: 30_000 });
   const scroller = () => page.evaluate(() => (document.querySelector(".row")?.closest("[data-vscroll]") as HTMLElement | null)?.scrollTop ?? -1);
+  // The row in the middle of the window (the full-bleed hero holds the first screen), from where each wheel starts.
+  await row.evaluate((r) => r.scrollIntoView({ block: "center" }));
+  const base = await scroller();
   // The points: the row's heading, 8 px above it (the gap after the row before), and its first tile.
   const points = await row.evaluate((r) => {
     const head = r.querySelector(".row-head")?.getBoundingClientRect();
@@ -337,13 +340,13 @@ test("desktop: the mouse wheel scrolls Home over a row's heading, the gap betwee
   });
   expect(points.length).toBe(3);
   for (const p of points) {
-    await page.evaluate(() => {
+    await page.evaluate((base) => {
       const s = document.querySelector(".row")?.closest("[data-vscroll]") as HTMLElement | null;
-      if (s) s.scrollTop = 0;
-    });
+      if (s) s.scrollTop = base;
+    }, base);
     await page.mouse.move(p.x, p.y);
     await page.mouse.wheel(0, 400);
-    await expect.poll(scroller, { message: `the wheel over the ${p.where} scrolls the page` }).toBeGreaterThan(0);
+    await expect.poll(scroller, { message: `the wheel over the ${p.where} scrolls the page` }).toBeGreaterThan(base);
   }
   await context.close();
 });

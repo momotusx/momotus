@@ -287,7 +287,7 @@ export default function Home() {
     <div class="home">
       <main class="page" data-vscroll ref={attach} onScroll={(e) => (pageScroll.top = e.currentTarget.scrollTop)}>
         <section class="hero" classList={{ closed: !hero() && !waiting() }} data-reveal-top data-focus-wait={!hero() && waiting() ? "" : undefined} aria-label="Featured">
-          <Backdrop src={hero()?.tile.background ?? null} class="hero-bd" ramp={form() === "phone" ? "heroPhone" : form() === "tv" ? "heroTv" : "hero"} />
+          <Backdrop src={hero()?.tile.background ?? null} class="hero-bd" ramp={form() === "phone" ? "heroPhone" : form() === "tv" ? "heroTv" : "heroDesktop"} />
           <Show when={form() === "phone"}>
             <header class="ph-top">
               <span class="brand">Marquee</span>

@@ -50,10 +50,8 @@ const spots: Spot[] = [
   ["home tv, the synopsis", "heroTv", dark.bg, [1920, 1080], [TV_EDGE, 0.4509], "muted"],
   ["home tv, the meta line", "heroTv", dark.bg, [1920, 1080], [TV_EDGE, 0.5491], "dim"],
   ["home tv, Details pill", "heroTv", dark.bg, [1920, 1080], [0.2365, 0.663], "pill"],
-  ["home desktop, Details circle", "hero", dark.bgDesktop, [2212, 600], [0.1376, 0.755], "pill"],
   ["home phone, Details circle", "heroPhone", dark.bgPhone, [358, 520], [0.4976, 0.8731], "pill"],
   ["home tv, the reason", "heroTv", dark.bg, [1920, 1080], [TV_EDGE, 0.6046], "line"],
-  ["home desktop, the reason", "hero", dark.bgDesktop, [2212, 600], [0.2694, 0.68], "line"],
   ["home phone, the reason", "heroPhone", dark.bgPhone, [358, 520], [0.95, 0.819], "line"],
   ["title tv series, Start over", "title", dark.bg, [1920, 1080], [0.4398, 0.3817], "pill"],
   ["title tv series, Remove from Continue Watching circle", "title", dark.bg, [1920, 1080], [0.3184, 0.5503], "pill"],
@@ -63,6 +61,23 @@ const spots: Spot[] = [
   ["title desktop series, Start over", "title", dark.bgDesktop, [2300, 1438], [0.3671, 0.3046], "pill"],
   ["title desktop movie, Watched", "titleMovie", dark.bgDesktop, [2300, 1438], [0.2624, 0.3054], "pill"],
 ];
+
+// Desktop's hero at its extreme boxes (CSS px): the 400 floor at 900 and 1440 wide, 1280x720, 1440x900 and
+// 2560x1080 windows. The column sits at 40 with a 75 foot, each line no wider than min(560, 48 percent of the
+// hero less 40), so its end is at min(600, 0.48 w); the lines from the foot: buttons 40, reason 16 (16 above),
+// synopsis 2 x 21, meta 18, genre 20, 9 apart; Details' glyph at 196 from the left, 104 above the foot.
+for (const [w, h] of [[900, 400], [1440, 400], [1280, 578], [1440, 758], [2560, 938]] as const) {
+  const edge = Math.min(600, 0.48 * w) / w;
+  const y = (up: number) => (h - up) / h;
+  const at = `home desktop ${w}x${h}`;
+  spots.push(
+    [`${at}, the genre line`, "heroDesktop", dark.bgDesktop, [w, h], [edge, y(254)], "line"],
+    [`${at}, the meta line`, "heroDesktop", dark.bgDesktop, [w, h], [edge, y(225)], "dim"],
+    [`${at}, the synopsis`, "heroDesktop", dark.bgDesktop, [w, h], [edge, y(198)], "muted"],
+    [`${at}, the reason`, "heroDesktop", dark.bgDesktop, [w, h], [edge, y(147)], "line"],
+    [`${at}, Details`, "heroDesktop", dark.bgDesktop, [w, h], [196 / w, y(104)], "pill"],
+  );
+}
 
 test("every secondary over a backdrop keeps 4.5:1 over white art", () => {
   const rows = spots.map(([name, ramp, page, [w, h], [x, y], label]) => {

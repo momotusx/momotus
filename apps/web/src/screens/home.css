@@ -70,6 +70,35 @@
 /* No hero and none coming (offline, posters only, a kids profile): the rows start under the tab bar. */
 [data-form="tv"] .hero.closed { display: block; height: calc(var(--nav-top) + var(--nav-h) + 20px); margin-bottom: 0; background: none; }
 [data-form="tv"] .hero.closed .hero-bd { display: none; }
+
+/* Desktop: tv.apple.com's hero (`dkHome`; the Mac's HomeScreen.swift), full bleed under the 52 px
+ * header, black under the art, 16:9 of the width but no taller than the window under the header less
+ * 90 (so the first shelf's title shows) and no lower than 400: 758 at 1440x900. All in canvas units,
+ * since the canvas is scaled. The first shelf's title sits 12 below its foot. */
+[data-form="desktop"] .hero { height: max(min(calc(var(--cw) * 9 / 16), calc(var(--ch) - 142 * var(--px))), calc(400 * var(--px)));
+  margin: var(--nav-h) 0 calc(-24 * var(--px)); border-radius: 0; background: #000; box-shadow: none; }
+[data-form="desktop"] .hero-bd::after { background: radial-gradient(100% 100% at 66.7% 0%, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, .28) 100%); }
+[data-form="desktop"] .hero-body { padding: 0 0 calc(75 * var(--px)) calc(40 * var(--px)); }
+/* The column at 40 with a 75 foot; every line no wider than 560 or 48 percent of the hero less 40, so its
+ * end stays on the deep part of the wash at any width (art.test.ts, desktop's extreme boxes). */
+[data-form="desktop"] :is(.hero-body > *, .hero-lines > *) { max-width: min(calc(560 * var(--px)), calc(48% - 40 * var(--px))); }
+[data-form="desktop"] .hero-logo { width: calc(300 * var(--px)); height: calc(81 * var(--px)); margin-bottom: calc(9 * var(--px)); object-fit: contain; object-position: left bottom; }
+[data-form="desktop"] .hero .logo-text { margin-bottom: calc(9 * var(--px)); font-size: calc(48 * var(--px)); }
+[data-form="desktop"] .hero .genre { display: block; margin-bottom: calc(9 * var(--px)); font: 600 calc(15 * var(--px)) / calc(20 * var(--px)) var(--font-text); }
+[data-form="desktop"] .hero .meta { gap: 0 calc(8 * var(--px)); margin: 0 0 calc(9 * var(--px)); font: 600 calc(13 * var(--px)) / calc(18 * var(--px)) var(--font-text); color: var(--dim); }
+[data-form="desktop"] .hero-syn { -webkit-line-clamp: 2; margin-bottom: calc(9 * var(--px)); font: 400 calc(15 * var(--px)) / calc(21 * var(--px)) var(--font-text); }
+[data-form="desktop"] .hero .reason { margin-bottom: calc(16 * var(--px)); font: 600 calc(13 * var(--px)) / calc(16 * var(--px)) var(--font-text); }
+[data-form="desktop"] .hero .acts { align-items: center; gap: calc(12 * var(--px)); }
+[data-form="desktop"] .hero .btn { height: calc(40 * var(--px)); padding: 0 calc(30 * var(--px)); gap: calc(8 * var(--px)); font-size: calc(15 * var(--px)); }
+[data-form="desktop"] .hero .btn svg { width: calc(16 * var(--px)); height: calc(16 * var(--px)); }
+[data-form="desktop"] .hero .rbtn .ring { width: calc(40 * var(--px)); height: calc(40 * var(--px)); }
+[data-form="desktop"] .hero .rbtn .ring svg { width: calc(18 * var(--px)); height: calc(18 * var(--px)); }
+/* The round Details names itself to screen readers only, as Apple's. */
+[data-form="desktop"] .hero .rbtn .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+[data-form="desktop"] .hero .hero-skel { border-radius: 0; }
+/* No hero: the rows start 20 under the header. */
+[data-form="desktop"] .hero.closed { display: block; height: calc(20 * var(--px)); margin-bottom: 0; background: none; }
+[data-form="desktop"] .hero.closed .hero-bd { display: none; }
 [data-form="phone"] .hero.closed { display: block; height: 60px; background: none; box-shadow: none; }
 
 .home-problem { position: relative; margin: 40px var(--safe-side); }
@@ -181,8 +210,6 @@
 [data-form="desktop"] .row-head h2 { font: 700 calc(17 * var(--px)) / calc(22 * var(--px)) var(--font-display); }
 [data-form="desktop"] .row-note { font-size: calc(13 * var(--px)); }
 [data-form="desktop"] .row-body { margin-left: 0; }
-/* The hero card's words on the shelves' 40 px line. */
-[data-form="desktop"] .hero-body { padding-left: calc(40 * var(--px) - var(--hero-inset)); }
 [data-form="desktop"] .tile, [data-form="desktop"] .tile .pic { border-radius: calc(14 * var(--px)); }
 [data-form="desktop"] .tile .cap { margin-top: calc(8 * var(--px)); }
 [data-form="desktop"] .tile .cap b { font: 600 calc(15 * var(--px)) / calc(21 * var(--px)) var(--font-text); }

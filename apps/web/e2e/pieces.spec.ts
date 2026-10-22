@@ -380,6 +380,42 @@ test("TV: the top shelf is full bleed, the first row's title at 850, and nothing
   await context.close();
 });
 
+test("desktop: tv.apple.com's hero at every window, its column where the glass check measures it", async ({ browser }) => {
+  for (const [w, h] of [[1440, 900], [1280, 720], [900, 600], [1440, 500], [1920, 1080], [1440, 1200]] as const) {
+    const context = await browser.newContext({ viewport: { width: w, height: h }, reducedMotion: "reduce" });
+    const page = await context.newPage();
+    await page.goto("/?form=desktop");
+    await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator(".row .row-head h2").first()).toBeVisible({ timeout: 30_000 });
+    const g = await page.evaluate(() => {
+      const r = (s: string) => document.querySelector(s)?.getBoundingClientRect() as DOMRect;
+      const text = (s: string) => {
+        const range = document.createRange();
+        range.selectNodeContents(document.querySelector(s) as Element);
+        const rs = [...range.getClientRects()];
+        return { top: rs[0]?.top ?? -1, right: Math.max(...rs.map((x) => x.right)) };
+      };
+      const hero = r(".hero");
+      return { left: hero.left, top: hero.top, width: hero.width, height: hero.height, foot: hero.bottom, row: r(".row .row-head h2").top, genre: text(".hero .genre").top, meta: text(".hero .meta").top, syn: text(".hero-syn"), reason: text(".hero .reason").top, play: r('[data-f="hero:play"]').bottom };
+    });
+    const label = `${w}x${h}`;
+    // Under the 52 px header, 16:9 of the width, no taller than the window under the header less 90, no lower than 400.
+    const want = Math.max(Math.min((w * 9) / 16, h - 52 - 90), 400);
+    expect([g.left, Math.round(g.top), Math.round(g.width)], label).toEqual([0, 52, w]);
+    expect(Math.abs(g.height - want), label).toBeLessThanOrEqual(1);
+    // The first shelf's title 12 below the foot, inside the window.
+    expect(Math.abs(g.row - g.foot - 12), label).toBeLessThanOrEqual(1.5);
+    expect(g.row, label).toBeLessThan(h - 20);
+    // The column's lines from the foot, as art.test.ts takes them: genre 254, meta 225, synopsis 198, reason 147, buttons 75.
+    for (const [name, top, up] of [["genre", g.genre, 254], ["meta", g.meta, 225], ["synopsis", g.syn.top, 198], ["reason", g.reason, 147]] as const) {
+      expect(Math.abs(g.foot - top - up), `${label} ${name}`).toBeLessThanOrEqual(2);
+    }
+    expect(Math.abs(g.foot - g.play - 75), label).toBeLessThanOrEqual(1.5);
+    expect(g.syn.right, label).toBeLessThanOrEqual(Math.min(600, 0.48 * w) + 1);
+    await context.close();
+  }
+});
+
 /** Where a secondary's label starts and ends over a backdrop, as fractions of the backdrop: the
  * glass check (src/components/art.test.ts) composites the ramps at these spots, so a layout that
  * moves a label past one leaves the check measuring the wrong place. */
