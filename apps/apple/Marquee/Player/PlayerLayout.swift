@@ -559,3 +559,21 @@ struct StepperClock: Sendable {
         if pending?.url == old { pending?.url = new }
     }
 }
+
+/// The account card's wait, as the web's and Android's: while every version needs a streaming service
+/// account the card stays and the versions stay followed; once they offer a pick (an account added
+/// from the card's Add an account and Back, or anywhere else), the card goes and that pick plays.
+struct AccountWait {
+    private(set) var waiting = false
+
+    /// The pick to play now, once: nil while the card waits or nothing waits.
+    mutating func see(failed: Bool, versions: VersionsSnapshot?) -> String? {
+        if failed, PlayerLayout.needsAccount(versions) {
+            waiting = true
+            return nil
+        }
+        guard waiting, let pick = versions?.recommended?.key else { return nil }
+        waiting = false
+        return pick
+    }
+}

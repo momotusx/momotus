@@ -203,6 +203,10 @@ struct PlayerScreen: View {
         .task(id: model.taskId) { await model.drive() }
         // Back from the background on a new port: the source opens again where it was.
         .onChange(of: core.serverMoves) { model.serverMoved() }
+        // The account card follows the versions: an account added makes the play start.
+        .onChange(of: model.versions?.snapshot) { model.versionsChanged() }
+        .onChange(of: model.playback?.phase) { model.versionsChanged() }
+        .onChange(of: model.openError) { model.versionsChanged() }
         // The size reaches the file's own tracks as soon as it changes.
         .onChange(of: model.subtitleSize) { model.textSize() }
         .task { await autoHide() }

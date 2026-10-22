@@ -37,6 +37,7 @@ final class PlayerModel {
     private(set) var subtitleDelay: Double = 0 { didSet { watchCueEdges() } }
     /// The stepper's value not yet sent to the core: it goes once it rests, on another track and on close.
     @ObservationIgnored private var outbox: DelayOutbox!
+    @ObservationIgnored private var accountWait = AccountWait()
     private(set) var cues: [WebVTT.Cue] = [] { didSet { watchCueEdges() } }
     var rate: Float = 1 {
         // The Lock Screen extrapolates the playhead from the rate: it hears every change at once.
@@ -475,6 +476,21 @@ final class PlayerModel {
     func retry() {
         notice = nil
         choices.retry()
+    }
+
+    /// The versions or the card changed: a card waiting for an account (`AccountWait`) plays the
+    /// versions' pick once they offer one, the same version again when it is the one that failed.
+    func versionsChanged() {
+        let failed = playback?.phase == "failed" || openError != nil
+        guard let pick = accountWait.see(failed: failed, versions: versions?.snapshot) else { return }
+        if pick != route.key {
+            openError = nil
+            switchVersion(pick)
+        } else if openError != nil {
+            reopen()
+        } else {
+            retry()
+        }
     }
 
     /// The stepper's value for the addon track on: drawn at once, sent to the core (which keeps it for

@@ -189,3 +189,16 @@ private func playerModel() throws -> String {
         #expect(!b.contains("replaceCurrentItem") && !b.contains("AVPlayerItem(") && !b.contains("seek("), "\(name)")
     }
 }
+
+@Test func noTimingControlSaysEarlierOrLater() throws {
+    // The owner: the timing is a signed value. The tvOS items and the stepper's labels, as drawn
+    // and as VoiceOver reads them; comments may say which way a sign moves the words.
+    let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player/PlayerControls.swift")
+    let code = try String(contentsOf: file, encoding: .utf8).split(separator: "\n")
+        .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }.joined(separator: "\n")
+    #expect(code.range(of: #"earlier|later"#, options: [.regularExpression, .caseInsensitive]) == nil)
+    for label in [#"Label("\u{2212}0.1 s", glyph: "minus")"#, #"Label("+0.1 s", glyph: "plus")"#,
+                  #"label: "Minus 0.1 seconds""#, #"label: "Plus 0.1 seconds""#] {
+        #expect(code.contains(label), "\(label)")
+    }
+}
