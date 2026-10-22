@@ -41,7 +41,13 @@ pub struct Tile {
     pub id: String,
     pub kind: String,
     pub name: String,
+    /// For a poster of an IMDb title, RPDB's cover with the ratings band
+    /// drawn in (`Tile::rated_cover`); otherwise the addon's poster.
     pub poster: Option<String>,
+    /// The addon's own poster, for when `poster` is RPDB's and that image
+    /// does not load (an id RPDB does not know answers 404). `None` when
+    /// `poster` is the addon's own already.
+    pub poster_fallback: Option<String>,
     pub background: Option<String>,
     pub logo: Option<String>,
     pub poster_shape: String,
@@ -61,6 +67,37 @@ pub struct Tile {
     #[serde(skip)]
     #[cfg_attr(feature = "ts", ts(skip))]
     pub(crate) blurb: Option<Blurb>,
+}
+
+// ponytail: RPDB's public tier-0 key, as the owner's Rotten Tomatoes addon
+// uses it. Tier 0 serves `poster-default` only (IMDb, Metacritic, Rotten
+// Tomatoes); its `/requests` counter reads a limit of 9,999 whose scope
+// (per key, per address, per month) RPDB does not document; images may be
+// cached for personal use, so the apps' image caches must keep them. A
+// paid key (Patreon, from $2 a month) goes here if the free one runs out.
+const RPDB_KEY: &str = "t0-free-rpdb";
+const RPDB: &str = "https://api.ratingposterdb.com/";
+
+impl Tile {
+    /// The cover every poster-shaped tile of an IMDb title shows (the
+    /// owner, 2026-10-22): RPDB's poster with the IMDb, Metacritic and
+    /// Rotten Tomatoes band drawn in, the addon's own poster kept in
+    /// `poster_fallback` for when it does not load. `?fallback=true` makes
+    /// RPDB answer its plain poster for a title it has no ratings for; an
+    /// id it does not know still answers 404. Any other tile keeps the
+    /// addon's poster. A poster that is RPDB's already (an app sent a
+    /// cover back, as `playback`'s `poster`) is no fallback. Every tile
+    /// builder ends here.
+    pub(crate) fn rated_cover(mut self) -> Self {
+        if self.poster_shape == "poster" && crate::segments::is_imdb(&self.id) {
+            self.poster_fallback = self.poster.take().filter(|p| !p.starts_with(RPDB));
+            self.poster = Some(format!(
+                "{RPDB}{RPDB_KEY}/imdb/poster-default/{}.jpg?fallback=true",
+                self.id
+            ));
+        }
+        self
+    }
 }
 
 /// A catalog item's synopsis, genres and runtime, for when it becomes the hero.
@@ -894,7 +931,9 @@ pub(crate) fn tile_from_preview(m: mq_protocol::MetaItemPreview) -> Tile {
         ratings: Ratings::of(None, rating.as_deref()),
         rating,
         blurb: Some(blurb),
+        poster_fallback: None,
     }
+    .rated_cover()
 }
 
 /// The hero is the first catalog item with a background, never from Continue
@@ -1049,7 +1088,9 @@ pub(crate) fn kids_tile(row: &AllowedRow) -> Tile {
         rating: None,
         ratings: Ratings::default(),
         blurb: None,
+        poster_fallback: None,
     }
+    .rated_cover()
 }
 
 /// Whether a Continue Watching tile may show: the title passes the policy,
@@ -1230,7 +1271,9 @@ fn tile_for_next(meta: &mq_protocol::MetaItem, next: NextEpisode) -> Tile {
         rating: imdb_rating(p),
         ratings: Ratings::of(None, imdb_rating(p).as_deref()),
         blurb: None,
+        poster_fallback: None,
     }
+    .rated_cover()
 }
 
 /// The one caption every app shows under a Continue Watching tile:
@@ -1286,7 +1329,9 @@ fn tile_from_continue(item: ContinueItem, meta: Option<&mq_protocol::MetaItem>) 
         ratings: Ratings::of(None, preview.and_then(imdb_rating).as_deref()),
         rating: preview.and_then(imdb_rating),
         blurb: None,
+        poster_fallback: None,
     }
+    .rated_cover()
 }
 
 fn imdb_rating(p: &mq_protocol::MetaItemPreview) -> Option<String> {
@@ -1347,6 +1392,60 @@ mod tests {
         assert_eq!(super::kind_label("trakt"), None);
         assert_eq!(super::type_label("trakt"), "Other");
         assert_eq!(super::type_label("series"), "Series");
+    }
+
+    /// The owner, 2026-10-22: a poster of an IMDb title is RPDB's cover with
+    /// the ratings band, the addon's poster kept as its fallback; any other
+    /// tile keeps the addon's poster.
+    #[test]
+    fn an_imdb_poster_is_rpdbs_cover_with_the_addons_as_fallback() {
+        let tile = |id: &str, shape: &str, poster: Option<&str>| {
+            super::Tile {
+                id: id.into(),
+                kind: "movie".into(),
+                name: "x".into(),
+                poster: poster.map(str::to_owned),
+                poster_fallback: None,
+                background: None,
+                logo: None,
+                poster_shape: shape.into(),
+                release_info: None,
+                progress: None,
+                video_id: None,
+                rating: None,
+                ratings: Default::default(),
+                blurb: None,
+            }
+            .rated_cover()
+        };
+        let own = "https://images.metahub.space/poster/small/tt0111161/img";
+        let cover = tile("tt0111161", "poster", Some(own));
+        assert_eq!(
+            cover.poster.as_deref(),
+            Some(
+                "https://api.ratingposterdb.com/t0-free-rpdb/imdb/poster-default/tt0111161.jpg?fallback=true"
+            )
+        );
+        assert_eq!(cover.poster_fallback.as_deref(), Some(own));
+        // An IMDb title with no poster of its own still gets the cover.
+        assert!(tile("tt1", "poster", None).poster.is_some());
+        // Not an IMDb id, or not a poster: the addon's, no fallback.
+        for (id, shape) in [
+            ("kitsu:1", "poster"),
+            ("tt0111161", "landscape"),
+            ("tt", "poster"),
+        ] {
+            let t = tile(id, shape, Some(own));
+            assert_eq!(
+                (t.poster.as_deref(), t.poster_fallback),
+                (Some(own), None),
+                "{id} {shape}"
+            );
+        }
+        // A cover sent back (playback's `poster`) is no fallback.
+        let back = tile("tt0111161", "poster", cover.poster.as_deref());
+        assert_eq!(back.poster, cover.poster);
+        assert_eq!(back.poster_fallback, None);
     }
 
     #[test]

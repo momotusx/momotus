@@ -585,13 +585,15 @@ async fn an_unreadable_profile_reads_its_own_addons() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// Each tile's id, name and own poster: for an IMDb title the poster is
+/// RPDB's cover, so its own is the fallback.
 fn tile_faces(view: &HomeView, row: &str) -> Vec<(String, String, Option<String>)> {
     view.snapshot()
         .rows
         .into_iter()
         .filter(|r| r.row_id == row)
         .flat_map(|r| r.tiles)
-        .map(|t| (t.id, t.name, t.poster))
+        .map(|t| (t.id, t.name, t.poster_fallback.or(t.poster)))
         .collect()
 }
 
@@ -744,6 +746,16 @@ async fn a_kids_tiles_show_what_the_ratings_cache_holds() {
         })
     };
     let home = HomeView::open(&kid);
+    until("the kids row has RPDB's cover", || {
+        home.snapshot().rows.iter().any(|r| {
+            r.row_id == KIDS_ROW_ID
+                && r.tiles.iter().any(|t| {
+                    t.poster.as_deref()
+                        == Some("https://api.ratingposterdb.com/t0-free-rpdb/imdb/poster-default/tt1.jpg?fallback=true")
+                })
+        })
+    })
+    .await;
     until("the kids row is rated", || {
         home.snapshot()
             .rows

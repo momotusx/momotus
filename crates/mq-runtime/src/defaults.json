@@ -1171,7 +1171,7 @@
  },
  {
   "key": "rottentomatoes",
-  "url": "https://7a82163c306e-rottentomatoes.baby-beamup.club/manifest.json",
+  "url": "https://7a82163c306e-rottentomatoes.baby-beamup.club/%7B%22rpdb_key%22%3A%22t0-free-rpdb%22%7D/manifest.json",
   "name": "Rotten Tomatoes",
   "line": "Certified Fresh movies and shows.",
   "group": "lists",
@@ -1189,9 +1189,7 @@
      "title": "RPDB API Key"
     }
    ],
-   "behaviorHints": {
-    "configurable": true
-   },
+   "behaviorHints": {},
    "catalogs": [
     {
      "name": "RT: Certified Fresh",

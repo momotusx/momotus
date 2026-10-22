@@ -117,6 +117,17 @@ async fn rows_fill_in_place_and_mirror_matches_view() {
     assert_eq!(states[1], RowState::Ready);
     assert!(matches!(states[2], RowState::Failed { .. }));
     assert_eq!(mirror[0].tiles[0].name, "The Shawshank Redemption");
+    // RPDB's cover with the ratings band, the addon's poster as its fallback.
+    assert_eq!(
+        mirror[0].tiles[0].poster.as_deref(),
+        Some(
+            "https://api.ratingposterdb.com/t0-free-rpdb/imdb/poster-default/tt0111161.jpg?fallback=true"
+        )
+    );
+    assert_eq!(
+        mirror[0].tiles[0].poster_fallback.as_deref(),
+        Some("https://images.metahub.space/poster/medium/tt0111161/img")
+    );
     let hero = view
         .snapshot()
         .header
@@ -177,6 +188,12 @@ async fn continue_watching_appears_live_at_the_top() {
     let tile = &mirror[0].tiles[0];
     assert_eq!(tile.video_id.as_deref(), Some("tt0944947:1:3"));
     assert!((tile.progress.unwrap() - 0.2).abs() < 1e-4);
+    assert_eq!(
+        tile.poster.as_deref(),
+        Some(
+            "https://api.ratingposterdb.com/t0-free-rpdb/imdb/poster-default/tt0944947.jpg?fallback=true"
+        )
+    );
 }
 
 /// Journey reviews 2026-10-20 (web P2-10, Apple P2-3, Android P2-1):
@@ -369,6 +386,12 @@ async fn a_finished_episode_leaves_its_next_one_in_continue_watching() {
     assert_eq!(tile.video_id.as_deref(), Some("tt9:1:2"));
     assert_eq!(tile.release_info.as_deref(), Some("Next: S1:E2"));
     assert_eq!(tile.progress, None);
+    assert_eq!(
+        tile.poster.as_deref(),
+        Some(
+            "https://api.ratingposterdb.com/t0-free-rpdb/imdb/poster-default/tt9.jpg?fallback=true"
+        )
+    );
     // The hero features a catalog, never the first Continue Watching tile
     // right below it; with no catalog rows there is none.
     assert!(view.snapshot().header.hero.is_none());

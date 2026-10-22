@@ -176,11 +176,19 @@ const DEFAULTS_MOVED: &str = "defaultsMoved.";
 
 /// Links a default was installed with before it moved, by key. Trakt Tv's
 /// old deployment answers `{}` whenever its own call to Trakt fails, and its
-/// author points to the maintained one (the owner, 2026-10-22).
-const MOVED: [(&str, &str); 1] = [(
-    "trakt",
-    "https://2ecbbd610840-trakt.baby-beamup.club/manifest.json",
-)];
+/// author points to the maintained one; the Rotten Tomatoes addon is the
+/// owner's own, configured with RPDB's free key, so its posters carry the
+/// ratings band (the owner, 2026-10-22).
+const MOVED: [(&str, &str); 2] = [
+    (
+        "trakt",
+        "https://2ecbbd610840-trakt.baby-beamup.club/manifest.json",
+    ),
+    (
+        "rottentomatoes",
+        "https://7a82163c306e-rottentomatoes.baby-beamup.club/manifest.json",
+    ),
+];
 
 impl Core {
     /// Puts every default a profile never had in its list once, on, for

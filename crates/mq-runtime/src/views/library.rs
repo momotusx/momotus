@@ -257,7 +257,9 @@ fn tile(e: &LibraryEntry) -> Tile {
         rating: None,
         ratings: crate::ratings::Ratings::default(),
         blurb: None,
+        poster_fallback: None,
     }
+    .rated_cover()
 }
 
 /// Where the user is with a title, in Continue Watching's words: "S2:E3 ·

@@ -149,3 +149,47 @@ async fn unknown_types_share_one_other_chip() {
     view.set_filter(Some("other".into()));
     assert_eq!(names(&view), ["Bravo", "Charlie"]);
 }
+
+/// A library title with an IMDb id shows RPDB's cover with the ratings
+/// band, its own poster kept as the fallback; any other id keeps its own.
+#[tokio::test]
+async fn library_covers_carry_the_ratings_band() {
+    let core = Core::temporary("p").unwrap();
+    for (id, kind) in [("tt0111161", "movie"), ("kitsu:1", "series")] {
+        let row = LibraryItemRow {
+            item_id: id.into(),
+            kind: kind.into(),
+            name: id.into(),
+            poster: Some(format!("https://img.example/{id}.jpg")),
+            poster_shape: None,
+            added_ms: 1,
+        };
+        core.library()
+            .upsert_item(core.profile(), &row, true, &core.hlc())
+            .unwrap();
+    }
+    let view = LibraryView::open(&core);
+    let covers: Vec<(String, Option<String>, Option<String>)> = view
+        .snapshot()
+        .items
+        .into_iter()
+        .map(|t| (t.id, t.poster, t.poster_fallback))
+        .collect();
+    let rpdb = "https://api.ratingposterdb.com/t0-free-rpdb/imdb/poster-default/tt0111161.jpg?fallback=true";
+    assert!(
+        covers.contains(&(
+            "tt0111161".into(),
+            Some(rpdb.into()),
+            Some("https://img.example/tt0111161.jpg".into())
+        )),
+        "{covers:?}"
+    );
+    assert!(
+        covers.contains(&(
+            "kitsu:1".into(),
+            Some("https://img.example/kitsu:1.jpg".into()),
+            None
+        )),
+        "{covers:?}"
+    );
+}

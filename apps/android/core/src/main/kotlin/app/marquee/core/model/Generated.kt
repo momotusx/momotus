@@ -1566,7 +1566,10 @@ data class Tile(
     val id: String,
     val kind: String,
     val name: String,
+    /** For a poster of an IMDb title, RPDB's cover with the ratings band drawn in (`Tile::rated_cover`); otherwise the addon's poster. */
     val poster: String? = null,
+    /** The addon's own poster, for when `poster` is RPDB's and that image does not load (an id RPDB does not know answers 404). `None` when `poster` is the addon's own already. */
+    val posterFallback: String? = null,
     val background: String? = null,
     val logo: String? = null,
     val posterShape: String,

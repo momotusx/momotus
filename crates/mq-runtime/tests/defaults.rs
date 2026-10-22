@@ -904,3 +904,41 @@ async fn an_old_trakt_beside_the_new_one_goes_and_no_trakt_stays_none() {
     let core = device.start();
     assert!(urls(&core).iter().all(|(u, _)| !u.contains("trakt")));
 }
+
+/// The owner, 2026-10-22: the Rotten Tomatoes addon is his own, configured
+/// with RPDB's free key, so its posters carry the ratings band. A profile on
+/// the plain link moves to it once, its switch and place kept.
+#[tokio::test]
+async fn the_rotten_tomatoes_addon_moves_to_the_owners_configured_link() {
+    const PLAIN: &str = "https://7a82163c306e-rottentomatoes.baby-beamup.club/manifest.json";
+    assert!(url("rottentomatoes").contains("rpdb_key"));
+    let device = Device::new("rt-moved");
+    let core = device.start();
+    let rows: Vec<AddonRow> = ["cinemeta", "rottentomatoes", "opensubtitles"]
+        .iter()
+        .enumerate()
+        .map(|(position, key)| {
+            let d = defaults::list().iter().find(|d| d.key == *key).unwrap();
+            let rt = *key == "rottentomatoes";
+            AddonRow {
+                transport_url: if rt { PLAIN.into() } else { d.url.clone() },
+                manifest_json: serde_json::to_string(&d.manifest).unwrap(),
+                position: position as i64,
+                enabled: !rt,
+                allow_private: false,
+            }
+        })
+        .collect();
+    core.library()
+        .set_addons(OWNER, &rows, &core.hlc())
+        .unwrap();
+    drop(core);
+    let core = device.start();
+    let rows = urls(&core);
+    assert_eq!(
+        rows[1],
+        (url("rottentomatoes"), false),
+        "same place, still off"
+    );
+    assert!(rows.iter().all(|(u, _)| u != PLAIN));
+}
