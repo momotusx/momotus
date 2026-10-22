@@ -51,9 +51,30 @@ test("desktop: a wheel run over Home paints little", async ({ browser }) => {
   });
   report("desktop-home-wheel", result);
   expect(result.paintMs, JSON.stringify(result)).toBeLessThan(60);
-  // No live blur over the shelves: baseline 1.4 to 1.6 (one pass a frame, a second while a picture
-  // fades); a live blur adds a pass to every frame.
-  expect(result.passesPerFrame, JSON.stringify(result)).toBeLessThanOrEqual(2);
+  // No live blur over the shelves: baseline 1.0 since phase 2 step 2 (1.4 to 1.7 before, while the hero's
+  // secondaries blurred); a live blur adds a pass to every frame.
+  expect(result.passesPerFrame, JSON.stringify(result)).toBeLessThanOrEqual(1.5);
+  await page.close();
+});
+
+test("desktop: a trackpad fling over Home paints little", async ({ browser }) => {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await page.goto("/?form=desktop");
+  await expect(page.locator(".row .tile img.in").first()).toBeVisible({ timeout: 30_000 });
+  await page.waitForTimeout(1500);
+  // Wheel deltas decaying from 160 px a frame, down then up, the pointer over the shelves.
+  const result = await traced(page, browser, async () => {
+    await page.mouse.move(720, 600);
+    for (const dir of [1, -1]) {
+      for (let v = 160; v > 4; v *= 0.93) {
+        await page.mouse.wheel(0, dir * v);
+        await page.waitForTimeout(16);
+      }
+    }
+  });
+  report("desktop-home-fling", result);
+  expect(result.paintMs, JSON.stringify(result)).toBeLessThan(60);
+  expect(result.passesPerFrame, JSON.stringify(result)).toBeLessThanOrEqual(1.5);
   await page.close();
 });
 
@@ -76,8 +97,9 @@ test("TV: Play to Continue Watching and back paints little", async ({ browser })
   report("tv-home-play-row", result);
   // The tile's lift shadow transitions over the hero's ramp while the page moves (about 700 px each way).
   expect(result.paintMs, JSON.stringify(result)).toBeLessThan(80);
-  // Baseline 2.3 to 2.6 (the page and the hero's art as separate passes); a live blur adds one a frame.
-  expect(result.passesPerFrame, JSON.stringify(result)).toBeLessThanOrEqual(3);
+  // Baseline 58 to 63 ms and 1.0 pass a frame since phase 2 step 2 (the hero's secondaries lost their
+  // 20 px blur: 2.9 passes before); a live blur over the art adds a pass to every frame.
+  expect(result.passesPerFrame, JSON.stringify(result)).toBeLessThanOrEqual(1.5);
   // Held keys glide only with fix/scroll-web's dom.ts; until it lands this branch scrolls with the
   // browser's smooth scroll, so its hitches are not asserted here.
   test.info().annotations.push({ type: "skipped assert", description: "TV hitches: glide lands with fix/scroll-web" });
@@ -110,7 +132,7 @@ test("phone: a fling down Home and back paints little", async ({ browser }) => {
   expect(scrolled).toBeGreaterThan(400);
   // Baseline 3 ms of paint and 1.8 to 1.9 passes (step 4).
   expect(result.paintMs, JSON.stringify(result)).toBeLessThan(30);
-  // The floating tab bar's glass is the one live blur: one more pass a frame.
-  expect(result.passesPerFrame, JSON.stringify(result)).toBeLessThanOrEqual(3);
+  // The floating tab bar's glass is the one live blur, kept (cheap: 3 ms): 1.8 to 1.9 passes a frame.
+  expect(result.passesPerFrame, JSON.stringify(result)).toBeLessThanOrEqual(2.5);
   await context.close();
 });

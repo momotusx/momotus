@@ -106,6 +106,8 @@ export function Poster(props: {
   top?: boolean;
 }) {
   const [failed, setFailed] = createSignal(0);
+  // A new picture starts again from its own source, as Backdrop does.
+  createEffect(on(() => props.src, () => setFailed(0), { defer: true }));
   const src = () => [props.src, props.fallback].filter((s): s is string => !!s)[failed()];
   return (
     <>

@@ -266,6 +266,8 @@ export default function Home() {
   // lands after the focus went to the row anyway (restore's late fallback) takes it back, with the page
   // at its top, unless the viewer has pressed a key since Home opened.
   const rowFirst = () => !hero() && !waiting();
+  // Read when Home mounts. The Home view stays alive across Back, so a Back-restored tile is not pulled to
+  // Play by a late hero; if Home ever re-subscribes on Back, skip the return after a restore.
   const opened = inputCount();
   createEffect(
     on(

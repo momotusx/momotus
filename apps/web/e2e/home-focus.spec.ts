@@ -44,12 +44,14 @@ function apply(list: Row[], d: Diff): Row[] {
 }
 
 const loading = (r: Row): Row => (r.rowId === "continue-watching" ? r : { ...r, state: { state: "loading" }, tiles: [] });
+const failing = (r: Row): Row => (r.rowId === "continue-watching" ? r : { ...r, state: { state: "failed", reason: "offline" } as Row["state"], tiles: [] });
 
 /** A TV page whose Home is held at the socket for `ms` from its subscription, then shown as it
- * really is (a reset to the real rows and the real header). "catalogs": the page sees Continue
- * Watching and every catalog still loading, no hero. "hero": the page sees every row as it comes,
- * only the hero is held back. */
-async function held(browser: Browser, mode: "catalogs" | "hero", ms: number) {
+ * really is (a reset to the real rows and the real header); `ms` Infinity never lets go. "catalogs":
+ * the page sees Continue Watching and every catalog still loading, no hero. "hero": every row as it
+ * comes, only the hero held back (with Infinity: a Home with no hero by design, as a kids profile's).
+ * "failed": Continue Watching and every catalog failed, so no hero. */
+async function held(browser: Browser, mode: "catalogs" | "hero" | "failed", ms: number) {
   const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, reducedMotion: "reduce" });
   await context.routeWebSocket(/\/ws$/, (ws) => {
     const core = ws.connectToServer();
@@ -58,7 +60,7 @@ async function held(browser: Browser, mode: "catalogs" | "hero", ms: number) {
     let holding = false;
     let rows: Row[] = [];
     let header: { hero: unknown } = { hero: null };
-    const shown = (list: Row[]) => (mode === "catalogs" ? list.map(loading) : list);
+    const shown = (list: Row[]) => (mode === "catalogs" ? list.map(loading) : mode === "failed" ? list.map(failing) : list);
     ws.onMessage((m) => {
       const msg = JSON.parse(String(m));
       if (msg.op === "subscribe" && msg.view === "home") homeId = msg.id;
@@ -70,10 +72,11 @@ async function held(browser: Browser, mode: "catalogs" | "hero", ms: number) {
         sub = msg.result.sub;
         holding = true;
         ({ rows, header } = msg.result.snapshot);
-        setTimeout(() => {
-          holding = false;
-          ws.send(JSON.stringify({ sub, updates: [{ kind: "rows", diffs: [{ op: "reset", values: rows }] }, { kind: "header", header }] }));
-        }, ms);
+        if (ms !== Infinity)
+          setTimeout(() => {
+            holding = false;
+            ws.send(JSON.stringify({ sub, updates: [{ kind: "rows", diffs: [{ op: "reset", values: rows }] }, { kind: "header", header }] }));
+          }, ms);
         return void ws.send(JSON.stringify({ ...msg, result: { ...msg.result, snapshot: { header: { hero: null }, rows: shown(rows) } } }));
       }
       if (!holding || msg.sub !== sub) return void ws.send(m);
@@ -124,7 +127,12 @@ test("TV: while the catalogs are on their way nothing takes the focus, then Play
   await page.waitForTimeout(1000);
   expect(await focused(page)).toBe(null);
   expect(await top(page)).toBe(0);
+  // A movie row still loading already has its final height (16:9 stills, the 84 caption): nothing below jumps.
+  const movies = page.locator('.row[data-fgroup*=":movie:"] .row-body').first();
+  const loadingHeight = await movies.evaluate((el) => (el as HTMLElement).offsetHeight);
   await expect.poll(() => focused(page), { timeout: 10_000 }).toBe("hero:play");
+  await expect(page.locator('.row[data-fgroup*=":movie:"] .tile').first()).toBeAttached({ timeout: 10_000 });
+  expect(await movies.evaluate((el) => (el as HTMLElement).offsetHeight)).toBe(loadingHeight);
   await page.waitForTimeout(500);
   expect(await top(page)).toBe(0);
   await page.context().close();
@@ -137,4 +145,33 @@ test("TV: a hero that lands after the row took the focus takes it back, with the
   await expect.poll(() => focused(page), { timeout: 15_000 }).toBe("hero:play");
   await expect.poll(() => top(page)).toBe(0);
   await page.context().close();
+});
+
+test("TV: with no hero and none coming, Continue Watching takes the first focus at once", async ({ browser }) => {
+  // Every row answers and no hero comes (a kids profile's Home, or posters only).
+  const page = await held(browser, "hero", Infinity);
+  await expect.poll(() => focused(page), { timeout: 2000 }).toBe(cw(BBB_ID));
+  await expect(page.locator(".hero.closed")).toHaveCount(1);
+  expect(await top(page)).toBe(0);
+  await page.context().close();
+});
+
+test("TV: with every catalog failed, Continue Watching takes the first focus at once", async ({ browser }) => {
+  const page = await held(browser, "failed", Infinity);
+  await expect.poll(() => focused(page), { timeout: 2000 }).toBe(cw(BBB_ID));
+  await page.context().close();
+});
+
+test("desktop: a key on a fresh Home focuses Play with the page at its top", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+  const page = await context.newPage();
+  await page.goto("/?form=desktop");
+  await expect(page.locator(`[data-f="${cw(BBB_ID)}"]`)).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('[data-f="hero:play"]')).toBeVisible();
+  // Off the TV nothing is focused until a key says the viewer uses the keyboard.
+  expect(await focused(page)).toBe(null);
+  await page.keyboard.press("ArrowDown");
+  await expect.poll(() => focused(page)).toBe("hero:play");
+  expect(await top(page)).toBe(0);
+  await context.close();
 });

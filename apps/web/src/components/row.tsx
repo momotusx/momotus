@@ -249,7 +249,10 @@ export function Row(props: {
   // Continue Watching is a row of 16:9 stills; on TV a movie row is too and a series row is
   // 2:3 posters (design/DECISION.md, Shelves); other catalogs keep the shape their addon names.
   const wide = () => props.row.rowId === CONTINUE_ROW;
-  const still = () => !wide() && form() === "tv" && props.row.tiles[0]?.kind === "movie";
+  // A row still loading has no tile to tell its kind: its id names it (`<addonId>:<type>:<catalogId>`,
+  // HomeRows), so its skeleton already has the final height and nothing below jumps when tiles arrive.
+  const kind = () => props.row.tiles[0]?.kind ?? props.row.rowId.split(":")[1];
+  const still = () => !wide() && form() === "tv" && kind() === "movie";
   const size = () => (wide() || still() ? m().landscape : sizeOf(m(), props.row.tiles[0]?.posterShape));
   const stride = () => size()[0] + m().gap;
   // Captions under the art: every TV tile; elsewhere Continue Watching alone (posters show none).

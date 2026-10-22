@@ -98,7 +98,11 @@ async function open(browser: Browser, path: string): Promise<Page> {
 }
 
 const noAddonName = async (page: Page) => {
-  const text = await page.evaluate(() => document.body.innerText);
+  // Open every disclosure first: a failure's raw reason sits in a closed <details>, which innerText skips.
+  const text = await page.evaluate(() => {
+    for (const d of document.querySelectorAll("details")) d.open = true;
+    return document.body.innerText;
+  });
   for (const name of NAMES) expect(text).not.toContain(name);
   expect(text).not.toMatch(/\b(Alpha|Beta) Catalogs\b/);
 };
