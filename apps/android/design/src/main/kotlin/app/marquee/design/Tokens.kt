@@ -134,6 +134,7 @@ data class TileMetrics(
     val inset: Dp,
     val peek: Dp,
     val caption: Dp,
+    val captionPoster: Dp,
 )
 
 object Tokens {
@@ -288,6 +289,7 @@ object Tokens {
             inset = 34.dp,
             peek = 140.dp,
             caption = 84.dp,
+            captionPoster = 116.dp,
         )
 
     val phoneTiles = TileMetrics(
@@ -299,6 +301,7 @@ object Tokens {
             inset = 20.dp,
             peek = 40.dp,
             caption = 46.dp,
+            captionPoster = 46.dp,
         )
 
     val weight = Weights(

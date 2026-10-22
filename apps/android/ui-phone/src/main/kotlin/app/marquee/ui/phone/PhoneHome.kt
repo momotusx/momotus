@@ -250,7 +250,7 @@ private fun PhoneHero(
                 }.clickable(role = Role.Button, onClickLabel = "Details of ${tile.name}") { onOpen(tile) },
         ) {
             Backdrop(
-                tile.background ?: tile.poster,
+                TileCopy.art(tile, wide = true).first,
                 Modifier.matchParentSize(),
                 foot = Scrims.phoneHomeFoot,
                 top = Scrims.phoneHomeTop,
@@ -439,9 +439,11 @@ private fun TileLane(
         horizontalArrangement = Arrangement.spacedBy(metrics.gap),
     ) {
         itemsIndexed(row.tiles, key = { index, _ -> keys[index] }) { _, tile ->
+            val (art, fallback) = TileCopy.art(tile, wide = shape == TileShape.Landscape)
             PosterTile(
                 title = tile.name,
-                imageUrl = if (shape == TileShape.Landscape) tile.background ?: tile.poster else tile.poster,
+                imageUrl = art,
+                fallbackImageUrl = fallback,
                 onClick = { onOpen(tile) },
                 modifier = Modifier.padding(top = metrics.pad),
                 shape = shape,

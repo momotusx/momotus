@@ -413,9 +413,11 @@ internal fun Poster(
     onOpen: (Tile) -> Unit,
     caption: String? = tile.releaseInfo,
 ) {
+    val (art, fallback) = TileCopy.art(tile, wide = false)
     PosterTile(
         title = tile.name,
-        imageUrl = tile.poster,
+        imageUrl = art,
+        fallbackImageUrl = fallback,
         onClick = { onOpen(tile) },
         modifier = Modifier.padding(top = Marquee.tiles.pad),
         progress = tile.progress,

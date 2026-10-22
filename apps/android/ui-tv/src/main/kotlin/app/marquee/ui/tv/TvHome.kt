@@ -385,7 +385,7 @@ private fun TopShelfArt(
     // Known without seeing the hero: back from a title page the list can come back with the hero already gone.
     val (gap, hero) = with(LocalDensity.current) { Marquee.space.s.roundToPx() to heroHeight().roundToPx() }
     Backdrop(
-        tile.background ?: tile.poster,
+        TileCopy.art(tile, wide = true).first,
         Modifier
             .layout { measurable, constraints ->
                 val up = room.roundToPx()
@@ -669,9 +669,11 @@ private fun TvTile(
         onDispose { state.focus.detach(key, requester) }
     }
     val wide = shape == TileShape.Landscape
+    val (art, fallback) = TileCopy.art(tile, wide)
     PosterTile(
         title = tile.name,
-        imageUrl = if (wide) tile.background ?: tile.poster else tile.poster,
+        imageUrl = art,
+        fallbackImageUrl = fallback,
         onClick = { onOpen(tile) },
         modifier = Modifier.padding(top = Marquee.tiles.pad),
         shape = shape,

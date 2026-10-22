@@ -120,19 +120,25 @@ class RatingsTest {
     }
 
     @Test
-    fun `a poster's caption carries the scores under the art, read with the title, and a bare poster has none`() {
-        var ratings by mutableStateOf(listOf("IMDb 8.8", "RT 87%"))
+    fun `a tile's caption is its name and year, the cover shows the scores, and they are still read with the title`() {
         var captioned by mutableStateOf(true)
         compose.setContent {
             MarqueeTheme(
                 Form.Tv,
-            ) { PosterTile("Inception", null, {}, caption = "2010", ratings = ratings, captioned = captioned) }
+            ) {
+                PosterTile(
+                    "Inception",
+                    null,
+                    {},
+                    caption = "2010",
+                    ratings = listOf("IMDb 8.8", "RT 87%"),
+                    captioned = captioned,
+                )
+            }
         }
-        assertEquals(1, count("IMDb 8.8"))
-        assertEquals(1, count("RT 87%"))
-        val art = compose.onNodeWithContentDescription("Inception").fetchSemanticsNode().boundsInRoot
-        val score = compose.onNodeWithText("IMDb 8.8", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-        assertTrue(score.top >= art.bottom, "the score sits on the art")
+        assertEquals(0, count("IMDb 8.8"))
+        assertEquals(0, count("RT 87%"))
+        assertEquals(1, count("2010"))
         // The scores are read with the title, after the year.
         compose.onNodeWithContentDescription("Inception").assert(
             SemanticsMatcher.expectValue(
@@ -140,13 +146,9 @@ class RatingsTest {
                 "2010, IMDb 8.8, Rotten Tomatoes 87 percent",
             ),
         )
-        ratings = listOf("IMDb 8.8")
-        compose.waitForIdle()
-        assertEquals(0, count("RT 87%"))
-        // The phone's Home posters are the art alone: no name, no year, no scores.
+        // The phone's Home posters are the art alone: no name, no year.
         captioned = false
         compose.waitForIdle()
-        assertEquals(0, count("IMDb 8.8"))
         assertEquals(0, count("2010"))
     }
 }

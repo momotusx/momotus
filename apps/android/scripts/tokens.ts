@@ -19,6 +19,8 @@ interface TileSet {
   inset: number;
   peek: number;
   caption: number;
+  /** A poster lane's caption room where it differs from the 16:9 one (TV). */
+  captionPoster?: number;
 }
 export interface Tokens {
   color: { dark: Record<string, string>; light: Record<string, string> };
@@ -79,6 +81,7 @@ function tileSet(t: TileSet): string {
     ["inset", dp(t.inset)],
     ["peek", dp(t.peek)],
     ["caption", dp(t.caption)],
+    ["captionPoster", dp(t.captionPoster ?? t.caption)],
   ]);
 }
 
@@ -150,6 +153,7 @@ export function generate(t: Tokens): string {
       ["inset", "Dp"],
       ["peek", "Dp"],
       ["caption", "Dp"],
+      ["captionPoster", "Dp"],
     ]),
     "object Tokens {",
     `    val dark = ${palette(t.color.dark)}`,

@@ -54,9 +54,9 @@ fun captionHeight(): Dp {
 }
 
 /**
- * The height of a row of [shape] tiles: room for the focus scale above and below, then the caption, which on a
- * poster is three lines (the name, the year, the ratings row; [PosterTile]). A [captioned] false row is the art
- * alone (the phone's Home posters).
+ * The height of a row of [shape] tiles: room for the focus scale above and below, then the caption's room from the
+ * tokens (the name and its line, [PosterTile]), which grows only when a larger font needs more. A [captioned] false
+ * row is the art alone (the phone's Home posters).
  */
 @Composable
 fun TileMetrics.laneHeight(
@@ -64,25 +64,24 @@ fun TileMetrics.laneHeight(
     captioned: Boolean = true,
 ): Dp {
     if (!captioned) return pad * 2 + heightOf(shape)
-    val poster =
-        if (shape ==
-            TileShape.Poster
-        ) {
-            with(LocalDensity.current) { Marquee.type.caption.toDp() * LINE }
-        } else {
-            0.dp
-        }
-    return pad * 2 + heightOf(shape) + Marquee.space.s + captionHeight() + poster
+    val room = if (shape == TileShape.Poster) captionPoster else caption
+    // ponytail: the token at the default font size; a larger one takes what its two lines measure.
+    val text = if (LocalDensity.current.fontScale > 1f) Marquee.space.s + captionHeight() else 0.dp
+    return pad * 2 + heightOf(shape) + maxOf(room, text)
 }
 
 /** `MqText`'s line height for text roles. */
 private const val LINE = 1.4f
 
+// ponytail: the phone's caption room (tile.phone.caption, 46) less its two lines (34 measured); a token if web and
+// Apple ever need the gap itself.
+private val PHONE_CAPTION_GAP = 12.dp
+
 /**
- * A title in a row or grid (design/DECISION.md, Shelves and cards): the picture, then the name and its lines
- * under it, never over it. [caption] is the core's own words (Continue Watching, Library) or the year. A
- * poster's caption is always two lines, the year and then the ratings row ([RatingsRow]), so a row's captions
- * align; a 16:9 card puts the ratings after its line. The name at 600, the lines at 64 percent, neither
+ * A title in a row or grid (design/DECISION.md, Shelves and cards): the picture, then the name and its line
+ * under it, never over it. [caption] is the core's own words (Continue Watching, Library) or the year. The scores
+ * are in the cover itself (RPDB's band), so the caption is the name and that line, always two lines so a row's
+ * captions align; a screen reader still hears the scores. The name at 600, the line at 64 percent, neither
  * changing on focus. [captioned] false is the art alone (the phone's Home posters). The art carries the 25 percent inner keyline (design/DECISION.md, Lines). Focus
  * lifts the card (on TV with its shadow and the sheen on the art, on a phone with the key ring).
  * Everything is a plain value, so the design module knows nothing of the core.
@@ -98,7 +97,7 @@ fun PosterTile(
     fallbackImageUrl: String? = null,
     progress: Float? = null,
     caption: String? = null,
-    /** The scores side by side as plain text ("IMDb 8.4", "RT 87%"), in the caption under the art. */
+    /** The scores as plain text ("IMDb 8.4", "RT 87%"), read out after the title; the cover shows them. */
     ratings: List<String> = emptyList(),
     /** False leaves the caption out: the art alone. */
     captioned: Boolean = true,
@@ -127,8 +126,9 @@ fun PosterTile(
     Column(
         // First in the chain: the focused tile draws above its neighbours in the row.
         modifier = Modifier.lifted(lift).then(modifier).width(size.width),
-        // The caption starts a full step under the unscaled card, so a focused card's lift rarely covers it.
-        verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
+        // The caption starts a full step under the unscaled card on TV, so a focused card's lift rarely covers it; on a
+        // phone 12 dp, so its two lines end inside the tokens' caption room.
+        verticalArrangement = Arrangement.spacedBy(if (Marquee.form == Form.Tv) Marquee.space.s else PHONE_CAPTION_GAP),
     ) {
         Box(
             Modifier
@@ -159,22 +159,14 @@ fun PosterTile(
         // Read as part of the tile above.
         Column(Modifier.clearAndSetSemantics { }) {
             MqText(title, role = TextRole.Callout, weight = FontWeight.SemiBold, maxLines = 1)
-            val line: @Composable (String) -> Unit = {
-                MqText(it, role = TextRole.Caption, color = colors.dim, weight = FontWeight.Medium, maxLines = 1)
-            }
-            if (shape == TileShape.Poster) {
-                // Two lines whatever the title has, so every poster of a row ends level.
-                line(caption.orEmpty())
-                if (ratings.isNotEmpty()) RatingsRow(ratings, wrap = true) else line("")
-            } else {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    if (caption != null) line(caption)
-                    RatingsRow(ratings)
-                }
-            }
+            // Two lines whatever the title has, so every tile of a row ends level.
+            MqText(
+                caption.orEmpty(),
+                role = TextRole.Caption,
+                color = colors.dim,
+                weight = FontWeight.Medium,
+                maxLines = 1,
+            )
         }
     }
 }

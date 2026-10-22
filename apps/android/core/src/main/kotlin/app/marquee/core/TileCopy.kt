@@ -82,6 +82,20 @@ object TileCopy {
     fun ratings(ratings: Ratings): List<String> =
         listOfNotNull(ratings.imdb?.let { "IMDb $it" }, ratings.rottenTomatoes?.let { "RT $it" })
 
+    /**
+     * A tile's picture and what shows when it does not load. A cover is the core's poster, RPDB's with the ratings
+     * band drawn in for an IMDb title, then the addon's own (an id RPDB does not know answers 404). A 16:9 card and
+     * the hero ([wide]) show the backdrop, else the addon's own poster: never a cover with ratings drawn in.
+     */
+    fun art(
+        tile: Tile,
+        wide: Boolean,
+    ): Pair<String?, String?> {
+        if (!wide) return tile.poster to tile.posterFallback
+        val plain = tile.posterFallback ?: tile.poster
+        return (tile.background ?: plain) to plain.takeIf { tile.background != null }
+    }
+
     /** A hero's genre line: the kind, then its genres ("Series · Drama · Thriller"). */
     fun heroGenres(hero: Hero): String = (listOf(kind(hero.tile.kind)) + hero.genres).joinToString(" · ")
 

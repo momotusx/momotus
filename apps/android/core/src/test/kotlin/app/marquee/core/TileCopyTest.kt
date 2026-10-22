@@ -49,6 +49,25 @@ class TileCopyTest {
     }
 
     @Test
+    fun `a cover is RPDB's rated poster then the addon's, and wide art never shows the ratings band`() {
+        val rpdb = "https://api.ratingposterdb.com/k/imdb/poster-default/tt1.jpg"
+        val rated =
+            tile().copy(
+                poster = rpdb,
+                posterFallback = "https://addon/p.jpg",
+                background = "https://addon/b.jpg",
+            )
+        assertEquals(rpdb to "https://addon/p.jpg", TileCopy.art(rated, wide = false))
+        assertEquals("https://addon/b.jpg" to "https://addon/p.jpg", TileCopy.art(rated, wide = true))
+        // No backdrop: the 16:9 card and the hero take the addon's poster, not RPDB's.
+        assertEquals("https://addon/p.jpg" to null, TileCopy.art(rated.copy(background = null), wide = true))
+        // A poster that is the addon's own already has no fallback.
+        val plain = tile().copy(poster = "https://addon/p.jpg")
+        assertEquals("https://addon/p.jpg" to null, TileCopy.art(plain, wide = false))
+        assertEquals("https://addon/p.jpg" to null, TileCopy.art(plain, wide = true))
+    }
+
+    @Test
     fun `other rows have no caption, their release info is the year`() {
         assertNull(TileCopy.caption("a:movie:top", tile(releaseInfo = "2010")))
         assertNull(TileCopy.caption(TileCopy.CONTINUE_ROW, tile()))
