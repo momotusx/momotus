@@ -204,6 +204,18 @@ async fn versions_then_playback_then_progress() {
             "command": {"type": "duration", "key": "another-version", "durationMs": 888000}})))
         .await;
     assert_eq!(next(&mut rx).await["ok"], true);
+    // `subtitleDelay` needs its ms; a URL that is not the core's track (an
+    // in-file one) is accepted and changes nothing.
+    session
+        .handle_text(&request(json!({"id": 45, "op": "command", "sub": playback,
+            "command": {"type": "subtitleDelay", "url": "http://127.0.0.1:1/x.vtt"}})))
+        .await;
+    assert_eq!(next(&mut rx).await["ok"], false);
+    session
+        .handle_text(&request(json!({"id": 46, "op": "command", "sub": playback,
+            "command": {"type": "subtitleDelay", "url": "http://127.0.0.1:1/x.vtt", "ms": -1300}})))
+        .await;
+    assert_eq!(next(&mut rx).await["ok"], true);
     // A failOver about a source already given up on leaves this one playing.
     let gone = ready["attempt"].as_u64().unwrap() - 1;
     session
