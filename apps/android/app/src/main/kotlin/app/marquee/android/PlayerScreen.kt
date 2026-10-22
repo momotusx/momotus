@@ -14,7 +14,6 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import app.marquee.core.Format
 import app.marquee.core.PlayPick
 import app.marquee.core.VersionsCopy
-import app.marquee.core.client.CoreLog
 import app.marquee.core.model.NextEpisode
 import app.marquee.core.model.SubtitleSize
 import app.marquee.core.model.VersionRow
@@ -28,6 +27,7 @@ import app.marquee.design.Form
 import app.marquee.player.PlaybackController
 import app.marquee.player.PlayerHost
 import app.marquee.player.PlayerLifecycle
+import app.marquee.player.SizeSetting
 import app.marquee.ui.phone.PhonePlayer
 import app.marquee.ui.tv.TvPlayer
 import kotlinx.coroutines.CancellationException
@@ -81,13 +81,27 @@ class PlayerHolder(
     /** Start the next episode by itself when one ends. */
     val autoplayNext: Boolean get() = prefs.snapshot?.autoplayNext == true
 
+    /** The picker's Size: shown at once, and kept as the profile's setting, as Settings sets it. */
+    private val sizes =
+        SizeSetting(
+            viewModelScope,
+            write = { size ->
+                session.ops
+                    .setPrefs(buildJsonObject { put("subtitleSize", JsonPrimitive(size.wire)) })
+                    .subtitleSize
+            },
+            show = { controller.subtitleSize = it },
+        )
+
+    fun setSubtitleSize(size: SubtitleSize) = sizes.pick(size)
+
     init {
         viewModelScope.launch { start() }
         // Subtitles show at the profile's size, and follow it when Settings change it.
         viewModelScope.launch {
             snapshotFlow {
                 prefs.snapshot?.subtitleSize
-            }.collect { controller.subtitleSize = it ?: SubtitleSize.Medium }
+            }.collect { sizes.fromProfile(it ?: SubtitleSize.Medium) }
         }
         viewModelScope.launch {
             snapshotFlow { art.header?.details }.collect {
@@ -107,20 +121,6 @@ class PlayerHolder(
                     .firstOrNull { it.key == playing }
                     ?.let { VersionsCopy.cell(it.quality) }
             }.collect { controller.versionLabel = it }
-        }
-    }
-
-    /** The picker's Size: shown at once, and kept as the profile's setting, as Settings sets it. */
-    fun setSubtitleSize(size: SubtitleSize) {
-        controller.subtitleSize = size
-        viewModelScope.launch {
-            try {
-                session.ops.setPrefs(buildJsonObject { put("subtitleSize", JsonPrimitive(size.wire)) })
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                CoreLog.w("the subtitle size was not kept: ${e.message}")
-            }
         }
     }
 

@@ -211,6 +211,9 @@ class SubtitleLanguagesTest {
         assertEquals(FLAGS["zh"], flagFor("zh-hant"), "no flag for the script: the language's")
         assertNull(flagFor(""))
         assertNull(flagFor("zz"))
+        // No flag: a neutral mark with two letters, and a question mark for tracks that name no language.
+        assertEquals("ZZ", flagLetters("zz"))
+        assertEquals("?", flagLetters(""))
         // circle-flags' language set: about 200, none of them the question mark or a constructed set.
         assertEquals(true, FLAGS.size > 190 && "xx" !in FLAGS && "translingual" !in FLAGS)
     }

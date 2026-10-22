@@ -33,6 +33,7 @@ import app.marquee.design.MarqueeTheme
 import app.marquee.player.LoadingLayer
 import app.marquee.player.PlaybackController
 import app.marquee.player.Scrim
+import app.marquee.player.TitleMark
 import app.marquee.player.TrackChoice
 import app.marquee.player.TvSubtitlePicker
 import app.marquee.player.drawnBox
@@ -120,9 +121,9 @@ class PlayerShotsTest {
             show {
                 LoadingLayer(
                     "Night of the Living Dead",
-                    logo(),
+                    TitleMark.Logo(logo()),
                     art("backdrop.jpg").path,
-                    p,
+                    { p },
                     listOf("Starting 1080p, 1.5 GB from Torrentio"),
                 )
             }
@@ -131,9 +132,9 @@ class PlayerShotsTest {
         show {
             LoadingLayer(
                 "Night of the Living Dead",
-                logo(),
+                TitleMark.Logo(logo()),
                 art("backdrop.jpg").path,
-                0.1f,
+                { 0.1f },
                 listOf("Starting 4K, 15.8 GB from Torrentio", "Finding peers, 3 so far"),
             )
         }
@@ -141,9 +142,9 @@ class PlayerShotsTest {
         show {
             LoadingLayer(
                 "Severance Mountain",
-                null,
+                TitleMark.Name,
                 art("backdrop.jpg").path,
-                0.4f,
+                { 0.4f },
                 listOf("Choosing the best version"),
             )
         }

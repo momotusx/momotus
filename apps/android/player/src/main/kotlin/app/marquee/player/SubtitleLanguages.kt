@@ -76,6 +76,9 @@ private fun folded(text: String): String =
 
 private val MARKS = Regex("\\p{Mn}+")
 
+/** The neutral mark's letters for a language with no flag: its two first ("KU"), "?" for tracks that name none. */
+fun flagLetters(key: String): String = key.take(2).uppercase().ifEmpty { "?" }
+
 /** The circle-flags drawable for a language key: its own, else its language's ("pt-br", then "pt"); null for none. */
 fun flagFor(key: String): Int? = FLAGS[key] ?: FLAGS[key.substringBefore('-')]
 

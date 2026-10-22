@@ -79,8 +79,8 @@ import app.marquee.player.clockText
 import app.marquee.player.endsAt
 import app.marquee.player.loadingLines
 import app.marquee.player.nextSpeed
+import app.marquee.player.rememberTitleMark
 import app.marquee.player.rememberTouchExploration
-import app.marquee.player.rememberTrimmedLogo
 import app.marquee.player.seekStepMs
 import app.marquee.player.speedText
 import app.marquee.player.subtitlesDetail
@@ -130,7 +130,7 @@ fun TvPlayer(
     // Before the source shows a picture: the loading screen alone, nothing focused; the remote's Back cancels.
     val opening = controller.starting
     // The title's logo for the loading screen, loaded once for the play.
-    val logo = rememberTrimmedLogo(controller.logo)
+    val mark = rememberTitleMark(controller.logo)
     var osd by remember { mutableStateOf(true) }
     // The controls band's height (bar, transport and options), as last laid out: the cues sit over it.
     var controlsHeight by remember { mutableStateOf(0.dp) }
@@ -369,9 +369,9 @@ fun TvPlayer(
         if (opening || stalled) {
             LoadingLayer(
                 title = controller.title,
-                logo = logo,
+                mark = mark,
                 backdrop = controller.backdrop,
-                fill = controller.loadingFill,
+                fill = { controller.loadingFill },
                 lines = loadingLines(controller.status, controller.start?.caption),
                 opening = opening,
             )

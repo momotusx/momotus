@@ -82,8 +82,8 @@ import app.marquee.player.audioDetail
 import app.marquee.player.clockText
 import app.marquee.player.loadingLines
 import app.marquee.player.nextSpeed
+import app.marquee.player.rememberTitleMark
 import app.marquee.player.rememberTouchExploration
-import app.marquee.player.rememberTrimmedLogo
 import app.marquee.player.scrubTo
 import app.marquee.player.speedText
 import app.marquee.player.subtitlesDetail
@@ -149,7 +149,7 @@ fun PhonePlayer(
     var wake by remember { mutableIntStateOf(0) }
     var panel by remember { mutableStateOf<Panel?>(null) }
     // The title's logo for the loading screen, loaded once for the play.
-    val logo = rememberTrimmedLogo(controller.logo)
+    val mark = rememberTitleMark(controller.logo)
     // The language whose options the subtitle sheet shows; null for its languages.
     var opened by remember { mutableStateOf<String?>(null) }
     // The side of the last double tap (1 right, -1 left) and how many there were, so the same side twice restarts the hint.
@@ -221,15 +221,16 @@ fun PhonePlayer(
             .background(Color.Black)
             // TalkBack has no tap on the picture: a double tap on it shows the controls.
             .semantics {
-                if (live) {
+                if (live && !opening) {
                     onClick(label = SHOW_CONTROLS) {
                         osd = true
                         wake++
                         true
                     }
                 }
-            }.pointerInput(live) {
-                if (!live) return@pointerInput
+            }.pointerInput(live && !opening) {
+                // While it loads there is nothing to show or seek: a tap never hides Back.
+                if (!live || opening) return@pointerInput
                 detectTapGestures(
                     onTap = {
                         // A tap on the picture while a list is open closes the list, nothing else.
@@ -264,9 +265,9 @@ fun PhonePlayer(
         if ((opening || stalled) && !inPip) {
             LoadingLayer(
                 title = controller.title,
-                logo = logo,
+                mark = mark,
                 backdrop = controller.backdrop,
-                fill = controller.loadingFill,
+                fill = { controller.loadingFill },
                 lines = loadingLines(controller.status, controller.start?.caption),
                 opening = opening,
             )
@@ -274,7 +275,7 @@ fun PhonePlayer(
 
         // Scrims: edge to edge, 120 dp at the top (60% black) and 200 dp at the foot (72%).
         AnimatedVisibility(
-            visible = ((osd && !ended) || !live) && !inPip,
+            visible = ((osd && !ended) || !live || opening) && !inPip,
             enter = fadeIn(),
             exit = fadeOut(),
         ) {

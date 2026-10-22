@@ -183,7 +183,7 @@ class TvSubtitlePickerTest {
     }
 
     @Test
-    fun `with a subtitle on, Down from the last option reaches the delay, where Left and Right step it and select resets`() {
+    fun `Down from the last option reaches the delay, where Left and Right step it and select resets`() {
         open(timing = 0L)
         row("English, 3 options").press(Key.DirectionRight)
         compose.onNode(isFocused()).press(Key.DirectionDown)

@@ -66,16 +66,18 @@ import kotlinx.coroutines.withContext
 /**
  * The loading screen (plans/player-polish.md 1.2, design/DECISION.md "Loading"): until the first frame the title's
  * [backdrop] at 30 percent with a light blur over black; on a later stall no backdrop, so the paused frame shows.
- * The title's [logo] (trimmed, [rememberTrimmedLogo]) fills from a faint copy to solid as [fill] goes from 0 to 1,
- * or the [title] in display type when there is none; under it the core's [lines], small and quiet. A gentle pulse,
- * none under reduced motion. Nothing here takes focus: on a TV the remote's Back cancels.
+ * The title's [mark] (its logo trimmed, [rememberTitleMark], or its name in display type when it has no logo; nothing
+ * while the logo loads) fills from a faint copy to solid as [fill] goes from 0 to 1; under it the core's [lines],
+ * small and quiet. A gentle pulse, none under reduced motion. Nothing here takes focus: on a TV the remote's Back
+ * cancels. [fill] is read here only, and its easing only where the mark is drawn, so the fill redraws and
+ * recomposes nothing around it.
  */
 @Composable
 fun LoadingLayer(
     title: String,
-    logo: ImageBitmap?,
+    mark: TitleMark,
     backdrop: String?,
-    fill: Float,
+    fill: () -> Float,
     lines: List<String>,
     modifier: Modifier = Modifier,
     /** Until the first frame: the black stage under the backdrop. False over a paused frame. */
@@ -83,7 +85,8 @@ fun LoadingLayer(
 ) {
     val tv = Marquee.form == Form.Tv
     val reduced = LocalReducedMotion.current
-    val shown by animateFloatAsState(fill.coerceIn(0f, 1f), tween(if (reduced) 0 else FILL_EASE_MS), label = "fill")
+    val target = fill().coerceIn(0f, 1f)
+    val shown = animateFloatAsState(target, tween(if (reduced) 0 else FILL_EASE_MS), label = "fill")
     Box(
         modifier
             .fillMaxSize()
@@ -91,7 +94,7 @@ fun LoadingLayer(
             .testTag(LOADING_TAG)
             .semantics {
                 contentDescription = "Loading $title"
-                progressBarRangeInfo = ProgressBarRangeInfo(shown, 0f..1f)
+                progressBarRangeInfo = ProgressBarRangeInfo(target, 0f..1f)
             },
         contentAlignment = Alignment.Center,
     ) {
@@ -120,8 +123,9 @@ fun LoadingLayer(
                 verticalArrangement = Arrangement.spacedBy(if (tv) 40.dp else 16.dp),
             ) {
                 Pulse(enabled = !reduced) {
-                    Filled(shown) {
-                        if (logo != null) {
+                    Filled({ shown.value }) {
+                        if (mark is TitleMark.Logo) {
+                            val logo = mark.image
                             val k = minOf(wide.value / logo.width, tall.value / logo.height)
                             Image(
                                 logo,
@@ -135,7 +139,7 @@ fun LoadingLayer(
                                         ).dp,
                                     ),
                             )
-                        } else {
+                        } else if (mark is TitleMark.Name) {
                             BasicText(
                                 title,
                                 Modifier.widthIn(max = wide),
@@ -170,7 +174,7 @@ fun LoadingLayer(
 /** The faint copy of [content] and over it the solid copy revealed from the left to [fill], its edge feathered. */
 @Composable
 private fun Filled(
-    fill: Float,
+    fill: () -> Float,
     content: @Composable () -> Unit,
 ) {
     // The layer says the title once, in its own words: the two copies are only for the eye.
@@ -181,7 +185,7 @@ private fun Filled(
                 .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
                 .drawWithContent {
                     drawContent()
-                    val (from, to) = revealEdge(fill)
+                    val (from, to) = revealEdge(fill())
                     drawRect(
                         Brush.horizontalGradient(
                             listOf(Color.Black, Color.Transparent),
@@ -263,15 +267,39 @@ fun drawnBox(
     return if (right < 0) null else IntRect(left, top, right + 1, bottom + 1)
 }
 
+/** What the loading screen fills: the title's logo, its name when it has no logo (or it does not load), nothing yet. */
+sealed interface TitleMark {
+    /** A logo is on its way: an empty mark, so the name never shows for a moment and gives way to it. */
+    data object Waiting : TitleMark
+
+    data class Logo(
+        val image: ImageBitmap,
+    ) : TitleMark
+
+    data object Name : TitleMark
+}
+
+/** The mark for a logo at [url], [image] once it loaded, [done] once the load ended either way. */
+fun titleMark(
+    url: String?,
+    image: ImageBitmap?,
+    done: Boolean,
+): TitleMark =
+    when {
+        image != null -> TitleMark.Logo(image)
+        url != null && !done -> TitleMark.Waiting
+        else -> TitleMark.Name
+    }
+
 /**
- * The title's logo at [url], trimmed to its drawn box (logos come with wide transparent margins, Apple trims them
- * too); null while it loads, and for no logo or one that does not load, so the name shows instead.
+ * The title's mark from its logo at [url], trimmed to its drawn box (logos come with wide transparent margins, Apple
+ * trims them too): nothing while it loads, the name for no logo or one that does not load.
  */
 @Composable
-fun rememberTrimmedLogo(url: String?): ImageBitmap? {
+fun rememberTitleMark(url: String?): TitleMark {
     val context = LocalContext.current
-    val logo by produceState<ImageBitmap?>(null, url) {
-        value = null
+    val mark by produceState<TitleMark>(titleMark(url, null, done = false), url) {
+        value = titleMark(url, null, done = false)
         if (url == null) return@produceState
         val request =
             ImageRequest
@@ -280,10 +308,13 @@ fun rememberTrimmedLogo(url: String?): ImageBitmap? {
                 .size(LOGO_PX)
                 .allowHardware(false)
                 .build()
-        val result = SingletonImageLoader.get(context).execute(request) as? SuccessResult ?: return@produceState
-        value = withContext(Dispatchers.Default) { trimmed(result.image.toBitmap()) }
+        val image =
+            (SingletonImageLoader.get(context).execute(request) as? SuccessResult)?.let {
+                withContext(Dispatchers.Default) { trimmed(it.image.toBitmap()) }
+            }
+        value = titleMark(url, image, done = true)
     }
-    return logo
+    return mark
 }
 
 private fun trimmed(bitmap: Bitmap): ImageBitmap? {

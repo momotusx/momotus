@@ -108,7 +108,7 @@ fun LanguageFlag(
             contentAlignment = Alignment.Center,
         ) {
             MqText(
-                key.take(2).uppercase(),
+                flagLetters(key),
                 role = TextRole.Caption,
                 color = Marquee.colors.muted,
                 weight = FontWeight.SemiBold,
@@ -232,12 +232,15 @@ fun PhoneSubtitleSheet(
             .semantics { paneTitle = "Subtitles" },
     ) {
         SheetHeader(language, onBack = { onOpen(null) }, onDone = onDone)
+        // Held over both levels: back from a language, the search and the place in the list are as they were.
+        var query by rememberSaveable { mutableStateOf("") }
+        val list = rememberLazyListState()
         if (language == null) {
-            var query by rememberSaveable { mutableStateOf("") }
             val shown = filterLanguages(languages, query)
             SearchLanguages(query, { query = it }, Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
             LazyColumn(
                 Modifier.weight(1f).padding(horizontal = 12.dp),
+                state = list,
                 contentPadding = PaddingValues(top = 6.dp, bottom = 12.dp),
             ) {
                 item(key = TRACK_OFF) {
@@ -512,9 +515,10 @@ fun TvSubtitlePicker(
                             on,
                             { onPick(TRACK_OFF) },
                             "Off",
+                            // Focus stays in the panel while it is open: the controls under it take nothing.
                             Modifier.focusRequester(off).focusProperties {
-                                right =
-                                    FocusRequester.Cancel
+                                left = FocusRequester.Cancel
+                                right = FocusRequester.Cancel
                             },
                         ) {
                             Spacer(Modifier.width(40.dp))
@@ -538,6 +542,7 @@ fun TvSubtitlePicker(
                                 .focusRequester(requester(lang.key))
                                 .onFocusChanged { if (it.isFocused) focusedKey = lang.key }
                                 .focusProperties {
+                                    left = FocusRequester.Cancel
                                     right = into
                                     if (lang == shown.last()) down = FocusRequester.Cancel
                                 },

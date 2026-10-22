@@ -57,4 +57,11 @@ class LoadingFillTest {
         assertEquals(IntRect(2, 1, 6, 4), drawnBox(pixels, w, h))
         assertNull(drawnBox(IntArray(w * h), w, h), "nothing drawn")
     }
+
+    @Test
+    fun `while a logo loads the mark is empty, so the name never shows and gives way to it`() {
+        assertEquals(TitleMark.Waiting, titleMark("https://images/logo", null, done = false))
+        assertEquals(TitleMark.Name, titleMark("https://images/logo", null, done = true), "it did not load")
+        assertEquals(TitleMark.Name, titleMark(null, null, done = false), "no logo")
+    }
 }

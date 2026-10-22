@@ -7,7 +7,9 @@ import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -75,7 +77,7 @@ class TvLoadingTest {
     private val client = CoreClient(executor.asCoroutineDispatcher())
 
     /** The core's playback view, ready with a stream, as a scripted core answers its subscribe. */
-    private fun readyView(): PlaybackView {
+    private fun readyView(snapshot: String = READY): PlaybackView {
         client.attach { text ->
             val msg = CoreJson.parseToJsonElement(text).jsonObject
             val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
@@ -83,7 +85,7 @@ class TvLoadingTest {
                 if (msg["op"]?.jsonPrimitive?.content ==
                     "subscribe"
                 ) {
-                    """{"sub":7,"snapshot":$READY}"""
+                    """{"sub":7,"snapshot":$snapshot}"""
                 } else {
                     "{}"
                 }
@@ -161,6 +163,30 @@ class TvLoadingTest {
     }
 
     @Test
+    fun `Left in the open picker stays in it, with the controls composed under it`() {
+        compose.setContent { MarqueeTheme(Form.Tv) { TvPlayer(controller, false, {}, null, { _, _ -> }, {}) } }
+        compose.runOnIdle { controller.attach(readyView(WITH_SUBTITLES)) }
+        compose.waitUntil(10_000) {
+            Snapshot.sendApplyNotifications()
+            shadowOf(Looper.getMainLooper()).idle()
+            controller.stage == PlaybackController.Stage.Buffering
+        }
+        compose.runOnIdle { player.open() }
+        compose.waitUntil(10_000) { controller.stage == PlaybackController.Stage.Playing }
+        compose.onNodeWithContentDescription("Subtitles, Off, 2 languages").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Off").assertIsFocused()
+        // The transport sits at the left under the picker: Left from Off and from a language goes nowhere.
+        compose.onNode(isFocused()).performKeyInput { pressKey(Key.DirectionLeft) }
+        compose.onNodeWithContentDescription("Off").assertIsFocused()
+        compose.onNode(isFocused()).performKeyInput { pressKey(Key.DirectionDown) }
+        compose.onNodeWithContentDescription("English, 1 option").assertIsFocused()
+        compose.onNode(isFocused()).performKeyInput { pressKey(Key.DirectionLeft) }
+        compose.onNodeWithContentDescription("English, 1 option").assertIsFocused()
+        compose.onNode(isFocused() and hasAnyAncestor(hasTestTag(SUBTITLE_PICKER_TAG))).assertExists()
+    }
+
+    @Test
     fun `the picture takes over from the loading screen`() {
         compose.setContent { MarqueeTheme(Form.Tv) { TvPlayer(controller, false, {}, null, { _, _ -> }, {}) } }
         compose.onNodeWithTag(LOADING_TAG).assertExists()
@@ -175,3 +201,13 @@ class TvLoadingTest {
 private const val READY =
     """{"phase":"ready","url":"http://127.0.0.1:7780/video.mp4","key":"k1","attempt":1,"manifest":false,""" +
         """"subtitlesPending":false,"trakt":"off","subtitles":[]}"""
+
+/** A stream with an English track from OpenSubtitles and a Turkish one from SubSense, as the core lists them. */
+private const val WITH_SUBTITLES =
+    """{"phase":"ready","url":"http://127.0.0.1:7780/video.mp4","key":"k1","attempt":1,"manifest":false,""" +
+        """"subtitlesPending":false,"trakt":"off","subtitles":[""" +
+        """{"url":"http://127.0.0.1:7781/en.srt","lang":"eng","language":"en","languageName":"English",""" +
+        """"nativeName":"English","name":"CAKES, WEB 1080p","source":"OpenSubtitles v3","forced":false,""" +
+        """"hearingImpaired":false},""" +
+        """{"url":"http://127.0.0.1:7781/tr.srt","lang":"tur","language":"tr","languageName":"Turkish",""" +
+        """"nativeName":"Türkçe","name":"SubSense","source":"SubSense","forced":false,"hearingImpaired":false}]}"""

@@ -12,7 +12,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.doubleClick
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -167,6 +172,14 @@ class PhoneSubtitleSheetTest {
             compose.onAllNodesWithContentDescription("English", substring = true).fetchSemanticsNodes().size,
         )
         compose.onNodeWithContentDescription("Turkish, Türkçe, 1 option").assertExists()
+        // Into Turkish and back: the search is as it was.
+        compose.onNodeWithContentDescription("Turkish options").performClick()
+        compose.onNodeWithContentDescription("Back to languages").performClick()
+        compose.onNode(hasContentDescription(SEARCH_LANGUAGES) and hasText("tür")).assertExists()
+        assertEquals(
+            0,
+            compose.onAllNodesWithContentDescription("English", substring = true).fetchSemanticsNodes().size,
+        )
     }
 
     @Test
@@ -308,6 +321,13 @@ class PhoneSubtitleSheetTest {
         compose.waitForIdle()
         compose.onNodeWithTag(LOADING_TAG).assertExists()
         assertEquals(0, compose.onAllNodesWithContentDescription("Back 10 seconds").fetchSemanticsNodes().size)
+        compose.onNodeWithContentDescription("Back").assertExists()
+        // A tap never hides Back, a double tap never seeks the start point.
+        compose.onRoot().performTouchInput { click(center) }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Back").assertExists()
+        compose.onRoot().performTouchInput { doubleClick(centerLeft + Offset(40f, 0f)) }
+        compose.runOnIdle { assertEquals(60_000L, player.currentPosition) }
         compose.onNodeWithContentDescription("Back").assertExists()
     }
 
