@@ -144,6 +144,9 @@ enum Theme {
         static let poster = CGSize(width: 99, height: 149)
         static let landscape = CGSize(width: 239, height: 134)
         static let gap: CGFloat = 12
+        /// A poster's corners, then a 16:9 card's.
+        static let radius: CGFloat = 11
+        static let cardRadius: CGFloat = 13
     }
 
     /// The Mac's shelves (`tile.desktop`, tv.apple.com's), for `Metrics.regular`.
@@ -152,6 +155,12 @@ enum Theme {
         static let landscape = CGSize(width: 256, height: 144)
         static let gap: CGFloat = 20
         static let inset: CGFloat = 40
+        static let radius: CGFloat = 14
+    }
+
+    /// Scrims laid over art: `hover` is tv.apple.com's grey over a card under the pointer.
+    enum Scrim {
+        static let hover = Color(RGBA(0.2000, 0.2000, 0.2000, 0.3))
     }
 
     /// Font weights, 100 to 900.

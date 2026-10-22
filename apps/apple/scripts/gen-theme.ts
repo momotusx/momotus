@@ -116,6 +116,9 @@ ${radius}
         static let poster = CGSize(width: ${tokens.tile.phone.poster.width}, height: ${tokens.tile.phone.poster.height})
         static let landscape = CGSize(width: ${tokens.tile.phone.landscape.width}, height: ${tokens.tile.phone.landscape.height})
         static let gap: CGFloat = ${tokens.tile.phone.gap}
+        /// A poster's corners, then a 16:9 card's.
+        static let radius: CGFloat = ${tokens.tile.phone.radius}
+        static let cardRadius: CGFloat = ${tokens.tile.phone.cardRadius}
     }
 
     /// The Mac's shelves (\`tile.desktop\`, tv.apple.com's), for \`Metrics.regular\`.
@@ -124,6 +127,12 @@ ${radius}
         static let landscape = CGSize(width: ${tokens.tile.desktop.landscape.width}, height: ${tokens.tile.desktop.landscape.height})
         static let gap: CGFloat = ${tokens.tile.desktop.gap}
         static let inset: CGFloat = ${tokens.tile.desktop.inset}
+        static let radius: CGFloat = ${tokens.tile.desktop.radius}
+    }
+
+    /// Scrims laid over art: \`hover\` is tv.apple.com's grey over a card under the pointer.
+    enum Scrim {
+        static let hover = Color(${rgba(tokens.scrim.hover)})
     }
 
     /// Font weights, 100 to 900.
