@@ -455,8 +455,11 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       clearInterval(timer);
       clearTimeout(hideTimer);
       window.removeEventListener("keydown", onKey, { capture: true });
+      // The last progress and delay go before the view closes; anything the
+      // page sends after (the video's own pause as it leaves) is a no-op.
       report();
       sendDelay();
+      void playback()?.close();
       engine.stop();
     });
   });

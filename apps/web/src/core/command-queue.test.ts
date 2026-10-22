@@ -45,3 +45,13 @@ test("a view that never opens drops held and later commands", async () => {
   q.open(async (c) => void sent.push(c));
   expect(sent).toEqual([]);
 });
+
+test("once the view closes, a command is a no-op", async () => {
+  const sent: string[] = [];
+  const q = commandQueue<string>();
+  q.open(async (c) => void sent.push(c));
+  void q.send("last report");
+  q.drop();
+  await q.send("a pause after the close");
+  expect(sent).toEqual(["last report"]);
+});

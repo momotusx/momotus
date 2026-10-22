@@ -202,7 +202,7 @@ async function picker(browser: Browser, form: keyof typeof VIEWPORTS, missingFla
   return { context, page, errors, commands, panel: page.locator('aside[aria-label="Subtitles"]') };
 }
 /** The subtitle delays the page sent the core. */
-const delaysSent = (commands: { command: Json }[]) => commands.filter((c) => c.command.type === "subtitleDelay").map((c) => c.command);
+const delaysSent = (commands: { command: Json }[]) => commands.filter((c) => c.command?.type === "subtitleDelay").map((c) => c.command);
 const focusedKey = (page: Page) => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? "");
 
 test("the picker lists languages first, in the core's order, with flags and counts", async ({ browser }) => {
@@ -474,7 +474,7 @@ test("the core's marks show in the detail line; timing goes to the core once it 
   await page.waitForTimeout(400);
   expect(delaysSent(commands).length).toBe(before);
   await expect.poll(() => delaysSent(commands).slice(before)).toEqual([{ type: "subtitleDelay", url, ms: 300 }]);
-  expect((commands.filter((c) => c.command.type === "subtitleDelay").at(-1)?.at ?? 0) - pressed).toBeGreaterThanOrEqual(600);
+  expect((commands.filter((c) => c.command?.type === "subtitleDelay").at(-1)?.at ?? 0) - pressed).toBeGreaterThanOrEqual(600);
   // The next play of this version starts the track there, and its cues with it.
   await page.goto(`/play/movie/${BBB_ID}/${BBB_ID}?form=desktop`);
   await expect(page.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
@@ -515,7 +515,7 @@ test("the core's marks show in the detail line; timing goes to the core once it 
     { type: "subtitleDelay", url: first, ms: 400 },
     { type: "subtitleDelay", url: second, ms: 100 },
   ]);
-  expect((commands.filter((c) => c.command.type === "subtitleDelay").at(-1)?.at ?? 0) - last).toBeLessThan(600);
+  expect((commands.filter((c) => c.command?.type === "subtitleDelay").at(-1)?.at ?? 0) - last).toBeLessThan(600);
   // The core keeps one track's delay per title, the last one set: on the next play OPENFILM
   // starts at 0 and Many Subs there. Then back to 0 for the core, so a rerun starts clean.
   await page.goto(`/play/movie/${BBB_ID}/${BBB_ID}?form=desktop`);
@@ -530,8 +530,8 @@ test("the core's marks show in the detail line; timing goes to the core once it 
   await opts.locator('[data-f="sub:reset"]').dispatchEvent("click");
   await expect.poll(() => delaysSent(commands).at(-1)?.ms).toBe(0);
   await fitting.dispatchEvent("click");
-  // Leaving the player pauses the video after its view closed, and that pause's progress report
-  // comes back "no subscription" (the player's report, not the delay): only those are allowed.
-  expect(errors.filter((e) => !/^no subscription \d+$/.test(e))).toEqual([]);
+  // Nothing goes to a view after the page closed it (the video's pause as the player leaves).
+  expect(commands.filter((c, i) => c.command && commands.slice(0, i).some((d) => !d.command && d.conn === c.conn && d.sub === c.sub))).toEqual([]);
+  expect(errors).toEqual([]);
   await context.close();
 });

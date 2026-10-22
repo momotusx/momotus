@@ -150,7 +150,10 @@ export function liveView<S>(view: string, params: Record<string, unknown> = {}, 
       commands.drop();
       return null;
     });
-  const close = () => (closing ??= closeWhenOpen(opening));
+  const close = () => {
+    commands.drop();
+    return (closing ??= closeWhenOpen(opening));
+  };
   if (!keep) onCleanup(() => void close());
   return { state, sub, command: commands.send, close };
 }
