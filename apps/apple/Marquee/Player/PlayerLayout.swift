@@ -138,6 +138,12 @@ enum PlayerLayout {
         modifiers.isDisjoint(with: [.command, .option, .control, .shift])
     }
 
+    /// Whether a key press goes to the stepper: a modifier at the press makes it someone else's; at
+    /// the release (Shift tapped mid-hold) the stepper's own hold must still end.
+    static func stepperTakes(down: Bool, modifiers: EventModifiers) -> Bool {
+        !down || stepperKey(modifiers)
+    }
+
     /// The value as the stepper shows it: "+0.3 s", "\u{2212}1.2 s" (a true minus), "0.0 s".
     static func delayText(_ delay: Double) -> String {
         let sign = delay > 0 ? "+" : delay < 0 ? "\u{2212}" : ""
@@ -514,7 +520,8 @@ struct StepperClock: Sendable {
 @MainActor final class DelayOutbox {
     typealias Command = [String: any Sendable]
     private let clock: StepperClock
-    private let send: (Command) -> Void
+    /// True when the command went (a view was open to take it).
+    private let send: (Command) -> Bool
     private var pending: (url: String, seconds: Double)?
     private var settle: Task<Void, Never>?
     /// Each track's value in this play, by URL: going back to a track finds it where it was.
@@ -522,7 +529,7 @@ struct StepperClock: Sendable {
     /// Told the value once it settled from a press or hold, for VoiceOver.
     var settled: (Double) -> Void = { _ in }
 
-    init(clock: StepperClock = .real, send: @escaping (Command) -> Void) {
+    init(clock: StepperClock = .real, send: @escaping (Command) -> Bool) {
         (self.clock, self.send) = (clock, send)
     }
 
@@ -541,13 +548,13 @@ struct StepperClock: Sendable {
         }
     }
 
-    /// The value not sent yet goes now, once.
+    /// The value not sent yet goes now, once; with no view open to take it (a server move between
+    /// views) it stays for the next flush.
     func flush() {
         settle?.cancel()
         settle = nil
-        guard let pending else { return }
+        guard let pending, send(PlayerLayout.delayCommand(url: pending.url, seconds: pending.seconds)) else { return }
         self.pending = nil
-        send(PlayerLayout.delayCommand(url: pending.url, seconds: pending.seconds))
     }
 
     /// Where `track` starts: its value earlier in this play, else the core's `delayMs`.

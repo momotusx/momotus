@@ -153,8 +153,9 @@ final class PlayerModel {
         observePlayer()
         outbox = DelayOutbox { [weak self] command in
             // At once, not in a Task: it reaches the core before the view's unsubscribe.
-            guard let self, let sub = self.sub else { return }
+            guard let self, let sub = self.sub else { return false }
             self.core.commandNow(sub, command)
+            return true
         }
         outbox.settled = { AccessibilityNotification.Announcement(PlayerLayout.delayWords($0)).post() }
     }

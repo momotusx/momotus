@@ -64,7 +64,7 @@ private func track(_ url: String, delayMs: Int? = nil) -> SubtitleTrack {
 
 @MainActor @Test func aHoldOfThirtyTicksSendsOneCommandOnceItRests() async {
     var sent: [DelayOutbox.Command] = []
-    let outbox = DelayOutbox(clock: VirtualTime().clock) { sent.append($0) }
+    let outbox = DelayOutbox(clock: VirtualTime().clock) { sent.append($0); return true }
     for tick in 1...30 { outbox.set(url: "a", seconds: Double(tick) / 10) }
     #expect(sent.isEmpty, "nothing goes while the value moves")
     await settle()
@@ -76,7 +76,7 @@ private func track(_ url: String, delayMs: Int? = nil) -> SubtitleTrack {
     // Close, another track, a failover, a server move: the value goes now, to the view still open,
     // ahead of anything sent after it (the unsubscribe), and only once.
     var log: [String] = []
-    let outbox = DelayOutbox(clock: VirtualTime().clock) { log.append("delay \($0["url"] as? String ?? "") \($0["ms"] as? Int ?? 0)") }
+    let outbox = DelayOutbox(clock: VirtualTime().clock) { log.append("delay \($0["url"] as? String ?? "") \($0["ms"] as? Int ?? 0)"); return true }
     outbox.set(url: "a", seconds: 0.5)
     outbox.flush()
     log.append("unsubscribe")
@@ -87,7 +87,7 @@ private func track(_ url: String, delayMs: Int? = nil) -> SubtitleTrack {
 
 @MainActor @Test func aTrackChangeSendsTheOldTracksValueFirst() async {
     var sent: [String] = []
-    let outbox = DelayOutbox(clock: VirtualTime().clock) { sent.append("\($0["url"] as? String ?? "") \($0["ms"] as? Int ?? 0)") }
+    let outbox = DelayOutbox(clock: VirtualTime().clock) { sent.append("\($0["url"] as? String ?? "") \($0["ms"] as? Int ?? 0)"); return true }
     outbox.set(url: "a", seconds: -1.2)
     outbox.flush()
     outbox.set(url: "b", seconds: 0.3)
@@ -96,7 +96,7 @@ private func track(_ url: String, delayMs: Int? = nil) -> SubtitleTrack {
 }
 
 @MainActor @Test func eachTrackKeepsItsValueForThePlayThenTheCoresDelayMs() {
-    let outbox = DelayOutbox(clock: VirtualTime().clock) { _ in }
+    let outbox = DelayOutbox(clock: VirtualTime().clock) { _ in true }
     #expect(outbox.start(track("a", delayMs: 300)) == 0.3)
     outbox.set(url: "a", seconds: 1.5)
     outbox.set(url: "b", seconds: -0.4)
@@ -109,7 +109,7 @@ private func track(_ url: String, delayMs: Int? = nil) -> SubtitleTrack {
 
 @MainActor @Test func aServerMoveCarriesTheValueToTheTracksNewURL() async {
     var sent: [String] = []
-    let outbox = DelayOutbox(clock: VirtualTime().clock) { sent.append($0["url"] as? String ?? "") }
+    let outbox = DelayOutbox(clock: VirtualTime().clock) { sent.append($0["url"] as? String ?? ""); return true }
     outbox.set(url: "http://old/1.vtt", seconds: 0.7)
     outbox.moved(from: "http://old/1.vtt", to: "http://new/1.vtt")
     outbox.flush()
@@ -119,7 +119,7 @@ private func track(_ url: String, delayMs: Int? = nil) -> SubtitleTrack {
 
 @MainActor @Test func theSettledValueIsSaidOnceAndNotForVoiceOversOwnAdjust() async {
     var said: [Double] = []
-    let outbox = DelayOutbox(clock: VirtualTime().clock) { _ in }
+    let outbox = DelayOutbox(clock: VirtualTime().clock) { _ in true }
     outbox.settled = { said.append($0) }
     outbox.set(url: "a", seconds: 0.1)
     outbox.set(url: "a", seconds: 0.2)
@@ -128,6 +128,31 @@ private func track(_ url: String, delayMs: Int? = nil) -> SubtitleTrack {
     outbox.set(url: "a", seconds: 0.3, spoken: false)
     await settle()
     #expect(said == [0.2])
+}
+
+@MainActor @Test func aValueWithNoViewToTakeItWaitsForTheNext() async {
+    // Between a server move's old view and its new one: the value is kept, not dropped.
+    var open = false
+    var sent: [Int] = []
+    let outbox = DelayOutbox(clock: VirtualTime().clock) { command in
+        guard open else { return false }
+        sent.append(command["ms"] as? Int ?? 0)
+        return true
+    }
+    outbox.set(url: "a", seconds: 0.4)
+    outbox.flush()
+    #expect(sent.isEmpty)
+    open = true
+    outbox.flush()
+    #expect(sent == [400])
+}
+
+@Test func aModifierAtTheReleaseStillEndsTheHold() {
+    // Shift tapped while Right is held: the release is still the stepper's, or the hold runs on.
+    #expect(PlayerLayout.stepperTakes(down: false, modifiers: .shift))
+    #expect(PlayerLayout.stepperTakes(down: false, modifiers: .option))
+    #expect(!PlayerLayout.stepperTakes(down: true, modifiers: .command))
+    #expect(PlayerLayout.stepperTakes(down: true, modifiers: []))
 }
 
 @Test func aKeyWithAModifierIsNoStep() {
@@ -176,6 +201,10 @@ private func playerModel() throws -> String {
     // Synchronous, so it beats the unsubscribe; a Task could lose to it.
     let send = try body(of: "outbox = DelayOutbox ", in: text)
     #expect(send.contains("core.commandNow(sub, command)") && !send.contains("Task {") && !send.contains("await"), "\(send)")
+    // The key handlers ask with the press's phase, so a release always ends a hold.
+    let controls = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player/PlayerControls.swift"), encoding: .utf8)
+    #expect(controls.components(separatedBy: "PlayerLayout.stepperTakes(down: press.phase == .down, modifiers: press.modifiers)").count == 3)
+    #expect(!controls.contains("guard PlayerLayout.stepperKey(press.modifiers)"))
     // After a server move the track's URL changes: the outbox follows it.
     #expect(try body(of: "private func apply(", in: text).contains("outbox.moved(from: shown.url, to: same.url)"))
 }

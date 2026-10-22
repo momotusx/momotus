@@ -633,7 +633,9 @@ struct SubtitleTimingStepper: View {
     let reset: () -> Void
     @State private var hold: TimingHold?
     @State private var pressing = 0
-    @GestureState private var touching = 0
+    /// One per button: a finger lifted from one never ends the other's hold.
+    @GestureState private var touchingMinus = false
+    @GestureState private var touchingPlus = false
     @FocusState private var focus: Part?
     /// The part a key hold started on: focus leaving it ends the hold (a click moves no focus).
     @State private var keyPart: Part?
@@ -664,18 +666,18 @@ struct SubtitleTimingStepper: View {
         .frame(minWidth: 240)
         .onAppear {
             hold = TimingHold { move($0, true) }
+            #if os(macOS)
+            // The keyboard's way in; a touch screen draws no focus.
             focus = .value
+            #endif
         }
         .onDisappear { stop(single: false) }
         .onChange(of: track) { stop(single: false) }
         .onChange(of: scenePhase) { _, phase in if phase != .active { stop(single: false) } }
         .onChange(of: focus) { old, _ in if let keyPart, keyPart == old { stop(single: false) } }
         // A touch the system took back (a banner, Control Center) resets the gesture with no end.
-        .onChange(of: touching) { _, now in
-            guard now == 0 else { return }
-            let cut = pressing
-            Task { @MainActor in if cut != 0, pressing == cut { stop(single: false) } }
-        }
+        .onChange(of: touchingMinus) { _, now in if !now { touchEnded(-1) } }
+        .onChange(of: touchingPlus) { _, now in if !now { touchEnded(1) } }
     }
 
     /// The value: a click resets; focused, Left and Right held move it by the stepper's rules, and
@@ -693,7 +695,7 @@ struct SubtitleTimingStepper: View {
             .focusEffectDisabled()
             .focused($focus, equals: .value)
             .onKeyPress(keys: [.leftArrow, .rightArrow, .space, .return], phases: [.down, .repeat, .up]) { press in
-                guard PlayerLayout.stepperKey(press.modifiers) else { return .ignored }
+                guard PlayerLayout.stepperTakes(down: press.phase == .down, modifiers: press.modifiers) else { return .ignored }
                 if press.key == .space || press.key == .return {
                     if press.phase == .down { reset() }
                     return .handled
@@ -715,6 +717,11 @@ struct SubtitleTimingStepper: View {
     private func start(_ direction: Int) {
         pressing = direction
         hold?.start(direction)
+    }
+
+    /// The gesture's state reset: a hold its own end did not stop was a touch the system took back.
+    private func touchEnded(_ direction: Int) {
+        Task { @MainActor in if pressing == direction { stop(single: false) } }
     }
 
     private func stop(single: Bool) {
@@ -743,7 +750,7 @@ struct SubtitleTimingStepper: View {
             .modifier(FocusRing(shape: Circle(), active: focus == part))
             .gesture(
                 DragGesture(minimumDistance: 0)
-                    .updating($touching) { _, state, _ in state = direction }
+                    .updating(direction < 0 ? $touchingMinus : $touchingPlus) { _, state, _ in state = true }
                     .onChanged { _ in if pressing != direction { start(direction) } }
                     // Only the finger that started this hold ends it (another on the other button stops nothing).
                     .onEnded { _ in if pressing == direction { stop(single: true) } }
@@ -752,7 +759,7 @@ struct SubtitleTimingStepper: View {
             .focusEffectDisabled()
             .focused($focus, equals: part)
             .onKeyPress(keys: [.space, .return], phases: [.down, .repeat, .up]) { press in
-                guard PlayerLayout.stepperKey(press.modifiers) else { return .ignored }
+                guard PlayerLayout.stepperTakes(down: press.phase == .down, modifiers: press.modifiers) else { return .ignored }
                 key(press, direction: direction, part: part)
                 return .handled
             }
