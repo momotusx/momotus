@@ -14,6 +14,8 @@ test("tokens.css matches design/tokens.json (run `bun run tokens`)", () => {
   // The key keeps its v2 name; in v3 it holds the focus lift's drop shadow.
   expect(css).toContain("--lift-focus-edge: 0 30px 60px rgba(0, 0, 0, 0.6);");
   expect(css).toContain("--lift-primary-shadow: 0 3px 16px rgba(0, 0, 0, 0.28);");
+  // tv.apple.com's hover over a desktop poster.
+  expect(css).toContain("--scrim-hover: rgba(51, 51, 51, 0.3);");
   expect(css).toMatch(/:root\[data-form="phone"\] \{\n {2}--type-hero: 34px;/);
   // Dark only: no light theme block; the halo is the lift's soft 30 px shadow.
   expect(css).not.toContain('data-theme="light"');
