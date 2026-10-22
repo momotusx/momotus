@@ -8,12 +8,12 @@ import kotlin.test.assertEquals
 class SubtitleTimingTest {
     @Test
     fun `the Timing row says where the words are`() {
-        assertEquals("On time", timingWords(0))
-        assertEquals("0.5 s later", timingWords(500))
-        assertEquals("1.5 s earlier", timingWords(-1_500))
+        assertEquals("0.0 seconds", timingWords(0))
+        assertEquals("Plus 0.5 seconds", timingWords(500))
+        assertEquals("Minus 1.5 seconds", timingWords(-1_500))
         assertEquals("0.0 s", delayText(0))
         assertEquals("+0.3 s", delayText(300))
-        assertEquals("-1.2 s", delayText(-1_200))
+        assertEquals("\u22121.2 s", delayText(-1_200))
     }
 
     @Test

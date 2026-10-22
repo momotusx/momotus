@@ -275,9 +275,9 @@ fun TimingRow(
             )
             MqIcon(Icons.Plus, tint = Marquee.colors.dim, size = 26.dp)
         } else {
-            HoldButton(MINUS, "Show subtitles earlier", -1, hold)
+            HoldButton(MINUS, "Minus 0.1 seconds", -1, hold)
             DelayValue(delayMs, reset)
-            HoldButton(Icons.Plus, "Show subtitles later", 1, hold)
+            HoldButton(Icons.Plus, "Plus 0.1 seconds", 1, hold)
         }
         if (delayMs != 0L) {
             SecondaryButton(
@@ -356,7 +356,7 @@ private fun delayKey(
     return true
 }
 
-/** The delay ("+0.3 s"); a press resets it to 0. Read out in words ("0.3 s later"), as it changes. */
+/** The delay ("+0.3 s"); a press resets it to 0. Read out in words ("Plus 0.3 seconds"), as it changes. */
 @Composable
 private fun DelayValue(
     delayMs: Long,

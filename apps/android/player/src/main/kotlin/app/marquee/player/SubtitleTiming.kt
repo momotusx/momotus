@@ -48,19 +48,24 @@ fun steppedDelay(
     return (tenths * SUBTITLE_STEP_MS).coerceIn(-SUBTITLE_MAX_MS, SUBTITLE_MAX_MS)
 }
 
-/** "+0.3 s", "0.0 s", "-1.2 s": the delay as the Timing row shows it, later being plus. */
+/** "+0.3 s", "0.0 s", "−1.2 s" (a true minus sign, U+2212): the delay as the Timing row shows it, later being plus. */
 fun delayText(delayMs: Long): String {
-    val seconds = "%.1f".format(java.util.Locale.ROOT, kotlin.math.abs(delayMs) / 1000.0)
+    val seconds = seconds(delayMs)
     return when {
         delayMs > 0 -> "+$seconds s"
-        delayMs < 0 -> "-$seconds s"
+        delayMs < 0 -> "\u2212$seconds s"
         else -> "$seconds s"
     }
 }
 
-/** "On time", "0.5 s later", "1.5 s earlier": what the Timing row says to a screen reader. */
+/** "Plus 0.3 seconds", "0.0 seconds", "Minus 1.2 seconds": what a screen reader says for the Timing row, as on web and Apple. */
 fun timingWords(delayMs: Long): String {
-    if (delayMs == 0L) return "On time"
-    val seconds = "%.1f".format(java.util.Locale.ROOT, kotlin.math.abs(delayMs) / 1000.0)
-    return if (delayMs > 0) "$seconds s later" else "$seconds s earlier"
+    val seconds = seconds(delayMs)
+    return when {
+        delayMs > 0 -> "Plus $seconds seconds"
+        delayMs < 0 -> "Minus $seconds seconds"
+        else -> "$seconds seconds"
+    }
 }
+
+private fun seconds(delayMs: Long) = "%.1f".format(java.util.Locale.ROOT, kotlin.math.abs(delayMs) / 1000.0)
