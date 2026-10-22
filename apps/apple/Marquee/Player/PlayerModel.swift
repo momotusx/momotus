@@ -639,7 +639,11 @@ final class PlayerModel {
 
     // MARK: core and player plumbing
 
+    /// Milliseconds since the play was tapped, for the metric lines.
+    private var sinceTap: Int { Int((ContinuousClock.now - route.tapped) / .milliseconds(1)) }
+
     private func apply(_ snapshot: PlaybackSnapshot) {
+        let wasPending = playback?.subtitlesPending == true
         if let trouble = PlayerLayout.subtitleTrouble(
             picked: subtitle, old: playback?.notes ?? [], new: snapshot.notes, tracks: snapshot.subtitles
         ) {
@@ -655,7 +659,13 @@ final class PlayerModel {
         // A move on to another source: the old start subtitle and its cues go.
         let step = choices.subtitleStep(attempt: snapshot.attempt, auto: snapshot.autoSubtitle, tracks: snapshot.subtitles)
         if step.drop { selectSubtitle(nil) }
-        if let track = step.turnOn { selectSubtitle(track) }
+        if let track = step.turnOn {
+            selectSubtitle(track)
+            coreLog.notice("metric start_subtitle_ms=\(self.sinceTap, privacy: .public)")
+        }
+        if wasPending, !snapshot.subtitlesPending {
+            coreLog.notice("metric subtitles_settled_ms=\(self.sinceTap, privacy: .public) tracks=\(snapshot.subtitles.count, privacy: .public)")
+        }
         // After a server move the same addon track has a new URL: it stays on,
         // its cues and timing kept, and the menu marks it.
         if let shown = subtitle, !snapshot.subtitles.contains(shown), let same = SubtitleMenu.same(shown, in: snapshot.subtitles) {
