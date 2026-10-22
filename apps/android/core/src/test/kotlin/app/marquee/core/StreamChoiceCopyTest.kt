@@ -3,6 +3,7 @@ package app.marquee.core
 import app.marquee.core.StreamChoiceCopy.Setting
 import app.marquee.core.StreamChoiceCopy.UpDown
 import app.marquee.core.model.BlockedReason
+import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.Learned
 import app.marquee.core.model.LearnedByClass
 import app.marquee.core.model.LearnedChoice
@@ -141,6 +142,21 @@ class StreamChoiceCopyTest {
                             )
                         }
                         put("showRows", SHOW_ROWS)
+                    },
+                )
+                put(
+                    "empty",
+                    buildJsonObject {
+                        for ((kind, w) in EMPTY) {
+                            put(
+                                kind.wire,
+                                buildJsonObject {
+                                    put("text", w.first)
+                                    w.second?.let { put("action", it) }
+                                    if (kind == EmptyKind.Unreachable) put("playFromDevice", PLAY_FROM_DEVICE)
+                                },
+                            )
+                        }
                     },
                 )
                 put(

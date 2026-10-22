@@ -7,7 +7,9 @@ mod common;
 
 use common::{Server, route};
 use mq_library::AddonRow;
-use mq_runtime::{BlockedReason, Core, StoreId, TitleFacts, VersionsParams, VersionsView};
+use mq_runtime::{
+    BlockedReason, Core, EmptyAction, EmptyKind, StoreId, TitleFacts, VersionsParams, VersionsView,
+};
 use mq_streams::{DeviceCaps, HideReason, SourceClass, StreamPrefs, Target};
 use std::time::{Duration, Instant};
 
@@ -113,6 +115,11 @@ async fn without_engine_or_account_versions_say_an_account_opens_them() {
     assert_eq!(
         (blocked.reason, blocked.count),
         (BlockedReason::NeedsAccount, 2)
+    );
+    let empty = s.empty.expect("empty");
+    assert_eq!(
+        (empty.kind, empty.action, empty.count, empty.rows.len()),
+        (EmptyKind::NeedsAccount, EmptyAction::SettingsAccounts, 2, 2)
     );
     let names: Vec<&str> = blocked
         .rows
@@ -1797,4 +1804,119 @@ async fn live_versions_done_with_live_seeders() {
             serde_json::json!({ "round": round, "changed": changed })
         );
     }
+}
+
+/// Plans/play-every-version.md 2a: a core whose one addon answers
+/// `status` with `streams`.
+async fn answering(status: u16, streams: &str) -> (Core, Server) {
+    let server = Server::start(vec![
+        route("GET", "/stream/series/tt1%3A1%3A1.json", status, streams),
+        route("GET", "/meta/series/tt1.json", 200, &meta()),
+    ])
+    .await;
+    (core_with(&server), server)
+}
+
+/// What the view names when nothing can play, with its one action.
+async fn empty_of(view: &VersionsView) -> mq_runtime::EmptyVersions {
+    let s = view.snapshot();
+    assert!(s.recommended.is_none() && s.rows.is_empty(), "{s:?}");
+    s.empty.expect("an empty state")
+}
+
+fn kind_and_action(e: &mq_runtime::EmptyVersions) -> (EmptyKind, EmptyAction) {
+    (e.kind, e.action)
+}
+
+/// 2a: no stream addon installed sends the viewer to Settings, Addons; a
+/// version listed names nothing.
+#[tokio::test]
+async fn with_no_source_the_view_says_add_one() {
+    let core = Core::temporary("p").unwrap();
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    assert_eq!(
+        kind_and_action(&empty_of(&view).await),
+        (EmptyKind::NoSource, EmptyAction::SettingsAddons)
+    );
+    let (core, _server) = answering(200, &torrents()).await;
+    if !core.has_engine() {
+        core.set_debrid_keys(&[(StoreId::RealDebrid, "rd".into())]);
+    }
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    assert!(view.snapshot().empty.is_none());
+}
+
+/// 2a: every addon failing (offline too) offers Try again; with nothing
+/// kept on this device there is nothing to play from it.
+#[tokio::test]
+async fn with_every_source_failing_the_view_offers_try_again() {
+    let (core, _server) = answering(500, "{}").await;
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    let empty = empty_of(&view).await;
+    assert_eq!(
+        kind_and_action(&empty),
+        (EmptyKind::Unreachable, EmptyAction::TryAgain)
+    );
+    assert_eq!(empty.key, None);
+}
+
+/// 2a: nothing answered, or only another episode, reads "No source has
+/// this yet", with no action.
+#[tokio::test]
+async fn with_no_version_of_this_video_no_source_has_it() {
+    let other = serde_json::json!({ "streams": [
+        { "name": "Torrentio\n1080p", "title": "Show.S01E05.1080p.WEB-DL.x264-AAA\n👤 900 💾 2.0 GB",
+          "infoHash": HASH_A, "fileIdx": 0 },
+    ]});
+    for streams in [r#"{"streams":[]}"#.to_owned(), other.to_string()] {
+        let (core, _server) = answering(200, &streams).await;
+        core.set_debrid_keys(&[(StoreId::RealDebrid, "rd".into())]);
+        let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+        assert_eq!(
+            kind_and_action(&empty_of(&view).await),
+            (EmptyKind::NoResults, EmptyAction::None),
+            "{streams}"
+        );
+    }
+}
+
+/// 2a: versions found that none of this device's players open are
+/// offered dimmed under Choose a version, each still startable.
+#[tokio::test]
+async fn with_nothing_this_device_plays_each_version_stays_startable() {
+    let streams = serde_json::json!({ "streams": [
+        { "name": "Direct", "title": "Show.S01E01.1080p.WEB-DL.x265-AAA", "url": "http://127.0.0.1:9/v.mp4" },
+    ]});
+    let (core, _server) = answering(200, &streams.to_string()).await;
+    let caps = DeviceCaps {
+        decoders: vec![mq_relparse::VideoCodec::H264],
+        has_fallback_engine: false,
+        ..DeviceCaps::basic_1080p()
+    };
+    let view = versions_for(&core, caps).await;
+    let empty = empty_of(&view).await;
+    assert_eq!(
+        (kind_and_action(&empty), empty.count),
+        ((EmptyKind::NothingPlaysHere, EmptyAction::ChooseVersion), 1)
+    );
+    let key = &empty.rows[0].key;
+    assert_eq!(view.candidates(key).len(), 1, "startable");
+}
+
+/// 2a: with no room even for the playback window the view says the device
+/// needs a little free space, with no action.
+#[tokio::test]
+async fn with_no_room_for_the_window_the_view_asks_for_a_little_space() {
+    let (core, _server) = answering(200, &torrents()).await;
+    if !core.has_engine() {
+        // Store builds never fetch a swarm.
+        return;
+    }
+    core.set_free_bytes(0);
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    let empty = empty_of(&view).await;
+    assert_eq!(
+        (kind_and_action(&empty), empty.count),
+        ((EmptyKind::NoRoom, EmptyAction::None), 2)
+    );
 }

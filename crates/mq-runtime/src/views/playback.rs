@@ -4278,6 +4278,34 @@ pub(crate) async fn kept_start(core: &Core, item_id: &str, video_id: &str) -> Op
         .flatten()
 }
 
+/// The stream `key` names in `item_id`'s stream memory, built from what
+/// the memory keeps (the torrent, its file and release), so it starts with
+/// no addon: "Play from this device" when every source failed.
+#[cfg(feature = "torrent")]
+pub(crate) fn kept_stream(core: &Core, item_id: &str, key: &str) -> Option<ParsedStream> {
+    let memory = core
+        .library()
+        .stream_memory(core.profile(), item_id)
+        .ok()??;
+    let memory: serde_json::Value = serde_json::from_str(&memory).ok()?;
+    if memory["key"].as_str() != Some(key) {
+        return None;
+    }
+    let kept = &memory["torrent"];
+    let release = memory["release"].as_str().unwrap_or_default();
+    let body = serde_json::json!({ "streams": [{
+        "infoHash": kept["hash"].as_str()?,
+        "fileIdx": kept["file"].as_u64()?,
+        "name": release,
+        "behaviorHints": { "filename": release },
+    }]});
+    let wire = mq_protocol::decode_streams(body.to_string().as_bytes()).ok()?;
+    let addon = memory["addonId"].as_str().unwrap_or_default();
+    let mut stream = mq_streams::normalize(wire.streams.first()?, addon, "", 0, 0);
+    stream.key = key.to_owned();
+    Some(stream)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

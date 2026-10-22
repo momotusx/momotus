@@ -6,7 +6,8 @@
 use mq_library::{AddonRow, AllowedRow, OWNER};
 use mq_runtime::views::versions::Verified;
 use mq_runtime::{
-    Core, PlayTarget, PlaybackPhase, PlaybackView, TitleView, VersionsParams, VersionsView,
+    Core, EmptyAction, EmptyKind, PlayTarget, PlaybackPhase, PlaybackView, TitleView,
+    VersionsParams, VersionsView,
 };
 use mq_streams::{DeviceCaps, HideReason, StreamPrefs, Target};
 use serde_json::{Value, json};
@@ -227,6 +228,12 @@ async fn versions_need_the_list_and_a_video_of_the_title() {
     ];
     assert!(refused.iter().all(VersionsView::denied));
     assert!(refused.iter().all(|v| v.candidates("any").is_empty()));
+    // Said in a child's words, with nothing to do (play-every-version 2a).
+    assert!(refused.iter().all(|v| {
+        v.snapshot()
+            .empty
+            .is_some_and(|e| (e.kind, e.action) == (EmptyKind::KidsNothing, EmptyAction::None))
+    }));
     let allowed =
         VersionsView::open_checked(&kid, params("series", "tt1:2:5", "Other"), Some("tt1"));
     assert!(!allowed.denied());
@@ -334,6 +341,7 @@ async fn nothing_playable_leaves_no_pick_and_the_owner_counts_none() {
     ))
     .await;
     assert!(s.recommended.is_none() && s.rows.is_empty());
+    assert_eq!(s.empty.map(|e| e.kind), Some(EmptyKind::KidsNothing));
     // "View as": the owner runs the same view as the kid.
     let as_kid = owner.for_profile(kid.profile());
     let s = settled(&VersionsView::open_checked(
@@ -873,6 +881,56 @@ async fn a_title_kept_on_this_device_says_so() {
                 .is_some_and(|r| r.on_device.as_deref() == Some("On this device"))
     })
     .await;
+}
+
+/// Plans/play-every-version.md 2a: with every source down, the version
+/// this device keeps is offered as "Play from this device", and it plays
+/// with no addon.
+#[cfg(feature = "torrent")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn with_every_source_down_the_kept_version_plays_from_this_device() {
+    let (s, _t, owner, kid, found) = torrent_kid().await;
+    let view = PlaybackView::open(&kid, found, target("movie", "tt1", "tt1"));
+    let url = ready(&view).await;
+    let len = s.movie.len() as u64;
+    assert!(read_range(&url, 0, len).await == s.movie, "the whole film");
+    view.report_progress(60_000, 120_000, false);
+    drop(view);
+    // The one addon's port is closed: every source fails.
+    let port = TcpListener::bind("127.0.0.1:0")
+        .await
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let mut down = Fixture::default().addon().await;
+    down.transport_url = format!("http://127.0.0.1:{port}/manifest.json");
+    owner
+        .library()
+        .set_addons(OWNER, &[down], &owner.hlc())
+        .unwrap();
+    let versions = VersionsView::open_checked(&kid, params("movie", "tt1", ""), Some("tt1"));
+    until("play from this device", || {
+        versions
+            .snapshot()
+            .empty
+            .is_some_and(|e| e.action == EmptyAction::PlayFromDevice)
+    })
+    .await;
+    let empty = versions.snapshot().empty.unwrap();
+    assert_eq!(empty.kind, EmptyKind::Unreachable);
+    let key = empty.key.unwrap();
+    let play = PlaybackView::open_picked(
+        &kid,
+        versions.pick(&key),
+        target("movie", "tt1", "tt1"),
+        &versions.plays(),
+    );
+    let url = ready(&play).await;
+    assert!(
+        read_range(&url, 0, len).await == s.movie,
+        "from this device"
+    );
 }
 
 /// Plans/player-polish.md 2b, after the app was closed: a core opened again

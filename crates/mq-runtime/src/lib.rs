@@ -57,6 +57,7 @@ pub use views::settings::{HomeRows, Prefs, SettingsView};
 pub use views::sign_in::{SignInSnapshot, SignInView};
 pub use views::title::{Episode, TitleHeader, TitleUpdate, TitleView};
 pub use views::versions::{
-    BlockedReason, BlockedVersions, Pick, PickHandle, TitleFacts, VersionRow, VersionStatus,
-    VersionsConditions, VersionsParams, VersionsSnapshot, VersionsView,
+    BlockedReason, BlockedVersions, EmptyAction, EmptyKind, EmptyVersions, Pick, PickHandle,
+    TitleFacts, VersionRow, VersionStatus, VersionsConditions, VersionsParams, VersionsSnapshot,
+    VersionsView,
 };

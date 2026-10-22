@@ -416,6 +416,56 @@ sealed interface DiscoverState {
     ) : DiscoverState
 }
 
+@Serializable(with = EmptyAction.Serializer::class)
+enum class EmptyAction(
+    val wire: String,
+) {
+    SettingsAddons("settingsAddons"),
+    TryAgain("tryAgain"),
+    PlayFromDevice("playFromDevice"),
+    SettingsAccounts("settingsAccounts"),
+    ChooseVersion("chooseVersion"),
+    None("none"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<EmptyAction>("EmptyAction", EmptyAction.entries, EmptyAction::wire, Unknown)
+}
+
+@Serializable(with = EmptyKind.Serializer::class)
+enum class EmptyKind(
+    val wire: String,
+) {
+    NoSource("noSource"),
+    Unreachable("unreachable"),
+    NoRoom("noRoom"),
+    NeedsAccount("needsAccount"),
+    KidsNothing("kidsNothing"),
+    NoResults("noResults"),
+    NothingPlaysHere("nothingPlaysHere"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<EmptyKind>("EmptyKind", EmptyKind.entries, EmptyKind::wire, Unknown)
+}
+
+/** Why nothing can play (plans/play-every-version.md 2a), with its one action. The words are `empty.<kind>` in apps/shared/stream-choice-words.json. */
+@Serializable
+data class EmptyVersions(
+    val kind: EmptyKind,
+    val action: EmptyAction,
+    /** The versions found, for the states that have some. */
+    val count: Int,
+    /** Those versions ranked as they would play once the reason is gone: shown dimmed for needsAccount and noRoom, startable each for nothingPlaysHere ("Choose a version"). */
+    val rows: List<VersionRow> = emptyList(),
+    /** The version `playFromDevice` starts (`pick` takes it). */
+    val key: String? = null,
+)
+
 @Serializable
 data class Episode(
     val videoId: String,
@@ -1870,6 +1920,8 @@ data class VersionsSnapshot(
     val conditions: VersionsConditions,
     /** Every addon answered, nothing is listed, and the hidden rows say why (3.11). */
     val blocked: BlockedVersions? = null,
+    /** Nothing can play, and why, named by the core with the one action the apps offer (plans/play-every-version.md 2a). None while anything plays or the view is still asking. */
+    val empty: EmptyVersions? = null,
     /** The one-time note when a pick taught Marquee something (3.9). */
     val note: LearnedNote? = null,
     val recommended: VersionRow? = null,

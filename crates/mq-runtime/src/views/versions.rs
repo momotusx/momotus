@@ -106,6 +106,10 @@ pub struct VersionsSnapshot {
     /// Every addon answered, nothing is listed, and the hidden rows say
     /// why (3.11).
     pub blocked: Option<BlockedVersions>,
+    /// Nothing can play, and why, named by the core with the one action
+    /// the apps offer (plans/play-every-version.md 2a). None while anything
+    /// plays or the view is still asking.
+    pub empty: Option<EmptyVersions>,
     /// The one-time note when a pick taught Marquee something (3.9).
     pub note: Option<LearnedNote>,
     pub recommended: Option<VersionRow>,
@@ -188,6 +192,78 @@ pub enum BlockedReason {
     NothingPlaysHere,
 }
 
+/// Why nothing can play (plans/play-every-version.md 2a), with its one
+/// action. The words are `empty.<kind>` in apps/shared/stream-choice-words.json.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub struct EmptyVersions {
+    pub kind: EmptyKind,
+    pub action: EmptyAction,
+    /// The versions found, for the states that have some.
+    pub count: u32,
+    /// Those versions ranked as they would play once the reason is gone:
+    /// shown dimmed for needsAccount and noRoom, startable each for
+    /// nothingPlaysHere ("Choose a version").
+    pub rows: Vec<VersionRow>,
+    /// The version `playFromDevice` starts (`pick` takes it).
+    pub key: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub enum EmptyKind {
+    /// No stream addon is installed.
+    NoSource,
+    /// Every addon failed (offline included: the network has no offline
+    /// kind).
+    Unreachable,
+    /// Every version needs more room than this device has, not even the
+    /// playback window fits (`Room::None`).
+    NoRoom,
+    /// Every version plays only through a streaming account the viewer has
+    /// not set up.
+    NeedsAccount,
+    /// A kids profile: nothing here is on its list.
+    KidsNothing,
+    /// Every addon answered with nothing, or only with what is not a
+    /// version of this video (another title or episode, an excluded one).
+    NoResults,
+    /// Versions exist, none plays on this device.
+    NothingPlaysHere,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub enum EmptyAction {
+    /// A link to Settings, Addons.
+    SettingsAddons,
+    /// Open the view again.
+    TryAgain,
+    /// Pick `key`: the last played source, kept on this device, starts with
+    /// no addon.
+    PlayFromDevice,
+    /// A link to Settings, Accounts.
+    SettingsAccounts,
+    /// The rows, each startable.
+    ChooseVersion,
+    None,
+}
+
 /// How long `done` waits for the meta, for each cache check (4.2, r4 N4)
 /// and for the live counts once the rest is in: the apps play at `done`.
 const SIDE_WAIT: Duration = Duration::from_secs(3);
@@ -236,6 +312,14 @@ struct State {
     counting: usize,
     /// The key of the version that starts from what this device keeps.
     on_device: Option<String>,
+    /// That version's stream from the stream memory, startable with no
+    /// addon when every source failed ("Play from this device").
+    kept: Option<ParsedStream>,
+    /// The stream addons asked.
+    addons: usize,
+    /// A kids profile: what keeps it from playing is said in a child's
+    /// words.
+    kids: bool,
 }
 
 pub struct VersionsView {
@@ -778,6 +862,9 @@ impl VersionsView {
             counting: 0,
             ranking: None,
             on_device: None,
+            kept: None,
+            addons: eligible.len(),
+            kids: verified.is_some(),
         }));
         let snapshot = SharedObservable::new(render(&lock(&state)));
         let mut tasks = JoinSet::new();
@@ -847,6 +934,9 @@ impl VersionsView {
             counting: 0,
             ranking: None,
             on_device: None,
+            kept: None,
+            addons: 0,
+            kids: true,
         };
         Self {
             core: core.clone(),
@@ -933,7 +1023,23 @@ impl VersionsView {
                 .cloned()
                 .collect()
         })
-        .unwrap_or_default()
+        // The source kept on this device when no addon listed it ("Play from
+        // this device"), or a version hidden as unplayable here: each stays
+        // startable ("Choose a version").
+        .unwrap_or_else(|| {
+            let unplayable = s
+                .ranked
+                .hidden
+                .iter()
+                .filter(|h| h.reason == HideReason::Unplayable);
+            s.kept
+                .iter()
+                .chain(unplayable.map(|h| &h.stream))
+                .find(|st| st.key == key)
+                .cloned()
+                .into_iter()
+                .collect()
+        })
     }
 
     /// The user picked row `key` to play. A pick counts toward learning
@@ -1041,8 +1147,10 @@ async fn kept_start(
     let Some(key) = crate::views::playback::kept_start(&core, &ranking.item_id, video).await else {
         return;
     };
+    let kept = crate::views::playback::kept_stream(&core, &ranking.item_id, &key);
     let mut s = lock(&state);
     s.on_device = Some(key);
+    s.kept = kept;
     snapshot.set(render(&s));
 }
 
@@ -1188,6 +1296,7 @@ fn restart(s: &mut State, addons: &[InstalledAddon]) {
     s.slow.clear();
     s.failed.clear();
     s.blocked = None;
+    s.addons = addons.len();
     s.done = addons.is_empty();
 }
 
@@ -1851,6 +1960,7 @@ fn render(s: &State) -> VersionsSnapshot {
     VersionsSnapshot {
         conditions: s.conditions.clone(),
         blocked: s.blocked.clone(),
+        empty: empty(s),
         note: s.note.clone(),
         recommended: s
             .recommended
@@ -1868,6 +1978,67 @@ fn render(s: &State) -> VersionsSnapshot {
         frozen: s.frozen,
         nobody_sharing: nobody_sharing(s),
     }
+}
+
+/// Why nothing can play, once the view is done and nothing is listed
+/// (plans/play-every-version.md 2a): no addon, every addon failed, a kids
+/// profile, the hidden rows' reason (an account, room, this device), else
+/// nothing that is a version of this video (another title or episode, an
+/// excluded one).
+fn empty(s: &State) -> Option<EmptyVersions> {
+    let named = |kind, action| {
+        Some(EmptyVersions {
+            kind,
+            action,
+            count: 0,
+            rows: Vec::new(),
+            key: None,
+        })
+    };
+    // The refused view asks no addon.
+    if s.kids && s.addons == 0 {
+        return named(EmptyKind::KidsNothing, EmptyAction::None);
+    }
+    if !s.done || !s.ranked.rows.is_empty() {
+        return None;
+    }
+    if s.addons == 0 {
+        return named(EmptyKind::NoSource, EmptyAction::SettingsAddons);
+    }
+    if s.failed.len() >= s.addons {
+        let key = s.kept.as_ref().map(|k| k.key.clone());
+        return Some(EmptyVersions {
+            kind: EmptyKind::Unreachable,
+            action: if key.is_some() {
+                EmptyAction::PlayFromDevice
+            } else {
+                EmptyAction::TryAgain
+            },
+            count: 0,
+            rows: Vec::new(),
+            key,
+        });
+    }
+    if s.kids {
+        return named(EmptyKind::KidsNothing, EmptyAction::None);
+    }
+    if let Some(b) = &s.blocked {
+        let (kind, action) = match b.reason {
+            BlockedReason::NeedsAccount => (EmptyKind::NeedsAccount, EmptyAction::SettingsAccounts),
+            BlockedReason::NoSpace => (EmptyKind::NoRoom, EmptyAction::None),
+            BlockedReason::NothingPlaysHere => {
+                (EmptyKind::NothingPlaysHere, EmptyAction::ChooseVersion)
+            }
+        };
+        return Some(EmptyVersions {
+            kind,
+            action,
+            count: b.count,
+            rows: b.rows.clone(),
+            key: None,
+        });
+    }
+    named(EmptyKind::NoResults, EmptyAction::None)
 }
 
 /// Every listed version is a swarm the engine would fetch, and every

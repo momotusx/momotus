@@ -1,6 +1,7 @@
 package app.marquee.core
 
 import app.marquee.core.model.BlockedReason
+import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.LearnedChoice
 import app.marquee.core.model.Network
 import app.marquee.core.model.Prefs
@@ -148,6 +149,21 @@ object StreamChoiceCopy {
                 ("Marquee found {versions}, but this device is nearly full, so none can play here." to "Show them"),
             BlockedReason.NothingPlaysHere to ("Found {versions}, but none plays on this device." to "Show them"),
         )
+
+    /** Why nothing can play, by kind (plans/play-every-version.md 2a): the words and the one action, if any. */
+    val EMPTY =
+        mapOf(
+            EmptyKind.NoSource to ("Add a source in Settings" to "Settings"),
+            EmptyKind.Unreachable to ("Can't reach any source" to "Try again"),
+            EmptyKind.NoRoom to ("This device needs a little free space to play this" to null),
+            EmptyKind.NeedsAccount to ("These play through a streaming account" to "Settings"),
+            EmptyKind.KidsNothing to ("There's nothing here for you to watch" to null),
+            EmptyKind.NoResults to ("No source has this yet" to null),
+            EmptyKind.NothingPlaysHere to ("None of these plays on this device" to "Choose a version"),
+        )
+
+    /** The action for `playFromDevice`, with the unreachable kind's words. */
+    const val PLAY_FROM_DEVICE = "Play from this device"
 
     /** The no-room text on a storage that plays no window: too large for it, whatever its free space. */
     const val NO_SPACE_NO_WINDOW = "{versionsAre} too large for this storage."
