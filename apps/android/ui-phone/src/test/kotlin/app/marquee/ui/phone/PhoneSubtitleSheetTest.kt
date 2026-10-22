@@ -90,8 +90,12 @@ class PhoneSubtitleSheetTest {
     private val executor = Executors.newSingleThreadExecutor { Thread(it, "test-core") }
     private val client = CoreClient(executor.asCoroutineDispatcher())
 
-    /** The core's playback view, ready with a stream, as a scripted core answers its subscribe. */
-    private fun readyView(snapshot: String = READY): PlaybackView {
+    /** The core's playback view, ready with a stream, as a scripted core answers its subscribe; [again] after the first. */
+    private fun readyView(
+        snapshot: String = READY,
+        again: String = snapshot,
+    ): PlaybackView {
+        var subscribes = 0
         client.attach { text ->
             val msg = CoreJson.parseToJsonElement(text).jsonObject
             val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
@@ -99,7 +103,7 @@ class PhoneSubtitleSheetTest {
                 if (msg["op"]?.jsonPrimitive?.content ==
                     "subscribe"
                 ) {
-                    """{"sub":7,"snapshot":$snapshot}"""
+                    """{"sub":${7 + subscribes},"snapshot":${if (subscribes++ == 0) snapshot else again}}"""
                 } else {
                     "{}"
                 }
@@ -334,6 +338,33 @@ class PhoneSubtitleSheetTest {
         compose.onNodeWithContentDescription("Back").assertExists()
         compose.onRoot().performTouchInput { doubleClick(centerLeft + Offset(40f, 0f)) }
         compose.runOnIdle { assertEquals(60_000L, player.currentPosition) }
+        compose.onNodeWithContentDescription("Back").assertExists()
+    }
+
+    @Test
+    fun `a source that starts again after the controls hid shows its loading screen with Back`() {
+        compose.setContent {
+            MarqueeTheme(Form.Phone) { PhonePlayer(controller, false, false, {}, null, { _, _ -> }, {}, {}) }
+        }
+        compose.runOnIdle { controller.attach(readyView(again = READY.replace("7780", "7790"))) }
+        compose.waitUntil(10_000) {
+            Snapshot.sendApplyNotifications()
+            shadowOf(Looper.getMainLooper()).idle()
+            controller.stage == PlaybackController.Stage.Buffering
+        }
+        compose.runOnIdle { player.open() }
+        compose.waitUntil(10_000) { controller.stage == PlaybackController.Stage.Playing }
+        // The controls hide after four seconds of play, Back with them.
+        compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("Back").fetchSemanticsNodes().isEmpty() }
+        // The stream server moved: the play opens again at its new address, from the loading screen.
+        compose.runOnIdle { controller.serverMoved() }
+        compose.waitUntil(10_000) {
+            Snapshot.sendApplyNotifications()
+            shadowOf(Looper.getMainLooper()).idle()
+            controller.starting && controller.stage == PlaybackController.Stage.Buffering
+        }
+        compose.waitForIdle()
+        compose.onNodeWithTag(LOADING_TAG).assertExists()
         compose.onNodeWithContentDescription("Back").assertExists()
     }
 

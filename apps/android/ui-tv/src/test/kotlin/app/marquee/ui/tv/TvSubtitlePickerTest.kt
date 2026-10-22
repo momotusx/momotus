@@ -1,11 +1,20 @@
 package app.marquee.ui.tv
 
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsFocused
@@ -20,6 +29,7 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.unit.dp
 import app.marquee.core.model.SubtitleSize
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
@@ -125,6 +135,31 @@ class TvSubtitlePickerTest {
         row("English, 3 options").press(Key.DirectionDown)
         row("Arabic, العربية, 1 option").press(Key.DirectionRight)
         row("PSA, WEBRip 1080p, OpenSubtitles v3").assertIsFocused()
+    }
+
+    @Test
+    fun `Left from a language and from Off stays in the picker, with a control at its left`() {
+        compose.setContent {
+            MarqueeTheme(Form.Tv) {
+                Box(Modifier.fillMaxSize()) {
+                    // Something focusable left of the picker and level with its rows, as a player's controls may be.
+                    Box(
+                        Modifier
+                            .padding(top = 120.dp)
+                            .size(200.dp, 600.dp)
+                            .focusable()
+                            .semantics { contentDescription = "Behind" },
+                    )
+                    TvSubtitlePicker(rows, {}, Modifier.align(Alignment.TopEnd).padding(end = 80.dp, top = 96.dp))
+                }
+            }
+        }
+        compose.waitForIdle()
+        row("English, 3 options").assertIsFocused().press(Key.DirectionLeft)
+        row("English, 3 options").assertIsFocused()
+        row("English, 3 options").press(Key.DirectionUp)
+        row("Off").assertIsFocused().press(Key.DirectionLeft)
+        row("Off").assertIsFocused()
     }
 
     @Test
