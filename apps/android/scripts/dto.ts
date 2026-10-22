@@ -87,9 +87,12 @@ const DEFAULTED = new Map([
   ["SubtitleTrack.fits", "false"],
   // The best-timed subtitle (plans/player-polish.md 2g): an older core marks no hash match.
   ["SubtitleTrack.hashMatch", "false"],
+  // Its remembered delay: an older core remembers none.
+  ["SubtitleTrack.delayMs", "0"],
 ]);
 const INT = new Set([
   "overCount",
+  "delayMs",
   "retries",
   "searchable",
   "pace",

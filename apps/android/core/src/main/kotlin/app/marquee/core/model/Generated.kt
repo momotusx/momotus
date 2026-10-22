@@ -1512,6 +1512,8 @@ data class SubtitleTrack(
     val hashMatch: Boolean = false,
     /** The frame rate it was made for, set only when one of it and the playing file's is PAL (25) and the other is not: show "Made for 25 fps". */
     val madeForFps: Float? = null,
+    /** The delay the viewer last set for this track on this version and video, in ms (positive shows the text later): the stepper starts there. 0 when none. */
+    val delayMs: Int = 0,
     /** The release text the addon names for the track (its label, file name or release name), for a detail line; null when it names none. */
     val release: String? = null,
 )

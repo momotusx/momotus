@@ -270,9 +270,18 @@ pub struct SubtitleTrack {
     /// playing file's is PAL (25) and the other is not: show "Made for 25
     /// fps".
     pub made_for_fps: Option<f32>,
+    /// The delay the viewer last set for this track on this version and
+    /// video, in ms (positive shows the text later): the stepper starts
+    /// there. 0 when none.
+    pub delay_ms: i32,
     /// The release text the addon names for the track (its label, file
     /// name or release name), for a detail line; null when it names none.
     pub release: Option<String>,
+    /// What names the file across plays (its URL here is per play): the
+    /// addon id and the file's id, else the addon's URL for it.
+    #[serde(skip)]
+    #[cfg_attr(feature = "ts", ts(skip))]
+    origin: String,
     /// `name` before numbering.
     #[serde(skip)]
     #[cfg_attr(feature = "ts", ts(skip))]
@@ -328,6 +337,8 @@ impl SubtitleTrack {
             fits: false,
             hash_match: false,
             made_for_fps: None,
+            delay_ms: 0,
+            origin: String::new(),
             made: Made {
                 family: fit::family(parsed.quality),
                 cut: parsed.cut,
@@ -631,6 +642,9 @@ struct State {
     /// The viewer picked a subtitle, or Off, in this view: `autoSubtitle`
     /// stays null from then on.
     subtitle_picked: bool,
+    /// The subtitle delay the title remembers for the playing version and
+    /// video: the track's origin (`SubtitleTrack::origin`) and its ms.
+    delay: Option<(String, i32)>,
     /// The start's progress when the source starting now began, and when
     /// it began (`start`).
     start_base: f32,
@@ -734,6 +748,7 @@ impl State {
             order: HashMap::new(),
             playing: OwnedPlaying::default(),
             subtitle_picked: false,
+            delay: None,
             start_base: 0.0,
             source_since: tokio::time::Instant::now(),
             languages: Vec::new(),
@@ -1118,6 +1133,57 @@ impl PlaybackView {
         let Some(choice) = choice else {
             return;
         };
+        self.remember(binge_group, |memory| memory["subtitle"] = choice.into());
+    }
+
+    /// The viewer settled the delay of the core's track `url` at `ms` (the
+    /// stepper's value, within a minute either way): the title remembers it
+    /// for the playing version and video and that track, the one track it
+    /// remembers a delay for, and the track's `delayMs` starts there on the
+    /// next play. Zero forgets it.
+    pub fn subtitle_delay(&self, url: &str, ms: i64) {
+        let ms = ms.clamp(-MAX_DELAY_MS, MAX_DELAY_MS) as i32;
+        let mut s = lock(&self.state);
+        let Some(origin) = s
+            .snapshot
+            .subtitles
+            .iter()
+            .find(|t| t.url == url)
+            .map(|t| t.origin.clone())
+        else {
+            return;
+        };
+        let Some(key) = s.snapshot.key.clone() else {
+            return;
+        };
+        s.delay = (ms != 0).then(|| (origin.clone(), ms));
+        let delay = s.delay.clone();
+        for t in &mut s.snapshot.subtitles {
+            t.delay_ms = delay_of(&delay, &t.origin);
+        }
+        self.snapshot.set(s.snapshot.clone());
+        let binge_group = s.snapshot.binge_group.clone();
+        drop(s);
+        let video_id = self.target.video_id.clone();
+        self.remember(binge_group, |memory| {
+            let Some(memory) = memory.as_object_mut() else {
+                return;
+            };
+            if ms == 0 {
+                memory.remove(DELAY);
+            } else {
+                // Nothing is baked into a track yet: its ratio is 1.
+                let entry = serde_json::json!({
+                    "key": key, "videoId": video_id, "origin": origin,
+                    "ratio": 1.0, "offsetMs": ms,
+                });
+                memory.insert(DELAY.into(), entry);
+            }
+        });
+    }
+
+    /// Rewrites the title's stream memory with `change`.
+    fn remember(&self, binge_group: Option<String>, change: impl FnOnce(&mut serde_json::Value)) {
         let library = self.core.library();
         let mut memory: serde_json::Value = library
             .stream_memory(self.core.profile(), &self.target.item_id)
@@ -1126,7 +1192,7 @@ impl PlaybackView {
             .and_then(|m| serde_json::from_str(&m).ok())
             .filter(serde_json::Value::is_object)
             .unwrap_or_else(|| serde_json::json!({}));
-        memory["subtitle"] = choice.into();
+        change(&mut memory);
         if let Err(e) = library.set_stream_memory(
             self.core.profile(),
             &self.target.item_id,
@@ -1134,7 +1200,7 @@ impl PlaybackView {
             &memory.to_string(),
             self.core.clock(),
         ) {
-            tracing::warn!("subtitle choice not remembered: {e}");
+            tracing::warn!("subtitle memory not written: {e}");
         }
     }
 
@@ -1694,9 +1760,10 @@ async fn resolve_next(
                     .iter()
                     .filter_map(|w| {
                         let url = slot.add(w.url.as_str(), &w.lang, addon_url)?;
-                        Some(track(w, &stream.addon_name, "", url))
+                        Some(track(w, &stream.addon_name, &stream.addon_id, url))
                     })
                     .collect();
+                let delay = remembered_delay(&core, &target, &stream.key);
                 let proven = {
                     let mut s = lock(&state);
                     if !adopt(&mut s, run, lease) {
@@ -1710,6 +1777,7 @@ async fn resolve_next(
                     s.snapshot.phase = PlaybackPhase::Ready;
                     s.snapshot.start = None;
                     s.playing = OwnedPlaying::of(&stream.release);
+                    s.delay = delay;
                     s.snapshot.key = Some(stream.key.clone());
                     s.snapshot.filename = filename.clone();
                     s.snapshot.size_bytes = size.or(stream.size_bytes);
@@ -3282,6 +3350,7 @@ async fn built_in_tracks(
                         made: Made::of(found.row.made()),
                         name: found.label.clone(),
                         base: found.label.clone(),
+                        origin: key.clone(),
                         ..SubtitleTrack::new(url, "tur", label, BUILT_IN, Some(found.label))
                     });
                 }
@@ -3424,9 +3493,15 @@ fn track(
         .and_then(|f| f.as_f64())
         .filter(|f| *f > 0.0)
         .map(|f| (f / 1000.0) as f32);
+    let origin = if addon_id.is_empty() || w.id.is_empty() {
+        w.url.to_string()
+    } else {
+        format!("{addon_id}:{}", w.id)
+    };
     SubtitleTrack {
         forced: w.forced,
         hearing_impaired,
+        origin,
         made: Made {
             hash,
             fps,
@@ -3540,12 +3615,49 @@ const OFF: &str = "off";
 
 /// The user's subtitle choice for this title: `OFF` or a language tag.
 fn remembered_subtitle(core: &Core, target: &PlayTarget) -> Option<String> {
+    stream_memory(core, target)?
+        .get("subtitle")?
+        .as_str()
+        .map(str::to_owned)
+}
+
+/// Where a title's memory keeps the one subtitle delay it remembers:
+/// `{key, videoId, origin, ratio, offsetMs}` (plans/player-polish.md 2g).
+const DELAY: &str = "subtitleDelay";
+
+/// The stepper's reach either way.
+const MAX_DELAY_MS: i64 = 60_000;
+
+/// The title's stream memory (synced: it belongs to the file pair, not the
+/// device).
+fn stream_memory(core: &Core, target: &PlayTarget) -> Option<serde_json::Value> {
     let memory = core
         .library()
         .stream_memory(core.profile(), &target.item_id)
         .ok()??;
-    let memory: serde_json::Value = serde_json::from_str(&memory).ok()?;
-    memory.get("subtitle")?.as_str().map(str::to_owned)
+    serde_json::from_str(&memory).ok()
+}
+
+/// The subtitle delay the title remembers for the version `key` of this
+/// video: the track's origin and its ms.
+fn remembered_delay(core: &Core, target: &PlayTarget, key: &str) -> Option<(String, i32)> {
+    let memory = stream_memory(core, target)?;
+    let delay = &memory[DELAY];
+    if delay["key"].as_str() != Some(key) || delay["videoId"].as_str() != Some(&target.video_id) {
+        return None;
+    }
+    let ms = delay["offsetMs"]
+        .as_i64()?
+        .clamp(-MAX_DELAY_MS, MAX_DELAY_MS) as i32;
+    Some((delay["origin"].as_str()?.to_owned(), ms))
+}
+
+/// A track's remembered delay: `delay`'s when it names its origin.
+fn delay_of(delay: &Option<(String, i32)>, origin: &str) -> i32 {
+    delay
+        .as_ref()
+        .filter(|(o, _)| o == origin)
+        .map_or(0, |(_, ms)| *ms)
 }
 
 /// The video's bytes in process, for the subtitle hash and the frame rate:
@@ -3719,6 +3831,7 @@ fn reorder(s: &mut State, preferred: &[String]) {
         snapshot,
         order,
         playing,
+        delay,
         ..
     } = s;
     let playing = playing.get();
@@ -3756,6 +3869,7 @@ fn reorder(s: &mut State, preferred: &[String]) {
         };
         t.fits = fit::same_group(&t.made.text, playing.group);
         t.hash_match = t.made.hash;
+        t.delay_ms = delay_of(delay, &t.origin);
         t.made_for_fps = fit::misses(&t.made.get(), &playing)
             .rate
             .then_some(t.made.fps)
@@ -3849,9 +3963,17 @@ fn remember_stream(
             "videoId": target.video_id,
         });
     }
-    // The user's subtitle choice for the title stays.
-    if let Some(choice) = remembered_subtitle(core, target) {
-        memory["subtitle"] = choice.into();
+    let old = stream_memory(core, target).unwrap_or_default();
+    // The user's subtitle choice for the title stays, and the subtitle
+    // delay while the version and the video are the same.
+    if let Some(choice) = old.get("subtitle") {
+        memory["subtitle"] = choice.clone();
+    }
+    let delay = &old[DELAY];
+    if delay["key"].as_str() == Some(&stream.key)
+        && delay["videoId"].as_str() == Some(&target.video_id)
+    {
+        memory[DELAY] = delay.clone();
     }
     if let Err(e) = core.library().set_stream_memory(
         core.profile(),

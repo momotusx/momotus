@@ -1631,3 +1631,73 @@ async fn a_pick_before_the_probe_ends_stays_the_pick() {
     assert_eq!(s.subtitles[1].url, picked);
     assert_eq!(s.auto_subtitle, None);
 }
+
+/// Plans/player-polish.md 2g: the stepper's delay is remembered for the
+/// title's version, video and track (its origin, not its per-play URL),
+/// and the next play of the same version starts its track there.
+#[tokio::test]
+async fn a_subtitle_delay_is_remembered_for_the_version_and_the_track() {
+    let (video, _) = counted_origin().await;
+    let core = Core::temporary("p").unwrap();
+    let streams = |file: &str| {
+        let subs: Vec<_> = ["a", "b"]
+            .iter()
+            .map(|id| serde_json::json!({"id": id, "lang": "eng", "url": format!("https://subs.test/{id}.srt"), "subtitleFileName": format!("{id}.srt")}))
+            .collect();
+        serde_json::json!({"streams": [{"url": format!("{video}/{file}"), "title": "Sintel.2010.1080p.WEB", "subtitles": subs}]})
+            .to_string()
+    };
+    let play = |file: &str| PlaybackView::open(&core, setup(&core, &streams(file)), target());
+    let delays = |s: &PlaybackSnapshot| -> Vec<(String, i32)> {
+        s.subtitles
+            .iter()
+            .map(|t| (t.release.clone().unwrap_or_default(), t.delay_ms))
+            .collect()
+    };
+    let at = |pairs: [(&str, i32); 2]| -> Vec<(String, i32)> {
+        pairs.iter().map(|(r, ms)| (r.to_string(), *ms)).collect()
+    };
+
+    let view = play("v.mkv");
+    let s = settled_list(&view).await;
+    assert_eq!(delays(&s), at([("a", 0), ("b", 0)]));
+    let b = s.subtitles[1].url.clone();
+    view.subtitle_delay(&b, 1_300);
+    assert_eq!(delays(&view.snapshot()), at([("a", 0), ("b", 1_300)]));
+    // Not a core track (an in-file one): nothing changes.
+    view.subtitle_delay("http://127.0.0.1:1/sub/x/in-file.vtt", 500);
+    assert_eq!(delays(&view.snapshot()), at([("a", 0), ("b", 1_300)]));
+    drop(view);
+
+    // The next play of the version: a new URL, the same delay.
+    let view = play("v.mkv");
+    let s = settled_list(&view).await;
+    assert_ne!(s.subtitles[1].url, b);
+    assert_eq!(delays(&s), at([("a", 0), ("b", 1_300)]));
+    drop(view);
+    // Each start rewrites the memory and keeps it.
+    let view = play("v.mkv");
+    let s = settled_list(&view).await;
+    assert_eq!(delays(&s), at([("a", 0), ("b", 1_300)]));
+    // The stepper stops at a minute either way.
+    view.subtitle_delay(&s.subtitles[0].url, -90_000);
+    drop(view);
+    let view = play("v.mkv");
+    let s = settled_list(&view).await;
+    assert_eq!(delays(&s), at([("a", -60_000), ("b", 0)]));
+    drop(view);
+
+    // Another version of the title starts at 0 and forgets it.
+    let s = settled_list(&play("w.mkv")).await;
+    assert_eq!(delays(&s), at([("a", 0), ("b", 0)]));
+    let view = play("v.mkv");
+    let s = settled_list(&view).await;
+    assert_eq!(delays(&s), at([("a", 0), ("b", 0)]));
+
+    // Reset to 0 is remembered as no delay.
+    view.subtitle_delay(&s.subtitles[0].url, 700);
+    view.subtitle_delay(&s.subtitles[0].url, 0);
+    drop(view);
+    let s = settled_list(&play("v.mkv")).await;
+    assert_eq!(delays(&s), at([("a", 0), ("b", 0)]));
+}
