@@ -418,18 +418,24 @@ class TvHomeScrollTest {
     }
 
     @Test
-    fun `Up into Continue Watching moves the page once, to its top under the hero`() {
+    fun `Up into Continue Watching, then to the hero's Play, each move the page once`() {
         show(hero = true)
         downTo(2)
         press(Key.DirectionUp)
-        val move = press(Key.DirectionUp)
-        println(
-            "BENCH up stalls=${move.stalls} moving=${move.moving.count()} " +
-                move.frames.take(30).joinToString(",") { "%.0f".format(it) },
-        )
+        // Into Continue Watching under the top shelf: the anchor brings the card in whole, with its lines.
+        val toCard = press(Key.DirectionUp)
         assertTrue(focused("Watching 1"), "focus went back to Continue Watching")
-        // Before: the anchor brought the row down and stopped, then the page went on up to the hero.
-        assertEquals(0, move.stalls, "the page stopped and went on: ${move.frames}")
+        // On to Play: the page's own scroll to its top, the anchor holding while the hero has focus.
+        val toPlay = press(Key.DirectionUp)
+        for ((name, move) in listOf("card" to toCard, "play" to toPlay)) {
+            println(
+                "BENCH up-$name stalls=${move.stalls} moving=${move.moving.count()} " +
+                    move.frames.take(30).joinToString(",") { "%.0f".format(it) },
+            )
+            // Before: the anchor brought the row down and stopped, then the page went on up to the hero.
+            assertEquals(0, move.stalls, "the page stopped and went on into the $name: ${move.frames}")
+        }
+        assertTrue(focused("Play Sintel"), "focus went up to the hero's Play")
         assertEquals(0, state.page.firstVisibleItemIndex)
         assertEquals(0, state.page.firstVisibleItemScrollOffset)
     }

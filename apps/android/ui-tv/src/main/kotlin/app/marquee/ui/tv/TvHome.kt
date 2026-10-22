@@ -476,12 +476,17 @@ private fun TvHero(
                     maxLines = 1,
                 )
             }
+            // Coming up from the rows, focus lands on Play, the hero's primary, wherever it came from.
+            val playable = tile.playable()
             Row(
-                Modifier.padding(top = Marquee.space.s),
+                Modifier
+                    .padding(top = Marquee.space.s)
+                    .focusProperties { enter = { if (playable) playRequester else FocusRequester.Default } }
+                    .focusGroup(),
                 horizontalArrangement = Arrangement.spacedBy(TopShelf.BUTTON_GAP),
                 verticalAlignment = Alignment.Top,
             ) {
-                if (tile.playable()) {
+                if (playable) {
                     PrimaryButton(
                         label = "Play",
                         icon = PlayFilled,
