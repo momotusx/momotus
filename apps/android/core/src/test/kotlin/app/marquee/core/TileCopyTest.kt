@@ -92,11 +92,8 @@ class TileCopyTest {
     }
 
     @Test
-    fun `a hero says the year, runtime and genres, or the kind`() {
+    fun `a hero says its kind and genres, then its year and runtime`() {
         val full = Hero(tile(releaseInfo = "2026"), "r", runtime = "145 min", genres = listOf("Action", "Adventure"))
-        assertEquals("2026 · 145 min · Action, Adventure", TileCopy.heroMeta(full))
-        assertEquals("2026", TileCopy.heroMeta(Hero(tile(releaseInfo = "2026"), "r")))
-        assertEquals("Series", TileCopy.heroMeta(Hero(tile(kind = "series"), "r")))
         // The top shelf's two lines: the kind and genres (600), then the facts before the ratings row.
         assertEquals("Movie · Action · Adventure", TileCopy.heroGenres(full))
         assertEquals("2026 · 145 min", TileCopy.heroFacts(full))
@@ -106,6 +103,7 @@ class TileCopyTest {
     @Test
     fun `only Continue Watching tiles (Next Up among them) offer Remove on a hold`() {
         assertEquals(true, TileCopy.removable(TileCopy.CONTINUE_ROW))
+        assertEquals(true, TileCopy.isContinue(TileCopy.CONTINUE_ROW))
         assertEquals(false, TileCopy.removable("com.linvo.cinemeta:movie:top"))
     }
 

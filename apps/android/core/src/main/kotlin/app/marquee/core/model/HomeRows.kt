@@ -66,7 +66,8 @@ fun HomeRow.notice(): RowNotice? =
             if (tiles.isEmpty()) {
                 RowNotice.Explained(
                     ROW_FAILED,
-                    "${s.reason.trimEnd('.')}. Check the network, then try again.",
+                    // The reason stays in the log: it can name the addon's host (a blocked private address).
+                    "Check the network, then try again.",
                     failed = true,
                 )
             } else {

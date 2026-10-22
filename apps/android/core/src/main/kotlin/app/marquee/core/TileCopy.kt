@@ -13,8 +13,11 @@ object TileCopy {
     /** The hold menu of a Continue Watching tile (Next Up tiles live in the same row). */
     const val REMOVE_CONTINUE = "Remove from Continue Watching"
 
-    /** Whether a hold on a tile of [rowId] opens the menu with [REMOVE_CONTINUE]. */
-    fun removable(rowId: String): Boolean = rowId == CONTINUE_ROW
+    /** Whether [rowId] is Continue Watching: 16:9 cards with the core's line and no scores. */
+    fun isContinue(rowId: String): Boolean = rowId == CONTINUE_ROW
+
+    /** Whether a hold on a tile of [rowId] opens the menu with [REMOVE_CONTINUE]: Continue Watching's. */
+    fun removable(rowId: String): Boolean = isContinue(rowId)
 
     /** TV's hint beside Continue Watching, as the title page has one for its episodes. */
     const val HOLD_TO_REMOVE = "Hold select on a title to remove it"
@@ -78,15 +81,6 @@ object TileCopy {
      */
     fun ratings(ratings: Ratings): List<String> =
         listOfNotNull(ratings.imdb?.let { "IMDb $it" }, ratings.rottenTomatoes?.let { "RT $it" })
-
-    /**
-     * The facts after a hero's scores: "2026 · 145 min · Action, Adventure". The kind
-     * stands in when the addon gave no year, runtime or genre ("Series").
-     */
-    fun heroMeta(hero: Hero): String {
-        val facts = listOfNotNull(hero.tile.releaseInfo, hero.runtime, hero.genres.joinToString(", ").ifEmpty { null })
-        return facts.ifEmpty { listOf(kind(hero.tile.kind)) }.joinToString(" · ")
-    }
 
     /** A hero's genre line: the kind, then its genres ("Series · Drama · Thriller"). */
     fun heroGenres(hero: Hero): String = (listOf(kind(hero.tile.kind)) + hero.genres).joinToString(" · ")

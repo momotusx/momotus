@@ -33,9 +33,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -236,7 +240,14 @@ private fun PhoneHero(
                 .fillMaxWidth()
                 .height(height)
                 .testTag(PHONE_HERO_TAG)
-                .clickable(role = Role.Button, onClickLabel = "Details of ${tile.name}") { onOpen(tile) },
+                .semantics {
+                    // The buttons on the hero are hidden from screen readers, so Play is an action of the hero, which
+                    // itself opens the details.
+                    if (tile.playable()) {
+                        customActions =
+                            listOf(CustomAccessibilityAction("Play ${tile.name}") { onPlay(tile).let { true } })
+                    }
+                }.clickable(role = Role.Button, onClickLabel = "Details of ${tile.name}") { onOpen(tile) },
         ) {
             Backdrop(
                 tile.background ?: tile.poster,
@@ -279,7 +290,7 @@ private fun PhoneHero(
                         weight = FontWeight.SemiBold,
                         maxLines = 1,
                     )
-                    RatingsRow(TileCopy.ratings(tile.ratings))
+                    RatingsRow(TileCopy.ratings(tile.ratings), onArt = true)
                 }
                 // The core's reason on Apple's explainability line; never an eyebrow.
                 if (hero.reason.isNotBlank()) {
@@ -292,8 +303,10 @@ private fun PhoneHero(
                         textAlign = TextAlign.Center,
                     )
                 }
+                // The hero is the control for screen readers (Details, and Play as its action); the buttons repeat
+                // it for sighted touch.
                 Row(
-                    Modifier.padding(top = 18.dp),
+                    Modifier.padding(top = 18.dp).clearAndSetSemantics { testTag = PHONE_HERO_BUTTONS },
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -312,8 +325,9 @@ private fun PhoneHero(
     }
 }
 
-/** The hero, for tests of where it sits. */
+/** The hero and its button row, for tests of where they sit. */
 internal const val PHONE_HERO_TAG = "home-hero"
+internal const val PHONE_HERO_BUTTONS = "home-hero-buttons"
 
 /** The frame's 390 by 680. */
 private const val HERO_RATIO = 680f / 390f
@@ -334,7 +348,7 @@ private fun shapeOf(row: HomeRow): TileShape =
     }
 
 /** A catalog's posters are the art alone on the phone; Continue Watching keeps its name and line. */
-private fun captioned(row: HomeRow): Boolean = TileCopy.removable(row.rowId)
+private fun captioned(row: HomeRow): Boolean = TileCopy.isContinue(row.rowId)
 
 @Composable
 private fun PhoneRow(

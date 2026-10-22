@@ -84,7 +84,7 @@ private enum class ButtonKind { Primary, Secondary }
  * A secondary's fill (design/DECISION.md, Secondary actions): white at 16 percent with a pure white
  * label and no edge. Over art it sits on a [Backdrop] ramp deep enough for that label (DesignTest).
  */
-internal val SECONDARY_FILL = Color(0x29FFFFFF)
+val SECONDARY_FILL = Color(0x29FFFFFF)
 
 /** A segmented control's track (Apple's tertiary fill), under its unselected choices. */
 internal val SEGMENT_TRACK = Color(0x3D767680)
@@ -810,6 +810,8 @@ fun RatingLine(
     onFirst: (() -> Unit)? = null,
     role: TextRole = TextRole.Callout,
     factsColor: Color = Marquee.colors.muted,
+    /** Over artwork (a hero, a title page): the scores in pure white; on the page, the text level. */
+    onArt: Boolean = true,
 ) {
     Row(
         modifier,
@@ -827,13 +829,13 @@ fun RatingLine(
                 maxLines = 1,
             )
         }
-        RatingsRow(ratings, role = role, onFirst = onFirst)
+        RatingsRow(ratings, role = role, onFirst = onFirst, onArt = onArt)
     }
 }
 
 /**
  * IMDb and Rotten Tomatoes side by side (design/DECISION.md, Status and ratings): each source's name at 70
- * percent and 400, its score in white at 600, as one unbroken line ("IMDb 8.4", "RT Fresh"); no star, no logo,
+ * percent and 400, its score at 600, pure white over artwork ([onArt]) and the 92 percent text level on the page, as one unbroken line ("IMDb 8.4", "RT Fresh"); no star, no logo,
  * no dot between them. A score the data lacks has no slot. Read out as "Rotten Tomatoes 87 percent", never
  * "R T". [onFirst] makes the first score a link a finger can hit. [wrap] lets a pair go to the next line when
  * both do not fit (a narrow poster's caption): a score is never cut and never runs past its column.
@@ -845,9 +847,12 @@ fun RatingsRow(
     role: TextRole = TextRole.Caption,
     onFirst: (() -> Unit)? = null,
     wrap: Boolean = false,
+    onArt: Boolean = false,
 ) {
     if (ratings.isEmpty()) return
     val source = Marquee.colors.muted
+    // Pure white only on artwork (design/DECISION.md, Text).
+    val number = if (onArt) Color.White else Marquee.colors.text
     val gap = Arrangement.spacedBy(if (Marquee.form == Form.Tv) 14.dp else 8.dp)
     val pairs: @Composable () -> Unit = {
         ratings.forEachIndexed { index, score ->
@@ -857,7 +862,7 @@ fun RatingsRow(
                         SpanStyle(color = source, fontWeight = FontWeight.Normal),
                     ) { append(score.substringBefore(' ')) }
                     append(" ")
-                    withStyle(SpanStyle(color = Color.White, fontWeight = FontWeight.SemiBold)) {
+                    withStyle(SpanStyle(color = number, fontWeight = FontWeight.SemiBold)) {
                         append(score.substringAfter(' '))
                     }
                 }

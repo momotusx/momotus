@@ -10,13 +10,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import app.marquee.core.TileCopy
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
@@ -30,6 +34,7 @@ import app.marquee.core.model.Tile
 import app.marquee.core.views.HomeView
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
+import app.marquee.design.SECONDARY_FILL
 import app.marquee.design.Scrims
 import app.marquee.design.formPalette
 import kotlinx.coroutines.CoroutineDispatcher
@@ -109,7 +114,10 @@ class PhoneHomeShelfTest {
         ratings = Ratings("8.4", "Fresh"),
     )
 
-    private fun show() {
+    private fun show(
+        onPlay: () -> Unit = {},
+        onOpen: () -> Unit = {},
+    ) {
         val hero =
             Hero(
                 tile(
@@ -170,7 +178,9 @@ class PhoneHomeShelfTest {
         }
         val home = HomeView(client, scope)
         compose.setContent {
-            MarqueeTheme(Form.Phone) { PhoneHome(home, onOpen = {}, onPlay = {}, onSetup = {}, onAddons = {}) }
+            MarqueeTheme(
+                Form.Phone,
+            ) { PhoneHome(home, onOpen = { onOpen() }, onPlay = { onPlay() }, onSetup = {}, onAddons = {}) }
         }
         compose.waitForIdle()
         home.open()
@@ -207,7 +217,7 @@ class PhoneHomeShelfTest {
         val height = hero.size.height / root.width * 390f
         assertEquals(680f, height, 4f, "the hero is $height tall at 390 wide")
         val phone = formPalette(Form.Phone)
-        val fill = Color(0x29FFFFFF)
+        val fill = SECONDARY_FILL
         val heroTop = hero.positionInRoot.y
         val heroHeight = hero.size.height.toFloat()
         val lines =
@@ -217,7 +227,8 @@ class PhoneHomeShelfTest {
                 Triple("the reason", bounds("#1 in Popular Movies"), phone.text to Color.Transparent),
                 Triple(
                     "Details",
-                    compose.onNodeWithContentDescription("Details").fetchSemanticsNode().boundsInRoot,
+                    // The row ends with Details; its glyph sits level with the row's top.
+                    compose.onNodeWithTag(PHONE_HERO_BUTTONS, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot,
                     Color.White to fill,
                 ),
             )
@@ -256,6 +267,23 @@ class PhoneHomeShelfTest {
                 "$text under the poster",
             )
         }
+    }
+
+    @Test
+    fun `a screen reader finds the hero as one control that opens Details, with Play as its action`() {
+        var played = 0
+        var opened = 0
+        show(onPlay = { played++ }, onOpen = { opened++ })
+        val hero = compose.onNodeWithTag(PHONE_HERO_TAG)
+        hero.assertHasClickAction()
+        val play = hero.fetchSemanticsNode().config[SemanticsActions.CustomActions].single()
+        assertEquals("Play Night of the Living Dead", play.label)
+        compose.runOnIdle { play.action() }
+        compose.runOnIdle { assertEquals(1, played) }
+        hero.performClick()
+        compose.runOnIdle { assertEquals(1, opened) }
+        // The buttons are for sighted touch: no second Play or Details for a screen reader.
+        assertEquals(0, compose.onAllNodesWithContentDescription("Details").fetchSemanticsNodes().size)
     }
 
     private fun save(name: String) {
