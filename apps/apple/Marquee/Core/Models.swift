@@ -59,7 +59,8 @@ func posterLabel(_ parts: [String?], _ ratings: Ratings?) -> String {
 
 struct Hero: Decodable, Hashable, Sendable {
     let tile: Tile
-    /// One line telling the user why this title is here.
+    /// One line telling the user why this title is here: "#1 in Popular
+    /// Movies", never with the addon's name.
     let reason: String
     let description: String?
     /// At most three, in the addon's order. Optional here only so replies

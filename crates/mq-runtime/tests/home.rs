@@ -1103,3 +1103,111 @@ async fn a_later_twin_row_stays_off_home_until_turned_on() {
         [false, true, true]
     );
 }
+
+/// The Godfather first with a backdrop, then The Shawshank Redemption.
+const GODFATHER_FIRST: &str = r#"{"metas":[
+  {"id":"tt0068646","type":"movie","name":"The Godfather","background":"https://images.metahub.space/background/medium/tt0068646/img"},
+  {"id":"tt0111161","type":"movie","name":"The Shawshank Redemption","background":"https://images.metahub.space/background/medium/tt0111161/img"}
+]}"#;
+
+/// The Godfather alone.
+const GODFATHER_ONLY: &str = r#"{"metas":[
+  {"id":"tt0068646","type":"movie","name":"The Godfather","background":"https://images.metahub.space/background/medium/tt0068646/img"}
+]}"#;
+
+/// Waits up to 3 s for the hero to be `id` with `reason`.
+async fn hero_until(view: &HomeView, id: &str, reason: &str) {
+    for _ in 0..300 {
+        if view
+            .snapshot()
+            .header
+            .hero
+            .is_some_and(|h| h.tile.id == id && h.reason == reason)
+        {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!(
+        "wanted {id} {reason:?}, got {:?}",
+        view.snapshot().header.hero
+    );
+}
+
+/// A kept hero whose row goes never stays on another row's word: another
+/// row that lists it lower down does not keep it, the first candidate takes
+/// its place with its own reason.
+#[tokio::test]
+async fn the_kept_hero_goes_with_its_row() {
+    let core = Core::temporary("p").unwrap();
+    let mut first = catalog_addon("first", Duration::ZERO, 200, METAS).await;
+    let mut trending =
+        named_catalog_addon("trending", "Trending", Duration::ZERO, 200, GODFATHER_FIRST).await;
+    (first.position, trending.position) = (0, 1);
+    core.library()
+        .set_addons("p", &[first, trending], &core.hlc())
+        .unwrap();
+    let view = HomeView::open(&core);
+    hero_until(&view, "tt0111161", "#1 in Popular Movies").await;
+    let own = view.snapshot().rows[0].row_id.clone();
+    core.set_home_row_hidden(&own, true).unwrap();
+    hero_until(&view, "tt0068646", "#1 in Trending Movies").await;
+}
+
+/// The kept hero's row must still hold it: a row of the same title that no
+/// longer lists it (its addon replaced by another) gives the hero up.
+#[tokio::test]
+async fn the_kept_hero_needs_its_row_to_hold_it() {
+    let core = Core::temporary("p").unwrap();
+    let first = catalog_addon("first", Duration::ZERO, 200, METAS).await;
+    let other = catalog_addon("other", Duration::ZERO, 200, GODFATHER_ONLY).await;
+    core.library()
+        .set_addons("p", &[first], &core.hlc())
+        .unwrap();
+    let view = HomeView::open(&core);
+    hero_until(&view, "tt0111161", "#1 in Popular Movies").await;
+    core.library()
+        .set_addons("p", &[other], &core.hlc())
+        .unwrap();
+    hero_until(&view, "tt0068646", "#1 in Popular Movies").await;
+}
+
+/// A clash that appears after the hero shows changes nothing on screen: the
+/// new twin stays off Home and the hero keeps its tile and its words.
+#[tokio::test]
+async fn a_twin_installed_after_the_hero_shows_changes_nothing() {
+    let core = Core::temporary("p").unwrap();
+    let mut first = catalog_addon("first", Duration::ZERO, 200, METAS).await;
+    let mut second = catalog_addon("second", Duration::ZERO, 200, GODFATHER_ONLY).await;
+    (first.position, second.position) = (0, 1);
+    core.library()
+        .set_addons("p", std::slice::from_ref(&first), &core.hlc())
+        .unwrap();
+    let view = HomeView::open(&core);
+    hero_until(&view, "tt0111161", "#1 in Popular Movies").await;
+    let shown = view.snapshot().rows[0].row_id.clone();
+    core.library()
+        .set_addons("p", &[first, second], &core.hlc())
+        .unwrap();
+    for _ in 0..300 {
+        if core.home_catalogs().len() == 2 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert_eq!(
+        core.home_catalogs()
+            .iter()
+            .map(|c| c.hidden)
+            .collect::<Vec<_>>(),
+        [false, true]
+    );
+    // Give an open Home the time to follow the install.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    rows_until(&view, &[&shown]).await;
+    let hero = view.snapshot().header.hero.unwrap();
+    assert_eq!(
+        (hero.tile.id.as_str(), hero.reason.as_str()),
+        ("tt0111161", "#1 in Popular Movies")
+    );
+}

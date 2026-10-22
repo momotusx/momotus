@@ -529,16 +529,6 @@ async fn watch_addons(
             rows.clear();
             rows.append(swapped.into_iter().collect());
         }
-        // A hero from a catalog that went away goes with it.
-        let hero = header.get().hero.map(|h| h.tile.id);
-        let shown = hero.is_some_and(|id| {
-            lock(&rows)
-                .iter()
-                .any(|r| r.tiles.iter().any(|t| t.id == id))
-        });
-        if !shown {
-            header.set(HomeHeader { hero: None });
-        }
         maybe_pick_hero(&rows, &header);
         // Hiding, showing or moving rows that kept their tiles loads nothing.
         if !fresh.is_empty() {
@@ -581,6 +571,13 @@ fn catalog_title(name: &str, kind: &str, source: &str) -> String {
     } else {
         format!("{name} {label}")
     }
+}
+
+/// The hero's caption: "#1 in Popular Movies", never with the addon's name
+/// (the owner, 2026-10-22); a twin row is off Home by default, so the title
+/// says enough.
+fn hero_reason(title: &str) -> String {
+    format!("#1 in {title}")
 }
 
 /// Lowercase words of letters and digits.
@@ -862,10 +859,10 @@ pub(crate) fn tile_from_preview(m: mq_protocol::MetaItemPreview) -> Tile {
     }
 }
 
-/// The hero is the newest Continue Watching item with artwork, else the first
-/// catalog item with a background. Once a catalog hero is shown it stays put
-/// while later rows arrive, so the screen does not shift under the user; only a
-/// Continue Watching item may replace it.
+/// The hero is the first catalog item with a background, never from Continue
+/// Watching. Once shown it stays put while its row holds it, so the screen
+/// does not shift under the user as later rows arrive; its row hidden or gone,
+/// or an answer without it, lets the first candidate take its place.
 fn maybe_pick_hero(rows: &Mutex<ObservableVector<HomeRow>>, header: &SharedObservable<HomeHeader>) {
     let rows = lock(rows);
     // Walk rows in display order and stop at the first one still loading, so
@@ -884,20 +881,22 @@ fn maybe_pick_hero(rows: &Mutex<ObservableVector<HomeRow>>, header: &SharedObser
             let blurb = tile.blurb.clone().unwrap_or_default();
             Some(Hero {
                 tile: tile.clone(),
-                // Never the addon's name (the owner, 2026-10-22): a twin
-                // row is hidden by default, so the title says enough.
-                reason: format!("#1 in {}", row.title),
+                reason: hero_reason(&row.title),
                 description: blurb.description,
                 genres: blurb.genres,
                 runtime: blurb.runtime,
             })
         });
     let current = header.get().hero;
-    let next = match (candidate, &current) {
-        (Some(_), Some(existing)) => Some(existing.clone()),
-        (Some(hero), None) => Some(hero),
-        (None, _) => None,
-    };
+    // Its row is the one its reason names, and it must still hold the tile.
+    let kept = current.clone().filter(|hero| {
+        rows.iter().any(|r| {
+            r.row_id != CONTINUE_ROW_ID
+                && hero_reason(&r.title) == hero.reason
+                && r.tiles.iter().any(|t| t.id == hero.tile.id)
+        })
+    });
+    let next = kept.or(candidate);
     if current != next {
         header.set(HomeHeader { hero: next });
     }
