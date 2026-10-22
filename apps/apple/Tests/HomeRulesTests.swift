@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 // Home's rules, as Android's RouteTest has them.
@@ -56,6 +57,35 @@ private func row(_ state: RowState, _ tiles: String...) -> HomeRow {
     #expect(![row(.failed(reason: "late"), "a")].allFailed, "tiles that arrived before the failure")
     #expect(![row(.empty)].allFailed, "empty, not failed")
     #expect(![HomeRow]().allFailed)
+}
+
+@Test func aRowNeverNamesItsAddonNotEvenForATwinOrInItsState() {
+    // The owner's rule (2026-10-22): two "Popular Movies" rows, or Search's two "Movies" groups,
+    // still show the title alone; a slow, empty or failed row says what happened.
+    func lane(_ id: String, _ state: RowState) -> HomeRow {
+        HomeRow(rowId: id, title: "Popular Movies", source: "Cinemeta", state: state, tiles: [])
+    }
+    #expect(lane("cinemeta/movie/top", .ready).subtitle == nil)
+    #expect(lane("other/movie/top", .ready).subtitle == nil)
+    #expect(lane("cinemeta/movie/top", .slow).subtitle == "Slow to answer, still trying")
+    #expect(lane("cinemeta/movie/top", .ready).stateWords == nil)
+    #expect(lane("cinemeta/movie/top", .empty).stateWords == "Nothing in this row right now.")
+    #expect(lane("cinemeta/movie/top", .failed(reason: "timed out")).stateWords == "This row did not load.")
+}
+
+@Test func homeSearchAndDiscoverNeverReadAnAddonsName() throws {
+    // The rows, the hero, Search's groups and Discover's catalog chips never read `source`; only the
+    // Addons pages and Settings > Home rows do (design/DECISION.md, Shelves).
+    let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
+    var read = 0
+    for folder in ["Home", "Search", "Discover"] {
+        for name in try FileManager.default.contentsOfDirectory(atPath: app.appending(path: folder).path) where name.hasSuffix(".swift") {
+            let text = try String(contentsOf: app.appending(path: "\(folder)/\(name)"), encoding: .utf8)
+            #expect(text.range(of: #"\.source\b"#, options: .regularExpression) == nil, "\(folder)/\(name) reads an addon's name")
+            read += 1
+        }
+    }
+    #expect(read >= 8)
 }
 
 @Test func oneFailedRowsTryAgainAsksForThatRowOnly() {

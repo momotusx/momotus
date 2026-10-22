@@ -107,6 +107,22 @@ struct HomeRow: Decodable, Hashable, Sendable {
 extension HomeRow {
     /// The Home view's command for this row's Try again (core `retryRow`).
     var retryCommand: [String: String] { ["type": "retryRow", "rowId": rowId] }
+
+    // No addon's name on Home or Search, not even for two rows with the same title, and not in a
+    // row's state (the owner, 2026-10-22; design/DECISION.md, Shelves). The Addons pages and
+    // Settings > Home rows name it.
+
+    /// Beside the title: "Slow to answer, still trying" for a slow row, else nothing (the web's words).
+    var subtitle: String? { state == .slow ? "Slow to answer, still trying" : nil }
+
+    /// What an empty or failed row says under its title.
+    var stateWords: String? {
+        switch state {
+        case .empty: "Nothing in this row right now."
+        case .failed: "This row did not load."
+        case .loading, .slow, .ready: nil
+        }
+    }
 }
 
 extension [HomeRow] {

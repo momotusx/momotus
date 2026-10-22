@@ -13,16 +13,16 @@ struct RowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: metrics.wide ? 16 : 12) {
-            RowHeader(title: row.title, subtitle: subtitle).padding(.horizontal, metrics.gutter)
+            RowHeader(title: row.title, subtitle: row.subtitle).padding(.horizontal, metrics.gutter)
             switch row.state {
             case .loading, .slow:
                 SkeletonStrip()
             case .empty:
-                StateLine(symbol: "inbox", text: "\(row.source) has nothing in this catalog right now.")
+                StateLine(symbol: "inbox", text: row.stateWords ?? "")
                     .padding(.horizontal, metrics.gutter)
-            case .failed(let reason):
+            case .failed:
                 // Secondary: the page's primary is the hero's Play, or the one Try again when nothing answered.
-                StateLine(symbol: "triangle-alert", text: "\(row.source) did not answer: \(reason)", action: ("Try again", retry), primary: false)
+                StateLine(symbol: "triangle-alert", text: row.stateWords ?? "", action: ("Try again", retry), primary: false)
                     .padding(.horizontal, metrics.gutter)
             case .ready:
                 strip
@@ -35,11 +35,6 @@ struct RowView: View {
         #if os(tvOS)
         .focusSection()
         #endif
-    }
-
-    private var subtitle: String? {
-        if row.state == .slow { return "\(row.source), still loading" }
-        return row.rowId == "continue-watching" ? nil : row.source
     }
 
     /// Takes the title off Continue Watching; a failure says so under the row,
@@ -89,7 +84,7 @@ struct RowView: View {
     }
 }
 
-/// A section header: a bar, the title, its source and a hairline to the edge.
+/// A section header: the title, and a quiet word beside it ("Slow to answer, still trying").
 struct RowHeader: View {
     let title: String
     var subtitle: String?

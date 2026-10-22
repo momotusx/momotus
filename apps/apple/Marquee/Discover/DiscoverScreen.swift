@@ -58,7 +58,7 @@ struct DiscoverScreen: View {
                 isSelected: { $0 == s.kind }, select: { select(["kind": $0]) })
             if !s.catalogs.isEmpty {
                 ChipRow(
-                    label: "Catalog", chips: s.catalogs.map { Chip(id: $0.id, title: $0.name, detail: $0.source) },
+                    label: "Catalog", chips: s.catalogs.map { Chip(id: $0.id, title: $0.name) },
                     isSelected: { $0 == s.catalog }, select: { select(["catalog": $0]) })
             }
             if !s.genres.isEmpty {
