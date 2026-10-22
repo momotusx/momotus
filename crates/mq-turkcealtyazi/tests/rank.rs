@@ -288,10 +288,8 @@ fn the_playing_source_family_comes_right_after_the_group() {
     // disc's master: near, so the WEB pack leads for a BluRay too
     // (plans/player-polish.md 2g); HD says nothing, so its order differs.
     assert_eq!(from(Quality::BluRay, None)[0].row.altid, 725317);
-    assert_ne!(
-        ids(&from(Quality::BluRay, None)),
-        ids(&from(Quality::Unknown, None))
-    );
+    // With no source the DVDRip pack and its downloads lead.
+    assert_eq!(from(Quality::Unknown, None)[0].row.altid, 373225);
     // The group still comes first.
     assert_eq!(from(Quality::WebDl, Some("ORPHEUS"))[0].row.altid, 373225);
 }

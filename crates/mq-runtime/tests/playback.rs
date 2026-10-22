@@ -1681,6 +1681,7 @@ async fn a_subtitle_delay_is_remembered_for_the_version_and_the_track() {
     assert_eq!(delays(&s), at([("a", 0), ("b", 1_300)]));
     // The stepper stops at a minute either way.
     view.subtitle_delay(&s.subtitles[0].url, -90_000);
+    assert_eq!(delays(&view.snapshot()), at([("a", -60_000), ("b", 0)]));
     drop(view);
     let view = play("v.mkv");
     let s = settled_list(&view).await;
@@ -1694,10 +1695,41 @@ async fn a_subtitle_delay_is_remembered_for_the_version_and_the_track() {
     let s = settled_list(&view).await;
     assert_eq!(delays(&s), at([("a", 0), ("b", 0)]));
 
-    // Reset to 0 is remembered as no delay.
+    // 0 for another track (sent on close for the active one) forgets
+    // nothing; 0 for the track itself forgets its delay.
     view.subtitle_delay(&s.subtitles[0].url, 700);
+    view.subtitle_delay(&s.subtitles[1].url, 0);
+    assert_eq!(delays(&view.snapshot()), at([("a", 700), ("b", 0)]));
+    drop(view);
+    let view = play("v.mkv");
+    let s = settled_list(&view).await;
+    assert_eq!(delays(&s), at([("a", 700), ("b", 0)]));
     view.subtitle_delay(&s.subtitles[0].url, 0);
     drop(view);
     let s = settled_list(&play("v.mkv")).await;
     assert_eq!(delays(&s), at([("a", 0), ("b", 0)]));
+}
+
+/// Review of feat/subtitle-best P2-4: a pick is of one source's tracks.
+/// After a failover the next source's settle turns the title's remembered
+/// choice on again.
+#[tokio::test]
+async fn after_a_failover_the_remembered_choice_turns_on_again() {
+    let (video, _) = counted_origin().await;
+    let core = Core::temporary("p").unwrap();
+    let source = |file: &str| {
+        serde_json::json!({"url": format!("{video}/{file}"), "title": "Sintel.2010.1080p.WEB",
+            "subtitles": [{"id": file, "lang": "eng", "url": format!("https://subs.test/{file}.srt")}]})
+    };
+    let streams = serde_json::json!({"streams": [source("v.mkv"), source("w.mkv")]});
+    let view = PlaybackView::open(&core, setup(&core, &streams.to_string()), target());
+    let first = settled_list(&view).await;
+    assert_eq!(first.auto_subtitle, None, "no subtitle languages set");
+    view.subtitle_chosen(Some(&first.subtitles[0].url));
+    view.fail_over(Some(first.attempt), Some("network"), None, "gone");
+    let next = until(&view, "the next source", |s| {
+        s.attempt > first.attempt && s.phase == PlaybackPhase::Ready && !s.subtitles_pending
+    })
+    .await;
+    assert_eq!(next.auto_subtitle, Some(next.subtitles[0].url.clone()));
 }

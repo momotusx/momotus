@@ -1158,8 +1158,19 @@ impl PlaybackView {
         let Some(key) = s.snapshot.key.clone() else {
             return;
         };
-        s.delay = (ms != 0).then(|| (origin.clone(), ms));
-        let delay = s.delay.clone();
+        let ours = |d: &Option<(String, i32)>| d.as_ref().is_some_and(|(o, _)| *o == origin);
+        // 0 for another track (the app sends the active one's on close)
+        // forgets nothing.
+        let delay = match ms {
+            0 if ours(&s.delay) => None,
+            0 => s.delay.clone(),
+            ms => Some((origin.clone(), ms)),
+        };
+        // The same value again (the close resends it): no write, no sync.
+        if delay == s.delay {
+            return;
+        }
+        s.delay = delay.clone();
         for t in &mut s.snapshot.subtitles {
             t.delay_ms = delay_of(&delay, &t.origin);
         }
@@ -1172,7 +1183,9 @@ impl PlaybackView {
                 return;
             };
             if ms == 0 {
-                memory.remove(DELAY);
+                if memory.get(DELAY).and_then(|d| d["origin"].as_str()) == Some(origin.as_str()) {
+                    memory.remove(DELAY);
+                }
             } else {
                 // Nothing is baked into a track yet: its ratio is 1.
                 let entry = serde_json::json!({
@@ -1471,6 +1484,9 @@ fn release_all(s: &mut State) {
     s.snapshot.subtitles.clear();
     s.snapshot.subtitle_notes.clear();
     s.snapshot.auto_subtitle = None;
+    // A pick was of this source's tracks: the next one's settle may turn on
+    // the title's remembered choice again.
+    s.subtitle_picked = false;
     s.order.clear();
     s.lease = None;
 }
@@ -5616,14 +5632,14 @@ mod subtitle_order_tests {
     /// lead their language.
     #[test]
     fn the_flags_the_picker_shows_and_the_rows_that_never_lead() {
-        let mut forced = row(
-            V3,
-            5,
-            "Inception.2010.1080p.BluRay.x264-SPARKS.forced.srt",
-            Some(23976),
-            "h",
-        );
-        forced.forced = true;
+        // The addon's own forced flag, read through `track`.
+        let forced: mq_protocol::WireSubtitle = serde_json::from_value(serde_json::json!({
+            "id": "5", "url": "https://subs.example/5", "lang": "eng", "m": "h",
+            "forced": true, "fpsMilli": 23976,
+            "subtitleFileName": "Inception.2010.1080p.BluRay.x264-SPARKS.forced.srt",
+        }))
+        .unwrap();
+        let forced = track(&forced, V3, V3, "u5".into());
         let rows = vec![
             (1, forced),
             (
