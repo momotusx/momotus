@@ -36,6 +36,8 @@ fun MacrobenchmarkScope.onboardIfAsked() {
     fresh.click()
     device.wait(Until.findObject(By.text("Continue")), 10_000)?.click()
     device.wait(Until.findObject(By.text("Start fast")), 10_000)?.click()
+    // The subtitles step, with the device's language chosen.
+    device.wait(Until.findObject(By.text("Continue")), 10_000)?.click()
     device.wait(Until.hasObject(By.textContains("Popular")), 30_000)
 }
 
@@ -80,9 +82,10 @@ fun MacrobenchmarkScope.startPlayback() {
     device.waitForIdle()
 }
 
-/** A start in the TV tree (`form=tv`, read by debug and benchmark builds), on a phone as on a TV. */
+/** A start in the TV tree (`form=tv`, read by debug and benchmark builds), on a phone as on a TV, past onboarding. */
 fun MacrobenchmarkScope.startTv() {
     startActivityAndWait { it.putExtra("form", "tv") }
+    onboardIfAsked()
 }
 
 /** [times] D-pad presses [gapMs] apart, then a wait until the screen settles. */
