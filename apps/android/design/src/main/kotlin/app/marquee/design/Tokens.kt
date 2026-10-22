@@ -287,14 +287,14 @@ object Tokens {
             pad = 34.dp,
             inset = 34.dp,
             peek = 140.dp,
-            caption = 52.dp,
+            caption = 84.dp,
         )
 
     val phoneTiles = TileMetrics(
-            poster = TileSize(112.dp, 168.dp),
-            landscape = TileSize(252.dp, 142.dp),
+            poster = TileSize(99.dp, 149.dp),
+            landscape = TileSize(239.dp, 134.dp),
             square = TileSize(140.dp, 140.dp),
-            gap = 10.dp,
+            gap = 12.dp,
             pad = 8.dp,
             inset = 20.dp,
             peek = 40.dp,

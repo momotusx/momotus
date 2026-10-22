@@ -118,6 +118,14 @@ ${radius}
         static let gap: CGFloat = ${tokens.tile.phone.gap}
     }
 
+    /// The Mac's shelves (\`tile.desktop\`, tv.apple.com's), for \`Metrics.regular\`.
+    enum TileDesktop {
+        static let poster = CGSize(width: ${tokens.tile.desktop.poster.width}, height: ${tokens.tile.desktop.poster.height})
+        static let landscape = CGSize(width: ${tokens.tile.desktop.landscape.width}, height: ${tokens.tile.desktop.landscape.height})
+        static let gap: CGFloat = ${tokens.tile.desktop.gap}
+        static let inset: CGFloat = ${tokens.tile.desktop.inset}
+    }
+
     /// Font weights, 100 to 900.
     enum Weight {
 ${lets(tokens.weight)}

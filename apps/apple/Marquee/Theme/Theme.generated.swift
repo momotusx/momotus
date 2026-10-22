@@ -141,9 +141,17 @@ enum Theme {
 
     /// The phone's tiles (`tile.phone`), read by `Metrics.compact`.
     enum Tile {
-        static let poster = CGSize(width: 112, height: 168)
-        static let landscape = CGSize(width: 252, height: 142)
-        static let gap: CGFloat = 10
+        static let poster = CGSize(width: 99, height: 149)
+        static let landscape = CGSize(width: 239, height: 134)
+        static let gap: CGFloat = 12
+    }
+
+    /// The Mac's shelves (`tile.desktop`, tv.apple.com's), for `Metrics.regular`.
+    enum TileDesktop {
+        static let poster = CGSize(width: 153, height: 228)
+        static let landscape = CGSize(width: 256, height: 144)
+        static let gap: CGFloat = 20
+        static let inset: CGFloat = 40
     }
 
     /// Font weights, 100 to 900.
