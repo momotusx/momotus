@@ -262,10 +262,10 @@ export default function Home() {
   const waiting = () => home.status.state === "opening" || home.rows.some((r) => r.state.state === "loading" || r.state.state === "slow");
   // The first focus is the hero's Play, as tvOS and Android TV (plans/design-v3-phase2-web.md, rule 1):
   // the top shelf fills the first screen, so a focused card would sit half off it and the page would
-  // scroll the hero away. Continue Watching takes it only when no hero is there or coming. A hero that
-  // lands after the focus went to the row anyway (restore's late fallback) takes it back, with the page
-  // at its top, unless the viewer has pressed a key since Home opened.
-  const rowFirst = () => !hero() && !waiting();
+  // scroll the hero away. With no hero there or coming, nothing is marked and the focus goes to the first
+  // content, Continue Watching (focus/dom.ts, the first-content fallback). A hero that lands after the
+  // focus went to the row anyway (restore's late fallback) takes it back, with the page at its top,
+  // unless the viewer has pressed a key since Home opened.
   // Read when Home mounts. The Home view stays alive across Back, so a Back-restored tile is not pulled to
   // Play by a late hero; if Home ever re-subscribes on Back, skip the return after a restore.
   const opened = inputCount();
@@ -428,7 +428,7 @@ export default function Home() {
               <For each={home.rows}>
                 {(row, i) => (
                   <>
-                    <Row row={row} autofocus={i() === 0 && row.rowId === CONTINUE_ROW && rowFirst()} root={page} onRetry={retryHomeRow} />
+                    <Row row={row} root={page} onRetry={retryHomeRow} />
                     {/* The account's notices and the defaults card come after the first row, never over the
                         hero's art or between it and the row that rises into it (as Android's TV Home). */}
                     <Show when={i() === 0}>

@@ -235,7 +235,6 @@ export const removeFromContinue = (itemId: string) => op("removeFromContinue", {
 
 export function Row(props: {
   row: HomeRow;
-  autofocus: boolean;
   root: () => Element | null;
   onOpen?: () => void;
   scope?: string;
@@ -395,7 +394,6 @@ export function Row(props: {
                           style={{ position: "absolute", left: `${m().inset + i * stride()}px`, top: `${m().pad}px` }}
                           w={size()[0]}
                           h={size()[1]}
-                          autofocus={props.autofocus && i === 0}
                           onOpen={props.onOpen}
                           eager
                           wide={wide()}
