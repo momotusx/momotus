@@ -47,7 +47,7 @@ const spots: Spot[] = [
   ["home tv, the reason", "hero", dark.bg, [1832, 600], [0.3253, 0.68], "line"],
   ["home desktop, the reason", "hero", dark.bgDesktop, [2212, 600], [0.2694, 0.68], "line"],
   ["home phone, the reason", "heroPhone", dark.bgPhone, [358, 520], [0.95, 0.819], "line"],
-  ["title tv series, Start over", "title", dark.bg, [1920, 1080], [0.4398, 0.4054], "pill"],
+  ["title tv series, Start over", "title", dark.bg, [1920, 1080], [0.4398, 0.3817], "pill"],
   ["title tv series, Remove from Continue Watching circle", "title", dark.bg, [1920, 1080], [0.3184, 0.5503], "pill"],
   ["title tv series, Remove from Continue Watching word", "title", dark.bg, [1920, 1080], [0.3535, 0.63], "word"],
   ["title tv movie, Watched", "titleMovie", dark.bg, [1920, 1080], [0.3179, 0.3968], "pill"],

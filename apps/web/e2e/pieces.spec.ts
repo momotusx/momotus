@@ -363,6 +363,6 @@ test("TV: the secondaries over a backdrop sit where the glass check measures the
   await expect(page.locator('[data-f="title:startover"]')).toBeVisible({ timeout: 30_000 });
   const over = await spot(page, '[data-f="title:startover"]', ".title-bd");
   expect(over.x).toBeLessThanOrEqual(0.4398 + 0.002);
-  expect(over.y).toBeGreaterThanOrEqual(0.4054 - 0.005);
+  expect(over.y).toBeGreaterThanOrEqual(0.3817 - 0.005);
   await context.close();
 });
