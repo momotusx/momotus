@@ -1,5 +1,5 @@
 /** The ratings row (design/DECISION.md, Status and ratings; D10): IMDb and Rotten Tomatoes side
- * by side as plain text ("IMDb 8.4 · RT Fresh"), the source's name at 70 percent and the score in
+ * by side as plain text ("IMDb 8.4 · RT 87%"), the source's name at 70 percent and the score in
  * white, no star and no logos; a score the core left out has no slot. A screen reader hears each
  * score's spoken twin, never "R T". `sep` is the line's own separator, laid between the scores
  * as their sibling; `imdb` links IMDb's score to its page. */

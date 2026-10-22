@@ -132,21 +132,13 @@
 @media (prefers-reduced-motion: reduce) { .tile .pic:has(> img.fade:not(.in)) { animation: none; } }
 .pic-name { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center;
   font: var(--weight-heading) var(--type-headline) / 1.15 var(--font-display); letter-spacing: var(--tracking-heading); color: var(--text); overflow: hidden; overflow-wrap: anywhere; }
-/* The poster's scores: white words on black, no glass and no edge; a pair wider than the
-   poster takes two lines, each score whole. */
-.chip-rate { position: absolute; z-index: 2; top: 10px; right: 10px; max-width: calc(100% - 20px); display: flex; flex-wrap: wrap; justify-content: flex-end;
-  align-items: center; gap: 2px 8px; padding: 6px 12px; white-space: nowrap; border-radius: 12px; font: 600 20px / 22px var(--font-text); color: #fff;
-  background: rgba(0, 0, 0, .72); }
 /* Above the art's shadow, and never scaled with it. */
 /* The caption is the token's height in the frames' type (tile.tv.caption 84: 16, a 36 name line,
- * a 32 line; a TV poster's 116: the year, then the ratings row on two 32 lines). */
+ * a 32 line): the name, then the year or the core's caption. A poster's scores are in its cover. */
 .tile .cap { position: relative; z-index: 1; margin-top: 16px; display: grid; gap: 0; min-width: 0; }
 .tile .cap b { font: 600 var(--type-body) / 36px var(--font-text); letter-spacing: var(--tracking-label); color: var(--text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tile .cap > span { font: 500 var(--type-callout) / 32px var(--font-text); color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tile .cap-line { display: flex; align-items: center; gap: 16px; height: 32px; min-width: 0; overflow: hidden; white-space: nowrap; font: 500 var(--type-callout) / 32px var(--font-text); color: var(--dim); }
-.tile .cap-rates { display: flex; gap: 14px; }
-.tile .cap.two .cap-line { display: grid; grid-template-rows: 32px 32px; gap: 0; height: 64px; align-items: center; justify-items: start; font: 500 var(--type-caption) / 30px var(--font-text); }
 .tile:focus-visible, [data-form="tv"] .tile:focus { outline: none; box-shadow: none; }
 .tile:focus-visible .pic, [data-form="tv"] .tile:focus .pic {
   outline: var(--focus-ring) solid var(--key); outline-offset: var(--focus-ring); box-shadow: var(--focus-shadow); overflow: hidden; }
@@ -245,9 +237,6 @@
 [data-form="phone"] .tile { scroll-snap-align: start; }
 [data-form="phone"] .tile, [data-form="phone"] .tile .pic { border-radius: 11px; }
 [data-form="phone"] .tile.wide, [data-form="phone"] .tile.wide .pic { border-radius: 13px; }
-/* A phone poster has room for one short score a line: the two stack, never wrap or cut. */
-[data-form="phone"] .chip-rate { top: 6px; right: 6px; max-width: calc(100% - 12px); padding: 3px 7px; gap: 1px; border-radius: 7px; font-size: 11px; line-height: 1.2;
-  flex-direction: column; align-items: flex-end; }
 [data-form="phone"] .tile .cap { margin-top: 8px; }
 [data-form="phone"] .tile .cap b { font: 600 15px / 20px var(--font-text); }
 [data-form="phone"] .tile .cap > span { font: 400 13px / 18px var(--font-text); }

@@ -309,11 +309,12 @@ test("desktop: a press outside a pull-down closes it", async ({ browser }) => {
   await context.close();
 });
 
-test("TV: movie rows are 16:9 stills and series rows 2:3 posters, from the tile tokens", async ({ browser }) => {
+test("TV: every catalog row is 2:3 posters, movies and series, from the tile tokens", async ({ browser }) => {
   const { context, page } = await open(browser, "tv", "/");
   await expect(page.locator(".row").nth(1).locator(".tile").first()).toBeVisible({ timeout: 30_000 });
   // Rows mount their tiles near the screen: walk down the page, reading each row that has them, with
-  // its body's height (art, the pads and the caption: 84 under a still, 116 under a poster).
+  // its body's height (art, the pads and the caption: 84, the name and the year; a poster's scores are
+  // in its RPDB cover, as Stremio's rows).
   const shapes: { kind?: string; w?: number; h?: number; body?: number }[] = [];
   for (let i = 0; i < 8; i++) {
     shapes.push(
@@ -330,8 +331,8 @@ test("TV: movie rows are 16:9 stills and series rows 2:3 posters, from the tile 
   }
   const movie = shapes.find((s) => s.kind === "movie");
   const series = shapes.find((s) => s.kind === "series");
-  expect(movie).toMatchObject({ w: 410, h: 231, body: 231 + 2 * 34 + 84 });
-  expect(series).toMatchObject({ w: 217, h: 326, body: 326 + 2 * 34 + 116 });
+  expect(movie).toMatchObject({ w: 217, h: 326, body: 326 + 2 * 34 + 84 });
+  expect(series).toMatchObject({ w: 217, h: 326, body: 326 + 2 * 34 + 84 });
   await context.close();
 });
 

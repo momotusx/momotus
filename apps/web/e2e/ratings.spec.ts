@@ -1,10 +1,11 @@
 /** IMDb and Rotten Tomatoes side by side (plans/research/ratings.md) on a core of its own whose
  * MDBList is a local fake (MQ_DEV_MDBLIST): the widest scores there are ("IMDb 10.0", "RT 100%")
- * never wrap or get cut, on posters, the hero, the title page and search, in every form. On a
- * phone poster the two stack as two lines; everywhere else they sit side by side. A fake of the
- * Rotten Tomatoes addon lists two titles MDBList gives no Tomatometer, so they show its mark,
- * "RT Fresh", under the same rules. The measured widths are printed as `ratings-measure` lines
- * for bench/core/ratings.jsonl. */
+ * never wrap or get cut, on the hero, the title page and search, in every form. A poster tile
+ * shows the core's RPDB cover, its scores drawn in, and no score of its own; its label speaks
+ * them, and the addon's poster stands in when the cover does not load. A fake of the
+ * Rotten Tomatoes addon lists two titles MDBList gives no Tomatometer: they show IMDb alone,
+ * never the word "Fresh" (the owner, 2026-10-23). The measured widths are printed as
+ * `ratings-measure` lines for bench/core/ratings.jsonl. */
 
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import type { ChildProcess } from "node:child_process";
@@ -35,6 +36,10 @@ const TITLES = [
 const MAX = TITLES[0]!;
 const FRESH = TITLES.filter((t) => t.name.startsWith("Fresh"));
 
+/** A one-pixel grey PNG: the addon's own poster. */
+const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+const RPDB = (id: string) => `https://api.ratingposterdb.com/t0-free-rpdb/imdb/poster-default/${id}.jpg?fallback=true`;
+
 let core: { proc: ChildProcess; data: string } | null = null;
 let addon: Server | null = null;
 let mdblist: Server | null = null;
@@ -48,6 +53,8 @@ function localAddon(): Promise<Server> {
     id: t.id,
     type: "movie",
     name: t.name,
+    // One title with an addon poster of its own: the stand-in when RPDB's cover fails.
+    poster: t.name === "Only IMDb" ? `http://127.0.0.1:${(addon?.address() as AddressInfo).port}/poster/only.png` : undefined,
     // A series' span of years: the longest release line a search hit carries.
     releaseInfo: "2011–2019",
     runtime: "148 min",
@@ -72,6 +79,10 @@ function localAddon(): Promise<Server> {
         return json({ id: "dev.marquee.ratings", version: "1.0.0", name: "Ratings Test", resources: ["catalog", "meta"], types: ["movie"], idPrefixes: ["tt920"], catalogs });
       }
       if (url.startsWith("/catalog/movie/")) return json({ metas: TITLES.map(meta) });
+      if (url === "/poster/only.png") {
+        res.writeHead(200, { "content-type": "image/png" });
+        return res.end(PNG);
+      }
       const asked = /^\/meta\/movie\/(tt\d+)\.json$/.exec(url);
       const title = TITLES.find((t) => t.id === asked?.[1]);
       if (title) return json({ meta: meta(title) });
@@ -142,6 +153,8 @@ test.afterAll(() => {
 async function open(browser: Browser, form: Form): Promise<Page> {
   const { width, height, scale } = FORMS[form];
   const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: scale, colorScheme: "dark", baseURL: `http://127.0.0.1:${PORTS.vite}` });
+  // RPDB knows none of these made-up ids: a stand-in cover, so nothing is asked of it.
+  await context.route(/^https:\/\/api\.ratingposterdb\.com\//, (r) => r.fulfill({ status: 200, contentType: "image/png", body: PNG }));
   await context.routeWebSocket(/\/ws$/, (ws) => {
     const upstream = new WebSocket(`ws://127.0.0.1:${RATINGS_PORT}/ws`);
     const early: string[] = [];
@@ -184,31 +197,24 @@ function measure(form: Form, where: string, values: unknown) {
 }
 
 for (const form of Object.keys(FORMS) as Form[]) {
-  test(`${form}: the widest scores never wrap or get cut, on Home's shelves in the TV caption and nowhere on the art`, async ({ browser }) => {
+  test(`${form}: a poster tile shows the RPDB cover and no scores of its own; its label speaks them`, async ({ browser }) => {
     const page = await open(browser, form);
     await page.goto(`/?form=${form}`);
-    const fresh = page.locator(".row .tile", { hasText: "Fresh widest" }).first();
-    await expect(fresh).toHaveAttribute("aria-label", /IMDb 10\.0, Rotten Tomatoes: Fresh$/, { timeout: 30_000 });
-    // Home's shelves draw no score chip on any form (the frames): the scores are the TV caption's
-    // ratings row, and off the TV a shelf poster carries none.
+    // On TV the tiles carry their names in the caption; elsewhere a shelf poster has none.
+    const tile = (name: string) => page.locator(`.row .tile[aria-label="${name}"], .row .tile[aria-label^="${name},"]`).first();
+    const fresh = tile("Fresh widest");
+    await expect(fresh).toHaveAttribute("aria-label", /^Fresh widest(, [^,]+)?, IMDb 10\.0$/, { timeout: 30_000 });
+    // The core's cover for an IMDb title, and it loads: every catalog row is 2:3 posters on every form.
+    const cover = tile("Widest 1").locator(".pic img");
+    await expect(cover).toHaveAttribute("src", RPDB(MAX.id));
+    await expect.poll(() => cover.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+    // No score chip on the art and no ratings line in the caption (name and year): the cover carries them.
     await expect(page.locator(".row .tile .chip-rate")).toHaveCount(0);
-    if (form === "tv") {
-      const rates = ".row .tile .cap-rates .rate > [aria-hidden]";
-      await expect(page.locator(rates).filter({ hasText: "RT 100%" }).first()).toBeVisible({ timeout: 30_000 });
-      const parts = await scores(page, rates, ".tile");
-      expect(parts.length).toBeGreaterThan(0);
-      for (const part of parts) expect(part, JSON.stringify(part)).toMatchObject({ lines: 1, cut: false, inside: true });
-      const pair = parts.filter((p) => ["IMDb 10.0", "RT 100%"].includes(p.text)).slice(0, 2);
-      expect(pair.map((p) => p.text)).toEqual(["IMDb 10.0", "RT 100%"]);
-      expect(Math.abs(pair[1]!.middle - pair[0]!.middle)).toBeLessThanOrEqual(1);
-      // A score MDBList did not give has no slot.
-      await expect(page.locator(".row .tile", { hasText: "No scores" }).first().locator(".cap-rates .rate")).toHaveCount(0);
-      await expect(page.locator(".row .tile", { hasText: "Only IMDb" }).first().locator(".cap-rates .rate > [aria-hidden]")).toHaveText(["IMDb 7.4"]);
-      await expect(fresh.locator(".cap-rates .rate > [aria-hidden]")).toHaveText(["IMDb 10.0", "RT Fresh"]);
-      measure(form, "TV caption ratings row", pair.map((p) => p.width));
-    }
-    // The chip is hidden from screen readers; the poster's label speaks its scores.
-    await expect(page.locator(".tile", { hasText: "Fresh widest" }).first()).toHaveAttribute("aria-label", /IMDb 10\.0, Rotten Tomatoes: Fresh$/);
+    await expect(page.locator(".row .tile .cap .rate")).toHaveCount(0);
+    // A tile with scores is the size of one without, so a late score moves nothing.
+    const box = async (name: string) => (await tile(name).boundingBox())!;
+    expect((await box("Widest 1")).height).toBe((await box("No scores")).height);
+    await expect(tile("Only IMDb")).toHaveAttribute("aria-label", /IMDb 7\.4$/);
 
     // The hero: side by side, one line each.
     const hero = await scores(page, ".hero-body .meta .rate > [aria-hidden]", ".hero-body");
@@ -240,27 +246,20 @@ for (const form of Object.keys(FORMS) as Form[]) {
     measure(form, "title page", title.map((t) => t.width));
     await page.screenshot({ path: `${SHOTS}/ratings-title-${form}.jpg`, type: "jpeg", quality: 80 });
 
-    // A title with the mark: the same meta line and the spoken word.
+    // A title on the Rotten Tomatoes addon's list with no Tomatometer: IMDb alone, never "Fresh".
     await page.goto(`/title/movie/${FRESH[0]!.id}?form=${form}`);
-    await expect(page.locator(".info .meta .rate > [aria-hidden]").nth(1)).toHaveText("RT Fresh", { timeout: 30_000 });
-    const freshTitle = await scores(page, ".info .meta .rate > [aria-hidden]", ".info");
-    for (const t of freshTitle) expect(t, JSON.stringify(t)).toMatchObject({ lines: 1, cut: false, inside: true });
-    expect(Math.abs(freshTitle[1]!.middle - freshTitle[0]!.middle)).toBeLessThanOrEqual(1);
-    await expect(page.locator(".info .meta span.rate .sr")).toHaveText(form === "tv" ? ["IMDb 10.0", "Rotten Tomatoes: Fresh"] : ["Rotten Tomatoes: Fresh"]);
-    measure(form, "title page, RT Fresh", freshTitle.map((t) => t.width));
+    await expect(page.locator(".info .meta .rate > [aria-hidden]")).toHaveText(["IMDb 10.0"], { timeout: 30_000 });
+    await expect(page.locator(".info .meta")).not.toContainText("Fresh");
 
-    // Discover's 2:3 posters, the narrowest slot: a pair wider than the poster takes two lines,
-    // each score whole and inside the art.
+    // Discover's 2:3 posters: the cover, no chip, the label speaks the scores.
     await page.goto(`/discover?form=${form}`);
     const freshPoster = page.locator(".grid .tile", { hasText: "Fresh widest" }).first();
-    await expect(freshPoster.locator(".chip-rate")).toHaveText("IMDb 10.0RT Fresh", { timeout: 30_000 });
-    const gridChips = await scores(page, ".grid .tile .chip-rate", ".pic");
-    const gridParts = await scores(page, ".grid .tile .chip-rate > span", ".chip-rate");
-    expect(gridChips.length).toBeGreaterThan(0);
-    for (const chip of gridChips) expect(chip, JSON.stringify(chip)).toMatchObject({ inside: true, cut: false });
-    for (const part of gridParts) expect(part, JSON.stringify(part)).toMatchObject({ lines: 1, cut: false, inside: true });
-    const gridFresh = (await scores(page, '.grid .tile:has-text("Fresh widest") .chip-rate', ".pic"))[0]!;
-    measure(form, "grid poster chip, RT Fresh", { chip: gridFresh.width, poster: gridFresh.outer });
+    await expect(freshPoster).toHaveAttribute("aria-label", /^Fresh widest(, [^,]+)?, IMDb 10\.0$/, { timeout: 30_000 });
+    await expect(freshPoster.locator(".pic img")).toHaveAttribute("src", RPDB(FRESH[0]!.id));
+    await expect(page.locator(".grid .tile .chip-rate")).toHaveCount(0);
+    // A 2:3 poster's caption has no ratings line, on TV either: the cover carries the scores.
+    await expect(page.locator(".grid .tile .cap .rate")).toHaveCount(0);
+    await page.screenshot({ path: `${SHOTS}/ratings-discover-${form}.jpg`, type: "jpeg", quality: 80 });
 
     // Search: the meta line keeps every score whole.
     await page.goto(`/search?form=${form}`);
@@ -274,12 +273,25 @@ for (const form of Object.keys(FORMS) as Form[]) {
     for (const h of hit.slice(0, 2)) expect(h, JSON.stringify(h)).toMatchObject({ lines: 1, cut: false, inside: true });
     await expect(page.locator(".hit-meta").first().locator(".rate .sr")).toHaveText(["IMDb 10.0", "Rotten Tomatoes 100 percent"]);
     measure(form, "search hit", meta);
-    const freshHit = page.locator(".hit-meta", { hasText: "RT Fresh" }).first();
-    await expect(freshHit).toBeVisible({ timeout: 30_000 });
-    const freshMeta = await freshHit.evaluate((el) => ({ width: el.clientWidth, needs: el.scrollWidth }));
-    expect(freshMeta.needs, JSON.stringify(freshMeta)).toBeLessThanOrEqual(freshMeta.width);
-    await expect(freshHit.locator(".rate .sr")).toHaveText(["IMDb 10.0", "Rotten Tomatoes: Fresh"]);
-    measure(form, "search hit, RT Fresh", freshMeta);
+    // No Tomatometer: IMDb alone, never "Fresh".
+    const freshHit = page.locator(".hit", { hasText: "Fresh widest" }).first().locator(".hit-meta");
+    await expect(freshHit.locator(".rate .sr")).toHaveText(["IMDb 10.0"], { timeout: 30_000 });
+    await expect(page.locator(".hit-meta", { hasText: "RT Fresh" })).toHaveCount(0);
     await page.context().close();
   });
 }
+
+test("a cover that does not load gives way to the addon's poster, then to the name card", async ({ browser }) => {
+  const page = await open(browser, "desktop");
+  // RPDB answers 404 for an id it does not know.
+  await page.context().route(/^https:\/\/api\.ratingposterdb\.com\//, (r) => r.fulfill({ status: 404 }));
+  await page.goto("/discover?form=desktop");
+  const tile = (name: string) => page.locator(".grid .tile", { hasText: name }).first();
+  // Only IMDb has its addon's poster: it shows that one.
+  await expect(tile("Only IMDb").locator(".pic img")).toHaveAttribute("src", /\/poster\/only\.png$/, { timeout: 30_000 });
+  await expect.poll(() => tile("Only IMDb").locator(".pic img").evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+  // No addon poster: the name card, never a broken image.
+  await expect(tile("No scores").locator(".pic img")).toHaveCount(0);
+  await expect(tile("No scores").locator(".pic-name")).toHaveText("No scores");
+  await page.context().close();
+});

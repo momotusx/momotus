@@ -289,7 +289,7 @@ object Tokens {
             inset = 34.dp,
             peek = 140.dp,
             caption = 84.dp,
-            captionPoster = 116.dp,
+            captionPoster = 84.dp,
         )
 
     val phoneTiles = TileMetrics(

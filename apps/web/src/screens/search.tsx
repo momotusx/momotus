@@ -330,7 +330,8 @@ function Hit(props: { tile: Tile; fkey: string; onOpen: () => void }) {
       {/* No poster, or not yet: a film mark on the surface, never squeezed words. */}
       <span class="hit-art" aria-hidden="true">
         <Film class="hit-ph" />
-        <Poster src={t().poster} name={t().name} w={64} h={96} nameCard={false} />
+        {/* The plain poster: at this size a cover's drawn scores cannot be read, and the line beside it says them. */}
+        <Poster src={t().posterFallback ?? t().poster} fallback={t().posterFallback ? t().poster : null} name={t().name} w={64} h={96} nameCard={false} />
       </span>
       <span class="hit-text">
         <b>{t().name}</b>

@@ -13,6 +13,7 @@ import type { ChildProcess } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Client, cleanup, JOURNEY_PORT, PORTS, SHOTS, startBridge, startIfPaused, until, watch } from "./core";
+import { patchedContext } from "./patch";
 import { NAME, startSource } from "./source";
 import { applyDiffs } from "../src/core/diff";
 import type { HomeRow } from "../src/core/generated/HomeRow";
@@ -522,6 +523,34 @@ test("Continue Watching: the tile's remove button off TV, the title page on TV",
     await context.close();
   }
   home.close();
+});
+
+test("Continue Watching keeps its own line under the still, never a ratings line", async ({ browser }) => {
+  const home = await watchHome();
+  await seedFilm(120_000);
+  await expect.poll(home.ids).toContain("mqjm");
+  home.close();
+  // This core has no ratings source: the film's tile is given scores on their way to the page.
+  let given = 0;
+  const scored = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(scored);
+    if (!v || typeof v !== "object") return v;
+    const o = Object.fromEntries(Object.entries(v).map(([k, x]) => [k, scored(x)]));
+    if (o.id !== "mqjm" || !("ratings" in o)) return o;
+    given++;
+    return { ...o, ratings: { imdb: "7.1", rottenTomatoes: "45%" } };
+  };
+  for (const [form, viewport] of [["tv", { width: 1920, height: 1080 }], ["desktop", { width: 1440, height: 900 }]] as const) {
+    const { context } = await patchedContext(browser, JOURNEY_PORT, { viewport }, (view, snapshot) => (view === "home" ? scored(snapshot) : snapshot));
+    const p = await context.newPage();
+    await p.goto(`/?form=${form}`);
+    const tile = p.locator('[data-f="tile:home:continue-watching:mqjm"]');
+    await expect(tile.locator(".cap > span")).toHaveText(/min left$/, { timeout: 30_000 });
+    expect(given).toBeGreaterThan(0);
+    await expect(tile.locator(".cap .rate")).toHaveCount(0);
+    await expect(tile.locator(".bar")).toHaveCount(1);
+    await context.close();
+  }
 });
 
 test("back in front after the stream server moved: the playback opens again", async ({ browser }) => {

@@ -11,14 +11,13 @@ import X from "lucide-solid/icons/x";
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import tokens from "../../../../design/tokens.json";
 import { Poster } from "./art";
-import { Ratings } from "./ratings";
 import { Why } from "./why";
 import type { HomeRow } from "../core/generated/HomeRow";
 import type { Tile as TileData } from "../core/generated/Tile";
 import { op } from "../core/client";
 import { onProfileReset } from "../core/profiles";
 import { form, scale } from "../form";
-import { pct, posterLabel, ratingParts, titlePath } from "../lib/format";
+import { pct, posterLabel, titlePath } from "../lib/format";
 import { caption } from "../lib/words";
 import { visibleRange } from "../lib/range";
 import { rowWords } from "../lib/rows";
@@ -28,7 +27,6 @@ export const CONTINUE_ROW = "continue-watching";
 interface Metrics {
   poster: [number, number];
   landscape: [number, number];
-  square: [number, number];
   gap: number;
   /** Room above and below tiles for the focus scale, ring and halo. */
   pad: number;
@@ -36,25 +34,21 @@ interface Metrics {
   inset: number;
   peek: number;
   caption: number;
-  /** A 2:3 poster's caption: on TV the name, then the year and the ratings row on two lines. */
-  captionPoster: number;
 }
 
 // From the one token source (design/tokens.json `tile`); `caption` is the room under a
 // tile for its two lines (name, then the year or the core's caption).
-type TileTokens = Pick<(typeof tokens.tile)["tv"], "poster" | "landscape" | "square" | "gap" | "pad" | "inset" | "peek" | "caption">;
+type TileTokens = Pick<(typeof tokens.tile)["tv"], "poster" | "landscape" | "gap" | "pad" | "inset" | "peek" | "caption">;
 const fromTokens = (t: TileTokens): Metrics => ({
   poster: [t.poster.width, t.poster.height],
   landscape: [t.landscape.width, t.landscape.height],
-  square: [t.square.width, t.square.height],
   gap: t.gap,
   pad: t.pad,
   inset: t.inset,
   peek: t.peek,
   caption: t.caption,
-  captionPoster: t.caption,
 });
-const TV = { ...fromTokens(tokens.tile.tv), captionPoster: tokens.tile.tv.captionPoster };
+const TV = fromTokens(tokens.tile.tv);
 const PHONE = fromTokens(tokens.tile.phone);
 /** Grids (Discover, Library): TV's sizes on desktop until their own phase. */
 export const metrics = () => (form() === "phone" ? PHONE : TV);
@@ -67,20 +61,15 @@ const desktopShelf = (k: number): Metrics => {
   return {
     poster: size(m.poster),
     landscape: size(m.landscape),
-    square: size(m.square),
     gap: px(m.gap),
     pad: px(m.pad),
     inset: px(m.inset),
     peek: px(m.peek),
     caption: px(m.caption),
-    captionPoster: px(m.caption),
   };
 };
 /** Home's shelves per form: TV and phone from their tokens, desktop tv.apple.com's. */
 export const shelfMetrics = () => (form() === "desktop" ? desktopShelf(scale()) : metrics());
-
-const sizeOf = (m: Metrics, shape: string | undefined) =>
-  shape === "landscape" ? m.landscape : shape === "square" ? m.square : m.poster;
 
 // Survives the Home screen unmounting, so Back lands on the same offsets;
 // another profile's Home starts at the start of each row.
@@ -102,18 +91,16 @@ export function TileCard(props: {
   eager?: boolean;
   /** Continue Watching: a 16:9 still with the logo, Apple TV Up Next style. */
   wide?: boolean;
-  /** A 16:9 still (a TV movie row): the backdrop, else the poster from its upper part. */
-  still?: boolean;
   /** A remove button on the tile (Continue Watching off TV; TV removes from the title page). */
   onRemove?: () => Promise<unknown>;
-  /** A TV shelf's caption: the year then the ratings row (one line under a still, two under a
-   * poster), so the art carries no score chip. */
-  rated?: boolean;
 }) {
   // Two lines under the art: the name, then the core's caption (Continue
   // Watching, Library) or the year.
   const cap = () => (props.captions === false ? null : caption(props.tile));
   const sub = () => cap() ?? props.tile.releaseInfo;
+  // A 2:3 poster shows the core's cover (RPDB's, its scores drawn in) and its addon's poster when
+  // that does not load; Continue Watching's still crops a poster from its top, so it takes the plain one.
+  const plain = () => props.tile.posterFallback ?? props.tile.poster;
   // A button cannot sit inside the link: with a remove button, both go in a
   // slot that takes the tile's place.
   const slotted = !!props.onRemove;
@@ -125,34 +112,26 @@ export function TileCard(props: {
       data-f={props.fkey}
       data-index={props.index}
       data-autofocus={props.autofocus ? "" : undefined}
-      /* The chip is hidden from screen readers: the label speaks its scores. */
+      /* The cover's scores are pixels: the label speaks them from the core's ratings. */
       aria-label={posterLabel([props.tile.name, cap()], props.wide ? null : props.tile.ratings)}
       style={slotted ? { width: `${props.w}px` } : { width: `${props.w}px`, ...props.style }}
       onClick={() => props.onOpen?.()}
     >
       <div class="pic" style={{ height: `${props.h}px` }}>
         <Show
-          when={props.wide || props.still}
-          fallback={<Poster src={props.tile.poster} name={props.tile.name} w={props.w} h={props.h} eager={props.eager} />}
+          when={props.wide}
+          fallback={<Poster src={props.tile.poster} fallback={props.tile.posterFallback} name={props.tile.name} w={props.w} h={props.h} eager={props.eager} />}
         >
           <Poster
-            src={props.tile.background ?? props.tile.poster}
-            fallback={props.tile.background ? props.tile.poster : null}
+            src={props.tile.background ?? plain()}
+            fallback={props.tile.background ? plain() : null}
             name={props.tile.name}
             w={props.w}
             h={props.h}
             eager={props.eager}
-            nameCard={!props.wide}
+            nameCard={false}
             top={!props.tile.background}
           />
-        </Show>
-        {/* The score chip rides on a grid's poster. Home's shelves draw none (the frames): on TV the
-            scores are the caption's ratings row, off the TV a shelf poster has no caption, and the
-            label speaks them either way. */}
-        <Show when={!props.wide && !props.rated && props.captions !== false && ratingParts(props.tile.ratings).length}>
-          <span class="chip-rate num" aria-hidden="true">
-            <For each={ratingParts(props.tile.ratings)}>{(p) => <span>{p.text}</span>}</For>
-          </span>
         </Show>
         {/* A track and a fill on a dark strip, so progress shows on white art. */}
         <Show when={props.tile.progress !== null}>
@@ -164,22 +143,11 @@ export function TileCard(props: {
         </Show>
       </div>
       <Show when={props.captions !== false}>
-        <p class="cap" classList={{ rated: props.rated, two: props.rated && !props.still }}>
+        {/* The name, then the year or the core's caption: no scores (the cover carries them). */}
+        <p class="cap">
           <b>{props.tile.name}</b>
-          <Show
-            when={props.rated}
-            fallback={
-              <Show when={sub()}>
-                <span class="num">{sub()}</span>
-              </Show>
-            }
-          >
-            <span class="cap-line">
-              <span class="num">{sub()}</span>
-              <span class="cap-rates">
-                <Ratings ratings={props.tile.ratings} sep={() => " "} />
-              </span>
-            </span>
+          <Show when={sub()}>
+            <span class="num">{sub()}</span>
           </Show>
         </p>
       </Show>
@@ -245,24 +213,14 @@ export function Row(props: {
   const m = shelfMetrics;
   // Search shows the same catalogs as Home: keep their offsets and keys apart.
   const id = () => `${props.scope ?? "home"}:${props.row.rowId}`;
-  // Continue Watching is a row of 16:9 stills; on TV a movie row is too and a series row is
-  // 2:3 posters (design/DECISION.md, Shelves); other catalogs keep the shape their addon names.
+  // Continue Watching is a row of 16:9 stills with progress; every catalog row is 2:3 posters on every
+  // form, as Stremio's, each the core's RPDB cover with its ratings band (the owner, 2026-10-23).
   const wide = () => props.row.rowId === CONTINUE_ROW;
-  // A row still loading has no tile to tell its kind: its id names it (`<addonId>@<install>:<kind>:<catalogId>`,
-  // views/home.rs row_id), so its skeleton already has the final height and nothing below jumps when tiles
-  // arrive. The kind is the part after the one carrying the install tag, so a catalog id with colons is fine.
-  // ponytail: parsed from the id; a `kind` field on HomeRow is the sturdy source, but it touches 13 core and
-  // 26 Android construction sites, so it waits for the next HomeRow change. A wrong guess only brings back
-  // the jump: the loaded row reads its tiles' kind.
-  const kind = () => props.row.tiles[0]?.kind ?? props.row.rowId.split(":").find((_, i, parts) => parts[i - 1]?.includes("@"));
-  const still = () => !wide() && form() === "tv" && kind() === "movie";
-  const size = () => (wide() || still() ? m().landscape : sizeOf(m(), props.row.tiles[0]?.posterShape));
+  const size = () => (wide() ? m().landscape : m().poster);
   const stride = () => size()[0] + m().gap;
   // Captions under the art: every TV tile; elsewhere Continue Watching alone (posters show none).
   const captions = () => form() === "tv" || wide();
-  // On TV a catalog's caption carries the ratings row: one line under a still, two under a poster.
-  const rated = () => form() === "tv" && !wide();
-  const captionHeight = () => (!captions() ? 0 : rated() && !still() ? m().captionPoster : m().caption);
+  const captionHeight = () => (!captions() ? 0 : m().caption);
   const bodyHeight = () => size()[1] + m().pad * 2 + captionHeight();
   const [scroll, setScroll] = createSignal(offsets.get(id()) ?? 0);
   const [viewport, setViewport] = createSignal(1920);
@@ -401,9 +359,7 @@ export function Row(props: {
                           onOpen={props.onOpen}
                           eager
                           wide={wide()}
-                          still={still()}
                           captions={captions()}
-                          rated={rated()}
                           onRemove={wide() && form() !== "tv" ? () => removeFromContinue(tile().id) : undefined}
                         />
                       )}

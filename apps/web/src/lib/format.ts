@@ -13,8 +13,9 @@ export function bytes(n: number): string {
 }
 
 /** A title's scores side by side as plain text, the source first: "IMDb 8.8",
- * "RT 87%", "RT Fresh", with what a screen reader says ("Rotten Tomatoes 87
- * percent", "Rotten Tomatoes: Fresh"), the source and the score apart for the ratings row. A
+ * "RT 87%", with what a screen reader says ("Rotten Tomatoes 87 percent"), the
+ * source and the score apart for the ratings row. The core sends Rotten Tomatoes as
+ * a number or not at all, never a word. A
  * score the core left null has no slot, and the brands' logos and icons never appear
  * (plans/research/ratings.md). */
 export type RatingPart = { text: string; source: string; score: string; spoken: string; imdb: boolean };
@@ -22,16 +23,12 @@ export function ratingParts(r: Ratings | null | undefined): RatingPart[] {
   const parts: RatingPart[] = [];
   if (r?.imdb) parts.push({ text: `IMDb ${r.imdb}`, source: "IMDb", score: r.imdb, spoken: `IMDb ${r.imdb}`, imdb: true });
   const rt = r?.rottenTomatoes;
-  if (rt) {
-    // "Fresh" is the Rotten Tomatoes addon's mark: a word, not a number.
-    const spoken = /^\d+%$/.test(rt) ? `Rotten Tomatoes ${rt.replace("%", " percent")}` : `Rotten Tomatoes: ${rt}`;
-    parts.push({ text: `RT ${rt}`, source: "RT", score: rt, spoken, imdb: false });
-  }
+  if (rt) parts.push({ text: `RT ${rt}`, source: "RT", score: rt, spoken: `Rotten Tomatoes ${rt.replace("%", " percent")}`, imdb: false });
   return parts;
 }
 
 /** What a screen reader says for a poster: its name and caption, then the
- * scores its chip shows ("Inception, 2010, IMDb 8.8, Rotten Tomatoes: Fresh"). */
+ * scores its cover shows ("Inception, 2010, IMDb 8.8, Rotten Tomatoes 87 percent"). */
 export function posterLabel(parts: (string | null | undefined)[], r: Ratings | null | undefined): string {
   return [...parts.filter((p): p is string => !!p), ...ratingParts(r).map((p) => p.spoken)].join(", ");
 }
