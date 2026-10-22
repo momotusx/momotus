@@ -264,9 +264,10 @@ class TvHomeShelfTest {
         assertEquals(850f / 1080f, shelf.top / root.height, 0.03f, "Continue Watching starts at ${shelf.top}")
         compose.onNodeWithText("S2:E3 · 36 min left", useUnmergedTree = true).assertExists()
         // Only Continue Watching is on screen under the top shelf, and it shows no scores.
+        // Laid out, not what shows: the cards' lines run below the screen's foot.
         val scores = compose.onAllNodesWithText("IMDb 8.4", useUnmergedTree = true).fetchSemanticsNodes()
         assertTrue(
-            scores.none { it.boundsInRoot.top in shelf.top..root.bottom },
+            scores.none { it.positionInRoot.y >= shelf.top },
             "a Continue Watching card shows scores",
         )
         if (out != null) save("tv-home")

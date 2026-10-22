@@ -1,8 +1,11 @@
 package app.marquee.design
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -13,6 +16,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.dp
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -53,6 +57,26 @@ class RatingsTest {
         compose.waitForIdle()
         assertEquals(0, count("RT 87%"))
         compose.onNodeWithText("2010 · 148 min").assertExists()
+    }
+
+    @Test
+    fun `on a narrow meta line the facts are cut and both scores stay whole`() {
+        compose.setContent {
+            MarqueeTheme(Form.Phone) {
+                Box(Modifier.width(220.dp)) {
+                    RatingLine(listOf("IMDb 8.8", "RT 87%"), "2011–2019 · 148 min · Drama, Science Fiction, Mystery")
+                }
+            }
+        }
+        val line = compose.onNodeWithText("2011–2019", substring = true, useUnmergedTree = true).fetchSemanticsNode()
+        for (score in listOf("IMDb 8.8", "RT 87%")) {
+            val node = compose.onNodeWithText(score, useUnmergedTree = true).fetchSemanticsNode()
+            assertTrue(
+                node.size.width > 0 && node.boundsInRoot.right <= 220 * compose.density.density + 1,
+                "$score is cut",
+            )
+        }
+        assertTrue(line.size.width < 220 * compose.density.density, "the facts took the line")
     }
 
     @Test
