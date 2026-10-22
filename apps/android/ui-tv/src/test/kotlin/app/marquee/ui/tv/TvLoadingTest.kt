@@ -3,8 +3,12 @@ package app.marquee.ui.tv
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.hasAnyAncestor
@@ -25,8 +29,10 @@ import app.marquee.core.views.PlaybackView
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
 import app.marquee.player.LOADING_TAG
+import app.marquee.player.LoadingLayer
 import app.marquee.player.PlaybackController
 import app.marquee.player.SUBTITLE_PICKER_TAG
+import app.marquee.player.TitleMark
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -184,6 +190,26 @@ class TvLoadingTest {
         compose.onNode(isFocused()).performKeyInput { pressKey(Key.DirectionLeft) }
         compose.onNodeWithContentDescription("English, 1 option").assertIsFocused()
         compose.onNode(isFocused() and hasAnyAncestor(hasTestTag(SUBTITLE_PICKER_TAG))).assertExists()
+    }
+
+    @Test
+    fun `a screen reader hears where the fill is going, not each frame of its easing`() {
+        var fill by mutableFloatStateOf(0.1f)
+        compose.setContent {
+            MarqueeTheme(Form.Tv) { LoadingLayer("Sintel", TitleMark.Name, null, { fill }, emptyList()) }
+        }
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        fill = 0.7f
+        Snapshot.sendApplyNotifications()
+        compose.mainClock.advanceTimeByFrame()
+        val heard =
+            compose
+                .onNodeWithTag(LOADING_TAG)
+                .fetchSemanticsNode()
+                .config[SemanticsProperties.ProgressBarRangeInfo]
+        assertEquals(0.7f, heard.current, "the easing toward 0.7 has only begun")
+        compose.mainClock.autoAdvance = true
     }
 
     @Test
