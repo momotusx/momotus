@@ -16,10 +16,10 @@ import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * A first run's subtitles step, after the stream question (plans/m13-subtitle-languages.md 7): the language
- * subtitles start in, one choice. The [device]'s language, when the core lists it, is listed first and chosen,
- * unless it is English (No subtitles then: most titles are in English, and English audio a file does not tag
- * would get English subtitles over it); then the common ones and No subtitles; every other language waits behind
- * More languages. [save] writes the choice as the profile's `subtitleLanguages` (none for No subtitles); Skip
+ * subtitles start in, one choice. The [device]'s language, as the core lists it ("nb" reads as Norwegian, "no"),
+ * is listed first and chosen, unless it is English (No subtitles then: most titles are in English, and English
+ * audio a file does not tag would get English subtitles over it); then the common ones and No subtitles; every
+ * other language waits behind More languages. [save] writes the choice as the profile's `subtitleLanguages` (none for No subtitles); Skip
  * writes nothing. Main thread only.
  */
 class SubtitleStep(
@@ -31,8 +31,8 @@ class SubtitleStep(
     var all by mutableStateOf(emptyList<LanguageChoice>())
         private set
 
-    /** The chosen language's code; null for No subtitles. */
-    var chosen by mutableStateOf(device?.takeIf { it.isNotBlank() && it != "en" })
+    /** The chosen language's code; null for No subtitles. The device's, once the core's list is in. */
+    var chosen by mutableStateOf<String?>(null)
 
     /** The choice is being written: a second press sends nothing. */
     var busy by mutableStateOf(false)
@@ -44,13 +44,14 @@ class SubtitleStep(
 
     fun load() {
         scope.launch {
-            all = runCatching { ops.languages() }.getOrDefault(emptyList())
-            // The device's language counts only when the core lists it.
-            if (chosen == device && all.none { it.code == device }) chosen = null
+            val list = runCatching { ops.languages(device) }.getOrDefault(emptyList())
+            // The device's language as the core lists it; English stays on No subtitles.
+            if (chosen == null) chosen = list.firstOrNull { it.device }?.code?.takeIf { it != "en" }
+            all = list
         }
     }
 
-    /** The device's language, then the common ones ([LanguagePicks.COMMON]). */
+    /** The device's language as the core lists it, then the common ones ([LanguagePicks.COMMON]). */
     val common: List<LanguageChoice>
         get() = LanguagePicks.search(all, "", emptyList(), device)
 

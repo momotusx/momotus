@@ -419,19 +419,19 @@ test("Subtitles: the device's language is chosen; the pick is the profile's; a p
   expect(await languages()).toEqual(["tr"]);
 });
 
-test("Subtitles: a device language the core does not list is not offered or chosen", async ({ browser }) => {
+test("Subtitles: a device language reads as the one the core lists", async ({ browser }) => {
   // Norway says Bokmål ("nb"); the core lists Norwegian as "no".
   const page = await device(browser, "desktop", { locale: "nb-NO" });
   await page.goto("/welcome?step=subs&form=desktop");
   const rows = page.locator('.langs[data-fgroup="subs"] .subrow');
-  await expect(rows).toHaveCount(9);
-  await expect(rows.first()).toHaveAttribute("data-f", "welcome:sub:en");
+  await expect(rows.first()).toHaveAttribute("data-f", "welcome:sub:no");
+  await expect(rows.first()).toHaveAttribute("aria-checked", "true");
+  await expect(rows.first()).toContainText("Norwegian");
+  await expect(rows.first()).toContainText("This device's language");
   await expect(page.locator('[data-f="welcome:sub:nb"]')).toHaveCount(0);
-  await expect(page.locator('[data-f="welcome:sub:none"]')).toHaveAttribute("aria-checked", "true");
-  await expect(rows.filter({ hasText: "This device's language" })).toHaveCount(0);
   await page.locator('[data-f="welcome:next"]').click();
   await expect(page).toHaveURL(/step=3/);
-  expect((await client.req<Prefs>("setPrefs", { patch: {} })).subtitleLanguages).toEqual([]);
+  expect((await client.req<Prefs>("setPrefs", { patch: {} })).subtitleLanguages).toEqual(["no"]);
 });
 
 test("Subtitles: Skip waits while Continue saves, so the step leaves once", async ({ browser }) => {

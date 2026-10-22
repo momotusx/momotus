@@ -454,22 +454,27 @@ function Subtitles(props: { then?: string }) {
   const next = () => leave(navigate, afterContinue(props.then));
   // Once, when the preferences are in: a Continue here must not pass twice.
   createEffect(on(() => prefs.state.data !== null, (ready) => ready && (prefs.state.data?.subtitleLanguages.length ?? 0) > 0 && next()));
-  const device = (navigator.language || "en").split("-")[0]?.toLowerCase() || "en";
   const [all, setAll] = createSignal<LanguageChoice[]>([]);
-  const [chosen, setChosen] = createSignal<string | null>(device === "en" ? null : device);
-  // The device's language counts only when the core lists it: a code it
-  // does not ("haw") would be a preference no track ever matches.
-  const listed = () => all().some((l) => l.code === device);
+  const [chosen, setChosen] = createSignal<string | null>(null);
+  // The device's language as the core lists it ("no" for a Norwegian "nb"):
+  // a code it does not list would be a preference no track ever matches.
+  const device = () => all().find((l) => l.device)?.code ?? null;
+  let touched = false;
+  const pick = (code: string | null) => {
+    touched = true;
+    setChosen(code);
+  };
   const load = (list: LanguageChoice[]) => {
     setAll(list);
-    if (chosen() === device && !listed()) setChosen(null);
+    const mine = device();
+    if (!touched && mine !== "en") setChosen(mine);
   };
   onMount(() => void allLanguages().then(load, () => load([])));
   const [more, setMore] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
   const [problem, setProblem] = createSignal<string | null>(null);
   const nameOf = (code: string) => all().find((l) => l.code === code)?.name ?? languageName(code);
-  const common = () => [...new Set([...(listed() ? [device] : []), ...QUICK])];
+  const common = () => [...new Set([device(), ...QUICK].filter((c): c is string => c !== null))];
   // The core's list comes sorted by name.
   const rest = () => all().filter((l) => !common().includes(l.code));
   const go = async () => {
@@ -488,12 +493,13 @@ function Subtitles(props: { then?: string }) {
       setSubsSaving(false);
     }
   };
+  // The device's line follows the core's list, which can come after the row.
   const row = (code: string | null, name: string, line?: string) => (
-    <button class="drow subrow" role="radio" aria-checked={chosen() === code} data-f={`welcome:sub:${code ?? "none"}`} onClick={() => setChosen(code)}>
+    <button class="drow subrow" role="radio" aria-checked={chosen() === code} data-f={`welcome:sub:${code ?? "none"}`} onClick={() => pick(code)}>
       <span class="dtext">
         <b>{name}</b>
-        <Show when={line}>
-          <small>{line}</small>
+        <Show when={line ?? (code !== null && code === device() ? "This device's language" : undefined)}>
+          {(text) => <small>{text()}</small>}
         </Show>
       </span>
       <Check aria-hidden class="lcheck" />
@@ -504,7 +510,7 @@ function Subtitles(props: { then?: string }) {
       <h1>Subtitles</h1>
       <p class="lead">Pick the language subtitles start in. They turn on when a film's audio is in another language. Change it later in Settings, under Playback.</p>
       <div class="langs" role="radiogroup" aria-label="Subtitle language" data-fgroup="subs">
-        <For each={common()}>{(code) => row(code, nameOf(code), code === device ? "This device's language" : undefined)}</For>
+        <For each={common()}>{(code) => row(code, nameOf(code))}</For>
         {row(null, "No subtitles", "Turn them on while watching")}
       </div>
       <Show when={problem()}>

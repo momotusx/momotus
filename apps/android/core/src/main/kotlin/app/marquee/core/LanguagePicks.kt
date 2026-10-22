@@ -29,8 +29,9 @@ object LanguagePicks {
     /**
      * What the search offers for [query]: names or codes starting with it first, then the ones containing it,
      * none already [chosen] (by code or by name, so an old "eng" keeps English off the list), at most [SHOWN].
-     * An empty query offers the [device]'s own language first, when the core lists it (a code it does not
-     * would be a preference no track ever matches), then [COMMON].
+     * An empty query offers the device's own language first, as the core lists it (the one it marks, else
+     * the [device] code when listed: a code it does not list would be a preference no track ever matches),
+     * then [COMMON].
      */
     fun search(
         all: List<LanguageChoice>,
@@ -42,7 +43,8 @@ object LanguagePicks {
         val open = { choice: LanguageChoice -> choice.code !in chosen && choice.name.lowercase() !in taken }
         val q = query.trim().lowercase()
         if (q.isEmpty()) {
-            return (listOfNotNull(device?.takeIf { code -> all.any { it.code == code } }) + COMMON)
+            val mine = all.firstOrNull { it.device }?.code ?: device?.takeIf { code -> all.any { it.code == code } }
+            return (listOfNotNull(mine) + COMMON)
                 .distinct()
                 .map { code ->
                     all.firstOrNull { it.code == code } ?: LanguageChoice(code, name(code, all))

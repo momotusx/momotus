@@ -24,7 +24,7 @@ struct OnboardingScreen: View {
     /// The subtitles step: every language the core knows, the one chosen
     /// (nil: No subtitles), and whether the rest show.
     @State private var languages: [LanguageChoice] = []
-    @State private var subtitle: String?
+    @State private var subtitle: String? = nil
     @State private var moreLanguages = false
     /// The recommended addons step's switches.
     @State private var defaults: DefaultsStep
@@ -69,7 +69,6 @@ struct OnboardingScreen: View {
         _step = State(initialValue: opened ?? Self.first(start))
         _addons = State(initialValue: LiveRecord("addons", core: core))
         _prefs = State(initialValue: LiveRecord("settings", core: core))
-        _subtitle = State(initialValue: SubtitleStepRules.initial(Self.device))
         _defaults = State(initialValue: DefaultsStep(core: core, scope: .all))
         _fixer = State(initialValue: DefaultsStep(core: core, scope: .all))
     }
@@ -150,8 +149,9 @@ struct OnboardingScreen: View {
             if step == .check { await fixer.load() }
             if step == .defaults, defaults.list == nil { await defaults.load() }
             if step == .subtitles, languages.isEmpty {
-                languages = (try? await core.call("languages", as: [LanguageChoice].self)) ?? []
-                subtitle = SubtitleStepRules.loaded(subtitle, device: Self.device, all: languages)
+                let device: [String: any Sendable] = Self.device.map { ["device": $0] } ?? [:]
+                languages = (try? await core.call("languages", device, as: [LanguageChoice].self)) ?? []
+                subtitle = SubtitleStepRules.loaded(subtitle, all: languages)
             }
         }
         .task { await pingLoop() }
@@ -247,8 +247,9 @@ struct OnboardingScreen: View {
             }
             stepHeading(SubtitleStepRules.title, SubtitleStepRules.lead)
             LazyVGrid(columns: columns, alignment: .leading, spacing: Theme.Space.xs) {
-                ForEach(SubtitleStepRules.common(languages, device: Self.device), id: \.code) { language in
-                    languageRow(language.code, language.name, line: language.code == Self.device ? SubtitleStepRules.device : nil)
+                let mine = SubtitleStepRules.listed(languages)
+                ForEach(SubtitleStepRules.common(languages, device: mine), id: \.code) { language in
+                    languageRow(language.code, language.name, line: language.code == mine ? SubtitleStepRules.device : nil)
                 }
                 languageRow(nil, SubtitleStepRules.none, line: SubtitleStepRules.noneLine)
             }
@@ -267,7 +268,7 @@ struct OnboardingScreen: View {
             .padding(.top, Theme.Space.s)
             if moreLanguages {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: Theme.Space.xs) {
-                    ForEach(SubtitleStepRules.rest(languages, device: Self.device), id: \.code) { language in
+                    ForEach(SubtitleStepRules.rest(languages, device: SubtitleStepRules.listed(languages)), id: \.code) { language in
                         languageRow(language.code, language.name, line: nil)
                     }
                 }

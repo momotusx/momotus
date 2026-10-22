@@ -112,8 +112,12 @@ class CoreOps(
         client.request("removeFromContinue", mapOf("itemId" to text(itemId)))
     }
 
-    /** Every language the core knows, by English name, for the subtitle and audio pickers. */
-    suspend fun languages(): List<LanguageChoice> = call("languages", emptyMap(), languageList)
+    /**
+     * Every language the core knows, by English name, for the subtitle and audio pickers; with the [device]'s
+     * code the one it reads as is marked (`device`: "nb" marks Norwegian, "no").
+     */
+    suspend fun languages(device: String? = null): List<LanguageChoice> =
+        call("languages", device?.let { mapOf("device" to text(it)) } ?: emptyMap(), languageList)
 
     /**
      * A link whose settings carry a sign-in is refused with code `tokenInLink` before anything is

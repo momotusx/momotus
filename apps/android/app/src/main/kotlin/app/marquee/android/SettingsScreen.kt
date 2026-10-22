@@ -754,7 +754,10 @@ private fun Playback(
     val ops = holder.session.ops
     Section {
         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-            SubtitleLanguage(prefs.subtitleLanguages, ops::languages) { list ->
+            // The core marks the device's language as it lists it ("nb" reads as "no").
+            val device = DeviceCaps.languageCode(LocalConfiguration.current.locales[0])
+            val load = remember(ops, device) { suspend { ops.languages(device) } }
+            SubtitleLanguage(prefs.subtitleLanguages, load) { list ->
                 if (!busy) {
                     run("Changing the subtitle languages") {
                         ops.setPrefs(buildJsonObject { put("subtitleLanguages", json(list)) })

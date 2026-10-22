@@ -29,14 +29,19 @@ private let known = [
     #expect(SubtitleStepRules.common(known, device: "en").first?.code == "en")
 }
 
-@Test func aDeviceLanguageTheCoreDoesNotListIsNeitherOfferedNorChosen() {
-    // Norway's Bokmål: the core lists Norwegian as "no".
-    #expect(SubtitleStepRules.common(known, device: "nb").first?.code == "en")
-    #expect(SubtitleStepRules.listed("nb", in: known) == nil)
-    #expect(SubtitleStepRules.loaded("nb", device: "nb", all: known) == nil)
-    // A listed one stays, and so does a choice the viewer made.
-    #expect(SubtitleStepRules.loaded("tr", device: "tr", all: known) == "tr")
-    #expect(SubtitleStepRules.loaded("de", device: "nb", all: known) == "de")
+@Test func theDevicesLanguageIsTheOneTheCoreMarks() {
+    // Norway's Bokmål: the core lists Norwegian as "no" and marks it.
+    let norwegian = known + [LanguageChoice(code: "no", name: "Norwegian", device: true)]
+    #expect(SubtitleStepRules.listed(norwegian) == "no")
+    #expect(SubtitleStepRules.loaded(nil, all: norwegian) == "no")
+    #expect(SubtitleStepRules.common(norwegian, device: SubtitleStepRules.listed(norwegian)).first?.name == "Norwegian")
+    // A code the core does not list: nothing marked, No subtitles.
+    #expect(SubtitleStepRules.listed(known) == nil)
+    #expect(SubtitleStepRules.loaded(nil, all: known) == nil)
+    // English stays on No subtitles; a choice made stays.
+    let english = [LanguageChoice(code: "en", name: "English", device: true)]
+    #expect(SubtitleStepRules.loaded(nil, all: english) == nil)
+    #expect(SubtitleStepRules.loaded("de", all: norwegian) == "de")
 }
 
 @Test func theQuestionLeadsToTheStepUnlessTheProfileHasLanguages() {

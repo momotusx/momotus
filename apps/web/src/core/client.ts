@@ -72,6 +72,9 @@ connection?.addEventListener("change", () => lifecycle("networkChanged", { netwo
 
 export type ViewStatus ={ state: "opening" } | { state: "open" } | { state: "failed"; reason: string };
 
+/** This browser's language as the core's codes begin ("nb" for "nb-NO"). */
+export const deviceLanguage = () => (navigator.language || "en").split("-")[0]?.toLowerCase() || "en";
+
 export const reasonOf = (e: unknown) =>
   e instanceof Error && e.message === "connection closed"
     ? `Cannot reach the core at ${bridgeUrl}. Start it with: bun run bridge (in apps/web)`
@@ -315,7 +318,7 @@ export function displayCaps(): DeviceCaps {
     containers: CONTAINERS.filter(([, type]) => plays(type)).map(([name]) => name),
     passthrough: [],
     hasFallbackEngine: false,
-    language: (navigator.language || "en").split("-")[0]?.toLowerCase() || "en",
+    language: deviceLanguage(),
   };
 }
 

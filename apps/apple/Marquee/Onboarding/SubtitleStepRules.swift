@@ -17,17 +17,18 @@ enum SubtitleStepRules {
     static let more = "More languages"
     static let fewer = "Fewer languages"
 
-    /// The device's language when the core lists it: a code it does not
-    /// ("nb", "haw") would be a preference no track ever matches.
-    static func listed(_ device: String?, in all: [LanguageChoice]) -> String? {
-        all.contains { $0.code == device } ? device : nil
+    /// The device's language as the core lists it, the one it marks ("nb"
+    /// reads as Norwegian, "no"): a code it does not list would be a
+    /// preference no track ever matches.
+    static func listed(_ all: [LanguageChoice]) -> String? {
+        all.first { $0.device == true }?.code
     }
 
-    /// The device's language (when listed), then the common ones, each once,
+    /// The device's language (`listed`), then the common ones, each once,
     /// named as the core names them (by the system before its list is in).
     static func common(_ all: [LanguageChoice], device: String?) -> [LanguageChoice] {
         var seen = Set<String>()
-        let codes = ([listed(device, in: all)].compactMap { $0 } + Language.all.map(\.audio)).filter { seen.insert($0).inserted }
+        let codes = ([device].compactMap { $0 }.filter { !$0.isEmpty } + Language.all.map(\.audio)).filter { seen.insert($0).inserted }
         return codes.map { code in all.first { $0.code == code } ?? LanguageChoice(code: code, name: Language.name(code)) }
     }
 
@@ -53,10 +54,10 @@ enum SubtitleStepRules {
         device == "en" ? nil : device
     }
 
-    /// The choice once the core's list is in: the device's language, still
-    /// chosen, gives way to No subtitles when the core does not list it.
-    static func loaded(_ chosen: String?, device: String?, all: [LanguageChoice]) -> String? {
-        chosen == device && listed(device, in: all) == nil ? nil : chosen
+    /// The choice once the core's list is in: one already made stays, else
+    /// the device's language as the core lists it (`initial`).
+    static func loaded(_ chosen: String?, all: [LanguageChoice]) -> String? {
+        chosen ?? initial(listed(all))
     }
 
     /// Where a first run goes after the question, and after this step.

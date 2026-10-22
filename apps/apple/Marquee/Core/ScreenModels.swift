@@ -278,6 +278,9 @@ enum SubtitleSize: String, Codable, Hashable, Sendable, CaseIterable {
 struct LanguageChoice: Decodable, Hashable, Sendable {
     let code: String
     let name: String
+    /// The language the device's code reads as ("nb" is Norwegian, "no"),
+    /// when the request named one; an older core sends none.
+    var device: Bool? = nil
 }
 
 extension LanguageChoice {

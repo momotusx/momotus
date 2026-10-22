@@ -86,7 +86,11 @@ class SubtitleStepScreenTest {
 
     /** A step over a core that knows [languages] and takes every write. */
     private fun step(device: String): SubtitleStep {
-        val list = languages.joinToString(",", "[", "]") { """{"code":"${it.code}","name":"${it.name}"}""" }
+        // As the core answers: the device's language marked.
+        val list =
+            languages.joinToString(",", "[", "]") {
+                """{"code":"${it.code}","name":"${it.name}","device":${it.code == device}}"""
+            }
         client.attach(
             CoreTransport { text ->
                 sent += text

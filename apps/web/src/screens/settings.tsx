@@ -13,7 +13,7 @@ import SlidersHorizontal from "lucide-solid/icons/sliders-horizontal";
 import Sparkle from "lucide-solid/icons/sparkle";
 import Wrench from "lucide-solid/icons/wrench";
 import { createSignal, For, type JSX, onMount, Show } from "solid-js";
-import { liveView, op, prefsView, reasonOf } from "../core/client";
+import { deviceLanguage, liveView, op, prefsView, reasonOf } from "../core/client";
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import type { LanguageChoice } from "../core/generated/LanguageChoice";
 import type { Prefs } from "../core/generated/Prefs";
@@ -41,10 +41,11 @@ export const QUICK = ["en", "tr", "es", "fr", "de", "it", "pt", "ja"];
 /** The ISO 639-2 codes earlier pickers stored for subtitles; the core reads both. */
 const LEGACY: Record<string, string> = { eng: "en", tur: "tr", spa: "es", fre: "fr", ger: "de", ita: "it", por: "pt", jpn: "ja" };
 
-// Every language the core knows (113), loaded once per app run.
+// Every language the core knows (113), loaded once per app run; `device`
+// marks the one this browser's language reads as.
 let catalog: Promise<LanguageChoice[]> | undefined;
 export const allLanguages = () =>
-  (catalog ??= op<LanguageChoice[]>("languages").catch((e: unknown) => {
+  (catalog ??= op<LanguageChoice[]>("languages", { device: deviceLanguage() }).catch((e: unknown) => {
     catalog = undefined;
     throw e;
   }));

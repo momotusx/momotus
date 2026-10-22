@@ -3,6 +3,7 @@ package app.marquee.core
 import app.marquee.core.ScriptedCore.Companion.fail
 import app.marquee.core.ScriptedCore.Companion.ok
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -16,15 +17,29 @@ class SubtitleStepTest {
     fun close() = core.close()
 
     private val languages =
-        """[{"code":"de","name":"German"},{"code":"en","name":"English"},{"code":"pl","name":"Polish"},""" +
-            """{"code":"pt-BR","name":"Portuguese (Brazil)"},{"code":"tr","name":"Turkish"}]"""
+        listOf(
+            "de" to "German",
+            "en" to "English",
+            "no" to "Norwegian",
+            "pl" to "Polish",
+            "pt-BR" to "Portuguese (Brazil)",
+            "tr" to "Turkish",
+        )
+
+    /** The list as the core answers it: the language the device's code reads as marked ("nb" is Norwegian). */
+    private fun answer(device: String?): String {
+        val mine = if (device == "nb") "no" else device
+        return languages.joinToString(",", "[", "]") { (code, name) ->
+            """{"code":"$code","name":"$name","device":${code == mine}}"""
+        }
+    }
     private val zero = """{"ready":0,"height":0,"hdr":0,"size":0,"picks":0,"epoch":0,"atMs":0}"""
     private val prefs =
         """{"streams":{"quality":"balanced","minSeeders":50,"hdr":true,"preferReady":true,"learn":true},""" +
             """"autoplayNext":true,"homeRows":{},"learned":{"uhd":$zero,"fhd":$zero,"hd":$zero,"sd":$zero},"learnedEpoch":0}"""
 
     private fun step(device: String?): SubtitleStep {
-        core.answers["languages"] = { ok(languages) }
+        core.answers["languages"] = { request -> ok(answer(request["device"]?.jsonPrimitive?.content)) }
         return SubtitleStep(core.ops, core.scope, device).also {
             it.load()
             core.waitFor("the languages") { it.all.isNotEmpty() }
@@ -46,7 +61,7 @@ class SubtitleStepTest {
         assertEquals(listOf("tr", "en", "es", "fr", "de", "it", "pt", "ja"), step.common.map { it.code })
         assertEquals("Turkish", step.common.first().name)
         // The rest, by name, none of them twice.
-        assertEquals(listOf("pl", "pt-BR"), step.rest.map { it.code })
+        assertEquals(listOf("no", "pl", "pt-BR"), step.rest.map { it.code })
     }
 
     @Test
@@ -57,16 +72,20 @@ class SubtitleStepTest {
     }
 
     @Test
-    fun a_device_language_the_core_does_not_list_is_neither_offered_nor_chosen() {
+    fun a_device_language_is_the_one_the_core_lists() {
         core.answers["setPrefs"] = { ok(prefs) }
-        // Norway's Bokmål: the core lists Norwegian as "no".
+        // Norway's Bokmål: the core lists Norwegian as "no" and marks it.
         val step = step("nb")
-        assertNull(step.chosen)
-        assertEquals(listOf("en", "tr", "es", "fr", "de", "it", "pt", "ja"), step.common.map { it.code })
+        assertEquals("no", step.chosen)
+        assertEquals("Norwegian", step.common.first().name)
         var done = false
         step.save { done = true }
         core.waitFor("the write") { done }
-        assertEquals("[]", written())
+        assertEquals("""["no"]""", written())
+        // A code the core does not list is neither offered nor chosen.
+        val unknown = step("haw")
+        assertNull(unknown.chosen)
+        assertEquals("en", unknown.common.first().code)
     }
 
     @Test
