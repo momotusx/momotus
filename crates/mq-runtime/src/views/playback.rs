@@ -1923,11 +1923,18 @@ async fn resolve_next(
                     let early = async {
                         tokio::time::sleep(START_SUBTITLE_WAIT).await;
                         rated_done.notified().await;
-                        let audio = audio_of(probed.clone().await, &stream);
+                        let wants = StartWants::read(
+                            &core,
+                            &target,
+                            audio_of(probed.clone().await, &stream),
+                        );
+                        // Nothing to settle early with no first language.
                         // ponytail: looks at the list every 100 ms; a signal
                         // from each source if those 100 ms ever matter.
-                        while !settle_start(&core, &target, &state, &snapshot, run, &audio, false) {
-                            tokio::time::sleep(Duration::from_millis(100)).await;
+                        if wants.first().is_some() {
+                            while !settle_start(&state, &snapshot, run, &wants, false) {
+                                tokio::time::sleep(Duration::from_millis(100)).await;
+                            }
                         }
                         std::future::pending::<()>().await;
                     };
@@ -1935,8 +1942,8 @@ async fn resolve_next(
                         _ = async { tokio::join!(addons, built_in, rated) } => {}
                         () = early => {}
                     }
-                    let audio = audio_of(probed.await, &stream);
-                    settle_start(&core, &target, &state, &snapshot, run, &audio, true);
+                    let wants = StartWants::read(&core, &target, audio_of(probed.await, &stream));
+                    settle_start(&state, &snapshot, run, &wants, true);
                 };
                 let next = async {
                     if let Some(next) = next_episode(&core, &target).await {
@@ -3689,32 +3696,52 @@ fn audio_of(probed: Probed, stream: &ParsedStream) -> Vec<String> {
         .collect()
 }
 
+/// What the start subtitle is chosen with, read once per settle: the
+/// title's remembered choice, the profile's subtitle languages and the
+/// audio's.
+struct StartWants {
+    remembered: Option<String>,
+    explicit: Vec<String>,
+    audio: Vec<String>,
+}
+
+impl StartWants {
+    fn read(core: &Core, target: &PlayTarget, audio: Vec<String>) -> Self {
+        let explicit = core
+            .prefs()
+            .subtitle_languages
+            .iter()
+            .map(|l| crate::languages::language(l).tag)
+            .collect();
+        Self {
+            remembered: remembered_subtitle(core, target),
+            explicit,
+            audio,
+        }
+    }
+
+    fn first(&self) -> Option<&str> {
+        first_language(self.remembered.as_deref(), &self.explicit, &self.audio)
+    }
+}
+
 /// Decides the source's start subtitle once: early (`last` false) only when
 /// a track in the first language (`first_language`) is listed, as a slower
 /// source may bring one; any other pick when every source has answered,
 /// which also ends `subtitles_pending`. A pick before it stays the pick.
-/// True once there is nothing left to decide.
+/// True once there is nothing left to decide early.
 fn settle_start(
-    core: &Core,
-    target: &PlayTarget,
     state: &Mutex<State>,
     snapshot: &SharedObservable<PlaybackSnapshot>,
     run: u64,
-    audio: &[String],
+    wants: &StartWants,
     last: bool,
 ) -> bool {
-    let remembered = remembered_subtitle(core, target);
-    let explicit: Vec<String> = core
-        .prefs()
-        .subtitle_languages
-        .iter()
-        .map(|l| crate::languages::language(l).tag)
-        .collect();
     let mut s = lock(state);
     if !current(&s, run) {
         return true;
     }
-    if s.start_settled {
+    if s.start_settled || (s.subtitle_picked && !last) {
         if last {
             s.snapshot.subtitles_pending = false;
             snapshot.set(s.snapshot.clone());
@@ -3722,13 +3749,13 @@ fn settle_start(
         return true;
     }
     let pick = auto_subtitle(
-        remembered.as_deref(),
-        &explicit,
-        audio,
+        wants.remembered.as_deref(),
+        &wants.explicit,
+        &wants.audio,
         &s.snapshot.subtitles,
     )
     .filter(|_| !s.subtitle_picked);
-    let first = first_language(remembered.as_deref(), &explicit, audio);
+    let first = wants.first();
     let in_first = pick.as_ref().is_some_and(|url| {
         s.snapshot.subtitles.iter().any(|t| {
             &t.url == url

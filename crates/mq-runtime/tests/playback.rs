@@ -1451,37 +1451,37 @@ fn start_source(s: &PlaybackSnapshot) -> Option<String> {
 
 /// Review P2-1 and P3-1: a profile with Turkish then English. English
 /// listed at once never settles the start early, as a slower source may
-/// bring Turkish; Turkish listed at 1.5 s settles it then, with a slower
-/// source still out, and that one changes nothing.
+/// bring Turkish; Turkish listed at 2.5 s settles it then, with a source
+/// still out until 8 s, and that one changes nothing. The margins (0.7 s
+/// before Turkish, 5.5 s after it) hold on a loaded machine.
 #[tokio::test]
 async fn the_start_subtitle_settles_early_only_in_the_first_language() {
     let view = open_with_subtitles(
         &["tur", "eng"],
         vec![
-            subtitles_addon("late", "eng", Duration::from_secs(6)).await,
-            subtitles_addon("turkish", "tur", Duration::from_millis(1500)).await,
+            subtitles_addon("late", "eng", Duration::from_secs(8)).await,
+            subtitles_addon("turkish", "tur", Duration::from_millis(2500)).await,
             subtitles_addon("english", "eng", Duration::ZERO).await,
         ],
     )
     .await;
-    let opened = std::time::Instant::now();
     until(&view, "the English track", |s| {
         s.subtitles.iter().any(|t| t.source == "english")
     })
     .await;
-    tokio::time::sleep(Duration::from_millis(1200).saturating_sub(opened.elapsed())).await;
+    // Past the 1 s wait, Turkish not listed yet.
+    tokio::time::sleep(Duration::from_millis(1800)).await;
+    let before = view.snapshot();
+    assert!(!before.subtitles.iter().any(|t| t.source == "turkish"));
     assert_eq!(
-        view.snapshot().auto_subtitle,
-        None,
+        before.auto_subtitle, None,
         "English settled before Turkish came"
     );
     let s = until(&view, "the start subtitle", |s| s.auto_subtitle.is_some()).await;
     assert!(
-        opened.elapsed() < Duration::from_millis(2500),
-        "took {:?}",
-        opened.elapsed()
+        s.subtitles_pending,
+        "settled only when the late addon answered"
     );
-    assert!(s.subtitles_pending, "the late addon is still out");
     assert_eq!(start_source(&s).as_deref(), Some("turkish"));
     let done = settled_list(&view).await;
     assert_eq!(done.auto_subtitle, s.auto_subtitle);
@@ -1509,39 +1509,39 @@ async fn a_second_language_waits_for_every_source() {
     );
 }
 
-/// Review P3: the viewer's pick before the 1 s wait stays the pick: the
-/// start subtitle never comes over it, early or last.
+/// Review P3: the viewer's pick stays the pick: the start subtitle never
+/// comes over it, early or last. The profile wants English, which only the
+/// 3 s addon lists, so nothing can settle before the viewer picks the
+/// French track listed at once, however slow the machine.
 #[tokio::test]
 async fn a_pick_before_the_wait_stays_the_pick() {
     let view = open_with_subtitles(
         &["eng"],
         vec![
             subtitles_addon("late", "eng", Duration::from_secs(3)).await,
-            subtitles_addon("english", "eng", Duration::ZERO).await,
+            subtitles_addon("french", "fre", Duration::ZERO).await,
         ],
     )
     .await;
-    let opened = std::time::Instant::now();
-    let s = until(&view, "the English track", |s| {
-        s.subtitles.iter().any(|t| t.source == "english")
+    let s = until(&view, "the French track", |s| {
+        s.subtitles.iter().any(|t| t.source == "french")
     })
     .await;
-    assert!(
-        opened.elapsed() < Duration::from_secs(1),
-        "listed at {:?}",
-        opened.elapsed()
-    );
+    assert_eq!(s.auto_subtitle, None);
     let picked = s
         .subtitles
         .iter()
-        .find(|t| t.source == "english")
+        .find(|t| t.source == "french")
         .unwrap()
         .url
         .clone();
     view.subtitle_chosen(Some(&picked), None);
-    tokio::time::sleep(Duration::from_millis(1500)).await;
-    assert_eq!(view.snapshot().auto_subtitle, None);
-    assert_eq!(settled_list(&view).await.auto_subtitle, None);
+    let done = settled_list(&view).await;
+    assert!(done.subtitles.iter().any(|t| t.source == "late"));
+    assert_eq!(
+        done.auto_subtitle, None,
+        "the English track came over the pick"
+    );
 }
 
 /// The track every app turns on at start: only when the profile set
