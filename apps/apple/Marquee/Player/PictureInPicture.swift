@@ -132,7 +132,7 @@ final class FloatingPlayer {
     func float(_ held: Held) {
         self.held = held
         held.model.floating = true
-        guard let words = PlayerLayout.pipSubtitleNote(addonSubtitle: held.model.subtitle != nil, told: held.pip.told) else { return }
+        guard let words = PlayerLayout.pipSubtitleNote(addonSubtitle: held.model.subtitle != nil, fileSubtitle: held.model.textTrack != nil, told: held.pip.told) else { return }
         held.pip.told = true
         note = words
         announce(words)

@@ -158,8 +158,20 @@ enum PlayerLayout {
     /// The times the drawn line changes: each cue's start and end, shifted by
     /// the timing, from the film's start, each once and in order.
     static func cueEdges(_ cues: [WebVTT.Cue], delay: Double) -> [Double] {
-        Array(Set(cues.flatMap { [$0.start + delay, $0.end + delay] }.filter { $0 >= 0 })).sorted()
+        // A file track's last cue stays open (infinite end) until a delivery ends it.
+        Array(Set(cues.flatMap { [$0.start + delay, $0.end + delay] }.filter { $0 >= 0 && $0.isFinite })).sorted()
     }
+
+    /// A file's own track takes timing when the app can draw it: subtitles and text, not the captions
+    /// carried in the video (CEA-608), whose layout the legible output cannot hand over, as on Android.
+    static func fileTrackTimeable(mediaType: String) -> Bool {
+        mediaType != "clcp"
+    }
+
+    /// The timing key of a file's own track: its place in the menu. In-file tracks have no core
+    /// identity, so their value is kept for the play only, never sent.
+    static func fileTrackKey(_ index: Int) -> String { fileTrackPrefix + "\(index)" }
+    static let fileTrackPrefix = "file:"
 
     /// "Plus 1.5 seconds", "Minus 0.3 seconds", "0.0 seconds": the signed value as VoiceOver says it,
     /// once it settles. Never "earlier" or "later" (the owner, 2026-10-22).
@@ -184,8 +196,11 @@ enum PlayerLayout {
 
     /// Picture in Picture shows the picture only: an addon's subtitles are
     /// drawn over the page, which has left. Said once per film.
-    static func pipSubtitleNote(addonSubtitle: Bool, told: Bool) -> String? {
-        addonSubtitle && !told ? "Addon subtitles do not show in Picture in Picture" : nil
+    static func pipSubtitleNote(addonSubtitle: Bool, fileSubtitle: Bool = false, told: Bool) -> String? {
+        guard !told else { return nil }
+        if addonSubtitle { return "Addon subtitles do not show in Picture in Picture" }
+        // The file's own track is drawn by the app too (plans/apple-file-subtitle-timing.md, decision A).
+        return fileSubtitle ? "Subtitles from the file do not show in Picture in Picture" : nil
     }
 
     /// The core took a Try again: `retries` rose within one view. The first
@@ -534,10 +549,11 @@ struct StepperClock: Sendable {
     }
 
     /// `spoken`: the settled value is said (a press or hold); an adjustable action's value is read
-    /// by VoiceOver as it changes, so it is not said again.
-    func set(url: String, seconds: Double, spoken: Bool = true) {
+    /// by VoiceOver as it changes, so it is not said again. `sent` false: kept for the play only (a
+    /// file's own track, which the core does not know).
+    func set(url: String, seconds: Double, spoken: Bool = true, sent: Bool = true) {
         kept[url] = seconds
-        pending = (url, seconds)
+        if sent { pending = (url, seconds) } else { flush() }
         settle?.cancel()
         let clock = clock
         settle = Task { [weak self] in
@@ -559,6 +575,13 @@ struct StepperClock: Sendable {
 
     /// Where `track` starts: its value earlier in this play, else the core's `delayMs`.
     func start(_ track: SubtitleTrack?) -> Double { PlayerLayout.startDelay(track, kept: kept) }
+
+    /// Values kept under keys starting with `prefix` go: another version is another file, whose own tracks share
+    /// only their places with the last one's (`file:<index>`).
+    func forget(prefix: String) {
+        kept = kept.filter { !$0.key.hasPrefix(prefix) }
+        if pending?.url.hasPrefix(prefix) == true { pending = nil }
+    }
 
     /// A server move gave the track a new URL: its value and anything unsent follow it.
     func moved(from old: String, to new: String) {

@@ -213,7 +213,8 @@ private func playerModel() throws -> String {
     // The picture stays up while tracks change (the web's and Android's rule): a pick, the file's own
     // tracks and the timing change cues or a media selection, never the player's item.
     let text = try playerModel()
-    for name in ["func chooseSubtitle(", "func selectSubtitle(", "func selectText(", "func setSubtitleDelay(", "private func flushDelay("] {
+    for name in ["func chooseSubtitle(", "func selectSubtitle(", "func selectText(", "func setSubtitleDelay(", "private func flushDelay(",
+                 "private func legibleDelivered(", "private func linesChanged("] {
         let b = try body(of: name, in: text)
         #expect(!b.contains("replaceCurrentItem") && !b.contains("AVPlayerItem(") && !b.contains("seek("), "\(name)")
     }

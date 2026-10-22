@@ -67,6 +67,16 @@ final class PlayerModel {
     private(set) var textTrack: Int?
     @ObservationIgnored private var textGroup: AVMediaSelectionGroup?
     @ObservationIgnored private var textOptions: [AVMediaSelectionOption] = []
+    /// Per option: the app can draw it with a timing (subtitles and text, not captions in the video).
+    @ObservationIgnored private var textTimeable: [Bool] = []
+    /// The item's legible text as its muting output delivers it: the app draws the file's own subtitles itself, so a
+    /// timing can move them (plans/apple-file-subtitle-timing.md, decision A).
+    @ObservationIgnored private var legibleLog = LegibleLog()
+    /// The output's delegate, held here: the output holds it weakly.
+    @ObservationIgnored private var legibleSink: LegibleSink?
+    /// Bumped when the log changes, so the overlay reads it again.
+    private(set) var legibleLines = 0
+    @ObservationIgnored private var edgesQueued = false
 
     @ObservationIgnored private let core: CoreClient
     @ObservationIgnored private let prefs: LiveRecord<Prefs>
@@ -190,12 +200,50 @@ final class PlayerModel {
         selectSubtitle(nil)
         player.currentItem?.select(textOptions[index], in: group)
         textTrack = index
+        // Another track: nothing delivered for the last one holds; this one starts where it was left this play.
+        legibleLog.reset()
+        subtitleDelay = outbox.kept[PlayerLayout.fileTrackKey(index)] ?? 0
+        linesChanged()
+    }
+
+    /// The file track on takes timing (`PlayerLayout.fileTrackTimeable`).
+    var textTrackTimeable: Bool {
+        guard let textTrack, textTimeable.indices.contains(textTrack) else { return false }
+        return textTimeable[textTrack]
+    }
+
+    /// What the stepper times: the addon track, else a file track the app can draw; nil for neither.
+    var timingKey: String? {
+        if let url = subtitle?.url { return url }
+        return textTrackTimeable ? textTrack.map(PlayerLayout.fileTrackKey) : nil
+    }
+
+    /// The file's timing applies to a timeable file track with no addon track on (an addon track has its own, and a
+    /// forced line the player picks beside it keeps its time).
+    var fileDelay: Double { subtitle == nil && textTrackTimeable ? subtitleDelay : 0 }
+
+    private func legibleDelivered(_ text: String, at time: Double) {
+        legibleLog.deliver(text, at: time)
+        linesChanged()
+    }
+
+    /// The overlay reads the log again; the boundary observer is rebuilt once per run loop turn, not per delivery
+    /// (a lookahead burst is dozens at once).
+    private func linesChanged() {
+        legibleLines += 1
+        guard !edgesQueued else { return }
+        edgesQueued = true
+        Task { @MainActor [weak self] in
+            self?.edgesQueued = false
+            self?.watchCueEdges()
+        }
     }
 
     /// Reads the audio and subtitle tracks once the file is open.
     private func loadTracks(_ item: AVPlayerItem, generation: Int) {
         (audioTracks, audioTrack, audioGroup) = ([], nil, nil)
-        (textTracks, textTrack, textGroup, textOptions) = ([], nil, nil, [])
+        (textTracks, textTrack, textGroup, textOptions, textTimeable) = ([], nil, nil, [], [])
+
         let asset = item.asset
         Task { [weak self] in
             guard let group = try? await asset.loadMediaSelectionGroup(for: .audible),
@@ -213,8 +261,10 @@ final class PlayerModel {
             let options = AVMediaSelectionGroup.mediaSelectionOptions(
                 from: group.options, withoutMediaCharacteristics: [.containsOnlyForcedSubtitles])
             (textGroup, textOptions) = (group, options)
+            textTimeable = options.map { PlayerLayout.fileTrackTimeable(mediaType: $0.mediaType.rawValue) }
             textTracks = Self.names(options, one: "Subtitles", many: "Subtitles")
             textTrack = item.currentMediaSelection.selectedMediaOption(in: group).flatMap { options.firstIndex(of: $0) }
+
             if let index = carriedTracks?.text { selectText(index) }
             carriedTracks?.text = nil
             #if DEBUG
@@ -382,6 +432,8 @@ final class PlayerModel {
         // The old track's URL goes with the old view: the new version starts
         // with its own start subtitle.
         guard let next = choices.switchVersion(from: route, to: key) else { return }
+        // Another file: its own tracks' timings start again (a server move keeps them: the same file).
+        outbox.forget(prefix: PlayerLayout.fileTrackPrefix)
         report()
         route = next
         (loadedURL, rendered, firstFrameMs, playback) = (nil, false, nil, nil)
@@ -433,6 +485,9 @@ final class PlayerModel {
         // The viewer's seek replaces a start that has not landed yet, and stays pending itself.
         pendingStart = target.seconds
         ended = false
+        // The output delivers again from the landing; until it does, the landing reads empty.
+        legibleLog.seek(to: target.seconds)
+        linesChanged()
         seekToken += 1
         let (token, generation) = (seekToken, generation)
         player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] done in
@@ -497,9 +552,15 @@ final class PlayerModel {
     /// The stepper's value for the addon track on: drawn at once, sent to the core (which keeps it for
     /// this track) once it rests, and said to VoiceOver then (`spoken`), never on each tick of a hold.
     func setSubtitleDelay(_ seconds: Double, spoken: Bool = true) {
-        guard let url = subtitle?.url else { return }
+        if let url = subtitle?.url {
+            subtitleDelay = seconds
+            outbox.set(url: url, seconds: seconds, spoken: spoken)
+            return
+        }
+        // A file's own track: kept for the play, never sent (the core does not know it).
+        guard let key = timingKey else { return }
         subtitleDelay = seconds
-        outbox.set(url: url, seconds: seconds, spoken: spoken)
+        outbox.set(url: key, seconds: seconds, spoken: spoken, sent: false)
     }
 
     /// The value not sent yet goes to the view still open, now.
@@ -516,6 +577,8 @@ final class PlayerModel {
         if textTrack != nil, let group = textGroup, group.allowsEmptySelection {
             player.currentItem?.select(nil, in: group)
             textTrack = nil
+            legibleLog.reset()
+            linesChanged()
         }
         guard let track, let url = URL(string: track.url) else { return }
         Task {
@@ -530,6 +593,7 @@ final class PlayerModel {
         if let cueObserver { player.removeTimeObserver(cueObserver) }
         cueObserver = nil
         let edges = PlayerLayout.cueEdges(cues, delay: subtitleDelay)
+            + legibleLog.edges(delay: fileDelay, from: position, ahead: PlayerLayout.maxSubtitleDelay + 10)
         guard !edges.isEmpty else { return }
         let times = edges.map { NSValue(time: CMTime(seconds: $0, preferredTimescale: 600)) }
         cueObserver = player.addBoundaryTimeObserver(forTimes: times, queue: .main) { [weak self] in
@@ -540,7 +604,15 @@ final class PlayerModel {
         }
     }
 
-    var subtitleText: String? { WebVTT.text(at: PlayerLayout.cueTime(position: position, delay: subtitleDelay), in: cues) }
+    /// The file's line (its timing, or none) and the addon track's (its own): both when the player shows a forced line
+    /// beside an addon track.
+    var subtitleText: String? {
+        _ = legibleLines
+        let file = legibleLog.text(at: PlayerLayout.cueTime(position: position, delay: fileDelay))
+        let addon = WebVTT.text(at: PlayerLayout.cueTime(position: position, delay: subtitleDelay), in: cues)
+        let lines = [file, addon].compactMap { $0 }
+        return lines.isEmpty ? nil : lines.joined(separator: "\n")
+    }
 
     private func showSubtitleStatus(_ words: String) {
         subtitleStatus = words
@@ -620,6 +692,19 @@ final class PlayerModel {
         player.allowsExternalPlayback = airPlayable
         let item = AVPlayerItem(url: address)
         textSize(item)
+        // Made with the item and never removed: an output added later gets no delivery, and any legible output stops
+        // the player drawing the track (bench AFS2, AFS3), so the app draws the item's legible text itself.
+        let sink = LegibleSink { [weak self] text, time in
+            guard let self, generation == self.generation else { return }
+            self.legibleDelivered(text, at: time)
+        }
+        let legible = AVPlayerItemLegibleOutput()
+        legible.advanceIntervalForDelegateInvocation = PlayerLayout.maxSubtitleDelay
+        legible.suppressesPlayerRendering = true
+        legible.setDelegate(sink, queue: .main)
+        item.add(legible)
+        legibleSink = sink
+        legibleLog.reset()
         item.publisher(for: \.status)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] status in
@@ -803,5 +888,19 @@ final class PlayerModel {
         player.pause()
         player.replaceCurrentItem(with: nil)
         sub = nil
+    }
+}
+
+/// The item's legible output delegate: each delivery's strings as one text, on the main queue.
+private final class LegibleSink: NSObject, AVPlayerItemLegibleOutputPushDelegate, @unchecked Sendable {
+    private let deliver: @MainActor (String, Double) -> Void
+
+    init(deliver: @escaping @MainActor (String, Double) -> Void) { self.deliver = deliver }
+
+    func legibleOutput(_ output: AVPlayerItemLegibleOutput, didOutputAttributedStrings strings: [NSAttributedString],
+                       nativeSampleBuffers nativeSamples: [Any], forItemTime itemTime: CMTime) {
+        let text = strings.map(\.string).joined(separator: "\n")
+        let time = itemTime.seconds
+        MainActor.assumeIsolated { deliver(text, time) }
     }
 }

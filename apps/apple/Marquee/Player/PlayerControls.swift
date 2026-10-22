@@ -346,7 +346,7 @@ struct PlayerControls: View {
         #if !os(tvOS)
         // Over the actions, not on one of the row's copies above (only one is drawn).
         .popover(isPresented: $timingShown, arrowEdge: .top) {
-            SubtitleTimingStepper(value: model.subtitleDelay, track: model.subtitle?.url ?? "") { by, spoken in
+            SubtitleTimingStepper(value: model.subtitleDelay, track: model.timingKey ?? "") { by, spoken in
                 model.setSubtitleDelay(PlayerLayout.nudge(model.subtitleDelay, by: by), spoken: spoken)
                 hold(true)
             } reset: {
@@ -361,7 +361,7 @@ struct PlayerControls: View {
         // Open, it keeps the controls up; closed, they hide as usual again.
         .onChange(of: timingShown) { _, open in hold(open) }
         // Its track went off: nothing left to time.
-        .onChange(of: model.subtitle == nil) { _, off in if off { timingShown = false } }
+        .onChange(of: model.timingKey == nil) { _, off in if off { timingShown = false } }
         #endif
     }
 
@@ -417,7 +417,7 @@ struct PlayerControls: View {
                 }
                 // An addon track's timing: Stremio's stepper, which a menu item cannot be (no hold),
                 // so the item opens it over the actions. The core keeps the value for the track.
-                if model.subtitle != nil {
+                if model.timingKey != nil {
                     #if os(tvOS)
                     Section("Timing: \(PlayerLayout.delayText(model.subtitleDelay))") {
                         Button { model.setSubtitleDelay(PlayerLayout.nudge(model.subtitleDelay, by: -PlayerLayout.subtitleStep)); hold(true) } label: {
@@ -439,9 +439,9 @@ struct PlayerControls: View {
                     }
                     #endif
                 }
-                // A file's own track is drawn by AVFoundation, which takes the size but no timing.
-                if model.subtitle == nil, model.textTrack != nil {
-                    Section("Timing") { Text("Timing works for addon subtitles only") }
+                // Captions carried in the video: the legible output cannot hand over their layout.
+                if model.subtitle == nil, model.textTrack != nil, !model.textTrackTimeable {
+                    Section("Timing") { Text("Captions in the video take no timing") }
                 }
                 if !model.textTracks.isEmpty {
                     Section("In the file") {
