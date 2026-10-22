@@ -184,7 +184,7 @@ function measure(form: Form, where: string, values: unknown) {
 }
 
 for (const form of Object.keys(FORMS) as Form[]) {
-  test(`${form}: the widest scores never wrap or get cut, stacked only on phone posters`, async ({ browser }) => {
+  test(`${form}: the widest scores never wrap or get cut, stacked when the pair is wider than the poster`, async ({ browser }) => {
     const page = await open(browser, form);
     await page.goto(`/?form=${form}`);
     const chips = page.locator(".tile .chip-rate");
@@ -200,7 +200,9 @@ for (const form of Object.keys(FORMS) as Form[]) {
     const widest = chipBoxes.find((c) => c.text.includes("RT 100%"))!;
     const pair = parts.filter((p) => ["IMDb 10.0", "RT 100%"].includes(p.text)).slice(0, 2);
     expect(pair.map((p) => p.text)).toEqual(["IMDb 10.0", "RT 100%"]);
-    if (form === "phone") expect(pair[1]!.top).toBeGreaterThan(pair[0]!.top);
+    // A pair wider than the poster takes two lines (phase 1b): the phone's and desktop's posters; TV's 16:9 stills hold it on one.
+    const stacks = form !== "tv";
+    if (stacks) expect(pair[1]!.top).toBeGreaterThan(pair[0]!.top);
     else expect(Math.abs(pair[1]!.middle - pair[0]!.middle)).toBeLessThanOrEqual(1);
     // A score MDBList did not give has no slot.
     await expect(page.locator(".tile", { hasText: "No scores" }).locator(".chip-rate")).toHaveCount(0);
@@ -213,7 +215,7 @@ for (const form of Object.keys(FORMS) as Form[]) {
     expect(freshPair.map((p) => p.text)).toEqual(["IMDb 10.0", "RT Fresh"]);
     expect(freshChip, JSON.stringify(freshChip)).toMatchObject({ inside: true, cut: false });
     for (const part of freshPair) expect(part, JSON.stringify(part)).toMatchObject({ lines: 1, cut: false, inside: true });
-    if (form === "phone") expect(freshPair[1]!.top).toBeGreaterThan(freshPair[0]!.top);
+    if (stacks) expect(freshPair[1]!.top).toBeGreaterThan(freshPair[0]!.top);
     else expect(Math.abs(freshPair[1]!.middle - freshPair[0]!.middle)).toBeLessThanOrEqual(1);
     measure(form, "poster chip, RT Fresh", { chip: freshChip.width, poster: freshChip.outer, parts: freshPair.map((p) => p.width) });
     // The chip is hidden from screen readers; the poster's label speaks its scores.
