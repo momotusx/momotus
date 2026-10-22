@@ -1,6 +1,8 @@
 package app.marquee.ui.tv
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.layout.LazyLayoutCacheWindow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -140,7 +142,14 @@ fun FocusMemory.watch(
  */
 class TvHomeState {
     val focus = FocusMemory()
-    val page = LazyListState()
+
+    /**
+     * The lanes a screen ahead are composed while the page is idle, tile by tile: a Down brings the next lane
+     * into view within its first frames, too soon for the default prefetch, which starts with the scroll, so
+     * the lane's tiles composed inside those frames.
+     */
+    @OptIn(ExperimentalFoundationApi::class)
+    val page = LazyListState(LazyLayoutCacheWindow(aheadFraction = 1f, behindFraction = 0.5f))
     private val rows = HashMap<String, LazyListState>()
 
     fun rowState(rowId: String): LazyListState = rows.getOrPut(rowId) { LazyListState() }
