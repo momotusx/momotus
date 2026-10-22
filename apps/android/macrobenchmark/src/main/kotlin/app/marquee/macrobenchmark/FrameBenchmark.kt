@@ -10,7 +10,8 @@ import org.junit.runner.RunWith
 
 /**
  * Frames and jank of a Home scroll, of TV Home and Discover's grid with the D-pad, and of a playback start; each
- * run leaves a Perfetto trace.
+ * run leaves a Perfetto trace. The TV tests on a phone run the TV tree on the phone's GPU and window (the canvas
+ * scaled): label their numbers so, never as a TV stick's.
  */
 @RunWith(AndroidJUnit4::class)
 class FrameBenchmark {

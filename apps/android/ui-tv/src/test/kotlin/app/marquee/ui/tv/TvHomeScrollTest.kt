@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composer
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.CompositionTracer
 import androidx.compose.runtime.InternalComposeTracingApi
 import androidx.compose.runtime.snapshots.Snapshot
@@ -21,6 +22,7 @@ import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
@@ -137,7 +139,10 @@ class TvHomeScrollTest {
         ratings = Ratings(imdb = "7.4", rottenTomatoes = "87%"),
     )
 
-    private fun show(hero: Boolean = false) {
+    private fun show(
+        hero: Boolean = false,
+        start: String = "Watching 1",
+    ) {
         val rows =
             listOf(
                 HomeRow(
@@ -188,9 +193,11 @@ class TvHomeScrollTest {
         compose.setContent {
             view = LocalView.current
             MarqueeTheme(Form.Tv) {
-                // Under the shell's pill, as in the app.
+                // Under the shell's pill, as in the app, which tells Home the room its top shelf's art reaches up into.
                 Box(Modifier.padding(top = PILL.dp)) {
-                    TvHome(home, state, onOpen = {}, onPlay = {}, onSetup = {}, onAddons = {})
+                    CompositionLocalProvider(TvNavRoom provides PILL.dp) {
+                        TvHome(home, state, onOpen = {}, onPlay = {}, onSetup = {}, onAddons = {})
+                    }
                 }
             }
         }
@@ -214,7 +221,7 @@ class TvHomeScrollTest {
             compose.waitForIdle()
             Thread.sleep(10)
         }
-        compose.onNodeWithContentDescription("Watching 1").performSemanticsAction(SemanticsActions.RequestFocus)
+        compose.onNodeWithContentDescription(start).performSemanticsAction(SemanticsActions.RequestFocus)
         compose.mainClock.advanceTimeBy(2_000)
         compose.waitForIdle()
         Composer.setTracer(tracer)
@@ -438,6 +445,47 @@ class TvHomeScrollTest {
         assertTrue(focused("Play Sintel"), "focus went up to the hero's Play")
         assertEquals(0, state.page.firstVisibleItemIndex)
         assertEquals(0, state.page.firstVisibleItemScrollOffset)
+    }
+
+    @Test
+    fun `the first Down from the hero's Play glides Continue Watching in and slows to a stop`() {
+        show(hero = true, start = "Play Sintel")
+        // The page's biggest move: from its top, past the top shelf, to the first card.
+        val move = press(Key.DirectionDown)
+        println(
+            "BENCH hero-down total=${"%.0f".format(move.total)} stalls=${move.stalls} " +
+                "landing=${"%.3f".format(
+                    move.landing,
+                )} " + move.frames.take(20).joinToString(",") { "%.0f".format(it) },
+        )
+        assertTrue(focused("Watching 1"), "focus went down to Continue Watching")
+        assertEquals(0, move.stalls, "the page stopped and went on: ${move.frames}")
+        assertTrue(move.landing < 0.05f, "the page stopped at speed: ${move.frames}")
+        val anchor = PILL + Tokens.space.m.value
+        val header = headerTop("Continue Watching")
+        assertTrue(abs(header - anchor) < ANCHOR_SLACK, "Continue Watching rests at $header, the anchor is $anchor")
+    }
+
+    @Test
+    fun `with the lanes composed ahead, the top shelf's art follows the page without a jump`() {
+        show(hero = true, start = "Play Sintel")
+        // Where the art is laid out, its scroll included (TvHomeShelfTest's walk, here with the cache window and
+        // the prefetch on: a lane composed ahead must never count as one in the list's layout).
+        val art = { compose.onNodeWithTag(TOP_SHELF_ART, useUnmergedTree = true).fetchSemanticsNode() }
+        val step = 20f
+        var last = art().positionInRoot.y
+        var left = false
+        repeat(80) {
+            compose.runOnIdle { state.page.dispatchRawDelta(step) }
+            compose.waitForIdle()
+            val node = art()
+            val top = node.positionInRoot.y
+            if (state.page.firstVisibleItemIndex > 0) left = true
+            // Each step moves the art by the step while any of it is on the screen: it never drops away early.
+            if (last + node.size.height > step) assertEquals(last - step, top, 1.5f, "the art jumped at step $it")
+            last = top
+        }
+        assertTrue(left, "the hero item never left the list's first place")
     }
 
     private companion object {
