@@ -315,12 +315,14 @@ test("subtitle size is the profile's; timing steps, holds and resets, and moves 
   const earlier = p.locator('[data-f="sub:earlier"]');
   const later = p.locator('[data-f="sub:later"]');
   await expect(timing).toHaveText("0.0 s");
-  await expect(timing).toHaveAccessibleName("Subtitles in step");
+  await expect(timing).toHaveAccessibleName("0.0 seconds");
   await expect(reset).toHaveCount(0);
   // A press is 0.1 s, by the pointer and by the keyboard.
   await later.click();
   await expect(timing).toHaveText("+0.1 s");
-  await expect(timing).toHaveAccessibleName("Subtitles 0.1 seconds later, press to reset");
+  await expect(timing).toHaveAccessibleName("Plus 0.1 seconds, press to reset");
+  await expect(later).toHaveAccessibleName("Plus 0.1 seconds");
+  await expect(earlier).toHaveAccessibleName("Minus 0.1 seconds");
   await expect.poll(cue).toEqual([1.1, 30.1]);
   await later.focus();
   await p.keyboard.press("Enter");
@@ -341,10 +343,10 @@ test("subtitle size is the profile's; timing steps, holds and resets, and moves 
   await p.waitForTimeout(1300);
   // A screen reader hears the value once it settles, not every tick.
   await expect(timing).not.toHaveText("0.0 s");
-  await expect(p.locator(".sub-delay .sr")).toHaveText("Subtitles in step");
+  await expect(p.locator(".sub-delay .sr")).toHaveText("0.0 seconds");
   await p.mouse.up();
   const held = Number((await timing.textContent())?.replace("−", "-").replace(" s", ""));
-  await expect(p.locator(".sub-delay .sr")).toHaveText(`Subtitles ${(-held).toFixed(1)} seconds earlier`);
+  await expect(p.locator(".sub-delay .sr")).toHaveText(`Minus ${(-held).toFixed(1)} seconds`);
   expect(held).toBeLessThanOrEqual(-2.5);
   expect(held).toBeGreaterThanOrEqual(-5);
   expect(Math.round(held * 10)).toBeCloseTo(held * 10, 6);

@@ -81,7 +81,7 @@ test("the value shows its sign and one decimal, and reads in words", () => {
   expect(delayText(0.3)).toBe("+0.3 s");
   expect(delayText(-1.2)).toBe("−1.2 s");
   expect(delayText(60)).toBe("+60.0 s");
-  expect(delayWords(0)).toBe("Subtitles in step");
-  expect(delayWords(0.3)).toBe("Subtitles 0.3 seconds later");
-  expect(delayWords(-1.2)).toBe("Subtitles 1.2 seconds earlier");
+  expect(delayWords(0)).toBe("0.0 seconds");
+  expect(delayWords(0.3)).toBe("Plus 0.3 seconds");
+  expect(delayWords(-1.2)).toBe("Minus 1.2 seconds");
 });

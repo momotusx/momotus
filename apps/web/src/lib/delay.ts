@@ -57,5 +57,6 @@ export function nudge(value: number, by: number): number {
 /** The value as the stepper shows it: "+0.3 s", "−1.2 s" (a true minus sign), "0.0 s". */
 export const delayText = (sec: number) => `${sec > 0 ? "+" : sec < 0 ? "−" : ""}${Math.abs(sec).toFixed(1)} s`;
 
-/** The value in words, for a screen reader. */
-export const delayWords = (sec: number) => (sec === 0 ? "Subtitles in step" : `Subtitles ${Math.abs(sec).toFixed(1)} seconds ${sec > 0 ? "later" : "earlier"}`);
+/** The value in words, for a screen reader, signed as Apple says it: "Plus 0.3 seconds",
+ * "Minus 1.2 seconds", "0.0 seconds" (never earlier or later). */
+export const delayWords = (sec: number) => `${sec > 0 ? "Plus " : sec < 0 ? "Minus " : ""}${Math.abs(sec).toFixed(1)} seconds`;

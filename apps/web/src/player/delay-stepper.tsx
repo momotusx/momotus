@@ -80,7 +80,7 @@ export function DelayStepper(props: { value: number; set: (sec: number) => void;
         </button>
       </Show>
       {/* On TV the value holds the focus; these stay for a pointer remote. */}
-      <button class="sub-step" data-f={tv() ? undefined : "sub:earlier"} tabIndex={tv() ? -1 : undefined} aria-label="Show subtitles 0.1 seconds earlier" {...holds(-1)}>
+      <button class="sub-step" data-f={tv() ? undefined : "sub:earlier"} tabIndex={tv() ? -1 : undefined} aria-label="Minus 0.1 seconds" {...holds(-1)}>
         <Minus aria-hidden />
       </button>
       <button
@@ -103,7 +103,7 @@ export function DelayStepper(props: { value: number; set: (sec: number) => void;
       >
         {delayText(props.value)}
       </button>
-      <button class="sub-step" data-f={tv() ? undefined : "sub:later"} tabIndex={tv() ? -1 : undefined} aria-label="Show subtitles 0.1 seconds later" {...holds(1)}>
+      <button class="sub-step" data-f={tv() ? undefined : "sub:later"} tabIndex={tv() ? -1 : undefined} aria-label="Plus 0.1 seconds" {...holds(1)}>
         <Plus aria-hidden />
       </button>
       <span class="sr" aria-live="polite">
