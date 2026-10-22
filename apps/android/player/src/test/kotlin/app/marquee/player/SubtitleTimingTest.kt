@@ -25,7 +25,8 @@ class SubtitleTimingTest {
         assertEquals(300L, steppedDelay(250, 1))
         assertEquals(200L, steppedDelay(250, -1))
         assertEquals(-300L, steppedDelay(-250, -1))
-        // Held: the first repeat after 250 ms, then every 100 ms; 0.3 s a tick in the first second, then 0.4, 0.5, 0.6.
+        // Held: the interval starts after 250 ms, so the first repeat is at 350, then every 100 ms; 0.3 s a tick in
+        // the first second, then 0.4, 0.5, 0.6.
         assertEquals(250L, HOLD_START_MS)
         assertEquals(100L, HOLD_EVERY_MS)
         assertEquals(300L, steppedDelay(0, 1, heldMs = 250))
@@ -40,7 +41,7 @@ class SubtitleTimingTest {
         assertEquals(-60_000L, steppedDelay(-60_000, -1))
         // Held from 0, a minute is 109 ticks away: 11 s of holding.
         val ticks =
-            generateSequence(HOLD_START_MS) { it + HOLD_EVERY_MS }
+            generateSequence(HOLD_START_MS + HOLD_EVERY_MS) { it + HOLD_EVERY_MS }
                 .runningFold(0L) { at, held -> steppedDelay(at, 1, held) }
                 .indexOfFirst { it == SUBTITLE_MAX_MS }
         assertEquals(109, ticks)

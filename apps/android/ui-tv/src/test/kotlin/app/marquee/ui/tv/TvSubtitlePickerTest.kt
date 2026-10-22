@@ -233,14 +233,14 @@ class TvSubtitlePickerTest {
         // The focus stayed on the delay all along; select puts it back to 0.
         compose.onNode(isFocused() and hasContentDescription("Timing")).press(Key.Enter)
         compose.onNodeWithText("0.0 s").assertExists()
-        // Right held for a second: 0.3 s a tick from 250 ms, every 100 ms, whatever the system's own key repeats.
+        // Right held for a second: 0.3 s a tick from 350 ms, every 100 ms (7 ticks), whatever the system's own key repeats.
         compose.mainClock.autoAdvance = false
         compose.onNode(isFocused()).performKeyInput { keyDown(Key.DirectionRight) }
         compose.mainClock.advanceTimeBy(1_000)
         compose.onNode(isFocused()).performKeyInput { keyUp(Key.DirectionRight) }
         compose.mainClock.advanceTimeBy(500)
         compose.mainClock.autoAdvance = true
-        compose.onNodeWithText("+2.4 s").assertExists()
+        compose.onNodeWithText("+2.1 s").assertExists()
         // Down from the delay reaches Reset, shown while it is not 0.
         compose.onNode(isFocused()).press(Key.DirectionDown)
         compose.onNode(isFocused() and hasText("Reset")).assertExists().press(Key.Enter)

@@ -23,6 +23,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.media3.common.Player
 import androidx.media3.common.text.Cue
 import androidx.media3.common.text.CueGroup
@@ -80,17 +83,21 @@ fun PlayerVideo(
             player.addListener(listener)
             onDispose { player.removeListener(listener) }
         }
+        val lifecycle = LocalLifecycleOwner.current.lifecycle
         LaunchedEffect(player, addonCues != null) {
             if (addonCues == null) {
                 cues = player.currentCues.cues
                 return@LaunchedEffect
             }
-            // ponytail: a look every 40 ms, near a frame's worth for a subtitle; a wait until the next cue's start or
-            // end if the polling ever shows in a profile.
-            while (true) {
-                val now = addon.value?.invoke() ?: break
-                if (now != cues) cues = now
-                delay(ADDON_POLL_MS)
+            // Only while the screen is in front. ponytail: a look every 40 ms while it plays, near a frame's worth for a
+            // subtitle, and every 250 ms while paused, for a seek or a delay step; a wait until the next cue's start
+            // or end if the polling ever shows in a profile.
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) {
+                    val now = addon.value?.invoke() ?: break
+                    if (now != cues) cues = now
+                    delay(if (player.isPlaying) ADDON_POLL_MS else ADDON_PAUSED_POLL_MS)
+                }
             }
         }
         // The system caption size (as setUserDefaultTextSize reads it) times the profile's size.
@@ -288,8 +295,9 @@ private fun captionScale(context: Context): Float {
     return if (captions.isEnabled) captions.fontScale else 1f
 }
 
-/** How often an addon track's cues are looked up while it is on. */
+/** How often an addon track's cues are looked up while it is on: playing, and paused. */
 private const val ADDON_POLL_MS = 40L
+private const val ADDON_PAUSED_POLL_MS = 250L
 
 /** The subtitles' area, for tests of where they sit. */
 const val SUBTITLES_TAG = "subtitles"

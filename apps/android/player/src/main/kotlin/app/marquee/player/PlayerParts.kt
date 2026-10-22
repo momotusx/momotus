@@ -312,10 +312,12 @@ private class DelayHold(
         repeated = false
         job =
             scope.launch {
-                delay(HOLD_START_MS)
+                // As stremio-web's Stepper: the repeat interval starts after the hold's wait, so the first tick
+                // comes one interval later.
+                delay(HOLD_START_MS + HOLD_EVERY_MS)
                 repeated = true
                 var at = delayMs.value
-                var held = HOLD_START_MS
+                var held = HOLD_START_MS + HOLD_EVERY_MS
                 while (true) {
                     at = steppedDelay(at, direction, held)
                     onDelay.value(at)

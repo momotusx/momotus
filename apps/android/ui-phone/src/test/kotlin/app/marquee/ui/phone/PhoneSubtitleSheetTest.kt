@@ -243,7 +243,7 @@ class PhoneSubtitleSheetTest {
         compose.onNodeWithContentDescription("Show subtitles later").performClick()
         compose.onNodeWithText("+0.4 s").assertExists()
         compose.runOnIdle { assertEquals(listOf(400L), delays) }
-        // Held for a second: no step at the press, then 0.3 s a tick every 100 ms from 250 ms, none at the release.
+        // Held for a second: no step at the press, then 0.3 s a tick every 100 ms from 350 ms, none at the release.
         compose.mainClock.autoAdvance = false
         compose.onNodeWithContentDescription("Show subtitles earlier").performTouchInput { down(center) }
         compose.mainClock.advanceTimeBy(1_000)
@@ -251,7 +251,7 @@ class PhoneSubtitleSheetTest {
         compose.mainClock.advanceTimeBy(1_000)
         compose.mainClock.autoAdvance = true
         val held = delays.drop(1)
-        assertTrue(held.size in 7..9, "repeats while held: $held")
+        assertEquals(7, held.size, "repeats while held: $held")
         assertEquals((1..held.size).map { 400L - 300L * it }, held)
         // Reset shows while the delay is not 0, and puts it back.
         compose.onNodeWithText("Reset").performClick()
