@@ -191,13 +191,16 @@ class PlayerShotsTest {
                     .widthIn(max = 420.dp)
                     .fillMaxWidth()
                     .fillMaxHeight(),
-                timing = 0L.takeIf { opened != null },
+                timing = 300L.takeIf { opened != null },
             )
         }
     }
 }
 
-/** A title's subtitles as the controller lists them: Slow Horses S6:E2 from OpenSubtitles, and the file's English. */
+/**
+ * A title's subtitles as the controller lists them: Slow Horses S6:E2 from OpenSubtitles in the core's order (the
+ * release that fits the playing group first), and the file's English.
+ */
 internal object ShotRows {
     private fun lang(
         code: String,
@@ -225,6 +228,15 @@ internal object ShotRows {
         listOf(TrackChoice("off", "Off")) +
             listOf(
                 TrackChoice(
+                    "late:en4",
+                    "FLUX, WEB-DL 1080p",
+                    "OpenSubtitles v3",
+                    section = "English",
+                    language = "en",
+                    fits = true,
+                    release = "Slow.Horses.S06E02.Daddy.Issues.1080p.ATVP.WEB-DL.DDP5.1.Atmos.H.264-FLUX",
+                ),
+                TrackChoice(
                     "late:en1",
                     "CAKES, WEB 1080p",
                     "OpenSubtitles v3",
@@ -247,15 +259,6 @@ internal object ShotRows {
                     section = "English",
                     language = "en",
                     release = "slow.horses.s06e02.1080p.web.h264-cakes-hi",
-                ),
-                TrackChoice(
-                    "late:en4",
-                    "FLUX, WEB-DL 1080p",
-                    "OpenSubtitles v3",
-                    section = "English",
-                    language = "en",
-                    fits = true,
-                    release = "Slow.Horses.S06E02.Daddy.Issues.1080p.ATVP.WEB-DL.DDP5.1.Atmos.H.264-FLUX",
                 ),
             ) +
             lang("ar", "Arabic", "العربية", 3) +

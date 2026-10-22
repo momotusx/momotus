@@ -185,7 +185,7 @@ class PlayerShotsTest {
                     rows,
                     {},
                     Modifier.align(Alignment.TopEnd).padding(end = 80.dp, top = 96.dp),
-                    timing = 0L,
+                    timing = 300L,
                 )
             }
         }
@@ -219,10 +219,22 @@ class PlayerShotsTest {
         )
     }
 
-    /** Slow Horses S6:E2 from OpenSubtitles and the file's English, as the controller lists them. */
+    /**
+     * Slow Horses S6:E2 from OpenSubtitles in the core's order (the release that fits the playing group first) and the
+     * file's English, as the controller lists them.
+     */
     private val rows =
         listOf(TrackChoice("off", "Off")) +
             listOf(
+                TrackChoice(
+                    "late:en4",
+                    "FLUX, WEB-DL 1080p",
+                    "OpenSubtitles v3",
+                    section = "English",
+                    language = "en",
+                    fits = true,
+                    release = "Slow.Horses.S06E02.Daddy.Issues.1080p.ATVP.WEB-DL.DDP5.1.Atmos.H.264-FLUX",
+                ),
                 TrackChoice(
                     "late:en1",
                     "CAKES, WEB 1080p",
@@ -246,15 +258,6 @@ class PlayerShotsTest {
                     section = "English",
                     language = "en",
                     release = "slow.horses.s06e02.1080p.web.h264-cakes-hi",
-                ),
-                TrackChoice(
-                    "late:en4",
-                    "FLUX, WEB-DL 1080p",
-                    "OpenSubtitles v3",
-                    section = "English",
-                    language = "en",
-                    fits = true,
-                    release = "Slow.Horses.S06E02.Daddy.Issues.1080p.ATVP.WEB-DL.DDP5.1.Atmos.H.264-FLUX",
                 ),
             ) +
             lang("ar", "Arabic", "العربية", 3) +
