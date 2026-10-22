@@ -10,6 +10,17 @@ use tokio::net::TcpListener;
 
 /// Local catalog addon answering after `delay` with `status` and `body`.
 async fn catalog_addon(id: &str, delay: Duration, status: u16, body: &'static str) -> AddonRow {
+    named_catalog_addon(id, "Popular", delay, status, body).await
+}
+
+/// `catalog_addon` with its movie catalog called `name`.
+async fn named_catalog_addon(
+    id: &str,
+    name: &str,
+    delay: Duration,
+    status: u16,
+    body: &'static str,
+) -> AddonRow {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -34,7 +45,7 @@ async fn catalog_addon(id: &str, delay: Duration, status: u16, body: &'static st
         "id": id, "version": "1.0.0", "name": format!("{id} addon"),
         "types": ["movie"], "resources": ["catalog"],
         "catalogs": [
-            {"type": "movie", "id": "top", "name": "Popular"},
+            {"type": "movie", "id": "top", "name": name},
             {"type": "movie", "id": "search", "name": "Search", "extra": [{"name": "search", "isRequired": true}]}
         ]
     });
@@ -1020,14 +1031,36 @@ async fn retrying_a_row_asks_only_its_catalog() {
     assert!(!view.retry_row("gone:movie:top"));
 }
 
-/// The hero's reason, once Home has picked one.
-async fn hero_reason(core: &Core) -> String {
-    let view = HomeView::open(core);
+/// The hero's reason once it reads `want` (each part of Home re-reads it).
+async fn reason_until(view: &HomeView, want: &str) {
     for _ in 0..300 {
-        if let Some(hero) = view.snapshot().header.hero {
-            return hero.reason;
+        if view
+            .snapshot()
+            .header
+            .hero
+            .is_some_and(|h| h.reason == want)
+        {
+            return;
         }
         tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!(
+        "the hero never read {want:?}: {:?}",
+        view.snapshot().header.hero.map(|h| h.reason)
+    );
+}
+
+/// The first hero Home shows, with the rows as they were then.
+async fn first_hero(view: &HomeView) -> (String, Vec<RowState>) {
+    for _ in 0..300 {
+        let snap = view.snapshot();
+        if let Some(hero) = snap.header.hero {
+            return (
+                hero.reason,
+                snap.rows.iter().map(|r| r.state.clone()).collect(),
+            );
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
     }
     panic!("no hero");
 }
@@ -1040,19 +1073,81 @@ async fn the_hero_names_its_addon_only_when_another_row_has_the_same_title() {
     core.library()
         .set_addons("p", &[only], &core.hlc())
         .unwrap();
-    assert_eq!(hero_reason(&core).await, "#1 in Popular Movies");
+    let view = HomeView::open(&core);
+    assert_eq!(first_hero(&view).await.0, "#1 in Popular Movies");
 
-    // Two addons with a "Popular Movies" row each: the hero says which.
+    // A second "Popular Movies" row, slow to answer: it counts while it
+    // loads, so the hero says which at once.
     let core = Core::temporary("q").unwrap();
     let mut first = catalog_addon("first", Duration::ZERO, 200, METAS).await;
-    let mut second = catalog_addon("second", Duration::ZERO, 200, METAS).await;
+    let mut second = catalog_addon("second", Duration::from_millis(400), 200, METAS).await;
     first.position = 0;
     second.position = 1;
     core.library()
         .set_addons("q", &[first, second], &core.hlc())
         .unwrap();
+    let view = HomeView::open(&core);
+    let (reason, states) = first_hero(&view).await;
+    assert_eq!(reason, "#1 in Popular Movies on first addon");
     assert_eq!(
-        hero_reason(&core).await,
+        states[1],
+        RowState::Loading,
+        "picked before the second answered"
+    );
+
+    // Hiding the other row takes "on first addon" away from the hero shown.
+    let other = view.snapshot().rows[1].row_id.clone();
+    core.set_home_row_hidden(&other, true).unwrap();
+    reason_until(&view, "#1 in Popular Movies").await;
+}
+
+#[tokio::test]
+async fn titles_that_differ_only_in_case_clash_too() {
+    let core = Core::temporary("p").unwrap();
+    let mut first = catalog_addon("first", Duration::ZERO, 200, METAS).await;
+    let mut lower =
+        named_catalog_addon("lower", "popular movies", Duration::ZERO, 200, METAS).await;
+    first.position = 0;
+    lower.position = 1;
+    core.library()
+        .set_addons("p", &[first, lower], &core.hlc())
+        .unwrap();
+    let view = HomeView::open(&core);
+    assert_eq!(view.snapshot().rows[1].title, "popular movies");
+    assert_eq!(
+        first_hero(&view).await.0,
         "#1 in Popular Movies on first addon"
     );
+}
+
+/// Another row that lists the hero lower down never lends it its title: with
+/// the hero's own row hidden, the reason keeps the row it came from.
+#[tokio::test]
+async fn the_hero_reason_never_takes_a_row_where_it_is_not_first() {
+    const LATER: &str = r#"{"metas":[
+  {"id":"tt0068646","type":"movie","name":"The Godfather","background":"https://images.metahub.space/background/medium/tt0068646/img"},
+  {"id":"tt0111161","type":"movie","name":"The Shawshank Redemption","background":"https://images.metahub.space/background/medium/tt0111161/img"}
+]}"#;
+    let core = Core::temporary("p").unwrap();
+    let mut first = catalog_addon("first", Duration::ZERO, 200, METAS).await;
+    let mut trending =
+        named_catalog_addon("trending", "Trending", Duration::ZERO, 200, LATER).await;
+    first.position = 0;
+    trending.position = 1;
+    core.library()
+        .set_addons("p", &[first, trending], &core.hlc())
+        .unwrap();
+    let view = HomeView::open(&core);
+    assert_eq!(first_hero(&view).await.0, "#1 in Popular Movies");
+    let own = view.snapshot().rows[0].row_id.clone();
+    core.set_home_row_hidden(&own, true).unwrap();
+    for _ in 0..300 {
+        if view.snapshot().rows.iter().all(|r| r.row_id != own) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let hero = view.snapshot().header.hero.unwrap();
+    assert_eq!(hero.tile.id, "tt0111161");
+    assert_eq!(hero.reason, "#1 in Popular Movies");
 }

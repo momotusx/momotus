@@ -465,7 +465,7 @@ enum class Group(
 @Serializable
 data class Hero(
     val tile: Tile,
-    /** One line telling the user why this title is here. */
+    /** One line telling the user why this title is here: "#1 in Popular Movies", with the addon ("on Cinemeta") only when another row on Home has the same title, in any case. It follows the rows while the hero stays: a row hidden or an addon gone can take the addon away. */
     val reason: String,
     val description: String? = null,
     /** At most three, in the addon's order. */

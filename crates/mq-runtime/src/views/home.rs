@@ -123,7 +123,8 @@ pub struct Hero {
     pub tile: Tile,
     /// One line telling the user why this title is here: "#1 in Popular
     /// Movies", with the addon ("on Cinemeta") only when another row on Home
-    /// has the same title.
+    /// has the same title, in any case. It follows the rows while the hero
+    /// stays: a row hidden or an addon gone can take the addon away.
     pub reason: String,
     pub description: Option<String>,
     /// At most three, in the addon's order.
@@ -584,6 +585,19 @@ fn hero_reason(title: &str, source: &str, shared: bool) -> String {
     }
 }
 
+/// The hero's reason from `row` as Home lays out its rows now: the addon is
+/// said only when another row has the same title, in any case. Every row
+/// has its title from the start, loading or not.
+fn reason_in(rows: &ObservableVector<HomeRow>, row: &HomeRow) -> String {
+    let title = row.title.to_lowercase();
+    let shared = rows
+        .iter()
+        .filter(|r| r.title.to_lowercase() == title)
+        .count()
+        > 1;
+    hero_reason(&row.title, &row.source, shared)
+}
+
 /// Lowercase words of letters and digits.
 fn words(text: &str) -> Vec<String> {
     text.split(|c: char| !c.is_alphanumeric())
@@ -883,15 +897,9 @@ fn maybe_pick_hero(rows: &Mutex<ObservableVector<HomeRow>>, header: &SharedObser
         .find_map(|row| {
             let tile = row.tiles.iter().find(|t| t.background.is_some())?;
             let blurb = tile.blurb.clone().unwrap_or_default();
-            // Every row Home lays out has its title from the start.
-            let shared = rows
-                .iter()
-                .filter(|r| r.title.to_lowercase() == row.title.to_lowercase())
-                .count()
-                > 1;
             Some(Hero {
                 tile: tile.clone(),
-                reason: hero_reason(&row.title, &row.source, shared),
+                reason: reason_in(&rows, row),
                 description: blurb.description,
                 genres: blurb.genres,
                 runtime: blurb.runtime,
@@ -899,7 +907,25 @@ fn maybe_pick_hero(rows: &Mutex<ObservableVector<HomeRow>>, header: &SharedObser
         });
     let current = header.get().hero;
     let next = match (candidate, &current) {
-        (Some(_), Some(existing)) => Some(existing.clone()),
+        // The hero stays; its reason follows the rows (one hidden, an addon
+        // gone or added, a sync), so a clash that went takes "on X" with it.
+        // Its row is the one holding the tile whose title (and addon) the
+        // reason says, never another row that lists it too.
+        (Some(_), Some(existing)) => {
+            let from = rows
+                .iter()
+                .filter(|r| r.row_id != CONTINUE_ROW_ID)
+                .find(|r| {
+                    r.tiles.iter().any(|t| t.id == existing.tile.id)
+                        && [false, true].iter().any(|&shared| {
+                            hero_reason(&r.title, &r.source, shared) == existing.reason
+                        })
+                });
+            Some(Hero {
+                reason: from.map_or_else(|| existing.reason.clone(), |row| reason_in(&rows, row)),
+                ..existing.clone()
+            })
+        }
         (Some(hero), None) => Some(hero),
         (None, _) => None,
     };
