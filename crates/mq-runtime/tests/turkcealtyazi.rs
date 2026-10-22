@@ -632,7 +632,7 @@ async fn a_pick_of_its_file_puts_turkish_first() {
     let s = until(&view, "subtitles", settled).await;
     let file = s.subtitles.iter().find(|t| t.source == NAME).unwrap();
     assert_eq!(file.lang, "tur");
-    view.subtitle_chosen(Some(&file.url));
+    view.subtitle_chosen(Some(&file.url), None);
     assert_eq!(core.prefs().subtitle_languages, ["tr"]);
 }
 
@@ -660,7 +660,7 @@ async fn a_pick_while_it_lists_moves_no_section() {
     .await;
     assert!(s.subtitles_pending, "{s:?}");
     let ukrainian = s.subtitles.iter().find(|t| t.lang == "ukr").unwrap();
-    view.subtitle_chosen(Some(&ukrainian.url));
+    view.subtitle_chosen(Some(&ukrainian.url), None);
     assert_eq!(core.prefs().subtitle_languages, ["uk"]);
     let s = until(&view, "subtitles", settled).await;
     let languages: Vec<&str> = s.subtitles.iter().map(|t| t.language.as_str()).collect();

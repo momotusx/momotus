@@ -1391,7 +1391,7 @@ async fn a_subtitle_turns_on_at_start_only_as_the_profile_and_the_user_say() {
     assert_eq!(dubbed.auto_subtitle, None);
 
     // The user turns subtitles off: gone at once, and the title remembers.
-    view.subtitle_chosen(None);
+    view.subtitle_chosen(None, None);
     assert_eq!(view.snapshot().auto_subtitle, None);
     drop(view);
     let again = settled_list(&open(&core, "Sintel.2010.1080p.WEB")).await;
@@ -1401,7 +1401,7 @@ async fn a_subtitle_turns_on_at_start_only_as_the_profile_and_the_user_say() {
     // though Turkish is the profile's language.
     let view = open(&core, "Sintel.2010.1080p.WEB");
     let s = settled_list(&view).await;
-    view.subtitle_chosen(Some(&url(&s, "eng")));
+    view.subtitle_chosen(Some(&url(&s, "eng")), None);
     drop(view);
     let next = settled_list(&open(&core, "Sintel.2010.1080p.WEB")).await;
     assert_eq!(next.auto_subtitle, Some(url(&next, "eng")));
@@ -1449,7 +1449,7 @@ async fn a_picked_subtitle_language_starts_the_next_titles() {
     let pick = async |core: &Core, id: &str, choice: Option<&str>| {
         let view = open(core, id);
         let s = settled_list(&view).await;
-        view.subtitle_chosen(choice.map(|l| url(&s, l)).as_deref());
+        view.subtitle_chosen(choice.map(|l| url(&s, l)).as_deref(), None);
     };
     let on = |l: &str| Some(l.to_owned());
 
@@ -1546,7 +1546,7 @@ async fn a_pick_in_the_audios_own_language_is_kept_and_skipped_for_that_audio() 
         .unwrap()
         .url
         .clone();
-    view.subtitle_chosen(Some(&turkish));
+    view.subtitle_chosen(Some(&turkish), None);
     drop(view);
     assert_eq!(core.prefs().subtitle_languages, ["tr"]);
     // The title remembers it; another title in another language starts with it;
@@ -1559,6 +1559,62 @@ async fn a_pick_in_the_audios_own_language_is_kept_and_skipped_for_that_audio() 
         Some("tur")
     );
     assert_eq!(started(&core, "tt3", dubbed).await, None);
+}
+
+/// A track inside the video file comes as its language code, with no url:
+/// it counts as a core track of that language, so the title remembers it
+/// and it goes first in the profile's languages; a code the core does not
+/// know only stops the start pick.
+#[tokio::test]
+async fn an_in_file_pick_puts_its_language_first() {
+    let (video, _) = counted_origin().await;
+    let subs: Vec<_> = ["eng", "ger"]
+        .iter()
+        .map(|lang| serde_json::json!({"id": lang, "lang": lang, "url": format!("https://subs.test/{lang}.srt")}))
+        .collect();
+    let stream = serde_json::json!({"streams": [{"url": format!("{video}/v.mkv"), "title": "Film.2020.1080p.WEB", "subtitles": subs}]})
+        .to_string();
+    let open = |core: &Core, id: &str| {
+        let title = PlayTarget {
+            item_id: id.into(),
+            video_id: id.into(),
+            ..target()
+        };
+        PlaybackView::open(core, setup(core, &stream), title)
+    };
+    let started = async |core: &Core, id: &str| {
+        let s = settled_list(&open(core, id)).await;
+        let on = s
+            .subtitles
+            .iter()
+            .find(|t| Some(&t.url) == s.auto_subtitle.as_ref());
+        on.map(|t| t.lang.clone())
+    };
+    let core = Core::temporary("p").unwrap();
+    core.set_prefs(&serde_json::json!({ "subtitleLanguages": ["en"] }))
+        .unwrap();
+
+    // The file's German track, by its ISO 639-2 code: German first, the
+    // title and the next one start with it.
+    let view = open(&core, "tt1");
+    let s = settled_list(&view).await;
+    assert!(s.auto_subtitle.is_some());
+    view.subtitle_chosen(None, Some("ger"));
+    assert_eq!(view.snapshot().auto_subtitle, None);
+    drop(view);
+    assert_eq!(core.prefs().subtitle_languages, ["de", "en"]);
+    assert_eq!(started(&core, "tt1").await.as_deref(), Some("ger"));
+    assert_eq!(started(&core, "tt2").await.as_deref(), Some("ger"));
+
+    // A file track of no known language: the start pick stops, and nothing
+    // is written, so the title still starts with German.
+    let view = open(&core, "tt2");
+    settled_list(&view).await;
+    view.subtitle_chosen(None, Some("und"));
+    assert_eq!(view.snapshot().auto_subtitle, None);
+    drop(view);
+    assert_eq!(core.prefs().subtitle_languages, ["de", "en"]);
+    assert_eq!(started(&core, "tt2").await.as_deref(), Some("ger"));
 }
 
 /// A link slow to send its first byte says "Opening the video" once its
@@ -1947,7 +2003,7 @@ async fn a_pick_before_the_probe_ends_stays_the_pick() {
     assert!(early.subtitles_pending);
     assert_eq!(releases(&early), [FILM, PAL], "the rate is not read yet");
     let picked = early.subtitles[0].url.clone();
-    view.subtitle_chosen(Some(&picked));
+    view.subtitle_chosen(Some(&picked), None);
     let s = settled_list(&view).await;
     assert_eq!(releases(&s), [PAL, FILM], "the rate landed after the pick");
     assert_eq!(s.subtitles[1].url, picked);
@@ -2047,7 +2103,7 @@ async fn after_a_failover_the_remembered_choice_turns_on_again() {
     let view = PlaybackView::open(&core, setup(&core, &streams.to_string()), target());
     let first = settled_list(&view).await;
     assert_eq!(first.auto_subtitle, None, "no subtitle languages set");
-    view.subtitle_chosen(Some(&first.subtitles[0].url));
+    view.subtitle_chosen(Some(&first.subtitles[0].url), None);
     view.fail_over(Some(first.attempt), Some("network"), None, "gone");
     let next = until(&view, "the next source", |s| {
         s.attempt > first.attempt && s.phase == PlaybackPhase::Ready && !s.subtitles_pending

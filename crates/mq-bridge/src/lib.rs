@@ -1966,7 +1966,8 @@ impl Session {
             (View::Playback(playback), "retry") => playback.retry(),
             (View::Playback(playback), "subtitleChosen") => {
                 let url = command.get("url").and_then(Value::as_str);
-                playback.subtitle_chosen(url);
+                let language = command.get("language").and_then(Value::as_str);
+                playback.subtitle_chosen(url, language);
             }
             (View::Playback(playback), "subtitleDelay") => {
                 let ms = command

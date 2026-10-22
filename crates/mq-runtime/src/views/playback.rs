@@ -1116,19 +1116,25 @@ impl PlaybackView {
     /// (`autoSubtitle` clears), and the title remembers the choice, the
     /// track's language or Off, for its next plays. A track's language also
     /// goes first in the profile's subtitle languages, so the next titles
-    /// start with it; Off stays the title's own. A kids profile's
-    /// preferences stay as the owner left them (plans/m11-kids.md): its
-    /// picks are its titles' own.
-    pub fn subtitle_chosen(&self, url: Option<&str>) {
+    /// start with it; Off stays the title's own. A track inside the video
+    /// file comes as its `language` code with no `url`, and counts as a
+    /// core track of that language; a code the core does not know (`und`)
+    /// only clears `autoSubtitle`. A kids profile's preferences stay as the
+    /// owner left them (plans/m11-kids.md): its picks are its titles' own.
+    pub fn subtitle_chosen(&self, url: Option<&str>, language: Option<&str>) {
+        use crate::languages::{is_known, primary};
         let mut s = lock(&self.state);
-        let choice = match url {
-            None => Some(OFF.to_owned()),
-            Some(url) => s
+        let choice = match (url, language) {
+            (Some(url), _) => s
                 .snapshot
                 .subtitles
                 .iter()
                 .find(|t| t.url == url)
                 .map(|t| t.language.clone()),
+            (None, Some(code)) => {
+                Some(crate::languages::language(code).tag).filter(|tag| is_known(primary(tag)))
+            }
+            (None, None) => Some(OFF.to_owned()),
         };
         s.subtitle_picked = true;
         if s.snapshot.auto_subtitle.take().is_some() {
@@ -1139,7 +1145,7 @@ impl PlaybackView {
         let Some(choice) = choice else {
             return;
         };
-        if url.is_some()
+        if choice != OFF
             && !self.core.policy().kids()
             && let Some(next) = picked_first(&self.core.prefs().subtitle_languages, &choice)
         {
