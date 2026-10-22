@@ -452,7 +452,7 @@ fun PhonePlayer(
                                 .fillMaxHeight()
                                 .pointerInput(Unit) { detectTapGestures { } },
                         note = controller.subtitlePanelNote,
-                        timing = controller.subtitleDelayMs.takeIf { controller.subtitleOn },
+                        timing = controller.subtitleDelayMs.takeIf { controller.subtitleTimeable },
                         onDelay = controller::setSubtitleDelay,
                         textSize = controller.subtitleSize,
                         onSize = onSubtitleSize,

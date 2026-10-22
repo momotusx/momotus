@@ -12,6 +12,7 @@ import androidx.core.net.toUri
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
@@ -500,6 +501,13 @@ class PlaybackController(
         player.playWhenReady = false
         player.prepare()
         stage = Stage.Buffering
+        // Another source is another file: the delays set on this one's tracks (the file's own are known by their
+        // group, "0", "1") do not carry over. A delay not told to the core yet goes first.
+        if (again) {
+            sendDelay()
+            delays.clear()
+            pick?.let { applyDelay(startDelay(it)) }
+        }
         // A new source lists its files at new addresses: the addon pick goes over to the same file, else the
         // best one in its language, else off.
         pick?.takeIf { it.external }?.let { carried ->
@@ -816,9 +824,20 @@ class PlaybackController(
         chose = true
         when {
             id == TRACK_OFF -> view?.subtitleChosen(null)
+
             id.startsWith(LATE) -> view?.subtitleChosen(id.removePrefix(LATE))
+
+            // A track in the file goes as its language, so the title starts in it next time; one with no
+            // language says nothing (with no language the core would read Off).
+            else -> fileLanguage(id)?.let { view?.subtitleChosen(null, it) }
         }
         choose(id)
+    }
+
+    /** The language tag of the file's own text track [id], or null when it names none. */
+    private fun fileLanguage(id: String): String? {
+        val (group, index) = find(C.TRACK_TYPE_TEXT, id) ?: return null
+        return group.getTrackFormat(index).language?.takeIf { it.isNotBlank() && it != C.LANGUAGE_UNDETERMINED }
     }
 
     /**
@@ -1000,6 +1019,12 @@ class PlaybackController(
     val subtitleOn: Boolean get() = text.any { it.selected && it.id != TRACK_OFF }
 
     /**
+     * The chosen subtitle can be timed: on, and not captions carried in the video (CEA-608 and 708), which
+     * Media3's own renderer draws without a delay. The Timing row shows only then.
+     */
+    val subtitleTimeable: Boolean get() = subtitleOn && pick?.kind !in CAPTIONS
+
+    /**
      * Another page is over the player (Versions, an install link): it stays paused, whatever asks it to
      * play. The screen sets it as the player leaves and comes back to the screen.
      */
@@ -1135,6 +1160,10 @@ class PlaybackController(
         const val NOTICE_MS = 4_000L
         const val TRYING_AGAIN_MS = 1_500L
         const val LATE = "late:"
+
+        /** Captions carried in the video: Media3's renderer draws them, with no delay. */
+        val CAPTIONS =
+            setOf(MimeTypes.APPLICATION_CEA608, MimeTypes.APPLICATION_CEA708, MimeTypes.APPLICATION_MP4CEA608)
 
         /** How long after the last delay press a core track's delay goes to the core. */
         const val DELAY_SETTLE_MS = 700L

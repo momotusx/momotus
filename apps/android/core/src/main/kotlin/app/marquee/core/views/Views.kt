@@ -407,7 +407,16 @@ class PlaybackView(
      * The viewer's subtitle pick (a core track's `url`) or Off (null): the start subtitle clears, and the
      * title remembers the choice for its next plays (plans/m13-subtitle-languages.md 6).
      */
-    fun subtitleChosen(url: String?) = post(command("subtitleChosen") { put("url", url) })
+    fun subtitleChosen(
+        url: String?,
+        /** A track inside the file: no [url], its language tag, which the title remembers as a core track's. */
+        language: String? = null,
+    ) = post(
+        command("subtitleChosen") {
+            put("url", url)
+            if (language != null) put("language", language)
+        },
+    )
 
     /**
      * The viewer's delay for a core track ([url]), in ms (positive shows the text later): the title remembers it

@@ -219,6 +219,10 @@ class SubtitleFailureTest {
             it["command"]!!.jsonObject["url"]?.jsonPrimitive?.contentOrNull
         }
 
+    /** What each `subtitleChosen` sent as its language: a track in the file's, or none. */
+    private fun languagesChosen() =
+        commands("subtitleChosen").mapNotNull { it["command"]!!.jsonObject["language"]?.jsonPrimitive?.contentOrNull }
+
     private fun httpError(
         url: String,
         status: Int,
@@ -834,6 +838,78 @@ class SubtitleFailureTest {
         runFor(1_000)
         assertEquals(1, player.items.size, "the item was set again")
         assertEquals(1, player.prepares, "the item was prepared again")
+        controller.release()
+    }
+
+    /** The video and one text track of the file's own, on, of [mime] in [language]: the menu's [OWN]. */
+    private fun ownTrack(
+        mime: String,
+        language: String?,
+    ) = Tracks(
+        video264.groups +
+            Tracks.Group(
+                TrackGroup(
+                    "text:own",
+                    Format
+                        .Builder()
+                        .setId("0")
+                        .setSampleMimeType(mime)
+                        .setLanguage(language)
+                        .build(),
+                ),
+                false,
+                intArrayOf(C.FORMAT_HANDLED),
+                booleanArrayOf(true),
+            ),
+    )
+
+    @Test
+    fun `captions carried in the video have no Timing row, as Media3 draws them with no delay`() {
+        val (player, controller) = open()
+        player.media(ownTrack(MimeTypes.APPLICATION_CEA608, "en"), 10_000_000L)
+        controller.selectText(OWN)
+        until("the captions are on") { controller.subtitleOn }
+        assertFalse(controller.subtitleTimeable)
+        player.media(withOwnTrack, 10_000_000L)
+        controller.selectText(OWN)
+        until("the file's track is on") { controller.subtitleOn }
+        assertTrue(controller.subtitleTimeable)
+        controller.release()
+    }
+
+    @Test
+    fun `a pick of a track in the file goes to the core with its language, one with none says nothing`() {
+        val (player, controller) = open()
+        player.media(withOwnTrack, 10_000_000L)
+        controller.selectText(OWN)
+        until("the pick goes to the core") { languagesChosen().isNotEmpty() }
+        assertEquals(listOf("tr"), languagesChosen())
+        assertEquals(listOf<String?>(null), chosen(), "an in-file pick named a url")
+        // A track that names no language: with no language the core would read Off, so nothing goes.
+        player.media(ownTrack(MimeTypes.APPLICATION_SUBRIP, "und"), 10_000_000L)
+        controller.selectText(OWN)
+        runFor(500)
+        assertEquals(1, chosen().size)
+        controller.release()
+    }
+
+    @Test
+    fun `a new source starts every track's delay over`() {
+        val delay = SubtitleDelay()
+        val (player, controller) = open(delay = delay)
+        player.media(withOwnTrack, 10_000_000L)
+        controller.selectText(OWN)
+        until("the file's track is on") { controller.subtitleOn }
+        controller.setSubtitleDelay(1_500)
+        // A failover: another file, whose track "0" is not this one.
+        push(
+            snapshot(subtitles = emptyList())
+                .replace(video, "http://127.0.0.1:7780/second.mp4")
+                .replace("\"attempt\":1", "\"attempt\":2"),
+        )
+        until("the new source loads") { player.items.lastOrNull()?.uri == "http://127.0.0.1:7780/second.mp4" }
+        assertEquals(0L, controller.subtitleDelayMs)
+        assertEquals(0L, delay.ms)
         controller.release()
     }
 
