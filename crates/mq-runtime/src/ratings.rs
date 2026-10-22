@@ -83,9 +83,9 @@ const fn given(value: Option<&'static str>) -> Option<&'static str> {
 /// its IMDb id.
 pub type Title = (String, String);
 
-/// A title's scores, written as shown: IMDb "8.8", Rotten Tomatoes and
-/// Metacritic a number with "%" ("87%"), never a word. A score nobody gave
-/// is null: apps show no slot for it, never a placeholder.
+/// A title's IMDb and Rotten Tomatoes scores, written as shown: IMDb "8.8",
+/// Rotten Tomatoes a number with "%" ("87%"), never a word. A score nobody
+/// gave is null: apps show no slot for it, never a placeholder.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 #[cfg_attr(
     feature = "ts",
@@ -96,8 +96,6 @@ pub type Title = (String, String);
 pub struct Ratings {
     pub imdb: Option<String>,
     pub rotten_tomatoes: Option<String>,
-    /// Empty until a source gives it; the apps lay out its place now.
-    pub metacritic: Option<String>,
 }
 
 /// What MDBList answered for one title: IMDb's average and the Tomatometer;
@@ -127,7 +125,6 @@ impl Ratings {
                 .and_then(|s| s.rt)
                 .filter(|v| rt_ok(*v))
                 .map(|v| format!("{v}%")),
-            metacritic: None,
         }
     }
 }
@@ -908,8 +905,7 @@ mod tests {
             addon,
             Ratings {
                 imdb: Some("8.4".into()),
-                rotten_tomatoes: None,
-                metacritic: None
+                rotten_tomatoes: None
             }
         );
         assert_eq!(Ratings::of(None, Some("7")).imdb.as_deref(), Some("7.0"));
@@ -948,8 +944,7 @@ mod tests {
             Ratings::of(Some(&fresh(None, None)), Some("8.4")),
             Ratings {
                 imdb: Some("8.4".into()),
-                rotten_tomatoes: None,
-                metacritic: None
+                rotten_tomatoes: None
             }
         );
         let number = fresh(Some(8.8), Some(87));

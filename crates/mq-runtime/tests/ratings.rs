@@ -364,7 +364,6 @@ async fn a_missing_or_invalid_score_shows_no_slot() {
     let shown = |imdb: Option<&str>, rt: Option<&str>| Ratings {
         imdb: imdb.map(str::to_owned),
         rotten_tomatoes: rt.map(str::to_owned),
-        metacritic: None,
     };
     assert_eq!(row("tt1", Some("8.7")), shown(Some("8.8"), Some("87%")));
     // MDBList has no IMDb score: the addon's; it never gives the RT one.
@@ -396,8 +395,7 @@ async fn without_a_key_mdblist_is_never_asked() {
         Ratings::of(None, Some("8.4")),
         Ratings {
             imdb: Some("8.4".into()),
-            rotten_tomatoes: None,
-            metacritic: None
+            rotten_tomatoes: None
         }
     );
 }
@@ -783,7 +781,7 @@ async fn setup() -> (Core, Fake) {
 }
 
 fn pair(imdb: Option<&str>, rt: Option<&str>) -> Value {
-    json!({"imdb": imdb, "rottenTomatoes": rt, "metacritic": null})
+    json!({"imdb": imdb, "rottenTomatoes": rt})
 }
 
 async fn until(what: &str, mut done: impl FnMut() -> bool) {
@@ -1348,16 +1346,14 @@ async fn mdblists_tomatometer_wins_over_the_mark() {
         row(&movie(SHAWSHANK)),
         Ratings {
             imdb: Some("9.2".into()),
-            rotten_tomatoes: Some("89%".into()),
-            metacritic: None
+            rotten_tomatoes: Some("89%".into())
         }
     );
     assert_eq!(
         row(&movie(GODFATHER)),
         Ratings {
             imdb: Some("9.1".into()),
-            rotten_tomatoes: None,
-            metacritic: None
+            rotten_tomatoes: None
         },
         "MDBList had no Tomatometer: nothing, the mark never shows"
     );

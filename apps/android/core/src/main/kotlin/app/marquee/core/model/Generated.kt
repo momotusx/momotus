@@ -1088,13 +1088,11 @@ data class RankKey(
     val within: Int,
 )
 
-/** A title's scores, written as shown: IMDb "8.8", Rotten Tomatoes and Metacritic a number with "%" ("87%"), never a word. A score nobody gave is null: apps show no slot for it, never a placeholder. */
+/** A title's IMDb and Rotten Tomatoes scores, written as shown: IMDb "8.8", Rotten Tomatoes a number with "%" ("87%"), never a word. A score nobody gave is null: apps show no slot for it, never a placeholder. */
 @Serializable
 data class Ratings(
     val imdb: String? = null,
     val rottenTomatoes: String? = null,
-    /** Empty until a source gives it; the apps lay out its place now. */
-    val metacritic: String? = null,
 )
 
 @Serializable(with = Reason.Serializer::class)
