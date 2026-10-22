@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
-import { bestOption, byLanguage, FITS, flagFile, MATCHES, matchesLanguage, middle, offSummary, optionCount, pickerLanguages, startOption, trackDetail } from "./subtitles";
+import { bestOption, byLanguage, FITS, fileChoice, flagFile, MATCHES, matchesLanguage, middle, offSummary, optionCount, pickerLanguages, startOption, trackDetail } from "./subtitles";
 
 const track = (language: string, languageName: string, name: string, more: Partial<SubtitleTrack> = {}): SubtitleTrack => ({
   url: `http://127.0.0.1/sub/${language}/${name}`,
@@ -188,4 +188,11 @@ test("a flag is the tag's own file, else its language's, else none", () => {
   expect(flagFile("es-419", has)).toBe("es");
   expect(flagFile("en", has)).toBe("en");
   expect(flagFile("mne", has)).toBeNull();
+});
+
+test("a pick inside the file tells the core its language, as the file names it", () => {
+  expect(fileChoice("eng")).toEqual({ type: "subtitleChosen", url: null, language: "eng" });
+  expect(fileChoice("pt-BR")).toEqual({ type: "subtitleChosen", url: null, language: "pt-BR" });
+  // A file that names none: the pick still clears the core's start pick.
+  expect(fileChoice(null)).toEqual({ type: "subtitleChosen", url: null });
 });

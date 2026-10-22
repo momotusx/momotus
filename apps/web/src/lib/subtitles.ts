@@ -106,6 +106,10 @@ export function offSummary(languages: number, pending: boolean): { text: string;
   return { text: pending ? "Searching" : "None found", searching: false };
 }
 
+/** `subtitleChosen` for a track inside the file: no core URL, and the file's own code for its
+ * language (`eng`, `pt-BR`) when it gives one, so the profile's languages follow the pick. */
+export const fileChoice = (lang: string | null) => ({ type: "subtitleChosen", url: null, ...(lang ? { language: lang } : {}) });
+
 /** The core's words for a track that names the playing release's group. */
 export const FITS = "Same release group";
 export const MATCHES = "Matches this file";

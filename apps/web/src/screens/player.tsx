@@ -40,7 +40,7 @@ import { loadedSource, type Retry, sourceStart, TRYING_AGAIN_MS, tryingAgain } f
 import { bytes, clock, decoded, startsText, episodeLabel, groupFailures, playPath, playState, seasonName, titlePath, versionsPath } from "../lib/format";
 import { DELAY_SETTLE_MS } from "../lib/delay";
 import { bufferShare, loadingLines, STALL_AHEAD_S, startFill } from "../lib/loading";
-import { offSummary, pickerLanguages, startOption } from "../lib/subtitles";
+import { fileChoice, offSummary, pickerLanguages, startOption } from "../lib/subtitles";
 import { blockedWords, languageName, nextVersion, noVersionWords, qualityCell, qualityText, restartLine, subtitleNote } from "../lib/words";
 import "./player.css";
 
@@ -700,8 +700,9 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   };
   // A subtitle inside the file replaces the core's one, and the other way round.
   const pickFileSub = (id: string) => {
-    // A track in the file is the viewer's choice too.
+    // A track in the file is the viewer's choice too, and its language the profile's.
     chose = true;
+    void playback()?.command(fileChoice(fileSubs().find((t) => t.id === id)?.lang ?? null));
     pickSubtitle(null);
     engine.selectTrack("sub", id);
   };
