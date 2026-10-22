@@ -27,12 +27,12 @@ struct ContinueCard: View {
         return CGSize(width: width, height: width * 9 / 16)
     }
 
-    /// Apple's corners: 14 on the web and the Mac, 13 on the iPhone, the token on TV.
+    /// Apple's corners (tile.desktop and tile.phone): 14 on the Mac, 13 on the iPhone, the token on TV.
     private var radius: CGFloat {
         #if os(tvOS)
         return Theme.Radius.m
         #else
-        return metrics.wide ? Theme.Radius.card : 13
+        return metrics.wide ? Theme.TileDesktop.radius : Theme.Tile.cardRadius
         #endif
     }
 

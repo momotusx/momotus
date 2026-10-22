@@ -192,8 +192,8 @@ private struct CardArt: ViewModifier {
         content
             .clipShape(shape)
             .overlay {
-                // tv.apple.com's hover: rgba(51,51,51,.3) over the art.
-                if card.hovered && !card.focused { shape.fill(Color(white: 0.2).opacity(0.3)).allowsHitTesting(false) }
+                // tv.apple.com's hover over the art (scrim.hover).
+                if card.hovered && !card.focused { shape.fill(Theme.Scrim.hover).allowsHitTesting(false) }
             }
             .overlay { shape.strokeBorder(Theme.Palette.lineStrong, lineWidth: CardArt.keyline).allowsHitTesting(false) }
             .modifier(FocusRing(shape: shape, active: card.focused))

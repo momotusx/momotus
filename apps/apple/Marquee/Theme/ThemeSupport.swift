@@ -192,10 +192,10 @@ struct Metrics: Sendable {
     static let regular = Metrics(
         // tv.apple.com's posters at 1440: eight a row, 20 apart, at a 40 margin.
         poster: Theme.TileDesktop.poster, gutter: Theme.Space.l, rowSpacing: Theme.Space.l, wide: true,
-        cardName: 15, cardInfo: 13, chip: 12, posterRadius: Theme.Radius.card)
+        cardName: 15, cardInfo: 13, chip: 12, posterRadius: Theme.TileDesktop.radius)
     static let compact = Metrics(
         poster: Theme.Tile.poster, gutter: 16, rowSpacing: Theme.Space.m, wide: false,
-        cardName: 13, cardInfo: 12, chip: 11, posterRadius: 11)
+        cardName: 13, cardInfo: 12, chip: 11, posterRadius: Theme.Tile.radius)
 }
 
 extension EnvironmentValues {
