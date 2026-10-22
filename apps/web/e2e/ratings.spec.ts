@@ -244,19 +244,18 @@ for (const form of Object.keys(FORMS) as Form[]) {
       if (form === "phone") expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     }
     await expect(page.locator(".info .meta span.rate .sr")).toHaveText(form === "tv" ? ["IMDb 10.0", "Rotten Tomatoes 100 percent"] : ["Rotten Tomatoes 100 percent"]);
-    await expect(page.locator(".facts div", { hasText: "Ratings from" })).toContainText("IMDb and Rotten Tomatoes via MDBList");
+    // Where the scores came from is not said on the title page: no addon name outside the Addons pages.
+    await expect(page.locator(".facts div", { hasText: "Ratings from" })).toHaveCount(0);
     measure(form, "title page", title.map((t) => t.width));
     await page.screenshot({ path: `${SHOTS}/ratings-title-${form}.jpg`, type: "jpeg", quality: 80 });
 
-    // A title with the mark: the same meta line, the spoken word, each source credited (MDBList
-    // gave its IMDb score).
+    // A title with the mark: the same meta line and the spoken word.
     await page.goto(`/title/movie/${FRESH[0]!.id}?form=${form}`);
     await expect(page.locator(".info .meta .rate > [aria-hidden]").nth(1)).toHaveText("RT Fresh", { timeout: 30_000 });
     const freshTitle = await scores(page, ".info .meta .rate > [aria-hidden]", ".info");
     for (const t of freshTitle) expect(t, JSON.stringify(t)).toMatchObject({ lines: 1, cut: false, inside: true });
     expect(Math.abs(freshTitle[1]!.middle - freshTitle[0]!.middle)).toBeLessThanOrEqual(1);
     await expect(page.locator(".info .meta span.rate .sr")).toHaveText(form === "tv" ? ["IMDb 10.0", "Rotten Tomatoes: Fresh"] : ["Rotten Tomatoes: Fresh"]);
-    await expect(page.locator(".facts div", { hasText: "Ratings from" })).toContainText("IMDb via MDBList, Rotten Tomatoes from the Rotten Tomatoes addon");
     measure(form, "title page, RT Fresh", freshTitle.map((t) => t.width));
 
     // Search: the meta line keeps every score whole.

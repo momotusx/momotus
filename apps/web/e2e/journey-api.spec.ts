@@ -266,16 +266,17 @@ test("an episode not out yet: its day stands where Play was", async ({ browser }
 
 test("the title page names the version it plays, never the addon it comes from", async ({ browser }) => {
   // No addon name outside the Addons pages and Versions, which names the source on purpose
-  // (design/DECISION.md, Shelves). This film's details come from the same addon, and the
-  // "Details from" fact names it there on purpose, so the line under Play is what is checked.
+  // (design/DECISION.md, Shelves): not under Play, and not as where the details came from (this
+  // film's details and its stream come from the same addon).
   for (const form of ["desktop", "tv", "phone"] as const) {
     const viewport = form === "tv" ? { width: 1920, height: 1080 } : form === "phone" ? { width: 390, height: 844 } : { width: 1440, height: 900 };
     const { context, page: p } = await page(browser, viewport);
     await p.goto(`/title/movie/mqjm?form=${form}`);
     await expect(p.locator(".vline .st")).toBeVisible({ timeout: 30_000 });
     await expect(p.locator(".vline")).toContainText("Direct link");
-    await expect(p.locator(".vline")).not.toContainText("Journey Fixture");
     await expect(p.locator(".vline")).not.toContainText("via");
+    await expect(p.locator("body")).not.toContainText("Journey Fixture");
+    await expect(p.locator(".facts")).not.toContainText(/Details from|Ratings from/);
     await context.close();
   }
 });

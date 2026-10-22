@@ -309,8 +309,6 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                   <Fact label="Starring" value={x().cast.slice(0, 3).join(", ")} />
                   <Fact label="Directed by" value={x().directors.slice(0, 2).join(", ")} />
                   <Fact label="Runtime" value={x().runtime ? `${x().runtime}${series() ? " an episode" : ""}` : ""} />
-                  <Fact label="Details from" value={x().source} />
-                  <Fact label="Ratings from" value={x().ratingsFrom ?? ""} />
                 </dl>
               </section>
               <Show when={series() && form() !== "phone"}>
