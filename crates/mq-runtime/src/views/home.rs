@@ -947,15 +947,28 @@ async fn watch_continue(
     header: SharedObservable<HomeHeader>,
 ) {
     let mut changes = core.library().subscribe();
+    // A streaming account coming or going changes " · On this device"
+    // (`kept_here`): the row is read again then too.
+    let (mut accounts, mut open) = (core.account_changes(), true);
     let mut lookups = JoinSet::new();
     let titles = refresh_continue(&core, &rows).await;
     maybe_pick_hero(&rows, &header);
     lookups.spawn(rate(core.clone(), rows.clone(), header.clone(), titles));
-    while let Some(tables) = crate::views::next_change(&mut changes).await {
-        if tables.iter().any(|t| {
-            matches!(t, Table::Progress | Table::Watched | Table::LibraryItems)
-                || (kids && *t == Table::Access)
-        }) {
+    loop {
+        let refresh = tokio::select! {
+            tables = crate::views::next_change(&mut changes) => {
+                let Some(tables) = tables else { return };
+                tables.iter().any(|t| {
+                    matches!(t, Table::Progress | Table::Watched | Table::LibraryItems)
+                        || (kids && *t == Table::Access)
+                })
+            }
+            moved = accounts.changed(), if open => {
+                open = moved.is_ok();
+                open
+            }
+        };
+        if refresh {
             let titles = refresh_continue(&core, &rows).await;
             maybe_pick_hero(&rows, &header);
             while lookups.try_join_next().is_some() {}

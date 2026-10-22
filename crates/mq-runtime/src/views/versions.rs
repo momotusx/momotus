@@ -699,8 +699,10 @@ impl VersionsView {
         }
         let episode = (params.target.season, params.target.episode);
         let plays = plays(&params.caps);
-        // Subscribe before the first read so no addon change slips in between.
+        // Subscribe before the first read so no addon or account change
+        // slips in between.
         let changes = core.library().subscribe();
+        let accounts = core.account_changes();
         let path = ResourcePath {
             resource: "stream".into(),
             r#type: params.kind.clone(),
@@ -800,7 +802,7 @@ impl VersionsView {
         ));
         tasks.spawn(supervise(
             core.clone(),
-            changes,
+            (changes, accounts),
             eligible,
             path,
             ranking,
@@ -1045,11 +1047,15 @@ async fn kept_start(
 }
 
 /// Asks the installed stream addons, and asks again from the start whenever
-/// they change: a source installed while a title is open shows up without
-/// reopening it.
+/// they change, or a streaming account is added, replaced or removed: a
+/// source installed, or an account connected, while a title is open shows
+/// up without reopening it, on every screen that holds the view.
 async fn supervise(
     core: Core,
-    mut changes: tokio::sync::broadcast::Receiver<Vec<Table>>,
+    (mut changes, mut accounts): (
+        tokio::sync::broadcast::Receiver<Vec<Table>>,
+        crate::debrid::AccountChanges,
+    ),
     mut addons: Vec<InstalledAddon>,
     path: ResourcePath,
     ranking: Arc<Ranking>,
@@ -1058,21 +1064,53 @@ async fn supervise(
 ) {
     loop {
         let current = urls(&addons);
+        let run = collect(
+            core.clone(),
+            addons.clone(),
+            path.clone(),
+            ranking.clone(),
+            state.clone(),
+            snapshot.clone(),
+        );
+        tokio::pin!(run);
+        let mut running = true;
         // Dropping an unfinished run stops its writes at once.
-        let outcome = tokio::select! {
-            () = collect(core.clone(), addons, path.clone(), ranking.clone(), state.clone(), snapshot.clone()) => None,
-            next = changed_set(&mut changes, &core, &path, &current) => Some(next),
+        let moved = loop {
+            tokio::select! {
+                () = &mut run, if running => running = false,
+                next = changed_set(&mut changes, &core, &path, &current) => {
+                    let Some(next) = next else { return };
+                    addons = next;
+                    break false;
+                }
+                moved = accounts.changed() => {
+                    if moved.is_err() {
+                        return;
+                    }
+                    break true;
+                }
+            }
         };
-        let next = match outcome {
-            Some(next) => next,
-            None => changed_set(&mut changes, &core, &path, &current).await,
-        };
-        let Some(next) = next else { return };
-        addons = next;
         let mut s = lock(&state);
+        if moved {
+            accounts_moved(&core, &mut s);
+        }
         restart(&mut s, &addons);
         snapshot.set(render(&s));
     }
+}
+
+/// A streaming account came, went or was replaced: the rows rank by the
+/// accounts there are now (an account opens the rows `needsAccount` held),
+/// the old accounts' cache answers go, and the pick is made again.
+fn accounts_moved(core: &Core, s: &mut State) {
+    let account = core.debrid().is_some();
+    s.rank.debrid = account;
+    s.conditions.account = account;
+    s.cache.clear();
+    s.asked.clear();
+    s.frozen = false;
+    s.prefetched = false;
 }
 
 /// The device moved between Wi-Fi and mobile data (`networkChanged`): a

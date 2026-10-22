@@ -561,3 +561,37 @@ async fn unrelated_addon_writes_keep_the_rows() {
     }
     assert!(view.snapshot().recommended.is_some());
 }
+
+/// An open view follows the streaming accounts: one connected while it is
+/// open turns "needs an account" into a playable pick, and taking it away
+/// brings the reason back, without reopening.
+#[tokio::test]
+async fn versions_follow_streaming_accounts() {
+    use mq_runtime::BlockedReason;
+    mq_relparse::warm_up();
+    let core = Core::temporary("p").unwrap();
+    let debrid = stream_addon("debrid", Duration::ZERO, DEBRID).await;
+    core.library()
+        .set_addons("p", std::slice::from_ref(&debrid), &core.hlc())
+        .unwrap();
+    let view = VersionsView::open(&core, params());
+    let needs_account = |s: &mq_runtime::views::versions::VersionsSnapshot| {
+        s.done
+            && s.recommended.is_none()
+            && s.blocked
+                .as_ref()
+                .is_some_and(|b| b.reason == BlockedReason::NeedsAccount)
+    };
+    until(&view, "needs an account", needs_account).await;
+    assert!(!view.snapshot().conditions.account);
+
+    core.set_debrid_keys(&[(mq_runtime::StoreId::RealDebrid, "rd".into())]);
+    until(&view, "a pick through the account", |s| {
+        s.done && s.blocked.is_none() && s.recommended.is_some() && s.conditions.account
+    })
+    .await;
+
+    core.set_debrid_keys(&[]);
+    until(&view, "needs an account again", needs_account).await;
+    assert!(!view.snapshot().conditions.account);
+}

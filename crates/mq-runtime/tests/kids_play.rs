@@ -852,6 +852,27 @@ async fn a_title_kept_on_this_device_says_so() {
         caption().as_deref(),
         Some("1 min left \u{b7} On this device")
     );
+
+    // A streaming account would take the title, so neither says it while
+    // one is connected; both say it again once it goes, on the open views.
+    kid.set_debrid_keys(&[(mq_runtime::StoreId::RealDebrid, "rd".into())]);
+    until("the account takes the mark away", || {
+        caption().as_deref() == Some("1 min left")
+            && after
+                .snapshot()
+                .recommended
+                .is_some_and(|r| r.on_device.is_none())
+    })
+    .await;
+    kid.set_debrid_keys(&[]);
+    until("the mark comes back", || {
+        caption().is_some_and(|c| c.ends_with(" \u{b7} On this device"))
+            && after
+                .snapshot()
+                .recommended
+                .is_some_and(|r| r.on_device.as_deref() == Some("On this device"))
+    })
+    .await;
 }
 
 /// Plans/player-polish.md 2b, after the app was closed: a core opened again

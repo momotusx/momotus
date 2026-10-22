@@ -205,6 +205,10 @@ pub struct RestoreAnswer {
 }
 
 /// The device's debrid accounts, shared by every profile.
+/// The connected streaming accounts as they move (`Core::account_changes`):
+/// (service, generation) in order.
+pub(crate) type AccountChanges = tokio::sync::watch::Receiver<Vec<(StoreId, String)>>;
+
 pub(crate) struct Accounts {
     me: Weak<Accounts>,
     http: HttpClient,
@@ -215,6 +219,10 @@ pub(crate) struct Accounts {
     /// Holds the cache and flights every rebuilt resolver shares.
     base: Resolver,
     resolver: RwLock<Option<Resolver>>,
+    /// The connected accounts, as (service, generation) in order: moves
+    /// only when one is added, replaced or removed, for views that rank by
+    /// them (`Core::account_changes`).
+    set: tokio::sync::watch::Sender<Vec<(StoreId, String)>>,
 }
 
 #[derive(Default)]
@@ -489,6 +497,7 @@ impl Accounts {
             snapshot: SharedObservable::new(DebridSnapshot::default()),
             base: Resolver::new(ResolverConfig::default()),
             resolver: RwLock::new(None),
+            set: tokio::sync::watch::Sender::new(Vec::new()),
         })
     }
 
@@ -571,7 +580,24 @@ impl Accounts {
         *self.resolver.write().unwrap_or_else(|p| p.into_inner()) =
             (!state.conns.is_empty()).then_some(resolver);
         self.base.prune();
+        let set: Vec<(StoreId, String)> = state
+            .order
+            .iter()
+            .filter_map(|s| state.conns.get(s))
+            .map(|c| (c.service, c.generation.clone()))
+            .collect();
+        self.set.send_if_modified(|old| {
+            let moved = *old != set;
+            *old = set;
+            moved
+        });
         self.publish(state);
+    }
+
+    /// Moves whenever an account is added, replaced or removed; marked seen
+    /// as of now.
+    pub(crate) fn changes(&self) -> AccountChanges {
+        self.set.subscribe()
     }
 
     fn add(&self, resolver: Resolver, conn: Arc<Connection>) -> Resolver {
@@ -1028,6 +1054,13 @@ impl Drop for DebridLoginView {
 }
 
 impl Core {
+    /// Moves whenever a streaming account is added, replaced or removed:
+    /// a view that ranks or captions by them follows it. Take it before
+    /// reading `debrid`, so no change falls in between.
+    pub(crate) fn account_changes(&self) -> AccountChanges {
+        self.accounts().changes()
+    }
+
     /// The resolver over the connected accounts, `None` when there are none.
     pub fn debrid(&self) -> Option<Resolver> {
         self.accounts().resolver()
