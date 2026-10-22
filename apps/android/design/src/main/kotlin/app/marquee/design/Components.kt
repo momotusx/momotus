@@ -832,11 +832,10 @@ fun RatingLine(
 }
 
 /**
- * IMDb and Rotten Tomatoes side by side (design/DECISION.md, Status and ratings): each source's name at 70
- * percent and 400, its score at 600, pure white over artwork ([onArt]) and the 92 percent text level on the page, as one unbroken line ("IMDb 8.4", "RT Fresh"); no star, no logo,
- * no dot between them. A score the data lacks has no slot. Read out as "Rotten Tomatoes 87 percent", never
- * "R T". [onFirst] makes the first score a link a finger can hit. [wrap] lets a pair go to the next line when
- * both do not fit (a narrow poster's caption): a score is never cut and never runs past its column.
+ * The scores as text (design/DECISION.md, Status and ratings), today IMDb's alone, as Stremio shows it: the source's
+ * name at 70 percent and 400, its number at 600, pure white over artwork ([onArt]) and the 92 percent text level on
+ * the page, one unbroken line ("IMDb 8.4"); no star, no logo. A score the data lacks has no slot. [onFirst] makes
+ * the first score a link a finger can hit.
  */
 @Composable
 fun RatingsRow(
@@ -844,7 +843,6 @@ fun RatingsRow(
     modifier: Modifier = Modifier,
     role: TextRole = TextRole.Caption,
     onFirst: (() -> Unit)? = null,
-    wrap: Boolean = false,
     onArt: Boolean = false,
 ) {
     if (ratings.isEmpty()) return
@@ -867,7 +865,7 @@ fun RatingsRow(
             val line: @Composable (Modifier) -> Unit = {
                 MqText(
                     text,
-                    modifier = it.semantics { contentDescription = spokenScore(score) },
+                    modifier = it,
                     role = role,
                     maxLines = 1,
                     overflow = TextOverflow.Visible,
@@ -885,11 +883,7 @@ fun RatingsRow(
             }
         }
     }
-    if (wrap) {
-        FlowRow(modifier, horizontalArrangement = gap, itemVerticalAlignment = Alignment.CenterVertically) { pairs() }
-    } else {
-        Row(modifier, horizontalArrangement = gap, verticalAlignment = Alignment.CenterVertically) { pairs() }
-    }
+    Row(modifier, horizontalArrangement = gap, verticalAlignment = Alignment.CenterVertically) { pairs() }
 }
 
 /**

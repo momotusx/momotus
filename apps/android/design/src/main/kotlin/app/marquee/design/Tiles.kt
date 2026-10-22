@@ -97,7 +97,7 @@ fun PosterTile(
     fallbackImageUrl: String? = null,
     progress: Float? = null,
     caption: String? = null,
-    /** The scores as plain text ("IMDb 8.4", "RT 87%"), read out after the title; the cover shows them. */
+    /** The score as plain text ("IMDb 8.4"), read out after the title; the cover shows it. */
     ratings: List<String> = emptyList(),
     /** False leaves the caption out: the art alone. */
     captioned: Boolean = true,
@@ -120,7 +120,7 @@ fun PosterTile(
     val state =
         (
             listOfNotNull(caption ?: progress?.let { "${(it * 100).roundToInt()}% watched" }) +
-                ratings.map(::spokenScore) +
+                ratings +
                 listOfNotNull("Watched".takeIf { watched })
         ).joinToString(", ").ifEmpty { null }
     Column(
@@ -167,17 +167,6 @@ fun PosterTile(
         }
     }
 }
-
-/**
- * What a screen reader says for a score: "IMDb 8.8", "Rotten Tomatoes 87 percent", never "R T". The Rotten
- * Tomatoes addon's mark is a word, not a number: "Rotten Tomatoes: Fresh".
- */
-fun spokenScore(score: String): String {
-    val rt = score.removePrefix("RT ").takeIf { it != score } ?: return score
-    return if (PERCENT.matches(rt)) "Rotten Tomatoes ${rt.replace("%", " percent")}" else "Rotten Tomatoes: $rt"
-}
-
-private val PERCENT = Regex("\\d+%")
 
 /**
  * An episode on a card (design/DECISION.md v2, Episodes): a 16:9 still with the number at its

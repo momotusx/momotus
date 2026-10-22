@@ -110,7 +110,7 @@ class TvHomeShelfTest {
         year: String? = null,
         progress: Float? = null,
         imdb: String? = "8.4",
-        rt: String? = "Fresh",
+        rt: String? = "87%",
     ) = Tile(
         id = id,
         kind = kind,

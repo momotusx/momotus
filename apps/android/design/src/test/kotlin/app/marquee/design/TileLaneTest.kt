@@ -42,7 +42,7 @@ class TileLaneTest {
                     {},
                     shape = shape,
                     caption = "2010",
-                    ratings = listOf("IMDb 10.0", "RT 100%"),
+                    ratings = listOf("IMDb 10.0"),
                 )
             }
         }

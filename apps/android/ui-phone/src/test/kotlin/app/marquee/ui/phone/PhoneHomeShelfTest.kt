@@ -115,7 +115,7 @@ class PhoneHomeShelfTest {
         posterShape = "poster",
         releaseInfo = line,
         progress = progress,
-        ratings = Ratings("8.4", "Fresh"),
+        ratings = Ratings("8.4", "87%"),
     )
 
     private fun show(

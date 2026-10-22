@@ -16,7 +16,7 @@ import kotlin.test.assertTrue
 
 /**
  * The widest scores there are ("IMDb 10.0", "RT 100%") measured with real text layout: on the meta line each
- * stays one whole line, the Rotten Tomatoes addon's mark ("RT Fresh") too. A tile's cover carries its scores
+ * stays one whole line. A tile's cover carries its scores
  * (RPDB's band), so none is measured under it. The widths print as `ratings-measure` lines for
  * bench/core/ratings.jsonl.
  */
@@ -28,7 +28,6 @@ class RatingsMeasureTest {
     val compose = createComposeRule()
 
     private val widest = listOf("IMDb 10.0", "RT 100%")
-    private val fresh = listOf("IMDb 10.0", "RT Fresh")
 
     private fun layout(node: SemanticsNode): TextLayoutResult {
         val results = mutableListOf<TextLayoutResult>()
@@ -66,12 +65,6 @@ class RatingsMeasureTest {
 
     @Test
     fun `the phone meta line keeps both scores whole`() = line(Form.Phone)
-
-    @Test
-    fun `the phone meta line keeps RT Fresh whole`() = line(Form.Phone, fresh)
-
-    @Test
-    fun `the TV meta line keeps RT Fresh whole`() = line(Form.Tv, fresh)
 
     @Test
     fun `the TV meta line keeps both scores whole`() = line(Form.Tv)

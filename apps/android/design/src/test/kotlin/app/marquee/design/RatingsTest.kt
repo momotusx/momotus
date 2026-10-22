@@ -29,7 +29,7 @@ import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** IMDb and Rotten Tomatoes side by side: the meta line and a poster's caption show each score there is, and nothing else. */
+/** The scores as text: the meta line shows each score there is (today IMDb's alone), a tile's caption none. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class RatingsTest {
@@ -40,26 +40,13 @@ class RatingsTest {
         compose.onAllNodesWithText(text, useUnmergedTree = true).fetchSemanticsNodes().size
 
     @Test
-    fun `the meta line shows both scores, one, or none before the facts`() {
-        var ratings by mutableStateOf(listOf("IMDb 8.8", "RT 87%"))
+    fun `the meta line shows the score, or none, before the facts`() {
+        var ratings by mutableStateOf(listOf("IMDb 8.8"))
         compose.setContent { MarqueeTheme(Form.Phone) { RatingLine(ratings, "2010 · 148 min") } }
         assertEquals(1, count("IMDb 8.8"))
-        assertEquals(1, count("RT 87%"))
-        // TalkBack says the name, not "R T".
-        compose.onNodeWithContentDescription("Rotten Tomatoes 87 percent", useUnmergedTree = true).assertExists()
-        compose.onNodeWithContentDescription("IMDb 8.8", useUnmergedTree = true).assertExists()
-        // The Rotten Tomatoes addon's mark has no number.
-        ratings = listOf("IMDb 8.8", "RT Fresh")
-        compose.waitForIdle()
-        assertEquals(1, count("RT Fresh"))
-        compose.onNodeWithContentDescription("Rotten Tomatoes: Fresh", useUnmergedTree = true).assertExists()
-        ratings = listOf("RT 87%")
-        compose.waitForIdle()
-        assertEquals(0, count("IMDb 8.8"))
-        assertEquals(1, count("RT 87%"))
         ratings = emptyList()
         compose.waitForIdle()
-        assertEquals(0, count("RT 87%"))
+        assertEquals(0, count("IMDb 8.8"))
         compose.onNodeWithText("2010 · 148 min").assertExists()
     }
 
@@ -131,19 +118,18 @@ class RatingsTest {
                     null,
                     {},
                     caption = "2010",
-                    ratings = listOf("IMDb 8.8", "RT 87%"),
+                    ratings = listOf("IMDb 8.8"),
                     captioned = captioned,
                 )
             }
         }
         assertEquals(0, count("IMDb 8.8"))
-        assertEquals(0, count("RT 87%"))
         assertEquals(1, count("2010"))
         // The scores are read with the title, after the year.
         compose.onNodeWithContentDescription("Inception").assert(
             SemanticsMatcher.expectValue(
                 SemanticsProperties.StateDescription,
-                "2010, IMDb 8.8, Rotten Tomatoes 87 percent",
+                "2010, IMDb 8.8",
             ),
         )
         // The phone's Home posters are the art alone: no name, no year.
