@@ -5,7 +5,7 @@
 
 use crate::hlc::{Hlc, HlcClock};
 use crate::policy::AllowedRow;
-use crate::store::{AddonRow, Library, LibraryError, LibraryItemRow, ProgressRow};
+use crate::store::{AddonRow, Library, LibraryError, LibraryItemRow, ProgressRow, Table};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -604,10 +604,12 @@ impl Library {
 
     /// Forgets everything sync knew (this device signed out, left here,
     /// deleted the account or was dropped from it): queue, cursors and
-    /// roster, and the defaults era that said the device joined or made an
-    /// account (`DEFAULTS_ERA`, now "legacy", as a reopen would read it).
-    /// The library itself stays, and so do this device's id and the hosts
-    /// relay ids were pinned to.
+    /// roster. The defaults era that said the device made or joined an
+    /// account (`DEFAULTS_ERA`) goes back: a device that made it is new
+    /// again ("fresh": a profile without a list keeps its defaults step), one
+    /// that joined is from before ("legacy"), announced as an addons change
+    /// for an open addons view. The library itself stays, and so do this
+    /// device's id and the hosts relay ids were pinned to.
     pub fn forget_sync(&self) -> Result<(), LibraryError> {
         self.write(|c| {
             c.execute_batch(
@@ -615,12 +617,16 @@ impl Library {
                  DELETE FROM sync_state WHERE key != 'device_id' AND substr(key, 1, 6) != 'relay:';
                  DELETE FROM sync_roster;",
             )?;
-            c.execute(
-                "UPDATE device_state SET value = 'legacy'
+            let left = c.execute(
+                "UPDATE device_state
+                 SET value = CASE value WHEN 'created' THEN 'fresh' ELSE 'legacy' END
                  WHERE key = ?1 AND value IN ('joined', 'created')",
                 params![DEFAULTS_ERA],
-            )
-            .map(drop)
+            )?;
+            if left > 0 {
+                self.announce(Table::Addons);
+            }
+            Ok(())
         })
     }
 }

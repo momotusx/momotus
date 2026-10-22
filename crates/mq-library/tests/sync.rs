@@ -1,4 +1,7 @@
-use mq_library::{AddonRow, Library, LibraryItemRow, ProgressRow, SyncCursor, SyncRecord, coll};
+use mq_library::{
+    AddonRow, DEFAULTS_ERA, Library, LibraryItemRow, ProgressRow, SyncCursor, SyncRecord, Table,
+    coll,
+};
 
 fn hlc(wall: u64, device: u64) -> String {
     mq_library::Hlc {
@@ -277,6 +280,33 @@ fn a_roster_entry_at_a_taken_seq_is_refused_unless_it_is_the_same() {
         lib.roster_entries("g").unwrap(),
         vec![(b"one".to_vec(), b"sig".to_vec())]
     );
+}
+
+/// Out of its account, a device that made it is new again (its defaults step
+/// stays) and one that joined counts as from before; an open addons view
+/// hears it. Other eras stay.
+#[test]
+fn leaving_an_account_takes_the_era_back() {
+    for (era, after, heard) in [
+        ("created", "fresh", true),
+        ("joined", "legacy", true),
+        ("legacy", "legacy", false),
+        ("fresh", "fresh", false),
+    ] {
+        let lib = Library::temporary().unwrap();
+        lib.set_device_value(DEFAULTS_ERA, era).unwrap();
+        let mut changes = lib.subscribe();
+        lib.forget_sync().unwrap();
+        assert_eq!(
+            lib.device_value(DEFAULTS_ERA).unwrap().as_deref(),
+            Some(after),
+            "{era}"
+        );
+        let addons = changes
+            .try_recv()
+            .is_ok_and(|tables| tables.contains(&Table::Addons));
+        assert_eq!(addons, heard, "{era}");
+    }
 }
 
 /// A dropped device forgets its queue, cursors and roster, but keeps its own

@@ -269,6 +269,15 @@ impl Library {
         Ok(())
     }
 
+    /// Announces `table` with the write transaction open on this thread,
+    /// for a change no table hook sees (a device value a view reads).
+    pub(crate) fn announce(&self, table: Table) {
+        let mut touched = lock(&self.touched);
+        if !touched.contains(&table) {
+            touched.push(table);
+        }
+    }
+
     /// Sets a device value that a view reads through `table`, announcing
     /// `table` with the commit (the defaults marker changes the addons
     /// view's `fresh`).
@@ -284,10 +293,7 @@ impl Library {
                  ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 params![key, value],
             )?;
-            let mut touched = lock(&self.touched);
-            if !touched.contains(&table) {
-                touched.push(table);
-            }
+            self.announce(table);
             Ok(())
         })
     }
@@ -301,10 +307,7 @@ impl Library {
     ) -> Result<(), LibraryError> {
         self.write(|c| {
             c.execute("DELETE FROM device_state WHERE key = ?1", params![key])?;
-            let mut touched = lock(&self.touched);
-            if !touched.contains(&table) {
-                touched.push(table);
-            }
+            self.announce(table);
             Ok(())
         })
     }

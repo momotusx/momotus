@@ -274,12 +274,42 @@ async fn wrong_pins_are_throttled_with_the_wait_in_the_reply() {
 
 /// A relay to sync with while locked.
 async fn relay() -> (String, std::path::PathBuf) {
-    let dir = temp_dir("relay");
+    relay_in("relay").await
+}
+
+/// A relay of its own in the temp dir `what`, for tests that run at once.
+async fn relay_in(what: &str) -> (String, std::path::PathBuf) {
+    let dir = temp_dir(what);
     let app = mq_sync_server::router(&dir.join("relay.sqlite"), Default::default()).unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let server = format!("http://{}", listener.local_addr().unwrap());
     tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
     (server, dir)
+}
+
+/// The six default addons an older onboarding installed, with their
+/// bundled manifests.
+fn older_onboarding_rows() -> Vec<mq_library::AddonRow> {
+    let six = [
+        "cinemeta",
+        "kitsu",
+        "torrentio",
+        "turkcealtyazi",
+        "subsense",
+        "opensubtitles",
+    ];
+    mq_runtime::defaults::list()
+        .iter()
+        .filter(|d| six.contains(&d.key.as_str()))
+        .enumerate()
+        .map(|(position, d)| mq_library::AddonRow {
+            transport_url: d.url.clone(),
+            manifest_json: serde_json::to_string(&d.manifest).unwrap(),
+            position: position as i64,
+            enabled: true,
+            allow_private: false,
+        })
+        .collect()
 }
 
 fn temp_dir(what: &str) -> std::path::PathBuf {
@@ -980,11 +1010,7 @@ async fn a_removal_stays_through_a_lost_answer_and_goes_with_a_later_plain_sign_
 /// given to before then would win over newer edits made on other devices.
 #[tokio::test]
 async fn in_a_sync_account_new_defaults_wait_for_the_runs_first_pull() {
-    let relay_dir = temp_dir("defaults-relay");
-    let app = mq_sync_server::router(&relay_dir.join("relay.sqlite"), Default::default()).unwrap();
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let server = format!("http://{}", listener.local_addr().unwrap());
-    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+    let (server, relay_dir) = relay_in("defaults-relay").await;
     let data = temp_dir("defaults-pull");
     let open = || {
         Core::open(CoreConfig {
@@ -1001,26 +1027,7 @@ async fn in_a_sync_account_new_defaults_wait_for_the_runs_first_pull() {
         .await;
     drop(c);
     // The six an older onboarding installed, as an older build left them.
-    let six = [
-        "cinemeta",
-        "kitsu",
-        "torrentio",
-        "turkcealtyazi",
-        "subsense",
-        "opensubtitles",
-    ];
-    let rows: Vec<mq_library::AddonRow> = mq_runtime::defaults::list()
-        .iter()
-        .filter(|d| six.contains(&d.key.as_str()))
-        .enumerate()
-        .map(|(position, d)| mq_library::AddonRow {
-            transport_url: d.url.clone(),
-            manifest_json: serde_json::to_string(&d.manifest).unwrap(),
-            position: position as i64,
-            enabled: true,
-            allow_private: false,
-        })
-        .collect();
+    let rows = older_onboarding_rows();
     core.library()
         .set_addons("default", &rows, &core.hlc())
         .unwrap();
@@ -1044,11 +1051,7 @@ async fn in_a_sync_account_new_defaults_wait_for_the_runs_first_pull() {
 /// outside an account.
 #[tokio::test]
 async fn a_device_signed_out_of_its_account_gets_new_defaults_again() {
-    let relay_dir = temp_dir("signed-out-relay");
-    let app = mq_sync_server::router(&relay_dir.join("relay.sqlite"), Default::default()).unwrap();
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let server = format!("http://{}", listener.local_addr().unwrap());
-    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+    let (server, relay_dir) = relay_in("signed-out-relay").await;
     let data = temp_dir("signed-out");
     let open = || {
         Core::open(CoreConfig {
@@ -1063,26 +1066,7 @@ async fn a_device_signed_out_of_its_account_gets_new_defaults_again() {
     let record = c
         .ok(json!({"op": "createSyncAccount", "server": server, "name": "TV"}))
         .await;
-    let six = [
-        "cinemeta",
-        "kitsu",
-        "torrentio",
-        "turkcealtyazi",
-        "subsense",
-        "opensubtitles",
-    ];
-    let rows: Vec<mq_library::AddonRow> = mq_runtime::defaults::list()
-        .iter()
-        .filter(|d| six.contains(&d.key.as_str()))
-        .enumerate()
-        .map(|(position, d)| mq_library::AddonRow {
-            transport_url: d.url.clone(),
-            manifest_json: serde_json::to_string(&d.manifest).unwrap(),
-            position: position as i64,
-            enabled: true,
-            allow_private: false,
-        })
-        .collect();
+    let rows = older_onboarding_rows();
     core.library()
         .set_addons("default", &rows, &core.hlc())
         .unwrap();
@@ -1092,6 +1076,32 @@ async fn a_device_signed_out_of_its_account_gets_new_defaults_again() {
 
     let core = open();
     assert_eq!(core.library().addons("default").unwrap().len(), 9);
+    drop(core);
+    let _ = std::fs::remove_dir_all(&data);
+    let _ = std::fs::remove_dir_all(&relay_dir);
+}
+
+/// A device that made its account and signed out before its defaults step
+/// is new again: the step stays, so its first-run defaults are not lost.
+#[tokio::test]
+async fn a_device_that_made_its_account_and_left_before_the_defaults_step_keeps_it() {
+    let (server, relay_dir) = relay_in("made-left-relay").await;
+    let data = temp_dir("made-left");
+    let core = Core::open(CoreConfig {
+        data_dir: data.clone(),
+        profile_id: "default".into(),
+        device_id: 13,
+    })
+    .unwrap();
+    assert!(core.addons_fresh());
+    let mut c = Client::new(core.clone());
+    let record = c
+        .ok(json!({"op": "createSyncAccount", "server": server, "name": "TV"}))
+        .await;
+    assert!(core.addons_fresh(), "a genesis keeps its defaults step");
+    c.ok(json!({"op": "signOut", "record": record})).await;
+    assert!(core.addons_fresh(), "still new once it left");
+    drop(c);
     drop(core);
     let _ = std::fs::remove_dir_all(&data);
     let _ = std::fs::remove_dir_all(&relay_dir);
