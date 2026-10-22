@@ -13,14 +13,18 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import app.marquee.core.TileCopy
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
@@ -163,6 +167,16 @@ class PhoneHomeShelfTest {
                             tile("s$it", "Series $it", "series", "2022–")
                         },
                     ),
+                    // An addon that draws its catalog wide: posters all the same, as Stremio shows them.
+                    HomeRow(
+                        "addon:movie:featured",
+                        "Featured Movies",
+                        "Addon",
+                        RowState.Ready,
+                        (1..3).map {
+                            tile("w$it", "Wide $it", "movie", "2026").copy(posterShape = "landscape")
+                        },
+                    ),
                 ),
             )
         client.attach { text ->
@@ -223,7 +237,7 @@ class PhoneHomeShelfTest {
         val lines =
             listOf(
                 Triple("the genre line", bounds("Movie · Horror · Thriller"), phone.text to Color.Transparent),
-                Triple("the ratings", bounds("RT 96%"), phone.muted to Color.Transparent),
+                Triple("the rating", bounds("IMDb 7.8"), phone.muted to Color.Transparent),
                 Triple("the reason", bounds("#1 in Popular Movies"), phone.text to Color.Transparent),
                 Triple(
                     "Details",
@@ -267,6 +281,18 @@ class PhoneHomeShelfTest {
                 "$text under the poster",
             )
         }
+    }
+
+    @Test
+    fun `a catalog its addon draws wide is posters too, only Continue Watching is 16 by 9`() {
+        show()
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        val dp = root.width / 390f
+        compose.onAllNodes(hasScrollToNodeAction()).onFirst().performScrollToNode(hasContentDescription("Wide 1"))
+        compose.waitForIdle()
+        val node = compose.onNodeWithContentDescription("Wide 1").fetchSemanticsNode()
+        assertEquals(99f, node.size.width / dp, 1f)
+        assertEquals(149f, node.size.height / dp, 1f)
     }
 
     @Test

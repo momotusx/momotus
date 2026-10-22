@@ -516,16 +516,12 @@ private fun cardLines(): Dp {
 }
 
 /**
- * Continue Watching and movie rows are lanes of 16:9 cards, series rows of 2:3 posters (design/DECISION.md,
- * Shelves); a catalog whose addon draws another shape keeps it. ponytail: the first tile's kind names the row; a
- * list mixing films and series takes its first title's shape.
+ * Continue Watching is a lane of 16:9 stills with their progress; every catalog row is posters, the covers carrying
+ * RPDB's ratings band, as Stremio shows them (the owner, 2026-10-23).
  */
 internal fun shapeOf(row: HomeRow): TileShape =
     when {
-        row.rowId == TileCopy.CONTINUE_ROW -> TileShape.Landscape
-        row.tiles.firstOrNull()?.posterShape == "landscape" -> TileShape.Landscape
-        row.tiles.firstOrNull()?.posterShape == "square" -> TileShape.Square
-        row.tiles.firstOrNull()?.kind == "movie" -> TileShape.Landscape
+        TileCopy.isContinue(row.rowId) -> TileShape.Landscape
         else -> TileShape.Poster
     }
 

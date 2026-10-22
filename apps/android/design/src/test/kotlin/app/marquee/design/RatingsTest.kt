@@ -153,7 +153,7 @@ class RatingsTest {
     }
 
     @Test
-    fun `a 16 to 9 card's art has no ratings band, so its scores follow its line under the art`() {
+    fun `a 16 to 9 card's caption has no score either, only its name and line`() {
         compose.setContent {
             MarqueeTheme(Form.Tv) {
                 PosterTile(
@@ -162,18 +162,14 @@ class RatingsTest {
                     {},
                     shape = TileShape.Landscape,
                     caption = "2026",
-                    ratings = listOf("IMDb 7.5", "RT Fresh"),
+                    ratings = listOf("IMDb 7.5"),
                 )
             }
         }
-        val art = compose.onNodeWithContentDescription("Tenzing").fetchSemanticsNode().boundsInRoot
-        val year = compose.onNodeWithText("2026", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-        for (score in listOf("IMDb 7.5", "RT Fresh")) {
-            val at = compose.onNodeWithText(score, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-            assertTrue(at.top >= art.bottom, "$score sits on the art")
-            assertEquals(year.center.y, at.center.y, 1f, "$score is not on the year's line")
-            assertTrue(at.left >= year.right, "$score comes before the year")
-            assertTrue(at.right <= art.right + 0.5f, "$score runs past the card")
-        }
+        assertEquals(1, count("2026"))
+        assertEquals(0, count("IMDb 7.5"))
+        compose.onNodeWithContentDescription("Tenzing").assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "2026, IMDb 7.5"),
+        )
     }
 }

@@ -80,9 +80,8 @@ private val PHONE_CAPTION_GAP = 12.dp
 /**
  * A title in a row or grid (design/DECISION.md, Shelves and cards): the picture, then the name and its line
  * under it, never over it. [caption] is the core's own words (Continue Watching, Library) or the year. The scores
- * are in a poster's cover itself (RPDB's band), so its caption is the name and that line; a 16:9 card's art is a
- * backdrop, so its scores follow the line ([RatingsRow]). Always two lines, so a row's captions align; a screen
- * reader hears the scores either way. The name at 600, the line at 64 percent, neither
+ * are in a poster's cover itself (RPDB's band) and nowhere in a caption, which is the name and that line, always two
+ * lines so a row's captions align; a screen reader still hears them. The name at 600, the line at 64 percent, neither
  * changing on focus. [captioned] false is the art alone (the phone's Home posters). The art carries the 25 percent inner keyline (design/DECISION.md, Lines). Focus
  * lifts the card (on TV with its shadow and the sheen on the art, on a phone with the key ring).
  * Everything is a plain value, so the design module knows nothing of the core.
@@ -164,18 +163,7 @@ fun PosterTile(
             val line: @Composable (String) -> Unit = {
                 MqText(it, role = TextRole.Caption, color = colors.dim, weight = FontWeight.Medium, maxLines = 1)
             }
-            if (shape == TileShape.Poster) {
-                line(caption.orEmpty())
-            } else {
-                // A 16:9 card's art is a backdrop, with no ratings band drawn in: the scores follow its line.
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    line(caption.orEmpty())
-                    RatingsRow(ratings)
-                }
-            }
+            line(caption.orEmpty())
         }
     }
 }

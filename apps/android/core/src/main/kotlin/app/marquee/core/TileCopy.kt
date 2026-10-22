@@ -76,11 +76,11 @@ object TileCopy {
         }
 
     /**
-     * A title's scores side by side as plain text, the source first: "IMDb 8.8", "RT 87%". A score the
-     * core left null has no slot, and the brands' logos and icons never appear (plans/research/ratings.md).
+     * A title's score as plain text where text shows one (the hero, the title page, what a screen reader hears):
+     * IMDb's number alone, "IMDb 8.8", as Stremio shows it; the covers carry the rest in RPDB's band (the owner,
+     * 2026-10-23). A score the core left null has no slot, and no brand's logo appears.
      */
-    fun ratings(ratings: Ratings): List<String> =
-        listOfNotNull(ratings.imdb?.let { "IMDb $it" }, ratings.rottenTomatoes?.let { "RT $it" })
+    fun ratings(ratings: Ratings): List<String> = listOfNotNull(ratings.imdb?.let { "IMDb $it" })
 
     /**
      * A tile's picture and what shows when it does not load. A cover is the core's poster, RPDB's with the ratings

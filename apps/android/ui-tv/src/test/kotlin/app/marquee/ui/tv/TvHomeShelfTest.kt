@@ -260,7 +260,7 @@ class TvHomeShelfTest {
                 Triple("the genre line", bounds("Movie · Horror · Thriller"), tv.text to Color.Transparent),
                 Triple("the synopsis", bounds("A ragtag group"), tv.muted to Color.Transparent),
                 Triple("the facts", bounds("1968 · 1 h 36 min"), tv.dim to Color.Transparent),
-                Triple("the ratings", bounds("RT 96%"), tv.muted to Color.Transparent),
+                Triple("the rating", bounds("IMDb 7.8"), tv.muted to Color.Transparent),
                 Triple("the reason", bounds("#1 in Popular Movies"), tv.text to Color.Transparent),
                 Triple("Details", bounds("Details"), Color.White to fill),
             )
@@ -294,19 +294,19 @@ class TvHomeShelfTest {
     }
 
     @Test
-    fun `movie rows are 16 by 9 cards and series rows 2 by 3 posters, each with its year and scores`() {
+    fun `Continue Watching is 16 by 9 stills and every catalog row 2 by 3 posters, each with its year`() {
         show(withHero = false, framed = out == null)
-        // Laid out sizes, not what the screen shows of them: the series row starts at the screen's foot.
-        for ((name, ratio) in listOf("Severance" to 16f / 9f, "Movie 1" to 16f / 9f, "Series 1" to 2f / 3f)) {
+        // Laid out sizes, not what the screen shows of them.
+        for ((name, ratio) in listOf("Severance" to 16f / 9f, "Movie 1" to 2f / 3f)) {
             val art = compose.onNodeWithContentDescription(name).fetchSemanticsNode().size
             assertEquals(ratio, art.width.toFloat() / art.height, 0.02f, "$name's shape")
         }
-        // A poster's two lines: the year, then the scores, under the art.
-        val poster = compose.onNodeWithContentDescription("Series 1").fetchSemanticsNode()
+        // A poster's caption: the name, then the year, under the art; its scores are in the cover.
+        val poster = compose.onNodeWithContentDescription("Movie 1").fetchSemanticsNode()
         val foot = poster.positionInRoot.y + poster.size.height
         val year =
             compose
-                .onAllNodesWithText("2022–", useUnmergedTree = true)
+                .onAllNodesWithText("2024", useUnmergedTree = true)
                 .fetchSemanticsNodes()
                 .first {
                     it.positionInRoot.x in poster.positionInRoot.x - 1..poster.positionInRoot.x + poster.size.width

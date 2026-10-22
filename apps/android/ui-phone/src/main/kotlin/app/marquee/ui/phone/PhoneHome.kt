@@ -338,12 +338,10 @@ private const val HERO_WINDOW = 0.85f
 /** The buttons' foot over the hero's (the frame's 56; its carousel dots wait for a source). */
 private val HERO_FOOT = 56.dp
 
-/** Continue Watching is a lane of 16:9 stills; catalogs keep the shape their first tile has. */
+/** Continue Watching is a lane of 16:9 stills; every catalog row is posters, as Stremio shows them. */
 private fun shapeOf(row: HomeRow): TileShape =
     when {
-        row.rowId == TileCopy.CONTINUE_ROW -> TileShape.Landscape
-        row.tiles.firstOrNull()?.posterShape == "landscape" -> TileShape.Landscape
-        row.tiles.firstOrNull()?.posterShape == "square" -> TileShape.Square
+        TileCopy.isContinue(row.rowId) -> TileShape.Landscape
         else -> TileShape.Poster
     }
 
