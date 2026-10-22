@@ -175,9 +175,13 @@ func filterEpisodes(_ episodes: [Episode], query: String) -> [Episode] {
 
 /// The Information band's rows: Genres, Runtime, and for a series Seasons and the selected season's
 /// episodes, "8 episodes in Season 2" (the core sends one season's episodes at a time).
-func informationRows(genres: [String], runtime: String?, seasons: [Int], selectedSeason: Int?, episodes: Int) -> [(key: String, value: String)] {
+func informationRows(
+    genres: [String], directors: [String] = [], runtime: String?, seasons: [Int], selectedSeason: Int?, episodes: Int
+) -> [(key: String, value: String)] {
     var rows: [(key: String, value: String)] = []
     if !genres.isEmpty { rows.append(("Genres", genres.prefix(3).joined(separator: ", "))) }
+    // Every director, also those the hero's one chip line dropped (review r2 P3-2).
+    if !directors.isEmpty { rows.append((directors.count == 1 ? "Director" : "Directors", directors.joined(separator: ", "))) }
     if let runtime { rows.append(("Runtime", runtime)) }
     let regular = seasons.filter { $0 > 0 }.count
     if regular > 0 { rows.append(("Seasons", "\(regular)")) }
@@ -236,6 +240,18 @@ struct EpisodeFailure: Equatable {
         }
         text = VersionWords.none(done)
         way = done.blocked?.reason == "needsAccount" ? .addAccount : .addSource
+    }
+}
+
+/// What opened the episodes panel: keyboard focus goes back to it on close.
+enum PanelOpener: Hashable {
+    case season
+    case card(String)
+    /// A card's "...": an unaired card's play button is off, so focus goes back to its menu.
+    case more(String)
+
+    static func card(_ videoId: String, unaired: Bool) -> PanelOpener {
+        unaired ? .more(videoId) : .card(videoId)
     }
 }
 

@@ -13,6 +13,8 @@ struct TitleScreen: View {
     @Environment(SyncModel.self) private var sync
     @State private var width: CGFloat = 0
     @State private var height: CGFloat = 0
+    /// The version note and the page's failure under the Mac hero, with their gap.
+    @State private var noteHeight: CGFloat = 0
     /// The Mac action row's drawn width: Starring shows only clear of it.
     @State private var actionsWidth = CGFloat.infinity
     /// Content has scrolled under the status bar and the back button.
@@ -140,6 +142,8 @@ struct TitleScreen: View {
                 // Beside the open panel the note keeps to the hero's column.
                 .frame(maxWidth: panelOpen && !panelCovers ? WideLayout.panelColumnWidth(window: width) : .infinity, alignment: .leading)
                 .padding(.horizontal, metrics.wide ? metrics.gutter : 20)
+                // The hero gives the note its room: Season N stays on the first screen (review P3-8).
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { noteHeight = $0 > 0 ? $0 + Theme.Space.l : 0 }
                 v3Lower
             }
             .padding(.bottom, Theme.Space.xl)
@@ -166,7 +170,7 @@ struct TitleScreen: View {
     }
 
     private var v3HeroHeight: CGFloat {
-        if metrics.wide { return WideLayout.titleHeroHeight(width: width, height: height) }
+        if metrics.wide { return WideLayout.titleHeroHeight(width: width, height: height, note: noteHeight) }
         guard width > 0, height > 0 else { return 633 }
         // The iPhone's 390x680 hero, its status bar under the art's top, held to most of a short window.
         return min(width * 633 / 390, max(height * 0.85, 280))
@@ -228,7 +232,7 @@ struct TitleScreen: View {
                 if !details.cast.isEmpty {
                     CastShelf(cast: details.cast).padding(.horizontal, metrics.wide ? metrics.gutter : 20)
                 }
-                let rows = informationRows(genres: details.genres, runtime: details.runtime, seasons: seasons,
+                let rows = informationRows(genres: details.genres, directors: metrics.wide ? details.directors : [], runtime: details.runtime, seasons: seasons,
                                            selectedSeason: model.header?.selectedSeason, episodes: model.episodes.count)
                 if metrics.wide {
                     InfoBand(synopsis: details.description, genres: details.genres, rows: rows)

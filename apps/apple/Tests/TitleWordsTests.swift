@@ -182,3 +182,18 @@ private func ep(_ number: Int, _ title: String, released: String? = "2022-02-18"
     #expect(EpisodeFailure(videoId: "e", versions: try versions(done: false)).way == .chooseVersion)
     #expect(EpisodeFailure(videoId: "e", versions: nil).text == "No version answered yet. Choose a version to keep waiting.")
 }
+
+@Test func theMacInformationListsEveryDirector() {
+    // The hero's chip line drops names that do not fit; the band names them all.
+    let rows = informationRows(genres: ["Drama"], directors: ["Lana Wachowski", "Lilly Wachowski", "Tom Tykwer", "Jean-Pierre Jeunet"],
+                               runtime: "172 min", seasons: [], selectedSeason: nil, episodes: 0)
+    #expect(rows.map(\.key) == ["Genres", "Directors", "Runtime"])
+    #expect(rows[1].value == "Lana Wachowski, Lilly Wachowski, Tom Tykwer, Jean-Pierre Jeunet")
+    #expect(informationRows(genres: [], directors: ["Christopher Nolan"], runtime: nil, seasons: [], selectedSeason: nil, episodes: 0).map(\.key) == ["Director"])
+}
+
+@Test func anUnairedCardsPanelSendsFocusBackToItsMenu() {
+    // Its play button is off, so focus could not land there (review r2 P3-4).
+    #expect(PanelOpener.card("e", unaired: true) == .more("e"))
+    #expect(PanelOpener.card("e", unaired: false) == .card("e"))
+}

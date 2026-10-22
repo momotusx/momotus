@@ -17,12 +17,6 @@ struct EpisodeActionsSet {
     var startOver: () -> Void = {}
 }
 
-/// What opened the episodes panel: focus goes back to it on close.
-enum PanelOpener: Hashable {
-    case season
-    case card(String)
-}
-
 /// The v3 episode card (plans/design-v3-phase3-apple.md 2.1, 2.2): the still with its words on a
 /// legibility ramp, the progress line on its foot. A click plays it; "..." (shown on hover or keyboard
 /// focus on the Mac, always on the iPhone), the context menu and the accessibility actions carry
@@ -65,6 +59,7 @@ struct EpisodeCard: View {
             .menuIndicator(.hidden)
             .fixedSize()
             .focused($menuFocused)
+            .focused(actions.focus, equals: .more(episode.videoId))
             .opacity(metrics.wide && !hovered && !menuFocused ? 0 : 1)
             .accessibilityHidden(true)
             .padding(2)
@@ -135,7 +130,7 @@ struct EpisodeCard: View {
                 actions.setWatched(episode.videoId, !episode.watched)
             }
         }
-        Button("All Episodes", glyph: "list") { actions.allEpisodes(.card(episode.videoId)) }
+        Button("All Episodes", glyph: "list") { actions.allEpisodes(.card(episode.videoId, unaired: unaired)) }
     }
 }
 

@@ -15,11 +15,12 @@ enum WideLayout {
     /// A short one (a large phone in landscape, a short iPad split) stacks them
     /// under the art, as a phone does, with the art held to the window.
     static func titleOverArt(wide: Bool, window: CGFloat) -> Bool { wide && !(window > 0 && window < 500) }
-    /// The Mac title hero, as Home's: 16:9, held so the first shelf's title shows on the first screen,
-    /// never under 400; `heroFrame` grows it when its words need more.
-    static func titleHeroHeight(width: CGFloat, height: CGFloat) -> CGFloat {
+    /// The Mac title hero, as Home's: 16:9, held so the first shelf's title shows on the first screen
+    /// below the version note's `note` points, never under 400; `heroFrame` grows it when its words
+    /// need more.
+    static func titleHeroHeight(width: CGFloat, height: CGFloat, note: CGFloat = 0) -> CGFloat {
         guard width > 0, height > 0 else { return 506 }
-        return max(min(width * 0.5625, height - 90), 400)
+        return max(min(width * 0.5625, height - 90 - note), 400)
     }
     /// The panel beside the info: 40 at the left, 40 between, the 420 panel, 40 at the right.
     static let panelRoom: CGFloat = 540

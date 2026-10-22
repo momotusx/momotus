@@ -155,3 +155,11 @@ private func snapshot(
     #expect(!WideLayout.panelCoversInfo(window: 1440))
     #expect(WideLayout.panelColumnWidth(window: 1440) == 900)
 }
+
+@Test func theMacTitleHeroGivesTheVersionNoteItsRoom() {
+    // A two-line note with its gap (52 pt) comes off the hero, so Season N stays on the first screen.
+    #expect(WideLayout.titleHeroHeight(width: 1440, height: 863, note: 52) == 721)
+    #expect(WideLayout.titleHeroHeight(width: 1440, height: 863, note: 0) == 773)
+    // Never under the 400 floor.
+    #expect(WideLayout.titleHeroHeight(width: 720, height: 500, note: 52) == 400)
+}
