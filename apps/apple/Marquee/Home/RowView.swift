@@ -206,8 +206,9 @@ private struct SkeletonStrip: View {
                 .padding(.horizontal, metrics.gutter)
             }
             .clipped()
-        .opacity(dim ? 0.55 : 1)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 1.1).repeatForever(), value: dim)
+        // Scoped to the opacity: an endless animation on the view itself also ran its removal, so
+        // Home's loading rows stayed drawn under the real ones.
+        .animation(reduceMotion ? nil : .easeInOut(duration: 1.1).repeatForever()) { $0.opacity(dim ? 0.55 : 1) }
         .onAppear { dim = true }
         .accessibilityLabel("Loading")
     }
