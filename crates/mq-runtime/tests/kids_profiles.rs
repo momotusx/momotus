@@ -187,6 +187,16 @@ async fn an_allow_needs_details_for_that_very_title() {
         code(core.allow_title(&kid, "movie", "tt1").await),
         Some("noDetails")
     );
+    // `{}` gives no details either.
+    install(
+        &core,
+        vec![meta_addon(1, "{}".into(), Duration::ZERO).await],
+    )
+    .await;
+    assert_eq!(
+        code(core.allow_title(&kid, "movie", "tt1").await),
+        Some("noDetails")
+    );
     install(
         &core,
         vec![meta_addon(1, meta("series", "tt1", "Up"), Duration::ZERO).await],

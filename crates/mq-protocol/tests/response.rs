@@ -10,12 +10,36 @@ fn ids(body: &[u8]) -> Vec<String> {
 /// Trakt Tv's "Trending movies" as it answered on 2026-10-22 (one GET of
 /// `/catalog/trakt/trakt_trending_movies.json`, 200): `{}`, no `metas` key.
 /// stremio-core refuses it ("didn't contain any of the required keys"), so
-/// the Home row read "This row did not load"; it is an empty list.
+/// the Home row read "This row did not load"; it is an empty list, and so
+/// is an object holding only caching hints.
 #[test]
-fn trakts_empty_object_is_an_empty_catalog() {
+fn an_empty_object_is_an_empty_catalog() {
     let body = include_bytes!("fixtures/trakt_trending_movies.json");
     assert!(serde_json::from_slice::<ResourceResponse>(body).is_err());
     assert!(ids(body).is_empty());
+    assert!(ids(br#"{"cacheMaxAge": 3600, "staleRevalidate": 60, "staleError": 60}"#).is_empty());
+}
+
+/// Any other shape without `metas` is never a catalog: an addon's error
+/// object is an error, and a list for another resource reads as that
+/// resource (as in stremio-core), which every catalog reader refuses.
+#[test]
+fn an_error_object_or_another_resources_list_is_never_a_catalog() {
+    for body in [
+        r#"{"err": "upstream failed"}"#,
+        r#"{"error": "no user"}"#,
+        r#"{"message": "rate limited"}"#,
+        r#"{"cacheMaxAge": 60, "error": "x"}"#,
+        r#"{"streams": []}"#,
+    ] {
+        assert!(
+            !matches!(
+                decode_response(body.as_bytes(), "catalog"),
+                Ok(ResourceResponse::Metas { .. })
+            ),
+            "{body}"
+        );
+    }
 }
 
 /// What stremio-core already forgives stays forgiven: a null list is empty,
@@ -33,19 +57,10 @@ fn null_lists_and_broken_items_read_as_stremio_reads_them() {
     assert_eq!(ids(body), ["tt1", "tt3"]);
 }
 
-/// Keys for other resources beside the asked one, which stremio-core
-/// refuses as "more than 1 of the unique keys", are ignored.
+/// A meta answer reads exactly as stremio-core reads it: `{}` is no meta,
+/// and a body that is not an object is an error for either resource.
 #[test]
-fn keys_for_other_resources_are_ignored() {
-    let body = br#"{"metas": [{"id": "tt1", "type": "movie", "name": "One"}], "streams": [], "meta": null}"#;
-    assert!(serde_json::from_slice::<ResourceResponse>(body).is_err());
-    assert_eq!(ids(body), ["tt1"]);
-}
-
-/// Leniency stops where there is nothing to read: a meta answer without its
-/// meta, or a body that is not an object, is still an error.
-#[test]
-fn a_missing_meta_or_a_body_that_is_not_an_object_stays_an_error() {
+fn a_meta_answer_and_a_body_that_is_not_an_object_read_as_before() {
     assert!(decode_response(b"{}", "meta").is_err());
     assert!(decode_response(b"[]", "catalog").is_err());
     assert!(decode_response(b"not json", "catalog").is_err());

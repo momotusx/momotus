@@ -18,6 +18,20 @@ async fn slow_search_addon(
     ids: &'static [&'static str],
     delay: Duration,
 ) -> (AddonRow, Arc<AtomicUsize>) {
+    let metas: Vec<_> = ids
+        .iter()
+        .map(|id| serde_json::json!({"id": id, "type": "movie", "name": id}))
+        .collect();
+    let body = serde_json::json!({ "metas": metas }).to_string();
+    answering_search_addon(id, body, delay).await
+}
+
+/// A search addon answering every query with `body` after `delay`.
+async fn answering_search_addon(
+    id: &str,
+    body: String,
+    delay: Duration,
+) -> (AddonRow, Arc<AtomicUsize>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let hits = Arc::new(AtomicUsize::new(0));
@@ -25,15 +39,11 @@ async fn slow_search_addon(
     tokio::spawn(async move {
         while let Ok((mut socket, _)) = listener.accept().await {
             counter.fetch_add(1, Ordering::SeqCst);
+            let body = body.clone();
             tokio::spawn(async move {
                 let mut buf = [0u8; 2048];
                 let _ = socket.read(&mut buf).await;
                 tokio::time::sleep(delay).await;
-                let metas: Vec<_> = ids
-                    .iter()
-                    .map(|id| serde_json::json!({"id": id, "type": "movie", "name": id}))
-                    .collect();
-                let body = serde_json::json!({ "metas": metas }).to_string();
                 let reply = format!(
                     "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
                     body.len()
@@ -608,4 +618,53 @@ async fn catalogs_of_one_kind_are_one_group_in_addon_order() {
             .all(|(_, tiles)| tiles.is_empty()),
         "nothing shows before the first catalog answers: {seen:?}"
     );
+}
+
+/// The search for "sintel" once every addon was asked and nothing is
+/// loading or slow.
+async fn answered(core: &Core, hits: &[&AtomicUsize]) -> SearchSnapshot {
+    let view = SearchView::open(core);
+    view.set_query("sintel");
+    for _ in 0..300 {
+        let s = view.snapshot();
+        if s.query == "sintel"
+            && hits.iter().all(|h| h.load(Ordering::SeqCst) > 0)
+            && s.rows
+                .iter()
+                .all(|r| !matches!(r.state, RowState::Loading | RowState::Slow))
+        {
+            return s;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("not answered: {:?}", view.snapshot());
+}
+
+/// An addon answering `{}` (Trakt Tv, 2026-10-22) found nothing: its group
+/// is left out, not failed. An error object fails the group, and when every
+/// catalog of the group failed, the group shows failed.
+#[tokio::test]
+async fn an_empty_answer_finds_nothing_and_error_objects_fail_the_group() {
+    let core = Core::temporary("p").unwrap();
+    let (empty, asked) = answering_search_addon("empty", "{}".into(), Duration::ZERO).await;
+    core.library()
+        .set_addons(core.profile(), &[empty], &core.hlc())
+        .unwrap();
+    assert!(
+        answered(&core, &[&asked]).await.rows.is_empty(),
+        "nothing found"
+    );
+
+    let core = Core::temporary("p").unwrap();
+    let (a, a_asked) =
+        answering_search_addon("a", r#"{"error": "x"}"#.into(), Duration::ZERO).await;
+    let (mut b, b_asked) =
+        answering_search_addon("b", r#"{"message": "y"}"#.into(), Duration::ZERO).await;
+    b.position = 1;
+    core.library()
+        .set_addons(core.profile(), &[a, b], &core.hlc())
+        .unwrap();
+    let s = answered(&core, &[&a_asked, &b_asked]).await;
+    assert_eq!(s.rows.len(), 1, "{:?}", s.rows);
+    assert!(matches!(s.rows[0].state, RowState::Failed { .. }));
 }

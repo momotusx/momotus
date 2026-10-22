@@ -334,3 +334,59 @@ async fn a_failed_page_is_asked_again() {
         "the end asks nothing more"
     );
 }
+
+/// A paging catalog whose first page lists tt0 and tt1 and whose later
+/// pages answer `later` as is.
+async fn later_pages(later: &'static str) -> AddonRow {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let mut buf = [0u8; 2048];
+            let n = socket.read(&mut buf).await.unwrap_or(0);
+            let head = String::from_utf8_lossy(&buf[..n]).into_owned();
+            let body = if head.contains("skip=") {
+                later.to_owned()
+            } else {
+                r#"{"metas": [{"id": "tt0", "type": "movie", "name": "M0"}, {"id": "tt1", "type": "movie", "name": "M1"}]}"#.to_owned()
+            };
+            let reply = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = socket.write_all(reply.as_bytes()).await;
+        }
+    });
+    let manifest = serde_json::json!({
+        "id": "pages", "version": "1.0.0", "name": "Pages", "types": ["movie"], "resources": ["catalog"],
+        "catalogs": [{"type": "movie", "id": "top", "name": "Popular", "extra": [{"name": "skip"}]}]
+    });
+    AddonRow {
+        transport_url: format!("http://{addr}/manifest.json"),
+        manifest_json: manifest.to_string(),
+        position: 0,
+        enabled: true,
+        allow_private: true,
+    }
+}
+
+/// A later page answering `{}` (Trakt Tv's empty answer) ends the catalog;
+/// one answering an error object fails, so the page can be asked again.
+#[tokio::test]
+async fn an_empty_page_ends_the_catalog_and_an_error_object_fails_it() {
+    for (later, end) in [("{}", true), (r#"{"err": "upstream failed"}"#, false)] {
+        let core = Core::temporary("p").unwrap();
+        core.library()
+            .set_addons(core.profile(), &[later_pages(later).await], &core.hlc())
+            .unwrap();
+        let view = DiscoverView::open(&core);
+        until(&view, |s| s.state == DiscoverState::Ready).await;
+        view.load_more();
+        if end {
+            until(&view, |s| s.state == DiscoverState::End).await;
+        } else {
+            until(&view, |s| matches!(s.state, DiscoverState::Failed { .. })).await;
+        }
+        assert_eq!(ids(&view), ["tt0", "tt1"], "{later}");
+    }
+}

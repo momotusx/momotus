@@ -926,6 +926,8 @@ struct RtAddon {
     served: Arc<Mutex<Vec<String>>>,
     /// The metas a page answers, by its path.
     pages: Arc<Mutex<HashMap<String, Value>>>,
+    /// A whole answer a page gives instead, by its path.
+    raw: Arc<Mutex<HashMap<String, String>>>,
     fail: Arc<Mutex<HashSet<String>>>,
     hang: Arc<Mutex<HashSet<String>>>,
     busy: Arc<AtomicUsize>,
@@ -950,6 +952,13 @@ impl RtAddon {
             .lock()
             .unwrap()
             .insert(path.to_owned(), Value::Array(metas));
+    }
+
+    fn answer(&self, path: &str, body: &str) {
+        self.raw
+            .lock()
+            .unwrap()
+            .insert(path.to_owned(), body.to_owned());
     }
 
     fn fail(&self, path: &str, on: bool) {
@@ -998,6 +1007,7 @@ async fn rt_addon_with(genres: &[&str], delay: Duration) -> RtAddon {
         },
         served: Arc::default(),
         pages: Arc::default(),
+        raw: Arc::default(),
         fail: Arc::default(),
         hang: Arc::default(),
         busy: Arc::default(),
@@ -1027,7 +1037,9 @@ async fn rt_addon_with(genres: &[&str], delay: Duration) -> RtAddon {
                     tokio::time::sleep(Duration::from_secs(3600)).await;
                 }
                 let metas = fake.pages.lock().unwrap().get(&path).cloned();
-                let body = json!({"metas": metas.unwrap_or(json!([]))}).to_string();
+                let raw = fake.raw.lock().unwrap().get(&path).cloned();
+                let body =
+                    raw.unwrap_or_else(|| json!({"metas": metas.unwrap_or(json!([]))}).to_string());
                 let status = if fake.fail.lock().unwrap().contains(&path) {
                     "500 No"
                 } else {
@@ -1136,6 +1148,38 @@ async fn the_addons_lists_mark_their_titles_fresh_and_are_read_once_a_day() {
         .await
         .expect("read");
     assert_eq!(known[&movie(PART_II)], Scores::default());
+}
+
+/// A page answering `{}` (Trakt Tv's empty answer) is an answer with no
+/// titles, read again a day on; one answering an error object failed, and
+/// the read is due again after the rest.
+#[tokio::test]
+async fn an_empty_page_is_an_answer_and_an_error_object_a_failure() {
+    let core = Core::temporary("p").unwrap();
+    let rt = rt_addon().await;
+    rt.answer(RT_COMEDY, "{}");
+    install(&core, std::slice::from_ref(&rt.row));
+    let titles = vec![movie(SHAWSHANK), movie(GODFATHER)];
+    read(&core, &titles).await;
+    let served = rt.served().len();
+    core.ratings().age_lists(Duration::from_secs(300));
+    read(&core, &titles).await;
+    assert_eq!(
+        rt.served().len(),
+        served,
+        "an answer: no read after the rest"
+    );
+    rt.answer(RT_COMEDY, r#"{"err": "upstream failed"}"#);
+    core.ratings().age_lists(DAY);
+    read(&core, &titles).await;
+    assert_eq!(rt.served().len(), 2 * served);
+    core.ratings().age_lists(Duration::from_secs(300));
+    read(&core, &titles).await;
+    assert_eq!(
+        rt.served().len(),
+        3 * served,
+        "a failure: read again after the rest"
+    );
 }
 
 #[tokio::test]

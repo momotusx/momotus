@@ -1212,23 +1212,33 @@ async fn a_twin_installed_after_the_hero_shows_changes_nothing() {
     );
 }
 
-/// Trakt Tv's "Trending movies" answered `{}` (2026-10-22): an empty row,
-/// never "This row did not load".
-#[tokio::test]
-async fn an_answer_without_metas_is_an_empty_row() {
-    const TRAKT_TRENDING: &str =
-        include_str!("../../mq-protocol/tests/fixtures/trakt_trending_movies.json");
+/// The first row's state once it is no longer loading.
+async fn settled_state(body: &'static str) -> RowState {
     let core = Core::temporary("p").unwrap();
-    let trakt = catalog_addon("trakt", Duration::ZERO, 200, TRAKT_TRENDING).await;
+    let addon = catalog_addon("trakt", Duration::ZERO, 200, body).await;
     core.library()
-        .set_addons("p", &[trakt], &core.hlc())
+        .set_addons("p", &[addon], &core.hlc())
         .unwrap();
     let view = HomeView::open(&core);
     for _ in 0..300 {
-        if view.snapshot().rows[0].state != RowState::Loading {
-            break;
+        let state = view.snapshot().rows[0].state.clone();
+        if state != RowState::Loading {
+            return state;
         }
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
-    assert_eq!(view.snapshot().rows[0].state, RowState::Empty);
+    panic!("the row never answered");
+}
+
+/// Trakt Tv's "Trending movies" answered `{}` (2026-10-22): an empty row,
+/// never "This row did not load". An error object still fails the row.
+#[tokio::test]
+async fn an_empty_answer_is_an_empty_row_and_an_error_object_fails_it() {
+    const TRAKT_TRENDING: &str =
+        include_str!("../../mq-protocol/tests/fixtures/trakt_trending_movies.json");
+    assert_eq!(settled_state(TRAKT_TRENDING).await, RowState::Empty);
+    assert!(matches!(
+        settled_state(r#"{"err": "upstream failed"}"#).await,
+        RowState::Failed { .. }
+    ));
 }

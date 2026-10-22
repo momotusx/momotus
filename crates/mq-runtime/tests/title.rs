@@ -270,6 +270,11 @@ async fn a_title_that_cannot_load_says_why() {
         reason(&[meta_addon(r#"{"metas":[]}"#).await]).await,
         "Meta Test has no details for this title"
     );
+    // `{}` is an empty answer only for a catalog: a meta has no empty form.
+    assert_eq!(
+        reason(&[meta_addon("{}").await]).await,
+        "Meta Test sent details Marquee cannot read"
+    );
     assert_eq!(
         reason(&[meta_addon("not json").await]).await,
         "Meta Test sent details Marquee cannot read"
