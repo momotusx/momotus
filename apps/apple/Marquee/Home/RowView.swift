@@ -221,9 +221,11 @@ struct TitleRoute: Hashable {
     let name: String
     /// The season to show first (from the calendar).
     var season: Int?
+    /// The episode a Calendar link names: the panel (or the Episodes page) opens on it.
+    var videoId: String?
 
-    init(kind: String, id: String, name: String, season: Int? = nil) {
-        (self.kind, self.id, self.name, self.season) = (kind, id, name, season)
+    init(kind: String, id: String, name: String, season: Int? = nil, videoId: String? = nil) {
+        (self.kind, self.id, self.name, self.season, self.videoId) = (kind, id, name, season, videoId)
     }
 
     init(_ tile: Tile) {

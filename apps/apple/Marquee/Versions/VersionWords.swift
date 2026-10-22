@@ -21,6 +21,13 @@ enum WideLayout {
         guard width > 0, height > 0 else { return 506 }
         return max(min(width * 0.5625, height - 90), 400)
     }
+    /// The panel beside the info: 40 at the left, 40 between, the 420 panel, 40 at the right.
+    static let panelRoom: CGFloat = 540
+    /// Below about 1020 the column beside the panel would be under 480: the panel covers the info and
+    /// the page dims (plans/design-v3-phase3-apple.md 2.3).
+    static func panelCoversInfo(window: CGFloat) -> Bool { window - panelRoom < BackdropStops.heroSynopsisWidth }
+    /// The hero column beside the open panel, at most the hero's 900.
+    static func panelColumnWidth(window: CGFloat) -> CGFloat { min(900, max(0, window - panelRoom)) }
     /// Starring (360 pt at the right) clears a full action row (about 760) with 40 on every side.
     static func starringFits(window: CGFloat) -> Bool { window >= 40 + 760 + 40 + 360 + 40 }
 }

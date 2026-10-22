@@ -141,3 +141,12 @@ private func snapshot(
     #expect(WideLayout.starringFits(window: 1240))
     #expect(!WideLayout.starringFits(window: 720))
 }
+
+@Test func thePanelCoversTheInfoOnlyBelowAbout1020() {
+    // Beside the open panel the column narrows to the window less 540; under 480 the panel covers it.
+    #expect(WideLayout.panelCoversInfo(window: 1000))
+    #expect(!WideLayout.panelCoversInfo(window: 1100))
+    #expect(WideLayout.panelColumnWidth(window: 1100) == 560)
+    #expect(!WideLayout.panelCoversInfo(window: 1440))
+    #expect(WideLayout.panelColumnWidth(window: 1440) == 900)
+}

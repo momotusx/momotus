@@ -143,6 +143,8 @@ private struct HeroProbe: ViewModifier {
 struct TitleHeroWide<Actions: View>: View {
     let facts: TitleHeroFacts
     var cap: CGFloat = HeroLayout.synopsisWidth
+    /// The column's width: 900, or narrower beside the open panel (`WideLayout.panelColumnWidth`).
+    var columnWidth: CGFloat = 900
     let open: (TitleLink) -> Void
     let more: () -> Void
     @ViewBuilder let actions: Actions
@@ -153,18 +155,18 @@ struct TitleHeroWide<Actions: View>: View {
             TitleLogo(logo: facts.logo, name: facts.name, maxWidth: HeroLayout.logoWidth, height: HeroLayout.logoHeight, nameSize: Theme.type.hero + 12)
             MetaLine(ratings: facts.ratings, parts: facts.meta, size: HeroLayout.meta, imdbLink: facts.imdbLink)
                 .foregroundStyle(Theme.Palette.dim)
-                .frame(maxWidth: cap, alignment: .leading)
+                .frame(maxWidth: min(cap, columnWidth), alignment: .leading)
                 .padding(.top, 7)
                 .heroProbe(.meta)
             if !facts.genres.isEmpty || !facts.directors.isEmpty {
                 ChipGroups(genres: facts.genres, directors: facts.directors, open: open)
-                    .frame(maxWidth: cap, alignment: .leading)
+                    .frame(maxWidth: min(cap, columnWidth), alignment: .leading)
                     .padding(.top, 5)
                     .heroProbe(.chips)
             }
             if let synopsis = facts.synopsis {
                 HeroSynopsis(text: synopsis, lines: 3, more: more)
-                    .frame(maxWidth: cap, alignment: .leading)
+                    .frame(maxWidth: min(cap, columnWidth), alignment: .leading)
                     .padding(.top, 3)
                     .heroProbe(.synopsis)
             }
@@ -172,7 +174,7 @@ struct TitleHeroWide<Actions: View>: View {
                 .padding(.top, 7)
                 .heroProbe(.actions)
         }
-        .frame(maxWidth: 900, alignment: .leading)
+        .frame(maxWidth: columnWidth, alignment: .leading)
         .padding(.horizontal, metrics.gutter)
         .padding(.bottom, HeroLayout.foot)
     }

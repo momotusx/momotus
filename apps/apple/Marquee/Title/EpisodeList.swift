@@ -5,6 +5,7 @@ import SwiftUI
 /// synopsis. Selecting an episode plays it; choosing a version and the
 /// watched mark sit beside it, and in its long press or right click menu.
 /// An episode still to air is shown but cannot be selected.
+#if os(tvOS)
 struct EpisodeList: View {
     let seasons: [Int]
     let selected: Int?
@@ -79,6 +80,8 @@ struct EpisodeList: View {
     }
 }
 
+#endif
+
 /// Why an episode from the list could not start, and whether any version exists at all.
 struct EpisodeFailure: Equatable {
     let videoId: String
@@ -87,6 +90,7 @@ struct EpisodeFailure: Equatable {
     let noVersion: Bool
 }
 
+#if os(tvOS)
 /// "SEASON (1) [2] (3) Specials": pills with a control edge; the selected
 /// season is a lighter fill with a bright edge (the ring is only ever focus).
 private struct SeasonPicker: View {
@@ -306,27 +310,7 @@ private struct EpisodeRow: View {
     }
 
     /// "57 min · Feb 18, 2022", "36 min left · Feb 18, 2022" or "Airs Oct 21".
-    private var meta: String {
-        let released = releaseDate(episode.released)
-        if let released, released > .now {
-            return "Airs \(released.formatted(Self.day.month(.abbreviated).day()))"
-        }
-        var parts: [String] = []
-        if let left = episode.leftMs, left > 0, !episode.watched {
-            parts.append(minutesLeft(ms: left))
-        } else if let minutes {
-            if let progress = episode.progress, !episode.watched {
-                parts.append("\(max(1, Int((Double(minutes) * (1 - progress)).rounded()))) min left")
-            } else {
-                parts.append("\(minutes) min")
-            }
-        }
-        if let released { parts.append(released.formatted(Self.day.month(.abbreviated).day().year())) }
-        return parts.joined(separator: " \u{B7} ")
-    }
-
-    /// Release dates are days, kept in UTC so they never slip a day.
-    private static let day = Date.FormatStyle(timeZone: TimeZone(identifier: "UTC") ?? .current)
+    private var meta: String { episodeCaption(episode, minutes: minutes) }
 }
 
 private struct ChipLabelStyle: LabelStyle {
@@ -337,3 +321,4 @@ private struct ChipLabelStyle: LabelStyle {
         }
     }
 }
+#endif

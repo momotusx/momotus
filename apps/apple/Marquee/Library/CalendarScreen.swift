@@ -95,7 +95,7 @@ private struct DaySection: View {
                 .foregroundStyle(day.date == today ? Theme.Palette.accent : Theme.Palette.text)
                 .accessibilityAddTraits(.isHeader)
             ForEach(day.items, id: \.videoId) { item in
-                NavigationLink(value: TitleRoute(kind: "series", id: item.itemId, name: item.name, season: item.season)) {
+                NavigationLink(value: TitleRoute(kind: "series", id: item.itemId, name: item.name, season: item.season, videoId: item.videoId)) {
                     CalendarRow(item: item)
                 }
                 .buttonStyle(.row)

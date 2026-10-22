@@ -33,6 +33,11 @@ struct TitleScreen: View {
     @State private var startFailure: EpisodeFailure?
     /// MORE: the whole synopsis in a sheet (iOS and macOS).
     @State private var reading = false
+    /// The episodes panel beside the info (Mac, iPad) and the Episodes page (iPhone).
+    @State private var panelOpen = false
+    @State private var showEpisodes = false
+    /// A Calendar link opens the episodes once.
+    @State private var openedFromLink = false
     @Environment(\.linkRequests) private var links
     @Environment(\.openTab) private var openTab
 
@@ -125,14 +130,29 @@ struct TitleScreen: View {
                         StateLine(symbol: "triangle-alert", text: failure)
                     }
                 }
+                // Beside the open panel the note keeps to the hero's column.
+                .frame(maxWidth: panelOpen && !panelCovers ? WideLayout.panelColumnWidth(window: width) : .infinity, alignment: .leading)
                 .padding(.horizontal, metrics.wide ? metrics.gutter : 20)
-                lower
+                v3Lower
             }
             .padding(.bottom, Theme.Space.xl)
+            // Under the panel's scrim the page is out of reach (it covers the info below about 1020).
+            .accessibilityHidden(panelCovers)
         }
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)
         .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > 8 } action: { underBar = $1 }
+        #if DEBUG
+        .defaultScrollAnchor(DebugHooks.scrollBottom ? .bottom : nil)
+        #endif
+        .overlay(alignment: .topTrailing) { panelOverlay }
+        .navigationDestination(isPresented: $showEpisodes) { episodesPage }
+        // A Calendar link names a season: the episodes open on it once the title loads.
+        .onChange(of: model.header?.details != nil, initial: true) { _, loaded in
+            guard loaded, !openedFromLink, model.route.season != nil else { return }
+            openedFromLink = true
+            openEpisodes()
+        }
         .sheet(isPresented: $reading) {
             SynopsisSheet(title: details?.name ?? model.route.name, text: details?.description ?? "")
         }
@@ -150,14 +170,15 @@ struct TitleScreen: View {
             let facts = TitleHeroFacts(details)
             Group {
                 if metrics.wide {
-                    TitleHeroWide(facts: facts, open: openLink, more: { reading = true }) { wideActions(details) }
+                    TitleHeroWide(facts: facts, columnWidth: panelOpen && !panelCovers ? WideLayout.panelColumnWidth(window: width) : 900,
+                                  open: openLink, more: { reading = true }) { wideActions(details) }
                 } else {
                     TitleHeroPhone(facts: facts) { phoneButtons() } secondaries: { phoneSecondaries(details) }
                 }
             }
             .heroFrame(height: v3HeroHeight, alignment: metrics.wide ? .bottomLeading : .bottom) { EmptyView() }
             .overlay(alignment: .bottomTrailing) {
-                if metrics.wide, WideLayout.starringFits(window: width), !facts.cast.isEmpty {
+                if metrics.wide, !panelOpen, WideLayout.starringFits(window: width), !facts.cast.isEmpty {
                     HeroStarring(cast: facts.cast)
                         .padding(.trailing, metrics.gutter)
                         .padding(.bottom, HeroLayout.foot)
@@ -182,6 +203,102 @@ struct TitleScreen: View {
                 .foregroundStyle(Theme.Palette.muted)
                 .frame(maxWidth: .infinity, minHeight: v3HeroHeight)
         }
+    }
+
+    /// The page under the hero: the season shelf, Cast, then Information (the Mac's band, the
+    /// iPhone's list).
+    @ViewBuilder private var v3Lower: some View {
+        if let details {
+            let seasons = model.header?.seasons ?? []
+            VStack(alignment: .leading, spacing: Theme.Space.l) {
+                if !seasons.isEmpty {
+                    SeasonShelf(seasons: seasons, selected: model.header?.selectedSeason, episodes: model.episodes,
+                                minutes: minutes(details.runtime), select: model.selectSeason, actions: episodeActions)
+                        .padding(.leading, metrics.wide ? metrics.gutter : 20)
+                    episodeStatus.padding(.horizontal, metrics.wide ? metrics.gutter : 20)
+                }
+                if !details.cast.isEmpty {
+                    CastShelf(cast: details.cast).padding(.horizontal, metrics.wide ? metrics.gutter : 20)
+                }
+                let rows = informationRows(genres: details.genres, runtime: details.runtime, seasons: seasons,
+                                           selectedSeason: model.header?.selectedSeason, episodes: model.episodes.count)
+                if metrics.wide {
+                    InfoBand(synopsis: details.description, genres: details.genres, rows: rows)
+                } else {
+                    InfoList(genres: Array(details.genres.prefix(3)), directors: details.directors, rows: rows, open: openLink)
+                        .padding(.horizontal, 20)
+                }
+            }
+        }
+    }
+
+    /// An episode whose version is being found, or why it could not start, with the way forward.
+    @ViewBuilder private var episodeStatus: some View {
+        if let failure = startFailure {
+            StateLine(symbol: "circle-alert", text: failure.text,
+                      action: failure.noVersion ? ("Add a source", { showAddons = true })
+                          : ("Choose a version", { if let episode = model.episodes.first(where: { $0.videoId == failure.videoId }) { chooseVersion(episode) } }),
+                      primary: false)
+        } else if starting != nil {
+            Label("Finding a version", glyph: "clock")
+                .textFont(Theme.type.callout, relativeTo: .callout)
+                .foregroundStyle(Theme.Palette.muted)
+        }
+    }
+
+    private var episodeActions: EpisodeActionsSet {
+        EpisodeActionsSet(
+            play: { episode in Task { await play(episode) } }, chooseVersion: chooseVersion,
+            setWatched: { model.setWatched($0, $1); sync.schedule() }, allEpisodes: openEpisodes)
+    }
+
+    private func openEpisodes() {
+        if metrics.wide { panelOpen = true } else { showEpisodes = true }
+    }
+
+    /// The panel covers the info on a narrow window: the page dims and goes inert (WideLayout).
+    private var panelCovers: Bool { metrics.wide && panelOpen && WideLayout.panelCoversInfo(window: width) }
+
+    /// The Mac's and iPad's panel, pinned under the header 40 from the right, as tall as the window
+    /// less 48, over a scrim only when it covers the info.
+    @ViewBuilder private var panelOverlay: some View {
+        if metrics.wide, panelOpen {
+            ZStack(alignment: .topTrailing) {
+                if panelCovers {
+                    Color.black.opacity(0.5)
+                        .contentShape(Rectangle())
+                        .onTapGesture { panelOpen = false }
+                        .accessibilityHidden(true)
+                }
+                episodePanel(close: { panelOpen = false })
+                    .padding(16)
+                    .frame(width: 420)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .padding(.vertical, 24)
+                    .padding(.trailing, 40)
+                    .accessibilityAddTraits(panelCovers ? .isModal : [])
+            }
+        }
+    }
+
+    /// The iPhone's Episodes page.
+    private var episodesPage: some View {
+        episodePanel(close: nil)
+            .padding(.horizontal, 20)
+            .padding(.top, Theme.Space.s)
+            .background(Theme.Palette.bg)
+            .navigationTitle("Episodes")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.large)
+            #endif
+    }
+
+    private func episodePanel(close: (() -> Void)?) -> some View {
+        EpisodePanel(
+            seasons: model.header?.seasons ?? [], selected: model.header?.selectedSeason, episodes: model.episodes,
+            minutes: minutes(details?.runtime), select: model.selectSeason, actions: episodeActions,
+            scrollTo: model.route.videoId, close: close)
     }
 
     /// The Mac's action row: the primary, Trailer, the Library and Watched capsule, Versions.
@@ -555,6 +672,7 @@ struct TitleScreen: View {
         #endif
     }
 
+    #if os(tvOS)
     @ViewBuilder private var lower: some View {
         if let details {
             let series = !(model.header?.seasons.isEmpty ?? true)
@@ -591,6 +709,7 @@ struct TitleScreen: View {
             addSource: { showAddons = true },
             setWatched: { model.setWatched($0, $1); sync.schedule() })
     }
+    #endif
 }
 
 /// Three lines and More; the whole text once opened.

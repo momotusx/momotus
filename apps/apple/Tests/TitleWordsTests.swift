@@ -116,3 +116,38 @@ import Testing
     #expect(!startOverAvailable(resume: 600_000, shown: false, covered: false))
     #expect(!startOverAvailable(resume: 600_000, shown: true, covered: true))
 }
+
+private func ep(_ number: Int, _ title: String, released: String? = "2022-02-18", watched: Bool = false, progress: Double? = nil, leftMs: Int64? = nil) -> Episode {
+    Episode(videoId: "tt5875444:6:\(number)", season: 6, episode: number, title: title, overview: nil, thumbnail: nil,
+            released: released, watched: watched, progress: progress, leftMs: leftMs)
+}
+
+@Test func anEpisodesCaptionKeepsTheTVPagesWords() {
+    let en = Locale(identifier: "en_US")
+    let now = Date(timeIntervalSince1970: 1_761_000_000)  // 2025-10-20
+    #expect(episodeCaption(ep(1, "Bad Dates", released: "2026-03-03"), minutes: 46, now: now, locale: en) == "Airs Mar 3")
+    #expect(episodeCaption(ep(2, "Dead Weight", leftMs: 31 * 60_000), minutes: 46, now: now, locale: en) == "31 min left \u{B7} Feb 18, 2022")
+    // No time left from the core: the progress against the title's runtime.
+    #expect(episodeCaption(ep(3, "Hard Lines", progress: 0.5), minutes: 46, now: now, locale: en) == "23 min left \u{B7} Feb 18, 2022")
+    #expect(episodeCaption(ep(4, "Last Stop"), minutes: 46, now: now, locale: en) == "46 min \u{B7} Feb 18, 2022")
+    // The card says Watched, as the frames draw it; the shared words do not change.
+    #expect(cardCaption(ep(5, "Close Calls", watched: true), minutes: 46, now: now, locale: en) == "Watched")
+    #expect(episodeCaption(ep(5, "Close Calls", watched: true), minutes: 46, now: now, locale: en) == "46 min \u{B7} Feb 18, 2022")
+}
+
+@Test func theEpisodeSearchMatchesANumberOrANameWithoutCase() {
+    let season = [ep(1, "Bad Dates"), ep(2, "Dead Weight"), ep(12, "Twelve")]
+    #expect(filterEpisodes(season, query: "").count == 3)
+    #expect(filterEpisodes(season, query: "2").map(\.episode) == [2])
+    #expect(filterEpisodes(season, query: "dead").map(\.episode) == [2])
+    #expect(filterEpisodes(season, query: " DATES ").map(\.episode) == [1])
+}
+
+@Test func informationCountsTheSelectedSeasonsEpisodes() {
+    let series = informationRows(genres: ["Drama", "Thriller"], runtime: "46 min", seasons: [0, 1, 2], selectedSeason: 2, episodes: 8)
+    #expect(series.map(\.key) == ["Genres", "Runtime", "Seasons", "Episodes"])
+    #expect(series.last?.value == "8 episodes in Season 2")
+    #expect(series[2].value == "2")
+    let movie = informationRows(genres: ["Drama"], runtime: "142 min", seasons: [], selectedSeason: nil, episodes: 0)
+    #expect(movie.map(\.key) == ["Genres", "Runtime"])
+}

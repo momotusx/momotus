@@ -193,6 +193,17 @@ private let spots = [
     Spot(name: "title, Mac, Starring 1240", page: "bgDesktop", layers: titleHero(width: 1240, height: Double(WideLayout.titleHeroHeight(width: 1240, height: 800)), end: 1200, top: 129), word: false, text: 0.64),
     Spot(name: "title, Mac, Starring 1440", page: "bgDesktop", layers: titleHero(width: 1440, height: 810, end: 1400, top: 129), word: false, text: 0.64),
     Spot(name: "title, TV", page: "bg", layers: titlePage(width: 1920, height: 640, end: 653, top: 134)),
+    // An episode card's words on its black legibility ramp over a white still, each line's top in
+    // points above the card's foot: 12 in, the caption (12/600, 15 tall, 2 above it), the overview
+    // (13 pt, 16 a line: two on the Mac, three on the iPhone), the name (15/600) and the tag (11 pt).
+    // The ramp covers the Mac card's lower 141 and the iPhone card's lower 170.
+    Spot(name: "card, Mac, tag", page: "bgDesktop", layers: [(false, BackdropStops.alpha(BackdropStops.cardRamp, at: 98.0 / 141))], word: false, text: 0.7),
+    Spot(name: "card, Mac, name", page: "bgDesktop", layers: [(false, BackdropStops.alpha(BackdropStops.cardRamp, at: 83.0 / 141))], word: false, text: 1),
+    Spot(name: "card, Mac, overview", page: "bgDesktop", layers: [(false, BackdropStops.alpha(BackdropStops.cardRamp, at: 63.0 / 141))], word: false, text: 0.7),
+    Spot(name: "card, Mac, caption", page: "bgDesktop", layers: [(false, BackdropStops.alpha(BackdropStops.cardRamp, at: 27.0 / 141))], word: false, text: 0.7),
+    Spot(name: "card, iPhone, tag", page: "bgPhone", layers: [(false, BackdropStops.alpha(BackdropStops.cardRamp, at: 122.0 / 170))], word: false, text: 0.7),
+    Spot(name: "card, iPhone, name", page: "bgPhone", layers: [(false, BackdropStops.alpha(BackdropStops.cardRamp, at: 107.0 / 170))], word: false, text: 1),
+    Spot(name: "card, iPhone, overview", page: "bgPhone", layers: [(false, BackdropStops.alpha(BackdropStops.cardRamp, at: 85.0 / 170))], word: false, text: 0.7),
 ]
 
 @Test(arguments: spots.map(\.name)) func aSecondaryOverWhiteArtKeepsItsLabel(_ name: String) {

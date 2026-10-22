@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Starring, direction and runtime: a glass table, keys dim on the left, values on the right. No
 /// addon's name: it shows on the Addons pages alone (design/DECISION.md, Shelves).
+#if os(tvOS)
 struct Credits: View {
     let details: TitleDetails
     let series: Bool
@@ -36,6 +37,8 @@ struct Credits: View {
         return rows
     }
 }
+
+#endif
 
 /// Years, up to three genres and the season count: the meta line after the scores.
 func metaParts(_ details: TitleDetails, seasons: [Int]) -> [String] {

@@ -14,6 +14,11 @@ enum BackdropStops {
     /// Home's full-bleed hero, wide (the frames' desktop ramps): the black wash along `washAngle`,
     /// and the page color from the foot up, where it reaches the page.
     static let heroSide = [Stop(at: 0, alpha: 0.74), Stop(at: 0.22, alpha: 0.56), Stop(at: 0.4, alpha: 0.24), Stop(at: 0.56, alpha: 0)]
+    /// An episode card's legibility ramp, black from the still's foot up over its lower part (141 pt on
+    /// the Mac, 170 on the iPhone): the card's words sit on it, the tag line about 70 percent up, where
+    /// 70 percent white needs .66 over white art (the glass check's card spots).
+    static let cardRamp = [Stop(at: 0, alpha: 0.82), Stop(at: 0.5, alpha: 0.76), Stop(at: 0.8, alpha: 0.7), Stop(at: 1, alpha: 0)]
+
     /// The title page's wash: deeper and wider than Home's, because its column carries more lines (the
     /// meta row, the chips, three of synopsis) up to about 360 pt above the foot; the glass check sets it.
     static let titleWash = [Stop(at: 0, alpha: 0.9), Stop(at: 0.32, alpha: 0.84), Stop(at: 0.45, alpha: 0.5), Stop(at: 0.62, alpha: 0)]

@@ -140,6 +140,58 @@ func removeFailedWords(name: String, reason: String) -> String {
 /// when its place went out of sight meanwhile (a player must never open in a
 /// hidden place, review apple-journey r3 P2-2); else play the pick, or Add a
 /// source with no version at all, or Versions while sources still answer.
+/// An episode's caption, the same words on every form: "Airs Oct 21" for one still to come, else
+/// "36 min left · Feb 18, 2022" (the core's time left, or the progress against `minutes`) or
+/// "57 min · Feb 18, 2022". The day is kept in UTC so it never slips (plans/design-v3-phase3-apple.md).
+func episodeCaption(_ episode: Episode, minutes: Int?, now: Date = .now, locale: Locale = .current) -> String {
+    let day = Date.FormatStyle(locale: locale, timeZone: TimeZone(identifier: "UTC") ?? .current)
+    let released = releaseDate(episode.released)
+    if let released, released > now {
+        return "Airs \(released.formatted(day.month(.abbreviated).day()))"
+    }
+    var parts: [String] = []
+    if let left = episode.leftMs, left > 0, !episode.watched {
+        parts.append(minutesLeft(ms: left))
+    } else if let minutes {
+        if let progress = episode.progress, !episode.watched {
+            parts.append("\(max(1, Int((Double(minutes) * (1 - progress)).rounded()))) min left")
+        } else {
+            parts.append("\(minutes) min")
+        }
+    }
+    if let released { parts.append(released.formatted(day.month(.abbreviated).day().year())) }
+    return parts.joined(separator: " \u{B7} ")
+}
+
+/// The v3 episode card's caption: "Watched" for a watched episode, as the frames draw it; the shared
+/// words otherwise. Card only, so the TV page's list keeps its words.
+func cardCaption(_ episode: Episode, minutes: Int?, now: Date = .now, locale: Locale = .current) -> String {
+    episode.watched ? "Watched" : episodeCaption(episode, minutes: minutes, now: now, locale: locale)
+}
+
+/// The panel's episode search: the loaded season by number ("3") or by name, without case. The core
+/// has no episode search (plans/design-v3-phase3-apple.md G3).
+func filterEpisodes(_ episodes: [Episode], query: String) -> [Episode] {
+    let text = query.trimmingCharacters(in: .whitespaces)
+    guard !text.isEmpty else { return episodes }
+    return episodes.filter { "\($0.episode)" == text || $0.title.range(of: text, options: .caseInsensitive) != nil }
+}
+
+/// The Information band's rows: Genres, Runtime, and for a series Seasons and the selected season's
+/// episodes, "8 episodes in Season 2" (the core sends one season's episodes at a time).
+func informationRows(genres: [String], runtime: String?, seasons: [Int], selectedSeason: Int?, episodes: Int) -> [(key: String, value: String)] {
+    var rows: [(key: String, value: String)] = []
+    if !genres.isEmpty { rows.append(("Genres", genres.prefix(3).joined(separator: ", "))) }
+    if let runtime { rows.append(("Runtime", runtime)) }
+    let regular = seasons.filter { $0 > 0 }.count
+    if regular > 0 { rows.append(("Seasons", "\(regular)")) }
+    if let season = selectedSeason, episodes > 0 {
+        let name = season == 0 ? "Specials" : "Season \(season)"
+        rows.append(("Episodes", "\(episodes) \(episodes == 1 ? "episode" : "episodes") in \(name)"))
+    }
+    return rows
+}
+
 /// Start Over in the Mac's Playback menu is live only for the title in front: it has a resume
 /// point, its place is shown and no player covers it (plans/design-v3-phase3-apple.md 2.1).
 func startOverAvailable(resume: Int64?, shown: Bool, covered: Bool) -> Bool {

@@ -4,13 +4,18 @@ import SwiftUI
 /// Test hooks for debug builds only, used to verify the app headless (a
 /// locked Mac, a simulator driven from a script).
 enum DebugHooks {
-    /// `-MQOpenTitle series:tt0903747` opens that title page at launch.
+    /// `-MQOpenTitle series:tt0903747` opens that title page at launch; `-MQOpenSeason 2` and
+    /// `-MQOpenEpisode tt0903747:2:3` open it as a Calendar link does, on that season and episode.
     static var openTitle: TitleRoute? {
         guard let value = UserDefaults.standard.string(forKey: "MQOpenTitle") else { return nil }
         let parts = value.split(separator: ":", maxSplits: 1).map(String.init)
         guard parts.count == 2 else { return nil }
-        return TitleRoute(kind: parts[0], id: parts[1], name: "")
+        let season = UserDefaults.standard.object(forKey: "MQOpenSeason") == nil ? nil : UserDefaults.standard.integer(forKey: "MQOpenSeason")
+        return TitleRoute(kind: parts[0], id: parts[1], name: "", season: season, videoId: UserDefaults.standard.string(forKey: "MQOpenEpisode"))
     }
+
+    /// `-MQScrollBottom YES`: the title page opens scrolled to its foot, for a walk's shot.
+    static var scrollBottom: Bool { UserDefaults.standard.bool(forKey: "MQScrollBottom") }
 
     /// `-MQTab discover` starts on that tab.
     static var tab: AppTab? { UserDefaults.standard.string(forKey: "MQTab").flatMap(AppTab.init(rawValue:)) }
