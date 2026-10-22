@@ -119,42 +119,6 @@ struct RowHeader: View {
     }
 }
 
-/// A catalog poster: the cover, which for an IMDb title is RPDB's with the ratings band drawn in (the addon's
-/// poster when RPDB has none). The iPhone's and tv.apple.com's shelves show the art alone; VoiceOver still says
-/// the name, the year and the scores. tvOS keeps its v2 tile (D9): the name and the year under the art.
-struct PosterTile: View {
-    let tile: Tile
-    @Environment(\.metrics) private var metrics
-
-    var body: some View {
-        content
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(posterLabel([tile.name, tile.releaseInfo], tile.ratings))
-    }
-
-    @ViewBuilder private var content: some View {
-        let art = ArtImage(url: tile.poster, fallbackURL: tile.posterFallback, fallback: tile.name).frame(width: size.width, height: size.height)
-        #if os(tvOS)
-        VStack(alignment: .leading, spacing: metrics.wide ? 10 : 6) {
-            art
-                .cardArt(radius: metrics.posterRadius)
-            CardCaption(name: tile.name, info: tile.releaseInfo).frame(width: size.width, alignment: .leading)
-        }
-        #else
-        art.cardArt(radius: metrics.posterRadius)
-        #endif
-    }
-
-    private var size: CGSize {
-        let height = metrics.poster.height
-        switch tile.posterShape {
-        case "landscape": return CGSize(width: height * 16 / 9, height: height)
-        case "square": return CGSize(width: height, height: height)
-        default: return metrics.poster
-        }
-    }
-}
-
 /// "S2:E3" from a Stremio video id like "tt0903747:2:3".
 func episodeLabel(_ videoId: String?) -> String? {
     guard let parts = videoId?.split(separator: ":"), parts.count == 3 else { return nil }

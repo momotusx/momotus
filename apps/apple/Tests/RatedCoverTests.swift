@@ -26,8 +26,8 @@ private func tile(_ poster: String?, fallback: String?) throws -> Tile {
     #expect(try tile(own, fallback: nil).plainPoster == own)
     let old = try JSONDecoder().decode(Tile.self, from: Data(#"{"id": "x", "kind": "movie", "name": "X", "poster": "p", "background": null, "logo": null, "posterShape": "poster", "releaseInfo": null, "progress": null, "videoId": null, "rating": null}"#.utf8))
     #expect(old.posterFallback == nil && old.plainPoster == "p")
-    // VoiceOver still reads the scores the band shows.
-    #expect(posterLabel([cover.name, cover.releaseInfo], cover.ratings) == "Inception, 2010, IMDb 8.8, Rotten Tomatoes 87 percent")
+    // VoiceOver reads the name, the year and IMDb's score.
+    #expect(posterLabel([cover.name, cover.releaseInfo], cover.ratings) == "Inception, 2010, IMDb 8.8")
 }
 
 @Test func theFallbackIsAskedOnlyWhenTheCoverFails() async {
@@ -62,7 +62,7 @@ private func tile(_ poster: String?, fallback: String?) throws -> Tile {
     // Read from the sources: the tiles are SwiftUI views over a live core.
     let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
     func read(_ path: String) throws -> String { try String(contentsOf: app.appending(path: path), encoding: .utf8) }
-    for path in ["Home/RowView.swift", "Common/Browse.swift"] {
+    for path in ["Home/PosterTile.swift", "Common/Browse.swift"] {
         let text = try read(path)
         #expect(text.contains("ArtImage(url: tile.poster, fallbackURL: tile.posterFallback, fallback: tile.name)"), "\(path)")
         #expect(!text.contains("RatingChip"), "\(path)")

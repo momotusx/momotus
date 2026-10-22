@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// "2011–2019 · Drama, Fantasy · 8 seasons · IMDb 9.2 · RT 89%": the year
-/// first, the parts joined by dots, then the ratings row. Lines break only
+/// "2011–2019 · Drama, Fantasy · 8 seasons · IMDb 9.2": the year
+/// first, the parts joined by dots, then the score. Lines break only
 /// between the parts. `imdbLink` makes IMDb's score open its page (never on TV).
 struct MetaLine: View {
     let ratings: [String]
@@ -25,7 +25,7 @@ struct MetaLine: View {
         }
         .textFont(size, weight: .semibold, relativeTo: .callout)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel((parts + ratings.map(spokenScore)).joined(separator: ", "))
+        .accessibilityLabel((parts + ratings).joined(separator: ", "))
         .accessibilityActions {
             if let link { Button("Open on IMDb") { openURL(link) } }
         }
@@ -60,7 +60,7 @@ struct MetaLine: View {
 }
 
 /// One score as the ratings row writes it (D10): the source's name at 70 percent and its value in
-/// white at 600, plain text with no star and no logo ("IMDb 8.4", "RT 98%", "RT Fresh").
+/// white at 600, plain text with no star and no logo ("IMDb 8.4").
 func ratingText(_ score: String) -> Text {
     let parts = score.split(separator: " ", maxSplits: 1).map(String.init)
     guard parts.count == 2 else { return Text(score).fontWeight(.semibold).foregroundStyle(.white) }

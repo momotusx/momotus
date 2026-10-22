@@ -17,7 +17,7 @@ private func details(_ overrides: [String: Any] = [:]) throws -> TitleDetails {
         "poster": NSNull(), "background": NSNull(), "logo": NSNull(), "releaseInfo": "Since 2022", "runtime": "46 min",
         "genres": ["Drama", "Thriller", "Crime"], "cast": ["Gary Oldman", "Jack Lowden", "Kristin Scott Thomas"],
         "directors": ["James Hawes", "Jeremy Lovering"], "rating": "8.4",
-        "ratings": ["imdb": "8.4", "rottenTomatoes": "Fresh"], "imdbUrl": "https://www.imdb.com/title/tt5875444/",
+        "ratings": ["imdb": "8.4", "rottenTomatoes": "87%"], "imdbUrl": "https://www.imdb.com/title/tt5875444/",
         "ratingsFrom": NSNull(), "source": "Cinemeta", "trailers": [],
     ]
     for (key, value) in overrides { json[key] = value }

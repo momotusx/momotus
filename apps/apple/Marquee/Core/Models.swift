@@ -21,7 +21,7 @@ struct Tile: Decodable, Hashable, Sendable {
     let videoId: String?
     /// The IMDb rating the addon gave, as written ("8.4").
     let rating: String?
-    /// The IMDb and Rotten Tomatoes scores to show side by side. Optional here
+    /// The scores the core gives (IMDb's is the one text shows). Optional here
     /// only so replies recorded before the field existed still decode.
     let ratings: Ratings?
 
@@ -35,35 +35,22 @@ struct Tile: Decodable, Hashable, Sendable {
     var playVideoId: String? { videoId ?? (kind == "movie" ? id : nil) }
 }
 
-/// A title's IMDb and Rotten Tomatoes scores, written as shown ("8.8", "87%",
-/// or "Fresh", the Rotten Tomatoes addon's mark); a score the core left null
-/// has no slot.
+/// A title's IMDb score, written as shown ("8.8"); null when nobody gave one. The core sends Rotten Tomatoes
+/// too, which shows only in the covers' band (RPDB's), never as text.
 struct Ratings: Decodable, Hashable, Sendable {
     let imdb: String?
-    let rottenTomatoes: String?
 }
 
-/// The scores side by side as plain text, the source first: "IMDb 8.8",
-/// "RT 87%". No IMDb or Rotten Tomatoes logos or icons, ever
-/// (plans/research/ratings.md).
+/// A title's score as plain text where text shows one (the hero, the title page, what VoiceOver says): IMDb's
+/// number alone, "IMDb 8.8", as Stremio shows it; the covers carry the rest in RPDB's band (the owner,
+/// 2026-10-23). No slot for a missing score, and no brand's logo (plans/research/ratings.md).
 func ratingParts(_ ratings: Ratings?) -> [String] {
-    [ratings?.imdb.map { "IMDb \($0)" }, ratings?.rottenTomatoes.map { "RT \($0)" }].compactMap { $0 }
+    [ratings?.imdb.map { "IMDb \($0)" }].compactMap { $0 }
 }
 
-/// What VoiceOver says for a score: "IMDb 8.8", "Rotten Tomatoes 87 percent",
-/// never "R T". The Rotten Tomatoes addon's mark is a word, not a number:
-/// "Rotten Tomatoes: Fresh".
-func spokenScore(_ score: String) -> String {
-    guard score.hasPrefix("RT ") else { return score }
-    let rt = score.dropFirst(3)
-    guard rt.wholeMatch(of: /\d+%/) != nil else { return "Rotten Tomatoes: \(rt)" }
-    return "Rotten Tomatoes " + rt.replacingOccurrences(of: "%", with: " percent")
-}
-
-/// What VoiceOver says for a poster: its name and caption, then the scores
-/// its chip shows ("Inception, 2010, IMDb 8.8, Rotten Tomatoes: Fresh").
+/// What VoiceOver says for a poster: its name and caption, then the score ("Inception, 2010, IMDb 8.8").
 func posterLabel(_ parts: [String?], _ ratings: Ratings?) -> String {
-    (parts.compactMap { $0 } + ratingParts(ratings).map(spokenScore)).joined(separator: ", ")
+    (parts.compactMap { $0 } + ratingParts(ratings)).joined(separator: ", ")
 }
 
 struct Hero: Decodable, Hashable, Sendable {

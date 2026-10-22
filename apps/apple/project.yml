@@ -192,6 +192,8 @@ targets:
       - path: Marquee/Theme/BackdropStops.swift
       # The hero box, laid out for real in Tests/HeroFrameTests.swift.
       - path: Marquee/Home/HeroFrame.swift
+      # A catalog tile, laid out for real in Tests/PosterRowTests.swift.
+      - path: Marquee/Home/PosterTile.swift
       # The title hero, laid out from plain values in Tests/TitleHeroTests.swift, with what it draws with.
       - path: Marquee/Home/HeroLayout.swift
       - path: Marquee/Home/HeroText.swift
