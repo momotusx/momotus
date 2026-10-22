@@ -284,6 +284,8 @@ struct OnboardingScreen: View {
             }
         }
         .defaultFocus($onSubtitles, true)
+        // A disabled Continue cannot take the focus: TV gives it once the list is in.
+        .onChange(of: languagesLoaded) { _, loaded in if loaded { onSubtitles = true } }
     }
 
     /// One language: its name, a line when it has one, a check when chosen.

@@ -26,6 +26,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -66,6 +67,7 @@ import app.marquee.core.session.CoreSession
 import app.marquee.design.FocusInk
 import app.marquee.design.Form
 import app.marquee.design.Icons
+import app.marquee.design.KeyPresses
 import app.marquee.design.LiveSpoken
 import app.marquee.design.MarkTile
 import app.marquee.design.Marquee
@@ -82,6 +84,7 @@ import app.marquee.design.Tokens
 import app.marquee.design.focusClickable
 import app.marquee.design.focusPalette
 import app.marquee.design.focusSelectable
+import app.marquee.design.focusSoon
 import app.marquee.design.marqueeFocus
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -306,6 +309,12 @@ internal fun SubtitleStepPage(
     val tv = Marquee.form == Form.Tv
     val go = remember { FocusRequester() }
     AutoFocus(go)
+    // A disabled Continue cannot take focus: on TV it is asked again once the list is in, unless a key has
+    // moved the focus since the page came.
+    val keys = remember { KeyPresses.count }
+    LaunchedEffect(step.loaded) {
+        if (tv && step.loaded && KeyPresses.count == keys) focusSoon(go, 60)
+    }
     var more by remember { mutableStateOf(false) }
     Column(
         Modifier

@@ -200,6 +200,24 @@ class SubtitleStepScreenTest {
     }
 
     @Test
+    @Config(qualifiers = "w960dp-h540dp-xhdpi")
+    fun `TV, a list that comes after 2 s still puts the focus on Continue`() {
+        holdList = true
+        val step = step("tr")
+        var done = 0
+        page(Form.Tv) { SubtitleStepPage(step) { done++ } }
+        compose.waitUntil(5_000) { heldList != null }
+        // Past the first focus request's frames: a disabled Continue could not take it.
+        compose.mainClock.advanceTimeBy(2_000)
+        heldList?.invoke()
+        compose.waitUntil(5_000) { step.loaded }
+        compose.waitUntil(5_000) { runCatching { compose.onNode(isFocused()).assert(hasText("Continue")) }.isSuccess }
+        compose.onNode(isFocused()).performClick()
+        compose.waitUntil(5_000) { done == 1 }
+        assertTrue(wrote("""["tr"]"""), "one press keeps the device's language: $sent")
+    }
+
+    @Test
     @Config(qualifiers = "w412dp-h915dp-xxhdpi")
     fun `Skip waits while Continue saves, so the step leaves once`() {
         holdSaves = true
