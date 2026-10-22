@@ -92,6 +92,20 @@ struct AddonsSnapshot: Decodable, Hashable, Sendable {
     let fresh: Bool
 }
 
+extension AddonsSnapshot {
+    /// Settings' Addons row: "4 installed. 1 finds streams." Counts only: an addon's name shows on
+    /// the Addons pages alone (the owner, 2026-10-22; design/DECISION.md, Shelves).
+    var summary: String {
+        let finding = addons.filter { $0.enabled && $0.provides.contains("stream") }.count
+        let count = addons.count == 1 ? "1 installed." : "\(addons.count) installed."
+        switch finding {
+        case 0: return "\(count) None of them finds streams yet."
+        case 1: return "\(count) 1 finds streams."
+        default: return "\(count) \(finding) find streams."
+        }
+    }
+}
+
 struct AddonInfo: Decodable, Hashable, Sendable, Identifiable {
     /// The key for commands. May hold API keys: never show or log it.
     let url: String

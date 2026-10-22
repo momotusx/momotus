@@ -73,19 +73,33 @@ private func row(_ state: RowState, _ tiles: String...) -> HomeRow {
     #expect(lane("cinemeta/movie/top", .failed(reason: "timed out")).stateWords == "This row did not load.")
 }
 
-@Test func homeSearchAndDiscoverNeverReadAnAddonsName() throws {
-    // The rows, the hero, Search's groups and Discover's catalog chips never read `source`; only the
-    // Addons pages and Settings > Home rows do (design/DECISION.md, Shelves).
+@Test func homeSearchDiscoverAndTheTitleNeverReadAnAddonsName() throws {
+    // The rows, the hero, Search's groups, Discover's catalog chips and the title page never read
+    // `source` or the ratings' credit (`ratingsFrom`, which names addons); only the Addons pages and
+    // Settings > Home rows name an addon (design/DECISION.md, Shelves).
     let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
     var read = 0
-    for folder in ["Home", "Search", "Discover"] {
+    for folder in ["Home", "Search", "Discover", "Title"] {
         for name in try FileManager.default.contentsOfDirectory(atPath: app.appending(path: folder).path) where name.hasSuffix(".swift") {
             let text = try String(contentsOf: app.appending(path: "\(folder)/\(name)"), encoding: .utf8)
-            #expect(text.range(of: #"\.source\b"#, options: .regularExpression) == nil, "\(folder)/\(name) reads an addon's name")
+            #expect(text.range(of: #"\.source\b|ratingsFrom"#, options: .regularExpression) == nil, "\(folder)/\(name) reads an addon's name")
             read += 1
         }
     }
-    #expect(read >= 8)
+    #expect(read >= 13)
+}
+
+@Test func settingsAddonsRowCountsAndNamesNoAddon() {
+    func addon(_ name: String, streams: Bool, enabled: Bool = true) -> AddonInfo {
+        AddonInfo(url: "https://\(name).example/manifest.json", host: "\(name).example", name: name, description: nil, logo: nil,
+                  version: "1.0.0", enabled: enabled, provides: streams ? ["stream"] : ["catalog"], types: ["movie"],
+                  configurable: false, configureUrl: nil, builtIn: nil)
+    }
+    let cinemeta = addon("Cinemeta", streams: false), torrentio = addon("Torrentio", streams: true)
+    #expect(AddonsSnapshot(addons: [cinemeta], fresh: false).summary == "1 installed. None of them finds streams yet.")
+    #expect(AddonsSnapshot(addons: [cinemeta, torrentio], fresh: false).summary == "2 installed. 1 finds streams.")
+    let more = [cinemeta, torrentio, addon("Comet", streams: true), addon("Off", streams: true, enabled: false)]
+    #expect(AddonsSnapshot(addons: more, fresh: false).summary == "4 installed. 2 find streams.")
 }
 
 @Test func oneFailedRowsTryAgainAsksForThatRowOnly() {

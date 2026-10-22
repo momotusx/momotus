@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Starring, direction, runtime and where the details came from: a glass
-/// table, keys dim on the left, values on the right.
+/// Starring, direction and runtime: a glass table, keys dim on the left, values on the right. No
+/// addon's name: it shows on the Addons pages alone (design/DECISION.md, Shelves).
 struct Credits: View {
     let details: TitleDetails
     let series: Bool
@@ -33,8 +33,6 @@ struct Credits: View {
         if !details.cast.isEmpty { rows.append(("Starring", details.cast.prefix(4).joined(separator: ", "))) }
         if !details.directors.isEmpty { rows.append(("Directed by", details.directors.joined(separator: ", "))) }
         if let runtime = details.runtime { rows.append(("Runtime", series ? "\(runtime) an episode" : runtime)) }
-        rows.append(("Details from", details.source))
-        if let from = details.ratingsFrom { rows.append(("Ratings from", from)) }
         return rows
     }
 }

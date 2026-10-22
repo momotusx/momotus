@@ -180,13 +180,8 @@ struct SettingsScreen: View {
                                  notes: sync.lastReport?.notes ?? [], at: sync.lastSynced)
     }
 
-    /// "4 installed. Streams from Torrentio, Sample Source."
-    private var addonsSummary: String {
-        guard let list = addons.snapshot?.addons else { return "Loading" }
-        let streams = list.filter { $0.enabled && $0.provides.contains("stream") }.map(\.name)
-        let count = list.count == 1 ? "1 installed." : "\(list.count) installed."
-        return streams.isEmpty ? "\(count) No stream source yet." : "\(count) Streams from \(streams.joined(separator: ", "))."
-    }
+    /// "4 installed. 1 finds streams."
+    private var addonsSummary: String { addons.snapshot?.summary ?? "Loading" }
 
     /// The quality, size and audio choices live on Stream choice; subtitles and Up next stay here.
     private func playback(_ p: Prefs) -> some View {
