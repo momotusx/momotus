@@ -44,35 +44,10 @@ struct HeroView: View {
             ZStack {
                 ArtImage(url: hero?.tile.background ?? hero?.tile.poster, maxPixels: ArtSize.backdrop)
                     .accessibilityHidden(true)
-                scrims
+                HeroScrims(wide: metrics.wide, page: Theme.Palette.bg)
             }
             .ignoresSafeArea(edges: metrics.wide ? [] : .top)
         }
-    }
-
-    /// The ramps (BackdropStops), so every word and secondary reads on any picture. Wide, bottom
-    /// first as the frames layer them: the vignette, the 80 degree wash, the foot into the page.
-    private var scrims: some View {
-        let bg = Theme.Palette.bg
-        return ZStack {
-            if metrics.wide {
-                GeometryReader { geo in
-                    ZStack {
-                        BackdropStops.vignetteGradient
-                        BackdropStops.wash(geo.size)
-                        LinearGradient(stops: BackdropStops.gradient(BackdropStops.heroFoot, bg), startPoint: .bottom, endPoint: .top)
-                    }
-                }
-            } else {
-                GeometryReader { geo in
-                    ZStack {
-                        LinearGradient(stops: BackdropStops.gradient(BackdropStops.heroPhoneTop, bg), startPoint: .top, endPoint: .bottom)
-                        BackdropStops.phoneFoot(geo.size, bg)
-                    }
-                }
-            }
-        }
-        .allowsHitTesting(false)
     }
 
     private func wide(_ hero: Hero) -> some View {
@@ -200,7 +175,7 @@ struct HeroView: View {
     private static let genre: CGFloat = 15
     private static let meta: CGFloat = 13
     private static let reasonSize: CGFloat = 13
-    private static let synopsisWidth: CGFloat = 560
+    private static let synopsisWidth = BackdropStops.heroSynopsisWidth
     private static let foot: CGFloat = 75
     #if os(macOS)
     // The desktop frames' 16 px icon in the 40 pt pill; the iPhone keeps its 18.

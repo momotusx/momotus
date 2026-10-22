@@ -21,9 +21,23 @@ enum BackdropStops {
     /// by the distance from `vignetteCenter` as a share of the box's own width and height.
     static let vignette = [Stop(at: 0.4, alpha: 0), Stop(at: 1, alpha: 0.28)]
     static let vignetteCenter = UnitPoint(x: 0.667, y: 0)
-    /// The Mac window's narrowest width: below it a secondary over art (Home's Details, the title
-    /// page's Start over) falls under 4.5:1 on white art; the glass check holds every spot here.
-    static let macMinWidth: CGFloat = 900
+    /// The Mac window's narrowest width, half of a 13 inch MacBook's screen so two windows tile; the
+    /// glass check reads every Mac spot here.
+    static let macMinWidth: CGFloat = 720
+    /// The desktop frames' hero, 1440 by 810. A smaller wide hero (a narrow Mac window, an iPad) lays
+    /// the wash and the foot out in this box from its own foot and leading edge, so every word and
+    /// button at the foot keeps the frame's darkness in points; tvOS keeps its own box (D9).
+    static let heroFrame = CGSize(width: 1440, height: 810)
+    static func rampBox(_ size: CGSize, held: Bool) -> CGSize {
+        held ? CGSize(width: max(size.width, heroFrame.width), height: max(size.height, heroFrame.height)) : size
+    }
+    /// The wide hero's synopsis column off TV, capped short of the frames' 560 so its first line ends
+    /// where the wash still holds it; the glass check reads its end.
+    static let heroSynopsisWidth: CGFloat = 480
+    /// The foot's stops in a `size` hero laid out in `box`.
+    static func heroFoot(_ size: CGSize, box: CGSize) -> [Stop] {
+        size.height > 0 ? held(heroFoot, scale: box.height / size.height) : heroFoot
+    }
     /// Home's hero on the phone (the frames' iPhone shade): from the foot up into the black page, and
     /// a light wash from the top so the status bar and the large title read on any art.
     static let heroPhoneFoot = [Stop(at: 0, alpha: 1), Stop(at: 0.09, alpha: 0.92), Stop(at: 0.2, alpha: 0.7), Stop(at: 0.33, alpha: 0.4), Stop(at: 0.46, alpha: 0.12), Stop(at: 0.56, alpha: 0)]
@@ -34,14 +48,25 @@ enum BackdropStops {
     static let heroPhoneHeight = 680.0
     static func heroPhoneFoot(height: Double) -> [Stop] {
         guard height > 0 else { return heroPhoneFoot }
-        let scale = heroPhoneHeight / height
-        let inside = heroPhoneFoot.filter { $0.at * scale < 1 }.map { Stop(at: $0.at * scale, alpha: $0.alpha) }
-        return inside.count == heroPhoneFoot.count ? inside : inside + [Stop(at: 1, alpha: alpha(heroPhoneFoot, at: 1 / scale))]
+        return held(heroPhoneFoot, scale: heroPhoneHeight / height)
+    }
+
+    /// Stops drawn `scale` times as far along their gradient, so they keep their place in points in
+    /// a box shorter by that much; the ramp's end is cut at the box's edge.
+    static func held(_ stops: [Stop], scale: Double) -> [Stop] {
+        let inside = stops.filter { $0.at * scale < 1 }.map { Stop(at: $0.at * scale, alpha: $0.alpha) }
+        return inside.count == stops.count ? inside : inside + [Stop(at: 1, alpha: alpha(stops, at: 1 / scale))]
     }
 
     /// Title page, wide: from the leading edge, and from the top down; on a phone only the second,
     /// darker at the top under the status bar.
     static let titleSide = [Stop(at: 0, alpha: 0.95), Stop(at: 0.42, alpha: 0.6), Stop(at: 0.75, alpha: 0)]
+    /// Below a 900 pt window the side ramp keeps that window's points, so Start over beside Resume
+    /// reads on a half-screen window as on a 900 pt one.
+    static let titleSideWidth = 900.0
+    static func titleSide(width: Double) -> [Stop] {
+        width > 0 ? held(titleSide, scale: max(1, titleSideWidth / width)) : titleSide
+    }
     /// Deepened in 1b (the glass check): Start over beside Resume read 3.0:1 on a 913 pt Mac window.
     static func titleFoot(wide: Bool) -> [Stop] {
         [Stop(at: 0, alpha: wide ? 0 : 0.6), Stop(at: 0.25, alpha: 0), Stop(at: 0.5, alpha: 0.62), Stop(at: 0.82, alpha: 0.88), Stop(at: 1, alpha: 1)]
@@ -82,10 +107,19 @@ enum BackdropStops {
         return alpha(vignette, at: (dx * dx + dy * dy).squareRoot())
     }
 
-    /// The wash and the vignette as HeroView draws them, so the glass check reads what is drawn.
-    static func wash(_ size: CGSize) -> LinearGradient {
-        let line = washLine(width: size.width, height: size.height)
-        return LinearGradient(stops: gradient(heroSide, .black), startPoint: line.start, endPoint: line.end)
+    /// Where a point of a `size` hero (from its top leading corner) falls along the wash laid out in `box`.
+    static func washT(x: Double, y: Double, size: CGSize, box: CGSize) -> Double {
+        washT(x: x, y: y + box.height - size.height, width: box.width, height: box.height)
+    }
+
+    /// The wash as HeroScrims draws it in a `size` hero, laid out in `box` from the foot and the
+    /// leading edge, so the glass check reads what is drawn.
+    static func wash(_ size: CGSize, box: CGSize) -> LinearGradient {
+        let line = washLine(width: box.width, height: box.height)
+        guard size.width > 0, size.height > 0 else { return LinearGradient(stops: gradient(heroSide, .black), startPoint: line.start, endPoint: line.end) }
+        let lift = box.height - size.height
+        func unit(_ p: UnitPoint) -> UnitPoint { UnitPoint(x: p.x * box.width / size.width, y: (p.y * box.height - lift) / size.height) }
+        return LinearGradient(stops: gradient(heroSide, .black), startPoint: unit(line.start), endPoint: unit(line.end))
     }
 
     /// The phone's foot ramp as HeroView draws it in a `size` box, in the page color.

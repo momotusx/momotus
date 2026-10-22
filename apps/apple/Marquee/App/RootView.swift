@@ -147,6 +147,10 @@ struct MainShell: View {
     /// The profile picker, from the avatar at the end of the pill.
     @State private var showProfiles = false
     #endif
+    #if os(macOS)
+    /// The window's width: the header's search field folds to its glyph on a half-screen window.
+    @State private var windowWidth = CGFloat.infinity
+    #endif
     #if os(tvOS)
     /// Places whose root page has another page over it: Back pops that first.
     @State private var covered: Set<AppTab> = []
@@ -264,7 +268,8 @@ struct MainShell: View {
         places
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Theme.Palette.bg)
-            .toolbar { NavToolbar(selection: tab, select: select, profiles: { showProfiles = true }) }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { windowWidth = $0 }
+            .toolbar { NavToolbar(selection: tab, select: select, profiles: { showProfiles = true }, narrow: windowWidth < NavToolbar.fieldWidthFrom) }
             // tv.apple.com's black header.
             .toolbarBackground(Theme.Palette.barDesktop, for: .windowToolbar)
             .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
@@ -536,23 +541,32 @@ private struct NavToolbar: ToolbarContent {
     let selection: AppTab
     let select: (AppTab) -> Void
     let profiles: () -> Void
+    /// A window too narrow for the 172 pt field beside the tabs: the field is its glyph alone.
+    var narrow = false
+    /// The narrowest window that holds the wordmark, the centered tabs, the whole field and the
+    /// profile, with a pushed page's back button too (measured: at 940 that button cuts the tabs and
+    /// the field, at 1000 they only just fit).
+    static let fieldWidthFrom: CGFloat = 1060
 
     var body: some ToolbarContent {
         if #available(macOS 26, *) {
             ToolbarItem(placement: .navigation) { mark }.sharedBackgroundVisibility(.hidden)
-            ToolbarItem(placement: .principal) { tabs }.sharedBackgroundVisibility(.hidden)
-            ToolbarItem(placement: .primaryAction) { tools }.sharedBackgroundVisibility(.hidden)
+            // New items when the width class flips: the toolbar keeps an item's first size otherwise, and
+            // the grown field then cuts the tabs.
+            ToolbarItem(id: "tabs-\(narrow)", placement: .principal) { tabs }.sharedBackgroundVisibility(.hidden)
+            ToolbarItem(id: "tools-\(narrow)", placement: .primaryAction) { tools }.sharedBackgroundVisibility(.hidden)
         } else {
             ToolbarItem(placement: .navigation) { mark }
-            ToolbarItem(placement: .principal) { tabs }
-            ToolbarItem(placement: .primaryAction) { tools }
+            ToolbarItem(id: "tabs-\(narrow)", placement: .principal) { tabs }
+            ToolbarItem(id: "tools-\(narrow)", placement: .primaryAction) { tools }
         }
     }
 
     private var mark: some View { Wordmark(size: 17) }
 
     private var tabs: some View {
-        HStack(spacing: 12) {
+        // Closer on a narrow window, so a pushed page's back button fits beside them.
+        HStack(spacing: narrow ? 2 : 12) {
             ForEach(AppTab.bar.filter { $0 != .search }, id: \.self) { item in
                 Button(item.title) { select(item) }
                     .buttonStyle(DesktopTabStyle(on: item == selection))
@@ -564,7 +578,7 @@ private struct NavToolbar: ToolbarContent {
     private var tools: some View {
         HStack(spacing: 16) {
             Button { select(.search) } label: { Label("Search", glyph: "search") }
-                .buttonStyle(SearchFieldStyle())
+                .buttonStyle(SearchFieldStyle(narrow: narrow))
                 .accessibilityAddTraits(selection == .search ? .isSelected : [])
             ProfileButton(size: 28, action: profiles)
         }
@@ -600,23 +614,28 @@ private struct DesktopTabStyle: ButtonStyle {
 }
 
 /// The header's search field (tv.apple.com, 172 by 28, a 1 pt white edge): a button that opens Search.
+/// Narrow, a 28 pt square with the glyph alone.
 private struct SearchFieldStyle: ButtonStyle {
+    var narrow = false
+
     func makeBody(configuration: Configuration) -> some View {
-        Field(configuration: configuration)
+        Field(configuration: configuration, narrow: narrow)
     }
 
     private struct Field: View {
         let configuration: ButtonStyleConfiguration
+        let narrow: Bool
         @KeyboardFocused private var focused
 
         var body: some View {
             let shape = RoundedRectangle(cornerRadius: 4, style: .continuous)
-            configuration.label
-                .labelStyle(PillLabelStyle())
+            Group {
+                if narrow { configuration.label.labelStyle(.iconOnly) } else { configuration.label.labelStyle(PillLabelStyle()) }
+            }
                 .textFont(15, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.dim)
-                .padding(.horizontal, 8)
-                .frame(width: 172, height: 28, alignment: .leading)
+                .padding(.horizontal, narrow ? 0 : 8)
+                .frame(width: narrow ? 28 : 172, height: 28, alignment: narrow ? .center : .leading)
                 .overlay(shape.strokeBorder(Theme.Palette.text, lineWidth: 1))
                 .contentShape(shape)
                 .modifier(FocusRing(shape: shape, active: focused))

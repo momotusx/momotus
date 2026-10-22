@@ -468,7 +468,9 @@ private struct Backdrop: View {
             .clipped()
             .overlay {
                 if wide {
-                    LinearGradient(stops: BackdropStops.gradient(BackdropStops.titleSide, bg), startPoint: .leading, endPoint: .trailing)
+                    GeometryReader { geo in
+                        LinearGradient(stops: BackdropStops.gradient(BackdropStops.titleSide(width: geo.size.width), bg), startPoint: .leading, endPoint: .trailing)
+                    }
                 }
                 LinearGradient(stops: BackdropStops.gradient(BackdropStops.titleFoot(wide: wide), bg), startPoint: .top, endPoint: .bottom)
             }
