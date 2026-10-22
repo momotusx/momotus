@@ -108,6 +108,7 @@ export function offSummary(languages: number, pending: boolean): { text: string;
 
 /** The core's words for a track that names the playing release's group. */
 export const FITS = "Same release group";
+export const MATCHES = "Matches this file";
 
 /** `text` cut to `max` characters in the middle, at a dot or a space, so a
  * release's start and its group at the end both stay in view. */
@@ -131,7 +132,11 @@ export function middle(text: string, max: number): string {
  * (the whole line when the rest leaves it under 24). */
 export function trackDetail(t: SubtitleTrack, max = 46): string[] {
   const source = t.name === t.source || t.name.startsWith(`${t.source} `) ? null : t.source;
-  const parts = [source, t.forced ? "Forced" : null, t.hearingImpaired ? "For the hard of hearing" : null, t.fits ? FITS : null].filter((p): p is string => !!p);
+  // A rate as written ("23.976", "25"), not the core's float (23.976000785827637).
+  const made = t.madeForFps ? `Made for ${Number(t.madeForFps.toFixed(3))} fps` : null;
+  const parts = [source, t.forced ? "Forced" : null, t.hearingImpaired ? "For the hard of hearing" : null, t.hashMatch ? MATCHES : null, t.fits ? FITS : null, made].filter(
+    (p): p is string => !!p,
+  );
   if (!t.release || t.release === t.name) return parts;
   const room = max - parts.join(" · ").length - 3;
   return [...parts, middle(t.release, room >= 24 ? room : max)];

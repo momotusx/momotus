@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
-import { bestOption, byLanguage, FITS, flagFile, matchesLanguage, middle, offSummary, optionCount, pickerLanguages, startOption, trackDetail } from "./subtitles";
+import { bestOption, byLanguage, FITS, flagFile, MATCHES, matchesLanguage, middle, offSummary, optionCount, pickerLanguages, startOption, trackDetail } from "./subtitles";
 
 const track = (language: string, languageName: string, name: string, more: Partial<SubtitleTrack> = {}): SubtitleTrack => ({
   url: `http://127.0.0.1/sub/${language}/${name}`,
@@ -156,6 +156,11 @@ test("the detail line: the source when the name does not say it, the kind, the m
   expect(trackDetail(track("en", "English", "CAKES, WEB 1080p", { fits: true, release }))).toEqual(["OpenSubtitles v3", FITS, release]);
   expect(trackDetail(track("en", "English", "CAKES, WEB 1080p", { fits: true, release }), 34)).toEqual(["OpenSubtitles v3", FITS, middle(release, 34)]);
   expect(middle(release, 34)).toBe("Slow.Horses…1080p.WEB.H264-CAKES");
+  // A hash match says so before the group; a file timed for another frame rate says which, as written.
+  expect(trackDetail(track("en", "English", "OpenSubtitles v3", { hashMatch: true, fits: true }))).toEqual([MATCHES, FITS]);
+  expect(MATCHES).toBe("Matches this file");
+  expect(trackDetail(track("en", "English", "OpenSubtitles v3", { madeForFps: 25 }))).toEqual(["Made for 25 fps"]);
+  expect(trackDetail(track("en", "English", "OpenSubtitles v3", { madeForFps: Math.fround(23.976) }))).toEqual(["Made for 23.976 fps"]);
   // The release that is the name itself is said once.
   expect(trackDetail(track("en", "English", release, { release }))).toEqual(["OpenSubtitles v3"]);
 });

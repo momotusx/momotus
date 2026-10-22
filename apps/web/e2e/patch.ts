@@ -8,7 +8,7 @@ import type { Browser, BrowserContextOptions, WebSocketRoute } from "@playwright
 import { PORTS } from "./core";
 
 // Snapshots are whatever the core sent.
-type Json = any;
+export type Json = any;
 
 export async function patchedContext(browser: Browser, port: number, options: BrowserContextOptions, patch: (view: string, snapshot: Json) => Json) {
   const context = await browser.newContext({ colorScheme: "dark", baseURL: `http://127.0.0.1:${PORTS.vite}`, ...options });
@@ -16,6 +16,8 @@ export async function patchedContext(browser: Browser, port: number, options: Br
   const asked = new Map<number, string>();
   const subs = new Map<number, { view: string; last: Json }>();
   let page: WebSocketRoute | null = null;
+  // The commands the page sent, with when they left it.
+  const commands: { at: number; command: Json }[] = [];
   await context.routeWebSocket(/\/ws$/, (ws) => {
     page = ws;
     const upstream = new WebSocket(`ws://127.0.0.1:${port}/ws`);
@@ -40,6 +42,7 @@ export async function patchedContext(browser: Browser, port: number, options: Br
     ws.onMessage((raw) => {
       const m = JSON.parse(String(raw));
       if (m.op === "subscribe") asked.set(m.id, m.view);
+      if (m.op === "command") commands.push({ at: Date.now(), command: m.command });
       if (upstream.readyState === WebSocket.OPEN) upstream.send(String(raw));
       else early.push(String(raw));
     });
@@ -49,5 +52,5 @@ export async function patchedContext(browser: Browser, port: number, options: Br
   const repush = (view: string) => {
     for (const [sub, s] of subs) if (s.view === view) page?.send(JSON.stringify({ sub, updates: [patch(view, structuredClone(s.last))] }));
   };
-  return { context, repush };
+  return { context, repush, commands };
 }

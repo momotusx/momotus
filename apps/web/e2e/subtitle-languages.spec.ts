@@ -13,7 +13,7 @@ import type { ChildProcess } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Client, cleanup, LANGS_PORT, PORTS, SHOTS, startBridge, startIfPaused } from "./core";
-import { patchedContext } from "./patch";
+import { type Json, patchedContext } from "./patch";
 import { BBB_ID, NAME, startSource } from "./source";
 
 let core: { proc: ChildProcess; data: string } | null = null;
@@ -184,9 +184,9 @@ test("while the core still asks, Subtitles counts what is in and marks the searc
 
 const VIEWPORTS = { tv: { width: 1920, height: 1080 }, desktop: { width: 1440, height: 900 }, phone: { width: 844, height: 390 } };
 /** A player on this spec's core at `form`'s size; `missingFlag` names a flag file that answers 404. */
-async function picker(browser: Browser, form: keyof typeof VIEWPORTS, missingFlag?: string) {
-  // The core's own fields reach the page as it sent them (a pass-through proxy to this spec's core).
-  const { context } = await patchedContext(browser, LANGS_PORT, { viewport: VIEWPORTS[form] }, (_view, snapshot) => snapshot);
+async function picker(browser: Browser, form: keyof typeof VIEWPORTS, missingFlag?: string, patch = (_view: string, snapshot: Json) => snapshot) {
+  // The core's own fields reach the page as it sent them (a pass-through proxy to this spec's core), unless `patch` says otherwise.
+  const { context, commands } = await patchedContext(browser, LANGS_PORT, { viewport: VIEWPORTS[form] }, patch);
   // The image alone: the dev server also serves the flag's URL as a script the page imports.
   if (missingFlag) await context.route(new RegExp(`/flags/${missingFlag}\\.svg`), (r) => (r.request().resourceType() === "image" ? r.fulfill({ status: 404 }) : r.continue()));
   const page = await context.newPage();
@@ -199,8 +199,10 @@ async function picker(browser: Browser, form: keyof typeof VIEWPORTS, missingFla
     if (v) v.muted = true;
   });
   await startIfPaused(page);
-  return { context, page, errors, panel: page.locator('aside[aria-label="Subtitles"]') };
+  return { context, page, errors, commands, panel: page.locator('aside[aria-label="Subtitles"]') };
 }
+/** The subtitle delays the page sent the core. */
+const delaysSent = (commands: { command: Json }[]) => commands.filter((c) => c.command.type === "subtitleDelay").map((c) => c.command);
 const focusedKey = (page: Page) => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? "");
 
 test("the picker lists languages first, in the core's order, with flags and counts", async ({ browser }) => {
@@ -276,7 +278,7 @@ test("the search field matches English names, own names and codes", async ({ bro
 });
 
 test("a language opens its options: names, the quiet detail, the fit, the chosen one checked", async ({ browser }) => {
-  const { context, page, errors, panel } = await picker(browser, "desktop");
+  const { context, page, errors, commands, panel } = await picker(browser, "desktop");
   await page.locator('[data-f="player:subs"]').dispatchEvent("click");
   await panel.locator('[data-f="subopen:en"]').dispatchEvent("click");
   const opts = panel.locator(".subp-opts");
@@ -328,6 +330,10 @@ test("a language opens its options: names, the quiet detail, the fit, the chosen
   await reopen();
   await expect(opts.locator(".opt.on b")).toHaveText(/^OPENFILM, WEB\b/);
   await expect(timing).toHaveText("+0.1 s");
+  // Reset: the core forgets it too, so the next tests start at 0.
+  await opts.locator('[data-f="sub:reset"]').dispatchEvent("click");
+  await expect(timing).toHaveText("0.0 s");
+  await expect.poll(() => delaysSent(commands).at(-1)?.ms).toBe(0);
   // Back to the languages, by the link and by the key.
   await opts.locator('[data-f="sub:languages"]').dispatchEvent("click");
   await expect(panel.locator('[data-f="sub:off"]')).toBeVisible();
@@ -428,5 +434,104 @@ test("phone: a full-height sheet with Done, a language's options a level down", 
   await panel.locator('[data-f="sub:done"]').dispatchEvent("click");
   await expect(panel).toHaveCount(0);
   expect(errors).toEqual([]);
+  await context.close();
+});
+
+test("the core's marks show in the detail line; timing goes to the core once it settles and on close, and the next play starts there", async ({ browser }) => {
+  // OPENFILM as a hash match, Many Subs as made for 25 fps (the e2e film's 12 fps is no rate the core places).
+  const mark = (view: string, s: Json) => {
+    if (view !== "playback") return s;
+    for (const t of s?.subtitles ?? []) {
+      if (t.language === "en" && t.release === PLAYING) t.hashMatch = true;
+      else if (t.language === "en") t.madeForFps = 25;
+    }
+    return s;
+  };
+  const { context, page, errors, commands, panel } = await picker(browser, "desktop", undefined, mark);
+  const opts = panel.locator(".subp-opts");
+  const openEnglish = async () => {
+    await page.locator('[data-f="player:subs"]').dispatchEvent("click");
+    await panel.locator('[data-f="subopen:en"]').dispatchEvent("click");
+  };
+  await openEnglish();
+  const fitting = opts.locator(".opt").first();
+  await expect(fitting.locator(".fit")).toHaveText(["Matches this file", "Same release group"]);
+  await expect(opts.locator(".opt").nth(1).locator(".part")).toContainText(["Made for 25 fps"]);
+  await expect(opts.locator(".opt").nth(1).locator(".fit")).toHaveCount(0);
+  if (!(await fitting.getAttribute("class"))?.includes("on")) {
+    await fitting.dispatchEvent("click");
+    await openEnglish();
+  }
+  const url = (await fitting.getAttribute("data-f"))?.replace(/^sub:/, "");
+  const timing = opts.locator(".sub-val");
+  await expect(timing).toHaveText("0.0 s");
+  const before = delaysSent(commands).length;
+  // Three presses: one delay goes, 700 ms after the last.
+  const later = opts.locator('[data-f="sub:later"]');
+  for (let i = 0; i < 3; i++) await later.dispatchEvent("click");
+  const pressed = Date.now();
+  await expect(timing).toHaveText("+0.3 s");
+  await page.waitForTimeout(400);
+  expect(delaysSent(commands).length).toBe(before);
+  await expect.poll(() => delaysSent(commands).slice(before)).toEqual([{ type: "subtitleDelay", url, ms: 300 }]);
+  expect((commands.filter((c) => c.command.type === "subtitleDelay").at(-1)?.at ?? 0) - pressed).toBeGreaterThanOrEqual(600);
+  // The next play of this version starts the track there, and its cues with it.
+  await page.goto(`/play/movie/${BBB_ID}/${BBB_ID}?form=desktop`);
+  await expect(page.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
+  await page.evaluate(() => {
+    const v = document.querySelector("video");
+    if (v) v.muted = true;
+  });
+  await startIfPaused(page);
+  await expect(page.locator('[data-f="player:subs"] small')).toHaveText("English", { timeout: 30_000 });
+  const cue = () => page.evaluate(() => {
+    const c = document.querySelector("video")?.textTracks[0]?.cues?.[0];
+    return c ? [c.startTime, c.endTime] : null;
+  });
+  await expect.poll(cue, { timeout: 30_000 }).toEqual([1.3, 30.3]);
+  await openEnglish();
+  await expect(timing).toHaveText("+0.3 s");
+  // The track's URL is this play's.
+  const first = (await fitting.getAttribute("data-f"))?.replace(/^sub:/, "");
+  expect(first).not.toBe(url);
+  const other = opts.locator(".opt").nth(1);
+  const second = (await other.getAttribute("data-f"))?.replace(/^sub:/, "");
+  // A change still waiting on one track goes the moment another track's changes; that other
+  // track starts at its own 0.
+  const sent = delaysSent(commands).length;
+  await later.dispatchEvent("click");
+  await expect(timing).toHaveText("+0.4 s");
+  await other.dispatchEvent("click");
+  await openEnglish();
+  await expect(timing).toHaveText("0.0 s");
+  await later.dispatchEvent("click");
+  await expect(timing).toHaveText("+0.1 s");
+  const last = Date.now();
+  expect(delaysSent(commands).slice(sent)).toEqual([{ type: "subtitleDelay", url: first, ms: 400 }]);
+  // One that has not settled goes when the play closes.
+  await page.locator('[data-f="player:leave"]').dispatchEvent("click");
+  await expect(page.locator('[data-f="player:toggle"]')).toHaveCount(0);
+  await expect.poll(() => delaysSent(commands).slice(sent)).toEqual([
+    { type: "subtitleDelay", url: first, ms: 400 },
+    { type: "subtitleDelay", url: second, ms: 100 },
+  ]);
+  expect((commands.filter((c) => c.command.type === "subtitleDelay").at(-1)?.at ?? 0) - last).toBeLessThan(600);
+  // The core keeps one track's delay per title, the last one set: on the next play OPENFILM
+  // starts at 0 and Many Subs there. Then back to 0 for the core, so a rerun starts clean.
+  await page.goto(`/play/movie/${BBB_ID}/${BBB_ID}?form=desktop`);
+  await expect(page.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('[data-f="player:subs"] small')).toHaveText("English", { timeout: 30_000 });
+  await openEnglish();
+  await expect(opts.locator(".opt.on b")).toHaveText(/^OPENFILM, WEB\b/);
+  await expect(timing).toHaveText("0.0 s");
+  await other.dispatchEvent("click");
+  await openEnglish();
+  await expect(timing).toHaveText("+0.1 s");
+  await opts.locator('[data-f="sub:reset"]').dispatchEvent("click");
+  await expect.poll(() => delaysSent(commands).at(-1)?.ms).toBe(0);
+  await fitting.dispatchEvent("click");
+  // Leaving the player pauses the video after its view closed, and that pause's progress report
+  // comes back "no subscription" (the player's report, not the delay): only those are allowed.
+  expect(errors.filter((e) => !/^no subscription \d+$/.test(e))).toEqual([]);
   await context.close();
 });

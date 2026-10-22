@@ -38,6 +38,7 @@ import { SubtitlePicker } from "../player/subtitle-picker";
 import { createVideoEngine } from "../player/video-engine";
 import { loadedSource, type Retry, sourceStart, TRYING_AGAIN_MS, tryingAgain } from "../lib/failover";
 import { bytes, clock, decoded, startsText, episodeLabel, groupFailures, playPath, playState, seasonName, titlePath, versionsPath } from "../lib/format";
+import { DELAY_SETTLE_MS } from "../lib/delay";
 import { bufferShare, loadingLines, STALL_AHEAD_S, startFill } from "../lib/loading";
 import { offSummary, pickerLanguages, startOption } from "../lib/subtitles";
 import { blockedWords, languageName, nextVersion, noVersionWords, qualityCell, qualityText, restartLine, subtitleNote } from "../lib/words";
@@ -258,10 +259,33 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     onSubtitleError: (lang) => setSubError(`Could not load ${languageName(lang)} subtitles from the core`),
   });
   const { time, duration, paused, buffered, started, waiting, rate } = engine;
-  // Subtitle timing per track, for this play only (the size is the profile's, synced).
+  // Subtitle timing per track (the size is the profile's, synced): a core
+  // track starts at the delay the core keeps for it (`delayMs`), and a change
+  // goes back to the core once the stepper settles and when the play closes.
   const [delays, setDelays] = createSignal<Record<string, number>>({});
-  const subDelay = () => delays()[track()?.url ?? ""] ?? 0;
+  const subDelay = () => {
+    const url = track()?.url;
+    if (!url) return 0;
+    return delays()[url] ?? (snap()?.subtitles.find((t) => t.url === url)?.delayMs ?? 0) / 1000;
+  };
   createEffect(() => engine.setSubtitleDelay(subDelay()));
+  let unsent: { url: string; ms: number } | null = null;
+  let settle: ReturnType<typeof setTimeout> | undefined;
+  const sendDelay = () => {
+    clearTimeout(settle);
+    if (unsent) void playback()?.command({ type: "subtitleDelay", ...unsent });
+    unsent = null;
+  };
+  const setSubDelay = (sec: number) => {
+    const url = untrack(track)?.url;
+    if (!url) return;
+    // Another track's change still waiting goes first.
+    if (unsent && unsent.url !== url) sendDelay();
+    setDelays({ ...delays(), [url]: sec });
+    unsent = { url, ms: Math.round(sec * 1000) };
+    clearTimeout(settle);
+    settle = setTimeout(sendDelay, DELAY_SETTLE_MS);
+  };
   // A desktop has no volume keys of its own here: a mute button and a level,
   // and full screen (with Back in the header on a desktop and a phone). The
   // level and mute carry on to the next episode (`sound`); full screen stays
@@ -432,6 +456,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       clearTimeout(hideTimer);
       window.removeEventListener("keydown", onKey, { capture: true });
       report();
+      sendDelay();
       engine.stop();
     });
   });
@@ -1173,7 +1198,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
           notes={(snap()?.subtitleNotes ?? []).map(subtitleNote)}
           open={subLanguage()}
           setOpen={setSubLanguage}
-          timing={track() ? { value: subDelay(), set: (sec) => setDelays({ ...delays(), [track()?.url ?? ""]: sec }) } : null}
+          timing={track() ? { value: subDelay(), set: setSubDelay } : null}
           size={{
             text: SIZES[sizeAt()]?.text ?? "100%",
             less: sizeAt() > 0 ? () => setSize(sizeAt() - 1) : undefined,

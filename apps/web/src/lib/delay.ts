@@ -8,6 +8,8 @@ export const DELAY_STEP = 0.1;
 export const MAX_DELAY = 60;
 export const FIRST_REPEAT_MS = 250;
 export const REPEAT_MS = 100;
+/** How long the stepper rests before its value goes to the core (plans/core-protocol.md `subtitleDelay`). */
+export const DELAY_SETTLE_MS = 700;
 
 /** What one repeat moves after `heldMs` of holding: 0.3 s a tick in the first
  * second, 0.4 and 0.5 in the next two, 0.6 from the third on. */

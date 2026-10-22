@@ -16,7 +16,7 @@ import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from
 import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
 import { autoFocusSoon } from "../focus/dom";
 import { form } from "../form";
-import { bestOption, FITS, matchesLanguage, optionCount, pickerLanguages, type PickerLanguage, trackDetail } from "../lib/subtitles";
+import { bestOption, FITS, MATCHES, matchesLanguage, optionCount, pickerLanguages, type PickerLanguage, trackDetail } from "../lib/subtitles";
 import { languageName } from "../lib/words";
 import type { Track } from "./engine";
 import { DelayStepper } from "./delay-stepper";
@@ -288,7 +288,7 @@ export function SubtitlePicker(props: {
                                     <Show when={i()}>
                                       <span class="sep">· </span>
                                     </Show>
-                                    <span classList={{ fit: p === FITS, rel: release() && i() === parts().length - 1 }} title={release() && i() === parts().length - 1 ? (t().release ?? undefined) : undefined}>
+                                    <span classList={{ fit: p === FITS || p === MATCHES, rel: release() && i() === parts().length - 1 }} title={release() && i() === parts().length - 1 ? (t().release ?? undefined) : undefined}>
                                       {p}
                                     </span>
                                   </span>
