@@ -9,6 +9,15 @@ use tokio::net::TcpListener;
 
 /// A search addon answering every query with `ids`; counts its requests.
 async fn search_addon(id: &str, ids: &'static [&'static str]) -> (AddonRow, Arc<AtomicUsize>) {
+    slow_search_addon(id, ids, Duration::ZERO).await
+}
+
+/// `search_addon` answering after `delay`.
+async fn slow_search_addon(
+    id: &str,
+    ids: &'static [&'static str],
+    delay: Duration,
+) -> (AddonRow, Arc<AtomicUsize>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let hits = Arc::new(AtomicUsize::new(0));
@@ -19,6 +28,7 @@ async fn search_addon(id: &str, ids: &'static [&'static str]) -> (AddonRow, Arc<
             tokio::spawn(async move {
                 let mut buf = [0u8; 2048];
                 let _ = socket.read(&mut buf).await;
+                tokio::time::sleep(delay).await;
                 let metas: Vec<_> = ids
                     .iter()
                     .map(|id| serde_json::json!({"id": id, "type": "movie", "name": id}))
@@ -84,7 +94,8 @@ async fn debounces_dedupes_and_drops_empty_rows() {
         .iter()
         .map(|r| r.tiles.iter().map(|t| t.id.as_str()).collect())
         .collect();
-    assert_eq!(ids, vec![vec!["tt1", "tt2"], vec!["tt3"]]);
+    // Three "Movies" catalogs are one group, in addon order, each title once.
+    assert_eq!(ids, vec![vec!["tt1", "tt2", "tt3"]]);
     assert_eq!(s.rows[0].title, "Movies");
 
     view.remember().unwrap();
@@ -108,8 +119,8 @@ async fn debounces_dedupes_and_drops_empty_rows() {
     assert_eq!(first.as_deref(), Some("tt2"));
 }
 
-/// An open search runs again when a search addon is installed, so its row
-/// appears without retyping.
+/// An open search runs again when a search addon is installed, so its
+/// results appear without retyping (in the one "Movies" group).
 #[tokio::test]
 async fn an_open_search_picks_up_a_new_addon() {
     let core = Core::temporary("p").unwrap();
@@ -120,29 +131,35 @@ async fn an_open_search_picks_up_a_new_addon() {
         .unwrap();
     let view = SearchView::open(&core);
     view.set_query("sintel");
-    let rows = |n: usize| {
+    let rows = |want: &[&str]| {
         let s = view.snapshot();
-        s.rows.len() == n && s.rows.iter().all(|r| r.state == RowState::Ready)
+        s.rows.len() == 1
+            && s.rows[0].state == RowState::Ready
+            && s.rows[0]
+                .tiles
+                .iter()
+                .map(|t| t.id.as_str())
+                .eq(want.iter().copied())
     };
     for _ in 0..300 {
-        if rows(1) {
+        if rows(&["tt1"]) {
             break;
         }
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
-    assert!(rows(1), "{:?}", view.snapshot());
+    assert!(rows(&["tt1"]), "{:?}", view.snapshot());
     let mut b = b;
     b.position = 1;
     core.library()
         .set_addons(core.profile(), &[a, b], &core.hlc())
         .unwrap();
     for _ in 0..300 {
-        if rows(2) {
+        if rows(&["tt1", "tt2"]) {
             break;
         }
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
-    assert!(rows(2), "{:?}", view.snapshot());
+    assert!(rows(&["tt1", "tt2"]), "{:?}", view.snapshot());
     assert_eq!(view.snapshot().query, "sintel");
 }
 
@@ -531,4 +548,64 @@ async fn the_snapshot_says_whether_any_addon_can_search() {
     until(&view, |s| s.searchable == 1 && s.rows.is_empty()).await;
     view.set_query("");
     assert_eq!(view.snapshot().searchable, 1, "known before typing");
+}
+
+/// Two "Movies" groups never show (the owner, 2026-10-22): catalogs of one
+/// kind are one group in addon order, each title once. A later catalog that
+/// answers first waits for the earlier one, and one that answers later only
+/// adds at the end, so nothing on screen moves.
+#[tokio::test]
+async fn catalogs_of_one_kind_are_one_group_in_addon_order() {
+    let core = Core::temporary("p").unwrap();
+    let (slow, _) = slow_search_addon("slow", &["tt1", "tt2"], Duration::from_millis(600)).await;
+    let (fast, _) = search_addon("fast", &["tt2", "tt3"]).await;
+    let (late, _) = slow_search_addon("late", &["tt4"], Duration::from_millis(1200)).await;
+    let mut rows = vec![slow, fast, late];
+    for (i, r) in rows.iter_mut().enumerate() {
+        r.position = i as i64;
+    }
+    core.library()
+        .set_addons(core.profile(), &rows, &core.hlc())
+        .unwrap();
+    let view = SearchView::open(&core);
+    view.set_query("sintel");
+    let mut seen: Vec<(RowState, Vec<String>)> = Vec::new();
+    for _ in 0..400 {
+        let s = view.snapshot();
+        if s.query == "sintel" {
+            assert!(s.rows.len() <= 1, "one group: {:?}", s.rows);
+            if let Some(row) = s.rows.first() {
+                let now = (
+                    row.state.clone(),
+                    row.tiles.iter().map(|t| t.id.clone()).collect(),
+                );
+                if seen.last() != Some(&now) {
+                    seen.push(now);
+                }
+                if row.tiles.len() == 4 {
+                    break;
+                }
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    let filled: Vec<&Vec<String>> = seen
+        .iter()
+        .filter(|(state, _)| *state == RowState::Ready)
+        .map(|(_, tiles)| tiles)
+        .collect();
+    assert_eq!(
+        filled,
+        [
+            &vec!["tt1".to_string(), "tt2".into(), "tt3".into()],
+            &vec!["tt1".to_string(), "tt2".into(), "tt3".into(), "tt4".into()]
+        ],
+        "{seen:?}"
+    );
+    assert!(
+        seen.iter()
+            .take_while(|(state, _)| *state != RowState::Ready)
+            .all(|(_, tiles)| tiles.is_empty()),
+        "nothing shows before the first catalog answers: {seen:?}"
+    );
 }

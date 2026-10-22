@@ -1,6 +1,8 @@
-//! Search: one row per addon catalog that supports `search`, in addon order.
-//! A title shown in an earlier row is not repeated further down, so the same
-//! film from two metadata addons appears once.
+//! Search: one row per kind ("Movies", "Series") over the addon catalogs that
+//! support `search`, in addon order: catalogs of one title are one group, so
+//! two "Movies" groups never show (no addon's name tells them apart, the
+//! owner, 2026-10-22). A title shown in an earlier row or group is not
+//! repeated, so the same film from two metadata addons appears once.
 //!
 //! The query is debounced here, so every UI types into the same behaviour.
 //!
@@ -449,8 +451,9 @@ fn outcome(
     }
 }
 
-/// "Top results" first, then the rows in slot order; a filled row shows
-/// what `Shown` gave it, and a filled row left with nothing is dropped.
+/// "Top results" first, then one row per title in slot order (`merged`); a
+/// filled row shows what `Shown` gave it, and a filled row left with nothing
+/// is dropped.
 fn render(
     top: Option<&(RowState, Vec<Tile>)>,
     slots: &[Slot],
@@ -473,22 +476,63 @@ fn render(
         };
     let top =
         top.and_then(|(state, tiles)| row(TOP_ROW_ID, "Top results", "Trakt", state, tiles, false));
-    let addons: Vec<HomeRow> = slots
+    let mut groups: Vec<Vec<usize>> = Vec::new();
+    for (i, slot) in slots.iter().enumerate() {
+        let title = slot.title.to_lowercase();
+        match groups
+            .iter_mut()
+            .find(|g| slots[g[0]].title.to_lowercase() == title)
+        {
+            Some(group) => group.push(i),
+            None => groups.push(vec![i]),
+        }
+    }
+    let addons: Vec<HomeRow> = groups
         .iter()
-        .zip(rows)
-        .filter_map(|(slot, (state, tiles))| {
-            let source = &slot.addon.manifest.name;
-            row(&slot.row_id, &slot.title, source, state, tiles, true)
+        .filter_map(|group| {
+            let first = &slots[group[0]];
+            let (state, tiles) = merged(group.iter().map(|&i| &rows[i]));
+            let source = &first.addon.manifest.name;
+            row(&first.row_id, &first.title, source, &state, &tiles, true)
         })
         .collect();
     top.into_iter().chain(addons).collect()
 }
 
+/// One group from its catalogs' answers, in addon order: the results of
+/// those that answered before the first still asked, so a later catalog
+/// only adds at the end. Ready once those hold results or every catalog
+/// answered; failed only when every one failed.
+fn merged<'a>(members: impl Iterator<Item = &'a (RowState, Vec<Tile>)>) -> (RowState, Vec<Tile>) {
+    let mut tiles = Vec::new();
+    let (mut ready, mut failed) = (false, None);
+    for (state, own) in members {
+        match state {
+            RowState::Loading | RowState::Slow if tiles.is_empty() => {
+                return (state.clone(), tiles);
+            }
+            RowState::Loading | RowState::Slow => break,
+            RowState::Ready => {
+                ready = true;
+                tiles.extend(own.iter().cloned());
+            }
+            _ => {
+                failed.get_or_insert_with(|| state.clone());
+            }
+        }
+    }
+    match failed {
+        Some(state) if !ready => (state, tiles),
+        _ => (RowState::Ready, tiles),
+    }
+}
+
 /// What each row showed once it filled, so the layout holds while the
 /// rest arrives (web journey review r2 P2-4): a title never leaves a row
-/// on screen, and a row that fills later leaves out the titles already
-/// shown. "Top results" keeps all of its own, so a title another row
-/// showed first stays there too.
+/// on screen, a group only grows at its end as its later catalogs answer,
+/// and a row that fills later leaves out the titles already shown. "Top
+/// results" keeps all of its own, so a title another row showed first stays
+/// there too.
 #[derive(Default)]
 struct Shown {
     /// The titles on screen.
@@ -498,19 +542,18 @@ struct Shown {
 }
 
 impl Shown {
+    /// The row's tiles: those it showed before, then the new ones in
+    /// `tiles`, each id once and, with `dedupe`, none another row showed.
     fn fill(&mut self, row_id: &str, tiles: &[Tile], dedupe: bool) -> Vec<Tile> {
-        if let Some(shown) = self.rows.get(row_id) {
-            return shown.clone();
+        let shown = self.rows.entry(row_id.to_owned()).or_default();
+        let mut own: HashSet<String> = shown.iter().map(|t| t.id.clone()).collect();
+        for tile in tiles {
+            if own.insert(tile.id.clone()) && !(dedupe && self.titles.contains(&tile.id)) {
+                self.titles.insert(tile.id.clone());
+                shown.push(tile.clone());
+            }
         }
-        let mut own = HashSet::new();
-        let kept: Vec<Tile> = tiles
-            .iter()
-            .filter(|t| own.insert(t.id.clone()) && !(dedupe && self.titles.contains(&t.id)))
-            .cloned()
-            .collect();
-        self.titles.extend(kept.iter().map(|t| t.id.clone()));
-        self.rows.insert(row_id.to_owned(), kept.clone());
-        kept
+        shown.clone()
     }
 }
 
