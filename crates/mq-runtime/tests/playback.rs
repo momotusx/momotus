@@ -1379,8 +1379,7 @@ async fn subtitles_addon(id: &str, delay: Duration) -> AddonRow {
 }
 
 /// One slow subtitle addon (SubSense took 12 to 20 s on the iphone-a walk)
-/// never holds the start subtitle: at the fan-out's soft deadline the
-/// tracks listed decide it, and the slow addon's track, listed later and
+/// never holds the start subtitle: after 1 s the tracks listed decide it, and the slow addon's track, listed later and
 /// ranked first, never changes it.
 #[tokio::test]
 async fn a_slow_subtitle_addon_does_not_hold_the_start_subtitle() {
@@ -1404,7 +1403,7 @@ async fn a_slow_subtitle_addon_does_not_hold_the_start_subtitle() {
     let opened = std::time::Instant::now();
     let s = until(&view, "the start subtitle", |s| s.auto_subtitle.is_some()).await;
     assert!(
-        opened.elapsed() < Duration::from_secs(5),
+        opened.elapsed() < Duration::from_secs(2),
         "the start subtitle took {:?}",
         opened.elapsed()
     );

@@ -1910,12 +1910,12 @@ async fn resolve_next(
                         &state,
                         &snapshot,
                     );
-                    // The start subtitle waits for every source until the
-                    // fan-out's soft deadline, then goes with the tracks
-                    // listed: one slow addon (SubSense took 12 to 20 s, the
-                    // iphone-a walk) never leaves subtitles off that long.
+                    // The start subtitle waits for every source until
+                    // START_SUBTITLE_WAIT, then goes with the tracks listed:
+                    // one slow addon (SubSense took 12 to 20 s, the iphone-a
+                    // walk) never leaves subtitles off that long.
                     let early = async {
-                        tokio::time::sleep(Deadlines::default().soft).await;
+                        tokio::time::sleep(START_SUBTITLE_WAIT).await;
                         let audio = audio_of(probed.clone().await, &stream);
                         settle_start(&core, &target, &state, &snapshot, run, &audio, false);
                         std::future::pending::<()>().await;
@@ -3755,6 +3755,12 @@ fn auto_subtitle(
 
 /// How a title's memory says the user turned subtitles off.
 const OFF: &str = "off";
+
+/// How long the start subtitle waits for every subtitle source before it
+/// goes with the tracks listed: OpenSubtitles answers in 0.1 to 0.2 s and
+/// the first frame shows at about 0.4 s, so subtitles come with the first
+/// seconds of picture (the owner's lead, 2026-10-23).
+const START_SUBTITLE_WAIT: Duration = Duration::from_secs(1);
 
 /// The profile's subtitle languages with `tag`, the language of a track the
 /// user picked, first: each language once, by its tag (an older "tur" gives
