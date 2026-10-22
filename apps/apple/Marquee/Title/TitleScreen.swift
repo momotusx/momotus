@@ -38,19 +38,7 @@ struct TitleScreen: View {
     }
 
     var body: some View {
-        ScrollView(.vertical) {
-            VStack(alignment: .leading, spacing: Theme.Space.l) {
-                hero
-                if let failure = model.failure {
-                    StateLine(symbol: "triangle-alert", text: failure)
-                        .padding(.horizontal, metrics.gutter)
-                }
-                lower
-            }
-            .padding(.bottom, Theme.Space.xl)
-        }
-        .scrollIndicators(.hidden)
-        .background(Theme.Palette.bg)
+        tvBody
         .onGeometryChange(for: CGSize.self) { $0.size } action: { (width, height) = ($0.width, $0.height) }
         .task(id: core.generation) {
             model.start()
@@ -86,6 +74,23 @@ struct TitleScreen: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+    }
+
+    /// Today's page: tvOS keeps it (D9); iOS and macOS move to the v3 page in phase 3.
+    private var tvBody: some View {
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: Theme.Space.l) {
+                hero
+                if let failure = model.failure {
+                    StateLine(symbol: "triangle-alert", text: failure)
+                        .padding(.horizontal, metrics.gutter)
+                }
+                lower
+            }
+            .padding(.bottom, Theme.Space.xl)
+        }
+        .scrollIndicators(.hidden)
+        .background(Theme.Palette.bg)
     }
 
     private var details: TitleDetails? { model.header?.details }

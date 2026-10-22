@@ -52,34 +52,34 @@ struct HeroView: View {
 
     private func wide(_ hero: Hero) -> some View {
         let tile = hero.tile
-        return VStack(alignment: .leading, spacing: Self.gap) {
-            TitleLogo(logo: tile.logo, name: tile.name, maxWidth: Self.logoWidth, height: Self.logoHeight, nameSize: Theme.type.hero + 12)
+        return VStack(alignment: .leading, spacing: HeroLayout.gap) {
+            TitleLogo(logo: tile.logo, name: tile.name, maxWidth: HeroLayout.logoWidth, height: HeroLayout.logoHeight, nameSize: Theme.type.hero + 12)
             Text(genreLine(hero))
-                .textFont(Self.genre, weight: .semibold, relativeTo: .callout)
+                .textFont(HeroLayout.genre, weight: .semibold, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.text)
-            MetaLine(ratings: ratingParts(tile.ratings), parts: [tile.releaseInfo, hero.runtime].compactMap { $0 }, size: Self.meta)
+            MetaLine(ratings: ratingParts(tile.ratings), parts: [tile.releaseInfo, hero.runtime].compactMap { $0 }, size: HeroLayout.meta)
                 .foregroundStyle(Theme.Palette.dim)
             if let description = hero.description {
                 Text(description)
-                    .textFont(Self.genre, relativeTo: .callout)
+                    .textFont(HeroLayout.genre, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                     .lineLimit(2)
-                    .frame(maxWidth: Self.synopsisWidth, alignment: .leading)
+                    .frame(maxWidth: HeroLayout.synopsisWidth, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
             reason(hero)
             HStack(spacing: 12) {
                 playButton(tile)
-                NavigationLink(value: TitleRoute(tile)) { Label("Details", glyph: "info", size: Self.icon) }
+                NavigationLink(value: TitleRoute(tile)) { Label("Details", glyph: "info", size: HeroLayout.icon) }
                     .buttonStyle(PillButtonStyle())
                     .modifier(StartFocus(scope: tile.playVideoId == nil ? startScope : nil))
             }
-            .padding(.top, 16 - Self.gap)
+            .padding(.top, 16 - HeroLayout.gap)
         }
         .frame(maxWidth: 900, alignment: .leading)
         .padding(.leading, metrics.gutter)
         .padding(.trailing, metrics.gutter)
-        .padding(.bottom, Self.foot)
+        .padding(.bottom, HeroLayout.foot)
     }
 
     private func phone(_ hero: Hero) -> some View {
@@ -119,7 +119,7 @@ struct HeroView: View {
     @ViewBuilder private func reason(_ hero: Hero) -> some View {
         if !hero.reason.isEmpty {
             Text(hero.reason)
-                .textFont(Self.reasonSize, weight: .semibold, relativeTo: .caption)
+                .textFont(HeroLayout.reasonSize, weight: .semibold, relativeTo: .caption)
                 .foregroundStyle(Theme.Palette.text)
                 .lineLimit(2)
         }
@@ -136,7 +136,7 @@ struct HeroView: View {
                             Text("Starting")
                         }
                     } else {
-                        Label("Play", glyph: "play-fill", size: Self.icon)
+                        Label("Play", glyph: "play-fill", size: HeroLayout.icon)
                     }
                 }
                 .frame(maxWidth: metrics.wide ? nil : .infinity)
@@ -156,34 +156,6 @@ struct HeroView: View {
         let kind = hero.tile.kind == "movie" ? "Movie" : hero.tile.kind == "series" ? "Series" : hero.tile.kind.capitalized
         return ([kind] + (hero.genres ?? []).prefix(2)).joined(separator: " \u{B7} ")
     }
-
-    // tv.apple.com's sizes on the Mac, the tvOS scale on TV.
-    #if os(tvOS)
-    private static let gap: CGFloat = 12
-    private static let logoWidth: CGFloat = 560
-    private static let logoHeight: CGFloat = 140
-    private static let genre = Theme.type.callout
-    private static let meta = Theme.type.caption
-    private static let reasonSize = Theme.type.caption
-    private static let synopsisWidth: CGFloat = 820
-    private static let foot: CGFloat = 75
-    private static let icon = Theme.type.body + 1
-    #else
-    private static let gap: CGFloat = 9
-    private static let logoWidth: CGFloat = 400
-    private static let logoHeight: CGFloat = 81
-    private static let genre: CGFloat = 15
-    private static let meta: CGFloat = 13
-    private static let reasonSize: CGFloat = 13
-    private static let synopsisWidth = BackdropStops.heroSynopsisWidth
-    private static let foot: CGFloat = 75
-    #if os(macOS)
-    // The desktop frames' 16 px icon in the 40 pt pill; the iPhone keeps its 18.
-    private static let icon: CGFloat = 16
-    #else
-    private static let icon = Theme.type.body + 1
-    #endif
-    #endif
 }
 
 /// TV: a scope's default focus (the hero's Play, or a row's first tile); elsewhere nothing.
