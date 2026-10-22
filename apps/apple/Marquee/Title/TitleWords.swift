@@ -143,7 +143,7 @@ func episodeCaption(_ episode: Episode, minutes: Int?, now: Date = .now, locale:
     let day = Date.FormatStyle(locale: locale, timeZone: TimeZone(identifier: "UTC") ?? .current)
     let released = releaseDate(episode.released)
     if let released, released > now {
-        return "Airs \(released.formatted(day.month(.abbreviated).day()))"
+        return whole("Airs \(released.formatted(day.month(.abbreviated).day()))")
     }
     var parts: [String] = []
     if let left = episode.leftMs, left > 0, !episode.watched {
@@ -156,8 +156,12 @@ func episodeCaption(_ episode: Episode, minutes: Int?, now: Date = .now, locale:
         }
     }
     if let released { parts.append(released.formatted(day.month(.abbreviated).day().year())) }
-    return parts.joined(separator: " \u{B7} ")
+    return parts.map(whole).joined(separator: "\u{A0}\u{B7} ")
 }
+
+/// A caption part a line never breaks inside ("52 min", "Oct 7, 2026"): on the iPhone's narrow episode list a
+/// line breaks only after a dot (the iphone-a walk, 2026-10-23).
+private func whole(_ part: String) -> String { part.replacing(/\s/, with: "\u{A0}") }
 
 /// The v3 episode card's caption: "Watched" for a watched episode, as the frames draw it; the shared
 /// words otherwise. Card only, so the TV page's list keeps its words.

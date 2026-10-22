@@ -125,14 +125,26 @@ private func ep(_ number: Int, _ title: String, released: String? = "2022-02-18"
 @Test func anEpisodesCaptionKeepsTheTVPagesWords() {
     let en = Locale(identifier: "en_US")
     let now = Date(timeIntervalSince1970: 1_761_000_000)  // 2025-10-20
-    #expect(episodeCaption(ep(1, "Bad Dates", released: "2026-03-03"), minutes: 46, now: now, locale: en) == "Airs Mar 3")
-    #expect(episodeCaption(ep(2, "Dead Weight", leftMs: 31 * 60_000), minutes: 46, now: now, locale: en) == "31 min left \u{B7} Feb 18, 2022")
+    // The words as read: the spaces a line may not break at are no-break spaces (the next test).
+    func plain(_ caption: String) -> String { caption.replacingOccurrences(of: "\u{A0}", with: " ") }
+    #expect(plain(episodeCaption(ep(1, "Bad Dates", released: "2026-03-03"), minutes: 46, now: now, locale: en)) == "Airs Mar 3")
+    #expect(plain(episodeCaption(ep(2, "Dead Weight", leftMs: 31 * 60_000), minutes: 46, now: now, locale: en)) == "31 min left \u{B7} Feb 18, 2022")
     // No time left from the core: the progress against the title's runtime.
-    #expect(episodeCaption(ep(3, "Hard Lines", progress: 0.5), minutes: 46, now: now, locale: en) == "23 min left \u{B7} Feb 18, 2022")
-    #expect(episodeCaption(ep(4, "Last Stop"), minutes: 46, now: now, locale: en) == "46 min \u{B7} Feb 18, 2022")
+    #expect(plain(episodeCaption(ep(3, "Hard Lines", progress: 0.5), minutes: 46, now: now, locale: en)) == "23 min left \u{B7} Feb 18, 2022")
+    #expect(plain(episodeCaption(ep(4, "Last Stop"), minutes: 46, now: now, locale: en)) == "46 min \u{B7} Feb 18, 2022")
     // The card says Watched, as the frames draw it; the shared words do not change.
     #expect(cardCaption(ep(5, "Close Calls", watched: true), minutes: 46, now: now, locale: en) == "Watched")
-    #expect(episodeCaption(ep(5, "Close Calls", watched: true), minutes: 46, now: now, locale: en) == "46 min \u{B7} Feb 18, 2022")
+    #expect(plain(episodeCaption(ep(5, "Close Calls", watched: true), minutes: 46, now: now, locale: en)) == "46 min \u{B7} Feb 18, 2022")
+}
+
+@Test func anEpisodesCaptionBreaksOnlyAfterADot() {
+    let en = Locale(identifier: "en_US")
+    let now = Date(timeIntervalSince1970: 1_761_000_000)  // 2025-10-20
+    let caption = episodeCaption(ep(4, "Last Stop"), minutes: 46, now: now, locale: en)
+    #expect(caption == "46\u{A0}min\u{A0}\u{B7} Feb\u{A0}18,\u{A0}2022")
+    // One place a line may break: after the dot.
+    #expect(caption.filter { $0 == " " }.count == 1)
+    #expect(episodeCaption(ep(1, "Bad Dates", released: "2026-03-03"), minutes: 46, now: now, locale: en) == "Airs\u{A0}Mar\u{A0}3")
 }
 
 @Test func theEpisodeSearchMatchesANumberOrANameWithoutCase() {
