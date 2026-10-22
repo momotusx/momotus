@@ -346,8 +346,8 @@ struct PlayerControls: View {
         #if !os(tvOS)
         // Over the actions, not on one of the row's copies above (only one is drawn).
         .popover(isPresented: $timingShown, arrowEdge: .top) {
-            SubtitleTimingStepper(value: model.subtitleDelay, track: model.subtitle?.url ?? "") { by in
-                model.setSubtitleDelay(PlayerLayout.nudge(model.subtitleDelay, by: by))
+            SubtitleTimingStepper(value: model.subtitleDelay, track: model.subtitle?.url ?? "") { by, spoken in
+                model.setSubtitleDelay(PlayerLayout.nudge(model.subtitleDelay, by: by), spoken: spoken)
                 hold(true)
             } reset: {
                 model.setSubtitleDelay(0)
@@ -423,9 +423,12 @@ struct PlayerControls: View {
                         Button { model.setSubtitleDelay(PlayerLayout.nudge(model.subtitleDelay, by: -PlayerLayout.subtitleStep)); hold(true) } label: {
                             Label("\u{2212}0.1 s", glyph: "minus")
                         }
+                        // The menu stays open for the next press: finding the timing takes several.
+                        .menuActionDismissBehavior(.disabled)
                         Button { model.setSubtitleDelay(PlayerLayout.nudge(model.subtitleDelay, by: PlayerLayout.subtitleStep)); hold(true) } label: {
                             Label("+0.1 s", glyph: "plus")
                         }
+                        .menuActionDismissBehavior(.disabled)
                         if model.subtitleDelay != 0 {
                             Button { model.setSubtitleDelay(0); hold(false) } label: { Label("Reset", glyph: "rotate-ccw") }
                         }
@@ -617,16 +620,26 @@ private struct Choice: View {
 #if !os(tvOS)
 /// The subtitle Timing row, as Stremio's stepper (`PlayerLayout`, the web's delay-stepper.tsx): minus,
 /// the value, plus, and Reset while it is not 0; a click on the value resets too. A press is 0.1 s;
-/// held, it repeats and speeds up. The focused value takes Left and Right held the same way, and
-/// VoiceOver adjusts it a step at a time; the model says the value once it settles.
+/// held, it repeats and speeds up. On the Mac the value takes the focus (no Full Keyboard Access
+/// needed) and Left and Right held move it; minus and plus take Space and Return held with Full
+/// Keyboard Access. VoiceOver adjusts the value a step at a time. A hold ends on its release and
+/// whenever it is cut off: a cancelled touch, focus leaving, the app going inactive, another track.
 struct SubtitleTimingStepper: View {
     let value: Double
     /// The track the value is for: a new one ends a hold under way.
     let track: String
-    let move: (Double) -> Void
+    /// A step by the signed amount; `spoken` false for VoiceOver's own adjust, which it reads itself.
+    let move: (Double, _ spoken: Bool) -> Void
     let reset: () -> Void
     @State private var hold: TimingHold?
     @State private var pressing = 0
+    @GestureState private var touching = 0
+    @FocusState private var focus: Part?
+    /// The part a key hold started on: focus leaving it ends the hold (a click moves no focus).
+    @State private var keyPart: Part?
+    @Environment(\.scenePhase) private var scenePhase
+
+    enum Part: Hashable { case minus, value, plus }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -642,36 +655,61 @@ struct SubtitleTimingStepper: View {
                 }
             }
             HStack(spacing: 12) {
-                step(-1, glyph: "minus", label: "Minus 0.1 seconds")
-                Button(action: reset) {
-                    Text(PlayerLayout.delayText(value))
-                        .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
-                        .monospacedDigit()
-                        .frame(minWidth: 88)
-                }
-                .buttonStyle(.plain)
-                .onKeyPress(keys: [.leftArrow, .rightArrow], phases: [.down, .repeat, .up]) { press in
-                    switch press.phase {
-                    case .down: start(press.key == .leftArrow ? -1 : 1)
-                    case .up: stop(single: true)
-                    default: break
-                    }
-                    return .handled
-                }
-                .accessibilityLabel("Subtitle timing")
-                .accessibilityValue(PlayerLayout.delayWords(value))
-                .accessibilityHint(value == 0 ? "" : "Resets to 0.0 seconds")
-                .accessibilityAdjustableAction { direction in
-                    move(direction == .increment ? PlayerLayout.subtitleStep : -PlayerLayout.subtitleStep)
-                }
-                step(1, glyph: "plus", label: "Plus 0.1 seconds")
+                step(-1, glyph: "minus", label: "Minus 0.1 seconds", part: .minus)
+                valueView
+                step(1, glyph: "plus", label: "Plus 0.1 seconds", part: .plus)
             }
         }
         .foregroundStyle(Theme.Palette.text)
         .frame(minWidth: 240)
-        .onAppear { hold = TimingHold(move: move) }
-        .onDisappear { hold?.stop(single: false) }
+        .onAppear {
+            hold = TimingHold { move($0, true) }
+            focus = .value
+        }
+        .onDisappear { stop(single: false) }
         .onChange(of: track) { stop(single: false) }
+        .onChange(of: scenePhase) { _, phase in if phase != .active { stop(single: false) } }
+        .onChange(of: focus) { old, _ in if let keyPart, keyPart == old { stop(single: false) } }
+        // A touch the system took back (a banner, Control Center) resets the gesture with no end.
+        .onChange(of: touching) { _, now in
+            guard now == 0 else { return }
+            let cut = pressing
+            Task { @MainActor in if cut != 0, pressing == cut { stop(single: false) } }
+        }
+    }
+
+    /// The value: a click resets; focused, Left and Right held move it by the stepper's rules, and
+    /// Space or Return resets. A key with Command, Option, Control or Shift is not the stepper's.
+    private var valueView: some View {
+        Text(PlayerLayout.delayText(value))
+            .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
+            .monospacedDigit()
+            .frame(minWidth: 88, minHeight: 36)
+            .background(.white.opacity(focus == .value ? 0.12 : 0), in: Capsule())
+            .overlay { if focus == .value { Capsule().strokeBorder(Theme.Palette.key, lineWidth: Theme.Focus.ring) } }
+            .contentShape(Capsule())
+            .onTapGesture(perform: reset)
+            .focusable(interactions: .edit)
+            .focusEffectDisabled()
+            .focused($focus, equals: .value)
+            .onKeyPress(keys: [.leftArrow, .rightArrow, .space, .return], phases: [.down, .repeat, .up]) { press in
+                guard PlayerLayout.stepperKey(press.modifiers) else { return .ignored }
+                if press.key == .space || press.key == .return {
+                    if press.phase == .down { reset() }
+                    return .handled
+                }
+                key(press, direction: press.key == .leftArrow ? -1 : 1, part: .value)
+                return .handled
+            }
+            .accessibilityElement()
+            .accessibilityLabel("Subtitle timing")
+            .accessibilityValue(PlayerLayout.delayWords(value))
+            .accessibilityHint(value == 0 ? "" : "Resets to 0.0 seconds")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction(.default, reset)
+            .accessibilityAdjustableAction { direction in
+                move(direction == .increment ? PlayerLayout.subtitleStep : -PlayerLayout.subtitleStep, false)
+            }
     }
 
     private func start(_ direction: Int) {
@@ -680,26 +718,48 @@ struct SubtitleTimingStepper: View {
     }
 
     private func stop(single: Bool) {
-        pressing = 0
+        (pressing, keyPart) = (0, nil)
         hold?.stop(single: single)
     }
 
-    /// Minus or plus: a press and hold by the stepper's rules, not the system's repeat; an
-    /// accessibility activation is one step.
-    private func step(_ direction: Int, glyph: String, label: String) -> some View {
+    /// A held key: down starts the hold, the system's own repeats are ignored, up ends it.
+    private func key(_ press: KeyPress, direction: Int, part: Part) {
+        switch press.phase {
+        case .down:
+            start(direction)
+            keyPart = part
+        case .up: if pressing == direction { stop(single: true) }
+        default: break
+        }
+    }
+
+    /// Minus or plus: a press and hold by the stepper's rules, not the system's repeat; with Full
+    /// Keyboard Access, Space and Return held; an accessibility activation is one step.
+    private func step(_ direction: Int, glyph: String, label: String, part: Part) -> some View {
         Glyph(glyph, size: 18)
             .frame(width: 44, height: 44)
             .background(.white.opacity(pressing == direction ? 0.24 : 0.12), in: Circle())
             .contentShape(Circle())
+            .modifier(FocusRing(shape: Circle(), active: focus == part))
             .gesture(
                 DragGesture(minimumDistance: 0)
+                    .updating($touching) { _, state, _ in state = direction }
                     .onChanged { _ in if pressing != direction { start(direction) } }
-                    .onEnded { _ in stop(single: true) }
+                    // Only the finger that started this hold ends it (another on the other button stops nothing).
+                    .onEnded { _ in if pressing == direction { stop(single: true) } }
             )
+            .focusable(interactions: .activate)
+            .focusEffectDisabled()
+            .focused($focus, equals: part)
+            .onKeyPress(keys: [.space, .return], phases: [.down, .repeat, .up]) { press in
+                guard PlayerLayout.stepperKey(press.modifiers) else { return .ignored }
+                key(press, direction: direction, part: part)
+                return .handled
+            }
             .accessibilityElement()
             .accessibilityLabel(label)
             .accessibilityAddTraits(.isButton)
-            .accessibilityAction { move(Double(direction) * PlayerLayout.subtitleStep) }
+            .accessibilityAction { move(Double(direction) * PlayerLayout.subtitleStep, true) }
     }
 }
 #endif

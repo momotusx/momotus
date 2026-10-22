@@ -123,12 +123,19 @@ enum PlayerLayout {
     /// for none.
     static func startDelay(_ track: SubtitleTrack?, kept: [String: Double] = [:]) -> Double {
         guard let track else { return 0 }
-        return kept[track.url] ?? Double(track.delayMs ?? 0) / 1000
+        // The core's value to the tenth the stepper shows (a 40 ms delay is 0.0 s, with no Reset).
+        return kept[track.url] ?? (Double(track.delayMs ?? 0) / 100).rounded() / 10
     }
 
     /// The core's `subtitleDelay` for a settled value: the track's URL and the value in ms.
     static func delayCommand(url: String, seconds: Double) -> [String: any Sendable] {
         ["type": "subtitleDelay", "url": url, "ms": Int((seconds * 1000).rounded())]
+    }
+
+    /// A key the stepper takes: one with Command, Option, Control or Shift belongs to someone else
+    /// (Cmd-Left is no step).
+    static func stepperKey(_ modifiers: EventModifiers) -> Bool {
+        modifiers.isDisjoint(with: [.command, .option, .control, .shift])
     }
 
     /// The value as the stepper shows it: "+0.3 s", "\u{2212}1.2 s" (a true minus), "0.0 s".
@@ -220,7 +227,14 @@ enum PlayerLayout {
     /// Every version needs a streaming service account (`needsAccount`): adding one comes first, as
     /// the title page's primary and Versions say it; Choose a version stays beside it.
     static func failureActions(offer: Bool, canChoose: Bool, needsAccount: Bool = false) -> [FailureAction] {
-        (needsAccount ? [.account] : []) + (offer ? [.offer] : []) + [.retry] + (canChoose ? [.choose] : []) + [.back]
+        if needsAccount { return accountActions(canChoose: canChoose) }
+        return (offer ? [.offer] : []) + [.retry] + (canChoose ? [.choose] : []) + [.back]
+    }
+
+    /// Every version needs an account: Add an account, then Choose a version, then Back, as the web
+    /// and Android cards have it; no other source and no Try again can play one.
+    static func accountActions(canChoose: Bool) -> [FailureAction] {
+        [.account] + (canChoose ? [.choose] : []) + [.back]
     }
 
     /// The versions as they stand say every one needs a streaming service account.
@@ -232,7 +246,7 @@ enum PlayerLayout {
     /// where Try again opens the same key again, so another version comes
     /// first; Try again stays for a lost subscription (review r4 P3-6).
     static func cannotOpenActions(canChoose: Bool, needsAccount: Bool = false) -> [FailureAction] {
-        (needsAccount ? [.account] : []) + (canChoose ? [.choose] : []) + [.retry, .back]
+        needsAccount ? accountActions(canChoose: canChoose) : (canChoose ? [.choose] : []) + [.retry, .back]
     }
 
     /// The Subtitles value. The core asks the subtitle addons once it has a
@@ -443,28 +457,44 @@ struct PhoneOSD<Top: View, Bottom: View>: View {
     }
 }
 
+/// The clock a hold and the outbox run on: the time since a start and a sleep. Tests pass a virtual
+/// one, so the rules hold on a loaded machine too.
+struct StepperClock: Sendable {
+    let now: @Sendable () -> Duration
+    let sleep: @Sendable (Duration) async -> Void
+
+    static let real: StepperClock = {
+        let origin = ContinuousClock.now
+        return StepperClock(now: { ContinuousClock.now - origin }, sleep: { try? await Task.sleep(for: $0) })
+    }()
+}
+
 /// A press or hold on the timing stepper's minus or plus by `PlayerLayout`'s rules: `start` on the
 /// press, `stop(single: true)` on its release (one 0.1 s step when no repeat came yet), `stop(single:
-/// false)` when it is cut off. `move` gets each step with its sign.
+/// false)` when it is cut off (a cancelled touch, lost focus, the app going inactive). `move` gets
+/// each step with its sign.
 @MainActor final class TimingHold {
     private let move: (Double) -> Void
+    private let clock: StepperClock
     private var task: Task<Void, Never>?
-    private var direction = 0
+    private(set) var direction = 0
     private var repeated = false
 
-    init(move: @escaping (Double) -> Void) { self.move = move }
+    init(clock: StepperClock = .real, move: @escaping (Double) -> Void) {
+        (self.clock, self.move) = (clock, move)
+    }
 
     func start(_ direction: Int) {
         stop(single: false)
         (self.direction, repeated) = (direction, false)
-        let since = ContinuousClock.now
+        let (clock, since) = (clock, clock.now())
         task = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(PlayerLayout.firstRepeatMs))
+            await clock.sleep(.milliseconds(PlayerLayout.firstRepeatMs))
             while !Task.isCancelled, let self {
                 repeated = true
-                let held = Int((ContinuousClock.now - since) / .milliseconds(1))
+                let held = Int((clock.now() - since) / .milliseconds(1))
                 move(Double(direction) * PlayerLayout.holdStep(heldMs: held))
-                try? await Task.sleep(for: .milliseconds(PlayerLayout.repeatMs))
+                await clock.sleep(.milliseconds(PlayerLayout.repeatMs))
             }
         }
     }
@@ -474,5 +504,58 @@ struct PhoneOSD<Top: View, Bottom: View>: View {
         task = nil
         if direction != 0, single, !repeated { move(Double(direction) * PlayerLayout.subtitleStep) }
         direction = 0
+    }
+}
+
+/// The stepper's value on its way to the core (`subtitleDelay`): each track's value for the play, and
+/// the one not sent yet, which goes once it rests 700 ms or at once on `flush` (another track, a
+/// failover, a server move, close). `send` is synchronous (`commandNow`), so a flush reaches the core
+/// before anything sent after it, an unsubscribe included.
+@MainActor final class DelayOutbox {
+    typealias Command = [String: any Sendable]
+    private let clock: StepperClock
+    private let send: (Command) -> Void
+    private var pending: (url: String, seconds: Double)?
+    private var settle: Task<Void, Never>?
+    /// Each track's value in this play, by URL: going back to a track finds it where it was.
+    private(set) var kept: [String: Double] = [:]
+    /// Told the value once it settled from a press or hold, for VoiceOver.
+    var settled: (Double) -> Void = { _ in }
+
+    init(clock: StepperClock = .real, send: @escaping (Command) -> Void) {
+        (self.clock, self.send) = (clock, send)
+    }
+
+    /// `spoken`: the settled value is said (a press or hold); an adjustable action's value is read
+    /// by VoiceOver as it changes, so it is not said again.
+    func set(url: String, seconds: Double, spoken: Bool = true) {
+        kept[url] = seconds
+        pending = (url, seconds)
+        settle?.cancel()
+        let clock = clock
+        settle = Task { [weak self] in
+            await clock.sleep(.milliseconds(PlayerLayout.delaySettleMs))
+            guard !Task.isCancelled, let self else { return }
+            flush()
+            if spoken { settled(seconds) }
+        }
+    }
+
+    /// The value not sent yet goes now, once.
+    func flush() {
+        settle?.cancel()
+        settle = nil
+        guard let pending else { return }
+        self.pending = nil
+        send(PlayerLayout.delayCommand(url: pending.url, seconds: pending.seconds))
+    }
+
+    /// Where `track` starts: its value earlier in this play, else the core's `delayMs`.
+    func start(_ track: SubtitleTrack?) -> Double { PlayerLayout.startDelay(track, kept: kept) }
+
+    /// A server move gave the track a new URL: its value and anything unsent follow it.
+    func moved(from old: String, to new: String) {
+        if let value = kept.removeValue(forKey: old) { kept[new] = value }
+        if pending?.url == old { pending?.url = new }
     }
 }

@@ -36,10 +36,7 @@ final class PlayerModel {
     /// remembers the viewer left it (`delayMs`); `setSubtitleDelay` changes it.
     private(set) var subtitleDelay: Double = 0 { didSet { watchCueEdges() } }
     /// The stepper's value not yet sent to the core: it goes once it rests, on another track and on close.
-    @ObservationIgnored private var unsentDelay: [String: any Sendable]?
-    @ObservationIgnored private var delaySettle: Task<Void, Never>?
-    /// Each track's timing in this play, by URL: going back to a track finds it where it was.
-    @ObservationIgnored private var keptDelays: [String: Double] = [:]
+    @ObservationIgnored private var outbox: DelayOutbox!
     private(set) var cues: [WebVTT.Cue] = [] { didSet { watchCueEdges() } }
     var rate: Float = 1 {
         // The Lock Screen extrapolates the playhead from the rate: it hears every change at once.
@@ -153,6 +150,12 @@ final class PlayerModel {
         if WalkLog.on { walkLog = WalkLog(player: player) }
         #endif
         observePlayer()
+        outbox = DelayOutbox { [weak self] command in
+            // At once, not in a Task: it reaches the core before the view's unsubscribe.
+            guard let self, let sub = self.sub else { return }
+            self.core.commandNow(sub, command)
+        }
+        outbox.settled = { AccessibilityNotification.Announcement(PlayerLayout.delayWords($0)).post() }
     }
 
     var taskId: [String] { [route.key, "\(route.versionsSub)", "\(core.generation)", "\(opens)"] }
@@ -405,6 +408,8 @@ final class PlayerModel {
         // addon track, its cues and its timing are kept.
         carriedTracks = (audioTrack, textTrack)
         choices.reopened()
+        // To the view about to close, while its track URLs are the ones the value names.
+        flushDelay()
         reopen()
     }
 
@@ -473,33 +478,21 @@ final class PlayerModel {
     }
 
     /// The stepper's value for the addon track on: drawn at once, sent to the core (which keeps it for
-    /// this track) once it rests, and said to VoiceOver then, never on each tick of a hold.
-    func setSubtitleDelay(_ seconds: Double) {
+    /// this track) once it rests, and said to VoiceOver then (`spoken`), never on each tick of a hold.
+    func setSubtitleDelay(_ seconds: Double, spoken: Bool = true) {
         guard let url = subtitle?.url else { return }
         subtitleDelay = seconds
-        keptDelays[url] = seconds
-        unsentDelay = PlayerLayout.delayCommand(url: url, seconds: seconds)
-        delaySettle?.cancel()
-        delaySettle = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(PlayerLayout.delaySettleMs))
-            guard !Task.isCancelled, let self else { return }
-            sendDelay()
-            AccessibilityNotification.Announcement(PlayerLayout.delayWords(subtitleDelay)).post()
-        }
+        outbox.set(url: url, seconds: seconds, spoken: spoken)
     }
 
-    private func sendDelay() {
-        delaySettle?.cancel()
-        guard let unsent = unsentDelay, let sub else { return }
-        unsentDelay = nil
-        Task { [unsent] in try? await core.command(sub, unsent) }
-    }
+    /// The value not sent yet goes to the view still open, now.
+    private func flushDelay() { outbox.flush() }
 
     func selectSubtitle(_ track: SubtitleTrack?) {
         if track?.url != subtitle?.url {
             // Another track's change still waiting goes first; the new one starts where it was left.
-            sendDelay()
-            subtitleDelay = PlayerLayout.startDelay(track, kept: keptDelays)
+            flushDelay()
+            subtitleDelay = outbox.start(track)
         }
         subtitle = track
         cues = []
@@ -562,6 +555,7 @@ final class PlayerModel {
         // After a server move the same addon track has a new URL: it stays on,
         // its cues and timing kept, and the menu marks it.
         if let shown = subtitle, !snapshot.subtitles.contains(shown), let same = SubtitleMenu.same(shown, in: snapshot.subtitles) {
+            outbox.moved(from: shown.url, to: same.url)
             subtitle = same
         }
         switch snapshot.phase {
@@ -682,7 +676,7 @@ final class PlayerModel {
         player.pause()
         player.replaceCurrentItem(with: nil)
         // A delay not sent yet goes first, while the failed source's version is the current one.
-        sendDelay()
+        flushDelay()
         let command = failOverCommand(failure, attempt: loadedAttempt)
         stoppedAt = stoppedPosition(pendingStart: pendingStart, position: position)
         pendingStart = nil
@@ -778,13 +772,13 @@ final class PlayerModel {
 
     /// Saves the position before the view goes away (Back, close).
     func close() {
-        sendDelay()
+        flushDelay()
         report()
         player.pause()
     }
 
     private func stop() {
-        sendDelay()
+        flushDelay()
         report()
         nowPlaying.stop()
         NowPlaying.deactivate()

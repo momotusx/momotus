@@ -1,0 +1,191 @@
+import Foundation
+import SwiftUI
+import Testing
+
+// The subtitle timing stepper's hold and its way to the core (the web's lib/delay.ts, Android's
+// SubtitleTiming.kt), on a virtual clock so a loaded machine changes nothing.
+
+/// Time that moves only when a hold or the outbox sleeps; it starts well past zero, so a hold that
+/// forgot when it started reads the wrong step.
+private final class VirtualTime: @unchecked Sendable {
+    private let lock = NSLock()
+    private var ms = 5_000
+
+    var now: Int { lock.withLock { ms } }
+
+    var clock: StepperClock {
+        StepperClock(now: { [self] in .milliseconds(now) }, sleep: { [self] duration in
+            lock.withLock { ms += Int(duration / .milliseconds(1)) }
+            await Task.yield()
+        })
+    }
+}
+
+/// Lets the hold's and the outbox's tasks run.
+@MainActor private func settle(_ rounds: Int = 50) async {
+    for _ in 0..<rounds { await Task.yield() }
+}
+
+private func track(_ url: String, delayMs: Int? = nil) -> SubtitleTrack {
+    var t = SubtitleTrack(url: url, lang: "eng", label: nil, source: "Walk", forced: false, hearingImpaired: false)
+    t.delayMs = delayMs
+    return t
+}
+
+@MainActor @Test func aPressIsOneStepAndACutHoldNone() async {
+    var moves: [Double] = []
+    let hold = TimingHold(clock: VirtualTime().clock) { moves.append($0) }
+    hold.start(1)
+    hold.stop(single: true)
+    #expect(moves == [0.1])
+    // Cut off (a cancelled touch, focus gone): no step, and nothing keeps ticking.
+    hold.start(-1)
+    hold.stop(single: false)
+    await settle()
+    #expect(moves == [0.1])
+}
+
+@MainActor @Test func aHoldRepeatsFrom350MsAndSpeedsUpBySecondHeld() async {
+    let time = VirtualTime()
+    var moves: [Double] = []
+    let hold = TimingHold(clock: time.clock) { moves.append($0) }
+    let start = time.now
+    hold.start(1)
+    while time.now - start < 3_500 { await Task.yield() }
+    hold.stop(single: true)
+    await settle()
+    let rounded = moves.map { ($0 * 10).rounded() / 10 }
+    // Ticks at 350, 450 ... 950 ms: 0.3 each; then 0.4 through the second second, 0.5 through the
+    // third, 0.6 from there; the release after repeats adds no step.
+    let expected = Array(repeating: 0.3, count: 7) + Array(repeating: 0.4, count: 10) + Array(repeating: 0.5, count: 10)
+    #expect(Array(rounded.prefix(27)) == expected, "\(rounded)")
+    #expect(rounded.count >= 32 && rounded.dropFirst(27).allSatisfy { $0 == 0.6 }, "\(rounded)")
+}
+
+@MainActor @Test func aHoldOfThirtyTicksSendsOneCommandOnceItRests() async {
+    var sent: [DelayOutbox.Command] = []
+    let outbox = DelayOutbox(clock: VirtualTime().clock) { sent.append($0) }
+    for tick in 1...30 { outbox.set(url: "a", seconds: Double(tick) / 10) }
+    #expect(sent.isEmpty, "nothing goes while the value moves")
+    await settle()
+    #expect(sent.count == 1)
+    #expect(sent.first?["url"] as? String == "a" && sent.first?["ms"] as? Int == 3000)
+}
+
+@MainActor @Test func aFlushSendsAtOnceOnceAndBeforeWhatFollowsIt() async {
+    // Close, another track, a failover, a server move: the value goes now, to the view still open,
+    // ahead of anything sent after it (the unsubscribe), and only once.
+    var log: [String] = []
+    let outbox = DelayOutbox(clock: VirtualTime().clock) { log.append("delay \($0["url"] as? String ?? "") \($0["ms"] as? Int ?? 0)") }
+    outbox.set(url: "a", seconds: 0.5)
+    outbox.flush()
+    log.append("unsubscribe")
+    outbox.flush()
+    await settle()
+    #expect(log == ["delay a 500", "unsubscribe"])
+}
+
+@MainActor @Test func aTrackChangeSendsTheOldTracksValueFirst() async {
+    var sent: [String] = []
+    let outbox = DelayOutbox(clock: VirtualTime().clock) { sent.append("\($0["url"] as? String ?? "") \($0["ms"] as? Int ?? 0)") }
+    outbox.set(url: "a", seconds: -1.2)
+    outbox.flush()
+    outbox.set(url: "b", seconds: 0.3)
+    await settle()
+    #expect(sent == ["a -1200", "b 300"])
+}
+
+@MainActor @Test func eachTrackKeepsItsValueForThePlayThenTheCoresDelayMs() {
+    let outbox = DelayOutbox(clock: VirtualTime().clock) { _ in }
+    #expect(outbox.start(track("a", delayMs: 300)) == 0.3)
+    outbox.set(url: "a", seconds: 1.5)
+    outbox.set(url: "b", seconds: -0.4)
+    // The core keeps one track's delay; the play keeps each track's.
+    #expect(outbox.start(track("a", delayMs: 0)) == 1.5)
+    #expect(outbox.start(track("b", delayMs: 0)) == -0.4)
+    #expect(outbox.start(track("c", delayMs: 700)) == 0.7)
+    #expect(outbox.start(nil) == 0)
+}
+
+@MainActor @Test func aServerMoveCarriesTheValueToTheTracksNewURL() async {
+    var sent: [String] = []
+    let outbox = DelayOutbox(clock: VirtualTime().clock) { sent.append($0["url"] as? String ?? "") }
+    outbox.set(url: "http://old/1.vtt", seconds: 0.7)
+    outbox.moved(from: "http://old/1.vtt", to: "http://new/1.vtt")
+    outbox.flush()
+    #expect(sent == ["http://new/1.vtt"])
+    #expect(outbox.start(track("http://new/1.vtt")) == 0.7)
+}
+
+@MainActor @Test func theSettledValueIsSaidOnceAndNotForVoiceOversOwnAdjust() async {
+    var said: [Double] = []
+    let outbox = DelayOutbox(clock: VirtualTime().clock) { _ in }
+    outbox.settled = { said.append($0) }
+    outbox.set(url: "a", seconds: 0.1)
+    outbox.set(url: "a", seconds: 0.2)
+    await settle()
+    // VoiceOver reads an adjusted value itself: saying it again would be twice.
+    outbox.set(url: "a", seconds: 0.3, spoken: false)
+    await settle()
+    #expect(said == [0.2])
+}
+
+@Test func aKeyWithAModifierIsNoStep() {
+    #expect(PlayerLayout.stepperKey([]))
+    #expect(!PlayerLayout.stepperKey(.command))
+    #expect(!PlayerLayout.stepperKey(.option))
+    #expect(!PlayerLayout.stepperKey([.shift]))
+    #expect(!PlayerLayout.stepperKey(.control))
+}
+
+/// A function's body in a Swift source, by brace count from its signature.
+private func body(of signature: String, in text: String) throws -> String {
+    let start = try #require(text.range(of: signature), "\(signature) not found")
+    let open = try #require(text[start.upperBound...].firstIndex(of: "{"))
+    var depth = 0
+    var index = open
+    while index < text.endIndex {
+        if text[index] == "{" { depth += 1 }
+        if text[index] == "}" { depth -= 1; if depth == 0 { break } }
+        index = text.index(after: index)
+    }
+    return String(text[open...index])
+}
+
+private func playerModel() throws -> String {
+    let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player/PlayerModel.swift")
+    return try String(contentsOf: file, encoding: .utf8)
+}
+
+@Test func everyWayOutOfATrackOrAViewSendsTheValueFirst() throws {
+    // The model's wiring of the outbox (read from the source: the model needs a live player).
+    let text = try playerModel()
+    func before(_ first: String, _ then: String, in name: String) throws {
+        let b = try body(of: name, in: text)
+        let one = try #require(b.range(of: first), "\(name) has no \(first)")
+        let two = try #require(b.range(of: then), "\(name) has no \(then)")
+        #expect(one.lowerBound < two.lowerBound, "\(name): \(first) after \(then)")
+    }
+    try before("flushDelay()", "outbox.start(track)", in: "func selectSubtitle(")
+    try before("flushDelay()", "failOverCommand(", in: "private func fail(")
+    try before("flushDelay()", "report()", in: "func close()")
+    try before("flushDelay()", "sub = nil", in: "private func stop()")
+    try before("flushDelay()", "reopen()", in: "func serverMoved()")
+    #expect(try body(of: "func chooseSubtitle(", in: text).contains("selectSubtitle(track)"))
+    #expect(try body(of: "func setSubtitleDelay(", in: text).contains("outbox.set(url: url, seconds: seconds, spoken: spoken)"))
+    // Synchronous, so it beats the unsubscribe; a Task could lose to it.
+    let send = try body(of: "outbox = DelayOutbox ", in: text)
+    #expect(send.contains("core.commandNow(sub, command)") && !send.contains("Task {") && !send.contains("await"), "\(send)")
+    // After a server move the track's URL changes: the outbox follows it.
+    #expect(try body(of: "private func apply(", in: text).contains("outbox.moved(from: shown.url, to: same.url)"))
+}
+
+@Test func aSubtitlePickOrATimingStepNeverSetsThePictureAgain() throws {
+    // The picture stays up while tracks change (the web's and Android's rule): a pick, the file's own
+    // tracks and the timing change cues or a media selection, never the player's item.
+    let text = try playerModel()
+    for name in ["func chooseSubtitle(", "func selectSubtitle(", "func selectText(", "func setSubtitleDelay(", "private func flushDelay("] {
+        let b = try body(of: name, in: text)
+        #expect(!b.contains("replaceCurrentItem") && !b.contains("AVPlayerItem(") && !b.contains("seek("), "\(name)")
+    }
+}

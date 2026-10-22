@@ -659,29 +659,6 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     #expect(PlayerLayout.delayText(0) == "0.0 s")
 }
 
-@MainActor @Test func aPressIsOneStepAndACutHoldNone() {
-    var moves: [Double] = []
-    let hold = TimingHold { moves.append($0) }
-    hold.start(1)
-    hold.stop(single: true)
-    #expect(moves == [0.1])
-    hold.start(-1)
-    hold.stop(single: false)
-    #expect(moves == [0.1])
-}
-
-@MainActor @Test func aHeldPlusRepeatsAfterItsFirstWait() async throws {
-    var moves: [Double] = []
-    let hold = TimingHold { moves.append($0) }
-    hold.start(1)
-    try await Task.sleep(for: .milliseconds(200))
-    #expect(moves.isEmpty, "no repeat before 350 ms")
-    try await Task.sleep(for: .milliseconds(450))
-    hold.stop(single: true)
-    // Repeats at about 350, 450, 550: 0.3 s each, and the release adds no single step.
-    #expect(moves.count >= 2 && moves.allSatisfy { abs($0 - 0.3) < 1e-9 }, "\(moves)")
-}
-
 @Test func theProfilesSubtitleSizeScalesTheDrawnLines() {
     #expect(CaptionStyle.factor(.medium) == 1)
     #expect(CaptionStyle.factor(.small) < 1)
@@ -893,8 +870,11 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
         failedAddons: [], done: true, frozen: false, conditions: nil, blocked: blocked, note: nil)
     #expect(PlayerLayout.needsAccount(versions))
     #expect(!PlayerLayout.needsAccount(nil))
-    #expect(PlayerLayout.failureActions(offer: false, canChoose: true, needsAccount: true) == [.account, .retry, .choose, .back])
-    #expect(PlayerLayout.cannotOpenActions(canChoose: true, needsAccount: true) == [.account, .choose, .retry, .back])
+    // Add an account, then Choose a version, then Back, as the web and Android cards: no other source
+    // and no Try again can play a version that needs an account.
+    #expect(PlayerLayout.failureActions(offer: true, canChoose: true, needsAccount: true) == [.account, .choose, .back])
+    #expect(PlayerLayout.cannotOpenActions(canChoose: true, needsAccount: true) == [.account, .choose, .back])
+    #expect(PlayerLayout.failureActions(offer: false, canChoose: false, needsAccount: true) == [.account, .back])
     #expect(PlayerLayout.failureLabel(.account, offer: nil) == "Add an account")
     #expect(PlayerLayout.failureFocus(PlayerLayout.failureActions(offer: false, canChoose: true, needsAccount: true)) == .account)
 }
@@ -905,6 +885,12 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     #expect(PlayerLayout.startDelay(track) == 0)
     track.delayMs = 300
     #expect(PlayerLayout.startDelay(track) == 0.3)
+    // To the tenth the stepper shows: 40 ms is 0.0 s, with no Reset.
+    track.delayMs = 40
+    #expect(PlayerLayout.startDelay(track) == 0)
+    track.delayMs = 260
+    #expect(PlayerLayout.startDelay(track) == 0.3)
+    track.delayMs = 300
     // Earlier in this play wins: the core keeps one track's delay, the play each track's.
     #expect(PlayerLayout.startDelay(track, kept: [track.url: -1.5]) == -1.5)
     #expect(PlayerLayout.startDelay(track, kept: ["other": 2]) == 0.3)
@@ -915,18 +901,4 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     // The core's own field, as it sends it.
     let decoded = try JSONDecoder().decode(SubtitleTrack.self, from: Data(#"{"url": "u", "lang": "eng", "label": null, "source": "Walk", "forced": false, "hearingImpaired": false, "hashMatch": true, "madeForFps": 25.0, "delayMs": -500}"#.utf8))
     #expect(decoded.hashMatch == true && decoded.madeForFps == 25 && decoded.delayMs == -500)
-}
-
-@Test func aSubtitlePickOrATimingStepNeverSetsThePictureAgain() throws {
-    // The picture stays up while tracks change (the web's and Android's rule): the pick, the file's
-    // own tracks and the timing only change cues or a media selection, never the player's item.
-    // Read from the source: the player needs a live stream.
-    let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player/PlayerModel.swift")
-    let text = try String(contentsOf: file, encoding: .utf8)
-    for (from, to) in [("func selectText(", "/// Reads the audio and subtitle tracks"), ("func setSubtitleDelay(", "private func watchCueEdges(")] {
-        let start = try #require(text.range(of: from))
-        let end = try #require(text.range(of: to, range: start.upperBound..<text.endIndex))
-        let body = text[start.lowerBound..<end.lowerBound]
-        #expect(!body.contains("replaceCurrentItem") && !body.contains("AVPlayerItem(") && !body.contains("seek("), "\(from)")
-    }
 }
