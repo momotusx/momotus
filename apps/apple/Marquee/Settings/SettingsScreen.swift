@@ -132,6 +132,11 @@ struct SettingsScreen: View {
                 Text("Marquee \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""), core \(core.version)")
                     .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
+                if CoreBuild.missingEngine(field: CoreBuild.field, hasEngine: hasEngine()) {
+                    Text(CoreBuild.aboutLine)
+                        .textFont(Theme.type.callout, relativeTo: .callout)
+                        .foregroundStyle(Theme.Palette.muted)
+                }
                 // The licences ship in the app: LICENSE-lucide.txt and each font's OFL.txt.
                 Text("Turkish subtitles from TurkceAltyazi.org, fetched by this device when you play.")
                     .textFont(Theme.type.callout, relativeTo: .callout)

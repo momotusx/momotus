@@ -937,20 +937,3 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     #expect(screen.contains(".onChange(of: model.versions?.snapshot) { model.versionsChanged() }"))
     #expect(screen.contains(".onChange(of: model.playback?.phase) { model.versionsChanged() }"))
 }
-
-@Test func aReleaseOwnBuildRefusesPlayOnACoreWithoutTheEngine() throws {
-    // plans/play-every-version.md, Phase 0: own builds carry the torrent engine.
-    let refusal = PlayerLayout.engineRefusal(hasEngine: false, store: false, release: true)
-    #expect(refusal?.contains("no torrent engine") == true)
-    #expect(PlayerLayout.engineRefusal(hasEngine: true, store: false, release: true) == nil)
-    #expect(PlayerLayout.engineRefusal(hasEngine: false, store: true, release: true) == nil, "a store build, on purpose")
-    #expect(PlayerLayout.engineRefusal(hasEngine: false, store: false, release: false) == nil, "Debug plays on any core")
-    // Asked before the playback view opens (read from the source: the model needs a live core).
-    let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player/PlayerModel.swift")
-    let text = try String(contentsOf: url, encoding: .utf8)
-    let ask = try #require(text.range(of: "PlayerLayout.engineRefusal(hasEngine: hasEngine(), store: store, release: release)"))
-    let open = try #require(text.range(of: #"core.open("playback""#))
-    #expect(ask.lowerBound < open.lowerBound)
-    // This test bundle links the checkout's core: it carries the engine.
-    #expect(hasEngine())
-}

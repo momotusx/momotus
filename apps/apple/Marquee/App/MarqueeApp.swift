@@ -15,6 +15,7 @@ struct MarqueeApp: App {
 
     init() {
         Fonts.register()
+        CoreBuild.check()
         #if os(macOS)
         // A kit copied before the app last stopped, if nothing was copied since.
         Clipboard.clearLeftover()

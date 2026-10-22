@@ -125,3 +125,51 @@ test.if(existsSync(linked))("this checkout's linked core carries the engine", ()
   expect(slices.length).toBeGreaterThan(0);
   expect(check(slices).code).toBe(0);
 });
+
+/**
+ * The Xcode pre-build phase, as project.yml writes it, run over a stand-in checkout: its
+ * Core/MarqueeCore.xcframework holds `lib` as a slice, its scripts/check-engine.sh is this one.
+ */
+function phase(lib: string, dir: string, coreBuild = "own") {
+  const yml = readFileSync(join(scripts, "..", "project.yml"), "utf8");
+  const at = yml.indexOf("- name: Refuse a core without the engine");
+  expect(at).toBeGreaterThan(-1);
+  const lines = yml.slice(yml.indexOf("script: |", at)).split("\n").slice(1);
+  const indent = lines[0].length - lines[0].trimStart().length;
+  const body = lines
+    .slice(0, lines.findIndex((l) => l.trim() !== "" && l.length - l.trimStart().length < indent))
+    .map((l) => l.slice(indent))
+    .join("\n");
+  const root = join(dir, "checkout");
+  mkdirSync(join(root, "Core", "MarqueeCore.xcframework", "ios-arm64"), { recursive: true });
+  mkdirSync(join(root, "scripts"), { recursive: true });
+  writeFileSync(join(root, "Core", "MarqueeCore.xcframework", "ios-arm64", "libmarquee_core.a"), readFileSync(lib));
+  writeFileSync(join(root, "scripts", "check-engine.sh"), readFileSync(join(scripts, "check-engine.sh")));
+  chmodSync(join(root, "scripts", "check-engine.sh"), 0o755);
+  const run = Bun.spawnSync(["/bin/sh", "-c", body], {
+    env: { ...process.env, SRCROOT: root, MARQUEE_CORE_BUILD: coreBuild },
+  });
+  return { code: run.exitCode, said: run.stdout.toString() + run.stderr.toString() };
+}
+
+test("the Xcode phase fails an own build on a stale core without the engine", () => {
+  const { dir, engine, store } = fixtures();
+  try {
+    expect(phase(engine, dir).code).toBe(0);
+    const stale = phase(store, dir);
+    expect(stale.code).toBe(1);
+    expect(stale.said).toContain("error: the linked core has no torrent engine");
+    const storeBuild = phase(store, dir, "store");
+    expect(storeBuild.code).toBe(0);
+    expect(storeBuild.said).toContain("store core");
+  } finally {
+    rmSync(dir, { recursive: true });
+  }
+});
+
+test("the build says own unless it is a store build, for the app to read", () => {
+  const yml = readFileSync(join(scripts, "..", "project.yml"), "utf8");
+  expect(yml).toContain("    MARQUEE_CORE_BUILD: own\n");
+  // Every app target's Info.plist carries it.
+  expect(yml.split("MarqueeCoreBuild: $(MARQUEE_CORE_BUILD)").length - 1).toBe(3);
+});

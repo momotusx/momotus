@@ -28,9 +28,9 @@ settings:
     # owner steps 1 and 3: until then no build asks for them (an ad hoc Mac build with
     # them would not launch). Set to Marquee/Marquee.entitlements once they exist.
     MARQUEE_ENTITLEMENTS: ""
-    # 1 for a store build: its core has no torrent engine, on purpose (STORE=1 for build-core.sh).
-    # Every other build links a core with the engine, checked before it compiles.
-    MARQUEE_STORE: ""
+    # own: the core carries the torrent engine, checked before the app compiles; store: a store core,
+    # engine-free on purpose (STORE=1 for build-core.sh). The app reads it as MarqueeCoreBuild.
+    MARQUEE_CORE_BUILD: own
 targetTemplates:
   App:
     type: application
@@ -80,8 +80,10 @@ targetTemplates:
         inputFiles:
           - $(SRCROOT)/Core/MarqueeCore.xcframework/Info.plist
         script: |
-          if ! STORE="$MARQUEE_STORE" "$SRCROOT/scripts/check-engine.sh" "$SRCROOT"/Core/MarqueeCore.xcframework/*/libmarquee_core.a; then
-            echo "error: the linked core has no torrent engine. Run apps/apple/scripts/build-core.sh, or set MARQUEE_STORE=1 for a store build."
+          store=""
+          if [ "$MARQUEE_CORE_BUILD" = store ]; then store=1; fi
+          if ! STORE="$store" "$SRCROOT/scripts/check-engine.sh" "$SRCROOT"/Core/MarqueeCore.xcframework/*/libmarquee_core.a; then
+            echo "error: the linked core has no torrent engine. Run apps/apple/scripts/build-core.sh, or set MARQUEE_CORE_BUILD=store for a store build."
             exit 1
           fi
       # The entitlements name the link host (applinks, webcredentials): never an empty one.
@@ -111,7 +113,7 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         MarqueeSyncServer: $(MARQUEE_SYNC_SERVER)
         MarqueeLinkHost: $(MARQUEE_LINK_HOST)
-        MarqueeStore: $(MARQUEE_STORE)
+        MarqueeCoreBuild: $(MARQUEE_CORE_BUILD)
     settings:
       base:
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.entertainment
@@ -131,7 +133,7 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         MarqueeSyncServer: $(MARQUEE_SYNC_SERVER)
         MarqueeLinkHost: $(MARQUEE_LINK_HOST)
-        MarqueeStore: $(MARQUEE_STORE)
+        MarqueeCoreBuild: $(MARQUEE_CORE_BUILD)
     settings:
       base:
         TARGETED_DEVICE_FAMILY: "1,2"
@@ -154,7 +156,7 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         MarqueeSyncServer: $(MARQUEE_SYNC_SERVER)
         MarqueeLinkHost: $(MARQUEE_LINK_HOST)
-        MarqueeStore: $(MARQUEE_STORE)
+        MarqueeCoreBuild: $(MARQUEE_CORE_BUILD)
     settings:
       base:
         TARGETED_DEVICE_FAMILY: "3"
@@ -209,6 +211,8 @@ targets:
       - path: Marquee/Theme/BackdropStops.swift
       # The hero box, laid out for real in Tests/HeroFrameTests.swift.
       - path: Marquee/Home/HeroFrame.swift
+      # Own or store build beside the core's engine (Tests/CoreBuildTests.swift).
+      - path: Marquee/App/CoreBuild.swift
       # A catalog tile, laid out for real in Tests/PosterRowTests.swift.
       - path: Marquee/Home/PosterTile.swift
       # The title hero, laid out from plain values in Tests/TitleHeroTests.swift, with what it draws with.
