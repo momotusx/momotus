@@ -12,6 +12,11 @@
 #            the macOS and iOS simulator slices only: for tests and simulator walks.
 #            The app refuses it outside Debug (it greps every slice for the hook).
 #
+# Own installs (Xcode, TestFlight) carry the torrent engine: mq-ffi builds with
+# `--features torrent`, and an iOS or tvOS slice without it fails the build
+# (check-engine.sh). STORE=1 builds the store core, with no engine, on purpose
+# (App Store Guideline 5.2.3; plans/play-every-version.md, Phase 0).
+#
 # Each slice is built as a staticlib alone (`cargo rustc --crate-type staticlib`): with
 # mq-ffi's three crate types cargo passes no `-C lto`, so the profile's thin LTO never
 # applied. The Swift bindings are read from the macOS staticlib by the pinned generator
@@ -47,6 +52,10 @@ elif [[ "${1:-}" == "--dev" ]]; then
   target_dir="${target_dir}-dev"
 fi
 export CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=$dev_assertions
+features=(--features torrent)
+if [[ "${STORE:-}" == 1 ]]; then
+  features=()
+fi
 
 # C code built by build scripts (SQLite, ring) must match the app floors.
 export MACOSX_DEPLOYMENT_TARGET=15.0 IPHONEOS_DEPLOYMENT_TARGET=18.0 TVOS_DEPLOYMENT_TARGET=18.0
@@ -55,11 +64,20 @@ cd "$root"
 for target in aarch64-apple-darwin "${targets[@]}"; do
   echo "building mq-ffi for $target"
   CARGO_TARGET_DIR="$target_dir" CARGO_INCREMENTAL=0 \
-    cargo rustc -p mq-ffi --lib --release --target "$target" -j 4 --crate-type staticlib
+    cargo rustc -p mq-ffi --lib --release --target "$target" -j 4 ${features[@]+"${features[@]}"} --crate-type staticlib
 done
 
 # A shipped core carries no dev hook: the MQ_DEV_ variables and the e2e recorder's set_dev_replay
 # are compiled in only with debug assertions (--dev). Checked on every library built here.
+# An own build's phone and TV slices carry the engine; only STORE=1 leaves it out.
+if [[ "${STORE:-}" != 1 ]]; then
+  engine_libs=()
+  for target in "${targets[@]}"; do
+    engine_libs+=("$target_dir/$target/release/libmarquee_core.a")
+  done
+  "$apple/scripts/check-engine.sh" "${engine_libs[@]}"
+fi
+
 if [[ $dev_assertions == false ]]; then
   for target in aarch64-apple-darwin "${targets[@]}"; do
     lib="$target_dir/$target/release/libmarquee_core.a"
