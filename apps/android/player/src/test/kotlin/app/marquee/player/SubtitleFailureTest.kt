@@ -463,6 +463,33 @@ class SubtitleFailureTest {
     }
 
     @Test
+    fun `after a picture, a failed source or a moved server fills the next start from nothing`() {
+        val (player, controller) = open()
+        player.buffered(START_BUFFER_MS.toLong())
+        until("the buffer fills the logo") { controller.loadingFill == 1f }
+        player.state(Player.STATE_READY)
+        player.renderFirstFrame()
+        until("the picture shows") { controller.picture }
+        // Twenty minutes in, the source breaks: the loading screen of the next one is not full from the start.
+        player.fail(httpError(video, 503))
+        until("the next source is asked for") { failOvers().size == 1 }
+        assertFalse(controller.picture)
+        assertEquals(0f, controller.loadingFill)
+        assertTrue(controller.starting)
+        // The next source plays; then the stream server moves while the app was away.
+        push(snapshot(url = "http://127.0.0.1:7780/next.mp4"))
+        until("the next source loads") { player.items.size == 2 }
+        player.buffered(START_BUFFER_MS.toLong())
+        until("its buffer fills the logo") { controller.loadingFill == 1f }
+        player.renderFirstFrame()
+        until("its picture shows") { controller.picture }
+        controller.serverMoved()
+        assertEquals(0f, controller.loadingFill)
+        assertFalse(controller.picture)
+        controller.release()
+    }
+
+    @Test
     fun `a start the app leaves goes on paused and plays once the viewer is back, a play already showing does not`() {
         val (player, controller) = open(snapshot(phase = "resolving"), loads = false)
         until("the start is heard") { controller.subtitlesPending }

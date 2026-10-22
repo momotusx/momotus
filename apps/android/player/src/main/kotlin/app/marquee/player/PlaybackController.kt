@@ -637,7 +637,7 @@ class PlaybackController(
         handlingFailure = true
         player.stop()
         player.clearMediaItems()
-        picture = false
+        startOver()
         stage = Stage.Buffering
         status = "${failure.message}, trying the next source"
         playback.failOver(failure.message, playingAttempt, failure.kind.wire, failure.status)
@@ -1002,7 +1002,15 @@ class PlaybackController(
         if (loadedUrl == null || released) return
         lastPositionMs = player.currentPosition.coerceAtLeast(0L)
         reopening = true
+        startOver()
         view?.retry()
+    }
+
+    /** A source that failed or moved is opened again: the loading screen starts from nothing, not where the last got. */
+    private fun startOver() {
+        picture = false
+        loadingFill = 0f
+        fillBase = 0f
     }
 
     // The same source at a new address (the server moved): nothing to announce when it loads.
