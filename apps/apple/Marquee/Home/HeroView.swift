@@ -124,6 +124,8 @@ struct HeroView: View {
                 playButton(tile).frame(width: 178)
                 NavigationLink(value: TitleRoute(tile)) {
                     Glyph("info", size: 22)
+                        // The glyph scales with the text, held so it stays inside its 48 pt circle.
+                        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                         .foregroundStyle(.white)
                         .frame(width: 48, height: 48)
                         .background(SecondaryFill(shape: Circle()))
@@ -163,6 +165,9 @@ struct HeroView: View {
                     }
                 }
                 .frame(maxWidth: metrics.wide ? nil : .infinity)
+                // The iPhone's pill is 178 wide: a large text size shrinks the word rather than cut it.
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
             }
             .buttonStyle(PillButtonStyle(prominent: true))
             // Never off while starting: a TV moves focus off a disabled button,

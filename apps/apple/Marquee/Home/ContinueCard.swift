@@ -32,7 +32,7 @@ struct ContinueCard: View {
         #if os(tvOS)
         return Theme.Radius.m
         #else
-        return metrics.wide ? 14 : 13
+        return metrics.wide ? Theme.Radius.card : 13
         #endif
     }
 
