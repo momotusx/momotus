@@ -140,6 +140,24 @@ func removeFailedWords(name: String, reason: String) -> String {
 /// when its place went out of sight meanwhile (a player must never open in a
 /// hidden place, review apple-journey r3 P2-2); else play the pick, or Add a
 /// source with no version at all, or Versions while sources still answer.
+/// Start Over in the Mac's Playback menu is live only for the title in front: it has a resume
+/// point, its place is shown and no player covers it (plans/design-v3-phase3-apple.md 2.1).
+func startOverAvailable(resume: Int64?, shown: Bool, covered: Bool) -> Bool {
+    (resume ?? 0) > 0 && shown && !covered
+}
+
+/// A title-level mark the page can toggle.
+enum TitleMark: Equatable {
+    case library(on: Bool)
+    case watched(on: Bool)
+}
+
+/// The title's marks in the order they show: Library always, Watched only for a movie. The core keeps
+/// no watched mark for a whole series (C14, C41), so a series shows Library alone.
+func titleMarks(kind: String, inLibrary: Bool, watched: Bool) -> [TitleMark] {
+    kind == "movie" ? [.library(on: inLibrary), .watched(on: watched)] : [.library(on: inLibrary)]
+}
+
 enum SettledStart: Equatable {
     case play, addSource, versions, nothing
 

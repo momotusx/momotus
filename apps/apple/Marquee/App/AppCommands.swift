@@ -8,6 +8,13 @@ extension FocusedValues {
     @Entry var find: OpenTabAction?
     /// The player on screen, for the Playback menu.
     @Entry var playerKeys: PlayerKeys?
+    /// The title page in front, when Start Over can play it from the beginning (`startOverAvailable`).
+    @Entry var startOver: StartOverAction?
+}
+
+/// Plays the title in front from its beginning.
+struct StartOverAction {
+    let run: @MainActor () -> Void
 }
 
 /// What the Playback menu acts on: the player and its way out.
@@ -23,6 +30,7 @@ struct AppCommands: Commands {
     @FocusedValue(\.places) private var places
     @FocusedValue(\.find) private var find
     @FocusedValue(\.playerKeys) private var player
+    @FocusedValue(\.startOver) private var startOver
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {}
@@ -44,6 +52,11 @@ struct AppCommands: Commands {
             .disabled(places == nil)
         }
         CommandMenu("Playback") {
+            // A title page's resume point, outside the player's group so it is live on the page.
+            Button("Start Over") { startOver?.run() }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .disabled(startOver == nil)
+            Divider()
             Group {
                 Button(player?.model.playing == true ? "Pause" : "Play") { player?.model.togglePlay() }
                     .keyboardShortcut(bare(.space))

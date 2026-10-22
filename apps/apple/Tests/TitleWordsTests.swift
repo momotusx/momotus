@@ -101,3 +101,18 @@ import Testing
     #expect(SettledStart.of(picked: false, done: true, placeShown: true) == .addSource)
     #expect(SettledStart.of(picked: false, done: false, placeShown: true) == .versions)
 }
+
+@Test func aSeriesShowsLibraryAloneAMovieBothMarks() {
+    // The core keeps no watched mark for a whole series (C14, C41).
+    #expect(titleMarks(kind: "series", inLibrary: true, watched: true) == [.library(on: true)])
+    #expect(titleMarks(kind: "movie", inLibrary: false, watched: true) == [.library(on: false), .watched(on: true)])
+}
+
+@Test func startOverIsLiveOnlyForTheTitleInFront() {
+    #expect(startOverAvailable(resume: 600_000, shown: true, covered: false))
+    #expect(!startOverAvailable(resume: nil, shown: true, covered: false))
+    #expect(!startOverAvailable(resume: 0, shown: true, covered: false))
+    // Another tab's title, or one under the player.
+    #expect(!startOverAvailable(resume: 600_000, shown: false, covered: false))
+    #expect(!startOverAvailable(resume: 600_000, shown: true, covered: true))
+}

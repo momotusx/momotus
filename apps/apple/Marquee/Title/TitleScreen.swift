@@ -56,6 +56,11 @@ struct TitleScreen: View {
         // At rest too: on a short or wide window the words can start under the bar before any scroll.
         .topScrim(underBar, atRest: true)
         .defaultFocus($primaryFocused, true)
+        #if os(macOS)
+        // Start Over in the Playback menu, for this title only while it is the page in front.
+        .focusedSceneValue(\.startOver, startOverAvailable(resume: model.header?.playTarget?.resumeMs, shown: placeShown, covered: playing != nil)
+            ? StartOverAction { play(fromStart: true) } : nil)
+        #endif
         .navigationDestination(item: $playing) { route in
             PlayerScreen(route: route, versions: [versions, episodeVersions].compactMap { $0 }.first { $0.sub == route.versionsSub }, core: core)
         }
@@ -315,6 +320,7 @@ struct TitleScreen: View {
                     .frame(maxWidth: column)
             }
             #endif
+            #if os(tvOS)
             Button { model.setInLibrary(!inLibrary); sync.schedule() } label: {
                 Label(inLibrary ? "In Library" : "Add to Library", glyph: inLibrary ? "bookmark-check" : "bookmark-plus")
             }
@@ -324,7 +330,21 @@ struct TitleScreen: View {
             .accessibilityLabel("In Library")
             .accessibilityAddTraits(.isToggle)
             .accessibilityValue(inLibrary ? "On" : "Off")
-            if details.kind == "movie" {
+            #else
+            if metrics.wide {
+                // The desktop frame's paired capsule: Library, and Watched for a movie.
+                MarkCapsule(marks: titleMarks(kind: details.kind, inLibrary: inLibrary, watched: watched)) { mark in
+                    switch mark {
+                    case .library(let on): model.setInLibrary(!on)
+                    case .watched(let on): model.setWatched(details.id, !on)
+                    }
+                    sync.schedule()
+                }
+            } else {
+                LibraryControl(on: inLibrary) { model.setInLibrary(!inLibrary); sync.schedule() }
+            }
+            #endif
+            if details.kind == "movie" && !capsuleHoldsWatched {
                 Button { model.setWatched(details.id, !watched); sync.schedule() } label: {
                     Label(watched ? "Watched" : "Mark as watched", glyph: "circle-check")
                 }
@@ -336,6 +356,15 @@ struct TitleScreen: View {
             }
         }
         .padding(.top, 4)
+    }
+
+    /// The Mac's capsule carries Watched; elsewhere it stays a round button until the v3 hero.
+    private var capsuleHoldsWatched: Bool {
+        #if os(tvOS)
+        return false
+        #else
+        return metrics.wide
+        #endif
     }
 
     @ViewBuilder private var lower: some View {
@@ -557,7 +586,13 @@ private struct PlayBlock: View {
                                 Glyph("play-fill")
                                 Text(target?.label ?? "Play")
                                 if let resume = target?.resumeMs, resume > 0 {
+                                    #if os(tvOS)
                                     Text(resumeText(resumeMs: resume, leftMs: target?.leftMs, runtime: runtime)).fontWeight(.regular).opacity(0.8)
+                                    #else
+                                    // The frame's 13 pt sub in the pill: "Resume S6:E2  31 min left".
+                                    Text(resumeText(resumeMs: resume, leftMs: target?.leftMs, runtime: runtime))
+                                        .textFont(13, relativeTo: .footnote).opacity(0.8)
+                                    #endif
                                 }
                             }
                         }
@@ -574,6 +609,19 @@ private struct PlayBlock: View {
                     // focus off a disabled button, and `play(fromStart:)` ignores a second press.
                     .disabled(failure != nil)
                     .accessibilityLabel(starting ? "Starting" : playWords)
+                    #if !os(tvOS)
+                    // Start over from Resume's menu and a named action; the Mac also has it in the
+                    // Playback menu (plans/design-v3-phase3-apple.md 2.1).
+                    .contextMenu {
+                        if (target?.resumeMs ?? 0) > 0 {
+                            Button { play(true) } label: { Label("Start Over", glyph: "rotate-ccw") }
+                        }
+                    }
+                    .accessibilityActions {
+                        if (target?.resumeMs ?? 0) > 0 { Button("Start over") { play(true) } }
+                    }
+                    #endif
+                    #if os(tvOS)
                     if let resume = target?.resumeMs, resume > 0 {
                         Button { play(true) } label: {
                             Label("Start over", glyph: "rotate-ccw")
@@ -583,6 +631,7 @@ private struct PlayBlock: View {
                         .fixedSize(horizontal: wide, vertical: false)
                         .disabled(failure != nil)
                     }
+                    #endif
                 }
             }
             Group {
