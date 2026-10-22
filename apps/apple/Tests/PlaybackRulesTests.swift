@@ -636,10 +636,11 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     #expect(WebVTT.text(at: PlayerLayout.cueTime(position: 8.5, delay: 0), in: cues) == nil)
     // Later holds a line back.
     #expect(WebVTT.text(at: PlayerLayout.cueTime(position: 10.5, delay: 1), in: cues) == nil)
-    #expect(PlayerLayout.delayWords(0) == "On time")
-    #expect(PlayerLayout.delayWords(1.5) == "1.5 s later")
-    #expect(PlayerLayout.delayWords(-0.5) == "0.5 s earlier")
-    #expect(PlayerLayout.delayWords(-2) == "2.0 s earlier")
+    // Signed, never "earlier" or "later" (the owner).
+    #expect(PlayerLayout.delayWords(0) == "0.0 seconds")
+    #expect(PlayerLayout.delayWords(1.5) == "Plus 1.5 seconds")
+    #expect(PlayerLayout.delayWords(-0.5) == "Minus 0.5 seconds")
+    #expect(PlayerLayout.delayWords(-2) == "Minus 2.0 seconds")
 }
 
 @Test func theTimingStepperMovesAsStremiosDoes() {

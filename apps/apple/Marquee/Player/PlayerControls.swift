@@ -421,10 +421,10 @@ struct PlayerControls: View {
                     #if os(tvOS)
                     Section("Timing: \(PlayerLayout.delayText(model.subtitleDelay))") {
                         Button { model.setSubtitleDelay(PlayerLayout.nudge(model.subtitleDelay, by: -PlayerLayout.subtitleStep)); hold(true) } label: {
-                            Label("Earlier by 0.1 s", glyph: "chevron-left")
+                            Label("\u{2212}0.1 s", glyph: "minus")
                         }
                         Button { model.setSubtitleDelay(PlayerLayout.nudge(model.subtitleDelay, by: PlayerLayout.subtitleStep)); hold(true) } label: {
-                            Label("Later by 0.1 s", glyph: "chevron-right")
+                            Label("+0.1 s", glyph: "plus")
                         }
                         if model.subtitleDelay != 0 {
                             Button { model.setSubtitleDelay(0); hold(false) } label: { Label("Reset", glyph: "rotate-ccw") }
@@ -642,7 +642,7 @@ struct SubtitleTimingStepper: View {
                 }
             }
             HStack(spacing: 12) {
-                step(-1, glyph: "minus", label: "Show subtitles 0.1 seconds earlier")
+                step(-1, glyph: "minus", label: "Minus 0.1 seconds")
                 Button(action: reset) {
                     Text(PlayerLayout.delayText(value))
                         .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
@@ -660,11 +660,11 @@ struct SubtitleTimingStepper: View {
                 }
                 .accessibilityLabel("Subtitle timing")
                 .accessibilityValue(PlayerLayout.delayWords(value))
-                .accessibilityHint(value == 0 ? "" : "Resets to on time")
+                .accessibilityHint(value == 0 ? "" : "Resets to 0.0 seconds")
                 .accessibilityAdjustableAction { direction in
                     move(direction == .increment ? PlayerLayout.subtitleStep : -PlayerLayout.subtitleStep)
                 }
-                step(1, glyph: "plus", label: "Show subtitles 0.1 seconds later")
+                step(1, glyph: "plus", label: "Plus 0.1 seconds")
             }
         }
         .foregroundStyle(Theme.Palette.text)

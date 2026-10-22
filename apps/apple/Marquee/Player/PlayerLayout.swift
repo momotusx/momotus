@@ -148,11 +148,12 @@ enum PlayerLayout {
         Array(Set(cues.flatMap { [$0.start + delay, $0.end + delay] }.filter { $0 >= 0 })).sorted()
     }
 
-    /// "On time", "1.5 s later", "0.3 s earlier": the value in words, said once it settles.
+    /// "Plus 1.5 seconds", "Minus 0.3 seconds", "0.0 seconds": the signed value as VoiceOver says it,
+    /// once it settles. Never "earlier" or "later" (the owner, 2026-10-22).
     static func delayWords(_ delay: Double) -> String {
-        guard abs(delay) >= 0.05 else { return "On time" }
-        let amount = String(format: "%.1f", abs(delay))
-        return delay > 0 ? "\(amount) s later" : "\(amount) s earlier"
+        let amount = String(format: "%.1f seconds", abs(delay))
+        guard abs(delay) >= 0.05 else { return "0.0 seconds" }
+        return delay > 0 ? "Plus \(amount)" : "Minus \(amount)"
     }
 
     /// The phone player opens across on a play's first appear; back from
