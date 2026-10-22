@@ -408,8 +408,8 @@ class TvHomeShelfTest {
             val node = art()
             val top = node.positionInRoot.y
             if (state.page.firstVisibleItemIndex > 0) flipped = true
-            // Each step moves the art by the step, until it has gone above the screen for good.
-            if (top + node.size.height > 0f) assertEquals(last - step, top, 1.5f, "the art jumped at step $it")
+            // Each step moves the art by the step while a step leaves any of it on the screen: it never drops away early.
+            if (last + node.size.height > step) assertEquals(last - step, top, 1.5f, "the art jumped at step $it")
             last = top
         }
         assertTrue(flipped, "the hero item never left the list's first place")
