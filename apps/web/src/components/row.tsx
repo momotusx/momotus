@@ -248,9 +248,13 @@ export function Row(props: {
   // Continue Watching is a row of 16:9 stills; on TV a movie row is too and a series row is
   // 2:3 posters (design/DECISION.md, Shelves); other catalogs keep the shape their addon names.
   const wide = () => props.row.rowId === CONTINUE_ROW;
-  // A row still loading has no tile to tell its kind: its id names it (`<addonId>:<type>:<catalogId>`,
-  // HomeRows), so its skeleton already has the final height and nothing below jumps when tiles arrive.
-  const kind = () => props.row.tiles[0]?.kind ?? props.row.rowId.split(":")[1];
+  // A row still loading has no tile to tell its kind: its id names it (`<addonId>@<install>:<kind>:<catalogId>`,
+  // views/home.rs row_id), so its skeleton already has the final height and nothing below jumps when tiles
+  // arrive. The kind is the part after the one carrying the install tag, so a catalog id with colons is fine.
+  // ponytail: parsed from the id; a `kind` field on HomeRow is the sturdy source, but it touches 13 core and
+  // 26 Android construction sites, so it waits for the next HomeRow change. A wrong guess only brings back
+  // the jump: the loaded row reads its tiles' kind.
+  const kind = () => props.row.tiles[0]?.kind ?? props.row.rowId.split(":").find((_, i, parts) => parts[i - 1]?.includes("@"));
   const still = () => !wide() && form() === "tv" && kind() === "movie";
   const size = () => (wide() || still() ? m().landscape : sizeOf(m(), props.row.tiles[0]?.posterShape));
   const stride = () => size()[0] + m().gap;
