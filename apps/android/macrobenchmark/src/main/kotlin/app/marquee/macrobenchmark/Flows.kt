@@ -6,7 +6,8 @@ import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 
-const val PACKAGE = "app.marquee.android"
+/** The benchmark builds' own package (app/build.gradle.kts), so a run never touches a device's Marquee. */
+const val PACKAGE = "app.marquee.android.benchmark"
 
 /** The profile this emulator walks with: the start picker asks once per cold start when there are two. */
 private const val PROFILE = "Main"
