@@ -16,9 +16,11 @@ import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * A first run's subtitles step, after the stream question (plans/m13-subtitle-languages.md 7): the language
- * subtitles start in, one choice. The [device]'s language is chosen at first and listed first, then the
- * common ones and No subtitles; every other language waits behind More languages. [save] writes the choice
- * as the profile's `subtitleLanguages` (none for No subtitles); Skip writes nothing. Main thread only.
+ * subtitles start in, one choice. The [device]'s language is listed first and chosen at first, unless it is
+ * English (No subtitles then: most titles are in English, and English audio a file does not tag would get
+ * English subtitles over it); then the common ones and No subtitles; every other language waits behind More
+ * languages. [save] writes the choice as the profile's `subtitleLanguages` (none for No subtitles); Skip
+ * writes nothing. Main thread only.
  */
 class SubtitleStep(
     private val ops: CoreOps,
@@ -30,7 +32,7 @@ class SubtitleStep(
         private set
 
     /** The chosen language's code; null for No subtitles. */
-    var chosen by mutableStateOf(device?.takeIf { it.isNotBlank() })
+    var chosen by mutableStateOf(device?.takeIf { it.isNotBlank() && it != "en" })
 
     /** The choice is being written: a second press sends nothing. */
     var busy by mutableStateOf(false)

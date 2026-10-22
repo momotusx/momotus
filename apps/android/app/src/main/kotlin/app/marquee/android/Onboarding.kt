@@ -26,12 +26,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -275,16 +275,27 @@ fun SubtitleStepScreen(
     session: CoreSession,
     onDone: () -> Unit,
 ) {
-    val device = DeviceCaps.deviceLanguage(LocalConfiguration.current.locales[0])
+    val device = DeviceCaps.languageCode(LocalConfiguration.current.locales[0])
     val holder =
         viewModel<SubtitleStepHolder>(
             key = "subtitle-step",
             factory = viewModelFactory { initializer { SubtitleStepHolder(session, device) } },
         )
-    // Read once, before anything shows: null while the core has not said.
-    val has by produceState<Boolean?>(null) { value = prefsNow(session)?.subtitleLanguages?.isNotEmpty() == true }
-    LaunchedEffect(has) { if (has == true) onDone() }
-    if (has == false) SubtitleStepPage(holder.step, device, onDone)
+    SubtitleStepGate({ prefsNow(session)?.subtitleLanguages.isNullOrEmpty() }, holder.step, device, onDone)
+}
+
+/** Asks [asks] once, before anything shows: the page when it says yes, else [onDone] at once. */
+@Composable
+internal fun SubtitleStepGate(
+    asks: suspend () -> Boolean,
+    step: SubtitleStep,
+    device: String?,
+    onDone: () -> Unit,
+) {
+    val leave by rememberUpdatedState(onDone)
+    // Answered once: a step that passes by leaves once.
+    val shows by produceState<Boolean?>(null) { value = asks().also { if (!it) leave() } }
+    if (shows == true) SubtitleStepPage(step, device, onDone)
 }
 
 /** The subtitles step's page over [step]: the rows, Continue and More languages. */
@@ -308,7 +319,8 @@ internal fun SubtitleStepPage(
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             MqText("Marquee", role = TextRole.Title2, modifier = Modifier.weight(1f))
-            SkipLink(SubtitleStep.SKIP, onDone)
+            // Not while Continue saves: the step leaves once.
+            SkipLink(SubtitleStep.SKIP, { if (!step.busy) onDone() })
         }
         val width = Modifier.widthIn(max = 900.dp).fillMaxWidth()
         Column(

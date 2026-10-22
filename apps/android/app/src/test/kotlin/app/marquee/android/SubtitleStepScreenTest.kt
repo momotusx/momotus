@@ -45,6 +45,7 @@ import org.robolectric.annotation.GraphicsMode
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -78,6 +79,11 @@ class SubtitleStepScreenTest {
             LanguageChoice("tr", "Turkish"),
         )
 
+    /** Holds the answer to the next `setPrefs` until it is released (a slow save). */
+    @Volatile private var held: (() -> Unit)? = null
+
+    @Volatile private var holdSaves = false
+
     /** A step over a core that knows [languages] and takes every write. */
     private fun step(device: String): SubtitleStep {
         val list = languages.joinToString(",", "[", "]") { """{"code":"${it.code}","name":"${it.name}"}""" }
@@ -86,8 +92,10 @@ class SubtitleStepScreenTest {
                 sent += text
                 val request = CoreJson.parseToJsonElement(text).jsonObject
                 val id = request.getValue("id").jsonPrimitive.long
-                val result = if (request.getValue("op").jsonPrimitive.content == "languages") list else PREFS
-                client.onMessage("""{"id":$id,"ok":true,"result":$result}""")
+                val op = request.getValue("op").jsonPrimitive.content
+                val result = if (op == "languages") list else PREFS
+                val answer = { client.onMessage("""{"id":$id,"ok":true,"result":$result}""") }
+                if (holdSaves && op == "setPrefs") held = answer else answer()
             },
         )
         return SubtitleStep(CoreOps(client), scope, device).also { it.load() }
@@ -136,6 +144,50 @@ class SubtitleStepScreenTest {
         compose.onNode(isFocused()).performClick()
         compose.waitUntil(5_000) { done == 1 }
         assertTrue(wrote("""["tr"]"""), "Continue writes the device's language: $sent")
+    }
+
+    @Test
+    @Config(qualifiers = "w412dp-h915dp-xxhdpi")
+    fun `a profile with languages passes by, once, and shows nothing`() {
+        val step = step("tr")
+        var done = 0
+        page(Form.Phone) { SubtitleStepGate({ false }, step, "tr") { done++ } }
+        compose.waitUntil(5_000) { done == 1 }
+        // A second leave would arrive at Home twice.
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.onNodeWithText(SubtitleStep.TITLE).assertDoesNotExist()
+        assertEquals(1, done)
+    }
+
+    @Test
+    @Config(qualifiers = "w412dp-h915dp-xxhdpi")
+    fun `Skip leaves at once and writes nothing`() {
+        val step = step("tr")
+        var done = 0
+        page(Form.Phone) { SubtitleStepGate({ true }, step, "tr") { done++ } }
+        compose.waitUntil(5_000) { runCatching { compose.onNodeWithText(SubtitleStep.TITLE).assertExists() }.isSuccess }
+        compose.onNodeWithText(SubtitleStep.SKIP).performClick()
+        compose.waitUntil(5_000) { done == 1 }
+        assertTrue(sent.none { "\"setPrefs\"" in it }, "Skip writes nothing: $sent")
+    }
+
+    @Test
+    @Config(qualifiers = "w412dp-h915dp-xxhdpi")
+    fun `Skip waits while Continue saves, so the step leaves once`() {
+        holdSaves = true
+        val step = step("tr")
+        var done = 0
+        page(Form.Phone) { SubtitleStepPage(step, "tr") { done++ } }
+        compose.waitUntil(5_000) { step.all.isNotEmpty() }
+        compose.onNodeWithText("Continue").performClick()
+        compose.waitUntil(5_000) { held != null }
+        compose.onNodeWithText(SubtitleStep.SKIP).performClick()
+        compose.waitForIdle()
+        assertEquals(0, done, "Skip went while the save ran")
+        held?.invoke()
+        compose.waitUntil(5_000) { done == 1 }
+        compose.waitForIdle()
+        assertEquals(1, done)
     }
 
     @Test

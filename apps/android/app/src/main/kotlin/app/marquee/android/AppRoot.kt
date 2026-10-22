@@ -420,7 +420,12 @@ private fun AppNav(
                     entry<Route.StreamQuestion> {
                         StreamQuestionScreen(
                             session,
-                            onDone = { backStack[backStack.lastIndex] = Route.SubtitleLanguage },
+                            onDone = {
+                                // A Back during the save took the question away: nothing to replace.
+                                if (backStack.lastOrNull() == Route.StreamQuestion) {
+                                    backStack[backStack.lastIndex] = Route.SubtitleLanguage
+                                }
+                            },
                         )
                     }
                     entry<Route.SubtitleLanguage> { SubtitleStepScreen(session, onDone = ::arrive) }

@@ -178,11 +178,14 @@ object DeviceCaps {
         (audioMimes.filterKeys { mime -> all.any { mime in it.mimes } }.values + "pcm").distinct()
 
     /** A two letter ISO 639-1 code; `iw`, `in` and `ji` (the old Java codes) are mapped to what the core reads. */
-    internal fun deviceLanguage(locale: Locale): String? =
+    internal fun deviceLanguage(locale: Locale): String? = languageCode(locale)?.takeIf { it.length == 2 }
+
+    /** The locale's language as the core's tags begin, three letters too ("fil", "yue"): for the subtitle pickers. */
+    internal fun languageCode(locale: Locale): String? =
         locale
             .toLanguageTag()
             .substringBefore('-')
-            .takeIf { it.length == 2 }
+            .takeIf { it.length in 2..3 && it != "und" }
 
     internal fun hdrNames(types: IntArray): List<String> = types.toList().mapNotNull { hdrTypes[it] }.distinct()
 

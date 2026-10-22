@@ -9,7 +9,7 @@ import app.marquee.core.model.LanguageChoice
  */
 object LanguagePicks {
     /** Offered before anything is typed: the languages the pickers had before the full list. */
-    val COMMON = listOf("en", "es", "fr", "de", "it", "pt", "ja", "tr")
+    val COMMON = listOf("en", "tr", "es", "fr", "de", "it", "pt", "ja")
 
     /** How many matches the search shows at once. */
     const val SHOWN = 12

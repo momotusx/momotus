@@ -85,6 +85,14 @@ class DeviceCapsTest {
     }
 
     @Test
+    fun `the subtitle pickers take a three letter language too`() {
+        assertEquals("fil", DeviceCaps.languageCode(Locale.forLanguageTag("fil-PH")))
+        assertEquals("yue", DeviceCaps.languageCode(Locale.forLanguageTag("yue-HK")))
+        assertEquals("he", DeviceCaps.languageCode(Locale("iw", "IL")))
+        assertNull(DeviceCaps.languageCode(Locale.ROOT))
+    }
+
+    @Test
     fun `the versions params carry every capability under the names the core reads`() {
         val json =
             DeviceCapsParams(

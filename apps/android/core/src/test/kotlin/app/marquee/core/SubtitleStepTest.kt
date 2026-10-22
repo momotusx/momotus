@@ -50,6 +50,18 @@ class SubtitleStepTest {
     }
 
     @Test
+    fun an_english_device_leads_with_english_and_chooses_no_subtitles() {
+        val step = step("en")
+        assertNull(step.chosen)
+        assertEquals(listOf("en", "tr", "es", "fr", "de", "it", "pt", "ja"), step.common.map { it.code })
+    }
+
+    @Test
+    fun turkish_comes_after_the_device_and_english() {
+        assertEquals(listOf("de", "en", "tr"), step("de").common.map { it.code }.take(3))
+    }
+
+    @Test
     fun continue_writes_the_choice_and_no_subtitles_writes_none() {
         core.answers["setPrefs"] = { ok(prefs) }
         val step = step("de")
