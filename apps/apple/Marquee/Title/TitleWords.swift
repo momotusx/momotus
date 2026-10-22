@@ -136,10 +136,6 @@ func removeFailedWords(name: String, reason: String) -> String {
     "\(name) could not be removed from Continue Watching: \(reason)"
 }
 
-/// What a Play that waited for its pick does once the pick settles: nothing
-/// when its place went out of sight meanwhile (a player must never open in a
-/// hidden place, review apple-journey r3 P2-2); else play the pick, or Add a
-/// source with no version at all, or Versions while sources still answer.
 /// An episode's caption, the same words on every form: "Airs Oct 21" for one still to come, else
 /// "36 min left · Feb 18, 2022" (the core's time left, or the progress against `minutes`) or
 /// "57 min · Feb 18, 2022". The day is kept in UTC so it never slips (plans/design-v3-phase3-apple.md).
@@ -210,6 +206,10 @@ func titleMarks(kind: String, inLibrary: Bool, watched: Bool) -> [TitleMark] {
     kind == "movie" ? [.library(on: inLibrary), .watched(on: watched)] : [.library(on: inLibrary)]
 }
 
+/// What a Play that waited for its pick does once the pick settles: nothing
+/// when its place went out of sight meanwhile (a player must never open in a
+/// hidden place, review apple-journey r3 P2-2); else play the pick, or Add a
+/// source with no version at all, or Versions while sources still answer.
 enum SettledStart: Equatable {
     case play, addSource, versions, nothing
 

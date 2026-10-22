@@ -180,6 +180,7 @@ targets:
       - path: Marquee/Core/ListDiff.swift
       - path: Marquee/Title/TitleWords.swift
       - path: Marquee/App/TabBarRule.swift
+      - path: Marquee/App/Places.swift
       - path: Marquee/Common/ChipRule.swift
       - path: Marquee/Versions/VersionWords.swift
       - path: Marquee/Core/ProfileModels.swift
@@ -197,6 +198,7 @@ targets:
       - path: Marquee/Home/HeroText.swift
       - path: Marquee/Theme/Glyph.swift
       - path: Marquee/Title/TitleHero.swift
+      - path: Marquee/Title/TitleActions.swift
       - path: Marquee/Theme/Components.swift
       - path: Marquee/Player/CaptionStyle.swift
       - path: Marquee/Sync/SyncWords.swift

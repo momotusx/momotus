@@ -28,8 +28,18 @@ enum WideLayout {
     static func panelCoversInfo(window: CGFloat) -> Bool { window - panelRoom < BackdropStops.heroSynopsisWidth }
     /// The hero column beside the open panel, at most the hero's 900.
     static func panelColumnWidth(window: CGFloat) -> CGFloat { min(900, max(0, window - panelRoom)) }
-    /// Starring (360 pt at the right) clears a full action row (about 760) with 40 on every side.
-    static func starringFits(window: CGFloat) -> Bool { window >= 40 + 760 + 40 + 360 + 40 }
+    /// The page under the open panel goes inert only while the scrim shows: beside the panel it stays
+    /// in reach.
+    static func pageInert(wide: Bool, panelOpen: Bool, window: CGFloat) -> Bool {
+        wide && panelOpen && panelCoversInfo(window: window)
+    }
+    /// Starring (360 pt at the right) shows from a 1240 window, where the glass check reads it, and
+    /// only where it clears the action row as drawn with 40 on every side: a movie's row runs to
+    /// about 875 (review P2-1), a long Resume further.
+    static func starringFits(window: CGFloat, row: CGFloat) -> Bool {
+        window >= max(starringFrom, 40 + row + 40 + 360 + 40)
+    }
+    static let starringFrom: CGFloat = 1240
 }
 
 /// Plain words for what the core says about a version, equal to the web's

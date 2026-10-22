@@ -13,6 +13,8 @@ struct TitleScreen: View {
     @Environment(SyncModel.self) private var sync
     @State private var width: CGFloat = 0
     @State private var height: CGFloat = 0
+    /// The Mac action row's drawn width: Starring shows only clear of it.
+    @State private var actionsWidth = CGFloat.infinity
     /// Content has scrolled under the status bar and the back button.
     @State private var underBar = false
     /// TV: the page enters on its primary (Play, Resume or Add a source).
@@ -36,6 +38,11 @@ struct TitleScreen: View {
     /// The episodes panel beside the info (Mac, iPad) and the Episodes page (iPhone).
     @State private var panelOpen = false
     @State private var showEpisodes = false
+    #if !os(tvOS)
+    /// What opened the panel, which takes keyboard focus back when it closes.
+    @State private var opener: PanelOpener?
+    @FocusState private var openerFocus: PanelOpener?
+    #endif
     /// A Calendar link opens the episodes once.
     @State private var openedFromLink = false
     @Environment(\.linkRequests) private var links
@@ -136,10 +143,10 @@ struct TitleScreen: View {
                 v3Lower
             }
             .padding(.bottom, Theme.Space.xl)
-            // Under the panel's scrim the page is out of reach (it covers the info below about 1020).
-            .accessibilityHidden(panelCovers)
         }
         .scrollIndicators(.hidden)
+        // Under the panel's scrim the page is out of reach (it covers the info below about 1020).
+        .inert(panelCovers)
         .background(Theme.Palette.bg)
         .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y + $0.contentInsets.top > 8 } action: { underBar = $1 }
         #if DEBUG
@@ -178,7 +185,7 @@ struct TitleScreen: View {
             }
             .heroFrame(height: v3HeroHeight, alignment: metrics.wide ? .bottomLeading : .bottom) { EmptyView() }
             .overlay(alignment: .bottomTrailing) {
-                if metrics.wide, !panelOpen, WideLayout.starringFits(window: width), !facts.cast.isEmpty {
+                if metrics.wide, !panelOpen, WideLayout.starringFits(window: width, row: actionsWidth), !facts.cast.isEmpty {
                     HeroStarring(cast: facts.cast)
                         .padding(.trailing, metrics.gutter)
                         .padding(.bottom, HeroLayout.foot)
@@ -215,7 +222,8 @@ struct TitleScreen: View {
                     SeasonShelf(seasons: seasons, selected: model.header?.selectedSeason, episodes: model.episodes,
                                 minutes: minutes(details.runtime), select: model.selectSeason, actions: episodeActions)
                         .padding(.leading, metrics.wide ? metrics.gutter : 20)
-                    episodeStatus.padding(.horizontal, metrics.wide ? metrics.gutter : 20)
+                    // The open panel shows it itself, where the episode was pressed.
+                    if !panelOpen { episodeStatus.padding(.horizontal, metrics.wide ? metrics.gutter : 20) }
                 }
                 if !details.cast.isEmpty {
                     CastShelf(cast: details.cast).padding(.horizontal, metrics.wide ? metrics.gutter : 20)
@@ -249,15 +257,25 @@ struct TitleScreen: View {
     private var episodeActions: EpisodeActionsSet {
         EpisodeActionsSet(
             play: { episode in Task { await play(episode) } }, chooseVersion: chooseVersion,
-            setWatched: { model.setWatched($0, $1); sync.schedule() }, allEpisodes: openEpisodes)
+            setWatched: { model.setWatched($0, $1); sync.schedule() }, allEpisodes: { openEpisodes(from: $0) }, focus: $openerFocus,
+            resumable: (model.header?.playTarget?.resumeMs ?? 0) > 0 ? model.header?.playTarget?.videoId : nil,
+            startOver: { play(fromStart: true) })
     }
 
-    private func openEpisodes() {
+    private func openEpisodes(from: PanelOpener? = nil) {
+        opener = from
         if metrics.wide { panelOpen = true } else { showEpisodes = true }
     }
 
     /// The panel covers the info on a narrow window: the page dims and goes inert (WideLayout).
-    private var panelCovers: Bool { metrics.wide && panelOpen && WideLayout.panelCoversInfo(window: width) }
+    private var panelCovers: Bool { WideLayout.pageInert(wide: metrics.wide, panelOpen: panelOpen, window: width) }
+
+    /// Closes the panel and gives keyboard focus back to what opened it.
+    private func closePanel() {
+        panelOpen = false
+        let back = opener
+        Task { @MainActor in openerFocus = back }
+    }
 
     /// The Mac's and iPad's panel, pinned under the header 40 from the right, as tall as the window
     /// less 48, over a scrim only when it covers the info.
@@ -267,10 +285,10 @@ struct TitleScreen: View {
                 if panelCovers {
                     Color.black.opacity(0.5)
                         .contentShape(Rectangle())
-                        .onTapGesture { panelOpen = false }
+                        .onTapGesture { closePanel() }
                         .accessibilityHidden(true)
                 }
-                episodePanel(close: { panelOpen = false })
+                episodePanel(close: closePanel)
                     .padding(16)
                     .frame(width: 420)
                     .frame(maxHeight: .infinity, alignment: .top)
@@ -298,24 +316,18 @@ struct TitleScreen: View {
         EpisodePanel(
             seasons: model.header?.seasons ?? [], selected: model.header?.selectedSeason, episodes: model.episodes,
             minutes: minutes(details?.runtime), select: model.selectSeason, actions: episodeActions,
-            scrollTo: model.route.videoId, close: close)
+            scrollTo: model.route.videoId, close: close) { episodeStatus }
     }
 
     /// The Mac's action row: the primary, Trailer, the Library and Watched capsule, Versions.
     private func wideActions(_ details: TitleDetails) -> some View {
-        FlowRow(spacing: 12) {
-            playBlock(details)
-            if let trailer = details.trailers.first, let url = URL(string: trailer.url) {
-                Button { openURL(url) } label: { Label("Trailer", glyph: "film", size: HeroLayout.icon) }
-                    .buttonStyle(PillButtonStyle())
-            }
-            MarkCapsule(marks: titleMarks(kind: details.kind, inLibrary: model.header?.inLibrary ?? false, watched: model.header?.watched ?? false)) { mark in
-                toggle(mark, details)
-            }
-            Button { showVersions = true } label: { Label("Versions", glyph: "layers", size: HeroLayout.icon) }
-                .buttonStyle(PillButtonStyle())
-                .disabled(versions == nil)
-        }
+        WideActions(
+            trailer: details.trailers.first.flatMap { URL(string: $0.url) },
+            marks: titleMarks(kind: details.kind, inLibrary: model.header?.inLibrary ?? false, watched: model.header?.watched ?? false),
+            toggle: { toggle($0, details) }, versionsReady: versions != nil, showVersions: { showVersions = true }
+        ) { playBlock(details) }
+        // Starring keeps clear of the row as drawn (review P2-1).
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { actionsWidth = $0 }
     }
 
     /// The iPhone's primary, 178 wide with the time left under it, and Apple's Library control.
@@ -392,10 +404,10 @@ struct TitleScreen: View {
         switch link {
         case .genre(let genre):
             links?.discover = DiscoverRequest(kind: details?.kind ?? "movie", genre: genre)
-            openTab(.discover)
+            openTab(.discover, link: true)
         case .director(let name):
             links?.search = name
-            openTab(.search)
+            openTab(.search, link: true)
         }
     }
     #endif
@@ -834,148 +846,10 @@ private struct Backdrop: View {
 
 #endif
 
-/// Play or Resume with the resume point, and the chosen version under it.
-/// Never a Play that can only fail: with no version at all the primary
-/// becomes Add a source; while sources still answer, Play waits for the pick.
-private struct PlayBlock: View {
-    let target: PlayTarget?
-    /// With no target, the day the next episode comes out.
-    let nextAirs: String?
-    /// With no target and no day: the page lists episodes (the next has no date).
-    let hasEpisodes: Bool
-    /// The title's runtime ("57 min"), so Resume says the time left.
-    let runtime: String?
-    let versions: VersionsSnapshot?
-    let failure: String?
-    let wide: Bool
-    /// Play was pressed and the pick is still settling.
-    let starting: Bool
-    /// Plays the pick; true starts over from the beginning.
-    let play: (_ fromStart: Bool) -> Void
-    let addSource: () -> Void
-    /// Versions that play only through a streaming service account (stream choice 3.11).
-    let addAccount: () -> Void
-    /// TV: the page enters on this block's primary.
-    var focus: FocusState<Bool>.Binding
-    /// The v3 page (iOS and macOS): no note under the button (the page shows `VersionNote` under
-    /// the hero), and on the iPhone the 178 pt pill with its time left under it.
-    var v3 = false
-    @Environment(\.dynamicTypeSize) private var typeSize
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if target == nil {
-                // Nothing to play yet: the day it comes, or why there is no Play,
-                // never a Play that finds nothing.
-                let airs = nextAirs.flatMap { nextAirsWords($0) }
-                Label(airs ?? noPlayWords(hasEpisodes: hasEpisodes), glyph: airs == nil ? "circle-alert" : "calendar")
-                    .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
-                    .foregroundStyle(Theme.Palette.text)
-            } else if versions?.done == true, versions?.recommended == nil, versions?.blocked?.reason == "needsAccount" {
-                Button(action: addAccount) {
-                    Label(StreamChoice.words.blocked.needsAccount.action, glyph: "key-round")
-                        .frame(minWidth: wide ? 160 : nil, maxWidth: wide ? nil : .infinity)
-                }
-                .buttonStyle(PillButtonStyle(prominent: true))
-                .focused(focus)
-            } else if versions?.done == true, versions?.recommended == nil {
-                Button(action: addSource) {
-                    Label("Add a source", glyph: "plus")
-                        .frame(minWidth: wide ? 160 : nil, maxWidth: wide ? nil : .infinity)
-                }
-                .buttonStyle(PillButtonStyle(prominent: true))
-                .focused(focus)
-            } else {
-                // Start over beside Resume, under it at the accessibility sizes.
-                let row = wide || !typeSize.isAccessibilitySize ? AnyLayout(HStackLayout(spacing: 10)) : AnyLayout(VStackLayout(spacing: 10))
-                row {
-                    Button { play(false) } label: {
-                        HStack(spacing: 10) {
-                            if starting {
-                                // Never a silent wait: the pick is settling (up to 10 s).
-                                ProgressView().controlSize(.small).tint(Theme.Palette.onPrimary)
-                                Text("Starting")
-                            } else {
-                                Glyph("play-fill")
-                                Text(target?.label ?? "Play")
-                                if let resume = target?.resumeMs, resume > 0, !(v3 && !wide) {
-                                    #if os(tvOS)
-                                    Text(resumeText(resumeMs: resume, leftMs: target?.leftMs, runtime: runtime)).fontWeight(.regular).opacity(0.8)
-                                    #else
-                                    // The frame's 13 pt sub in the pill: "Resume S6:E2  31 min left".
-                                    Text(resumeText(resumeMs: resume, leftMs: target?.leftMs, runtime: runtime))
-                                        .textFont(13, relativeTo: .footnote).opacity(0.8)
-                                    #endif
-                                }
-                            }
-                        }
-                        .lineLimit(wide || v3 ? 1 : nil)
-                        .frame(minWidth: wide ? 160 : nil, maxWidth: wide ? nil : .infinity)
-                    }
-                    .buttonStyle(PillButtonStyle(prominent: true))
-                    // One line sized to its words where there is room for it (TV, Mac,
-                    // iPad): the pill itself, not only its words, keeps its width, so
-                    // "Resume 13 min left" never breaks or spills (the tvOS walk, ATV-F2).
-                    .fixedSize(horizontal: wide, vertical: false)
-                    .focused(focus)
-                    // The reason shows right under it. Never off while starting: a TV moves
-                    // focus off a disabled button, and `play(fromStart:)` ignores a second press.
-                    .disabled(failure != nil)
-                    .accessibilityLabel(starting ? "Starting" : playWords)
-                    #if !os(tvOS)
-                    // Start over from Resume's menu and a named action; the Mac also has it in the
-                    // Playback menu (plans/design-v3-phase3-apple.md 2.1).
-                    .contextMenu {
-                        if (target?.resumeMs ?? 0) > 0 {
-                            Button { play(true) } label: { Label("Start Over", glyph: "rotate-ccw") }
-                        }
-                    }
-                    .accessibilityActions {
-                        if (target?.resumeMs ?? 0) > 0 { Button("Start over") { play(true) } }
-                    }
-                    #endif
-                    #if os(tvOS)
-                    if let resume = target?.resumeMs, resume > 0 {
-                        Button { play(true) } label: {
-                            Label("Start over", glyph: "rotate-ccw")
-                                .frame(maxWidth: wide || !typeSize.isAccessibilitySize ? nil : .infinity)
-                        }
-                        .buttonStyle(PillButtonStyle())
-                        .fixedSize(horizontal: wide, vertical: false)
-                        .disabled(failure != nil)
-                    }
-                    #endif
-                }
-            }
-            #if os(tvOS)
-            Group {
-                if let failure {
-                    Label("Versions could not load: \(failure)", glyph: "triangle-alert")
-                        .foregroundStyle(Theme.Palette.muted)
-                } else if target != nil {
-                    VersionLine(versions: versions)
-                }
-            }
-            // Wraps whole on a small phone or a large text size: the status and source decide the pick.
-            .textFont(Theme.type.callout, relativeTo: .callout)
-            .fixedSize(horizontal: false, vertical: true)
-            #endif
-        }
-    }
-
-    /// "Resume Season 2, Episode 3, 36 min left": the code said as words.
-    private var playWords: String {
-        let label = spokenCodes(target?.label ?? "Play")
-        guard let resume = target?.resumeMs, resume > 0 else { return label }
-        return "\(label), \(resumeText(resumeMs: resume, leftMs: target?.leftMs, runtime: runtime))"
-    }
-}
-
-
 #if os(tvOS)
 /// "720p  472 MB  (dot) Torrent, 153 seeds", or why there is none yet. No addon's name: it shows on
 /// the Addons pages alone (design/DECISION.md, Shelves).
-private struct VersionLine: View {
+struct VersionLine: View {
     let versions: VersionsSnapshot?
 
     var body: some View {

@@ -151,3 +151,15 @@ private func ep(_ number: Int, _ title: String, released: String? = "2022-02-18"
     let movie = informationRows(genres: ["Drama"], runtime: "142 min", seasons: [], selectedSeason: nil, episodes: 0)
     #expect(movie.map(\.key) == ["Genres", "Runtime"])
 }
+
+@Test func theMacPlaybackMenuStartsOverTheTitleInFront() throws {
+    // The FocusedValues entry the title page publishes while `startOverAvailable`, and the menu item
+    // reading it with Shift-Cmd-R (plans/design-v3-phase3-apple.md 2.1). Read from the sources: the
+    // menu lives in a scene.
+    let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
+    let commands = try String(contentsOf: app.appending(path: "App/AppCommands.swift"), encoding: .utf8)
+    let title = try String(contentsOf: app.appending(path: "Title/TitleScreen.swift"), encoding: .utf8)
+    #expect(commands.contains("@Entry var startOver: StartOverAction?"))
+    #expect(commands.range(of: #"Button\("Start Over"\) \{ startOver\?\.run\(\) \}\s+\.keyboardShortcut\("r", modifiers: \[\.command, \.shift\]\)\s+\.disabled\(startOver == nil\)"#, options: .regularExpression) != nil)
+    #expect(title.range(of: #"\.focusedSceneValue\(\\\.startOver, startOverAvailable\("#, options: .regularExpression) != nil)
+}

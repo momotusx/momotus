@@ -7,7 +7,7 @@ import SwiftUI
 /// menu, Next, an episode search, then the dated rows with their actions. On the Mac and iPad it is an
 /// overlay beside the info (`TitleScreen`); on the iPhone it is the Episodes page. Phase 6 adds the
 /// streams state.
-struct EpisodePanel: View {
+struct EpisodePanel<Status: View>: View {
     let seasons: [Int]
     let selected: Int?
     let episodes: [Episode]
@@ -18,6 +18,9 @@ struct EpisodePanel: View {
     var scrollTo: String?
     /// Mac and iPad: the panel's close button (Escape too).
     var close: (() -> Void)?
+    /// An episode's version being found, or why it could not start, with the way forward: shown here,
+    /// where the episode was pressed (review P2-3).
+    @ViewBuilder var status: Status
     @Environment(\.metrics) private var metrics
     @State private var query = ""
     @FocusState private var seasonFocused: Bool
@@ -52,6 +55,7 @@ struct EpisodePanel: View {
             .padding(.horizontal, 12)
             .frame(height: metrics.wide ? 36 : 44)
             .background(Color(red: 118 / 255, green: 118 / 255, blue: 128 / 255).opacity(0.24), in: Capsule())
+            status
             ScrollViewReader { proxy in
                 ScrollView(.vertical) {
                     LazyVStack(alignment: .leading, spacing: 4) {
@@ -134,19 +138,27 @@ private struct PanelRow: View {
     @Environment(\.metrics) private var metrics
     @State private var hovered = false
     @FocusState private var focused: Bool
+    /// A pill has keyboard focus: the pills stay while Tab moves through them.
+    @FocusState private var pillFocused: Int?
 
     private var unaired: Bool { airsLater(episode.released) }
 
     var body: some View {
         HStack(alignment: metrics.wide ? .top : .center, spacing: 12) {
-            Button { actions.play(episode) } label: { content }
-                .buttonStyle(FocusPlainStyle(shape: RoundedRectangle(cornerRadius: 12, style: .continuous), scale: 1))
-                .focused($focused)
-                .disabled(unaired)
-                .accessibilityElement(children: .combine)
-                .accessibilityHint(unaired ? "" : "Plays this episode")
-                .accessibilityActions { items }
-                .contextMenu { items }
+            VStack(alignment: .leading, spacing: 6) {
+                Button { actions.play(episode) } label: { content }
+                    .buttonStyle(FocusPlainStyle(shape: RoundedRectangle(cornerRadius: 12, style: .continuous), scale: 1))
+                    .focused($focused)
+                    .disabled(unaired)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityHint(unaired ? "" : "Plays this episode")
+                    .accessibilityActions { items }
+                    .contextMenu { items }
+                // Beside the play button, never inside its label: a button in a button loses its focus.
+                if metrics.wide && !unaired && (hovered || focused || pillFocused != nil || touchPad) {
+                    pills.padding(.leading, 112 + 12)
+                }
+            }
             if !metrics.wide && !unaired { phoneButtons }
         }
         .padding(8)
@@ -189,7 +201,6 @@ private struct PanelRow: View {
                         .background(.white.opacity(0.16), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                         .padding(.top, 4)
                 }
-                if metrics.wide && !unaired && (hovered || focused || touchPad) { pills.padding(.top, 6) }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -206,14 +217,14 @@ private struct PanelRow: View {
 
     private var pills: some View {
         HStack(spacing: 6) {
-            pill("Choose version", glyph: "layers") { actions.chooseVersion(episode) }
-            pill(episode.watched ? "Mark as not watched" : "Mark as watched", glyph: episode.watched ? "eye-off" : "eye") {
+            pill(0, "Choose version", glyph: "layers") { actions.chooseVersion(episode) }
+            pill(1, episode.watched ? "Mark as not watched" : "Mark as watched", glyph: episode.watched ? "eye-off" : "eye") {
                 actions.setWatched(episode.videoId, !episode.watched)
             }
         }
     }
 
-    private func pill(_ title: String, glyph: String, action: @escaping () -> Void) -> some View {
+    private func pill(_ index: Int, _ title: String, glyph: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Label(title, glyph: glyph, size: 14)
                 .labelStyle(PillLabelStyle())
@@ -224,6 +235,7 @@ private struct PanelRow: View {
                 .background(SecondaryFill(shape: Capsule()))
         }
         .buttonStyle(FocusPlainStyle(shape: Capsule(), scale: 1))
+        .focused($pillFocused, equals: index)
     }
 
     private var phoneButtons: some View {

@@ -189,7 +189,7 @@ private let spots = [
     Spot(name: "title, Mac 1440, meta", page: "bgDesktop", layers: titleHero(width: 1440, height: 810, end: TitleSpots.end, top: TitleSpots.meta), word: false, text: 0.64),
     Spot(name: "title, Mac 1440, chips", page: "bgDesktop", layers: titleHero(width: 1440, height: 810, end: TitleSpots.end, top: TitleSpots.chips), word: false),
     // Starring at the right, 75 above the foot, three lines of 18 (top 129), its "Starring" key at 64
-    // percent, read where it first shows (WideLayout.starringFits, 1240) and at 1440.
+    // percent, read where it first shows (WideLayout.starringFrom, 1240) and at 1440.
     Spot(name: "title, Mac, Starring 1240", page: "bgDesktop", layers: titleHero(width: 1240, height: Double(WideLayout.titleHeroHeight(width: 1240, height: 800)), end: 1200, top: 129), word: false, text: 0.64),
     Spot(name: "title, Mac, Starring 1440", page: "bgDesktop", layers: titleHero(width: 1440, height: 810, end: 1400, top: 129), word: false, text: 0.64),
     Spot(name: "title, TV", page: "bg", layers: titlePage(width: 1920, height: 640, end: 653, top: 134)),

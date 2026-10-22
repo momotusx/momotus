@@ -485,6 +485,12 @@ extension View {
         textSelection(.enabled)
         #endif
     }
+
+    /// Out of reach under a scrim: no click, key, scroll or VoiceOver gets in
+    /// (plans/design-v3-phase3-apple.md 2.3).
+    func inert(_ on: Bool) -> some View {
+        disabled(on).allowsHitTesting(!on).scrollDisabled(on).accessibilityHidden(on)
+    }
 }
 
 /// Thin progress bar for partly watched items: Apple's white fill on a dark

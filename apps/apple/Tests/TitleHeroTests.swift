@@ -24,25 +24,68 @@ private func details(_ overrides: [String: Any] = [:]) throws -> TitleDetails {
     return try JSONDecoder().decode(TitleDetails.self, from: JSONSerialization.data(withJSONObject: json))
 }
 
-/// The Mac's action row at its widest: Resume, Trailer, a two-cell capsule, Versions (about 760).
-private var fullRow: some View {
-    FlowRow(spacing: 12) {
-        ForEach([210.0, 120, 300, 130], id: \.self) { Color.clear.frame(width: $0, height: 40) }
+/// A version list that found only versions needing a service account: the primary reads "Add an account".
+private func needsAccount() throws -> VersionsSnapshot {
+    let blocked = try JSONDecoder().decode(BlockedVersions.self, from: Data(#"{"reason": "needsAccount", "count": 4, "rows": []}"#.utf8))
+    return VersionsSnapshot(
+        recommended: nil, rows: [], hidden: HiddenSummary(count: 0, byReason: []), pendingAddons: [], slowAddons: [],
+        failedAddons: [], done: true, frozen: false, conditions: nil, blocked: blocked, note: nil)
+}
+
+/// The Mac's real action row (TitleScreen's `wideActions`): the primary, Trailer, the marks capsule, Versions.
+private struct Row: View {
+    let kind: String
+    let target: PlayTarget?
+    let versions: VersionsSnapshot?
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        WideActions(
+            trailer: URL(string: "https://www.youtube.com/watch?v=YoHD9XEInc0"),
+            marks: titleMarks(kind: kind, inLibrary: false, watched: false), toggle: { _ in },
+            versionsReady: true, showVersions: {}
+        ) {
+            PlayBlock(
+                target: target, nextAirs: nil, hasEpisodes: kind == "series", runtime: "148 min", versions: versions,
+                failure: nil, wide: true, starting: false, play: { _ in }, addSource: {}, addAccount: {},
+                focus: $focused, v3: true)
+        }
     }
 }
 
-/// Lays the Mac hero out in a \`width\` window at the hero's \`height\` and returns its parts.
-@MainActor private func layOut(width: CGFloat, height: CGFloat) throws -> [HeroPart: CGRect] {
+/// The rows at their widest: a movie whose versions need an account (the review's 875), a movie and an
+/// episode to resume.
+private func rows() throws -> [(String, Row)] {
+    let resume = { (label: String) in PlayTarget(videoId: "v", label: label, resumeMs: 1_800_000, leftMs: 3_720_000) }
+    return [
+        ("movie, add an account", Row(kind: "movie", target: resume("Resume"), versions: try needsAccount())),
+        ("movie, resume", Row(kind: "movie", target: resume("Resume"), versions: nil)),
+        ("series, resume", Row(kind: "series", target: resume("Resume S6:E2"), versions: nil)),
+    ]
+}
+
+/// Lays the Mac hero out in a `width` window at the hero's `height` and returns its parts, once every
+/// part has reported and a layout pass has passed with no change.
+@MainActor private func layOut<Actions: View>(
+    width: CGFloat, height: CGFloat, details overrides: [String: Any] = [:], @ViewBuilder row: () -> Actions
+) throws -> [HeroPart: CGRect] {
     let parts = Parts()
-    let hero = TitleHeroWide(facts: TitleHeroFacts(try details()), open: { _ in }, more: {}) { fullRow }
+    let hero = TitleHeroWide(facts: TitleHeroFacts(try details(overrides)), open: { _ in }, more: {}, actions: row)
         .heroFrame(height: height, alignment: .bottomLeading) { EmptyView() }
         .heroProbe(.box)
         .environment(\.heroProbe, HeroProbeSink { part, frame in parts.frames[part] = frame })
         .environment(\.metrics, .regular)
     let host = NSHostingView(rootView: hero.frame(width: width).fixedSize(horizontal: false, vertical: true))
     host.frame = CGRect(x: 0, y: 0, width: width, height: 1200)
-    host.layoutSubtreeIfNeeded()
-    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+    let all: Set<HeroPart> = [.box, .meta, .chips, .synopsis, .actions]
+    var last: [HeroPart: CGRect] = [:]
+    for _ in 0..<200 {
+        host.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+        if all.isSubset(of: parts.frames.keys), parts.frames == last { break }
+        last = parts.frames
+    }
+    #expect(all.isSubset(of: parts.frames.keys), "parts reported: \(parts.frames.keys)")
     return parts.frames
 }
 
@@ -52,8 +95,9 @@ private func spot(_ part: CGRect, in box: CGRect) -> (top: CGFloat, end: CGFloat
 }
 
 @MainActor @Test func theMacTitleHeroSitsWhereTheGlassCheckReadsIt() throws {
+    let widest = try rows()[0].1
     for (width, floor) in [(CGFloat(BackdropStops.macMinWidth), CGFloat(400)), (1440, 810)] {
-        let frames = try layOut(width: width, height: floor)
+        let frames = try layOut(width: width, height: floor) { widest }
         let box = try #require(frames[.box])
         let meta = spot(try #require(frames[.meta]), in: box)
         let chips = spot(try #require(frames[.chips]), in: box)
@@ -74,5 +118,81 @@ private func spot(_ part: CGRect, in box: CGRect) -> (top: CGFloat, end: CGFloat
         #expect(actions.top <= TitleSpots.upperRow + 40 + 1, "actions top \(actions.top) at \(width)")
         // The hero grows to its words at the floor.
         #expect(box.height >= floor)
+    }
+}
+
+@MainActor @Test func starringShowsOnlyClearOfTheRealActionRow() throws {
+    let widest = try rows()[0].1
+    for (name, row) in try rows() {
+        for width in [CGFloat(1240), 1280, 1355, 1440, 1600] {
+            let frames = try layOut(width: width, height: WideLayout.titleHeroHeight(width: width, height: 900)) { row }
+            let box = try #require(frames[.box])
+            let actions = try #require(frames[.actions])
+            print(#"title-row {"row":"\#(name)","window":\#(width),"width":\#(actions.width)}"#)
+            guard WideLayout.starringFits(window: width, row: actions.width) else { continue }
+            // Starring's 360 pt column, 40 in from the right, starts 40 or more past the row's end.
+            #expect(box.maxX - 40 - 360 - actions.maxX >= 40 - 1, "\(name) at \(width)")
+        }
+    }
+    // The review's case: a movie whose versions need an account, in a 1280 window.
+    let frames = try layOut(width: 1280, height: 720) { widest }
+    #expect(!WideLayout.starringFits(window: 1280, row: try #require(frames[.actions]).width))
+}
+
+@MainActor @Test func manyLongDirectorsKeepTheMetaRowWhereTheGlassCheckReadsIt() throws {
+    let widest = try rows()[0].1
+    let names = ["Florian Henckel von Donnersmarck", "Alejandro González Iñárritu", "Apichatpong Weerasethakul", "Jean-Pierre Jeunet", "Christopher McQuarrie"]
+    #expect(TitleHeroFacts(try details(["directors": names])).directors.count == 3)
+    for width in [CGFloat(BackdropStops.macMinWidth), 1440] {
+        let frames = try layOut(width: width, height: 400, details: ["directors": names, "genres": ["Action & Adventure", "Sci-Fi & Fantasy", "Documentary"]]) { widest }
+        let box = try #require(frames[.box])
+        let meta = spot(try #require(frames[.meta]), in: box)
+        let chips = spot(try #require(frames[.chips]), in: box)
+        #expect(meta.top <= TitleSpots.meta + 1, "meta top \(meta.top) at \(width)")
+        #expect(chips.top <= TitleSpots.chips + 1, "chips top \(chips.top) at \(width)")
+        #expect(chips.end <= 40 + BackdropStops.heroSynopsisWidth + 1, "chips end \(chips.end) at \(width)")
+    }
+}
+
+@Test func resumeCarriesStartOverAsANamedAction() throws {
+    // VoiceOver's way to Start over beside Resume's context menu, only with a resume point (plans/
+    // design-v3-phase3-apple.md 2.1). Read from the source: a hosting view out of a running app builds
+    // no accessibility tree to ask.
+    let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Title/TitleActions.swift")
+    let text = try String(contentsOf: file, encoding: .utf8)
+    let action = #"\.accessibilityActions \{\s+if \(target\?\.resumeMs \?\? 0\) > 0 \{ Button\("Start over"\) \{ play\(true\) \} \}\s+\}"#
+    #expect(text.range(of: action, options: .regularExpression) != nil)
+}
+
+@MainActor @Test func aSeriesCapsuleDrawsNoWatchedCell() {
+    // The core keeps no whole-series watched mark (C41): the series capsule is Library's cell alone.
+    func width(_ marks: [TitleMark]) -> CGFloat {
+        NSHostingView(rootView: MarkCapsule(marks: marks) { _ in }.fixedSize()).fittingSize.width
+    }
+    let series = width(titleMarks(kind: "series", inLibrary: false, watched: false))
+    #expect(series == width([.library(on: false)]))
+    #expect(width(titleMarks(kind: "movie", inLibrary: false, watched: false)) > series + 40)
+}
+
+@MainActor @Test func thePageIsInertOnlyUnderTheScrim() {
+    // The rule: the panel covers the info below about 1020, and only then the page goes out of reach.
+    #expect(WideLayout.pageInert(wide: true, panelOpen: true, window: 1000))
+    #expect(!WideLayout.pageInert(wide: true, panelOpen: true, window: 1040))
+    #expect(!WideLayout.pageInert(wide: true, panelOpen: false, window: 1000))
+    #expect(!WideLayout.pageInert(wide: false, panelOpen: true, window: 390))
+    // The modifier: an inert page's controls are off, so no key or click reaches them.
+    final class Seen { var enabled: [Bool] = [] }
+    struct Probe: View {
+        let seen: Seen
+        @Environment(\.isEnabled) private var enabled
+        var body: some View { Color.clear.frame(width: 10, height: 10).onAppear { seen.enabled.append(enabled) } }
+    }
+    for on in [true, false] {
+        let seen = Seen()
+        let host = NSHostingView(rootView: Probe(seen: seen).inert(on))
+        host.frame = CGRect(x: 0, y: 0, width: 10, height: 10)
+        host.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        #expect(seen.enabled == [!on], "inert(\(on)) left the page enabled: \(seen.enabled)")
     }
 }

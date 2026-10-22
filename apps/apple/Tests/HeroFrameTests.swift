@@ -97,3 +97,14 @@ import Testing
     let drawn = drawnAlpha(HeroScrims(wide: false, page: .black), size: landscape, at: CGPoint(x: 422, y: 323 - 104.5))
     #expect(abs(drawn - upright) < 0.02, "phone scrims in landscape: \(drawn), upright \(upright)")
 }
+
+@MainActor @Test func theCardRampIsDrawnWhereTheGlassCheckReadsIt() {
+    // The card spots' heights above the foot (ThemeColorTests): the tag, name, overview and caption lines.
+    for (size, heights) in [(CGSize(width: 256, height: 141), [98.0, 83, 63, 27]), (CGSize(width: 239, height: 170), [122.0, 107, 85])] {
+        for h in heights {
+            let drawn = drawnAlpha(BackdropStops.cardRampGradient, size: size, at: CGPoint(x: size.width / 2, y: size.height - h - 0.5))
+            let checked = BackdropStops.alpha(BackdropStops.cardRamp, at: h / size.height)
+            #expect(abs(drawn - checked) < 0.02, "the ramp at \(h) in \(size) draws \(drawn), the check reads \(checked)")
+        }
+    }
+}

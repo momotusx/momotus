@@ -136,10 +136,15 @@ private func snapshot(
     #expect(WideLayout.titleHeroHeight(width: 0, height: 0) == 506)
 }
 
-@Test func starringShowsOnlyWhereItClearsAFullActionRow() {
-    #expect(!WideLayout.starringFits(window: 1239))
-    #expect(WideLayout.starringFits(window: 1240))
-    #expect(!WideLayout.starringFits(window: 720))
+@Test func starringShowsOnlyWhereItClearsTheActionRow() {
+    // A short row: from 1240, where the glass check reads Starring.
+    #expect(!WideLayout.starringFits(window: 1239, row: 500))
+    #expect(WideLayout.starringFits(window: 1240, row: 500))
+    #expect(!WideLayout.starringFits(window: 720, row: 500))
+    // A movie's 875 pt row needs 1355 (review P2-1); an unmeasured row hides it.
+    #expect(!WideLayout.starringFits(window: 1354, row: 875))
+    #expect(WideLayout.starringFits(window: 1355, row: 875))
+    #expect(!WideLayout.starringFits(window: 1440, row: .infinity))
 }
 
 @Test func thePanelCoversTheInfoOnlyBelowAbout1020() {

@@ -35,18 +35,18 @@ struct AppCommands: Commands {
     var body: some Commands {
         CommandGroup(replacing: .newItem) {}
         CommandGroup(replacing: .appSettings) {
-            Button("Settings…") { places?.open(.settings) }
+            Button("Settings…") { places?(.settings) }
                 .keyboardShortcut(",")
                 .disabled(places == nil)
         }
         CommandGroup(after: .textEditing) {
-            Button("Search Titles") { find?.open(.search) }
+            Button("Search Titles") { find?(.search) }
                 .keyboardShortcut("f")
                 .disabled(find == nil)
         }
         CommandMenu("Go") {
             ForEach(Array(AppTab.allCases.enumerated()), id: \.element) { index, tab in
-                Button(tab.title) { places?.open(tab) }
+                Button(tab.title) { places?(tab) }
                     .keyboardShortcut(KeyEquivalent(Character(String(index + 1))))
             }
             .disabled(places == nil)

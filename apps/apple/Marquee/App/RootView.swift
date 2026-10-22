@@ -1,50 +1,12 @@
 import SwiftUI
 
-enum AppTab: String, CaseIterable, Hashable {
-    case home, discover, library, calendar, search, settings
-
-    var title: String { rawValue.capitalized }
-
-    var symbol: String {
-        switch self {
-        case .home: "house"
-        case .discover: "compass"
-        case .library: "library-big"
-        case .calendar: "calendar"
-        case .search: "search"
-        case .settings: "settings"
-        }
-    }
-
-    /// Search and Settings sit after the divider in the top navigation.
-    var isTool: Bool { self == .search || self == .settings }
-
-    /// The places the navigation shows. The iPhone's bar has five: Calendar is a row at the top
-    /// of Library there (D6).
-    static var bar: [AppTab] {
-        #if os(iOS)
-        allCases.filter { $0 != .calendar }
-        #else
-        allCases
-        #endif
-    }
-
-    /// The place the navigation lights for this one: on the iPhone, Library while Calendar is open.
-    var lit: AppTab {
-        #if os(iOS)
-        self == .calendar ? .library : self
-        #else
-        self
-        #endif
-    }
-}
-
 /// Moves to another place in the navigation (an empty page's way in), as
 /// `openURL` does for links.
 struct OpenTabAction {
-    let open: @MainActor (AppTab) -> Void
+    let open: @MainActor (AppTab, Bool) -> Void
 
-    @MainActor func callAsFunction(_ tab: AppTab) { open(tab) }
+    /// `link`: a title page's chip asks for the place, which only its first page answers.
+    @MainActor func callAsFunction(_ tab: AppTab, link: Bool = false) { open(tab, link) }
 }
 
 /// A title page's linked chips (plans/design-v3-phase3-apple.md 4.2): Discover on a kind and a
@@ -55,7 +17,7 @@ struct OpenTabAction {
 }
 
 extension EnvironmentValues {
-    @Entry var openTab = OpenTabAction { _ in }
+    @Entry var openTab = OpenTabAction { _, _ in }
     @Entry var linkRequests: LinkRequests? = nil
     /// The tab this view is in is the one on screen. On a phone every opened
     /// tab stays alive behind the shown one, so its pages never disappear.
@@ -191,7 +153,7 @@ struct MainShell: View {
     var body: some View {
         content
             .environment(\.metrics, metrics)
-            .environment(\.openTab, OpenTabAction { select($0) })
+            .environment(\.openTab, OpenTabAction { select($0, link: $1) })
             .environment(\.linkRequests, links)
             .environment(immersion)
             // Home stays subscribed for the profile's life, so Back lands on the same rows.
@@ -201,8 +163,12 @@ struct MainShell: View {
             .onDisappear { profiles.shell(onScreen: false) }
             #if DEBUG
             .onAppear {
-                if let route = DebugHooks.openTitle, homePath.isEmpty { homePath = [route] }
                 if let start = DebugHooks.tab { select(start.lit) }
+                // Over the place `-MQTab` named: a title opened from Search, for its chips' walk.
+                if let route = DebugHooks.openTitle {
+                    if tab == .home, homePath.isEmpty { homePath = [route] }
+                    if tab != .home, tab != .settings, titlePaths[tab, default: []].isEmpty { titlePaths[tab] = [route] }
+                }
                 if let page = DebugHooks.takeSettingsPage() {
                     select(.settings)
                     settingsPath = [page]
@@ -232,7 +198,7 @@ struct MainShell: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             // Off while the keyboard is up, as a tab bar sits behind it.
             if !immersion.active && !typing {
-                TabBar(selection: tab, select: select, bottomInset: bottomInset)
+                TabBar(selection: tab, select: { select($0) }, bottomInset: bottomInset)
             }
         }
         // The screen's own bottom inset (the home indicator), read outside the bar's inset.
@@ -280,7 +246,7 @@ struct MainShell: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Theme.Palette.bg)
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { windowWidth = $0 }
-            .toolbar { NavToolbar(selection: tab, select: select, profiles: { showProfiles = true }, narrow: windowWidth < NavToolbar.fieldWidthFrom) }
+            .toolbar { NavToolbar(selection: tab, select: { select($0) }, profiles: { showProfiles = true }, narrow: windowWidth < NavToolbar.fieldWidthFrom) }
             // tv.apple.com's black header.
             .toolbarBackground(Theme.Palette.barDesktop, for: .windowToolbar)
             .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
@@ -294,8 +260,8 @@ struct MainShell: View {
                 .environment(\.metrics, metrics)
             })
             // The Go menu and its keys, off while the player covers the places.
-            .focusedSceneValue(\.places, immersion.active ? nil : OpenTabAction { select($0) })
-            .focusedSceneValue(\.find, immersion.active ? nil : OpenTabAction { _ in
+            .focusedSceneValue(\.places, immersion.active ? nil : OpenTabAction { tab, _ in select(tab) })
+            .focusedSceneValue(\.find, immersion.active ? nil : OpenTabAction { _, _ in
                 // A title open over Search goes first: the field is on Search's first page.
                 popToRoot(.search)
                 select(.search)
@@ -306,7 +272,7 @@ struct MainShell: View {
             // Top-level places only, as on Android: a pushed page has no pill to wander into.
             if !immersion.active && !pageOver {
                 let away = TVTopBar.hidden(atHome: tab == .home, scrolledDown: homeScrolled)
-                TopNav(selection: tab, select: select, profiles: { showProfiles = true }).padding(.bottom, Theme.Space.m)
+                TopNav(selection: tab, select: { select($0) }, profiles: { showProfiles = true }).padding(.bottom, Theme.Space.m)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { navHeight = $0 }
                     // Kept in the layout, so the page under it never jumps.
                     .offset(y: away ? -navHeight : 0)
@@ -342,11 +308,8 @@ struct MainShell: View {
     }
     #endif
 
-    private func select(_ item: AppTab) {
-        #if os(iOS)
-        // The current tab again goes back to its first page, as a tab bar does.
-        if item == tab { popToRoot(item) }
-        #endif
+    private func select(_ item: AppTab, link: Bool = false) {
+        if item.opensAtRoot(from: tab, link: link) { popToRoot(item) }
         opened.insert(item)
         tab = item
     }

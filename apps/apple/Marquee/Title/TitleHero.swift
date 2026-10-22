@@ -92,7 +92,7 @@ struct TitleHeroFacts {
         let kind = details.kind == "movie" ? "Movie" : details.kind == "series" ? "Series" : details.kind.capitalized
         kindLine = ([kind] + details.genres.prefix(2)).joined(separator: " \u{B7} ")
         genres = Array(details.genres.prefix(3))
-        directors = details.directors
+        directors = Array(details.directors.prefix(3))
         meta = [details.releaseInfo, details.runtime].compactMap { $0 }
         ratings = ratingParts(details.ratings)
         imdbLink = details.ratings?.imdb == nil ? nil : details.imdbUrl.flatMap(URL.init(string:))
@@ -219,28 +219,37 @@ struct ChipGroups: View {
         }
     }
 
+    /// One line a group, as the glass check's spots read them: the most names that fit (review P2-2).
     @ViewBuilder private func group(_ label: String, _ names: [String], _ link: @escaping (String) -> TitleLink, hint: String) -> some View {
         if !names.isEmpty {
-            FlowRow(spacing: 8) {
-                Text(label)
-                    .textFont(13, weight: .semibold, relativeTo: .footnote)
-                    .foregroundStyle(Theme.Palette.text)
-                    .frame(height: 28)
-                    .padding(.trailing, 4)
-                    .accessibilityAddTraits(.isHeader)
-                ForEach(names, id: \.self) { name in
-                    Button { open(link(name)) } label: {
-                        Text(name)
-                            .textFont(13, weight: .medium, relativeTo: .footnote)
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                            .padding(.horizontal, 12)
-                            .frame(height: 28)
-                            .background(SecondaryFill(shape: Capsule()))
-                    }
-                    .buttonStyle(FocusPlainStyle(shape: Capsule(), scale: 1))
-                    .accessibilityHint(hint)
+            ViewThatFits(in: .horizontal) {
+                ForEach((1...names.count).reversed(), id: \.self) { count in
+                    line(label, Array(names.prefix(count)), link, hint: hint)
                 }
+            }
+        }
+    }
+
+    private func line(_ label: String, _ names: [String], _ link: @escaping (String) -> TitleLink, hint: String) -> some View {
+        HStack(spacing: 8) {
+            Text(label)
+                .textFont(13, weight: .semibold, relativeTo: .footnote)
+                .foregroundStyle(Theme.Palette.text)
+                .frame(height: 28)
+                .padding(.trailing, 4)
+                .accessibilityAddTraits(.isHeader)
+            ForEach(names, id: \.self) { name in
+                Button { open(link(name)) } label: {
+                    Text(name)
+                        .textFont(13, weight: .medium, relativeTo: .footnote)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .padding(.horizontal, 12)
+                        .frame(height: 28)
+                        .background(SecondaryFill(shape: Capsule()))
+                }
+                .buttonStyle(FocusPlainStyle(shape: Capsule(), scale: 1))
+                .accessibilityHint(hint)
             }
         }
     }

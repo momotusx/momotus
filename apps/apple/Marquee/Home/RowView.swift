@@ -214,21 +214,3 @@ private struct SkeletonStrip: View {
     }
 }
 
-/// Where a tile leads: the title page for one id.
-struct TitleRoute: Hashable {
-    let kind: String
-    let id: String
-    let name: String
-    /// The season to show first (from the calendar).
-    var season: Int?
-    /// The episode a Calendar link names: the panel (or the Episodes page) opens on it.
-    var videoId: String?
-
-    init(kind: String, id: String, name: String, season: Int? = nil, videoId: String? = nil) {
-        (self.kind, self.id, self.name, self.season, self.videoId) = (kind, id, name, season, videoId)
-    }
-
-    init(_ tile: Tile) {
-        self.init(kind: tile.kind, id: tile.id, name: tile.name)
-    }
-}

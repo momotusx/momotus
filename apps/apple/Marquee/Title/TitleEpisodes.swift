@@ -8,8 +8,19 @@ struct EpisodeActionsSet {
     let play: (Episode) -> Void
     let chooseVersion: (Episode) -> Void
     let setWatched: (String, Bool) -> Void
-    /// Opens the panel (Mac, iPad) or the Episodes page (iPhone) on the season.
-    let allEpisodes: () -> Void
+    /// Opens the panel (Mac, iPad) or the Episodes page (iPhone) on the season, from the season menu or a card.
+    let allEpisodes: (PanelOpener) -> Void
+    /// Where keyboard focus goes back when the panel closes.
+    let focus: FocusState<PanelOpener?>.Binding
+    /// The episode Resume plays from its resume point, whose menu also starts it over.
+    var resumable: String?
+    var startOver: () -> Void = {}
+}
+
+/// What opened the episodes panel: focus goes back to it on close.
+enum PanelOpener: Hashable {
+    case season
+    case card(String)
 }
 
 /// The v3 episode card (plans/design-v3-phase3-apple.md 2.1, 2.2): the still with its words on a
@@ -40,6 +51,7 @@ struct EpisodeCard: View {
                 .accessibilityHint(unaired ? "" : "Plays this episode")
                 .accessibilityActions { menuItems }
                 .contextMenu { menuItems }
+                .focused(actions.focus, equals: .card(episode.videoId))
             Menu { menuItems } label: {
                 Glyph("ellipsis", size: 20)
                     .foregroundStyle(.white)
@@ -66,7 +78,7 @@ struct EpisodeCard: View {
         ArtImage(url: episode.thumbnail, maxPixels: 640, fallback: nil)
             .frame(width: size.width, height: size.height)
             .overlay(alignment: .bottom) {
-                LinearGradient(stops: BackdropStops.gradient(BackdropStops.cardRamp, .black), startPoint: .bottom, endPoint: .top)
+                BackdropStops.cardRampGradient
                     .frame(height: rampHeight)
                     .allowsHitTesting(false)
             }
@@ -112,13 +124,16 @@ struct EpisodeCard: View {
     }
 
     @ViewBuilder private var menuItems: some View {
+        if episode.videoId == actions.resumable {
+            Button("Start Over", glyph: "rotate-ccw") { actions.startOver() }
+        }
         if !unaired {
             Button("Choose Version", glyph: "layers") { actions.chooseVersion(episode) }
             Button(episode.watched ? "Mark as Not Watched" : "Mark as Watched", glyph: episode.watched ? "eye-off" : "eye") {
                 actions.setWatched(episode.videoId, !episode.watched)
             }
         }
-        Button("All Episodes", glyph: "list") { actions.allEpisodes() }
+        Button("All Episodes", glyph: "list") { actions.allEpisodes(.card(episode.videoId)) }
     }
 }
 
@@ -141,7 +156,7 @@ struct SeasonShelf: View {
                     }
                 }
                 Divider()
-                Button("All Episodes", glyph: "list") { actions.allEpisodes() }
+                Button("All Episodes", glyph: "list") { actions.allEpisodes(.season) }
             } label: {
                 HStack(spacing: 4) {
                     Text(seasonName(selected ?? ordered.first ?? 1))
@@ -157,6 +172,7 @@ struct SeasonShelf: View {
             .buttonStyle(.plain)
             .menuIndicator(.hidden)
             .fixedSize()
+            .focused(actions.focus, equals: .season)
             .accessibilityLabel("Season, \(seasonName(selected ?? 1))")
             .accessibilityHint("Chooses a season, or shows all episodes")
             ScrollView(.horizontal) {
