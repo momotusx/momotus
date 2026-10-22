@@ -268,17 +268,25 @@ class TvHomeScrollTest {
         return px * TV_WIDTH / view!!.width
     }
 
-    /** Presses [key] for a remote's 50 ms and runs [FRAMES] frames of 16 ms one by one, following the page. */
-    private fun press(key: Key): Move {
+    /**
+     * Presses [key] for a remote's 50 ms, [times] times [gap] frames apart (a held key repeats every 112 ms past
+     * the shell's throttle), and runs 16 ms frames one by one until [FRAMES] after the last press, following the
+     * page.
+     */
+    private fun press(
+        key: Key,
+        times: Int = 1,
+        gap: Int = FRAMES,
+    ): Move {
         tilesInFrame = 0
         tilesAhead = 0
         homeBodies = 0
         compose.mainClock.autoAdvance = false
         var last = items()
         val frames = mutableListOf<Float>()
-        compose.onNode(isFocused()).performKeyInput { keyDown(key) }
-        repeat(FRAMES) { frame ->
-            if (frame == 3) compose.onRoot().performKeyInput { keyUp(key) }
+        repeat((times - 1) * gap + FRAMES) { frame ->
+            if (frame % gap == 0 && frame / gap < times) compose.onNode(isFocused()).performKeyInput { keyDown(key) }
+            if (frame % gap == 3 && frame / gap < times) compose.onRoot().performKeyInput { keyUp(key) }
             compose.mainClock.advanceTimeByFrame()
             compose.waitForIdle()
             val now = items()
@@ -357,6 +365,27 @@ class TvHomeScrollTest {
     }
 
     @Test
+    fun `a held Down keeps the page moving from row to row and lands on the last`() {
+        show()
+        downTo(SETTLED)
+        val move = press(Key.DirectionDown, times = 4, gap = HELD_GAP)
+        val speeds = move.frames.map(::abs)
+        // How much faster a frame goes than the one before, against the move's top speed: each repeat
+        // starts Compose's scroll toward a farther row (the spring it runs is not ours to shape).
+        val jolt = speeds.zipWithNext { a, b -> (b - a) / speeds.max() }.max()
+        println(
+            "BENCH held moving=${move.moving.count()} stalls=${move.stalls} jolt=${"%.3f".format(jolt)} " +
+                move.frames.take(50).joinToString(",") { "%.0f".format(it) },
+        )
+        // Before: each repeat's move stopped dead before the next began.
+        assertEquals(0, move.stalls, "the page stood still between repeats: ${move.frames}")
+        assertTrue(focused("Title ${SETTLED + 4}.1"), "focus went down four rows")
+        val anchor = PILL + Tokens.space.m.value
+        val header = headerTop("Row ${SETTLED + 4}")
+        assertTrue(abs(header - anchor) < ANCHOR_SLACK, "the last row rests at $header, the anchor is $anchor")
+    }
+
+    @Test
     fun `Up into Continue Watching moves the page once, to its top under the hero`() {
         show(hero = true)
         downTo(2)
@@ -380,6 +409,9 @@ class TvHomeScrollTest {
         /** Moves before the measured ones: the page leaves its top. */
         const val SETTLED = 2
         const val STEPS = 3
+
+        /** A held key's repeat after the shell's throttle (DpadThrottle, 112 ms), in frames. */
+        const val HELD_GAP = 7
 
         /** The shell's pill and the gap over it, in points. */
         const val PILL = 114f
