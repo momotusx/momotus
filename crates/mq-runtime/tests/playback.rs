@@ -1347,6 +1347,83 @@ async fn without_subtitle_languages_the_device_language_then_english_lead() {
     }
 }
 
+/// A subtitles addon that lists one English track, `delay` after it is asked.
+async fn subtitles_addon(id: &str, delay: Duration) -> AddonRow {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let body = serde_json::json!({"subtitles": [
+        {"id": id, "lang": "eng", "url": format!("https://subs.test/{id}.srt")}
+    ]})
+    .to_string();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let body = body.clone();
+            tokio::spawn(async move {
+                let mut buf = [0u8; 2048];
+                let _ = socket.read(&mut buf).await;
+                tokio::time::sleep(delay).await;
+                let reply = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(reply.as_bytes()).await;
+            });
+        }
+    });
+    row(
+        &format!("http://{addr}/manifest.json"),
+        id,
+        "subtitles",
+        true,
+    )
+}
+
+/// One slow subtitle addon (SubSense took 12 to 20 s on the iphone-a walk)
+/// never holds the start subtitle: at the fan-out's soft deadline the
+/// tracks listed decide it, and the slow addon's track, listed later and
+/// ranked first, never changes it.
+#[tokio::test]
+async fn a_slow_subtitle_addon_does_not_hold_the_start_subtitle() {
+    let (video, _) = counted_origin().await;
+    let core = Core::temporary("p").unwrap();
+    core.set_prefs(&serde_json::json!({ "subtitleLanguages": ["eng"] }))
+        .unwrap();
+    let slow = subtitles_addon("slow", Duration::from_secs(8)).await;
+    let quick = subtitles_addon("quick", Duration::ZERO).await;
+    install(
+        &core,
+        &[row(LOCAL_ADDON, "local", "stream", true), slow, quick],
+    );
+    let streams = serde_json::json!({"streams": [{"url": format!("{video}/v.mkv"), "title": "Sintel.2010.1080p.WEB"}]})
+        .to_string();
+    let view = PlaybackView::open(
+        &core,
+        listed(LOCAL_ADDON, "local", "Local", &streams),
+        target(),
+    );
+    let opened = std::time::Instant::now();
+    let s = until(&view, "the start subtitle", |s| s.auto_subtitle.is_some()).await;
+    assert!(
+        opened.elapsed() < Duration::from_secs(5),
+        "the start subtitle took {:?}",
+        opened.elapsed()
+    );
+    assert!(s.subtitles_pending, "the slow addon is still out");
+    let source = |s: &PlaybackSnapshot| {
+        s.subtitles
+            .iter()
+            .find(|t| Some(&t.url) == s.auto_subtitle.as_ref())
+            .map(|t| t.source.clone())
+    };
+    assert_eq!(source(&s).as_deref(), Some("quick"));
+    let done = settled_list(&view).await;
+    assert!(done.subtitles.iter().any(|t| t.source == "slow"));
+    assert_eq!(
+        done.auto_subtitle, s.auto_subtitle,
+        "a slower source never changes it"
+    );
+}
+
 /// The track every app turns on at start: only when the profile set
 /// subtitle languages and the audio is in none of them; the user's own
 /// choice (a track, or Off) wins and is remembered for the title.

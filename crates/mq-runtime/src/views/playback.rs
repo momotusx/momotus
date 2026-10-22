@@ -644,6 +644,9 @@ struct State {
     /// The viewer picked a subtitle, or Off, in this view: `autoSubtitle`
     /// stays null from then on.
     subtitle_picked: bool,
+    /// This source's start subtitle is decided: a slower source's tracks
+    /// still list, but never change it.
+    start_settled: bool,
     /// The subtitle delay the title remembers for the playing version and
     /// video: the track's origin (`SubtitleTrack::origin`) and its ms.
     delay: Option<(String, i32)>,
@@ -750,6 +753,7 @@ impl State {
             order: HashMap::new(),
             playing: OwnedPlaying::default(),
             subtitle_picked: false,
+            start_settled: false,
             delay: None,
             start_base: 0.0,
             source_since: tokio::time::Instant::now(),
@@ -1506,6 +1510,7 @@ fn release_all(s: &mut State) {
     // A pick was of this source's tracks: the next one's settle may turn on
     // the title's remembered choice again.
     s.subtitle_picked = false;
+    s.start_settled = false;
     s.order.clear();
     s.lease = None;
 }
@@ -1905,37 +1910,22 @@ async fn resolve_next(
                         &state,
                         &snapshot,
                     );
-                    tokio::join!(addons, built_in, rated);
-                    // The release's languages when the file says none.
-                    let mut audio = probed.await.audio;
-                    if audio.is_empty() {
-                        audio = stream
-                            .release
-                            .languages
-                            .iter()
-                            .map(|l| crate::languages::language(l).tag)
-                            .collect();
+                    // The start subtitle waits for every source until the
+                    // fan-out's soft deadline, then goes with the tracks
+                    // listed: one slow addon (SubSense took 12 to 20 s, the
+                    // iphone-a walk) never leaves subtitles off that long.
+                    let early = async {
+                        tokio::time::sleep(Deadlines::default().soft).await;
+                        let audio = audio_of(probed.clone().await, &stream);
+                        settle_start(&core, &target, &state, &snapshot, run, &audio, false);
+                        std::future::pending::<()>().await;
+                    };
+                    tokio::select! {
+                        _ = async { tokio::join!(addons, built_in, rated) } => {}
+                        () = early => {}
                     }
-                    let remembered = remembered_subtitle(&core, &target);
-                    let explicit: Vec<String> = core
-                        .prefs()
-                        .subtitle_languages
-                        .iter()
-                        .map(|l| crate::languages::language(l).tag)
-                        .collect();
-                    let mut s = lock(&state);
-                    if current(&s, run) {
-                        s.snapshot.subtitles_pending = false;
-                        // A pick before the list settled stays the pick.
-                        s.snapshot.auto_subtitle = auto_subtitle(
-                            remembered.as_deref(),
-                            &explicit,
-                            &audio,
-                            &s.snapshot.subtitles,
-                        )
-                        .filter(|_| !s.subtitle_picked);
-                        snapshot.set(s.snapshot.clone());
-                    }
+                    let audio = audio_of(probed.await, &stream);
+                    settle_start(&core, &target, &state, &snapshot, run, &audio, true);
                 };
                 let next = async {
                     if let Some(next) = next_episode(&core, &target).await {
@@ -3673,6 +3663,61 @@ async fn probe_video(reader: Option<&dyn mq_media::RangeReader>) -> Probed {
         .into_iter()
         .collect();
     Probed { fps, audio }
+}
+
+/// The audio's languages: the file's, else the release's when the file says none.
+fn audio_of(probed: Probed, stream: &ParsedStream) -> Vec<String> {
+    if !probed.audio.is_empty() {
+        return probed.audio;
+    }
+    stream
+        .release
+        .languages
+        .iter()
+        .map(|l| crate::languages::language(l).tag)
+        .collect()
+}
+
+/// Decides the source's start subtitle once: early (`last` false) only when
+/// a track to turn on is listed, else when every source has answered, which
+/// also ends `subtitles_pending`. A pick before it stays the pick.
+fn settle_start(
+    core: &Core,
+    target: &PlayTarget,
+    state: &Mutex<State>,
+    snapshot: &SharedObservable<PlaybackSnapshot>,
+    run: u64,
+    audio: &[String],
+    last: bool,
+) {
+    let remembered = remembered_subtitle(core, target);
+    let explicit: Vec<String> = core
+        .prefs()
+        .subtitle_languages
+        .iter()
+        .map(|l| crate::languages::language(l).tag)
+        .collect();
+    let mut s = lock(state);
+    if !current(&s, run) {
+        return;
+    }
+    if !s.start_settled {
+        let pick = auto_subtitle(
+            remembered.as_deref(),
+            &explicit,
+            audio,
+            &s.snapshot.subtitles,
+        )
+        .filter(|_| !s.subtitle_picked);
+        if pick.is_some() || last {
+            s.start_settled = true;
+            s.snapshot.auto_subtitle = pick;
+        }
+    }
+    if last {
+        s.snapshot.subtitles_pending = false;
+    }
+    snapshot.set(s.snapshot.clone());
 }
 
 /// The track the apps turn on at start, if any (plans/m13-subtitle-languages.md
