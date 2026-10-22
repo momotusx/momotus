@@ -77,8 +77,8 @@ fn apply(rows: &mut Vec<HomeRow>, updates: Vec<HomeUpdate>) {
 async fn rows_fill_in_place_and_mirror_matches_view() {
     let core = Core::temporary("p").unwrap();
     let fast = catalog_addon("fast", Duration::ZERO, 200, METAS).await;
-    let slow = catalog_addon("slow", Duration::from_millis(2800), 200, METAS).await;
-    let broken = catalog_addon("broken", Duration::ZERO, 500, "{}").await;
+    let slow = named_catalog_addon("slow", "Slow", Duration::from_millis(2800), 200, METAS).await;
+    let broken = named_catalog_addon("broken", "Broken", Duration::ZERO, 500, "{}").await;
     core.library()
         .set_addons("p", &[fast, slow, broken], &core.hlc())
         .unwrap();
@@ -86,7 +86,8 @@ async fn rows_fill_in_place_and_mirror_matches_view() {
     let view = HomeView::open(&core);
     let (snapshot, mut updates) = view.subscribe();
     assert_eq!(snapshot.rows.len(), 3, "search-only catalogs are skipped");
-    assert!(snapshot.rows.iter().all(|r| r.title == "Popular Movies"));
+    let titles: Vec<&str> = snapshot.rows.iter().map(|r| r.title.as_str()).collect();
+    assert_eq!(titles, ["Popular Movies", "Slow Movies", "Broken Movies"]);
     let mut mirror = snapshot.rows.clone();
 
     let deadline = tokio::time::Instant::now() + Duration::from_secs(6);
@@ -488,7 +489,7 @@ async fn real_cinemeta_next_up() {
 async fn home_follows_addon_changes_without_reopening() {
     let core = Core::temporary("p").unwrap();
     let first = catalog_addon("first", Duration::ZERO, 200, METAS).await;
-    let second = catalog_addon("second", Duration::ZERO, 200, METAS).await;
+    let second = named_catalog_addon("second", "Trending", Duration::ZERO, 200, METAS).await;
     core.library()
         .set_addons("p", std::slice::from_ref(&first), &core.hlc())
         .unwrap();
@@ -721,7 +722,7 @@ async fn meta_keeps_tvdb_ids() {
 async fn home_rows_hide_and_move_live() {
     let core = Core::temporary("p").unwrap();
     let mut a = catalog_addon("a", Duration::ZERO, 200, METAS).await;
-    let mut b = catalog_addon("b", Duration::ZERO, 200, METAS).await;
+    let mut b = named_catalog_addon("b", "Trending", Duration::ZERO, 200, METAS).await;
     a.position = 0;
     b.position = 1;
     core.library()
@@ -783,7 +784,7 @@ async fn home_rows_hide_and_move_live() {
 /// Two configurations of one addon (same manifest id) are two rows, and
 /// each catalog lands in its own row.
 #[tokio::test]
-async fn two_installations_of_one_addon_are_two_rows() {
+async fn two_installations_of_one_addon_are_two_catalogs_and_home_shows_the_first() {
     let core = Core::temporary("p").unwrap();
     let mut first = catalog_addon("same", Duration::ZERO, 200, METAS).await;
     let mut second = catalog_addon("same", Duration::ZERO, 200, METAS).await;
@@ -792,27 +793,20 @@ async fn two_installations_of_one_addon_are_two_rows() {
     core.library()
         .set_addons("p", &[first, second], &core.hlc())
         .unwrap();
-    let ids: Vec<String> = core.home_catalogs().into_iter().map(|c| c.row_id).collect();
-    assert_eq!(ids.len(), 2);
-    assert_ne!(ids[0], ids[1]);
-    let view = HomeView::open(&core);
-    for _ in 0..300 {
-        if view
-            .snapshot()
-            .rows
-            .iter()
-            .all(|r| r.state == RowState::Ready)
-        {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-    assert!(
-        view.snapshot()
-            .rows
-            .iter()
-            .all(|r| r.state == RowState::Ready && !r.tiles.is_empty())
+    let catalogs = core.home_catalogs();
+    assert_eq!(catalogs.len(), 2);
+    assert_ne!(catalogs[0].row_id, catalogs[1].row_id);
+    // Same titles: the second is a twin, off Home until turned on.
+    assert_eq!(
+        catalogs.iter().map(|c| c.hidden).collect::<Vec<_>>(),
+        [false, true]
     );
+    let view = HomeView::open(&core);
+    rows_until(&view, &[&catalogs[0].row_id]).await;
+    core.set_home_row_hidden(&catalogs[1].row_id, false)
+        .unwrap();
+    rows_until(&view, &[&catalogs[0].row_id, &catalogs[1].row_id]).await;
+    assert!(view.snapshot().rows.iter().all(|r| !r.tiles.is_empty()));
 }
 
 /// Live (web journey review P3-20): a real Kitsu series through the core
@@ -956,7 +950,7 @@ async fn flaky_addon(id: &str, statuses: &'static [u16]) -> (AddonRow, Arc<Atomi
     let manifest = serde_json::json!({
         "id": id, "version": "1.0.0", "name": format!("{id} addon"),
         "types": ["movie"], "resources": ["catalog"],
-        "catalogs": [{"type": "movie", "id": "top", "name": "Popular"}]
+        "catalogs": [{"type": "movie", "id": "top", "name": id}]
     });
     let row = AddonRow {
         transport_url: format!("http://{addr}/manifest.json"),
@@ -1031,123 +1025,81 @@ async fn retrying_a_row_asks_only_its_catalog() {
     assert!(!view.retry_row("gone:movie:top"));
 }
 
-/// The hero's reason once it reads `want` (each part of Home re-reads it).
-async fn reason_until(view: &HomeView, want: &str) {
+/// The reason of the first hero Home shows.
+async fn first_hero(view: &HomeView) -> String {
     for _ in 0..300 {
-        if view
-            .snapshot()
-            .header
-            .hero
-            .is_some_and(|h| h.reason == want)
-        {
-            return;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-    panic!(
-        "the hero never read {want:?}: {:?}",
-        view.snapshot().header.hero.map(|h| h.reason)
-    );
-}
-
-/// The first hero Home shows, with the rows as they were then.
-async fn first_hero(view: &HomeView) -> (String, Vec<RowState>) {
-    for _ in 0..300 {
-        let snap = view.snapshot();
-        if let Some(hero) = snap.header.hero {
-            return (
-                hero.reason,
-                snap.rows.iter().map(|r| r.state.clone()).collect(),
-            );
+        if let Some(hero) = view.snapshot().header.hero {
+            return hero.reason;
         }
         tokio::time::sleep(Duration::from_millis(5)).await;
     }
     panic!("no hero");
 }
 
-#[tokio::test]
-async fn the_hero_names_its_addon_only_when_another_row_has_the_same_title() {
-    // One "Popular Movies" row: the addon is left unsaid.
-    let core = Core::temporary("p").unwrap();
-    let only = catalog_addon("first", Duration::ZERO, 200, METAS).await;
-    core.library()
-        .set_addons("p", &[only], &core.hlc())
-        .unwrap();
-    let view = HomeView::open(&core);
-    assert_eq!(first_hero(&view).await.0, "#1 in Popular Movies");
-
-    // A second "Popular Movies" row, slow to answer: it counts while it
-    // loads, so the hero says which at once.
-    let core = Core::temporary("q").unwrap();
-    let mut first = catalog_addon("first", Duration::ZERO, 200, METAS).await;
-    let mut second = catalog_addon("second", Duration::from_millis(400), 200, METAS).await;
-    first.position = 0;
-    second.position = 1;
-    core.library()
-        .set_addons("q", &[first, second], &core.hlc())
-        .unwrap();
-    let view = HomeView::open(&core);
-    let (reason, states) = first_hero(&view).await;
-    assert_eq!(reason, "#1 in Popular Movies on first addon");
-    assert_eq!(
-        states[1],
-        RowState::Loading,
-        "picked before the second answered"
-    );
-
-    // Hiding the other row takes "on first addon" away from the hero shown.
-    let other = view.snapshot().rows[1].row_id.clone();
-    core.set_home_row_hidden(&other, true).unwrap();
-    reason_until(&view, "#1 in Popular Movies").await;
-}
-
-#[tokio::test]
-async fn titles_that_differ_only_in_case_clash_too() {
-    let core = Core::temporary("p").unwrap();
-    let mut first = catalog_addon("first", Duration::ZERO, 200, METAS).await;
-    let mut lower =
-        named_catalog_addon("lower", "popular movies", Duration::ZERO, 200, METAS).await;
-    first.position = 0;
-    lower.position = 1;
-    core.library()
-        .set_addons("p", &[first, lower], &core.hlc())
-        .unwrap();
-    let view = HomeView::open(&core);
-    assert_eq!(view.snapshot().rows[1].title, "popular movies");
-    assert_eq!(
-        first_hero(&view).await.0,
-        "#1 in Popular Movies on first addon"
-    );
-}
-
-/// Another row that lists the hero lower down never lends it its title: with
-/// the hero's own row hidden, the reason keeps the row it came from.
-#[tokio::test]
-async fn the_hero_reason_never_takes_a_row_where_it_is_not_first() {
-    const LATER: &str = r#"{"metas":[
-  {"id":"tt0068646","type":"movie","name":"The Godfather","background":"https://images.metahub.space/background/medium/tt0068646/img"},
-  {"id":"tt0111161","type":"movie","name":"The Shawshank Redemption","background":"https://images.metahub.space/background/medium/tt0111161/img"}
-]}"#;
-    let core = Core::temporary("p").unwrap();
-    let mut first = catalog_addon("first", Duration::ZERO, 200, METAS).await;
-    let mut trending =
-        named_catalog_addon("trending", "Trending", Duration::ZERO, 200, LATER).await;
-    first.position = 0;
-    trending.position = 1;
-    core.library()
-        .set_addons("p", &[first, trending], &core.hlc())
-        .unwrap();
-    let view = HomeView::open(&core);
-    assert_eq!(first_hero(&view).await.0, "#1 in Popular Movies");
-    let own = view.snapshot().rows[0].row_id.clone();
-    core.set_home_row_hidden(&own, true).unwrap();
+/// Waits up to 3 s for Home to show exactly the rows `want`, all filled.
+async fn rows_until(view: &HomeView, want: &[&str]) {
     for _ in 0..300 {
-        if view.snapshot().rows.iter().all(|r| r.row_id != own) {
-            break;
+        let rows = view.snapshot().rows;
+        if rows
+            .iter()
+            .map(|r| r.row_id.as_str())
+            .eq(want.iter().copied())
+            && rows.iter().all(|r| r.state == RowState::Ready)
+        {
+            return;
         }
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
-    let hero = view.snapshot().header.hero.unwrap();
-    assert_eq!(hero.tile.id, "tt0111161");
-    assert_eq!(hero.reason, "#1 in Popular Movies");
+    panic!("wanted {want:?}, got {:?}", view.snapshot().rows);
+}
+
+/// No addon's name anywhere on Home (the owner, 2026-10-22): a row titled as
+/// one before it in addon order, in any case, stays off Home until the user
+/// turns it on in Customize Home, and the hero says only "#1 in" its row.
+#[tokio::test]
+async fn a_later_twin_row_stays_off_home_until_turned_on() {
+    let core = Core::temporary("p").unwrap();
+    let mut first = catalog_addon("first", Duration::ZERO, 200, METAS).await;
+    let mut second = catalog_addon("second", Duration::ZERO, 200, METAS).await;
+    let mut lower =
+        named_catalog_addon("lower", "popular movies", Duration::ZERO, 200, METAS).await;
+    (first.position, second.position, lower.position) = (0, 1, 2);
+    core.library()
+        .set_addons("p", &[first, second, lower], &core.hlc())
+        .unwrap();
+    let listed = |core: &Core| -> Vec<(String, bool)> {
+        core.home_catalogs()
+            .into_iter()
+            .map(|c| (c.title, c.hidden))
+            .collect()
+    };
+    assert_eq!(
+        listed(&core),
+        [
+            ("Popular Movies".into(), false),
+            ("Popular Movies".into(), true),
+            ("popular movies".into(), true)
+        ]
+    );
+    let ids: Vec<String> = core.home_catalogs().into_iter().map(|c| c.row_id).collect();
+    let view = HomeView::open(&core);
+    rows_until(&view, &[&ids[0]]).await;
+    assert_eq!(first_hero(&view).await, "#1 in Popular Movies");
+
+    // Turned on, the twin shows; the hero still names no addon.
+    core.set_home_row_hidden(&ids[1], false).unwrap();
+    rows_until(&view, &[&ids[0], &ids[1]]).await;
+    assert_eq!(
+        view.snapshot().header.hero.unwrap().reason,
+        "#1 in Popular Movies"
+    );
+    assert_eq!(core.prefs().home_rows.shown, [ids[1].clone()]);
+    // Turned off again, it goes, and the choice to show it with it.
+    core.set_home_row_hidden(&ids[1], true).unwrap();
+    rows_until(&view, &[&ids[0]]).await;
+    assert!(core.prefs().home_rows.shown.is_empty());
+    assert_eq!(
+        listed(&core).iter().map(|(_, h)| *h).collect::<Vec<_>>(),
+        [false, true, true]
+    );
 }

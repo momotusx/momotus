@@ -17,7 +17,7 @@ use mq_addons::InstalledAddon;
 use mq_library::{AllowedRow, ContinueItem, Policy, Table};
 use mq_protocol::{ResourcePath, ResourceResponse};
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -122,9 +122,7 @@ pub struct HomeHeader {
 pub struct Hero {
     pub tile: Tile,
     /// One line telling the user why this title is here: "#1 in Popular
-    /// Movies", with the addon ("on Cinemeta") only when another row on Home
-    /// has the same title, in any case. It follows the rows while the hero
-    /// stays: a row hidden or an addon gone can take the addon away.
+    /// Movies", never with the addon's name.
     pub reason: String,
     pub description: Option<String>,
     /// At most three, in the addon's order.
@@ -323,16 +321,25 @@ fn catalog_slots(addons: &[InstalledAddon]) -> Vec<CatalogSlot> {
 }
 
 /// The user's order first (ids that still exist, first mention wins), then
-/// every other catalog in addon order; each with whether it is hidden.
+/// every other catalog in addon order; each with whether it is hidden. A
+/// twin, a row titled as one before it in addon order (in any case), is
+/// hidden until the user shows it: no addon's name tells the two apart (the
+/// owner, 2026-10-22). The user's own choice wins either way.
 fn arrange(slots: Vec<CatalogSlot>, prefs: &HomeRows) -> Vec<(CatalogSlot, bool)> {
+    let mut titles = HashSet::new();
+    let twins: Vec<bool> = slots
+        .iter()
+        .map(|s| !titles.insert(row_title(s).to_lowercase()))
+        .collect();
     let rank = |id: &str| prefs.order.iter().position(|o| o == id);
     let mut slots: Vec<(usize, CatalogSlot)> = slots.into_iter().enumerate().collect();
     // Stable: unordered rows keep addon order after all ordered ones.
     slots.sort_by_key(|(i, s)| (rank(&s.row_id).unwrap_or(usize::MAX), *i));
     slots
         .into_iter()
-        .map(|(_, s)| {
-            let hidden = prefs.hidden.contains(&s.row_id);
+        .map(|(i, s)| {
+            let hidden =
+                prefs.hidden.contains(&s.row_id) || (twins[i] && !prefs.shown.contains(&s.row_id));
             (s, hidden)
         })
         .collect()
@@ -380,19 +387,20 @@ impl Core {
         Ok(())
     }
 
-    /// Hides or shows one Home row. Only `homeRows.hidden` is written, and
-    /// ids of catalogs that are gone stay in it.
+    /// Hides or shows one Home row. Only `homeRows.hidden` and
+    /// `homeRows.shown` (a twin shown on purpose) are written, and ids of
+    /// catalogs that are gone stay in them.
     pub fn set_home_row_hidden(
         &self,
         row_id: &str,
         hidden: bool,
     ) -> Result<Vec<HomeCatalog>, CoreError> {
-        let mut list = self.prefs().home_rows.hidden;
-        list.retain(|id| id != row_id);
-        if hidden {
-            list.push(row_id.to_owned());
-        }
-        self.set_prefs(&serde_json::json!({"homeRows": {"hidden": list}}))?;
+        let rows = self.prefs().home_rows;
+        let (mut on, mut off) = (rows.shown, rows.hidden);
+        on.retain(|id| id != row_id);
+        off.retain(|id| id != row_id);
+        if hidden { &mut off } else { &mut on }.push(row_id.to_owned());
+        self.set_prefs(&serde_json::json!({"homeRows": {"hidden": off, "shown": on}}))?;
         Ok(self.home_catalogs())
     }
 
@@ -556,13 +564,16 @@ fn row_title(slot: &CatalogSlot) -> String {
     catalog_title(&name, &slot.path.r#type, &slot.addon.manifest.name)
 }
 
-/// A row's title: the catalog's name and the kind it lists ("Popular Movies"). The row names its addon
-/// beside the title, so a name that starts with the addon's name ("trakt - Popular movies" from Trakt Tv)
-/// drops that start, and a kind the name already says, or a custom kind that only repeats the addon's name
-/// (Trakt Tv's type "trakt"), is not added. A known kind stays even when the addon's name holds it (The
-/// Movie Database Addon's "Popular Movies").
+/// A row's title: the catalog's name and the kind it lists ("Popular Movies"), with its spaces made
+/// single (Streaming Catalogs' "Prime  Video"). No addon's name shows on Home, so a name that starts with
+/// the addon's name ("trakt - Popular movies" from Trakt Tv) drops that start, and a kind the name already
+/// says, or a custom kind that only repeats the addon's name (Trakt Tv's type "trakt"), is not added. A
+/// known kind stays even when the addon's name holds it (The Movie Database Addon's "Popular Movies").
 fn catalog_title(name: &str, kind: &str, source: &str) -> String {
-    let name = without_source(name, source);
+    let name = without_source(
+        &name.split_whitespace().collect::<Vec<_>>().join(" "),
+        source,
+    );
     let label = type_label(kind);
     let custom = label == kind;
     if has_words(&name, label) || (custom && has_words(source, label)) {
@@ -570,32 +581,6 @@ fn catalog_title(name: &str, kind: &str, source: &str) -> String {
     } else {
         format!("{name} {label}")
     }
-}
-
-/// The hero's caption: "#1 in Popular Movies", the addon left unsaid (the owner, 2026-10-22: "don't write
-/// Cinemeta"). Only when another row on Home has the same title (`shared`) does the addon tell them apart,
-/// "#1 in Popular Movies on Trakt Tv", and never when the title names it already, so it is never said twice.
-fn hero_reason(title: &str, source: &str, shared: bool) -> String {
-    let own = source_words(source);
-    let named = !own.is_empty() && own.iter().all(|w| words(title).contains(w));
-    if shared && !named {
-        format!("#1 in {title} on {source}")
-    } else {
-        format!("#1 in {title}")
-    }
-}
-
-/// The hero's reason from `row` as Home lays out its rows now: the addon is
-/// said only when another row has the same title, in any case. Every row
-/// has its title from the start, loading or not.
-fn reason_in(rows: &ObservableVector<HomeRow>, row: &HomeRow) -> String {
-    let title = row.title.to_lowercase();
-    let shared = rows
-        .iter()
-        .filter(|r| r.title.to_lowercase() == title)
-        .count()
-        > 1;
-    hero_reason(&row.title, &row.source, shared)
 }
 
 /// Lowercase words of letters and digits.
@@ -899,7 +884,9 @@ fn maybe_pick_hero(rows: &Mutex<ObservableVector<HomeRow>>, header: &SharedObser
             let blurb = tile.blurb.clone().unwrap_or_default();
             Some(Hero {
                 tile: tile.clone(),
-                reason: reason_in(&rows, row),
+                // Never the addon's name (the owner, 2026-10-22): a twin
+                // row is hidden by default, so the title says enough.
+                reason: format!("#1 in {}", row.title),
                 description: blurb.description,
                 genres: blurb.genres,
                 runtime: blurb.runtime,
@@ -907,25 +894,7 @@ fn maybe_pick_hero(rows: &Mutex<ObservableVector<HomeRow>>, header: &SharedObser
         });
     let current = header.get().hero;
     let next = match (candidate, &current) {
-        // The hero stays; its reason follows the rows (one hidden, an addon
-        // gone or added, a sync), so a clash that went takes "on X" with it.
-        // Its row is the one holding the tile whose title (and addon) the
-        // reason says, never another row that lists it too.
-        (Some(_), Some(existing)) => {
-            let from = rows
-                .iter()
-                .filter(|r| r.row_id != CONTINUE_ROW_ID)
-                .find(|r| {
-                    r.tiles.iter().any(|t| t.id == existing.tile.id)
-                        && [false, true].iter().any(|&shared| {
-                            hero_reason(&r.title, &r.source, shared) == existing.reason
-                        })
-                });
-            Some(Hero {
-                reason: from.map_or_else(|| existing.reason.clone(), |row| reason_in(&rows, row)),
-                ..existing.clone()
-            })
-        }
+        (Some(_), Some(existing)) => Some(existing.clone()),
         (Some(hero), None) => Some(hero),
         (None, _) => None,
     };
@@ -1276,7 +1245,7 @@ fn imdb_rating(p: &mq_protocol::MetaItemPreview) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{catalog_title, hero_reason, without_source};
+    use super::{catalog_title, without_source};
 
     #[test]
     fn a_row_title_names_the_catalog_and_its_kind() {
@@ -1284,16 +1253,36 @@ mod tests {
             catalog_title("Popular", "movie", "Cinemeta"),
             "Popular Movies"
         );
-        // The addon is left unsaid, unless another row shares the title.
-        assert_eq!(
-            hero_reason("Popular Movies", "Cinemeta", false),
-            "#1 in Popular Movies"
-        );
-        assert_eq!(
-            hero_reason("Popular Movies", "Cinemeta", true),
-            "#1 in Popular Movies on Cinemeta"
-        );
         assert_eq!(catalog_title("Top", "series", "Cinemeta"), "Top Series");
+    }
+
+    #[test]
+    fn streaming_catalogs_rows_read_as_their_services() {
+        let d = crate::defaults::list()
+            .iter()
+            .find(|d| d.key == "streamingcatalogs")
+            .unwrap();
+        let titles: Vec<String> = d
+            .manifest
+            .catalogs
+            .iter()
+            .map(|c| catalog_title(c.name.as_deref().unwrap(), &c.r#type, &d.manifest.name))
+            .collect();
+        assert_eq!(
+            titles,
+            [
+                "Netflix Movies",
+                "Netflix Series",
+                "HBO Max Movies",
+                "HBO Max Series",
+                "Disney+ Movies",
+                "Disney+ Series",
+                "Prime Video Movies",
+                "Prime Video Series",
+                "Apple TV+ Movies",
+                "Apple TV+ Series"
+            ]
+        );
     }
 
     #[test]
@@ -1303,25 +1292,12 @@ mod tests {
         let title = catalog_title("trakt - Popular movies", "trakt", "Trakt Tv");
         assert_eq!(title, "Popular movies");
         assert_eq!(
-            hero_reason(&title, "Trakt Tv", true),
-            "#1 in Popular movies on Trakt Tv"
-        );
-        assert_eq!(
             catalog_title("Trakt: Trending", "movie", "Trakt Tv"),
             "Trending Movies"
-        );
-        // A title that still names the addon is not followed by it.
-        assert_eq!(
-            hero_reason("Trakt Trending", "Trakt Tv", true),
-            "#1 in Trakt Trending"
         );
         // Game Cinema's catalogs (community.json) part the addon from the name with an em dash.
         let title = catalog_title("Game Cinema \u{2014} New This Week", "movie", "Game Cinema");
         assert_eq!(title, "New This Week Movies");
-        assert_eq!(
-            hero_reason(&title, "Game Cinema", true),
-            "#1 in New This Week Movies on Game Cinema"
-        );
         assert_eq!(
             catalog_title("Game Cinema \u{2014} Most Watched", "movie", "Game Cinema"),
             "Most Watched Movies"
@@ -1431,9 +1407,5 @@ mod tests {
             "Traktor hits Movies"
         );
         assert_eq!(catalog_title("Top", "movie", "TV"), "Top Movies");
-        assert_eq!(
-            hero_reason("Top Movies", "TV", true),
-            "#1 in Top Movies on TV"
-        );
     }
 }

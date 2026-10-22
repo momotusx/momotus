@@ -60,10 +60,11 @@ pub enum SubtitleSize {
     ExtraLarge,
 }
 
-/// Home rows the user hid or moved, by row id (`<addonId>:<type>:<catalogId>`).
+/// Home rows the user hid, showed or moved, by row id (`<addonId>:<type>:<catalogId>`).
 /// Rows in `order` come first in that order, then the rest in addon order.
-/// Ids of catalogs that are gone are kept, so a reinstalled addon gets its
-/// place back.
+/// `shown` holds the twins the user turned on (a row titled as one before it
+/// is hidden until then). Ids of catalogs that are gone are kept, so a
+/// reinstalled addon gets its place back.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(
     feature = "ts",
@@ -74,6 +75,7 @@ pub enum SubtitleSize {
 pub struct HomeRows {
     pub hidden: Vec<String>,
     pub order: Vec<String>,
+    pub shown: Vec<String>,
 }
 
 impl Default for Prefs {

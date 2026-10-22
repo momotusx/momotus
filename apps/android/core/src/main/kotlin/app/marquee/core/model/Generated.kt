@@ -465,7 +465,7 @@ enum class Group(
 @Serializable
 data class Hero(
     val tile: Tile,
-    /** One line telling the user why this title is here: "#1 in Popular Movies", with the addon ("on Cinemeta") only when another row on Home has the same title, in any case. It follows the rows while the hero stays: a row hidden or an addon gone can take the addon away. */
+    /** One line telling the user why this title is here: "#1 in Popular Movies", never with the addon's name. */
     val reason: String,
     val description: String? = null,
     /** At most three, in the addon's order. */
@@ -524,11 +524,12 @@ data class HomeRow(
     val tiles: List<Tile> = emptyList(),
 )
 
-/** Home rows the user hid or moved, by row id (`<addonId>:<type>:<catalogId>`). Rows in `order` come first in that order, then the rest in addon order. Ids of catalogs that are gone are kept, so a reinstalled addon gets its place back. */
+/** Home rows the user hid, showed or moved, by row id (`<addonId>:<type>:<catalogId>`). Rows in `order` come first in that order, then the rest in addon order. `shown` holds the twins the user turned on (a row titled as one before it is hidden until then). Ids of catalogs that are gone are kept, so a reinstalled addon gets its place back. */
 @Serializable
 data class HomeRows(
     val hidden: List<String> = emptyList(),
     val order: List<String> = emptyList(),
+    val shown: List<String> = emptyList(),
 )
 
 @Serializable
