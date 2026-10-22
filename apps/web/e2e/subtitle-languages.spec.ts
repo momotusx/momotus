@@ -365,9 +365,15 @@ test("TV: two columns, the right one follows the focused language, Right moves i
   await expect(panel.locator('[data-f="sublang:de"] .flag.none')).toHaveText("DE");
   await expect(panel.locator('[data-f="sublang:de"] .flag.none')).toHaveCSS("font-size", "23px");
   await expect(panel.locator('[data-f="sublang:de"] img.flag')).toHaveCount(0);
+  // Down moves to the row under English. Which row that is depends on the tests before: a pick
+  // puts its language first in the profile's (the core's rule since 151a5844), so English and
+  // Portuguese (Brazil), both picked above, now lead the list.
+  const rows = panel.locator('[data-f^="sublang:"]');
+  const keys = await rows.evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.f ?? ""));
+  const below = keys[keys.indexOf("sublang:en") + 1] ?? "";
   await page.keyboard.press("ArrowDown");
-  await expect.poll(() => focusedKey(page)).toBe("sublang:zh-Hant");
-  await expect(panel.locator(".subp-opts .subp-head h2")).toHaveText("Chinese (Traditional)");
+  await expect.poll(() => focusedKey(page)).toBe(below);
+  await expect(panel.locator(".subp-opts .subp-head h2")).toHaveText((await panel.locator(`[data-f="${below}"] .nm`).textContent()) ?? "");
   await page.keyboard.press("ArrowUp");
   await expect(panel.locator(".subp-opts .subp-head h2")).toHaveText("English");
   await page.waitForTimeout(300);
