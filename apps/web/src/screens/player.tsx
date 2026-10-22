@@ -37,7 +37,7 @@ import { Loading, type Wait } from "../player/loading";
 import { SubtitlePicker } from "../player/subtitle-picker";
 import { createVideoEngine } from "../player/video-engine";
 import { loadedSource, type Retry, sourceStart, TRYING_AGAIN_MS, tryingAgain } from "../lib/failover";
-import { bytes, clock, decoded, delayText, startsText, episodeLabel, groupFailures, playPath, playState, seasonName, titlePath, versionsPath } from "../lib/format";
+import { bytes, clock, decoded, startsText, episodeLabel, groupFailures, playPath, playState, seasonName, titlePath, versionsPath } from "../lib/format";
 import { bufferShare, loadingLines, STALL_AHEAD_S, startFill } from "../lib/loading";
 import { offSummary, pickerLanguages, startOption } from "../lib/subtitles";
 import { blockedWords, languageName, nextVersion, noVersionWords, qualityCell, qualityText, restartLine, subtitleNote } from "../lib/words";
@@ -258,13 +258,10 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     onSubtitleError: (lang) => setSubError(`Could not load ${languageName(lang)} subtitles from the core`),
   });
   const { time, duration, paused, buffered, started, waiting, rate } = engine;
-  // Subtitle timing, for this play only (the size is the profile's, synced).
-  const [subDelay, setSubDelay] = createSignal(0);
-  const nudgeSubs = (by: number) => {
-    const next = Math.round((subDelay() + by) * 10) / 10;
-    setSubDelay(next);
-    engine.setSubtitleDelay(next);
-  };
+  // Subtitle timing per track, for this play only (the size is the profile's, synced).
+  const [delays, setDelays] = createSignal<Record<string, number>>({});
+  const subDelay = () => delays()[track()?.url ?? ""] ?? 0;
+  createEffect(() => engine.setSubtitleDelay(subDelay()));
   // A desktop has no volume keys of its own here: a mute button and a level,
   // and full screen (with Back in the header on a desktop and a phone). The
   // level and mute carry on to the next episode (`sound`); full screen stays
@@ -1176,7 +1173,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
           notes={(snap()?.subtitleNotes ?? []).map(subtitleNote)}
           open={subLanguage()}
           setOpen={setSubLanguage}
-          timing={track() ? { text: delayText(subDelay()), less: () => nudgeSubs(-0.5), more: () => nudgeSubs(0.5) } : null}
+          timing={track() ? { value: subDelay(), set: (sec) => setDelays({ ...delays(), [track()?.url ?? ""]: sec }) } : null}
           size={{
             text: SIZES[sizeAt()]?.text ?? "100%",
             less: sizeAt() > 0 ? () => setSize(sizeAt() - 1) : undefined,

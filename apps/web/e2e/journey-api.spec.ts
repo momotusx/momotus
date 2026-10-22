@@ -273,7 +273,7 @@ test("a series watched to its end plays again from its first episode", async ({ 
   await context.close();
 });
 
-test("subtitle size is the profile's; timing moves the cues for this play", async ({ browser }) => {
+test("subtitle size is the profile's; timing steps, holds and resets, and moves the cues for this play", async ({ browser }) => {
   const { context, page: p } = await page(browser);
   await p.goto("/settings?form=desktop");
   const large = p.locator('[data-f="pref-subsize:large"]');
@@ -293,15 +293,47 @@ test("subtitle size is the profile's; timing moves the cues for this play", asyn
   // Timing sits under the options of a language.
   await p.locator('[data-f="player:subs"]').dispatchEvent("click");
   await p.locator('[data-f="subopen:en"]').dispatchEvent("click");
-  const timing = p.locator(".sub-delay output");
-  await expect(timing).toHaveText("In step");
-  await p.locator('[data-f="sub:later"]').dispatchEvent("click");
-  await expect(timing).toHaveText("0.5 s later");
-  await expect.poll(cue).toEqual([1.5, 30.5]);
-  await p.locator('[data-f="sub:earlier"]').dispatchEvent("click");
-  await p.locator('[data-f="sub:earlier"]').dispatchEvent("click");
-  await expect(timing).toHaveText("0.5 s earlier");
-  await expect.poll(cue).toEqual([0.5, 29.5]);
+  const timing = p.locator(".sub-delay .sub-val");
+  const reset = p.locator('[data-f="sub:reset"]');
+  const earlier = p.locator('[data-f="sub:earlier"]');
+  const later = p.locator('[data-f="sub:later"]');
+  await expect(timing).toHaveText("0.0 s");
+  await expect(timing).toHaveAccessibleName("Subtitles in step");
+  await expect(reset).toHaveCount(0);
+  // A press is 0.1 s, by the pointer and by the keyboard.
+  await later.click();
+  await expect(timing).toHaveText("+0.1 s");
+  await expect(timing).toHaveAccessibleName("Subtitles 0.1 seconds later, press to reset");
+  await expect.poll(cue).toEqual([1.1, 30.1]);
+  await later.focus();
+  await p.keyboard.press("Enter");
+  await expect(timing).toHaveText("+0.2 s");
+  // Reset shows while the value is not 0; it leaves with it and the focus moves to the value.
+  await reset.focus();
+  await p.keyboard.press("Enter");
+  await expect(timing).toHaveText("0.0 s");
+  await expect(reset).toHaveCount(0);
+  await expect(timing).toBeFocused();
+  await expect.poll(cue).toEqual([1, 30]);
+  // Held about 1.3 s: repeats from 250 ms, every 100 ms, 0.3 s a tick in the
+  // first second and 0.4 after: about 3.6 s, far past a press or 13 plain steps.
+  const box = await earlier.boundingBox();
+  if (!box) throw new Error("no minus button");
+  await p.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await p.mouse.down();
+  await p.waitForTimeout(1300);
+  await p.mouse.up();
+  const held = Number((await timing.textContent())?.replace("−", "-").replace(" s", ""));
+  expect(held).toBeLessThanOrEqual(-2.5);
+  expect(held).toBeGreaterThanOrEqual(-5);
+  expect(Math.round(held * 10)).toBeCloseTo(held * 10, 6);
+  await expect.poll(async () => (await cue())?.[1]).toBeCloseTo(30 + held, 6);
+  // A tap on the value resets too.
+  await timing.click();
+  await expect(timing).toHaveText("0.0 s");
+  await expect.poll(cue).toEqual([1, 30]);
+  await later.click();
+  await expect(timing).toHaveText("+0.1 s");
   // A new play starts in step.
   await openPlayer(p);
   await expect.poll(cue, { timeout: 30_000 }).toEqual([1, 30]);

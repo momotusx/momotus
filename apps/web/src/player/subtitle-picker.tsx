@@ -19,6 +19,7 @@ import { form } from "../form";
 import { bestOption, FITS, matchesLanguage, optionCount, pickerLanguages, type PickerLanguage, trackDetail } from "../lib/subtitles";
 import { languageName } from "../lib/words";
 import type { Track } from "./engine";
+import { DelayStepper } from "./delay-stepper";
 import { Flag } from "./flags";
 
 /** A row of the tuning foot: its words, its value and the two steps (absent at an end). */
@@ -41,7 +42,8 @@ export function SubtitlePicker(props: {
   open: string | null;
   setOpen: (language: string | null) => void;
   /** Timing, while a track is on; size, always. */
-  timing: Tune | null;
+  /** The playing track's delay in seconds, or null when no core track plays. */
+  timing: { value: number; set: (sec: number) => void } | null;
   size: Tune;
   pick: (t: SubtitleTrack | null) => void;
   pickFile: (id: string) => void;
@@ -306,24 +308,9 @@ export function SubtitlePicker(props: {
                 }}
               </For>
             </div>
-            {/* Timing for a subtitle out of step with the speech (this play only), and the profile's size. */}
+            {/* Timing for a subtitle out of step with the speech (per track, this play only), and the profile's size. */}
             <div class="subp-tune">
-              <Show when={props.timing}>
-                {(d) => (
-                  <div class="sub-delay" role="group" aria-label="Subtitle timing">
-                    <span>Timing</span>
-                    <button class="sub-step" data-f="sub:earlier" aria-label="Show subtitles half a second earlier" onClick={() => d().less?.()}>
-                      <Minus aria-hidden />
-                    </button>
-                    <output class="num" aria-live="polite">
-                      {d().text}
-                    </output>
-                    <button class="sub-step" data-f="sub:later" aria-label="Show subtitles half a second later" onClick={() => d().more?.()}>
-                      <Plus aria-hidden />
-                    </button>
-                  </div>
-                )}
-              </Show>
+              <Show when={props.timing}>{(d) => <DelayStepper value={d().value} set={d().set} />}</Show>
               <div class="sub-size" role="group" aria-label="Subtitle size">
                 <span>Size</span>
                 <button class="sub-step" data-f="sub:smaller" aria-label="Smaller subtitles" disabled={!props.size.less} onClick={() => props.size.less?.()}>

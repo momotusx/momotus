@@ -98,13 +98,21 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 .opt:focus-visible, [data-form="tv"] .opt:focus { background: color-mix(in srgb, var(--text) 12%, transparent); }
 .sub-delay, .sub-size { display: flex; align-items: center; gap: 14px; margin: 0 12px 14px; font: 600 var(--type-callout) / 1.2 var(--font-text); }
 .sub-delay > span, .sub-size > span { flex: 1; color: var(--muted); }
-.sub-delay output, .sub-size output { min-width: 6.5em; text-align: center; }
+.sub-size output { min-width: 6.5em; text-align: center; }
 .sub-step:disabled { opacity: .4; cursor: default; }
 .sub-step { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: var(--raised); color: var(--text); }
 .sub-step svg { width: 26px; height: 26px; }
 .sub-step:focus-visible, [data-form="tv"] .sub-step:focus { background: color-mix(in srgb, var(--text) 18%, transparent); }
+/* Timing: the value is a button (a press resets it), Reset a quiet word by the label; a held minus or plus
+ * is the stepper's own repeat, so the touch neither scrolls nor calls up a menu. */
+.sub-val { min-width: 6.5em; height: 56px; border-radius: var(--radius-pill); font: inherit; color: var(--text); text-align: center; }
+.sub-reset { padding: 8px 14px; border-radius: var(--radius-pill); font: inherit; color: var(--muted); }
+.sub-val:focus-visible, .sub-reset:focus-visible, [data-form="tv"] :is(.sub-val, .sub-reset):focus { background: color-mix(in srgb, var(--text) 18%, transparent); }
+.sub-delay .sub-step { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 [data-form="phone"] .sub-delay, [data-form="phone"] .sub-size { margin: 0 6px 10px; gap: 10px; }
 [data-form="phone"] .sub-step { width: 40px; height: 40px; }
+[data-form="phone"] .sub-val { height: 40px; min-width: 5.5em; }
+[data-form="phone"] .sub-reset { padding: 6px 8px; }
 [data-form="phone"] .sub-step svg { width: 20px; height: 20px; }
 .opt-note { padding: 14px 18px 14px 56px; font: 400 var(--type-caption) var(--font-text); color: var(--muted); }
 
@@ -322,7 +330,7 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 [data-form="tv"] .subp .opt:focus { outline: none; background: var(--primary); color: var(--on-primary); box-shadow: var(--lift-focus-edge); transform: scale(var(--focus-scale-tile)); }
 [data-form="tv"] .subp .opt:focus :is(.own, .ct, small, .ck, .sep) { color: color-mix(in srgb, var(--on-primary) 73%, transparent); }
 [data-form="tv"] .subp .opt:focus .fit { color: var(--on-primary); }
-[data-form="tv"] .subp .sub-step:focus { outline: none; background: var(--primary); color: var(--on-primary); }
+[data-form="tv"] .subp :is(.sub-step, .sub-val, .sub-reset):focus { outline: none; background: var(--primary); color: var(--on-primary); }
 [data-form="tv"] .subp-find:focus-within { outline: none; background: var(--primary); color: var(--on-primary); }
 [data-form="tv"] .subp-find:focus-within input { color: var(--on-primary); }
 /* Desktop: one panel that steps between the two levels, the check at the row's start. */

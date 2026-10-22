@@ -311,7 +311,23 @@ test("a language opens its options: names, the quiet detail, the fit, the chosen
   await expect(opts.locator(".opt.on")).toHaveAttribute("aria-checked", "true");
   await expect(opts.locator(".opt.on")).toHaveAccessibleName(/^OPENFILM, WEB.*, selected$/);
   await expect(opts.locator('.opt:not(.on)[aria-checked="false"]')).toHaveCount(1);
-  await expect(opts.locator(".sub-delay output")).toHaveText("In step");
+  // The delay is the track's: Many Subs starts at 0 and OPENFILM keeps its own.
+  const timing = opts.locator(".sub-val");
+  const reopen = async () => {
+    await page.locator('[data-f="player:subs"]').dispatchEvent("click");
+    await panel.locator('[data-f="subopen:en"]').dispatchEvent("click");
+  };
+  await expect(timing).toHaveText("0.0 s");
+  await opts.locator('[data-f="sub:later"]').dispatchEvent("click");
+  await expect(timing).toHaveText("+0.1 s");
+  await opts.locator(".opt").nth(1).dispatchEvent("click");
+  await reopen();
+  await expect(opts.locator(".opt.on b")).toHaveText("Many Subs");
+  await expect(timing).toHaveText("0.0 s");
+  await fitting.dispatchEvent("click");
+  await reopen();
+  await expect(opts.locator(".opt.on b")).toHaveText(/^OPENFILM, WEB\b/);
+  await expect(timing).toHaveText("+0.1 s");
   // Back to the languages, by the link and by the key.
   await opts.locator('[data-f="sub:languages"]').dispatchEvent("click");
   await expect(panel.locator('[data-f="sub:off"]')).toBeVisible();
@@ -360,6 +376,29 @@ test("TV: two columns, the right one follows the focused language, Right moves i
   await page.keyboard.press("Enter");
   await expect.poll(() => focusedKey(page)).toBe("player:subs");
   await expect(page.locator('[data-f="player:subs"] small')).toHaveText("English");
+  // Timing on the remote: the value holds the focus, Left and Right step it (held, they repeat), Enter resets.
+  await page.keyboard.press("Enter");
+  await expect.poll(() => focusedKey(page)).toBe("sublang:en");
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => focusedKey(page)).toMatch(/^sub:http/);
+  for (let i = 0; i < 4 && (await focusedKey(page)) !== "sub:delay"; i++) await page.keyboard.press("ArrowDown");
+  await expect.poll(() => focusedKey(page)).toBe("sub:delay");
+  const timing = panel.locator('[data-f="sub:delay"]');
+  await expect(timing).toHaveText("0.0 s");
+  await page.keyboard.press("ArrowRight");
+  await expect(timing).toHaveText("+0.1 s");
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("ArrowLeft");
+  await expect(timing).toHaveText("−0.1 s");
+  await expect.poll(() => focusedKey(page)).toBe("sub:delay");
+  // Held 700 ms: 0.3 s a tick from 250 ms on, so about +1.4 s, far past one press.
+  await page.keyboard.down("ArrowRight");
+  await page.waitForTimeout(700);
+  await page.keyboard.up("ArrowRight");
+  expect(Number((await timing.textContent())?.replace(" s", ""))).toBeGreaterThanOrEqual(1);
+  await page.keyboard.press("Enter");
+  await expect(timing).toHaveText("0.0 s");
+  await expect.poll(() => focusedKey(page)).toBe("sub:delay");
   expect(errors).toEqual([]);
   await context.close();
 });
