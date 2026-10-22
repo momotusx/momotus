@@ -1102,6 +1102,26 @@ mod tests {
         assert_eq!(second[0].map(|c| c.seeders), Some(300), "the late answer");
     }
 
+    /// A count some tracker still owed after `LATE` is not taken as it is:
+    /// the next call asks again, starting from what it was.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_count_a_tracker_still_owed_is_asked_again() {
+        let s = loopback_scraper();
+        let silent = fake(V4, "127.0.0.1", 300, 0);
+        silent.quiet.store(true, Ordering::SeqCst);
+        let asked = vec![(H1.to_owned(), vec![tracker(Some(10)), silent.url.clone()])];
+        let first = s.scrape(&asked, &[]).await;
+        assert_eq!(first[0].map(|c| c.seeders), Some(10));
+        tokio::time::sleep(LATE).await;
+        let seen = silent.seen.load(Ordering::SeqCst);
+        let second = s.scrape(&asked, &[]).await;
+        assert_eq!(second[0].map(|c| c.seeders), Some(10), "from what it was");
+        assert!(
+            silent.seen.load(Ordering::SeqCst) > seen,
+            "the owed count was taken as it was"
+        );
+    }
+
     /// At most 16 own trackers per hash and 24 per call, the shared ones
     /// kept; a name that did not resolve is not looked up again within a
     /// minute (engine review r1, P2: each lookup holds a thread of the
