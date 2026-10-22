@@ -140,7 +140,7 @@ pub struct DefaultChoice {
     pub on: bool,
 }
 
-/// The nine defaults, in order.
+/// The ten defaults, in order.
 pub fn list() -> &'static [DefaultAddon] {
     static LIST: OnceLock<Vec<DefaultAddon>> = OnceLock::new();
     LIST.get_or_init(|| {
@@ -154,11 +154,16 @@ pub fn by_id(id: &str) -> Option<&'static DefaultAddon> {
     list().iter().find(|d| d.manifest.id == id)
 }
 
-/// The defaults the owner's ruling of 2026-10-22 brings to existing
-/// profiles. A profile with a list from before the profiles kept what they
-/// had counts every other default as had: it gets these three once, and an
-/// older one it removed stays removed.
-const BROUGHT: [&str; 3] = ["trakt", "rottentomatoes", "torrentcatalogs"];
+/// The defaults the owner's rulings of 2026-10-22 bring to existing
+/// profiles (Streaming Catalogs the later one). A profile with a list from
+/// before the profiles kept what they had counts every other default as
+/// had: it gets these four once, and an older one it removed stays removed.
+const BROUGHT: [&str; 4] = [
+    "trakt",
+    "rottentomatoes",
+    "torrentcatalogs",
+    "streamingcatalogs",
+];
 
 impl Core {
     /// Puts every default a profile never had in its list once, on, for
@@ -306,7 +311,7 @@ mod tests {
     }
 
     #[test]
-    fn the_bundled_defaults_are_nine_installable_addons() {
+    fn the_bundled_defaults_are_ten_installable_addons() {
         let list = list();
         let keys: Vec<&str> = list.iter().map(|d| d.key.as_str()).collect();
         assert_eq!(
@@ -320,7 +325,8 @@ mod tests {
                 "trakt",
                 "rottentomatoes",
                 "torrentcatalogs",
-                "kitsu"
+                "kitsu",
+                "streamingcatalogs"
             ]
         );
         let ids: HashSet<&str> = list.iter().map(|d| d.manifest.id.as_str()).collect();

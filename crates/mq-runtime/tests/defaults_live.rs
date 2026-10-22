@@ -1,5 +1,5 @@
 //! The default addons against the real ones (plans/m13-default-addons.md 10):
-//! a fresh core installs the nine, then reads each live manifest; each must
+//! a fresh core installs the ten, then reads each live manifest; each must
 //! answer with the bundled id and need no setup. Prints one JSON line per
 //! addon for `bench/m13/defaults-live.jsonl`.
 //!
@@ -11,8 +11,8 @@ use mq_runtime::defaults;
 use std::time::Instant;
 
 #[tokio::test]
-#[ignore = "network: the nine default addons"]
-async fn the_nine_defaults_install_on_a_fresh_core_and_each_live_manifest_answers() {
+#[ignore = "network: the ten default addons"]
+async fn the_ten_defaults_install_on_a_fresh_core_and_each_live_manifest_answers() {
     let core = Core::temporary(OWNER).unwrap();
     assert!(core.addons_fresh());
     let all_on: Vec<defaults::DefaultChoice> = defaults::list()
@@ -21,7 +21,7 @@ async fn the_nine_defaults_install_on_a_fresh_core_and_each_live_manifest_answer
         .collect();
     core.install_defaults(&all_on).unwrap();
     let rows = core.library().addons(OWNER).unwrap();
-    assert_eq!(rows.len(), 9);
+    assert_eq!(rows.len(), defaults::list().len());
     let mut failed = Vec::new();
     for d in defaults::list() {
         let started = Instant::now();

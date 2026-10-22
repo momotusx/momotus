@@ -1108,7 +1108,7 @@ impl Core {
     /// key left out is never added or switched (the Review card names only
     /// the missing ones; a resent call never brings back what a pull
     /// removed). A profile that never had a list gets wall time zero, so
-    /// any list a person built on another device wins over it: all nine on
+    /// any list a person built on another device wins over it: all of them on
     /// is this device's zero hlc (it ties with other untouched defaults),
     /// any other answer counter 1 (it beats untouched defaults only). A
     /// list that was there makes it an edit. A call that changes nothing (a

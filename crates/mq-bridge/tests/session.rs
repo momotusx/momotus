@@ -708,7 +708,7 @@ async fn defaults_and_links_with_a_sign_in_over_the_protocol() {
         .await;
     let listed = next(&mut rx).await;
     let addons = listed["result"]["addons"].as_array().unwrap();
-    assert_eq!(addons.len(), 9, "{listed}");
+    assert_eq!(addons.len(), 10, "{listed}");
     assert_eq!(addons[1]["key"], "torrentio");
     assert_eq!(addons[1]["installed"], "absent");
     session

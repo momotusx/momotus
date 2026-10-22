@@ -40,7 +40,7 @@ fn stamp(core: &Core) -> Hlc {
 }
 
 #[tokio::test]
-async fn a_fresh_profile_gets_the_nine_in_order_with_its_switches() {
+async fn a_fresh_profile_gets_the_ten_in_order_with_its_switches() {
     let core = Core::temporary(OWNER).unwrap();
     assert!(
         core.addons_fresh(),
@@ -152,7 +152,7 @@ async fn a_retried_continue_changes_nothing_and_pushes_nothing() {
     core.install_defaults(&switches(&[])).unwrap();
     assert_eq!(stamp(&core), first, "untouched defaults stay untouched");
     assert_eq!(core.library().outbox(1_000).unwrap().records.len(), queued);
-    assert_eq!(urls(&core).len(), 9, "nothing added twice");
+    assert_eq!(urls(&core).len(), 10, "nothing added twice");
     // A switch changed later is an edit.
     core.install_defaults(&[choice("subsense", false)]).unwrap();
     assert!(stamp(&core).wall_ms > 0);
@@ -183,7 +183,7 @@ async fn a_default_already_there_by_manifest_id_is_only_switched() {
         .unwrap();
     core.install_defaults(&switches(&["torrentio"])).unwrap();
     let rows = urls(&core);
-    assert_eq!(rows.len(), 9, "Torrentio is not added a second time");
+    assert_eq!(rows.len(), 10, "Torrentio is not added a second time");
     assert_eq!(
         rows[0],
         (theirs.to_owned(), false),
@@ -216,14 +216,14 @@ async fn a_default_not_named_is_never_added() {
         .changed_since(&SyncCursor::default(), 1_000)
         .unwrap();
     b.library().apply(&from_a).unwrap();
-    assert_eq!(urls(&b).len(), 8, "the account's list, without Torrentio");
+    assert_eq!(urls(&b).len(), 9, "the account's list, without Torrentio");
     // The card's Review, built before the pull, named only Trakt.
     b.install_defaults(&[choice("trakt", true)]).unwrap();
     assert!(
         urls(&b).iter().all(|(url, _)| *url != torrentio.url),
         "Torrentio stays removed"
     );
-    assert_eq!(urls(&b).len(), 8);
+    assert_eq!(urls(&b).len(), 9);
     // Nothing named, nothing written.
     let before = stamp(&b);
     b.install_defaults(&[]).unwrap();
@@ -305,13 +305,13 @@ async fn onboarding_lists_lose_to_real_ones_and_a_choice_beats_untouched() {
     real.library().apply(&from_chose).unwrap();
     assert_eq!(
         (urls(&real).len(), off(&real)),
-        (8, 0),
+        (9, 0),
         "the real list stays"
     );
     chose.library().apply(&from_real).unwrap();
     assert_eq!(
         (urls(&chose).len(), off(&chose)),
-        (8, 0),
+        (9, 0),
         "the real list wins"
     );
 
@@ -426,7 +426,8 @@ async fn get(url: &str) -> (u16, String, Vec<u8>) {
 
 /// The logos come from the core's own loopback server, so the first-run
 /// step asks no logo host: every default but Cinemeta (it publishes none)
-/// has one, and an unknown key or another token is not found.
+/// and Streaming Catalogs (not fetched yet) has one, and an unknown key or
+/// another token is not found.
 #[tokio::test]
 async fn every_default_logo_is_served_on_loopback_and_nothing_else() {
     let core = Core::temporary(OWNER).unwrap();
@@ -434,7 +435,7 @@ async fn every_default_logo_is_served_on_loopback_and_nothing_else() {
     let mut served = Vec::new();
     for d in &shown.addons {
         let Some(url) = &d.logo else {
-            assert_eq!(d.key, "cinemeta");
+            assert!(["cinemeta", "streamingcatalogs"].contains(&d.key.as_str()));
             continue;
         };
         assert!(url.starts_with("http://127.0.0.1:"), "{url}");
@@ -537,11 +538,16 @@ async fn an_old_profile_gets_each_default_it_never_had_once_on() {
     old_list(&core, &OLD_SIX, &[]);
     drop(core);
 
-    // The next build starts: the three it never had arrive after its own
+    // The next build starts: the four it never had arrive after its own
     // six, on, in list order, and the card has nothing left to offer.
     let core = device.start();
     let mut expected: Vec<(String, bool)> = OLD_SIX.iter().map(|k| (url(k), true)).collect();
-    for key in ["trakt", "rottentomatoes", "torrentcatalogs"] {
+    for key in [
+        "trakt",
+        "rottentomatoes",
+        "torrentcatalogs",
+        "streamingcatalogs",
+    ] {
         expected.push((url(key), true));
     }
     assert_eq!(urls(&core), expected);
@@ -594,7 +600,7 @@ async fn the_defaults_step_counts_what_it_named_and_a_new_or_kids_profile_gets_n
     assert_eq!(core.library().addon_list_hlc(OWNER).unwrap(), None);
     assert!(core.addons_fresh());
 
-    // The step named all nine; ones removed later do not come back.
+    // The step named all ten; ones removed later do not come back.
     core.install_defaults(&switches(&[])).unwrap();
     core.remove_addon(&url("kitsu")).unwrap();
     core.remove_addon(&url("rottentomatoes")).unwrap();
@@ -627,7 +633,7 @@ async fn the_defaults_step_counts_what_it_named_and_a_new_or_kids_profile_gets_n
     let count = |profile: &str| core.library().addons(profile).unwrap().len();
     assert!(!has(OWNER, "kitsu") && !has(OWNER, "rottentomatoes"));
     assert_eq!(count(&kid), 6);
-    assert_eq!(count(&sam), 7);
+    assert_eq!(count(&sam), 8);
     assert!(!has(&sam, "kitsu") && !has(&sam, "rottentomatoes"));
 
     // A kids profile made standard copies the same.
@@ -641,12 +647,12 @@ async fn the_defaults_step_counts_what_it_named_and_a_new_or_kids_profile_gets_n
             .iter()
             .any(|r| r.transport_url == url(key))
     };
-    assert_eq!(core.library().addons(&kid).unwrap().len(), 7);
+    assert_eq!(core.library().addons(&kid).unwrap().len(), 8);
     assert!(!has(&kid, "kitsu") && !has(&kid, "rottentomatoes"));
 }
 
 #[tokio::test]
-async fn a_list_from_before_gets_only_the_three_and_an_older_default_it_removed_stays_removed() {
+async fn a_list_from_before_gets_only_the_four_and_an_older_default_it_removed_stays_removed() {
     let device = Device::new("before");
     let core = device.start();
     // An older onboarding's six, Kitsu since removed; a second profile of
@@ -660,11 +666,40 @@ async fn a_list_from_before_gets_only_the_three_and_an_older_default_it_removed_
     drop(core);
     let core = device.start();
     let mut expected: Vec<(String, bool)> = five.iter().map(|k| (url(k), true)).collect();
-    for key in ["trakt", "rottentomatoes", "torrentcatalogs"] {
+    for key in [
+        "trakt",
+        "rottentomatoes",
+        "torrentcatalogs",
+        "streamingcatalogs",
+    ] {
         expected.push((url(key), true));
     }
     assert_eq!(urls(&core), expected, "Kitsu stays removed");
-    assert_eq!(core.library().addons("old").unwrap().len(), 9);
+    assert_eq!(core.library().addons("old").unwrap().len(), 10);
+}
+
+/// The owner's later ruling of 2026-10-22: a profile whose defaults step
+/// named the nine before Streaming Catalogs gets it once, on, at the end of
+/// its list; removed, it never comes back.
+#[tokio::test]
+async fn a_profile_from_the_nine_gets_streaming_catalogs_once() {
+    let device = Device::new("streaming");
+    let core = device.start();
+    let nine: Vec<DefaultChoice> = switches(&[])
+        .into_iter()
+        .filter(|c| c.key != "streamingcatalogs")
+        .collect();
+    core.install_defaults(&nine).unwrap();
+    assert_eq!(urls(&core).len(), 9);
+    drop(core);
+    let core = device.start();
+    let rows = urls(&core);
+    assert_eq!(rows.len(), 10);
+    assert_eq!(rows[9], (url("streamingcatalogs"), true));
+    core.remove_addon(&url("streamingcatalogs")).unwrap();
+    drop(core);
+    let core = device.start();
+    assert_eq!(urls(&core).len(), 9, "removed, it stays removed");
 }
 
 #[tokio::test]
