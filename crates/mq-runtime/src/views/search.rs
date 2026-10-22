@@ -501,7 +501,10 @@ struct Group {
 /// in slot order, so their place and id never move. A catalog of any other
 /// type (Trakt Tv's "trakt") gives no group of its own: once it answers,
 /// each result joins the group of its own kind ("Movies"), or "Other", and
-/// while it is asked or when it failed it holds no group back.
+/// while it is asked or when it failed it holds no group back. With no
+/// catalog of a known kind, its asking and failing show in the "Other"
+/// group instead, so a search never reads as finding nothing while it is
+/// still asked or when it failed.
 fn groups(slots: &[Slot], rows: &[(RowState, Vec<Tile>)]) -> Vec<Group> {
     let mut groups: Vec<Group> = Vec::new();
     let at =
@@ -525,6 +528,7 @@ fn groups(slots: &[Slot], rows: &[(RowState, Vec<Tile>)]) -> Vec<Group> {
             at(&mut groups, title, slot.row_id.clone(), slot);
         }
     }
+    let known = !groups.is_empty();
     for (slot, (state, tiles)) in slots.iter().zip(rows) {
         if let Some(title) = slot.title {
             let i = at(&mut groups, title, slot.row_id.clone(), slot);
@@ -532,6 +536,15 @@ fn groups(slots: &[Slot], rows: &[(RowState, Vec<Tile>)]) -> Vec<Group> {
             continue;
         }
         if *state != RowState::Ready {
+            if !known {
+                let i = at(
+                    &mut groups,
+                    OTHER_KIND.1,
+                    format!("kind:{}", OTHER_KIND.1.to_lowercase()),
+                    slot,
+                );
+                groups[i].members.push((state.clone(), Vec::new()));
+            }
             continue;
         }
         let mut by_kind: Vec<(&'static str, Vec<Tile>)> = Vec::new();
@@ -543,8 +556,12 @@ fn groups(slots: &[Slot], rows: &[(RowState, Vec<Tile>)]) -> Vec<Group> {
             }
         }
         for (title, own) in by_kind {
-            let row_id = format!("kind:{}", title.to_lowercase());
-            let i = at(&mut groups, title, row_id, slot);
+            let i = at(
+                &mut groups,
+                title,
+                format!("kind:{}", title.to_lowercase()),
+                slot,
+            );
             groups[i].members.push((RowState::Ready, own));
         }
     }

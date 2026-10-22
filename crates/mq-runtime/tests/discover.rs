@@ -530,3 +530,72 @@ async fn a_catalog_of_an_unknown_type_is_filed_by_its_name() {
         Some("lists|trakt|picks")
     );
 }
+
+/// An addon serving `manifest` whose every catalog answers one movie.
+async fn serving(manifest: serde_json::Value) -> AddonRow {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let mut buf = [0u8; 2048];
+            let _ = socket.read(&mut buf).await;
+            let body = r#"{"metas": [{"id": "tt0", "type": "movie", "name": "M0"}]}"#;
+            let reply = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = socket.write_all(reply.as_bytes()).await;
+        }
+    });
+    AddonRow {
+        transport_url: format!("http://{addr}/manifest.json"),
+        manifest_json: manifest.to_string(),
+        position: 0,
+        enabled: true,
+        allow_private: true,
+    }
+}
+
+/// The name that files a catalog is its own, not its addon's: "Anime Lists
+/// - Best" from Anime Lists is under Other. Inside a kind, catalogs of a
+/// known type come first, so picking the kind with a genre lands on one that
+/// offers the genre.
+#[tokio::test]
+async fn a_name_files_without_its_addon_and_known_types_come_first() {
+    let row = serving(serde_json::json!({
+        "id": "lists", "version": "1.0.0", "name": "Anime Lists", "types": ["movie", "lists"],
+        "resources": ["catalog"],
+        "catalogs": [
+            {"type": "lists", "id": "popular", "name": "Popular movies"},
+            {"type": "movie", "id": "top", "name": "Top",
+             "extra": [{"name": "genre", "options": ["Action"]}]},
+            {"type": "lists", "id": "best", "name": "Anime Lists - Best"}
+        ]
+    }))
+    .await;
+    let core = Core::temporary("p").unwrap();
+    core.library().set_addons("p", &[row], &core.hlc()).unwrap();
+    let view = DiscoverView::open(&core);
+    settle(&view).await;
+    let kinds: Vec<String> = view.snapshot().kinds.into_iter().map(|(k, _)| k).collect();
+    assert_eq!(kinds, ["movie", "other"]);
+    let names: Vec<String> = view
+        .snapshot()
+        .catalogs
+        .iter()
+        .map(|c| c.name.clone())
+        .collect();
+    assert_eq!(names, ["Top", "Popular movies"]);
+    assert_eq!(view.snapshot().catalog.as_deref(), Some("lists|movie|top"));
+    view.select(Some("other"), None, None);
+    settle(&view).await;
+    assert_eq!(view.snapshot().catalog.as_deref(), Some("lists|lists|best"));
+    // The genre chip of the movie kind.
+    view.select(Some("movie"), None, Some(Some("Action")));
+    settle(&view).await;
+    let s = view.snapshot();
+    assert_eq!(
+        (s.catalog.as_deref(), s.genre.as_deref()),
+        (Some("lists|movie|top"), Some("Action"))
+    );
+}

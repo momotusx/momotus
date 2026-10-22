@@ -4,7 +4,7 @@
 
 use crate::Core;
 use crate::live::{FRAME, coalesce};
-use crate::views::home::{Tile, type_label};
+use crate::views::home::{OTHER_KIND, Tile, kind_label, type_label};
 use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
 use mq_library::{LibraryEntry, Table};
@@ -54,7 +54,8 @@ pub struct LibrarySnapshot {
     /// The type filter, `None` for everything.
     pub kind: Option<String>,
     pub sort: LibrarySort,
-    /// Types present in the library, for the filter chips.
+    /// Kinds present in the library, for the filter chips; every type
+    /// Marquee does not know shares one chip, `other` ("Other").
     pub kinds: Vec<KindCount>,
     pub items: Vec<Tile>,
 }
@@ -159,6 +160,16 @@ async fn watch(
     }
 }
 
+/// The filter chip a title's type falls under: a kind Marquee knows, or
+/// one "Other" chip for every other type, never shown as is.
+fn chip(kind: &str) -> &str {
+    if kind_label(kind).is_some() {
+        kind
+    } else {
+        OTHER_KIND.0
+    }
+}
+
 fn render(core: &Core, query: &Query) -> LibrarySnapshot {
     let library = core.library();
     let entries = if core.policy().kids() {
@@ -169,11 +180,12 @@ fn render(core: &Core, query: &Query) -> LibrarySnapshot {
     .unwrap_or_default();
     let mut kinds: Vec<KindCount> = Vec::new();
     for e in &entries {
-        match kinds.iter_mut().find(|k| k.kind == e.item.kind) {
+        let kind = chip(&e.item.kind);
+        match kinds.iter_mut().find(|k| k.kind == kind) {
             Some(k) => k.count += 1,
             None => kinds.push(KindCount {
-                kind: e.item.kind.clone(),
-                label: type_label(&e.item.kind).to_owned(),
+                kind: kind.to_owned(),
+                label: type_label(kind).to_owned(),
                 count: 1,
             }),
         }
@@ -181,7 +193,7 @@ fn render(core: &Core, query: &Query) -> LibrarySnapshot {
     kinds.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.kind.cmp(&b.kind)));
     let mut items: Vec<&LibraryEntry> = entries
         .iter()
-        .filter(|e| query.kind.as_ref().is_none_or(|k| *k == e.item.kind))
+        .filter(|e| query.kind.as_ref().is_none_or(|k| k == chip(&e.item.kind)))
         .collect();
     match query.sort {
         LibrarySort::Recent => {

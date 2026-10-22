@@ -122,3 +122,30 @@ async fn tiles_say_where_the_user_is() {
         ]
     );
 }
+
+/// Types Marquee does not know never show as is: they share one "Other"
+/// chip, and its filter keeps them all.
+#[tokio::test]
+async fn unknown_types_share_one_other_chip() {
+    let core = Core::temporary("p").unwrap();
+    add(&core, "tt1", "alpha", "movie", 1);
+    add(&core, "trakt:1", "Bravo", "trakt", 2);
+    add(&core, "pod:1", "Charlie", "podcast", 3);
+    let view = LibraryView::open(&core);
+    let kinds: Vec<_> = view
+        .snapshot()
+        .kinds
+        .iter()
+        .map(|k| (k.kind.clone(), k.label.clone(), k.count))
+        .collect();
+    assert_eq!(
+        kinds,
+        [
+            ("other".to_string(), "Other".to_string(), 2),
+            ("movie".into(), "Movies".into(), 1)
+        ]
+    );
+    view.set_sort(LibrarySort::Name);
+    view.set_filter(Some("other".into()));
+    assert_eq!(names(&view), ["Bravo", "Charlie"]);
+}

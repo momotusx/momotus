@@ -738,7 +738,7 @@ data class LibrarySnapshot(
     /** The type filter, `None` for everything. */
     val kind: String? = null,
     val sort: LibrarySort,
-    /** Types present in the library, for the filter chips. */
+    /** Kinds present in the library, for the filter chips; every type Marquee does not know shares one chip, `other` ("Other"). */
     val kinds: List<KindCount> = emptyList(),
     val items: List<Tile> = emptyList(),
 )

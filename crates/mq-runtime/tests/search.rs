@@ -724,3 +724,70 @@ async fn a_catalog_of_an_unknown_type_files_its_results_by_their_own_kind() {
         ]
     );
 }
+
+/// With no catalog of a known kind, an unknown-type catalog's asking and
+/// failing show in the "Other" group, so a search never reads as finding
+/// nothing while it is asked or when it failed.
+#[tokio::test]
+async fn with_only_unknown_types_the_other_group_carries_loading_and_failure() {
+    let core = Core::temporary("p").unwrap();
+    let (trakt, asked) = typed_search_addon(
+        "trakt",
+        "trakt",
+        r#"{"metas": [{"id": "tt2", "type": "movie", "name": "Two"}]}"#.into(),
+        Duration::from_millis(600),
+    )
+    .await;
+    core.library()
+        .set_addons(core.profile(), &[trakt], &core.hlc())
+        .unwrap();
+    let view = SearchView::open(&core);
+    view.set_query("sintel");
+    let mut loading = false;
+    for _ in 0..300 {
+        let s = view.snapshot();
+        if s.query == "sintel" && !s.rows.is_empty() {
+            loading = s.rows[0].row_id == "kind:other" && s.rows[0].state == RowState::Loading;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    assert!(loading, "{:?}", view.snapshot().rows);
+    drop(view);
+    let s = answered(&core, &[&asked]).await;
+    let ids: Vec<(&str, Vec<&str>)> = s
+        .rows
+        .iter()
+        .map(|r| {
+            (
+                r.row_id.as_str(),
+                r.tiles.iter().map(|t| t.id.as_str()).collect(),
+            )
+        })
+        .collect();
+    assert_eq!(ids, [("kind:movies", vec!["tt2"])]);
+
+    let core = Core::temporary("p").unwrap();
+    let (failing, asked) =
+        typed_search_addon("trakt", "trakt", r#"{"error": "x"}"#.into(), Duration::ZERO).await;
+    core.library()
+        .set_addons(core.profile(), &[failing], &core.hlc())
+        .unwrap();
+    let s = answered(&core, &[&asked]).await;
+    assert_eq!(s.rows.len(), 1, "{:?}", s.rows);
+    assert_eq!(s.rows[0].row_id, "kind:other");
+    assert!(matches!(s.rows[0].state, RowState::Failed { .. }));
+
+    // Beside a catalog of a known kind its failure stays silent, as before.
+    let core = Core::temporary("p").unwrap();
+    let (movies, movies_asked) = search_addon("movies", &["tt1"]).await;
+    let (mut failing, asked) =
+        typed_search_addon("trakt", "trakt", r#"{"error": "x"}"#.into(), Duration::ZERO).await;
+    failing.position = 1;
+    core.library()
+        .set_addons(core.profile(), &[movies, failing], &core.hlc())
+        .unwrap();
+    let s = answered(&core, &[&movies_asked, &asked]).await;
+    let rows: Vec<&str> = s.rows.iter().map(|r| r.row_id.as_str()).collect();
+    assert_eq!(rows, ["movies:movie:top"]);
+}

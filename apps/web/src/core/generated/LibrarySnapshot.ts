@@ -9,6 +9,7 @@ export type LibrarySnapshot = {
  */
 kind: string | null, sort: LibrarySort, 
 /**
- * Types present in the library, for the filter chips.
+ * Kinds present in the library, for the filter chips; every type
+ * Marquee does not know shares one chip, `other` ("Other").
  */
 kinds: Array<KindCount>, items: Array<Tile>, };

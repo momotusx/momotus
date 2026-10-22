@@ -362,10 +362,12 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 /// from (so search-only catalogs and id-list feeds are left out). A twin,
 /// titled as a catalog before it in addon order, is left out as on Home
 /// unless the user turned its row on in Customize Home: no addon's name
-/// tells the two apart (the owner, 2026-10-22).
+/// tells the two apart (the owner, 2026-10-22). Catalogs of a known type
+/// come before those filed by their name (`shelf`), so a kind picked with a
+/// genre lands on a catalog that offers genres of that kind.
 fn browsable(addons: &[InstalledAddon], rows: &HomeRows) -> Vec<Catalog> {
     let mut titles = HashSet::new();
-    addons
+    let mut catalogs: Vec<Catalog> = addons
         .iter()
         .flat_map(|addon| addon.manifest.catalogs.iter().map(move |c| (addon, c)))
         .filter_map(|(addon, c)| {
@@ -377,15 +379,16 @@ fn browsable(addons: &[InstalledAddon], rows: &HomeRows) -> Vec<Catalog> {
                 return None;
             }
             let genre = c.extra.iter().find(|e| e.name == "genre");
+            let name = without_source(name, &addon.manifest.name);
             Some(Catalog {
+                shelf: shelf(&c.r#type, &name),
                 choice: CatalogChoice {
                     id: format!("{}|{}|{}", addon.id(), c.r#type, c.id),
-                    name: without_source(name, &addon.manifest.name),
+                    name,
                     source: addon.manifest.name.clone(),
                 },
                 addon: addon.clone(),
                 kind: c.r#type.clone(),
-                shelf: shelf(&c.r#type, name),
                 id: c.id.clone(),
                 genres: genre
                     .as_ref()
@@ -395,12 +398,17 @@ fn browsable(addons: &[InstalledAddon], rows: &HomeRows) -> Vec<Catalog> {
                 pages: c.extra.iter().any(|e| e.name == "skip"),
             })
         })
-        .collect()
+        .collect();
+    // Stable: addon order holds within each part.
+    catalogs.sort_by_key(|c| kind_label(&c.kind).is_none());
+    catalogs
 }
 
 /// The kind a catalog is filed under: its type when Marquee knows it, else
 /// the one kind its name says ("Popular movies" is a movie list), else
-/// "other". Its items cannot say: none is fetched before a kind is picked.
+/// "other". `name` is the catalog's name without its addon's (from Anime
+/// Lists, "Anime Lists - Best" is "Best"), so an addon's own name never
+/// files it. Its items cannot say: none is fetched before a kind is picked.
 fn shelf(kind: &str, name: &str) -> String {
     if kind_label(kind).is_some() {
         return kind.to_owned();
