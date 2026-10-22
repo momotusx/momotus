@@ -408,6 +408,50 @@ async fn the_frame_rate_read_from_the_video_ranks_the_files() {
     assert!(own.is_some_and(|at| at > 0), "{labels:?}");
 }
 
+/// Review of feat/subtitle-best P2-2: a built-in listing cut by its
+/// deadline has no frame rate of its own, and never erases the one the
+/// probe read: the 25 fps file still leads the film-rate one.
+#[tokio::test]
+async fn a_built_in_listing_past_its_deadline_keeps_the_probed_rate() {
+    let (port, _) = site(|r| {
+        (r.path == "/mov/0903747/x.html").then(|| {
+            std::thread::sleep(Duration::from_secs(14));
+            reply("404 Not Found", &[], b"")
+        })
+    });
+    let core = Core::temporary("p").unwrap();
+    let origin = Url::parse(&format!("https://{SITE}:{port}")).unwrap();
+    let patient = Limits {
+        request: Duration::from_secs(30),
+        fetch: Duration::from_secs(30),
+        spacing: Duration::from_millis(5),
+    };
+    core.use_turkcealtyazi_at(origin, patient);
+    let video = video_origin(mkv_at_25_fps()).await;
+    let own = format!("{video}/manifest.json");
+    install(&core, &[built_in_row(), row(&own, "own", "stream", true)]);
+    let streams = format!(
+        r#"{{"streams":[{{"url":"{video}/video.mkv","title":"Breaking Bad S01E01",
+            "subtitles":[{{"id":"film","lang":"tur","label":"film","url":"https://subs.test/film.srt","fpsMilli":23976}},
+                         {{"id":"pal","lang":"tur","label":"pal","url":"https://subs.test/pal.srt","fpsMilli":25000}}]}}]}}"#
+    );
+    let view = PlaybackView::open(&core, listed(&own, &streams), s01e01());
+    let s = until(&view, "subtitles", settled).await;
+    let labels: Vec<&str> = s
+        .subtitles
+        .iter()
+        .filter_map(|t| t.label.as_deref())
+        .collect();
+    assert_eq!(labels, ["pal", "film"]);
+    assert_eq!(
+        s.subtitle_notes
+            .iter()
+            .map(|n| n.problem)
+            .collect::<Vec<_>>(),
+        [SubtitleProblem::Unreachable]
+    );
+}
+
 #[tokio::test]
 async fn pending_ends_only_after_the_built_in_listing_too() {
     let (port, _) = site(|r| {

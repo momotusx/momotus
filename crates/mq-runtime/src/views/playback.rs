@@ -342,12 +342,16 @@ impl SubtitleTrack {
             made: Made {
                 family: fit::family(parsed.quality),
                 cut: parsed.cut,
-                hearing: marked,
                 text: plain,
                 ..Made::default()
             },
             release,
         }
+    }
+
+    /// What the track says of its release, for `fit::misses`.
+    fn made(&self) -> fit::Made<'_> {
+        self.made.get(self.forced, self.hearing_impaired)
     }
 }
 
@@ -458,8 +462,6 @@ struct Made {
     cut: Option<mq_relparse::Cut>,
     fps: Option<f32>,
     hash: bool,
-    forced: bool,
-    hearing: bool,
 }
 
 impl Made {
@@ -470,20 +472,20 @@ impl Made {
             cut: made.cut,
             fps: made.fps,
             hash: made.hash,
-            forced: made.forced,
-            hearing: made.hearing,
         }
     }
 
-    fn get(&self) -> fit::Made<'_> {
+    /// With the track's own forced and hearing marks: the one place each
+    /// source sets them.
+    fn get(&self, forced: bool, hearing: bool) -> fit::Made<'_> {
         fit::Made {
             text: &self.text,
             family: self.family,
             cut: self.cut,
             fps: self.fps,
             hash: self.hash,
-            forced: self.forced,
-            hearing: self.hearing,
+            forced,
+            hearing,
         }
     }
 }
@@ -1826,7 +1828,8 @@ async fn resolve_next(
                         let fps = probed.clone().await.fps.map(|fps| fps as f32);
                         let wanted = preferred_languages(&core, &state);
                         let mut s = lock(&state);
-                        if fps.is_some() && current(&s, run) && s.playing.fps != fps {
+                        // The one writer of the rate.
+                        if fps.is_some() && current(&s, run) {
                             s.playing.fps = fps;
                             reorder(&mut s, &wanted);
                             snapshot.set(s.snapshot.clone());
@@ -3320,8 +3323,8 @@ async fn built_in_tracks(
     if !current(&s, run) {
         return;
     }
-    // The measured frame rate counts in every track's release match.
-    s.playing.fps = playing.fps;
+    // The measured rate is the view's to set (`rated`): a listing cut by
+    // its deadline has none and must not erase it.
     match listing {
         mq_turkcealtyazi::Listing::Tracks(tracks) => {
             for (rank, found) in tracks.into_iter().enumerate() {
@@ -3343,16 +3346,7 @@ async fn built_in_tracks(
                 let _ = url_cell.set(url.clone());
                 s.order.insert(url.clone(), (position + 1, rank));
                 if !s.snapshot.subtitles.iter().any(|known| known.url == url) {
-                    let label = Some(found.label.clone());
-                    // Its own label already says what tells its files apart.
-                    s.snapshot.subtitles.push(SubtitleTrack {
-                        hearing_impaired: found.row.hearing_impaired,
-                        made: Made::of(found.row.made()),
-                        name: found.label.clone(),
-                        base: found.label.clone(),
-                        origin: key.clone(),
-                        ..SubtitleTrack::new(url, "tur", label, BUILT_IN, Some(found.label))
-                    });
+                    s.snapshot.subtitles.push(built_in_track(url, key, found));
                 }
             }
         }
@@ -3363,6 +3357,20 @@ async fn built_in_tracks(
     }
     reorder(&mut s, &wanted);
     snapshot.set(s.snapshot.clone());
+}
+
+/// A built-in TurkceAltyazi.org track: its own label already says what
+/// tells its files apart.
+fn built_in_track(url: String, origin: String, found: mq_turkcealtyazi::Track) -> SubtitleTrack {
+    let label = Some(found.label.clone());
+    SubtitleTrack {
+        hearing_impaired: found.row.hearing_impaired,
+        made: Made::of(found.row.made()),
+        name: found.label.clone(),
+        base: found.label.clone(),
+        origin,
+        ..SubtitleTrack::new(url, "tur", label, BUILT_IN, Some(found.label))
+    }
 }
 
 /// What the playing release says (`fit::Playing`), owned by the view and
@@ -3505,8 +3513,6 @@ fn track(
         made: Made {
             hash,
             fps,
-            forced: w.forced,
-            hearing: hearing_impaired,
             ..t.made.clone()
         },
         ..t
@@ -3593,10 +3599,13 @@ fn auto_subtitle(
     tracks: &[SubtitleTrack],
 ) -> Option<String> {
     use crate::languages::primary;
+    // A forced track only covers foreign lines: never turned on as a
+    // language's subtitles.
+    let plain = || tracks.iter().filter(|t| !t.forced);
     let best = |tag: &str| {
-        let exact = tracks.iter().find(|t| t.language == tag);
+        let exact = plain().find(|t| t.language == tag);
         exact
-            .or_else(|| tracks.iter().find(|t| primary(&t.language) == primary(tag)))
+            .or_else(|| plain().find(|t| primary(&t.language) == primary(tag)))
             .map(|t| t.url.clone())
     };
     match remembered {
@@ -3848,7 +3857,7 @@ fn reorder(s: &mut State, preferred: &[String]) {
             rank(&t.language).unwrap_or(usize::MAX),
             t.language_name.to_lowercase(),
             t.language.clone(),
-            fit::misses(&t.made.get(), &playing),
+            fit::misses(&t.made(), &playing),
             order.get(&t.url).copied().unwrap_or((usize::MAX, 0)),
         )
     });
@@ -3870,7 +3879,7 @@ fn reorder(s: &mut State, preferred: &[String]) {
         t.fits = fit::same_group(&t.made.text, playing.group);
         t.hash_match = t.made.hash;
         t.delay_ms = delay_of(delay, &t.origin);
-        t.made_for_fps = fit::misses(&t.made.get(), &playing)
+        t.made_for_fps = fit::misses(&t.made(), &playing)
             .rate
             .then_some(t.made.fps)
             .flatten();
@@ -5409,6 +5418,26 @@ mod auto_subtitle_tests {
             );
         }
     }
+
+    /// Review of feat/subtitle-best P2-3: a forced track is never turned
+    /// on, even as its language's only one, and a plain regional track
+    /// wins over a forced one of the exact tag.
+    #[test]
+    fn a_forced_track_is_never_turned_on() {
+        let forced = |url: &str, lang: &str| SubtitleTrack {
+            forced: true,
+            ..track(url, lang)
+        };
+        let tags = |l: &[&str]| -> Vec<String> { l.iter().map(|s| s.to_string()).collect() };
+        let only_forced = [forced("trf", "tur"), track("en1", "eng")];
+        assert_eq!(auto_subtitle(None, &tags(&["tr"]), &[], &only_forced), None);
+        assert_eq!(auto_subtitle(Some("tr"), &[], &[], &only_forced), None);
+        let regional = [forced("ptf", "por"), track("br1", "pob")];
+        assert_eq!(
+            auto_subtitle(None, &tags(&["pt"]), &[], &regional).as_deref(),
+            Some("br1")
+        );
+    }
 }
 
 #[cfg(test)]
@@ -5446,6 +5475,48 @@ mod subtitle_order_tests {
     }
 
     const V3: &str = OPENSUBTITLES;
+
+    /// Review of feat/subtitle-best P2-1: the built-in source marks the
+    /// hard of hearing on its row, not in the release text; that row still
+    /// follows a plain one that matches as well.
+    #[test]
+    fn a_built_in_row_for_the_hard_of_hearing_follows_a_plain_one() {
+        let built_in = |altid: u32, hearing_impaired: bool| {
+            let row = mq_turkcealtyazi::Row {
+                altid,
+                path: format!("/sub/{altid}/x.html"),
+                lang: mq_turkcealtyazi::Lang::Turkish,
+                kind: mq_turkcealtyazi::Kind::Movie { discs: 1 },
+                release: "Film.2020.1080p.WEB-DL-OTHER".into(),
+                source: None,
+                fps: None,
+                downloads: 0,
+                translator: None,
+                hearing_impaired,
+            };
+            let label = row.release.clone();
+            let url = format!("u{altid}");
+            built_in_track(
+                url,
+                format!("turkcealtyazi:{altid}"),
+                mq_turkcealtyazi::Track { row, label },
+            )
+        };
+        let mut s = State::new(Vec::new(), None);
+        s.playing = OwnedPlaying::of(&mq_relparse::parse("Film.2020.1080p.WEB-DL-FLUX"));
+        for t in [built_in(1, true), built_in(2, false)] {
+            s.order.insert(t.url.clone(), (1, s.order.len()));
+            s.snapshot.subtitles.push(t);
+        }
+        reorder(&mut s, &["tr".to_owned()]);
+        let urls: Vec<&str> = s
+            .snapshot
+            .subtitles
+            .iter()
+            .map(|t| t.url.as_str())
+            .collect();
+        assert_eq!(urls, ["u2", "u1"]);
+    }
 
     /// Plans/research/subtitle-pick.md 5, case A: Inception, v3 only, a
     /// 23.976 BluRay playing. Today a 25 fps CAM led; now the 30 fps rip
@@ -5553,7 +5624,6 @@ mod subtitle_order_tests {
             "h",
         );
         forced.forced = true;
-        forced.made.forced = true;
         let rows = vec![
             (1, forced),
             (
