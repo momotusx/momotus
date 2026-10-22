@@ -35,13 +35,13 @@ const under = (ramp: Ramp, page: string, w: number, h: number, x: number, y: num
 const { dark } = tokens.color;
 const WHITE: RGB = [255, 255, 255];
 const FILL = 0.16;
-type Label = "pill" | "word" | "line" | "muted" | "dim";
+type Label = "pill" | "word" | "line" | "muted" | "dim" | "white";
 type Spot = [name: string, ramp: Ramp, page: string, box: [number, number], at: [number, number], label: Label];
 // "pill": a white label or glyph on the fill; "word": a round button's word under its circle, 70 percent white on
 // the art; "line": text at 92 percent on the art (the reason, the genre line); "muted": 70 percent (the synopsis);
 // "dim": 64 percent (the meta line). Text holds 4.5:1 on every form (DECISION, contrast floors). The phone title's
 // rows sit under its art, on the page.
-const LEVEL: Record<Exclude<Label, "pill">, number> = { word: 0.7, line: 0.92, muted: 0.7, dim: 0.64 };
+const LEVEL: Record<Exclude<Label, "pill">, number> = { word: 0.7, line: 0.92, muted: 0.7, dim: 0.64, white: 1 };
 // TV's top shelf at 1920x1080, measured on the e2e Home: every line of the column is taken at the column's
 // 820 px edge (x 900, 0.4688), wherever its text ends, and at its first line's top.
 const TV_EDGE = 0.4688;
@@ -50,9 +50,7 @@ const spots: Spot[] = [
   ["home tv, the synopsis", "heroTv", dark.bg, [1920, 1080], [TV_EDGE, 0.4509], "muted"],
   ["home tv, the meta line", "heroTv", dark.bg, [1920, 1080], [TV_EDGE, 0.5491], "dim"],
   ["home tv, Details pill", "heroTv", dark.bg, [1920, 1080], [0.2365, 0.663], "pill"],
-  ["home phone, Details circle", "heroPhone", dark.bgPhone, [358, 520], [0.4976, 0.8731], "pill"],
   ["home tv, the reason", "heroTv", dark.bg, [1920, 1080], [TV_EDGE, 0.6046], "line"],
-  ["home phone, the reason", "heroPhone", dark.bgPhone, [358, 520], [0.95, 0.819], "line"],
   ["title tv series, Start over", "title", dark.bg, [1920, 1080], [0.4398, 0.3817], "pill"],
   ["title tv series, Remove from Continue Watching circle", "title", dark.bg, [1920, 1080], [0.3184, 0.5503], "pill"],
   ["title tv series, Remove from Continue Watching word", "title", dark.bg, [1920, 1080], [0.3535, 0.63], "word"],
@@ -76,6 +74,23 @@ for (const [w, h] of [[900, 400], [1440, 400], [1280, 578], [1440, 758], [2560, 
     [`${at}, the synopsis`, "heroDesktop", dark.bgDesktop, [w, h], [edge, y(198)], "muted"],
     [`${at}, the reason`, "heroDesktop", dark.bgDesktop, [w, h], [edge, y(147)], "line"],
     [`${at}, Details`, "heroDesktop", dark.bgDesktop, [w, h], [196 / w, y(104)], "pill"],
+  );
+}
+
+// The phone's hero at its boxes: min(width x 680/390, the window less 164) at 360x640, 375x667,
+// 390x844 and 430x932. The large title's words end near 150 at the top 53; the centered lines may reach
+// 20 from the edge; from the foot: the buttons 56 to 104, the reason 140, the genre and ratings line 166;
+// Details' glyph 136 right of the middle.
+for (const [w, h] of [[360, 476], [375, 503], [390, 680], [430, 750]] as const) {
+  const edge = (w - 20) / w;
+  const y = (up: number) => (h - up) / h;
+  const at = `home phone ${w}x${h}`;
+  spots.push(
+    [`${at}, the large title`, "heroPhone", dark.bgPhone, [w, h], [150 / w, 53 / h], "white"],
+    [`${at}, the genre line`, "heroPhone", dark.bgPhone, [w, h], [edge, y(166)], "line"],
+    [`${at}, the ratings source`, "heroPhone", dark.bgPhone, [w, h], [edge, y(166)], "muted"],
+    [`${at}, the reason`, "heroPhone", dark.bgPhone, [w, h], [edge, y(140)], "line"],
+    [`${at}, Details`, "heroPhone", dark.bgPhone, [w, h], [(w / 2 + 136) / w, y(91)], "pill"],
   );
 }
 

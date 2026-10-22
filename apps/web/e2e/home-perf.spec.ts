@@ -83,3 +83,34 @@ test("TV: Play to Continue Watching and back paints little", async ({ browser })
   test.info().annotations.push({ type: "skipped assert", description: "TV hitches: glide lands with fix/scroll-web" });
   await page.close();
 });
+
+test("phone: a fling down Home and back paints little", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await context.newPage();
+  await page.goto("/?form=phone");
+  await expect(page.locator(".row .tile img.in").first()).toBeVisible({ timeout: 30_000 });
+  await page.waitForTimeout(1500);
+  // The phone scrolls the document. Headless Chromium moves it neither by wheel nor by a synthesized touch
+  // gesture in a mobile context, so the browser's own smooth scroll stands in for the fling: 1600 down, back up.
+  const glide = (top: number) =>
+    page.evaluate(
+      (top) =>
+        new Promise<number>((done) => {
+          window.scrollBy({ top, behavior: "smooth" });
+          setTimeout(() => done(window.scrollY), 900);
+        }),
+      top,
+    );
+  let scrolled = 0;
+  const result = await traced(page, browser, async () => {
+    scrolled = await glide(1600);
+    await glide(-1600);
+  });
+  report("phone-home-fling", { ...result, scrolled });
+  expect(scrolled).toBeGreaterThan(400);
+  // Baseline 3 ms of paint and 1.8 to 1.9 passes (step 4).
+  expect(result.paintMs, JSON.stringify(result)).toBeLessThan(30);
+  // The floating tab bar's glass is the one live blur: one more pass a frame.
+  expect(result.passesPerFrame, JSON.stringify(result)).toBeLessThanOrEqual(3);
+  await context.close();
+});

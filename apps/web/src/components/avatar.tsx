@@ -14,8 +14,10 @@ import Headphones from "lucide-solid/icons/headphones";
 import Popcorn from "lucide-solid/icons/popcorn";
 import Rocket from "lucide-solid/icons/rocket";
 import Tv from "lucide-solid/icons/tv";
-import type { Component } from "solid-js";
+import { A } from "@solidjs/router";
+import { type Component, Show } from "solid-js";
 import { Dynamic } from "solid-js/web";
+import { profiles } from "../core/profiles";
 import { type Glyph, initial, parseAvatar } from "../lib/avatar";
 import "./avatar.css";
 
@@ -48,5 +50,20 @@ export function AvatarArt(props: { avatar: string; name: string; size?: "s" | "m
         <Dynamic component={ICONS[a().glyph as Exclude<Glyph, "letter">]} aria-hidden />
       )}
     </span>
+  );
+}
+
+/** The active profile's avatar, opening the picker: at the end of the TV tab bar and the desktop
+ * header, and at the top right of the phone's Home. */
+export function ProfileButton() {
+  const me = () => profiles()?.profiles.find((p) => p.id === profiles()?.active);
+  return (
+    <Show when={me()}>
+      {(p) => (
+        <A href="/profiles" class="nav pavatar" data-f="nav:/profiles" aria-label={`Profile: ${p().name}, switch profile`}>
+          <AvatarArt avatar={p().avatar} name={p().name} size="s" />
+        </A>
+      )}
+    </Show>
   );
 }

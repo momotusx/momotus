@@ -9,6 +9,7 @@ import Sparkle from "lucide-solid/icons/sparkle";
 import ShieldAlert from "lucide-solid/icons/shield-alert";
 import { createEffect, createSignal, For, Match, on, Show, Switch } from "solid-js";
 import { Backdrop, Logo } from "../components/art";
+import { ProfileButton } from "../components/avatar";
 import { Ratings } from "../components/ratings";
 import { separators } from "../components/separators";
 import { CONTINUE_ROW, Row } from "../components/row";
@@ -288,9 +289,12 @@ export default function Home() {
       <main class="page" data-vscroll ref={attach} onScroll={(e) => (pageScroll.top = e.currentTarget.scrollTop)}>
         <section class="hero" classList={{ closed: !hero() && !waiting() }} data-reveal-top data-focus-wait={!hero() && waiting() ? "" : undefined} aria-label="Featured">
           <Backdrop src={hero()?.tile.background ?? null} class="hero-bd" ramp={form() === "phone" ? "heroPhone" : form() === "tv" ? "heroTv" : "heroDesktop"} />
+          {/* The phone's large title and the profile button over the art, as the iPhone TV app; "Home" is
+              the page's heading there, the hero's logo the next level. */}
           <Show when={form() === "phone"}>
             <header class="ph-top">
-              <span class="brand">Marquee</span>
+              <h1 class="ph-title">Home</h1>
+              <ProfileButton />
             </header>
           </Show>
           <div class="hero-body">
@@ -304,7 +308,7 @@ export default function Home() {
           >
             {(h) => (
               <>
-                <Logo src={h().tile.logo} name={h().tile.name} class="hero-logo" />
+                <Logo src={h().tile.logo} name={h().tile.name} class="hero-logo" level={form() === "phone" ? 2 : 1} />
                 {/* The genre line, then the meta line with the ratings row; each form orders the column
                     as its frame (home.css). */}
                 <div class="hero-lines">

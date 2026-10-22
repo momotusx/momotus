@@ -24,10 +24,13 @@ export const ramps = {
     { deg: 90, stops: [[0, 0.94], [0.48, 0.82], [0.64, 0.3], [0.8, 0]] },
     { deg: 0, stops: [[0, 1], [0.05, 1], [0.14, 0.8], [0.3, 0.45], [0.5, 0.12], [0.62, 0]] },
   ],
-  /** The phone's hero: under the status bar, and from the bottom up. */
+  /** The phone's hero (the iPhone TV app): into the black page from the foot, Android's checked stops
+   * (`Scrims.phoneHomeFoot`), and a wash under the large title a little deeper than Android's top, since the
+   * web's hero gets shorter (the floating tab bar's cap: 476 on a 360x640 screen): every word keeps 4.5:1
+   * over white art on every box (art.test.ts). */
   heroPhone: [
-    { deg: 180, stops: [[0, 0.55], [0.22, 0]] },
-    { deg: 0, stops: [[0, 0.96], [0.38, 0.55], [0.62, 0]] },
+    { deg: 0, stops: [[0, 1], [0.12, 0.94], [0.3, 0.8], [0.42, 0.5], [0.56, 0.15], [0.66, 0]] },
+    { deg: 180, stops: [[0, 0.72], [0.18, 0.5], [0.3, 0]] },
   ],
   /** A series: the episode cards sit on the right, so the art there is dimmed for their text, not to black. */
   title: [

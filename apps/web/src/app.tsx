@@ -7,7 +7,7 @@ import LibraryBig from "lucide-solid/icons/library-big";
 import SearchIcon from "lucide-solid/icons/search";
 import Settings from "lucide-solid/icons/settings";
 import { type Component, createEffect, createMemo, createSignal, For, on, Show, untrack } from "solid-js";
-import { AvatarArt } from "./components/avatar";
+import { ProfileButton } from "./components/avatar";
 import { bridgeUrl, link } from "./core/client";
 // The debrid accounts follow the core from the start, whatever screen is open.
 import "./core/debrid";
@@ -116,20 +116,6 @@ function TopNav() {
         </div>
       </Show>
     </nav>
-  );
-}
-
-/** The active profile's avatar at the pill's end: it opens the picker. */
-function ProfileButton() {
-  const me = () => profiles()?.profiles.find((p) => p.id === profiles()?.active);
-  return (
-    <Show when={me()}>
-      {(p) => (
-        <A href="/profiles" class="nav pavatar" data-f="nav:/profiles" aria-label={`Profile: ${p().name}, switch profile`}>
-          <AvatarArt avatar={p().avatar} name={p().name} size="s" />
-        </A>
-      )}
-    </Show>
   );
 }
 

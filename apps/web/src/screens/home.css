@@ -99,7 +99,9 @@
 /* No hero: the rows start 20 under the header. */
 [data-form="desktop"] .hero.closed { display: block; height: calc(20 * var(--px)); margin-bottom: 0; background: none; }
 [data-form="desktop"] .hero.closed .hero-bd { display: none; }
-[data-form="phone"] .hero.closed { display: block; height: 60px; background: none; box-shadow: none; }
+/* No hero on the phone: the large title alone, the rows under it. */
+[data-form="phone"] .hero.closed { display: block; height: calc(max(47px, env(safe-area-inset-top)) + 54px); background: none; box-shadow: none; }
+[data-form="phone"] .hero.closed .hero-bd { display: none; }
 
 .home-problem { position: relative; margin: 40px var(--safe-side); }
 /* New recommended addons, under Continue Watching: a solid surface with no edge and secondary
@@ -220,17 +222,27 @@
 
 /* Phone */
 [data-form="phone"] .home .page { position: static; padding-bottom: 112px; }
-/* Phone: the card's edges sit on the rows' 16 px gutter; the words keep 18 px inside. */
-[data-form="phone"] .hero { margin: calc(8px + env(safe-area-inset-top)) 20px 0; height: 520px; border-radius: 26px; }
-[data-form="phone"] .hero-body { padding: 0 18px 20px; }
-[data-form="phone"] .hero-logo { height: 84px; max-width: 240px; margin-bottom: 12px; }
-[data-form="phone"] .hero-logo { --logo-area: 10000; height: clamp(40px, calc(sqrt(var(--logo-area) / var(--r, 5.6)) * 1px), 96px); }
-[data-form="phone"] .logo-text { font-size: var(--type-title1); margin-bottom: 8px; }
-[data-form="phone"] .hero .reason { max-width: none; font-size: 13px; margin-bottom: 12px; }
-[data-form="phone"] .hero .meta { font-size: 13px; gap: 4px 8px; margin-bottom: 10px; }
-[data-form="phone"] .hero-syn { font-size: 14px; -webkit-line-clamp: 2; margin-bottom: 16px; }
+/* Phone: the iPhone TV app's hero (`phoneHome`; Android's PhoneHome.kt, Apple's HomeScreen.swift): full
+ * bleed from the top of the page, 680 tall at 390 wide but at most the small viewport (stable while the
+ * address bar hides) less 164, so the first shelf's header shows above the floating tab bar on a 360x640
+ * screen too (Android and Apple cap at 85 percent, with no bar floating over the first row); the column
+ * centered, its buttons 56 above the foot. The first header sits at the foot (the row's 10 taken back). */
+[data-form="phone"] .hero { height: min(calc(100vw * 680 / 390), calc(100svh - 164px)); margin: 0 0 -10px; border-radius: 0; background: #000; box-shadow: none; }
+[data-form="phone"] .hero-body { padding: 0 20px 56px; align-items: center; text-align: center; }
+[data-form="phone"] .hero-body > * { max-width: 100%; }
+[data-form="phone"] .hero-logo { width: 300px; height: 86px; max-width: 100%; margin: 0; object-fit: contain; object-position: center bottom; }
+[data-form="phone"] .logo-text { font-size: var(--type-title1); margin: 0; }
+/* The genre line and the ratings row on one line, wrapping centered when long; no year, runtime or synopsis. */
+[data-form="phone"] .hero-lines { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 0 8px; margin-top: 12px; }
+[data-form="phone"] .hero .genre { display: block; margin: 0; font: 600 15px / 20px var(--font-text); }
+[data-form="phone"] .hero .meta { margin: 0; gap: 0 8px; font: 600 15px / 20px var(--font-text); color: var(--text); }
+[data-form="phone"] .hero .meta .yr, [data-form="phone"] .hero-syn { display: none; }
+[data-form="phone"] .hero .reason { max-width: 100%; margin: 6px 0 0; font: 600 13px / 18px var(--font-text); }
 [data-form="phone"] .acts { gap: 12px; align-items: center; }
-[data-form="phone"] .hero .acts .btn.primary { flex: 1; justify-content: center; }
+[data-form="phone"] .hero .acts { justify-content: center; margin-top: 18px; }
+[data-form="phone"] .hero .acts .btn.primary { width: 178px; height: 48px; justify-content: center; }
+[data-form="phone"] .hero .rbtn .ring { width: 48px; height: 48px; }
+[data-form="phone"] .hero .rbtn .ring svg { width: 22px; height: 22px; }
 [data-form="phone"] .hero .acts .rbtn .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 [data-form="phone"] .home-problem { margin: 0 16px 24px; }
 [data-form="phone"] .defaults-card { flex-wrap: wrap; gap: 12px; margin: 20px 16px 0; padding: 16px; border-radius: 14px; }
@@ -262,5 +274,8 @@
 [data-form="phone"] .row-msg .why { font-size: 13px; }
 [data-form="phone"] .row-msg .row-acts { margin-left: 0; gap: 8px; }
 [data-form="phone"] .row-msg-icon { width: 22px; height: 22px; }
-[data-form="phone"] .ph-top { position: absolute; left: 0; right: 0; top: 0; z-index: 2; padding: 16px 18px 0; }
-[data-form="phone"] .ph-top .brand { font-size: 22px; margin: 0; text-shadow: 0 1px 12px rgba(0, 0, 0, .6); }
+/* The large title "Home" (34/700 at 16, its top at 47 or the status bar's foot) and the profile button. */
+[data-form="phone"] .ph-top { position: absolute; left: 16px; right: 14px; top: max(47px, env(safe-area-inset-top)); z-index: 2; height: 54px; display: flex; align-items: center; justify-content: space-between; }
+[data-form="phone"] .ph-title { font: 700 34px / 41px var(--font-display); letter-spacing: var(--tracking-display); color: #fff; }
+[data-form="phone"] .ph-top .pavatar { display: grid; place-items: center; width: 44px; height: 44px; }
+[data-form="phone"] .ph-top .avatar-s { width: 40px; height: 40px; border-radius: 50%; font-size: 17px; }

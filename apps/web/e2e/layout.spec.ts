@@ -23,16 +23,16 @@ for (const form of Object.keys(FORMS) as Form[]) {
   test(`${form}: the hero sits on the rows' grid line`, async ({ browser }) => {
     const { context, page, go } = await open(browser, form, "/");
     await go();
-    await expect(page.locator(".hero .meta")).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
     await expect(page.locator(".row-head").first()).toBeVisible({ timeout: 30_000 });
     const at = await page.evaluate((phone) => {
       const head = document.querySelector<HTMLElement>(".row-head") as HTMLElement;
       const r = head.getBoundingClientRect();
       const k = r.width / head.offsetWidth || 1;
       const grid = r.left + parseFloat(getComputedStyle(head).paddingLeft) * k;
-      // TV and desktop: the words start on the line; phone: the card's edge does.
-      const hero = document.querySelector(phone ? ".hero" : ".hero .meta") as HTMLElement;
-      return { grid, left: hero.getBoundingClientRect().left };
+      // TV and desktop: the words start on the line; phone: the hero is full bleed, its column centered.
+      const hero = document.querySelector(phone ? ".hero" : ".hero .reason") as HTMLElement;
+      return { grid: phone ? 0 : grid, left: hero.getBoundingClientRect().left };
     }, form === "phone");
     expect(Math.abs(at.left - at.grid)).toBeLessThanOrEqual(1);
     await context.close();

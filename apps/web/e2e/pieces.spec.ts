@@ -59,7 +59,7 @@ for (const form of Object.keys(FORMS) as Form[]) {
 
   test(`${form}: the page takes its form's color, and the hero's ramps fade to it`, async ({ browser }) => {
     const { context, page } = await open(browser, form, "/");
-    await expect(page.locator(".hero .meta")).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
     const page_ = { tv: "rgb(28, 28, 30)", desktop: "rgb(31, 31, 31)", phone: "rgb(0, 0, 0)" }[form];
     expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe(page_);
     expect(await page.locator('meta[name="theme-color"]').getAttribute("content")).toBe({ tv: "#1C1C1E", desktop: "#1F1F1F", phone: "#000000" }[form]);
@@ -414,6 +414,42 @@ test("desktop: tv.apple.com's hero at every window, its column where the glass c
     expect(g.syn.right, label).toBeLessThanOrEqual(Math.min(600, 0.48 * w) + 1);
     await context.close();
   }
+});
+
+test("phone: the iPhone's hero at every screen, the large title and the profile button over it", async ({ browser }) => {
+  for (const [w, h] of [[360, 640], [375, 667], [390, 844], [430, 932]] as const) {
+    const context = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, reducedMotion: "reduce" });
+    const page = await context.newPage();
+    await page.goto("/?form=phone");
+    await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator(".row .row-head").first()).toBeVisible({ timeout: 30_000 });
+    const g = await page.evaluate(() => {
+      const r = (s: string) => document.querySelector(s)?.getBoundingClientRect() as DOMRect;
+      const tabs = r("nav.tabs");
+      return { hero: [r(".hero").left, r(".hero").top, r(".hero").width, r(".hero").height], foot: r(".hero").bottom, head: [r(".row .row-head").top, r(".row .row-head").bottom], tabs: tabs.top, lines: r(".hero-lines").top, reason: r(".hero .reason").top, play: r('[data-f="hero:play"]').bottom, title: r(".ph-title").top, avatar: [r(".ph-top .pavatar").width, r(".ph-top .pavatar").height] };
+    });
+    const label = `${w}x${h}`;
+    // 680 at 390 wide, never taller than the window less 164: the first shelf's header shows above the tab bar.
+    const want = Math.min((w * 680) / 390, h - 164);
+    expect([g.hero[0], g.hero[1], g.hero[2]], label).toEqual([0, 0, w]);
+    expect(Math.abs((g.hero[3] as number) - want), label).toBeLessThanOrEqual(1);
+    expect(Math.abs(g.head[0]! - g.foot), label).toBeLessThanOrEqual(1);
+    expect(g.head[1]!, label).toBeLessThanOrEqual(g.tabs);
+    // The column from the foot, as art.test.ts takes it: the lines 166, the reason 140, the buttons 56.
+    expect(Math.abs(g.foot - g.lines - 166), `${label} lines`).toBeLessThanOrEqual(3);
+    expect(Math.abs(g.foot - g.reason - 140), `${label} reason`).toBeLessThanOrEqual(3);
+    expect(Math.abs(g.foot - g.play - 56), `${label} buttons`).toBeLessThanOrEqual(1.5);
+    expect(g.title, label).toBeGreaterThanOrEqual(47);
+    expect(g.avatar, label).toEqual([44, 44]);
+    await context.close();
+  }
+  // "Home" is the page's heading, the hero's title the next level; the profile button opens the picker.
+  const { context, page } = await open(browser, "phone", "/");
+  await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Home");
+  await expect(page.locator(".hero").getByRole("heading", { level: 2 })).toHaveCount(1);
+  await expect(page.locator('.ph-top [data-f="nav:/profiles"]')).toHaveAttribute("href", "/profiles");
+  await context.close();
 });
 
 /** Where a secondary's label starts and ends over a backdrop, as fractions of the backdrop: the
