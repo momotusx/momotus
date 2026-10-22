@@ -11,7 +11,8 @@ import ChevronRight from "lucide-solid/icons/chevron-right";
 import Minus from "lucide-solid/icons/minus";
 import Plus from "lucide-solid/icons/plus";
 import Search from "lucide-solid/icons/search";
-import { createMemo, createSignal, For, Show } from "solid-js";
+import X from "lucide-solid/icons/x";
+import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js";
 import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
 import { autoFocusSoon } from "../focus/dom";
 import { form } from "../form";
@@ -65,7 +66,20 @@ export function SubtitlePicker(props: {
     if ("file" in best) props.pickFile(best.file.id);
     else props.pick(best.track);
   };
+  // TV: the right column follows the focus once it rests (a held Down passes
+  // over the rows without rebuilding the column at each).
+  let follow: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(follow));
+  const followFocus = (language: string) => {
+    clearTimeout(follow);
+    follow = setTimeout(() => props.setOpen(language), 120);
+  };
+  // Off the TV the languages leave while a language's options show: they come back where they were.
+  let langList: HTMLDivElement | undefined;
+  let langScroll = 0;
+  let search: HTMLInputElement | undefined;
   const openLanguage = (language: string) => {
+    langScroll = langList?.scrollTop ?? 0;
     props.setOpen(language);
     autoFocusSoon(() => document.querySelector<HTMLElement>(".subp-opts .opt.on") ?? document.querySelector<HTMLElement>(".subp-opts .opt"));
   };
@@ -74,6 +88,8 @@ export function SubtitlePicker(props: {
     props.setOpen(null);
     autoFocusSoon(() => document.querySelector<HTMLElement>(`[data-f="sublang:${was}"]`) ?? document.querySelector<HTMLElement>('[data-f="sub:off"]'));
   };
+  // Once the languages are back (rendered in this same flush), before anyone can scroll them.
+  createEffect(on(deep, (now, was) => was && !now && langList && (langList.scrollTop = langScroll), { defer: true }));
   const done = () => (
     <Show when={form() === "phone"}>
       <button class="subp-done" data-f="sub:done" onClick={() => props.close()}>
@@ -90,9 +106,10 @@ export function SubtitlePicker(props: {
             <h2>Subtitles</h2>
             {done()}
           </header>
-          <label class="subp-find">
+          <div class="subp-find">
             <Search aria-hidden />
             <input
+              ref={search}
               type="search"
               data-f="sub:search"
               placeholder="Search languages"
@@ -102,9 +119,38 @@ export function SubtitlePicker(props: {
               value={query()}
               onInput={(e) => setQuery(e.currentTarget.value)}
             />
-          </label>
-          <div class="subp-list" data-vscroll>
-            <button class="opt lr" classList={{ on: !props.on && !props.onFile }} data-f="sub:off" data-autofocus onClick={() => props.pick(null)}>
+            {/* A touch or a pointer clears it in one press; a remote has its keyboard's delete. */}
+            <Show when={!tv() && query()}>
+              <button
+                class="subp-clear"
+                data-f="sub:clear"
+                aria-label="Clear the search"
+                onClick={() => {
+                  setQuery("");
+                  search?.focus();
+                }}
+              >
+                <X aria-hidden />
+              </button>
+            </Show>
+          </div>
+          <div
+            class="subp-list"
+            data-vscroll
+            role="group"
+            aria-label="Languages"
+            ref={langList}
+          >
+            <button
+              class="opt lr"
+              classList={{ on: !props.on && !props.onFile }}
+              role="menuitemradio"
+              aria-checked={!props.on && !props.onFile}
+              aria-label={!props.on && !props.onFile ? "Off, selected" : "Off"}
+              data-f="sub:off"
+              data-autofocus
+              onClick={() => props.pick(null)}
+            >
               <span class="flag-space" aria-hidden="true" />
               <span class="lname">
                 <span class="nm">Off</span>
@@ -125,9 +171,12 @@ export function SubtitlePicker(props: {
                       class="opt lr"
                       classList={{ on: on() }}
                       data-f={`sublang:${tag}`}
-                      aria-label={`${l().name}, ${optionCount(l())} ${optionCount(l()) === 1 ? "option" : "options"}`}
+                      role="menuitemradio"
+                      aria-checked={on()}
+                      // Its own name too, and whether it is the one on: the check is drawn, not read.
+                      aria-label={`${l().name}${l().own ? `, ${l().own}` : ""}, ${optionCount(l())} ${optionCount(l()) === 1 ? "option" : "options"}${on() ? ", selected" : ""}`}
                       onClick={() => pickLanguage(l())}
-                      onFocus={() => tv() && props.setOpen(tag)}
+                      onFocus={() => tv() && followFocus(tag)}
                     >
                       <Flag language={tag} />
                       {/* The own name drops onto a hidden second line when both do not fit. */}
@@ -179,17 +228,25 @@ export function SubtitlePicker(props: {
               </h2>
               {done()}
             </header>
-            <div class="subp-list" data-vscroll>
+            <div class="subp-list" data-vscroll role="group" aria-label={`${l().name} options`}>
               {/* The file's own tracks first: they always fit the file. */}
               <For each={l().file.map((f) => f.id)}>
                 {(id) => {
                   const f = () => l().file.find((x) => x.id === id) as Track;
                   const on = () => props.onFile === id;
                   return (
-                    <button class="opt op" classList={{ on: on() }} data-f={`subfile:${id}`} onClick={() => props.pickFile(id)}>
+                    <button
+                      class="opt op"
+                      classList={{ on: on() }}
+                      role="menuitemradio"
+                      aria-checked={on()}
+                      aria-label={`${f().label && f().label !== f().lang ? f().label : l().name}, ${f().forced ? "In the file, Forced" : "In the file"}${on() ? ", selected" : ""}`}
+                      data-f={`subfile:${id}`}
+                      onClick={() => props.pickFile(id)}
+                    >
                       <span class="op-tx">
                         <b>{f().label && f().label !== f().lang ? f().label : l().name}</b>
-                        <small>In the file</small>
+                        <small>{f().forced ? "In the file, Forced" : "In the file"}</small>
                       </span>
                       <span class="ck">
                         <Show when={on()}>
@@ -207,7 +264,15 @@ export function SubtitlePicker(props: {
                   const parts = () => trackDetail(t(), measure());
                   const release = () => !!t().release && t().release !== t().name;
                   return (
-                    <button class="opt op" classList={{ on: on() }} data-f={`sub:${url}`} onClick={() => props.pick(t())}>
+                    <button
+                      class="opt op"
+                      classList={{ on: on() }}
+                      role="menuitemradio"
+                      aria-checked={on()}
+                      aria-label={[t().name, ...parts(), ...(on() ? ["selected"] : [])].join(", ")}
+                      data-f={`sub:${url}`}
+                      onClick={() => props.pick(t())}
+                    >
                       <span class="op-tx">
                         <b>{t().name}</b>
                         <Show when={parts().length}>
@@ -215,9 +280,15 @@ export function SubtitlePicker(props: {
                             <For each={parts()}>
                               {(p, i) => (
                                 <>
-                                  {i() ? " · " : ""}
-                                  <span classList={{ fit: p === FITS, rel: release() && i() === parts().length - 1 }} title={release() && i() === parts().length - 1 ? (t().release ?? undefined) : undefined}>
-                                    {p}
+                                  {/* A line that wraps starts with the separator, never ends on one. */}
+                                  {i() ? " " : ""}
+                                  <span class="part">
+                                    <Show when={i()}>
+                                      <span class="sep">· </span>
+                                    </Show>
+                                    <span classList={{ fit: p === FITS, rel: release() && i() === parts().length - 1 }} title={release() && i() === parts().length - 1 ? (t().release ?? undefined) : undefined}>
+                                      {p}
+                                    </span>
                                   </span>
                                 </>
                               )}

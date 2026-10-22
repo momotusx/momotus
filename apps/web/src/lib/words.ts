@@ -99,12 +99,16 @@ const names = (() => {
   }
 })();
 
+const iso1: Record<string, string> = { eng: "en", tur: "tr", fre: "fr", fra: "fr", ger: "de", deu: "de", spa: "es", ita: "it", por: "pt", rus: "ru", jpn: "ja", kor: "ko", chi: "zh", zho: "zh", ara: "ar", dut: "nl", nld: "nl", pol: "pl", swe: "sv", hin: "hi", gre: "el", ell: "el", rum: "ro", ron: "ro", hun: "hu", cze: "cs", ces: "cs", heb: "he", per: "fa", fas: "fa", pob: "pt-BR" };
+
+/** "fre" to "fr", "pob" to "pt-BR": ISO 639-1 where the table knows one, else the code in lower case. */
+export const languageTag = (code: string): string => iso1[code.toLowerCase()] ?? code.toLowerCase();
+
 /** "fr" or "fre" to "French"; unknown codes stay as given, upper-cased. */
 export function languageName(code: string): string {
   const c = code.toLowerCase();
-  const iso1: Record<string, string> = { eng: "en", tur: "tr", fre: "fr", fra: "fr", ger: "de", deu: "de", spa: "es", ita: "it", por: "pt", rus: "ru", jpn: "ja", kor: "ko", chi: "zh", zho: "zh", ara: "ar", dut: "nl", nld: "nl", pol: "pl", swe: "sv", hin: "hi", gre: "el", ell: "el", rum: "ro", ron: "ro", hun: "hu", cze: "cs", ces: "cs", heb: "he", per: "fa", fas: "fa", pob: "pt-BR" };
   try {
-    const name = names?.of(iso1[c] ?? c);
+    const name = names?.of(languageTag(c));
     if (name && name.toLowerCase() !== c) return name;
   } catch {
     // Not a language code: fall through.

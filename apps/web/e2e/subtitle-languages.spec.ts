@@ -183,9 +183,12 @@ test("while the core still asks, Subtitles counts what is in and marks the searc
 });
 
 const VIEWPORTS = { tv: { width: 1920, height: 1080 }, desktop: { width: 1440, height: 900 }, phone: { width: 844, height: 390 } };
-async function picker(browser: Browser, form: keyof typeof VIEWPORTS) {
+/** A player on this spec's core at `form`'s size; `missingFlag` names a flag file that answers 404. */
+async function picker(browser: Browser, form: keyof typeof VIEWPORTS, missingFlag?: string) {
   // The core's own fields reach the page as it sent them (a pass-through proxy to this spec's core).
   const { context } = await patchedContext(browser, LANGS_PORT, { viewport: VIEWPORTS[form] }, (_view, snapshot) => snapshot);
+  // The image alone: the dev server also serves the flag's URL as a script the page imports.
+  if (missingFlag) await context.route(new RegExp(`/flags/${missingFlag}\\.svg`), (r) => (r.request().resourceType() === "image" ? r.fulfill({ status: 404 }) : r.continue()));
   const page = await context.newPage();
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -218,6 +221,12 @@ test("the picker lists languages first, in the core's order, with flags and coun
     await expect.poll(() => panel.locator(`[data-f="sublang:${tag}"] img.flag`).evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBeGreaterThan(0);
   await expect(panel.locator('[data-f="sub:search"]')).toBeVisible();
   await expect(panel.locator('[data-f="sub:off"]')).toHaveClass(/\bon\b/);
+  // What is on is said, not only drawn: Off is the checked radio, the languages are not.
+  await expect(panel.locator('[data-f="sub:off"]')).toHaveAttribute("role", "menuitemradio");
+  await expect(panel.locator('[data-f="sub:off"]')).toHaveAttribute("aria-checked", "true");
+  await expect(panel.locator('[data-f="sub:off"]')).toHaveAccessibleName("Off, selected");
+  await expect(panel.locator('[data-f="sublang:en"]')).toHaveAttribute("aria-checked", "false");
+  await expect(panel.locator('[data-f="sublang:tr"]')).toHaveAccessibleName("Turkish, Türkçe, 2 options");
   await expect(page.locator('[data-f="player:subs"] small')).toHaveText("Off, 5 languages");
   await page.screenshot({ path: `${SHOTS}/subtitle-picker-desktop.png` });
 
@@ -242,6 +251,9 @@ test("the search field matches English names, own names and codes", async ({ bro
     ["brasil", ["Portuguese (Brazil)"]],
     ["pob", ["Portuguese (Brazil)"]],
     ["chin", ["Chinese (Traditional)"]],
+    // A region-tagged code as typed.
+    ["pt-br", ["Portuguese (Brazil)"]],
+    ["zh-hant", ["Chinese (Traditional)"]],
   ] as const) {
     await search.fill(typed);
     await expect(names).toHaveText([...shown]);
@@ -253,8 +265,12 @@ test("the search field matches English names, own names and codes", async ({ bro
   await search.fill("zzz");
   await expect(names).toHaveCount(0);
   await expect(panel.locator(".subp-none")).toHaveText("No language matches “zzz”");
-  await search.fill("");
+  // The clear button empties the field in one press and leaves the focus in it.
+  await panel.locator('[data-f="sub:clear"]').click();
+  await expect(search).toHaveValue("");
+  await expect(search).toBeFocused();
   await expect(names).toHaveCount(5);
+  await expect(panel.locator('[data-f="sub:clear"]')).toHaveCount(0);
   expect(errors).toEqual([]);
   await context.close();
 });
@@ -274,6 +290,9 @@ test("a language opens its options: names, the quiet detail, the fit, the chosen
   await expect(fitting.locator(".rel")).toHaveText(/^Big\.Buck.*….*-OPENFILM$/);
   await expect(fitting.locator(".rel")).toHaveAttribute("title", PLAYING);
   await expect(opts.locator(".opt").nth(1).locator(".fit")).toHaveCount(0);
+  // A separator goes with the part after it, so a wrapped line never ends on one.
+  await expect(fitting.locator(".part:has(.rel) .sep")).toHaveCount(1);
+  expect(await fitting.locator("small").evaluate((el) => [...el.querySelectorAll(".part")].every((p, i) => (i === 0) === !p.querySelector(".sep")))).toBe(true);
   // The timing row waits for a track; size is always there.
   await expect(opts.locator(".sub-size output")).toHaveText(/^\d+%$/);
   await page.screenshot({ path: `${SHOTS}/subtitle-options-desktop.png` });
@@ -284,8 +303,14 @@ test("a language opens its options: names, the quiet detail, the fit, the chosen
   await page.locator('[data-f="player:subs"]').dispatchEvent("click");
   await expect(panel.locator('[data-f="sublang:en"]')).toHaveClass(/\bon\b/);
   await expect(panel.locator('[data-f="sublang:en"] .ck svg')).toHaveCount(1);
+  await expect(panel.locator('[data-f="sublang:en"]')).toHaveAttribute("aria-checked", "true");
+  await expect(panel.locator('[data-f="sublang:en"]')).toHaveAccessibleName("English, 2 options, selected");
+  await expect(panel.locator('[data-f="sub:off"]')).toHaveAttribute("aria-checked", "false");
   await panel.locator('[data-f="subopen:en"]').dispatchEvent("click");
   await expect(opts.locator(".opt.on b")).toHaveText(/^OPENFILM, WEB\b/);
+  await expect(opts.locator(".opt.on")).toHaveAttribute("aria-checked", "true");
+  await expect(opts.locator(".opt.on")).toHaveAccessibleName(/^OPENFILM, WEB.*, selected$/);
+  await expect(opts.locator('.opt:not(.on)[aria-checked="false"]')).toHaveCount(1);
   await expect(opts.locator(".sub-delay output")).toHaveText("In step");
   // Back to the languages, by the link and by the key.
   await opts.locator('[data-f="sub:languages"]').dispatchEvent("click");
@@ -301,17 +326,23 @@ test("a language opens its options: names, the quiet detail, the fit, the chosen
 });
 
 test("TV: two columns, the right one follows the focused language, Right moves into it", async ({ browser }) => {
-  const { context, page, errors, panel } = await picker(browser, "tv");
+  // German's flag file fails: its row shows the round mark with its letters instead, at the TV's floor.
+  const { context, page, errors, panel } = await picker(browser, "tv", "de");
   await page.locator('[data-f="player:subs"]').focus();
   await page.keyboard.press("Enter");
   // The remote starts on the language that is on, and the right column shows its options.
   const on = panel.locator('[data-f^="sublang:"].on');
   await expect.poll(() => focusedKey(page)).toBe((await on.getAttribute("data-f")) ?? "");
   await expect(panel.locator(".subp-opts .subp-head h2")).toHaveText((await on.locator(".nm").textContent()) ?? "");
+  // The chosen option's quiet words at 92 percent on its grey fill (5.37:1, design/DECISION.md).
+  await expect(panel.locator(".subp-opts .opt.on small")).toHaveCSS("color", "rgba(255, 255, 255, 0.92)");
   await panel.locator('[data-f="sublang:en"]').focus();
   await expect(panel.locator(".subp-opts .subp-head h2")).toHaveText("English");
   // No chevrons on TV: the right column is always there.
   await expect(panel.locator(".lr-open")).toHaveCount(0);
+  await expect(panel.locator('[data-f="sublang:de"] .flag.none')).toHaveText("DE");
+  await expect(panel.locator('[data-f="sublang:de"] .flag.none')).toHaveCSS("font-size", "23px");
+  await expect(panel.locator('[data-f="sublang:de"] img.flag')).toHaveCount(0);
   await page.keyboard.press("ArrowDown");
   await expect.poll(() => focusedKey(page)).toBe("sublang:zh-Hant");
   await expect(panel.locator(".subp-opts .subp-head h2")).toHaveText("Chinese (Traditional)");
@@ -345,6 +376,16 @@ test("phone: a full-height sheet with Done, a language's options a level down", 
   await expect(panel.locator(".subp-opts .subp-head h2")).toHaveText("English");
   await expect(panel.locator('[data-f="sub:languages"]')).toBeVisible();
   await page.screenshot({ path: `${SHOTS}/subtitle-options-phone.png` });
+  // Back at the languages, the list is where it was: on a shorter screen it scrolls.
+  await panel.locator('[data-f="sub:languages"]').dispatchEvent("click");
+  await page.setViewportSize({ width: 844, height: 300 });
+  const list = panel.locator(".subp-langs .subp-list");
+  await expect.poll(() => list.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeGreaterThan(40);
+  await list.evaluate((el) => (el.scrollTop = 40));
+  await panel.locator('[data-f="subopen:pt-BR"]').dispatchEvent("click");
+  await expect(panel.locator(".subp-opts .subp-head h2")).toHaveText("Portuguese (Brazil)");
+  await panel.locator('[data-f="sub:languages"]').dispatchEvent("click");
+  await expect.poll(() => list.evaluate((el) => el.scrollTop)).toBe(40);
   await panel.locator('[data-f="sub:done"]').dispatchEvent("click");
   await expect(panel).toHaveCount(0);
   expect(errors).toEqual([]);

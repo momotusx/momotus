@@ -39,7 +39,7 @@ import { createVideoEngine } from "../player/video-engine";
 import { loadedSource, type Retry, sourceStart, TRYING_AGAIN_MS, tryingAgain } from "../lib/failover";
 import { bytes, clock, decoded, delayText, startsText, episodeLabel, groupFailures, playPath, playState, seasonName, titlePath, versionsPath } from "../lib/format";
 import { bufferShare, loadingLines, STALL_AHEAD_S, startFill } from "../lib/loading";
-import { offSummary, pickerLanguages } from "../lib/subtitles";
+import { offSummary, pickerLanguages, startOption } from "../lib/subtitles";
 import { blockedWords, languageName, nextVersion, noVersionWords, qualityCell, qualityText, restartLine, subtitleNote } from "../lib/words";
 import "./player.css";
 
@@ -515,9 +515,17 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     }
     if (k) version = k;
     const auto = s?.autoSubtitle;
-    if (!auto || chose || untrack(track)) return;
-    const t = s?.subtitles.find((x) => x.url === auto);
-    if (t) showSubtitle(t);
+    if (!auto || chose) return;
+    // Once the file has opened, its own track in that language (not forced)
+    // wins over the core's, even one already on (plans/player-polish.md 2.2).
+    const files = engine.tracks().filter((t) => t.kind === "sub");
+    const pick = startOption(pickerLanguages(s?.subtitles ?? [], files, languageName), auto);
+    if (!pick) return;
+    if ("file" in pick) {
+      if (pick.file.selected) return;
+      if (untrack(track)) showSubtitle(null);
+      engine.selectTrack("sub", pick.file.id);
+    } else if (!untrack(track)) showSubtitle(pick.track);
   });
 
   // A file the core could not serve plays as an empty track and comes back

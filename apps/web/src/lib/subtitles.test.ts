@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
-import { bestOption, byLanguage, FITS, flagFile, matchesLanguage, middle, offSummary, optionCount, pickerLanguages, trackDetail } from "./subtitles";
+import { bestOption, byLanguage, FITS, flagFile, matchesLanguage, middle, offSummary, optionCount, pickerLanguages, startOption, trackDetail } from "./subtitles";
 
 const track = (language: string, languageName: string, name: string, more: Partial<SubtitleTrack> = {}): SubtitleTrack => ({
   url: `http://127.0.0.1/sub/${language}/${name}`,
@@ -75,6 +75,49 @@ test("the file's tracks open their language first and win its one-tap pick", () 
   // No file track: the core's first, its best match.
   expect(bestOption(langs[0]!)).toEqual({ track: tracks[0]! });
   expect(bestOption({ ...en, file: [], tracks: [] })).toBeNull();
+});
+
+test("a file's code joins the core's language by its tag, else by its base language; alone it keeps the tag", () => {
+  const core = [track("zh-Hans", "Chinese (Simplified)", "OpenSubtitles v3", { lang: "chi" }), track("pt-BR", "Portuguese (Brazil)", "OpenSubtitles v3", { lang: "pob" })];
+  // "chi" is "zh": no "zh" here, so it joins Chinese (Simplified); "pob" is "pt-BR" itself; "fre" stands alone as "fr".
+  const langs = pickerLanguages(core, [{ id: "1", lang: "chi" }, { id: "2", lang: "pob" }, { id: "3", lang: "fre" }], nameOf);
+  expect(langs.map((l) => [l.language, l.file.map((f) => f.id)])).toEqual([
+    ["zh-Hans", ["1"]],
+    ["pt-BR", ["2"]],
+    ["fr", ["3"]],
+  ]);
+  // The tag finds its flag, and the code a search.
+  expect(langs[2]?.codes).toEqual(["fr", "fre"]);
+});
+
+test("a forced track of the file never wins the one-tap pick or the start", () => {
+  const en = track("en", "English", "CAKES", { lang: "eng" });
+  const langs = pickerLanguages([en], [{ id: "f", lang: "eng", forced: true }, { id: "p", lang: "eng" }], nameOf);
+  expect(bestOption(langs[0]!)).toEqual({ file: { id: "p", lang: "eng" } });
+  expect(startOption(langs, en.url)).toEqual({ file: { id: "p", lang: "eng" } });
+  const forcedOnly = pickerLanguages([en], [{ id: "f", lang: "eng", forced: true }], nameOf);
+  expect(bestOption(forcedOnly[0]!)).toEqual({ track: en });
+  expect(startOption(forcedOnly, en.url)).toEqual({ track: en });
+  // A forced file track alone in its language is still what that language opens with.
+  expect(bestOption(pickerLanguages([], [{ id: "f", lang: "eng", forced: true }], nameOf)[0]!)).toEqual({ file: { id: "f", lang: "eng", forced: true } });
+});
+
+test("the start keeps the core's own track when the file has none in its language", () => {
+  const langs = pickerLanguages(tracks, [{ id: "9", lang: "fre" }], nameOf);
+  // The core's pick is the second English track: that one, not the language's first.
+  expect(startOption(langs, tracks[2]!.url)).toEqual({ track: tracks[2]! });
+  expect(startOption(langs, "http://127.0.0.1/gone")).toBeNull();
+});
+
+test("search takes a region-tagged code as typed", () => {
+  const langs = pickerLanguages([track("pt-BR", "Portuguese (Brazil)", "A", { lang: "pob" }), track("zh-Hant", "Chinese (Traditional)", "B", { lang: "zht" }), track("es-419", "Spanish (Latin America)", "C", { lang: "spl" }), track("pt", "Portuguese", "D", { lang: "por" })], [], nameOf);
+  const find = (q: string) => langs.filter((l) => matchesLanguage(l, q)).map((l) => l.language);
+  expect(find("pt-br")).toEqual(["pt-BR"]);
+  expect(find("pt-b")).toEqual(["pt-BR"]);
+  expect(find("PT-BR")).toEqual(["pt-BR"]);
+  expect(find("zh-hant")).toEqual(["zh-Hant"]);
+  expect(find("es-419")).toEqual(["es-419"]);
+  expect(find("pt")).toEqual(["pt-BR", "pt"]);
 });
 
 test("search matches the English name, the own name and the code", () => {

@@ -4,6 +4,7 @@
  * (plans/player-polish.md 2.4). */
 
 import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
+import { languageTag } from "./words";
 
 export type LanguageSection = { language: string; name: string; tracks: { track: SubtitleTrack; index: number }[] };
 
@@ -19,7 +20,7 @@ export function byLanguage(tracks: SubtitleTrack[]): LanguageSection[] {
 }
 
 /** A track inside the file, as the engine lists it (player/engine.ts). */
-type FileTrack = { id: string; lang: string | null };
+type FileTrack = { id: string; lang: string | null; forced?: boolean };
 
 /** One language of the picker's first level: its tag, its English name, its
  * own name when the core knows a different one, the codes a search matches,
@@ -35,8 +36,10 @@ export type PickerLanguage<F extends FileTrack = FileTrack> = {
 };
 
 /** The picker's languages: the core's, in its order, each with the file's
- * tracks of that language (told by their English name, `nameOf`); a
- * language only the file has comes after them. */
+ * tracks of that language (its code as a tag, "chi" as "zh", joins the
+ * core's language of that tag, else the first of that base language,
+ * "zh-Hans"); a language only the file has comes after them, named by
+ * `nameOf`. */
 export function pickerLanguages<F extends FileTrack>(tracks: SubtitleTrack[], file: F[], nameOf: (lang: string) => string): PickerLanguage<F>[] {
   const out: PickerLanguage<F>[] = byLanguage(tracks).map((s) => {
     const first = s.tracks[0]?.track;
@@ -44,12 +47,13 @@ export function pickerLanguages<F extends FileTrack>(tracks: SubtitleTrack[], fi
     const codes = [...new Set([s.language.toLowerCase(), ...s.tracks.map((t) => t.track.lang.toLowerCase())])];
     return { language: s.language, name: s.name, own, codes, file: [], tracks: s.tracks.map((t) => t.track) };
   });
+  const base = (tag: string) => tag.toLowerCase().split("-")[0];
   for (const f of file) {
     if (!f.lang) continue;
-    const name = nameOf(f.lang);
-    const lang = out.find((l) => l.name === name);
+    const tag = languageTag(f.lang);
+    const lang = out.find((l) => l.language.toLowerCase() === tag.toLowerCase()) ?? out.find((l) => base(l.language) === base(tag));
     if (lang) lang.file.push(f);
-    else out.push({ language: f.lang, name, own: null, codes: [f.lang.toLowerCase()], file: [f], tracks: [] });
+    else out.push({ language: tag, name: nameOf(f.lang), own: null, codes: [...new Set([tag.toLowerCase(), f.lang.toLowerCase()])], file: [f], tracks: [] });
   }
   return out;
 }
@@ -60,23 +64,38 @@ const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCas
 const startsWord = (text: string, query: string) => ` ${fold(text).replace(/[^\p{L}\p{N}]+/gu, " ")}`.includes(` ${query}`);
 
 /** The search field's rule: a word of the English name or of the language's
- * own name starts with what was typed, or a code does ("pt", "pob", "deu"). */
+ * own name starts with what was typed, or a code does as typed ("pt",
+ * "pob", "deu", "pt-br", "es-419"). */
 export function matchesLanguage(l: Pick<PickerLanguage, "name" | "own" | "codes">, typed: string): boolean {
-  const q = fold(typed.trim()).replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  const code = fold(typed.trim());
+  const q = code.replace(/[^\p{L}\p{N}]+/gu, " ").trim();
   if (!q) return true;
-  return startsWord(l.name, q) || (!!l.own && startsWord(l.own, q)) || l.codes.some((c) => c.startsWith(q));
+  return startsWord(l.name, q) || (!!l.own && startsWord(l.own, q)) || l.codes.some((c) => c.startsWith(code) || c.startsWith(q));
 }
 
 /** What a language's row counts: every option it opens. */
 export const optionCount = (l: PickerLanguage) => l.file.length + l.tracks.length;
 
-/** What picking a language turns on: the file's own track once the file
- * has opened (it always fits the file), else the core's best match. */
+/** What picking a language turns on: the file's own track that is not
+ * forced, once the file has opened (it always fits the file), else the
+ * core's best match, else a forced one of the file's. */
 export function bestOption<F extends FileTrack>(l: PickerLanguage<F>): { file: F } | { track: SubtitleTrack } | null {
-  const file = l.file[0];
+  const file = l.file.find((f) => !f.forced);
   if (file) return { file };
   const track = l.tracks[0];
-  return track ? { track } : null;
+  if (track) return { track };
+  return l.file[0] ? { file: l.file[0] } : null;
+}
+
+/** What the start turns on for the core's `autoSubtitle` (plans/player-polish.md
+ * 2.2): the file's own track of that language when there is one that is not
+ * forced (it wins once the file has opened), else the core's track itself. */
+export function startOption<F extends FileTrack>(languages: PickerLanguage<F>[], auto: string): { file: F } | { track: SubtitleTrack } | null {
+  const lang = languages.find((l) => l.tracks.some((t) => t.url === auto));
+  const track = lang?.tracks.find((t) => t.url === auto);
+  if (!lang || !track) return null;
+  const file = lang.file.find((f) => !f.forced);
+  return file ? { file } : { track };
 }
 
 /** The Subtitles button with no track on: the languages the picker shows as

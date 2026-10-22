@@ -18,6 +18,8 @@ export interface Track {
   /** "English 5.1", "Commentary": what the file calls it. */
   label: string;
   selected: boolean;
+  /** The file marks the subtitle forced (mpv's `forced`); unknown when absent. */
+  forced?: boolean;
 }
 
 /** What the engine reports back; the player decides what each means. */

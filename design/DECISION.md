@@ -87,7 +87,7 @@ Per form, by the owner's later direction (2026-10-21): the TV form follows the V
 - Focus: on Android TV and web TV the white lift (scale, rise, deeper shadow, sheen; buttons and rows invert to white), never a colored ring and never color alone; tvOS keeps its white ring and scale; desktop, phone and the Mac show the 4 px `key` ring for keyboard focus only (the Keyboard focus row above).
 - The core's captions, labels and states are shown as is.
 - Lucide icons with visible labels on TV; no emoji anywhere.
-- Contrast floors: text 4.5:1, control edges, glyphs and the keyboard ring 3:1 (measured with the WCAG formula, a translucent color composited over what it sits on). The v3 pairs: text 92 on `bg` 14.51, 64 on `bg` 7.61, 64 on `surface` 6.65, 70 on `bg` 8.86, the primary label 14.47, white on the secondary fill 10.30, a focused row's value 6.33, `key` on `bg` 4.66, on `surface` 3.82, on `raised` 3.11, `key` on the alert 4.64, white on `keyFill` 4.70, `switchOn` on `surface` 6.89.
+- Contrast floors: text 4.5:1, control edges, glyphs and the keyboard ring 3:1 (measured with the WCAG formula, a translucent color composited over what it sits on). The v3 pairs: text 92 on `bg` 14.51, 64 on `bg` 7.61, 64 on `surface` 6.65, 70 on `bg` 8.86, the primary label 14.47, white on the secondary fill 10.30, a focused row's value 6.33, `key` on `bg` 4.66, on `surface` 3.82, on `raised` 3.11, `key` on the alert 4.64, white on `keyFill` 4.70, `switchOn` on `surface` 6.89, text 92 on `selected.fill` 5.37 (the TV picker's chosen row and its quiet words; 64 there is 3.54, under the floor).
 
 ## History
 

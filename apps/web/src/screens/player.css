@@ -277,6 +277,9 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 .subp-find input { flex: 1; min-width: 0; height: 100%; font: 500 var(--type-callout) / 1 var(--font-text); color: var(--text); }
 .subp-find input::placeholder { color: var(--dim); }
 .subp-find input::-webkit-search-cancel-button { display: none; }
+/* Our own clear button off the TV (the native one is hidden and absent on touch). */
+.subp-clear { display: grid; place-items: center; flex: none; width: 44px; height: 44px; margin-right: -10px; border-radius: 50%; color: var(--dim); }
+.subp-clear svg { width: 26px; height: 26px; }
 .subp .subp-find input:focus { outline: none; box-shadow: none; }
 .subp-find:focus-within { outline: var(--focus-ring) solid var(--key); outline-offset: 2px; }
 .subp-list { flex: 1; min-height: 0; margin: 0 -16px; padding: 6px 16px 16px; }
@@ -290,7 +293,8 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 .lr-open { display: grid; place-items: center; flex: none; width: 56px; height: 56px; border-radius: 50%; color: var(--dim); }
 .lr-open svg { width: 26px; height: 26px; }
 .flag { flex: none; width: 40px; height: 40px; border-radius: 50%; }
-.flag.none { display: grid; place-items: center; background: var(--control); font: 600 15px / 1 var(--font-text); color: var(--text); }
+/* The mark's letters at the TV's floor of 23 points. */
+.flag.none { display: grid; place-items: center; background: var(--control); font: 600 23px / 1 var(--font-text); color: var(--text); }
 .flag-space { flex: none; width: 40px; }
 /* A language's own name beside it only when both fit: else it wraps onto a hidden second line. */
 .lname { display: flex; flex: 1; flex-wrap: wrap; column-gap: 10px; min-width: 0; height: 32px; overflow: hidden; }
@@ -303,15 +307,20 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 .op-tx b { display: block; overflow: hidden; font-weight: inherit; text-overflow: ellipsis; white-space: nowrap; }
 .op-tx small { display: block; margin-top: 2px; font: 500 var(--type-caption) / 30px var(--font-text); color: var(--dim); }
 .op-tx .fit { color: var(--text); font-weight: 600; }
+/* Each part keeps its separator in front of it, so a line that wraps starts with one and never ends on one. */
+.op-tx .part { white-space: nowrap; }
+.op-tx .sep { font-weight: 400; color: var(--dim); }
 /* The release wraps as one piece, and a line too long for its measure ends in an ellipsis. */
-.op-tx .rel { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+.op-tx .rel { display: inline-block; max-width: calc(100% - 1em); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 .subp-tune { display: grid; gap: 6px; padding: 12px 16px 0; box-shadow: inset 0 1px 0 var(--line); }
 .subp-tune .sub-delay, .subp-tune .sub-size { margin: 0; }
 [data-form="tv"] .subp { top: 96px; bottom: auto; width: 1160px; height: 736px; display: grid; grid-template-columns: 500px 660px; border-radius: 24px; }
 [data-form="tv"] .subp-col + .subp-col { box-shadow: inset 1px 0 0 var(--line); }
+/* TV: the chosen row's quiet words at 92 percent on its grey fill (5.37:1; 64 percent there is 3.54:1). */
+[data-form="tv"] .subp .opt.on :is(.own, .ct, small, .sep) { color: var(--text); }
 /* TV focus: the row inverts to white and rises a little (no ring, no key color). */
 [data-form="tv"] .subp .opt:focus { outline: none; background: var(--primary); color: var(--on-primary); box-shadow: var(--lift-focus-edge); transform: scale(var(--focus-scale-tile)); }
-[data-form="tv"] .subp .opt:focus :is(.own, .ct, small, .ck) { color: color-mix(in srgb, var(--on-primary) 73%, transparent); }
+[data-form="tv"] .subp .opt:focus :is(.own, .ct, small, .ck, .sep) { color: color-mix(in srgb, var(--on-primary) 73%, transparent); }
 [data-form="tv"] .subp .opt:focus .fit { color: var(--on-primary); }
 [data-form="tv"] .subp .sub-step:focus { outline: none; background: var(--primary); color: var(--on-primary); }
 [data-form="tv"] .subp-find:focus-within { outline: none; background: var(--primary); color: var(--on-primary); }
@@ -351,6 +360,8 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 [data-form="phone"] .lr-open svg { width: 16px; height: 16px; }
 [data-form="phone"] .flag { width: 24px; height: 24px; }
 [data-form="phone"] .flag.none { font-size: 11px; }
+[data-form="phone"] .subp-clear { width: 36px; height: 36px; margin-right: -6px; }
+[data-form="phone"] .subp-clear svg { width: 17px; height: 17px; }
 [data-form="phone"] .flag-space { display: none; }
 [data-form="phone"] .lname { height: 20px; column-gap: 6px; }
 [data-form="phone"] .lname .own { font-size: 13px; }
