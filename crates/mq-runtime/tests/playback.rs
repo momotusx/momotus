@@ -1347,12 +1347,12 @@ async fn without_subtitle_languages_the_device_language_then_english_lead() {
     }
 }
 
-/// A subtitles addon that lists one English track, `delay` after it is asked.
-async fn subtitles_addon(id: &str, delay: Duration) -> AddonRow {
+/// A subtitles addon that lists one track in `lang`, `delay` after it is asked.
+async fn subtitles_addon(id: &str, lang: &str, delay: Duration) -> AddonRow {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let body = serde_json::json!({"subtitles": [
-        {"id": id, "lang": "eng", "url": format!("https://subs.test/{id}.srt")}
+        {"id": id, "lang": lang, "url": format!("https://subs.test/{id}.srt")}
     ]})
     .to_string();
     tokio::spawn(async move {
@@ -1387,8 +1387,8 @@ async fn a_slow_subtitle_addon_does_not_hold_the_start_subtitle() {
     let core = Core::temporary("p").unwrap();
     core.set_prefs(&serde_json::json!({ "subtitleLanguages": ["eng"] }))
         .unwrap();
-    let slow = subtitles_addon("slow", Duration::from_secs(8)).await;
-    let quick = subtitles_addon("quick", Duration::ZERO).await;
+    let slow = subtitles_addon("slow", "eng", Duration::from_secs(8)).await;
+    let quick = subtitles_addon("quick", "eng", Duration::ZERO).await;
     install(
         &core,
         &[row(LOCAL_ADDON, "local", "stream", true), slow, quick],
@@ -1421,6 +1421,127 @@ async fn a_slow_subtitle_addon_does_not_hold_the_start_subtitle() {
         done.auto_subtitle, s.auto_subtitle,
         "a slower source never changes it"
     );
+}
+
+/// Opens Sintel with the stream addon and `subtitles` installed in this
+/// order, the profile's subtitle languages set to `languages`.
+async fn open_with_subtitles(languages: &[&str], subtitles: Vec<AddonRow>) -> PlaybackView {
+    let (video, _) = counted_origin().await;
+    let core = Core::temporary("p").unwrap();
+    core.set_prefs(&serde_json::json!({ "subtitleLanguages": languages }))
+        .unwrap();
+    let mut rows = vec![row(LOCAL_ADDON, "local", "stream", true)];
+    rows.extend(subtitles);
+    install(&core, &rows);
+    let streams = serde_json::json!({"streams": [{"url": format!("{video}/v.mkv"), "title": "Sintel.2010.1080p.WEB"}]})
+        .to_string();
+    PlaybackView::open(
+        &core,
+        listed(LOCAL_ADDON, "local", "Local", &streams),
+        target(),
+    )
+}
+
+fn start_source(s: &PlaybackSnapshot) -> Option<String> {
+    s.subtitles
+        .iter()
+        .find(|t| Some(&t.url) == s.auto_subtitle.as_ref())
+        .map(|t| t.source.clone())
+}
+
+/// Review P2-1 and P3-1: a profile with Turkish then English. English
+/// listed at once never settles the start early, as a slower source may
+/// bring Turkish; Turkish listed at 1.5 s settles it then, with a slower
+/// source still out, and that one changes nothing.
+#[tokio::test]
+async fn the_start_subtitle_settles_early_only_in_the_first_language() {
+    let view = open_with_subtitles(
+        &["tur", "eng"],
+        vec![
+            subtitles_addon("late", "eng", Duration::from_secs(6)).await,
+            subtitles_addon("turkish", "tur", Duration::from_millis(1500)).await,
+            subtitles_addon("english", "eng", Duration::ZERO).await,
+        ],
+    )
+    .await;
+    let opened = std::time::Instant::now();
+    until(&view, "the English track", |s| {
+        s.subtitles.iter().any(|t| t.source == "english")
+    })
+    .await;
+    tokio::time::sleep(Duration::from_millis(1200).saturating_sub(opened.elapsed())).await;
+    assert_eq!(
+        view.snapshot().auto_subtitle,
+        None,
+        "English settled before Turkish came"
+    );
+    let s = until(&view, "the start subtitle", |s| s.auto_subtitle.is_some()).await;
+    assert!(
+        opened.elapsed() < Duration::from_millis(2500),
+        "took {:?}",
+        opened.elapsed()
+    );
+    assert!(s.subtitles_pending, "the late addon is still out");
+    assert_eq!(start_source(&s).as_deref(), Some("turkish"));
+    let done = settled_list(&view).await;
+    assert_eq!(done.auto_subtitle, s.auto_subtitle);
+}
+
+/// Review P2-1: when the first language never comes, the second settles
+/// only once every source has answered.
+#[tokio::test]
+async fn a_second_language_waits_for_every_source() {
+    let view = open_with_subtitles(
+        &["tur", "eng"],
+        vec![
+            subtitles_addon("late", "eng", Duration::from_secs(3)).await,
+            subtitles_addon("english", "eng", Duration::ZERO).await,
+        ],
+    )
+    .await;
+    tokio::time::sleep(Duration::from_millis(2000)).await;
+    let s = view.snapshot();
+    assert!(s.subtitles_pending && s.auto_subtitle.is_none(), "{s:?}");
+    let done = settled_list(&view).await;
+    assert!(
+        done.auto_subtitle.is_some(),
+        "English turns on once every source answered"
+    );
+}
+
+/// Review P3: the viewer's pick before the 1 s wait stays the pick: the
+/// start subtitle never comes over it, early or last.
+#[tokio::test]
+async fn a_pick_before_the_wait_stays_the_pick() {
+    let view = open_with_subtitles(
+        &["eng"],
+        vec![
+            subtitles_addon("late", "eng", Duration::from_secs(3)).await,
+            subtitles_addon("english", "eng", Duration::ZERO).await,
+        ],
+    )
+    .await;
+    let opened = std::time::Instant::now();
+    let s = until(&view, "the English track", |s| {
+        s.subtitles.iter().any(|t| t.source == "english")
+    })
+    .await;
+    assert!(
+        opened.elapsed() < Duration::from_secs(1),
+        "listed at {:?}",
+        opened.elapsed()
+    );
+    let picked = s
+        .subtitles
+        .iter()
+        .find(|t| t.source == "english")
+        .unwrap()
+        .url
+        .clone();
+    view.subtitle_chosen(Some(&picked), None);
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    assert_eq!(view.snapshot().auto_subtitle, None);
+    assert_eq!(settled_list(&view).await.auto_subtitle, None);
 }
 
 /// The track every app turns on at start: only when the profile set
@@ -2084,6 +2205,25 @@ async fn a_pick_before_the_probe_ends_stays_the_pick() {
     assert_eq!(releases(&s), [PAL, FILM], "the rate landed after the pick");
     assert_eq!(s.subtitles[1].url, picked);
     assert_eq!(s.auto_subtitle, None);
+}
+
+/// Review P2-2: the start subtitle ranks with the probed frame rate in.
+/// The rate lands at 1.2 s, after the 1 s wait (the probe gives up at 1.5 s): the pick is the 25 fps
+/// track the rate puts first, never the film-rate one listed first.
+#[tokio::test]
+async fn the_start_subtitle_waits_for_the_frame_rate() {
+    let video = late_tracks_origin(mkv_at_25_fps(), Duration::from_millis(1200)).await;
+    let core = Core::temporary("p").unwrap();
+    core.set_prefs(&serde_json::json!({ "subtitleLanguages": ["eng"] }))
+        .unwrap();
+    let view = PlaybackView::open(&core, setup(&core, &rated_rows(&video)), target());
+    let s = until(&view, "the start subtitle", |s| s.auto_subtitle.is_some()).await;
+    let pick = s
+        .subtitles
+        .iter()
+        .find(|t| Some(&t.url) == s.auto_subtitle.as_ref())
+        .and_then(|t| t.release.clone());
+    assert_eq!(pick.as_deref(), Some(PAL));
 }
 
 /// Plans/player-polish.md 2g: the stepper's delay is remembered for the

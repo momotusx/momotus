@@ -1883,15 +1883,20 @@ async fn resolve_next(
                     let probed = probe_video(reader).shared();
                     // The measured rate counts in the order as soon as it is
                     // read, whichever source answers first.
+                    let rated_done = tokio::sync::Notify::new();
                     let rated = async {
                         let fps = probed.clone().await.fps.map(|fps| fps as f32);
-                        let mut s = lock(&state);
-                        // The one writer of the rate.
-                        if fps.is_some() && current(&s, run) {
-                            s.playing.fps = fps;
-                            reorder(&mut s, &wanted);
-                            snapshot.set(s.snapshot.clone());
+                        {
+                            let mut s = lock(&state);
+                            // The one writer of the rate.
+                            if fps.is_some() && current(&s, run) {
+                                s.playing.fps = fps;
+                                reorder(&mut s, &wanted);
+                                snapshot.set(s.snapshot.clone());
+                            }
                         }
+                        // The start pick ranks with the rate in.
+                        rated_done.notify_one();
                     };
                     let addons = async {
                         let extra = video_extra(reader, filename.as_deref()).await;
@@ -1911,13 +1916,19 @@ async fn resolve_next(
                         &snapshot,
                     );
                     // The start subtitle waits for every source until
-                    // START_SUBTITLE_WAIT, then goes with the tracks listed:
-                    // one slow addon (SubSense took 12 to 20 s, the iphone-a
-                    // walk) never leaves subtitles off that long.
+                    // START_SUBTITLE_WAIT and the rate, then settles as soon
+                    // as a track in the first language is listed: one slow
+                    // addon (SubSense took 12 to 20 s, the iphone-a walk) never
+                    // leaves subtitles off that long.
                     let early = async {
                         tokio::time::sleep(START_SUBTITLE_WAIT).await;
+                        rated_done.notified().await;
                         let audio = audio_of(probed.clone().await, &stream);
-                        settle_start(&core, &target, &state, &snapshot, run, &audio, false);
+                        // ponytail: looks at the list every 100 ms; a signal
+                        // from each source if those 100 ms ever matter.
+                        while !settle_start(&core, &target, &state, &snapshot, run, &audio, false) {
+                            tokio::time::sleep(Duration::from_millis(100)).await;
+                        }
                         std::future::pending::<()>().await;
                     };
                     tokio::select! {
@@ -3679,8 +3690,10 @@ fn audio_of(probed: Probed, stream: &ParsedStream) -> Vec<String> {
 }
 
 /// Decides the source's start subtitle once: early (`last` false) only when
-/// a track to turn on is listed, else when every source has answered, which
-/// also ends `subtitles_pending`. A pick before it stays the pick.
+/// a track in the first language (`first_language`) is listed, as a slower
+/// source may bring one; any other pick when every source has answered,
+/// which also ends `subtitles_pending`. A pick before it stays the pick.
+/// True once there is nothing left to decide.
 fn settle_start(
     core: &Core,
     target: &PlayTarget,
@@ -3689,7 +3702,7 @@ fn settle_start(
     run: u64,
     audio: &[String],
     last: bool,
-) {
+) -> bool {
     let remembered = remembered_subtitle(core, target);
     let explicit: Vec<String> = core
         .prefs()
@@ -3699,25 +3712,60 @@ fn settle_start(
         .collect();
     let mut s = lock(state);
     if !current(&s, run) {
-        return;
+        return true;
     }
-    if !s.start_settled {
-        let pick = auto_subtitle(
-            remembered.as_deref(),
-            &explicit,
-            audio,
-            &s.snapshot.subtitles,
-        )
-        .filter(|_| !s.subtitle_picked);
-        if pick.is_some() || last {
-            s.start_settled = true;
-            s.snapshot.auto_subtitle = pick;
+    if s.start_settled {
+        if last {
+            s.snapshot.subtitles_pending = false;
+            snapshot.set(s.snapshot.clone());
         }
+        return true;
     }
+    let pick = auto_subtitle(
+        remembered.as_deref(),
+        &explicit,
+        audio,
+        &s.snapshot.subtitles,
+    )
+    .filter(|_| !s.subtitle_picked);
+    let first = first_language(remembered.as_deref(), &explicit, audio);
+    let in_first = pick.as_ref().is_some_and(|url| {
+        s.snapshot.subtitles.iter().any(|t| {
+            &t.url == url
+                && first.is_some_and(|f| {
+                    crate::languages::primary(&t.language) == crate::languages::primary(f)
+                })
+        })
+    });
+    if !(in_first || last) {
+        return false;
+    }
+    s.start_settled = true;
+    s.snapshot.auto_subtitle = pick;
     if last {
         s.snapshot.subtitles_pending = false;
     }
     snapshot.set(s.snapshot.clone());
+    true
+}
+
+/// The language the start subtitle wants most: the title's remembered one,
+/// else the profile's first subtitle language the audio is not in; None for
+/// Off or none set.
+fn first_language<'a>(
+    remembered: Option<&'a str>,
+    explicit: &'a [String],
+    audio: &[String],
+) -> Option<&'a str> {
+    use crate::languages::primary;
+    match remembered {
+        Some(OFF) => None,
+        Some(tag) => Some(tag),
+        None => explicit
+            .iter()
+            .find(|e| !audio.iter().any(|a| primary(a) == primary(e)))
+            .map(String::as_str),
+    }
 }
 
 /// The track the apps turn on at start, if any (plans/m13-subtitle-languages.md
