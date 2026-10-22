@@ -129,7 +129,10 @@ object TitleCopy {
                 ?: details.runtime.takeIf { details.kind == "movie" },
         ).joinToString("$NBSP· ") { it.replace(' ', NBSP) }
 
-    /** The facts table: label and value, in the web's words, left out when empty. */
+    /**
+     * The facts table: label and value, in the web's words, left out when empty. Not where the details or the
+     * scores came from: no addon's name on a title page (design/DECISION.md, Shelves).
+     */
     fun facts(
         details: TitleDetails,
         seasons: Int = 0,
@@ -140,8 +143,6 @@ object TitleCopy {
             "Runtime" to (details.runtime?.let { if (details.kind == "movie") it else "$it an episode" } ?: ""),
             "Directed by" to details.directors.take(2).joinToString(", "),
             "Starring" to details.cast.take(3).joinToString(", "),
-            "Details from" to details.source,
-            "Ratings from" to (details.ratingsFrom ?: ""),
         ).filter { it.second.isNotBlank() }
 
     /** "Watched, S1:E2, The Kingsroad" (and "Airs Nov 3, 2026" when it is not out): what a screen reader says for an episode. */

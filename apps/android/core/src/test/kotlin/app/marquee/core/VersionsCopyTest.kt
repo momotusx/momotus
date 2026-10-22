@@ -261,15 +261,18 @@ class VersionsCopyTest {
     }
 
     @Test
-    fun `a title page never names the addon a version comes from, the Versions screens do`() {
-        // The owner, 2026-10-22 (design/DECISION.md, Shelves): addon names only on the Addons pages and in Versions.
+    fun `a title page never names an addon, the Versions screens do`() {
+        // The owner, 2026-10-22 (design/DECISION.md, Shelves): addon names only on the Addons pages and in Versions:
+        // not the version's addon, nor where the details or the scores came from.
         val pages =
             listOf(
                 "../ui-tv/src/main/kotlin/app/marquee/ui/tv/TvTitle.kt",
                 "../ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneTitle.kt",
+                "src/main/kotlin/app/marquee/core/TitleCopy.kt",
             )
+        val names = Regex("""\.via\b|\bvia \$|\.source\b|ratingsFrom|Details from|Ratings from""")
         for (path in pages) {
-            assertFalse(Regex("""\.via\b|\bvia \$""").containsMatchIn(File(path).readText()), "$path names the addon")
+            assertFalse(names.containsMatchIn(File(path).readText()), "$path names an addon")
         }
     }
 }

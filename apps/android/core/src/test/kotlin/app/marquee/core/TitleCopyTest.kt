@@ -94,7 +94,6 @@ class TitleCopyTest {
                 "Runtime" to "52 min",
                 "Directed by" to "X, Y",
                 "Starring" to "A, B, C",
-                "Details from" to "Cinemeta",
             ),
             TitleCopy.facts(details()),
         )
@@ -114,20 +113,18 @@ class TitleCopyTest {
             "52 min an episode",
             TitleCopy.facts(details(kind = "series")).first { it.first == "Runtime" }.second,
         )
+        // Never where the details or the scores came from: those name addons.
         assertEquals(
-            listOf("Details from" to "Cinemeta"),
+            emptyList(),
             TitleCopy.facts(
-                details(releaseInfo = null, runtime = null).copy(cast = emptyList(), directors = emptyList()),
+                details(releaseInfo = null, runtime = null)
+                    .copy(
+                        cast = emptyList(),
+                        directors = emptyList(),
+                        ratingsFrom = "IMDb and Rotten Tomatoes via MDBList",
+                    ),
             ),
         )
-        // The scores' credit, when MDBList gave one.
-        assertEquals(
-            "Ratings from" to "IMDb and Rotten Tomatoes via MDBList",
-            TitleCopy.facts(details().copy(ratingsFrom = "IMDb and Rotten Tomatoes via MDBList")).last(),
-        )
-        // Or the Rotten Tomatoes addon, for its Fresh mark.
-        val addon = "IMDb from Cinemeta, Rotten Tomatoes from the Rotten Tomatoes addon"
-        assertEquals("Ratings from" to addon, TitleCopy.facts(details().copy(ratingsFrom = addon)).last())
     }
 
     @Test
