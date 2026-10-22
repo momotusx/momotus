@@ -1,6 +1,7 @@
 package app.marquee.android
 
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
 import android.graphics.Color
 import android.net.Uri
@@ -32,6 +33,7 @@ class MainActivity : ComponentActivity() {
         // Debug and benchmark builds take the tree from `form=tv` (the TV benchmarks run on a phone).
         val asked = intent.getStringExtra("form")?.takeIf { debuggable || BuildConfig.BENCHMARK }
         val form = FormFactor.detect(this, asked)
+        if (intent.walkLandscape(debuggable)) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         applyBars()
         // The first frame shows the form's page color.
         window.setBackgroundDrawable(
@@ -175,3 +177,9 @@ internal fun accountLink(
         }
     }
 }
+
+/**
+ * A walk of the TV form on a phone (`--es form tv --ez landscape true`, debug builds only): the app asks for a
+ * landscape window itself, so the device's own rotation setting is never touched.
+ */
+internal fun Intent.walkLandscape(debuggable: Boolean): Boolean = debuggable && getBooleanExtra("landscape", false)
