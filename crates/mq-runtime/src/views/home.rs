@@ -121,7 +121,9 @@ pub struct HomeHeader {
 #[serde(rename_all = "camelCase")]
 pub struct Hero {
     pub tile: Tile,
-    /// One line telling the user why this title is here.
+    /// One line telling the user why this title is here: "#1 in Popular
+    /// Movies", with the addon ("on Cinemeta") only when another row on Home
+    /// has the same title.
     pub reason: String,
     pub description: Option<String>,
     /// At most three, in the addon's order.
@@ -569,14 +571,16 @@ fn catalog_title(name: &str, kind: &str, source: &str) -> String {
     }
 }
 
-/// The hero's caption: "#1 in Popular Movies on Cinemeta", and only "#1 in" a title that names its addon
-/// already, so the addon is never said twice.
-fn hero_reason(title: &str, source: &str) -> String {
+/// The hero's caption: "#1 in Popular Movies", the addon left unsaid (the owner, 2026-10-22: "don't write
+/// Cinemeta"). Only when another row on Home has the same title (`shared`) does the addon tell them apart,
+/// "#1 in Popular Movies on Trakt Tv", and never when the title names it already, so it is never said twice.
+fn hero_reason(title: &str, source: &str, shared: bool) -> String {
     let own = source_words(source);
-    if !own.is_empty() && own.iter().all(|w| words(title).contains(w)) {
-        format!("#1 in {title}")
-    } else {
+    let named = !own.is_empty() && own.iter().all(|w| words(title).contains(w));
+    if shared && !named {
         format!("#1 in {title} on {source}")
+    } else {
+        format!("#1 in {title}")
     }
 }
 
@@ -879,9 +883,15 @@ fn maybe_pick_hero(rows: &Mutex<ObservableVector<HomeRow>>, header: &SharedObser
         .find_map(|row| {
             let tile = row.tiles.iter().find(|t| t.background.is_some())?;
             let blurb = tile.blurb.clone().unwrap_or_default();
+            // Every row Home lays out has its title from the start.
+            let shared = rows
+                .iter()
+                .filter(|r| r.title.to_lowercase() == row.title.to_lowercase())
+                .count()
+                > 1;
             Some(Hero {
                 tile: tile.clone(),
-                reason: hero_reason(&row.title, &row.source),
+                reason: hero_reason(&row.title, &row.source, shared),
                 description: blurb.description,
                 genres: blurb.genres,
                 runtime: blurb.runtime,
@@ -1248,8 +1258,13 @@ mod tests {
             catalog_title("Popular", "movie", "Cinemeta"),
             "Popular Movies"
         );
+        // The addon is left unsaid, unless another row shares the title.
         assert_eq!(
-            hero_reason("Popular Movies", "Cinemeta"),
+            hero_reason("Popular Movies", "Cinemeta", false),
+            "#1 in Popular Movies"
+        );
+        assert_eq!(
+            hero_reason("Popular Movies", "Cinemeta", true),
             "#1 in Popular Movies on Cinemeta"
         );
         assert_eq!(catalog_title("Top", "series", "Cinemeta"), "Top Series");
@@ -1262,7 +1277,7 @@ mod tests {
         let title = catalog_title("trakt - Popular movies", "trakt", "Trakt Tv");
         assert_eq!(title, "Popular movies");
         assert_eq!(
-            hero_reason(&title, "Trakt Tv"),
+            hero_reason(&title, "Trakt Tv", true),
             "#1 in Popular movies on Trakt Tv"
         );
         assert_eq!(
@@ -1271,14 +1286,14 @@ mod tests {
         );
         // A title that still names the addon is not followed by it.
         assert_eq!(
-            hero_reason("Trakt Trending", "Trakt Tv"),
+            hero_reason("Trakt Trending", "Trakt Tv", true),
             "#1 in Trakt Trending"
         );
         // Game Cinema's catalogs (community.json) part the addon from the name with an em dash.
         let title = catalog_title("Game Cinema \u{2014} New This Week", "movie", "Game Cinema");
         assert_eq!(title, "New This Week Movies");
         assert_eq!(
-            hero_reason(&title, "Game Cinema"),
+            hero_reason(&title, "Game Cinema", true),
             "#1 in New This Week Movies on Game Cinema"
         );
         assert_eq!(
@@ -1390,6 +1405,9 @@ mod tests {
             "Traktor hits Movies"
         );
         assert_eq!(catalog_title("Top", "movie", "TV"), "Top Movies");
-        assert_eq!(hero_reason("Top Movies", "TV"), "#1 in Top Movies on TV");
+        assert_eq!(
+            hero_reason("Top Movies", "TV", true),
+            "#1 in Top Movies on TV"
+        );
     }
 }

@@ -1019,3 +1019,40 @@ async fn retrying_a_row_asks_only_its_catalog() {
     assert!(!view.retry_row(CONTINUE_ROW_ID));
     assert!(!view.retry_row("gone:movie:top"));
 }
+
+/// The hero's reason, once Home has picked one.
+async fn hero_reason(core: &Core) -> String {
+    let view = HomeView::open(core);
+    for _ in 0..300 {
+        if let Some(hero) = view.snapshot().header.hero {
+            return hero.reason;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("no hero");
+}
+
+#[tokio::test]
+async fn the_hero_names_its_addon_only_when_another_row_has_the_same_title() {
+    // One "Popular Movies" row: the addon is left unsaid.
+    let core = Core::temporary("p").unwrap();
+    let only = catalog_addon("first", Duration::ZERO, 200, METAS).await;
+    core.library()
+        .set_addons("p", &[only], &core.hlc())
+        .unwrap();
+    assert_eq!(hero_reason(&core).await, "#1 in Popular Movies");
+
+    // Two addons with a "Popular Movies" row each: the hero says which.
+    let core = Core::temporary("q").unwrap();
+    let mut first = catalog_addon("first", Duration::ZERO, 200, METAS).await;
+    let mut second = catalog_addon("second", Duration::ZERO, 200, METAS).await;
+    first.position = 0;
+    second.position = 1;
+    core.library()
+        .set_addons("q", &[first, second], &core.hlc())
+        .unwrap();
+    assert_eq!(
+        hero_reason(&core).await,
+        "#1 in Popular Movies on first addon"
+    );
+}
