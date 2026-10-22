@@ -392,7 +392,6 @@ function VersionLine(props: { snap: VersionsSnapshot | null }) {
                 <i class="dot" />
                 {st().text}
               </span>
-              <span class="muted">via {p().via}</span>
             </p>
           );
         }}
