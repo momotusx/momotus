@@ -28,6 +28,16 @@ enum BackdropStops {
     /// a light wash from the top so the status bar and the large title read on any art.
     static let heroPhoneFoot = [Stop(at: 0, alpha: 1), Stop(at: 0.09, alpha: 0.92), Stop(at: 0.2, alpha: 0.7), Stop(at: 0.33, alpha: 0.4), Stop(at: 0.46, alpha: 0.12), Stop(at: 0.56, alpha: 0)]
     static let heroPhoneTop = [Stop(at: 0, alpha: 0.5), Stop(at: 0.11, alpha: 0.2), Stop(at: 0.2, alpha: 0)]
+    /// The foot ramp's stops are shares of the 680 pt portrait hero and hold in points from the foot:
+    /// a shorter hero (a landscape phone, down to 280) keeps the same darkness at the same height
+    /// above the foot, so Details reads there as it does upright.
+    static let heroPhoneHeight = 680.0
+    static func heroPhoneFoot(height: Double) -> [Stop] {
+        guard height > 0 else { return heroPhoneFoot }
+        let scale = heroPhoneHeight / height
+        let inside = heroPhoneFoot.filter { $0.at * scale < 1 }.map { Stop(at: $0.at * scale, alpha: $0.alpha) }
+        return inside.count == heroPhoneFoot.count ? inside : inside + [Stop(at: 1, alpha: alpha(heroPhoneFoot, at: 1 / scale))]
+    }
 
     /// Title page, wide: from the leading edge, and from the top down; on a phone only the second,
     /// darker at the top under the status bar.
@@ -76,6 +86,11 @@ enum BackdropStops {
     static func wash(_ size: CGSize) -> LinearGradient {
         let line = washLine(width: size.width, height: size.height)
         return LinearGradient(stops: gradient(heroSide, .black), startPoint: line.start, endPoint: line.end)
+    }
+
+    /// The phone's foot ramp as HeroView draws it in a `size` box, in the page color.
+    static func phoneFoot(_ size: CGSize, _ page: Color) -> LinearGradient {
+        LinearGradient(stops: gradient(heroPhoneFoot(height: size.height), page), startPoint: .bottom, endPoint: .top)
     }
 
     static var vignetteGradient: EllipticalGradient {

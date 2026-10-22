@@ -64,8 +64,12 @@ struct HeroView: View {
                     }
                 }
             } else {
-                LinearGradient(stops: BackdropStops.gradient(BackdropStops.heroPhoneTop, bg), startPoint: .top, endPoint: .bottom)
-                LinearGradient(stops: BackdropStops.gradient(BackdropStops.heroPhoneFoot, bg), startPoint: .bottom, endPoint: .top)
+                GeometryReader { geo in
+                    ZStack {
+                        LinearGradient(stops: BackdropStops.gradient(BackdropStops.heroPhoneTop, bg), startPoint: .top, endPoint: .bottom)
+                        BackdropStops.phoneFoot(geo.size, bg)
+                    }
+                }
             }
         }
         .allowsHitTesting(false)

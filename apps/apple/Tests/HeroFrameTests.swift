@@ -38,6 +38,15 @@ import Testing
     return Double(bytes[offset + 3]) / 255
 }
 
+@MainActor @Test func thePhoneFootHoldsInPointsFromTheFoot() {
+    // Details, 104 pt above the foot, gets the portrait hero's darkness in a landscape hero too.
+    let upright = BackdropStops.alpha(BackdropStops.heroPhoneFoot, at: 104.0 / BackdropStops.heroPhoneHeight)
+    for size in [CGSize(width: 390, height: 680), CGSize(width: 844, height: 323), CGSize(width: 667, height: 280)] {
+        let drawn = drawnAlpha(BackdropStops.phoneFoot(size, .black), size: size, at: CGPoint(x: size.width / 2, y: size.height - 104.5))
+        #expect(abs(drawn - upright) < 0.02, "the foot at 104 pt in \(size) draws \(drawn), upright \(upright)")
+    }
+}
+
 @MainActor @Test func theWashAndTheVignetteAreDrawnWhereTheGlassCheckReadsThem() {
     // Home's Details on the narrowest Mac window, in the hero's 400 pt floor, and a wide 1440 hero.
     for (size, point) in [(CGSize(width: BackdropStops.macMinWidth, height: 400), CGPoint(x: 271, y: 400 - 104.5)),

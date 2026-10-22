@@ -133,7 +133,10 @@ private let spots = [
     // tvOS draws the same hero at 1920 by 600: Details ends at about a third of the width.
     Spot(name: "home hero, TV", page: "bg", layers: wideHome(width: 1920, height: 600, end: 634, top: 130), word: false),
     // The iPhone's 48 pt glass Details, its top 104 pt above the foot of the 680 pt hero.
-    Spot(name: "home hero, iPhone", page: "bgPhone", layers: [(true, BackdropStops.alpha(BackdropStops.heroPhoneFoot, at: 104.0 / 680))], word: false),
+    Spot(name: "home hero, iPhone", page: "bgPhone", layers: [(true, BackdropStops.alpha(BackdropStops.heroPhoneFoot(height: 680), at: 104.0 / 680))], word: false),
+    // A landscape phone shortens the hero to most of its height, never under 280 (HomeScreen.heroHeight);
+    // Details keeps its place, 104 pt above the foot.
+    Spot(name: "home hero, iPhone landscape", page: "bgPhone", layers: [(true, BackdropStops.alpha(BackdropStops.heroPhoneFoot(height: 280), at: 104.0 / 280))], word: false),
     // The title's round row, at the far edge of its 580 pt column (620 pt in), the hero at its 420 floor.
     Spot(name: "title, Mac", page: "bgDesktop", layers: titlePage(width: narrowestMac, height: 420, end: 620, top: 96)),
     // Start over beside Resume, above the version line and the round row: the widest Resume row
