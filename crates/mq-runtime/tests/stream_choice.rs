@@ -1903,8 +1903,9 @@ async fn with_nothing_this_device_plays_each_version_stays_startable() {
     assert_eq!(view.candidates(key).len(), 1, "startable");
 }
 
-/// 2a: with no room even for the playback window the view says the device
-/// needs a little free space, with no action.
+/// 2a, 2c: with no room even for the playback window the rows are hidden
+/// silently and the view says the device needs a little free space, with
+/// no action.
 #[tokio::test]
 async fn with_no_room_for_the_window_the_view_asks_for_a_little_space() {
     let (core, _server) = answering(200, &torrents()).await;
@@ -1915,8 +1916,12 @@ async fn with_no_room_for_the_window_the_view_asks_for_a_little_space() {
     core.set_free_bytes(0);
     let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
     let empty = empty_of(&view).await;
+    // 2c: the one line, no count, no other words.
     assert_eq!(
-        (kind_and_action(&empty), empty.count),
-        ((EmptyKind::NoRoom, EmptyAction::None), 2)
+        (kind_and_action(&empty), empty.count, empty.rows.len()),
+        ((EmptyKind::NoRoom, EmptyAction::None), 0, 0)
     );
+    let s = view.snapshot();
+    assert!(s.blocked.is_none(), "{:?}", s.blocked);
+    assert_eq!((s.hidden.count, s.hidden.by_reason.len()), (0, 0));
 }

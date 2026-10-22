@@ -186,7 +186,9 @@ pub struct BlockedVersions {
 pub enum BlockedReason {
     /// Torrents this build opens only through a paid streaming service.
     NeedsAccount,
-    /// Torrents larger than the free space.
+    /// Torrents larger than the free space. No longer sent: those rows
+    /// stay silent, and `empty` says noRoom (plans/play-every-version.md
+    /// 2c).
     NoSpace,
     /// Nothing found plays on this device.
     NothingPlaysHere,
@@ -207,8 +209,8 @@ pub struct EmptyVersions {
     /// The versions found, for the states that have some.
     pub count: u32,
     /// Those versions ranked as they would play once the reason is gone:
-    /// shown dimmed for needsAccount and noRoom, startable each for
-    /// nothingPlaysHere ("Choose a version").
+    /// shown dimmed for needsAccount, startable each for nothingPlaysHere
+    /// ("Choose a version").
     pub rows: Vec<VersionRow>,
     /// The version `playFromDevice` starts (`pick` takes it).
     pub key: Option<String>,
@@ -1950,8 +1952,12 @@ fn render(s: &State) -> VersionsSnapshot {
         .filter(|r| !holds_pick(r))
         .map(|r| row_dto(r, kept, s.rank.debrid))
         .collect();
+    // Rows with no room at all stay silently hidden (play-every-version 2c).
+    let counted: Vec<_> = (s.ranked.hidden.iter())
+        .filter(|h| h.reason != HideReason::NoSpace)
+        .collect();
     let mut by_reason: Vec<(HideReason, u32)> = Vec::new();
-    for h in &s.ranked.hidden {
+    for h in &counted {
         match by_reason.iter_mut().find(|(r, _)| *r == h.reason) {
             Some((_, n)) => *n += 1,
             None => by_reason.push((h.reason, 1)),
@@ -1959,7 +1965,7 @@ fn render(s: &State) -> VersionsSnapshot {
     }
     VersionsSnapshot {
         conditions: s.conditions.clone(),
-        blocked: s.blocked.clone(),
+        blocked: (s.blocked.clone()).filter(|b| b.reason != BlockedReason::NoSpace),
         empty: empty(s),
         note: s.note.clone(),
         recommended: s
@@ -1968,7 +1974,7 @@ fn render(s: &State) -> VersionsSnapshot {
             .map(|r| row_dto(r, kept, s.rank.debrid)),
         rows,
         hidden: HiddenSummary {
-            count: s.ranked.hidden.len() as u32,
+            count: counted.len() as u32,
             by_reason,
         },
         pending_addons: names(&s.pending),
@@ -2025,7 +2031,8 @@ fn empty(s: &State) -> Option<EmptyVersions> {
     if let Some(b) = &s.blocked {
         let (kind, action) = match b.reason {
             BlockedReason::NeedsAccount => (EmptyKind::NeedsAccount, EmptyAction::SettingsAccounts),
-            BlockedReason::NoSpace => (EmptyKind::NoRoom, EmptyAction::None),
+            // The one storage line, with no count (2c).
+            BlockedReason::NoSpace => return named(EmptyKind::NoRoom, EmptyAction::None),
             BlockedReason::NothingPlaysHere => {
                 (EmptyKind::NothingPlaysHere, EmptyAction::ChooseVersion)
             }

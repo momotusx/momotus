@@ -14,8 +14,8 @@ export type EmptyVersions = { kind: EmptyKind, action: EmptyAction,
 count: number, 
 /**
  * Those versions ranked as they would play once the reason is gone:
- * shown dimmed for needsAccount and noRoom, startable each for
- * nothingPlaysHere ("Choose a version").
+ * shown dimmed for needsAccount, startable each for nothingPlaysHere
+ * ("Choose a version").
  */
 rows: Array<VersionRow>, 
 /**

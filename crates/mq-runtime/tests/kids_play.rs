@@ -1385,15 +1385,10 @@ async fn a_packs_played_episode_is_room_for_the_next_only_in_a_window() {
     let versions = VersionsView::open_checked(&flat, params("movie", "tt2", ""), Some("tt2"));
     let shown = settled(&versions).await;
     assert!(shown.recommended.is_none(), "{:?}", shown.recommended);
-    assert!(
-        shown
-            .hidden
-            .by_reason
-            .iter()
-            .any(|(r, n)| *r == HideReason::NoSpace && *n > 0),
-        "{:?}",
-        shown.hidden
-    );
+    // Hidden silently, with the one storage line (play-every-version 2c).
+    assert_eq!(shown.hidden.count, 0, "{:?}", shown.hidden);
+    assert!(shown.blocked.is_none(), "{:?}", shown.blocked);
+    assert_eq!(shown.empty.map(|e| e.kind), Some(EmptyKind::NoRoom));
     let refused = PlaybackView::open(&flat, next.clone(), target("movie", "tt2", "tt2"));
     until("the playback failed", || {
         refused.snapshot().phase == PlaybackPhase::Failed

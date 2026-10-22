@@ -460,7 +460,7 @@ data class EmptyVersions(
     val action: EmptyAction,
     /** The versions found, for the states that have some. */
     val count: Int,
-    /** Those versions ranked as they would play once the reason is gone: shown dimmed for needsAccount and noRoom, startable each for nothingPlaysHere ("Choose a version"). */
+    /** Those versions ranked as they would play once the reason is gone: shown dimmed for needsAccount, startable each for nothingPlaysHere ("Choose a version"). */
     val rows: List<VersionRow> = emptyList(),
     /** The version `playFromDevice` starts (`pick` takes it). */
     val key: String? = null,
