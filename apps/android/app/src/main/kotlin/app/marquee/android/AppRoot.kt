@@ -734,6 +734,8 @@ private fun AppNav(
                                 },
                                 // The same video and Versions view, the offered version's key.
                                 onOffer = { key -> replacePlayer(route, route.copy(key = key)) },
+                                // Over the player, as Versions is: Back returns to it.
+                                onAddAccount = { if (backStack.lastOrNull() == route) backStack.add(Route.Debrid) },
                             )
                         }
                     }

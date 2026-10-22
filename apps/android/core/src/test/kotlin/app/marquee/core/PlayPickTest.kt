@@ -95,9 +95,12 @@ class PlayPickTest {
     fun `versions that none of plays here say why instead of failing over nothing`() {
         val blocked = snapshot(done = true).copy(blocked = BlockedVersions(BlockedReason.NothingPlaysHere, 42))
         assertEquals(
-            PlayPick.None("Found 42 versions, but none plays on this device."),
+            PlayPick.None("Found 42 versions, but none plays on this device.", BlockedReason.NothingPlaysHere),
             pickVersion(blocked, null, settled = true),
         )
+        // The reason goes with the words, so the player's card offers what Versions offers.
+        val account = snapshot(done = true).copy(blocked = BlockedVersions(BlockedReason.NeedsAccount, 3))
+        assertEquals(BlockedReason.NeedsAccount, (pickVersion(account, null, settled = true) as PlayPick.None).blocked)
     }
 
     @Test

@@ -198,7 +198,7 @@ class PlayerHolder(
                             }
 
                             is PlayPick.None -> {
-                                controller.fail(pick.reason)
+                                controller.cannotPlay(pick)
                                 chosen.complete(null)
                                 return@collectLatest
                             }
@@ -244,6 +244,7 @@ class PlayerHolder(
  * @param onTitle the title page of a series, for its episodes; null for a movie.
  * @param onNext the next episode (it replaces the player).
  * @param onOffer the version the failure card offers, by its key (it replaces the player).
+ * @param onAddAccount where a streaming service account is added, when every version found needs one.
  */
 @Composable
 fun PlayerScreen(
@@ -257,6 +258,7 @@ fun PlayerScreen(
     onTitle: (() -> Unit)?,
     onNext: (NextEpisode, String?) -> Unit,
     onOffer: (String) -> Unit,
+    onAddAccount: () -> Unit,
 ) {
     val context = LocalContext.current
     val holder =
@@ -301,6 +303,7 @@ fun PlayerScreen(
             active = active,
             onOffer = offer,
             onSubtitleSize = holder::setSubtitleSize,
+            onAddAccount = onAddAccount,
         )
     } else {
         PhonePlayer(
@@ -314,6 +317,7 @@ fun PlayerScreen(
             leave,
             onOffer = offer,
             onSubtitleSize = holder::setSubtitleSize,
+            onAddAccount = onAddAccount,
         )
     }
 }

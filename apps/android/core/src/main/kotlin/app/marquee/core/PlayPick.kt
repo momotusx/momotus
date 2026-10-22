@@ -1,5 +1,6 @@
 package app.marquee.core
 
+import app.marquee.core.model.BlockedReason
 import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionsSnapshot
 
@@ -23,9 +24,10 @@ sealed interface PlayPick {
         val key: String,
     ) : PlayPick
 
-    /** Nothing can be played. */
+    /** Nothing can be played; [blocked] when versions were found and none plays here (3.11). */
     data class None(
         val reason: String,
+        val blocked: BlockedReason? = null,
     ) : PlayPick
 }
 
@@ -72,6 +74,7 @@ fun pickVersion(
 
                     else -> "No version is ready to play yet"
                 },
+                snapshot.blocked?.reason,
             )
         }
 
