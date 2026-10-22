@@ -775,7 +775,8 @@ class SubtitleFailureTest {
         // Another track before it settles: the first one's goes at once.
         controller.setSubtitleDelay(300)
         controller.selectText("late:$other")
-        until("the first track's delay goes") { delaysSent().size == 2 }
+        // Well inside the 700 ms a run waits: it went with the pick, not after.
+        runFor(300)
         assertEquals(subtitle to 300L, delaysSent().last())
         // The file's own track has no core identity: nothing goes.
         player.media(withOwnTrack, 10_000_000L)
