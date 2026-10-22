@@ -618,8 +618,8 @@ private fun TileLane(
     val metrics = Marquee.tiles
     val shape = shapeOf(row)
     val keys = remember(row.tiles) { row.tileKeys() }
-    // Room for the focused tile's lift and shadow at either end of the lane, as the menu has.
-    LaneScrolling(metrics.pad) { Lane(row, state, onOpen, onHold, metrics, shape, keys) }
+    // The next tile peeks past the focused one at either end, as on the web (its inset and peek).
+    LaneScrolling(metrics.inset + metrics.peek) { Lane(row, state, onOpen, onHold, metrics, shape, keys) }
 }
 
 @Composable

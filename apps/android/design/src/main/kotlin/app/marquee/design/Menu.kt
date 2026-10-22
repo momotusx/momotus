@@ -138,8 +138,13 @@ class RoomSpec(
         containerSize: Float,
     ): Float =
         when {
+            // A child too wide for the room at both ends takes the leading one, or the two would take turns.
+            size + 2 * room >= containerSize -> offset - room
+
             offset < room -> offset - room
+
             offset + size + room > containerSize -> offset + size + room - containerSize
+
             else -> 0f
         }
 }
