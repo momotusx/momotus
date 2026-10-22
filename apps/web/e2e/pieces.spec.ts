@@ -76,16 +76,19 @@ for (const form of Object.keys(FORMS) as Form[]) {
     await expect(page.locator(".row .tile").first()).toBeVisible({ timeout: 30_000 });
     expect((await style(page, ".row-head", "::before")).content).toBe("none");
     expect((await style(page, ".row-head", "::after")).content).toBe("none");
-    expect((await style(page, ".row-head h2")).size).toBe(form === "phone" ? "20px" : "38px");
+    // In CSS pixels: TV's title3 38 on its canvas, tv.apple.com's 17 on desktop, the iPhone's 20.
+    const k = await page.evaluate(() => Number(getComputedStyle(document.documentElement).getPropertyValue("--k")) || 1);
+    expect(Math.round(parseFloat((await style(page, ".row-head h2")).size) * k)).toBe({ tv: 38, desktop: 17, phone: 20 }[form]);
     // The title alone: no row names its addon (e2e/addon-names.spec.ts has two of one title).
     await expect(page.locator(".row-head .row-src")).toHaveCount(0);
     // Every artwork's 25 percent inner keyline over the picture; the name at 600 under it.
     expect((await style(page, ".row .tile .pic", "::before")).shadow).toBe("rgba(255, 255, 255, 0.25) 0px 0px 0px 1px inset");
-    const name = page.locator(".row").nth(1).locator(".tile .cap b").first();
+    // A caption under the art: every TV row's, Continue Watching's elsewhere (posters carry none off the TV).
+    const name = page.locator(".row").nth(form === "tv" ? 1 : 0).locator(".tile .cap b").first();
     expect(await name.evaluate((el) => getComputedStyle(el).fontWeight)).toBe("600");
     // Focus leaves the caption's color as it is.
     const before = await name.evaluate((el) => getComputedStyle(el).color);
-    await page.locator(".row").nth(1).locator(".tile").first().focus();
+    await page.locator(".row").nth(form === "tv" ? 1 : 0).locator(".tile").first().focus();
     expect(await name.evaluate((el) => getComputedStyle(el).color)).toBe(before);
     await context.close();
   });
@@ -94,8 +97,9 @@ for (const form of Object.keys(FORMS) as Form[]) {
     const { context, page } = await open(browser, form, "/");
     const track = page.locator(".row .tile .bar-track").first();
     await expect(track).toBeVisible({ timeout: 30_000 });
-    const s = await track.evaluate((el) => ({ track: getComputedStyle(el).backgroundColor, fill: getComputedStyle(el.firstElementChild as Element).backgroundColor, h: (el as HTMLElement).offsetHeight }));
-    expect(s).toEqual({ track: "rgba(0, 0, 0, 0.55)", fill: "rgb(255, 255, 255)", h: form === "phone" ? 4 : 8 });
+    // Its height in CSS pixels: 8 on TV, 4 on desktop (tv.apple.com) and the phone.
+    const s = await track.evaluate((el) => ({ track: getComputedStyle(el).backgroundColor, fill: getComputedStyle(el.firstElementChild as Element).backgroundColor, h: Math.round(el.getBoundingClientRect().height) }));
+    expect(s).toEqual({ track: "rgba(0, 0, 0, 0.55)", fill: "rgb(255, 255, 255)", h: form === "tv" ? 8 : 4 });
     await context.close();
   });
 
@@ -307,17 +311,26 @@ test("desktop: a press outside a pull-down closes it", async ({ browser }) => {
 test("TV: movie rows are 16:9 stills and series rows 2:3 posters, from the tile tokens", async ({ browser }) => {
   const { context, page } = await open(browser, "tv", "/");
   await expect(page.locator(".row").nth(1).locator(".tile").first()).toBeVisible({ timeout: 30_000 });
-  const shapes = await page.evaluate(() =>
-    [...document.querySelectorAll(".row")].slice(1).map((r) => {
-      const t = r.querySelector<HTMLAnchorElement>(".tile");
-      const pic = t?.querySelector<HTMLElement>(".pic");
-      return { kind: t?.getAttribute("href")?.split("/")[2], w: pic?.offsetWidth, h: pic?.offsetHeight };
-    }),
-  );
+  // Rows mount their tiles near the screen: walk down the page, reading each row that has them, with
+  // its body's height (art, the pads and the caption: 84 under a still, 116 under a poster).
+  const shapes: { kind?: string; w?: number; h?: number; body?: number }[] = [];
+  for (let i = 0; i < 8; i++) {
+    shapes.push(
+      ...(await page.evaluate(() =>
+        [...document.querySelectorAll(".row")].slice(1).flatMap((r) => {
+          const t = r.querySelector<HTMLAnchorElement>(".tile");
+          const pic = t?.querySelector<HTMLElement>(".pic");
+          return t ? [{ kind: t.getAttribute("href")?.split("/")[2], w: pic?.offsetWidth, h: pic?.offsetHeight, body: r.querySelector<HTMLElement>(".row-body")?.offsetHeight }] : [];
+        }),
+      )),
+    );
+    await page.evaluate(() => document.querySelector("[data-vscroll]")?.scrollBy({ top: 700 }));
+    await page.waitForTimeout(250);
+  }
   const movie = shapes.find((s) => s.kind === "movie");
   const series = shapes.find((s) => s.kind === "series");
-  expect(movie).toMatchObject({ w: 410, h: 231 });
-  expect(series).toMatchObject({ w: 217, h: 326 });
+  expect(movie).toMatchObject({ w: 410, h: 231, body: 231 + 2 * 34 + 84 });
+  expect(series).toMatchObject({ w: 217, h: 326, body: 326 + 2 * 34 + 116 });
   await context.close();
 });
 

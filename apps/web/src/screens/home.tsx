@@ -23,6 +23,7 @@ import { accountWords as aw, activeProfile, needsSecondWayIn, type Card, fill, h
 import { Tick } from "./sign-in";
 import { cardOffer, defaultsWords, namesLine } from "../lib/defaults";
 import { allFailed } from "../lib/rows";
+import { autoFocusSoon, inputCount } from "../focus/dom";
 import { form } from "../form";
 import type { Tile } from "../core/generated/Tile";
 import { playPath, ratingParts, titlePath } from "../lib/format";
@@ -258,6 +259,24 @@ export default function Home() {
   // every row has answered and none gave a backdrop (offline, posters only),
   // the hero closes instead of shimmering for good.
   const waiting = () => home.status.state === "opening" || home.rows.some((r) => r.state.state === "loading" || r.state.state === "slow");
+  // The first focus is the hero's Play, as tvOS and Android TV (plans/design-v3-phase2-web.md, rule 1):
+  // the top shelf fills the first screen, so a focused card would sit half off it and the page would
+  // scroll the hero away. Continue Watching takes it only when no hero is there or coming. A hero that
+  // lands after the focus went to the row anyway (restore's late fallback) takes it back, with the page
+  // at its top, unless the viewer has pressed a key since Home opened.
+  const rowFirst = () => !hero() && !waiting();
+  const opened = inputCount();
+  createEffect(
+    on(
+      () => !!hero(),
+      (has, had) => {
+        if (!has || had || inputCount() !== opened) return;
+        if (!(document.activeElement instanceof HTMLElement) || !document.activeElement.closest("[data-row]")) return;
+        autoFocusSoon(() => document.querySelector<HTMLElement>('[data-f="hero:play"], [data-f="hero:details"]'));
+      },
+      { defer: true },
+    ),
+  );
 
   const attach = (el: HTMLElement) => {
     setPage(el);
@@ -267,7 +286,7 @@ export default function Home() {
   return (
     <div class="home">
       <main class="page" data-vscroll ref={attach} onScroll={(e) => (pageScroll.top = e.currentTarget.scrollTop)}>
-        <section class="hero" classList={{ closed: !hero() && !waiting() }} data-reveal-top aria-label="Featured">
+        <section class="hero" classList={{ closed: !hero() && !waiting() }} data-reveal-top data-focus-wait={!hero() && waiting() ? "" : undefined} aria-label="Featured">
           <Backdrop src={hero()?.tile.background ?? null} class="hero-bd" ramp={form() === "phone" ? "heroPhone" : "hero"} />
           <Show when={form() === "phone"}>
             <header class="ph-top">
@@ -307,10 +326,11 @@ export default function Home() {
                   <p class="hero-syn">{h().description}</p>
                 </Show>
                 <p class="reason">{h().reason}</p>
-                <div class="acts">
+                {/* One stack: Up from the first row lands on its first button, Play (`data-fentry`). */}
+                <div class="acts" data-fgroup="hero" data-fentry>
                   <Show when={playHref(h().tile)}>
                     {(href) => (
-                      <A class="btn primary" href={href()} data-f="hero:play" aria-label={`Play ${h().tile.name}`} data-autofocus={hasContinue() ? undefined : ""}>
+                      <A class="btn primary" href={href()} data-f="hero:play" aria-label={`Play ${h().tile.name}`} data-autofocus="">
                         <Play aria-hidden class="fill" />
                         Play
                       </A>
@@ -321,7 +341,7 @@ export default function Home() {
                     href={titlePath(h().tile.kind, h().tile.id)}
                     data-f="hero:details"
                     aria-label={`Details for ${h().tile.name}`}
-                    data-autofocus={hasContinue() || playHref(h().tile) ? undefined : ""}
+                    data-autofocus={playHref(h().tile) ? undefined : ""}
                   >
                     <span class="ring">
                       <Info aria-hidden />
@@ -381,7 +401,7 @@ export default function Home() {
               <For each={home.rows}>
                 {(row, i) => (
                   <>
-                    <Row row={row} autofocus={i() === 0 && row.rowId === CONTINUE_ROW} root={page} onRetry={retryHomeRow} />
+                    <Row row={row} autofocus={i() === 0 && row.rowId === CONTINUE_ROW && rowFirst()} root={page} onRetry={retryHomeRow} />
                     <Show when={i() === 0 && row.rowId === CONTINUE_ROW}>
                       <DefaultsCard />
                     </Show>

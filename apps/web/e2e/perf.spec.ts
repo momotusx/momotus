@@ -19,8 +19,12 @@ const pct = (xs: number[], p: number) => {
 test("Home scrolls at frame rate under remote key repeat", async ({ page }) => {
   const started = Date.now();
   await page.goto("/?form=tv");
-  await expect.poll(() => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? "")).toMatch(/^tile:/);
+  const focusedKey = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? "");
+  // The hero's Play takes the first focus; Down enters the rows the run scrolls through.
+  await expect.poll(focusedKey).toBe("hero:play");
   const firstFocusMs = Date.now() - started;
+  await page.keyboard.press("ArrowDown");
+  await expect.poll(focusedKey).toMatch(/^tile:/);
 
   await page.evaluate(() => {
     const w = window as unknown as { frames: number[]; lat: number[]; rec: boolean };

@@ -57,16 +57,17 @@
 .problem-icon { width: 48px; height: 48px; color: var(--bad); }
 
 /* Rows. The header is the shelf title in the title3 role: no bar, no hairline. */
-.row { position: relative; margin-top: 28px; }
+/* TV: 64 from the end of a caption to the next title (the lane's 34 pad and this 30). */
+.row { position: relative; margin-top: 30px; }
 .row-head { display: flex; align-items: center; gap: 16px; padding: 0 var(--safe-side); }
 .row-head h2 { font: var(--weight-heading) var(--type-title3) / 1.2 var(--font-display); letter-spacing: var(--tracking-heading); }
 .row-note { font: 500 var(--type-caption) var(--font-text); color: var(--muted); }
 .row-body { position: relative; margin-left: calc(var(--safe-side) - 34px); }
 .track { position: absolute; inset: 0; }
-/* Room for the lift, in Apple's padding and negative-margin form: the lane reaches past its row
+/* Room for the lift on TV, in Apple's padding and negative-margin form: the lane reaches past its row
  * by the art's rise and its 88 px shadow (lift.focusArt), so neither is cut and no tile moves.
- * The phone has no lift to make room for. */
-:is([data-form="tv"], [data-form="desktop"]) .track { inset: -44px -88px -132px; padding: 44px 88px 132px; }
+ * Desktop's hover and the phone lift nothing: their pads hold the keyboard ring. */
+[data-form="tv"] .track { inset: -44px -88px -132px; padding: 44px 88px 132px; }
 .lane { position: relative; height: 100%; }
 .skel-lane > .skel { position: absolute; border-radius: var(--radius-m); }
 
@@ -94,10 +95,15 @@
   align-items: center; gap: 2px 8px; padding: 6px 12px; white-space: nowrap; border-radius: 12px; font: 600 20px / 22px var(--font-text); color: #fff;
   background: rgba(0, 0, 0, .72); }
 /* Above the art's shadow, and never scaled with it. */
-.tile .cap { position: relative; z-index: 1; margin-top: 14px; display: grid; gap: 4px; min-width: 0; }
-.tile .cap b { font: 600 var(--type-caption) / 1.25 var(--font-text); letter-spacing: var(--tracking-label); color: var(--text);
+/* The caption is the token's height in the frames' type (tile.tv.caption 84: 16, a 36 name line,
+ * a 32 line; a TV poster's 116: the year, then the ratings row on two 32 lines). */
+.tile .cap { position: relative; z-index: 1; margin-top: 16px; display: grid; gap: 0; min-width: 0; }
+.tile .cap b { font: 600 var(--type-body) / 36px var(--font-text); letter-spacing: var(--tracking-label); color: var(--text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tile .cap span { font: 500 21px / 1.25 var(--font-text); color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .cap > span { font: 500 var(--type-callout) / 32px var(--font-text); color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .cap-line { display: flex; align-items: center; gap: 16px; height: 32px; min-width: 0; overflow: hidden; white-space: nowrap; font: 500 var(--type-callout) / 32px var(--font-text); color: var(--dim); }
+.tile .cap-rates { display: flex; gap: 14px; }
+.tile .cap.two .cap-line { display: grid; grid-template-rows: 32px 32px; gap: 0; height: 64px; align-items: center; justify-items: start; font: 500 var(--type-caption) / 30px var(--font-text); }
 .tile:focus-visible, [data-form="tv"] .tile:focus { outline: none; box-shadow: none; }
 .tile:focus-visible .pic, [data-form="tv"] .tile:focus .pic {
   outline: var(--focus-ring) solid var(--key); outline-offset: var(--focus-ring); box-shadow: var(--focus-shadow); overflow: hidden; }
@@ -106,7 +112,7 @@
  * with a transitioned shadow repainted the whole row on every frame as tiles slid under the
  * pointer (about 180 ms of paint and layerize per wheel run on desktop Home, against 20 now). */
 [data-form="desktop"] .tile .pic::after { transition: none; }
-@media (hover: hover) { [data-form="desktop"] .tile:hover .pic::after { background: rgba(51, 51, 51, .3); opacity: 1; } }
+@media (hover: hover) { [data-form="desktop"] .tile:hover .pic::after { background: var(--scrim-hover); opacity: 1; } }
 /* Continue Watching off TV: a remove button on the still's top right
  * corner, shown on hover or focus, always on touch screens. */
 .tile-x { position: absolute; z-index: 3; top: 10px; right: 10px; display: grid; place-items: center; width: 36px; height: 36px;
@@ -139,10 +145,28 @@
 .row-msg-icon { width: 40px; height: 40px; flex: none; }
 .bad-ico { color: var(--bad); }
 
+/* Desktop shelves (tv.apple.com, `dkHome`; tile.desktop): titles 17/700, 13 above the art, posters
+ * 153x228 and Continue Watching 256x144 at radius 14, 20 apart at a 40 margin, the caption under
+ * Continue Watching only, 4 px progress, about 44 between shelves. */
+[data-form="desktop"] .row { margin-top: calc(36 * var(--px)); }
+[data-form="desktop"] .row-head { gap: calc(8 * var(--px)); margin-bottom: calc(5 * var(--px)); padding: 0 calc(40 * var(--px)); }
+[data-form="desktop"] .row-head h2 { font: 700 calc(17 * var(--px)) / calc(22 * var(--px)) var(--font-display); }
+[data-form="desktop"] .row-note { font-size: calc(13 * var(--px)); }
+[data-form="desktop"] .row-body { margin-left: 0; }
+/* The hero card's words on the shelves' 40 px line. */
+[data-form="desktop"] .hero-body { padding-left: calc(40 * var(--px) - var(--hero-inset)); }
+[data-form="desktop"] .tile, [data-form="desktop"] .tile .pic { border-radius: calc(14 * var(--px)); }
+[data-form="desktop"] .tile .cap { margin-top: calc(8 * var(--px)); }
+[data-form="desktop"] .tile .cap b { font: 600 calc(15 * var(--px)) / calc(21 * var(--px)) var(--font-text); }
+[data-form="desktop"] .tile .cap > span { font: 400 calc(13 * var(--px)) / calc(18 * var(--px)) var(--font-text); }
+[data-form="desktop"] .bar-track { height: calc(4 * var(--px)); }
+[data-form="desktop"] .pic-name { padding: calc(12 * var(--px)); font-size: calc(15 * var(--px)); }
+[data-form="desktop"] .row-msg { left: calc(40 * var(--px)); right: calc(40 * var(--px)); top: calc(8 * var(--px)); bottom: calc(8 * var(--px)); }
+
 /* Phone */
 [data-form="phone"] .home .page { position: static; padding-bottom: 112px; }
 /* Phone: the card's edges sit on the rows' 16 px gutter; the words keep 18 px inside. */
-[data-form="phone"] .hero { margin: calc(8px + env(safe-area-inset-top)) 16px 0; height: 520px; border-radius: 26px; }
+[data-form="phone"] .hero { margin: calc(8px + env(safe-area-inset-top)) 20px 0; height: 520px; border-radius: 26px; }
 [data-form="phone"] .hero-body { padding: 0 18px 20px; }
 [data-form="phone"] .hero-logo { height: 84px; max-width: 240px; margin-bottom: 12px; }
 [data-form="phone"] .hero-logo { --logo-area: 10000; height: clamp(40px, calc(sqrt(var(--logo-area) / var(--r, 5.6)) * 1px), 96px); }
@@ -160,19 +184,22 @@
 [data-form="phone"] .dc-text p { font-size: 13px; }
 [data-form="phone"] .defaults-card .acts { width: 100%; gap: 10px; }
 [data-form="phone"] .problem-icon { width: 28px; height: 28px; }
-[data-form="phone"] .row { margin-top: 20px; }
-[data-form="phone"] .row-head { padding: 0 16px; gap: 8px; flex-wrap: nowrap; }
-[data-form="phone"] .row-head h2 { white-space: nowrap; }
+/* Phone shelves (the iPhone TV app): a 51 tall header in 20 bold right over the art, posters 99x149
+ * at radius 11, Continue Watching 239x134 at radius 13, 20 from the edge, 18 between shelves (tile.phone). */
+[data-form="phone"] .row { margin-top: 10px; }
+[data-form="phone"] .row-head { height: 51px; margin-bottom: -8px; padding: 0 20px; gap: 8px; flex-wrap: nowrap; }
+[data-form="phone"] .row-head h2 { font: 700 20px / 25px var(--font-display); white-space: nowrap; }
 [data-form="phone"] .row-body { margin-left: 0; }
-[data-form="phone"] .track { scroll-snap-type: x proximity; scroll-padding-left: 16px; }
-[data-form="phone"] .tile { scroll-snap-align: start; border-radius: 10px; }
-[data-form="phone"] .tile .pic { border-radius: 10px; }
+[data-form="phone"] .track { scroll-snap-type: x proximity; scroll-padding-left: 20px; }
+[data-form="phone"] .tile { scroll-snap-align: start; }
+[data-form="phone"] .tile, [data-form="phone"] .tile .pic { border-radius: 11px; }
+[data-form="phone"] .tile.wide, [data-form="phone"] .tile.wide .pic { border-radius: 13px; }
 /* A phone poster has room for one short score a line: the two stack, never wrap or cut. */
 [data-form="phone"] .chip-rate { top: 6px; right: 6px; max-width: calc(100% - 12px); padding: 3px 7px; gap: 1px; border-radius: 7px; font-size: 11px; line-height: 1.2;
   flex-direction: column; align-items: flex-end; }
-[data-form="phone"] .tile .cap { margin-top: 6px; gap: 2px; }
-[data-form="phone"] .tile .cap b { font-size: 13px; }
-[data-form="phone"] .tile .cap span { font-size: 12px; }
+[data-form="phone"] .tile .cap { margin-top: 8px; }
+[data-form="phone"] .tile .cap b { font: 600 15px / 20px var(--font-text); }
+[data-form="phone"] .tile .cap > span { font: 400 13px / 18px var(--font-text); }
 [data-form="phone"] .pic-name { padding: 10px; font-size: 15px; }
 [data-form="phone"] .bar-track { height: 4px; }
 [data-form="phone"] .row-msg { left: 16px; right: 16px; top: 8px; bottom: 8px; gap: 12px; flex-wrap: wrap; align-content: center; }

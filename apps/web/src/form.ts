@@ -46,6 +46,9 @@ const [form, setForm] = createSignal<Form>(pin ?? detect());
 // The form chosen for this device, or null for Automatic (detected).
 const [pinned, setPinned] = createSignal<Form | null>(pin);
 export { form, pinned };
+// The canvas scale (`--k`): desktop shelves are sized in CSS pixels, so their canvas size is px / k.
+const [scale, setScale] = createSignal(1);
+export { scale };
 
 /** Lets Settings switch the form factor for this device. */
 export function chooseForm(next: Form | null) {
@@ -85,6 +88,7 @@ export function fit() {
     ch = h / k;
   }
   root.style.setProperty("--k", String(k));
+  setScale(k);
   root.style.setProperty("--cw", `${cw}px`);
   root.style.setProperty("--ch", `${ch}px`);
   root.style.setProperty("--ox", `${(w - cw * k) / 2}px`);

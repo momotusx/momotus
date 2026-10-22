@@ -184,40 +184,29 @@ function measure(form: Form, where: string, values: unknown) {
 }
 
 for (const form of Object.keys(FORMS) as Form[]) {
-  test(`${form}: the widest scores never wrap or get cut, stacked when the pair is wider than the poster`, async ({ browser }) => {
+  test(`${form}: the widest scores never wrap or get cut, on Home's shelves in the TV caption and nowhere on the art`, async ({ browser }) => {
     const page = await open(browser, form);
     await page.goto(`/?form=${form}`);
-    const chips = page.locator(".tile .chip-rate");
-    await expect(chips.filter({ hasText: "RT 100%" }).first()).toBeVisible({ timeout: 30_000 });
-    await expect(page.locator(".tile", { hasText: "Fresh widest" }).first().locator(".chip-rate")).toHaveText("IMDb 10.0RT Fresh", { timeout: 30_000 });
-
-    // Posters: the chip and each of its scores.
-    const chipBoxes = await scores(page, ".tile .chip-rate", ".pic");
-    const parts = await scores(page, ".tile .chip-rate > span", ".chip-rate");
-    expect(chipBoxes.length).toBeGreaterThan(0);
-    for (const chip of chipBoxes) expect(chip, JSON.stringify(chip)).toMatchObject({ inside: true, cut: false });
-    for (const part of parts) expect(part, JSON.stringify(part)).toMatchObject({ lines: 1, cut: false, inside: true });
-    const widest = chipBoxes.find((c) => c.text.includes("RT 100%"))!;
-    const pair = parts.filter((p) => ["IMDb 10.0", "RT 100%"].includes(p.text)).slice(0, 2);
-    expect(pair.map((p) => p.text)).toEqual(["IMDb 10.0", "RT 100%"]);
-    // A pair wider than the poster takes two lines (phase 1b): the phone's and desktop's posters; TV's 16:9 stills hold it on one.
-    const stacks = form !== "tv";
-    if (stacks) expect(pair[1]!.top).toBeGreaterThan(pair[0]!.top);
-    else expect(Math.abs(pair[1]!.middle - pair[0]!.middle)).toBeLessThanOrEqual(1);
-    // A score MDBList did not give has no slot.
-    await expect(page.locator(".tile", { hasText: "No scores" }).locator(".chip-rate")).toHaveCount(0);
-    await expect(page.locator(".tile", { hasText: "Only IMDb" }).locator(".chip-rate")).toHaveText("IMDb 7.4");
-    await expect(page.locator(".tile", { hasText: "Fresh only" }).first().locator(".chip-rate")).toHaveText("RT Fresh");
-    measure(form, "poster chip", { chip: widest.width, poster: widest.outer, parts: pair.map((p) => p.width) });
-    // The mark: a word, stacked on a phone poster and side by side elsewhere, never cut.
-    const freshChip = (await scores(page, '.tile:has-text("Fresh widest") .chip-rate', ".pic"))[0]!;
-    const freshPair = (await scores(page, '.tile:has-text("Fresh widest") .chip-rate > span', ".chip-rate")).slice(0, 2);
-    expect(freshPair.map((p) => p.text)).toEqual(["IMDb 10.0", "RT Fresh"]);
-    expect(freshChip, JSON.stringify(freshChip)).toMatchObject({ inside: true, cut: false });
-    for (const part of freshPair) expect(part, JSON.stringify(part)).toMatchObject({ lines: 1, cut: false, inside: true });
-    if (stacks) expect(freshPair[1]!.top).toBeGreaterThan(freshPair[0]!.top);
-    else expect(Math.abs(freshPair[1]!.middle - freshPair[0]!.middle)).toBeLessThanOrEqual(1);
-    measure(form, "poster chip, RT Fresh", { chip: freshChip.width, poster: freshChip.outer, parts: freshPair.map((p) => p.width) });
+    const fresh = page.locator(".row .tile", { hasText: "Fresh widest" }).first();
+    await expect(fresh).toHaveAttribute("aria-label", /IMDb 10\.0, Rotten Tomatoes: Fresh$/, { timeout: 30_000 });
+    // Home's shelves draw no score chip on any form (the frames): the scores are the TV caption's
+    // ratings row, and off the TV a shelf poster carries none.
+    await expect(page.locator(".row .tile .chip-rate")).toHaveCount(0);
+    if (form === "tv") {
+      const rates = ".row .tile .cap-rates .rate > [aria-hidden]";
+      await expect(page.locator(rates).filter({ hasText: "RT 100%" }).first()).toBeVisible({ timeout: 30_000 });
+      const parts = await scores(page, rates, ".tile");
+      expect(parts.length).toBeGreaterThan(0);
+      for (const part of parts) expect(part, JSON.stringify(part)).toMatchObject({ lines: 1, cut: false, inside: true });
+      const pair = parts.filter((p) => ["IMDb 10.0", "RT 100%"].includes(p.text)).slice(0, 2);
+      expect(pair.map((p) => p.text)).toEqual(["IMDb 10.0", "RT 100%"]);
+      expect(Math.abs(pair[1]!.middle - pair[0]!.middle)).toBeLessThanOrEqual(1);
+      // A score MDBList did not give has no slot.
+      await expect(page.locator(".row .tile", { hasText: "No scores" }).first().locator(".cap-rates .rate")).toHaveCount(0);
+      await expect(page.locator(".row .tile", { hasText: "Only IMDb" }).first().locator(".cap-rates .rate > [aria-hidden]")).toHaveText(["IMDb 7.4"]);
+      await expect(fresh.locator(".cap-rates .rate > [aria-hidden]")).toHaveText(["IMDb 10.0", "RT Fresh"]);
+      measure(form, "TV caption ratings row", pair.map((p) => p.width));
+    }
     // The chip is hidden from screen readers; the poster's label speaks its scores.
     await expect(page.locator(".tile", { hasText: "Fresh widest" }).first()).toHaveAttribute("aria-label", /IMDb 10\.0, Rotten Tomatoes: Fresh$/);
 

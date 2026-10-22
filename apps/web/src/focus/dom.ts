@@ -24,6 +24,8 @@ let lastInput: "keys" | "pointer" | null = null;
 // never takes over the one the viewer moved since.
 let inputs = 0;
 export const mayAutoFocus = () => document.documentElement.dataset.form === "tv" || lastInput === "keys";
+/** Key and pointer presses so far: a screen compares two readings to know the viewer has not moved. */
+export const inputCount = () => inputs;
 /** Focuses `el` when focus may move by itself; see `mayAutoFocus`. */
 export function autoFocus(el: HTMLElement | null | undefined) {
   if (el && mayAutoFocus()) focusEl(el);
@@ -178,6 +180,9 @@ export function move(dir: Direction): boolean {
     const back = content.get(path());
     if (back && list.some((c) => c.key === back)) target = back;
   }
+  // Up from the content stays in the content while there is some above (Home's first row back to
+  // the hero's Play, scrolled away under the floating navigation); the navigation is the top.
+  if (dir === "up" && here.group !== "rail") target = pick(here, list.filter((c) => c === here || c.group !== "rail"), dir, memory);
   target ??= pick(here, list, dir, memory);
   const el = target === null ? null : els[list.findIndex((c) => c.key === target)];
   if (!el) return false;
@@ -273,7 +278,9 @@ function replacement(): HTMLElement | null {
     );
     if (near) return near;
   }
-  return initialIfMarked(true);
+  // A screen whose first focus target is still coming (Home's hero, `data-focus-wait`) keeps nothing
+  // focused meanwhile; restore's late fallback still lands after its 4 s.
+  return initialIfMarked(!document.querySelector("[data-focus-wait]"));
 }
 
 function nearest(els: HTMLElement[], x: number, y: number): HTMLElement | null {

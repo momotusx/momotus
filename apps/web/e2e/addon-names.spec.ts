@@ -40,8 +40,10 @@ function addon(n: 0 | 1): Promise<Server> {
             ]
           : []),
         { type: "movie", id: "find", name: "Find", extra: [{ name: "search", isRequired: true }] },
+        // Search groups that fail (Alpha's series search) and answer late (Beta's channel search).
+        n === 0 ? { type: "series", id: "lost", name: "Lost", extra: [{ name: "search", isRequired: true }] } : { type: "tv", id: "late", name: "Late", extra: [{ name: "search", isRequired: true }] },
       ];
-      return json({ id: `dev.marquee.names${n}`, version: "1.0.0", name: NAMES[n], resources: ["catalog"], types: ["movie"], idPrefixes: [prefix], catalogs });
+      return json({ id: `dev.marquee.names${n}`, version: "1.0.0", name: NAMES[n], resources: ["catalog"], types: ["movie", "series", "tv"], idPrefixes: [prefix], catalogs });
     }
     if (url === "/bg.png") {
       res.writeHead(200, { "content-type": "image/png" });
@@ -52,6 +54,7 @@ function addon(n: 0 | 1): Promise<Server> {
     // Past the core's soft deadline (2.5 s) and inside its hard one (12 s): slow, then ready.
     if (url === "/catalog/movie/late.json") return void setTimeout(() => json({ metas: metas("Late") }), 8000);
     if (url.startsWith("/catalog/movie/find/")) return json({ metas: metas("Pop") });
+    if (url.startsWith("/catalog/tv/late/")) return void setTimeout(() => json({ metas: [] }), 8000);
     res.writeHead(500);
     res.end();
   });
@@ -118,12 +121,18 @@ test("Home, the hero and every row state name no addon, and the later twin waits
   await page.context().close();
 });
 
-test("Search merges both addons' movie search into one Movies group that names neither", async ({ browser }) => {
+test("Search merges both addons' movie search into one Movies group, and no group's state names an addon", async ({ browser }) => {
   const page = await open(browser, "/search");
   await page.locator('[data-f="search:input"]').fill("pop");
   await expect(page.locator(".hits:not(.top) .hit").first()).toBeVisible({ timeout: 30_000 });
-  await expect(page.locator(".hits:not(.top) .hits-head .kicker")).toHaveText(["Movies"]);
-  await expect(page.locator(".hits:not(.top)").first()).toHaveAttribute("aria-label", "Movies");
+  // The late channel search is slow first, in words of its own.
+  await expect(page.locator(".hits:not(.top) .palette-note.warn")).toHaveText("Slow to answer, still trying", { timeout: 30_000 });
+  await noAddonName(page);
+  const movies = page.locator(".hits:not(.top)", { has: page.locator(".hits-head .kicker", { hasText: /^Movies$/ }) });
+  await expect(movies).toHaveCount(1);
+  await expect(movies).toHaveAttribute("aria-label", "Movies");
+  // The series search failed: its group says so without naming the addon.
+  await expect(page.locator(".hits:not(.top) .palette-note.bad")).toContainText("These results did not load.", { timeout: 30_000 });
   await noAddonName(page);
   await page.context().close();
 });

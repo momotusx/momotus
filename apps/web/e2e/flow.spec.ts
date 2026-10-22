@@ -10,10 +10,12 @@ const cw = (id: string) => `tile:home:continue-watching:${id}`;
 test("remote flow: Home, Title, seasons, Versions and Back restore focus", async ({ page }) => {
   await page.goto("/?form=tv");
 
-  // Continue Watching is the first row and takes the initial focus.
+  // The hero's Play takes the first focus (tvOS, Android TV); Down reaches Continue Watching.
   await expect(page.locator(`[data-f="${cw(BBB_ID)}"]`)).toBeVisible();
   // The hero's buttons name the title they act on.
   await expect(page.locator('[data-f="hero:details"]')).toHaveAttribute("aria-label", /^Details for \S/);
+  await expect.poll(() => focused(page)).toBe("hero:play");
+  await page.keyboard.press("ArrowDown");
   await expect.poll(() => focused(page)).toBe(cw(BBB_ID));
   await expect(page.locator(".row").nth(1).locator(".tile").first()).toBeVisible();
 

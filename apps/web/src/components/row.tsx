@@ -11,12 +11,13 @@ import X from "lucide-solid/icons/x";
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import tokens from "../../../../design/tokens.json";
 import { Poster } from "./art";
+import { Ratings } from "./ratings";
 import { Why } from "./why";
 import type { HomeRow } from "../core/generated/HomeRow";
 import type { Tile as TileData } from "../core/generated/Tile";
 import { op } from "../core/client";
 import { onProfileReset } from "../core/profiles";
-import { form } from "../form";
+import { form, scale } from "../form";
 import { pct, posterLabel, ratingParts, titlePath } from "../lib/format";
 import { caption } from "../lib/words";
 import { visibleRange } from "../lib/range";
@@ -35,9 +36,11 @@ interface Metrics {
   inset: number;
   peek: number;
   caption: number;
+  /** A 2:3 poster's caption: on TV the name, then the year and the ratings row on two lines. */
+  captionPoster: number;
 }
 
-// From the one token source (design/tokens.json `tile`); `caption` is the room under every
+// From the one token source (design/tokens.json `tile`); `caption` is the room under a
 // tile for its two lines (name, then the year or the core's caption).
 type TileTokens = Pick<(typeof tokens.tile)["tv"], "poster" | "landscape" | "square" | "gap" | "pad" | "inset" | "peek" | "caption">;
 const fromTokens = (t: TileTokens): Metrics => ({
@@ -49,10 +52,32 @@ const fromTokens = (t: TileTokens): Metrics => ({
   inset: t.inset,
   peek: t.peek,
   caption: t.caption,
+  captionPoster: t.caption,
 });
-const TV = fromTokens(tokens.tile.tv);
+const TV = { ...fromTokens(tokens.tile.tv), captionPoster: tokens.tile.tv.captionPoster };
 const PHONE = fromTokens(tokens.tile.phone);
+/** Grids (Discover, Library): TV's sizes on desktop until their own phase. */
 export const metrics = () => (form() === "phone" ? PHONE : TV);
+
+// Desktop shelves, tv.apple.com's (`tile.desktop`), in CSS pixels on the scaled canvas.
+const desktopShelf = (k: number): Metrics => {
+  const m = fromTokens(tokens.tile.desktop);
+  const px = (n: number) => n / k;
+  const size = ([w, h]: [number, number]): [number, number] => [px(w), px(h)];
+  return {
+    poster: size(m.poster),
+    landscape: size(m.landscape),
+    square: size(m.square),
+    gap: px(m.gap),
+    pad: px(m.pad),
+    inset: px(m.inset),
+    peek: px(m.peek),
+    caption: px(m.caption),
+    captionPoster: px(m.caption),
+  };
+};
+/** Home's shelves per form: TV and phone from their tokens, desktop tv.apple.com's. */
+export const shelfMetrics = () => (form() === "desktop" ? desktopShelf(scale()) : metrics());
 
 const sizeOf = (m: Metrics, shape: string | undefined) =>
   shape === "landscape" ? m.landscape : shape === "square" ? m.square : m.poster;
@@ -81,6 +106,9 @@ export function TileCard(props: {
   still?: boolean;
   /** A remove button on the tile (Continue Watching off TV; TV removes from the title page). */
   onRemove?: () => Promise<unknown>;
+  /** A TV shelf's caption: the year then the ratings row (one line under a still, two under a
+   * poster), so the art carries no score chip. */
+  rated?: boolean;
 }) {
   // Two lines under the art: the name, then the core's caption (Continue
   // Watching, Library) or the year.
@@ -118,7 +146,10 @@ export function TileCard(props: {
             top={!props.tile.background}
           />
         </Show>
-        <Show when={!props.wide && ratingParts(props.tile.ratings).length}>
+        {/* The score chip rides on a grid's poster. Home's shelves draw none (the frames): on TV the
+            scores are the caption's ratings row, off the TV a shelf poster has no caption, and the
+            label speaks them either way. */}
+        <Show when={!props.wide && !props.rated && props.captions !== false && ratingParts(props.tile.ratings).length}>
           <span class="chip-rate num" aria-hidden="true">
             <For each={ratingParts(props.tile.ratings)}>{(p) => <span>{p.text}</span>}</For>
           </span>
@@ -133,10 +164,22 @@ export function TileCard(props: {
         </Show>
       </div>
       <Show when={props.captions !== false}>
-        <p class="cap">
+        <p class="cap" classList={{ rated: props.rated, two: props.rated && !props.still }}>
           <b>{props.tile.name}</b>
-          <Show when={sub()}>
-            <span class="num">{sub()}</span>
+          <Show
+            when={props.rated}
+            fallback={
+              <Show when={sub()}>
+                <span class="num">{sub()}</span>
+              </Show>
+            }
+          >
+            <span class="cap-line">
+              <span class="num">{sub()}</span>
+              <span class="cap-rates">
+                <Ratings ratings={props.tile.ratings} sep={() => " "} />
+              </span>
+            </span>
           </Show>
         </p>
       </Show>
@@ -200,7 +243,7 @@ export function Row(props: {
 }) {
   let section!: HTMLElement;
   let track: HTMLDivElement | undefined;
-  const m = metrics;
+  const m = shelfMetrics;
   // Search shows the same catalogs as Home: keep their offsets and keys apart.
   const id = () => `${props.scope ?? "home"}:${props.row.rowId}`;
   // Continue Watching is a row of 16:9 stills; on TV a movie row is too and a series row is
@@ -209,7 +252,12 @@ export function Row(props: {
   const still = () => !wide() && form() === "tv" && props.row.tiles[0]?.kind === "movie";
   const size = () => (wide() || still() ? m().landscape : sizeOf(m(), props.row.tiles[0]?.posterShape));
   const stride = () => size()[0] + m().gap;
-  const bodyHeight = () => size()[1] + m().pad * 2 + m().caption;
+  // Captions under the art: every TV tile; elsewhere Continue Watching alone (posters show none).
+  const captions = () => form() === "tv" || wide();
+  // On TV a catalog's caption carries the ratings row: one line under a still, two under a poster.
+  const rated = () => form() === "tv" && !wide();
+  const captionHeight = () => (!captions() ? 0 : rated() && !still() ? m().captionPoster : m().caption);
+  const bodyHeight = () => size()[1] + m().pad * 2 + captionHeight();
   const [scroll, setScroll] = createSignal(offsets.get(id()) ?? 0);
   const [viewport, setViewport] = createSignal(1920);
   const [focused, setFocused] = createSignal(-1);
@@ -349,6 +397,8 @@ export function Row(props: {
                           eager
                           wide={wide()}
                           still={still()}
+                          captions={captions()}
+                          rated={rated()}
                           onRemove={wide() && form() !== "tv" ? () => removeFromContinue(tile().id) : undefined}
                         />
                       )}

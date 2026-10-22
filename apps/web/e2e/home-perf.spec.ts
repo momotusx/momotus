@@ -3,7 +3,7 @@
  * wheel run and a TV Play to Continue Watching round trip: the main thread's paint (Paint,
  * PrePaint, Layerize) and the compositor's render passes per frame. The desktop hover lift
  * that repainted whole rows (phase 1b) cost 178 to 288 ms of paint per wheel run; without it,
- * about 20 (baseline 25 to 29 on 3531a4f3 with phase 1b). HOME_PERF_BENCH=1 prints the rows for bench/design-v3/perf.jsonl. */
+ * about 20 (baseline 25 to 29 with phase 1b on a543d87d). HOME_PERF_BENCH=1 prints the rows for bench/design-v3/perf.jsonl. */
 
 import { type Browser, expect, type Page, test } from "@playwright/test";
 
@@ -51,8 +51,9 @@ test("desktop: a wheel run over Home paints little", async ({ browser }) => {
   });
   report("desktop-home-wheel", result);
   expect(result.paintMs, JSON.stringify(result)).toBeLessThan(60);
-  // No live blur over the shelves: baseline 1.4 (one pass a frame, a second while a picture fades).
-  expect(result.passesPerFrame, JSON.stringify(result)).toBeLessThanOrEqual(1.5);
+  // No live blur over the shelves: baseline 1.4 to 1.6 (one pass a frame, a second while a picture
+  // fades); a live blur adds a pass to every frame.
+  expect(result.passesPerFrame, JSON.stringify(result)).toBeLessThanOrEqual(2);
   await page.close();
 });
 
@@ -75,8 +76,8 @@ test("TV: Play to Continue Watching and back paints little", async ({ browser })
   report("tv-home-play-row", result);
   // The tile's lift shadow transitions over the hero's ramp while the page moves (about 700 px each way).
   expect(result.paintMs, JSON.stringify(result)).toBeLessThan(80);
-  // Baseline 2.3 to 2.6 (the page and the hero's art as separate passes).
-  expect(result.passesPerFrame, JSON.stringify(result)).toBeLessThanOrEqual(2.8);
+  // Baseline 2.3 to 2.6 (the page and the hero's art as separate passes); a live blur adds one a frame.
+  expect(result.passesPerFrame, JSON.stringify(result)).toBeLessThanOrEqual(3);
   // Held keys glide only with fix/scroll-web's dom.ts; until it lands this branch scrolls with the
   // browser's smooth scroll, so its hitches are not asserted here.
   test.info().annotations.push({ type: "skipped assert", description: "TV hitches: glide lands with fix/scroll-web" });
