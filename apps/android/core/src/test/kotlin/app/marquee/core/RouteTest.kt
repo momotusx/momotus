@@ -70,6 +70,12 @@ class RouteTest {
         val failed = row(RowState.Failed("timed out")).notice()
         assertIs<RowNotice.Explained>(failed)
         assertTrue(failed.failed && failed.body.contains("timed out"))
+        // What happened, never who: no addon's name in a row's state (design/DECISION.md, Shelves).
+        assertEquals("This row did not load", failed.title)
+        assertEquals("Still loading", (row(RowState.Slow).notice() as RowNotice.Waiting).detail)
+        for (state in listOf(RowState.Slow, RowState.Empty, RowState.Failed("timed out"))) {
+            assertFalse("Cinemeta" in row(state).notice().toString(), "$state")
+        }
         // Tiles that arrived stay on screen whatever happens after.
         assertNull(row(RowState.Failed("late"), "a").notice())
         assertNull(row(RowState.Loading, "a").notice())

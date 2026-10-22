@@ -38,7 +38,7 @@ fun HomeRow.tileKeys(): List<String> {
 
 /**
  * The notice for a row, or null when it has tiles to show. A row that failed after some tiles
- * arrived keeps showing them.
+ * arrived keeps showing them. It never names the row's addon (design/DECISION.md, Shelves).
  */
 fun HomeRow.notice(): RowNotice? =
     when (val s = state) {
@@ -47,7 +47,7 @@ fun HomeRow.notice(): RowNotice? =
         }
 
         RowState.Slow -> {
-            if (tiles.isEmpty()) RowNotice.Waiting(slow = true, detail = "$source is slow to answer") else null
+            if (tiles.isEmpty()) RowNotice.Waiting(slow = true, detail = STILL_LOADING) else null
         }
 
         RowState.Ready -> {
@@ -56,7 +56,7 @@ fun HomeRow.notice(): RowNotice? =
 
         RowState.Empty -> {
             if (tiles.isEmpty()) {
-                RowNotice.Explained("$title is empty", "$source has nothing to list here.", failed = false)
+                RowNotice.Explained("Nothing here right now", "This row has no titles to show.", failed = false)
             } else {
                 null
             }
@@ -65,8 +65,8 @@ fun HomeRow.notice(): RowNotice? =
         is RowState.Failed -> {
             if (tiles.isEmpty()) {
                 RowNotice.Explained(
-                    "$title could not load",
-                    "$source did not give a list: ${s.reason}. Check the network, then check the addon.",
+                    ROW_FAILED,
+                    "${s.reason.trimEnd('.')}. Check the network, then try again.",
                     failed = true,
                 )
             } else {
@@ -96,3 +96,9 @@ fun List<HomeRow>.withoutRemoved(id: String?): List<HomeRow> {
         if (left.isEmpty()) null else row.copy(tiles = left)
     }
 }
+
+/** A slow row's line under its skeletons. */
+const val STILL_LOADING = "Still loading"
+
+/** A failed row's title. */
+const val ROW_FAILED = "This row did not load"

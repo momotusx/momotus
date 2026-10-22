@@ -247,7 +247,7 @@ fun TvHome(
                 items(
                     rows.subList(0, split),
                     key = { it.rowId },
-                ) { row -> TvRow(row, TileCopy.source(row, rows), state, onOpen, hold, retry, { headerRoom = it }) }
+                ) { row -> TvRow(row, state, onOpen, hold, retry, { headerRoom = it }) }
                 val said = removing?.let { TileCopy.removed(it.name) } ?: removal?.failed
                 if (said != null) {
                     item(key = "notice") {
@@ -262,7 +262,7 @@ fun TvHome(
                 items(
                     rows.subList(split, rows.size),
                     key = { it.rowId },
-                ) { row -> TvRow(row, TileCopy.source(row, rows), state, onOpen, hold, retry, { headerRoom = it }) }
+                ) { row -> TvRow(row, state, onOpen, hold, retry, { headerRoom = it }) }
             }
         }
     }
@@ -424,8 +424,6 @@ private fun shapeOf(row: HomeRow): TileShape =
 @Composable
 private fun TvRow(
     row: HomeRow,
-    /** The addon's name, when another row has the same title (TileCopy.source). */
-    source: String?,
     state: TvHomeState,
     onOpen: (Tile) -> Unit,
     onHold: ((Tile, String) -> Unit)?,
@@ -445,8 +443,9 @@ private fun TvRow(
         // A remote has no long press to discover: Continue Watching says how to remove a title.
         val hint = TileCopy.HOLD_TO_REMOVE.takeIf { onHold != null && TileCopy.removable(row.rowId) }
         RowHeader(
+            // The catalog's name and kind alone, never its addon (design/DECISION.md, Shelves).
             row.title,
-            source ?: hint,
+            hint,
             Modifier
                 .padding(horizontal = inset)
                 .onSizeChanged { if (it.height > 0) onHeaderRoom(with(density) { it.height.toDp() } + gap + lift) },

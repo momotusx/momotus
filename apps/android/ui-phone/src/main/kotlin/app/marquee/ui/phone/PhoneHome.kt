@@ -130,13 +130,13 @@ fun PhoneHome(
             val split = rows.indexOfFirst { it.rowId == TileCopy.CONTINUE_ROW } + 1
             items(rows.subList(0, split), key = {
                 it.rowId
-            }) { row -> PhoneRow(row, TileCopy.source(row, rows), onOpen, hold, home::retryRow) }
+            }) { row -> PhoneRow(row, onOpen, hold, home::retryRow) }
             if (notice != null) item(key = "notice") { notice() }
             if (card != null) item(key = "card") { card() }
             items(
                 rows.subList(split, rows.size),
                 key = { it.rowId },
-            ) { row -> PhoneRow(row, TileCopy.source(row, rows), onOpen, hold, home::retryRow) }
+            ) { row -> PhoneRow(row, onOpen, hold, home::retryRow) }
         }
     }
 }
@@ -311,8 +311,6 @@ private fun shapeOf(row: HomeRow): TileShape =
 @Composable
 private fun PhoneRow(
     row: HomeRow,
-    /** The addon's name, when another row has the same title (TileCopy.source). */
-    source: String?,
     onOpen: (Tile) -> Unit,
     hold: ((Tile) -> Unit)?,
     /** A failed row's Try again: that catalog only. */
@@ -320,7 +318,8 @@ private fun PhoneRow(
 ) {
     val side = Marquee.safe.side
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-        RowHeader(row.title, source, Modifier.padding(horizontal = side))
+        // The catalog's name and kind alone, never its addon (design/DECISION.md, Shelves).
+        RowHeader(row.title, null, Modifier.padding(horizontal = side))
         when (val notice = row.notice()) {
             is RowNotice.Waiting -> {
                 SkeletonLane(shapeOf(row))

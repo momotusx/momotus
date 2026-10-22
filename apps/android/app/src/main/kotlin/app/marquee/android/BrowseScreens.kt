@@ -301,7 +301,7 @@ fun SearchScreen(
             else -> {
                 val rows = snapshot?.rows.orEmpty()
                 itemsIndexed(rows, key = { _, row -> row.rowId }) { _, row ->
-                    ResultRow(row, TileCopy.source(row, rows)) { tile ->
+                    ResultRow(row) { tile ->
                         view.remember()
                         onOpen(tile)
                     }
@@ -366,13 +366,12 @@ internal fun SearchField(
 @Composable
 private fun ResultRow(
     row: HomeRow,
-    /** The addon's name, when another row has the same title (TileCopy.source). */
-    source: String?,
     onOpen: (Tile) -> Unit,
 ) {
     val metrics = Marquee.tiles
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-        RowHeader(row.title, source, Modifier.padding(horizontal = Marquee.safe.side))
+        // The group's kind alone ("Movies"), never its addon (design/DECISION.md, Search).
+        RowHeader(row.title, null, Modifier.padding(horizontal = Marquee.safe.side))
         when (val notice = row.notice()) {
             is RowNotice.Waiting -> {
                 Row(
@@ -506,20 +505,12 @@ fun DiscoverScreen(
                     }
                 }
                 full("catalogs") {
-                    // A catalog names its addon only beside another of its name (TileCopy.twinSource); names drop
-                    // a leading addon name (the core).
-                    val catalogs = snapshot.catalogs
-                    val sources =
-                        catalogs.associate { c ->
-                            c.id to
-                                TileCopy.twinSource(c, catalogs, { it.name }, { it.source })
-                        }
+                    // A catalog by its name alone, never its addon's (design/DECISION.md, Shelves).
                     ChipRow(
                         "Catalog",
                         snapshot.catalogs.map { it.id to it.name },
                         snapshot.catalog,
                         0.dp,
-                        detail = { sources[it] },
                     ) { catalog -> if (catalog != null) view.select(catalog = catalog) }
                 }
                 if (snapshot.genres.isNotEmpty()) {
@@ -531,11 +522,9 @@ fun DiscoverScreen(
                         }
                     }
                 }
-                // The catalog by its name; a failed or empty state names its addon too (TileCopy.catalogLabel).
+                // The catalog by its name, in its failed and empty states too.
                 val chosen = snapshot.catalogs.firstOrNull { it.id == snapshot.catalog }
-                val catalogName = chosen?.let { TileCopy.catalogLabel(it, snapshot.catalogs) } ?: "this catalog"
-                val catalogState =
-                    chosen?.let { TileCopy.catalogLabel(it, snapshot.catalogs, state = true) } ?: "this catalog"
+                val catalogName = chosen?.name ?: "this catalog"
                 val state = snapshot.state
                 when {
                     snapshot.genreRequired && snapshot.genre == null -> {
@@ -555,12 +544,12 @@ fun DiscoverScreen(
 
                     snapshot.items.isEmpty() && state is DiscoverState.Failed -> {
                         full("failed-items") {
-                            Note("$catalogState did not answer: ${state.reason}", failed = true, side = 0.dp)
+                            Note("$catalogName did not load: ${state.reason}", failed = true, side = 0.dp)
                         }
                     }
 
                     snapshot.items.isEmpty() -> {
-                        full("nothing") { Note("Nothing in $catalogState for this choice.", side = 0.dp) }
+                        full("nothing") { Note("Nothing in $catalogName for this choice.", side = 0.dp) }
                     }
 
                     else -> {
