@@ -1,6 +1,5 @@
 package app.marquee.ui.tv
 
-import androidx.compose.animation.core.snap
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.gestures.ScrollScope
@@ -50,7 +49,7 @@ class AnchorTest {
     @Test
     fun `a scroll once started goes on to the anchor, though the child comes into view halfway`() {
         val list = List()
-        val spec = AnchoredSpec(lead = 34f, trail = 0f, scrollAnimationSpec = snap(), list = list)
+        val spec = AnchoredSpec(lead = 34f, trail = 0f, list = list)
         // A row under the foot: the page starts to bring it to the anchor.
         assertEquals(866f, spec.calculateScrollDistance(900f, 240f, 1000f))
         list.moving = true
@@ -64,7 +63,7 @@ class AnchorTest {
 
     @Test
     fun `the anchor leaves the first row's move to the page`() {
-        val spec = AnchoredSpec(lead = 34f, trail = 0f, scrollAnimationSpec = snap(), list = List(), hold = { true })
+        val spec = AnchoredSpec(lead = 34f, trail = 0f, list = List(), hold = { true })
         assertEquals(0f, spec.calculateScrollDistance(-400f, 240f, 1000f))
     }
 

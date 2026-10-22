@@ -1,6 +1,5 @@
 package app.marquee.design
 
-import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.BringIntoViewSpec
@@ -127,17 +126,12 @@ private const val MENU_FOCUS_FRAMES = 60
 /**
  * Scrolls a focused child into view [room] pixels clear of either end, so its rise and shadow stay whole,
  * with the least movement. It asks nothing of where the scroll started, so Compose's asking again on every
- * frame lands it smoothly; [animation] is the scroll's, Compose's own when null.
+ * frame of the scroll lands it smoothly.
  */
 @OptIn(ExperimentalFoundationApi::class)
 class RoomSpec(
     private val room: Float,
-    private val animation: AnimationSpec<Float>? = null,
 ) : BringIntoViewSpec {
-    @Suppress("DEPRECATION")
-    override val scrollAnimationSpec: AnimationSpec<Float>
-        get() = animation ?: super.scrollAnimationSpec
-
     override fun calculateScrollDistance(
         offset: Float,
         size: Float,
