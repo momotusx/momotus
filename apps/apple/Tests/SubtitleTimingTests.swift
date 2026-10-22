@@ -254,3 +254,14 @@ private func playerModel() throws -> String {
     #expect(load.contains("item.add(legible)"))
     #expect(text.components(separatedBy: "AVPlayerItemLegibleOutput()").count == 2, "one output, made once")
 }
+
+@Test func theTimingStepperOpensOnTheScreenAndItsItemIsLabelled() throws {
+    // The iphone-a walk (2026-10-23): under the action row at the screen's foot, iOS hung the stepper off the screen.
+    #expect(PlayerLayout.timingArrowEdge(ios: true) == .bottom)
+    #expect(PlayerLayout.timingArrowEdge(ios: false) == .top)
+    let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player/PlayerControls.swift")
+    let text = try String(contentsOf: url, encoding: .utf8)
+    #expect(text.contains("arrowEdge: PlayerLayout.timingArrowEdge(ios: Self.ios)"))
+    // A menu item takes the plain image: with a glyph view VoiceOver found an empty cell.
+    #expect(text.contains(#"Button("Timing: \(PlayerLayout.delayText(model.subtitleDelay))", glyph: "clock")"#))
+}

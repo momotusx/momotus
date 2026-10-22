@@ -40,6 +40,14 @@ struct PlayerControls: View {
 
     enum Control: Hashable { case back, rewind, play, forward, scrub, audio, subtitles, versions, speed }
 
+    private static var ios: Bool {
+        #if os(iOS)
+        true
+        #else
+        false
+        #endif
+    }
+
     /// The iPhone lays the OSD out as the system player does (`PhoneFrame`).
     private static var phone: Bool {
         #if os(iOS)
@@ -345,7 +353,7 @@ struct PlayerControls: View {
         }
         #if !os(tvOS)
         // Over the actions, not on one of the row's copies above (only one is drawn).
-        .popover(isPresented: $timingShown, arrowEdge: .top) {
+        .popover(isPresented: $timingShown, arrowEdge: PlayerLayout.timingArrowEdge(ios: Self.ios)) {
             SubtitleTimingStepper(value: model.subtitleDelay, track: model.timingKey ?? "") { by, spoken in
                 model.setSubtitleDelay(PlayerLayout.nudge(model.subtitleDelay, by: by), spoken: spoken)
                 hold(true)
@@ -434,9 +442,8 @@ struct PlayerControls: View {
                         }
                     }
                     #else
-                    Button { timingShown = true } label: {
-                        Label("Timing: \(PlayerLayout.delayText(model.subtitleDelay))", glyph: "clock")
-                    }
+                    // A menu draws only a plain image: a glyph view left the item unlabelled for VoiceOver.
+                    Button("Timing: \(PlayerLayout.delayText(model.subtitleDelay))", glyph: "clock") { timingShown = true }
                     #endif
                 }
                 // Captions carried in the video: the legible output cannot hand over their layout.
