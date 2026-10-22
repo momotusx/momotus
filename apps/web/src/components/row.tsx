@@ -39,7 +39,7 @@ interface Metrics {
 
 // From the one token source (design/tokens.json `tile`); `caption` is the room under every
 // tile for its two lines (name, then the year or the core's caption).
-type TileTokens = (typeof tokens.tile)["tv"];
+type TileTokens = Pick<(typeof tokens.tile)["tv"], "poster" | "landscape" | "square" | "gap" | "pad" | "inset" | "peek" | "caption">;
 const fromTokens = (t: TileTokens): Metrics => ({
   poster: [t.poster.width, t.poster.height],
   landscape: [t.landscape.width, t.landscape.height],
