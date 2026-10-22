@@ -19,11 +19,16 @@
 #   this machine, `MQ_DEV_TRAKT`, for walks), in its own target dir, into src/debug/jniLibs: only debug
 #   builds of the app package it. It builds arm64, or armv7 when named. The plain build has no debug
 #   assertions and so no hook.
-# MQ_FEATURES=torrent builds the torrent engine in (the `full` variant, never a store build); its
-# size is measured against its own budget (plans/core-backlog.md C11). Unset, the core has no engine.
+# The torrent engine is in every own build (plans/play-every-version.md, Phase 0); its size is measured
+# against its own budget (plans/core-backlog.md C11). STORE=1 builds the store core without it, on purpose;
+# MQ_FEATURES names the features outright. The build fails when a library is not the core it should be
+# (scripts/core-engine.sh).
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
+# shellcheck source=apps/android/scripts/core-engine.sh
+source "$ROOT/apps/android/scripts/core-engine.sh"
+FEATURES=$(core_features)
 # The Trakt app (client id and redirect URI, read by `option_env!`) when this machine has it:
 # .env.trakt.local at the repository root, gitignored. Without the file the core has no Trakt app
 # (notConfigured), as in CI or a fresh clone. The MDBList key (MARQUEE_MDBLIST_KEY) the same way,
@@ -86,7 +91,7 @@ CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS=$PACKED CARGO_TARGET_ARMV7_LINUX_AN
 CARGO_TARGET_DIR=$TARGET CARGO_INCREMENTAL=0 CARGO_PROFILE_RELEASE_STRIP=none ANDROID_NDK_HOME=$NDK \
   CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=$DEV_ASSERTIONS \
   cargo ndk "${ABIS[@]}" --platform 24 rustc --release -p mq-ffi -j 4 --crate-type cdylib \
-  ${MQ_FEATURES:+--features "$MQ_FEATURES"}
+  ${FEATURES:+--features "$FEATURES"}
 
 # The bindings come from the first ABI's library. Each further ABI's are generated too and must be the
 # same, so a `cfg(target_pointer_width)` that ever reached the FFI surface fails here, not on a device.
@@ -118,6 +123,11 @@ if [ "$DEV_ASSERTIONS" = false ]; then
     fi
   done
 fi
+
+# The engine in an own build, none in a store build: checked on each library before it is stripped.
+for pair in "${TRIPLES[@]}"; do
+  core_check_engine "$TARGET/${pair%%:*}/release/libmarquee_core.so"
+done
 
 rm -rf "$LIBS"
 # A plain build drops a dev library left from before, which debug builds would otherwise package.
