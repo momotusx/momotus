@@ -77,7 +77,7 @@ for (const form of Object.keys(FORMS) as Form[]) {
     expect((await style(page, ".row-head", "::before")).content).toBe("none");
     expect((await style(page, ".row-head", "::after")).content).toBe("none");
     expect((await style(page, ".row-head h2")).size).toBe(form === "phone" ? "20px" : "38px");
-    // The title alone: no row on this Home shares its title, so none names its addon.
+    // The title alone: no row names its addon (e2e/addon-names.spec.ts has two of one title).
     await expect(page.locator(".row-head .row-src")).toHaveCount(0);
     // Every artwork's 25 percent inner keyline over the picture; the name at 600 under it.
     expect((await style(page, ".row .tile .pic", "::before")).shadow).toBe("rgba(255, 255, 255, 0.25) 0px 0px 0px 1px inset");
@@ -123,7 +123,7 @@ for (const form of Object.keys(FORMS) as Form[]) {
   });
 }
 
-test("Search's sections show their title alone when no two share it", async ({ browser }) => {
+test("Search's sections show their title alone, each title once", async ({ browser }) => {
   const { context, page } = await open(browser, "desktop", "/search");
   await page.locator('[data-f="search:input"]').fill("thrones");
   await expect(page.locator(".hits .hit").first()).toBeVisible({ timeout: 30_000 });
@@ -133,7 +133,7 @@ test("Search's sections show their title alone when no two share it", async ({ b
   await context.close();
 });
 
-test("Settings' Home rows and Discover's catalogs show their names alone when no two share one", async ({ browser }) => {
+test("Customize Home names each row's addon on a quiet second line; Discover's catalogs name none", async ({ browser }) => {
   const { context, page } = await open(browser, "desktop", "/home-rows");
   await expect(page.locator(".hrow-main").first()).toBeVisible({ timeout: 30_000 });
   const rows = await page.locator(".hrow").evaluateAll((els) =>
@@ -143,10 +143,11 @@ test("Settings' Home rows and Discover's catalogs show their names alone when no
       note: el.querySelector(".hrow-text small")?.textContent ?? null,
     })),
   );
-  expect(new Set(rows.map((r) => r.title)).size).toBe(rows.length);
   for (const r of rows) {
-    expect(r.label.startsWith(`${r.title}, `) && /^(hidden|shown), row \d+ of \d+$/.test(r.label.slice(r.title.length + 2)), r.label).toBe(true);
-    expect([null, "Hidden from Home"]).toContain(r.note);
+    const source = (r.note ?? "").replace(/ · Hidden from Home$/, "");
+    expect(source.length, r.title).toBeGreaterThan(0);
+    const head = `${r.title}, ${source}, `;
+    expect(r.label.startsWith(head) && /^(hidden|shown), row \d+ of \d+$/.test(r.label.slice(head.length)), r.label).toBe(true);
   }
   await page.goto("/discover?form=desktop");
   const catalogs = page.locator('[data-fgroup="catalogs"] [data-f]');

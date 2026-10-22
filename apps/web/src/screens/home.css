@@ -56,11 +56,10 @@
 .defaults-card .acts { flex: none; gap: 16px; }
 .problem-icon { width: 48px; height: 48px; color: var(--bad); }
 
-/* Rows. The header is the shelf title in the title3 role and its source: no bar, no hairline. */
+/* Rows. The header is the shelf title in the title3 role: no bar, no hairline. */
 .row { position: relative; margin-top: 28px; }
 .row-head { display: flex; align-items: center; gap: 16px; padding: 0 var(--safe-side); }
 .row-head h2 { font: var(--weight-heading) var(--type-title3) / 1.2 var(--font-display); letter-spacing: var(--tracking-heading); }
-.row-src { font: 500 var(--type-callout) var(--font-text); color: var(--dim); }
 .row-note { font: 500 var(--type-caption) var(--font-text); color: var(--muted); }
 .row-body { position: relative; margin-left: calc(var(--safe-side) - 34px); }
 .track { position: absolute; inset: 0; }
@@ -164,7 +163,6 @@
 [data-form="phone"] .row { margin-top: 20px; }
 [data-form="phone"] .row-head { padding: 0 16px; gap: 8px; flex-wrap: nowrap; }
 [data-form="phone"] .row-head h2 { white-space: nowrap; }
-[data-form="phone"] .row-src { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 [data-form="phone"] .row-body { margin-left: 0; }
 [data-form="phone"] .track { scroll-snap-type: x proximity; scroll-padding-left: 16px; }
 [data-form="phone"] .tile { scroll-snap-align: start; border-radius: 10px; }

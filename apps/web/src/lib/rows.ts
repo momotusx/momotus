@@ -7,12 +7,13 @@ export const allFailed = (rows: HomeRow[]): boolean =>
   rows.every((r) => r.tiles.length === 0 && r.state.state !== "loading" && r.state.state !== "slow") &&
   rows.some((r) => r.state.state === "failed");
 
-/** The titles two or more rows (Home's rows, Search's sections, Home rows in Settings, Discover's
- * catalogs) on a screen share. A row shows its title alone; only these also name their addon, to
- * tell them apart (the owner, 2026-10-22). */
-export function sharedTitles(rows: readonly { title: string }[]): Set<string> {
-  const seen = new Set<string>();
-  const twice = new Set<string>();
-  for (const r of rows) (seen.has(r.title) ? twice : seen).add(r.title);
-  return twice;
-}
+/** A row's states in words that name no addon, not even to tell two rows apart (the owner,
+ * 2026-10-22; design/DECISION.md, Shelves): addon names show only on the Addons pages and as
+ * Customize Home's quiet second line. */
+export const rowWords = {
+  failed: "This row did not load.",
+  retrying: "Trying this row again.",
+  slow: "Slow to answer, still trying",
+  empty: "Nothing in this row right now.",
+  searchFailed: "These results did not load.",
+} as const;

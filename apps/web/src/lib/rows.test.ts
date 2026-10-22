@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
+import { readdirSync, readFileSync } from "node:fs";
 import type { HomeRow } from "../core/generated/HomeRow";
 import type { RowState } from "../core/generated/RowState";
-import { allFailed, sharedTitles } from "./rows";
+import { allFailed, rowWords } from "./rows";
 
 const row = (state: RowState, tiles = 0): HomeRow => ({
   rowId: "r",
@@ -22,8 +23,13 @@ test("Home offers one Try again only when every lane ended with nothing and one 
   expect(allFailed([])).toBe(false);
 });
 
-test("a row names its addon only when another row on the screen has the same title", () => {
-  const named = (title: string, source: string): HomeRow => ({ ...row({ state: "ready" }, 1), rowId: `${source}:${title}`, title, source });
-  expect([...sharedTitles([named("Popular Movies", "Cinemeta"), named("Popular Series", "Cinemeta")])]).toEqual([]);
-  expect([...sharedTitles([named("Popular", "Cinemeta"), named("Trending", "TMDB"), named("Popular", "TMDB")])]).toEqual(["Popular"]);
+test("no screen names a row's addon but Customize Home, not even beside a row of the same title", () => {
+  // The owner, 2026-10-22 (design/DECISION.md, Shelves): Home, the hero, Search, Discover and a
+  // row's states read no addon's name; Customize Home (screens/home-rows.tsx) shows it as a quiet line.
+  const src = new URL("..", import.meta.url).pathname;
+  const reads = ["components", "screens"]
+    .flatMap((dir) => readdirSync(`${src}${dir}`).filter((f) => f.endsWith(".tsx")).map((f) => `${dir}/${f}`))
+    .filter((f) => /\b(row|r|c)\.source\b/.test(readFileSync(`${src}${f}`, "utf8")));
+  expect(reads).toEqual(["screens/home-rows.tsx"]);
+  for (const line of Object.values(rowWords)) expect(line).not.toMatch(/Cinemeta|addon/i);
 });

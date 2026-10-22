@@ -7,7 +7,7 @@ import Wrench from "lucide-solid/icons/wrench";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Sparkle from "lucide-solid/icons/sparkle";
 import ShieldAlert from "lucide-solid/icons/shield-alert";
-import { createEffect, createMemo, createSignal, For, Match, on, Show, Switch } from "solid-js";
+import { createEffect, createSignal, For, Match, on, Show, Switch } from "solid-js";
 import { Backdrop, Logo } from "../components/art";
 import { Ratings } from "../components/ratings";
 import { separators } from "../components/separators";
@@ -22,7 +22,7 @@ import { removeHere, wipeState } from "../core/wipe";
 import { accountWords as aw, activeProfile, needsSecondWayIn, type Card, fill, homeCard, providerName } from "../lib/account";
 import { Tick } from "./sign-in";
 import { cardOffer, defaultsWords, namesLine } from "../lib/defaults";
-import { allFailed, sharedTitles } from "../lib/rows";
+import { allFailed } from "../lib/rows";
 import { form } from "../form";
 import type { Tile } from "../core/generated/Tile";
 import { playPath, ratingParts, titlePath } from "../lib/format";
@@ -254,7 +254,6 @@ export default function Home() {
   const hasContinue = () => home.rows[0]?.rowId === CONTINUE_ROW;
   const empty = () => home.status.state === "open" && home.rows.length === 0;
   const hero = () => home.hero;
-  const shared = createMemo(() => sharedTitles(home.rows));
   // Rows still on their way: only then is a missing hero still coming. When
   // every row has answered and none gave a backdrop (offline, posters only),
   // the hero closes instead of shimmering for good.
@@ -382,7 +381,7 @@ export default function Home() {
               <For each={home.rows}>
                 {(row, i) => (
                   <>
-                    <Row row={row} autofocus={i() === 0 && row.rowId === CONTINUE_ROW} root={page} named={shared().has(row.title)} onRetry={retryHomeRow} />
+                    <Row row={row} autofocus={i() === 0 && row.rowId === CONTINUE_ROW} root={page} onRetry={retryHomeRow} />
                     <Show when={i() === 0 && row.rowId === CONTINUE_ROW}>
                       <DefaultsCard />
                     </Show>

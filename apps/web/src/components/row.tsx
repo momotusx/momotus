@@ -20,6 +20,7 @@ import { form } from "../form";
 import { pct, posterLabel, ratingParts, titlePath } from "../lib/format";
 import { caption } from "../lib/words";
 import { visibleRange } from "../lib/range";
+import { rowWords } from "../lib/rows";
 
 export const CONTINUE_ROW = "continue-watching";
 
@@ -189,14 +190,12 @@ export function askOnce(act: () => Promise<unknown>) {
  * Home's row updates from the core. */
 export const removeFromContinue = (itemId: string) => op("removeFromContinue", { itemId });
 
-/** `named`: another row on the screen has the same title, so this one names its addon too. */
 export function Row(props: {
   row: HomeRow;
   autofocus: boolean;
   root: () => Element | null;
   onOpen?: () => void;
   scope?: string;
-  named?: boolean;
   onRetry?: (rowId: string) => Promise<unknown> | undefined;
 }) {
   let section!: HTMLElement;
@@ -253,15 +252,10 @@ export function Row(props: {
     <section class="row" data-row data-fgroup={`row:${id()}`} ref={section} aria-label={props.row.title}>
       <header class="row-head">
         <h2>{props.row.title}</h2>
-        {/* The title alone; an addon's name only tells two rows of one title apart. Continue
-            Watching comes from what was played, not from an addon: it names no source. */}
-        <Show when={props.named && props.row.rowId !== CONTINUE_ROW}>
-          <span class="row-src">{props.row.source}</span>
-        </Show>
         <Show when={state() === "slow" && !ready()}>
           <span class="st warn row-note">
             <i class="dot" />
-            {props.row.source} is slow to answer, still trying
+            {rowWords.slow}
           </span>
         </Show>
       </header>
@@ -278,7 +272,7 @@ export function Row(props: {
               </Show>
               <div>
                 <p>
-                  {retrying() ? `Asking ${props.row.source} for ${props.row.title} again.` : `${props.row.source} could not load ${props.row.title}.`}
+                  {retrying() ? rowWords.retrying : rowWords.failed}
                 </p>
                 <Show when={!retrying() && props.row.state.state === "failed"}>
                   <Why class="why" reason={props.row.state.state === "failed" ? props.row.state.reason : ""} />
@@ -311,7 +305,7 @@ export function Row(props: {
           </Match>
           <Match when={state() === "empty"}>
             <div class="row-msg">
-              <p>{props.row.source} has nothing in this catalog right now.</p>
+              <p>{rowWords.empty}</p>
             </div>
           </Match>
           <Match when={!ready()}>

@@ -24,7 +24,7 @@ import { onProfileReset } from "../core/profiles";
 import { focusEl, isBackKey, mayAutoFocus } from "../focus/dom";
 import { historyDepth } from "../history";
 import { ratingParts, titlePath } from "../lib/format";
-import { sharedTitles } from "../lib/rows";
+import { rowWords } from "../lib/rows";
 import { kindLabel, problemWords } from "../lib/words";
 import "./browse.css";
 import "./search.css";
@@ -149,8 +149,6 @@ function SearchPanel(props: { dialog?: boolean }) {
   if (lastQuery) queueMicrotask(() => send(lastQuery));
   const searching = () => text().trim().length > 0;
   const rows = () => s()?.rows ?? [];
-  // A section shows its title alone; only two of one title name their addon (lib/rows.ts).
-  const shared = createMemo(() => sharedTitles(rows()));
   // "Top results" (the core's row "top") holds its place for the query it
   // came with: a loading row, a short answer, or none at all (Trakt failed or
   // found nothing, and the core drops the row) keeps the height of three
@@ -278,26 +276,23 @@ function SearchPanel(props: { dialog?: boolean }) {
             <For each={rows()}>
               {(row) => (
                 <Show when={!current() || scoped(row).length > 0}>
-                  <section class="hits" classList={{ top: row.rowId === TOP }} aria-label={shared().has(row.title) ? `${row.title}, ${row.source}` : row.title}>
+                  <section class="hits" classList={{ top: row.rowId === TOP }} aria-label={row.title}>
                     <h3 class="hits-head">
                       <span class="kicker">{row.title}</span>
-                      <Show when={shared().has(row.title)}>
-                        <span class="hits-src">{row.source}</span>
-                      </Show>
                     </h3>
                     <div class="hits-body">
                       <Switch>
                         <Match when={row.state.state === "failed" && row.tiles.length === 0}>
                           <p class="st bad palette-note">
                             <i class="dot" />
-                            {row.source} could not search {row.title}. {row.state.state === "failed" ? problemWords(row.state.reason).text : ""}
+                            {rowWords.searchFailed} {row.state.state === "failed" ? problemWords(row.state.reason).text : ""}
                           </p>
                         </Match>
                         <Match when={row.tiles.length === 0}>
                           <Show when={row.state.state === "slow"}>
                             <p class="st warn palette-note">
                               <i class="dot" />
-                              {row.source} is slow to answer, still trying
+                              {rowWords.slow}
                             </p>
                           </Show>
                           <div class="hit-wait" aria-hidden="true">

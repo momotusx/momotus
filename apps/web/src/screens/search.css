@@ -51,7 +51,6 @@
 .hits-body { display: flex; flex-direction: column; gap: 4px; }
 .hits.top .hits-body { min-height: calc(3 * 116px + 2 * 8px); }
 .hits-head { display: flex; align-items: baseline; gap: 14px; padding: 0 14px 6px; font: inherit; }
-.hits-src { font: 500 var(--type-caption) / 1 var(--font-text); color: var(--dim); }
 .hit { display: flex; align-items: center; gap: 22px; padding: 10px 14px; border-radius: var(--radius-card); transform-origin: center; }
 .hit-art { position: relative; flex: none; width: 64px; height: 96px; border-radius: var(--radius-s); overflow: hidden; background: var(--surface);
   box-shadow: inset 0 0 0 1px var(--edge); }
@@ -90,7 +89,6 @@
 [data-form="phone"] .palette-close svg { width: 16px; height: 16px; }
 [data-form="phone"] .palette-body { gap: 14px; margin: 0 -14px -14px; padding: 2px 14px 14px; }
 [data-form="phone"] .hits-head { padding: 0 6px 4px; }
-[data-form="phone"] .hits-src { font-size: 12px; }
 [data-form="phone"] .hit { gap: 12px; padding: 6px; border-radius: 12px; }
 [data-form="phone"] .hit-art { width: 40px; height: 60px; border-radius: 6px; }
 [data-form="phone"] .hit-ph { width: 18px; height: 18px; }
