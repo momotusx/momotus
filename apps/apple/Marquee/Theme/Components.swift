@@ -7,6 +7,8 @@ struct ArtImage: View {
     var maxPixels = ArtSize.poster
     /// Shown in the display face when there is no art or it cannot load.
     var fallback: String?
+    /// The part of filled art that stays in the frame: `.top` keeps a poster's upper part in a 16:9 card.
+    var alignment: Alignment = .center
     @State private var art: DecodedArt?
     @State private var missing = false
 
@@ -15,7 +17,7 @@ struct ArtImage: View {
         // filled image is wider than its frame, and letting that through made
         // the title page grow without end.
         Theme.Palette.surface
-            .overlay {
+            .overlay(alignment: alignment) {
                 if let art {
                     Image(decorative: art.image, scale: 1)
                         .resizable()
@@ -27,6 +29,8 @@ struct ArtImage: View {
                         .foregroundStyle(Theme.Palette.text.opacity(0.85))
                         .multilineTextAlignment(.center)
                         .padding(Theme.Space.xs)
+                        // Centered whatever part of the art `alignment` keeps.
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
             .clipped()

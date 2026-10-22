@@ -183,17 +183,19 @@ struct Metrics: Sendable {
     let cardInfo: CGFloat
     /// Text in a poster's rating chip.
     let chip: CGFloat
+    /// A shelf poster's corners: the token on TV, tv.apple.com's 14 on the Mac, the iPhone's 11.
+    let posterRadius: CGFloat
 
     static let tv = Metrics(
         poster: Theme.Poster.tv, gutter: Theme.safeArea.side, rowSpacing: Theme.Space.l, wide: true,
-        cardName: Theme.type.caption, cardInfo: Theme.type.caption, chip: 20)
+        cardName: Theme.type.caption, cardInfo: Theme.type.caption, chip: 20, posterRadius: Theme.Radius.m)
     static let regular = Metrics(
         // tv.apple.com's posters at 1440: eight a row, 20 apart, at a 40 margin.
         poster: CGSize(width: 153, height: 228), gutter: Theme.Space.l, rowSpacing: Theme.Space.l, wide: true,
-        cardName: 15, cardInfo: 13, chip: 12)
+        cardName: 15, cardInfo: 13, chip: 12, posterRadius: 14)
     static let compact = Metrics(
         poster: Theme.Tile.poster, gutter: 16, rowSpacing: Theme.Space.m, wide: false,
-        cardName: 13, cardInfo: 12, chip: 11)
+        cardName: 13, cardInfo: 12, chip: 11, posterRadius: 11)
 }
 
 extension EnvironmentValues {

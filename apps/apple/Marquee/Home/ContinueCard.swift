@@ -1,15 +1,15 @@
 import SwiftUI
 
 /// A Continue Watching or Next Up card: a 16:9 still (the episode still,
-/// else the backdrop, else the poster) with Apple's white progress line,
-/// then the name and the core's caption under it.
+/// else the backdrop, else the poster cropped from its upper part) with
+/// Apple's white progress line, then the name and the core's caption under it.
 struct ContinueCard: View {
     let tile: Tile
     @Environment(\.metrics) private var metrics
 
     var body: some View {
         VStack(alignment: .leading, spacing: metrics.wide ? 10 : 6) {
-            ArtImage(url: tile.background ?? tile.poster, maxPixels: ArtSize.backdrop / 2, fallback: tile.name)
+            ArtImage(url: tile.background ?? tile.poster, maxPixels: ArtSize.backdrop / 2, fallback: tile.name, alignment: tile.background == nil ? .top : .center)
                 .overlay(alignment: .bottom) {
                     if let progress = tile.progress { EdgeProgress(value: progress) }
                 }

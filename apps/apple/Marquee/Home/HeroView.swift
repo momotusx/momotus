@@ -215,9 +215,9 @@ struct StartFocus: ViewModifier {
     }
 }
 
-/// "IMDb 9.2 · RT 89% · 2011–2019 · Drama, Fantasy · 8 seasons": the scores
-/// as plain text, the rest joined by dots. Lines break only between the parts.
-/// `imdbLink` makes the first score, IMDb's, open its page (never on TV).
+/// "2011–2019 · Drama, Fantasy · 8 seasons · IMDb 9.2 · RT 89%": the year
+/// first, the parts joined by dots, then the ratings row. Lines break only
+/// between the parts. `imdbLink` makes IMDb's score open its page (never on TV).
 struct MetaLine: View {
     let ratings: [String]
     let parts: [String]
@@ -227,12 +227,12 @@ struct MetaLine: View {
 
     var body: some View {
         FlowRow(spacing: size * 0.45) {
-            ForEach(Array((ratings + parts).enumerated()), id: \.offset) { index, part in
+            ForEach(Array((parts + ratings).enumerated()), id: \.offset) { index, part in
                 if index > 0 {
                     Text("\u{B7}").foregroundStyle(Theme.Palette.dim)
                 }
-                if index < ratings.count {
-                    score(part, link: index == 0 ? link : nil)
+                if index >= parts.count {
+                    score(part, link: index == parts.count ? link : nil)
                 } else {
                     Text(part)
                 }
@@ -240,7 +240,7 @@ struct MetaLine: View {
         }
         .textFont(size, weight: .semibold, relativeTo: .callout)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel((ratings.map(spokenScore) + parts).joined(separator: ", "))
+        .accessibilityLabel((parts + ratings.map(spokenScore)).joined(separator: ", "))
         .accessibilityActions {
             if let link { Button("Open on IMDb") { openURL(link) } }
         }
@@ -255,8 +255,9 @@ struct MetaLine: View {
     }
 
     @ViewBuilder private func score(_ text: String, link: URL?) -> some View {
-        // One line, never cut: the row breaks between parts, never inside a score.
-        let label = Text(text).fontWeight(.bold).foregroundStyle(Theme.Palette.text)
+        // One line, never cut: the row breaks between parts, never inside a score. The ratings row
+        // as plain text: the source at 70 percent, the value in white at 600 (D10).
+        let label = ratingText(text).fontWeight(.regular)
             .lineLimit(1).fixedSize()
         if let link {
             Link(destination: link) { label }
@@ -270,6 +271,14 @@ struct MetaLine: View {
             label
         }
     }
+}
+
+/// One score as the ratings row writes it (D10): the source's name at 70 percent and its value in
+/// white at 600, plain text with no star and no logo ("IMDb 8.4", "RT 98%", "RT Fresh").
+func ratingText(_ score: String) -> Text {
+    let parts = score.split(separator: " ", maxSplits: 1).map(String.init)
+    guard parts.count == 2 else { return Text(score).fontWeight(.semibold).foregroundStyle(.white) }
+    return Text(parts[0]).foregroundStyle(Theme.Palette.muted) + Text(" ") + Text(parts[1]).fontWeight(.semibold).foregroundStyle(.white)
 }
 
 /// The title's logo art, or its name set in the display face when there is none.

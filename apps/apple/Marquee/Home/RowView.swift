@@ -124,24 +124,34 @@ struct RowHeader: View {
     }
 }
 
-/// A catalog poster: the art with its rating chip, the name and the year
-/// (or the core's caption) under it, never over it.
+/// A catalog poster. The iPhone's and tv.apple.com's shelves show the art
+/// alone, with no caption and no chip; VoiceOver still says the name, the
+/// year and the scores. tvOS keeps its v2 tile (D9): the rating chip on the
+/// art, the name and the year under it.
 struct PosterTile: View {
     let tile: Tile
     @Environment(\.metrics) private var metrics
 
     var body: some View {
+        content
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(posterLabel([tile.name, tile.releaseInfo], tile.ratings))
+    }
+
+    @ViewBuilder private var content: some View {
+        let art = ArtImage(url: tile.poster, fallback: tile.name).frame(width: size.width, height: size.height)
+        #if os(tvOS)
         VStack(alignment: .leading, spacing: metrics.wide ? 10 : 6) {
-            ArtImage(url: tile.poster, fallback: tile.name)
-                .frame(width: size.width, height: size.height)
+            art
                 .overlay(alignment: .topTrailing) {
                     if !ratingParts(tile.ratings).isEmpty { RatingChip(ratings: ratingParts(tile.ratings)).padding(metrics.chip * 0.55) }
                 }
-                .cardArt()
+                .cardArt(radius: metrics.posterRadius)
             CardCaption(name: tile.name, info: tile.releaseInfo).frame(width: size.width, alignment: .leading)
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(posterLabel([tile.name, tile.releaseInfo], tile.ratings))
+        #else
+        art.cardArt(radius: metrics.posterRadius)
+        #endif
     }
 
     private var size: CGSize {
@@ -193,7 +203,7 @@ private struct SkeletonStrip: View {
             .overlay(alignment: .leading) {
                 HStack(spacing: metrics.wide ? 20 : 12) {
                     ForEach(0..<10, id: \.self) { _ in
-                        RoundedRectangle(cornerRadius: Theme.Radius.m, style: .continuous)
+                        RoundedRectangle(cornerRadius: metrics.posterRadius, style: .continuous)
                             .fill(Theme.Palette.surface)
                             .frame(width: metrics.poster.width, height: metrics.poster.height)
                     }
