@@ -1101,16 +1101,16 @@ async fn supervise(
 }
 
 /// A streaming account came, went or was replaced: the rows rank by the
-/// accounts there are now (an account opens the rows `needsAccount` held),
-/// the old accounts' cache answers go, and the pick is made again.
+/// accounts there are now (an account opens the rows `needsAccount` held)
+/// and the old accounts' cache answers go. A pick the user made stays, as
+/// through an addon change, while its source is still installed
+/// (`restart`).
 fn accounts_moved(core: &Core, s: &mut State) {
     let account = core.debrid().is_some();
     s.rank.debrid = account;
     s.conditions.account = account;
     s.cache.clear();
     s.asked.clear();
-    s.frozen = false;
-    s.prefetched = false;
 }
 
 /// The device moved between Wi-Fi and mobile data (`networkChanged`): a

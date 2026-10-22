@@ -204,11 +204,11 @@ pub struct RestoreAnswer {
     pub tombstones: Vec<DebridTombstone>,
 }
 
-/// The device's debrid accounts, shared by every profile.
 /// The connected streaming accounts as they move (`Core::account_changes`):
 /// (service, generation) in order.
 pub(crate) type AccountChanges = tokio::sync::watch::Receiver<Vec<(StoreId, String)>>;
 
+/// The device's debrid accounts, shared by every profile.
 pub(crate) struct Accounts {
     me: Weak<Accounts>,
     http: HttpClient,

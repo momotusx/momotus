@@ -595,3 +595,35 @@ async fn versions_follow_streaming_accounts() {
     until(&view, "needs an account again", needs_account).await;
     assert!(!view.snapshot().conditions.account);
 }
+
+/// A pick the user made stays through an account change, as through an
+/// addon change, while its source is still installed: the view asks again
+/// for the new accounts and keeps the pick under focus.
+#[tokio::test]
+async fn a_frozen_pick_stays_through_an_account_change() {
+    mq_relparse::warm_up();
+    let core = opens_torrents();
+    let first = stream_addon("first", Duration::from_millis(200), FIRST).await;
+    core.library()
+        .set_addons("p", std::slice::from_ref(&first), &core.hlc())
+        .unwrap();
+    let view = VersionsView::open(&core, params());
+    until(&view, "the first pick", |s| {
+        s.done && s.recommended.is_some()
+    })
+    .await;
+    view.freeze();
+
+    core.set_debrid_keys(&[
+        (mq_runtime::StoreId::RealDebrid, "rd".into()),
+        (mq_runtime::StoreId::AllDebrid, "ad".into()),
+    ]);
+    until(&view, "asked again for the new accounts", |s| {
+        !s.pending_addons.is_empty()
+    })
+    .await;
+    until(&view, "answered again", |s| s.done).await;
+    let snap = view.snapshot();
+    assert!(snap.frozen, "the pick under focus stays");
+    assert_eq!(snap.recommended.unwrap().via, "first");
+}
