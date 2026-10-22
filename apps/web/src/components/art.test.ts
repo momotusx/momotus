@@ -35,16 +35,24 @@ const under = (ramp: Ramp, page: string, w: number, h: number, x: number, y: num
 const { dark } = tokens.color;
 const WHITE: RGB = [255, 255, 255];
 const FILL = 0.16;
-type Spot = [name: string, ramp: Ramp, page: string, box: [number, number], at: [number, number], label: "pill" | "word" | "line"];
+type Label = "pill" | "word" | "line" | "muted" | "dim";
+type Spot = [name: string, ramp: Ramp, page: string, box: [number, number], at: [number, number], label: Label];
 // "pill": a white label or glyph on the fill; "word": a round button's word under its circle, 70 percent white on
-// the art; "line": the hero's reason, 92 percent white on the art at its 560 px end. The phone title's rows sit under
-// its art, on the page.
+// the art; "line": text at 92 percent on the art (the reason, the genre line); "muted": 70 percent (the synopsis);
+// "dim": 64 percent (the meta line). Text holds 4.5:1 on every form (DECISION, contrast floors). The phone title's
+// rows sit under its art, on the page.
+const LEVEL: Record<Exclude<Label, "pill">, number> = { word: 0.7, line: 0.92, muted: 0.7, dim: 0.64 };
+// TV's top shelf at 1920x1080, measured on the e2e Home: every line of the column is taken at the column's
+// 820 px edge (x 900, 0.4688), wherever its text ends, and at its first line's top.
+const TV_EDGE = 0.4688;
 const spots: Spot[] = [
-  ["home tv, Details circle", "hero", dark.bg, [1832, 600], [0.1662, 0.755], "pill"],
-  ["home tv, Details word", "hero", dark.bg, [1832, 600], [0.1695, 0.89], "word"],
+  ["home tv, the genre line", "heroTv", dark.bg, [1920, 1080], [TV_EDGE, 0.4083], "line"],
+  ["home tv, the synopsis", "heroTv", dark.bg, [1920, 1080], [TV_EDGE, 0.4509], "muted"],
+  ["home tv, the meta line", "heroTv", dark.bg, [1920, 1080], [TV_EDGE, 0.5491], "dim"],
+  ["home tv, Details pill", "heroTv", dark.bg, [1920, 1080], [0.2365, 0.663], "pill"],
   ["home desktop, Details circle", "hero", dark.bgDesktop, [2212, 600], [0.1376, 0.755], "pill"],
   ["home phone, Details circle", "heroPhone", dark.bgPhone, [358, 520], [0.4976, 0.8731], "pill"],
-  ["home tv, the reason", "hero", dark.bg, [1832, 600], [0.3253, 0.68], "line"],
+  ["home tv, the reason", "heroTv", dark.bg, [1920, 1080], [TV_EDGE, 0.6046], "line"],
   ["home desktop, the reason", "hero", dark.bgDesktop, [2212, 600], [0.2694, 0.68], "line"],
   ["home phone, the reason", "heroPhone", dark.bgPhone, [358, 520], [0.95, 0.819], "line"],
   ["title tv series, Start over", "title", dark.bg, [1920, 1080], [0.4398, 0.3817], "pill"],
@@ -59,7 +67,7 @@ const spots: Spot[] = [
 test("every secondary over a backdrop keeps 4.5:1 over white art", () => {
   const rows = spots.map(([name, ramp, page, [w, h], [x, y], label]) => {
     const art = under(ramp, page, w, h, x, y);
-    const ratio = label === "pill" ? contrast(WHITE, over(WHITE, FILL, art)) : contrast(over(WHITE, label === "word" ? 0.7 : 0.92, art), art);
+    const ratio = label === "pill" ? contrast(WHITE, over(WHITE, FILL, art)) : contrast(over(WHITE, LEVEL[label], art), art);
     return { name, ratio: +ratio.toFixed(2) };
   });
   console.log(rows.map((r) => `${r.ratio.toFixed(2)}  ${r.name}`).join("\n"));

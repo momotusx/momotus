@@ -15,6 +15,13 @@ export const ramps = {
     { deg: 90, stops: [[0, 0.94], [0.28, 0.72], [0.58, 0.18], [0.72, 0]] },
     { deg: 0, stops: [[0, 0.9], [0.34, 0.3], [0.58, 0]] },
   ],
+  /** TV Home's full-bleed top shelf: the page color from the leading edge over the column and from the
+   * bottom up into the page, Android's checked stops (`Images.kt` `Scrims.topShelf*`, deepened from the
+   * frame's until every word of the column keeps 4.5:1 over white art; art.test.ts). */
+  heroTv: [
+    { deg: 90, stops: [[0, 0.94], [0.48, 0.82], [0.64, 0.3], [0.8, 0]] },
+    { deg: 0, stops: [[0, 1], [0.05, 1], [0.14, 0.8], [0.3, 0.45], [0.5, 0.12], [0.62, 0]] },
+  ],
   /** The phone's hero: under the status bar, and from the bottom up. */
   heroPhone: [
     { deg: 180, stops: [[0, 0.55], [0.22, 0]] },

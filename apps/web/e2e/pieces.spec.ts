@@ -334,6 +334,52 @@ test("TV: movie rows are 16:9 stills and series rows 2:3 posters, from the tile 
   await context.close();
 });
 
+test("TV: the top shelf is full bleed, the first row's title at 850, and nothing on the art blurs or filters", async ({ browser }) => {
+  const { context, page } = await open(browser, "tv", "/");
+  // The logo held back a moment: the column must not move when it lands (its box is fixed).
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await context.route(/images\.metahub\.space\/logo\//, async (route) => {
+    await held;
+    await route.continue();
+  });
+  await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+  const column = () =>
+    page.evaluate(() => [".hero .genre", ".hero .meta", ".hero .reason", '[data-f="hero:details"]'].map((s) => Math.round(document.querySelector(s)?.getBoundingClientRect().top ?? -1)));
+  const before = await column();
+  release();
+  await expect(page.locator(".hero-logo:not(.pending)")).toBeVisible({ timeout: 30_000 });
+  await page.waitForTimeout(300);
+  expect(await column()).toEqual(before);
+  const geo = await page.evaluate(() => {
+    const r = (s: string) => document.querySelector(s)?.getBoundingClientRect();
+    const hero = r(".hero") as DOMRect;
+    const logo = r(".hero-logo") as DOMRect;
+    return { hero: [hero.left, hero.top, hero.width, hero.height], logo: [logo.width, logo.height], row: Math.round(r(".row .row-head h2")?.top ?? -1), details: Math.round(r('[data-f="hero:details"]')?.bottom ?? -1) };
+  });
+  expect(geo).toEqual({ hero: [0, 0, 1920, 1080], logo: [640, 160], row: 850, details: 770 });
+  // Nothing over the art makes a live render pass: no filter, no backdrop filter (a failed tile's dimmed art aside).
+  const filtered = await page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>(".hero, .hero *, .row:first-of-type .tile, .row:first-of-type .tile *")]
+      .filter((el) => !el.closest(".tile-slot.failed"))
+      .filter((el) => {
+        const c = getComputedStyle(el);
+        return c.filter !== "none" || c.backdropFilter !== "none";
+      })
+      .map((el) => el.className || el.tagName),
+  );
+  expect(filtered).toEqual([]);
+  // The rising row's lanes take no press meant for the hero's buttons.
+  for (const key of ["hero:play", "hero:details"]) {
+    const hit = await page.locator(`[data-f="${key}"]`).evaluate((el) => {
+      const b = el.getBoundingClientRect();
+      return el.contains(document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2));
+    });
+    expect(hit, key).toBe(true);
+  }
+  await context.close();
+});
+
 /** Where a secondary's label starts and ends over a backdrop, as fractions of the backdrop: the
  * glass check (src/components/art.test.ts) composites the ramps at these spots, so a layout that
  * moves a label past one leaves the check measuring the wrong place. */
@@ -353,12 +399,16 @@ const spot = (page: Page, selector: string, backdrop: string, maxWidth = false) 
 test("TV: the secondaries over a backdrop sit where the glass check measures them", async ({ browser }) => {
   const { context, page } = await open(browser, "tv", "/");
   await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
-  const details = await spot(page, ".hero .rbtn .ring", ".hero-bd");
-  expect(details.x).toBeLessThanOrEqual(0.1662 + 0.002);
-  expect(details.y).toBeGreaterThanOrEqual(0.755 - 0.005);
-  const reason = await spot(page, ".hero .reason", ".hero-bd", true);
-  expect(reason.x).toBeLessThanOrEqual(0.3253 + 0.002);
-  expect(reason.y).toBeGreaterThanOrEqual(0.68 - 0.005);
+  // The top shelf's column (art.test.ts, TV_EDGE 0.4688 for every line): each line's top no higher than
+  // the check measures it, the column no wider, Details' label no further right.
+  for (const [selector, y] of [[".hero .genre", 0.4083], [".hero-syn", 0.4509], [".hero .meta", 0.5491], [".hero .reason", 0.6046]] as const) {
+    const at = await spot(page, selector, ".hero-bd", true);
+    expect(at.x, selector).toBeLessThanOrEqual(0.4688 + 0.002);
+    expect(at.y, selector).toBeGreaterThanOrEqual(y - 0.005);
+  }
+  const details = await spot(page, '[data-f="hero:details"]', ".hero-bd");
+  expect(details.x).toBeLessThanOrEqual(0.2365 + 34 / 1920 + 0.002);
+  expect(details.y).toBeGreaterThanOrEqual(0.663 - 18 / 1080 - 0.005);
   await page.goto(`/title/series/${GOT.id}?form=tv`);
   await expect(page.locator('[data-f="title:startover"]')).toBeVisible({ timeout: 30_000 });
   const over = await spot(page, '[data-f="title:startover"]', ".title-bd");

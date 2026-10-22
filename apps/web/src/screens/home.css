@@ -42,6 +42,34 @@
 .hero .hero-skel { position: absolute; inset: 0; z-index: -1; background: var(--raised); }
 /* No hero to show and none coming: the rows start at the top. */
 .hero.closed { display: none; }
+/* The genre line, and the meta line in the column's own order per form. */
+.hero-lines { display: contents; }
+.hero .genre { display: none; max-width: 100%; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Nothing on the hero blurs, filters or animates a shadow over the art (plans/design-v3-phase2-web.md,
+ * rule 2): its controls move and fade only. */
+.hero [data-f] { transition-property: transform, opacity; }
+
+/* TV: the full-bleed top shelf (`tvHome`). The art fills the first screen under the floating tab bar,
+ * with no card, radius or edge; Continue Watching's title sits at 850 (850 - 1080 - the row's 30 top
+ * margin = -260). The column stands at the safe side, its buttons ending 80 above that title (770). */
+[data-form="tv"] .hero { height: 1080px; margin: 0 0 -260px; border-radius: 0; background: var(--bg); box-shadow: none; }
+[data-form="tv"] .hero-bd::after { background: radial-gradient(120% 100% at 66.7% 0%, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, .28) 100%); }
+[data-form="tv"] .hero-body { padding: 0 0 310px var(--safe-side); }
+[data-form="tv"] :is(.hero-body > *, .hero-lines > *) { max-width: 820px; }
+/* The frame's order: logo, genre line, synopsis, meta line, the reason, the buttons. */
+[data-form="tv"] .hero .genre { display: block; order: 1; margin-bottom: 10px; font: 600 var(--type-body) / 36px var(--font-text); }
+[data-form="tv"] .hero-syn { order: 2; -webkit-line-clamp: 2; font: 500 var(--type-body) / 36px var(--font-text); }
+[data-form="tv"] .hero .meta { order: 3; margin: 12px 0 28px; gap: 6px 14px; font: 600 var(--type-callout) / 32px var(--font-text); color: var(--dim); }
+[data-form="tv"] .hero .reason { order: 4; max-width: 820px; }
+[data-form="tv"] .hero .acts { order: 5; gap: 40px; }
+/* The logo's box is fixed (160 by 640, the image contained at its bottom left): nothing moves when it
+ * decodes, whatever its shape. */
+[data-form="tv"] .hero-logo { order: 0; width: 640px; height: 160px; max-width: none; margin-bottom: 24px; object-fit: contain; object-position: left bottom; }
+[data-form="tv"] .hero .logo-text { order: 0; margin-bottom: 24px; }
+[data-form="tv"] .hero .hero-skel { border-radius: 0; }
+/* No hero and none coming (offline, posters only, a kids profile): the rows start under the tab bar. */
+[data-form="tv"] .hero.closed { display: block; height: calc(var(--nav-top) + var(--nav-h) + 20px); margin-bottom: 0; background: none; }
+[data-form="tv"] .hero.closed .hero-bd { display: none; }
 [data-form="phone"] .hero.closed { display: block; height: 60px; background: none; box-shadow: none; }
 
 .home-problem { position: relative; margin: 40px var(--safe-side); }

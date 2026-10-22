@@ -394,7 +394,12 @@ test("tv: with no backdrop from any catalog, Home's hero closes once the rows ha
   // answered with no backdrop, the skeleton goes and the hero closes.
   await expect(page.locator(".row").first()).toBeVisible({ timeout: 30_000 });
   await expect(page.locator(".hero-skel")).toHaveCount(0, { timeout: 60_000 });
-  await expect(page.locator(".hero")).toBeHidden();
+  // Closed, the hero keeps only the room under the tab bar: the first row's title starts under it.
+  await expect(page.locator(".hero.closed .hero-bd")).toBeHidden();
+  const head = await page.locator(".row .row-head h2").first().evaluate((el) => Math.round(el.getBoundingClientRect().top));
+  const nav = await page.locator(".topnav .tabbar").evaluate((el) => Math.round(el.getBoundingClientRect().bottom));
+  expect(head).toBeGreaterThan(nav + 12);
+  expect(head).toBeLessThan(nav + 80);
   await context.close();
 });
 

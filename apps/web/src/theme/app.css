@@ -97,7 +97,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 .btn.primary { background: var(--primary); color: var(--on-primary); }
 /* Over artwork a secondary blurs what is behind it, 20 px (the hero, a title's actions);
    on a plain page there is nothing to blur. */
-:is(.hero .btn, .play-row .btn, .rbtn .ring, .info .acts .btn svg) { -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
+:is(.play-row .btn, .rbtn .ring, .info .acts .btn svg):not(.hero *) { -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
 .btn.primary svg.fill, .btn svg.fill { fill: currentColor; }
 .btn small { font: 500 var(--type-callout) var(--font-text); opacity: .7; margin-left: 4px; }
 .btn.big { height: 84px; padding: 0 40px; font-size: var(--type-headline); }

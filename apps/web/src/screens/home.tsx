@@ -287,7 +287,7 @@ export default function Home() {
     <div class="home">
       <main class="page" data-vscroll ref={attach} onScroll={(e) => (pageScroll.top = e.currentTarget.scrollTop)}>
         <section class="hero" classList={{ closed: !hero() && !waiting() }} data-reveal-top data-focus-wait={!hero() && waiting() ? "" : undefined} aria-label="Featured">
-          <Backdrop src={hero()?.tile.background ?? null} class="hero-bd" ramp={form() === "phone" ? "heroPhone" : "hero"} />
+          <Backdrop src={hero()?.tile.background ?? null} class="hero-bd" ramp={form() === "phone" ? "heroPhone" : form() === "tv" ? "heroTv" : "hero"} />
           <Show when={form() === "phone"}>
             <header class="ph-top">
               <span class="brand">Marquee</span>
@@ -305,23 +305,24 @@ export default function Home() {
             {(h) => (
               <>
                 <Logo src={h().tile.logo} name={h().tile.name} class="hero-logo" />
-                <p class="meta" ref={separators}>
-                  <Ratings ratings={h().tile.ratings} sep={() => <b aria-hidden="true">·</b>} />
-                  <Show when={ratingParts(h().tile.ratings).length}>
-                    <b aria-hidden="true">·</b>
-                  </Show>
-                  <Show when={h().tile.releaseInfo} fallback={kindLabel(h().tile.kind)}>
-                    <span class="num">{h().tile.releaseInfo}</span>
-                  </Show>
-                  <Show when={h().runtime}>
-                    <b aria-hidden="true">·</b>
-                    <span class="num">{h().runtime}</span>
-                  </Show>
-                  <Show when={h().genres.length}>
-                    <b aria-hidden="true">·</b>
-                    <span>{h().genres.join(", ")}</span>
-                  </Show>
-                </p>
+                {/* The genre line, then the meta line with the ratings row; each form orders the column
+                    as its frame (home.css). */}
+                <div class="hero-lines">
+                  <p class="genre">{[kindLabel(h().tile.kind), ...h().genres].join(" · ")}</p>
+                  <p class="meta" ref={separators}>
+                    <Show when={h().tile.releaseInfo}>
+                      <span class="num yr">{h().tile.releaseInfo}</span>
+                    </Show>
+                    <Show when={h().runtime}>
+                      <b aria-hidden="true" class="yr">·</b>
+                      <span class="num yr">{h().runtime}</span>
+                    </Show>
+                    <Show when={(h().tile.releaseInfo || h().runtime) && ratingParts(h().tile.ratings).length}>
+                      <b aria-hidden="true" class="yr">·</b>
+                    </Show>
+                    <Ratings ratings={h().tile.ratings} sep={() => <b aria-hidden="true">·</b>} />
+                  </p>
+                </div>
                 <Show when={h().description}>
                   <p class="hero-syn">{h().description}</p>
                 </Show>
@@ -336,18 +337,35 @@ export default function Home() {
                       </A>
                     )}
                   </Show>
-                  <A
-                    class="rbtn"
-                    href={titlePath(h().tile.kind, h().tile.id)}
-                    data-f="hero:details"
-                    aria-label={`Details for ${h().tile.name}`}
-                    data-autofocus={playHref(h().tile) ? undefined : ""}
+                  {/* Details: a pill with its word on TV, as tvOS; the round button off the TV. */}
+                  <Show
+                    when={form() === "tv"}
+                    fallback={
+                      <A
+                        class="rbtn"
+                        href={titlePath(h().tile.kind, h().tile.id)}
+                        data-f="hero:details"
+                        aria-label={`Details for ${h().tile.name}`}
+                        data-autofocus={playHref(h().tile) ? undefined : ""}
+                      >
+                        <span class="ring">
+                          <Info aria-hidden />
+                        </span>
+                        <span class="lbl">Details</span>
+                      </A>
+                    }
                   >
-                    <span class="ring">
+                    <A
+                      class="btn"
+                      href={titlePath(h().tile.kind, h().tile.id)}
+                      data-f="hero:details"
+                      aria-label={`Details for ${h().tile.name}`}
+                      data-autofocus={playHref(h().tile) ? undefined : ""}
+                    >
                       <Info aria-hidden />
-                    </span>
-                    <span class="lbl">Details</span>
-                  </A>
+                      Details
+                    </A>
+                  </Show>
                 </div>
               </>
             )}
@@ -355,7 +373,10 @@ export default function Home() {
           </div>
         </section>
 
-        <AccountCard />
+        {/* With no row to follow, the account's notices sit under the hero. */}
+        <Show when={home.rows.length === 0}>
+          <AccountCard />
+        </Show>
 
         <Show when={home.status.state === "failed" && home.status}>
           {(s) => (
@@ -402,6 +423,11 @@ export default function Home() {
                 {(row, i) => (
                   <>
                     <Row row={row} autofocus={i() === 0 && row.rowId === CONTINUE_ROW && rowFirst()} root={page} onRetry={retryHomeRow} />
+                    {/* The account's notices and the defaults card come after the first row, never over the
+                        hero's art or between it and the row that rises into it (as Android's TV Home). */}
+                    <Show when={i() === 0}>
+                      <AccountCard />
+                    </Show>
                     <Show when={i() === 0 && row.rowId === CONTINUE_ROW}>
                       <DefaultsCard />
                     </Show>
