@@ -2,9 +2,11 @@ package app.marquee.android
 
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.ReportDrawnWhen
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -326,15 +328,7 @@ private fun AppNav(
     SideEffect { app.tvHome.focus.paused = top != Route.Home }
 
     val content: @Composable () -> Unit = {
-        val fade =
-            fadeIn(
-                androidx.compose.animation.core
-                    .tween(Marquee.panelMs),
-            ) togetherWith
-                fadeOut(
-                    androidx.compose.animation.core
-                        .tween(Marquee.panelMs),
-                )
+        val fade = screenFade(Marquee.panelMs)
         NavDisplay(
             backStack = backStack,
             onBack = { if (backStack.size > 1) backStack.removeAt(backStack.lastIndex) },
@@ -771,6 +765,13 @@ private fun AppNav(
         )
     }
 }
+
+/**
+ * The cross-fade between screens. Unclipped: by default the fade clips the screens to their box, which on
+ * TV cut Home's top shelf art off at the tab bar for the whole fade, then let it jump up behind the bar.
+ */
+internal fun screenFade(ms: Int): ContentTransform =
+    ContentTransform(fadeIn(tween(ms)), fadeOut(tween(ms)), sizeTransform = SizeTransform(clip = false))
 
 /** Under Continue Watching after Remove: the words with Undo while it can be taken back, or why it failed. */
 @Composable
