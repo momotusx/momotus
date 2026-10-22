@@ -11,10 +11,12 @@ import androidx.media3.common.text.CueGroup
 import androidx.media3.decoder.DecoderInputBuffer
 import androidx.media3.exoplayer.BaseRenderer
 import androidx.media3.exoplayer.FormatHolder
+import androidx.media3.exoplayer.Renderer
 import androidx.media3.exoplayer.RendererCapabilities
 import androidx.media3.exoplayer.text.TextOutput
 import androidx.media3.extractor.text.CueDecoder
 import androidx.media3.extractor.text.CuesWithTiming
+import app.marquee.core.client.CoreLog
 
 /**
  * The text renderer for the file's own subtitle tracks, which draws the cues of the position minus the track's
@@ -41,6 +43,9 @@ class DelayedTextRenderer(
     private var inputEnded = false
     private var shown: List<Cue> = emptyList()
 
+    /** Where the last render was, for a redraw between renders ([MSG_REDRAW]); unset while disabled. */
+    private var lastPositionUs = C.TIME_UNSET
+
     override fun getName(): String = "DelayedTextRenderer"
 
     override fun supportsFormat(format: Format): Int =
@@ -64,9 +69,29 @@ class DelayedTextRenderer(
         positionUs: Long,
         elapsedRealtimeUs: Long,
     ) {
-        readAhead()
+        lastPositionUs = positionUs
+        draw(positionUs)
+    }
+
+    /** A delay change, sent through the player (PlayerHost): drawn now, not at the next render. */
+    override fun handleMessage(
+        messageType: Int,
+        message: Any?,
+    ) {
+        if (messageType == MSG_REDRAW &&
+            lastPositionUs != C.TIME_UNSET
+        ) {
+            draw(lastPositionUs)
+        } else {
+            super.handleMessage(messageType, message)
+        }
+    }
+
+    private fun draw(positionUs: Long) {
         val at = positionUs - delay.ms * 1000
+        readAhead(at)
         cues.discardBefore(positionUs - SUBTITLE_MAX_MS * 1000)
+        cues.trimPictures(at, MAX_PICTURES_BEHIND)
         val now = cues.at(at)
         if (now != shown) {
             shown = now
@@ -74,10 +99,15 @@ class DelayedTextRenderer(
         }
     }
 
-    /** Every cue the player has loaded so far; a bounded batch a call, so a long file never holds a frame up. */
-    private fun readAhead() {
+    /**
+     * Every cue the player has loaded so far; a bounded batch a call, so a long file never holds a frame up. Picture
+     * cues (PGS, DVB) come decoded, a few MB each at full frame: past [MAX_PICTURES_AHEAD] of them ahead of [at], or
+     * [MAX_PICTURE_BYTES] held, the rest wait in the player's buffer.
+     */
+    private fun readAhead(at: Long) {
         repeat(READ_BATCH) {
             if (inputEnded) return
+            if (cues.picturesFrom(at) >= MAX_PICTURES_AHEAD || cues.pictureBytes() >= MAX_PICTURE_BYTES) return
             buffer.clear()
             when (readSource(formatHolder, buffer, 0)) {
                 C.RESULT_BUFFER_READ -> {
@@ -87,7 +117,12 @@ class DelayedTextRenderer(
                     }
                     buffer.flip()
                     val data = buffer.data ?: return@repeat
-                    cues.add(decoder.decode(buffer.timeUs, data.array(), data.arrayOffset(), data.limit()))
+                    // A cue that does not decode is skipped, as Media3's own renderer does; the video goes on.
+                    try {
+                        cues.add(decoder.decode(buffer.timeUs, data.array(), data.arrayOffset(), data.limit()))
+                    } catch (e: RuntimeException) {
+                        CoreLog.w("a subtitle cue at ${buffer.timeUs} us did not decode: ${e.message}")
+                    }
                 }
 
                 C.RESULT_FORMAT_READ -> {
@@ -112,6 +147,7 @@ class DelayedTextRenderer(
     }
 
     override fun onDisabled() {
+        lastPositionUs = C.TIME_UNSET
         cues.clear()
         clear()
     }
@@ -132,8 +168,16 @@ class DelayedTextRenderer(
         return true
     }
 
-    private companion object {
-        const val READ_BATCH = 64
+    companion object {
+        /** The player message that redraws at the last position: a delay changed. */
+        const val MSG_REDRAW = Renderer.MSG_CUSTOM_BASE + 1
+
+        private const val READ_BATCH = 64
+
+        /** Picture cues held ahead of what shows and behind it, and their bytes at most. */
+        internal const val MAX_PICTURES_AHEAD = 16
+        internal const val MAX_PICTURES_BEHIND = 8
+        internal const val MAX_PICTURE_BYTES = 64L * 1024 * 1024
     }
 }
 
@@ -170,6 +214,25 @@ class TimedCues {
      */
     fun at(timeUs: Long): List<Cue> =
         all.indices.filter { all[it].startTimeUs <= timeUs && timeUs < endOf(it) }.flatMap { all[it].cues }
+
+    private fun picture(c: CuesWithTiming) = c.cues.any { it.bitmap != null }
+
+    /** The picture cues starting at or after [timeUs]. */
+    fun picturesFrom(timeUs: Long): Int = all.count { picture(it) && it.startTimeUs >= timeUs }
+
+    /** The bytes the picture cues hold. */
+    fun pictureBytes(): Long = all.sumOf { c -> c.cues.sumOf { it.bitmap?.allocationByteCount?.toLong() ?: 0L } }
+
+    /** Keeps the last [keep] picture cues that ended by [timeUs], the newest; text cues stay. */
+    fun trimPictures(
+        timeUs: Long,
+        keep: Int,
+    ) {
+        val behind = all.indices.filter { picture(all[it]) && endOf(it) <= timeUs }
+        if (behind.size <= keep) return
+        val gone = behind.dropLast(keep).map { all[it] }.toSet()
+        all.removeAll(gone)
+    }
 
     /** Forgets the cues that ended before [timeUs]. */
     fun discardBefore(timeUs: Long) {

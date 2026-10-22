@@ -40,7 +40,7 @@ class PlayerHost(
     private val walkLog: WalkLog?
 
     init {
-        val renderers = MarqueeRenderers(context, subtitleDelay).setEnableDecoderFallback(true)
+        val renderers = MarqueeRenderers(context, subtitleDelay).apply { setEnableDecoderFallback(true) }
         val selector =
             DefaultTrackSelector(context).apply {
                 setParameters(
@@ -74,6 +74,11 @@ class PlayerHost(
                 ).setHandleAudioBecomingNoisy(true)
                 .setWakeMode(C.WAKE_MODE_NETWORK)
                 .build()
+        // A delay step on the file's own track redraws at once, also while paused, when ExoPlayer renders only
+        // once a second.
+        subtitleDelay.onChange = {
+            renderers.text?.let { player.createMessage(it).setType(DelayedTextRenderer.MSG_REDRAW).send() }
+        }
         if (WalkMute.on) player.volume = 0f
         walkLog = WalkLog.attach(context, player)
         // Media keys and the system's now-playing card; no service, so nothing plays in the background.
@@ -105,6 +110,10 @@ internal class MarqueeRenderers(
     context: Context,
     private val delay: SubtitleDelay,
 ) : DefaultRenderersFactory(context) {
+    /** The renderer it built, which a delay change wakes ([DelayedTextRenderer.MSG_REDRAW]). */
+    var text: DelayedTextRenderer? = null
+        private set
+
     override fun buildTextRenderers(
         context: Context,
         output: TextOutput,
@@ -112,7 +121,7 @@ internal class MarqueeRenderers(
         extensionRendererMode: Int,
         out: ArrayList<Renderer>,
     ) {
-        out += DelayedTextRenderer(output, outputLooper, delay)
+        out += DelayedTextRenderer(output, outputLooper, delay).also { text = it }
         super.buildTextRenderers(context, output, outputLooper, extensionRendererMode, out)
     }
 }

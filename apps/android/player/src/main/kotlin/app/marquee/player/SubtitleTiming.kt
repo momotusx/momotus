@@ -8,6 +8,14 @@ package app.marquee.player
 class SubtitleDelay {
     @Volatile
     var ms = 0L
+        set(value) {
+            field = value
+            onChange?.invoke()
+        }
+
+    /** Told of every change, on the writer's thread: the player wakes the file's renderer with it (PlayerHost). */
+    @Volatile
+    var onChange: (() -> Unit)? = null
 }
 
 /** How far one press of the Timing row's minus or plus moves the subtitles, as Stremio's delay steps. */
@@ -16,7 +24,10 @@ const val SUBTITLE_STEP_MS = 100L
 /** The furthest the subtitles move either way (Kodi's and Nuvio's): room for a cut or an advert. */
 const val SUBTITLE_MAX_MS = 60_000L
 
-/** How long minus or plus is held before it repeats, and how often it repeats then (stremio-web subtitleDelay.ts). */
+/**
+ * How long minus or plus is held before its repeat interval starts, and the interval (stremio-web subtitleDelay.ts):
+ * as its Stepper, the first repeat comes one interval after the wait, at 350 ms.
+ */
 internal const val HOLD_START_MS = 250L
 internal const val HOLD_EVERY_MS = 100L
 
