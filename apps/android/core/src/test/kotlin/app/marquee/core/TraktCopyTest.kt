@@ -31,11 +31,12 @@ class TraktCopyTest {
                 .parseToJsonElement(File("../../shared/trakt-words.json").readText())
                 .jsonObject
                 .mapValues { it.value.jsonPrimitive.content }
+                // Android shows no eyebrow (design v3); the web and Apple keep theirs until their own screens drop it.
+                .filterKeys { it != "eyebrow" }
         val ours =
             with(TraktCopy) {
                 mapOf(
                     "title" to TITLE,
-                    "eyebrow" to EYEBROW,
                     "lede" to LEDE,
                     "rowOff" to ROW_OFF,
                     "connected" to CONNECTED,

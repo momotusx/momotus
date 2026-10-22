@@ -6,7 +6,6 @@ package app.marquee.core
  * `{kind}` and `{host}` are filled in by [filterEmpty] and [fromHost].
  */
 object FindAddonsCopy {
-    const val EYEBROW = "Addons"
     const val TITLE = "Find addons"
     const val LEDE =
         "Most of these add subtitles and catalogs. Sources usually come as a link from the addon's own website."

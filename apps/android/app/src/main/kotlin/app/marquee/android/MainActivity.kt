@@ -14,7 +14,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.core.graphics.drawable.toDrawable
 import app.marquee.core.route.Route
 import app.marquee.design.MarqueeTheme
-import app.marquee.design.Tokens
+import app.marquee.design.formPalette
 import app.marquee.player.WalkLog
 import app.marquee.player.WalkMute
 
@@ -31,9 +31,10 @@ class MainActivity : ComponentActivity() {
         val debuggable = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         val form = FormFactor.detect(this, if (debuggable) intent.getStringExtra("form") else null)
         applyBars()
-        // The first frame shows the page color.
+        // The first frame shows the form's page color.
         window.setBackgroundDrawable(
-            Tokens.dark.bg
+            formPalette(form)
+                .bg
                 .toArgb()
                 .toDrawable(),
         )

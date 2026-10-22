@@ -80,7 +80,7 @@ fun StreamChoiceScreen(session: CoreSession) {
     ) {
         item(key = "head") {
             Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-                BrowseHeader("Settings", StreamChoiceCopy.TITLE)
+                BrowseHeader(StreamChoiceCopy.TITLE)
                 MqText(
                     StreamChoiceCopy.LEDE,
                     modifier = Modifier.padding(horizontal = Marquee.safe.side).widthIn(max = 900.dp),

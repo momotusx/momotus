@@ -398,7 +398,7 @@ fun FindAddonsScreen(
                 },
             verticalArrangement = Arrangement.spacedBy(gap),
         ) {
-            item(key = "head") { BrowseHeader(FindAddonsCopy.EYEBROW, FindAddonsCopy.TITLE, side = 0.dp) }
+            item(key = "head") { BrowseHeader(FindAddonsCopy.TITLE, side = 0.dp) }
             item(key = "lede") { MqText(FindAddonsCopy.LEDE, color = Marquee.colors.muted) }
             item(key = "paste") {
                 if (tv) {

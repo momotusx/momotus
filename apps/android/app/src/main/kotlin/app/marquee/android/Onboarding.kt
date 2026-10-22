@@ -439,7 +439,7 @@ internal fun RecommendedCard(
             .bringIntoViewRequester(whole)
             .onFocusChanged { if (it.hasFocus) scope.launch { whole.bringIntoView() } },
     ) {
-        // Glass buttons: Home's one white pill is the hero's Play.
+        // Secondary pills: Home's one white pill is the hero's Play.
         Section {
             Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
                 MqText(DefaultsCopy.REVIEW_TITLE, role = TextRole.Title3)

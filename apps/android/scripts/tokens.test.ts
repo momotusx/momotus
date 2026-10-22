@@ -20,6 +20,7 @@ test("the output carries the values the design decision names", () => {
   expect(kotlin).toContain("primary = Color(0xEBFFFFFF)");
   expect(kotlin).toContain("key = Color(0xFF0A84FF)");
   expect(kotlin).toContain("switchOn = Color(0xFF30D158)");
+  expect(kotlin).toContain("val selectedFill = Color(0xFF636366)");
   expect(kotlin).toContain("body = 29.sp");
   expect(kotlin).toContain("const val FOCUS_SCALE_CARD = 1.06f");
   expect(kotlin).toContain("val focusRing = 4.dp");

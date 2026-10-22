@@ -89,7 +89,7 @@ fun ImportScreen(
     ) {
         item(key = "head") {
             Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-                BrowseHeader("Settings", "Import from Stremio")
+                BrowseHeader("Import from Stremio")
                 MqText(
                     "Brings your addons, library, Continue Watching and watched marks over once. Nothing is sent " +
                         "back to Stremio." + if (tv) " Nothing is typed on this screen." else "",

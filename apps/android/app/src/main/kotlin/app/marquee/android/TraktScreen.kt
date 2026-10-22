@@ -191,7 +191,7 @@ fun TraktScreen(
     ) {
         item(key = "head") {
             Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-                BrowseHeader(TraktCopy.EYEBROW, TraktCopy.TITLE)
+                BrowseHeader(TraktCopy.TITLE)
                 MqText(
                     TraktCopy.LEDE,
                     modifier = Modifier.padding(horizontal = Marquee.safe.side).widthIn(max = 900.dp),

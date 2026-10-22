@@ -1,6 +1,7 @@
 package app.marquee.design
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -64,9 +66,10 @@ private const val LINE = 1.4f
 /**
  * A title in a row or grid (design/DECISION.md v2, Cards): the picture with a rating chip, then
  * the name and a secondary line under it, never over it. [caption] is that line: the core's own
- * words (Continue Watching, Library) or the year. Focus lifts the card (on TV with its shadow and
- * the sheen on the art, on a phone with the key ring) and brightens the name. Everything is a plain
- * value, so the design module knows nothing of the core.
+ * words (Continue Watching, Library) or the year: the name at 600, the line at 64 percent, neither
+ * changing on focus. The art carries the 25 percent inner keyline (design/DECISION.md, Lines). Focus
+ * lifts the card (on TV with its shadow and the sheen on the art, on a phone with the key ring).
+ * Everything is a plain value, so the design module knows nothing of the core.
  */
 @Composable
 fun PosterTile(
@@ -94,8 +97,6 @@ fun PosterTile(
     val size = metrics.sizeOf(shape)
     val corner = Marquee.radius.m
     val lift = remember { mutableStateOf(forceFocus) }
-    // The name brightens on a TV focus; a phone keyboard's focus is the ring alone.
-    val focused = lift.value && Marquee.form == Form.Tv
     // What a screen reader says after the title: the caption, or the watched share; and Watched.
     val state =
         listOfNotNull(
@@ -115,6 +116,7 @@ fun PosterTile(
                 .then(
                     if (onFocusChange != null) Modifier.onFocusChanged { onFocusChange(it.isFocused) } else Modifier,
                 ).clip(RoundedCornerShape(corner))
+                .keyline(RoundedCornerShape(corner))
                 .semantics {
                     contentDescription = title
                     if (state != null) stateDescription = state
@@ -128,13 +130,7 @@ fun PosterTile(
         }
         // Read as part of the tile above.
         Column(Modifier.clearAndSetSemantics { }) {
-            MqText(
-                title,
-                role = TextRole.Callout,
-                color = if (focused) colors.accent else colors.text,
-                weight = FontWeight.Bold,
-                maxLines = 1,
-            )
+            MqText(title, role = TextRole.Callout, weight = FontWeight.SemiBold, maxLines = 1)
             if (caption != null) {
                 MqText(caption, role = TextRole.Caption, color = colors.dim, weight = FontWeight.Medium, maxLines = 1)
             }
@@ -238,7 +234,9 @@ fun EpisodeCard(
             .semantics(mergeDescendants = true) { contentDescription = spoken }
             .focusClickable(onClick, Role.Button, onLongClick = onLongClick, longClickLabel = longClickLabel),
     ) {
-        RemoteImage(imageUrl, size.width, size.height, fallbackText = number) {
+        // The keyline is the still's: the card's words sit on its fill.
+        val still = RoundedCornerShape(topStart = corner, topEnd = corner)
+        RemoteImage(imageUrl, size.width, size.height, fallbackText = number, modifier = Modifier.keyline(still)) {
             if (watched) WatchedChip(Modifier.align(Alignment.TopStart))
             MqText(
                 number,
@@ -293,3 +291,8 @@ private fun WatchedChip(modifier: Modifier) {
 }
 
 private val EPISODE_PAD = 16.dp
+
+/** The 25 percent inner keyline over art, so dark art never melts into the page: 1 point on TV, half on a phone. */
+@Composable
+private fun Modifier.keyline(shape: Shape): Modifier =
+    border(if (Marquee.form == Form.Tv) 1.dp else 0.5.dp, Marquee.colors.lineStrong, shape)

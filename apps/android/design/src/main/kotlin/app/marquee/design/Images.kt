@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -17,6 +18,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -153,16 +156,82 @@ fun RemoteImage(
     }
 }
 
+/** A stop of a scrim over art: [at] along it (0 at the edge it starts from), [alpha] of the page color there. */
+@Immutable
+data class ScrimStop(
+    val at: Float,
+    val alpha: Float,
+)
+
 /**
- * A wide picture that fills its bounds, for hero artwork. Coil takes the request size from the
+ * The backdrops' scrims (design/DECISION.md, Backdrops and scrims), the one source for every hero and for
+ * the check over white art in DesignTest: a secondary's white label on its 16 percent fill keeps
+ * 4.5:1 wherever a secondary row sits on them.
+ */
+object Scrims {
+    /**
+     * TV Home's hero card: from the leading edge, and from the bottom up. Deepened in 1b (the check): the
+     * synopsis at the end of its column read 1.6:1 over white art on the v2 stops.
+     */
+    val heroSide = listOf(ScrimStop(0f, 0.94f), ScrimStop(0.4f, 0.8f), ScrimStop(0.6f, 0.3f), ScrimStop(0.75f, 0f))
+    val heroFoot = listOf(ScrimStop(0f, 0.9f), ScrimStop(0.34f, 0.3f), ScrimStop(0.58f, 0f))
+
+    /** The TV title page: dark over the text column's half, and the art fading into the page below. */
+    val titleSide = listOf(ScrimStop(0f, 0.94f), ScrimStop(0.5f, 0.8f), ScrimStop(0.75f, 0.35f), ScrimStop(1f, 0f))
+    val titleFoot = listOf(ScrimStop(0f, 1f), ScrimStop(0.4f, 0f))
+
+    /** The phone's Home hero, from the bottom up: its text starts no higher than a third down. */
+    val phoneHeroFoot = listOf(ScrimStop(0f, 0.96f), ScrimStop(0.7f, 0.8f), ScrimStop(1f, 0f))
+
+    /** The phone title's art: under the status bar from the top, and toward the logo from the bottom. */
+    val phoneTitleTop = listOf(ScrimStop(0f, 0.5f), ScrimStop(0.25f, 0f))
+    val phoneTitleFoot = listOf(ScrimStop(0f, 0.6f), ScrimStop(0.5f, 0f))
+
+    /** How much page color covers the art at [t] along [stops], linear between them. */
+    fun alpha(
+        stops: List<ScrimStop>,
+        t: Float,
+    ): Float {
+        if (stops.isEmpty()) return 0f
+        if (t <= stops.first().at) return stops.first().alpha
+        if (t >= stops.last().at) return stops.last().alpha
+        val i = stops.indexOfFirst { it.at >= t }
+        val (a, b) = stops[i - 1] to stops[i]
+        return a.alpha + (b.alpha - a.alpha) * (t - a.at) / (b.at - a.at)
+    }
+}
+
+/**
+ * A wide picture that fills its bounds, for hero artwork, under its [Scrims] in the page color: [side] from
+ * the leading edge, [foot] from the bottom up, [top] from the top down. Coil takes the request size from the
  * layout, so one image of known place needs no size here.
  */
 @Composable
 fun Backdrop(
     url: String?,
     modifier: Modifier = Modifier,
+    side: List<ScrimStop> = emptyList(),
+    foot: List<ScrimStop> = emptyList(),
+    top: List<ScrimStop> = emptyList(),
 ) {
-    Box(modifier.background(Marquee.colors.surface)) {
+    val page = Marquee.colors.bg
+    val scrims =
+        Modifier.drawWithCache {
+            fun stops(list: List<ScrimStop>) = list.map { it.at to page.copy(alpha = it.alpha) }.toTypedArray()
+            val brushes =
+                listOfNotNull(
+                    side.takeIf { it.isNotEmpty() }?.let { Brush.horizontalGradient(*stops(it)) },
+                    foot.takeIf { it.isNotEmpty() }?.let {
+                        Brush.verticalGradient(*stops(it.map { s -> ScrimStop(1f - s.at, s.alpha) }.reversed()))
+                    },
+                    top.takeIf { it.isNotEmpty() }?.let { Brush.verticalGradient(*stops(it)) },
+                )
+            onDrawWithContent {
+                drawContent()
+                brushes.forEach { drawRect(it) }
+            }
+        }
+    Box(modifier.background(Marquee.colors.surface).then(scrims)) {
         if (url != null) {
             AsyncImage(
                 model = url,

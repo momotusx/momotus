@@ -1,6 +1,9 @@
 package app.marquee.core
 
+import app.marquee.core.model.CatalogChoice
 import app.marquee.core.model.Hero
+import app.marquee.core.model.HomeCatalog
+import app.marquee.core.model.HomeRow
 import app.marquee.core.model.Ratings
 import app.marquee.core.model.Tile
 
@@ -28,13 +31,53 @@ object TileCopy {
     ): String = "$name could not be removed from Continue Watching: ${reason.trimEnd('.')}."
 
     /**
-     * What a row's source label says: the addon's name. Continue Watching has none: it comes from
-     * what was played, not from an addon or the library.
+     * What a row's or a search group's source label says: nothing beside a title of its own, and the
+     * addon's name only when another row of [rows] has the same title ([twinSource]). Continue Watching
+     * has none: it comes from what was played, not from an addon.
      */
     fun source(
-        rowId: String,
-        source: String,
-    ): String? = if (rowId == CONTINUE_ROW) null else source
+        row: HomeRow,
+        rows: List<HomeRow>,
+    ): String? = if (row.rowId == CONTINUE_ROW) null else twinSource(row, rows, { it.title }, { it.source })
+
+    /**
+     * No addon name in the UI (the owner, 2026-10-22: no "Cinemeta" beside a title): [item]'s addon only
+     * when another of [all] has the same [title], to tell the two apart (a row, a search group, a catalog).
+     * A failed or empty state and the Addons pages still name it.
+     */
+    fun <T> twinSource(
+        item: T,
+        all: List<T>,
+        title: (T) -> String,
+        source: (T) -> String,
+    ): String? = source(item).takeIf { all.count { title(it) == title(item) } > 1 }
+
+    /**
+     * A Discover catalog in a line about it ("Popular only answers for one genre at a time"): its name, with
+     * "from" its addon only beside another catalog of that name. A failed or empty [state] names the addon
+     * always, as it says who did not answer.
+     */
+    fun catalogLabel(
+        catalog: CatalogChoice,
+        catalogs: List<CatalogChoice>,
+        state: Boolean = false,
+    ): String {
+        val source = if (state) catalog.source else twinSource(catalog, catalogs, { it.name }, { it.source })
+        return source?.let { "${catalog.name} from $it" } ?: catalog.name
+    }
+
+    /**
+     * The line under a catalog's name on the Home rows page: its addon only beside another row of that
+     * title, then [hidden] ("Hidden") when it is; null when neither.
+     */
+    fun homeRowLine(
+        row: HomeCatalog,
+        rows: List<HomeCatalog>,
+        hidden: String,
+    ): String? =
+        listOfNotNull(twinSource(row, rows, { it.title }, { it.source }), hidden.takeIf { row.hidden })
+            .joinToString(" · ")
+            .ifEmpty { null }
 
     /**
      * The line under a tile. Only Continue Watching has one, and the core writes it ("S2:E3 · 36 min

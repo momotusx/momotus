@@ -1,7 +1,6 @@
 package app.marquee.android
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -224,7 +223,7 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
         if (sourcesOnly) {
-            item(key = "head") { BrowseHeader("Addons", "Add a source") }
+            item(key = "head") { BrowseHeader("Add a source") }
             item(key = "sources-why") {
                 Note(
                     "A source is an addon that finds a playable stream for a title. " +
@@ -244,7 +243,7 @@ fun SettingsScreen(
                 )
             }
         } else {
-            item(key = "head") { BrowseHeader("Settings", "Your Marquee") }
+            item(key = "head") { BrowseHeader("Your Marquee") }
         }
         if (!sourcesOnly) {
             gate.snapshot?.let { s ->
@@ -436,21 +435,19 @@ fun SettingsScreen(
     }
 }
 
-/** A section card on glass. */
+/** A section card (Home's defaults card among them): solid `surface`, no edge (design/DECISION.md, Surfaces). */
 @Composable
 internal fun Section(
     side: Dp = Marquee.safe.side,
     content: @Composable () -> Unit,
 ) {
     val shape = RoundedCornerShape(Marquee.radius.l)
-    val colors = Marquee.colors
     Box(
         Modifier
             .padding(horizontal = side)
             .fillMaxWidth()
             .clip(shape)
-            .background(colors.surface)
-            .border(1.dp, colors.edge, shape)
+            .background(Marquee.colors.surface)
             .padding(if (Marquee.form == Form.Tv) 24.dp else 16.dp),
     ) { content() }
 }
@@ -475,7 +472,6 @@ private fun ProfileLinkRow(
                 .onFocusChanged { focused = it.isFocused }
                 .clip(shape)
                 .background(colors.surface)
-                .border(1.dp, colors.edge, shape)
                 .semantics(mergeDescendants = true) {}
                 .focusClickable(onClick, Role.Button)
                 .padding(if (Marquee.form == Form.Tv) 24.dp else 16.dp),
@@ -492,7 +488,7 @@ private fun ProfileLinkRow(
     }
 }
 
-/** A row that opens another page: its icon, name and what it does, and a chevron (the web's LinkRow). */
+/** A row that opens another page: its icon, name and what it does, and a chevron (the web's LinkRow); no edge. */
 @Composable
 internal fun LinkRow(
     icon: ImageVector,
@@ -501,6 +497,8 @@ internal fun LinkRow(
     onClick: () -> Unit,
     /** Lines the text may take; Find addons' lede is never cut. */
     lines: Int = 2,
+    /** The page's own side margin; a grid that pads its items already gives none. */
+    side: Dp = Marquee.safe.side,
 ) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(Marquee.radius.l)
@@ -509,13 +507,12 @@ internal fun LinkRow(
         val colors = Marquee.colors
         Row(
             Modifier
-                .padding(horizontal = Marquee.safe.side)
+                .padding(horizontal = side)
                 .fillMaxWidth()
                 .marqueeFocus(Marquee.radius.l, Tokens.FOCUS_SCALE_TILE)
                 .onFocusChanged { focused = it.isFocused }
                 .clip(shape)
                 .background(colors.surface)
-                .border(1.dp, colors.edge, shape)
                 .semantics(mergeDescendants = true) {}
                 .focusClickable(onClick, Role.Button)
                 .padding(if (Marquee.form == Form.Tv) 24.dp else 16.dp),

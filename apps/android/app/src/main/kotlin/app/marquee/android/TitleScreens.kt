@@ -1,11 +1,23 @@
 package app.marquee.android
 
-import android.widget.Toast
 import androidx.activity.compose.ReportDrawnWhen
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.createSavedStateHandle
@@ -24,11 +36,15 @@ import app.marquee.core.session.CoreSession
 import app.marquee.core.views.TitleView
 import app.marquee.core.views.ViewStatus
 import app.marquee.design.Form
+import app.marquee.design.Icons
+import app.marquee.design.Marquee
+import app.marquee.design.Toast
 import app.marquee.ui.phone.PhoneTitle
 import app.marquee.ui.phone.PhoneVersions
 import app.marquee.ui.tv.FocusMemory
 import app.marquee.ui.tv.TvTitle
 import app.marquee.ui.tv.TvVersions
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -113,41 +129,68 @@ fun TitleScreen(
     val failed = versions?.status is ViewStatus.Failed
     val title = name.orEmpty()
     // A tap on an episode plays it (the player picks its version); its versions are in the hold menu.
-    // One that has not aired says when it does instead: a player could only fail.
-    val context = LocalContext.current
+    // One that has not aired says when it does instead, in a passing note: a player could only fail.
+    // Keyed by a count, so the same episode pressed again shows and says its note again.
+    var note by remember { mutableStateOf<Pair<Int, String>?>(null) }
+    val accessibility = LocalAccessibilityManager.current
+    LaunchedEffect(note) {
+        if (note == null) return@LaunchedEffect
+        delay(
+            accessibility?.calculateRecommendedTimeoutMillis(NOTE_MS, containsIcons = true, containsText = true)
+                ?: NOTE_MS,
+        )
+        note = null
+    }
     val episode: (Episode) -> Unit = {
         val airs = TitleCopy.airs(it)
-        if (airs == null) onPlayEpisode(it.videoId, title) else Toast.makeText(context, airs, Toast.LENGTH_SHORT).show()
+        if (airs == null) onPlayEpisode(it.videoId, title) else note = (note?.first ?: 0) + 1 to airs
     }
     val episodeVersions: (Episode) -> Unit = { onVersions(it.videoId, title) }
     val play: (String, String) -> Unit = { key, id -> onPlay(key, id, title) }
-    if (form == Form.Tv) {
-        TvTitle(
-            holder.view,
-            snapshot,
-            holder.focus,
-            play,
-            onVersions = { onVersions(it, title) },
-            onAddSource = onAddSource,
-            onAddAccount = onAddAccount,
-            onEpisode = episode,
-            onEpisodeVersions = episodeVersions,
-            versionsFailed = failed,
-        )
-    } else {
-        PhoneTitle(
-            holder.view,
-            snapshot,
-            play,
-            onVersions = { onVersions(it, title) },
-            onAddSource = onAddSource,
-            onAddAccount = onAddAccount,
-            onEpisode = episode,
-            onEpisodeVersions = episodeVersions,
-            versionsFailed = failed,
-        )
+    Box(Modifier.fillMaxSize()) {
+        if (form == Form.Tv) {
+            TvTitle(
+                holder.view,
+                snapshot,
+                holder.focus,
+                play,
+                onVersions = { onVersions(it, title) },
+                onAddSource = onAddSource,
+                onAddAccount = onAddAccount,
+                onEpisode = episode,
+                onEpisodeVersions = episodeVersions,
+                versionsFailed = failed,
+            )
+        } else {
+            PhoneTitle(
+                holder.view,
+                snapshot,
+                play,
+                onVersions = { onVersions(it, title) },
+                onAddSource = onAddSource,
+                onAddAccount = onAddAccount,
+                onEpisode = episode,
+                onEpisodeVersions = episodeVersions,
+                versionsFailed = failed,
+            )
+        }
+        note?.let { (id, words) ->
+            key(id) {
+                Toast(
+                    words,
+                    Icons.CalendarDays,
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .windowInsetsPadding(WindowInsets.navigationBars)
+                        .padding(bottom = if (form == Form.Tv) Marquee.safe.bottom else Marquee.space.m),
+                )
+            }
+        }
     }
 }
+
+/** How long a passing note stays (a short system toast's two seconds), unless accessibility asks for longer. */
+private const val NOTE_MS = 2_000L
 
 @Composable
 fun VersionsScreen(

@@ -39,7 +39,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -74,6 +73,7 @@ import app.marquee.design.PlayFilled
 import app.marquee.design.PrimaryButton
 import app.marquee.design.RatingLine
 import app.marquee.design.RoundButton
+import app.marquee.design.Scrims
 import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
 import app.marquee.design.Status
@@ -124,7 +124,6 @@ fun TvTitle(
     val safe = Marquee.safe
     val header = title.header
     val details = header?.details
-    val scrim = Marquee.colors.bg
     val failed = header?.state is TitleState.Failed
     // Focus goes to Play once the page has loaded (or to Try again when it could not), not before:
     // the buttons do not exist while the skeleton shows. Try again asks again.
@@ -143,21 +142,8 @@ fun TvTitle(
             false
         },
     ) {
-        Backdrop(details?.background ?: details?.poster, Modifier.fillMaxSize())
         // The text column sits on the left half: the art stays clear on the right, and fades into the page below.
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.horizontalGradient(
-                        0f to scrim.copy(alpha = 0.94f),
-                        0.5f to scrim.copy(alpha = 0.8f),
-                        0.75f to scrim.copy(alpha = 0.35f),
-                        1f to Color.Transparent,
-                    ),
-                ),
-        )
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.6f to Color.Transparent, 1f to scrim)))
+        Backdrop(details?.background ?: details?.poster, Modifier.fillMaxSize(), Scrims.titleSide, Scrims.titleFoot)
 
         val state = header?.state
         when {

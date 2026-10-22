@@ -57,7 +57,6 @@ import app.marquee.core.model.VersionsSnapshot
 import app.marquee.core.views.VersionsView
 import app.marquee.core.views.ViewStatus
 import app.marquee.design.CapsLabel
-import app.marquee.design.Eyebrow
 import app.marquee.design.FactsGrid
 import app.marquee.design.GlassBar
 import app.marquee.design.Icons
@@ -137,7 +136,7 @@ fun PhoneVersions(
     ) {
         item(key = "head") {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Eyebrow(heading)
+                MqText(heading, role = TextRole.Callout, color = colors.dim, weight = FontWeight.SemiBold, maxLines = 1)
                 MqText("Versions", role = TextRole.Title1, maxLines = 1)
                 val (text, tone) = VersionsCopy.progress(snapshot)
                 StatusWord(text, tone(tone), Modifier.padding(top = 4.dp))
@@ -261,7 +260,7 @@ private fun Pick(
             }
 
             best != null -> {
-                CapsLabel("Recommended for this screen")
+                PickLine()
                 MqText(VersionsCopy.pickHeading(best), role = TextRole.Title1, maxLines = 2)
                 FactsGrid(VersionsCopy.facts(best), tones = mapOf("Status" to statusTone(best)))
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -315,7 +314,7 @@ private fun Pick(
             }
 
             snapshot == null || !snapshot.done -> {
-                CapsLabel("Recommended for this screen")
+                PickLine()
                 Skeleton(Modifier.size(160.dp, 36.dp))
                 Skeleton(Modifier.size(240.dp, 20.dp))
                 Skeleton(Modifier.size(200.dp, 20.dp))
@@ -521,4 +520,10 @@ private fun SourceRow(
             }
         }
     }
+}
+
+/** The pick card's first line, plain at 64 percent: the frames' words, never an eyebrow. */
+@Composable
+private fun PickLine() {
+    MqText("Best for this screen", role = TextRole.Callout, color = Marquee.colors.dim, weight = FontWeight.SemiBold)
 }

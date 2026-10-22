@@ -50,6 +50,7 @@ import app.marquee.core.model.playVideoId
 import app.marquee.core.route.DefaultsMode
 import app.marquee.core.route.Route
 import app.marquee.core.route.afterChoice
+import app.marquee.core.route.calendarInLibrary
 import app.marquee.core.route.isTopLevel
 import app.marquee.core.route.restoredStack
 import app.marquee.core.route.switchedTo
@@ -185,11 +186,13 @@ internal fun rememberProfileStack(
     profile: String?,
     initial: List<Route>,
     seen: MutableSet<String?>,
+    /** The phone has no Calendar tab: a stored one opens Library. */
+    phone: Boolean = false,
 ) = rememberNavBackStack(*initial.toTypedArray()).let { saved ->
     remember(saved) {
         if (seen.add(profile)) {
             val restored = saved.map { it as Route }
-            val kept = restoredStack(restored)
+            val kept = restoredStack(restored).let { if (phone) calendarInLibrary(it) else it }
             if (kept != restored) {
                 saved.clear()
                 saved.addAll(kept)
@@ -210,7 +213,7 @@ private fun AppNav(
     val sync = (LocalContext.current.applicationContext as MarqueeApp).sync
     val gate = (LocalContext.current.applicationContext as MarqueeApp).profiles
     val accessibility = LocalAccessibilityManager.current
-    val backStack = rememberProfileStack(gate.snapshot?.active, initial, app.stacksSeen)
+    val backStack = rememberProfileStack(gate.snapshot?.active, initial, app.stacksSeen, phone = form == Form.Phone)
     val routes = backStack.map { it as Route }
     val top = routes.last()
     val tv = form == Form.Tv
@@ -518,7 +521,14 @@ private fun AppNav(
                             onAddons = { choose(Route.Settings) },
                         )
                     }
-                    entry<Route.Library> { LibraryScreen(session, ::open) }
+                    entry<Route.Library> {
+                        // On the phone Calendar is a row at the top of Library, pushed over it (D6).
+                        LibraryScreen(
+                            session,
+                            ::open,
+                            onCalendar = if (tv) null else ({ backStack.add(Route.Calendar) }),
+                        )
+                    }
                     entry<Route.Calendar> {
                         CalendarScreen(
                             session,

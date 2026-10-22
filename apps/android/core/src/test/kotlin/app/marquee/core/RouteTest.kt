@@ -9,6 +9,7 @@ import app.marquee.core.model.notice
 import app.marquee.core.model.tileKeys
 import app.marquee.core.route.Route
 import app.marquee.core.route.afterChoice
+import app.marquee.core.route.calendarInLibrary
 import app.marquee.core.route.isTopLevel
 import app.marquee.core.route.restoredStack
 import app.marquee.core.route.switchedTo
@@ -85,6 +86,18 @@ class RouteTest {
         assertFalse(listOf(row(RowState.Failed("late"), "a")).allFailed(), "tiles that arrived before the failure")
         assertFalse(listOf(row(RowState.Empty)).allFailed(), "empty, not failed")
         assertFalse(emptyList<HomeRow>().allFailed())
+    }
+
+    @Test
+    fun `on the phone a stored Calendar tab opens Library, and Calendar pushed over Library stays`() {
+        assertEquals(listOf(Route.Home, Route.Library), calendarInLibrary(listOf(Route.Home, Route.Calendar)))
+        assertEquals(
+            listOf(Route.Home, Route.Library, title),
+            calendarInLibrary(listOf(Route.Home, Route.Calendar, title)),
+        )
+        val pushed = listOf(Route.Home, Route.Library, Route.Calendar, title)
+        assertEquals(pushed, calendarInLibrary(pushed))
+        assertEquals(listOf(Route.Home), calendarInLibrary(listOf(Route.Home)))
     }
 
     @Test

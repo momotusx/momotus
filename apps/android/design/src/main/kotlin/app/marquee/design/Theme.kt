@@ -71,8 +71,25 @@ fun rememberReducedMotion(): Boolean {
 }
 
 /**
- * The theme for one UI tree, dark on every form (design/DECISION.md v2). The TV tree is drawn on
- * the point canvas ([TvCanvas], applied here so no screen forgets it) and token sizes apply
+ * A form's colors (design/DECISION.md, Page): the TV page is systemGray6; the phone is the iPhone's, a
+ * black page with #1C1C1E groups, #2C2C2E inside them, iOS's grey for secondary text and the #F5F5F5 pill.
+ */
+fun formPalette(form: Form): Palette =
+    when (form) {
+        Form.Tv -> {
+            Tokens.dark
+        }
+
+        Form.Phone -> {
+            Tokens.dark.run {
+                copy(bg = bgPhone, surface = surfacePhone, raised = raisedPhone, dim = dimPhone, primary = primaryPhone)
+            }
+        }
+    }
+
+/**
+ * The theme for one UI tree, dark on every form, in its form's colors ([formPalette]). The TV tree is
+ * drawn on the point canvas ([TvCanvas], applied here so no screen forgets it) and token sizes apply
  * unchanged.
  */
 @Composable
@@ -80,7 +97,7 @@ fun MarqueeTheme(
     form: Form,
     content: @Composable () -> Unit,
 ) {
-    val palette = Tokens.dark
+    val palette = formPalette(form)
     val themed: @Composable () -> Unit = {
         CompositionLocalProvider(
             LocalForm provides form,

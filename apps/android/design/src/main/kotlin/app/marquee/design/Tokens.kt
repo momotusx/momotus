@@ -325,6 +325,7 @@ object Tokens {
     val focusArtShadowY = 44.dp
     val focusArtShadowBlur = 88.dp
     const val FOCUS_ART_SHADOW_ALPHA = 0.55f
+    val selectedFill = Color(0xFF636366)
 
     const val FOCUS_MS = 180
     const val PANEL_MS = 260

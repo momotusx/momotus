@@ -15,10 +15,11 @@ class FindAddonsCopyTest {
                 .parseToJsonElement(File("../../shared/find-addons-words.json").readText())
                 .jsonObject
                 .mapValues { it.value.jsonPrimitive.content }
+                // Android shows no eyebrow (design v3); the web and Apple keep theirs until their own screens drop it.
+                .filterKeys { it != "eyebrow" }
         val ours =
             with(FindAddonsCopy) {
                 mapOf(
-                    "eyebrow" to EYEBROW,
                     "title" to TITLE,
                     "lede" to LEDE,
                     "community" to COMMUNITY,

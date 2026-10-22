@@ -3,7 +3,6 @@
 package app.marquee.ui.phone
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,7 +11,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -33,6 +31,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.dropShadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -47,7 +48,6 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.marquee.core.route.Route
-import app.marquee.core.route.TOP_LEVEL
 import app.marquee.design.Icons
 import app.marquee.design.Marquee
 import app.marquee.design.MarqueeFonts
@@ -65,9 +65,9 @@ import app.marquee.design.windowDp
 val LocalBarSpace = compositionLocalOf { 0.dp }
 
 /**
- * The phone frame (plans/android-design-v2.md section 3): the screen fills the window and a
- * floating glass bar with the top-level places sits above the system navigation bar. The bar
- * shows on top-level places only and hides while the keyboard is up.
+ * The phone frame (design/DECISION.md, Navigation): the screen fills the window and the iPhone's
+ * floating capsule with five places sits above the system navigation bar, 21 from the sides. The
+ * bar shows on top-level places only and hides while the keyboard is up.
  */
 @Composable
 fun PhoneShell(
@@ -82,7 +82,7 @@ fun PhoneShell(
     content: @Composable () -> Unit,
 ) {
     val showBar = showTabs && !WindowInsets.isImeVisible
-    // Under 360 dp the bar gives up some margin, so six places keep 48 dp each (320 dp: 50).
+    // Under 360 dp the bar gives up some margin, so each place keeps more than 48 dp (320 dp: 58).
     val narrow = windowDp().width < 360.dp
     val inset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val space: Dp = if (showBar) BAR_HEIGHT + BAR_MARGIN * 2 + inset else 0.dp
@@ -110,8 +110,8 @@ fun PhoneShell(
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
                     .padding(
-                        start = if (narrow) 8.dp else 16.dp,
-                        end = if (narrow) 8.dp else 16.dp,
+                        start = if (narrow) 8.dp else BAR_SIDE,
+                        end = if (narrow) 8.dp else BAR_SIDE,
                         bottom = BAR_MARGIN,
                     ),
             )
@@ -134,9 +134,11 @@ private val places =
         Route.Settings to Place("Settings", Icons.Settings),
     )
 
-/** Browsing places first, then the tools, as on the web and Apple. */
-private val order =
-    listOf(Route.Home, Route.Discover, Route.Library, Route.Calendar, Route.Search, Route.Settings)
+/**
+ * Browsing places first, then the tools, as on the web and Apple: five, as the iPhone's. Calendar is a row
+ * at the top of Library (D6), which is lit while it shows.
+ */
+private val order = listOf(Route.Home, Route.Discover, Route.Library, Route.Search, Route.Settings)
 
 @Composable
 private fun PhoneBar(
@@ -145,6 +147,7 @@ private fun PhoneBar(
     modifier: Modifier,
 ) {
     val colors = Marquee.colors
+    val lit = if (selected == Route.Calendar) Route.Library else selected
     // The labels show only when the widest fits its slot at the current text size; otherwise the bar
     // keeps the icons (each keeps its label as its spoken name), never a cut word.
     val measurer = rememberTextMeasurer()
@@ -152,49 +155,60 @@ private fun PhoneBar(
     val caption = Marquee.type.caption
     val widest =
         remember(measurer, caption, density.fontScale) {
-            val style = TextStyle(fontSize = caption, fontFamily = MarqueeFonts.text, fontWeight = FontWeight.Bold)
-            places.values.maxOf { measurer.measure(it.label, style, maxLines = 1).size.width }
+            val style = TextStyle(fontSize = caption, fontFamily = MarqueeFonts.text, fontWeight = FontWeight.SemiBold)
+            order.maxOf { measurer.measure(places.getValue(it).label, style, maxLines = 1).size.width }
         }
     val width = windowDp().width
-    // The bar's widest margins (16 dp a side) and its inner padding (6 dp a side).
-    val slot = (width - 32.dp - 12.dp) / TOP_LEVEL.size
+    // The bar's widest margins and its inner padding (4 dp a side).
+    val slot = (width - BAR_SIDE * 2 - 8.dp) / order.size
     val compact = with(density) { widest.toDp() } > slot - 4.dp
-    val shape = RoundedCornerShape(Marquee.radius.l)
+    val shape = RoundedCornerShape(Marquee.radius.pill)
     Row(
         modifier
             .fillMaxWidth()
             .height(BAR_HEIGHT)
-            .clip(shape)
-            // Opaque: Android blurs no content behind a node, and the translucent glass let the
-            // text under the bar show through it (seen on the emulator).
+            .dropShadow(shape) {
+                radius = 30.dp.toPx()
+                offset = Offset(0f, 10.dp.toPx())
+                color = Color.Black
+                alpha = 0.45f
+            }.clip(shape)
+            // Opaque: Android blurs no content behind a node, so the capsule's translucent fill is laid on the
+            // page color, or the text under the bar would show through it (seen on the emulator).
             .background(colors.glassStrong.compositeOver(colors.bg))
-            .border(1.dp, colors.control, shape)
-            .padding(if (compact) 2.dp else 6.dp),
+            // The frame's inner top highlight, so the capsule's edge reads on the black page.
+            .drawBehind {
+                val line = 1.dp.toPx()
+                drawLine(colors.lineStrong, Offset(0f, line / 2), Offset(size.width, line / 2), line)
+            }.padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        for (route in order.filter { it in TOP_LEVEL }) {
+        for (route in order) {
             val place = places.getValue(route)
-            val isSelected = route == selected
+            val isSelected = route == lit
+            // The selected place in the key blue on a darker inner capsule; the rest white.
+            val ink = if (isSelected) colors.key else Color.White
             Column(
                 Modifier
                     .weight(1f)
-                    .fillMaxHeight()
+                    .height(TAB_HEIGHT)
                     // A keyboard on a phone or a tablet sees where it is, apart from the selected place.
-                    .marqueeFocus(Marquee.radius.m, scale = 1f)
-                    .clip(RoundedCornerShape(Marquee.radius.m))
-                    .background(if (isSelected) colors.text.copy(alpha = 0.12f) else Color.Transparent)
+                    .marqueeFocus(TAB_HEIGHT / 2, scale = 1f)
+                    .clip(shape)
+                    .background(if (isSelected) TAB_ON else Color.Transparent)
                     .semantics { contentDescription = place.label }
                     .focusSelectable(isSelected, { onSelect(route) }, Role.Tab),
-                verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
+                verticalArrangement = Arrangement.spacedBy(1.dp, Alignment.CenterVertically),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                MqIcon(place.icon, tint = if (isSelected) colors.text else colors.muted)
+                MqIcon(place.icon, tint = ink)
                 if (!compact) {
                     MqText(
                         place.label,
                         modifier = Modifier.clearAndSetSemantics { },
                         role = TextRole.Caption,
-                        color = if (isSelected) colors.text else colors.muted,
-                        weight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                        color = ink,
+                        weight = FontWeight.SemiBold,
                         maxLines = 1,
                     )
                 }
@@ -203,5 +217,9 @@ private fun PhoneBar(
     }
 }
 
-private val BAR_HEIGHT = 64.dp
+/** The selected place's inner capsule. */
+private val TAB_ON = Color(0xEB0A0A0A)
+private val BAR_HEIGHT = 62.dp
+private val TAB_HEIGHT = 54.dp
+private val BAR_SIDE = 21.dp
 private val BAR_MARGIN = 12.dp

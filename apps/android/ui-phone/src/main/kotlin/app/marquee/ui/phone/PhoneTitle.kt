@@ -73,6 +73,7 @@ import app.marquee.design.ProgressBar
 import app.marquee.design.RatingLine
 import app.marquee.design.RemoteImage
 import app.marquee.design.RoundButton
+import app.marquee.design.Scrims
 import app.marquee.design.SecondaryButton
 import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
@@ -284,20 +285,8 @@ private fun Hero(
     }
     val page = Marquee.colors.bg
     Box(Modifier.fillMaxWidth().height(heroHeight())) {
-        Backdrop(art, Modifier.matchParentSize())
-        // Dark in both themes: the logo and the status bar icons are light.
-        Box(
-            Modifier
-                .matchParentSize()
-                .background(
-                    Brush.verticalGradient(
-                        0f to Tokens.dark.bg.copy(alpha = 0.5f),
-                        0.25f to Color.Transparent,
-                        0.5f to Color.Transparent,
-                        1f to Tokens.dark.bg.copy(alpha = 0.6f),
-                    ),
-                ),
-        )
+        // Dark under the light status bar icons and toward the light logo.
+        Backdrop(art, Modifier.matchParentSize(), foot = Scrims.phoneTitleFoot, top = Scrims.phoneTitleTop)
         Box(
             Modifier
                 .align(Alignment.BottomStart)

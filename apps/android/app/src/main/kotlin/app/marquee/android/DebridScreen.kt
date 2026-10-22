@@ -196,7 +196,7 @@ fun DebridScreen(session: CoreSession) {
     ) {
         item(key = "head") {
             Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-                BrowseHeader("Settings", "Debrid services")
+                BrowseHeader("Debrid services")
                 MqText(
                     "A debrid account plays torrents as fast direct links. Sign-ins and keys stay on this device, " +
                         "encrypted, and are never shown again or synced.",

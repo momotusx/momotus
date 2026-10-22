@@ -399,7 +399,7 @@ fun SyncScreen(
         contentPadding = pagePadding(framed = false),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
-        item(key = "head") { BrowseHeader("Settings", SyncCopy.TITLE) }
+        item(key = "head") { BrowseHeader(SyncCopy.TITLE) }
         block("lede") { MqText(SyncCopy.LEDE, color = Marquee.colors.muted) }
         if (!sync.joined) {
             block("not-joined") {
@@ -1135,7 +1135,7 @@ fun SyncJoinScreen(
         contentPadding = pagePadding(framed = false),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
-        item(key = "head") { BrowseHeader(SyncCopy.TITLE, if (kit) SyncCopy.RECOVER_TITLE else SyncCopy.START_TITLE) }
+        item(key = "head") { BrowseHeader(if (kit) SyncCopy.RECOVER_TITLE else SyncCopy.START_TITLE) }
         block("lede") { MqText(if (kit) SyncCopy.RECOVER_LEDE else SyncCopy.START_TEXT, color = Marquee.colors.muted) }
         block("form") {
             Labeled(SyncCopy.SERVER) {
@@ -1333,7 +1333,7 @@ fun AddDeviceScreen(
         contentPadding = pagePadding(framed = false),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
-        item(key = "head") { BrowseHeader(SyncCopy.TITLE, AccountCopy.SIGN_IN_ANOTHER) }
+        item(key = "head") { BrowseHeader(AccountCopy.SIGN_IN_ANOTHER) }
         block("body") {
             NeedsAccount(sync, onDone) {
                 val shown = digits
@@ -1514,7 +1514,7 @@ fun RecoveryKitScreen(
         contentPadding = pagePadding(framed = false),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
-        item(key = "head") { BrowseHeader(SyncCopy.TITLE, SyncCopy.KIT_TITLE) }
+        item(key = "head") { BrowseHeader(SyncCopy.KIT_TITLE) }
         if (tv) {
             item(key = "tv") { ElsewhereRow(Icons.KeyRound, SyncCopy.TV_ONLY, SyncCopy.TV_KIT) }
             return@LazyColumn
@@ -1653,7 +1653,7 @@ fun ReportLostScreen(
         contentPadding = pagePadding(framed = false),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
-        item(key = "head") { BrowseHeader(SyncCopy.TITLE, "${SyncCopy.REPORT_LOST}: $name") }
+        item(key = "head") { BrowseHeader("${SyncCopy.REPORT_LOST}: $name") }
         block("lede") { MqText(SyncCopy.named(SyncCopy.LOST_LEDE, name), color = Marquee.colors.muted) }
         val shown = loaded
         when {
@@ -1898,7 +1898,7 @@ fun ForkScreen(
         contentPadding = pagePadding(framed = false),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
-        item(key = "head") { BrowseHeader(SyncCopy.TITLE, SyncCopy.FORK_TITLE) }
+        item(key = "head") { BrowseHeader(SyncCopy.FORK_TITLE) }
         block("lede") { MqText(SyncCopy.FORK_LEDE, color = Marquee.colors.muted) }
         when {
             !forked && shown == null -> {
@@ -2103,7 +2103,7 @@ fun PairingScreen(
     ) {
         item(key = "head") {
             Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-                BrowseHeader("Sync", SyncCopy.PAIR_TITLE)
+                BrowseHeader(SyncCopy.PAIR_TITLE)
                 MqText(
                     "Joins your sync account so library, progress and addons follow you. Nothing is kept until both " +
                         "screens show the same code.",

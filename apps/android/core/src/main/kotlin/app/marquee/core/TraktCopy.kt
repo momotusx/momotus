@@ -13,7 +13,6 @@ import app.marquee.core.model.TraktStatus
  */
 object TraktCopy {
     const val TITLE = "Trakt"
-    const val EYEBROW = "Settings"
     const val LEDE =
         "Trakt keeps a record of what you watch. With it connected, what you play here reaches Trakt, and " +
             "what you watched in other Trakt apps shows up here as watched and as places to resume. Each profile " +

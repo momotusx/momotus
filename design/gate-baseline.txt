@@ -116,27 +116,22 @@ apps/web/src/theme/app.css :: .brand::before { content: ""; width: 12px; height:
 apps/web/src/theme/app.css :: .nav.on { color: var(--text); background: rgba(255, 255, 255, .12); box-shadow: inset 0 0 0 1px var(--edge); }
 apps/web/src/theme/app.css :: padding: 16px 26px; border-radius: 16px; background: var(--glass-strong); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-shadow);
 apps/web/src/theme/app.css :: -webkit-backdrop-filter: blur(var(--glass-blur)); backdrop-filter: blur(var(--glass-blur));
-apps/android/app/src/main/kotlin/app/marquee/android/BrowseScreens.kt :: Eyebrow(eyebrow)
 apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: // glass cards, each installed or turned on in one press. The web's screens/find-addons.tsx.
 apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: /** Community's caution, on glass. */
 apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: .background(Marquee.colors.glass)
 apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: .background(colors.glass)
 apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: color = if (focused) colors.accent else colors.text,
 apps/android/app/src/main/kotlin/app/marquee/android/FindAddonsScreen.kt :: /** TV: the card's action drawn as a glass pill; the card itself takes the press. */
-apps/android/app/src/main/kotlin/app/marquee/android/Onboarding.kt :: // Glass buttons: Home's one white pill is the hero's Play.
 apps/android/app/src/main/kotlin/app/marquee/android/ProfileScreens.kt :: weight = FontWeight.ExtraBold,
 apps/android/app/src/main/kotlin/app/marquee/android/ProfileScreens.kt :: color = if (focused) colors.accent else colors.muted,
 apps/android/app/src/main/kotlin/app/marquee/android/ProfileScreens.kt :: color = if (focused) colors.accent else colors.muted,
 apps/android/app/src/main/kotlin/app/marquee/android/SettingsScreen.kt :: // Settings (plans/android-design-v2.md 5.5): addons, playback and about, as sections on glass.
-apps/android/app/src/main/kotlin/app/marquee/android/SettingsScreen.kt :: /** A section card on glass. */
 apps/android/app/src/main/kotlin/app/marquee/android/StreamChoiceScreen.kt :: * Settings > Stream choice (plans/m13-stream-choice.md 4.4, the web's page): one glass panel of rows,
 apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .background(Marquee.colors.glass)
 apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .background(Marquee.colors.glass)
 apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .background(Marquee.colors.glass)
 apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .background(Marquee.colors.glass)
 apps/android/design/src/main/kotlin/app/marquee/design/Avatar.kt :: fontWeight = FontWeight.ExtraBold,
-apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: .background(colors.accent),
-apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: fun Eyebrow(
 apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: * A title's facts as a key-value table on glass (design/DECISION.md v2, Title page): a `dim`
 apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: * label and its value per row. Over artwork the strong glass keeps both readable.
 apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: .background(colors.glassStrong)
@@ -146,29 +141,19 @@ apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: fun Glas
 apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: .background(colors.glass)
 apps/android/design/src/main/kotlin/app/marquee/design/TextField.kt :: cursorBrush = SolidColor(colors.accent),
 apps/android/design/src/main/kotlin/app/marquee/design/Theme.kt :: /** Reads of the current theme, e.g. `Marquee.colors.accent`. */
-apps/android/design/src/main/kotlin/app/marquee/design/Tiles.kt :: color = if (focused) colors.accent else colors.text,
 apps/android/design/src/main/kotlin/app/marquee/design/Tiles.kt :: .background(colors.glassStrong)
 apps/android/design/src/main/kotlin/app/marquee/design/Tiles.kt :: .background(colors.glassStrong)
 apps/android/player/src/main/kotlin/app/marquee/player/PlayerParts.kt :: * a glass pill. It stays while the controls hide, so a viewer who never opens them still learns it.
 apps/android/player/src/main/kotlin/app/marquee/player/PlayerParts.kt :: .background(Marquee.colors.glass)
-apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneHome.kt :: Eyebrow(hero.reason, overArt = true)
-apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneShell.kt :: * floating glass bar with the top-level places sits above the system navigation bar. The bar
-apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneShell.kt :: // Opaque: Android blurs no content behind a node, and the translucent glass let the
-apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneShell.kt :: .background(colors.glassStrong.compositeOver(colors.bg))
 apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneTitle.kt :: color = Marquee.colors.accent,
 apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneTitle.kt :: // A glass card per episode (design/DECISION.md v2, Episodes).
 apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: import app.marquee.design.GlassBar
 apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: * recommendation as a glass card with its facts; every other source by group with its line (a tone
-apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: Eyebrow(heading)
 apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: item(key = "nobody") { GlassBar(Modifier.padding(bottom = Marquee.space.xs)) { NobodySharing() } }
 apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: GlassBar(Modifier.padding(top = Marquee.space.xs)) {
 apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: GlassBar(Modifier.padding(top = Marquee.space.s)) {
 apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: .background(colors.glassStrong)
 apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: GlassBar(Modifier.padding(bottom = Marquee.space.xs)) {
-apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvHome.kt :: Eyebrow(hero.reason, overArt = true)
-apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvShell.kt :: * The TV frame (plans/android-design-v2.md section 2): a glass pill centered at the top with the
-apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvShell.kt :: .background(colors.glassStrong)
-apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvShell.kt :: Box(Modifier.size(10.dp).clip(CircleShape).background(colors.accent))
 apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvTitle.kt :: // The facts sit at the right, over the art, on strong glass.
 apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvTitle.kt :: * actions) and shows whole on glass while it has it; one that fits is plain text. Open, it is held
 apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvTitle.kt :: // back, so the text lines up with the logo whether the glass shows or not.
@@ -176,7 +161,6 @@ apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvTitle.kt :: .background(i
 apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvVersions.kt :: import app.marquee.design.GlassBar
 apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvVersions.kt :: * heading, how the search goes and what the ranking read of this TV; the recommendation as a glass
 apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvVersions.kt :: GlassBar { NobodySharing() }
-apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvVersions.kt :: Eyebrow(heading)
 apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvVersions.kt :: .background(colors.glassStrong)
 apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvVersions.kt :: GlassBar {
 apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvVersions.kt :: GlassBar(Modifier.padding(top = Marquee.space.xs)) {
@@ -190,28 +174,20 @@ apps/android/app/src/main/kotlin/app/marquee/android/Onboarding.kt :: .border(2.
 apps/android/app/src/main/kotlin/app/marquee/android/ProfileScreens.kt :: .border(2.dp, if (on) colors.text else colors.control, CircleShape),
 apps/android/app/src/main/kotlin/app/marquee/android/ProfileScreens.kt :: .border(2.dp, if (focused) colors.primary else colors.control, CircleShape)
 apps/android/app/src/main/kotlin/app/marquee/android/ProfileScreens.kt :: .border(1.dp, colors.edge, shape)
-apps/android/app/src/main/kotlin/app/marquee/android/SettingsScreen.kt :: .border(1.dp, colors.edge, shape)
-apps/android/app/src/main/kotlin/app/marquee/android/SettingsScreen.kt :: .border(1.dp, colors.edge, shape)
-apps/android/app/src/main/kotlin/app/marquee/android/SettingsScreen.kt :: .border(1.dp, colors.edge, shape)
 apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .border(1.dp, Marquee.colors.edge, shape)
 apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .border(1.dp, Marquee.colors.edge, shape)
 apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .border(1.dp, Marquee.colors.edge, shape)
 apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .border(1.dp, Marquee.colors.edge, shape)
 apps/android/app/src/main/kotlin/app/marquee/android/SyncScreens.kt :: .border(1.dp, Marquee.colors.edge, shape)
 apps/android/app/src/main/kotlin/app/marquee/android/TraktScreen.kt :: .border(1.dp, Marquee.colors.edge, shape)
-apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: Modifier.border(2.dp, colors.control, shape)
-apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: .then(if (selected) Modifier else Modifier.border(2.dp, colors.control, shape))
-apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: .then(if (lit) Modifier else Modifier.border(2.dp, colors.control, CircleShape))
 apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: .border(1.dp, colors.edge, shape)
 apps/android/design/src/main/kotlin/app/marquee/design/Components.kt :: .border(1.dp, colors.edge, shape)
 apps/android/design/src/main/kotlin/app/marquee/design/Switch.kt :: .border(2.dp, colors.edge, shape),
 apps/android/design/src/main/kotlin/app/marquee/design/Switch.kt :: .border(1.dp, Marquee.colors.edge, shape),
 apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneHome.kt :: .border(1.dp, Marquee.colors.edge, RoundedCornerShape(Marquee.radius.hero))
-apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneShell.kt :: .border(1.dp, colors.control, shape)
 apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneTitle.kt :: .border(1.dp, colors.edge, card)
 apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: .border(1.dp, colors.edge, shape)
 apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvHome.kt :: .border(1.dp, colors.edge, shape),
-apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvShell.kt :: .border(1.dp, colors.edge, pill)
 apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvVersions.kt :: .border(1.dp, colors.edge, shape)
 apps/apple/Marquee/Account/AccountCard.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/Account/AccountSections.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))

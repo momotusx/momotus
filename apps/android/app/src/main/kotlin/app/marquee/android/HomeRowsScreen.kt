@@ -40,6 +40,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import app.marquee.core.TileCopy
 import app.marquee.core.client.CoreError
 import app.marquee.core.client.CoreLog
 import app.marquee.core.model.HomeCatalog
@@ -131,7 +132,7 @@ fun HomeRowsScreen(session: CoreSession) {
     ) {
         item(key = "head") {
             Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-                BrowseHeader("Settings", "Home rows")
+                BrowseHeader("Home rows")
                 MqText(
                     "Continue Watching always comes first. Choose which catalogs follow it, and their order." +
                         if (tv) PICK_HINT else "",
@@ -149,6 +150,7 @@ fun HomeRowsScreen(session: CoreSession) {
         itemsIndexed(rows.orEmpty(), key = { _, row -> row.rowId }) { index, row ->
             CatalogRow(
                 row = row,
+                rows = rows.orEmpty(),
                 place = index + 1,
                 count = rows.orEmpty().size,
                 picked = picked == row.rowId,
@@ -162,10 +164,11 @@ fun HomeRowsScreen(session: CoreSession) {
 
 private const val PICK_HINT = " Select a row to pick it up, move it with up and down, and select again to put it down."
 
-/** A catalog: its place, name and addon; shown or hidden; Up and Down. */
+/** A catalog: its place and name (its addon only beside a twin name); shown or hidden; Up and Down. */
 @Composable
 private fun CatalogRow(
     row: HomeCatalog,
+    rows: List<HomeCatalog>,
     place: Int,
     count: Int,
     picked: Boolean,
@@ -179,6 +182,9 @@ private fun CatalogRow(
     val first = place == 1
     val last = place == count
     val shape = RoundedCornerShape(Marquee.radius.m)
+    // No addon name beside a name of its own (TileCopy.twinSource): the line says Hidden, or nothing.
+    val source = TileCopy.twinSource(row, rows, { it.title }, { it.source })
+    val line = TileCopy.homeRowLine(row, rows, if (tv) "Hidden from Home" else "Hidden")
     val text =
         @Composable {
             Row(
@@ -197,19 +203,7 @@ private fun CatalogRow(
                 )
                 Column(Modifier.alpha(if (row.hidden && !focused) 0.55f else 1f)) {
                     MqText(row.title, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 2)
-                    MqText(
-                        row.source +
-                            if (!row.hidden) {
-                                ""
-                            } else if (tv) {
-                                " · Hidden from Home"
-                            } else {
-                                " · Hidden"
-                            },
-                        role = TextRole.Caption,
-                        color = Marquee.colors.dim,
-                        maxLines = 1,
-                    )
+                    line?.let { MqText(it, role = TextRole.Caption, color = Marquee.colors.dim, maxLines = 1) }
                     if (picked) {
                         MqText(
                             "Up or down to move, select to put it down",
@@ -261,7 +255,8 @@ private fun CatalogRow(
                                     }
                                 }
                             }.semantics {
-                                contentDescription = "${row.title}, ${row.source}, row $place of $count"
+                                contentDescription =
+                                    listOfNotNull(row.title, source, "row $place of $count").joinToString(", ")
                                 stateDescription =
                                     if (picked) {
                                         "Picked up"

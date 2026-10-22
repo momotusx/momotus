@@ -785,7 +785,7 @@ fun ManageProfilesScreen(
         contentPadding = pagePadding(framed = false),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
     ) {
-        item(key = "head") { BrowseHeader("Settings", "Manage profiles") }
+        item(key = "head") { BrowseHeader("Manage profiles") }
         if (s == null || !owner) {
             item(key = "only") { Note("Only the main profile manages profiles. You can edit your own from Settings.") }
             return@LazyColumn
@@ -1008,7 +1008,6 @@ fun EditProfileScreen(
     ) {
         item(key = "head") {
             BrowseHeader(
-                "Profiles",
                 if (isNew) {
                     "Add profile"
                 } else if (mine) {

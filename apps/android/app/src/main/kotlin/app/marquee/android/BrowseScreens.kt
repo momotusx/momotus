@@ -64,7 +64,6 @@ import app.marquee.core.views.LibraryView
 import app.marquee.core.views.SearchView
 import app.marquee.core.views.ViewStatus
 import app.marquee.design.Chip
-import app.marquee.design.Eyebrow
 import app.marquee.design.FieldInput
 import app.marquee.design.FocusInk
 import app.marquee.design.Form
@@ -74,8 +73,10 @@ import app.marquee.design.MarqueeFonts
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
 import app.marquee.design.PosterTile
+import app.marquee.design.PullDown
 import app.marquee.design.RowHeader
 import app.marquee.design.SecondaryButton
+import app.marquee.design.SegmentTrack
 import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
 import app.marquee.design.TextRole
@@ -123,20 +124,18 @@ internal fun pagePadding(framed: Boolean = true): PaddingValues =
         PaddingValues(top = status + Marquee.space.m, bottom = Marquee.space.l + LocalBarSpace.current)
     }
 
-/** An accent eyebrow over the page title in display type (design/DECISION.md v2, Browse pages). */
+/** The page title in display type, with no eyebrow over it (design/DECISION.md, Grids). */
 @Composable
 internal fun BrowseHeader(
-    eyebrow: String,
     title: String,
     side: Dp = Marquee.safe.side,
 ) {
-    Column(
+    MqText(
+        title,
         Modifier.padding(horizontal = side),
-        verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-    ) {
-        Eyebrow(eyebrow)
-        MqText(title, role = if (Marquee.form == Form.Tv) TextRole.Title1 else TextRole.Title2, maxLines = 1)
-    }
+        role = if (Marquee.form == Form.Tv) TextRole.Title1 else TextRole.Title2,
+        maxLines = 1,
+    )
 }
 
 /** A small label in `dim` capitals over a row of choices. */
@@ -154,6 +153,12 @@ internal fun Kicker(
     )
 }
 
+/** The Calendar row's line in Library. */
+private const val CALENDAR_LINE = "New episodes of the series in your library"
+
+/** Past this many choices a row of chips is a pull-down on TV. */
+private const val SEGMENTS = 4
+
 @Composable
 internal fun <T> ChipRow(
     label: String,
@@ -166,15 +171,32 @@ internal fun <T> ChipRow(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
         Kicker(label, side)
-        LazyRow(
-            // Room for a focused chip to rise over its shadow; the page does not move.
-            Modifier.liftRoom(Marquee.tiles.pad).focusRestorer(),
-            contentPadding = PaddingValues(horizontal = side, vertical = Marquee.tiles.pad),
-            horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-        ) {
-            // By value: two addons can each have a "Popular" catalog of one kind, and a repeated key throws.
-            items(choices, key = { it.first.toString() }) { (value, name) ->
-                Chip(name, selected = value == selected, onClick = { onSelect(value) }, detail = detail(value))
+        // Up to four choices are a segmented control; more are a pull-down on TV (design/DECISION.md, Grids).
+        when {
+            choices.size <= SEGMENTS -> {
+                SegmentTrack(Modifier.focusRestorer(), side = side) {
+                    for ((value, name) in choices) {
+                        Chip(name, value == selected, { onSelect(value) }, detail = detail(value), inTrack = true)
+                    }
+                }
+            }
+
+            Marquee.form == Form.Tv -> {
+                PullDown(label, choices, selected, Modifier.padding(horizontal = side), detail, onSelect)
+            }
+
+            else -> {
+                LazyRow(
+                    // Room for a focused chip to rise over its shadow; the page does not move.
+                    Modifier.liftRoom(Marquee.tiles.pad).focusRestorer(),
+                    contentPadding = PaddingValues(horizontal = side, vertical = Marquee.tiles.pad),
+                    horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+                ) {
+                    // By value: two addons can each have a "Popular" catalog of one kind, and a repeated key throws.
+                    items(choices, key = { it.first.toString() }) { (value, name) ->
+                        Chip(name, selected = value == selected, onClick = { onSelect(value) }, detail = detail(value))
+                    }
+                }
             }
         }
     }
@@ -225,7 +247,7 @@ fun SearchScreen(
         contentPadding = pagePadding(),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
-        item(key = "head") { BrowseHeader("Search", "Find a title") }
+        item(key = "head") { BrowseHeader("Find a title") }
         item(key = "field") { SearchField(holder.query, ::send) }
         when {
             view.status is ViewStatus.Failed -> {
@@ -277,8 +299,9 @@ fun SearchScreen(
             }
 
             else -> {
-                itemsIndexed(snapshot?.rows.orEmpty(), key = { _, row -> row.rowId }) { _, row ->
-                    ResultRow(row) { tile ->
+                val rows = snapshot?.rows.orEmpty()
+                itemsIndexed(rows, key = { _, row -> row.rowId }) { _, row ->
+                    ResultRow(row, TileCopy.source(row, rows)) { tile ->
                         view.remember()
                         onOpen(tile)
                     }
@@ -343,11 +366,13 @@ internal fun SearchField(
 @Composable
 private fun ResultRow(
     row: HomeRow,
+    /** The addon's name, when another row has the same title (TileCopy.source). */
+    source: String?,
     onOpen: (Tile) -> Unit,
 ) {
     val metrics = Marquee.tiles
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-        RowHeader(row.title, TileCopy.source(row.rowId, row.source), Modifier.padding(horizontal = Marquee.safe.side))
+        RowHeader(row.title, source, Modifier.padding(horizontal = Marquee.safe.side))
         when (val notice = row.notice()) {
             is RowNotice.Waiting -> {
                 Row(
@@ -444,7 +469,7 @@ fun DiscoverScreen(
         horizontalArrangement = Arrangement.spacedBy(metrics.gap),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
     ) {
-        full("head") { BrowseHeader("Browse", "Discover", side = 0.dp) }
+        full("head") { BrowseHeader("Discover", side = 0.dp) }
         when {
             view.status is ViewStatus.Failed -> {
                 val reason = (view.status as ViewStatus.Failed).reason
@@ -481,8 +506,14 @@ fun DiscoverScreen(
                     }
                 }
                 full("catalogs") {
-                    // Each with its addon, as on the web and Apple TV: names drop a leading addon name (the core).
-                    val sources = snapshot.catalogs.associate { it.id to it.source }
+                    // A catalog names its addon only beside another of its name (TileCopy.twinSource); names drop
+                    // a leading addon name (the core).
+                    val catalogs = snapshot.catalogs
+                    val sources =
+                        catalogs.associate { c ->
+                            c.id to
+                                TileCopy.twinSource(c, catalogs, { it.name }, { it.source })
+                        }
                     ChipRow(
                         "Catalog",
                         snapshot.catalogs.map { it.id to it.name },
@@ -500,9 +531,11 @@ fun DiscoverScreen(
                         }
                     }
                 }
-                val catalogName =
-                    snapshot.catalogs.firstOrNull { it.id == snapshot.catalog }?.let { "${it.name} from ${it.source}" }
-                        ?: "this catalog"
+                // The catalog by its name; a failed or empty state names its addon too (TileCopy.catalogLabel).
+                val chosen = snapshot.catalogs.firstOrNull { it.id == snapshot.catalog }
+                val catalogName = chosen?.let { TileCopy.catalogLabel(it, snapshot.catalogs) } ?: "this catalog"
+                val catalogState =
+                    chosen?.let { TileCopy.catalogLabel(it, snapshot.catalogs, state = true) } ?: "this catalog"
                 val state = snapshot.state
                 when {
                     snapshot.genreRequired && snapshot.genre == null -> {
@@ -522,12 +555,12 @@ fun DiscoverScreen(
 
                     snapshot.items.isEmpty() && state is DiscoverState.Failed -> {
                         full("failed-items") {
-                            Note("$catalogName did not answer: ${state.reason}", failed = true, side = 0.dp)
+                            Note("$catalogState did not answer: ${state.reason}", failed = true, side = 0.dp)
                         }
                     }
 
                     snapshot.items.isEmpty() -> {
-                        full("nothing") { Note("Nothing in $catalogName for this choice.", side = 0.dp) }
+                        full("nothing") { Note("Nothing in $catalogState for this choice.", side = 0.dp) }
                     }
 
                     else -> {
@@ -582,6 +615,8 @@ class LibraryHolder(
 fun LibraryScreen(
     session: CoreSession,
     onOpen: (Tile) -> Unit,
+    /** The phone's Calendar row at the top, where the TV has a Calendar tab; null shows none. */
+    onCalendar: (() -> Unit)? = null,
 ) {
     val holder =
         viewModel<LibraryHolder>(
@@ -607,7 +642,10 @@ fun LibraryScreen(
         horizontalArrangement = Arrangement.spacedBy(metrics.gap),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
     ) {
-        full("head") { BrowseHeader("Yours", "Library", side = 0.dp) }
+        full("head") { BrowseHeader("Library", side = 0.dp) }
+        if (onCalendar != null) {
+            full("calendar") { LinkRow(Icons.CalendarDays, "Calendar", CALENDAR_LINE, onCalendar, side = 0.dp) }
+        }
         when {
             view.status is ViewStatus.Failed -> {
                 val reason = (view.status as ViewStatus.Failed).reason

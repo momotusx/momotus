@@ -33,8 +33,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -42,6 +40,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.marquee.core.TileCopy
 import app.marquee.core.model.Hero
@@ -57,7 +56,6 @@ import app.marquee.core.views.HomeView
 import app.marquee.core.views.ViewStatus
 import app.marquee.design.ActionMenu
 import app.marquee.design.Backdrop
-import app.marquee.design.Eyebrow
 import app.marquee.design.Icons
 import app.marquee.design.Logo
 import app.marquee.design.Marquee
@@ -69,6 +67,7 @@ import app.marquee.design.PrimaryButton
 import app.marquee.design.RatingLine
 import app.marquee.design.RoundButton
 import app.marquee.design.RowHeader
+import app.marquee.design.Scrims
 import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
 import app.marquee.design.TextRole
@@ -129,13 +128,15 @@ fun PhoneHome(
         } else {
             val rows = home.rows.toList().withoutRemoved(removing)
             val split = rows.indexOfFirst { it.rowId == TileCopy.CONTINUE_ROW } + 1
-            items(rows.subList(0, split), key = { it.rowId }) { row -> PhoneRow(row, onOpen, hold, home::retryRow) }
+            items(rows.subList(0, split), key = {
+                it.rowId
+            }) { row -> PhoneRow(row, TileCopy.source(row, rows), onOpen, hold, home::retryRow) }
             if (notice != null) item(key = "notice") { notice() }
             if (card != null) item(key = "card") { card() }
             items(
                 rows.subList(split, rows.size),
                 key = { it.rowId },
-            ) { row -> PhoneRow(row, onOpen, hold, home::retryRow) }
+            ) { row -> PhoneRow(row, TileCopy.source(row, rows), onOpen, hold, home::retryRow) }
         }
     }
 }
@@ -218,9 +219,7 @@ private fun PhoneHero(
     onPlay: (Tile) -> Unit,
 ) {
     // An inset card (design/DECISION.md v2, Home hero). The scrim is 80% from a third of the way
-    // down, where the text block begins, so white text reads at better than 8:1 on any artwork;
-    // the accent eyebrow sits in its own chip.
-    val scrim = Marquee.colors.bg
+    // down, where the text block begins, so white text reads at better than 8:1 on any artwork.
     val tile = hero.tile
     // At least the art's proportion, and taller when the text needs it (a small phone, large
     // fonts): the card grows and the page scrolls it, nothing is cut.
@@ -250,18 +249,7 @@ private fun PhoneHero(
                     onClick = { onOpen(tile) },
                 ),
         ) {
-            Backdrop(tile.background ?: tile.poster, Modifier.matchParentSize())
-            Box(
-                Modifier
-                    .matchParentSize()
-                    .background(
-                        Brush.verticalGradient(
-                            0f to Color.Transparent,
-                            0.3f to scrim.copy(alpha = 0.8f),
-                            1f to scrim.copy(alpha = 0.96f),
-                        ),
-                    ),
-            )
+            Backdrop(tile.background ?: tile.poster, Modifier.matchParentSize(), foot = Scrims.phoneHeroFoot)
             Column(
                 // The text starts no higher than a third down, where the scrim has darkened.
                 Modifier
@@ -270,7 +258,6 @@ private fun PhoneHero(
                     .padding(Marquee.space.m),
                 verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
             ) {
-                Eyebrow(hero.reason, overArt = true)
                 Logo(
                     tile.logo,
                     tile.name,
@@ -287,6 +274,8 @@ private fun PhoneHero(
                         MqText(it, role = TextRole.Caption, color = Marquee.colors.muted, maxLines = 3)
                     }
                 }
+                // The core's reason on Apple's explainability line, over the buttons; never an eyebrow.
+                MqText(hero.reason, role = TextRole.Caption, weight = FontWeight.SemiBold, maxLines = 2)
                 // The card is the control for screen readers (it opens the details); the buttons
                 // repeat it for sighted touch.
                 Row(
@@ -322,6 +311,8 @@ private fun shapeOf(row: HomeRow): TileShape =
 @Composable
 private fun PhoneRow(
     row: HomeRow,
+    /** The addon's name, when another row has the same title (TileCopy.source). */
+    source: String?,
     onOpen: (Tile) -> Unit,
     hold: ((Tile) -> Unit)?,
     /** A failed row's Try again: that catalog only. */
@@ -329,7 +320,7 @@ private fun PhoneRow(
 ) {
     val side = Marquee.safe.side
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-        RowHeader(row.title, TileCopy.source(row.rowId, row.source), Modifier.padding(horizontal = side))
+        RowHeader(row.title, source, Modifier.padding(horizontal = side))
         when (val notice = row.notice()) {
             is RowNotice.Waiting -> {
                 SkeletonLane(shapeOf(row))

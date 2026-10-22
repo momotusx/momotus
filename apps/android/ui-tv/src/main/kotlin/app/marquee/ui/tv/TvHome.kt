@@ -37,14 +37,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.marquee.core.PendingRemoval
@@ -64,7 +63,6 @@ import app.marquee.core.views.HomeView
 import app.marquee.core.views.ViewStatus
 import app.marquee.design.ActionMenu
 import app.marquee.design.Backdrop
-import app.marquee.design.Eyebrow
 import app.marquee.design.Icons
 import app.marquee.design.Logo
 import app.marquee.design.Marquee
@@ -76,6 +74,7 @@ import app.marquee.design.PrimaryButton
 import app.marquee.design.RatingLine
 import app.marquee.design.RoundButton
 import app.marquee.design.RowHeader
+import app.marquee.design.Scrims
 import app.marquee.design.SecondaryButton
 import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
@@ -96,6 +95,9 @@ private const val HERO_PLAY = "hero:play"
 private const val HERO_DETAILS = "hero:details"
 private const val HERO_ROW = "hero"
 private val HERO_HEIGHT = 560.dp
+
+/** The hero's text column, 56 in from the card's edge: inside Scrims.heroSide's dark side. */
+private val HERO_TEXT = 640.dp
 private const val FOCUS_WAIT_MS = 15_000L
 
 private fun Hero?.focusKey(): String? =
@@ -245,7 +247,7 @@ fun TvHome(
                 items(
                     rows.subList(0, split),
                     key = { it.rowId },
-                ) { row -> TvRow(row, state, onOpen, hold, retry, { headerRoom = it }) }
+                ) { row -> TvRow(row, TileCopy.source(row, rows), state, onOpen, hold, retry, { headerRoom = it }) }
                 val said = removing?.let { TileCopy.removed(it.name) } ?: removal?.failed
                 if (said != null) {
                     item(key = "notice") {
@@ -260,7 +262,7 @@ fun TvHome(
                 items(
                     rows.subList(split, rows.size),
                     key = { it.rowId },
-                ) { row -> TvRow(row, state, onOpen, hold, retry, { headerRoom = it }) }
+                ) { row -> TvRow(row, TileCopy.source(row, rows), state, onOpen, hold, retry, { headerRoom = it }) }
             }
         }
     }
@@ -345,7 +347,6 @@ private fun TvHero(
     onPlay: (Tile) -> Unit,
 ) {
     val colors = Marquee.colors
-    val scrim = colors.bg
     val tile = hero.tile
     val shape = RoundedCornerShape(Marquee.radius.hero)
     val playRequester = state.focus.requesterFor(HERO_PLAY)
@@ -360,38 +361,16 @@ private fun TvHero(
             .clip(shape)
             .border(1.dp, colors.edge, shape),
     ) {
-        Backdrop(tile.background ?: tile.poster, Modifier.matchParentSize())
-        Box(
-            Modifier
-                .matchParentSize()
-                .background(
-                    Brush.horizontalGradient(
-                        0f to scrim.copy(alpha = 0.94f),
-                        0.28f to scrim.copy(alpha = 0.72f),
-                        0.58f to scrim.copy(alpha = 0.18f),
-                        0.72f to scrim.copy(alpha = 0f),
-                    ),
-                ),
-        )
-        Box(
-            Modifier
-                .matchParentSize()
-                .background(
-                    Brush.verticalGradient(
-                        0.42f to Color.Transparent,
-                        0.66f to scrim.copy(alpha = 0.3f),
-                        1f to scrim.copy(alpha = 0.9f),
-                    ),
-                ),
-        )
+        Backdrop(tile.background ?: tile.poster, Modifier.matchParentSize(), Scrims.heroSide, Scrims.heroFoot)
         Column(
             Modifier
                 .align(Alignment.BottomStart)
                 .padding(start = 56.dp, bottom = 48.dp)
-                .widthIn(max = 860.dp),
+                // Held on the scrim's dark side, as the frames hold the info column; DesignTest checks its
+                // text over white art at this width.
+                .widthIn(max = HERO_TEXT),
             verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
         ) {
-            Eyebrow(hero.reason, overArt = true)
             Logo(tile.logo, tile.name, height = 120.dp, maxWidth = 520.dp, color = colors.text)
             RatingLine(TileCopy.ratings(tile.ratings), TileCopy.heroMeta(hero))
             hero.description?.let {
@@ -404,8 +383,9 @@ private fun TvHero(
                     maxLines = 3,
                 )
             }
+            // The core's reason on Apple's explainability line, 16 over the buttons; never an eyebrow.
+            MqText(hero.reason, role = TextRole.Caption, weight = FontWeight.SemiBold, maxLines = 1)
             Row(
-                Modifier.padding(top = Marquee.space.xs),
                 horizontalArrangement = Arrangement.spacedBy(Marquee.space.m),
                 verticalAlignment = Alignment.Top,
             ) {
@@ -444,6 +424,8 @@ private fun shapeOf(row: HomeRow): TileShape =
 @Composable
 private fun TvRow(
     row: HomeRow,
+    /** The addon's name, when another row has the same title (TileCopy.source). */
+    source: String?,
     state: TvHomeState,
     onOpen: (Tile) -> Unit,
     onHold: ((Tile, String) -> Unit)?,
@@ -464,7 +446,7 @@ private fun TvRow(
         val hint = TileCopy.HOLD_TO_REMOVE.takeIf { onHold != null && TileCopy.removable(row.rowId) }
         RowHeader(
             row.title,
-            TileCopy.source(row.rowId, row.source) ?: hint,
+            source ?: hint,
             Modifier
                 .padding(horizontal = inset)
                 .onSizeChanged { if (it.height > 0) onHeaderRoom(with(density) { it.height.toDp() } + gap + lift) },

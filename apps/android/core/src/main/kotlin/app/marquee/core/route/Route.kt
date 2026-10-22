@@ -220,6 +220,13 @@ fun restoredStack(stack: List<Route>): List<Route> {
 }
 
 /**
+ * On the phone Calendar is a row at the top of Library, pushed over it (D6): a stack stored with Calendar
+ * as its place, from when it was a tab, opens Library instead.
+ */
+fun calendarInLibrary(stack: List<Route>): List<Route> =
+    if (stack.getOrNull(1) == Route.Calendar) listOf(stack[0], Route.Library) + stack.drop(2) else stack
+
+/**
  * The stack after a version was chosen on the Versions page at its top. Opened from the player, which
  * waits paused under it, the page gives way with that player to the chosen version; otherwise the
  * chosen version plays over the page.

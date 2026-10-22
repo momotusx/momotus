@@ -32,6 +32,7 @@ export interface Tokens {
   tile: { tv: TileSet; phone: TileSet };
   weight: Scale;
   tracking: Scale;
+  selected: { fill: string };
 }
 
 export const tokensPath = join(import.meta.dir, "../../../design/tokens.json");
@@ -186,6 +187,8 @@ export function generate(t: Tokens): string {
     `    const val FOCUS_SCALE_ART = ${float(t.focus.scaleArt)}`,
     `    val focusRiseArt = ${dp(t.focus.riseArt)}`,
     ...artShadow(t.lift.focusArt),
+    // A selected segment or toggle: a grey, never white, which on TV is focus.
+    `    val selectedFill = Color(0x${argb(t.selected.fill)})`,
     "",
     `    const val FOCUS_MS = ${t.motion.focusMs}`,
     `    const val PANEL_MS = ${t.motion.panelMs}`,

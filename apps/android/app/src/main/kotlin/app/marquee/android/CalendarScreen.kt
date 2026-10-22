@@ -126,7 +126,7 @@ private fun Head(
     val snapshot = view.snapshot
     val status = view.status
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-        BrowseHeader("Coming up", "Calendar")
+        BrowseHeader("Calendar")
         MqText(
             CalendarCopy.lede(today),
             modifier = Modifier.padding(horizontal = Marquee.safe.side),

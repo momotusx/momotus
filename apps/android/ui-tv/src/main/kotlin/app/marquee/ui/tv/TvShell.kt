@@ -3,7 +3,6 @@
 package app.marquee.ui.tv
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,8 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -56,12 +53,13 @@ import app.marquee.design.focusSelectable
 import app.marquee.design.marqueeFocus
 
 /**
- * The TV frame (plans/android-design-v2.md section 2): a glass pill centered at the top with the
- * top-level places, and the screen under it. The screen starts below the pill rather than behind
- * it: a focus group is a candidate for a D-pad move only when it lies wholly in that direction. Focus moves between them by rule:
- * Up out of the top of a screen enters the pill on the current place, Down from the pill returns
- * to what had focus in the screen ([contentEntry]), and the ends of the pill stop Left and Right.
- * A held arrow key is throttled here, once, for every screen.
+ * The TV frame (design/DECISION.md, Navigation): the wordmark at the left and a solid `surface` tab bar
+ * centered at the top (68 tall, its top at 46) with every place in words, and the screen under it. The
+ * screen starts below the bar rather than behind it: a focus group is a candidate for a D-pad move only
+ * when it lies wholly in that direction. Focus moves between them by rule: Up out of the top of a screen
+ * enters the bar on the current place, Down from the bar returns to what had focus in the screen
+ * ([contentEntry]), and the ends of the bar stop Left and Right. A held arrow key is throttled here,
+ * once, for every screen.
  *
  * @param contentEntry where focus lands when it enters the content from the pill (null: the
  * default search).
@@ -77,7 +75,7 @@ fun TvShell(
     onNavFocus: () -> Unit,
     onKey: () -> Unit,
     modifier: Modifier = Modifier,
-    /** The active profile's avatar at the pill's end; it opens the picker. */
+    /** The active profile's avatar at the bar's end; it opens the picker. */
     profileButton: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
@@ -102,13 +100,7 @@ fun TvShell(
             },
     ) {
         if (showNav) {
-            TvTopNav(
-                selected,
-                onSelect,
-                onNavFocus,
-                Modifier.align(Alignment.CenterHorizontally).padding(top = Marquee.safe.top),
-                profileButton,
-            )
+            TvTopNav(selected, onSelect, onNavFocus, Modifier.fillMaxWidth().padding(top = NAV_TOP), profileButton)
         }
         Box(
             Modifier
@@ -120,7 +112,7 @@ fun TvShell(
     }
 }
 
-/** The gap between the pill and a top-level screen's first item. */
+/** The gap between the bar and a top-level screen's first item. */
 @Composable
 fun tvContentTop(): Dp = Marquee.space.m
 
@@ -142,7 +134,7 @@ private val places =
         Route.Settings to Place("Settings", Icons.Settings),
     )
 
-/** Browsing places first, then the tools after a divider, as on the web. */
+/** Browsing places first, then the tools, as on the web; the tools show their icon beside the word. */
 private val tools = setOf(Route.Search, Route.Settings)
 
 @Composable
@@ -153,42 +145,33 @@ private fun TvTopNav(
     modifier: Modifier,
     profileButton: (@Composable () -> Unit)?,
 ) {
-    val colors = Marquee.colors
     val current = remember { FocusRequester() }
     val pill = RoundedCornerShape(Marquee.radius.pill)
-    val browse = TOP_LEVEL.filter { it !in tools }
-    val tail = TOP_LEVEL.filter { it in tools }
-    Row(
-        modifier
-            .height(NAV_HEIGHT)
-            .clip(pill)
-            .background(colors.glassStrong)
-            .border(1.dp, colors.edge, pill)
-            .focusProperties { enter = { current } }
-            .focusGroup()
-            .padding(horizontal = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // The wordmark: an accent dot and the name; not focusable.
+    Box(modifier) {
+        // The wordmark: the name alone, with no dot; not focusable.
+        MqText(
+            "Marquee",
+            Modifier.align(Alignment.CenterStart).padding(start = Marquee.safe.side).clearAndSetSemantics { },
+            role = TextRole.Title3,
+            maxLines = 1,
+        )
         Row(
-            Modifier.padding(start = 16.dp, end = 20.dp).clearAndSetSemantics { },
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            Modifier
+                .align(Alignment.Center)
+                .height(NAV_HEIGHT)
+                .clip(pill)
+                .background(Marquee.colors.surface)
+                .focusProperties { enter = { current } }
+                .focusGroup()
+                .padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.size(10.dp).clip(CircleShape).background(colors.accent))
-            MqText("Marquee", role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 1)
+            for (route in TOP_LEVEL.filter { it !in tools } + TOP_LEVEL.filter { it in tools }) {
+                NavItem(route, route == selected, current, onSelect, onNavFocus)
+            }
+            profileButton?.invoke()
         }
-        for (route in browse) NavItem(route, route == selected, current, onSelect, onNavFocus)
-        Box(
-            Modifier
-                .padding(horizontal = 12.dp)
-                .width(1.dp)
-                .height(32.dp)
-                .background(colors.lineStrong),
-        )
-        for (route in tail) NavItem(route, route == selected, current, onSelect, onNavFocus)
-        profileButton?.invoke()
     }
 }
 
@@ -217,26 +200,29 @@ private fun NavItem(
             .background(
                 when {
                     focused -> colors.surface
-                    isSelected -> colors.text.copy(alpha = 0.12f)
+                    isSelected -> ACTIVE
                     else -> Color.Transparent
                 },
             ).focusSelectable(isSelected, { onSelect(route) }, Role.Tab)
-            .padding(horizontal = 22.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+            .padding(horizontal = 26.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Search and Settings carry their icon; the browsing places are words alone, as on the web.
-        val ink = if (isSelected || focused) colors.text else colors.muted
-        if (route in tools) MqIcon(place.icon, tint = ink, size = 26.dp)
-        MqText(
-            place.label,
-            role = TextRole.Callout,
-            color = ink,
-            weight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
-            maxLines = 1,
-        )
+        // Search and Settings carry their icon; the browsing places are words alone, as on the web. The
+        // active tab is pure white in its pill, the rest 64 percent.
+        val ink =
+            when {
+                focused -> colors.text
+                isSelected -> Color.White
+                else -> colors.dim
+            }
+        if (route in tools) MqIcon(place.icon, tint = ink, size = 30.dp)
+        MqText(place.label, color = ink, weight = FontWeight.SemiBold, maxLines = 1)
     }
 }
 
-private val NAV_HEIGHT = 72.dp
-private val NAV_ITEM = 56.dp
+/** The active tab's pill: white at 20 percent. */
+private val ACTIVE = Color(0x33FFFFFF)
+private val NAV_TOP = 46.dp
+private val NAV_HEIGHT = 68.dp
+private val NAV_ITEM = 60.dp

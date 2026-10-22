@@ -1,7 +1,11 @@
 package app.marquee.core
 
+import app.marquee.core.model.CatalogChoice
 import app.marquee.core.model.Hero
+import app.marquee.core.model.HomeCatalog
+import app.marquee.core.model.HomeRow
 import app.marquee.core.model.Ratings
+import app.marquee.core.model.RowState
 import app.marquee.core.model.Tile
 import app.marquee.core.model.withoutRemoved
 import kotlin.test.Test
@@ -50,9 +54,55 @@ class TileCopyTest {
     }
 
     @Test
-    fun `the source label names the addon, and Continue Watching has none`() {
-        assertNull(TileCopy.source(TileCopy.CONTINUE_ROW, "Local"))
-        assertEquals("Cinemeta", TileCopy.source("a:movie:top", "Cinemeta"))
+    fun `a row or search group names its addon only beside one of its title, and Continue Watching never`() {
+        fun row(
+            id: String,
+            title: String,
+            source: String,
+        ) = HomeRow(rowId = id, title = title, source = source, state = RowState.Loading)
+        val cinemeta = row("cinemeta:movie:top", "Popular Movies", "Cinemeta")
+        val tmdb = row("tmdb:movie:top", "Popular Movies", "The Movie Database")
+        val series = row("cinemeta:series:top", "Popular Series", "Cinemeta")
+        val continuing = row(TileCopy.CONTINUE_ROW, "Continue Watching", "Local")
+        val rows = listOf(continuing, cinemeta, tmdb, series)
+        assertEquals("Cinemeta", TileCopy.source(cinemeta, rows))
+        assertEquals("The Movie Database", TileCopy.source(tmdb, rows))
+        assertNull(TileCopy.source(series, rows))
+        assertNull(TileCopy.source(continuing, rows + continuing.copy(rowId = "x")))
+        // Search groups (titled by kind, the addon apart): "Movies" from two addons names both, "Series" none.
+        val films = row("cinemeta:movie:top", "Movies", "Cinemeta")
+        val more = row("tmdb:movie:tmdb.search", "Movies", "The Movie Database")
+        val shows = row("cinemeta:series:top", "Series", "Cinemeta")
+        val found = listOf(films, more, shows)
+        assertEquals(listOf("Cinemeta", "The Movie Database", null), found.map { TileCopy.source(it, found) })
+    }
+
+    @Test
+    fun `a Discover note names its catalog alone, and its addon only beside a twin or in a failed or empty state`() {
+        val popular = CatalogChoice("cinemeta|movie|top", "Popular", "Cinemeta")
+        val featured = CatalogChoice("cinemeta|movie|imdbRating", "Featured", "Cinemeta")
+        val tmdb = CatalogChoice("tmdb|movie|tmdb.top", "Popular", "The Movie Database")
+        assertEquals("Featured", TileCopy.catalogLabel(featured, listOf(popular, featured)))
+        assertEquals("Featured from Cinemeta", TileCopy.catalogLabel(featured, listOf(popular, featured), state = true))
+        assertEquals("Popular from Cinemeta", TileCopy.catalogLabel(popular, listOf(popular, featured, tmdb)))
+    }
+
+    @Test
+    fun `a Home rows line names the addon only beside a twin title, then says Hidden`() {
+        fun catalog(
+            id: String,
+            title: String,
+            source: String,
+            hidden: Boolean = false,
+        ) = HomeCatalog(id, title, source, hidden)
+        val movies = catalog("cinemeta:movie:top", "Popular Movies", "Cinemeta")
+        val series = catalog("cinemeta:series:top", "Popular Series", "Cinemeta", hidden = true)
+        val tmdb = catalog("tmdb:movie:top", "Popular Movies", "The Movie Database")
+        assertEquals(null, TileCopy.homeRowLine(movies, listOf(movies, series), "Hidden"))
+        assertEquals("Hidden", TileCopy.homeRowLine(series, listOf(movies, series), "Hidden"))
+        assertEquals("The Movie Database", TileCopy.homeRowLine(tmdb, listOf(movies, series, tmdb), "Hidden"))
+        val twin = series.copy(title = "Popular Movies")
+        assertEquals("Cinemeta · Hidden", TileCopy.homeRowLine(twin, listOf(movies, twin), "Hidden"))
     }
 
     @Test

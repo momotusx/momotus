@@ -3,6 +3,7 @@ package app.marquee.design
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -68,17 +69,16 @@ class DesignTest {
         // The TV ring, white on the page.
         assertTrue(contrast(dark.accent, dark.bg) >= 3f)
         assertTrue(contrast(dark.switchOn, dark.surface) >= 3f) // 6.89
-        // A chip's detail (Discover's catalog source), as Chip draws it: a step quieter than its label
-        // on `raised`, and the label's own white on the selected grey; 4.5:1 on its pill either way.
+        // A chip's detail (Discover's catalog source), as Chip draws it: `dim` on the segment track over
+        // the page and over `surface`, and the label's own white on the selected grey; 4.5:1 either way.
         val rest = chipDetailColor(selected = false, colors = dark)
         val picked = chipDetailColor(selected = true, colors = dark)
-        assertTrue(rest.alpha < dark.muted.alpha) // the label is muted
-        assertTrue(contrast(rest, dark.raised) >= 4.5f) // 5.73
-        assertTrue(contrast(picked, selectedFill(dark)) >= 4.5f) // 5.37
+        assertTrue(contrast(rest, SEGMENT_TRACK) >= 4.5f) // 6.27
+        assertTrue(contrast(rest, SEGMENT_TRACK, dark.surface) >= 4.5f) // 5.46
+        assertTrue(contrast(picked, Tokens.selectedFill) >= 4.5f) // 5.37
         // One white: selection is a grey that never reads as the white focus.
-        assertTrue(contrast(dark.primary, selectedFill(dark)) >= 3f)
-        // The control edge still drawn on chips, buttons, fields and the off switch until phase 1b
-        // removes it: 3:1 on the page.
+        assertTrue(contrast(dark.primary, Tokens.selectedFill) >= 3f)
+        // The control edge still drawn on the off switch until phase 8: 3:1 on the page.
         assertTrue(contrast(dark.control, dark.bg) >= 3f) // 3.25
         // Dark only: the light palette mirrors the dark one.
         assertEquals(dark, Tokens.light)
@@ -87,16 +87,17 @@ class DesignTest {
     @Test
     fun `the segmented control and the secondary pill carry their state in the label`() {
         val dark = Tokens.dark
-        // Apple's segmented control (design/reference/apple-tv.md): the selected segment is `control`
-        // with a white label, the others a 64 percent label on the track. Selection is carried by
-        // the label's level and the fill, so the fill against the track (2.14:1) is not an edge
-        // that needs 3:1; the labels are text and need 4.5:1.
-        val track = Color(118, 118, 128).copy(alpha = 0.24f)
-        assertTrue(contrast(Color.White, dark.control) >= 4.5f) // 5.99
-        assertTrue(contrast(dark.dim, track) >= 4.5f) // 6.27
+        // Apple's segmented control (design/reference/apple-tv.md): the selected segment is
+        // `selected.fill` with a white label, the others a 64 percent label on the track. Selection is
+        // carried by the label's level and the fill, so the fill against the track is not an edge that
+        // needs 3:1; the labels are text and need 4.5:1.
+        assertEquals(Color(118, 118, 128).copy(alpha = 0.24f).toArgb(), SEGMENT_TRACK.toArgb())
+        assertTrue(contrast(Color.White, Tokens.selectedFill) >= 4.5f) // 5.99
+        assertTrue(contrast(dark.dim, SEGMENT_TRACK) >= 4.5f) // 6.27
         // A secondary is white on a 16 percent white fill, never a colored word: 10.30 on the page.
-        // Over artwork the ramps keep it at 4.5:1; that check lands with the backdrop piece.
-        assertTrue(contrast(Color.White, Color.White.copy(alpha = 0.16f)) >= 4.5f)
+        // Over artwork the scrims keep it at 4.5:1 (the backdrop check below).
+        assertEquals(Color.White.copy(alpha = 0.16f).toArgb(), SECONDARY_FILL.toArgb())
+        assertTrue(contrast(Color.White, SECONDARY_FILL) >= 4.5f)
     }
 
     @Test
@@ -118,8 +119,9 @@ class DesignTest {
             dark.primary,
             buttonFill(primary = true, selected = false, tvFocused = true, colors = dark.inverted()),
         )
-        // A secondary is raised; focused on TV (its palette inverted) it is the white fill, a selected one too.
-        assertEquals(dark.raised, buttonFill(primary = false, selected = false, tvFocused = false, colors = dark))
+        // A secondary is the 16 percent fill; focused on TV (its palette inverted) it is the white fill, a
+        // selected one too.
+        assertEquals(SECONDARY_FILL, buttonFill(primary = false, selected = false, tvFocused = false, colors = dark))
         assertEquals(
             dark.primary,
             buttonFill(primary = false, selected = false, tvFocused = true, colors = dark.inverted()),
@@ -128,13 +130,24 @@ class DesignTest {
             dark.primary,
             buttonFill(primary = false, selected = true, tvFocused = true, colors = dark.inverted()),
         )
-        // While another button holds the TV focus the primary yields its white: one white per screen.
+        // While another button holds the TV focus the primary yields its white for the secondary fill:
+        // one white per screen.
         assertEquals(
-            dark.raised,
+            SECONDARY_FILL,
             buttonFill(primary = true, selected = false, tvFocused = false, colors = dark, yields = true),
         )
-        // A selected toggle is the selected grey, never white.
-        assertEquals(selectedFill(dark), buttonFill(primary = false, selected = true, tvFocused = false, colors = dark))
+        // Inside the player (its ring kept) a secondary and a round button keep the opaque raised fill: their
+        // controls sit over the picture with no scrim until phase 5 moves both.
+        assertEquals(
+            dark.raised,
+            buttonFill(primary = false, selected = false, tvFocused = false, colors = dark, ringed = true),
+        )
+        // A selected toggle is the selected grey (the selected.fill token, #636366), never white.
+        assertEquals(Color(0xFF636366), Tokens.selectedFill)
+        assertEquals(
+            Tokens.selectedFill,
+            buttonFill(primary = false, selected = true, tvFocused = false, colors = dark),
+        )
     }
 
     @Test
@@ -179,6 +192,68 @@ class DesignTest {
                 "star" to on.star,
             )
         for ((name, ink) in words) assertTrue(contrast(ink, on.surface) >= 4.5f, "$name on the focus white")
+    }
+
+    @Test
+    fun `over white art every word on a backdrop keeps 4_5 to 1, a secondary on its fill and text on the scrim`() {
+        // Each at its top trailing corner, as a share of its backdrop: [x] from the leading edge, [y] from the
+        // bottom. Laid in order: white art, the side scrim, the foot scrim, then the 16 percent fill under a
+        // secondary's white label; bare text in its own level.
+        class Spot(
+            val name: String,
+            val side: List<ScrimStop>,
+            val x: Float,
+            val foot: List<ScrimStop>,
+            val y: Float,
+            val page: Color,
+            val ink: Color = Color.White,
+            val fill: Color = SECONDARY_FILL,
+        )
+        val tv = formPalette(Form.Tv)
+        val phone = formPalette(Form.Phone)
+        val bare = Color.Transparent
+        // TvHome's 1760 by 560 hero card: the text column 640 wide from 56 in ends at x .4; from its foot the
+        // buttons sit at 48, the reason line ends by .38, the synopsis by .6 and the meta line by .69.
+        val (side, foot) = Scrims.heroSide to Scrims.heroFoot
+        val spots =
+            listOf(
+                Spot("TV Home, Details (its glyph ends by 321)", side, 0.2f, foot, 0.27f, tv.bg),
+                Spot("TV Home, the reason line", side, 0.4f, foot, 0.38f, tv.bg, tv.text, bare),
+                Spot("TV Home, the synopsis", side, 0.4f, foot, 0.6f, tv.bg, tv.muted, bare),
+                Spot("TV Home, the meta line", side, 0.4f, foot, 0.69f, tv.bg, tv.muted, bare),
+                // The TV title's Play and round buttons end before the middle, the row anywhere down the column;
+                // its synopsis, 640 wide from 80 in, ends by x .4.
+                Spot("TV title, its last round button", Scrims.titleSide, 0.5f, Scrims.titleFoot, 0.5f, tv.bg),
+                Spot("TV title, the synopsis", Scrims.titleSide, 0.4f, Scrims.titleFoot, 0.7f, tv.bg, tv.muted, bare),
+                // PhoneHome's hero card: Play and Details 24 from its foot, a fifth of it up (a third in landscape);
+                // its text starts no higher than .7.
+                Spot("phone Home, Play and Details", emptyList(), 0f, Scrims.phoneHeroFoot, 0.35f, phone.bg),
+                Spot("phone Home, its text", emptyList(), 0f, Scrims.phoneHeroFoot, 0.7f, phone.bg, phone.muted, bare),
+            )
+        for (spot in spots) {
+            val covered = 1 - (1 - Scrims.alpha(spot.side, spot.x)) * (1 - Scrims.alpha(spot.foot, spot.y))
+            val art = spot.page.copy(alpha = covered).compositeOver(Color.White)
+            val ratio = contrast(spot.ink, spot.fill, art)
+            assertTrue(ratio >= 4.5f, "${spot.name}: $ratio")
+        }
+    }
+
+    @Test
+    fun `the phone page is black with the iPhone's greys, and every word on it reads`() {
+        val phone = formPalette(Form.Phone)
+        val dark = Tokens.dark
+        assertEquals(Color.Black, phone.bg)
+        assertEquals(dark.surfacePhone, phone.surface)
+        assertEquals(dark.raisedPhone, phone.raised)
+        assertEquals(dark.dimPhone, phone.dim)
+        assertEquals(dark.primaryPhone, phone.primary)
+        assertEquals(dark, formPalette(Form.Tv))
+        for (ground in listOf(phone.bg, phone.surface, phone.raised)) {
+            for ((name, ink) in mapOf("text" to phone.text, "muted" to phone.muted, "dim" to phone.dim)) {
+                assertTrue(contrast(ink, ground, phone.bg) >= 4.5f, "$name on $ground")
+            }
+        }
+        assertTrue(contrast(phone.onPrimary, phone.primary) >= 4.5f)
     }
 
     /** WCAG contrast of [fg] on [bg]: a translucent [bg] is first laid on [base], then [fg] on that. */

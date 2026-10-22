@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
@@ -51,7 +53,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
@@ -76,14 +77,22 @@ import kotlinx.coroutines.flow.first
 
 private enum class ButtonKind { Primary, Secondary }
 
-/** The grey of a selected choice (a chip, a toggle, a lit round button): never white, which on TV is focus. */
-internal fun selectedFill(colors: Palette): Color = colors.text.copy(alpha = 0.22f).compositeOver(colors.raised)
+/**
+ * A secondary's fill (design/DECISION.md, Secondary actions): white at 16 percent with a pure white
+ * label and no edge. Over art it sits on a [Backdrop] ramp deep enough for that label (DesignTest).
+ */
+internal val SECONDARY_FILL = Color(0x29FFFFFF)
+
+/** A segmented control's track (Apple's tertiary fill), under its unselected choices. */
+internal val SEGMENT_TRACK = Color(0x3D767680)
 
 /**
  * A button's fill (design/DECISION.md): the one primary action is the white pill; on TV it yields
  * its white ([yields]) while another button holds focus, so focus stays the one white thing. A
- * secondary is raised, a selected toggle (Watched, In Library) the selected grey; on TV focus whitens
- * a secondary, which [colors] already says when it is the [focusPalette] of a focused button.
+ * secondary is the 16 percent fill, a selected toggle (Watched, In Library) `selected.fill`, never white,
+ * which on TV is focus; on TV focus whitens a secondary, which [colors] already says when it is the
+ * [focusPalette] of a focused button. Inside the player ([ringed]) a secondary keeps the opaque `raised`
+ * fill, as it keeps its ring: its controls sit over the picture with no scrim until phase 5 moves both.
  */
 internal fun buttonFill(
     primary: Boolean,
@@ -91,11 +100,14 @@ internal fun buttonFill(
     tvFocused: Boolean,
     colors: Palette,
     yields: Boolean = false,
+    ringed: Boolean = false,
 ): Color =
     when {
         primary && !yields -> colors.primary
-        selected && !tvFocused -> selectedFill(colors)
-        else -> colors.raised
+        tvFocused -> colors.raised
+        selected -> Tokens.selectedFill
+        ringed -> colors.raised
+        else -> SECONDARY_FILL
     }
 
 @Composable
@@ -112,6 +124,7 @@ private fun ButtonShell(
     onFocusChange: ((Boolean) -> Unit)?,
     busy: Boolean = false,
     spoken: String? = null,
+    iconAfter: Boolean = false,
 ) {
     val tv = Marquee.form == Form.Tv
     var focused by remember { mutableStateOf(false) }
@@ -127,8 +140,14 @@ private fun ButtonShell(
     val buttons = LocalButtonFocus.current
     val yields = tv && !ringed && kind == ButtonKind.Primary && !focused && (buttons?.intValue ?: 0) > 0
     ButtonFocused(focused && kind == ButtonKind.Secondary)
-    val background = buttonFill(kind == ButtonKind.Primary, selected, tvFocused = tv && focused, colors, yields)
-    val content = if (kind == ButtonKind.Primary && !yields) colors.onPrimary else colors.text
+    val background = buttonFill(kind == ButtonKind.Primary, selected, tvFocused = tv && focused, colors, yields, ringed)
+    // A secondary's label is pure white, never the 92 percent text, and dark on a TV focus's white.
+    val content =
+        when {
+            kind == ButtonKind.Primary && !yields -> colors.onPrimary
+            tv && focused && !ringed -> colors.text
+            else -> Color.White
+        }
     Row(
         modifier =
             modifier
@@ -141,13 +160,7 @@ private fun ButtonShell(
                 }.heightIn(min = height) // grows with a large system font instead of cutting the label
                 .clip(shape)
                 .background(background)
-                .then(
-                    if (kind == ButtonKind.Secondary || yields) {
-                        Modifier.border(2.dp, colors.control, shape)
-                    } else {
-                        Modifier
-                    },
-                ).then(if (spoken != null) Modifier.semantics { contentDescription = spoken } else Modifier)
+                .then(if (spoken != null) Modifier.semantics { contentDescription = spoken } else Modifier)
                 .focusClickable(onClick, Role.Button, enabled)
                 .padding(horizontal = pad, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(gap, Alignment.CenterHorizontally),
@@ -155,7 +168,7 @@ private fun ButtonShell(
     ) {
         if (busy) {
             Spinner(size = if (tv) 26.dp else 18.dp)
-        } else if (icon != null) {
+        } else if (icon != null && !iconAfter) {
             MqIcon(icon, tint = content)
         }
         // A label that does not fit (a small phone, a large font) takes a second line, never an ellipsis.
@@ -168,6 +181,7 @@ private fun ButtonShell(
             maxLines = 2,
             textAlign = TextAlign.Center,
         )
+        if (icon != null && iconAfter && !busy) MqIcon(icon, tint = content)
     }
 }
 
@@ -185,9 +199,10 @@ fun PrimaryButton(
 ) = ButtonShell(label, onClick, modifier, icon, ButtonKind.Primary, big, enabled, false, focusRequester, onFocusChange)
 
 /**
- * @param selected a toggle that is on (Watched, In Library): drawn with the raised fill.
+ * @param selected a toggle that is on (Watched, In Library): drawn in the selected grey.
  * @param busy its request runs: a spinner in place of the icon; the button stays, so focus does too.
  * @param spoken what a screen reader says in place of the label (the label with what it acts on).
+ * @param iconAfter the icon follows the label (a pull-down's chevron).
  */
 @Composable
 fun SecondaryButton(
@@ -202,6 +217,7 @@ fun SecondaryButton(
     onFocusChange: ((Boolean) -> Unit)? = null,
     busy: Boolean = false,
     spoken: String? = null,
+    iconAfter: Boolean = false,
 ) = ButtonShell(
     label,
     onClick,
@@ -215,11 +231,12 @@ fun SecondaryButton(
     onFocusChange,
     busy,
     spoken,
+    iconAfter,
 )
 
 /**
- * A chip's detail: `dim`, a step quieter than the `muted` label on `raised` (5.73:1); on the selected
- * grey it keeps the label's `text` (5.37:1), as the web's `.chip.on small`; in a TV focus's inverted
+ * A chip's detail: `dim` beside its label, in a lighter weight (5.46:1 on the track over `surface`); on
+ * the selected grey the label's `text` (5.37:1), as the web's `.chip.on small`; in a TV focus's inverted
  * palette both are dark.
  */
 internal fun chipDetailColor(
@@ -228,8 +245,10 @@ internal fun chipDetailColor(
 ): Color = if (selected) colors.text else colors.dim
 
 /**
- * A pill for filters and choices. Selected is the white pill with a check, never color alone.
- * [switch] makes it an on/off control on its own rather than one choice of a group.
+ * One choice of a segmented control (design/DECISION.md, Selected): a pill on the control's track with a
+ * 64 percent label, the selected one `selected.fill` with a white label, never white, which on TV is
+ * focus. [inTrack] leaves the track to the row of choices around it. [switch] makes it an on/off control
+ * on its own rather than one choice of a group.
  */
 @Composable
 fun Chip(
@@ -242,11 +261,13 @@ fun Chip(
     switch: Boolean = false,
     /** A quieter word after the label: the addon a catalog comes from, as on the web and Apple TV. */
     detail: String? = null,
+    inTrack: Boolean = false,
 ) {
     val tv = Marquee.form == Form.Tv
     var focused by remember { mutableStateOf(false) }
     // On TV a focused chip turns white with dark words (focusPalette).
     val colors = focusPalette(focused)
+    val lit = tv && focused && !LocalFocusRing.current
     // The pill is 36 dp on a phone inside a 48 dp touch target; on TV they are the same.
     val pill = if (tv) 52.dp else 36.dp
     val target = if (tv) pill else 48.dp
@@ -276,25 +297,30 @@ fun Chip(
             Modifier
                 .heightIn(min = pill)
                 .clip(shape)
-                // Opaque when not selected, so the focus halo of a neighbour does not show through.
-                .background(if (selected && !(tv && focused)) selectedFill(colors) else colors.raised)
-                // The edge is the control token, so an unselected pill does not vanish; focus is the white.
-                // It keeps 3:1 on `bg` (3.25) until 1b removes the edge.
-                .then(if (selected) Modifier else Modifier.border(2.dp, colors.control, shape))
-                .padding(horizontal = if (tv) 24.dp else 14.dp),
+                .background(
+                    when {
+                        lit -> colors.raised
+                        selected -> Tokens.selectedFill
+                        inTrack -> Color.Transparent
+                        else -> SEGMENT_TRACK
+                    },
+                ).padding(horizontal = if (tv) 24.dp else 14.dp),
             contentAlignment = Alignment.Center,
         ) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(if (tv) 10.dp else 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (selected) MqIcon(Icons.Check, tint = colors.text, size = if (tv) 24.dp else 16.dp)
-                val ink = if (selected) colors.text else colors.muted
                 MqText(
                     label,
                     role = TextRole.Callout,
-                    color = ink,
-                    weight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                    color =
+                        when {
+                            lit -> colors.text
+                            selected -> Color.White
+                            else -> colors.dim
+                        },
+                    weight = FontWeight.SemiBold,
                     maxLines = 1,
                 )
                 if (detail != null) {
@@ -308,6 +334,32 @@ fun Chip(
                 }
             }
         }
+    }
+}
+
+/**
+ * A segmented control (design/DECISION.md, Selected): the track around [content], [Chip]s with `inTrack`.
+ * It scrolls sideways when its choices outrun the width (three catalogs, each with its addon, on a phone),
+ * from [side] in; the room above and below lets a focused segment rise and cast its shadow.
+ */
+@Composable
+fun SegmentTrack(
+    modifier: Modifier = Modifier,
+    side: Dp = 0.dp,
+    content: @Composable RowScope.() -> Unit,
+) {
+    val room = Marquee.tiles.pad
+    Box(
+        modifier
+            .liftRoom(room)
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = side, vertical = room),
+    ) {
+        Row(
+            Modifier.background(SEGMENT_TRACK, RoundedCornerShape(Marquee.radius.pill)).padding(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            content = content,
+        )
     }
 }
 
@@ -331,23 +383,24 @@ fun KeepInView(
     }
 }
 
-/** A watched-progress bar for the foot of a tile. */
+/** A watched-progress line for the foot of a tile: white on a dark track, never a hue (design/DECISION.md). */
 @Composable
 fun ProgressBar(
     progress: Float,
     modifier: Modifier = Modifier,
 ) {
-    val colors = Marquee.colors
-    val height = if (Marquee.form == Form.Tv) 6.dp else 4.dp
-    Box(modifier.fillMaxWidth().height(height).background(colors.scrim)) {
+    val height = if (Marquee.form == Form.Tv) 8.dp else 4.dp
+    Box(modifier.fillMaxWidth().height(height).background(PROGRESS_TRACK)) {
         Box(
             Modifier
                 .fillMaxWidth(progress.coerceIn(0f, 1f))
                 .height(height)
-                .background(colors.accent),
+                .background(Color.White),
         )
     }
 }
+
+private val PROGRESS_TRACK = Color(0x8C000000)
 
 /**
  * One setup check: a status mark plus its name. The mark differs in shape as well as color (a
@@ -380,8 +433,8 @@ fun StatusLine(
 enum class Status { Ok, Warn, Bad, Idle }
 
 /**
- * The explained empty or failed state: what happened, why, and a fix. A second way out
- * ([secondaryLabel]) sits beside the fix as a secondary button.
+ * The explained empty or failed state, as text on the page (design/DECISION.md, States): what happened,
+ * why, and a fix. A second way out ([secondaryLabel]) sits beside the fix.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -412,18 +465,18 @@ fun StateMessage(
             if (icon != null) MqIcon(icon, tint = Marquee.colors.bad)
             MqText(title, role = TextRole.Title3)
         }
-        MqText(body, role = TextRole.Callout, color = Marquee.colors.muted)
-        // The fix is the state's one primary: the white pill, as on the web. Coming into the
-        // buttons from anywhere (Down from the TV pill) lands on it, not on its nearest neighbour.
-        val primary = actionFocus ?: remember { FocusRequester() }
-        val hasPrimary = actionLabel != null && onAction != null
+        MqText(body, role = TextRole.Callout, color = Marquee.colors.dim)
+        // The fix is a secondary pill. Coming into the buttons from anywhere (Down from the TV
+        // pill) lands on it, not on its nearest neighbour.
+        val fix = actionFocus ?: remember { FocusRequester() }
+        val hasFix = actionLabel != null && onAction != null
         FlowRow(
-            modifier = Modifier.focusProperties { if (hasPrimary) enter = { primary } }.focusGroup(),
+            modifier = Modifier.focusProperties { if (hasFix) enter = { fix } }.focusGroup(),
             horizontalArrangement = Arrangement.spacedBy(if (tv) 18.dp else 10.dp),
             verticalArrangement = Arrangement.spacedBy(if (tv) 18.dp else 10.dp),
         ) {
             if (actionLabel != null && onAction != null) {
-                PrimaryButton(actionLabel, onAction, icon = actionIcon, focusRequester = primary)
+                SecondaryButton(actionLabel, onAction, icon = actionIcon, focusRequester = fix)
             }
             if (secondaryLabel != null && onSecondary != null) {
                 SecondaryButton(secondaryLabel, onSecondary, secondaryModifier, icon = secondaryIcon)
@@ -607,7 +660,8 @@ fun StatusNote(
 /**
  * A round control. With [showLabel] its label shows under the ring (Details, Trailer, Library);
  * without it the label is only spoken (the player's transport). [main] is the white one (play and
- * pause); [selected] is a held toggle, drawn white as well and reported to screen readers.
+ * pause); [selected] is a held toggle, drawn in the selected grey and reported to screen readers. The
+ * rest are the secondary's 16 percent fill with a white glyph, no edge.
  */
 @Composable
 fun RoundButton(
@@ -648,13 +702,11 @@ fun RoundButton(
     ButtonFocused(focused)
     // White is the main action or a TV focus (not in the player, which keeps its ring); a selected
     // circle is the selected grey with a white glyph.
-    val lit = main || (tv && focused && !LocalFocusRing.current)
-    val fill =
-        when {
-            lit -> colors.primary
-            selected -> selectedFill(colors)
-            else -> colors.raised
-        }
+    val ringed = LocalFocusRing.current
+    val lit = main || (tv && focused && !ringed)
+    // The secondary's fill, or in the player the opaque `raised` one (buttonFill).
+    val fill = buttonFill(primary = lit, selected, tvFocused = false, colors, ringed = ringed)
+    val ink = if (lit) colors.onPrimary else Color.White
     Column(
         modifier.alpha(if (enabled) 1f else 0.55f),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -670,7 +722,6 @@ fun RoundButton(
                     onFocusChange?.invoke(it.isFocused)
                 }.clip(CircleShape)
                 .background(fill)
-                .then(if (lit) Modifier else Modifier.border(2.dp, colors.control, CircleShape))
                 .semantics {
                     contentDescription = spoken
                     if (selected) stateDescription = "On"
@@ -678,9 +729,9 @@ fun RoundButton(
             contentAlignment = Alignment.Center,
         ) {
             if (busy) {
-                Spinner(size = glyph, color = if (lit) colors.onPrimary else colors.text)
+                Spinner(size = glyph, color = ink)
             } else {
-                MqIcon(icon, tint = if (lit) colors.onPrimary else colors.text, size = glyph)
+                MqIcon(icon, tint = ink, size = glyph)
             }
             if (badge != null && !busy) {
                 // The label already says the seconds; the badge is only for the eye. A third of the
@@ -690,7 +741,7 @@ fun RoundButton(
                     modifier = Modifier.clearAndSetSemantics { },
                     style =
                         TextStyle(
-                            color = if (lit) colors.onPrimary else colors.text,
+                            color = ink,
                             fontSize = with(LocalDensity.current) { (glyph * 0.34f).toSp() },
                             fontFamily = MarqueeFonts.text,
                             fontWeight = FontWeight.Bold,
@@ -724,8 +775,8 @@ fun RoundButton(
 }
 
 /**
- * A row's header: a short white bar, the title, the source in `dim` and a hairline to the end
- * (design/DECISION.md v2, Section headers).
+ * A shelf's title in the `title3` role and its source in `dim`, with no bar, hairline or All pill
+ * (design/DECISION.md, Shelves and cards).
  */
 @Composable
 fun RowHeader(
@@ -733,57 +784,14 @@ fun RowHeader(
     source: String?,
     modifier: Modifier = Modifier,
 ) {
-    val colors = Marquee.colors
-    val tv = Marquee.form == Form.Tv
     Row(
         modifier.fillMaxWidth().semantics(mergeDescendants = true) { heading() },
-        horizontalArrangement = Arrangement.spacedBy(if (tv) 18.dp else 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (Marquee.form == Form.Tv) 18.dp else 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            Modifier
-                .size(width = if (tv) 5.dp else 3.dp, height = if (tv) 34.dp else 20.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(colors.text),
-        )
         MqText(title, role = TextRole.Title3, maxLines = 1)
-        if (source != null) MqText(source, role = TextRole.Callout, color = colors.dim, maxLines = 1)
-        Box(Modifier.weight(1f).height(1.dp).background(colors.line))
+        if (source != null) MqText(source, role = TextRole.Callout, color = Marquee.colors.dim, maxLines = 1)
     }
-}
-
-/**
- * A short label in spaced capitals at the 70 percent level, until 1b drops the eyebrow (white would
- * outshine the title under it); over artwork it sits in a chip filled with the page color.
- */
-@Composable
-fun Eyebrow(
-    text: String,
-    modifier: Modifier = Modifier,
-    overArt: Boolean = false,
-) {
-    val colors = Marquee.colors
-    val tv = Marquee.form == Form.Tv
-    MqText(
-        text.uppercase(),
-        modifier =
-            modifier.then(
-                if (overArt) {
-                    Modifier
-                        .clip(RoundedCornerShape(Marquee.radius.pill))
-                        .background(colors.bg)
-                        .padding(horizontal = if (tv) 16.dp else 10.dp, vertical = if (tv) 8.dp else 5.dp)
-                } else {
-                    Modifier
-                },
-            ),
-        role = TextRole.Caption,
-        color = colors.muted,
-        weight = FontWeight.Bold,
-        // A phone takes a second line rather than lose the subject ("#1 IN POPULAR MOVI...").
-        maxLines = if (tv) 1 else 2,
-        letterSpacing = 0.14.em,
-    )
 }
 
 /**
@@ -975,3 +983,29 @@ fun Modifier.endFade(
             drawRect(brush, blendMode = BlendMode.DstIn)
         }
     }
+
+/**
+ * A passing note (design/DECISION.md, States): its words beside a white glyph on solid `raised`, read out
+ * once. It holds no control, so focus never lands on it.
+ */
+@Composable
+fun Toast(
+    text: String,
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+) {
+    val tv = Marquee.form == Form.Tv
+    LiveSpoken(text) {
+        Row(
+            modifier
+                .clip(RoundedCornerShape(Marquee.radius.pill))
+                .background(Marquee.colors.raised)
+                .padding(horizontal = if (tv) 28.dp else 18.dp, vertical = if (tv) 16.dp else 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (tv) 14.dp else 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            MqIcon(icon, tint = Color.White)
+            MqText(text, role = TextRole.Callout, maxLines = 2)
+        }
+    }
+}

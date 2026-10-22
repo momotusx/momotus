@@ -86,7 +86,7 @@ class PhoneFocusTest {
         var palette: Palette? = null
         compose.setContent { MarqueeTheme(Form.Phone) { palette = focusPalette(focused = true) } }
         compose.waitForIdle()
-        assertEquals(Tokens.dark, palette)
+        assertEquals(formPalette(Form.Phone), palette)
     }
 
     @Test

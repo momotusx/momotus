@@ -194,7 +194,7 @@ fun SignInScreen(
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
         item(key = "head") {
-            BrowseHeader("Marquee", if (step == Step.New) AccountCopy.CREATE_ACCOUNT else AccountCopy.SIGN_IN_TITLE)
+            BrowseHeader(if (step == Step.New) AccountCopy.CREATE_ACCOUNT else AccountCopy.SIGN_IN_TITLE)
         }
         if (!firstRun && step is Step.Start) {
             block("added") { MqText(AccountCopy.LIBRARY_ADDED, color = Marquee.colors.muted) }
@@ -378,7 +378,7 @@ fun TvSignInScreen(
         contentPadding = pagePadding(framed = false),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
-        item(key = "head") { BrowseHeader("Marquee", AccountCopy.TV_SIGN_IN) }
+        item(key = "head") { BrowseHeader(AccountCopy.TV_SIGN_IN) }
         block("how") { MqText(AccountCopy.TV_SIGN_IN_HOW, color = Marquee.colors.muted) }
         holder.view?.let { view ->
             item(key = "session") {

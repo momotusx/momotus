@@ -65,7 +65,6 @@ import app.marquee.core.model.VersionsSnapshot
 import app.marquee.core.views.VersionsView
 import app.marquee.core.views.ViewStatus
 import app.marquee.design.CapsLabel
-import app.marquee.design.Eyebrow
 import app.marquee.design.FactsGrid
 import app.marquee.design.FocusInk
 import app.marquee.design.GlassBar
@@ -200,7 +199,7 @@ private fun tone(tone: VersionsCopy.Tone) =
 
 private fun statusTone(row: VersionRow) = if (VersionsCopy.good(row.status)) Status.Ok else Status.Warn
 
-/** The heading as an eyebrow over "Versions", and at the right how the search goes and what the ranking read of this TV. */
+/** The heading in a plain line over "Versions", and at the right how the search goes and what the ranking read of this TV. */
 @Composable
 private fun Header(
     heading: String,
@@ -210,7 +209,7 @@ private fun Header(
     val colors = Marquee.colors
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-            Eyebrow(heading)
+            MqText(heading, role = TextRole.Callout, color = colors.dim, weight = FontWeight.SemiBold, maxLines = 1)
             MqText("Versions", role = TextRole.Title1, maxLines = 1)
         }
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
@@ -293,7 +292,7 @@ private fun Pick(
                         .verticalScroll(details),
                     verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
                 ) {
-                    CapsLabel("Recommended for this screen")
+                    PickLine()
                     MqText(VersionsCopy.pickHeading(best), role = TextRole.Title1, maxLines = 1)
                     FactsGrid(VersionsCopy.facts(best), tones = mapOf("Status" to statusTone(best)))
                     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
@@ -343,7 +342,7 @@ private fun Pick(
             }
 
             snapshot == null || !snapshot.done -> {
-                CapsLabel("Recommended for this screen")
+                PickLine()
                 Skeleton(Modifier.size(260.dp, 56.dp))
                 Skeleton(Modifier.size(420.dp, 28.dp))
                 Skeleton(Modifier.size(360.dp, 28.dp))
@@ -649,4 +648,10 @@ private fun SourceRow(
             }
         }
     }
+}
+
+/** The pick card's first line, plain at 64 percent: the frames' words, never an eyebrow. */
+@Composable
+private fun PickLine() {
+    MqText("Best for this screen", role = TextRole.Callout, color = Marquee.colors.dim, weight = FontWeight.SemiBold)
 }
