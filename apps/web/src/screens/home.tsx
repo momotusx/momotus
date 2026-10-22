@@ -290,7 +290,7 @@ export default function Home() {
     <div class="home">
       <main class="page" data-vscroll ref={attach} onScroll={(e) => (pageScroll.top = e.currentTarget.scrollTop)}>
         <section class="hero" classList={{ closed: !hero() && !waiting() }} data-reveal-top data-focus-wait={!hero() && waiting() ? "" : undefined} aria-label="Featured">
-          <Backdrop src={hero()?.tile.background ?? null} class="hero-bd" ramp={form() === "phone" ? "heroPhone" : form() === "tv" ? "heroTv" : "heroDesktop"} />
+          <Backdrop src={hero()?.tile.background ?? null} class="hero-bd" ramp={form() === "phone" ? "heroPhone" : "hero"} />
           {/* The phone's large title and the profile button over the art, as the iPhone TV app; "Home" is
               the page's heading there, the hero's logo the next level. */}
           <Show when={form() === "phone"}>

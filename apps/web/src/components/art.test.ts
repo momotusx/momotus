@@ -46,11 +46,11 @@ const LEVEL: Record<Exclude<Label, "pill">, number> = { word: 0.7, line: 0.92, m
 // 820 px edge (x 900, 0.4688), wherever its text ends, and at its first line's top.
 const TV_EDGE = 0.4688;
 const spots: Spot[] = [
-  ["home tv, the genre line", "heroTv", dark.bg, [1920, 1080], [TV_EDGE, 0.4083], "line"],
-  ["home tv, the synopsis", "heroTv", dark.bg, [1920, 1080], [TV_EDGE, 0.4509], "muted"],
-  ["home tv, the meta line", "heroTv", dark.bg, [1920, 1080], [TV_EDGE, 0.5491], "dim"],
-  ["home tv, Details pill", "heroTv", dark.bg, [1920, 1080], [0.2365, 0.663], "pill"],
-  ["home tv, the reason", "heroTv", dark.bg, [1920, 1080], [TV_EDGE, 0.6046], "line"],
+  ["home tv, the genre line", "hero", dark.bg, [1920, 1080], [TV_EDGE, 0.4083], "line"],
+  ["home tv, the synopsis", "hero", dark.bg, [1920, 1080], [TV_EDGE, 0.4509], "muted"],
+  ["home tv, the meta line", "hero", dark.bg, [1920, 1080], [TV_EDGE, 0.5491], "dim"],
+  ["home tv, Details pill", "hero", dark.bg, [1920, 1080], [0.2365, 0.663], "pill"],
+  ["home tv, the reason", "hero", dark.bg, [1920, 1080], [TV_EDGE, 0.6046], "line"],
   ["title tv series, Start over", "title", dark.bg, [1920, 1080], [0.4398, 0.3817], "pill"],
   ["title tv series, Remove from Continue Watching circle", "title", dark.bg, [1920, 1080], [0.3184, 0.5503], "pill"],
   ["title tv series, Remove from Continue Watching word", "title", dark.bg, [1920, 1080], [0.3535, 0.63], "word"],
@@ -69,11 +69,11 @@ for (const [w, h] of [[900, 400], [1440, 400], [1280, 578], [1440, 758], [2560, 
   const y = (up: number) => (h - up) / h;
   const at = `home desktop ${w}x${h}`;
   spots.push(
-    [`${at}, the genre line`, "heroDesktop", dark.bgDesktop, [w, h], [edge, y(254)], "line"],
-    [`${at}, the meta line`, "heroDesktop", dark.bgDesktop, [w, h], [edge, y(225)], "dim"],
-    [`${at}, the synopsis`, "heroDesktop", dark.bgDesktop, [w, h], [edge, y(198)], "muted"],
-    [`${at}, the reason`, "heroDesktop", dark.bgDesktop, [w, h], [edge, y(147)], "line"],
-    [`${at}, Details`, "heroDesktop", dark.bgDesktop, [w, h], [196 / w, y(104)], "pill"],
+    [`${at}, the genre line`, "hero", dark.bgDesktop, [w, h], [edge, y(254)], "line"],
+    [`${at}, the meta line`, "hero", dark.bgDesktop, [w, h], [edge, y(225)], "dim"],
+    [`${at}, the synopsis`, "hero", dark.bgDesktop, [w, h], [edge, y(198)], "muted"],
+    [`${at}, the reason`, "hero", dark.bgDesktop, [w, h], [edge, y(147)], "line"],
+    [`${at}, Details`, "hero", dark.bgDesktop, [w, h], [196 / w, y(104)], "pill"],
   );
 }
 

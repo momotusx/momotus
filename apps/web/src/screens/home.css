@@ -1,4 +1,4 @@
-/* Home: an inset hero card, then rows of posters (design/DECISION.md v2). */
+/* Home: the full-bleed hero, then the shelves (design/DECISION.md, Home and Shelves). */
 
 .home .page { position: absolute; inset: 0; padding-bottom: var(--safe-bottom); }
 
@@ -8,43 +8,29 @@
 .bd.dim img { filter: brightness(.45) saturate(.85); }
 .bd::after, .bd .ramp { content: ""; position: absolute; inset: 0; }
 
-/* The hero: a rounded card inset from the page edges, its picture fading to
- * the page color from the left and the bottom so the words read on any art. */
-/* The card sits 44 px in from the screen; its words start on the rows' grid
- * line (the safe side), 36 px inside the card, clear of its 22 px corners. */
-.hero { --hero-inset: 44px; position: relative; margin: 24px var(--hero-inset) 0; height: 600px; border-radius: var(--radius-hero); overflow: hidden;
-  background: var(--surface); box-shadow: inset 0 0 0 1px var(--edge); isolation: isolate; }
+/* The hero, full bleed on every form: its art under the ramps of the page color (components/ramps.ts);
+ * each form sets its size and its column below. */
+.hero { position: relative; overflow: hidden; isolation: isolate; }
 .hero-bd { inset: 0; z-index: -1; }
 /* The vignette darkens the art under the ramps, never over them: the foot ends exactly on the page color,
  * so no seam shows where the shelves begin. */
 .hero-bd .ramp { z-index: 1; }
-.hero-body { position: absolute; inset: 0; padding: 0 0 40px calc(var(--safe-side) - var(--hero-inset)); display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-start; }
+.hero-body { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-start; }
 .logo { display: block; object-fit: contain; object-position: left bottom; }
 .logo.pending { visibility: hidden; }
-/* The stack under the floating pill: logo, meta, three lines and the actions
- * keep at least 24 px of air below the pill on a 600 px card. */
-.hero-logo { height: 100px; width: auto; max-width: 560px; margin-bottom: 16px; }
-/* Sized by area, as Netflix and the Apple TV app size title art: a stacked
- * logo grows taller, a wide one stays low, both read with one weight. The
- * plain height above stays for an engine without sqrt(). */
-.hero-logo { --logo-area: 36000; height: clamp(64px, calc(sqrt(var(--logo-area) / var(--r, 5.6)) * 1px), 140px); }
-.logo-text { font: var(--weight-display) var(--type-hero) / 1.0 var(--font-display); letter-spacing: var(--tracking-display); margin-bottom: 18px; max-width: 1100px; }
+.logo-text { font: var(--weight-display) var(--type-hero) / 1.0 var(--font-display); letter-spacing: var(--tracking-display); }
 /* The core's reason on Apple's explainability line, 16 px above the buttons: one line, kept
    where the ramps are deep (art.test.ts checks it over white art). */
-.hero .reason { max-width: 560px; margin-bottom: 16px; font: 600 var(--type-caption) / 1.25 var(--font-text); color: var(--text);
+.hero .reason { margin-bottom: 16px; font: 600 var(--type-caption) / 1.25 var(--font-text); color: var(--text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hero .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font: 600 var(--type-callout) / 1.3 var(--font-text); color: var(--muted); margin-bottom: 14px; }
+.hero .meta { display: flex; flex-wrap: wrap; align-items: center; }
 .hero .meta b { font-weight: 400; color: var(--dim); }
-.hero-syn { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; max-width: 900px;
-  font: 400 var(--type-callout) / 1.45 var(--font-text); color: var(--muted); margin-bottom: 22px; }
-/* Under a logo drawn taller than 100 px the synopsis keeps two lines, so the
- * stack still clears the pill on the 600 px card. */
-:is([data-form="tv"], [data-form="desktop"]) .hero-body:has(.hero-logo[data-shape="tall"]) .hero-syn { -webkit-line-clamp: 2; }
+.hero-syn { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; color: var(--muted); }
 .acts { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 24px; }
 /* A hero on its way: the hero's own shape breathes (design/DECISION.md, States). */
 .hero .hero-skel { position: absolute; inset: 0; z-index: -1; background: var(--raised); }
-/* No hero to show and none coming: the rows start at the top. */
-.hero.closed { display: none; }
+/* No hero to show and none coming: each form keeps only the room its rows start under. */
+.hero.closed .hero-bd { display: none; }
 /* The genre line, and the meta line in the column's own order per form. */
 .hero-lines { display: contents; }
 .hero .genre { display: none; max-width: 100%; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -55,7 +41,7 @@
 /* TV: the full-bleed top shelf (`tvHome`). The art fills the first screen under the floating tab bar,
  * with no card, radius or edge; Continue Watching's title sits at 850 (850 - 1080 - the row's 30 top
  * margin = -260). The column stands at the safe side, its buttons ending 80 above that title (770). */
-[data-form="tv"] .hero { height: 1080px; margin: 0 0 -260px; border-radius: 0; background: var(--bg); box-shadow: none; }
+[data-form="tv"] .hero { height: 1080px; margin: 0 0 -260px; background: var(--bg); }
 [data-form="tv"] .hero-bd::after { background: radial-gradient(120% 100% at 66.7% 0%, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, .28) 100%); }
 [data-form="tv"] .hero-body { padding: 0 0 310px var(--safe-side); }
 [data-form="tv"] :is(.hero-body > *, .hero-lines > *) { max-width: 820px; }
@@ -69,17 +55,15 @@
  * decodes, whatever its shape. */
 [data-form="tv"] .hero-logo { order: 0; width: 640px; height: 160px; max-width: none; margin-bottom: 24px; object-fit: contain; object-position: left bottom; }
 [data-form="tv"] .hero .logo-text { order: 0; margin-bottom: 24px; }
-[data-form="tv"] .hero .hero-skel { border-radius: 0; }
 /* No hero and none coming (offline, posters only, a kids profile): the rows start under the tab bar. */
-[data-form="tv"] .hero.closed { display: block; height: calc(var(--nav-top) + var(--nav-h) + 20px); margin-bottom: 0; background: none; }
-[data-form="tv"] .hero.closed .hero-bd { display: none; }
+[data-form="tv"] .hero.closed { height: calc(var(--nav-top) + var(--nav-h) + 20px); margin-bottom: 0; background: none; }
 
 /* Desktop: tv.apple.com's hero (`dkHome`; the Mac's HomeScreen.swift), full bleed under the 52 px
  * header, black under the art, 16:9 of the width but no taller than the window under the header less
  * 90 (so the first shelf's title shows) and no lower than 400: 758 at 1440x900. All in canvas units,
  * since the canvas is scaled. The first shelf's title sits 12 below its foot. */
 [data-form="desktop"] .hero { height: max(min(calc(var(--cw) * 9 / 16), calc(var(--ch) - 142 * var(--px))), calc(400 * var(--px)));
-  margin: var(--nav-h) 0 calc(-24 * var(--px)); border-radius: 0; background: #000; box-shadow: none; }
+  margin: var(--nav-h) 0 calc(-24 * var(--px)); background: #000; }
 [data-form="desktop"] .hero-bd::after { background: radial-gradient(100% 100% at 66.7% 0%, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, .28) 100%); }
 [data-form="desktop"] .hero-body { padding: 0 0 calc(75 * var(--px)) calc(40 * var(--px)); }
 /* The column at 40 with a 75 foot; every line no wider than 560 or 48 percent of the hero less 40, so its
@@ -98,13 +82,10 @@
 [data-form="desktop"] .hero .rbtn .ring svg { width: calc(18 * var(--px)); height: calc(18 * var(--px)); }
 /* The round Details names itself to screen readers only, as Apple's. */
 [data-form="desktop"] .hero .rbtn .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-[data-form="desktop"] .hero .hero-skel { border-radius: 0; }
 /* No hero: the rows start 20 under the header. */
-[data-form="desktop"] .hero.closed { display: block; height: calc(20 * var(--px)); margin-bottom: 0; background: none; }
-[data-form="desktop"] .hero.closed .hero-bd { display: none; }
+[data-form="desktop"] .hero.closed { height: calc(20 * var(--px)); margin-bottom: 0; background: none; }
 /* No hero on the phone: the large title alone, the rows under it. */
-[data-form="phone"] .hero.closed { display: block; height: calc(max(47px, env(safe-area-inset-top)) + 54px); background: none; box-shadow: none; }
-[data-form="phone"] .hero.closed .hero-bd { display: none; }
+[data-form="phone"] .hero.closed { height: calc(max(47px, env(safe-area-inset-top)) + 54px); background: none; }
 
 .home-problem { position: relative; margin: 40px var(--safe-side); }
 /* New recommended addons, under Continue Watching: a solid surface with no edge and secondary
@@ -230,7 +211,7 @@
  * address bar hides) less 164, so the first shelf's header shows above the floating tab bar on a 360x640
  * screen too (Android and Apple cap at 85 percent, with no bar floating over the first row); the column
  * centered, its buttons 56 above the foot. The first header sits at the foot (the row's 10 taken back). */
-[data-form="phone"] .hero { height: min(calc(100vw * 680 / 390), calc(100svh - 164px)); margin: 0 0 -10px; border-radius: 0; background: #000; box-shadow: none; }
+[data-form="phone"] .hero { height: min(calc(100vw * 680 / 390), calc(100svh - 164px)); margin: 0 0 -10px; background: #000; }
 [data-form="phone"] .hero-body { padding: 0 20px 56px; align-items: center; text-align: center; }
 [data-form="phone"] .hero-body > * { max-width: 100%; }
 [data-form="phone"] .hero-logo { width: 300px; height: 86px; max-width: 100%; margin: 0; object-fit: contain; object-position: center bottom; }

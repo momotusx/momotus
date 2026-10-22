@@ -9,7 +9,6 @@ apps/web/src/screens/find-addons.css :: background: var(--glass); box-shadow: in
 apps/web/src/screens/find-addons.css :: box-shadow: inset 0 0 0 1px var(--edge), inset 0 1px 0 rgba(255, 255, 255, .07); }
 apps/web/src/screens/find-addons.css :: box-shadow: inset 0 0 0 2px var(--control), inset 0 1px 0 rgba(255, 255, 255, .09); }
 apps/web/src/screens/find-addons.css :: @media (hover: hover) { [data-form="desktop"] .fa-card:hover { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .24), var(--glass-highlight); } }
-apps/web/src/screens/home.css :: background: var(--surface); box-shadow: inset 0 0 0 1px var(--edge); isolation: isolate; }
 apps/web/src/screens/onboarding.css :: .door { display: flex; align-items: center; gap: 24px; width: 100%; padding: 34px 34px; border-radius: var(--radius-l); background: var(--glass);
 apps/web/src/screens/onboarding.css :: box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight); transform-origin: center; text-align: left; }
 apps/web/src/screens/onboarding.css :: .door b { display: block; font: 800 var(--type-title3) / 1.1 var(--font-display); }
