@@ -26,8 +26,9 @@ export function TrailerOverlay(props: { trailers: Trailer[]; onClose: () => void
     setPlaying(next);
   };
   onMount(() => {
-    // Back closes it through the one Back stack, so a dialog opened over it closes first.
-    const removeBack = pushBack(() => props.onClose());
+    // Back closes it through the one Back stack, so a dialog opened over it closes first; the
+    // browser's Back too (its own history entry).
+    const removeBack = pushBack(() => props.onClose(), { entry: true });
     const onKey = (e: KeyboardEvent) => {
       // Space on one of the bar's buttons stays that button's press.
       if (PLAY_KEYS.has(e.key) && !(e.key === " " && (e.target as Element | null)?.closest?.("button"))) {
