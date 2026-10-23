@@ -2785,7 +2785,7 @@ async fn open_torrent(
     // The add, once the engine is up: a cold engine start never eats into
     // the attempt's window.
     let begun = tokio::time::Instant::now();
-    let policy = attempt_policy(&lock(state), begun);
+    let policy = attempt_policy(&lock(state), begun, stream);
     // This playback's own check, read before the torrent is touched: a
     // hold placed after it (the title left a kids list) is never lifted by
     // it (plans/m11-kids.md 4.4).
@@ -2987,6 +2987,7 @@ async fn open_torrent(
             Some(Progress {
                 received: s.received_bytes,
                 unchoked: s.unchoked_ms.is_some(),
+                peer: s.peers > 0,
             })
         };
         let rule = start_rule(&lock(state));
@@ -3465,6 +3466,8 @@ struct Progress {
     received: u64,
     /// A peer unchoked us.
     unchoked: bool,
+    /// A peer is connected.
+    peer: bool,
 }
 
 /// How a first play's attempt is judged (plans/play-every-version.md 2e),
@@ -3479,16 +3482,23 @@ struct Attempting {
     dead: Duration,
     until: tokio::time::Instant,
     last: bool,
+    /// The trackers counted no seeder for it before Play: even as the last
+    /// attempt it ends at `dead` with no peer and no unchoke by then.
+    none_counted: bool,
 }
 
 #[cfg(any(test, feature = "torrent"))]
 #[cfg_attr(not(feature = "torrent"), allow(dead_code))]
 impl Attempting {
     /// How long its details may take: its dead window, or to the budget's
-    /// end for the last attempt.
+    /// end for the last attempt the trackers did not count empty.
     fn window(&self) -> Duration {
         let left = self.until.saturating_duration_since(self.added);
-        if self.last { left } else { self.dead.min(left) }
+        if self.last && !self.none_counted {
+            left
+        } else {
+            self.dead.min(left)
+        }
     }
 }
 
@@ -3496,10 +3506,19 @@ impl Attempting {
 /// again" run, which waits patiently (`start_rule`). The first attempt of
 /// the start gets `DEAD_FIRST`, every later one `DEAD_LATER`; it is the
 /// last when less than `LIVE` is left or nothing else can play after it.
+/// The Versions view says whether the trackers counted no seeder for
+/// `stream` before Play.
 #[cfg(feature = "torrent")]
-fn attempt_policy(s: &State, added: tokio::time::Instant) -> Option<Attempting> {
+fn attempt_policy(
+    s: &State,
+    added: tokio::time::Instant,
+    stream: &ParsedStream,
+) -> Option<Attempting> {
     let start = s.start_at.filter(|_| !s.patient)?;
-    Some(attempting(start, s.tries, added, may_cut_early(s)))
+    Some(Attempting {
+        none_counted: s.pick.as_ref().is_some_and(|p| p.none_counted(stream)),
+        ..attempting(start, s.tries, added, may_cut_early(s))
+    })
 }
 
 /// Attempt `tries` (from 1) of a start begun at `start`, added at `added`;
@@ -3518,6 +3537,7 @@ fn attempting(
         dead: if tries <= 1 { DEAD_FIRST } else { DEAD_LATER },
         until,
         last: until.saturating_duration_since(added) < LIVE || !more,
+        none_counted: false,
     }
 }
 
@@ -3536,7 +3556,7 @@ where
     F: std::future::Future<Output = Option<Progress>>,
 {
     tokio::pin!(ready);
-    let mut unchoked = false;
+    let (mut unchoked, mut peer) = (false, false);
     let mut first = None;
     // What it had received each second, over the last `GROWING`.
     let mut seen = std::collections::VecDeque::new();
@@ -3551,6 +3571,7 @@ where
                 }
                 if let Some(x) = progress().await {
                     unchoked |= x.unchoked;
+                    peer |= x.peer;
                     first.get_or_insert(x.received);
                     seen.push_back((now, x.received));
                 }
@@ -3558,11 +3579,16 @@ where
                     seen.pop_front();
                 }
                 let age = now - p.added;
+                // With no unchoke by its dead window a swarm is dead; the
+                // last attempt waits on to the budget's end, unless the
+                // trackers counted no seeder before Play and no peer has
+                // come since (plans/play-every-version.md 2e).
+                let silent = !unchoked && age >= p.dead;
+                if silent && (!p.last || (p.none_counted && !peer)) {
+                    return Started::Late { unchoked: false };
+                }
                 if p.last {
                     continue;
-                }
-                if !unchoked && age >= p.dead {
-                    return Started::Late { unchoked: false };
                 }
                 let growing = seen.front().zip(seen.back()).is_some_and(|(a, b)| b.1 > a.1);
                 if unchoked && age >= LIVE && !growing {
@@ -5351,6 +5377,7 @@ mod tests {
             std::future::ready(Some(Progress {
                 received: bytes,
                 unchoked: peers > 0,
+                peer: peers > 0,
             }))
         }
     }
@@ -5483,6 +5510,44 @@ mod tests {
         assert_eq!(s.tries, 0);
         let now = tokio::time::Instant::now();
         assert_eq!(attempting(now, s.tries + 1, now, true).dead, DEAD_FIRST);
+    }
+
+    /// 2e: the last attempt the trackers counted empty before Play ends at
+    /// its 20 s dead window with no peer and no unchoke; a peer that
+    /// connects keeps it to the budget's end, as does no count at all.
+    #[tokio::test(start_paused = true)]
+    async fn a_last_attempt_counted_empty_ends_at_20s_unless_a_peer_comes() {
+        let run = |none_counted: bool, peer: bool| async move {
+            let added = tokio::time::Instant::now();
+            let policy = Attempting {
+                none_counted,
+                ..attempting(added, 1, added, false)
+            };
+            assert_eq!(
+                policy.window(),
+                if none_counted {
+                    DEAD_FIRST
+                } else {
+                    START_BUDGET
+                }
+            );
+            let progress = move || {
+                std::future::ready(Some(Progress {
+                    received: 0,
+                    unchoked: false,
+                    peer,
+                }))
+            };
+            let never = std::future::pending::<()>();
+            let started = watch_policy(never, progress, policy).await;
+            (
+                matches!(started, Started::Late { unchoked: false }),
+                added.elapsed().as_secs(),
+            )
+        };
+        assert_eq!(run(true, false).await, (true, 20));
+        assert_eq!(run(true, true).await, (true, 90), "a peer came");
+        assert_eq!(run(false, false).await, (true, 90), "no count: as before");
     }
 
     /// 2e: every swarm dead, the attempts begin at 0, 20, 32, 44, 56 and 68

@@ -478,6 +478,17 @@ impl PickHandle {
         self.recommended
     }
 
+    /// The trackers' live count for `stream`'s swarm said no seeder before
+    /// Play (plans/play-every-version.md 2e). False with no count (DHT only,
+    /// or none asked) or once the view is gone.
+    pub fn none_counted(&self, stream: &ParsedStream) -> bool {
+        let Some(state) = self.state.upgrade() else {
+            return false;
+        };
+        let s = lock(&state);
+        info_hash(stream).is_some_and(|h| s.live.get(&h) == Some(&0))
+    }
+
     /// The version the ranking picks after the sources `tried` (stream
     /// keys): the first listed row that can start and holds none of them,
     /// with its failover chain. A row a folded pick played through is a

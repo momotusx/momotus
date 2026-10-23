@@ -2495,3 +2495,42 @@ async fn a_resume_keeps_the_release_it_resumes() {
     let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
     assert_eq!(view.snapshot().recommended.unwrap().key, keys[1]);
 }
+
+/// 2e: the trackers counted no seeder for any version before Play, so
+/// nothing else can start; the one attempt, with no peer and no unchoke,
+/// ends at its 20 s dead window instead of the budget's end, and the
+/// playback fails as notStarted.
+#[cfg(feature = "torrent")]
+#[tokio::test]
+async fn versions_counted_empty_end_at_20s() {
+    let server = Server::start(vec![
+        route("GET", "/stream/series/tt1%3A1%3A1.json", 200, &torrents()),
+        route("GET", "/meta/series/tt1.json", 200, &meta()),
+    ])
+    .await;
+    let core = core_with(&server);
+    core.set_live_seeders([(HASH_A.to_owned(), 0), (HASH_B.to_owned(), 0)].into());
+    let view = VersionsView::open(&core, params(TitleFacts::default()));
+    until("the live counts", || {
+        view.snapshot().done && !view.counting()
+    })
+    .await;
+    assert!(view.snapshot().nobody_sharing);
+    let key = view.snapshot().recommended.unwrap().key;
+    let target = mq_runtime::PlayTarget::default();
+    let begun = Instant::now();
+    let playback =
+        mq_runtime::PlaybackView::open_picked(&core, view.pick(&key), target, &view.plays());
+    until("the failure", || {
+        playback.snapshot().phase == mq_runtime::PlaybackPhase::Failed
+    })
+    .await;
+    let took = begun.elapsed();
+    let s = playback.snapshot();
+    assert!(
+        (Duration::from_secs(19)..Duration::from_secs(26)).contains(&took),
+        "{took:?} {:?}",
+        s.attempts
+    );
+    assert_eq!(s.empty, Some(EmptyKind::NotStarted), "{:?}", s.attempts);
+}
