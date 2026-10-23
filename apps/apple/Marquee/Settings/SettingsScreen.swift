@@ -146,6 +146,11 @@ struct SettingsScreen: View {
                     .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
+                // The playback libraries' texts ship in the app: Resources/Licences.
+                Text("Playback: AetherEngine 7.36.0, LGPL-3 with App Store exception. FFmpeg and libzvbi, LGPL-2.1. dav1d, BSD. zimg, WTFPL. LibTrueHD, LibDTSX and LibDovi, MIT and Apache-2.0.")
+                    .textFont(Theme.type.callout, relativeTo: .callout)
+                    .foregroundStyle(Theme.Palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
                     .modifier(ReadableOnTV())
             }
             .frame(maxWidth: 880, alignment: .leading)

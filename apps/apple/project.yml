@@ -8,6 +8,10 @@ options:
     iOS: "18.0"
     tvOS: "18.0"
   createIntermediateGroups: true
+# The second player engine, for what AVPlayer does not open (plans/apple-second-engine.md).
+packages:
+  AetherEngine:
+    path: Vendor/AetherEngine
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -45,6 +49,10 @@ targetTemplates:
         buildPhase: resources
       - path: Marquee/Resources/LICENSE-lucide.txt
         buildPhase: resources
+      # The playback libraries' licence texts (Settings, About).
+      - path: Marquee/Resources/Licences
+        type: folder
+        buildPhase: resources
       # Stream choice words, shared with the web and Android.
       - path: ../shared/stream-choice-words.json
         buildPhase: resources
@@ -57,6 +65,7 @@ targetTemplates:
         embed: false
       - sdk: Security.framework
       - sdk: SystemConfiguration.framework
+      - package: AetherEngine
     preBuildScripts:
       # A core built with debug assertions (build-core.sh --dev) carries the dev hooks (the loopback
       # Trakt hook, MQ_DEV_TRAKT, and the e2e recorder's set_dev_replay): it never goes into a Release
