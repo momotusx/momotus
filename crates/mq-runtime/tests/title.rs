@@ -82,6 +82,46 @@ async fn the_years_read_from_to() {
     assert_eq!(details.release_info.as_deref(), Some("2011 to 2019"));
 }
 
+/// Core backlog C41: a series is Watched once every aired episode of its
+/// regular seasons is (the special left out), and `setWatched` on the
+/// series' id marks or unmarks them all.
+#[tokio::test]
+async fn a_series_is_watched_as_a_whole() {
+    let core = Core::temporary("p").unwrap();
+    core.library()
+        .set_addons("p", &[meta_addon(SHOW).await], &core.hlc())
+        .unwrap();
+    let view = TitleView::open(&core, "series", "tt0944947");
+    let snap = settle(&view).await;
+    assert!(!snap.header.watched);
+    let watched = |core: &Core| {
+        let mut v = core.library().watched_videos("p", "tt0944947").unwrap();
+        v.sort();
+        v
+    };
+    view.set_watched("tt0944947", true).unwrap();
+    assert_eq!(
+        watched(&core),
+        ["tt0944947:1:1", "tt0944947:1:2", "tt0944947:2:1"],
+        "every regular episode, not the special"
+    );
+    let (_, mut updates) = view.subscribe();
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+    while !view.snapshot().header.watched {
+        assert!(tokio::time::Instant::now() < deadline, "not marked watched");
+        let _ = tokio::time::timeout(Duration::from_millis(200), updates.next()).await;
+    }
+    // One episode unmarked: the series is not watched any more.
+    view.set_watched("tt0944947:2:1", false).unwrap();
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+    while view.snapshot().header.watched {
+        assert!(tokio::time::Instant::now() < deadline, "still watched");
+        let _ = tokio::time::timeout(Duration::from_millis(200), updates.next()).await;
+    }
+    view.set_watched("tt0944947", false).unwrap();
+    assert!(watched(&core).is_empty());
+}
+
 #[tokio::test]
 async fn resumes_the_season_being_watched() {
     let core = Core::temporary("p").unwrap();

@@ -104,8 +104,10 @@ pub struct TitleHeader {
     /// `Episode::released`) when it is not out yet: there is no play target,
     /// and the page says "Next episode airs <date>".
     pub next_airs: Option<String>,
-    /// A movie the user watched (episodes carry their own flag); toggled
-    /// with `setWatched` on the movie's id.
+    /// A movie the user watched, or a series whose every aired episode of
+    /// its regular seasons is watched (specials left out, as Trakt counts a
+    /// show complete; core backlog C41). Toggled with `setWatched` on the
+    /// title's id: for a series that marks or unmarks every such episode.
     pub watched: bool,
 }
 
@@ -321,10 +323,23 @@ impl TitleView {
     }
 
     /// Marks or unmarks by hand. With Trakt connected, a mark that flips
-    /// queues the write for Trakt in the same transaction.
+    /// queues the write for Trakt in the same transaction. The series' own
+    /// id marks every aired episode of its regular seasons (C41).
     pub fn set_watched(&self, video_id: &str, watched: bool) -> Result<(), crate::CoreError> {
         // No watched row for a title off the kids list.
         if self.denied {
+            return Ok(());
+        }
+        if self.kind == "series" && video_id == self.id {
+            let now = mq_library::hlc::now_ms() as i64;
+            let episodes = lock(&self.state)
+                .meta
+                .as_ref()
+                .map(|m| aired_episodes(m, now))
+                .unwrap_or_default();
+            for episode in episodes {
+                self.set_watched(&episode, watched)?;
+            }
             return Ok(());
         }
         let (library, profile) = (self.core.library(), self.core.profile());
@@ -504,7 +519,13 @@ impl Ctx {
             selected_season: season,
             play_target,
             next_airs,
-            watched: self.kind == "movie" && watched.contains(&self.id),
+            watched: match self.kind.as_str() {
+                "movie" => watched.contains(&self.id),
+                _ => {
+                    let aired = aired_episodes(&meta, now);
+                    !aired.is_empty() && aired.iter().all(|v| watched.contains(v))
+                }
+            },
         };
         if self.header.get() != header {
             self.header.set(header);
@@ -522,6 +543,17 @@ fn season_of(meta: &MetaItem, video_id: &str) -> Option<u32> {
         .iter()
         .find(|v| v.id == video_id)
         .and_then(|v| v.series_info.as_ref().map(|s| s.season))
+}
+
+/// A series' aired episodes of its regular seasons (season 0, the
+/// specials, left out): what a series-level watched mark counts.
+fn aired_episodes(meta: &MetaItem, now_ms: i64) -> Vec<String> {
+    meta.videos
+        .iter()
+        .filter(|v| v.series_info.as_ref().is_some_and(|i| i.season > 0))
+        .filter(|v| aired(v, now_ms))
+        .map(|v| v.id.clone())
+        .collect()
 }
 
 /// What the primary button plays, and the day the next episode comes out
