@@ -245,4 +245,24 @@ class TitleCopyTest {
         assertTrue(TitleCopy.live(play, target))
         assertFalse(TitleCopy.live(play, null), "no video, no Play")
     }
+
+    @Test
+    fun `Play goes to the player at once while versions are searched, to Versions once nothing is recommended`() {
+        val target = PlayTarget("tt1", "Play", null)
+        val to = { versions: VersionsSnapshot? ->
+            TitleCopy.playTo(TitleCopy.primary(target, versions), target, versions)
+        }
+        // Still searching, or the view not open yet: the player at once, its pick starting when it arrives.
+        assertEquals(PlayTo.Player(null), to(null))
+        assertEquals(PlayTo.Player(null), to(snapshot()))
+        assertEquals(PlayTo.Player("k"), to(snapshot(recommended = row())))
+        assertEquals(PlayTo.Versions, to(snapshot(rows = listOf(row()), done = true)), "done, none ready")
+        val empty = { kind: EmptyKind, action: EmptyAction, key: String? ->
+            snapshot(done = true).copy(empty = EmptyVersions(kind, action, 0, key = key))
+        }
+        assertEquals(PlayTo.Player("kept"), to(empty(EmptyKind.Unreachable, EmptyAction.PlayFromDevice, "kept")))
+        assertEquals(PlayTo.Versions, to(empty(EmptyKind.NoSource, EmptyAction.SettingsAddons, null)))
+        assertEquals(PlayTo.Nowhere, to(empty(EmptyKind.NoResults, EmptyAction.None, null)))
+        assertEquals(PlayTo.Nowhere, TitleCopy.playTo(PrimaryAction("Play"), null, null), "no video")
+    }
 }

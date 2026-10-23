@@ -23,6 +23,20 @@ data class PrimaryAction(
     val keptKey: String? = null,
 )
 
+/** Where the title's Play takes the viewer. */
+sealed interface PlayTo {
+    /** The player, with this version, or with none ([key] null): it opens at once and starts the core's pick. */
+    data class Player(
+        val key: String?,
+    ) : PlayTo
+
+    /** Versions, which holds why nothing plays, its action and the rows that can still start. */
+    data object Versions : PlayTo
+
+    /** Nowhere: there is no video, or Play is inert. */
+    data object Nowhere : PlayTo
+}
+
 /** The words of the title page, shared by both UI trees and equal to the web family's. */
 object TitleCopy {
     private const val NBSP = ' '
@@ -71,6 +85,27 @@ object TitleCopy {
             EmptyAction.PlayFromDevice -> PrimaryAction(label, keptKey = empty.key)
             EmptyAction.None -> PrimaryAction(label, inert = true)
             else -> PrimaryAction(label)
+        }
+    }
+
+    /**
+     * Where Play goes: the recommended or the kept version; while versions are still being searched the player
+     * at once, in the loading pattern, its pick starting when it arrives (plans/versions-android-spec.md, section
+     * 6); Versions once the search is done with nothing recommended or a state says why nothing plays.
+     */
+    fun playTo(
+        primary: PrimaryAction,
+        target: PlayTarget?,
+        versions: VersionsSnapshot?,
+    ): PlayTo {
+        val best = versions?.recommended
+        val kept = primary.keptKey
+        return when {
+            !live(primary, target) -> PlayTo.Nowhere
+            kept != null -> PlayTo.Player(kept)
+            best != null -> PlayTo.Player(best.key)
+            versions != null && (versions.done || versions.empty != null) -> PlayTo.Versions
+            else -> PlayTo.Player(null)
         }
     }
 

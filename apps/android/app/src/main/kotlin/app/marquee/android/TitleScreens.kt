@@ -96,7 +96,7 @@ fun TitleScreen(
     session: CoreSession,
     app: AppState,
     form: Form,
-    onPlay: (key: String, videoId: String, title: String) -> Unit,
+    onPlay: (key: String?, videoId: String, title: String) -> Unit,
     onVersions: (videoId: String, title: String) -> Unit,
     onPlayEpisode: (videoId: String, title: String) -> Unit,
 ) {
@@ -143,7 +143,7 @@ fun TitleScreen(
         if (airs == null) onPlayEpisode(it.videoId, title) else note = (note?.first ?: 0) + 1 to airs
     }
     val episodeVersions: (Episode) -> Unit = { onVersions(it.videoId, title) }
-    val play: (String, String) -> Unit = { key, id -> onPlay(key, id, title) }
+    val play: (String?, String) -> Unit = { key, id -> onPlay(key, id, title) }
     Box(Modifier.fillMaxSize()) {
         if (form == Form.Tv) {
             TvTitle(

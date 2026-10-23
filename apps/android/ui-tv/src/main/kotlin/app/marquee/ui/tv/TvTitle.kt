@@ -48,6 +48,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import app.marquee.core.Format
+import app.marquee.core.PlayTo
 import app.marquee.core.TileCopy
 import app.marquee.core.TitleCopy
 import app.marquee.core.VersionLine
@@ -99,9 +100,10 @@ private const val RETRY = "retry"
  * one. Focus starts on Play, or on the next action when Play is inert, and comes back to what it was on
  * after Versions.
  *
- * @param onPlay Play was chosen with the recommended version [key] of [videoId].
- * @param onVersions the Versions screen for [videoId] was asked for (also what Play does while no
- * version is known yet).
+ * @param onPlay Play was chosen with version [key] of [videoId], or with none while versions are still being
+ * searched: the player opens at once and starts the core's pick.
+ * @param onVersions the Versions screen for [videoId] was asked for (also what Play does once nothing is
+ * recommended).
  * @param onEpisode an episode was chosen: it plays.
  * @param onEpisodeVersions "Choose a version" for an episode, from its hold-select menu.
  */
@@ -110,7 +112,7 @@ fun TvTitle(
     title: TitleView,
     versions: VersionsSnapshot?,
     focus: FocusMemory,
-    onPlay: (key: String, videoId: String) -> Unit,
+    onPlay: (key: String?, videoId: String) -> Unit,
     onVersions: (videoId: String) -> Unit,
     onEpisode: (Episode) -> Unit,
     onEpisodeVersions: (Episode) -> Unit,
@@ -265,14 +267,13 @@ private fun Info(
     versions: VersionsSnapshot?,
     versionsFailed: Boolean,
     focus: FocusMemory,
-    onPlay: (String, String) -> Unit,
+    onPlay: (String?, String) -> Unit,
     onVersions: (String) -> Unit,
 ) {
     val header = checkNotNull(title.header)
     val details = checkNotNull(header.details)
     val colors = Marquee.colors
     val target = header.playTarget
-    val recommended = versions?.recommended
     val primary = TitleCopy.primary(target, versions, details.runtime)
     val context = LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
@@ -298,16 +299,10 @@ private fun Info(
                 icon = PlayFilled,
                 enabled = TitleCopy.live(primary, target),
                 onClick = {
-                    val kept = primary.keptKey
-                    when {
-                        target == null -> Unit
-
-                        kept != null -> onPlay(kept, target.videoId)
-
-                        // Nothing recommended: Versions holds the line, its action and the rows that can start.
-                        recommended == null -> onVersions(target.videoId)
-
-                        else -> onPlay(recommended.key, target.videoId)
+                    when (val to = TitleCopy.playTo(primary, target, versions)) {
+                        is PlayTo.Player -> target?.let { onPlay(to.key, it.videoId) }
+                        PlayTo.Versions -> target?.let { onVersions(it.videoId) }
+                        PlayTo.Nowhere -> Unit
                     }
                 },
                 // An inert Play is no focus target, so the first focus and the memory pass it by.

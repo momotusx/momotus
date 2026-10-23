@@ -45,6 +45,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.marquee.core.Format
+import app.marquee.core.PlayTo
 import app.marquee.core.TileCopy
 import app.marquee.core.TitleCopy
 import app.marquee.core.VersionLine
@@ -104,7 +105,7 @@ private val HERO_FADE = 96.dp
 fun PhoneTitle(
     title: TitleView,
     versions: VersionsSnapshot?,
-    onPlay: (key: String, videoId: String) -> Unit,
+    onPlay: (key: String?, videoId: String) -> Unit,
     onVersions: (videoId: String) -> Unit,
     onEpisode: (Episode) -> Unit,
     onEpisodeVersions: (Episode) -> Unit,
@@ -310,14 +311,13 @@ private fun Info(
     title: TitleView,
     versions: VersionsSnapshot?,
     versionsFailed: Boolean,
-    onPlay: (String, String) -> Unit,
+    onPlay: (String?, String) -> Unit,
     onVersions: (String) -> Unit,
 ) {
     val header = checkNotNull(title.header)
     val details = checkNotNull(header.details)
     val colors = Marquee.colors
     val target = header.playTarget
-    val recommended = versions?.recommended
     val primary = TitleCopy.primary(target, versions, details.runtime)
     Column(
         Modifier.padding(horizontal = Marquee.safe.side),
@@ -345,16 +345,10 @@ private fun Info(
                 modifier = Modifier.widthIn(min = PRIMARY_MIN).weight(1f),
                 enabled = TitleCopy.live(primary, target),
                 onClick = {
-                    val kept = primary.keptKey
-                    when {
-                        target == null -> Unit
-
-                        kept != null -> onPlay(kept, target.videoId)
-
-                        // Nothing recommended: Versions holds the line, its action and the rows that can start.
-                        recommended == null -> onVersions(target.videoId)
-
-                        else -> onPlay(recommended.key, target.videoId)
+                    when (val to = TitleCopy.playTo(primary, target, versions)) {
+                        is PlayTo.Player -> target?.let { onPlay(to.key, it.videoId) }
+                        PlayTo.Versions -> target?.let { onVersions(it.videoId) }
+                        PlayTo.Nowhere -> Unit
                     }
                 },
             )

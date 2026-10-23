@@ -154,6 +154,12 @@ class PhoneTitleActionsTest {
         val play = { compose.onNodeWithText("Play").performClick() }
         play()
         assertEquals(listOf("play kept tt1"), calls)
+        // Still searching: the player opens at once, with no version yet; its pick starts when it arrives.
+        shown = versions(EmptyKind.Unreachable, EmptyAction.TryAgain).copy(empty = null, done = false)
+        compose.waitForIdle()
+        calls.clear()
+        play()
+        assertEquals(listOf("play null tt1"), calls)
         // No Settings or account step on the play surface: Play opens Versions, which holds them.
         for ((kind, action) in listOf(
             EmptyKind.NoSource to EmptyAction.SettingsAddons,
