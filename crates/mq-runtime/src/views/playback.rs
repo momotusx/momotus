@@ -4731,7 +4731,7 @@ pub(crate) fn aired(video: &stremio_core::types::resource::Video, now_ms: i64) -
 
 /// Where a play of a video resumes, from its saved `(position, duration)`:
 /// none at its start or once it is finished.
-fn resume_point(progress: Option<(i64, i64)>) -> Option<u64> {
+pub(crate) fn resume_point(progress: Option<(i64, i64)>) -> Option<u64> {
     progress
         .filter(|&(pos, dur)| pos > 0 && (dur == 0 || (pos as f64) < dur as f64 * FINISHED_RATIO))
         .map(|(pos, _)| pos as u64)

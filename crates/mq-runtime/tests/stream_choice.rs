@@ -8,7 +8,8 @@ mod common;
 use common::{Server, route};
 use mq_library::AddonRow;
 use mq_runtime::{
-    BlockedReason, Core, EmptyAction, EmptyKind, StoreId, TitleFacts, VersionsParams, VersionsView,
+    BlockedReason, Core, EmptyAction, EmptyKind, SectionQuality, StoreId, TitleFacts,
+    VersionsParams, VersionsView,
 };
 use mq_streams::{DeviceCaps, HideReason, SourceClass, StreamPrefs, Target};
 use std::sync::Arc;
@@ -2212,4 +2213,192 @@ async fn answers_while(streams: String, meta: String, up: Arc<AtomicBool>) -> St
         }
     });
     base
+}
+
+/// Plans/play-every-version.md 2f: links of every quality, one of them the
+/// title's last release line.
+fn graded() -> String {
+    let link = |title: &str, gb: f64, binge: Option<&str>| {
+        let mut hints = serde_json::json!({ "videoSize": (gb * 1e9) as u64 });
+        if let Some(group) = binge {
+            hints["bingeGroup"] = group.into();
+        }
+        let file = title.replace(' ', ".");
+        serde_json::json!({ "name": "Direct", "title": title,
+            "url": format!("https://cdn.example/{file}.mkv"), "behaviorHints": hints })
+    };
+    serde_json::json!({ "streams": [
+        link("Show.S01E01.1080p.WEB-DL.x264-AAA", 4.0, None),
+        link("Show.S01E01.720p.WEB-DL.x264-BBB", 2.0, Some("bbb-720")),
+        link("Show.S01E01.2160p.WEB-DL.x265-CCC", 15.0, None),
+        link("Show.S01E01.480p.WEB-DL.x264-EEE", 0.5, None),
+        link("Show.S01E01.WEB-DL.x264-DDD", 0.8, None),
+    ]})
+    .to_string()
+}
+
+fn key_of(release: &str) -> String {
+    format!("url:https://cdn.example/{release}.mkv")
+}
+
+/// 2f: Up Next keeps the title's release line first (its binge group, the
+/// 720p one here); "Sharper" is the 1080p one (the 4K one is past this
+/// screen), "Smaller file" the first under half the pick's size; the rows
+/// fall into the quality sections in the core's order.
+#[tokio::test]
+async fn up_next_keeps_its_release_line_with_its_shortcuts_and_sections() {
+    let (core, _server) = answering(200, &graded()).await;
+    let view = VersionsView::open(
+        &core,
+        VersionsParams {
+            last_binge_group: Some("bbb-720".into()),
+            ..params(TitleFacts::default())
+        },
+    );
+    until("done", || view.snapshot().done).await;
+    let s = view.snapshot();
+    let name = |r: &Option<mq_runtime::VersionRow>| r.as_ref().map(|r| r.release_name.clone());
+    assert_eq!(
+        name(&s.recommended),
+        Some("Show.S01E01.720p.WEB-DL.x264-BBB".into())
+    );
+    assert_eq!(
+        name(&s.sharper),
+        Some("Show.S01E01.1080p.WEB-DL.x264-AAA".into())
+    );
+    assert_eq!(
+        name(&s.smaller),
+        Some("Show.S01E01.480p.WEB-DL.x264-EEE".into())
+    );
+    let sections: Vec<(SectionQuality, Vec<String>)> = s
+        .sections
+        .iter()
+        .map(|x| (x.quality, x.keys.clone()))
+        .collect();
+    assert_eq!(
+        sections,
+        [
+            (
+                SectionQuality::Uhd,
+                vec![key_of("Show.S01E01.2160p.WEB-DL.x265-CCC")]
+            ),
+            (
+                SectionQuality::Fhd,
+                vec![key_of("Show.S01E01.1080p.WEB-DL.x264-AAA")]
+            ),
+            (
+                SectionQuality::Hd,
+                vec![key_of("Show.S01E01.480p.WEB-DL.x264-EEE")]
+            ),
+            (
+                SectionQuality::Other,
+                vec![key_of("Show.S01E01.WEB-DL.x264-DDD")]
+            ),
+        ]
+    );
+
+    // A first play: the ranking's best, nothing sharper within this screen.
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    let s = view.snapshot();
+    assert_eq!(
+        name(&s.recommended),
+        Some("Show.S01E01.1080p.WEB-DL.x264-AAA".into())
+    );
+    assert_eq!(name(&s.sharper), None);
+    assert_eq!(
+        name(&s.smaller),
+        Some("Show.S01E01.480p.WEB-DL.x264-EEE".into())
+    );
+}
+
+/// 2f: the shortcuts freeze with the pick: a sharper version a slow addon
+/// sends after the freeze joins its section, not the shortcut.
+#[tokio::test]
+async fn the_shortcuts_freeze_with_the_pick() {
+    let all: serde_json::Value = serde_json::from_str(&graded()).unwrap();
+    let streams = all["streams"].as_array().unwrap();
+    let (late, early): (Vec<_>, Vec<_>) = streams
+        .iter()
+        .cloned()
+        .partition(|s| s["title"].as_str().unwrap().contains("1080p"));
+    for freeze in [true, false] {
+        let fast = Server::start(vec![
+            route(
+                "GET",
+                "/stream/series/tt1%3A1%3A1.json",
+                200,
+                &serde_json::json!({ "streams": early }).to_string(),
+            ),
+            route("GET", "/meta/series/tt1.json", 200, &meta()),
+        ])
+        .await;
+        let slow = Server::start(vec![
+            route(
+                "GET",
+                "/stream/series/tt1%3A1%3A1.json",
+                200,
+                &serde_json::json!({ "streams": late }).to_string(),
+            )
+            .delayed(Duration::from_secs(2)),
+        ])
+        .await;
+        let core = Core::temporary("p").unwrap();
+        core.set_free_bytes(FREE);
+        let mut second = addon(&slow);
+        second.position = 1;
+        second.manifest_json = second
+            .manifest_json
+            .replace(r#""id":"test""#, r#""id":"slow""#);
+        core.library()
+            .set_addons("p", &[addon(&fast), second], &core.hlc())
+            .unwrap();
+        let view = VersionsView::open(
+            &core,
+            VersionsParams {
+                last_binge_group: Some("bbb-720".into()),
+                ..params(TitleFacts::default())
+            },
+        );
+        until("the pick", || view.snapshot().recommended.is_some()).await;
+        assert!(view.snapshot().sharper.is_none());
+        if freeze {
+            view.freeze();
+        }
+        until("done", || view.snapshot().done).await;
+        let s = view.snapshot();
+        assert!(
+            s.rows.iter().any(|r| r.release_name.contains("1080p")),
+            "{freeze}"
+        );
+        assert_eq!(s.sharper.is_some(), !freeze, "frozen: {freeze}");
+    }
+}
+
+/// 2f: a Resume keeps the release it resumes first, though another ranks
+/// higher.
+#[tokio::test]
+async fn a_resume_keeps_the_release_it_resumes() {
+    let row = |name| (name, media_fixture("h264.mp4"));
+    let (core, _server, keys) = direct_rows(vec![
+        row("Show.S01E01.1080p.WEB-DL.x264-ONE"),
+        row("Show.S01E01.720p.WEB-DL.x264-TWO"),
+    ])
+    .await;
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    assert_eq!(view.snapshot().recommended.unwrap().key, keys[0]);
+    let target = mq_runtime::PlayTarget {
+        kind: "series".into(),
+        item_id: "tt1".into(),
+        video_id: "tt1:1:1".into(),
+        season: Some(1),
+        episode: Some(1),
+        ..mq_runtime::PlayTarget::default()
+    };
+    let by_hand =
+        mq_runtime::PlaybackView::open_picked(&core, view.pick(&keys[1]), target, &view.plays());
+    until("ready", || by_hand.snapshot().url.is_some()).await;
+    by_hand.report_progress(600_000, 3_000_000, false);
+    drop((by_hand, view));
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    assert_eq!(view.snapshot().recommended.unwrap().key, keys[1]);
 }

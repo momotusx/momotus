@@ -58,6 +58,6 @@ pub use views::sign_in::{SignInSnapshot, SignInView};
 pub use views::title::{Episode, TitleHeader, TitleUpdate, TitleView};
 pub use views::versions::{
     BlockedReason, BlockedVersions, EmptyAction, EmptyKind, EmptyVersions, Pick, PickHandle,
-    TitleFacts, VersionRow, VersionStatus, VersionsConditions, VersionsParams, VersionsSnapshot,
-    VersionsView,
+    SectionQuality, TitleFacts, VersionRow, VersionSection, VersionStatus, VersionsConditions,
+    VersionsParams, VersionsSnapshot, VersionsView,
 };

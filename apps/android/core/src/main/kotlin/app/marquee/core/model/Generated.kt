@@ -1327,6 +1327,22 @@ data class SearchSnapshot(
     val searchable: Int = 0,
 )
 
+@Serializable(with = SectionQuality.Serializer::class)
+enum class SectionQuality(
+    val wire: String,
+) {
+    Uhd("uhd"),
+    Fhd("fhd"),
+    Hd("hd"),
+    Other("other"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<SectionQuality>("SectionQuality", SectionQuality.entries, SectionQuality::wire, Unknown)
+}
+
 /** A stretch of the file a Skip button can jump over: `[startMs, endMs)`. */
 @Serializable
 data class Segment(
@@ -1921,6 +1937,14 @@ data class VersionsConditions(
     val window: Boolean = false,
 )
 
+/** One quality section of the Versions page (plans/play-every-version.md 2f). */
+@Serializable
+data class VersionSection(
+    val quality: SectionQuality,
+    /** Keys of `rows`, in the core's order. */
+    val keys: List<String> = emptyList(),
+)
+
 @Serializable
 data class VersionsSnapshot(
     /** What the ranking read: the screen, the connection, the disk, the title and the preferences in effect (4.2). */
@@ -1939,6 +1963,12 @@ data class VersionsSnapshot(
     val failedAddons: List<String> = emptyList(),
     val done: Boolean,
     val frozen: Boolean,
+    /** The "Smaller file" shortcut (plans/play-every-version.md 2f): the first row in the core's order under half the pick's size that can start and is in the viewer's language. Frozen with the pick. */
+    val smaller: VersionRow? = null,
+    /** The "Sharper" shortcut: the first row in the core's order sharper than the pick, up to this screen's class, that can start and is in the viewer's language. Frozen with the pick. */
+    val sharper: VersionRow? = null,
+    /** The quality sections of `rows`, in this order and only those with rows: 4K, 1080p (1080p and 1440p), 720p and below, other (quality not stated); each lists its rows' keys in the core's order. */
+    val sections: List<VersionSection> = emptyList(),
     /** Every listed version is a swarm the engine would fetch whose trackers count one seeder or none: almost nobody is sharing this title right now, so say so before Play. Its attempt keeps the stall windows and the full deadline, but a swarm where no peer unchoked by the end of the first window (30 s) is let go then. */
     val nobodySharing: Boolean,
 )

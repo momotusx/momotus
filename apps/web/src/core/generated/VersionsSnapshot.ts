@@ -4,6 +4,7 @@ import type { EmptyVersions } from "./EmptyVersions";
 import type { HiddenSummary } from "./HiddenSummary";
 import type { LearnedNote } from "./LearnedNote";
 import type { VersionRow } from "./VersionRow";
+import type { VersionSection } from "./VersionSection";
 import type { VersionsConditions } from "./VersionsConditions";
 
 export type VersionsSnapshot = { 
@@ -27,6 +28,24 @@ empty: EmptyVersions | null,
  * The one-time note when a pick taught Marquee something (3.9).
  */
 note: LearnedNote | null, recommended: VersionRow | null, rows: Array<VersionRow>, hidden: HiddenSummary, pendingAddons: Array<string>, slowAddons: Array<string>, failedAddons: Array<string>, done: boolean, frozen: boolean, 
+/**
+ * The "Smaller file" shortcut (plans/play-every-version.md 2f): the
+ * first row in the core's order under half the pick's size that can
+ * start and is in the viewer's language. Frozen with the pick.
+ */
+smaller: VersionRow | null, 
+/**
+ * The "Sharper" shortcut: the first row in the core's order sharper
+ * than the pick, up to this screen's class, that can start and is in
+ * the viewer's language. Frozen with the pick.
+ */
+sharper: VersionRow | null, 
+/**
+ * The quality sections of `rows`, in this order and only those with
+ * rows: 4K, 1080p (1080p and 1440p), 720p and below, other (quality
+ * not stated); each lists its rows' keys in the core's order.
+ */
+sections: Array<VersionSection>, 
 /**
  * Every listed version is a swarm the engine would fetch whose
  * trackers count one seeder or none: almost nobody is sharing this

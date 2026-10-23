@@ -120,6 +120,18 @@ pub struct VersionsSnapshot {
     pub failed_addons: Vec<String>,
     pub done: bool,
     pub frozen: bool,
+    /// The "Smaller file" shortcut (plans/play-every-version.md 2f): the
+    /// first row in the core's order under half the pick's size that can
+    /// start and is in the viewer's language. Frozen with the pick.
+    pub smaller: Option<VersionRow>,
+    /// The "Sharper" shortcut: the first row in the core's order sharper
+    /// than the pick, up to this screen's class, that can start and is in
+    /// the viewer's language. Frozen with the pick.
+    pub sharper: Option<VersionRow>,
+    /// The quality sections of `rows`, in this order and only those with
+    /// rows: 4K, 1080p (1080p and 1440p), 720p and below, other (quality
+    /// not stated); each lists its rows' keys in the core's order.
+    pub sections: Vec<VersionSection>,
     /// Every listed version is a swarm the engine would fetch whose
     /// trackers count one seeder or none: almost nobody is sharing this
     /// title right now, so say so before Play. Its attempt keeps the stall
@@ -191,6 +203,39 @@ pub enum BlockedReason {
     NoSpace,
     /// Nothing found plays on this device.
     NothingPlaysHere,
+}
+
+/// One quality section of the Versions page (plans/play-every-version.md
+/// 2f).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionSection {
+    pub quality: SectionQuality,
+    /// Keys of `rows`, in the core's order.
+    pub keys: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub enum SectionQuality {
+    /// 2160p and above.
+    Uhd,
+    /// 1080p and 1440p.
+    Fhd,
+    /// 720p and below.
+    Hd,
+    /// The release states no resolution.
+    Other,
 }
 
 /// Why nothing can play (plans/play-every-version.md 2a), with its one
@@ -304,6 +349,10 @@ struct State {
     ranked: Ranked,
     recommended: Option<RankedRow>,
     frozen: bool,
+    /// The shortcuts' keys (`smaller`, `sharper`), chosen with the pick and
+    /// frozen with it.
+    smaller: Option<String>,
+    sharper: Option<String>,
     /// Installs by transport URL, with their names: two installs may share a
     /// manifest id, and each keeps its own progress.
     pending: Vec<(Url, String)>,
@@ -857,6 +906,8 @@ impl VersionsView {
             ranked: Ranked::default(),
             recommended: None,
             frozen: false,
+            smaller: None,
+            sharper: None,
             pending: eligible
                 .iter()
                 .map(|a| (a.transport_url.clone(), a.manifest.name.clone()))
@@ -879,6 +930,7 @@ impl VersionsView {
         let mut tasks = JoinSet::new();
         let ranking = Arc::new(Ranking {
             kids: verified.as_ref().map(|v| v.names.clone()),
+            remembered: resumes(core, &item_id, &params.video_id),
             params,
             item_id,
         });
@@ -935,6 +987,8 @@ impl VersionsView {
             ranked: Ranked::default(),
             recommended: None,
             frozen: false,
+            smaller: None,
+            sharper: None,
             pending: Vec::new(),
             slow: Vec::new(),
             failed: Vec::new(),
@@ -1864,6 +1918,70 @@ struct Ranking {
     params: VersionsParams,
     kids: Option<Vec<String>>,
     item_id: String,
+    /// The release a Resume of this video plays: the title's remembered
+    /// one, when the video has a resume point.
+    remembered: Option<String>,
+}
+
+/// The title's remembered release when `video_id` resumes (it has a resume
+/// point): a Resume keeps it first (plans/play-every-version.md 2f).
+fn resumes(core: &Core, item_id: &str, video_id: &str) -> Option<String> {
+    let progress = core.library().progress(core.profile(), video_id).ok()?;
+    crate::views::playback::resume_point(progress)?;
+    let memory = core
+        .library()
+        .stream_memory(core.profile(), item_id)
+        .ok()??;
+    let memory: serde_json::Value = serde_json::from_str(&memory).ok()?;
+    memory["key"].as_str().map(str::to_owned)
+}
+
+/// The pick a Resume keeps first (2f): the release this video resumes,
+/// when it can start; else none, and the ranking's best is the pick. Up
+/// Next keeps the title's release line through the ranking itself (its
+/// `binge` key, `last_binge_group`), which still puts a version that keeps
+/// up with the connection first.
+fn preferred(rows: &[RankedRow], ranking: &Ranking) -> Option<RankedRow> {
+    let key = ranking.remembered.as_ref()?;
+    holding(rows, |st| &st.key == key).filter(|r| r.key.viable)
+}
+
+/// A row a shortcut may offer beside `pick`: another version (not a
+/// source of the pick's), that can start, in the viewer's language, and
+/// with no download first.
+fn shortcut(r: &RankedRow, pick: &RankedRow) -> bool {
+    r.key.viable
+        && !matches!(r.group, Group::OtherLanguages | Group::NeedsDownload)
+        && std::iter::once(&r.stream)
+            .chain(&r.failover)
+            .all(|st| st.key != pick.stream.key)
+}
+
+/// "Smaller file": the first row under half the pick's size.
+fn smaller(rows: &[RankedRow], pick: &RankedRow) -> Option<String> {
+    let size = pick.stream.size_bytes?;
+    rows.iter()
+        .find(|r| shortcut(r, pick) && r.stream.size_bytes.is_some_and(|b| b * 2 < size))
+        .map(|r| r.stream.key.clone())
+}
+
+/// "Sharper": the first row of a higher resolution than the pick's, up to
+/// the screen's class.
+fn sharper(rows: &[RankedRow], pick: &RankedRow, screen: u32) -> Option<String> {
+    let height = |r: &RankedRow| r.stream.release.resolution.height();
+    rows.iter()
+        .find(|r| shortcut(r, pick) && height(r) > height(pick) && height(r) <= screen)
+        .map(|r| r.stream.key.clone())
+}
+
+/// A row's quality section (2f).
+fn section(r: &RankedRow) -> SectionQuality {
+    match r.stream.release.resolution.height() {
+        0 => SectionQuality::Other,
+        h if h >= 2000 => SectionQuality::Uhd,
+        h if h >= 1000 => SectionQuality::Fhd,
+        _ => SectionQuality::Hd,
+    }
 }
 
 fn rerank(s: &mut State, ranking: &Ranking) {
@@ -1878,7 +1996,11 @@ fn rerank(s: &mut State, ranking: &Ranking) {
     };
     s.ranked = rank(s.streams.clone(), &input);
     if !s.frozen {
-        s.recommended = s.ranked.best().cloned();
+        s.recommended = preferred(&s.ranked.rows, ranking).or_else(|| s.ranked.best().cloned());
+        let screen = screen_class(params.caps.display_height);
+        let pick = s.recommended.as_ref();
+        s.smaller = pick.and_then(|p| smaller(&s.ranked.rows, p));
+        s.sharper = pick.and_then(|p| sharper(&s.ranked.rows, p, screen));
     } else if let Some(pick) = &s.recommended {
         // Frozen: the pick stays, its facts (live seeders, line) follow,
         // as long as its row still leads with the same source.
@@ -1972,13 +2094,33 @@ fn render(s: &State) -> VersionsSnapshot {
             .chain(&r.failover)
             .any(|st| Some(&st.key) == recommended_key.as_ref())
     };
-    let rows = s
-        .ranked
-        .rows
+    let listed: Vec<&RankedRow> = s.ranked.rows.iter().filter(|r| !holds_pick(r)).collect();
+    let rows = listed
         .iter()
-        .filter(|r| !holds_pick(r))
         .map(|r| row_dto(r, kept, s.rank.debrid))
         .collect();
+    let sections = [
+        SectionQuality::Uhd,
+        SectionQuality::Fhd,
+        SectionQuality::Hd,
+        SectionQuality::Other,
+    ]
+    .into_iter()
+    .map(|quality| VersionSection {
+        quality,
+        keys: (listed.iter())
+            .filter(|r| section(r) == quality)
+            .map(|r| r.stream.key.clone())
+            .collect(),
+    })
+    .filter(|section| !section.keys.is_empty())
+    .collect();
+    // A shortcut follows its row's facts, led by its own source, while its
+    // key is listed.
+    let shortcut_row = |key: &Option<String>| {
+        let key = key.as_ref()?;
+        holding(&s.ranked.rows, |st| &st.key == key).map(|r| row_dto(&r, kept, s.rank.debrid))
+    };
     let mut by_reason: Vec<(HideReason, u32)> = Vec::new();
     for h in &s.ranked.hidden {
         match by_reason.iter_mut().find(|(r, _)| *r == h.reason) {
@@ -2005,6 +2147,9 @@ fn render(s: &State) -> VersionsSnapshot {
         failed_addons: names(&s.failed),
         done: s.done,
         frozen: s.frozen,
+        smaller: shortcut_row(&s.smaller),
+        sharper: shortcut_row(&s.sharper),
+        sections,
         nobody_sharing: nobody_sharing(s),
     }
 }
