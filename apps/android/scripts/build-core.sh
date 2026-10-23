@@ -23,7 +23,8 @@
 # stays without it until its engine slice is shown to work (Step 0b). Its size is measured against its own
 # budget (plans/core-backlog.md C11). STORE=1 builds the store core without it, on purpose; MQ_FEATURES names
 # the arm64 features outright. The build fails when a library is not the core it should be, and it tells the
-# app which it is in core-build.properties (BuildConfig.CORE_BUILD). Rules: scripts/core-engine.sh.
+# app which it is in core-build.properties (BuildConfig.CORE_BUILD, and CORE_ENGINE_ABIS for the ABIs whose core
+# carries the engine). Rules: scripts/core-engine.sh.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
@@ -133,7 +134,10 @@ fi
 for pair in "${TRIPLES[@]}"; do
   core_check_engine "$TARGET/${pair%%:*}/release/libmarquee_core.so" "${pair##*:}"
 done
-echo "kind=$(core_kind)" > "$ROOT/apps/android/core/core-build.properties"
+abis=()
+for pair in "${TRIPLES[@]}"; do abis+=("${pair##*:}"); done
+printf 'kind=%s\nengine_abis=%s\n' "$(core_kind)" "$(core_engine_abis "${abis[@]}")" \
+  > "$ROOT/apps/android/core/core-build.properties"
 
 rm -rf "$LIBS"
 # A plain build drops a dev library left from before, which debug builds would otherwise package.

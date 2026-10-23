@@ -2,6 +2,7 @@ package app.marquee.android
 
 import android.app.Application
 import android.content.pm.ApplicationInfo
+import android.os.Build
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -93,7 +94,13 @@ class MarqueeApp :
         // An own build whose core has no engine tells the owner (CoreBuild), never the viewer in words.
         session.scope.launch {
             if (runCatching { session.ready.await() }.isSuccess) {
-                CoreBuild.check(BuildConfig.CORE_BUILD, session.hasEngine, debuggable)
+                CoreBuild.check(
+                    BuildConfig.CORE_BUILD,
+                    BuildConfig.CORE_ENGINE_ABIS,
+                    Build.SUPPORTED_ABIS[0],
+                    session.hasEngine,
+                    debuggable,
+                )
             }
         }
         sync = SyncController(session, this).also { it.start() }

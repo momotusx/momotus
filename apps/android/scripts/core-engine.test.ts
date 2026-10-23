@@ -29,6 +29,12 @@ test("an own build carries the engine on arm64-v8a only; STORE=1 builds without 
     "",
   );
   expect(run("core_features arm64-v8a", { STORE: "1" }).out).toBe("");
+  // The ABIs whose core carries the engine, for the app (BuildConfig.CORE_ENGINE_ABIS).
+  expect(run("core_engine_abis arm64-v8a armeabi-v7a").out).toBe("arm64-v8a");
+  expect(run("core_engine_abis armeabi-v7a").out).toBe("");
+  expect(
+    run("core_engine_abis arm64-v8a armeabi-v7a", { STORE: "1" }).out,
+  ).toBe("");
 });
 
 // The NDK's tools: llvm-nm reads the libraries, its clang makes the stand-in ones.

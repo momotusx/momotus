@@ -29,12 +29,16 @@ android {
         buildConfigField("String", "LINK_HOST", "\"${property("marquee.linkHost")}\"")
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${property("marquee.googleWebClientId")}\"")
         // Which core this build packages, as scripts/build-core.sh wrote it: "own" (the torrent engine on arm64-v8a)
-        // or "store" (none, STORE=1); "none" before the script has run.
+        // or "store" (none, STORE=1), "none" before the script has run; and the ABIs whose core carries the engine.
         val coreBuild =
-            rootProject.file("core/core-build.properties").takeIf { it.isFile }?.readLines()?.firstNotNullOfOrNull {
-                it.removePrefix("kind=").takeIf { kind -> kind != it }
-            } ?: "none"
-        buildConfigField("String", "CORE_BUILD", "\"$coreBuild\"")
+            rootProject
+                .file("core/core-build.properties")
+                .takeIf { it.isFile }
+                ?.readLines()
+                .orEmpty()
+                .associate { it.substringBefore('=') to it.substringAfter('=', "") }
+        buildConfigField("String", "CORE_BUILD", "\"${coreBuild["kind"] ?: "none"}\"")
+        buildConfigField("String", "CORE_ENGINE_ABIS", "\"${coreBuild["engine_abis"].orEmpty()}\"")
         // A host that never resolves (RFC 2606) stands in while there is none, so the App Link filter is valid.
         manifestPlaceholders["linkHost"] = property("marquee.linkHost").toString().ifEmpty { "link.marquee.invalid" }
     }

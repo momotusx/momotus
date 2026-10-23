@@ -14,6 +14,19 @@ core_wants_engine() {
   [ "$(core_kind)" = own ] && [ "$1" = arm64-v8a ]
 }
 
+# The ABIs of this build whose core carries the engine, comma-separated (BuildConfig.CORE_ENGINE_ABIS): the app
+# expects the engine only on those, so an armeabi-v7a device is no mismatch.
+core_engine_abis() {
+  local abi abis=()
+  for abi in "$@"; do
+    if core_wants_engine "$abi"; then abis+=("$abi"); fi
+  done
+  (
+    IFS=,
+    echo "${abis[*]}"
+  )
+}
+
 # The cargo features for one ABI: MQ_FEATURES (default torrent) where the engine belongs, else MQ_FEATURES in a
 # store build and none on armeabi-v7a.
 core_features() {
