@@ -627,9 +627,11 @@ struct NextEpisode: Decodable, Hashable, Sendable {
         send?(["type": "subtitleChosen", "url": track?.url ?? NSNull()])
     }
 
-    /// One of the file's own tracks: the viewer's pick, which the core does not know of.
-    func choseInFile() {
+    /// One of the file's own tracks: the viewer's pick. With its language tag the core remembers it as
+    /// a track of that language (the next plays start with it); with none it is this play's alone.
+    func choseInFile(language: String?) {
         viewerChose = true
+        if let language { send?(["type": "subtitleChosen", "url": NSNull(), "language": language]) }
     }
 
     /// Try again on the failure card: the same versions from the first.

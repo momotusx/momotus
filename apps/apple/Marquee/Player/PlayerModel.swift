@@ -240,12 +240,12 @@ final class PlayerModel {
     }
 
     /// Turns one of the file's own subtitles on, in place of an addon's: the
-    /// viewer's pick for this play, which the core does not know of.
+    /// viewer's pick, sent to the core with its language tag when it has one.
     /// `start`: the core's start pick turned it on (its language's track inside the file wins), not the viewer.
     func selectText(_ index: Int, start: Bool = false) {
         if backend == .aether {
             guard engineTextIDs.indices.contains(index) else { return }
-            if start { startFile = index } else { choices.choseInFile() }
+            if start { startFile = index } else { choices.choseInFile(language: textTrackLanguages[safe: index] ?? nil) }
             selectSubtitle(nil)
             aether?.selectText(id: engineTextIDs[index])
             (textTrack, engineCues, engineImages) = (index, [], [])
@@ -253,7 +253,7 @@ final class PlayerModel {
             return
         }
         guard let group = textGroup, textOptions.indices.contains(index) else { return }
-        if start { startFile = index } else { choices.choseInFile() }
+        if start { startFile = index } else { choices.choseInFile(language: textTrackLanguages[safe: index] ?? nil) }
         selectSubtitle(nil)
         player.currentItem?.select(textOptions[index], in: group)
         textTrack = index

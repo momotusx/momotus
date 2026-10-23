@@ -450,9 +450,13 @@ private func phase(_ phase: String, _ extra: String = "") throws -> PlaybackSnap
     #expect(sent[1]["type"] as? String == "subtitleChosen" && sent[1]["url"] as? String == turkish.url)
     // Off is sent too, as a null url, so the title remembers it.
     #expect(sent[2]["type"] as? String == "subtitleChosen" && sent[2]["url"] is NSNull)
-    // A track in the file settles the play and sends nothing.
-    choices.choseInFile()
-    #expect(sent.count == 3)
+    // A track in the file settles the play and sends its language, url null, so the core remembers it.
+    choices.choseInFile(language: "pt-BR")
+    #expect(sent.count == 4)
+    #expect(sent[3]["type"] as? String == "subtitleChosen" && sent[3]["url"] is NSNull && sent[3]["language"] as? String == "pt-BR")
+    // With no tag (an "und" track) it settles the play and sends nothing: a null url alone would be Off.
+    choices.choseInFile(language: nil)
+    #expect(sent.count == 4 && choices.viewerChose)
 }
 
 @MainActor @Test func anotherEpisodeOrVersionGetsItsStartSubtitleAgain() {
