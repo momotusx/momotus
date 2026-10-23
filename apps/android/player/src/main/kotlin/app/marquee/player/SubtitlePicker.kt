@@ -66,7 +66,7 @@ import app.marquee.core.model.SubtitleSize
 import app.marquee.design.FieldInput
 import app.marquee.design.Form
 import app.marquee.design.Icons
-import app.marquee.design.LocalFocusRing
+import app.marquee.design.LocalOverPicture
 import app.marquee.design.Marquee
 import app.marquee.design.MarqueeFonts
 import app.marquee.design.MqIcon
@@ -480,8 +480,8 @@ fun TvSubtitlePicker(
         withFrameNanos { }
         runCatching { (chosen?.let { requester(it.key) } ?: off).requestFocus() }
     }
-    // The picker is v3 throughout (its frames): its buttons and field invert on focus, not the player's ring.
-    CompositionLocalProvider(LocalFocusRing provides false) {
+    // The picker is its own panel (its frames): its buttons take the plain fills, not the over-the-picture one.
+    CompositionLocalProvider(LocalOverPicture provides false) {
         Row(
             modifier
                 .width(1160.dp)

@@ -60,7 +60,7 @@ import app.marquee.core.route.switchedTo
 import app.marquee.core.session.CoreSession
 import app.marquee.core.views.ViewStatus
 import app.marquee.design.Form
-import app.marquee.design.LocalFocusRing
+import app.marquee.design.LocalOverPicture
 import app.marquee.design.Marquee
 import app.marquee.design.MqText
 import app.marquee.design.SecondaryButton
@@ -698,9 +698,9 @@ private fun AppNav(
                         )
                     }
                     entry<Route.Player> { route ->
-                        // The TV player keeps the v2 white ring until phase 5 gives it the v3 look (its
-                        // files belong to plans/player-polish.md); everywhere else TV focus is the lift.
-                        CompositionLocalProvider(LocalFocusRing provides true) {
+                        // The player's controls sit over the picture with no scrim: they keep an opaque fill. Their TV
+                        // focus is the white invert, as everywhere.
+                        CompositionLocalProvider(LocalOverPicture provides true) {
                             PlayerScreen(
                                 route,
                                 session,

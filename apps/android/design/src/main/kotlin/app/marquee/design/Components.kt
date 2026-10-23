@@ -36,6 +36,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -95,8 +96,9 @@ internal val SEGMENT_TRACK = Color(0x3D767680)
  * its white ([yields]) while another button holds focus, so focus stays the one white thing. A
  * secondary is the 16 percent fill, a selected toggle (Watched, In Library) `selected.fill`, never white,
  * which on TV is focus; on TV focus whitens a secondary, which [colors] already says when it is the
- * [focusPalette] of a focused button. Inside the player ([ringed]) a secondary keeps the opaque `raised`
- * fill, as it keeps its ring: its controls sit over the picture with no scrim until phase 5 moves both.
+ * [focusPalette] of a focused button, the player included. Over the picture ([overPicture], the player's
+ * controls with no scrim) an unfocused secondary or round button keeps the opaque `raised` fill, so a white frame
+ * never swallows it.
  */
 internal fun buttonFill(
     primary: Boolean,
@@ -104,15 +106,18 @@ internal fun buttonFill(
     tvFocused: Boolean,
     colors: Palette,
     yields: Boolean = false,
-    ringed: Boolean = false,
+    overPicture: Boolean = false,
 ): Color =
     when {
         primary && !yields -> colors.primary
         tvFocused -> colors.raised
         selected -> Tokens.selectedFill
-        ringed -> colors.raised
+        overPicture -> colors.raised
         else -> SECONDARY_FILL
     }
+
+/** True over the picture (the player's controls, with no scrim): an unfocused button keeps an opaque fill. */
+val LocalOverPicture = staticCompositionLocalOf { false }
 
 @Composable
 private fun ButtonShell(
@@ -139,17 +144,24 @@ private fun ButtonShell(
     val gap = if (tv) 14.dp else 8.dp
     val corner = height / 2
     val shape = RoundedCornerShape(corner)
-    val ringed = LocalFocusRing.current
     // A white primary yields to a focused neighbour on TV (one white per screen).
     val buttons = LocalButtonFocus.current
-    val yields = tv && !ringed && kind == ButtonKind.Primary && !focused && (buttons?.intValue ?: 0) > 0
+    val yields = tv && kind == ButtonKind.Primary && !focused && (buttons?.intValue ?: 0) > 0
     ButtonFocused(focused && kind == ButtonKind.Secondary)
-    val background = buttonFill(kind == ButtonKind.Primary, selected, tvFocused = tv && focused, colors, yields, ringed)
+    val background =
+        buttonFill(
+            kind == ButtonKind.Primary,
+            selected,
+            tvFocused = tv && focused,
+            colors,
+            yields,
+            LocalOverPicture.current,
+        )
     // A secondary's label is pure white, never the 92 percent text, and dark on a TV focus's white.
     val content =
         when {
             kind == ButtonKind.Primary && !yields -> colors.onPrimary
-            tv && focused && !ringed -> colors.text
+            tv && focused -> colors.text
             else -> Color.White
         }
     Row(
@@ -271,7 +283,7 @@ fun Chip(
     var focused by remember { mutableStateOf(false) }
     // On TV a focused chip turns white with dark words (focusPalette).
     val colors = focusPalette(focused)
-    val lit = tv && focused && !LocalFocusRing.current
+    val lit = tv && focused
     // The pill is 36 dp on a phone inside a 48 dp touch target; on TV they are the same.
     val pill = if (tv) 52.dp else 36.dp
     val target = if (tv) pill else 48.dp
@@ -708,12 +720,10 @@ fun RoundButton(
         }
     var focused by remember { mutableStateOf(false) }
     ButtonFocused(focused)
-    // White is the main action or a TV focus (not in the player, which keeps its ring); a selected
-    // circle is the selected grey with a white glyph.
-    val ringed = LocalFocusRing.current
-    val lit = main || (tv && focused && !ringed)
-    // The secondary's fill, or in the player the opaque `raised` one (buttonFill).
-    val fill = buttonFill(primary = lit, selected, tvFocused = false, colors, ringed = ringed)
+    // White is the main action or a TV focus, in the player too; a selected circle is the selected grey with a
+    // white glyph.
+    val lit = main || (tv && focused)
+    val fill = buttonFill(primary = lit, selected, tvFocused = false, colors, overPicture = LocalOverPicture.current)
     val ink = if (lit) colors.onPrimary else Color.White
     Column(
         modifier.alpha(if (enabled) 1f else 0.55f),

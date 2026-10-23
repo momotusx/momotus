@@ -22,8 +22,8 @@ import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertTrue
 
 /**
- * The player's controls sit over the picture with no scrim (the phone's Back 10 and Forward 10): inside it
- * ([LocalFocusRing]) a round button and a secondary keep the opaque `raised` fill, so a white frame never
+ * The player's controls sit over the picture with no scrim (the phone's Back 10 and Forward 10): over it
+ * ([LocalOverPicture]) a round button and a secondary keep the opaque `raised` fill, so a white frame never
  * swallows them. Elsewhere they take the 16 percent fill. One pixel a point, on a white frame.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -37,7 +37,7 @@ class PlayerControlsTest {
     private fun fillLuma(player: Boolean): Int {
         compose.setContent {
             MarqueeTheme(Form.Phone) {
-                CompositionLocalProvider(LocalFocusRing provides player) {
+                CompositionLocalProvider(LocalOverPicture provides player) {
                     Box(Modifier.testTag("frame").background(Color.White).padding(PAD.dp)) {
                         RoundButton(Icons.RotateCcw, "Back 10 seconds", {})
                     }

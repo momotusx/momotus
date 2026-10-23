@@ -67,7 +67,6 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.cos
-import kotlin.math.pow
 import kotlin.math.sin
 
 /**
@@ -77,8 +76,7 @@ import kotlin.math.sin
  * shadow and catches the sheen. No ring and no colored edge: buttons and rows turn white with dark
  * words themselves ([focusPalette]); a target with no fill of its own takes a faint white platter and
  * neither rises nor casts a shadow, so focus never shows as nothing and no shadow shows through.
- * Inside the player ([LocalFocusRing]) the TV keeps the white ring until phase 5 gives the player its
- * own look. On the phone, focus comes only from a keyboard or a D-pad, and shows as the ring alone:
+ * The player is no exception (design/DECISION.md, TV focus: never a ring). On the phone, focus comes only from a keyboard or a D-pad, and shows as the ring alone:
  * one 4 dp stroke in the key blue right outside the edge, with no gap, no scale and no fill change.
  *
  * Cost on weak GPUs: the shadow is one blurred shape, the rest a few rounded rects, only while
@@ -118,10 +116,9 @@ fun Modifier.marqueeFocus(
     }
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
-    val ringed = tv && LocalFocusRing.current
-    val ringWidth = ringWidth(tv, ringed)
+    val ringWidth = ringWidth(tv)
     val halo = Marquee.focusHalo
-    val rises = tv && !ringed && rise && scale >= Tokens.FOCUS_SCALE_TILE
+    val rises = tv && rise && scale >= Tokens.FOCUS_SCALE_TILE
     val shape = RoundedCornerShape(radius)
     return this
         .onFocusChanged { focused = it.isFocused }
@@ -158,7 +155,7 @@ fun Modifier.marqueeFocus(
             val p = progress.value
             if (p <= 0f) return@drawBehind
             val corner = radius.toPx()
-            if (tv && !ringed) {
+            if (tv) {
                 drawRoundRect(
                     color = PLATTER.copy(alpha = PLATTER.alpha * p),
                     size = size,
@@ -167,37 +164,17 @@ fun Modifier.marqueeFocus(
             }
             val ring = ringWidth.toPx()
             if (ring <= 0f) return@drawBehind
-            if (ringed) {
-                // The v2 TV ring, kept in the player: a dark halo, a page-colored gap, then the ring.
-                val haloWidth = halo.toPx()
-                val layer = 1f - (1f - colors.halo.alpha * p).pow(1f / HALO_STEPS)
-                for (i in 1..HALO_STEPS) {
-                    val spread = ring * 2 + haloWidth * i / HALO_STEPS
-                    drawRoundRect(
-                        color = colors.halo.copy(alpha = layer),
-                        topLeft = Offset(-spread, -spread),
-                        size = Size(size.width + 2 * spread, size.height + 2 * spread),
-                        cornerRadius = CornerRadius(corner + spread),
-                    )
-                }
-                drawRoundRect(
-                    color = colors.bg.copy(alpha = p),
-                    topLeft = Offset(-ring, -ring),
-                    size = Size(size.width + 2 * ring, size.height + 2 * ring),
-                    cornerRadius = CornerRadius(corner + ring),
-                )
-            }
-            // The ring right outside the edge (the phone's key ring), or past the gap (the player's).
-            val at = if (ringed) ring * 1.5f else ring / 2
+            // The phone's key ring, right outside the edge.
+            val at = ring / 2
             drawRoundRect(
-                color = (if (ringed) colors.accent else colors.key).copy(alpha = p),
+                color = colors.key.copy(alpha = p),
                 topLeft = Offset(-at, -at),
                 size = Size(size.width + 2 * at, size.height + 2 * at),
                 cornerRadius = CornerRadius(corner + at),
                 style = Stroke(width = ring),
             )
         }.then(
-            if (art && tv && !ringed) {
+            if (art && tv) {
                 Modifier.drawWithCache {
                     val clip =
                         Path().apply {
@@ -233,19 +210,10 @@ fun Modifier.marqueeFocus(
 }
 
 /**
- * The width of the ring a focus target strokes: none on TV, which shows focus by the lift and the
- * white invert; the 4 dp ring on the phone (the key blue) and in the TV player ([LocalFocusRing]).
+ * The width of the ring a focus target strokes: none on TV, the player included, which shows focus by the lift and
+ * the white invert; the 4 dp ring on the phone (the key blue).
  */
-internal fun ringWidth(
-    tv: Boolean,
-    ringed: Boolean,
-): Dp = if (tv && !ringed) 0.dp else Tokens.focusRing
-
-/**
- * True inside the TV player, which keeps the v2 white ring until phase 5 (plans/player-polish.md
- * owns its files): buttons and rows there neither invert nor rise, as on the trunk.
- */
-val LocalFocusRing = staticCompositionLocalOf { false }
+internal fun ringWidth(tv: Boolean): Dp = if (tv) 0.dp else Tokens.focusRing
 
 /**
  * How many buttons in this tree hold focus (MarqueeTheme provides it). On TV a white primary yields
@@ -276,14 +244,14 @@ private const val SHEEN_DEG = 125.0
 /**
  * The palette a focus target draws with (design/DECISION.md, TV focus): on TV a focused button or
  * row turns white with dark words, so its fill is `primary` and every word, glyph and edge inside
- * it is dark; elsewhere, and inside the player ([LocalFocusRing]), the palette as it is. Give the
+ * it is dark, the player included; elsewhere the palette as it is. Give the
  * result to the row's own fill and, through [FocusInk], to its content.
  */
 @Composable
 @ReadOnlyComposable
 fun focusPalette(focused: Boolean): Palette {
     val colors = Marquee.colors
-    return if (focused && Marquee.form == Form.Tv && !LocalFocusRing.current) colors.inverted() else colors
+    return if (focused && Marquee.form == Form.Tv) colors.inverted() else colors
 }
 
 /**
@@ -340,8 +308,6 @@ fun Modifier.liftRoom(room: Dp): Modifier =
         val placeable = measurable.measure(grown)
         layout(placeable.width, (placeable.height - 2 * r).coerceAtLeast(0)) { placeable.place(0, -r) }
     }
-
-private const val HALO_STEPS = 3
 
 /**
  * Draws this node above its siblings while [raised] is true, so its halo is not cut by the next

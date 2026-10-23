@@ -136,11 +136,21 @@ class DesignTest {
             SECONDARY_FILL,
             buttonFill(primary = true, selected = false, tvFocused = false, colors = dark, yields = true),
         )
-        // Inside the player (its ring kept) a secondary and a round button keep the opaque raised fill: their
-        // controls sit over the picture with no scrim until phase 5 moves both.
+        // Over the picture (the player's controls, no scrim) an unfocused secondary keeps the opaque raised fill;
+        // focused on TV it is the white invert, as everywhere.
         assertEquals(
             dark.raised,
-            buttonFill(primary = false, selected = false, tvFocused = false, colors = dark, ringed = true),
+            buttonFill(primary = false, selected = false, tvFocused = false, colors = dark, overPicture = true),
+        )
+        assertEquals(
+            dark.primary,
+            buttonFill(
+                primary = false,
+                selected = false,
+                tvFocused = true,
+                colors = dark.inverted(),
+                overPicture = true,
+            ),
         )
         // A selected toggle is the selected grey (the selected.fill token, #636366), never white.
         assertEquals(Color(0xFF636366), Tokens.selectedFill)
@@ -165,10 +175,9 @@ class DesignTest {
     }
 
     @Test
-    fun `the TV strokes no ring, the phone and the TV player stroke the 4 dp one`() {
-        assertEquals(0.dp, ringWidth(tv = true, ringed = false))
-        assertEquals(Tokens.focusRing, ringWidth(tv = false, ringed = false))
-        assertEquals(Tokens.focusRing, ringWidth(tv = true, ringed = true))
+    fun `the TV strokes no ring, the player included, and the phone strokes the 4 dp one`() {
+        assertEquals(0.dp, ringWidth(tv = true))
+        assertEquals(Tokens.focusRing, ringWidth(tv = false))
     }
 
     @Test

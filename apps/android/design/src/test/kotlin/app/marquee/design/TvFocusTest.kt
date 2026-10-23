@@ -23,11 +23,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 /**
- * On TV focus is the lift and the white invert, never a ring (design/DECISION.md, TV focus); inside the
- * player ([LocalFocusRing]) the v2 white ring stays until phase 5. On the 1920 canvas at one pixel a point.
+ * On TV focus is the lift and the white invert, never a ring (design/DECISION.md, TV focus), the player's
+ * controls over the picture ([LocalOverPicture]) included. On the 1920 canvas at one pixel a point.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -37,11 +36,11 @@ class TvFocusTest {
     val compose = createComposeRule()
 
     /** The capture before and after a forced focus, for a 100 point target [PAD] points in. */
-    private fun shots(ringed: Boolean): Pair<IntArray, IntArray> {
+    private fun shots(overPicture: Boolean): Pair<IntArray, IntArray> {
         var focused by mutableStateOf(false)
         compose.setContent {
             MarqueeTheme(Form.Tv) {
-                CompositionLocalProvider(LocalFocusRing provides ringed) {
+                CompositionLocalProvider(LocalOverPicture provides overPicture) {
                     Box(Modifier.testTag("area").background(Marquee.colors.bg).padding(PAD.dp)) {
                         // Scale 1: nothing rises or casts a shadow, so only a stroke could reach outside.
                         Box(
@@ -67,9 +66,9 @@ class TvFocusTest {
 
     private fun luma(c: Int) = ((c shr 16 and 0xFF) + (c shr 8 and 0xFF) + (c and 0xFF)) / 3
 
-    @Test
-    fun `a focused TV target draws no stroke outside its fill`() {
-        val (before, after) = shots(ringed = false)
+    /** Pixels outside the target that a forced focus made brighter: a ring would. */
+    private fun ringed(overPicture: Boolean): Int {
+        val (before, after) = shots(overPicture)
         val side = PAD * 2 + SIZE
         var brighter = 0
         for (i in after.indices) {
@@ -78,16 +77,31 @@ class TvFocusTest {
             val outside = x < PAD || x >= PAD + SIZE || y < PAD || y >= PAD + SIZE
             if (outside && luma(after[i]) > luma(before[i]) + 2) brighter++
         }
-        assertEquals(0, brighter, "pixels outside the focused TV target that got brighter (a ring)")
+        return brighter
     }
 
     @Test
-    fun `inside the player a focused TV target keeps the white ring`() {
-        val (_, after) = shots(ringed = true)
-        val side = PAD * 2 + SIZE
-        // The ring sits past a 4 point gap: 4 to 8 points outside the edge, here at 6 on the left side.
-        val at = (PAD + SIZE / 2) * side + (PAD - 6)
-        assertTrue(luma(after[at]) > 200, "no white ring in the player: luma ${luma(after[at])}")
+    fun `a focused TV target draws no stroke outside its fill`() {
+        assertEquals(0, ringed(overPicture = false), "pixels outside the focused TV target that got brighter (a ring)")
+    }
+
+    @Test
+    fun `over the picture, in the player, a focused TV target draws no ring either`() {
+        assertEquals(0, ringed(overPicture = true), "pixels outside the focused player control that got brighter")
+    }
+
+    @Test
+    fun `over the picture a TV focus still turns a button white with dark words`() {
+        var inverted = false
+        compose.setContent {
+            MarqueeTheme(Form.Tv) {
+                CompositionLocalProvider(LocalOverPicture provides true) {
+                    inverted = focusPalette(focused = true) == Marquee.colors.inverted()
+                }
+            }
+        }
+        compose.waitForIdle()
+        assertEquals(true, inverted, "the player's focused control keeps its own palette (a ring look)")
     }
 
     private companion object {
