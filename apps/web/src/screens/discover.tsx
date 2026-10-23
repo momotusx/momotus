@@ -1,4 +1,4 @@
-import { A } from "@solidjs/router";
+import { A, useSearchParams } from "@solidjs/router";
 import Puzzle from "lucide-solid/icons/puzzle";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Wrench from "lucide-solid/icons/wrench";
@@ -8,6 +8,7 @@ import { Why } from "../components/why";
 import { discoverView } from "../core/client";
 import { onProfileReset } from "../core/profiles";
 import { defaultsWords } from "../lib/defaults";
+import { type DiscoverLink, discoverLinkStep } from "../lib/discover-link";
 import { problemWords } from "../lib/words";
 import "./browse.css";
 
@@ -36,6 +37,33 @@ function DiscoverPage(props: { retry: () => void }) {
   const select = (c: { kind?: string; catalog?: string; genre?: string | null }) => void view.command({ type: "select", ...c });
   const catalogName = () => d()?.catalogs.find((c) => c.id === d()?.catalog)?.name ?? "this catalog";
   const loadMore = () => d()?.state.state === "ready" && void view.command({ type: "loadMore" });
+  // A link from a title's genre chip (`?kind=series&genre=Drama`) opens Discover at its top on that kind
+  // and genre. It is taken from the URL once and dropped with a replace, so Back to Discover, or the
+  // viewer's own next choice, never has it applied again.
+  const [params, setParams] = useSearchParams();
+  if (params.kind || params.genre) pageScroll.top = 0;
+  const [link, setLink] = createSignal<DiscoverLink | null>(null);
+  createEffect(() => {
+    const kind = typeof params.kind === "string" ? params.kind : undefined;
+    const genre = typeof params.genre === "string" ? params.genre : undefined;
+    if (!kind && !genre) return;
+    setLink({ kind, genre });
+    setParams({ kind: undefined, genre: undefined }, { replace: true });
+  });
+  let sent = "";
+  createEffect(() => {
+    const l = link();
+    const s = d();
+    if (!l || !s) return;
+    const step = discoverLinkStep(l, s);
+    if (step === "wait") return;
+    if (step === "done") return void setLink(null);
+    // One command per step: the snapshot that answers it comes later.
+    const key = JSON.stringify(step);
+    if (key === sent) return;
+    sent = key;
+    select(step);
+  });
   // Try again after a failed page (or a failed catalog): loadMore asks that
   // page again. Its button stays, reading "Trying again", until the answer,
   // so the remote keeps its place.

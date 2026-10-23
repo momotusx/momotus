@@ -8,9 +8,9 @@ import Play from "lucide-solid/icons/play";
 import X from "lucide-solid/icons/x";
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import type { Trailer } from "../core/generated/Trailer";
+import { pushBack } from "../focus/back";
 import { focusEl } from "../focus/dom";
 
-const BACK = new Set(["Escape", "Backspace", "GoBack", "BrowserBack"]);
 const YOUTUBE = "https://www.youtube-nocookie.com";
 const PLAY_KEYS = new Set(["MediaPlayPause", "MediaPlay", "MediaPause", "k", "K", " "]);
 
@@ -26,13 +26,9 @@ export function TrailerOverlay(props: { trailers: Trailer[]; onClose: () => void
     setPlaying(next);
   };
   onMount(() => {
+    // Back closes it through the one Back stack, so a dialog opened over it closes first.
+    const removeBack = pushBack(() => props.onClose());
     const onKey = (e: KeyboardEvent) => {
-      if (BACK.has(e.key) || e.keyCode === 10009 || e.keyCode === 461) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        props.onClose();
-        return;
-      }
       // Space on one of the bar's buttons stays that button's press.
       if (PLAY_KEYS.has(e.key) && !(e.key === " " && (e.target as Element | null)?.closest?.("button"))) {
         e.preventDefault();
@@ -45,7 +41,10 @@ export function TrailerOverlay(props: { trailers: Trailer[]; onClose: () => void
       const close = document.querySelector<HTMLElement>('[data-f="trailer:close"]');
       if (close) focusEl(close);
     });
-    onCleanup(() => window.removeEventListener("keydown", onKey, { capture: true }));
+    onCleanup(() => {
+      removeBack();
+      window.removeEventListener("keydown", onKey, { capture: true });
+    });
   });
   return (
     <div class="trailer" role="dialog" aria-modal="true" aria-label={`Trailer: ${current()?.title ?? ""}`}>

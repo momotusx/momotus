@@ -4,7 +4,7 @@
  * screen you are on; /search shows the same panel as a page, for deep links.
  * The core's search view and its rows are unchanged: only how they show. */
 
-import { A } from "@solidjs/router";
+import { A, useSearchParams } from "@solidjs/router";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import Film from "lucide-solid/icons/film";
 import ListFilter from "lucide-solid/icons/list-filter";
@@ -21,7 +21,8 @@ import type { HomeRow } from "../core/generated/HomeRow";
 import type { SearchSnapshot } from "../core/generated/SearchSnapshot";
 import type { Tile } from "../core/generated/Tile";
 import { onProfileReset } from "../core/profiles";
-import { focusEl, isBackKey, mayAutoFocus } from "../focus/dom";
+import { pushBack } from "../focus/back";
+import { focusEl, mayAutoFocus } from "../focus/dom";
 import { historyDepth } from "../history";
 import { ratingParts, titlePath } from "../lib/format";
 import { rowWords } from "../lib/rows";
@@ -109,16 +110,8 @@ function finish(refocus: boolean) {
 
 /** The palette over the screen: Back, the scrim or a result closes it. */
 export function SearchOverlay() {
-  onMount(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!isBackKey(e)) return;
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      closeSearch();
-    };
-    window.addEventListener("keydown", onKey, { capture: true });
-    onCleanup(() => window.removeEventListener("keydown", onKey, { capture: true }));
-  });
+  // Back closes it through the one Back stack (focus/back.ts).
+  onMount(() => onCleanup(pushBack(() => closeSearch())));
   return (
     <div class="palette-layer">
       <div class="palette-scrim" aria-hidden="true" onClick={() => closeSearch()} />
@@ -129,6 +122,13 @@ export function SearchOverlay() {
 
 /** The deep link: the panel as a page under the navigation. */
 export default function Search() {
+  // A link from a title's director or cast member (`/search?q=Name`) sets the query once and is dropped
+  // from the URL with a replace, so Back to Search keeps whatever the viewer typed since.
+  const [params, setParams] = useSearchParams();
+  if (typeof params.q === "string" && params.q) {
+    lastQuery = params.q;
+    setParams({ q: undefined }, { replace: true });
+  }
   return (
     <main class="search-page">
       <SearchPanel />
