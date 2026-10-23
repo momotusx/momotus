@@ -58,7 +58,7 @@ class TvSubtitlePickerTest {
             TrackChoice(
                 "late:en1",
                 "CAKES, WEB 1080p",
-                "OpenSubtitles v3",
+                null,
                 selected = true,
                 section = "English",
                 language = "en",
@@ -67,7 +67,7 @@ class TvSubtitlePickerTest {
             TrackChoice(
                 "late:en2",
                 "FLUX, WEB-DL 1080p",
-                "OpenSubtitles v3",
+                null,
                 section = "English",
                 language = "en",
                 fits = true,
@@ -75,12 +75,12 @@ class TvSubtitlePickerTest {
             TrackChoice(
                 "late:ar",
                 "PSA, WEBRip 1080p",
-                "OpenSubtitles v3",
+                null,
                 section = "Arabic",
                 language = "ar",
                 nativeName = "العربية",
             ),
-            TrackChoice("late:tr", "SubSense", section = "Turkish", language = "tr", nativeName = "Türkçe"),
+            TrackChoice("late:tr", "Turkish 1", section = "Turkish", language = "tr", nativeName = "Türkçe"),
             TrackChoice("0:0", "English", "In the file", section = "English", language = "en", inFile = true),
         )
 
@@ -113,9 +113,9 @@ class TvSubtitlePickerTest {
         compose.onNodeWithContentDescription("English, In the file").assertExists()
         compose
             .onNodeWithContentDescription(
-                "CAKES, WEB 1080p, OpenSubtitles v3 · Slow.Horses.S06E02.1080p.WEB.H264-CAKES",
+                "CAKES, WEB 1080p, Slow.Horses.S06E02.1080p.WEB.H264-CAKES",
             ).assertExists()
-        compose.onNodeWithContentDescription("FLUX, WEB-DL 1080p, OpenSubtitles v3 · Same release group").assertExists()
+        compose.onNodeWithContentDescription("FLUX, WEB-DL 1080p, Same release group").assertExists()
         row("English, 3 options").press(Key.DirectionDown)
         row("Arabic, العربية, 1 option").assertIsFocused()
         compose.onNodeWithText("Arabic").assertExists()
@@ -128,13 +128,13 @@ class TvSubtitlePickerTest {
     fun `Right moves into the options, on the chosen one, and Left comes back to its language`() {
         open()
         row("English, 3 options").press(Key.DirectionRight)
-        row("CAKES, WEB 1080p, OpenSubtitles v3 · Slow.Horses.S06E02.1080p.WEB.H264-CAKES").assertIsFocused()
-        row("CAKES, WEB 1080p, OpenSubtitles v3 · Slow.Horses.S06E02.1080p.WEB.H264-CAKES").press(Key.DirectionLeft)
+        row("CAKES, WEB 1080p, Slow.Horses.S06E02.1080p.WEB.H264-CAKES").assertIsFocused()
+        row("CAKES, WEB 1080p, Slow.Horses.S06E02.1080p.WEB.H264-CAKES").press(Key.DirectionLeft)
         row("English, 3 options").assertIsFocused()
         // A language with nothing chosen opens on its first option.
         row("English, 3 options").press(Key.DirectionDown)
         row("Arabic, العربية, 1 option").press(Key.DirectionRight)
-        row("PSA, WEBRip 1080p, OpenSubtitles v3").assertIsFocused()
+        row("PSA, WEBRip 1080p").assertIsFocused()
     }
 
     @Test
@@ -170,8 +170,8 @@ class TvSubtitlePickerTest {
         row("Arabic, العربية, 1 option").press(Key.DirectionDown)
         row("Turkish, Türkçe, 1 option").press(Key.Enter)
         row("Turkish, Türkçe, 1 option").press(Key.DirectionRight)
-        row("SubSense").press(Key.Enter)
-        row("SubSense").press(Key.DirectionLeft)
+        row("Turkish 1").press(Key.Enter)
+        row("Turkish 1").press(Key.DirectionLeft)
         // Up the list to Off.
         repeat(3) { compose.onNode(isFocused()).press(Key.DirectionUp) }
         row("Off").assertIsFocused().press(Key.Enter)

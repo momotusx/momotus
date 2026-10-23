@@ -212,7 +212,7 @@ class PlayerShotsTest {
             } else {
                 "CAKES, WEB 1080p"
             },
-            "OpenSubtitles v3",
+            null,
             section = name,
             language = code,
             nativeName = own,
@@ -229,7 +229,7 @@ class PlayerShotsTest {
                 TrackChoice(
                     "late:en4",
                     "FLUX, WEB-DL 1080p",
-                    "OpenSubtitles v3",
+                    null,
                     section = "English",
                     language = "en",
                     fits = true,
@@ -238,7 +238,7 @@ class PlayerShotsTest {
                 TrackChoice(
                     "late:en1",
                     "CAKES, WEB 1080p",
-                    "OpenSubtitles v3",
+                    null,
                     section = "English",
                     language = "en",
                     release = "slow.horses.s06e02.1080p.web.h264-cakes",
@@ -246,7 +246,7 @@ class PlayerShotsTest {
                 TrackChoice(
                     "late:en2",
                     "PSA, WEBRip 1080p 10 bit",
-                    "OpenSubtitles v3",
+                    null,
                     section = "English",
                     language = "en",
                     release = "Slow.Horses.S06E02.1080p.WEBRip.6CH.x265.HEVC-PSA",
@@ -254,7 +254,7 @@ class PlayerShotsTest {
                 TrackChoice(
                     "late:en3",
                     "CAKES, WEB 1080p",
-                    "OpenSubtitles v3 · For the hard of hearing",
+                    "For the hard of hearing",
                     section = "English",
                     language = "en",
                     release = "slow.horses.s06e02.1080p.web.h264-cakes-hi",

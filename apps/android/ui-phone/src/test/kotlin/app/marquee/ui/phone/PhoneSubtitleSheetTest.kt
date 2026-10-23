@@ -123,18 +123,18 @@ class PhoneSubtitleSheetTest {
     private val rows =
         listOf(
             TrackChoice("off", "Off"),
-            TrackChoice("late:en1", "CAKES, WEB 1080p", "OpenSubtitles v3", section = "English", language = "en"),
+            TrackChoice("late:en1", "CAKES, WEB 1080p", null, section = "English", language = "en"),
             TrackChoice(
                 "late:en2",
                 "FLUX, WEB-DL 1080p",
-                "OpenSubtitles v3",
+                null,
                 section = "English",
                 language = "en",
                 fits = true,
             ),
             TrackChoice(
                 "late:tr",
-                "SubSense",
+                "Turkish 1",
                 section = "Turkish",
                 language = "tr",
                 nativeName = "Türkçe",
@@ -165,7 +165,7 @@ class PhoneSubtitleSheetTest {
         compose.onNodeWithContentDescription("English options").performClick()
         // The options level: the file's track first, then the core's, the match named.
         compose.onNodeWithContentDescription("English, In the file").assertExists()
-        compose.onNodeWithContentDescription("FLUX, WEB-DL 1080p, OpenSubtitles v3 · Same release group").performClick()
+        compose.onNodeWithContentDescription("FLUX, WEB-DL 1080p, Same release group").performClick()
         compose.runOnIdle { assertEquals(listOf("0:0", "late:en2"), picks) }
         compose.onNodeWithContentDescription("Back to languages").performClick()
         compose.onNodeWithContentDescription("Off").assertExists()
@@ -203,7 +203,7 @@ class PhoneSubtitleSheetTest {
         compose.onNodeWithContentDescription("Subtitles, Off, 2 languages").performClick()
         compose.onNodeWithContentDescription("Turkish options").performClick()
         compose.onNodeWithContentDescription("Back to languages").assertExists()
-        compose.onNodeWithContentDescription("SubSense").assertExists()
+        compose.onNodeWithContentDescription("Turkish 1").assertExists()
         val back = { compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() } }
         back()
         compose.waitForIdle()
@@ -404,4 +404,4 @@ private const val WITH_SUBTITLES =
         """"nativeName":"English","name":"CAKES, WEB 1080p","source":"OpenSubtitles v3","forced":false,""" +
         """"hearingImpaired":false},""" +
         """{"url":"http://127.0.0.1:7781/tr.srt","lang":"tur","language":"tr","languageName":"Turkish",""" +
-        """"nativeName":"Türkçe","name":"SubSense","source":"SubSense","forced":false,"hearingImpaired":false}]}"""
+        """"nativeName":"Türkçe","name":"Turkish 1","source":"SubSense","forced":false,"hearingImpaired":false}]}"""

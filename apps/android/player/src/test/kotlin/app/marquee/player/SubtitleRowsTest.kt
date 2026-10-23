@@ -50,12 +50,13 @@ class SubtitleRowsTest {
                 TrackChoice(
                     "late:u/tur",
                     "Breaking.Bad.S01E01.720p",
-                    "SubSense",
+                    // No source: no addon is named where a viewer reads it.
+                    null,
                     section = "Turkish",
                     language = "tr",
                 ),
                 TrackChoice("late:u/eng1", "OpenSubtitles v3 1", section = "English", language = "en"),
-                // Loaded: the player's id and state; the name already says its source.
+                // Loaded: the player's id and state.
                 TrackChoice("ext:1", "OpenSubtitles v3 2", "For the hard of hearing", true, "English", language = "en"),
                 TrackChoice(
                     "late:u/pob",
@@ -116,7 +117,11 @@ class SubtitleRowsTest {
         assertEquals("German", row.name)
         assertEquals("German", row.section)
         assertEquals("de", row.language)
-        assertEquals("SubSense", row.detail)
+        assertNull(row.detail, "no source under the name")
+        // With no label either, the track is named by its language, never by its addon.
+        val bare = subtitleRows(listOf(old.copy(label = null)), emptyMap(), emptySet(), emptyList(), "late:")[1]
+        assertEquals("German", bare.name)
+        assertNull(bare.detail)
         assertNull(subtitleRows(emptyList(), emptyMap(), emptySet(), emptyList(), "late:").first().section)
     }
 

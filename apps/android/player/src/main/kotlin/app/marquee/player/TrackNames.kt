@@ -91,13 +91,13 @@ internal fun subtitleRows(
         core.mapNotNull { t ->
             val row = loaded[t.url]
             if (row == null && t.url in hidden) return@mapNotNull null
-            val name = t.name.ifEmpty { t.label ?: t.source }
-            // An older core sends no name or heading: the code's language stands in.
+            // An older core sends no name or heading: the code's language stands in, never the addon's name.
             val section = t.languageName.ifEmpty { languageName(t.lang) ?: t.lang }
+            val name = t.name.ifEmpty { t.label ?: section }
             TrackChoice(
                 row?.id ?: "$late${t.url}",
                 name,
-                trackDetail(t, name).ifEmpty { null },
+                trackDetail(t).ifEmpty { null },
                 row?.selected == true,
                 section,
                 language = languageKey(t.language.ifEmpty { t.lang }),
@@ -113,18 +113,15 @@ internal fun subtitleRows(
     return listOf(TrackChoice(TRACK_OFF, "Off", selected = rows.none { it.selected })) + rows
 }
 
-/** Under a core track's name: its source when the name does not already say it, then what kind of file it is. */
-internal fun trackDetail(
-    t: SubtitleTrack,
-    name: String,
-): String {
-    val source = t.source.takeIf { name != it && !name.startsWith("$it ") }
-    return listOfNotNull(
-        source,
+/**
+ * Under a core track's name: what kind of file it is, never where it came from (no addon or service is named where a
+ * viewer reads it, plans/player-polish.md 2.4).
+ */
+internal fun trackDetail(t: SubtitleTrack): String =
+    listOfNotNull(
         "Forced".takeIf { t.forced },
         "For the hard of hearing".takeIf { t.hearingImpaired },
     ).joinToString(DOT)
-}
 
 /** Between the parts of a subtitle's detail line. */
 internal const val DOT = " · "
