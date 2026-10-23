@@ -734,7 +734,8 @@ fn when_nothing_keeps_up_the_row_that_pauses_least_wins() {
 /// what small swarms give (before any sample, 1.4 Mbit/s for 18 seeders,
 /// scaled per seeder), not the line. A 6-seeder 720p and a 22-seeder 1080p
 /// no longer beat a 900-seeder 1080p that needs 72% of a measured
-/// 10 Mbit/s, and their line says the figure is the small-swarm one.
+/// 10 Mbit/s; their line says they have few seeders (the small-swarm
+/// figure is an estimate, plans/play-every-version.md 2g).
 #[test]
 fn a_thin_swarm_is_judged_against_small_swarms_not_the_line() {
     let case = Case {
@@ -758,27 +759,57 @@ fn a_thin_swarm_is_judged_against_small_swarms_not_the_line() {
         first_line(ranked.best().unwrap()),
         "Movie.2020.1080p.BluRay.x264-BIG"
     );
-    for (name, have) in [
-        ("Movie.2020.1080p.WEB-DL", 1.4 * 22.0 / 18.0),
-        ("Movie.2020.720p", 1.4 * 6.0 / 18.0),
-    ] {
+    for name in ["Movie.2020.1080p.WEB-DL", "Movie.2020.720p"] {
         let thin = row(&ranked, name);
         assert!(!thin.key.sustains, "{name}");
-        match &thin.line {
-            ReasonLine::MayPause {
-                have_mbps,
-                small_swarm,
-                ..
-            } => assert!(
-                *small_swarm && (*have_mbps - have).abs() < 1e-3,
-                "{name} {have_mbps}"
-            ),
-            other => panic!("{name}: {other:?}"),
-        }
+        // The small-swarm figure is an estimate, scaled per seeder: it
+        // ranks, but no row says "may pause" on it (play-every-version 2g).
+        assert!(
+            matches!(thin.line, ReasonLine::Few { .. }),
+            "{name}: {:?}",
+            thin.line
+        );
     }
     // The healthy swarm is covered by the line with no margin.
     let healthy = row(&ranked, "Movie.2020.1080p.BluRay");
     assert_eq!(healthy.key.pace, 2, "x 0.72: covered, with no margin");
+}
+
+/// Plans/play-every-version.md 2g: with the speed only estimated (no
+/// playback measured it), the same thin swarms still rank below the healthy
+/// one, but no row says "may pause": a speed is shown only when measured.
+#[test]
+fn an_estimated_speed_never_reads_may_pause() {
+    let case = Case {
+        conditions: Conditions {
+            runtime_s: Some(100 * 60),
+            p2p: Speed {
+                mbps: 10.0,
+                samples: 0,
+            },
+            free_bytes: Some(200 << 30),
+            ..engine().clone()
+        },
+        ..Case::stick()
+    };
+    let ranked = case.rank(vec![
+        seeded(1, "Movie.2020.1080p.BluRay.x264-BIG", 900, 5.0),
+        seeded(2, "Movie.2020.1080p.WEB-DL.x264-MID", 22, 2.0),
+        seeded(3, "Movie.2020.720p.WEB-DL.x264-LOW", 6, 1.1),
+    ]);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.1080p.BluRay.x264-BIG"
+    );
+    for name in ["Movie.2020.1080p.WEB-DL", "Movie.2020.720p"] {
+        let thin = row(&ranked, name);
+        assert!(!thin.key.sustains, "{name}: the estimate still ranks");
+        assert!(
+            !matches!(thin.line, ReasonLine::MayPause { .. }),
+            "{name}: {:?}",
+            thin.line
+        );
+    }
 }
 
 /// Race 3, Big Buck Bunny's shape: every swarm has 0 or 1 seeders, so each

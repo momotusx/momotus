@@ -975,8 +975,11 @@ fn line(
     {
         return ReasonLine::OtherYear { year };
     }
+    // Said only of a measured speed: an estimate ranks, but no row says
+    // "may pause" on it (plans/play-every-version.md 2g).
     if !key.sustains
         && let (Some(need), Some((have, small_swarm))) = (bitrate, speed)
+        && have.samples > 0
     {
         return ReasonLine::MayPause {
             need_mbps: need,
