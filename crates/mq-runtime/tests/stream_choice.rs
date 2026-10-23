@@ -2140,6 +2140,21 @@ async fn playing_on_ends_a_stall_the_player_did_not_end() {
         "the first stall's clock: {took:?}"
     );
     assert_eq!(playback.snapshot().resume_ms, Some(16_500));
+
+    // The one move is spent: the next stall shows the button, and playing
+    // on with no "stalled: false" takes it away.
+    for at in [17_000, 19_000] {
+        playback.report_progress(at, 600_000, false);
+    }
+    playback.stalled(true, 19_500);
+    until("choose another", || playback.snapshot().choose_another).await;
+    for at in [20_000, 22_000] {
+        playback.report_progress(at, 600_000, false);
+    }
+    assert!(
+        !playback.snapshot().choose_another,
+        "the button over a playing video"
+    );
 }
 
 /// 2e, bench EW-3's shape: a stall right after a seek (17.2 s there) never

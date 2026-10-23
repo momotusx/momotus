@@ -1419,6 +1419,11 @@ impl PlaybackView {
             if s.advancing && s.stall_on == Some(s.stall) {
                 s.stall += 1;
                 s.stall_on = None;
+                // No "Choose another version" over a video that plays.
+                if s.snapshot.choose_another {
+                    s.snapshot.choose_another = false;
+                    self.snapshot.set(s.snapshot.clone());
+                }
             }
             s.reported_ms = Some(position_ms);
             if s.played_ms >= PLAYED_PAST_START.as_millis() as u64 {
