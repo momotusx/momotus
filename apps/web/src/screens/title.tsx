@@ -27,6 +27,7 @@ import { focusEl, remember } from "../focus/dom";
 import { form } from "../form";
 import { airDate, clock, decoded, episodeLabel, offersLibrary, parseVideo, pct, playPath, playState, ratingParts, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
 import { choiceWords, problemWords } from "../lib/words";
+import { firstFocus } from "./title-focus";
 import "./title.css";
 
 export default function Title() {
@@ -121,6 +122,16 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
     return { href: playPath(props.kind, props.id, videoId) };
   };
 
+  const first = () =>
+    firstFocus({
+      ready: header()?.state.state === "ready",
+      play: !!target() && !playInert(),
+      versions: !!target(),
+      library: offersLibrary(header()),
+      trailer: (d()?.trailers.length ?? 0) > 0,
+      synopsis: !!d()?.description,
+    });
+
   const metaLine = () => {
     const x = d();
     if (!x) return [];
@@ -198,7 +209,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                 </p>
                 <Show when={x().description}>
                   {/* The full text opens on its own card (components/synopsis.tsx), never in place. */}
-                  <button class="syn" data-f="title:synopsis" aria-label="Synopsis, open the full text" aria-haspopup="dialog" onClick={() => openSynopsis("title:synopsis")}>
+                  <button class="syn" data-f="title:synopsis" data-autofocus={first() === "title:synopsis" ? "" : undefined} aria-label="Synopsis, open the full text" aria-haspopup="dialog" onClick={() => openSynopsis("title:synopsis")}>
                     {x().description}
                   </button>
                   {/* Touch has no focus to open it: a phone says there is more. */}
@@ -229,7 +240,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                       }
                     >
                       {(t) => (
-                        <A class="btn primary big" href={playTo(t().videoId).href} state={playTo(t().videoId).state} data-f="title:play" data-autofocus>
+                        <A class="btn primary big" href={playTo(t().videoId).href} state={playTo(t().videoId).state} data-f="title:play" data-autofocus={first() === "title:play" ? "" : undefined}>
                           <Play aria-hidden class="fill" />
                           {t().label}
                           <Show when={t().resumeMs}>
@@ -266,7 +277,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                 <div class="acts">
                   <Show when={target()}>
                     {(t) => (
-                      <A class="btn" href={versionsPath(props.kind, props.id, t().videoId)} data-f="title:versions" data-autofocus={playInert() ? "" : undefined}>
+                      <A class="btn" href={versionsPath(props.kind, props.id, t().videoId)} data-f="title:versions" data-autofocus={first() === "title:versions" ? "" : undefined}>
                         <Layers aria-hidden />
                         {/* One inline label, so the count never wraps apart from its word. */}
                         <span>
@@ -279,7 +290,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                     )}
                   </Show>
                   <Show when={x().trailers.length > 0}>
-                    <button class="btn" data-f="title:trailer" onClick={() => setTrailerOpen(true)}>
+                    <button class="btn" data-f="title:trailer" data-autofocus={first() === "title:trailer" ? "" : undefined} onClick={() => setTrailerOpen(true)}>
                       <Film aria-hidden />
                       Trailer
                     </button>
@@ -288,7 +299,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                   <button
                     class="btn"
                     data-f="title:library"
-                    data-autofocus={!target() && (header()?.nextAirs || playInert()) ? "" : undefined}
+                    data-autofocus={first() === "title:library" ? "" : undefined}
                     aria-pressed={header()?.inLibrary ?? false}
                     onClick={() => view.command({ type: "setInLibrary", value: !header()?.inLibrary })}
                   >
