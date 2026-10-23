@@ -355,9 +355,12 @@ impl SubtitleTrack {
             .as_ref()
             .map(|_| mq_relparse::parse(&plain))
             .unwrap_or_default();
+        // A text that names no release says nothing a viewer can tell
+        // tracks apart by: the language, numbered by `reorder`. Never the
+        // source (no addon names).
         let base = match &release {
             Some(text) => short_name(&parsed).unwrap_or_else(|| text.clone()),
-            None => source.to_owned(),
+            None => language.name.clone(),
         };
         Self {
             url,
@@ -433,7 +436,8 @@ fn release_group(r: &mq_relparse::ParsedRelease) -> Option<&str> {
     let named = r.quality != Quality::Unknown || r.resolution != Resolution::Unknown;
     r.group
         .as_deref()
-        .filter(|g| named && !crate::languages::is_known(g))
+        // A copy number ("-cze(1)" reads as group "1") names no group.
+        .filter(|g| named && !crate::languages::is_known(g) && g.chars().any(char::is_alphabetic))
 }
 
 /// Whether a release text marks its file for the hard of hearing ("SDH", or
@@ -4345,7 +4349,15 @@ fn track(
     url: String,
     title_forced: bool,
 ) -> SubtitleTrack {
-    let t = SubtitleTrack::new(url, &w.lang, w.label.clone(), source, release(w));
+    let lang = file_language(w).unwrap_or_else(|| w.lang.clone());
+    let mut t = SubtitleTrack::new(url, &lang, w.label.clone(), source, release(w));
+    // A file name names a file, not what tells it apart: without a group,
+    // source or resolution in it ("sintel_en", "Sintel (2010).eng"), the
+    // track reads as its language. An addon's own label stays.
+    if !labelled(w) && t.release.as_ref() == Some(&t.base) {
+        t.base.clone_from(&t.language_name);
+        t.name.clone_from(&t.language_name);
+    }
     let hearing_impaired = w.hearing_impaired || t.hearing_impaired;
     // The word in a film's own title ("Forced Vengeance") is in every
     // file's name: then only the flag counts.
@@ -4391,6 +4403,55 @@ fn forced_mark(text: &str) -> bool {
 /// The OpenSubtitles v3 addon's manifest id: the one whose hash match counts.
 const OPENSUBTITLES: &str = "org.stremio.opensubtitlesv3";
 
+/// The language a file's name ends in when it says another than the
+/// addon's code: OpenSubtitles lists "sintel.he.srt" under English, and the
+/// file is Hebrew. Only a last word that names a language the core knows
+/// counts ("he", "heb", "hebrew"); a two-letter one only after a dot
+/// ("sintel.he", not "sintel_fi_ps"), never a short English word ("It",
+/// "Back.to"), and never when the addon's own language is named before it.
+/// Region and script words ("tw", "chs", "lat") name no language the core
+/// knows, so they never move a track.
+fn file_language(w: &mq_protocol::WireSubtitle) -> Option<String> {
+    use crate::languages::{is_known, language, primary};
+    let file = w.extra.get("subtitleFileName")?.as_str()?;
+    let stem = file
+        .rsplit_once('.')
+        .map_or(file, |(stem, ext)| if ext.len() <= 4 { stem } else { file });
+    let words: Vec<&str> = stem
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .collect();
+    let (last, before) = words.split_last()?;
+    let said = language(&w.lang).tag;
+    let names =
+        |word: &str, tag: &str| is_known(word) && primary(&language(word).tag) == primary(tag);
+    let english_word = ENGLISH_WORDS.contains(&last.to_lowercase().as_str());
+    let dotted = last.len() > 2 || stem.ends_with(&format!(".{last}"));
+    (is_known(last)
+        && dotted
+        && !english_word
+        && !names(last, &said)
+        && !before.iter().any(|w| names(w, &said)))
+    .then(|| (*last).to_owned())
+}
+
+/// Short English words that are also language codes ("it" Italian, "is"
+/// Icelandic, "hi" Hindi and the hard-of-hearing mark): a title's last word,
+/// never a file's language.
+const ENGLISH_WORDS: &[&str] = &[
+    "an", "as", "be", "ha", "hi", "id", "is", "it", "la", "lo", "mi", "my", "ne", "no", "or", "so",
+    "to",
+];
+
+/// Whether the addon gave the track a label of its own, one that says more
+/// than its language: then it names the track as the addon wrote it.
+fn labelled(w: &mq_protocol::WireSubtitle) -> bool {
+    let language = crate::languages::language(&w.lang);
+    w.label.as_deref().map(str::trim).is_some_and(|l| {
+        !l.is_empty() && !l.eq_ignore_ascii_case(&language.name) && !l.eq_ignore_ascii_case(&w.lang)
+    })
+}
+
 /// The release a file was made for, as the addon names it: its label, or
 /// OpenSubtitles' file name (without its extension) or release name.
 fn release(w: &mq_protocol::WireSubtitle) -> Option<String> {
@@ -4408,16 +4469,10 @@ fn release(w: &mq_protocol::WireSubtitle) -> Option<String> {
         stem.to_owned()
     });
     // A label that only names the language says nothing of the release.
-    let language = crate::languages::language(&w.lang);
     let text = w
         .label
         .clone()
-        .filter(|l| {
-            let l = l.trim();
-            !l.is_empty()
-                && !l.eq_ignore_ascii_case(&language.name)
-                && !l.eq_ignore_ascii_case(&w.lang)
-        })
+        .filter(|_| labelled(w))
         .or(file)
         .or_else(|| extra("movieReleaseName").map(str::to_owned))?;
     // At most 80 characters: a line in a menu.
@@ -6341,7 +6396,8 @@ mod tests {
             assert_eq!(track(text).name, text, "{text}");
         }
         let bare = SubtitleTrack::new("u".into(), "eng", None, "Subs", None);
-        assert_eq!((bare.name.as_str(), bare.release), ("Subs", None));
+        // No text at all: its language, never its source.
+        assert_eq!((bare.name.as_str(), bare.release), ("English", None));
     }
 
     /// Review P3-3: the playing release's "group" is no language or title
@@ -6373,6 +6429,48 @@ mod tests {
             track(w, "Subs", "", "u".into(), false).name,
             "CAKES, WEB 1080p"
         );
+    }
+
+    /// A file name's last word wins over the addon's code when it names
+    /// another language the core knows and the code's language is named
+    /// nowhere before it. Real names from OpenSubtitles v3's answer for
+    /// Sintel (tests/fixtures/opensubtitles-sintel.json, 2026-10-23), and
+    /// two made up for the English-word and hard-of-hearing guards.
+    #[test]
+    fn a_file_name_s_language_wins_over_a_wrong_code() {
+        let cases = [
+            ("eng", "sintel.he.srt", "he"),
+            ("eng", "Sintel (2010).eng.srt", "en"),
+            ("eng", "sintel_en.srt", "en"),
+            ("heb", "sintel-2048-surround.hebrew.srt", "he"),
+            ("fin", "sintel_fi_ps.srt", "fi"),
+            ("zho", "2010.Sintel.UTF-8.tw.srt", "zh"),
+            ("zho", "sintel_utf8.chs.srt", "zh"),
+            ("bos", "Sintel.2010.SURROUND.x264-VODO.lat.srt", "bs"),
+            ("ukr", "Sintel.ru.srt", "ru"),
+            ("srp", "Sintel.2010.1080p-hrv.srt", "hr"),
+            (
+                "tur",
+                "Sintel.4K.UHD.ENG.FLAC.ITA.ENG.Sub.DMRip.1744p.X264_ZMachine-tur.srt",
+                "tr",
+            ),
+            ("eng", "Stephen.Kings.It.srt", "en"),
+            ("eng", "Back.to.srt", "en"),
+            ("eng", "Life.of.Pi.srt", "en"),
+            ("eng", "Ever.So.srt", "en"),
+            // Review P3-1: a two-letter code only after a dot.
+            ("eng", "sintel_he.srt", "en"),
+            ("eng", "Movie.en.hi.srt", "en"),
+        ];
+        for (lang, file, tag) in cases {
+            let body = serde_json::json!({"subtitles": [
+                {"id": "1", "lang": lang, "url": "https://subs.test/1.srt", "subtitleFileName": file}
+            ]})
+            .to_string();
+            let w = &decode_subtitles(body.as_bytes()).unwrap().subtitles[0];
+            let t = track(w, "Subs", "", "u".into(), false);
+            assert_eq!(crate::languages::primary(&t.language), tag, "{file}");
+        }
     }
 
     /// Review P3-8: while the first byte is read through the server the

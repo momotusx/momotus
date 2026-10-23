@@ -1360,17 +1360,23 @@ async fn subtitles_come_grouped_by_language_named_and_told_apart() {
             ("tr", "Turkish", "TOPAZ 1"),
             ("tr", "Turkish", "TOPAZ 2"),
             ("en", "English", "ORPHEUS, DVD"),
-            ("en", "English", "Local 1"),
-            ("en", "English", "Local 2"),
+            // A track that names nothing reads as its language, never as
+            // its source.
+            ("en", "English", "English 1"),
+            ("en", "English", "English 2"),
             // The rest by English name; one language however it is spelled.
-            ("yue", "Chinese (Cantonese)", "Local"),
-            ("zh-Hant", "Chinese (Traditional)", "Local"),
+            ("yue", "Chinese (Cantonese)", "Chinese (Cantonese)"),
+            ("zh-Hant", "Chinese (Traditional)", "Chinese (Traditional)"),
             ("fr", "French", "NTb, WEB"),
-            ("de", "German", "Local 1"),
-            ("de", "German", "Local 2"),
-            ("cnr", "Montenegrin", "Local"),
-            ("pt-BR", "Portuguese (Brazil)", "Local"),
-            ("es-419", "Spanish (Latin America)", "Local"),
+            ("de", "German", "German 1"),
+            ("de", "German", "German 2"),
+            ("cnr", "Montenegrin", "Montenegrin"),
+            ("pt-BR", "Portuguese (Brazil)", "Portuguese (Brazil)"),
+            (
+                "es-419",
+                "Spanish (Latin America)",
+                "Spanish (Latin America)"
+            ),
         ]
     );
     // The addon's own code is kept for the player.
@@ -1450,7 +1456,7 @@ async fn subtitles_rank_by_the_playing_release_within_each_language() {
             ("FLUX, WEB 1080p 2", true, "English"),
             ("RARBG, WEBRip 1080p", false, "English"),
             ("OTHER, BluRay 1080p", false, "English"),
-            ("Local", false, "English"),
+            ("English", false, "English"),
             ("FLUX, WEB 1080p", true, "Türkçe"),
             ("OTHER, BluRay 720p", false, "Türkçe"),
         ]
@@ -1648,6 +1654,150 @@ async fn a_slow_subtitle_addon_does_not_hold_the_start_subtitle() {
     assert_eq!(
         done.auto_subtitle, s.auto_subtitle,
         "a slower source never changes it"
+    );
+}
+
+/// A subtitles addon answering every request with the recorded `body`.
+async fn recorded_subtitles(id: &str, body: &'static str) -> AddonRow {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                let mut buf = [0u8; 2048];
+                let _ = socket.read(&mut buf).await;
+                let reply = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(reply.as_bytes()).await;
+            });
+        }
+    });
+    row(
+        &format!("http://{addr}/manifest.json"),
+        id,
+        "subtitles",
+        true,
+    )
+}
+
+/// The owner's Mac walk: OpenSubtitles v3's real answer for Sintel
+/// (tests/fixtures/opensubtitles-sintel.json, recorded 2026-10-23) listed
+/// "sintel_en 1", "sintel_en 2" and "Sintel (2010).eng", and "sintel.he"
+/// under English. Names now say only what tells tracks apart, the
+/// language numbered when nothing does, and sintel.he is Hebrew. A second
+/// source's track with no label and no file name reads as its language
+/// too, never as the source ("OpenSubtitles v3 1" before).
+#[tokio::test]
+async fn real_subtitle_names_read_clean() {
+    let addon = recorded_subtitles(
+        "org.stremio.opensubtitlesv3",
+        include_str!("fixtures/opensubtitles-sintel.json"),
+    )
+    .await;
+    let bare = recorded_subtitles(
+        "Bare Subs",
+        r#"{"subtitles":[{"id":"b","lang":"eng","url":"https://subs.test/b.srt"}]}"#,
+    )
+    .await;
+    let view = open_with_subtitles(&["eng", "heb"], vec![addon, bare]).await;
+    let s = settled_list(&view).await;
+    let names = |language: &str| -> Vec<String> {
+        s.subtitles
+            .iter()
+            .filter(|t| t.language_name == language)
+            .map(|t| t.name.clone())
+            .collect()
+    };
+    for t in &s.subtitles {
+        let lower = t.name.to_lowercase();
+        assert!(
+            !["sintel", "2010", ".srt", "opensubtitles", "bare"]
+                .iter()
+                .any(|w| lower.contains(w)),
+            "{} reads {:?}",
+            t.release.as_deref().unwrap_or_default(),
+            t.name
+        );
+    }
+    assert_eq!(
+        names("English"),
+        ["English 1", "English 2", "English 3", "English 4"],
+        "in the core's order, the bare one last"
+    );
+    let bare = s
+        .subtitles
+        .iter()
+        .find(|t| t.source == "Bare Subs")
+        .unwrap();
+    assert_eq!(bare.name, "English 4");
+    assert!(
+        s.subtitles
+            .iter()
+            .any(|t| t.language_name == "Hebrew" && t.release.as_deref() == Some("sintel.he")),
+        "sintel.he is Hebrew: {:?}",
+        names("Hebrew")
+    );
+    let named = |release: &str| {
+        s.subtitles
+            .iter()
+            .find(|t| t.release.as_deref() == Some(release))
+            .map(|t| t.name.clone())
+    };
+    assert_eq!(
+        named("Sintel.2010.1080p.WEB.H264-CLASSiCALHD").as_deref(),
+        Some("CLASSiCALHD, WEB 1080p")
+    );
+    assert_eq!(
+        named("Sintel.2010.1080p-cze(1)").as_deref(),
+        Some("1080p"),
+        "a copy number is no group"
+    );
+    assert_eq!(named("sintel_fi_ps").as_deref(), Some("Finnish"));
+
+    // Review P3-3: a series' names too, from OpenSubtitles v3's answer for
+    // Breaking Bad S1E1 (tests/fixtures/opensubtitles-breaking-bad-s01e01.json,
+    // recorded 2026-10-23).
+    let addon = recorded_subtitles(
+        "org.stremio.opensubtitlesv3",
+        include_str!("fixtures/opensubtitles-breaking-bad-s01e01.json"),
+    )
+    .await;
+    let view = open_with_subtitles(&["eng"], vec![addon]).await;
+    let s = settled_list(&view).await;
+    for t in &s.subtitles {
+        let lower = t.name.to_lowercase();
+        assert!(
+            ![
+                "breaking",
+                "bad",
+                "s01e01",
+                "pilot",
+                ".srt",
+                "opensubtitles"
+            ]
+            .iter()
+            .any(|w| lower.contains(w)),
+            "{} reads {:?}",
+            t.release.as_deref().unwrap_or_default(),
+            t.name
+        );
+    }
+    let named = |release: &str| {
+        s.subtitles
+            .iter()
+            .find(|t| t.release.as_deref() == Some(release))
+            .map(|t| t.name.clone())
+    };
+    assert_eq!(
+        named("Breaking.Bad.S01E01.720p.BluRay.X264-REWARD").as_deref(),
+        Some("REWARD, BluRay 720p")
+    );
+    assert!(
+        named("Breaking Bad Season 1 Episode 01 - Pilot")
+            .is_some_and(|n| n.starts_with("English ")),
+        "a name with nothing to tell reads as its language"
     );
 }
 
