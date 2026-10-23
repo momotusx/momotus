@@ -223,12 +223,10 @@ class PhonePlayerLayoutTest {
         val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
 
         fun skip() =
-            listOf("Skip intro", "Skip data: TheIntroDB").minOf {
-                compose
-                    .onNodeWithText(it)
-                    .fetchSemanticsNode()
-                    .boundsInRoot.left
-            }
+            compose
+                .onNodeWithText("Skip intro")
+                .fetchSemanticsNode()
+                .boundsInRoot.left
         val shown = cues()
         assertTrue(shown.right <= skip(), "clear of Skip: the lines end at ${shown.right}, Skip starts at ${skip()}")
         assertTrue(abs((shown.left + shown.right) / 2 - root.center.x) < 1f, "centred: ${shown.left} to ${shown.right}")

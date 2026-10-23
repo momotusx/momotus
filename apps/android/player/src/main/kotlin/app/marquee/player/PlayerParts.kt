@@ -777,8 +777,8 @@ fun UpNextCard(
 }
 
 /**
- * The button over the picture while a skippable part plays ("Skip intro"), with where the timing came from
- * above it ("Skip data: TheIntroDB"). It seeks only when pressed, never by itself.
+ * The button over the picture while a skippable part plays ("Skip intro"). Where the timing came from is never
+ * said, as no addon or service is named where a viewer reads it. It seeks only when pressed, never by itself.
  */
 @Composable
 fun SkipButton(
@@ -788,21 +788,15 @@ fun SkipButton(
     focus: FocusRequester? = null,
     onFocusChange: ((Boolean) -> Unit)? = null,
 ) {
-    Column(
+    // A plain white pill: an accent edge that never goes away reads as focus stuck on it.
+    PrimaryButton(
+        skipLabel(segment.kind),
+        onSkip,
         modifier,
-        horizontalAlignment = Alignment.End,
-        verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-    ) {
-        MqText("Skip data: ${segment.source}", role = TextRole.Caption, color = Marquee.colors.muted, maxLines = 1)
-        // A plain white pill: an accent edge that never goes away reads as focus stuck on it.
-        PrimaryButton(
-            skipLabel(segment.kind),
-            onSkip,
-            icon = Icons.SkipForward,
-            focusRequester = focus,
-            onFocusChange = onFocusChange,
-        )
-    }
+        icon = Icons.SkipForward,
+        focusRequester = focus,
+        onFocusChange = onFocusChange,
+    )
 }
 
 /**

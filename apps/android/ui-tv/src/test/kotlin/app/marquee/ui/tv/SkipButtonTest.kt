@@ -8,10 +8,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.dp
 import app.marquee.core.model.Segment
 import app.marquee.core.model.SegmentKind
@@ -61,14 +64,24 @@ class SkipButtonTest {
         val pixels = compose.onNodeWithTag("skip").captureToImage().toPixelMap()
         val page = bg.toArgb()
         var off = 0
-        // The band beside and below the pill (the source line sits above it).
+        // All around the pill: nothing is said above it either.
         for (x in 0 until pixels.width) {
-            for (y in top until pixels.height) {
+            for (y in 0 until pixels.height) {
                 val inside = x in left - 1..right && y in top - 1..bottom
                 if (!inside && !close(pixels[x, y].toArgb(), page)) off++
             }
         }
         assertEquals(0, off, "pixels around the unfocused pill that are not the page color")
+    }
+
+    @Test
+    fun `Skip says what it skips and never where its timing came from`() {
+        compose.setContent {
+            MarqueeTheme(Form.Tv) { SkipButton(Segment(SegmentKind.Intro, 30_000, 75_000, "TheIntroDB"), {}) }
+        }
+        compose.onNodeWithText("Skip intro").assertExists()
+        compose.onAllNodesWithText("TheIntroDB", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("Skip data", substring = true).assertCountEquals(0)
     }
 
     private fun close(
