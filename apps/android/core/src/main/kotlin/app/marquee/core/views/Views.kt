@@ -460,6 +460,20 @@ class PlaybackView(
      * [retry], which opens a failed view again.
      */
     fun retryPlay() = post(command("retry"))
+
+    /**
+     * The player waits for data mid-play ([on]), or plays again, at [positionMs] (plans/play-every-version.md 2e):
+     * the core may move on to the next version, or offer Choose another version over the stalled frame.
+     */
+    fun stalled(
+        on: Boolean,
+        positionMs: Long,
+    ) = post(
+        command("stalled") {
+            put("stalled", on)
+            put("positionMs", positionMs.coerceAtLeast(0))
+        },
+    )
 }
 
 /** `name` is how the account's other devices will show this one. */

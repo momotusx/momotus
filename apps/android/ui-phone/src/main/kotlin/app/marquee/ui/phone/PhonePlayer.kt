@@ -273,8 +273,9 @@ fun PhonePlayer(
                 lines = loadingLines(controller.status, controller.start?.caption),
                 opening = opening,
                 // Choose another version, 20 s after the loading screen showed (plans/versions-android-spec.md, 6).
-                choose = onVersions.takeIf { opening },
-                chooseShown = rememberChooseShown(opening),
+                choose = onVersions.takeIf { opening || stalled },
+                // 20 s into the start, or when the core offers it over a stalled frame (30 s).
+                chooseShown = rememberChooseShown(opening) || (stalled && controller.chooseAnother),
             )
         }
 

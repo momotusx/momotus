@@ -101,6 +101,10 @@ class PlaybackController(
     var offer: OtherVersion? by mutableStateOf(null)
         private set
 
+    /** The core offers Choose another version: the start has taken 20 s, or a stall over the picture 30 s. */
+    var chooseAnother by mutableStateOf(false)
+        private set
+
     /** Why nothing played, as the core names it once the play failed (notStarted when its 90 s ran out); null otherwise. */
     var empty: EmptyKind? by mutableStateOf(null)
         private set
@@ -413,6 +417,7 @@ class PlaybackController(
         trakt = s.trakt
         offer = s.offer
         empty = s.empty.takeIf { s.phase == PlaybackPhase.Failed }
+        chooseAnother = s.chooseAnother
         retryable = s.phase == PlaybackPhase.Failed
         // A Try again the core took since the last snapshot, even when the play then failed again at once
         // and the snapshot is otherwise the one before (code review 2026-10-20 r2 P3-6).
@@ -575,6 +580,8 @@ class PlaybackController(
                 // Not a seek or a new source: the connection fell behind the file.
                 if (firstFrame && player.playWhenReady && !seekPending) {
                     stalledAt = SystemClock.elapsedRealtime()
+                    // The core's stall rule moves on, or offers another version (plans/play-every-version.md 2e).
+                    view?.stalled(true, player.currentPosition)
                 }
             }
 
@@ -583,6 +590,7 @@ class PlaybackController(
                 if (stalledAt != 0L) {
                     CoreLog.d("stall ${SystemClock.elapsedRealtime() - stalledAt} ms")
                     stalledAt = 0L
+                    view?.stalled(false, player.currentPosition)
                 }
                 if (!raised) {
                     raised = true

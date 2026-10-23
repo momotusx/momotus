@@ -57,6 +57,18 @@ internal class PlayingPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
         firstFrame = false
     }
 
+    /** The connection falls behind the file mid-play: Media3 buffers over the picture. */
+    fun stall() {
+        ready = false
+        invalidateState()
+    }
+
+    /** Data again after a [stall]. */
+    fun resume() {
+        ready = true
+        invalidateState()
+    }
+
     /**
      * A subtitle on screen now, as Media3 hands most subtitles over: on the bottom line ([line] -1, counted up),
      * centred, the whole width; [line] unset is a cue with no line of its own.

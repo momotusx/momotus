@@ -23,6 +23,8 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
@@ -33,6 +35,7 @@ import app.marquee.core.client.CoreJson
 import app.marquee.core.views.PlaybackView
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
+import app.marquee.player.CHOOSE_ANOTHER
 import app.marquee.player.LOADING_TAG
 import app.marquee.player.LoadingLayer
 import app.marquee.player.PlaybackController
@@ -96,9 +99,13 @@ class TvLoadingTest {
     private val executor = Executors.newSingleThreadExecutor { Thread(it, "test-core") }
     private val client = CoreClient(executor.asCoroutineDispatcher())
 
+    /** What the app sent the core. */
+    private val sent = CopyOnWriteArrayList<String>()
+
     /** The core's playback view, ready with a stream, as a scripted core answers its subscribe. */
     private fun readyView(snapshot: String = READY): PlaybackView {
         client.attach { text ->
+            sent += text
             val msg = CoreJson.parseToJsonElement(text).jsonObject
             val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
             val result =
@@ -289,7 +296,43 @@ class TvLoadingTest {
         compose.waitForIdle()
         compose.onNodeWithTag(LOADING_TAG).assertDoesNotExist()
     }
+
+    @Test
+    fun `a stall over the picture tells the core, and the core's Choose another version shows over the frame`() {
+        var versions = 0
+        compose.setContent {
+            MarqueeTheme(Form.Tv) { TvPlayer(controller, false, { versions++ }, null, { _, _ -> }, {}) }
+        }
+        compose.runOnIdle { controller.attach(readyView(READY_CHOOSE)) }
+        val until = { stage: PlaybackController.Stage ->
+            compose.waitUntil(10_000) {
+                Snapshot.sendApplyNotifications()
+                shadowOf(Looper.getMainLooper()).idle()
+                controller.stage == stage
+            }
+        }
+        until(PlaybackController.Stage.Buffering)
+        compose.runOnIdle { player.open() }
+        until(PlaybackController.Stage.Playing)
+        compose.runOnIdle { player.stall() }
+        until(PlaybackController.Stage.Buffering)
+        compose.waitUntil(10_000) { sent.any { "\"stalled\"" in it && "\"stalled\":true" in it } }
+        compose.waitForIdle()
+        compose.onNodeWithText(CHOOSE_ANOTHER).assertExists()
+        // The first D-pad key focuses it; OK opens Versions.
+        compose.onRoot().performKeyInput { pressKey(Key.DirectionDown) }
+        compose.waitForIdle()
+        compose.onNodeWithText(CHOOSE_ANOTHER).performKeyInput { pressKey(Key.DirectionCenter) }
+        compose.runOnIdle { assertEquals(1, versions) }
+        compose.runOnIdle { player.resume() }
+        compose.waitUntil(10_000) { sent.any { "\"stalled\":false" in it } }
+    }
 }
+
+/** The same, with the core offering another version (a stall of 30 s over the picture). */
+private const val READY_CHOOSE =
+    """{"phase":"ready","url":"http://127.0.0.1:7780/video.mp4","key":"k1","attempt":1,"manifest":false,""" +
+        """"subtitlesPending":false,"trakt":"off","subtitles":[],"chooseAnother":true}"""
 
 /** A playback snapshot with its stream, for [readyView]. */
 private const val READY =

@@ -143,8 +143,11 @@ fun TvPlayer(
     var panel by remember { mutableStateOf<Panel?>(null) }
     val ended = stage == Stage.Ended
     val showControls = osd && live && !ended && !opening
-    // Choose another version on the loading screen, 20 s after it showed (plans/versions-android-spec.md, 6).
-    val chooseShown = rememberChooseShown(opening)
+    // The loading screen over the paused picture while it waits for data.
+    val stalled = stage == Stage.Buffering && controller.picture
+    // Choose another version on the loading screen, 20 s after it showed, and over a stalled frame when the core
+    // offers it (30 s, plans/versions-android-spec.md, 6).
+    val chooseShown = rememberChooseShown(opening) || (stalled && controller.chooseAnother)
     val chooseFocus = remember { FocusRequester() }
     var chooseFocused by remember { mutableStateOf(false) }
     val showEnd = ended && !(autoplayNext && controller.next != null)
@@ -289,7 +292,7 @@ fun TvPlayer(
             .onPreviewKeyEvent { event ->
                 if (!active || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 // The button never takes focus by itself: the first D-pad key after it shows moves there.
-                if (opening && chooseShown && !chooseFocused && event.key in dpadKeys) {
+                if ((opening || stalled) && chooseShown && !chooseFocused && event.key in dpadKeys) {
                     runCatching { chooseFocus.requestFocus() }
                     return@onPreviewKeyEvent true
                 }
@@ -379,7 +382,6 @@ fun TvPlayer(
         )
 
         // The loading screen until the picture comes, and over the paused picture while it stalls.
-        val stalled = stage == Stage.Buffering && controller.picture
         if (opening || stalled) {
             LoadingLayer(
                 title = controller.title,
@@ -388,7 +390,7 @@ fun TvPlayer(
                 fill = { controller.loadingFill },
                 lines = loadingLines(controller.status, controller.start?.caption),
                 opening = opening,
-                choose = onVersions.takeIf { opening },
+                choose = onVersions.takeIf { opening || stalled },
                 chooseShown = chooseShown,
                 chooseFocus = chooseFocus,
                 chooseFocusChange = { chooseFocused = it },
