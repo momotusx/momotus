@@ -252,7 +252,7 @@ test("an episode not out yet: its day stands where Play was", async ({ browser }
     await expect(p.locator('[data-f="title:play"]')).toHaveCount(0);
     // No episode to play, so no versions to look for either.
     await expect(p.locator('[data-f="title:versions"]')).toHaveCount(0);
-    await expect(p.locator(".vline")).toHaveCount(0);
+    await expect(p.locator(".vnote")).toBeEmpty();
     // The episode itself is a plain row with its day: no play link, no versions.
     const later = p.locator('[data-f="ep:mqj1:1:2"]');
     await expect(later).toContainText("Airs Jan 1, 2099");
@@ -268,14 +268,14 @@ test("an episode not out yet: its day stands where Play was", async ({ browser }
 test("the title page names the version it plays, never the addon it comes from", async ({ browser }) => {
   // No addon name outside the Addons pages and Versions, which names the source on purpose
   // (design/DECISION.md, Shelves): not under Play, and not as where the details came from (this
-  // film's details and its stream come from the same addon).
+  // film's details and its stream come from the same addon). The pick itself shows only in Versions,
+  // so the note under the actions stays empty when a version plays.
   for (const form of ["desktop", "tv", "phone"] as const) {
     const viewport = form === "tv" ? { width: 1920, height: 1080 } : form === "phone" ? { width: 390, height: 844 } : { width: 1440, height: 900 };
     const { context, page: p } = await page(browser, viewport);
     await p.goto(`/title/movie/mqjm?form=${form}`);
-    await expect(p.locator(".vline .st")).toBeVisible({ timeout: 30_000 });
-    await expect(p.locator(".vline")).toContainText("Direct link");
-    await expect(p.locator(".vline")).not.toContainText("via");
+    await expect(p.locator('[data-f="title:play"]')).toHaveAttribute("href", /^\/play\/movie\/mqjm\//, { timeout: 30_000 });
+    await expect(p.locator(".vnote")).toBeEmpty();
     await expect(p.locator("body")).not.toContainText("Journey Fixture");
     await expect(p.locator(".facts")).not.toContainText(/Details from|Ratings from/);
     await context.close();

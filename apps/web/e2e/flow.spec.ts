@@ -271,19 +271,24 @@ test("onboarding: one decision per step, Back walks the steps", async ({ page })
   await expect(page.locator(".check")).not.toContainText("Core");
 });
 
-test("no dead ends: Add a source when nothing plays, a card with Back when nothing plays in the player", async ({ page }) => {
-  // Tom & Cherry: no addon here lists a version of it (the core's noResults).
+test("no dead ends: an inert Play with the reason under it, a card with Back when nothing plays in the player", async ({ page }) => {
+  // Tom & Cherry: no source has it (the core's noResults, whose only action is Back). Play keeps its
+  // place but is inert, the note under the actions says why, and TV's first focus is the next action
+  // (plans/play-every-version.md, the title page's row).
   await page.goto("/title/movie/tt43718175?form=tv");
-  const add = page.locator('[data-f="title:addsource"]');
-  await expect(add).toHaveText("Add a source", { timeout: 60_000 });
-  await expect(page.locator('[data-f="title:play"]')).toHaveCount(0);
-  await expect.poll(() => focused(page)).toBe("title:addsource");
+  const none = "No source has this yet";
+  await expect(page.locator(".vnote")).toHaveText(none, { timeout: 60_000 });
   // An owner's page offers Add to Library (the core's librarySettable; a kids profile's hides it).
   await expect(page.locator('[data-f="title:library"]')).toBeVisible();
-  // The title page keeps its own line until its empty-state step (design-web's).
-  await expect(page.locator(".vline")).toContainText("No playable version found");
-  // The player: the core's line.
-  const none = "No source has this yet";
+  const play = page.locator(".play-row .btn.primary");
+  await expect(play).toHaveAttribute("aria-disabled", "true");
+  await expect(play).not.toHaveAttribute("href", /.*/);
+  await expect(page.locator('[data-f="title:play"], [data-f="title:startover"], [data-f="title:addsource"]')).toHaveCount(0);
+  await expect.poll(() => focused(page)).toBe("title:versions");
+  // Not focusable: no key for the remote, no place in the Tab order.
+  expect(await play.evaluate((el) => ({ f: (el as HTMLElement).dataset.f ?? null, tab: (el as HTMLElement).tabIndex }))).toEqual({ f: null, tab: -1 });
+  await play.click({ force: true });
+  await expect(page).toHaveURL(/\/title\/movie\/tt43718175/);
 
   // Straight into the player: a centered card with the line and Back, its one action.
   await page.goto("/play/movie/tt43718175/tt43718175?form=tv");

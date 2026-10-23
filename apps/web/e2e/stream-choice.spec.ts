@@ -510,9 +510,12 @@ test.describe("Versions", () => {
     await page.waitForTimeout(300);
     expect(page.url()).toBe(url);
     await shot(page, "stream-choice-account", "desktop");
-    // A film with only Torrentio versions: the title says so under the hero, with no button for it.
+    // A film with only Torrentio versions: Play keeps its place but is inert (a page holding only Back is a
+    // dead end), and the note under the actions says why, quietly (the lead, 2026-10-23).
     await page.goto(`/title/movie/${SHAWSHANK}?form=desktop`);
-    await expect(page.locator(".vline")).toContainText("none plays on this device", { timeout: 60_000 });
+    await expect(page.locator(".vnote")).toHaveText(/^Found \d+ versions?, but none plays on this device\.$/, { timeout: 60_000 });
+    await expect(page.locator(".play-row .btn.primary")).toHaveAttribute("aria-disabled", "true");
+    await expect(page.locator('[data-f="title:play"]')).toHaveCount(0);
     await noAccountStep(page, ".title-scr");
     // The player, opened straight (a deep link), says the same (no playback is opened), with Back alone.
     await page.goto(`/play/movie/${SHAWSHANK}/${SHAWSHANK}?form=desktop`);

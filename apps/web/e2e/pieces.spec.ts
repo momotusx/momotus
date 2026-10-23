@@ -41,10 +41,10 @@ for (const form of Object.keys(FORMS) as Form[]) {
     if (form === "tv") await page.locator('[data-f="title:trailer"]').focus();
     const primary = await style(page, ".play-row .btn.primary");
     if (form !== "tv") expect(primary).toMatchObject({ background: form === "phone" ? "rgb(245, 245, 245)" : "rgba(255, 255, 255, 0.92)", color: "rgba(0, 0, 0, 0.88)", weight: "600", shadow: "none" });
-    // The title's round secondaries over the art: the fill, a pure white glyph, the 20 px blur.
+    // The title's round secondaries over the art: the fill and a pure white glyph, no blur.
     await page.locator('[data-f="title:versions"]').focus();
     const trailer = await style(page, '[data-f="title:trailer"] svg');
-    expect(trailer).toMatchObject({ background: "rgba(255, 255, 255, 0.16)", color: "rgb(255, 255, 255)", shadow: "none", blur: "blur(20px)" });
+    expect(trailer).toMatchObject({ background: "rgba(255, 255, 255, 0.16)", color: "rgb(255, 255, 255)", shadow: "none", blur: "none" });
     // A secondary on a plain page: the fill and no edge, and no blur with nothing to blur.
     await page.goto(`/addons?form=${form}`);
     const plain = page.locator('[data-f="addons:find"]');

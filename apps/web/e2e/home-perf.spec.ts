@@ -155,10 +155,10 @@ test("TV: the title's episodes walked by the remote and back paint little", asyn
     }
   });
   report("tv-title-episodes", result);
-  // Step 0 baseline (three runs, before phase 3/4): bounds at 1.5x the worst run and the passes plus 0.5;
-  // they tighten once step 1 takes the title's live blurs and masks away.
-  expect(result.paintMs, JSON.stringify(result)).toBeLessThan(36);
-  expect(result.passesPerFrame, JSON.stringify(result)).toBeLessThanOrEqual(5.5);
+  // Step 1 baseline (three runs, the title's live blurs and masks gone): 18.1 to 19.4 ms, 1.0 pass a frame
+  // (step 0: 23 ms and 4.7 to 5.0). Bounds at 1.5x the worst run and the passes plus 0.5.
+  expect(result.paintMs, JSON.stringify(result)).toBeLessThan(29);
+  expect(result.passesPerFrame, JSON.stringify(result)).toBeLessThanOrEqual(1.5);
   await page.close();
 });
 
@@ -179,10 +179,11 @@ test("desktop: a wheel run over the title page paints little", async ({ browser 
     }
   });
   report("desktop-title-wheel", result);
-  // Step 0 baseline (three runs, before phase 3/4): bounds at 1.5x the worst run and the passes plus 0.5;
-  // they tighten once step 1 takes the title's live blurs and masks away.
+  // Step 1 baseline (three runs): 13.9 to 22.1 ms, 1.0 pass a frame (step 0: 19 ms and 4.3 to 4.5). The paint
+  // left is the rows' hover changing as they slide under the pointer; a scripted scroll with the pointer
+  // away paints about 2 ms. The bound stays at step 0's 29 and the passes go to 1.5.
   expect(result.paintMs, JSON.stringify(result)).toBeLessThan(29);
-  expect(result.passesPerFrame, JSON.stringify(result)).toBeLessThanOrEqual(5);
+  expect(result.passesPerFrame, JSON.stringify(result)).toBeLessThanOrEqual(1.5);
   await page.close();
 });
 
@@ -208,9 +209,9 @@ test("phone: a glide down the title page and back paints little", async ({ brows
   });
   report("phone-title-glide", { ...result, scrolled });
   expect(scrolled).toBeGreaterThan(400);
-  // Step 0 baseline (three runs, before phase 3/4): bounds at 1.5x the worst run and the passes plus 0.5;
-  // they tighten once step 1 takes the title's live blurs and masks away.
-  expect(result.paintMs, JSON.stringify(result)).toBeLessThan(7);
-  expect(result.passesPerFrame, JSON.stringify(result)).toBeLessThanOrEqual(4.2);
+  // Step 1 baseline (three runs): 2.3 to 2.8 ms, 1.0 pass a frame (step 0: 3 to 4 ms and 3.7). Bounds at 1.5x
+  // the worst run and the passes plus 0.5.
+  expect(result.paintMs, JSON.stringify(result)).toBeLessThan(4.2);
+  expect(result.passesPerFrame, JSON.stringify(result)).toBeLessThanOrEqual(1.5);
   await context.close();
 });
