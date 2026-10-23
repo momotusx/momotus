@@ -239,6 +239,8 @@ struct DiscoverPreview: View {
     /// The snapshot's `preview`: shown only when it is this tile's.
     let details: ItemDetails?
     let open: () -> Void
+    /// Adds the item to the Library (true) or takes it out (`setInLibrary`, C44b).
+    let setLibrary: (Bool) -> Void
 
     var body: some View {
         let words = DiscoverWords.preview(tile, details)
@@ -259,7 +261,17 @@ struct DiscoverPreview: View {
             }
             HStack(spacing: 12) {
                 Button("Show", action: open).buttonStyle(PillButtonStyle(prominent: true))
-                // Add to Library joins here with C44b (the preview's Library state and set).
+                // Hidden until the details say the Library can be set for this item (never on a kids profile).
+                if let inLibrary = DiscoverWords.library(tile, details) {
+                    Button { setLibrary(!inLibrary) } label: {
+                        Label(inLibrary ? "In Library" : "Add to Library", glyph: inLibrary ? "bookmark-check" : "bookmark-plus")
+                    }
+                    .buttonStyle(PillButtonStyle())
+                    // A state, spoken as one: "In Library, toggle, on".
+                    .accessibilityLabel("In Library")
+                    .accessibilityAddTraits(.isToggle)
+                    .accessibilityValue(inLibrary ? "On" : "Off")
+                }
             }
         }
         .padding(16)

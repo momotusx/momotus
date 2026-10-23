@@ -105,6 +105,10 @@ struct ItemDetails: Decodable, Hashable, Sendable {
     let description: String?
     let genres: [String]
     let runtime: String?
+    /// In the Library as it stands; `setInLibrary {id, value}` on Discover changes it (C44b).
+    let inLibrary: Bool?
+    /// Add to Library can be offered: false on a kids profile.
+    let librarySettable: Bool?
 }
 
 /// A title page's genre chip: one `select {kind, genre}`, and the core opens the first catalog of
@@ -159,6 +163,13 @@ enum DiscoverWords {
         let genres = own.map { $0.genres.joined(separator: ", ") }.flatMap { $0.isEmpty ? nil : $0 }
         let parts = [kindWord(tile.kind), tile.releaseInfo, genres, own?.runtime].compactMap { $0 }.filter { !$0.isEmpty }
         return (parts, own?.description.flatMap { $0.isEmpty ? nil : $0 })
+    }
+
+    /// The preview's Library state for its own item: nil hides Add to Library (no details yet, details
+    /// for another item, or a profile whose Library cannot be set).
+    static func library(_ tile: Tile, _ details: ItemDetails?) -> Bool? {
+        guard let details, details.id == tile.id, details.librarySettable == true else { return nil }
+        return details.inLibrary ?? false
     }
 
     /// The state line under the filters, if any.

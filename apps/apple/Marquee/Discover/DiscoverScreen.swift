@@ -70,9 +70,12 @@ struct DiscoverScreen: View {
                         selection: $selection, onEnd: { loadMore(s) })
                 }
                 if let preview {
-                    DiscoverPreview(tile: preview, details: discover.snapshot?.preview) { openTitle(TitleRoute(preview)) }
-                        .padding(.top, Theme.Space.l)
-                        .padding(.trailing, DiscoverLayout.margin)
+                    DiscoverPreview(tile: preview, details: discover.snapshot?.preview, open: { openTitle(TitleRoute(preview)) }) { value in
+                        discover.command(["type": "setInLibrary", "id": preview.id, "value": value])
+                        sync.schedule()
+                    }
+                    .padding(.top, Theme.Space.l)
+                    .padding(.trailing, DiscoverLayout.margin)
                 }
             }
         } else {

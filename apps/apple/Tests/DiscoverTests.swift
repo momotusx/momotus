@@ -148,12 +148,12 @@ private func snapshot(
 @Test func thePreviewReadsTheCoresDetailsForItsOwnItem() throws {
     let s = try snapshot(items: 2)
     let tile = try #require(s.items.first)
-    let details = ItemDetails(id: tile.id, description: "A thief who steals secrets.", genres: ["Action", "Sci-Fi"], runtime: "148 min")
+    let details = ItemDetails(id: tile.id, description: "A thief who steals secrets.", genres: ["Action", "Sci-Fi"], runtime: "148 min", inLibrary: false, librarySettable: true)
     let words = DiscoverWords.preview(tile, details)
     #expect(words.parts == ["Movie", "2020", "Action, Sci-Fi", "148 min"])
     #expect(words.synopsis == "A thief who steals secrets.")
     // Details for another item (the last selection's, still in the snapshot) are not this one's.
-    let other = ItemDetails(id: "tt999", description: "Another.", genres: ["Drama"], runtime: "90 min")
+    let other = ItemDetails(id: "tt999", description: "Another.", genres: ["Drama"], runtime: "90 min", inLibrary: true, librarySettable: true)
     #expect(DiscoverWords.preview(tile, other).parts == ["Movie", "2020"])
     #expect(DiscoverWords.preview(tile, other).synopsis == nil)
     #expect(DiscoverWords.preview(tile, nil).parts == ["Movie", "2020"])
@@ -161,5 +161,26 @@ private func snapshot(
     let screen = try source("Discover/DiscoverScreen.swift")
     #expect(screen.contains("discover.command([\"type\": \"preview\", \"id\": ask.id])"))
     #expect(screen.contains("DiscoverPreviewAsk(id: tile.id, list: s.list)"))
-    #expect(screen.contains("DiscoverPreview(tile: preview, details: discover.snapshot?.preview)"))
+    #expect(screen.contains("DiscoverPreview(tile: preview, details: discover.snapshot?.preview,"))
+}
+
+@Test func addToLibraryShowsOnlyWhereTheLibraryCanBeSet() throws {
+    let s = try snapshot(items: 1)
+    let tile = try #require(s.items.first)
+    func details(id: String? = nil, in inLibrary: Bool?, settable: Bool?) -> ItemDetails {
+        ItemDetails(id: id ?? tile.id, description: nil, genres: [], runtime: nil, inLibrary: inLibrary, librarySettable: settable)
+    }
+    #expect(DiscoverWords.library(tile, details(in: false, settable: true)) == false)
+    #expect(DiscoverWords.library(tile, details(in: true, settable: true)) == true)
+    // A kids profile, a core from before C44b, another item's details, or none yet: no button.
+    #expect(DiscoverWords.library(tile, details(in: false, settable: false)) == nil)
+    #expect(DiscoverWords.library(tile, details(in: nil, settable: nil)) == nil)
+    #expect(DiscoverWords.library(tile, details(id: "tt999", in: true, settable: true)) == nil)
+    #expect(DiscoverWords.library(tile, nil) == nil)
+    // The button sends setInLibrary for the previewed item, then the change syncs, as on the title page.
+    let screen = try source("Discover/DiscoverScreen.swift")
+    #expect(screen.contains("discover.command([\"type\": \"setInLibrary\", \"id\": preview.id, \"value\": value])\n                        sync.schedule()"))
+    let preview = try body(of: "struct DiscoverPreview: View", in: source("Discover/DiscoverParts.swift"))
+    #expect(preview.contains("if let inLibrary = DiscoverWords.library(tile, details) {"))
+    #expect(preview.contains("Button { setLibrary(!inLibrary) }"))
 }
