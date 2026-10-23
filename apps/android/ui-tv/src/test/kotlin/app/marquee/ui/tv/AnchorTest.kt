@@ -96,9 +96,12 @@ class AnchorTest {
     fun `a TV stick short of memory composes fewer lanes ahead`() {
         assertEquals(1f, aheadFraction(lowMemory = false))
         assertEquals(0.5f, aheadFraction(lowMemory = true))
+        // Home's state takes the device's word.
+        assertEquals(1f, TvHomeState().ahead)
+        assertEquals(0.5f, TvHomeState(lowMemory = true).ahead)
         // Low-RAM by the system's word, or 192 MB of heap or less (most sticks); a phone's 256 or more is not.
-        assertEquals(true, lowMemory(lowRamDevice = true, memoryClassMb = 512))
-        assertEquals(true, lowMemory(lowRamDevice = false, memoryClassMb = 192))
-        assertEquals(false, lowMemory(lowRamDevice = false, memoryClassMb = 256))
+        assertEquals(true, isLowMemoryDevice(lowRamDevice = true, memoryClassMb = 512))
+        assertEquals(true, isLowMemoryDevice(lowRamDevice = false, memoryClassMb = 192))
+        assertEquals(false, isLowMemoryDevice(lowRamDevice = false, memoryClassMb = 256))
     }
 }

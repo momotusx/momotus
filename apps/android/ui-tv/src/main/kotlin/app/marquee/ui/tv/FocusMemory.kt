@@ -141,10 +141,13 @@ fun FocusMemory.watch(
  * screen's view model; the lists are plain objects so their positions survive the composition.
  */
 class TvHomeState(
-    /** A device short of memory (a TV stick, [lowMemory]): Home keeps fewer lanes composed ahead. */
+    /** A device short of memory (a TV stick, [isLowMemoryDevice]): Home keeps fewer lanes composed ahead. */
     lowMemory: Boolean = false,
 ) {
     val focus = FocusMemory()
+
+    /** How far ahead of the screen the page composes lanes, in screens: see [page]. */
+    internal val ahead = aheadFraction(lowMemory)
 
     /**
      * The lanes ahead are composed while the page is idle, tile by tile: a Down brings the next lane into view
@@ -156,7 +159,7 @@ class TvHomeState(
      * 2026-10-23), so a low-memory device keeps 0.5 ahead; none at all there if a stick still runs short.
      */
     @OptIn(ExperimentalFoundationApi::class)
-    val page = LazyListState(LazyLayoutCacheWindow(aheadFraction = aheadFraction(lowMemory), behindFraction = 0.3f))
+    val page = LazyListState(LazyLayoutCacheWindow(aheadFraction = ahead, behindFraction = 0.3f))
     private val rows = HashMap<String, LazyListState>()
 
     fun rowState(rowId: String): LazyListState = rows.getOrPut(rowId) { LazyListState() }
@@ -172,7 +175,7 @@ internal fun aheadFraction(lowMemory: Boolean): Float = if (lowMemory) 0.5f else
  * A device short of memory, where Home composes fewer lanes ahead: one the system calls low on RAM, or one
  * that gives an app [memoryClassMb] or less of heap, which most TV sticks do.
  */
-fun lowMemory(
+fun isLowMemoryDevice(
     lowRamDevice: Boolean,
     memoryClassMb: Int,
 ): Boolean = lowRamDevice || memoryClassMb <= LOW_MEMORY_CLASS_MB

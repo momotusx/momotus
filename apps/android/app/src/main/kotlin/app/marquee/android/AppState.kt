@@ -37,7 +37,7 @@ class AppState(
     caps: CapsSource,
     /** The gate's shuts before this state existed (a new activity in a running process): nothing to reset. */
     shutsBefore: Int,
-    /** A device short of memory: TV Home composes fewer lanes ahead ([lowMemory]). */
+    /** A device short of memory: TV Home composes fewer lanes ahead (isLowMemoryDevice). */
     private val lowMemory: Boolean = false,
 ) : ViewModel() {
     var start: Start by mutableStateOf(Start.Loading)
