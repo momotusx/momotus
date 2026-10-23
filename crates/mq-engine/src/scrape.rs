@@ -224,7 +224,7 @@ impl Scraper {
             scope: scope.clone(),
             names: names.clone(),
         };
-        let http = reqwest::Client::builder()
+        let http = mq_http::with_device_roots(reqwest::Client::builder())
             .no_proxy()
             .redirect(reqwest::redirect::Policy::none())
             .pool_max_idle_per_host(0)

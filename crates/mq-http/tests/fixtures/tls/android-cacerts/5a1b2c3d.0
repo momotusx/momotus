@@ -1,0 +1,42 @@
+-----BEGIN CERTIFICATE-----
+MIIBZDCCAQqgAwIBAgIULqfKnq7kX1QDzw+elz48OecEVccwCgYIKoZIzj0EAwIw
+FzEVMBMGA1UEAwwMZml4dHVyZS50ZXN0MCAXDTI2MTAxODE4MzExMFoYDzIxMjYw
+OTI0MTgzMTEwWjAXMRUwEwYDVQQDDAxmaXh0dXJlLnRlc3QwWTATBgcqhkjOPQIB
+BggqhkjOPQMBBwNCAAQtNoB5g2uZF8iPnTkGjE20HiXDt2L3y7m6N3VUAiJ4bVhR
+eAqW2XldOrE0onH7MgEw7u+40cEAlnEYt3p5IY/oozIwMDAdBgNVHQ4EFgQUv6Tf
+7jyA0tZaiMfD7dLRl/i6oREwDwYDVR0TAQH/BAUwAwEB/zAKBggqhkjOPQQDAgNI
+ADBFAiAaH9wFC9vRZUyatrM/eWxdHANpioCpQE0XFB/cLPKINQIhAJi3F6Alt9Js
+3Gc2PIJPczYFmoNFKzXTvsMVXfpCTUDO
+-----END CERTIFICATE-----
+Certificate:
+    Data:
+        Version: 3 (0x2)
+        Serial Number:
+            2e:a7:ca:9e:ae:e4:5f:54:03:cf:0f:9e:97:3e:3c:39:e7:04:55:c7
+        Signature Algorithm: ecdsa-with-SHA256
+        Issuer: CN=fixture.test
+        Validity
+            Not Before: Oct 18 18:31:10 2026 GMT
+            Not After : Sep 24 18:31:10 2126 GMT
+        Subject: CN=fixture.test
+        Subject Public Key Info:
+            Public Key Algorithm: id-ecPublicKey
+                Public-Key: (256 bit field, 128 bit security level)
+                pub:
+                    04:2d:36:80:79:83:6b:99:17:c8:8f:9d:39:06:8c:4d:
+                    b4:1e:25:c3:b7:62:f7:cb:b9:ba:37:75:54:02:22:78:
+                    6d:58:51:78:0a:96:d9:79:5d:3a:b1:34:a2:71:fb:32:
+                    01:30:ee:ef:b8:d1:c1:00:96:71:18:b7:7a:79:21:8f:
+                    e8
+                ASN1 OID: prime256v1
+                NIST CURVE: P-256
+        X509v3 extensions:
+            X509v3 Subject Key Identifier: 
+                BF:A4:DF:EE:3C:80:D2:D6:5A:88:C7:C3:ED:D2:D1:97:F8:BA:A1:11
+            X509v3 Basic Constraints: critical
+                CA:TRUE
+    Signature Algorithm: ecdsa-with-SHA256
+    Signature Value:
+        30:45:02:20:1a:1f:dc:05:0b:db:d1:65:4c:9a:b6:b3:3f:79:6c:5d:1c:03:69:8a:
+        80:a9:40:4d:17:14:1f:dc:2c:f2:88:35:02:21:00:98:b7:17:a0:25:b7:d2:6c:dc:
+        67:36:3c:82:4f:73:36:05:9a:83:45:2b:35:d3:be:c3:15:5d:fa:42:4d:40:ce

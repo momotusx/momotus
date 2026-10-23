@@ -505,6 +505,11 @@ pub struct SessionOptions {
     /// Marquee fork (C27): the address policy.
     pub destinations: Option<Destinations>,
 
+    /// Marquee fork (C29): the only roots the HTTPS trackers are verified
+    /// against (the device's CA store on Android); `None` keeps reqwest's
+    /// own verifier.
+    pub tls_roots: Option<Vec<reqwest::Certificate>>,
+
     /// Marquee fork (engine review r3, P2-2): with no `persistence`, keep
     /// each torrent's have-bitfield in this folder (`<info hash>.have`), so
     /// a relaunch skips the full check. The torrents themselves are not
@@ -539,6 +544,7 @@ impl Default for SessionOptions {
             ipv4_only: false,
             client_name_and_version: None,
             destinations: None,
+            tls_roots: None,
             bitv_folder: None,
         }
     }
@@ -798,6 +804,10 @@ impl Session {
                     None => builder,
                 };
 
+                let builder = match opts.tls_roots.clone() {
+                    Some(roots) => builder.tls_certs_only(roots),
+                    None => builder,
+                };
                 builder
                     .user_agent(&client_name_and_version)
                     .build()

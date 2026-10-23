@@ -907,11 +907,78 @@ fn redirect_allowed(first: &Url, next: &Url) -> bool {
     private(first) || !private(next)
 }
 
+/// Where Android keeps the system's trusted CAs: the Conscrypt APEX since
+/// Android 14 (updated through the Play Store), else the system image.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+const ANDROID_CA_DIRS: [&str; 2] = [
+    "/apex/com.android.conscrypt/cacerts",
+    "/system/etc/security/cacerts",
+];
+
+/// The roots every HTTPS client of the core verifies against: on Android
+/// the device's own CA store, read once, checked by rustls's WebPKI with no
+/// online revocation, as OkHttp, ExoPlayer and Chrome on Android do (core
+/// backlog C29, the owner's decision of 2026-10-23). The platform verifier
+/// it replaces scanned the whole store on every new certificate and fetched
+/// the CA's revocation list inside the handshake: 4 to 5 s per new host, and
+/// a Let's Encrypt site failed as "Revoked" when that list's host was out
+/// of reach. `None` elsewhere: each system's own verifier.
+pub fn device_roots() -> Option<Vec<reqwest::Certificate>> {
+    #[cfg(target_os = "android")]
+    {
+        static ROOTS: std::sync::LazyLock<Vec<reqwest::Certificate>> =
+            std::sync::LazyLock::new(|| roots_in(&ANDROID_CA_DIRS.map(std::path::Path::new)));
+        Some(ROOTS.clone())
+    }
+    #[cfg(not(target_os = "android"))]
+    None
+}
+
+/// Every certificate in the first of `dirs` that holds any (one PEM file a
+/// certificate, Android's layout); a file that is no certificate is passed
+/// over.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn roots_in(dirs: &[&std::path::Path]) -> Vec<reqwest::Certificate> {
+    for dir in dirs {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            continue;
+        };
+        let roots: Vec<_> = entries
+            .flatten()
+            .filter_map(|e| std::fs::read(e.path()).ok())
+            .filter_map(|pem| trust_anchor(&pem))
+            .collect();
+        if !roots.is_empty() {
+            return roots;
+        }
+    }
+    tracing::warn!("no CA certificates found in {dirs:?}");
+    Vec::new()
+}
+
+/// A PEM file's certificate when rustls takes it as a root; reqwest itself
+/// reads any text as one and would fail the client's build on it.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn trust_anchor(pem: &[u8]) -> Option<reqwest::Certificate> {
+    use rustls::pki_types::{CertificateDer, pem::PemObject};
+    let der = CertificateDer::from_pem_slice(pem).ok()?;
+    rustls::RootCertStore::empty().add(der.clone()).ok()?;
+    reqwest::Certificate::from_der(&der).ok()
+}
+
+/// `builder` verifying against `device_roots` where there are some.
+pub fn with_device_roots(builder: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
+    match device_roots() {
+        Some(roots) => builder.tls_certs_only(roots),
+        None => builder,
+    }
+}
+
 /// What every client shares, scoped or not. TCP keepalive finds a pooled
 /// connection the network dropped on platforms that send no network change
 /// (`network_changed` drops the pools at once where they do).
 fn builder(config: &ClientConfig) -> reqwest::ClientBuilder {
-    let builder = reqwest::Client::builder()
+    let builder = with_device_roots(reqwest::Client::builder())
         .user_agent(config.user_agent.clone())
         .connect_timeout(config.connect_timeout)
         .pool_idle_timeout(Duration::from_secs(90))
@@ -1522,6 +1589,37 @@ fn over_limit(len: u64, max_bytes: usize) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Core backlog C29: Android's CA folder read as Android lays it out
+    /// (each file a PEM certificate followed by its text dump), a file that
+    /// is no certificate passed over, and the system image's folder taken
+    /// when the Conscrypt APEX's is missing or empty.
+    #[test]
+    fn the_device_roots_are_read_from_the_first_ca_folder_that_has_any() {
+        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/tls/android-cacerts");
+        let empty = std::env::temp_dir().join(format!("mq-cacerts-{}", std::process::id()));
+        std::fs::create_dir_all(&empty).unwrap();
+        let missing = empty.join("apex-cacerts");
+        assert_eq!(
+            roots_in(&[&fixture]).len(),
+            1,
+            "one certificate, the notes passed over"
+        );
+        assert_eq!(
+            roots_in(&[&missing, &fixture]).len(),
+            1,
+            "no APEX folder: the system one"
+        );
+        assert_eq!(
+            roots_in(&[&empty, &fixture]).len(),
+            1,
+            "an empty APEX folder: the system one"
+        );
+        assert!(roots_in(&[&missing]).is_empty());
+        assert!(device_roots().is_none(), "this host keeps its own verifier");
+        std::fs::remove_dir(&empty).unwrap();
+    }
 
     /// The dev recorder takes a public host's request whole (path encoding,
     /// port, query), and never one for this machine or the LAN.
