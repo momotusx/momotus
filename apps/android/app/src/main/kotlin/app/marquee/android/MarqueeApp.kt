@@ -15,7 +15,6 @@ import app.marquee.core.session.CoreSession
 import app.marquee.core.trakt.SecretTraktRecords
 import app.marquee.core.trakt.TraktAccount
 import app.marquee.design.createImageLoader
-import app.marquee.ui.tv.isLowMemoryDevice
 import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
@@ -71,10 +70,11 @@ class MarqueeApp :
     lateinit var deviceCaps: CapsSource
         private set
 
-    /** Short of memory (most TV sticks): TV Home composes fewer lanes ahead. */
-    val lowMemory: Boolean by lazy {
-        getSystemService(ActivityManager::class.java).let { isLowMemoryDevice(it.isLowRamDevice, it.memoryClass) }
-    }
+    /**
+     * Low on RAM by the system's word, as the image loader reads it: TV Home composes fewer lanes ahead. ponytail:
+     * no heap-size threshold until a stick's numbers say one is needed.
+     */
+    val lowMemory: Boolean by lazy { getSystemService(ActivityManager::class.java).isLowRamDevice }
 
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)

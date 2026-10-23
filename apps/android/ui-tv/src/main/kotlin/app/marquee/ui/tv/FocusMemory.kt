@@ -141,7 +141,7 @@ fun FocusMemory.watch(
  * screen's view model; the lists are plain objects so their positions survive the composition.
  */
 class TvHomeState(
-    /** A device short of memory (a TV stick, [isLowMemoryDevice]): Home keeps fewer lanes composed ahead. */
+    /** The system calls this device low on RAM (ActivityManager.isLowRamDevice): fewer lanes composed ahead. */
     lowMemory: Boolean = false,
 ) {
     val focus = FocusMemory()
@@ -170,17 +170,6 @@ class TvHomeState(
 
 /** How far ahead of the screen Home composes lanes, in screens: see [TvHomeState.page]. */
 internal fun aheadFraction(lowMemory: Boolean): Float = if (lowMemory) 0.5f else 1f
-
-/**
- * A device short of memory, where Home composes fewer lanes ahead: one the system calls low on RAM, or one
- * that gives an app [memoryClassMb] or less of heap, which most TV sticks do.
- */
-fun isLowMemoryDevice(
-    lowRamDevice: Boolean,
-    memoryClassMb: Int,
-): Boolean = lowRamDevice || memoryClassMb <= LOW_MEMORY_CLASS_MB
-
-private const val LOW_MEMORY_CLASS_MB = 192
 
 /**
  * A screen's first focus: on [target] once there is one (it often comes late, with the data), or on
