@@ -9,7 +9,7 @@ import org.junit.runner.RunWith
 /**
  * The baseline profile: a start to Home and its scroll, a start onto a title page, then the TV tree's Home and
  * Discover moved through with the D-pad. The plugin writes the rules to app/src/main/generated/baselineProfiles
- * (`scripts/gw.sh :app:generateBaselineProfile` with this class alone, see app/build.gradle.kts).
+ * (`scripts/gw.sh :app:generateBaselineProfile`, which runs this class alone, see macrobenchmark/build.gradle.kts).
  */
 @RunWith(AndroidJUnit4::class)
 class BaselineProfileGenerator {

@@ -5,8 +5,7 @@ plugins {
 
 // Startup, Home scroll and playback start on a device or emulator, and the baseline profile generator.
 // Benchmarks: ANDROID_SERIAL=<serial> ./gradlew :macrobenchmark:connectedBenchmarkReleaseAndroidTest
-// Profile (the generator alone, see app/build.gradle.kts): ANDROID_SERIAL=<serial> ./gradlew :app:generateBaselineProfile
-//   -Pandroid.testInstrumentationRunnerArguments.class=app.marquee.macrobenchmark.BaselineProfileGenerator
+// Profile: ANDROID_SERIAL=<serial> ./gradlew :app:generateBaselineProfile (the generator alone, see below)
 android {
     namespace = "app.marquee.macrobenchmark"
     compileSdk = 37
@@ -31,6 +30,15 @@ android {
 // The connected emulator or device records the profile, with no managed device.
 baselineProfile {
     useConnectedDevices = true
+}
+
+// The profile's run is the generator alone: over the whole module (the frame and startup tests skipped) the
+// Pixel's test results listed no profile, and the plugin emptied the app's (2026-10-22, app/build.gradle.kts).
+// Only the profile's variant: the benchmarks keep every test.
+androidComponents {
+    onVariants(selector().withBuildType("nonMinifiedRelease")) {
+        it.instrumentationRunnerArguments.put("class", "app.marquee.macrobenchmark.BaselineProfileGenerator")
+    }
 }
 
 dependencies {
