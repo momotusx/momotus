@@ -1797,6 +1797,8 @@ async fn find_segments(
 /// Under the view's lock, which the lease's drop follows with the server's:
 /// never the reverse.
 fn release_all(s: &mut State) {
+    // Any stall was the released source's: its watcher stands down.
+    s.stall += 1;
     s.snapshot.url = None;
     s.snapshot.manifest = false;
     s.snapshot.subtitles.clear();
@@ -1896,6 +1898,8 @@ fn adopt(s: &mut State, run: u64, lease: Lease) -> bool {
     s.snapshot.url = Some(lease.url.clone());
     s.snapshot.manifest = lease.format.is_some();
     s.snapshot.attempt += 1;
+    // A new source: no stall of an earlier one carries over.
+    s.stall += 1;
     s.lease = Some(lease);
     // A source plays: what failed before it says nothing about a later
     // failure, and the move on that led here is over (code review

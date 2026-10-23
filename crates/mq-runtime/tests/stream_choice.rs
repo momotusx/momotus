@@ -2049,6 +2049,53 @@ async fn a_stall_of_30s_moves_the_recommendation_on_once_with_its_position() {
     assert!(!playback.snapshot().choose_another);
 }
 
+/// 2e, review 2026-10-23: a stall's watcher stands down when the source
+/// changes. The recommendation stalls, then fails over to its other source
+/// with no "stalled: false"; 30 s on, the healthy second source is never
+/// moved, and the play keeps its one move.
+#[tokio::test]
+async fn a_stall_ends_with_its_source() {
+    let row = |name| (name, media_fixture("h264.mp4"));
+    let (core, _server, keys) = direct_rows(vec![
+        row("Show.S01E01.1080p.WEB-DL.x264-ONE"),
+        row("Show.S01E01.1080p.WEB-DL.x264-ONE"),
+        row("Show.S01E01.720p.WEB-DL.x264-TWO"),
+    ])
+    .await;
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    let pick = view.snapshot().recommended.unwrap();
+    assert_eq!(pick.failover_count, 1, "two sources of one version");
+    let playback = play(&core, &view, &pick.key);
+    until("ready", || playback.snapshot().url.is_some()).await;
+    for at in [10_000, 12_000] {
+        playback.report_progress(at, 600_000, false);
+    }
+    playback.stalled(true, 12_500);
+    let first = playback.snapshot().key.unwrap();
+    playback.fail_over(None, Some("network"), None, "gone");
+    until("the other source", || {
+        playback
+            .snapshot()
+            .key
+            .as_ref()
+            .is_some_and(|k| *k != first)
+    })
+    .await;
+    let second = playback.snapshot().key.unwrap();
+    assert!(keys[..2].contains(&second), "{second}");
+    tokio::time::sleep(Duration::from_secs(33)).await;
+    let s = playback.snapshot();
+    assert_eq!(s.key.as_ref(), Some(&second), "the healthy source moved");
+    assert!(
+        s.attempts
+            .iter()
+            .all(|a| a.error != "The video stopped loading"),
+        "{:?}",
+        s.attempts
+    );
+    assert!(!s.choose_another);
+}
+
 /// 2e, bench EW-3's shape: a stall right after a seek (17.2 s there) never
 /// moves the version, however long it lasts; "Choose another version"
 /// shows after 30 s. A version picked by hand never moves either.
