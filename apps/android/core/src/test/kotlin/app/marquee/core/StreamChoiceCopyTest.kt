@@ -178,6 +178,7 @@ class StreamChoiceCopyTest {
                                 put("shared", SOURCE_SHARED)
                             },
                         )
+                        put("details", DETAILS)
                         put("bestTv", BEST_TV)
                         put("bestPhone", BEST_PHONE)
                         put("smaller", SMALLER)

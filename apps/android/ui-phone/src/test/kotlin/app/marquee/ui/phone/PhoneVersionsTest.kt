@@ -2,13 +2,26 @@ package app.marquee.ui.phone
 
 import android.os.Handler
 import android.os.Looper
+import androidx.activity.OnBackPressedDispatcher
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
@@ -143,6 +156,7 @@ class PhoneVersionsTest {
 
     private val played = mutableListOf<String>()
     private var accounts = 0
+    private var back: OnBackPressedDispatcher? = null
     private var backs = 0
     private val undone = mutableListOf<LearnedNote>()
 
@@ -161,6 +175,7 @@ class PhoneVersionsTest {
         }
         val view = VersionsView(client, scope, JsonObject(emptyMap()))
         compose.setContent {
+            back = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
             MarqueeTheme(Form.Phone) {
                 PhoneVersions(
                     "Sintel",
@@ -193,21 +208,34 @@ class PhoneVersionsTest {
     }
 
     @Test
-    fun `a row says its line with no addon name, and a tap opens it to the details and its own Play`() {
+    fun `one tap plays a row, its Details open a sheet with its own Play, and Back closes the sheet first`() {
         show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), listOf(row("a", ReasonLine.Quick(1204, 2 * gib)))))
         compose.onAllNodesWithText("This phone", substring = true).assertCountEquals(0)
         compose.onAllNodesWithText("Torrentio", substring = true).assertCountEquals(0)
-        compose.onNodeWithText("2 GB, shared by 1,204 people").assertIsDisplayed()
-        compose.onAllNodesWithText("1,204 seeders, 2 GB").assertCountEquals(0)
-        compose.onNodeWithText("2 GB, shared by 1,204 people").performClick()
-        compose.onNodeWithText("1,204 seeders, 2 GB").assertIsDisplayed()
-        // The card's white Play and the row's own.
-        compose.onAllNodesWithText("Play this version").assertCountEquals(2)
-        compose.onAllNodesWithText("Play this version")[1].performClick()
+        // One tap plays: no open-first step.
+        compose.onNodeWithText("2 GB, shared by 1,204 people").assertIsDisplayed().performClick()
         assertEquals(listOf("a"), played)
-        // A second tap closes it.
-        compose.onNodeWithText("2 GB, shared by 1,204 people").performClick()
-        compose.onAllNodesWithText("1,204 seeders, 2 GB").assertCountEquals(0)
+        // The info button, the row's sibling at its trailing edge, opens the sheet; the reader has the row's Details.
+        val rowNode = compose.onNodeWithContentDescription("1080p, HDR, 2 GB, shared by 1,204 people")
+        val bounds = rowNode.fetchSemanticsNode().boundsInRoot
+        compose.onRoot().performTouchInput { click(Offset(bounds.right + 24 * density, bounds.center.y)) }
+        compose.onNodeWithTag(DETAILS_SHEET).assertIsDisplayed()
+        compose.onNodeWithText("1,204 seeders, 2 GB").assertIsDisplayed()
+        compose.onNode(hasText("Play this version") and hasAnyAncestor(hasTestTag(DETAILS_SHEET))).performClick()
+        assertEquals(listOf("a", "a"), played)
+        // Back closes the sheet; the page stays.
+        compose.runOnIdle { back!!.onBackPressed() }
+        compose.onAllNodesWithTag(DETAILS_SHEET).assertCountEquals(0)
+        assertEquals(0, backs)
+        // The reader's way in: the row's Details action.
+        compose.runOnIdle {
+            rowNode
+                .fetchSemanticsNode()
+                .config[SemanticsActions.CustomActions]
+                .single { it.label == "Details" }
+                .action()
+        }
+        compose.onNodeWithTag(DETAILS_SHEET).assertIsDisplayed()
     }
 
     @Test
@@ -252,7 +280,6 @@ class PhoneVersionsTest {
         // Dimmed, and still startable: a tap opens it to its own Play.
         compose.onAllNodesWithText("May start slowly", substring = true).assertCountEquals(0)
         compose.onNodeWithText("Won't play here", substring = true).performClick()
-        compose.onNodeWithText("Play this version").performClick()
         assertEquals(listOf("a"), played)
         compose.onNodeWithText("Back").performClick()
         assertEquals(1, backs)

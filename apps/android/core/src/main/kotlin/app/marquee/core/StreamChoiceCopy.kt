@@ -206,6 +206,9 @@ object StreamChoiceCopy {
     const val SOURCE_DOWNLOAD = "downloads first"
     const val SOURCE_SHARED = "shared by {people}"
 
+    /** A row's details: its info button's and its screen-reader action's words, and the sheet's title. */
+    const val DETAILS = "Details"
+
     /** The card's kicker, by form. */
     const val BEST_TV = "Best for this TV"
     const val BEST_PHONE = "Best for this phone"

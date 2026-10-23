@@ -125,6 +125,7 @@
     "showAll": "Show all {n}",
     "showFewer": "Show fewer",
     "back": "Back",
+    "details": "Details",
     "bestTv": "Best for this TV",
     "bestPhone": "Best for this phone",
     "source": { "ready": "ready now", "direct": "direct link", "download": "downloads first", "shared": "shared by {people}" },

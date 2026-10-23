@@ -1,6 +1,10 @@
 package app.marquee.ui.phone
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +14,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -19,6 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -31,12 +37,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.collapse
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.expand
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -67,6 +77,7 @@ import app.marquee.design.MqText
 import app.marquee.design.ON_ARRIVAL_MS
 import app.marquee.design.PlayFilled
 import app.marquee.design.PrimaryButton
+import app.marquee.design.RoundButton
 import app.marquee.design.SecondaryButton
 import app.marquee.design.Skeleton
 import app.marquee.design.StateMessage
@@ -125,8 +136,15 @@ fun PhoneVersions(
         }
         Unit
     }
-    // The row a tap opened to its details and Play.
-    var opened by remember { mutableStateOf<String?>(null) }
+    // The row whose details sheet is open, and each row's info button, which takes the focus back when it closes.
+    var sheet by remember { mutableStateOf<VersionRow?>(null) }
+    var lastSheet by remember { mutableStateOf<String?>(null) }
+    val infos = remember { mutableMapOf<String, FocusRequester>() }
+    LaunchedEffect(sheet) {
+        if (sheet == null) lastSheet?.let { key -> infos[key]?.let { runCatching { it.requestFocus() } } }
+    }
+    // A press pins the pick, so the version under the finger at the press is the one its release plays.
+    val press = { if (snapshot?.recommended != null && snapshot.frozen != true) versions?.freeze() }
     val failure = (versions?.status as? ViewStatus.Failed)?.reason
     val listState = rememberLazyListState()
     // The first scroll pins the recommendation, once there is one: a pin before that would keep the
@@ -147,86 +165,99 @@ fun PhoneVersions(
     // The order the rows showed in, recorded after they show: held reads it, and composition changes nothing.
     if (held) LaunchedEffect(sections.flatMap { s -> s.rows.map { it.key } }) { VersionsCopy.record(sections, seen) }
     val open = remember { mutableStateMapOf<String, Boolean>() }
-    LazyColumn(
-        state = listState,
-        modifier = modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars),
-        contentPadding = PaddingValues(start = side, end = side, top = Marquee.space.m, bottom = Marquee.space.xl),
-        verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-    ) {
-        item(key = "head") {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                MqText(heading, role = TextRole.Callout, color = colors.dim, weight = FontWeight.SemiBold, maxLines = 1)
-                MqText("Versions", role = TextRole.Title1, maxLines = 1)
-                VersionsCopy.progress(snapshot)?.let { (text, tone) ->
-                    StatusWord(text, tone(tone), Modifier.padding(top = 4.dp))
-                }
-            }
-        }
-        item(key = "best") {
-            Pick(
-                snapshot,
-                failure,
-                { versions?.retry() },
-                onPlay,
-                Modifier.padding(vertical = Marquee.space.s),
-            ) {
-                if (empty != null) Empty(empty, step)
-            }
-        }
-        // The shortcuts under the card, each one tap to play; keyed apart from the section rows they may repeat.
-        for ((label, row) in VersionsCopy.shortcuts(snapshot)) {
-            val key = if (label == StreamChoiceCopy.SMALLER) "short:smaller" else "short:sharper"
-            item(key = key) {
-                SecondaryButton(
-                    VersionsCopy.shortcutLabel(label, row),
-                    { onPlay(row.key) },
-                    Modifier.fillMaxWidth(),
-                    icon = if (label == StreamChoiceCopy.SMALLER) Icons.Gauge else Icons.Gem,
-                )
-            }
-        }
-        for (section in sections) {
-            val group = section.id
-            val rows = section.rows
-            val all = open[group] == true
-            item(key = group) {
-                // A plain heading, no outline (design/DECISION.md, Lines).
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(top = Marquee.space.xs)
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    CapsLabel(
-                        section.title,
-                        Modifier.weight(1f),
-                        colors.text,
+    Box(modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars),
+            contentPadding = PaddingValues(start = side, end = side, top = Marquee.space.m, bottom = Marquee.space.xl),
+            verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+        ) {
+            item(key = "head") {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    MqText(
+                        heading,
+                        role = TextRole.Callout,
+                        color = colors.dim,
+                        weight = FontWeight.SemiBold,
+                        maxLines = 1,
                     )
-                    MqText("${rows.size}", role = TextRole.Callout, maxLines = 1)
+                    MqText("Versions", role = TextRole.Title1, maxLines = 1)
+                    VersionsCopy.progress(snapshot)?.let { (text, tone) ->
+                        StatusWord(text, tone(tone), Modifier.padding(top = 4.dp))
+                    }
                 }
             }
-            items(if (all) rows else rows.take(SHOWN), key = { "row:${it.key}" }) { row ->
-                SourceRow(
-                    row,
-                    empty?.kind,
-                    opened == row.key,
-                    { opened = if (opened == row.key) null else row.key },
+            item(key = "best") {
+                Pick(
+                    snapshot,
+                    failure,
+                    { versions?.retry() },
                     onPlay,
-                )
+                    Modifier.padding(vertical = Marquee.space.s),
+                ) {
+                    if (empty != null) Empty(empty, step)
+                }
             }
-            if (rows.size > SHOWN) {
-                item(key = "fold:$group") {
+            // The shortcuts under the card, each one tap to play; keyed apart from the section rows they may repeat.
+            for ((label, row) in VersionsCopy.shortcuts(snapshot)) {
+                val key = if (label == StreamChoiceCopy.SMALLER) "short:smaller" else "short:sharper"
+                item(key = key) {
                     SecondaryButton(
-                        if (all) StreamChoiceCopy.SHOW_FEWER else StreamChoiceCopy.showAll(rows.size),
-                        { open[group] = !all },
-                        icon = if (all) Icons.ChevronUp else Icons.ChevronDown,
+                        VersionsCopy.shortcutLabel(label, row),
+                        { onPlay(row.key) },
+                        Modifier.fillMaxWidth(),
+                        icon = if (label == StreamChoiceCopy.SMALLER) Icons.Gauge else Icons.Gem,
                     )
                 }
             }
+            for (section in sections) {
+                val group = section.id
+                val rows = section.rows
+                val all = open[group] == true
+                item(key = group) {
+                    // A plain heading, no outline (design/DECISION.md, Lines).
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = Marquee.space.xs)
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CapsLabel(
+                            section.title,
+                            Modifier.weight(1f),
+                            colors.text,
+                        )
+                        MqText("${rows.size}", role = TextRole.Callout, maxLines = 1)
+                    }
+                }
+                items(if (all) rows else rows.take(SHOWN), key = { "row:${it.key}" }) { row ->
+                    SourceRow(
+                        row,
+                        empty?.kind,
+                        onPlay,
+                        {
+                            lastSheet = row.key
+                            sheet = row
+                        },
+                        press,
+                        infos,
+                    )
+                }
+                if (rows.size > SHOWN) {
+                    item(key = "fold:$group") {
+                        SecondaryButton(
+                            if (all) StreamChoiceCopy.SHOW_FEWER else StreamChoiceCopy.showAll(rows.size),
+                            { open[group] = !all },
+                            icon = if (all) Icons.ChevronUp else Icons.ChevronDown,
+                        )
+                    }
+                }
+            }
+            snapshot?.note?.let { note -> item(key = "note") { LearnedLine(note, onUndo) } }
         }
-        snapshot?.note?.let { note -> item(key = "note") { LearnedLine(note, onUndo) } }
+        sheet?.let { row -> DetailsSheet(row, why = empty?.kind, onPlay = onPlay, onClose = { sheet = null }) }
     }
 }
 
@@ -377,18 +408,26 @@ private fun LearnedLine(
 }
 
 /**
- * One source (plans/versions-android-spec.md, section 1): its badges and language, then one quiet line (size and
- * source in plain words, or the core's warning). A tap opens it to the line's details, the release name and its own
- * Play.
+ * One source (plans/versions-android-spec.md, sections 1 and 3): its badges and language, then one quiet line (size and
+ * source in plain words, or the core's warning). One tap plays it; the trailing info button, a sibling in the same
+ * slot (not a button inside a button), opens its details. A screen reader hears the row as one stop and reaches the
+ * details through its Details action, the info button hidden from it.
  */
 @Composable
 private fun SourceRow(
     row: VersionRow,
     why: EmptyKind?,
-    open: Boolean,
-    onToggle: () -> Unit,
     onPlay: (String) -> Unit,
+    onInfo: () -> Unit,
+    onPress: () -> Unit,
+    infos: MutableMap<String, FocusRequester>,
 ) {
+    // The info button's requester, known by the row's key while it is composed: Back from the sheet comes back to it.
+    val info = remember { FocusRequester() }
+    DisposableEffect(row.key, info) {
+        infos[row.key] = info
+        onDispose { if (infos[row.key] === info) infos.remove(row.key) }
+    }
     val colors = Marquee.colors
     val line = why?.let(StreamChoiceCopy::emptyRowLine) ?: StreamChoiceCopy.rowLine(row)
     val tag = VersionsCopy.languageTag(row)
@@ -397,64 +436,104 @@ private fun SourceRow(
     // The rows of a page where none plays (the core's empty rows) are dimmed, say [why] in place of their line,
     // and stay startable.
     FocusInk(if (why != null) Marquee.colors.dimmed() else Marquee.colors) {
-        Column {
-            Row(
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(
                 Modifier
-                    .fillMaxWidth()
-                    .semantics {
-                        contentDescription = spoken
-                        // Said as expandable: a tap opens it to its details and its own Play.
-                        if (open) {
-                            collapse {
-                                onToggle()
-                                true
-                            }
-                        } else {
-                            expand {
-                                onToggle()
-                                true
-                            }
+                    .weight(1f)
+                    // Not consumed: the tap still plays; the press only pins the pick first.
+                    .pointerInput(row.key) {
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false)
+                            onPress()
                         }
-                    }.focusClickable(onToggle, Role.Button)
+                    }.semantics {
+                        contentDescription = spoken
+                        customActions =
+                            listOf(
+                                CustomAccessibilityAction(StreamChoiceCopy.DETAILS) {
+                                    onInfo()
+                                    true
+                                },
+                            )
+                    }.focusClickable({ onPlay(row.key) }, Role.Button)
                     .padding(horizontal = 12.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        BadgeRow(VersionsCopy.badges(row).map { it.text to badgeLook(it.look) })
-                        if (tag != null) LanguageTag(tag)
-                    }
-                    if (quiet != null) {
-                        MqText(quiet, role = TextRole.Callout, color = colors.muted, maxLines = 2)
-                    } else {
-                        ToneWord(line.text, tone(line.tone), icon = why?.let(::whyIcon))
-                    }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    BadgeRow(VersionsCopy.badges(row).map { it.text to badgeLook(it.look) })
+                    if (tag != null) LanguageTag(tag)
+                }
+                if (quiet != null) {
+                    MqText(quiet, role = TextRole.Callout, color = colors.muted, maxLines = 2)
+                } else {
+                    ToneWord(line.text, tone(line.tone), icon = why?.let(::whyIcon))
                 }
             }
-            if (open) {
-                Column(
-                    Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    if (line.details.isNotEmpty()) MqText(line.details, role = TextRole.Callout)
-                    // ponytail: the system monospace face; IBM Plex Mono as on the web when Android bundles it.
-                    MqText(
-                        Format.releaseWrapped(row.releaseName),
-                        role = TextRole.Caption,
-                        color = colors.muted,
-                        fontFamily = FontFamily.Monospace,
-                    )
-                    MqText(VersionsCopy.detail(row), role = TextRole.Caption, color = colors.muted)
-                    SecondaryButton("Play this version", { onPlay(row.key) }, icon = PlayFilled)
-                }
+            Box(Modifier.size(48.dp).clearAndSetSemantics {}, contentAlignment = Alignment.Center) {
+                RoundButton(Icons.Info, StreamChoiceCopy.DETAILS, onInfo, focusRequester = info)
             }
         }
     }
 }
+
+/**
+ * A row's details in a sheet from the foot (plans/versions-android-spec.md, section 3): its badges, the release name,
+ * the people sharing it, its languages and sources, and its own Play. Back and a tap outside close it.
+ */
+@Composable
+private fun DetailsSheet(
+    row: VersionRow,
+    why: EmptyKind?,
+    onPlay: (String) -> Unit,
+    onClose: () -> Unit,
+) {
+    BackHandler(onBack = onClose)
+    val colors = Marquee.colors
+    val line = why?.let(StreamChoiceCopy::emptyRowLine) ?: StreamChoiceCopy.rowLine(row)
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.5f))
+            .pointerInput(Unit) { detectTapGestures { onClose() } },
+    ) {
+        Column(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp))
+                .background(colors.surface)
+                // Taps on the sheet stay in it.
+                .pointerInput(Unit) { detectTapGestures { } }
+                .testTag(DETAILS_SHEET)
+                .semantics { paneTitle = StreamChoiceCopy.DETAILS }
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
+        ) {
+            BadgeRow(VersionsCopy.badges(row).map { it.text to badgeLook(it.look) })
+            if (line.details.isNotEmpty()) MqText(line.details, role = TextRole.Callout)
+            // ponytail: the system monospace face; IBM Plex Mono as on the web when Android bundles it.
+            MqText(
+                Format.releaseWrapped(row.releaseName),
+                role = TextRole.Caption,
+                color = colors.muted,
+                fontFamily = FontFamily.Monospace,
+            )
+            MqText(VersionsCopy.detail(row), role = TextRole.Caption, color = colors.muted)
+            PrimaryButton(
+                "Play this version",
+                { onPlay(row.key) },
+                Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                icon = PlayFilled,
+            )
+        }
+    }
+}
+
+const val DETAILS_SHEET = "versions-details"
 
 /**
  * The card's parts (plans/versions-android-spec.md, section 1): the kicker, the version's badges, one why line clamped
