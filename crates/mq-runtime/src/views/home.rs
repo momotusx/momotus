@@ -1383,6 +1383,8 @@ mod tests {
         assert_eq!(line("2020-2020").as_deref(), Some("2020"));
         assert_eq!(line("2019").as_deref(), Some("2019"));
         assert_eq!(line("TBA").as_deref(), Some("TBA"));
+        // A date is no range: it passes as the addon wrote it.
+        assert_eq!(line("2019-05-01").as_deref(), Some("2019-05-01"));
         assert_eq!(line("  "), None);
         assert_eq!(year_line(None), None);
     }

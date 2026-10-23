@@ -754,8 +754,9 @@ pub struct TitleFacts {
 
 impl TitleFacts {
     /// From the strings the apps and Cinemeta use: a runtime of "142 min"
-    /// or "2h 22min", a release info of "2002", "2022-" or "2005–2013", and
-    /// an air date of "2013-09-16".
+    /// or "2h 22min", a release info of "2002", "2022-", "2005-2013", or the
+    /// core's own "Since 2022" and "2005 to 2013", and an air date of
+    /// "2013-09-16".
     pub fn read(
         runtime: Option<&str>,
         release_info: Option<&str>,
@@ -791,14 +792,12 @@ fn minutes(text: &str) -> Option<u32> {
     (found && total > 0).then_some(total)
 }
 
-/// The first year in `text`.
+/// The first year in `text`: its first group of four or more digits, so
+/// the core's own year line ("Since 2023", "2008 to 2013", core backlog
+/// C37) reads as the addon's "2023-" did.
 fn year(text: &str) -> Option<u16> {
-    let digits: String = text
-        .trim()
-        .chars()
-        .take_while(char::is_ascii_digit)
-        .collect();
-    digits
+    text.split(|c: char| !c.is_ascii_digit())
+        .find(|group| group.len() >= 4)?
         .get(..4)?
         .parse()
         .ok()
@@ -2494,6 +2493,20 @@ mod tests {
             .find(|r| r.stream.release.resolution.height() == 0)
             .unwrap();
         assert_eq!(sharper(&rows, pick, 1080), None);
+    }
+
+    /// Core backlog C37: the year line the core now sends the apps, and
+    /// they send back, still gives the title's year (review 2026-10-23 P2).
+    #[test]
+    fn title_facts_read_the_cores_year_line() {
+        let year = |text: &str| TitleFacts::read(None, Some(text), None, None).title_year;
+        assert_eq!(year("Since 2023"), Some(2023));
+        assert_eq!(year("2008 to 2013"), Some(2008));
+        assert_eq!(year("2023-"), Some(2023));
+        assert_eq!(year("2002"), Some(2002));
+        assert_eq!(year("TBA"), None);
+        let aired = TitleFacts::read(None, None, Some("2013-09-16T00:00:00.000Z"), None);
+        assert_eq!(aired.episode_year, Some(2013));
     }
 
     fn wire(json: &str) -> ParsedStream {
