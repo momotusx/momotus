@@ -156,7 +156,7 @@ class VersionsCopyTest {
                 )
             for (w in words) assertFalse("TorBox" in w, "\"$w\" names the service")
         }
-        assertEquals("Starts right away: Ready now, 4 GB", VersionsCopy.why(row().copy(line = lines[0])))
+        assertEquals("Starts right away: ready now, 4 GB", VersionsCopy.why(row().copy(line = lines[0])))
     }
 
     @Test

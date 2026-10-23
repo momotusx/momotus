@@ -73,20 +73,20 @@ test("the web renders the shared stream choice words as they are", () => {
 test("every line has its tone, its plain text and its numbers in the details", () => {
   expect(lineWords({ kind: "copy", quality: "telesync" })).toEqual({ tone: "bad", text: "Recorded in a cinema, low quality", details: "Telesync copy" });
   expect(lineWords({ kind: "fetch", service: "Real-Debrid" })).toEqual({ tone: "bad", text: "Not ready yet, has to download first", details: "Your account does not have it yet" });
-  expect(lineWords({ kind: "veryFew", seeders: 1 }).details).toBe("1 seeder");
-  expect(lineWords({ kind: "veryFew", seeders: 3 })).toEqual({ tone: "bad", text: "May not start", details: "3 seeders" });
+  expect(lineWords({ kind: "veryFew", seeders: 1 }).details).toBe("Shared by 1 person");
+  expect(lineWords({ kind: "veryFew", seeders: 3 })).toEqual({ tone: "bad", text: "May not start", details: "Shared by 3 people" });
   expect(lineWords({ kind: "otherYear", year: 2004 })).toEqual({ tone: "warn", text: "May be a different film or show", details: "The release says 2004" });
   expect(lineWords({ kind: "washedOut" })).toEqual({ tone: "warn", text: "Colors may look washed out on this screen", details: "HDR file, screen without HDR" });
   expect(lineWords({ kind: "stalled" })).toEqual({ tone: "bad", text: "Did not start here last time", details: "Almost nothing arrived when this device last tried it" });
   expect(lineWords({ kind: "noPicture" })).toEqual({ tone: "bad", text: "No picture on this device", details: "Its HEVC video is stored in a form this device cannot show" });
   expect(lineWords({ kind: "didNotPlay" })).toEqual({ tone: "bad", text: "Did not play on this device", details: "This device could not decode it when it last tried" });
-  expect(lineWords({ kind: "few", seeders: 31 })).toEqual({ tone: "warn", text: "May start slowly", details: "31 seeders" });
+  expect(lineWords({ kind: "few", seeders: 31 })).toEqual({ tone: "warn", text: "May start slowly", details: "Shared by 31 people" });
   expect(lineWords({ kind: "ready", service: "TorBox", sizeBytes: 7.4 * GiB })).toEqual({ tone: "ok", text: "Starts right away", details: "Ready now, 7.4 GB" });
-  expect(lineWords({ kind: "quick", seeders: 1204, sizeBytes: 2.2 * GiB })).toEqual({ tone: "ok", text: "Starts quickly", details: "1,204 seeders, 2.2 GB" });
+  expect(lineWords({ kind: "quick", seeders: 1204, sizeBytes: 2.2 * GiB })).toEqual({ tone: "ok", text: "Starts quickly", details: "Shared by 1,204 people, 2.2 GB" });
   expect(lineWords({ kind: "should", seeders: 89, sizeBytes: 4 * GiB, service: "Real-Debrid" })).toEqual({
     tone: "ok",
     text: "Should start quickly",
-    details: "89 seeders, 4 GB, may be ready in your account",
+    details: "Shared by 89 people, 4 GB, may be ready in your account",
   });
 });
 
@@ -121,8 +121,8 @@ test("may pause on a small swarm says few people share it", () => {
 
 test("a window says its minutes ahead, or on mobile data that it keeps a short stretch", () => {
   const buffer: ReasonLine = { kind: "buffer", seeders: 214, sizeBytes: 40 * GiB, aheadMin: 7, budgetBytes: 2.5 * GiB };
-  expect(lineWords(buffer)).toEqual({ tone: "ok", text: "Plays without storing the whole file", details: "214 seeders, 40 GB, room for about 7 min ahead in 2.5 GB" });
-  expect(lineWords({ ...buffer, aheadMin: null }).details).toBe("214 seeders, 40 GB, keeps only a short stretch ahead on mobile data");
+  expect(lineWords(buffer)).toEqual({ tone: "ok", text: "Plays without storing the whole file", details: "Shared by 214 people, 40 GB, room for about 7 min ahead in 2.5 GB" });
+  expect(lineWords({ ...buffer, aheadMin: null }).details).toBe("Shared by 214 people, 40 GB, keeps only a short stretch ahead on mobile data");
   expect(lineWords({ ...buffer, seeders: null, aheadMin: 10 }).details).toBe("40 GB, room for about 10 min ahead in 2.5 GB");
 });
 

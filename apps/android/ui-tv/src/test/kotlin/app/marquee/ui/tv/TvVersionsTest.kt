@@ -281,7 +281,7 @@ class TvVersionsTest {
         val row = compose.onNodeWithContentDescription("1080p, HDR, 2 GB, shared by 1,204 people")
         val before = row.fetchSemanticsNode().size
         // The details line is there before focus (unseen), so focus only fades it in: the row keeps its height.
-        compose.onNodeWithText("1,204 seeders, 2 GB", substring = true, useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("Shared by 1,204 people, 2 GB", substring = true, useUnmergedTree = true).assertExists()
         row.requestFocus()
         compose.waitForIdle()
         assertEquals(before, row.fetchSemanticsNode().size, "a row is one height, focused or not")

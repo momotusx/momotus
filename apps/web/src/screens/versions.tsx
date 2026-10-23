@@ -114,7 +114,8 @@ const detailsLine = (r: VersionRow) =>
 const whyLine = (r: VersionRow) => {
   if (r.onDevice) return r.onDevice;
   const w = lineWords(r.line);
-  return w.details ? `${w.text}: ${w.details}` : w.text;
+  // After the colon the details go on as one sentence: "May start slowly: shared by 21 people".
+  return w.details ? `${w.text}: ${w.details.charAt(0).toLowerCase()}${w.details.slice(1)}` : w.text;
 };
 /** "1080p HDR, 2.1 GB": a version's name for a screen reader. */
 const rowName = (r: VersionRow) => [`${qualityText(r.quality)}${r.features.length ? ` ${r.features.join(" ")}` : ""}`, r.sizeBytes ? bytes(r.sizeBytes) : null].filter(Boolean).join(", ");

@@ -274,13 +274,15 @@ object VersionsCopy {
             .joinToString(", ")
 
     /**
-     * The card's one why line: the core's line and its details joined by a colon ("Starts quickly: 412 seeders, 2 GB"),
+     * The card's one why line: the core's line and its details joined by a colon ("Starts quickly: shared by 412 people, 2 GB"),
      * or, for the version kept on this device, that alone ("On this device"): one idea, as on the web.
      */
     fun why(row: VersionRow): String {
         row.onDevice?.let { return it }
         val line = StreamChoiceCopy.line(row.line)
-        return if (line.details.isEmpty()) line.text else "${line.text}: ${line.details}"
+        // After the colon the details go on as one sentence: "May start slowly: shared by 21 people".
+        val details = line.details.replaceFirstChar(Char::lowercase)
+        return if (details.isEmpty()) line.text else "${line.text}: $details"
     }
 
     /** The card as a screen reader says it: the kicker, the badges, the whole why sentence. */

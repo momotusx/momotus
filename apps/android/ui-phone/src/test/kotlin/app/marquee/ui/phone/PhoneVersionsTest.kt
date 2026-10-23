@@ -236,7 +236,7 @@ class PhoneVersionsTest {
             .onNode(
                 hasText("2 GB, shared by 1,204 people") and hasAnyAncestor(hasTestTag(DETAILS_SHEET)),
             ).assertIsDisplayed()
-        compose.onAllNodesWithText("1,204 seeders", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("Shared by 1,204 people", substring = true).assertCountEquals(0)
         compose.onNode(hasText("Play this version") and hasAnyAncestor(hasTestTag(DETAILS_SHEET))).performClick()
         assertEquals(listOf("a", "a"), played)
         // Back closes the sheet; the page stays.
@@ -255,7 +255,7 @@ class PhoneVersionsTest {
     }
 
     @Test
-    fun `the details sheet starts with what the row shows, then the seeders, the file and the language`() {
+    fun `the details sheet starts with what the row shows, then the people sharing it, the file and the language`() {
         val tr =
             row("a", ReasonLine.VeryFew(0)).copy(
                 sizeBytes = 117L shl 20,
@@ -283,8 +283,8 @@ class PhoneVersionsTest {
                 .first()
                 .boundsInRoot.top
         // Nothing the row shows is dropped: the badge, the language, the size and the warning come first.
-        val tops = listOf(top("1080p"), top("117 MB, may not start"), top("0 seeders"), top("a.2010"))
-        assertEquals(tops.sorted(), tops, "badges, the row's line, the seeders, then the file")
+        val tops = listOf(top("1080p"), top("117 MB, may not start"), top("Shared by 0 people"), top("a.2010"))
+        assertEquals(tops.sorted(), tops, "badges, the row's line, the people sharing it, then the file")
         assertTrue(
             compose
                 .onAllNodes(

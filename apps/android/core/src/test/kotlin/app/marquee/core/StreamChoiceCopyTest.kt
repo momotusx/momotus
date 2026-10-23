@@ -306,8 +306,8 @@ class StreamChoiceCopyTest {
             StreamChoiceCopy.Line(bad, "Not ready yet, has to download first", "Your account does not have it yet"),
             line(ReasonLine.Fetch("Real-Debrid")),
         )
-        assertEquals("1 seeder", line(ReasonLine.VeryFew(1)).details)
-        assertEquals(StreamChoiceCopy.Line(bad, "May not start", "3 seeders"), line(ReasonLine.VeryFew(3)))
+        assertEquals("Shared by 1 person", line(ReasonLine.VeryFew(1)).details)
+        assertEquals(StreamChoiceCopy.Line(bad, "May not start", "Shared by 3 people"), line(ReasonLine.VeryFew(3)))
         assertEquals(
             StreamChoiceCopy.Line(warn, "May be a different film or show", "The release says 2004"),
             line(ReasonLine.OtherYear(2004)),
@@ -340,17 +340,21 @@ class StreamChoiceCopyTest {
             ),
             line(ReasonLine.DidNotPlay),
         )
-        assertEquals(StreamChoiceCopy.Line(warn, "May start slowly", "31 seeders"), line(ReasonLine.Few(31)))
+        assertEquals(StreamChoiceCopy.Line(warn, "May start slowly", "Shared by 31 people"), line(ReasonLine.Few(31)))
         assertEquals(
             StreamChoiceCopy.Line(ok, "Starts right away", "Ready now, 7.4 GB"),
             line(ReasonLine.Ready("TorBox", (7.4 * gib).toLong())),
         )
         assertEquals(
-            StreamChoiceCopy.Line(ok, "Starts quickly", "1,204 seeders, 2.2 GB"),
+            StreamChoiceCopy.Line(ok, "Starts quickly", "Shared by 1,204 people, 2.2 GB"),
             line(ReasonLine.Quick(1204, (2.2 * gib).toLong())),
         )
         assertEquals(
-            StreamChoiceCopy.Line(ok, "Should start quickly", "89 seeders, 4 GB, may be ready in your account"),
+            StreamChoiceCopy.Line(
+                ok,
+                "Should start quickly",
+                "Shared by 89 people, 4 GB, may be ready in your account",
+            ),
             line(ReasonLine.Should(89, 4 * gib, "Real-Debrid")),
         )
     }
@@ -400,12 +404,12 @@ class StreamChoiceCopyTest {
             StreamChoiceCopy.Line(
                 ok,
                 "Plays without storing the whole file",
-                "214 seeders, 40 GB, room for about 7 min ahead in 2.5 GB",
+                "Shared by 214 people, 40 GB, room for about 7 min ahead in 2.5 GB",
             ),
             line(buffer),
         )
         assertEquals(
-            "214 seeders, 40 GB, keeps only a short stretch ahead on mobile data",
+            "Shared by 214 people, 40 GB, keeps only a short stretch ahead on mobile data",
             line(buffer.copy(aheadMin = null)).details,
         )
         assertEquals(
@@ -418,7 +422,7 @@ class StreamChoiceCopyTest {
     fun `the card's why line is the window's line when the version plays in one`() {
         val buffer = ReasonLine.Buffer(53, 545 * mib, aheadMin = 8, budgetBytes = 508 * mib)
         assertEquals(
-            "Plays without storing the whole file: 53 seeders, 545 MB, room for about 8 min ahead in 508 MB",
+            "Plays without storing the whole file: shared by 53 people, 545 MB, room for about 8 min ahead in 508 MB",
             VersionsCopy.why(VersionsFixtures.row(line = buffer)),
         )
     }

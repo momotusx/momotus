@@ -227,7 +227,7 @@ enum StreamChoice {
         return "\(max(1, Int((Double(n) / 1024).rounded()))) KB"
     }
 
-    /// "1 seeder", "1,204 seeders".
+    /// "1 person", "1,204 people".
     static func counted(_ what: String, _ n: Int) -> String {
         let forms = words.plurals[what] ?? ["{n}", "{n}"]
         return forms[n == 1 ? 0 : 1].replacingOccurrences(of: "{n}", with: grouped(n))
@@ -268,7 +268,8 @@ enum StreamChoice {
             // Never the service's name: "your account" when the line names one, as for addons.
             "account": line.service.map { _ in "your account" },
             "year": line.year.map(String.init),
-            "seeders": line.seeders.map { counted("seeders", $0) },
+            // The people sharing it, in plain words: "shared by 21 people".
+            "people": line.seeders.map { counted("people", $0) },
             "size": line.sizeBytes.map(bytes),
             "limit": line.limitBytes.map(bytes),
             "need": line.needMbps.map { String(Int($0.rounded())) },

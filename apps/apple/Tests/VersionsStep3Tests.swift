@@ -322,7 +322,7 @@ private func row(_ json: String) throws -> VersionRow {
     #endif
     let pick = try row(#", "line": {"kind": "quick", "seeders": 412, "sizeBytes": 2147483648}"#)
     #expect(VersionWords.badges(pick) == [.init(text: "1080p", look: .filled), .init(text: "HDR", look: .outlined), .init(text: "Dolby Atmos", look: .plain)])
-    #expect(VersionWords.why(pick) == "Starts quickly: 412 seeders, 2 GB")
+    #expect(VersionWords.why(pick) == "Starts quickly: shared by 412 people, 2 GB")
     // One video and one audio format at most, the best of each.
     let dv = try row(#", "features": ["Dolby Vision", "HDR10", "7.1", "5.1"]"#)
     #expect(VersionWords.badges(dv).map(\.text) == ["1080p", "Dolby Vision", "7.1"])
@@ -349,7 +349,7 @@ private func row(_ json: String) throws -> VersionRow {
     // One idea, as the web and Android: the row keeps the line's numbers for its details.
     #expect(VersionWords.why(kept) == "On this device")
     #expect(VersionWords.cardSpoken(kept) == "\(VersionWords.kicker). 1080p, HDR, Dolby Atmos. On this device")
-    #expect(VersionWords.details(kept).contains("22 seeders"))
+    #expect(VersionWords.details(kept).contains("Shared by 22 people"))
 }
 
 @Test func aRowIsItsBadgesAndOneQuietLineWithItsSizeFirst() throws {
@@ -411,7 +411,7 @@ private func row(_ json: String) throws -> VersionRow {
     let face = try body(of: "private struct RowFace", in: page)
     #expect(face.contains("VersionWords.badges(row)") && face.contains("VersionWords.languageTag(row)") && face.contains("RowLine(row: row, dimmed: dimmed)"))
     let r = try JSONDecoder().decode(VersionRow.self, from: Data(#"{"key": "k", "quality": "720p", "features": [], "sizeBytes": 1, "status": {"kind": "torrent", "seeds": 5}, "via": "Sample Source", "releaseName": "Sintel.720p.mp4", "languages": ["en"], "reasons": [], "group": "best", "failoverCount": 0, "line": {"kind": "few", "seeders": 5}}"#.utf8))
-    #expect(VersionWords.detailLines(r) == ["5 seeders", "Sintel.720p.mp4", "English"])
+    #expect(VersionWords.detailLines(r) == ["Shared by 5 people", "Sintel.720p.mp4", "English"])
 }
 
 @Test func anInertEpisodeOrHeroOpensNoBackOnlyPage() throws {

@@ -294,13 +294,14 @@ enum VersionWords {
         [rowLine(row)?.details ?? "", row.releaseName, detail(row)].filter { !$0.isEmpty }
     }
 
-    /// The card's one why line: the core's line and its details joined by a colon ("Starts quickly: 412
-    /// seeders, 2 GB"), or, for the version kept on this device, that alone ("On this device"): one idea,
+    /// The card's one why line: the core's line and its details joined by a colon ("Starts quickly: shared
+    /// by 412 people, 2 GB"), or, for the version kept on this device, that alone ("On this device"): one idea,
     /// as the web and Android say it.
     static func why(_ row: VersionRow) -> String {
         if let kept = row.onDevice { return kept }
         guard let line = rowLine(row) else { return [bytes(row)].compactMap { $0 }.joined() }
-        return line.details.isEmpty ? line.text : "\(line.text): \(line.details)"
+        // After the colon the details go on as one sentence: "May start slowly: shared by 21 people".
+        return line.details.isEmpty ? line.text : "\(line.text): \(line.details.prefix(1).lowercased())\(line.details.dropFirst())"
     }
 
     /// The card as a screen reader says it: its kicker, its badges, its why line, with no empty part.

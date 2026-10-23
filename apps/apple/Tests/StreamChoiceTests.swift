@@ -38,13 +38,13 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
     #expect(StreamChoice.bytes(150 * 1_073_741_824) == "150 GB")
     #expect(StreamChoice.bytes(10_737_418_240) == "10 GB")
     #expect(StreamChoice.bytes(900) == "1 KB")
-    #expect(StreamChoice.counted("seeders", 1) == "1 seeder")
-    #expect(StreamChoice.counted("seeders", 1204) == "1,204 seeders")
+    #expect(StreamChoice.counted("people", 1) == "1 person")
+    #expect(StreamChoice.counted("people", 1204) == "1,204 people")
 }
 
 @Test func eachLineSaysItsToneTextAndDetails() throws {
-    #expect(try words(#"{"kind": "veryFew", "seeders": 3}"#) == LineWords(tone: .bad, text: "May not start", details: "3 seeders"))
-    #expect(try words(#"{"kind": "few", "seeders": 7}"#) == LineWords(tone: .warn, text: "May start slowly", details: "7 seeders"))
+    #expect(try words(#"{"kind": "veryFew", "seeders": 3}"#) == LineWords(tone: .bad, text: "May not start", details: "Shared by 3 people"))
+    #expect(try words(#"{"kind": "few", "seeders": 7}"#) == LineWords(tone: .warn, text: "May start slowly", details: "Shared by 7 people"))
     #expect(try words(#"{"kind": "copy", "quality": "CAM"}"#).details == "CAM copy")
     #expect(try words(#"{"kind": "otherYear", "year": 1999}"#).details == "The release says 1999")
     // A part whose field is unknown is left out, and the rest starts with a capital.
@@ -54,7 +54,7 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
     #expect(try words(#"{"kind": "fetch", "service": "TorBox"}"#).details == "Your account does not have it yet")
     #expect(try words(#"{"kind": "fetch", "service": null}"#).details == "")
     #expect(try words(#"{"kind": "ready", "service": "TorBox", "sizeBytes": null}"#) == LineWords(tone: .ok, text: "Starts right away", details: "Ready now"))
-    #expect(try words(#"{"kind": "quick", "seeders": 120, "sizeBytes": 164626432}"#).details == "120 seeders, 157 MB")
+    #expect(try words(#"{"kind": "quick", "seeders": 120, "sizeBytes": 164626432}"#).details == "Shared by 120 people, 157 MB")
     // Measured from playbacks; an unmeasured speed is never said ("estimated" goes, plan 2g).
     #expect(try words(#"{"kind": "mayPause", "needMbps": 31.6, "haveMbps": 9.4, "samples": 3}"#).details
         == "Needs about 32 Mbit/s; this connection gives about 9 (measured from 3 playbacks)")
@@ -66,9 +66,9 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
     #expect(StreamChoice.lineWords(large)?.details == "9 GB; Marquee prefers files up to 5 GB")
     // A window: its minutes ahead, or on mobile data a short stretch.
     #expect(try words(#"{"kind": "buffer", "seeders": 214, "sizeBytes": 42949672960, "aheadMin": 7, "budgetBytes": 2684354560}"#)
-        == LineWords(tone: .ok, text: "Plays without storing the whole file", details: "214 seeders, 40 GB, room for about 7 min ahead in 2.5 GB"))
+        == LineWords(tone: .ok, text: "Plays without storing the whole file", details: "Shared by 214 people, 40 GB, room for about 7 min ahead in 2.5 GB"))
     #expect(try words(#"{"kind": "buffer", "seeders": 214, "sizeBytes": 42949672960, "aheadMin": null, "budgetBytes": 2684354560}"#).details
-        == "214 seeders, 40 GB, keeps only a short stretch ahead on mobile data")
+        == "Shared by 214 people, 40 GB, keeps only a short stretch ahead on mobile data")
     #expect(try words(#"{"kind": "buffer", "seeders": null, "sizeBytes": 42949672960, "aheadMin": 10, "budgetBytes": 2684354560}"#).details
         == "40 GB, room for about 10 min ahead in 2.5 GB")
     // A newer core's kind has no words here: the row keeps its status.

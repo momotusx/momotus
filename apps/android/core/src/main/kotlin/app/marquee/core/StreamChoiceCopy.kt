@@ -74,7 +74,6 @@ object StreamChoiceCopy {
 
     val PLURALS =
         mapOf(
-            "seeders" to ("{n} seeder" to "{n} seeders"),
             "playbacks" to ("{n} playback" to "{n} playbacks"),
             "versions" to ("{n} version" to "{n} versions"),
             "versionsAre" to ("{n} version is" to "{n} versions are"),
@@ -103,7 +102,7 @@ object StreamChoiceCopy {
                     "Did not play on this device",
                     listOf("This device could not decode it when it last tried"),
                 ),
-            "veryFew" to LineWords(bad, "May not start", listOf("{seeders}")),
+            "veryFew" to LineWords(bad, "May not start", listOf("shared by {people}")),
             "otherYear" to LineWords(warn, "May be a different film or show", listOf("The release says {year}")),
             "mayPause" to
                 LineWords(
@@ -121,17 +120,26 @@ object StreamChoiceCopy {
                     listOf("{size}; Marquee prefers files up to {limit}"),
                     textChosen = "Larger than the size you chose",
                 ),
-            "few" to LineWords(warn, "May start slowly", listOf("{seeders}")),
+            "few" to LineWords(warn, "May start slowly", listOf("shared by {people}")),
             "ready" to LineWords(ok, "Starts right away", listOf("Ready now", "{size}")),
-            "quick" to LineWords(ok, "Starts quickly", listOf("{seeders}", "{size}")),
+            "quick" to LineWords(ok, "Starts quickly", listOf("shared by {people}", "{size}")),
             "should" to
-                LineWords(ok, "Should start quickly", listOf("{seeders}", "{size}", "may be ready in {account}")),
+                LineWords(
+                    ok,
+                    "Should start quickly",
+                    listOf("shared by {people}", "{size}", "may be ready in {account}"),
+                ),
             "buffer" to
                 LineWords(
                     ok,
                     "Plays without storing the whole file",
-                    listOf("{seeders}", "{size}", "room for about {minutes} min ahead in {budget}"),
-                    detailsMobile = listOf("{seeders}", "{size}", "keeps only a short stretch ahead on mobile data"),
+                    listOf("shared by {people}", "{size}", "room for about {minutes} min ahead in {budget}"),
+                    detailsMobile =
+                        listOf(
+                            "shared by {people}",
+                            "{size}",
+                            "keeps only a short stretch ahead on mobile data",
+                        ),
                 ),
         )
 
@@ -387,7 +395,7 @@ object StreamChoiceCopy {
 
     private fun thousands(n: Int) = String.format(Locale.US, "%,d", n)
 
-    /** "1 seeder", "1,204 seeders". */
+    /** "1 person", "1,204 people". */
     fun counted(
         what: String,
         n: Int,
@@ -424,7 +432,7 @@ object StreamChoiceCopy {
             }
 
             is ReasonLine.VeryFew -> {
-                "veryFew" to mapOf("seeders" to counted("seeders", l.seeders))
+                "veryFew" to mapOf("people" to counted("people", l.seeders))
             }
 
             is ReasonLine.OtherYear -> {
@@ -447,7 +455,7 @@ object StreamChoiceCopy {
             }
 
             is ReasonLine.Few -> {
-                "few" to mapOf("seeders" to counted("seeders", l.seeders))
+                "few" to mapOf("people" to counted("people", l.seeders))
             }
 
             is ReasonLine.Ready -> {
@@ -457,7 +465,7 @@ object StreamChoiceCopy {
             is ReasonLine.Quick -> {
                 "quick" to
                     mapOf(
-                        "seeders" to l.seeders?.let { counted("seeders", it) },
+                        "people" to l.seeders?.let { counted("people", it) },
                         "size" to l.sizeBytes?.let(Format::bytes),
                     )
             }
@@ -465,7 +473,7 @@ object StreamChoiceCopy {
             is ReasonLine.Should -> {
                 "should" to
                     mapOf(
-                        "seeders" to l.seeders?.let { counted("seeders", it) },
+                        "people" to l.seeders?.let { counted("people", it) },
                         "size" to l.sizeBytes?.let(Format::bytes),
                         "account" to account(l.service),
                     )
@@ -474,7 +482,7 @@ object StreamChoiceCopy {
             is ReasonLine.Buffer -> {
                 "buffer" to
                     mapOf(
-                        "seeders" to l.seeders?.let { counted("seeders", it) },
+                        "people" to l.seeders?.let { counted("people", it) },
                         "size" to l.sizeBytes?.let(Format::bytes),
                         "minutes" to l.aheadMin,
                         "budget" to Format.bytes(l.budgetBytes),

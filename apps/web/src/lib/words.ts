@@ -625,13 +625,14 @@ function part(line: string, fields: Fields): string | null {
 
 const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-/** "1 seeder", "1,204 seeders". */
+/** "1 person", "1,204 people". */
 export const counted = (what: keyof typeof choice.plurals, n: number) =>
   (choice.plurals[what][n === 1 ? 0 : 1] as string).replace("{n}", n.toLocaleString("en-US"));
 
 const numbers = (l: ReasonLine): Fields => {
   const f: Fields = { ...l };
-  if ("seeders" in l) f.seeders = l.seeders === null ? null : counted("seeders", l.seeders);
+  // The people sharing it, in plain words: "shared by 21 people".
+  if ("seeders" in l) f.people = l.seeders === null ? null : counted("people", l.seeders);
   if ("sizeBytes" in l) f.size = l.sizeBytes === null ? null : bytes(l.sizeBytes);
   // The viewer's streaming service is said as their account, never by its name.
   if ("service" in l) f.account = l.service ? "your account" : null;
