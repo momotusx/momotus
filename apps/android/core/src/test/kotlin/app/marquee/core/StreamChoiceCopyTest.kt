@@ -303,7 +303,7 @@ class StreamChoiceCopyTest {
             line(ReasonLine.Copy("telesync")),
         )
         assertEquals(
-            StreamChoiceCopy.Line(bad, "Not ready yet, has to download first", "Real-Debrid does not have it yet"),
+            StreamChoiceCopy.Line(bad, "Not ready yet, has to download first", "Your account does not have it yet"),
             line(ReasonLine.Fetch("Real-Debrid")),
         )
         assertEquals("1 seeder", line(ReasonLine.VeryFew(1)).details)
@@ -342,7 +342,7 @@ class StreamChoiceCopyTest {
         )
         assertEquals(StreamChoiceCopy.Line(warn, "May start slowly", "31 seeders"), line(ReasonLine.Few(31)))
         assertEquals(
-            StreamChoiceCopy.Line(ok, "Starts right away", "Ready on TorBox, 7.4 GB"),
+            StreamChoiceCopy.Line(ok, "Starts right away", "Ready now, 7.4 GB"),
             line(ReasonLine.Ready("TorBox", (7.4 * gib).toLong())),
         )
         assertEquals(
@@ -350,7 +350,7 @@ class StreamChoiceCopyTest {
             line(ReasonLine.Quick(1204, (2.2 * gib).toLong())),
         )
         assertEquals(
-            StreamChoiceCopy.Line(ok, "Should start quickly", "89 seeders, 4 GB, may be ready on Real-Debrid"),
+            StreamChoiceCopy.Line(ok, "Should start quickly", "89 seeders, 4 GB, may be ready in your account"),
             line(ReasonLine.Should(89, 4 * gib, "Real-Debrid")),
         )
     }
@@ -359,7 +359,7 @@ class StreamChoiceCopyTest {
     fun `a detail with an unknown number is left out, never shown with a gap`() {
         assertEquals("", line(ReasonLine.Should(null, null, null)).details)
         assertEquals("3 GB", line(ReasonLine.Quick(null, 3 * gib)).details)
-        assertEquals("3 GB", line(ReasonLine.Ready(null, 3 * gib)).details)
+        assertEquals("Ready now, 3 GB", line(ReasonLine.Ready(null, 3 * gib)).details)
         assertEquals("", line(ReasonLine.Fetch(null)).details)
     }
 

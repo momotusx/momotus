@@ -348,9 +348,7 @@ class VersionsView(
 ) : RecordView<VersionsSnapshot>(client, scope, "versions", params, VersionsSnapshot.serializer()) {
     /**
      * Settings was opened from the page that shows this view (an addon or an account to add): the page asks the core
-     * again when it comes back, so what was added shows without a press. The page reads it as it enters composition,
-     * which works because the navigation drops a covered entry; an entry kept composed under Settings would need a
-     * resume signal instead.
+     * again when it resumes, so what was added shows without a press.
      */
     var askAgain = false
 

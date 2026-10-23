@@ -3,9 +3,7 @@ package app.marquee.ui.tv
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
@@ -13,6 +11,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.client.CoreClient
 import app.marquee.core.model.EmptyKind
@@ -227,10 +226,10 @@ class PlayerFailureCardTest {
     @Test
     fun `back from Settings opened on the failure card the start runs again`() {
         val events = mutableListOf<String>()
-        var shown by mutableStateOf(true)
+        val entry = Entry()
         compose.setContent {
             MarqueeTheme(Form.Tv) {
-                if (shown) {
+                CompositionLocalProvider(LocalLifecycleOwner provides entry) {
                     TvPlayer(controller, false, {}, null, { _, _ -> }, {}, onSettings = { events += "settings $it" })
                 }
             }
@@ -239,9 +238,8 @@ class PlayerFailureCardTest {
             controller.fail(StreamChoiceCopy.emptyLine(EmptyKind.NoSource), EmptyKind.NoSource) { events += "again" }
         }
         compose.onNodeWithText("Settings").performClick()
-        shown = false
-        compose.waitForIdle()
-        shown = true
+        compose.runOnIdle { entry.covered() }
+        compose.runOnIdle { entry.back() }
         compose.waitForIdle()
         assertEquals(listOf("settings NoSource", "again"), events)
     }

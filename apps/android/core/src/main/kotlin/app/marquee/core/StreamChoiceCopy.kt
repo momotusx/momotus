@@ -84,7 +84,7 @@ object StreamChoiceCopy {
     val LINES =
         mapOf(
             "copy" to LineWords(bad, "Recorded in a cinema, low quality", listOf("{quality} copy")),
-            "fetch" to LineWords(bad, "Not ready yet, has to download first", listOf("{service} does not have it yet")),
+            "fetch" to LineWords(bad, "Not ready yet, has to download first", listOf("{account} does not have it yet")),
             "stalled" to
                 LineWords(
                     bad,
@@ -122,10 +122,10 @@ object StreamChoiceCopy {
                     textChosen = "Larger than the size you chose",
                 ),
             "few" to LineWords(warn, "May start slowly", listOf("{seeders}")),
-            "ready" to LineWords(ok, "Starts right away", listOf("Ready on {service}", "{size}")),
+            "ready" to LineWords(ok, "Starts right away", listOf("Ready now", "{size}")),
             "quick" to LineWords(ok, "Starts quickly", listOf("{seeders}", "{size}")),
             "should" to
-                LineWords(ok, "Should start quickly", listOf("{seeders}", "{size}", "may be ready on {service}")),
+                LineWords(ok, "Should start quickly", listOf("{seeders}", "{size}", "may be ready in {account}")),
             "buffer" to
                 LineWords(
                     ok,
@@ -397,6 +397,9 @@ object StreamChoiceCopy {
 
     private fun whole(mbps: Float) = Math.round(mbps.toDouble())
 
+    /** The viewer's streaming service, said as their account and never by its name, as no addon is named. */
+    private fun account(service: String?) = service?.let { "your account" }
+
     private fun fields(l: ReasonLine): Pair<String, Map<String, Any?>> =
         when (l) {
             is ReasonLine.Copy -> {
@@ -404,7 +407,7 @@ object StreamChoiceCopy {
             }
 
             is ReasonLine.Fetch -> {
-                "fetch" to mapOf("service" to l.service)
+                "fetch" to mapOf("account" to account(l.service))
             }
 
             ReasonLine.Stalled -> {
@@ -452,7 +455,7 @@ object StreamChoiceCopy {
             }
 
             is ReasonLine.Ready -> {
-                "ready" to mapOf("service" to l.service, "size" to l.sizeBytes?.let(Format::bytes))
+                "ready" to mapOf("size" to l.sizeBytes?.let(Format::bytes))
             }
 
             is ReasonLine.Quick -> {
@@ -468,7 +471,7 @@ object StreamChoiceCopy {
                     mapOf(
                         "seeders" to l.seeders?.let { counted("seeders", it) },
                         "size" to l.sizeBytes?.let(Format::bytes),
-                        "service" to l.service,
+                        "account" to account(l.service),
                     )
             }
 

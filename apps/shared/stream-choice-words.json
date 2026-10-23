@@ -16,7 +16,7 @@
     "fetch": {
       "tone": "bad",
       "text": "Not ready yet, has to download first",
-      "details": ["{service} does not have it yet"]
+      "details": ["{account} does not have it yet"]
     },
     "stalled": {
       "tone": "bad",
@@ -70,7 +70,7 @@
     "ready": {
       "tone": "ok",
       "text": "Starts right away",
-      "details": ["Ready on {service}", "{size}"]
+      "details": ["Ready now", "{size}"]
     },
     "quick": {
       "tone": "ok",
@@ -80,7 +80,7 @@
     "should": {
       "tone": "ok",
       "text": "Should start quickly",
-      "details": ["{seeders}", "{size}", "may be ready on {service}"]
+      "details": ["{seeders}", "{size}", "may be ready in {account}"]
     },
     "buffer": {
       "tone": "ok",

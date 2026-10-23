@@ -48,6 +48,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.NextEpisode
 import app.marquee.core.model.SubtitleSize
@@ -132,12 +133,14 @@ fun TvPlayer(
 ) {
     val safe = Marquee.safe
     val stage = controller.stage
-    // Back from Settings opened on the failure card: the start runs again, so what was added plays without a press.
-    LaunchedEffect(controller) {
+    // Back from Settings opened on the failure card: the start runs again when the player resumes, so what was added
+    // plays without a press. The navigation resumes the entry on top, whether it stayed composed or not.
+    LifecycleResumeEffect(controller) {
         if (controller.askAgain) {
             controller.askAgain = false
             if (controller.reopenable) controller.reopen()
         }
+        onPauseOrDispose {}
     }
     val live = stage == Stage.Playing || stage == Stage.Paused || stage == Stage.Buffering || stage == Stage.Ended
     // Before the source shows a picture: the loading screen alone, nothing focused; the remote's Back cancels.

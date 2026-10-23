@@ -89,9 +89,9 @@ class VersionsCopyTest {
         assertEquals(VersionLine.Problem("No version is ready to play yet. Choose one to start it."), notReady)
         val chosen = VersionsCopy.line(snapshot(recommended = row())) as VersionLine.Chosen
         assertEquals(listOf("4K", "HDR10", "1.2 GB"), chosen.facts)
-        assertEquals("Ready on Real-Debrid", chosen.status)
+        assertEquals("Ready", chosen.status)
         assertEquals(true, chosen.good)
-        assertEquals("4K, HDR10, 1.2 GB, Ready on Real-Debrid", chosen.spoken)
+        assertEquals("4K, HDR10, 1.2 GB, Ready", chosen.spoken)
         val torrent =
             row().copy(
                 status = VersionStatus.Torrent(10),
@@ -119,10 +119,6 @@ class VersionsCopyTest {
 
     @Test
     fun `the reasons, groups and status words match the web table`() {
-        assertEquals(
-            "Ready now, cached on Real-Debrid",
-            VersionsCopy.reason(Reason.ReadyNow, VersionStatus.Ready("Real-Debrid")),
-        )
         assertEquals("Ready now", VersionsCopy.reason(Reason.ReadyNow))
         // A film replayed and an episode after the last one alike (walk EW-F1).
         assertEquals("Same release as last time", VersionsCopy.reason(Reason.SameReleaseAsLast))
@@ -131,10 +127,36 @@ class VersionsCopyTest {
             listOf("Best quality", "Smaller and faster", "Other languages", "Needs download", "Other versions"),
             Group.entries.map(VersionsCopy::group),
         )
-        assertEquals("Needs download on Real-Debrid", VersionsCopy.status(VersionStatus.NeedsDownload("Real-Debrid")))
+        assertEquals("Needs download", VersionsCopy.status(VersionStatus.NeedsDownload("Real-Debrid")))
         // With the pick above the list, the best group is not "Best quality".
         assertEquals("Other good choices", VersionsCopy.group(Group.Best, pickAbove = true))
         assertEquals("Smaller and faster", VersionsCopy.group(Group.SmallerFaster, pickAbove = true))
+    }
+
+    @Test
+    fun `no words name the viewer's streaming service, as none names an addon`() {
+        val lines =
+            listOf(
+                ReasonLine.Ready("TorBox", 4L shl 30),
+                ReasonLine.Should(89, 4L shl 30, "TorBox"),
+                ReasonLine.Fetch("TorBox"),
+            )
+        for (l in lines) {
+            val r = row().copy(status = VersionStatus.Ready("TorBox"), line = l)
+            val words =
+                listOf(
+                    VersionsCopy.why(r),
+                    VersionsCopy.rowWords(r),
+                    VersionsCopy.rowSpoken(r),
+                    VersionsCopy.cardSpoken("Best for this TV", r),
+                    VersionsCopy.details(r),
+                    VersionsCopy.status(r.status),
+                    StreamChoiceCopy.line(l).text,
+                    StreamChoiceCopy.line(l).details,
+                )
+            for (w in words) assertFalse("TorBox" in w, "\"$w\" names the service")
+        }
+        assertEquals("Starts right away: Ready now, 4 GB", VersionsCopy.why(row().copy(line = lines[0])))
     }
 
     @Test

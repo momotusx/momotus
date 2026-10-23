@@ -3,6 +3,7 @@ package app.marquee.ui.tv
 import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -37,6 +38,10 @@ import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.VersionsCopy
 import app.marquee.core.client.CoreClient
@@ -391,6 +396,7 @@ class TvVersionsTest {
         // Told apart by their sizes: 1 GB to 8 GB.
         val rows = (1..8).map { row("r$it", ReasonLine.Few(30 + it)).copy(sizeBytes = it * gib) }
         show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), rows))
+        compose.onNode(hasScrollToKeyAction()).performScrollToKey("fold:group:best")
         compose.onNodeWithContentDescription("Show all 8 Other good choices versions").requestFocus()
         compose.onNodeWithContentDescription("Show all 8 Other good choices versions").performKeyInput {
             pressKey(Key.DirectionCenter)
@@ -430,6 +436,7 @@ class TvVersionsTest {
     fun `from the 50th row of a 100-row section Left scrolls back to the heading, and OK folds it`() {
         val rows = (1..100).map { row("r$it", ReasonLine.Few(30 + it)).copy(sizeBytes = it * gib) }
         show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), rows))
+        compose.onNode(hasScrollToKeyAction()).performScrollToKey("fold:group:best")
         compose.onNodeWithContentDescription("Show all 100 Other good choices versions").requestFocus()
         compose.onNodeWithContentDescription("Show all 100 Other good choices versions").performKeyInput {
             pressKey(Key.DirectionCenter)
@@ -646,6 +653,8 @@ class TvVersionsTest {
         }
         press(Key.DirectionDown)
         compose.onNodeWithText("Smaller file: 720p, 1.5 GB").assertIsFocused()
+        // The 720p row, the last on the page, is also in the list.
+        compose.onNode(hasScrollToKeyAction()).performScrollToKey("row:${coherent().smaller!!.key}")
         compose.onNodeWithContentDescription(VersionsCopy.rowSpoken(coherent().smaller!!)).assertExists()
         press(Key.DirectionCenter)
         assertEquals(listOf("small"), played)
@@ -746,6 +755,7 @@ class TvVersionsTest {
         val rows = (1..400).map { row("r$it", ReasonLine.Few(30)).copy(sizeBytes = it * gib) }
         val started = System.nanoTime()
         show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), rows))
+        compose.onNode(hasScrollToKeyAction()).performScrollToKey("fold:group:best")
         compose.onNodeWithContentDescription("Show all 400 Other good choices versions").requestFocus()
         compose.onNodeWithContentDescription("Show all 400 Other good choices versions").performKeyInput {
             pressKey(Key.DirectionCenter)
@@ -781,6 +791,31 @@ class TvVersionsTest {
     }
 
     @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `a long release name takes the details line's two kept lines, and every row stays one height`() {
+        val long =
+            "The.Long.Title.Of.A.Film.2010.Directors.Cut.Remastered.2160p.UHD.BluRay.REMUX.HDR10.HEVC.Atmos-GROUP"
+        val short = row("a", ReasonLine.Few(30)).copy(sizeBytes = 1 * gib)
+        val longer = row("b", ReasonLine.Few(30)).copy(sizeBytes = 3 * gib, releaseName = long)
+        show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), listOf(short, longer)))
+        val results = mutableListOf<TextLayoutResult>()
+        compose
+            .onNodeWithText(VersionsCopy.details(longer), useUnmergedTree = true)
+            .fetchSemanticsNode()
+            .config[SemanticsActions.GetTextLayoutResult]
+            .action
+            ?.invoke(results)
+        assertEquals(2, results.single().lineCount, "the release name goes on to a second line")
+        val height = { size: String ->
+            compose
+                .onNodeWithContentDescription("1080p, HDR, $size")
+                .fetchSemanticsNode()
+                .size.height
+        }
+        assertEquals(height("1 GB"), height("3 GB"))
+    }
+
+    @Test
     fun `back from Settings the page asks the core again, so what was added shows without a press`() {
         var subscribes = 0
         val rows = listOf(row("a", ReasonLine.Few(31)))
@@ -798,10 +833,10 @@ class TvVersionsTest {
             client.onMessage("""{"id":$id,"ok":true,"result":$result}""")
         }
         val view = VersionsView(client, scope, JsonObject(emptyMap()))
-        var shown by mutableStateOf(true)
+        val entry = Entry()
         compose.setContent {
             MarqueeTheme(Form.Tv) {
-                if (shown) {
+                CompositionLocalProvider(LocalLifecycleOwner provides entry) {
                     TvVersions("Sintel", view, FocusMemory(), {}, {}, { accounts++ }, {}, {})
                 }
             }
@@ -816,19 +851,31 @@ class TvVersionsTest {
         compose.onNodeWithText(StreamChoiceCopy.SETTINGS).performClick()
         assertEquals(1, accounts)
         // Settings covers the page, then the viewer comes back.
-        shown = false
-        compose.waitForIdle()
-        shown = true
+        compose.runOnIdle { entry.covered() }
+        compose.runOnIdle { entry.back() }
         compose.waitUntil(10_000) {
             shadowOf(Looper.getMainLooper()).idle()
             subscribes == 2
         }
         // Once: coming back again without Settings asks nothing.
-        shown = false
-        compose.waitForIdle()
-        shown = true
+        compose.runOnIdle { entry.covered() }
+        compose.runOnIdle { entry.back() }
         compose.waitForIdle()
         Thread.sleep(200)
         assertEquals(2, subscribes)
+    }
+}
+
+/** A navigation entry's lifecycle: covered by Settings it stops, back on top it resumes, and it stays composed. */
+internal class Entry : LifecycleOwner {
+    private val registry = LifecycleRegistry.createUnsafe(this).apply { currentState = Lifecycle.State.RESUMED }
+    override val lifecycle: Lifecycle get() = registry
+
+    fun covered() {
+        registry.currentState = Lifecycle.State.CREATED
+    }
+
+    fun back() {
+        registry.currentState = Lifecycle.State.RESUMED
     }
 }

@@ -128,9 +128,9 @@ private fun Gallery() {
                 )
                 ChosenVersion(
                     facts = listOf("4K", "Dolby Vision", "18 GB"),
-                    status = "Ready on Real-Debrid",
+                    status = "Ready",
                     tone = Status.Ok,
-                    spoken = "4K, Dolby Vision, 18 GB, Ready on Real-Debrid",
+                    spoken = "4K, Dolby Vision, 18 GB, Ready",
                 )
                 StatusNote("Finding versions", busy = true)
                 StatusNote("No source has this yet", tone = Status.Warn)

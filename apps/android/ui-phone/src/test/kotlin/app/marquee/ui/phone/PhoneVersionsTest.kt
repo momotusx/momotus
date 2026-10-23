@@ -4,9 +4,7 @@ import android.os.Handler
 import android.os.Looper
 import androidx.activity.OnBackPressedDispatcher
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
@@ -31,6 +29,10 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTouchInput
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
@@ -455,10 +457,10 @@ class PhoneVersionsTest {
             client.onMessage("""{"id":$id,"ok":true,"result":$result}""")
         }
         val view = VersionsView(client, scope, JsonObject(emptyMap()))
-        var shown by mutableStateOf(true)
+        val entry = Entry()
         compose.setContent {
             MarqueeTheme(Form.Phone) {
-                if (shown) {
+                CompositionLocalProvider(LocalLifecycleOwner provides entry) {
                     PhoneVersions("Sintel", view, {}, {}, { accounts++ }, {}, {})
                 }
             }
@@ -473,19 +475,31 @@ class PhoneVersionsTest {
         compose.onNodeWithText(StreamChoiceCopy.SETTINGS).performClick()
         assertEquals(1, accounts)
         // Settings covers the page, then the viewer comes back.
-        shown = false
-        compose.waitForIdle()
-        shown = true
+        compose.runOnIdle { entry.covered() }
+        compose.runOnIdle { entry.back() }
         compose.waitUntil(10_000) {
             shadowOf(Looper.getMainLooper()).idle()
             subscribes == 2
         }
         // Once: coming back again without Settings asks nothing.
-        shown = false
-        compose.waitForIdle()
-        shown = true
+        compose.runOnIdle { entry.covered() }
+        compose.runOnIdle { entry.back() }
         compose.waitForIdle()
         Thread.sleep(200)
         assertEquals(2, subscribes)
+    }
+}
+
+/** A navigation entry's lifecycle: covered by Settings it stops, back on top it resumes, and it stays composed. */
+internal class Entry : LifecycleOwner {
+    private val registry = LifecycleRegistry.createUnsafe(this).apply { currentState = Lifecycle.State.RESUMED }
+    override val lifecycle: Lifecycle get() = registry
+
+    fun covered() {
+        registry.currentState = Lifecycle.State.CREATED
+    }
+
+    fun back() {
+        registry.currentState = Lifecycle.State.RESUMED
     }
 }

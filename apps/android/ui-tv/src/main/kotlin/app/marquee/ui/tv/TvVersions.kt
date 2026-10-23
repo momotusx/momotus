@@ -57,6 +57,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.marquee.core.Format
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.VersionsCopy
@@ -161,12 +162,13 @@ fun TvVersions(
         }
         Unit
     }
-    // Back from Settings opened here: ask the core again.
-    LaunchedEffect(versions) {
+    // Back from Settings opened here: ask the core again when the page resumes, whether it stayed composed or not.
+    LifecycleResumeEffect(versions) {
         if (versions?.askAgain == true) {
             versions.askAgain = false
             versions.retry()
         }
+        onPauseOrDispose {}
     }
     // The list, for Right from the empty state's actions.
     val list = remember { FocusRequester() }
@@ -498,7 +500,6 @@ private fun Sources(
     val open = remember { mutableStateMapOf<String, Boolean>() }
     val scope = rememberCoroutineScope()
     // Focus by key once its node is composed (an item a toggle just inserted is not yet attached).
-    val focusSoon = { key: String -> scope.launch { focus.focusWhenReady(key, focus.interactions, waitMs = 1_000) } }
     // Looked up when focus moves, so the builder below calls nothing composable.
     val toPlay = Modifier.focusProperties { left = focus.requester(PLAY) ?: FocusRequester.Default }
 
@@ -558,8 +559,24 @@ private fun Sources(
                 // the first, reaches it, so a long section folds in two presses (plans/versions-android-spec.md 2).
                 val fold = {
                     open[group] = !all
-                    // Back on the section's Show all once it has folded.
-                    if (all) focusSoon(foldKey(group))
+                    // Back on the section's Show all once it has folded, its heading brought to the top first: from
+                    // deep in a long section the Show all would land out of view and never take the focus.
+                    if (all) {
+                        val seen = listState.layoutInfo.visibleItemsInfo
+                        val head =
+                            seen.firstOrNull { it.key == group }?.index
+                                ?: seen.firstOrNull { it.key == foldKey(group) }?.let { it.index - rows.size - 1 }
+                        scope.launch {
+                            head?.let {
+                                listState.scrollToItem(it)
+                                // Rows too tall for the heading and Show all on one screen: Show all at the top.
+                                if (listState.layoutInfo.visibleItemsInfo.none { i -> i.key == foldKey(group) }) {
+                                    listState.scrollToItem(it + 1 + SHOWN)
+                                }
+                            }
+                            focus.focusWhenReady(foldKey(group), focus.interactions, waitMs = 1_000)
+                        }
+                    }
                 }
                 item(key = group) {
                     Heading {
@@ -655,7 +672,7 @@ private fun RowSkeleton(modifier: Modifier = Modifier) {
         Column(Modifier.alpha(0f).clearAndSetSemantics {}, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             BadgeRow(listOf("1080p" to BadgeLook.Filled))
             MqText("2 GB, ready now", role = TextRole.Callout, maxLines = 1)
-            MqText("A.2010.1080p.mkv", role = TextRole.Caption, maxLines = 1)
+            MqText("A.2010.1080p.mkv", role = TextRole.Caption, maxLines = 2, minLines = 2)
         }
         Skeleton(Modifier.matchParentSize())
     }
@@ -717,12 +734,14 @@ private fun SourceRow(
             } else {
                 ToneWord(VersionsCopy.rowWords(row, why), tone(line.tone), maxLines = 1, icon = why?.let(::whyIcon))
             }
+            // Two lines kept, so a long release name shows whole on focus and every row stays one height.
             MqText(
                 VersionsCopy.details(row),
                 Modifier.graphicsLayer { alpha = details },
                 role = TextRole.Caption,
                 color = colors.muted,
-                maxLines = 1,
+                maxLines = 2,
+                minLines = 2,
             )
         }
     }

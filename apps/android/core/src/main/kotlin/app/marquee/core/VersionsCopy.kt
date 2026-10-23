@@ -42,14 +42,11 @@ sealed interface VersionLine {
  * beyond what the user's own addons report.
  */
 object VersionsCopy {
-    /** Why a version is recommended; "cached on X" when the status names the service. */
-    fun reason(
-        reason: Reason,
-        status: VersionStatus? = null,
-    ): String =
+    /** Why a version is recommended. No service is named, as no addon is: "Ready now", never "Ready on TorBox". */
+    fun reason(reason: Reason): String =
         when (reason) {
             Reason.ReadyNow -> {
-                (status as? VersionStatus.Ready)?.service?.let { "Ready now, cached on $it" } ?: "Ready now"
+                "Ready now"
             }
 
             Reason.PlaysDirectly -> {
@@ -96,9 +93,9 @@ object VersionsCopy {
 
     fun status(status: VersionStatus): String =
         when (status) {
-            is VersionStatus.Ready -> status.service?.let { "Ready on $it" } ?: "Ready"
+            is VersionStatus.Ready -> "Ready"
             is VersionStatus.Torrent -> status.seeds?.let { "Torrent, $it seeds" } ?: "Torrent"
-            is VersionStatus.NeedsDownload -> status.service?.let { "Needs download on $it" } ?: "Needs download"
+            is VersionStatus.NeedsDownload -> "Needs download"
             VersionStatus.Direct -> "Direct link"
         }
 

@@ -57,6 +57,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.marquee.core.Format
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.VersionsCopy
@@ -155,12 +156,13 @@ fun PhoneVersions(
         }
         Unit
     }
-    // Back from Settings opened here: ask the core again.
-    LaunchedEffect(versions) {
+    // Back from Settings opened here: ask the core again when the page resumes, whether it stayed composed or not.
+    LifecycleResumeEffect(versions) {
         if (versions?.askAgain == true) {
             versions.askAgain = false
             versions.retry()
         }
+        onPauseOrDispose {}
     }
     // The row whose details sheet is open, and each row's info button, which takes the focus back when it closes.
     var sheet by remember { mutableStateOf<VersionRow?>(null) }

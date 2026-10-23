@@ -32,6 +32,8 @@ dependencies {
     api(project(":design"))
     api(project(":player"))
     implementation(libs.androidx.activity.compose)
+    // Back from Settings asks again on the entry's resume (LifecycleResumeEffect).
+    implementation(libs.androidx.lifecycle.runtime.compose)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test.junit)
