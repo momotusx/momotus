@@ -84,14 +84,41 @@ final class AetherSession {
             .receive(on: DispatchQueue.main)
             .sink { cues in MainActor.assumeIsolated { if mine() { events.cues(cues.compactMap(Self.cue)) } } }
             .store(in: &bag)
+        // Where the engine's start goes (plans/apple-second-engine.md 2.3), logged at the first frame: the probe
+        // (open and find_stream_info), the session (route and remux set up), then the first frame (for a remuxed
+        // source, its first segment's bytes).
+        let loaded = ContinuousClock.now
+        var passed: [StartupCheckpoint: ContinuousClock.Instant] = [:]
+        var logged = false
+        engine.$startupProgress
+            .receive(on: DispatchQueue.main)
+            .sink { progress in
+                MainActor.assumeIsolated {
+                    guard mine(), let progress, passed[progress.checkpoint] == nil else { return }
+                    passed[progress.checkpoint] = .now
+                }
+            }
+            .store(in: &bag)
         engine.$hasFirstFrameReadyForDisplay
             .receive(on: DispatchQueue.main)
-            .sink { shown in MainActor.assumeIsolated { if mine(), shown { events.firstFrame() } } }
+            .sink { shown in
+                MainActor.assumeIsolated {
+                    guard mine(), shown else { return }
+                    defer { events.firstFrame() }
+                    guard !logged else { return }
+                    logged = true
+                    let ms = { (from: ContinuousClock.Instant?, to: ContinuousClock.Instant?) in
+                        from.flatMap { from in to.map { "\(Int(($0 - from) / .milliseconds(1)))" } } ?? "n/a"
+                    }
+                    let (probed, session) = (passed[.streamsProbed], passed[.sessionConstructed])
+                    coreLog.notice("metric engine_start probe_ms=\(ms(loaded, probed), privacy: .public) session_ms=\(ms(probed, session), privacy: .public) frame_ms=\(ms(session, .now), privacy: .public)")
+                }
+            }
             .store(in: &bag)
         let engine = engine
         opening = Task { [weak self] in
             do {
-                try await engine.load(url: url, startPosition: start > 1 ? start : nil)
+                try await engine.load(url: url, startPosition: start > 1 ? start : nil, options: Self.options)
                 engine.play()
             } catch is CancellationError {
             } catch {
@@ -104,6 +131,16 @@ final class AetherSession {
             self.stop()
             events.failed("the second player did not open this source within \(Int(openWithin / .seconds(1))) s")
         }
+    }
+
+    /// The probe reads 8 MiB, not the engine's 50: a sparse track with no early packet (a PGS subtitle) makes
+    /// find_stream_info read to the budget, which on a torrent goes at the swarm's pace (20 s on a walk, cut by
+    /// the open bound). Video and audio resolve in the first packets; a PGS track that does not is left out (the
+    /// overlay draws text only).
+    static var options: LoadOptions {
+        var options = LoadOptions()
+        options.probesize = 8 << 20
+        return options
     }
 
     /// A text cue as the overlay draws it; a bitmap cue is not text.
