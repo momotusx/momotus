@@ -93,10 +93,11 @@ private const val ACTIONS = "actions"
 private const val RETRY = "retry"
 
 /**
- * A title on TV: artwork behind the facts, then the primary action (Play, with the version it will
- * play under it; "Add a source" when nothing can play), Versions, the library and watched toggles,
- * the details, and for a series the seasons and the episodes of the selected one. Focus starts on
- * the primary action and comes back to what it was on after Versions.
+ * A title on TV: artwork behind the facts, then the primary action (Play, always, with the version it
+ * will play or why nothing can under it; inert in the states whose only way on is Back), Versions, the
+ * library and watched toggles, the details, and for a series the seasons and the episodes of the selected
+ * one. Focus starts on Play, or on the next action when Play is inert, and comes back to what it was on
+ * after Versions.
  *
  * @param onPlay Play was chosen with the recommended version [key] of [videoId].
  * @param onVersions the Versions screen for [videoId] was asked for (also what Play does while no
@@ -290,8 +291,8 @@ private fun Info(
             horizontalArrangement = Arrangement.spacedBy(Marquee.space.m),
             verticalAlignment = Alignment.Top,
         ) {
-            // One button for every state, so its node (and the focus on it) survives the addons answering:
-            // Play turning into "Add a source" must not drop focus onto the page underneath.
+            // One button for every state, so its node survives the addons answering. Play may turn inert (a
+            // state whose only way on is Back), and an inert Play takes no focus: the first focus passes it by.
             PrimaryButton(
                 label = primary.label,
                 icon = PlayFilled,
