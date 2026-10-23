@@ -1,0 +1,238 @@
+{
+ "pendingAddons": [],
+ "slowAddons": [],
+ "failedAddons": [],
+ "done": true,
+ "frozen": true,
+ "conditions": null,
+ "note": null,
+ "hidden": {
+  "count": 0,
+  "byReason": []
+ },
+ "blocked": null,
+ "recommended": {
+  "key": "bt:pick",
+  "quality": "1080p",
+  "features": [
+   "HDR10"
+  ],
+  "sizeBytes": 4294967296,
+  "status": {
+   "kind": "ready",
+   "service": "TorBox"
+  },
+  "via": "Sample Source",
+  "releaseName": "Sintel.2010.1080p.BluRay.mp4",
+  "languages": [
+   "en"
+  ],
+  "reasons": [],
+  "group": "best",
+  "failoverCount": 0,
+  "line": {
+   "kind": "ready",
+   "service": "TorBox",
+   "sizeBytes": 4294967296
+  },
+  "sourceClass": "swarm",
+  "bitrateMbps": null,
+  "score": null,
+  "onDevice": null
+ },
+ "rows": [
+  {
+   "key": "bt:4k",
+   "quality": "4K",
+   "features": [
+    "HDR10"
+   ],
+   "sizeBytes": 12884901888,
+   "status": {
+    "kind": "torrent",
+    "seeds": 40
+   },
+   "via": "Sample Source",
+   "releaseName": "Sintel.2010.4K.WEB.mp4",
+   "languages": [
+    "en"
+   ],
+   "reasons": [],
+   "group": "best",
+   "failoverCount": 0,
+   "line": {
+    "kind": "few",
+    "seeders": 3
+   },
+   "sourceClass": "swarm",
+   "bitrateMbps": null,
+   "score": null,
+   "onDevice": null
+  },
+  {
+   "key": "bt:1080b",
+   "quality": "1080p",
+   "features": [
+    "HDR10"
+   ],
+   "sizeBytes": 3221225472,
+   "status": {
+    "kind": "torrent",
+    "seeds": 40
+   },
+   "via": "Sample Source",
+   "releaseName": "Sintel.2010.1080p.WEB.mp4",
+   "languages": [
+    "en"
+   ],
+   "reasons": [],
+   "group": "best",
+   "failoverCount": 0,
+   "line": {
+    "kind": "few",
+    "seeders": 5
+   },
+   "sourceClass": "swarm",
+   "bitrateMbps": null,
+   "score": null,
+   "onDevice": null
+  },
+  {
+   "key": "bt:1080c",
+   "quality": "1080p",
+   "features": [
+    "HDR10"
+   ],
+   "sizeBytes": 2576980377,
+   "status": {
+    "kind": "torrent",
+    "seeds": 40
+   },
+   "via": "Sample Source",
+   "releaseName": "Sintel.2010.1080p.WEB.mp4",
+   "languages": [
+    "tr"
+   ],
+   "reasons": [],
+   "group": "otherLanguages",
+   "failoverCount": 0,
+   "line": {
+    "kind": "quick",
+    "seeders": 40,
+    "sizeBytes": 2576980377
+   },
+   "sourceClass": "swarm",
+   "bitrateMbps": null,
+   "score": null,
+   "onDevice": null
+  },
+  {
+   "key": "bt:720",
+   "quality": "720p",
+   "features": [
+    "HDR10"
+   ],
+   "sizeBytes": 1610612736,
+   "status": {
+    "kind": "torrent",
+    "seeds": 40
+   },
+   "via": "Sample Source",
+   "releaseName": "Sintel.2010.720p.WEB.mp4",
+   "languages": [
+    "en"
+   ],
+   "reasons": [],
+   "group": "best",
+   "failoverCount": 0,
+   "line": {
+    "kind": "quick",
+    "seeders": 40,
+    "sizeBytes": 1610612736
+   },
+   "sourceClass": "swarm",
+   "bitrateMbps": null,
+   "score": null,
+   "onDevice": null
+  }
+ ],
+ "smaller": {
+  "key": "bt:720",
+  "quality": "720p",
+  "features": [
+   "HDR10"
+  ],
+  "sizeBytes": 1610612736,
+  "status": {
+   "kind": "torrent",
+   "seeds": 40
+  },
+  "via": "Sample Source",
+  "releaseName": "Sintel.2010.720p.WEB.mp4",
+  "languages": [
+   "en"
+  ],
+  "reasons": [],
+  "group": "best",
+  "failoverCount": 0,
+  "line": {
+   "kind": "quick",
+   "seeders": 40,
+   "sizeBytes": 1610612736
+  },
+  "sourceClass": "swarm",
+  "bitrateMbps": null,
+  "score": null,
+  "onDevice": null
+ },
+ "sharper": {
+  "key": "bt:4k",
+  "quality": "4K",
+  "features": [
+   "HDR10"
+  ],
+  "sizeBytes": 12884901888,
+  "status": {
+   "kind": "torrent",
+   "seeds": 40
+  },
+  "via": "Sample Source",
+  "releaseName": "Sintel.2010.4K.WEB.mp4",
+  "languages": [
+   "en"
+  ],
+  "reasons": [],
+  "group": "best",
+  "failoverCount": 0,
+  "line": {
+   "kind": "few",
+   "seeders": 3
+  },
+  "sourceClass": "swarm",
+  "bitrateMbps": null,
+  "score": null,
+  "onDevice": null
+ },
+ "sections": [
+  {
+   "quality": "uhd",
+   "keys": [
+    "bt:4k"
+   ]
+  },
+  {
+   "quality": "fhd",
+   "keys": [
+    "bt:1080b",
+    "bt:1080c"
+   ]
+  },
+  {
+   "quality": "hd",
+   "keys": [
+    "bt:720"
+   ]
+  }
+ ],
+ "empty": null
+}

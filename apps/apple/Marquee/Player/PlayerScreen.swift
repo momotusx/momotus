@@ -10,10 +10,8 @@ struct PlayerScreen: View {
     @State private var controls = true
     @State private var lastTouch = ContinuousClock.now
     @State private var showNextVersions = false
-    /// This title's Versions, after every source of the pick failed.
+    /// This title's Versions over the paused player: Choose another version, or the failure card's way on.
     @State private var showVersions = false
-    /// The failure's Add an account: where one is added, as from the title page.
-    @State private var showAccount = false
     /// When an OSD menu opened; a pick or the next touch clears it.
     @State private var menuOpenedAt: ContinuousClock.Instant?
     /// The controls stay up and Up Next waits while this holds (`PlayerLayout.menuHolds`).
@@ -92,8 +90,7 @@ struct PlayerScreen: View {
                 .accessibilityHidden(controls)
             #endif
             StatusOverlay(
-                model: model, back: close, chooseVersion: model.versions == nil ? nil : { showVersions = true },
-                addAccount: { showAccount = true },
+                model: model, back: close, chooseVersion: model.versions == nil ? nil : { openVersions() },
                 overControls: phoneControls
                     ? PlayerLayout.statusOverTransport(windowHeight: windowHeight, safeBottom: safeBottom)
                     : PlayerLayout.statusOverControls(controlsShown: controlsShown, windowHeight: windowHeight, controlsHeight: controlsHeight),
@@ -176,6 +173,14 @@ struct PlayerScreen: View {
                 EndCard(model: model, back: close) { showNextVersions = true }
                     .transition(.opacity)
             }
+            if showVersions, let versions = model.versions {
+                // Over the player, which waits paused under it: a pick replaces the play, Back returns to it.
+                VersionsScreen(model: versions, heading: model.route.target.title, core: core, choose: { key in
+                    model.switchVersion(key)
+                    closeVersions()
+                }, back: { closeVersions() })
+                .transition(.opacity)
+            }
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height + $0.safeAreaInsets.top + $0.safeAreaInsets.bottom } action: { windowHeight = $0 }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { safeBottom = $0 }
@@ -189,12 +194,6 @@ struct PlayerScreen: View {
         .onChange(of: model.playback?.trakt) { _, now in
             if let mark = TraktRules.playbackMark(now), mark.warn { announce(mark.label) }
         }
-        .navigationDestination(isPresented: $showAccount) { DebridScreen(core: core) }
-        .navigationDestination(isPresented: $showVersions) {
-            if let versions = model.versions {
-                VersionsScreen(model: versions, heading: model.route.target.title, core: core)
-            }
-        }
         .navigationDestination(isPresented: $showNextVersions) {
             if let versions = model.nextVersions, let next = model.next {
                 VersionsScreen(model: versions, heading: "S\(next.season):E\(next.episode) \(next.title)", core: core)
@@ -206,10 +205,6 @@ struct PlayerScreen: View {
         .task(id: model.taskId) { await model.drive() }
         // Back from the background on a new port: the source opens again where it was.
         .onChange(of: core.serverMoves) { model.serverMoved() }
-        // The account card follows the versions: an account added makes the play start.
-        .onChange(of: model.versions?.snapshot) { model.versionsChanged() }
-        .onChange(of: model.playback?.phase) { model.versionsChanged() }
-        .onChange(of: model.openError) { model.versionsChanged() }
         // The size reaches the file's own tracks as soon as it changes.
         .onChange(of: model.subtitleSize) { model.textSize() }
         .task { await autoHide() }
@@ -217,7 +212,7 @@ struct PlayerScreen: View {
         #if !os(macOS)
         .accessibilityAction(.magicTap) { model.togglePlay() }
         #endif
-        .accessibilityAction(.escape) { close() }
+        .accessibilityAction(.escape) { escape() }
         .onAppear {
             immersion.active = true
             #if os(iOS)
@@ -244,29 +239,32 @@ struct PlayerScreen: View {
         .persistentSystemOverlays(.hidden)
         // A hardware keyboard on iPad: the Mac's player keys, listed when Command is held.
         .background {
-            Group {
-                Button("Play or Pause") { model.togglePlay() }.keyboardShortcut(.space, modifiers: [])
-                Button("Back 10 Seconds") { model.skip(-10) }.keyboardShortcut(.leftArrow, modifiers: [])
-                Button("Forward 10 Seconds") { model.skip(10) }.keyboardShortcut(.rightArrow, modifiers: [])
-                Button("Close Player") { close() }.keyboardShortcut(.escape, modifiers: [])
+            if !showVersions {
+                Group {
+                    Button("Play or Pause") { model.togglePlay() }.keyboardShortcut(.space, modifiers: [])
+                    Button("Back 10 Seconds") { model.skip(-10) }.keyboardShortcut(.leftArrow, modifiers: [])
+                    Button("Forward 10 Seconds") { model.skip(10) }.keyboardShortcut(.rightArrow, modifiers: [])
+                    Button("Close Player") { close() }.keyboardShortcut(.escape, modifiers: [])
+                }
+                .opacity(0)
+                .accessibilityHidden(true)
             }
-            .opacity(0)
-            .accessibilityHidden(true)
         }
         #elseif os(macOS)
         .toolbarVisibility(.hidden, for: .windowToolbar)
         .focusable()
         .focusEffectDisabled()
-        .onKeyPress(.space) { model.togglePlay(); return .handled }
-        .onKeyPress(.leftArrow) { model.skip(-10); return .handled }
-        .onKeyPress(.rightArrow) { model.skip(10); return .handled }
-        .onKeyPress(.escape) { close(); return .handled }
+        // Under Versions the keys are the page's: Escape goes back to the player.
+        .onKeyPress(.space) { playerKey { model.togglePlay() } }
+        .onKeyPress(.leftArrow) { playerKey { model.skip(-10) } }
+        .onKeyPress(.rightArrow) { playerKey { model.skip(10) } }
+        .onKeyPress(.escape) { escape(); return .handled }
         .focusedSceneValue(\.playerKeys, PlayerKeys(model: model, close: close))
         #elseif os(tvOS)
         // Back one step at a time, as Leanback and the Android TV app do: an
         // open menu closes itself first, then the controls hide, then the player leaves.
         .onExitCommand {
-            if controlsShown { withAnimation(Theme.Motion.panel) { controls = false } } else { close() }
+            if showVersions { closeVersions() } else if controlsShown { withAnimation(Theme.Motion.panel) { controls = false } } else { close() }
         }
         // The remote's Play/Pause, wherever focus is: it toggles and shows the controls.
         .onPlayPauseCommand {
@@ -374,6 +372,30 @@ struct PlayerScreen: View {
         dismiss()
     }
 
+    #if os(macOS)
+    /// The player's own keys, not while Versions is over it.
+    private func playerKey(_ action: () -> Void) -> KeyPress.Result {
+        guard !showVersions else { return .ignored }
+        action()
+        return .handled
+    }
+    #endif
+
+    private func escape() {
+        if showVersions { closeVersions() } else { close() }
+    }
+
+    /// Versions over the paused player; the attempt keeps resolving under it.
+    private func openVersions() {
+        model.cover()
+        withAnimation(Theme.Motion.panel) { showVersions = true }
+    }
+
+    private func closeVersions() {
+        model.uncover()
+        withAnimation(Theme.Motion.panel) { showVersions = false }
+    }
+
     private func touched(toggle: Bool) {
         lastTouch = .now
         menuOpenedAt = nil
@@ -466,11 +488,9 @@ private struct SubtitleLine: View {
 private struct StatusOverlay: View {
     let model: PlayerModel
     let back: () -> Void
-    /// Opens this title's Versions: failover only tries the same release from
-    /// other sources, so another version is the way on.
+    /// Opens this title's Versions over the player: failover only tries the
+    /// same release from other sources, so another version is the way on.
     let chooseVersion: (() -> Void)?
-    /// Goes where a streaming service account is added.
-    let addAccount: () -> Void
     /// Set when the shown controls reach the middle: the waiting status sits
     /// this far up, just over them (PlayerLayout.statusOverControls).
     var overControls: CGFloat?
@@ -482,8 +502,7 @@ private struct StatusOverlay: View {
 
     /// The card's actions, the first the way on with focus. A view that could
     /// not open has no offer, and its Try again opens it again.
-    @ViewBuilder private func actions(cannotOpen: Bool) -> some View {
-        let order = actionOrder(cannotOpen: cannotOpen)
+    @ViewBuilder private func actions(_ order: [FailureAction], cannotOpen: Bool) -> some View {
         ForEach(order, id: \.self) { action in
             button(action, cannotOpen: cannotOpen)
                 .buttonStyle(PillButtonStyle(prominent: action == order.first))
@@ -495,16 +514,19 @@ private struct StatusOverlay: View {
     private func button(_ action: FailureAction, cannotOpen: Bool) -> Button<Text> {
         let label = PlayerLayout.failureLabel(action, offer: model.playback?.offer?.label)
         return switch action {
-        case .account: Button(label, action: addAccount)
         case .offer: Button(label) { if let key = model.playback?.offer?.key { model.switchVersion(key) } }
+        case .playFromDevice: Button(label) { if let key = kept { model.switchVersion(key) } }
         case .retry: Button(label) { if cannotOpen { model.reopen() } else { model.retry() } }
-        case .choose: Button(label) { chooseVersion?() }
+        case .choose, .versions: Button(label) { chooseVersion?() }
         case .back: Button(label, action: back)
         }
     }
 
+    /// The source kept on this device, which plays with no source in reach.
+    private var kept: String? { PlayerLayout.kept(model.versions?.snapshot) }
+
     /// A headline, one line per reason, and the actions.
-    private func card(_ headline: String, lines: [String], cannotOpen: Bool) -> some View {
+    private func card(_ headline: String, lines: [String], order: [FailureAction], cannotOpen: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
             Text(headline)
                 .display(Theme.type.title1)
@@ -522,8 +544,8 @@ private struct StatusOverlay: View {
             }
             // Side by side when they fit, else stacked with the way on first.
             ViewThatFits(in: .horizontal) {
-                HStack(spacing: Theme.Space.s) { actions(cannotOpen: cannotOpen) }
-                VStack(alignment: .leading, spacing: 10) { actions(cannotOpen: cannotOpen) }
+                HStack(spacing: Theme.Space.s) { actions(order, cannotOpen: cannotOpen) }
+                VStack(alignment: .leading, spacing: 10) { actions(order, cannotOpen: cannotOpen) }
             }
             .padding(.top, 8)
         }
@@ -532,49 +554,71 @@ private struct StatusOverlay: View {
         .frame(maxWidth: 640, alignment: .leading)
         .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true)
         .padding(.horizontal, Theme.Space.m)
-        .onAppear { focus = PlayerLayout.failureFocus(actionOrder(cannotOpen: cannotOpen)) }
-    }
-
-    private func actionOrder(cannotOpen: Bool) -> [FailureAction] {
-        let account = PlayerLayout.needsAccount(model.versions?.snapshot)
-        return cannotOpen
-            ? PlayerLayout.cannotOpenActions(canChoose: chooseVersion != nil, needsAccount: account)
-            : PlayerLayout.failureActions(offer: model.playback?.offer != nil, canChoose: chooseVersion != nil, needsAccount: account)
+        .onAppear { focus = PlayerLayout.failureFocus(order) }
     }
 
     private var waitingWords: some View {
-        Text(PlayerLayout.waitingWords(model.playback, notice: model.notice, tryingAgain: model.tryingAgain))
+        Text(PlayerLayout.waitingWords(
+            model.playback, notice: model.notice, tryingAgain: model.tryingAgain, findingPick: model.route.waitsForPick))
             .textFont(Theme.type.callout, relativeTo: .callout)
             .foregroundStyle(.white.opacity(0.8))
+    }
+
+    /// The core's quiet "Choose another version" under the stage line: its place is held from the
+    /// start, so nothing moves when it shows; hidden, it is neither seen, focused nor read.
+    private func another(_ status: PlayerStatus) -> some View {
+        let shown = PlayerLayout.offersAnother(model.playback, status: status) && chooseVersion != nil
+        return Button(StreamChoice.words.player.chooseAnother) { chooseVersion?() }
+            .buttonStyle(PillButtonStyle())
+            .fixedSize()
+            .opacity(shown ? 1 : 0)
+            .disabled(!shown)
+            .accessibilityHidden(!shown)
+            .onChange(of: shown) { _, now in
+                if now { AccessibilityNotification.Announcement(StreamChoice.words.player.chooseAnotherSaid).post() }
+            }
     }
 
     var body: some View {
         let status = PlayerLayout.status(
             phase: model.playback?.phase, cannotOpen: model.openError != nil,
-            firstFrameShown: model.firstFrameMs != nil, waiting: model.waiting)
+            firstFrameShown: model.firstFrameMs != nil, waiting: model.waiting, noPick: model.noPick)
+        let canChoose = chooseVersion != nil
         switch status {
         case .failed:
-            card(PlayerLayout.failureHeadline(offer: model.playback?.offer != nil),
-                 lines: FailedSources.group(model.playback?.attempts ?? []).map { "\($0.via): \($0.words)" },
-                 cannotOpen: false)
+            let playback = model.playback
+            card(PlayerLayout.failureHeadline(empty: playback?.empty, offer: playback?.offer != nil),
+                 lines: PlayerLayout.failureLines(playback?.attempts ?? []),
+                 order: PlayerLayout.failureActions(empty: playback?.empty, offer: playback?.offer != nil, kept: kept != nil, canChoose: canChoose))
+        case .noPick:
+            let empty = model.versions?.snapshot?.empty?.kind
+            card(empty.flatMap(VersionWords.emptyLine) ?? "No version was ready in time", lines: [],
+                 order: PlayerLayout.noPickActions(empty, canChoose: canChoose))
         case .cannotOpen:
-            card(PlayerLayout.cannotOpenHeadline, lines: [model.openError ?? ""], cannotOpen: true)
+            card(PlayerLayout.cannotOpenHeadline, lines: [model.openError ?? ""],
+                 order: PlayerLayout.cannotOpenActions(canChoose: canChoose), cannotOpen: true)
         case .waiting(let words):
             if let overControls {
-                HStack(spacing: 10) {
-                    if !spinnerInPlay { ProgressView().tint(.white) }
-                    if words { waitingWords.lineLimit(1) }
+                VStack(spacing: 10) {
+                    HStack(spacing: 10) {
+                        if !spinnerInPlay { ProgressView().tint(.white) }
+                        if words { waitingWords.lineLimit(1) }
+                    }
+                    .allowsHitTesting(false)
+                    another(status)
                 }
                 .padding(.horizontal, Theme.Space.s)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                 .padding(.bottom, overControls)
-                .allowsHitTesting(false)
             } else {
                 VStack(spacing: 14) {
-                    ProgressView().controlSize(.large).tint(.white)
-                    if words { waitingWords }
+                    VStack(spacing: 14) {
+                        ProgressView().controlSize(.large).tint(.white)
+                        if words { waitingWords }
+                    }
+                    .allowsHitTesting(false)
+                    another(status)
                 }
-                .allowsHitTesting(false)
             }
         case .none:
             EmptyView()

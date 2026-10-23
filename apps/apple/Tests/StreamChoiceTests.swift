@@ -75,18 +75,6 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
     #expect(StreamChoice.lineWords(try line(#"{"kind": "somethingNew"}"#)) == nil)
 }
 
-@Test func aHiddenRowWithNoRoomSaysSo() throws {
-    let hidden = try JSONDecoder().decode(HiddenSummary.self, from: Data(#"{"count": 3, "byReason": [["noSpace", 2], ["tooLarge", 1]]}"#.utf8))
-    #expect(VersionWords.hidden(hidden) == "2 have no room to play here, even a few minutes at a time, 1 is over your size limit")
-    // A storage that plays no window: too large for it, whatever its free space.
-    #expect(VersionWords.hidden(hidden, window: false) == "2 are too large for this storage, 1 is over your size limit")
-    let blocked = try JSONDecoder().decode(BlockedVersions.self, from: Data(#"{"reason": "noSpace", "count": 3, "rows": []}"#.utf8))
-    #expect(StreamChoice.blockedWords(blocked, window: false)?.text == "3 versions are too large for this storage.")
-    let one = try JSONDecoder().decode(BlockedVersions.self, from: Data(#"{"reason": "noSpace", "count": 1, "rows": []}"#.utf8))
-    #expect(StreamChoice.blockedWords(one, window: false)?.text == "1 version is too large for this storage.")
-    #expect(StreamChoice.blockedWords(blocked)?.text == "Marquee found 3 versions, but this device is nearly full, so none can play here.")
-}
-
 @Test func theRecommendedCardShowsTheWindowsLineAndNoOther() throws {
     let row = { (line: String) in
         try JSONDecoder().decode(VersionRow.self, from: Data((#"{"key": "k", "quality": "1080p", "features": [], "sizeBytes": null, "status": {"kind": "torrent", "seeds": 53}, "via": "Fixture", "releaseName": "A.1080p.mkv", "languages": [], "reasons": [], "group": "best", "failoverCount": 0, "line": "# + line + "}").utf8))
@@ -94,15 +82,6 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
     let buffer = try row(#"{"kind": "buffer", "seeders": 53, "sizeBytes": 571473920, "aheadMin": 8, "budgetBytes": 532676608}"#)
     #expect(StreamChoice.cardLine(buffer) == LineWords(tone: .ok, text: "Plays without storing the whole file", details: "53 seeders, 545 MB, room for about 8 min ahead in 508 MB"))
     #expect(StreamChoice.cardLine(try row(#"{"kind": "quick", "seeders": 53, "sizeBytes": 571473920}"#)) == nil)
-}
-
-@Test func blockedVersionsSayWhyAndOfferTheirAction() throws {
-    let blocked = try JSONDecoder().decode(BlockedVersions.self, from: Data(#"{"reason": "needsAccount", "count": 12, "rows": []}"#.utf8))
-    let w = try #require(StreamChoice.blockedWords(blocked))
-    #expect(w.text.hasPrefix("Marquee found 12 versions. This version of the app plays them only through a streaming service account"))
-    #expect(w.action == "Add an account")
-    let none = try JSONDecoder().decode(BlockedVersions.self, from: Data(#"{"reason": "nothingPlaysHere", "count": 1, "rows": []}"#.utf8))
-    #expect(StreamChoice.blockedWords(none)?.text == "Found 1 version, but none plays on this device.")
 }
 
 @Test func theDeviceLineNamesTheScreenTheConnectionAndTheDisk() {
@@ -115,10 +94,6 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
     #expect(StreamChoice.speed(http: measured, p2p: estimate, engine: true, account: false) == estimate)
     #expect(StreamChoice.speed(http: measured, p2p: estimate, engine: true, account: true) == measured)
     #expect(StreamChoice.speed(http: measured, p2p: estimate, engine: false, account: false) == measured)
-    let v = VersionsConditions(
-        screenClass: 1080, hdr: false, network: "ethernet", http: measured, p2p: estimate, freeBytes: nil, runtimeMin: 50,
-        sizeLimitBytes: 5_368_709_120, minSeeders: 50, engine: false, account: false)
-    #expect(StreamChoice.conditionsHeader(device: "desktop", v) == "This computer: 1080p, about 42 Mbit/s on Ethernet")
     #expect(StreamChoice.network(wifi: true, ethernet: false, cellular: false) == "wifi")
     #expect(StreamChoice.network(wifi: true, ethernet: true, cellular: false) == "ethernet")
     #expect(StreamChoice.network(wifi: false, ethernet: false, cellular: true) == "cellular")
@@ -180,19 +155,9 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
     #expect(try JSONDecoder().decode(VersionRow.self, from: Data((rowJSON + "}").utf8)).line == nil)
     let snap = #"{"recommended": null, "rows": [], "hidden": {"count": 0, "byReason": []}, "pendingAddons": [], "slowAddons": [], "failedAddons": [], "done": true, "frozen": false"#
     let full = try JSONDecoder().decode(VersionsSnapshot.self, from: Data((snap + #", "conditions": {"screenClass": 2160, "hdr": true, "network": "wifi", "http": {"mbps": 15, "samples": 0}, "p2p": {"mbps": 10, "samples": 0}, "freeBytes": 1024, "runtimeMin": 22, "sizeLimitBytes": null, "minSeeders": 50, "engine": true, "account": false}, "blocked": {"reason": "noSpace", "count": 2, "rows": []}, "note": null}"#).utf8))
-    #expect(full.conditions?.screenClass == 2160 && full.blocked?.reason == "noSpace" && full.note == nil)
+    // `blocked` and `hidden` are still sent (plans/play-every-version.md 2c) and no longer read.
+    #expect(full.conditions?.screenClass == 2160 && full.empty == nil && full.note == nil)
     #expect(try JSONDecoder().decode(VersionsSnapshot.self, from: Data((snap + "}").utf8)).conditions == nil)
-}
-
-@Test func almostNobodySharingDecodesWithItsSharedWords() throws {
-    let snap = #"{"recommended": null, "rows": [], "hidden": {"count": 0, "byReason": []}, "pendingAddons": [], "slowAddons": [], "failedAddons": [], "done": true, "frozen": false"#
-    #expect(try JSONDecoder().decode(VersionsSnapshot.self, from: Data((snap + #", "nobodySharing": true}"#).utf8)).nobodySharing == true)
-    #expect(try JSONDecoder().decode(VersionsSnapshot.self, from: Data((snap + #", "nobodySharing": false}"#).utf8)).nobodySharing == false)
-    // An older core sends none: nothing is said.
-    #expect(try JSONDecoder().decode(VersionsSnapshot.self, from: Data((snap + "}").utf8)).nobodySharing == nil)
-    // The words every app shows, from apps/shared/stream-choice-words.json.
-    #expect(StreamChoice.words.nobodySharing.text == "Almost nobody is sharing this right now")
-    #expect(StreamChoice.words.nobodySharing.details == "Every version has one seeder or none at the moment, so it may not start.")
 }
 
 @Suite(.serialized) @MainActor struct StreamChoiceWiringTests {
@@ -225,10 +190,10 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
 @Test func aRowReadsItsLineToAScreenReader() throws {
     let base = #"{"key": "k", "quality": "720p", "features": [], "sizeBytes": 1, "status": {"kind": "torrent", "seeds": 7}, "via": "Torrentio", "releaseName": "A.mp4", "languages": [], "reasons": [], "group": "best", "failoverCount": 0"#
     let row = try JSONDecoder().decode(VersionRow.self, from: Data((base + #", "line": {"kind": "few", "seeders": 7}}"#).utf8))
-    #expect(StreamChoice.spoken(row) == "720p, May start slowly, 7 seeders, via Torrentio")
-    // An older core's row says its status.
+    #expect(StreamChoice.spoken(row) == "720p, 1 byte, May start slowly, 7 seeders")
+    // An older core's row says its status; never its addon.
     let old = try JSONDecoder().decode(VersionRow.self, from: Data((base + "}").utf8))
-    #expect(StreamChoice.spoken(old) == "720p, Torrent, 7 seeds, via Torrentio")
+    #expect(StreamChoice.spoken(old) == "720p, 1 byte, Torrent, 7 seeds")
 }
 
 @Test func theResolutionChoiceAndTheScreenClassReadAsTheWebsDo() {
@@ -251,15 +216,6 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
     // Already pinned, or not open: nothing to send.
     #expect(!StreamChoice.shouldFreeze(open: true, frozen: true))
     #expect(!StreamChoice.shouldFreeze(open: false, frozen: false))
-}
-
-@Test func almostNobodySharingShowsOncePerScreen() {
-    // On the recommended card right before Play when there is one, never also over the list.
-    #expect(StreamChoice.nobodySharingPlace(true, hasRecommended: true) == .card)
-    // No card (every version blocked or hidden): over the list.
-    #expect(StreamChoice.nobodySharingPlace(true, hasRecommended: false) == .list)
-    #expect(StreamChoice.nobodySharingPlace(false, hasRecommended: true) == nil)
-    #expect(StreamChoice.nobodySharingPlace(nil, hasRecommended: false) == nil)
 }
 
 @Test func mayPauseSaysWhenFewAreSharing() {

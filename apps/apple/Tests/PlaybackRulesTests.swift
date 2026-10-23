@@ -134,7 +134,7 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
     #expect(CaptionStyle.face(named: "Menlo-Regular") == "Menlo-Regular")
 }
 
-@Test func sourcesThatFailedAlikeAreSaidOnceInFirstOrder() throws {
+@Test func sourcesThatFailedAlikeAreSaidOnceInFirstOrderWithNoAddonName() throws {
     let gone = "The link no longer exists (404)"
     let slow = "The source did not answer in time"
     let attempts = [
@@ -143,9 +143,9 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
         Attempt(key: "c", via: "Local", error: gone),
         Attempt(key: "d", via: "Torrentio", error: gone),
     ]
-    let grouped = FailedSources.group(attempts)
-    #expect(grouped.map(\.via) == ["Torrentio", "Torrentio", "Local"])
-    #expect(grouped.map(\.words) == [slow, "\(gone) · 2 sources", gone])
+    let lines = PlayerLayout.failureLines(attempts)
+    #expect(lines == [slow, "\(gone) · 3 sources"])
+    #expect(!lines.joined().contains("Torrentio") && !lines.joined().contains("Local"))
 }
 
 @Test func aFailoverNamesTheAttemptThatWasLoaded() {
@@ -379,13 +379,6 @@ private func phase(_ phase: String, _ extra: String = "") throws -> PlaybackSnap
     #expect(PlayerLayout.subtitleValue(picked: "German", found: 2, pending: false, ready: false) == ("German", true))
 }
 
-@Test func theFailureCardOffersTheNextVersionThenTryAgain() {
-    #expect(PlayerLayout.failureActions(offer: true, canChoose: true) == [.offer, .retry, .choose, .back])
-    // No version offered: Try again is first, the one that takes focus.
-    #expect(PlayerLayout.failureActions(offer: false, canChoose: true) == [.retry, .choose, .back])
-    #expect(PlayerLayout.failureActions(offer: false, canChoose: false) == [.retry, .back])
-}
-
 @Test func onlyADecoderThatCannotDecodeTheFileCountsAsDecode() {
     let busy = NSError(domain: AVFoundationErrorDomain, code: AVError.Code.decoderTemporarilyUnavailable.rawValue)
     #expect(playerFailure(busy).kind == "other")
@@ -438,11 +431,6 @@ private func phase(_ phase: String, _ extra: String = "") throws -> PlaybackSnap
     #expect(PlayerLayout.statusOverTransport(windowHeight: 402, safeBottom: 21) == 222)
 }
 
-@Test func theFailureHeadlineSaysOnlyThisVersionWhenAnotherIsOffered() {
-    #expect(PlayerLayout.failureHeadline(offer: true) == "This version could not be played")
-    #expect(PlayerLayout.failureHeadline(offer: false) == "None of the sources could be played")
-}
-
 @MainActor @Test func tryAgainAndSubtitlePicksSendTheirCommands() {
     let choices = PlayChoices()
     var sent: [[String: any Sendable]] = []
@@ -486,13 +474,6 @@ private func phase(_ phase: String, _ extra: String = "") throws -> PlaybackSnap
     // A stall mid-play: the spinner alone.
     #expect(PlayerLayout.status(phase: "ready", cannotOpen: false, firstFrameShown: true, waiting: true) == .waiting(words: false))
     #expect(PlayerLayout.status(phase: "ready", cannotOpen: false, firstFrameShown: true, waiting: false) == PlayerStatus.none)
-}
-
-@Test func theFailureCardSaysChooseAVersionAsTheOtherApps() {
-    #expect(PlayerLayout.failureLabel(.choose, offer: nil) == "Choose a version")
-    #expect(PlayerLayout.failureLabel(.offer, offer: "SD WEB") == "Play SD WEB")
-    #expect(PlayerLayout.failureLabel(.retry, offer: nil) == "Try again")
-    #expect(PlayerLayout.failureLabel(.back, offer: nil) == "Back")
 }
 
 @Test func anAcceptedTryAgainSaysSoEvenWhenItFailsAgainAtOnce() throws {
@@ -862,23 +843,6 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     #expect(SubtitleMenu.middle("short.name", max: 46) == "short.name")
 }
 
-@Test func aFailureWhereEveryVersionNeedsAnAccountOffersOneFirst() throws {
-    // The hero's words and destination (review r2 P2-6, the web's player:account).
-    let blocked = try JSONDecoder().decode(BlockedVersions.self, from: Data(#"{"reason": "needsAccount", "count": 4, "rows": []}"#.utf8))
-    let versions = VersionsSnapshot(
-        recommended: nil, rows: [], hidden: HiddenSummary(count: 0, byReason: []), pendingAddons: [], slowAddons: [],
-        failedAddons: [], done: true, frozen: false, conditions: nil, blocked: blocked, note: nil)
-    #expect(PlayerLayout.needsAccount(versions))
-    #expect(!PlayerLayout.needsAccount(nil))
-    // Add an account, then Choose a version, then Back, as the web and Android cards: no other source
-    // and no Try again can play a version that needs an account.
-    #expect(PlayerLayout.failureActions(offer: true, canChoose: true, needsAccount: true) == [.account, .choose, .back])
-    #expect(PlayerLayout.cannotOpenActions(canChoose: true, needsAccount: true) == [.account, .choose, .back])
-    #expect(PlayerLayout.failureActions(offer: false, canChoose: false, needsAccount: true) == [.account, .back])
-    #expect(PlayerLayout.failureLabel(.account, offer: nil) == "Add an account")
-    #expect(PlayerLayout.failureFocus(PlayerLayout.failureActions(offer: false, canChoose: true, needsAccount: true)) == .account)
-}
-
 @Test func aTracksTimingStartsWhereTheCoreKeptItAndSettlesAsOneCommand() throws {
     var track = sub(1, "eng", "en", "English", "Walk Clips")
     #expect(PlayerLayout.startDelay(nil) == 0)
@@ -901,39 +865,4 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     // The core's own field, as it sends it.
     let decoded = try JSONDecoder().decode(SubtitleTrack.self, from: Data(#"{"url": "u", "lang": "eng", "label": null, "source": "Walk", "forced": false, "hearingImpaired": false, "hashMatch": true, "madeForFps": 25.0, "delayMs": -500}"#.utf8))
     #expect(decoded.hashMatch == true && decoded.madeForFps == 25 && decoded.delayMs == -500)
-}
-
-@Test func theAccountCardPlaysTheVersionsPickOnceAnAccountMakesOnePlayable() throws {
-    // The web's and Android's follow (trunk 6877dfe2): the card waits on the versions view; Add an
-    // account and Back, or an account added anywhere, makes the core rank them again.
-    func versions(blocked reason: String?, pick: String?, done: Bool = true) throws -> VersionsSnapshot {
-        let blocked = try reason.map { try JSONDecoder().decode(BlockedVersions.self, from: Data(#"{"reason": "\#($0)", "count": 3, "rows": []}"#.utf8)) }
-        let row = pick.map {
-            VersionRow(key: $0, quality: "1080p", features: [], sizeBytes: nil, status: .direct, via: "Walk", releaseName: "x.mp4",
-                       languages: [], reasons: [], group: "best", failoverCount: 0, line: nil, sourceClass: nil, bitrateMbps: nil)
-        }
-        return VersionsSnapshot(
-            recommended: row, rows: [], hidden: HiddenSummary(count: 0, byReason: []), pendingAddons: [], slowAddons: [],
-            failedAddons: [], done: done, frozen: false, conditions: nil, blocked: blocked, note: nil)
-    }
-    var wait = AccountWait()
-    #expect(wait.see(failed: true, versions: try versions(blocked: "needsAccount", pick: nil)) == nil)
-    #expect(wait.waiting)
-    // The core asks again after the account: nothing to play yet, the card stays.
-    #expect(wait.see(failed: true, versions: try versions(blocked: nil, pick: nil, done: false)) == nil)
-    #expect(wait.see(failed: true, versions: try versions(blocked: nil, pick: "rd:abc")) == "rd:abc")
-    // Once: the card is gone.
-    #expect(!wait.waiting)
-    #expect(wait.see(failed: true, versions: try versions(blocked: nil, pick: "rd:abc")) == nil)
-    // A failure for another reason never starts a pick on its own.
-    var other = AccountWait()
-    #expect(other.see(failed: true, versions: try versions(blocked: nil, pick: "rd:abc")) == nil)
-    // The model's entry point and the screen's calls (read from the source: the model needs a player).
-    let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player")
-    let model = try String(contentsOf: app.appending(path: "PlayerModel.swift"), encoding: .utf8)
-    let screen = try String(contentsOf: app.appending(path: "PlayerScreen.swift"), encoding: .utf8)
-    #expect(model.contains("guard let pick = accountWait.see(failed: failed, versions: versions?.snapshot) else { return }"))
-    #expect(model.contains("switchVersion(pick)"))
-    #expect(screen.contains(".onChange(of: model.versions?.snapshot) { model.versionsChanged() }"))
-    #expect(screen.contains(".onChange(of: model.playback?.phase) { model.versionsChanged() }"))
 }

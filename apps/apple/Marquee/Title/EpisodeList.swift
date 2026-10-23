@@ -12,14 +12,9 @@ struct EpisodeList: View {
     let episodes: [Episode]
     let current: String?
     let runtime: String?
-    /// The episode whose version is being found.
-    let starting: String?
-    let failure: EpisodeFailure?
     let select: (Int) -> Void
     let play: (Episode) -> Void
     let chooseVersion: (Episode) -> Void
-    /// The failure's way forward: an account, a source or a version.
-    let proceed: (EpisodeFailure) -> Void
     let setWatched: (String, Bool) -> Void
     @Environment(\.metrics) private var metrics
 
@@ -38,7 +33,7 @@ struct EpisodeList: View {
                             episode: episode,
                             current: episode.videoId == current,
                             minutes: minutes(runtime),
-                            status: status(episode)
+                            status: nil
                         ) {
                             play(episode)
                         }
@@ -58,20 +53,9 @@ struct EpisodeList: View {
                             }
                         }
                     }
-                    // A reason is never the end: the way forward sits under it.
-                    if let failure, failure.videoId == episode.videoId {
-                        Button { proceed(failure) } label: { Label(failure.way.words, glyph: failure.way.glyph) }
-                        .buttonStyle(PillButtonStyle(prominent: true))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
                 }
             }
         }
-    }
-
-    private func status(_ episode: Episode) -> String? {
-        if starting == episode.videoId { return "Finding a version" }
-        return failure?.videoId == episode.videoId ? failure?.text : nil
     }
 }
 

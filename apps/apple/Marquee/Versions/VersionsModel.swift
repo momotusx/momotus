@@ -25,12 +25,22 @@ final class VersionsModel {
         record = LiveRecord("versions", params: params, core: core)
     }
 
-    var snapshot: VersionsSnapshot? { record.snapshot }
+    var snapshot: VersionsSnapshot? {
+        #if DEBUG
+        if let fixture = DebugHooks.versionsFixture { return fixture }
+        #endif
+        return record.snapshot
+    }
     var failure: String? { record.failure }
     var sub: UInt64? { record.sub }
 
     func start() {
         record.start()
+    }
+
+    /// Try again when no source could be reached: the view opens again.
+    func retry() {
+        record.retry()
     }
 
     /// Pins the recommended pick so late results never swap it under the user.
@@ -45,9 +55,16 @@ final class VersionsModel {
         return PlayRoute(versionsSub: sub, key: key, target: target, tapped: tapped)
     }
 
+    /// Play pressed while versions are still found: the player opens at once and
+    /// starts the pick itself (`PlayRoute.waitsForPick`).
+    func pending(tapped: ContinuousClock.Instant = .now, fromStart: Bool = false) -> PlayRoute {
+        PlayRoute(versionsSub: sub ?? 0, key: "", target: target, tapped: tapped, fromStart: fromStart)
+    }
+
     /// The pick once it settles, as the web waits for it: every addon has
-    /// answered, or 3 s have passed since the first pick. Nil when there is
-    /// none by then or within `limit`.
+    /// answered, or 3 s have passed since the first pick; with no source in
+    /// reach, the one kept on this device. Nil when there is none by then or
+    /// within `limit`.
     func settledPick(tapped: ContinuousClock.Instant = .now, limit: Duration = .seconds(10)) async -> PlayRoute? {
         start()
         let deadline = ContinuousClock.now + limit
@@ -60,6 +77,7 @@ final class VersionsModel {
             }
             try? await Task.sleep(for: .milliseconds(100))
         }
-        return play(tapped: tapped)
+        let kept = snapshot?.empty.flatMap { $0.kind == "unreachable" ? $0.key : nil }
+        return play(kept, tapped: tapped)
     }
 }

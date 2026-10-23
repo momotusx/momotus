@@ -208,45 +208,6 @@ enum TitleMark: Equatable {
     case watched(on: Bool)
 }
 
-/// Why an episode could not start, and the way forward, read from its versions as they stand: every
-/// version needs a streaming service account (Add an account, as the hero says), none plays at all
-/// (Add a source), or sources still answer (Choose a version keeps waiting).
-struct EpisodeFailure: Equatable {
-    enum Way: Equatable {
-        case addAccount, addSource, chooseVersion
-
-        var words: String {
-            switch self {
-            case .addAccount: StreamChoice.words.blocked.needsAccount.action
-            case .addSource: "Add a source"
-            case .chooseVersion: "Choose a version"
-            }
-        }
-
-        var glyph: String {
-            switch self {
-            case .addAccount: "key-round"
-            case .addSource: "plus"
-            case .chooseVersion: "layers"
-            }
-        }
-    }
-
-    let videoId: String
-    let text: String
-    let way: Way
-
-    init(videoId: String, versions: VersionsSnapshot?) {
-        self.videoId = videoId
-        guard let done = versions, done.done else {
-            (text, way) = ("No version answered yet. Choose a version to keep waiting.", .chooseVersion)
-            return
-        }
-        text = VersionWords.none(done)
-        way = done.blocked?.reason == "needsAccount" ? .addAccount : .addSource
-    }
-}
-
 /// What opened the episodes panel: keyboard focus goes back to it on close.
 enum PanelOpener: Hashable {
     case season
@@ -265,16 +226,23 @@ func titleMarks(kind: String, inLibrary: Bool, watched: Bool) -> [TitleMark] {
     kind == "movie" ? [.library(on: inLibrary), .watched(on: watched)] : [.library(on: inLibrary)]
 }
 
-/// What a Play that waited for its pick does once the pick settles: nothing
-/// when its place went out of sight meanwhile (a player must never open in a
-/// hidden place, review apple-journey r3 P2-2); else play the pick, or Add a
-/// source with no version at all, or Versions while sources still answer.
-enum SettledStart: Equatable {
-    case play, addSource, versions, nothing
+/// What Play does as the versions stand (plans/play-every-version.md, the shared table's title row).
+/// Play is always the title's primary, never Settings or an account step: still searching it opens the
+/// player at once, which starts the pick once it settles; with no source in reach a source kept on this
+/// device plays; the states that list rows or an action open Versions, which holds them; the states
+/// with Back alone leave Play in place but inert, since a page holding only Back is a dead end.
+enum TitlePlay: Equatable {
+    /// The player, with this key, or with none: it starts the pick once it settles.
+    case player(key: String?)
+    case versions
+    case inert
 
-    static func of(picked: Bool, done: Bool, placeShown: Bool) -> SettledStart {
-        guard placeShown else { return .nothing }
-        if picked { return .play }
-        return done ? .addSource : .versions
+    /// The states whose only action is Back.
+    static let backOnly: Set<String> = ["noRoom", "kidsNothing", "noResults"]
+
+    static func of(_ versions: VersionsSnapshot?) -> TitlePlay {
+        guard let empty = versions?.empty else { return .player(key: versions?.recommended?.key) }
+        if empty.kind == "unreachable" { return empty.key.map { .player(key: $0) } ?? .versions }
+        return backOnly.contains(empty.kind) ? .inert : .versions
     }
 }

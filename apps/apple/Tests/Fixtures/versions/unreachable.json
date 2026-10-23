@@ -1,0 +1,26 @@
+{
+ "pendingAddons": [],
+ "slowAddons": [],
+ "failedAddons": [],
+ "done": true,
+ "frozen": true,
+ "conditions": null,
+ "note": null,
+ "hidden": {
+  "count": 0,
+  "byReason": []
+ },
+ "blocked": null,
+ "recommended": null,
+ "rows": [],
+ "smaller": null,
+ "sharper": null,
+ "sections": [],
+ "empty": {
+  "kind": "unreachable",
+  "action": "playFromDevice",
+  "count": 0,
+  "rows": [],
+  "key": "bt:kept"
+ }
+}

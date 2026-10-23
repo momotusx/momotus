@@ -21,36 +21,37 @@ struct StreamChoiceWords: Decodable, Sendable {
         let value: Value?
     }
 
-    struct Note: Decodable, Sendable {
-        let text: String
-        let details: String
-    }
-
     struct UpDown: Decodable, Sendable {
         let up: String
         let down: String
     }
 
-    struct Blocked: Decodable, Sendable {
-        struct Reason: Decodable, Sendable {
-            let text: String
-            /// noSpace on a storage that plays no window.
-            var textNoWindow: String? = nil
-            let action: String
-        }
+    /// A zero-playable state's line, its action's word and a dimmed row's status.
+    struct Empty: Decodable, Sendable {
+        let text: String
+        var action: String?
+        var playFromDevice: String?
+        var row: String?
+        var chooseAnother: String?
+    }
 
-        let needsAccount: Reason
-        let noSpace: Reason
-        let nothingPlaysHere: Reason
+    struct Page: Decodable, Sendable {
+        let finding: String
+        let stillLooking: String
+        let showAll: String
+        let showFewer: String
+        let back: String
+        let smaller: String
+        let sharper: String
+        /// "uhd", "fhd", "hd", "other" to the section's heading.
+        let sections: [String: String]
+    }
 
-        func reason(_ name: String) -> Reason? {
-            switch name {
-            case "needsAccount": needsAccount
-            case "noSpace": noSpace
-            case "nothingPlaysHere": nothingPlaysHere
-            default: nil
-            }
-        }
+    struct Player: Decodable, Sendable {
+        let finding: String
+        let findingChosen: String
+        let chooseAnother: String
+        let chooseAnotherSaid: String
     }
 
     struct Learned: Decodable, Sendable {
@@ -159,12 +160,14 @@ struct StreamChoiceWords: Decodable, Sendable {
     let plurals: [String: [String]]
     let lines: [String: Line]
     let speedSource: [String: String]
-    let blocked: Blocked
+    /// By the core's state ("noSource", ... "notStarted").
+    let empty: [String: Empty]
+    let page: Page
+    let player: Player
     let learned: Learned
     let question: Question
     let settings: Settings
     let conditions: Conditions
-    let nobodySharing: Note
 
     /// The bundled file: the app's own bundle, or the test bundle that compiles this file.
     static let shared: StreamChoiceWords = {
@@ -201,16 +204,6 @@ enum StreamChoice {
     /// lets a failed pick go, and the page pins the new one (review r2 P3-4).
     static func shouldFreeze(open: Bool, frozen: Bool?) -> Bool {
         open && frozen != true
-    }
-
-    enum NotePlace: Equatable { case card, list }
-
-    /// "Almost nobody is sharing" shows once per Versions screen: on the
-    /// recommended card right before Play, or over the list when there is no
-    /// card (plans/m13-stream-choice.md).
-    static func nobodySharingPlace(_ nobodySharing: Bool?, hasRecommended: Bool) -> NotePlace? {
-        guard nobodySharing == true else { return nil }
-        return hasRecommended ? .card : .list
     }
 
     /// 1024-based, as addons print sizes: one decimal under 100 GB with a
@@ -302,15 +295,6 @@ enum StreamChoice {
         }
     }
 
-    /// Why no version is listed, with its one action (3.11). `window`: the
-    /// storage plays a torrent too big for its free space in a window.
-    static func blockedWords(_ blocked: BlockedVersions, window: Bool = true) -> (text: String, action: String)? {
-        guard let w = words.blocked.reason(blocked.reason) else { return nil }
-        let text = (window ? w.text : w.textNoWindow ?? w.text)
-            .replacingOccurrences(of: "{versionsAre}", with: counted("versionsAre", blocked.count))
-        return (text.replacingOccurrences(of: "{versions}", with: counted("versions", blocked.count)), w.action)
-    }
-
     /// The recommended card's line: a version that plays in a window says
     /// so under its reasons; other lines stay in the list.
     static func cardLine(_ row: VersionRow) -> LineWords? {
@@ -337,16 +321,6 @@ enum StreamChoice {
         let speedPart = speed.samples > 0 ? fill(c.speed, ["mbps": String(Int(speed.mbps.rounded())), "network": net]) : net
         let free = freeBytes.flatMap { fill(c.free, ["free": bytes($0)]) }
         return [hdr ? fill(c.hdr, ["screen": screen]) : screen, speedPart, free].compactMap { $0 }.joined(separator: ", ")
-    }
-
-    /// "This computer: 1080p, about 42 Mbit/s on Wi-Fi, 61 GB free": the Versions header.
-    static func conditionsHeader(device: String, _ v: VersionsConditions) -> String {
-        let c = words.conditions
-        let line = conditionsLine(
-            screenClass: v.screenClass, hdr: v.hdr, network: v.network,
-            speed: speed(http: v.http, p2p: v.p2p, engine: v.engine, account: v.account), freeBytes: v.freeBytes)
-        let name = c.devices[device] ?? device
-        return capital(c.header.replacingOccurrences(of: "{device}", with: name).replacingOccurrences(of: "{conditions}", with: line))
     }
 
     /// "tv", "desktop" or "phone": how the words name this device.
@@ -447,11 +421,11 @@ enum StreamChoice {
         return "other"
     }
 
-    /// A row for a screen reader: "1080p, May start slowly, 7 seeders, via Torrentio".
+    /// A row for a screen reader: "1080p, HDR10, 2 GB, May start slowly, 7 seeders"; never its addon.
     static func spoken(_ row: VersionRow) -> String {
         let line = row.line.flatMap { lineWords($0) }
         let state = line.map { [$0.text, $0.details].filter { !$0.isEmpty }.joined(separator: ", ") } ?? VersionWords.status(row.status)
-        return "\(row.quality), \(state), via \(row.via)"
+        return ([row.quality] + row.features + [VersionWords.size(row.sizeBytes), state].compactMap { $0 }).joined(separator: ", ")
     }
 
     /// The HDR formats the core ranks for: none on a screen without HDR;

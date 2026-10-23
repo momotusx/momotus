@@ -1,0 +1,62 @@
+{
+ "phase": "failed",
+ "url": null,
+ "key": "bt:pick",
+ "attempt": 6,
+ "manifest": false,
+ "filename": null,
+ "sizeBytes": null,
+ "resumeMs": null,
+ "attempts": [
+  {
+   "key": "bt:pick",
+   "via": "Sample Source",
+   "error": "No peer sent any data"
+  },
+  {
+   "key": "bt:pick",
+   "via": "Sample Source",
+   "error": "No peer sent any data"
+  },
+  {
+   "key": "bt:pick",
+   "via": "Sample Source",
+   "error": "No peer sent any data"
+  },
+  {
+   "key": "bt:pick",
+   "via": "Sample Source",
+   "error": "No peer sent any data"
+  },
+  {
+   "key": "bt:pick",
+   "via": "Sample Source",
+   "error": "No peer sent any data"
+  },
+  {
+   "key": "bt:720",
+   "via": "Sample Source",
+   "error": "The swarm had no seeders"
+  }
+ ],
+ "subtitles": [],
+ "subtitlesPending": false,
+ "subtitleNotes": [],
+ "autoSubtitle": null,
+ "next": null,
+ "bingeGroup": null,
+ "segments": [],
+ "nextAtMs": null,
+ "trakt": null,
+ "trying": null,
+ "offer": null,
+ "retries": 0,
+ "start": null,
+ "moved": null,
+ "chooseAnother": false,
+ "empty": "notStarted",
+ "startBudgetEndsAt": null,
+ "container": null,
+ "audio": [],
+ "engine": null
+}

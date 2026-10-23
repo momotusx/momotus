@@ -28,13 +28,6 @@ struct TitleScreen: View {
     @State private var playing: PlayRoute?
     @State private var showVersions = false
     @State private var showEpisodeVersions = false
-    @State private var showAddons = false
-    @State private var showAccount = false
-    /// The episode whose version is being found, and why the last one could not start.
-    @State private var starting: String?
-    /// Play was pressed and the pick is still settling: the button says Starting.
-    @State private var startingPlay = false
-    @State private var startFailure: EpisodeFailure?
     /// MORE: the whole synopsis in a sheet (iOS and macOS).
     @State private var reading = false
     /// The episodes panel beside the info (Mac, iPad) and the Episodes page (iPhone).
@@ -68,6 +61,13 @@ struct TitleScreen: View {
             if DebugHooks.autoPlay, key != nil, playing == nil { playing = versions?.play() }
             if DebugHooks.showVersions, key != nil { showVersions = true }
         }
+        // A fixture's pick is there before the view is: play once the view is open.
+        .onChange(of: versions?.sub) { _, sub in
+            if DebugHooks.autoPlay, sub != nil, DebugHooks.versionsFixture != nil, playing == nil { playing = versions?.play() }
+        }
+        .onChange(of: versions?.snapshot?.empty?.kind) { _, kind in
+            if DebugHooks.showVersions, kind != nil { showVersions = true }
+        }
         #endif
         .fullBleedTop()
         .onChange(of: shown, initial: true) { _, now in placeShown = now }
@@ -80,7 +80,7 @@ struct TitleScreen: View {
             ? StartOverAction { play(fromStart: true) } : nil)
         #endif
         .navigationDestination(item: $playing) { route in
-            PlayerScreen(route: route, versions: [versions, episodeVersions].compactMap { $0 }.first { $0.sub == route.versionsSub }, core: core)
+            PlayerScreen(route: route, versions: [versions, episodeVersions].compactMap { $0 }.first { $0.target.videoId == route.target.videoId }, core: core)
         }
         .navigationDestination(isPresented: $showVersions) {
             if let versions {
@@ -92,8 +92,6 @@ struct TitleScreen: View {
                 VersionsScreen(model: episodeVersions, heading: heading(episodeVersions.target), core: core)
             }
         }
-        .navigationDestination(isPresented: $showAddons) { AddonsPage(core: core, sourcesOnly: true) }
-        .navigationDestination(isPresented: $showAccount) { DebridScreen(core: core) }
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -227,7 +225,6 @@ struct TitleScreen: View {
                                 minutes: minutes(details.runtime), select: model.selectSeason, actions: episodeActions)
                         .padding(.leading, metrics.wide ? metrics.gutter : 20)
                     // The open panel shows it itself, where the episode was pressed.
-                    if !panelOpen { episodeStatus.padding(.horizontal, metrics.wide ? metrics.gutter : 20) }
                 }
                 if !details.cast.isEmpty {
                     CastShelf(cast: details.cast).padding(.horizontal, metrics.wide ? metrics.gutter : 20)
@@ -244,20 +241,9 @@ struct TitleScreen: View {
         }
     }
 
-    /// An episode whose version is being found, or why it could not start, with the way forward.
-    @ViewBuilder private var episodeStatus: some View {
-        if let failure = startFailure {
-            StateLine(symbol: "circle-alert", text: failure.text, action: (failure.way.words, { proceed(failure) }), primary: false)
-        } else if starting != nil {
-            Label("Finding a version", glyph: "clock")
-                .textFont(Theme.type.callout, relativeTo: .callout)
-                .foregroundStyle(Theme.Palette.muted)
-        }
-    }
-
     private var episodeActions: EpisodeActionsSet {
         EpisodeActionsSet(
-            play: { episode in Task { await play(episode) } }, chooseVersion: chooseVersion,
+            play: { play($0) }, chooseVersion: chooseVersion,
             setWatched: { model.setWatched($0, $1); sync.schedule() }, allEpisodes: { openEpisodes(from: $0) }, focus: $openerFocus,
             resumable: (model.header?.playTarget?.resumeMs ?? 0) > 0 ? model.header?.playTarget?.videoId : nil,
             startOver: { play(fromStart: true) })
@@ -317,7 +303,7 @@ struct TitleScreen: View {
         EpisodePanel(
             seasons: model.header?.seasons ?? [], selected: model.header?.selectedSeason, episodes: model.episodes,
             minutes: minutes(details?.runtime), select: model.selectSeason, actions: episodeActions,
-            scrollTo: model.route.videoId, close: close) { episodeStatus }
+            scrollTo: model.route.videoId, close: close)
     }
 
     /// The Mac's action row: the primary, Trailer, the Library and Watched capsule, Versions.
@@ -388,8 +374,7 @@ struct TitleScreen: View {
         PlayBlock(
             target: model.header?.playTarget, nextAirs: model.header?.nextAirs, hasEpisodes: !model.episodes.isEmpty,
             runtime: details.runtime, versions: versions?.snapshot, failure: versions?.failure, wide: metrics.wide,
-            starting: startingPlay, play: { play(fromStart: $0) },
-            addSource: { showAddons = true }, addAccount: { showAccount = true }, focus: $primaryFocused, v3: true)
+            play: { play(fromStart: $0) }, focus: $primaryFocused, v3: true)
     }
 
     private func toggle(_ mark: TitleMark, _ details: TitleDetails) {
@@ -435,28 +420,18 @@ struct TitleScreen: View {
         return target
     }
 
-    /// Plays the pick at once, else says Starting while it settles, as the
-    /// Home hero does: then plays it, or with no version at all goes to Add
-    /// a source, or with sources still answering after 10 s opens Versions.
+    /// Play as the versions stand (`TitlePlay`): the pick, the source kept here, or the player at once
+    /// while versions are found, which starts the pick once it settles; else Versions, which holds why
+    /// nothing plays with its way on; else nothing (Play is inert).
     private func play(fromStart: Bool) {
-        if var route = versions?.play() {
+        guard let versions else { return }
+        switch TitlePlay.of(versions.snapshot) {
+        case .player(let key):
+            var route = key.flatMap { versions.play($0) } ?? versions.pending(fromStart: fromStart)
             route.fromStart = fromStart
             playing = route
-            return
-        }
-        guard let versions, !startingPlay else { return }
-        startingPlay = true
-        Task {
-            var route = await versions.settledPick()
-            startingPlay = false
-            switch SettledStart.of(picked: route != nil, done: versions.snapshot?.done == true, placeShown: placeShown) {
-            case .play:
-                route?.fromStart = fromStart
-                playing = route
-            case .addSource: showAddons = true
-            case .versions: showVersions = true
-            case .nothing: break
-            }
+        case .versions: showVersions = true
+        case .inert: break
         }
     }
 
@@ -493,30 +468,13 @@ struct TitleScreen: View {
         return model
     }
 
-    /// Plays an episode from the list: its pick once it settles, as Play does.
-    private func play(_ episode: Episode) async {
-        let tapped = ContinuousClock.now
+    /// Plays an episode from the list as Play does: the player opens at once and starts its pick, or
+    /// Versions holds why nothing plays.
+    private func play(_ episode: Episode) {
         guard let model = versions(for: episode) else { return }
-        (starting, startFailure) = (episode.videoId, nil)
-        let route = await model.settledPick(tapped: tapped)
-        guard starting == episode.videoId else { return }
-        starting = nil
-        // Its place went out of sight meanwhile: no player opens there.
-        guard placeShown else { return }
-        if let route {
-            playing = route
-        } else {
-            startFailure = EpisodeFailure(videoId: episode.videoId, versions: model.snapshot)
-        }
-    }
-
-    /// An episode's way forward once it could not start, on every form (the panel, the Episodes page, TV).
-    private func proceed(_ failure: EpisodeFailure) {
-        switch failure.way {
-        case .addAccount: showAccount = true
-        case .addSource: showAddons = true
-        case .chooseVersion:
-            if let episode = model.episodes.first(where: { $0.videoId == failure.videoId }) { chooseVersion(episode) }
+        switch TitlePlay.of(model.snapshot) {
+        case .player(let key): playing = key.flatMap { model.play($0) } ?? model.pending()
+        case .versions, .inert: chooseVersion(episode)
         }
     }
 
@@ -608,8 +566,7 @@ struct TitleScreen: View {
                 PlayBlock(
                     target: model.header?.playTarget, nextAirs: model.header?.nextAirs, hasEpisodes: !model.episodes.isEmpty,
                     runtime: details.runtime, versions: versions?.snapshot, failure: versions?.failure, wide: metrics.wide,
-                    starting: startingPlay, play: { play(fromStart: $0) },
-                    addSource: { showAddons = true }, addAccount: { showAccount = true }, focus: $primaryFocused)
+                    play: { play(fromStart: $0) }, focus: $primaryFocused)
                 actions(details)
             } else if case .failed(let reason) = model.header?.state {
                 StateLine(symbol: "triangle-alert", text: reason, action: ("Try again", model.retry))
@@ -723,12 +680,9 @@ struct TitleScreen: View {
             episodes: model.episodes,
             current: model.header?.playTarget?.videoId,
             runtime: details?.runtime,
-            starting: starting,
-            failure: startFailure,
             select: model.selectSeason,
-            play: { episode in Task { await play(episode) } },
+            play: { play($0) },
             chooseVersion: chooseVersion,
-            proceed: proceed,
             setWatched: { model.setWatched($0, $1); sync.schedule() })
     }
     #endif
@@ -868,10 +822,11 @@ struct VersionLine: View {
             Text("\(VersionWords.line(best))   \(dot) \(VersionWords.status(best.status))")
                 .foregroundStyle(Theme.Palette.text)
                 .accessibilityLabel("\(VersionWords.line(best)), \(VersionWords.status(best.status))")
-        } else if let versions, versions.done {
-            Label(VersionWords.none(versions), glyph: "circle-alert")
+        } else if let line = versions?.empty.flatMap({ VersionWords.emptyLine($0.kind) }) {
+            // The core's line for why nothing plays, under Play (the title's reserved warning line).
+            Label(line, glyph: "circle-alert")
                 .foregroundStyle(Theme.Palette.muted)
-        } else {
+        } else if versions?.done != true {
             HStack(spacing: 8) {
                 ProgressView().controlSize(.mini)
                 Text("Finding versions")
@@ -884,8 +839,9 @@ struct VersionLine: View {
 #endif
 
 #if !os(tvOS)
-/// Why Resume cannot start, under the v3 hero: the versions did not load, or none can play here. The
-/// finding and found states show nothing, as the frames draw (plans/design-v3-phase3-apple.md 2.1).
+/// Why Resume cannot start, under the v3 hero: the versions did not load, or the core's line for why
+/// none can play here. The finding and found states show nothing, as the frames draw
+/// (plans/design-v3-phase3-apple.md 2.1).
 private struct VersionNote: View {
     let target: PlayTarget?
     let versions: VersionsSnapshot?
@@ -895,8 +851,8 @@ private struct VersionNote: View {
         Group {
             if let failure {
                 Label("Versions could not load: \(failure)", glyph: "triangle-alert")
-            } else if target != nil, let versions, versions.done, versions.recommended == nil {
-                Label(VersionWords.none(versions), glyph: "circle-alert")
+            } else if target != nil, let line = versions?.empty.flatMap({ VersionWords.emptyLine($0.kind) }) {
+                Label(line, glyph: "circle-alert")
             }
         }
         .textFont(Theme.type.callout, relativeTo: .callout)

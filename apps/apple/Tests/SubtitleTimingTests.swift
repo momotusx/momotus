@@ -164,7 +164,7 @@ private func track(_ url: String, delayMs: Int? = nil) -> SubtitleTrack {
 }
 
 /// A function's body in a Swift source, by brace count from its signature.
-private func body(of signature: String, in text: String) throws -> String {
+func body(of signature: String, in text: String) throws -> String {
     let start = try #require(text.range(of: signature), "\(signature) not found")
     let open = try #require(text[start.upperBound...].firstIndex(of: "{"))
     var depth = 0

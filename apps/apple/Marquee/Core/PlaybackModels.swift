@@ -9,7 +9,6 @@ import Foundation
 struct VersionsSnapshot: Decodable, Hashable, Sendable {
     let recommended: VersionRow?
     let rows: [VersionRow]
-    let hidden: HiddenSummary
     let pendingAddons: [String]
     let slowAddons: [String]
     let failedAddons: [String]
@@ -17,13 +16,36 @@ struct VersionsSnapshot: Decodable, Hashable, Sendable {
     let frozen: Bool
     /// What the ranking read about this device and title (optional for older cores).
     let conditions: VersionsConditions?
-    /// Every addon answered, nothing is listed, and the hidden rows say why.
-    let blocked: BlockedVersions?
     /// The one-time learning note, shown with Undo.
     let note: LearnedNote?
-    /// Every listed version is a swarm with one seeder or none: said over the
-    /// list and on the recommended card before Play (optional for older cores).
-    var nobodySharing: Bool?
+    /// Nothing can play, and why (plans/play-every-version.md 2a); nil while
+    /// anything plays or the view still asks (optional for older cores).
+    var empty: EmptyVersions?
+    /// The "Smaller file" and "Sharper" shortcuts (2f), never the pick itself.
+    var smaller: VersionRow?
+    var sharper: VersionRow?
+    /// `rows`' keys by quality, in the core's order (2f); empty from an older core.
+    var sections: [VersionSection]?
+}
+
+/// Why nothing can play (plans/play-every-version.md 2a), with what the
+/// shared table offers for it.
+struct EmptyVersions: Decodable, Hashable, Sendable {
+    /// "noSource", "unreachable", "noRoom", "needsAccount", "kidsNothing",
+    /// "noResults" or "nothingPlaysHere"; a string, so a newer state still decodes.
+    let kind: String
+    /// The versions found, for the states that have some.
+    let count: Int
+    /// Those versions, listed dimmed and each still startable.
+    let rows: [VersionRow]
+    /// The source kept on this device: Play from this device starts it.
+    let key: String?
+}
+
+/// One quality section of the Versions page: "uhd", "fhd", "hd" or "other".
+struct VersionSection: Decodable, Hashable, Sendable {
+    let quality: String
+    let keys: [String]
 }
 
 /// What the ranking read (plans/m13-stream-choice.md 4.2): "This TV: 4K HDR,
@@ -53,14 +75,6 @@ struct VersionsConditions: Decodable, Hashable, Sendable {
 struct Speed: Decodable, Hashable, Sendable {
     let mbps: Double
     let samples: Int
-}
-
-/// Why no version is listed, with the versions as they would rank once fixed.
-struct BlockedVersions: Decodable, Hashable, Sendable {
-    /// "needsAccount", "noSpace" or "nothingPlaysHere".
-    let reason: String
-    let count: Int
-    let rows: [VersionRow]
 }
 
 /// A choice the picks taught, on one screen class.
@@ -148,24 +162,6 @@ enum VersionStatus: Decodable, Hashable, Sendable {
     }
 }
 
-struct HiddenSummary: Decodable, Hashable, Sendable {
-    let count: Int
-    /// Hide reason ("wrongTitle", "unplayable", ...) and how many it hid.
-    let byReason: [ReasonCount]
-
-    struct ReasonCount: Decodable, Hashable, Sendable {
-        let reason: String
-        let count: Int
-
-        /// The core sends each pair as a two-element array.
-        init(from decoder: any Decoder) throws {
-            var c = try decoder.unkeyedContainer()
-            reason = try c.decode(String.self)
-            count = try c.decode(Int.self)
-        }
-    }
-}
-
 struct PlaybackSnapshot: Decodable, Hashable, Sendable {
     /// "resolving", "ready" or "failed".
     let phase: String
@@ -204,6 +200,12 @@ struct PlaybackSnapshot: Decodable, Hashable, Sendable {
     /// On `failed`, after a version picked by hand: the ranking's next pick,
     /// opened with its key from the same Versions view (optional for older cores).
     let offer: OtherVersion?
+    /// The start has taken 20 s, or a stall the core will not move on from
+    /// lasts: "Choose another version" shows (plans/play-every-version.md 2e).
+    var chooseAnother: Bool?
+    /// Why nothing played, once `failed`: an `empty` kind ("notStarted",
+    /// "noRoom", "nothingPlaysHere", "unreachable"); nil from an older core.
+    var empty: String?
     /// The track the core turns on at start (plans/m13-subtitle-languages.md 6),
     /// once the list has settled; nil for none (optional for older cores).
     let autoSubtitle: String?
@@ -388,32 +390,6 @@ struct Attempt: Decodable, Hashable, Sendable {
     let key: String
     let via: String
     let error: String
-}
-
-/// Sources that failed the same way, from one addon, said once.
-struct FailedSources: Hashable, Sendable {
-    let via: String
-    let error: String
-    let count: Int
-
-    /// "The link no longer exists (404) · 8 sources".
-    var words: String { count > 1 ? "\(error) · \(count) sources" : error }
-
-    /// One row per addon and reason, whatever its count.
-    var key: String { "\(via)\u{0}\(error)" }
-
-    /// The failure history with each addon and reason once, in the order they first failed.
-    static func group(_ attempts: [Attempt]) -> [FailedSources] {
-        var order: [FailedSources] = []
-        for attempt in attempts {
-            if let i = order.firstIndex(where: { $0.via == attempt.via && $0.error == attempt.error }) {
-                order[i] = FailedSources(via: attempt.via, error: attempt.error, count: order[i].count + 1)
-            } else {
-                order.append(FailedSources(via: attempt.via, error: attempt.error, count: 1))
-            }
-        }
-        return order
-    }
 }
 
 struct SubtitleTrack: Decodable, Hashable, Sendable, Identifiable {
@@ -718,4 +694,8 @@ struct PlayRoute: Hashable, Identifiable {
     var fromStart = false
 
     var id: String { "\(versionsSub):\(key)" }
+
+    /// Play pressed while versions are still found: the player opens at once
+    /// and starts the pick once it settles (plans/play-every-version.md Step 3).
+    var waitsForPick: Bool { key.isEmpty }
 }

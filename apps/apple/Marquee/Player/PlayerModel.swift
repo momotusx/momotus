@@ -37,7 +37,13 @@ final class PlayerModel {
     private(set) var subtitleDelay: Double = 0 { didSet { watchCueEdges() } }
     /// The stepper's value not yet sent to the core: it goes once it rests, on another track and on close.
     @ObservationIgnored private var outbox: DelayOutbox!
-    @ObservationIgnored private var accountWait = AccountWait()
+    /// The mid-play stall the core is told of (`stalled`).
+    @ObservationIgnored private var stall = StallWatch()
+    /// Versions is open over the player: nothing plays or sounds under it, the attempt keeps resolving.
+    @ObservationIgnored private var covered = false
+    @ObservationIgnored private var playsAfterCover = false
+    /// Play opened the player while versions were found, and none could start.
+    private(set) var noPick = false
     private(set) var cues: [WebVTT.Cue] = [] { didSet { watchCueEdges() } }
     var rate: Float = 1 {
         // The Lock Screen extrapolates the playhead from the rate: it hears every change at once.
@@ -365,7 +371,7 @@ final class PlayerModel {
         guard let pick = await model.settledPick() else {
             player.pause()
             nextVersions = model
-            let words = model.snapshot.flatMap { $0.done ? VersionWords.none($0) : nil }
+            let words = model.snapshot?.empty.flatMap { VersionWords.emptyLine($0.kind) }
             nextFailure = words ?? "No version answered yet."
             return
         }
@@ -407,6 +413,24 @@ final class PlayerModel {
     }
 
     func run() async {
+        #if DEBUG
+        if let fixture = DebugHooks.playbackFixture {
+            apply(fixture)
+            return
+        }
+        #endif
+        // Play pressed while versions were found: the pick, once it settles, opens the view (the page's
+        // task drives the run again for the new key); none, and the card says why.
+        if route.waitsForPick {
+            guard let versions else { return }
+            guard var pick = await versions.settledPick(tapped: route.tapped, limit: .seconds(30)) else {
+                if !Task.isCancelled { noPick = true }
+                return
+            }
+            pick.fromStart = route.fromStart
+            route = pick
+            return
+        }
         runs += 1
         let run = runs
         durationSent = []
@@ -447,7 +471,13 @@ final class PlayerModel {
     func switchVersion(_ key: String) {
         // The old track's URL goes with the old view: the new version starts
         // with its own start subtitle.
+        if route.waitsForPick, let pick = versions?.play(key) {
+            // Chosen from Versions over a player that found no pick: that version starts now.
+            (noPick, route) = (false, pick)
+            return
+        }
         guard let next = choices.switchVersion(from: route, to: key) else { return }
+        sendStall(stall.interrupted())
         // Another file: its own tracks' timings start again (a server move keeps them: the same file).
         outbox.forget(prefix: PlayerLayout.fileTrackPrefix)
         report()
@@ -494,6 +524,7 @@ final class PlayerModel {
     }
 
     func seek(to seconds: Double) {
+        sendStall(stall.interrupted())
         let target = CMTime(seconds: max(0, min(seconds, duration > 0 ? duration : seconds)), preferredTimescale: 600)
         position = target.seconds
         // A seek is not playback: the missing-picture count starts again where it lands.
@@ -550,19 +581,26 @@ final class PlayerModel {
         choices.retry()
     }
 
-    /// The versions or the card changed: a card waiting for an account (`AccountWait`) plays the
-    /// versions' pick once they offer one, the same version again when it is the one that failed.
-    func versionsChanged() {
-        let failed = playback?.phase == "failed" || openError != nil
-        guard let pick = accountWait.see(failed: failed, versions: versions?.snapshot) else { return }
-        if pick != route.key {
-            openError = nil
-            switchVersion(pick)
-        } else if openError != nil {
-            reopen()
-        } else {
-            retry()
-        }
+    /// Versions opens over the player: it pauses (nothing plays or sounds under the page) and a source
+    /// that comes in meanwhile loads paused; the attempt keeps resolving.
+    func cover() {
+        guard !covered else { return }
+        (covered, playsAfterCover) = (true, !paused)
+        player.pause()
+    }
+
+    /// Back from Versions: the player as it was, playing again unless the viewer had paused it.
+    func uncover() {
+        guard covered else { return }
+        covered = false
+        if playsAfterCover, loadedURL != nil, playback?.phase != "failed" { player.play() }
+    }
+
+    /// Tells the core a mid-play stall started or ended (plans/play-every-version.md 2e).
+    private func sendStall(_ change: Bool?) {
+        guard let change, let sub else { return }
+        let command = StallWatch.command(change, position: position)
+        Task { try? await core.command(sub, command) }
     }
 
     /// The stepper's value for the addon track on: drawn at once, sent to the core (which keeps it for
@@ -690,6 +728,8 @@ final class PlayerModel {
             #if DEBUG
             if loadedURL == nil, let at = DebugHooks.takeSeek() { start = at }
             #endif
+            // Another source: a stall on the last one ends with it.
+            sendStall(stall.interrupted())
             load(url, key: snapshot.key, attempt: snapshot.attempt, at: start)
         case "failed":
             player.pause()
@@ -780,7 +820,7 @@ final class PlayerModel {
         }
         NowPlaying.activate()
         // A source opened again after the server moved keeps the viewer's pause.
-        if holdPause { holdPause = false } else { player.play() }
+        if holdPause || covered { holdPause = false } else { player.play() }
     }
 
     /// The player cannot play this source: stop it, then ask the core for the next.
@@ -824,6 +864,8 @@ final class PlayerModel {
                     guard let self else { return }
                     self.playing = status == .playing
                     self.waiting = status == .waitingToPlayAtSpecifiedRate
+                    // Versions over the player paused it: the stall stays as it was until Back.
+                    if !self.covered { self.sendStall(self.stall.see(playing: self.playing, waiting: self.waiting, position: self.position)) }
                     // Playing without a pause or a stall: buffering is not a missing picture.
                     self.playingSince = status == .playing ? self.playingSince ?? .now : nil
                     self.publishNowPlaying()
@@ -863,6 +905,7 @@ final class PlayerModel {
     private func tick(_ time: CMTime) {
         guard time.isNumeric else { return }
         if let now = ticked(time: time.seconds, pending: pendingStart) { position = now }
+        if playing { sendStall(stall.see(playing: true, waiting: false, position: position)) }
         // A track delivered whole (HLS) sends nothing more: the observer moves on with the playhead.
         if position > edgesUntil { watchCueEdges() }
         let watched = PlayerLayout.pictureWatched(floating: floating, windowWatches: windowWatchesFrames(), onScreen: appOnScreen)

@@ -6,7 +6,7 @@ import Foundation
 enum WideLayout {
     /// The pick card (360 pt) beside the Versions table.
     static func pickBesideTable(page: CGFloat) -> Bool { page >= 900 }
-    /// The table's columns (quality, features, size, status, via) need about
+    /// The table's columns (quality, features, size, status) need about
     /// 680 pt; with less a row reads as the phone's two lines.
     static func tableColumns(table: CGFloat) -> Bool { table >= 680 }
     /// A series' credits (360 pt) beside its episodes.
@@ -84,84 +84,16 @@ enum VersionWords {
         }
     }
 
-    static func group(_ group: String) -> String {
-        switch group {
-        case "best": "Best quality"
-        case "smallerFaster": "Smaller and faster"
-        case "otherLanguages": "Other languages"
-        case "needsDownload": "Needs download"
-        default: group
-        }
-    }
-
-    static let groupOrder = ["best", "smallerFaster", "otherLanguages", "needsDownload"]
-
-    /// "19 are for other titles, 1 is another episode". `window` as in
-    /// `StreamChoice.blockedWords`.
-    static func hidden(_ summary: HiddenSummary, window: Bool = true) -> String {
-        summary.byReason.map { item in
-            let one = item.count == 1
-            let what: String
-            switch item.reason {
-            case "wrongTitle": what = one ? "is for another title" : "are for other titles"
-            case "wrongEpisode": what = one ? "is another episode" : "are other episodes"
-            case "excluded": what = one ? "matches your avoid list" : "match your avoid list"
-            case "tooLarge": what = one ? "is over your size limit" : "are over your size limit"
-            case "unplayable": what = "cannot play on this device"
-            case "unsupportedSource": what = one ? "uses a source this app cannot open yet" : "use a source this app cannot open yet"
-            // Kids profiles only.
-            case "leavesApp": what = "would open outside Marquee"
-            case "notForKids": what = one ? "is not for kids" : "are not for kids"
-            case "needsDebrid": what = one ? "needs a paid streaming service account" : "need a paid streaming service account"
-            case "noSpace" where !window: what = "\(one ? "is" : "are") too large for this storage"
-            case "noSpace": what = "\(one ? "has" : "have") no room to play here, even a few minutes at a time"
-            default: what = item.reason
-            }
-            return "\(item.count) \(what)"
-        }
-        .joined(separator: ", ")
-    }
-
-    /// Why there is no pick once every addon has answered; blocked versions say what would let them play.
-    static func none(_ snapshot: VersionsSnapshot) -> String {
-        let window = snapshot.conditions?.window ?? true
-        if let blocked = snapshot.blocked, let words = StreamChoice.blockedWords(blocked, window: window) { return words.text }
-        return snapshot.hidden.count > 0
-            ? "No version plays here: \(hidden(snapshot.hidden, window: window))"
-            : "No version found: your addons have no source for this"
-    }
-
-    /// The Versions header: who is still asked, slow or silent, else how many versions there are.
-    static func progress(_ snapshot: VersionsSnapshot?) -> (text: String, tone: Tone) {
-        guard let s = snapshot else { return ("Opening", .idle) }
-        if !s.pendingAddons.isEmpty { return ("Asking \(s.pendingAddons.joined(separator: ", "))", .warn) }
-        if !s.slowAddons.isEmpty { return ("\(s.slowAddons.joined(separator: ", ")) is slow, still waiting", .warn) }
-        if !s.failedAddons.isEmpty { return ("\(s.failedAddons.joined(separator: ", ")) did not answer", .bad) }
-        // Found, but none listed: how many there are, as a warning.
-        if let blocked = s.blocked { return (StreamChoice.counted("versions", blocked.count), .warn) }
-        let count = s.rows.count + (s.recommended == nil ? 0 : 1)
-        return (count == 1 ? "1 version" : "\(count) versions", .ok)
-    }
-
-    /// "This screen: 1080p, HDR, plays H.264, HEVC in MP4, MOV": what the ranking was made for.
-    static func device(screen: String, decoders: [String], containers: [String]) -> String {
-        let codecs = ["h264": "H.264", "h265": "HEVC", "av1": "AV1", "vp9": "VP9"]
-        let plays = decoders.map { codecs[$0] ?? $0.uppercased() }.joined(separator: ", ")
-        let boxes = containers.map { $0 == "webm" ? "WebM" : $0.uppercased() }.joined(separator: ", ")
-        return "This screen: \(screen), plays \(plays) in \(boxes)"
-    }
-
     /// The pick's heading, the quality and its first feature: "4K Dolby Vision".
     static func pickHeading(_ row: VersionRow) -> String {
         ([row.quality] + row.features.prefix(1)).joined(separator: " ")
     }
 
-    /// The pick's facts in the web's order: size, status, where from, more features, languages.
+    /// The pick's facts in the web's order: size, status, more features, languages; never its addon.
     static func facts(_ row: VersionRow) -> [(key: String, value: String)] {
         var facts = [
             (key: "Size", value: size(row.sizeBytes) ?? "Unknown"),
             (key: "Status", value: status(row.status)),
-            (key: "Via", value: row.via),
         ]
         if row.features.count > 1 { facts.append((key: "Features", value: row.features.joined(separator: ", "))) }
         if !row.languages.isEmpty { facts.append((key: "Languages", value: languages(row))) }
@@ -180,33 +112,6 @@ enum VersionWords {
         row.failoverCount > 0
             ? "\(row.failoverCount + 1) sources. If one fails, the next starts on its own."
             : "One source for this release."
-    }
-
-    /// The card's heading while there is no pick, once every addon has answered.
-    static func waitingTitle(_ snapshot: VersionsSnapshot) -> String {
-        snapshot.rows.isEmpty ? "No playable version found" : "Nothing is ready to play yet"
-    }
-
-    /// Why nothing is picked first, then any addon that failed.
-    static func waitingBody(_ snapshot: VersionsSnapshot) -> String {
-        let why = if !snapshot.rows.isEmpty {
-            "Choose a version to start it."
-        } else if snapshot.hidden.count > 0 {
-            "Every result was hidden: \(hidden(snapshot.hidden))."
-        } else {
-            "None of your addons returned a stream for this video. A source addon finds playable streams."
-        }
-        return [why, addons(snapshot).map { "\($0)." }].compactMap { $0 }.joined(separator: " ")
-    }
-
-    /// Addons still answering, slow or failed, as one line, or nil.
-    static func addons(_ snapshot: VersionsSnapshot) -> String? {
-        let parts = [
-            snapshot.pendingAddons.isEmpty ? nil : "Waiting for \(snapshot.pendingAddons.joined(separator: ", "))",
-            snapshot.slowAddons.isEmpty ? nil : "Slow: \(snapshot.slowAddons.joined(separator: ", "))",
-            snapshot.failedAddons.isEmpty ? nil : "No answer from \(snapshot.failedAddons.joined(separator: ", "))",
-        ].compactMap { $0 }
-        return parts.isEmpty ? nil : parts.joined(separator: ". ")
     }
 
     /// "English, Turkish" from the release's codes.
@@ -240,4 +145,117 @@ enum VersionWords {
     static func cell(_ quality: String) -> String {
         quality == "Quality not stated" || quality == "Unknown" ? "Unknown" : quality
     }
+
+    // The page as the core lays it out (plans/play-every-version.md Step 3): no addon, no hidden
+    // count, no device line, no account card; every word from apps/shared/stream-choice-words.json.
+
+    private static var words: StreamChoiceWords { StreamChoice.words }
+
+    /// The core's line for a zero-playable state: "Can't reach any source".
+    static func emptyLine(_ kind: String) -> String? { words.empty[kind]?.text }
+
+    /// What the Versions page offers when nothing can play, in the shared table's order, Back last.
+    enum EmptyAct: Hashable {
+        case settingsAddons, settingsAccounts, playFromDevice(key: String), tryAgain, back
+    }
+
+    /// nothingPlaysHere offers Back only: its rows are listed dimmed, each startable, and Choose a
+    /// version belongs to the title and the player.
+    static func emptyActs(_ empty: EmptyVersions) -> [EmptyAct] {
+        let first: [EmptyAct] = switch empty.kind {
+        case "noSource": [.settingsAddons]
+        case "unreachable": (empty.key.map { [.playFromDevice(key: $0)] } ?? []) + [.tryAgain]
+        case "needsAccount": [.settingsAccounts]
+        default: []
+        }
+        return first + [.back]
+    }
+
+    static func emptyActWord(_ act: EmptyAct) -> String {
+        let w = words.empty
+        return switch act {
+        case .settingsAddons: w["noSource"]?.action ?? "Settings"
+        case .settingsAccounts: w["needsAccount"]?.action ?? "Settings"
+        case .playFromDevice: w["unreachable"]?.playFromDevice ?? "Play from this device"
+        case .tryAgain: w["unreachable"]?.action ?? "Try again"
+        case .back: words.page.back
+        }
+    }
+
+    /// A dimmed row's one-line status, why it waits, with its icon; nil for a row that can play.
+    static func dimmedStatus(_ kind: String?) -> (text: String, glyph: String)? {
+        switch kind {
+        case "needsAccount": words.empty["needsAccount"]?.row.map { ($0, "lock") }
+        case "nothingPlaysHere": words.empty["nothingPlaysHere"]?.row.map { ($0, "ban") }
+        default: nil
+        }
+    }
+
+    /// The header's count: the versions listed, else the ones an empty state lists dimmed; nil for
+    /// none, so no zero sits beside an empty line.
+    static func count(_ s: VersionsSnapshot?) -> String? {
+        guard let s else { return nil }
+        let n = s.rows.count + (s.recommended == nil ? 0 : 1)
+        let shown = n > 0 ? n : s.empty?.rows.count ?? 0
+        return shown > 0 ? StreamChoice.counted("versions", shown) : nil
+    }
+
+    /// The reserved status line: "Finding versions" until one is found, "Still looking for more
+    /// versions" while the core still asks, then nothing. Never an addon's name.
+    static func status(_ s: VersionsSnapshot?) -> String? {
+        guard let s else { return words.page.finding }
+        guard !s.done, s.empty == nil else { return nil }
+        return s.recommended == nil && s.rows.isEmpty ? words.page.finding : words.page.stillLooking
+    }
+
+    /// "Smaller file: 720p, 1.5 GB" and "Sharper: 4K, 12 GB", in the core's order, each only when the
+    /// core sends it and it is not the pick.
+    static func shortcuts(_ s: VersionsSnapshot?) -> [(label: String, row: VersionRow)] {
+        guard let s else { return [] }
+        let pick = s.recommended?.key
+        return [(words.page.smaller, s.smaller), (words.page.sharper, s.sharper)].compactMap { name, row in
+            guard let row, row.key != pick else { return nil }
+            // The size as the rows below say it, so a shortcut and its row read the same.
+            let what = ([cell(row.quality)] + [size(row.sizeBytes)].compactMap { $0 }).joined(separator: ", ")
+            return ("\(name): \(what)", row)
+        }
+    }
+
+    /// A quality section as drawn: its heading ("4K", "720p and below") and its rows.
+    struct Section: Equatable {
+        let quality: String
+        let title: String?
+        let rows: [VersionRow]
+    }
+
+    /// The list under the card: the core's sections in its order, the rows looked up by key, nothing
+    /// grouped here. An empty state lists its rows (dimmed); an older core without sections lists every
+    /// row as one untitled section. `held`: the order held while Versions is over the player.
+    static func sections(_ s: VersionsSnapshot?, held: [String: [String]]? = nil) -> [Section] {
+        guard let s else { return [] }
+        if let empty = s.empty { return empty.rows.isEmpty ? [] : [Section(quality: "", title: nil, rows: empty.rows)] }
+        guard let sections = s.sections, !sections.isEmpty else {
+            return s.rows.isEmpty ? [] : [Section(quality: "", title: nil, rows: s.rows)]
+        }
+        let byKey = Dictionary(s.rows.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
+        return sections.compactMap { section in
+            let keys = held?[section.quality] ?? section.keys
+            let rows = keys.compactMap { byKey[$0] }
+            return rows.isEmpty ? nil : Section(quality: section.quality, title: words.page.sections[section.quality] ?? section.quality, rows: rows)
+        }
+    }
+
+    /// The order held while Versions is over the paused player: rows already shown keep their place in
+    /// their section, new ones come after them in the core's order, gone ones go.
+    static func hold(_ fresh: [VersionSection]?, shown: [String: [String]]) -> [String: [String]] {
+        var held: [String: [String]] = [:]
+        for section in fresh ?? [] {
+            let kept = (shown[section.quality] ?? []).filter(section.keys.contains)
+            held[section.quality] = kept + section.keys.filter { !kept.contains($0) }
+        }
+        return held
+    }
+
+    /// "Show all 12" for a closed section.
+    static func showAll(_ n: Int) -> String { words.page.showAll.replacingOccurrences(of: "{n}", with: String(n)) }
 }

@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Play or Resume with the resume point, and the chosen version under it.
-/// Never a Play that can only fail: with no version at all the primary
-/// becomes Add a source; while sources still answer, Play waits for the pick.
+/// Play or Resume with the resume point, always the title's primary (plans/play-every-version.md,
+/// the shared table's title row): never Settings, an account step or Try again in its place. Where
+/// nothing can play and the page holding the way on would hold only Back, Play stays but is inert.
 struct PlayBlock: View {
     let target: PlayTarget?
     /// With no target, the day the next episode comes out.
@@ -14,13 +14,8 @@ struct PlayBlock: View {
     let versions: VersionsSnapshot?
     let failure: String?
     let wide: Bool
-    /// Play was pressed and the pick is still settling.
-    let starting: Bool
-    /// Plays the pick; true starts over from the beginning.
+    /// Plays (or opens Versions, as `TitlePlay` says); true starts over from the beginning.
     let play: (_ fromStart: Bool) -> Void
-    let addSource: () -> Void
-    /// Versions that play only through a streaming service account (stream choice 3.11).
-    let addAccount: () -> Void
     /// TV: the page enters on this block's primary.
     var focus: FocusState<Bool>.Binding
     /// The v3 page (iOS and macOS): no note under the button (the page shows `VersionNote` under
@@ -37,42 +32,22 @@ struct PlayBlock: View {
                 Label(airs ?? noPlayWords(hasEpisodes: hasEpisodes), glyph: airs == nil ? "circle-alert" : "calendar")
                     .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                     .foregroundStyle(Theme.Palette.text)
-            } else if versions?.done == true, versions?.recommended == nil, versions?.blocked?.reason == "needsAccount" {
-                Button(action: addAccount) {
-                    Label(StreamChoice.words.blocked.needsAccount.action, glyph: "key-round")
-                        .frame(minWidth: wide ? 160 : nil, maxWidth: wide ? nil : .infinity)
-                }
-                .buttonStyle(PillButtonStyle(prominent: true))
-                .focused(focus)
-            } else if versions?.done == true, versions?.recommended == nil {
-                Button(action: addSource) {
-                    Label("Add a source", glyph: "plus")
-                        .frame(minWidth: wide ? 160 : nil, maxWidth: wide ? nil : .infinity)
-                }
-                .buttonStyle(PillButtonStyle(prominent: true))
-                .focused(focus)
             } else {
                 // Start over beside Resume, under it at the accessibility sizes.
                 let row = wide || !typeSize.isAccessibilitySize ? AnyLayout(HStackLayout(spacing: 10)) : AnyLayout(VStackLayout(spacing: 10))
                 row {
                     Button { play(false) } label: {
                         HStack(spacing: 10) {
-                            if starting {
-                                // Never a silent wait: the pick is settling (up to 10 s).
-                                ProgressView().controlSize(.small).tint(Theme.Palette.onPrimary)
-                                Text("Starting")
-                            } else {
-                                Glyph("play-fill")
-                                Text(target?.label ?? "Play")
-                                if let resume = target?.resumeMs, resume > 0, !(v3 && !wide) {
-                                    #if os(tvOS)
-                                    Text(resumeText(resumeMs: resume, leftMs: target?.leftMs, runtime: runtime)).fontWeight(.regular).opacity(0.8)
-                                    #else
-                                    // The frame's 13 pt sub in the pill: "Resume S6:E2  31 min left".
-                                    Text(resumeText(resumeMs: resume, leftMs: target?.leftMs, runtime: runtime))
-                                        .textFont(13, relativeTo: .footnote).opacity(0.8)
-                                    #endif
-                                }
+                            Glyph("play-fill")
+                            Text(target?.label ?? "Play")
+                            if let resume = target?.resumeMs, resume > 0, !(v3 && !wide) {
+                                #if os(tvOS)
+                                Text(resumeText(resumeMs: resume, leftMs: target?.leftMs, runtime: runtime)).fontWeight(.regular).opacity(0.8)
+                                #else
+                                // The frame's 13 pt sub in the pill: "Resume S6:E2  31 min left".
+                                Text(resumeText(resumeMs: resume, leftMs: target?.leftMs, runtime: runtime))
+                                    .textFont(13, relativeTo: .footnote).opacity(0.8)
+                                #endif
                             }
                         }
                         .lineLimit(wide || v3 ? 1 : nil)
@@ -84,10 +59,9 @@ struct PlayBlock: View {
                     // "Resume 13 min left" never breaks or spills (the tvOS walk, ATV-F2).
                     .fixedSize(horizontal: wide, vertical: false)
                     .focused(focus)
-                    // The reason shows right under it. Never off while starting: a TV moves
-                    // focus off a disabled button, and `play(fromStart:)` ignores a second press.
-                    .disabled(failure != nil)
-                    .accessibilityLabel(starting ? "Starting" : playWords)
+                    // The reason shows right under it: dimmed, not focusable, does nothing.
+                    .disabled(inert)
+                    .accessibilityLabel(playWords)
                     #if !os(tvOS)
                     // Start over from Resume's menu and a named action; the Mac also has it in the
                     // Playback menu (plans/design-v3-phase3-apple.md 2.1).
@@ -108,7 +82,7 @@ struct PlayBlock: View {
                         }
                         .buttonStyle(PillButtonStyle())
                         .fixedSize(horizontal: wide, vertical: false)
-                        .disabled(failure != nil)
+                        .disabled(inert)
                     }
                     #endif
                 }
@@ -128,6 +102,9 @@ struct PlayBlock: View {
             #endif
         }
     }
+
+    /// The versions could not load, or nothing here can play and the way on would hold only Back.
+    private var inert: Bool { failure != nil || TitlePlay.of(versions) == .inert }
 
     /// "Resume Season 2, Episode 3, 36 min left": the code said as words.
     private var playWords: String {

@@ -13,38 +13,15 @@ private func row(
         line: nil, sourceClass: nil, bitrateMbps: nil)
 }
 
-private func snapshot(
-    pick: VersionRow? = nil, rows: [VersionRow] = [], pending: [String] = [], slow: [String] = [],
-    failed: [String] = [], done: Bool = true, hidden: HiddenSummary = HiddenSummary(count: 0, byReason: [])
-) -> VersionsSnapshot {
-    VersionsSnapshot(
-        recommended: pick, rows: rows, hidden: hidden, pendingAddons: pending, slowAddons: slow,
-        failedAddons: failed, done: done, frozen: false, conditions: nil, blocked: nil, note: nil)
-}
-
-@Test func theHeaderSaysWhoIsAskedSlowOrSilentBeforeTheCount() {
-    #expect(VersionWords.progress(nil) == ("Opening", .idle))
-    #expect(VersionWords.progress(snapshot(pending: ["A", "B"], slow: ["C"])) == ("Asking A, B", .warn))
-    #expect(VersionWords.progress(snapshot(slow: ["C"], failed: ["D"])) == ("C is slow, still waiting", .warn))
-    #expect(VersionWords.progress(snapshot(rows: [row()], failed: ["D"])) == ("D did not answer", .bad))
-    #expect(VersionWords.progress(snapshot(pick: row(), rows: [row(), row()])) == ("3 versions", .ok))
-    #expect(VersionWords.progress(snapshot(pick: row())) == ("1 version", .ok))
-}
-
-@Test func theDeviceLineNamesTheScreenCodecsAndContainers() {
-    let line = VersionWords.device(screen: "1080p", decoders: ["h264", "h265", "av1"], containers: ["mp4", "m4v", "webm"])
-    #expect(line == "This screen: 1080p, plays H.264, HEVC, AV1 in MP4, M4V, WebM")
-}
-
 @Test func thePickHasItsFactsInTheWebsOrder() {
     let bare = row()
-    #expect(VersionWords.facts(bare).map(\.key) == ["Size", "Status", "Via"])
+    #expect(VersionWords.facts(bare).map(\.key) == ["Size", "Status"])
     #expect(VersionWords.facts(bare)[0].value == "Unknown")
     let full = row(features: ["HDR10", "Atmos"], size: 1_500_000_000, languages: ["eng", "tur"])
-    #expect(VersionWords.facts(full).map(\.key) == ["Size", "Status", "Via", "Features", "Languages"])
-    #expect(VersionWords.facts(full)[4].value == "English, Turkish")
+    #expect(VersionWords.facts(full).map(\.key) == ["Size", "Status", "Features", "Languages"])
+    #expect(VersionWords.facts(full)[3].value == "English, Turkish")
     // One feature is in the heading, not repeated as a fact.
-    #expect(VersionWords.facts(row(features: ["HDR10"])).map(\.key) == ["Size", "Status", "Via"])
+    #expect(VersionWords.facts(row(features: ["HDR10"])).map(\.key) == ["Size", "Status"])
     #expect(VersionWords.pickHeading(row(quality: "4K", features: ["Dolby Vision", "Atmos"])) == "4K Dolby Vision")
 }
 
@@ -58,22 +35,6 @@ private func snapshot(
     #expect(VersionWords.failover(row(failover: 2)) == "3 sources. If one fails, the next starts on its own.")
     #expect(VersionWords.status(.needsDownload(service: "TorBox")) == "Needs download")
     #expect(VersionWords.status(.ready(service: "TorBox")) == "Ready now")
-}
-
-@Test func withoutAPickTheReasonComesBeforeTheFailedAddon() {
-    let waiting = snapshot(rows: [row(status: .needsDownload(service: nil))], failed: ["Sample Source"])
-    #expect(VersionWords.waitingTitle(waiting) == "Nothing is ready to play yet")
-    #expect(VersionWords.waitingBody(waiting) == "Choose a version to start it. No answer from Sample Source.")
-    let none = snapshot(failed: ["Sample Source"])
-    #expect(VersionWords.waitingTitle(none) == "No playable version found")
-    #expect(
-        VersionWords.waitingBody(none)
-            == "None of your addons returned a stream for this video. A source addon finds playable streams. No answer from Sample Source.")
-}
-
-@Test func everyHiddenResultIsSaidWhenNothingIsLeft() throws {
-    let hidden = try JSONDecoder().decode(HiddenSummary.self, from: Data(#"{"count":3,"byReason":[["wrongTitle",2],["tooLarge",1]]}"#.utf8))
-    #expect(VersionWords.waitingBody(snapshot(hidden: hidden)) == "Every result was hidden: 2 are for other titles, 1 is over your size limit.")
 }
 
 @Test func languageCodesBecomeEnglishNames() {
@@ -119,15 +80,6 @@ private func snapshot(
     // Not measured yet: the wide layout; a phone always stacks.
     #expect(WideLayout.titleOverArt(wide: true, window: 0))
     #expect(!WideLayout.titleOverArt(wide: false, window: 900))
-}
-
-@Test func blockedVersionsSayWhyInsteadOfNoSource() throws {
-    let blocked = try JSONDecoder().decode(BlockedVersions.self, from: Data(#"{"reason": "nothingPlaysHere", "count": 3, "rows": []}"#.utf8))
-    let s = VersionsSnapshot(
-        recommended: nil, rows: [], hidden: HiddenSummary(count: 0, byReason: []), pendingAddons: [], slowAddons: [],
-        failedAddons: [], done: true, frozen: false, conditions: nil, blocked: blocked, note: nil)
-    #expect(VersionWords.none(s) == "Found 3 versions, but none plays on this device.")
-    #expect(VersionWords.progress(s) == ("3 versions", .warn))
 }
 
 @Test func theMacTitleHeroIsSixteenByNineHeldToTheWindowNeverUnder400() {

@@ -136,13 +136,6 @@ private func fixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T 
     #expect(latest.subtitlesPending == false)
 }
 
-@Test func hiddenReasonsDecodeFromPairs() throws {
-    let json = #"{"count": 3, "byReason": [["unplayable", 2], ["wrongTitle", 1]]}"#
-    let hidden = try JSONDecoder().decode(HiddenSummary.self, from: Data(json.utf8))
-    #expect(hidden.byReason.map(\.reason) == ["unplayable", "wrongTitle"])
-    #expect(hidden.byReason.map(\.count) == [2, 1])
-}
-
 @Test func failedCommandsCarryTheCoreError() throws {
     let reply = try fixture("command-error-reply.json", as: Reply<[String: String]>.self)
     #expect(!reply.ok)

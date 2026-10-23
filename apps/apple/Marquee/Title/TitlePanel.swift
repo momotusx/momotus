@@ -7,7 +7,7 @@ import SwiftUI
 /// menu, Next, an episode search, then the dated rows with their actions. On the Mac and iPad it is an
 /// overlay beside the info (`TitleScreen`); on the iPhone it is the Episodes page. Phase 6 adds the
 /// streams state.
-struct EpisodePanel<Status: View>: View {
+struct EpisodePanel: View {
     let seasons: [Int]
     let selected: Int?
     let episodes: [Episode]
@@ -18,9 +18,6 @@ struct EpisodePanel<Status: View>: View {
     var scrollTo: String?
     /// Mac and iPad: the panel's close button (Escape too).
     var close: (() -> Void)?
-    /// An episode's version being found, or why it could not start, with the way forward: shown here,
-    /// where the episode was pressed (review P2-3).
-    @ViewBuilder var status: Status
     @Environment(\.metrics) private var metrics
     @State private var query = ""
     @FocusState private var seasonFocused: Bool
@@ -55,7 +52,6 @@ struct EpisodePanel<Status: View>: View {
             .padding(.horizontal, 12)
             .frame(height: metrics.wide ? 36 : 44)
             .background(Color(red: 118 / 255, green: 118 / 255, blue: 128 / 255).opacity(0.24), in: Capsule())
-            status
             ScrollViewReader { proxy in
                 ScrollView(.vertical) {
                     LazyVStack(alignment: .leading, spacing: 4) {

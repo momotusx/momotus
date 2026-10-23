@@ -14,8 +14,6 @@ struct HeroView: View {
     var startScope: Namespace.ID?
     /// Plays the hero's video, as the title page's Play does.
     var play: (Tile) -> Void = { _ in }
-    /// Play was pressed and its pick is settling.
-    var starting = false
     @Environment(\.metrics) private var metrics
 
     var body: some View {
@@ -129,24 +127,13 @@ struct HeroView: View {
         // Play plays, as on the web and Android; a series with no video named has none.
         if tile.playVideoId != nil {
             Button { play(tile) } label: {
-                Group {
-                    if starting {
-                        HStack(spacing: 10) {
-                            ProgressView().controlSize(.small).tint(Theme.Palette.onPrimary)
-                            Text("Starting")
-                        }
-                    } else {
-                        Label("Play", glyph: "play-fill", size: HeroLayout.icon)
-                    }
-                }
+                Label("Play", glyph: "play-fill", size: HeroLayout.icon)
                 .frame(maxWidth: metrics.wide ? nil : .infinity)
                 // The iPhone's pill is 178 wide: a large text size shrinks the word rather than cut it.
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             }
             .buttonStyle(PillButtonStyle(prominent: true))
-            // Never off while starting: a TV moves focus off a disabled button,
-            // and `playHero` ignores a second press.
             .modifier(StartFocus(scope: startScope))
         }
     }

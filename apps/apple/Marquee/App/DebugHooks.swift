@@ -131,6 +131,20 @@ enum DebugHooks {
     /// `-MQShowVersions YES` opens the Versions page once versions are in.
     static var showVersions: Bool { UserDefaults.standard.bool(forKey: "MQShowVersions") }
 
+    /// `-MQVersionsFixture /path/versions.json`: every Versions view shows that snapshot, for a shot of
+    /// a state no live title gives on demand (needs an account, no source in reach).
+    static let versionsFixture: VersionsSnapshot? = fixture("MQVersionsFixture")
+
+    /// `-MQPlaybackFixture /path/playback.json`: the player shows that snapshot instead of opening the
+    /// core's view (its failure card).
+    static let playbackFixture: PlaybackSnapshot? = fixture("MQPlaybackFixture")
+
+    private static func fixture<T: Decodable>(_ key: String) -> T? {
+        guard let path = UserDefaults.standard.string(forKey: key),
+              let data = FileManager.default.contents(atPath: path) else { return nil }
+        return try? JSONDecoder().decode(T.self, from: data)
+    }
+
     /// `-MQInstallAddons url1,url2` installs addons through the protocol at launch.
     static var installAddons: [String] {
         UserDefaults.standard.string(forKey: "MQInstallAddons")?.split(separator: ",").map(String.init) ?? []

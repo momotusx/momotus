@@ -5,11 +5,14 @@ import SwiftUI
 /// Where the phone player puts its parts, as Android settled after three
 /// review rounds (plans/android-design-v2.md, slices 14 to 16). Heights are
 /// the real window's, bars included, since the player hides them.
-enum FailureAction: Hashable { case account, offer, retry, choose, back }
+/// The failure card's actions (plans/play-every-version.md, the shared table): never an account step.
+enum FailureAction: Hashable { case offer, playFromDevice, retry, choose, versions, back }
 
 /// What the player shows over the picture, first match.
 enum PlayerStatus: Equatable {
     case failed
+    /// Play opened the player while versions were found, and none can start.
+    case noPick
     case cannotOpen
     case waiting(words: Bool)
     case none
@@ -79,8 +82,9 @@ enum PlayerLayout {
     /// The overlay: the failure card, the card for a view that could not
     /// open, the spinner (with its words until a frame shows, and whenever the
     /// play starts over, a Try again after a frame), or nothing.
-    static func status(phase: String?, cannotOpen: Bool, firstFrameShown: Bool, waiting: Bool) -> PlayerStatus {
+    static func status(phase: String?, cannotOpen: Bool, firstFrameShown: Bool, waiting: Bool, noPick: Bool = false) -> PlayerStatus {
         if phase == "failed" { return .failed }
+        if noPick { return .noPick }
         if cannotOpen { return .cannotOpen }
         if phase == "resolving" || !firstFrameShown { return .waiting(words: true) }
         return waiting ? .waiting(words: false) : .none
@@ -254,44 +258,75 @@ enum PlayerLayout {
         order.first
     }
 
-    /// The failure card's buttons, in the words the web and Android use.
+    /// The failure card's buttons, in the shared words.
     static func failureLabel(_ action: FailureAction, offer: String?) -> String {
-        switch action {
-        case .account: StreamChoice.words.blocked.needsAccount.action
-        case .offer: "Play \(offer ?? "the next version")"
-        case .retry: "Try again"
-        case .choose: "Choose a version"
-        case .back: "Back"
+        let empty = StreamChoice.words.empty
+        return switch action {
+        case .offer: "Play \(offer ?? "the next version") instead"
+        case .playFromDevice: empty["unreachable"]?.playFromDevice ?? "Play from this device"
+        case .retry: empty["notStarted"]?.action ?? "Try again"
+        case .choose: StreamChoice.words.player.chooseAnother
+        case .versions: empty["nothingPlaysHere"]?.action ?? "Choose a version"
+        case .back: StreamChoice.words.page.back
         }
     }
 
-    static func failureHeadline(offer: Bool) -> String {
-        offer ? "This version could not be played" : "None of the sources could be played"
+    /// The core's line for why nothing played ("This didn't start"), else the plain words of an older core.
+    static func failureHeadline(empty: String?, offer: Bool) -> String {
+        if let line = empty.flatMap(VersionWords.emptyLine) { return line }
+        return offer ? "This version could not be played" : "None of the sources could be played"
     }
 
-    /// Every version needs a streaming service account (`needsAccount`): adding one comes first, as
-    /// the title page's primary and Versions say it; Choose a version stays beside it.
-    static func failureActions(offer: Bool, canChoose: Bool, needsAccount: Bool = false) -> [FailureAction] {
-        if needsAccount { return accountActions(canChoose: canChoose) }
-        return (offer ? [.offer] : []) + [.retry] + (canChoose ? [.choose] : []) + [.back]
+    /// The card's actions as the shared table orders them, Back last. A version picked by hand that
+    /// failed offers the ranking's next; the start's budget ran out (notStarted, or an older core):
+    /// Try again; no room: Back only; no source in reach: the source kept here, then Try again; none
+    /// plays here: another version.
+    static func failureActions(empty: String?, offer: Bool, kept: Bool = false, canChoose: Bool) -> [FailureAction] {
+        let choose: [FailureAction] = canChoose ? [.choose] : []
+        if offer { return [.offer] + choose + [.back] }
+        return switch empty {
+        case "noRoom": [.back]
+        case "unreachable": (kept ? [.playFromDevice] : []) + [.retry, .back]
+        case "nothingPlaysHere": choose + [.back]
+        default: [.retry] + choose + [.back]
+        }
     }
 
-    /// Every version needs an account: Add an account, then Choose a version, then Back, as the web
-    /// and Android cards have it; no other source and no Try again can play one.
-    static func accountActions(canChoose: Bool) -> [FailureAction] {
-        [.account] + (canChoose ? [.choose] : []) + [.back]
-    }
-
-    /// The versions as they stand say every one needs a streaming service account.
-    static func needsAccount(_ versions: VersionsSnapshot?) -> Bool {
-        versions?.done == true && versions?.recommended == nil && versions?.blocked?.reason == "needsAccount"
+    /// Play opened the player while versions were found and none can start: Versions holds the
+    /// state's line, its actions and the rows that can still start; the states with Back alone end here.
+    static func noPickActions(_ empty: String?, canChoose: Bool) -> [FailureAction] {
+        guard canChoose, !TitlePlay.backOnly.contains(empty ?? "") else { return [.back] }
+        return [.versions, .back]
     }
 
     /// A view that could not open: mostly "that version is no longer listed",
     /// where Try again opens the same key again, so another version comes
     /// first; Try again stays for a lost subscription (review r4 P3-6).
-    static func cannotOpenActions(canChoose: Bool, needsAccount: Bool = false) -> [FailureAction] {
-        needsAccount ? accountActions(canChoose: canChoose) : (canChoose ? [.choose] : []) + [.retry, .back]
+    static func cannotOpenActions(canChoose: Bool) -> [FailureAction] {
+        (canChoose ? [.choose] : []) + [.retry, .back]
+    }
+
+    /// The failure history in plain words, each reason once with its count: never an addon's name.
+    static func failureLines(_ attempts: [Attempt]) -> [String] {
+        var order: [(error: String, count: Int)] = []
+        for attempt in attempts {
+            if let i = order.firstIndex(where: { $0.error == attempt.error }) { order[i].count += 1 } else { order.append((attempt.error, 1)) }
+        }
+        return order.map { $0.count > 1 ? "\($0.error) \u{B7} \($0.count) sources" : $0.error }
+    }
+
+    /// The source kept on this device, which starts with no source in reach: the empty state's, else
+    /// the row the core marks "On this device".
+    static func kept(_ versions: VersionsSnapshot?) -> String? {
+        guard let versions else { return nil }
+        return versions.empty?.key ?? ([versions.recommended].compactMap { $0 } + versions.rows).first { $0.onDevice != nil }?.key
+    }
+
+    /// "Choose another version" on the loading screen and over a stalled frame: only while the core
+    /// says so (one clock, the core's), never on a failure or a played frame that plays on.
+    static func offersAnother(_ playback: PlaybackSnapshot?, status: PlayerStatus) -> Bool {
+        guard playback?.chooseAnother == true, case .waiting = status else { return false }
+        return true
     }
 
     /// The Subtitles value. The core asks the subtitle addons once it has a
@@ -305,15 +340,17 @@ enum PlayerLayout {
         return ("Off, \(found) found", searching)
     }
 
-    /// Under the spinner: the version the core moves on to while it resolves,
-    /// else the player's own word on a failed source, else the plain wait.
-    static func waitingWords(_ playback: PlaybackSnapshot?, notice: String?, tryingAgain: Bool = false) -> String {
+    /// Under the spinner: "Finding the best version" while Play waits for the pick, the version the
+    /// core moves on to while it resolves, else the player's own word on a failed source, else the
+    /// core's stage caption, else the plain wait. Never an addon's name.
+    static func waitingWords(_ playback: PlaybackSnapshot?, notice: String?, tryingAgain: Bool = false, findingPick: Bool = false) -> String {
+        if findingPick { return StreamChoice.words.player.finding }
         // A Try again that moves on at once names the version it moved to.
         if playback?.phase == "resolving", let label = playback?.trying?.label {
             return "Trying the next version: \(label)"
         }
         if tryingAgain { return "Trying again" }
-        return notice ?? "Getting the stream ready"
+        return notice ?? playback?.start?.caption ?? "Getting the stream ready"
     }
 
     /// What `progress` tells Trakt when the player's state changes: a pause, or a
@@ -614,20 +651,50 @@ struct StepperClock: Sendable {
     }
 }
 
-/// The account card's wait, as the web's and Android's: while every version needs a streaming service
-/// account the card stays and the versions stay followed; once they offer a pick (an account added
-/// from the card's Add an account and Back, or anywhere else), the card goes and that pick plays.
-struct AccountWait {
-    private(set) var waiting = false
+/// The player's side of a mid-play stall (plans/play-every-version.md 2e, Step 3 item 7). It tells the
+/// core when a wait for data starts after steady playing (not after the start, a seek or a pause) and
+/// when that wait ends: playing again, a seek, a pause, a stop or another source.
+struct StallWatch {
+    /// Seconds of playing since the start, a seek or a pause before a wait counts as a stall.
+    static let steadyAfter = 1.0
+    /// Where playing began after the last interruption; nil while it does not play.
+    private var from: Double?
+    private var steady = false
+    private(set) var stalled = false
 
-    /// The pick to play now, once: nil while the card waits or nothing waits.
-    mutating func see(failed: Bool, versions: VersionsSnapshot?) -> String? {
-        if failed, PlayerLayout.needsAccount(versions) {
-            waiting = true
+    /// The player plays, waits for data, or neither (paused, stopped) at `position`: the `stalled`
+    /// value to send, or nil.
+    mutating func see(playing: Bool, waiting: Bool, position: Double) -> Bool? {
+        if playing {
+            if stalled {
+                // Playing on after a stall: still mid-play, so the next wait is a stall too.
+                (stalled, from) = (false, position)
+                return false
+            }
+            let from = self.from ?? position
+            self.from = from
+            if position - from >= Self.steadyAfter { steady = true }
             return nil
         }
-        guard waiting, let pick = versions?.recommended?.key else { return nil }
-        waiting = false
-        return pick
+        if waiting {
+            guard steady, !stalled else { return nil }
+            (stalled, from) = (true, nil)
+            return true
+        }
+        return interrupted()
+    }
+
+    /// A seek, a pause, a stop or another source: a stall ends, and the next wait counts only after
+    /// steady playing again.
+    mutating func interrupted() -> Bool? {
+        (steady, from) = (false, nil)
+        guard stalled else { return nil }
+        stalled = false
+        return false
+    }
+
+    /// The command for a change.
+    static func command(_ stalled: Bool, position: Double) -> [String: any Sendable] {
+        ["type": "stalled", "stalled": stalled, "positionMs": Int64((max(0, position) * 1000).rounded())]
     }
 }

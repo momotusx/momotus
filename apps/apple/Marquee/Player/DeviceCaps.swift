@@ -53,11 +53,6 @@ enum DeviceCaps {
         return decoders
     }
 
-    /// "This screen: 1080p, plays H.264, HEVC in MP4, M4V, MOV": what Versions ranks for.
-    @MainActor static var line: String {
-        VersionWords.device(screen: displayWords, decoders: decoders, containers: containers)
-    }
-
     /// The screen as the stream choice words name it: "4K HDR, about 42 Mbit/s on Wi-Fi".
     @MainActor static func conditionsLine(_ c: StreamConditions?, account: Bool) -> String {
         StreamChoice.conditionsLine(

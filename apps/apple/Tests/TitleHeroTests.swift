@@ -24,12 +24,12 @@ private func details(_ overrides: [String: Any] = [:]) throws -> TitleDetails {
     return try JSONDecoder().decode(TitleDetails.self, from: JSONSerialization.data(withJSONObject: json))
 }
 
-/// A version list that found only versions needing a service account: the primary reads "Add an account".
-private func needsAccount() throws -> VersionsSnapshot {
-    let blocked = try JSONDecoder().decode(BlockedVersions.self, from: Data(#"{"reason": "needsAccount", "count": 4, "rows": []}"#.utf8))
+/// A version list where nothing plays and the way on would hold only Back: Resume stays, inert.
+private func noRoom() throws -> VersionsSnapshot {
+    let empty = try JSONDecoder().decode(EmptyVersions.self, from: Data(#"{"kind": "noRoom", "count": 0, "rows": [], "key": null}"#.utf8))
     return VersionsSnapshot(
-        recommended: nil, rows: [], hidden: HiddenSummary(count: 0, byReason: []), pendingAddons: [], slowAddons: [],
-        failedAddons: [], done: true, frozen: false, conditions: nil, blocked: blocked, note: nil)
+        recommended: nil, rows: [], pendingAddons: [], slowAddons: [], failedAddons: [], done: true, frozen: false,
+        conditions: nil, note: nil, empty: empty)
 }
 
 /// The Mac's real action row (TitleScreen's `wideActions`): the primary, Trailer, the marks capsule, Versions.
@@ -47,18 +47,16 @@ private struct Row: View {
         ) {
             PlayBlock(
                 target: target, nextAirs: nil, hasEpisodes: kind == "series", runtime: "148 min", versions: versions,
-                failure: nil, wide: true, starting: false, play: { _ in }, addSource: {}, addAccount: {},
-                focus: $focused, v3: true)
+                failure: nil, wide: true, play: { _ in }, focus: $focused, v3: true)
         }
     }
 }
 
-/// The rows at their widest: a movie whose versions need an account (the review's 875), a movie and an
-/// episode to resume.
+/// The rows at their widest: a movie whose Resume is inert, a movie and an episode to resume.
 private func rows() throws -> [(String, Row)] {
     let resume = { (label: String) in PlayTarget(videoId: "v", label: label, resumeMs: 1_800_000, leftMs: 3_720_000) }
     return [
-        ("movie, add an account", Row(kind: "movie", target: resume("Resume"), versions: try needsAccount())),
+        ("movie, inert", Row(kind: "movie", target: resume("Resume"), versions: try noRoom())),
         ("movie, resume", Row(kind: "movie", target: resume("Resume"), versions: nil)),
         ("series, resume", Row(kind: "series", target: resume("Resume S6:E2"), versions: nil)),
     ]

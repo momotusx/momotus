@@ -1,0 +1,56 @@
+{
+ "pendingAddons": [],
+ "slowAddons": [],
+ "failedAddons": [],
+ "done": true,
+ "frozen": true,
+ "conditions": null,
+ "note": null,
+ "hidden": {
+  "count": 0,
+  "byReason": []
+ },
+ "blocked": null,
+ "recommended": null,
+ "rows": [],
+ "smaller": null,
+ "sharper": null,
+ "sections": [],
+ "empty": {
+  "kind": "nothingPlaysHere",
+  "action": "chooseVersion",
+  "count": 1,
+  "rows": [
+   {
+    "key": "bt:avi",
+    "quality": "1080p",
+    "features": [
+     "HDR10"
+    ],
+    "sizeBytes": 2147483648,
+    "status": {
+     "kind": "torrent",
+     "seeds": 40
+    },
+    "via": "Sample Source",
+    "releaseName": "Sintel.2010.1080p.avi",
+    "languages": [
+     "en"
+    ],
+    "reasons": [],
+    "group": "best",
+    "failoverCount": 0,
+    "line": {
+     "kind": "quick",
+     "seeders": 40,
+     "sizeBytes": 2147483648
+    },
+    "sourceClass": "swarm",
+    "bitrateMbps": null,
+    "score": null,
+    "onDevice": null
+   }
+  ],
+  "key": null
+ }
+}

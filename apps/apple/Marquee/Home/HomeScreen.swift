@@ -10,9 +10,6 @@ struct HomeScreen: View {
     @Environment(CoreClient.self) private var core
     @Environment(\.metrics) private var metrics
     @Environment(SyncModel.self) private var sync
-    @Environment(\.tabShown) private var shown
-    /// Home is on screen now: a hero start that settles later reads it.
-    @State private var placeShown = true
     @Environment(ProfileSession.self) private var profiles
     @State private var width: CGFloat = 0
     @State private var height: CGFloat = 0
@@ -23,11 +20,9 @@ struct HomeScreen: View {
     /// Rows have scrolled under the status bar.
     @State private var underBar = false
     @State private var position = ScrollPosition(edge: .top)
-    /// The hero's Versions while its Play settles, held while it plays.
+    /// The hero's Versions, held while its player plays.
     @State private var heroVersions: VersionsModel?
-    @State private var starting = false
     @State private var playing: PlayRoute?
-    @State private var showSources = false
     @State private var showHeroVersions = false
     @State private var reviewing = false
     #if os(tvOS)
@@ -41,7 +36,7 @@ struct HomeScreen: View {
             LazyVStack(alignment: .leading, spacing: metrics.rowSpacing) {
                 // Without catalogs, or with none answering, there is no art to show.
                 if !model.needsSetup && !model.allFailed {
-                    HeroView(hero: model.header.hero, height: heroHeight, startScope: start == .hero ? startScopeID : nil, play: playHero, starting: starting)
+                    HeroView(hero: model.header.hero, height: heroHeight, startScope: start == .hero ? startScopeID : nil, play: playHero)
                         // Phone and tablet: the profile button, with Sign in another device
                         // in its menu (4.2), sits at the header's top right.
                         .overlay(alignment: .topTrailing) {
@@ -72,7 +67,6 @@ struct HomeScreen: View {
         #endif
         .topScrim(underBar || model.needsSetup || model.allFailed)
         .onGeometryChange(for: CGSize.self) { $0.size } action: { (width, height) = ($0.width, $0.height) }
-        .onChange(of: shown, initial: true) { _, now in placeShown = now }
         #if DEBUG
         .onAppear { if DebugHooks.takeOnboarding() { onboarding = true } }
         .task {
@@ -86,7 +80,6 @@ struct HomeScreen: View {
         .navigationDestination(item: $playing) { route in
             PlayerScreen(route: route, versions: heroVersions, core: core)
         }
-        .navigationDestination(isPresented: $showSources) { AddonsPage(core: core, sourcesOnly: true) }
         .navigationDestination(isPresented: $reviewing) {
             RecommendedAddonsPage(core: core, scope: .missing, hasCatalog: model.offer.addons.snapshot?.addons.contains { $0.enabled && $0.provides.contains("catalog") } == true)
         }
@@ -153,24 +146,17 @@ struct HomeScreen: View {
         }
     }
 
-    /// The hero's Play, as the title page's: its pick once it settles; with
-    /// no version at all the Add a source step; still waiting, its Versions.
+    /// The hero's Play, as the title page's: the player opens at once and starts the pick, or
+    /// Versions holds why nothing plays.
     private func playHero(_ tile: Tile) {
-        guard !starting, let videoId = tile.playVideoId else { return }
-        let tapped = ContinuousClock.now
+        guard let videoId = tile.playVideoId else { return }
         let target = PlayTargetInfo(kind: tile.kind, itemId: tile.id, videoId: videoId, title: tile.name, poster: tile.plainPoster, resumeMs: nil)
         let versions = heroVersions?.target == target ? heroVersions! : VersionsModel(target: target, core: core)
+        versions.start()
         heroVersions = versions
-        starting = true
-        Task {
-            let route = await versions.settledPick(tapped: tapped)
-            starting = false
-            switch SettledStart.of(picked: route != nil, done: versions.snapshot?.done == true, placeShown: placeShown) {
-            case .play: playing = route
-            case .addSource: showSources = true
-            case .versions: showHeroVersions = true
-            case .nothing: break
-            }
+        switch TitlePlay.of(versions.snapshot) {
+        case .player(let key): playing = key.flatMap { versions.play($0) } ?? versions.pending()
+        case .versions, .inert: showHeroVersions = true
         }
     }
 
