@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
@@ -32,6 +33,7 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
+import androidx.compose.ui.text.TextLayoutResult
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.VersionsCopy
 import app.marquee.core.client.CoreClient
@@ -171,6 +173,18 @@ class TvVersionsTest {
         nobodySharing = nobodySharing,
     )
 
+    /** How many lines [text] took. */
+    private fun lines(text: String): Int {
+        val layouts = mutableListOf<TextLayoutResult>()
+        compose
+            .onNodeWithText(text, useUnmergedTree = true)
+            .fetchSemanticsNode()
+            .config[SemanticsActions.GetTextLayoutResult]
+            .action
+            ?.invoke(layouts)
+        return layouts.single().lineCount
+    }
+
     private fun press(key: Key) {
         compose.onNode(isFocused()).performKeyInput { pressKey(key) }
         compose.waitForIdle()
@@ -249,16 +263,22 @@ class TvVersionsTest {
     }
 
     @Test
-    fun `a row says its line, and focus opens it to the details, with no device line and no addon name`() {
+    fun `a row is its badges and one quiet line, its details kept in place for focus, with no addon name`() {
         show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), listOf(row("a", ReasonLine.Quick(1204, 2 * gib)))))
         compose.onAllNodesWithText("This TV", substring = true).assertCountEquals(0)
         compose.onAllNodesWithText("Torrentio", substring = true).assertCountEquals(0)
         compose.onAllNodesWithText("Via", substring = true, ignoreCase = true).assertCountEquals(0)
-        compose.onNodeWithText("Starts quickly", substring = true).assertExists()
-        compose.onAllNodesWithText("1,204 seeders, 2 GB", substring = true).assertCountEquals(0)
-        compose.onNodeWithText("Starts quickly", substring = true).requestFocus()
-        compose.onNodeWithText("1,204 seeders, 2 GB", substring = true).assertExists()
-        compose.onNodeWithText("Starts quickly", substring = true).performClick()
+        // No column table.
+        compose.onAllNodesWithText("Quality", ignoreCase = true).assertCountEquals(0)
+        compose.onNodeWithText("2 GB, shared by 1,204 people").assertExists()
+        val row = compose.onNodeWithContentDescription("1080p, HDR, 2 GB, shared by 1,204 people")
+        val before = row.fetchSemanticsNode().size
+        // The details line is there before focus (unseen), so focus only fades it in: the row keeps its height.
+        compose.onNodeWithText("1,204 seeders, 2 GB", substring = true, useUnmergedTree = true).assertExists()
+        row.requestFocus()
+        compose.waitForIdle()
+        assertEquals(before, row.fetchSemanticsNode().size, "a row is one height, focused or not")
+        row.performClick()
         assertEquals(listOf("a"), played)
     }
 
@@ -275,17 +295,7 @@ class TvVersionsTest {
         compose.onNodeWithText("Back").performClick()
         assertEquals(1, backs)
         compose.onAllNodesWithText("May start slowly", substring = true).assertCountEquals(0)
-        assertEquals(
-            compose
-                .onNodeWithText("2 GB", useUnmergedTree = true)
-                .fetchSemanticsNode()
-                .boundsInRoot.height,
-            compose
-                .onNodeWithText("Won't play here", useUnmergedTree = true)
-                .fetchSemanticsNode()
-                .boundsInRoot.height,
-            "one line at the TV width",
-        )
+        assertEquals(1, lines("Won't play here"), "one line at the TV width")
         compose.onNodeWithText("Won't play here", substring = true).performClick()
         assertEquals(listOf("a"), played)
     }
@@ -298,18 +308,12 @@ class TvVersionsTest {
         actions(StreamChoiceCopy.SETTINGS, "Back")
         // A dimmed row says why it is dimmed, never how fast it would start.
         compose.onNodeWithText("Needs an account", substring = true).assertExists()
-        // On one line in the Status column at the TV width, as tall as the one-line size beside it.
-        val height = { text: String ->
-            compose
-                .onNodeWithText(text, useUnmergedTree = true)
-                .fetchSemanticsNode()
-                .boundsInRoot.height
-        }
-        assertEquals(height("2 GB"), height("Needs an account"))
+        // On one line at the TV width.
+        assertEquals(1, lines("Needs an account"))
         compose.onAllNodesWithText("May start slowly", substring = true).assertCountEquals(0)
         compose.onNodeWithText(StreamChoiceCopy.SETTINGS).assertIsFocused()
         compose.onNodeWithText(StreamChoiceCopy.SETTINGS).performKeyInput { pressKey(Key.DirectionRight) }
-        compose.onNodeWithContentDescription("1080p, HDR10, 2 GB").assertIsFocused()
+        compose.onNodeWithContentDescription("1080p, HDR, 2 GB").assertIsFocused()
         compose.onNodeWithText(StreamChoiceCopy.SETTINGS).performClick()
         assertEquals(1 to 0, accounts to sources)
     }
@@ -370,17 +374,12 @@ class TvVersionsTest {
         val turkish = row("tr", ReasonLine.Few(31)).copy(group = Group.OtherLanguages, languages = listOf("tr"))
         show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), listOf(turkish, row("a", ReasonLine.Few(31)))))
         compose.onNodeWithText("Turkish").assertExists()
-        compose.onNodeWithContentDescription("1080p, HDR10, Turkish, 2 GB").assertExists()
-        // The tag sits in the quality cell: the tagged row's features start where every other row's do.
-        val starts =
-            compose
-                .onAllNodesWithText(
-                    "HDR10",
-                    useUnmergedTree = true,
-                ).fetchSemanticsNodes()
-                .map { it.boundsInRoot.left }
-        assertEquals(2, starts.size)
-        assertEquals(starts[0], starts[1])
+        compose.onNodeWithContentDescription("1080p, HDR, Turkish, 2 GB").assertExists()
+        // The tag sits beside the row's badges, on their line.
+        val tag = compose.onNodeWithText("Turkish", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val badge =
+            compose.onAllNodesWithText("1080p", useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot }
+        assertTrue(badge.any { kotlin.math.abs(it.center.y - tag.center.y) < 2f && it.right < tag.left })
     }
 
     @Test
@@ -391,15 +390,30 @@ class TvVersionsTest {
         compose.onNodeWithText("Show all 8").requestFocus()
         compose.onNodeWithText("Show all 8").performKeyInput { pressKey(Key.DirectionCenter) }
         compose.waitForIdle()
+        println(
+            "open-dbg " +
+                compose
+                    .onAllNodes(
+                        androidx.compose.ui.test
+                            .hasContentDescription("1080p", substring = true),
+                    ).fetchSemanticsNodes()
+                    .map {
+                        "${it.config.getOrElseNullable(
+                            androidx.compose.ui.semantics.SemanticsProperties.ContentDescription,
+                        ) { null }} ${it.config.getOrElseNullable(
+                            androidx.compose.ui.semantics.SemanticsProperties.Focused,
+                        ) { null }}"
+                    },
+        )
         // Focus goes to the 4th row, the first that was hidden.
-        compose.onNodeWithContentDescription("1080p, HDR10, 4 GB").assertIsFocused()
+        compose.onNodeWithContentDescription("1080p, HDR, 4 GB").assertIsFocused()
         press(Key.DirectionLeft)
         compose.onNode(isFocused()).assertTextEquals("Show fewer")
         press(Key.DirectionLeft)
         compose.onNodeWithText("Play this version").assertIsFocused()
         // Back into the list on the row it left, Left to the heading, OK folds: two presses from inside the section.
         press(Key.DirectionRight)
-        compose.onNodeWithContentDescription("1080p, HDR10, 4 GB").assertIsFocused()
+        compose.onNodeWithContentDescription("1080p, HDR, 4 GB").assertIsFocused()
         press(Key.DirectionLeft)
         press(Key.DirectionCenter)
         compose.onNodeWithText("Show all 8").assertIsFocused()
@@ -414,8 +428,8 @@ class TvVersionsTest {
         compose.onNodeWithText("Show all 100").performKeyInput { pressKey(Key.DirectionCenter) }
         compose.waitForIdle()
         compose.onNode(hasScrollToKeyAction()).performScrollToKey("row:r50")
-        compose.onNodeWithContentDescription("1080p, HDR10, 50 GB").requestFocus()
-        compose.onNodeWithContentDescription("1080p, HDR10, 50 GB").assertIsFocused()
+        compose.onNodeWithContentDescription("1080p, HDR, 50 GB").requestFocus()
+        compose.onNodeWithContentDescription("1080p, HDR, 50 GB").assertIsFocused()
         // The heading is out of composition this far down: Left brings it back and lands on it, never on Play.
         compose.onAllNodesWithText("Show fewer").assertCountEquals(0)
         press(Key.DirectionLeft)
@@ -432,11 +446,12 @@ class TvVersionsTest {
         val rows = listOf(row("a", ReasonLine.Few(31)))
         show(snapshot(empty = EmptyVersions(EmptyKind.NothingPlaysHere, EmptyAction.ChooseVersion, 1, rows)))
         val image = compose.onRoot().captureToImage().asAndroidBitmap()
-        for (text in listOf("HDR10", "2 GB", "Won't play here")) {
+        val dp = compose.density.density
+        for (text in listOf("1080p", "Won't play here")) {
             val at = compose.onNodeWithText(text, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
             val y = at.center.y.toInt()
-            // The cell's empty end, behind the words.
-            val ground = Color(image.getPixel(at.right.toInt() - 2, y))
+            // Just left of the words: the badge's fill, or the gap after the line's icon.
+            val ground = Color(image.getPixel((at.left - 3 * dp).toInt(), y))
             var best = 0f
             for (x in at.left.toInt() until at.right.toInt()) {
                 for (py in at.top.toInt() until at.bottom.toInt()) {
@@ -515,7 +530,6 @@ class TvVersionsTest {
             MarqueeTheme(Form.Tv) { TvVersions("Sintel", current, FocusMemory(), {}, {}, {}, {}, {}) }
         }
         compose.waitForIdle()
-        compose.onNodeWithText("Quality", ignoreCase = true).assertExists()
         val frame = compose.onNodeWithTag("row-skeleton-0", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         // The card's Play takes the focus, so the first row sits as it would, unlifted.
         val snapshot = snapshot(row("best", ReasonLine.Ready("TorBox", gib)), listOf(row("a", ReasonLine.Few(31))))
@@ -536,9 +550,9 @@ class TvVersionsTest {
         view.open()
         compose.waitUntil(60_000) {
             Snapshot.sendApplyNotifications()
-            compose.onAllNodesWithContentDescription("1080p, HDR10, 2 GB").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithContentDescription("1080p, HDR, 2 GB").fetchSemanticsNodes().isNotEmpty()
         }
-        val first = compose.onNodeWithContentDescription("1080p, HDR10, 2 GB").fetchSemanticsNode().boundsInRoot
+        val first = compose.onNodeWithContentDescription("1080p, HDR, 2 GB").fetchSemanticsNode().boundsInRoot
         assertEquals(frame.top, first.top, "the first row lands where its frame was")
         assertEquals(frame.height, first.height, "a frame row is a row's height")
         compose.onAllNodesWithTag("row-skeleton-0", useUnmergedTree = true).assertCountEquals(0)
@@ -596,7 +610,7 @@ class TvVersionsTest {
         compose.onAllNodesWithText("Sintel.2010.1080p.BluRay.mkv", substring = true).assertCountEquals(0)
         compose.onAllNodesWithText("One source", substring = true).assertCountEquals(0)
         // The core keeps the pick out of the sections, so no row repeats it.
-        compose.onAllNodesWithContentDescription("1080p, HDR10, 4 GB").assertCountEquals(0)
+        compose.onAllNodesWithContentDescription(VersionsCopy.rowSpoken(pick)).assertCountEquals(0)
         // The core's smaller and sharper, in its order, with their own facts.
         compose.onNodeWithText("Smaller file: 720p, 1.5 GB").assertExists()
         compose.onNodeWithText("Sharper: 4K, 12 GB").assertExists()
@@ -613,7 +627,7 @@ class TvVersionsTest {
         }
         press(Key.DirectionDown)
         compose.onNodeWithText("Smaller file: 720p, 1.5 GB").assertIsFocused()
-        compose.onNodeWithContentDescription("720p, HDR10, 1.5 GB").assertExists()
+        compose.onNodeWithContentDescription(VersionsCopy.rowSpoken(coherent().smaller!!)).assertExists()
         press(Key.DirectionCenter)
         assertEquals(listOf("small"), played)
     }
@@ -641,11 +655,11 @@ class TvVersionsTest {
         )
         compose.waitUntil(10_000) {
             Snapshot.sendApplyNotifications()
-            compose.onAllNodesWithContentDescription("1080p, HDR10, 3 GB").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithContentDescription("1080p, HDR, 3 GB").fetchSemanticsNodes().isNotEmpty()
         }
         val top = { size: String ->
             compose
-                .onNodeWithContentDescription("1080p, HDR10, $size")
+                .onNodeWithContentDescription("1080p, HDR, $size")
                 .fetchSemanticsNode()
                 .boundsInRoot.top
         }

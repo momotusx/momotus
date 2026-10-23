@@ -2,6 +2,8 @@
 
 package app.marquee.ui.tv
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
@@ -12,11 +14,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -39,6 +41,7 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -52,7 +55,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.marquee.core.Format
 import app.marquee.core.StreamChoiceCopy
@@ -74,6 +76,7 @@ import app.marquee.design.GlassBar
 import app.marquee.design.Icons
 import app.marquee.design.LanguageTag
 import app.marquee.design.LiveSpoken
+import app.marquee.design.LocalReducedMotion
 import app.marquee.design.Marquee
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
@@ -146,6 +149,11 @@ fun TvVersions(
     }
     // The list, for Right from the empty state's actions.
     val list = remember { FocusRequester() }
+    val listState = rememberLazyListState()
+    // The row the list last had focused and its place, so Right from the left column returns to it even once it
+    // has scrolled out of composition (a section's heading or Play took focus and the list moved).
+    var lastRow by remember { mutableStateOf<Pair<Int, String>?>(null) }
+    val scope = rememberCoroutineScope()
     // The target exists once there is something to focus: the card's Play (or Try again, or the empty
     // state's first action), else the first row.
     val target =
@@ -164,6 +172,16 @@ fun TvVersions(
                     // First move of any kind pins the recommendation, once there is one to pin: a pin
                     // before that would keep the card empty while sources stream in.
                     if (event.key in arrows && snapshot?.recommended != null && !snapshot.frozen) versions?.freeze()
+                    val back = lastRow
+                    if (event.key == Key.DirectionRight && focus.focusedKey in left && back != null &&
+                        focus.rowEntry(ROWS) == null
+                    ) {
+                        scope.launch {
+                            listState.scrollToItem(back.first)
+                            focus.focusWhenReady(back.second, focus.interactions, waitMs = 1_000)
+                        }
+                        return@onPreviewKeyEvent true
+                    }
                 }
                 false
             }.padding(start = safe.side, end = safe.side, top = safe.top, bottom = safe.bottom),
@@ -185,6 +203,8 @@ fun TvVersions(
                     empty?.rows ?: snapshot?.rows.orEmpty(),
                     empty?.kind,
                     held,
+                    listState,
+                    { at, key -> lastRow = at to key },
                     // Nothing to list yet and nothing said: the table's frame waits in place, so nothing moves.
                     failure == null && snapshot?.recommended == null && snapshot?.empty == null &&
                         snapshot?.rows.isNullOrEmpty(),
@@ -200,6 +220,9 @@ fun TvVersions(
 }
 
 private val arrows = setOf(Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown)
+
+/** The left column's stops: Play (or the empty state's first action) and the shortcuts. */
+private val left = setOf(PLAY, SHORT_SMALLER, SHORT_SHARPER)
 
 private fun rowKey(row: VersionRow) = "row:${row.key}"
 
@@ -364,11 +387,6 @@ private fun Release(
     )
 }
 
-/** Column widths of the table; Features takes the rest. */
-private val QUALITY: Dp = 150.dp
-private val SIZE: Dp = 150.dp
-private val STATUS: Dp = 300.dp
-
 /**
  * Why nothing can play, in the core's words, said once when it appears, with its actions in the shared order under
  * it (plans/versions-android-spec.md, section 5). The first is focused, and Right goes to the rows listed beside it
@@ -441,6 +459,8 @@ private fun Sources(
     rows: List<VersionRow>,
     why: EmptyKind?,
     held: Boolean,
+    listState: LazyListState,
+    onRowFocused: (Int, String) -> Unit,
     loading: Boolean,
     focus: FocusMemory,
     list: FocusRequester,
@@ -460,7 +480,6 @@ private fun Sources(
     val focusSoon = { key: String -> scope.launch { focus.focusWhenReady(key, focus.interactions, waitMs = 1_000) } }
     // Looked up when focus moves, so the builder below calls nothing composable.
     val toPlay = Modifier.focusProperties { left = focus.requester(PLAY) ?: FocusRequester.Default }
-    val listState = rememberLazyListState()
 
     /**
      * Left from the [at]th row of an open section reaches its heading: by focus search while the heading is
@@ -486,19 +505,6 @@ private fun Sources(
             true
         }.focusProperties { left = focus.requester(headKey(group)) ?: FocusRequester.Default }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-        if (rows.isNotEmpty() || loading) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 22.dp),
-            ) {
-                CapsLabel("Quality", Modifier.width(QUALITY))
-                CapsLabel("Features", Modifier.weight(1f))
-                CapsLabel("Size", Modifier.width(SIZE))
-                CapsLabel("Status", Modifier.width(STATUS))
-            }
-            Line(colors.lineStrong)
-        }
         LazyColumn(
             state = listState,
             modifier =
@@ -557,7 +563,11 @@ private fun Sources(
                     if (all) rows else rows.take(SHOWN),
                     key = { _, row -> rowKey(row) },
                 ) { at, row ->
-                    SourceRow(row, why, focus, onPlay, if (all) toHeading(group, row, at) else toPlay)
+                    SourceRow(row, why, focus, onPlay, if (all) toHeading(group, row, at) else toPlay) {
+                        listState.layoutInfo.visibleItemsInfo
+                            .firstOrNull { it.key == rowKey(row) }
+                            ?.let { onRowFocused(it.index, rowKey(row)) }
+                    }
                 }
                 if (rows.size > SHOWN) {
                     item(key = "fold:$group") {
@@ -565,9 +575,20 @@ private fun Sources(
                             if (all) StreamChoiceCopy.SHOW_FEWER else StreamChoiceCopy.showAll(rows.size),
                             {
                                 val opening = !all
+                                // Where the fold sits now is where the 4th row lands once the section opens.
+                                val at =
+                                    listState.layoutInfo.visibleItemsInfo
+                                        .firstOrNull { it.key == foldKey(group) }
+                                        ?.index
                                 fold()
-                                // Opening: the 4th row, the first that was hidden, once it is composed.
-                                if (opening) focusSoon(rowKey(rows[SHOWN]))
+                                // Opening: the 4th row, the first that was hidden, scrolled into view and focused once
+                                // it is composed (rows are taller than the fold, so it may land below the screen).
+                                if (opening) {
+                                    scope.launch {
+                                        at?.let { listState.scrollToItem(maxOf(0, it - 1)) }
+                                        focus.focusWhenReady(rowKey(rows[SHOWN]), focus.interactions, waitMs = 1_000)
+                                    }
+                                }
                             },
                             Modifier
                                 .padding(start = 22.dp, top = 4.dp)
@@ -599,31 +620,24 @@ private fun Heading(content: @Composable RowScope.() -> Unit) {
 /** How many rows the table's frame shows while versions are found. */
 private const val SKELETON_ROWS = 4
 
-/** A row's frame while versions are found: the cells of a real row, unseen, under one block, so its height is a row's. */
+/** A row's frame while versions are found: a real row's parts, unseen, under one block, so its height is a row's. */
 @Composable
 private fun RowSkeleton(modifier: Modifier = Modifier) {
     Box(modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 14.dp)) {
-        Row(Modifier.alpha(0f).clearAndSetSemantics {}, verticalAlignment = Alignment.CenterVertically) {
-            MqText("1080p", Modifier.width(QUALITY), weight = FontWeight.SemiBold, maxLines = 1)
-            MqText("HDR10", Modifier.weight(1f), role = TextRole.Callout, maxLines = 1)
-            MqText("2 GB", Modifier.width(SIZE), role = TextRole.Callout, maxLines = 1)
-            ToneWord("Starts quickly", Status.Ok, Modifier.width(STATUS))
+        Column(Modifier.alpha(0f).clearAndSetSemantics {}, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            BadgeRow(listOf("1080p" to BadgeLook.Filled))
+            MqText("2 GB, ready now", role = TextRole.Callout, maxLines = 1)
+            MqText("A.2010.1080p.mkv", role = TextRole.Caption, maxLines = 1)
         }
         Skeleton(Modifier.matchParentSize())
     }
 }
 
-@Composable
-private fun Line(color: Color) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .height(1.dp)
-            .background(color),
-    ) {}
-}
-
-/** One source: its cells on a hairline, its line in the Status column, opened to the line's details, the release name and its languages while focused. */
+/**
+ * One source (plans/versions-android-spec.md, section 1): its badges and language, one quiet line (size and source in
+ * plain words, or the core's warning), and a details line kept for it at all times and faded in on focus, so a row is
+ * one height whether focused or not and a held Down lays out nothing.
+ */
 @Composable
 private fun SourceRow(
     row: VersionRow,
@@ -631,6 +645,7 @@ private fun SourceRow(
     focus: FocusMemory,
     onPlay: (String) -> Unit,
     modifier: Modifier = Modifier,
+    onFocused: () -> Unit = {},
 ) {
     val key = rowKey(row)
     val shape = RoundedCornerShape(Marquee.radius.m)
@@ -640,13 +655,10 @@ private fun SourceRow(
     // empty rows) read dimmed, say [why] in place of their line, and stay startable.
     val colors = focusPalette(focused).let { if (why != null && !focused) it.dimmed() else it }
     val line = why?.let(StreamChoiceCopy::emptyRowLine) ?: StreamChoiceCopy.rowLine(row)
+    val quiet = VersionsCopy.quiet(row).takeIf { why == null }
     val tag = VersionsCopy.languageTag(row)
-    val spoken =
-        listOfNotNull(
-            VersionsCopy.headline(row),
-            tag,
-            row.sizeBytes?.let(Format::bytes),
-        ).joinToString(", ")
+    val reduced = LocalReducedMotion.current
+    val details by animateFloatAsState(if (focused) 1f else 0f, tween(if (reduced) 0 else 180), label = "details")
     Column(
         modifier
             .fillMaxWidth()
@@ -655,47 +667,35 @@ private fun SourceRow(
             .onFocusChanged { state ->
                 watch(state.isFocused)
                 focused = state.isFocused
+                if (state.isFocused) onFocused()
             }.clip(shape)
             .background(if (focused) colors.raised else Color.Transparent)
             .semantics {
-                contentDescription = spoken
-                // The line, then its details: what the eye gets from the row while it has focus.
-                stateDescription = listOf(line.text, line.details).filter { it.isNotEmpty() }.joinToString(". ")
+                contentDescription = VersionsCopy.rowSpoken(row)
+                // A warning or why it is dimmed, then the details: what the eye gets from the row on focus.
+                stateDescription =
+                    listOfNotNull(line.text.takeIf { quiet == null }, VersionsCopy.details(row)).joinToString(". ")
             }.focusClickable({ onPlay(row.key) }, Role.Button)
             .padding(horizontal = 22.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         FocusInk(colors) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // The language tag under the quality, inside its cell, so every column stays under its heading.
-                Column(Modifier.width(QUALITY), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    MqText(VersionsCopy.cell(row.quality), weight = FontWeight.SemiBold, maxLines = 1)
-                    if (tag != null) LanguageTag(tag)
-                }
-                MqText(
-                    row.features.joinToString(", "),
-                    Modifier.weight(1f),
-                    role = TextRole.Callout,
-                    color = colors.muted,
-                    maxLines = 1,
-                )
-                // Left blank when the source does not say, as on the web.
-                MqText(
-                    row.sizeBytes?.let(Format::bytes).orEmpty(),
-                    Modifier.width(SIZE),
-                    role = TextRole.Callout,
-                    maxLines = 1,
-                )
-                // A long line ("Colors may look washed out on this screen") takes a second line, as on the web.
-                ToneWord(line.text, tone(line.tone), Modifier.width(STATUS), icon = why?.let(::whyIcon))
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                BadgeRow(VersionsCopy.badges(row).map { it.text to badgeLook(it.look) })
+                if (tag != null) LanguageTag(tag)
             }
-            if (focused) {
-                Column(Modifier.padding(start = QUALITY), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    if (line.details.isNotEmpty()) MqText(line.details, role = TextRole.Callout, maxLines = 2)
-                    Release(row.releaseName, maxLines = 2)
-                    MqText(VersionsCopy.detail(row), role = TextRole.Caption, color = colors.muted, maxLines = 1)
-                }
+            if (quiet != null) {
+                MqText(quiet, role = TextRole.Callout, color = colors.muted, maxLines = 1)
+            } else {
+                ToneWord(line.text, tone(line.tone), maxLines = 1, icon = why?.let(::whyIcon))
             }
+            MqText(
+                VersionsCopy.details(row),
+                Modifier.graphicsLayer { alpha = details },
+                role = TextRole.Caption,
+                color = colors.muted,
+                maxLines = 1,
+            )
         }
     }
 }

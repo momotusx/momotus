@@ -200,6 +200,55 @@ object VersionsCopy {
         return listOfNotNull(Badge(cell(row.quality), Badge.Look.Filled), video, audio)
     }
 
+    /**
+     * A row's one quiet line (plans/versions-android-spec.md, section 1): its size and its source in plain words
+     * ("2 GB, shared by 412 people", "4 GB, ready now"), or "On this device"; null when the core's line warns (it
+     * then shows instead: "May start slowly").
+     */
+    fun quiet(row: VersionRow): String? {
+        val line = StreamChoiceCopy.line(row.line)
+        val size = row.sizeBytes?.let(Format::bytes)
+        if (row.onDevice != null) return listOfNotNull(size, row.onDevice).joinToString(", ")
+        if (line.tone != Tone.Ok) return null
+        val source =
+            when (val s = row.status) {
+                is VersionStatus.Ready -> {
+                    StreamChoiceCopy.SOURCE_READY
+                }
+
+                VersionStatus.Direct -> {
+                    StreamChoiceCopy.SOURCE_DIRECT
+                }
+
+                is VersionStatus.NeedsDownload -> {
+                    StreamChoiceCopy.SOURCE_DOWNLOAD
+                }
+
+                is VersionStatus.Torrent -> {
+                    s.seeds?.let {
+                        StreamChoiceCopy.SOURCE_SHARED.replace(
+                            "{people}",
+                            StreamChoiceCopy.counted("people", it),
+                        )
+                    }
+                }
+            }
+        return listOfNotNull(size, source).joinToString(", ").ifEmpty { line.text }
+    }
+
+    /** A row's details, reserved under it and shown on focus: the release name, the line's details, its languages and sources. */
+    fun details(row: VersionRow): String =
+        listOfNotNull(
+            row.releaseName,
+            StreamChoiceCopy.line(row.line).details.takeIf { it.isNotEmpty() },
+            detail(row),
+        ).joinToString(" · ")
+
+    /** A row as a screen reader says it: its badges, its language, then its quiet line or its size. */
+    fun rowSpoken(row: VersionRow): String =
+        (badges(row).map { it.text } + listOfNotNull(languageTag(row), quiet(row) ?: row.sizeBytes?.let(Format::bytes)))
+            .joinToString(", ")
+
     /** The card's one why line: the core's line and its details joined by a colon ("Starts quickly: 412 seeders, 2 GB"). */
     fun why(row: VersionRow): String {
         val line = StreamChoiceCopy.rowLine(row)

@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -32,7 +31,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -40,11 +38,8 @@ import androidx.compose.ui.semantics.collapse
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.expand
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.marquee.core.Format
 import app.marquee.core.StreamChoiceCopy
@@ -67,7 +62,6 @@ import app.marquee.design.Icons
 import app.marquee.design.LanguageTag
 import app.marquee.design.LiveSpoken
 import app.marquee.design.Marquee
-import app.marquee.design.MarqueeFonts
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
 import app.marquee.design.ON_ARRIVAL_MS
@@ -329,23 +323,6 @@ private fun Pick(
     }
 }
 
-/** The width of the widest quality word ("Unknown") at the current text size. */
-@Composable
-private fun qualityWidth(): Dp {
-    val measurer = rememberTextMeasurer()
-    val size = Marquee.type.body
-    val density = LocalDensity.current
-    return remember(measurer, size, density.fontScale) {
-        val style = TextStyle(fontSize = size, fontFamily = MarqueeFonts.text, fontWeight = FontWeight.SemiBold)
-        with(density) {
-            measurer
-                .measure("Unknown", style, maxLines = 1)
-                .size.width
-                .toDp()
-        } + 2.dp
-    }
-}
-
 /**
  * Why nothing can play, in the core's words, said once when it appears, with its actions in the shared order under
  * it (plans/versions-android-spec.md, section 5), over the rows listed dimmed when there are some.
@@ -400,8 +377,9 @@ private fun LearnedLine(
 }
 
 /**
- * One source: the quality, then its line and its size, where from and its features, on a hairline.
- * A tap opens it to the line's details, the release name and its own Play.
+ * One source (plans/versions-android-spec.md, section 1): its badges and language, then one quiet line (size and
+ * source in plain words, or the core's warning). A tap opens it to the line's details, the release name and its own
+ * Play.
  */
 @Composable
 private fun SourceRow(
@@ -414,13 +392,8 @@ private fun SourceRow(
     val colors = Marquee.colors
     val line = why?.let(StreamChoiceCopy::emptyRowLine) ?: StreamChoiceCopy.rowLine(row)
     val tag = VersionsCopy.languageTag(row)
-    val spoken =
-        listOfNotNull(
-            VersionsCopy.headline(row),
-            tag,
-            row.sizeBytes?.let(Format::bytes),
-            line.text,
-        ).joinToString(", ")
+    val quiet = VersionsCopy.quiet(row).takeIf { why == null }
+    val spoken = listOfNotNull(VersionsCopy.rowSpoken(row), line.text.takeIf { quiet == null }).joinToString(", ")
     // The rows of a page where none plays (the core's empty rows) are dimmed, say [why] in place of their line,
     // and stay startable.
     FocusInk(if (why != null) Marquee.colors.dimmed() else Marquee.colors) {
@@ -447,29 +420,24 @@ private fun SourceRow(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // One width for every quality, "Unknown" measured at the current text size, so the statuses
-                // line up whatever the font scale.
-                Column(Modifier.width(qualityWidth()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    MqText(VersionsCopy.cell(row.quality), weight = FontWeight.SemiBold, maxLines = 1)
-                    if (tag != null) LanguageTag(tag)
-                }
-                // The line on its own line, then the size, the source and the features: both wrap on a
-                // small phone or a large font instead of cutting what helps the choice.
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    ToneWord(line.text, tone(line.tone), icon = why?.let(::whyIcon))
-                    MqText(
-                        (
-                            listOfNotNull(row.sizeBytes?.let(Format::bytes)) + row.features
-                        ).joinToString(" · "),
-                        role = TextRole.Caption,
-                        color = colors.muted,
-                        maxLines = 2,
-                    )
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        BadgeRow(VersionsCopy.badges(row).map { it.text to badgeLook(it.look) })
+                        if (tag != null) LanguageTag(tag)
+                    }
+                    if (quiet != null) {
+                        MqText(quiet, role = TextRole.Callout, color = colors.muted, maxLines = 2)
+                    } else {
+                        ToneWord(line.text, tone(line.tone), icon = why?.let(::whyIcon))
+                    }
                 }
             }
             if (open) {
                 Column(
-                    Modifier.padding(start = qualityWidth() + 26.dp, end = 12.dp, bottom = 12.dp),
+                    Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     if (line.details.isNotEmpty()) MqText(line.details, role = TextRole.Callout)

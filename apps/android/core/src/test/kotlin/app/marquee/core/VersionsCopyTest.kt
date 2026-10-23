@@ -357,4 +357,35 @@ class VersionsCopyTest {
         assertTrue(why.startsWith("Starts quickly: "), why)
         assertEquals("Best for this TV. 4K, HDR. $why", VersionsCopy.cardSpoken("Best for this TV", one))
     }
+
+    @Test
+    fun `a row's quiet line is its size and source in plain words, and a warning from the core replaces it`() {
+        val gb = 2L * 1024 * 1024 * 1024
+        val quick = ReasonLine.Quick(412, gb)
+        assertEquals(
+            "2 GB, shared by 412 people",
+            VersionsCopy.quiet(row(sizeBytes = gb).copy(status = VersionStatus.Torrent(412), line = quick)),
+        )
+        assertEquals(
+            "2 GB, shared by 1 person",
+            VersionsCopy.quiet(row(sizeBytes = gb).copy(status = VersionStatus.Torrent(1), line = quick)),
+        )
+        assertEquals("2 GB, ready now", VersionsCopy.quiet(row(sizeBytes = gb).copy(line = quick)))
+        assertEquals(
+            "2 GB, direct link",
+            VersionsCopy.quiet(row(sizeBytes = gb).copy(status = VersionStatus.Direct, line = quick)),
+        )
+        assertEquals(
+            "2 GB, downloads first",
+            VersionsCopy.quiet(row(sizeBytes = gb).copy(status = VersionStatus.NeedsDownload(null), line = quick)),
+        )
+        assertEquals(
+            "2 GB, On this device",
+            VersionsCopy.quiet(row(sizeBytes = gb).copy(line = quick, onDevice = "On this device")),
+        )
+        // A warning shows in its place.
+        assertNull(VersionsCopy.quiet(row(sizeBytes = gb).copy(line = ReasonLine.Few(31))))
+        // Said as its badges, then the quiet line.
+        assertEquals("4K, HDR, 2 GB, ready now", VersionsCopy.rowSpoken(row(sizeBytes = gb).copy(line = quick)))
+    }
 }

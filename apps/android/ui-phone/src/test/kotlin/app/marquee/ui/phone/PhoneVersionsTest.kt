@@ -197,16 +197,16 @@ class PhoneVersionsTest {
         show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), listOf(row("a", ReasonLine.Quick(1204, 2 * gib)))))
         compose.onAllNodesWithText("This phone", substring = true).assertCountEquals(0)
         compose.onAllNodesWithText("Torrentio", substring = true).assertCountEquals(0)
-        compose.onNodeWithText("Starts quickly", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("2 GB, shared by 1,204 people").assertIsDisplayed()
         compose.onAllNodesWithText("1,204 seeders, 2 GB").assertCountEquals(0)
-        compose.onNodeWithText("Starts quickly", substring = true).performClick()
+        compose.onNodeWithText("2 GB, shared by 1,204 people").performClick()
         compose.onNodeWithText("1,204 seeders, 2 GB").assertIsDisplayed()
         // The card's white Play and the row's own.
         compose.onAllNodesWithText("Play this version").assertCountEquals(2)
         compose.onAllNodesWithText("Play this version")[1].performClick()
         assertEquals(listOf("a"), played)
         // A second tap closes it.
-        compose.onNodeWithText("Starts quickly", substring = true).performClick()
+        compose.onNodeWithText("2 GB, shared by 1,204 people").performClick()
         compose.onAllNodesWithText("1,204 seeders, 2 GB").assertCountEquals(0)
     }
 

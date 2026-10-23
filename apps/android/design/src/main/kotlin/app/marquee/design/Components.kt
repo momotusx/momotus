@@ -974,8 +974,8 @@ enum class BadgeLook { Filled, Plain, Outlined }
 
 /**
  * Apple's badge row as measured (design/exploration/v3 `badgeRow`, design/reference/apple-tv.md): one badge per family,
- * 31 tall on TV at its meta row and 13 on the phone, in the badge color (64 percent white on TV, iOS's secondary grey
- * on the phone); a filled badge's word is near black on it.
+ * 31 tall on TV at its meta row and 13 on the phone, in the palette's `muted` (64 percent white, and dark on a focused
+ * row's white); a filled badge's word takes the `surface` color on it, so it reads in both.
  */
 @Composable
 fun BadgeRow(
@@ -983,7 +983,7 @@ fun BadgeRow(
     modifier: Modifier = Modifier,
 ) {
     val tv = Marquee.form == Form.Tv
-    val ink = if (tv) Color.White.copy(alpha = 0.64f) else Color(0xFFEBEBF5).copy(alpha = 0.6f)
+    val ink = Marquee.colors.muted
     val shape = RoundedCornerShape(if (tv) 5.dp else 2.5.dp)
     Row(
         modifier,
@@ -1017,7 +1017,7 @@ fun BadgeRow(
                     text,
                     style =
                         TextStyle(
-                            color = if (look == BadgeLook.Filled) Color.Black.copy(alpha = 0.88f) else ink,
+                            color = if (look == BadgeLook.Filled) Marquee.colors.surface else ink,
                             fontSize = if (tv) 23.sp else 10.sp,
                             fontWeight = FontWeight.SemiBold,
                             fontFamily = MarqueeFonts.text,

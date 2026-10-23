@@ -78,6 +78,7 @@ object StreamChoiceCopy {
             "playbacks" to ("{n} playback" to "{n} playbacks"),
             "versions" to ("{n} version" to "{n} versions"),
             "versionsAre" to ("{n} version is" to "{n} versions are"),
+            "people" to ("{n} person" to "{n} people"),
         )
 
     val LINES =
@@ -198,6 +199,12 @@ object StreamChoiceCopy {
     const val SHOW_ALL = "Show all {n}"
     const val SHOW_FEWER = "Show fewer"
     const val BACK = "Back"
+
+    /** A row's source in plain words, after its size ("2 GB, shared by 412 people"). */
+    const val SOURCE_READY = "ready now"
+    const val SOURCE_DIRECT = "direct link"
+    const val SOURCE_DOWNLOAD = "downloads first"
+    const val SOURCE_SHARED = "shared by {people}"
 
     /** The card's kicker, by form. */
     const val BEST_TV = "Best for this TV"

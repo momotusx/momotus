@@ -4,7 +4,8 @@
     "seeders": ["{n} seeder", "{n} seeders"],
     "playbacks": ["{n} playback", "{n} playbacks"],
     "versions": ["{n} version", "{n} versions"],
-    "versionsAre": ["{n} version is", "{n} versions are"]
+    "versionsAre": ["{n} version is", "{n} versions are"],
+    "people": ["{n} person", "{n} people"]
   },
   "lines": {
     "copy": {
@@ -126,6 +127,7 @@
     "back": "Back",
     "bestTv": "Best for this TV",
     "bestPhone": "Best for this phone",
+    "source": { "ready": "ready now", "direct": "direct link", "download": "downloads first", "shared": "shared by {people}" },
     "smaller": "Smaller file",
     "sharper": "Sharper",
     "sections": { "uhd": "4K", "fhd": "1080p", "hd": "720p and below", "other": "Other" }

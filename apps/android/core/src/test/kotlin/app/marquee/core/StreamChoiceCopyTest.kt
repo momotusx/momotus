@@ -169,6 +169,15 @@ class StreamChoiceCopyTest {
                         put("showAll", SHOW_ALL)
                         put("showFewer", SHOW_FEWER)
                         put("back", BACK)
+                        put(
+                            "source",
+                            buildJsonObject {
+                                put("ready", SOURCE_READY)
+                                put("direct", SOURCE_DIRECT)
+                                put("download", SOURCE_DOWNLOAD)
+                                put("shared", SOURCE_SHARED)
+                            },
+                        )
                         put("bestTv", BEST_TV)
                         put("bestPhone", BEST_PHONE)
                         put("smaller", SMALLER)
