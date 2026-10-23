@@ -110,6 +110,9 @@ pub struct ItemDetails {
     pub description: Option<String>,
     pub genres: Vec<String>,
     pub runtime: Option<String>,
+    /// In the Library, as it stands now: `setInLibrary {id, value}` on
+    /// Discover changes it with no title view (core backlog C44b).
+    pub in_library: bool,
 }
 
 #[derive(Clone)]
@@ -200,12 +203,17 @@ impl DiscoverView {
         // Taken before the first read of the ratings (`on_listed`).
         let listed = core.ratings().listed();
         inner.select_first();
-        let (watched, rated) = (inner.clone(), inner.clone());
+        let (watched, rated, library_watch) = (inner.clone(), inner.clone(), inner.clone());
+        let library = core.library().subscribe();
         let watch = tokio::spawn(async move {
             let rate = crate::ratings::on_listed(listed, move || {
                 rate_items(&rated.core, &rated.state, &rated.snapshot);
             });
-            futures_util::join!(watch_addons(watched, changes), rate);
+            futures_util::join!(
+                watch_addons(watched, changes),
+                watch_library(library_watch, library),
+                rate
+            );
         });
         Self { inner, watch }
     }
@@ -245,8 +253,44 @@ impl DiscoverView {
     pub fn preview(&self, id: Option<&str>) {
         let mut s = lock(&self.inner.state);
         s.preview = id.map(str::to_owned);
-        if fill_preview(&mut s) {
+        if fill_preview(&self.inner.core, &mut s) {
             self.inner.snapshot.set(s.snapshot.clone());
+        }
+    }
+
+    /// Adds a listed item to the Library, or takes it out, from what its
+    /// catalog gave (no title view, no meta fetch, no swarm warm-up): the
+    /// preview's Add to Library (core backlog C44b). An id not listed does
+    /// nothing.
+    pub fn set_in_library(&self, id: &str, in_library: bool) -> Result<(), crate::CoreError> {
+        let row = {
+            let s = lock(&self.inner.state);
+            let Some(t) = s.snapshot.items.iter().find(|t| t.id == id) else {
+                return Ok(());
+            };
+            mq_library::LibraryItemRow {
+                item_id: t.id.clone(),
+                kind: t.kind.clone(),
+                name: t.name.clone(),
+                // The addon's own poster, as the title view keeps it.
+                poster: t.poster_fallback.clone().or_else(|| t.poster.clone()),
+                poster_shape: None,
+                added_ms: mq_library::hlc::now_ms() as i64,
+            }
+        };
+        self.inner.core.set_in_library(&row, in_library)
+    }
+}
+
+/// Keeps the preview's Library state as it stands: an add or a removal
+/// here, on the title page or from another device.
+async fn watch_library(inner: Arc<Inner>, mut changes: Receiver<Vec<Table>>) {
+    while let Some(tables) = crate::views::next_change(&mut changes).await {
+        if tables.contains(&Table::LibraryItems) {
+            let mut s = lock(&inner.state);
+            if fill_preview(&inner.core, &mut s) {
+                inner.snapshot.set(s.snapshot.clone());
+            }
         }
     }
 }
@@ -579,7 +623,7 @@ async fn load_page(
             Err(reason) => DiscoverState::Failed { reason },
         };
         // A preview named before its item came.
-        fill_preview(&mut s);
+        fill_preview(&core, &mut s);
         snapshot.set(s.snapshot.clone());
         // Every item's, not only this page's: a page asked while the last
         // lookup was on its way cancelled it.
@@ -591,7 +635,7 @@ async fn load_page(
 }
 
 /// The named item's details, when it is listed; true when they changed.
-fn fill_preview(s: &mut State) -> bool {
+fn fill_preview(core: &Core, s: &mut State) -> bool {
     let details = s.preview.as_deref().and_then(|id| {
         let tile = s.snapshot.items.iter().find(|t| t.id == id)?;
         let blurb = tile.blurb.clone().unwrap_or_default();
@@ -600,6 +644,10 @@ fn fill_preview(s: &mut State) -> bool {
             description: blurb.description,
             genres: blurb.genres,
             runtime: blurb.runtime,
+            in_library: core
+                .library()
+                .is_in_library(core.profile(), &tile.id)
+                .unwrap_or(false),
         })
     });
     let changed = s.snapshot.preview != details;

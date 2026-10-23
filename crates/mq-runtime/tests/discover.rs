@@ -953,3 +953,63 @@ async fn the_genre_grid_has_each_genre_once_with_its_first_catalog_s_art() {
         "no request on the second open"
     );
 }
+
+/// Core backlog C44b: the preview reads and sets the Library from what the
+/// catalog gave, with no title view: the addon is asked for nothing more
+/// (no meta, no streams, so no swarm warm-up), the row keeps the catalog's
+/// name, kind and poster, and the preview follows a change made elsewhere.
+#[tokio::test]
+async fn the_preview_sets_the_library_with_no_title_view() {
+    let asked = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let row = serving_metas(
+        serde_json::json!({
+            "id": "cat", "version": "1.0.0", "name": "Cat", "types": ["movie"], "resources": ["catalog", "meta", "stream"],
+            "catalogs": [{"type": "movie", "id": "top", "name": "Popular"}]
+        }),
+        r#"{"metas": [{"id": "tt1", "type": "movie", "name": "Sintel", "poster": "https://img.test/sintel.jpg"}]}"#,
+        asked.clone(),
+    )
+    .await;
+    let core = Core::temporary("p").unwrap();
+    core.library().set_addons("p", &[row], &core.hlc()).unwrap();
+    let view = DiscoverView::open(&core);
+    settle(&view).await;
+    let before = asked.load(std::sync::atomic::Ordering::SeqCst);
+    view.preview(Some("tt1"));
+    assert!(!view.snapshot().preview.unwrap().in_library);
+
+    view.set_in_library("tt1", true).unwrap();
+    until(&view, |s| s.preview.as_ref().is_some_and(|p| p.in_library)).await;
+    let kept = core.library().library("p").unwrap();
+    let item = &kept[0].item;
+    assert_eq!(
+        (
+            item.item_id.as_str(),
+            item.kind.as_str(),
+            item.name.as_str(),
+            item.poster.as_deref()
+        ),
+        (
+            "tt1",
+            "movie",
+            "Sintel",
+            Some("https://img.test/sintel.jpg")
+        )
+    );
+    assert_eq!(
+        asked.load(std::sync::atomic::Ordering::SeqCst),
+        before,
+        "no meta or stream request: no title view, no warm-up"
+    );
+
+    // Taken out elsewhere (the title page, another device): the preview follows.
+    core.library()
+        .upsert_item("p", item, false, core.clock())
+        .unwrap();
+    until(&view, |s| s.preview.as_ref().is_some_and(|p| !p.in_library)).await;
+    view.set_in_library("tt9", true).unwrap();
+    assert!(
+        !core.library().is_in_library("p", "tt9").unwrap(),
+        "not listed: nothing"
+    );
+}

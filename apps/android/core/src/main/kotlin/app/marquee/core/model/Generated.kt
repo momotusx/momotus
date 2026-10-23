@@ -706,6 +706,8 @@ data class ItemDetails(
     val description: String? = null,
     val genres: List<String> = emptyList(),
     val runtime: String? = null,
+    /** In the Library, as it stands now: `setInLibrary {id, value}` on Discover changes it with no title view (core backlog C44b). */
+    val inLibrary: Boolean = false,
 )
 
 @Serializable

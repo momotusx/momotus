@@ -72,6 +72,10 @@ pub enum CoreError {
     /// `ready`.
     #[error("the title has not loaded yet")]
     NotLoaded,
+    /// A Library add or removal on a kids profile: its Library is the list
+    /// the owner keeps (plans/m11-kids.md), never written from a session.
+    #[error("a kids profile's Library is its list")]
+    KidsLibrary,
 }
 
 #[derive(Debug, Clone)]
@@ -1115,6 +1119,23 @@ impl Core {
                 })
                 .collect(),
         })
+    }
+
+    /// Adds `row`'s title to this profile's Library or takes it out: the one
+    /// write every view's Add to Library goes through (the title page,
+    /// Discover's preview). A kids profile is refused, as its Library is
+    /// the owner's list.
+    pub(crate) fn set_in_library(
+        &self,
+        row: &mq_library::LibraryItemRow,
+        in_library: bool,
+    ) -> Result<(), CoreError> {
+        if self.policy().kids() {
+            return Err(CoreError::KidsLibrary);
+        }
+        self.library()
+            .upsert_item(self.profile(), row, in_library, self.clock())?;
+        Ok(())
     }
 
     /// Installs the defaults `choices` names, on or off as chosen, in one

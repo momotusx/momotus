@@ -71,6 +71,8 @@ const DEFAULTED = new Map([
   ["PlaybackSnapshot.chooseAnother", "false"],
   // Every start subtitle unreadable: an older core never says so.
   ["PlaybackSnapshot.startSubtitleFailed", "false"],
+  // Discover's preview Library state (core backlog C44b): an older core says nothing.
+  ["ItemDetails.inLibrary", "false"],
   ["SearchSnapshot.searchable", "0"],
   ["RankKey.pace", "3"],
   ["RankKey.covered", "0"],

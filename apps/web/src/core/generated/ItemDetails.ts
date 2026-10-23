@@ -4,4 +4,9 @@
  * A catalog item's synopsis, up to three genres and runtime, as its
  * catalog gave them; any may be missing.
  */
-export type ItemDetails = { id: string, description: string | null, genres: Array<string>, runtime: string | null, };
+export type ItemDetails = { id: string, description: string | null, genres: Array<string>, runtime: string | null, 
+/**
+ * In the Library, as it stands now: `setInLibrary {id, value}` on
+ * Discover changes it with no title view (core backlog C44b).
+ */
+inLibrary: boolean, };

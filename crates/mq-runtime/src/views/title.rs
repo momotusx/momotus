@@ -301,7 +301,8 @@ impl TitleView {
         self.ctx().render();
     }
 
-    /// Adds or removes the title from the library.
+    /// Adds or removes the title from the library; a kids profile is
+    /// refused (`KidsLibrary`): its Library is the owner's list.
     pub fn set_in_library(&self, in_library: bool) -> Result<(), crate::CoreError> {
         let Some(details) = self.header.get().details else {
             return Ok(());
@@ -314,13 +315,7 @@ impl TitleView {
             poster_shape: None,
             added_ms: mq_library::hlc::now_ms() as i64,
         };
-        self.core.library().upsert_item(
-            self.core.profile(),
-            &row,
-            in_library,
-            self.core.clock(),
-        )?;
-        Ok(())
+        self.core.set_in_library(&row, in_library)
     }
 
     /// Marks or unmarks by hand. With Trakt connected, a mark that flips

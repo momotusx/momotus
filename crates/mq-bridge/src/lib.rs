@@ -1924,6 +1924,16 @@ impl Session {
             (View::Discover(discover), "preview") => {
                 discover.preview(command.get("id").and_then(Value::as_str));
             }
+            (View::Discover(discover), "setInLibrary") => {
+                let id = param(command, "id")?;
+                let value = command
+                    .get("value")
+                    .and_then(Value::as_bool)
+                    .ok_or("value missing")?;
+                discover
+                    .set_in_library(&id, value)
+                    .map_err(|e| e.to_string())?;
+            }
             (View::Pairing(pairing), "confirm") => pairing.confirm(),
             (View::Pairing(pairing), "reject") => pairing.reject(),
             (View::SignIn(sign_in), "returned") => sign_in.returned(&param(command, "fragment")?),

@@ -256,6 +256,38 @@ async fn a_kids_profile_has_no_genre_grid() {
     assert!(kids.snapshot().kinds.is_empty(), "{:?}", kids.snapshot());
 }
 
+/// C44b review note 1: a kids profile's Library is the owner's list, so
+/// Add to Library is refused whichever view sends it (the title page here;
+/// Discover's preview goes through the same write): no row, and nothing
+/// queued for sync. The owner's own add still writes.
+#[tokio::test]
+async fn a_kids_profile_never_writes_the_library() {
+    let fixture = Fixture::default();
+    let (owner, kid) = kid(&fixture).await;
+    allow(&kid, "tt1", "movie", "Up", &[]);
+    let page = TitleView::open(&kid, "movie", "tt1");
+    until("the details", || page.snapshot().header.details.is_some()).await;
+    let queued = kid.library().outbox(10_000).unwrap().last_id;
+    let refused = page.set_in_library(true);
+    assert!(
+        matches!(refused, Err(mq_runtime::CoreError::KidsLibrary)),
+        "{refused:?}"
+    );
+    assert!(!kid.library().is_in_library(kid.profile(), "tt1").unwrap());
+    assert_eq!(
+        kid.library().outbox(10_000).unwrap().last_id,
+        queued,
+        "nothing queued for sync"
+    );
+    let owners = TitleView::open(&owner, "movie", "tt1");
+    until("the owner's details", || {
+        owners.snapshot().header.details.is_some()
+    })
+    .await;
+    owners.set_in_library(true).unwrap();
+    assert!(owner.library().is_in_library(OWNER, "tt1").unwrap());
+}
+
 #[tokio::test]
 async fn versions_need_the_list_and_a_video_of_the_title() {
     let fixture = Fixture::default();
