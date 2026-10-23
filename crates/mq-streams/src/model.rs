@@ -173,8 +173,8 @@ pub struct Conditions {
     pub p2p_thin: Speed,
     pub free_bytes: Option<u64>,
     /// A torrent that does not fit may play in a window here
-    /// (plans/streaming-window.md 2.6): the torrent folder's volume punches
-    /// holes, and the engine runs DWH with upload off.
+    /// (plans/streaming-window.md 2.6): a build with the engine, on any
+    /// volume (plans/streaming-window-chunks.md).
     pub window: bool,
     /// `R`: what idle torrents hold, which a playback may delete.
     pub reclaimable_bytes: Option<u64>,

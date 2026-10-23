@@ -2,6 +2,7 @@ use std::{
     fs::OpenOptions,
     io::IoSlice,
     path::{Path, PathBuf},
+    sync::{Arc, atomic::AtomicBool},
 };
 
 use anyhow::Context;
@@ -16,11 +17,14 @@ use crate::storage::{StorageFactory, TorrentStorage};
 
 use super::opened_file::OpenedFile;
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone)]
 pub struct FilesystemStorageFactory {
     /// Marquee fork (plans/streaming-window-chunks.md): new files are kept
     /// as piece files, for a volume that cannot punch holes.
     pub chunked: bool,
+    /// The torrent's switch: its piece files keep new pieces in RAM while
+    /// it is on.
+    pub memory: Arc<AtomicBool>,
 }
 
 impl StorageFactory for FilesystemStorageFactory {
@@ -35,11 +39,12 @@ impl StorageFactory for FilesystemStorageFactory {
             output_folder: shared.options.output_folder.clone(),
             opened_files: Default::default(),
             chunked: self.chunked,
+            memory: self.memory.clone(),
         })
     }
 
     fn clone_box(&self) -> crate::storage::BoxStorageFactory {
-        self.boxed()
+        self.clone().boxed()
     }
 }
 
@@ -47,6 +52,7 @@ pub struct FilesystemStorage {
     pub(crate) output_folder: PathBuf,
     pub(crate) opened_files: Vec<OpenedFile>,
     chunked: bool,
+    memory: Arc<AtomicBool>,
 }
 
 impl FilesystemStorage {
@@ -60,6 +66,7 @@ impl FilesystemStorage {
                 .collect::<anyhow::Result<Vec<_>>>()?,
             output_folder: self.output_folder.clone(),
             chunked: self.chunked,
+            memory: self.memory.clone(),
         })
     }
 }
@@ -134,6 +141,7 @@ impl TorrentStorage for FilesystemStorage {
                 .collect::<anyhow::Result<Vec<_>>>()?,
             output_folder: self.output_folder.clone(),
             chunked: self.chunked,
+            memory: self.memory.clone(),
         }))
     }
 
@@ -175,12 +183,15 @@ impl TorrentStorage for FilesystemStorage {
                     std::fs::remove_file(&full_path)?;
                 }
                 std::fs::create_dir_all(&full_path)?;
-                files.push(OpenedFile::new_chunked(super::chunks::Chunked::new(
-                    full_path,
-                    file_details.offset_in_torrent,
-                    u64::from(metadata.lengths().default_piece_length()),
-                    file_details.len,
-                )));
+                files.push(OpenedFile::new_chunked(
+                    super::chunks::Chunked::new(
+                        full_path,
+                        file_details.offset_in_torrent,
+                        u64::from(metadata.lengths().default_piece_length()),
+                        file_details.len,
+                    )
+                    .with_memory(self.memory.clone()),
+                ));
                 continue;
             }
             let f = if shared.options.allow_overwrite {

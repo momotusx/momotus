@@ -296,7 +296,9 @@ impl TorrentStateInitializing {
                         ) {
                             return Err(std::io::Error::other("injected"));
                         }
-                        crate::bitv::Written::new(files.clone()).sync_data(&have_pieces)
+                        crate::bitv::Written::new(files.clone())
+                            .sync_data(&have_pieces)
+                            .map(|_| ())
                     })
                     .await;
                 match synced {

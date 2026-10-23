@@ -240,31 +240,54 @@ pub(crate) struct Written {
     files: Vec<(PathBuf, Range<usize>)>,
     /// The last state whose data was synced.
     last: Option<BitBox<u8, Msb0>>,
+    /// Claimed pieces with no piece file: in RAM
+    /// (plans/streaming-window-chunks.md), never claimed on disk.
+    ram: Option<BitBox<u8, Msb0>>,
 }
 
 impl Written {
     /// Nothing synced yet for `files`.
     pub(crate) fn new(files: Vec<(PathBuf, Range<usize>)>) -> Self {
-        Self { files, last: None }
+        Self {
+            files,
+            ..Self::default()
+        }
     }
 
     /// Syncs every file with a piece `next` claims that the last state did
-    /// not. Blocking.
-    pub(crate) fn sync_data(&mut self, next: &BitSlice<u8, Msb0>) -> std::io::Result<()> {
+    /// not, and returns what the bitfield on disk may claim: `next` less
+    /// the pieces in RAM. Blocking.
+    pub(crate) fn sync_data(
+        &mut self,
+        next: &BitSlice<u8, Msb0>,
+    ) -> std::io::Result<BitBox<u8, Msb0>> {
         let last = self.last.as_deref();
         let new = |i: usize| {
             next.get(i).is_some_and(|b| *b) && !last.and_then(|l| l.get(i)).is_some_and(|b| *b)
         };
+        // A RAM piece stays out until it is unclaimed (evicted).
+        let ram = self
+            .ram
+            .get_or_insert_with(|| BitVec::repeat(false, next.len()).into_boxed_bitslice());
+        for i in ram.iter_ones().collect::<Vec<_>>() {
+            if !next.get(i).is_some_and(|b| *b) {
+                ram.set(i, false);
+            }
+        }
         for (path, pieces) in &self.files {
             if !pieces.clone().any(&new) {
                 continue;
             }
             // Piece files (plans/streaming-window-chunks.md): those of the
-            // new pieces.
+            // new pieces; one not there is in RAM.
             let synced = if path.is_dir() {
                 let mut any = false;
                 for i in pieces.clone().filter(|i| new(*i)) {
-                    any |= sync_file(&path.join(i.to_string()))?;
+                    let on_disk = sync_file(&path.join(i.to_string()))?;
+                    if !on_disk {
+                        ram.set(i, true);
+                    }
+                    any |= on_disk;
                 }
                 // The new files' names too.
                 #[cfg(unix)]
@@ -281,8 +304,12 @@ impl Written {
             #[cfg(feature = "sync-log")]
             sync_log::push(sync_log::Event::DataSynced(path.clone()));
         }
+        let mut durable = next.to_bitvec().into_boxed_bitslice();
+        for i in ram.iter_ones() {
+            durable.set(i, false);
+        }
         self.last = Some(next.to_bitvec().into_boxed_bitslice());
-        Ok(())
+        Ok(durable)
     }
 }
 
@@ -320,8 +347,8 @@ impl Drop for DiskBackedBitV {
             .spawner
             .block_in_place(|| self.written.lock().sync_data(&self.bv));
         match synced {
-            Ok(()) => match self.file.pwrite_all(0, self.bv.as_raw_slice()) {
-                Ok(()) => log_written(&self.filename, self.bv.count_ones()),
+            Ok(durable) => match self.file.pwrite_all(0, durable.as_raw_slice()) {
+                Ok(()) => log_written(&self.filename, durable.count_ones()),
                 Err(e) => tracing::warn!("error writing bitv on drop: {e:#}"),
             },
             Err(e) => tracing::warn!("bitv not written on drop, its data did not sync: {e:#}"),
@@ -365,6 +392,7 @@ impl DiskBackedBitV {
         let written = Arc::new(parking_lot::Mutex::new(Written {
             files: Vec::new(),
             last: Some(bv.clone()),
+            ram: None,
         }));
         let (to_sync, own_spawner, own_filename) =
             (written.clone(), spawner.clone(), filename.clone());
@@ -390,8 +418,9 @@ impl DiskBackedBitV {
                         }
                     };
 
-                    // Marquee fork (engine review r4, P1-1): the data first.
-                    if let Err(e) = spawner
+                    // Marquee fork (engine review r4, P1-1): the data first;
+                    // what is in RAM stays out (plans/streaming-window-chunks.md).
+                    let durable = match spawner
                         .block_in_place_with_semaphore(|| {
                             #[cfg(feature = "sync-log")]
                             if sync_log::failing(&filename, sync_log::Fail::DataSync) {
@@ -401,13 +430,16 @@ impl DiskBackedBitV {
                         })
                         .await
                     {
-                        tracing::error!(
-                            ?filename,
-                            "torrent data did not sync, bitv not written: {e:#}"
-                        );
-                        answer(acks, Err(format!("data sync: {e}")));
-                        continue;
-                    }
+                        Ok(durable) => durable,
+                        Err(e) => {
+                            tracing::error!(
+                                ?filename,
+                                "torrent data did not sync, bitv not written: {e:#}"
+                            );
+                            answer(acks, Err(format!("data sync: {e}")));
+                            continue;
+                        }
+                    };
 
                     if let Err(e) = spawner
                         .block_in_place_with_semaphore(|| {
@@ -415,7 +447,7 @@ impl DiskBackedBitV {
                             if sync_log::failing(&filename, sync_log::Fail::HaveWrite) {
                                 anyhow::bail!("injected");
                             }
-                            flushed.pwrite_all(0, req.snapshot.as_raw_slice())
+                            flushed.pwrite_all(0, durable.as_raw_slice())
                         })
                         .await
                     {
@@ -426,12 +458,10 @@ impl DiskBackedBitV {
                         }
                         break;
                     }
-                    log_written(&filename, req.snapshot.count_ones());
+                    log_written(&filename, durable.count_ones());
 
                     if let Err(e) = spawner
-                        .block_in_place_with_semaphore(|| {
-                            fsync_have(&flushed, &filename, &req.snapshot)
-                        })
+                        .block_in_place_with_semaphore(|| fsync_have(&flushed, &filename, &durable))
                         .await
                     {
                         tracing::error!(?filename, "error fsyncing bitv: {e:#}");

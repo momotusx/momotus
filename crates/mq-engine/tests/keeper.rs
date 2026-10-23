@@ -17,8 +17,8 @@ use std::time::{Duration, Instant};
 
 use mq_engine::librqbit::sync_log::{self, Fail, Point};
 use mq_engine::{
-    APFS_HEAD_BYTES, Claim, Engine, EngineError, FileHint, RESERVE_BYTES, TorrentHandle, Window,
-    WindowPlan, test_hooks,
+    APFS_HEAD_BYTES, Claim, Engine, EngineError, FileHint, RESERVE_BYTES, RING_BYTES,
+    TorrentHandle, Window, WindowPlan, test_hooks,
 };
 use tokio::io::AsyncReadExt;
 
@@ -41,6 +41,7 @@ fn plan() -> WindowPlan {
         open_cap: 4 * MIB,
         floor: 12 * MIB,
         playing: 6 * MIB,
+        memory: false,
     }
 }
 
@@ -221,6 +222,84 @@ async fn a_window_without_punch_holds_its_budget_in_piece_files() {
     assert!(evicted > 0, "nothing was evicted");
 }
 
+/// A RAM ring (plans/streaming-window-chunks.md, Stremio's memory ring on
+/// the Fire TV): a 6 MiB ring, smaller than the blocking, critical and
+/// playback windows (about 7 MiB here), on a folder that cannot punch. The
+/// 48 MiB file reads byte for byte, the scheduler never holds more than the
+/// ring and a blocking span, no piece file is written past the head, the
+/// `.have` on disk never claims a piece kept in RAM, and when the playback
+/// ends the torrent leaves the session; the next playback starts again.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_ram_ring_plays_without_the_disk() {
+    // The scheduler's budget leaves out what APFS keeps of a file's head,
+    // as for every window here (a RAM ring only plays where holes do not
+    // punch, never on APFS).
+    let ring = WindowPlan {
+        budget: 6 * MIB + APFS_HEAD_BYTES,
+        behind: 3 * MIB / 2,
+        slack: 3 * MIB / 2,
+        ahead: 0,
+        floor: 6 * MIB,
+        playing: 4 * MIB,
+        memory: true,
+        ..plan()
+    };
+    let s = support::swarm_big(48 << 20, PIECE).await;
+    let root = tempfile::tempdir().unwrap();
+    sync_log::fail(root.path(), Fail::PunchRefused, usize::MAX);
+    let mut w = windowed_on(s, root, ring, None).await;
+    let movie = w.dir().join(&w.engine.files(w.t).unwrap()[w.movie].path);
+    let on_disk = || std::fs::read_dir(&movie).map_or(0, |d| d.count());
+    let before = on_disk();
+    let held = Arc::new(AtomicU64::new(0));
+    let watch = tokio::spawn({
+        let (engine, t, held) = (w.engine.clone(), w.t, held.clone());
+        async move {
+            loop {
+                if let Ok(s) = engine.stats(t).await {
+                    held.fetch_max(s.held_bytes.unwrap_or(0), Ordering::Relaxed);
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        }
+    });
+    let len = w.s.movie.len() as u64;
+    let got = w.read(0, len).await;
+    watch.abort();
+    assert!(got == w.s.movie, "bytes differ");
+    let held = held.load(Ordering::Relaxed);
+    assert!(held > 0 && held <= 6 * MIB + 2 * MIB, "held {held}");
+    assert_eq!(on_disk(), before, "pieces went to disk");
+    assert!(w.stats().await.evict_rounds > 0);
+    // What the `.have` claims is on disk.
+    let have = std::fs::read(w.dir().with_extension("have")).unwrap();
+    let claimed = have.iter().map(|b| b.count_ones() as usize).sum::<usize>();
+    assert!(claimed <= before, "{claimed} claimed, {before} piece files");
+    // The end: out of the session, then played again.
+    drop(w.claim.take());
+    until("the unload", || async {
+        w.engine
+            .stats(w.t)
+            .await
+            .map_or(true, |s| s.window_bytes.is_none())
+    })
+    .await;
+    let movie = w
+        .engine
+        .select_file(w.t, "default", &FileHint::Name("movie.mkv".into()))
+        .await
+        .unwrap();
+    w.claim = Some(w.engine.claim(w.t, "default").unwrap());
+    let again = Window {
+        plan: ring,
+        bitrate: RATE,
+        metered: false,
+        resume_at: None,
+    };
+    w.engine.window(w.t, movie, again).await.unwrap();
+    assert!(w.read(30 * MIB, 31 * MIB).await == w.movie(30 * MIB, 31 * MIB));
+}
+
 /// m. A parked read whose readahead (12 MiB here) wants more than the
 /// window has room for: the torrent fills up to the cap. Then, the
 /// bitfield's fsync held (a round can free nothing until it ends), a seek:
@@ -306,6 +385,7 @@ async fn a_scrub_with_large_pieces_settles_within_the_budget() {
         open_cap: 64 * MIB,
         floor: 96 * MIB,
         playing: 16 * MIB,
+        memory: false,
     };
     let s = support::swarm_big(256 << 20, BIG).await;
     let w = windowed_on(s, tempfile::tempdir().unwrap(), wide, None).await;
@@ -740,6 +820,7 @@ async fn a_sustained_write_takes_the_readahead_farthest_first() {
         open_cap: 8 * MIB,
         floor: 40 * MIB,
         playing: 6 * MIB,
+        memory: false,
     };
     let w = windowed(256 << 20, remux, None).await;
     let mut base = RESERVE_BYTES + 170 * MIB + allocated(w.root.path());
@@ -1052,22 +1133,37 @@ async fn a_slow_fsync_never_stalls_the_adapter() {
         .unwrap();
 }
 
-/// o. Room under `W_min + 64 MiB`: `DeviceFull`, before any write.
+/// o. Room under `W_min + 64 MiB` (a 38 Mbit/s remux): a ring, never a
+/// refusal (plans/streaming-window-chunks.md). `max(room, RING)`, in RAM
+/// when the room is under the ring; at least four pieces.
 #[test]
-fn a_device_under_the_window_floor_is_full() {
-    let inputs = mq_engine::WindowInputs {
-        free: RESERVE_BYTES + 32 * MIB,
-        reclaimable: 0,
-        committed: 0,
-        bitrate: 4_775_000,
-        piece_len: 4 * MIB,
-        fill: 5_000_000,
-        ..Default::default()
+fn a_device_under_the_window_floor_plays_in_a_ring() {
+    let plan = |free: u64, piece_len: u64| {
+        mq_engine::window_plan(
+            mq_engine::DeviceClass::Standard,
+            mq_engine::WindowInputs {
+                free,
+                bitrate: 4_775_000,
+                piece_len,
+                fill: 5_000_000,
+                ..Default::default()
+            },
+        )
     };
-    assert!(matches!(
-        mq_engine::window_plan(mq_engine::DeviceClass::Standard, inputs),
-        Err(EngineError::DeviceFull)
-    ));
+    let disk = plan(RESERVE_BYTES + 200 * MIB, 4 * MIB);
+    assert_eq!(
+        (disk.budget, disk.memory, disk.ahead),
+        (200 * MIB, false, 0)
+    );
+    assert!(disk.behind + disk.playing <= disk.budget, "{disk:?}");
+    let ram = plan(RESERVE_BYTES + 32 * MIB, 4 * MIB);
+    assert_eq!((ram.budget, ram.memory), (RING_BYTES, true));
+    assert_eq!(plan(0, 4 * MIB).budget, RING_BYTES, "a full disk too");
+    assert_eq!(plan(0, 16 * MIB).budget, 64 * MIB, "four pieces");
+    assert!(
+        disk.within(disk.budget - 1).is_none(),
+        "a walk under the ring"
+    );
 }
 
 /// 2.1's worked numbers: a 40 GiB remux at 4.775 MB/s on a phone with
@@ -1088,7 +1184,6 @@ fn the_window_plan_matches_the_worked_numbers() {
                 ..Default::default()
             },
         )
-        .unwrap()
     };
     let remux = plan(10_000_000_000, 4_775_000, 16 * MIB);
     assert!(

@@ -479,8 +479,8 @@ async fn run(
             .await
             .map_err(|e| e.to_string())?;
         let mut plan = mq_engine::window_plan(engine.device_class(), inputs)
-            .and_then(|p| p.within(limit).ok_or(mq_engine::EngineError::DeviceFull))
-            .map_err(|e| e.to_string())?;
+            .within(limit)
+            .ok_or_else(|| mq_engine::EngineError::DeviceFull.to_string())?;
         if o.no_open_limit {
             (plan.open_floor, plan.open_cap) = (1 << 40, 1 << 40);
         }

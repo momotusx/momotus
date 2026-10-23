@@ -1,7 +1,7 @@
 //! A window's size (plans/streaming-window.md 2.1, 2.2): the engine plays
-//! a file larger than its room in it, and the ranking shows such a file
-//! only when it holds 120 s ahead (3.1). One function, so both count the
-//! same parts.
+//! a file larger than its room in it, a ring when the room is short
+//! (plans/streaming-window-chunks.md), and the ranking says how far ahead
+//! it holds (3.1). One function, so both count the same parts.
 
 use crate::Config;
 
@@ -10,6 +10,11 @@ const MIB: u64 = 1 << 20;
 /// Free space a window or a whole file never takes (2.1): Android counts a
 /// volume low on storage at `min(5% of total, 500 MiB)`.
 pub const RESERVE_BYTES: u64 = 512 * MIB;
+
+/// The least ring a window plays in when the room cannot hold `W_min`
+/// (plans/streaming-window-chunks.md): Stremio's 45 MiB RAM ring on the
+/// owner's Fire TV, and at least four pieces.
+pub const RING_BYTES: u64 = 45 * MIB;
 
 /// APFS keeps a file's first 16 MiB allocated through a punch (2.6): on
 /// Apple targets a window counts it in `F`, and the scheduler's budget
@@ -118,8 +123,12 @@ pub struct WindowPlan {
     /// `W_min = F + (critical + playback) × r`: the least a window can play
     /// in.
     pub floor: u64,
-    /// The critical and playback windows, `(critical + playback) × r`.
+    /// The critical and playback windows, `(critical + playback) × r`; in
+    /// a ring, what it holds ahead.
     pub playing: u64,
+    /// A ring the disk cannot hold: its pieces stay in RAM
+    /// (plans/streaming-window-chunks.md).
+    pub memory: bool,
 }
 
 impl WindowPlan {
@@ -146,29 +155,51 @@ impl WindowPlan {
     }
 }
 
-/// Sizes a window with `cfg`'s windows, or `None` when `room` is under
-/// `W_min + 64 MiB` (the device is full).
-pub fn window_plan(cfg: &Config, i: WindowInputs) -> Option<WindowPlan> {
+/// Sizes a window with `cfg`'s windows. A room under `W_min + 64 MiB` gets
+/// a ring of `max(room, RING)` instead, in RAM when the room is under the
+/// ring (plans/streaming-window-chunks.md): a version never fails for
+/// space.
+pub fn window_plan(cfg: &Config, i: WindowInputs) -> WindowPlan {
     let (r, piece) = (i.bitrate.max(1), i.piece_len.max(1));
-    let room = i.room();
     let round = |b: u64| b.div_ceil(piece) * piece;
     let playing = cfg.critical_min_bytes.max(cfg.critical_secs * r) + cfg.playback_secs * r;
-    let behind = (90 * r).max(32 * MIB).min(room / 4);
-    let slack = (8 * MIB).max(2 * piece).max(2 * i.fill);
-    let open_floor = (4 * piece).max(8 * MIB);
-    let open_cap = (64 * MIB).min(room / 8).max(open_floor);
-    let open = (2 * i.fill).clamp(open_floor, open_cap);
-    // The head's blocking window and the container index, rounded out to
-    // pieces.
     let pinned = round(cfg.blocking_bytes) + round(cfg.tail_bytes) + piece;
-    let fixed = pinned + cfg.blocking_bytes + slack + open + playing + APFS_HEAD_BYTES;
-    let cap = fixed + behind + playing + 600 * r;
+    // The parts that follow the room: `B`, `h`, the open pieces, and `F`
+    // less the playing windows.
+    let parts = |room: u64| {
+        let behind = (90 * r).max(32 * MIB).min(room / 4);
+        let slack = (8 * MIB).max(2 * piece).max(2 * i.fill);
+        let open_floor = (4 * piece).max(8 * MIB);
+        let open_cap = (64 * MIB).min(room / 8).max(open_floor);
+        let open = (2 * i.fill).clamp(open_floor, open_cap);
+        // The head's blocking window and the container index, rounded out
+        // to pieces.
+        let fixed = pinned + cfg.blocking_bytes + slack + open + APFS_HEAD_BYTES;
+        (behind, slack, open_floor, open_cap, fixed)
+    };
+    let room = i.room();
+    let (behind, slack, open_floor, open_cap, fixed) = parts(room);
+    let fixed = fixed + playing;
     let floor = fixed + playing;
     if room < floor + 64 * MIB {
-        return None;
+        let budget = room.max(RING_BYTES.max(4 * piece));
+        let (_, slack, open_floor, open_cap, _) = parts(budget);
+        let behind = budget / 4;
+        return WindowPlan {
+            budget,
+            behind,
+            slack: slack.min(budget / 4),
+            ahead: 0,
+            open_floor,
+            open_cap,
+            floor: budget,
+            playing: budget.saturating_sub(behind + pinned + APFS_HEAD_BYTES),
+            memory: room < budget,
+        };
     }
+    let cap = fixed + behind + playing + 600 * r;
     let budget = cap.min(room);
-    Some(WindowPlan {
+    WindowPlan {
         budget,
         behind,
         slack,
@@ -177,5 +208,6 @@ pub fn window_plan(cfg: &Config, i: WindowInputs) -> Option<WindowPlan> {
         open_cap,
         floor,
         playing,
-    })
+        memory: false,
+    }
 }

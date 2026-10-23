@@ -30,8 +30,8 @@ pub use pick::FileHint;
 pub use reader::{RangeReader, StreamReader};
 pub use scrape::{SwarmCount, TrackerTrace};
 pub use window::{
-    APFS_HEAD_BYTES, Counted, HeldBytes, RESERVE_BYTES, WindowInputs, WindowPlan, counted_on_disk,
-    free_space, window_plan,
+    APFS_HEAD_BYTES, Counted, HeldBytes, RESERVE_BYTES, RING_BYTES, WindowInputs, WindowPlan,
+    counted_on_disk, free_space, window_plan,
 };
 
 use std::collections::{HashMap, HashSet};
@@ -432,6 +432,9 @@ struct Inner {
     /// `R`, `C` and the folders' bytes as maintenance last counted them,
     /// for a ranking that cannot wait (plans/streaming-window.md 3.1).
     counted: Mutex<Option<window::Counted>>,
+    /// The data folder cannot punch holes: files are kept as piece files,
+    /// whose pieces a ring may keep in RAM (plans/streaming-window-chunks.md).
+    chunked: bool,
 }
 
 /// The session's tasks hang off its token, each torrent's as a child: a
@@ -495,6 +498,9 @@ pub(crate) struct Torrent {
     starved: std::sync::atomic::AtomicBool,
     /// Rounds the keeper ran.
     rounds: AtomicU64,
+    /// Its piece files keep new pieces in RAM: a ring the disk cannot hold
+    /// plays (plans/streaming-window-chunks.md).
+    memory: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl Torrent {
@@ -606,7 +612,7 @@ impl Engine {
         let lock_file = std::fs::File::create(cfg.data_dir.join(".lock"))?;
         lock_file.try_lock().map_err(lock_error)?;
         let scopes = Scopes::new(&cfg.policy);
-        let mut opts = session_options(&cfg, &scopes);
+        let opts = session_options(&cfg, &scopes);
         // Where holes do not punch, files are kept as piece files, so a
         // window frees space everywhere (plans/streaming-window-chunks.md).
         let dir = cfg.data_dir.clone();
@@ -614,9 +620,6 @@ impl Engine {
             .await
             .unwrap_or(false);
         tracing::info!(punches, "torrent folder probed");
-        opts.default_storage_factory = Some(librqbit::storage::StorageFactoryExt::boxed(
-            librqbit::storage::filesystem::FilesystemStorageFactory { chunked: !punches },
-        ));
         let session = Session::new_with_opts(cfg.data_dir.clone(), opts).await?;
         let scraper = scrape::Scraper::new(scopes.trackers.clone());
         let engine = Self {
@@ -639,6 +642,7 @@ impl Engine {
                 #[cfg(feature = "test-hooks")]
                 free_base: Mutex::default(),
                 counted: Mutex::default(),
+                chunked: !punches,
             }),
         };
         tokio::spawn(maintenance(Arc::downgrade(&engine.inner)));
@@ -835,6 +839,7 @@ impl Engine {
             player_paused: Default::default(),
             starved: Default::default(),
             rounds: AtomicU64::new(0),
+            memory: Arc::default(),
         });
         let mut torrents = lock(&self.inner.torrents);
         if let Some((&h, _)) = torrents
@@ -979,6 +984,12 @@ impl Engine {
                 tx: ext_tx,
                 drive: dwh,
             }),
+            storage_factory: Some(librqbit::storage::StorageFactoryExt::boxed(
+                librqbit::storage::filesystem::FilesystemStorageFactory {
+                    chunked: self.inner.chunked,
+                    memory: t.memory.clone(),
+                },
+            )),
             ..Default::default()
         };
         let managed = self
@@ -1504,12 +1515,18 @@ impl Engine {
         if t.live.lock().await.is_none() {
             return Err(EngineError::NoFile);
         }
-        let dir = t.dir.clone();
-        let held = tokio::task::spawn_blocking(move || allocated(&dir))
-            .await
-            .unwrap_or(0);
-        let need = (w.plan.budget + RESERVE_BYTES).saturating_sub(held);
-        self.enforce_budget(Some(h), need).await;
+        // A ring the disk cannot hold keeps its pieces in RAM, where they are
+        // piece files (plans/streaming-window-chunks.md); it needs no disk.
+        let memory = w.plan.memory && self.inner.chunked;
+        t.memory.store(memory, Ordering::Relaxed);
+        if !memory {
+            let dir = t.dir.clone();
+            let held = tokio::task::spawn_blocking(move || allocated(&dir))
+                .await
+                .unwrap_or(0);
+            let need = (w.plan.budget + RESERVE_BYTES).saturating_sub(held);
+            self.enforce_budget(Some(h), need).await;
+        }
         lock(&t.ended).take();
         let state = window::WindowState {
             file,
@@ -1545,6 +1562,7 @@ impl Engine {
     /// last episode of a pack) ends, its cap with it.
     pub async fn play_whole(&self, h: TorrentHandle, file: usize) -> Result<()> {
         let t = self.torrent(h)?;
+        t.memory.store(false, Ordering::Relaxed);
         let other = (*lock(&t.window)).filter(|w| w.file != file);
         if let Some(w) = other {
             self.put_window(&t, None, None, Some(w.generation)).await;
@@ -1630,6 +1648,26 @@ impl Engine {
     /// `[position - B, position + 180 s × r]`, within the engine's budget,
     /// and the window ends; what stays counts in `R`.
     async fn trim(&self, h: TorrentHandle, t: &Torrent, w: window::WindowState) {
+        // A RAM ring leaves the session instead, so no RAM is held between
+        // playbacks; the next file choice starts it again
+        // (plans/streaming-window-chunks.md).
+        if t.memory.load(Ordering::Relaxed) && t.readers.load(Ordering::Relaxed) == 0 {
+            t.memory.store(false, Ordering::Relaxed);
+            let mut live = t.live.lock().await;
+            let _round = t.keeper.lock().await;
+            if let Some(l) = live.take()
+                && let Err(e) = self
+                    .inner
+                    .session
+                    .delete(l.managed.id().into(), false)
+                    .await
+            {
+                tracing::warn!("unloading {}: {e:#}", t.info_hash);
+            }
+            drop((_round, live));
+            self.put_window(t, None, None, Some(w.generation)).await;
+            return;
+        }
         let pinned = 4 * u64::from(t.piece_len);
         let room = self
             .inner

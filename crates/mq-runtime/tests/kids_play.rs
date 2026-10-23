@@ -104,11 +104,6 @@ impl Fixture {
 
 const PIN: &str = "1357";
 
-/// The engine's refusals for room, as the viewer reads them
-/// (plans/play-every-version.md 2c).
-#[cfg(feature = "torrent")]
-const NO_ROOM: &str = "This device needs a little free space to play this";
-
 /// The owner with a PIN and `fixture`'s addon, and a kids profile.
 async fn kid(fixture: &Fixture) -> (Core, Core) {
     let owner = Core::temporary(OWNER).unwrap();
@@ -787,27 +782,20 @@ async fn a_torrent_playback_sends_its_rate_to_the_engine() {
 }
 
 /// A torrent file larger than the room on a device under the window's
-/// floor (plans/streaming-window.md 2.1) fails with the one storage line
-/// before its start is asked for; with room for it, it plays whole.
+/// floor (plans/streaming-window.md 2.1) plays in a ring, never refused
+/// for space (plans/streaming-window-chunks.md); with room for it, it
+/// plays whole.
 #[cfg(feature = "torrent")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_torrent_on_a_full_device_is_refused_and_one_that_fits_plays_whole() {
+async fn a_torrent_on_a_full_device_plays_in_a_ring_and_one_that_fits_plays_whole() {
     let (s, t, _owner, kid, found) = torrent_kid().await;
-    kid.set_punches(true);
     kid.set_free_bytes(mq_engine::RESERVE_BYTES + 1024 * 1024);
     let view = PlaybackView::open(&kid, found.clone(), target("movie", "tt1", "tt1"));
-    until("the playback failed", || {
-        view.snapshot().phase == PlaybackPhase::Failed
-    })
-    .await;
-    let attempts = view.snapshot().attempts;
-    assert!(attempts.iter().any(|a| a.error == NO_ROOM), "{attempts:?}");
-    // The failure card says why (play-every-version 2e).
-    assert_eq!(view.snapshot().empty, Some(EmptyKind::NoRoom));
-    golden::golden_torrent("playback-empty-noRoom", &view.snapshot());
-    assert!(s.leecher.stats(t).await.is_err(), "the torrent went");
+    ready(&view).await;
+    let ring = s.leecher.stats(t).await.unwrap().window_bytes;
+    assert!(ring.is_some_and(|b| b <= mq_engine::RING_BYTES), "{ring:?}");
+    drop(view);
     let (s, t, _owner, kid, found) = torrent_kid().await;
-    kid.set_punches(true);
     kid.set_free_bytes(mq_engine::RESERVE_BYTES + 64 * 1024 * 1024);
     let view = PlaybackView::open(&kid, found, target("movie", "tt1", "tt1"));
     ready(&view).await;
@@ -1497,7 +1485,6 @@ async fn a_resume_counts_its_own_folder_in_the_room() {
     );
     let (owner, _kid) = kid(&fixture).await;
     owner.set_torrent_engine(s.leecher.clone());
-    owner.set_punches(true);
     let found = candidates(&owner, "movie", "tt1", "tt1").await;
     let len = s.movie.len() as u64;
     // The first play: a window in 200 MiB of room, 16 MiB read 40% in.
@@ -1557,7 +1544,6 @@ async fn a_resume_counts_its_own_folder_in_the_room() {
             ..Default::default()
         },
     )
-    .unwrap()
     .floor;
     assert!(own > 8 * MIB, "the trim kept {own}");
     owner.set_free_bytes(mq_engine::RESERVE_BYTES + floor + 68 * MIB - own);
@@ -1574,8 +1560,7 @@ async fn a_resume_counts_its_own_folder_in_the_room() {
 
 /// A season pack (review r2 P1-1): the played episode's bytes are room for
 /// the next episode's window, whose keeper evicts them first, never for it
-/// whole. Where the volume cannot punch holes, the next episode that fits
-/// only by counting them is hidden, and refused when opened.
+/// whole.
 #[cfg(feature = "torrent")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_packs_played_episode_is_room_for_the_next_only_in_a_window() {
@@ -1599,7 +1584,6 @@ async fn a_packs_played_episode_is_room_for_the_next_only_in_a_window() {
     }
     let (owner, _kid) = kid(&fixture).await;
     owner.set_torrent_engine(s.leecher.clone());
-    owner.set_punches(true);
     let first = candidates(&owner, "movie", "tt1", "tt1").await;
     let next = candidates(&owner, "movie", "tt2", "tt2").await;
     // Episode 1 plays whole, 140 MiB of it read (not finished, so the
@@ -1617,46 +1601,7 @@ async fn a_packs_played_episode_is_room_for_the_next_only_in_a_window() {
     // counting episode 1's 140 MiB. Maintenance counts the folder idle.
     let free = mq_engine::RESERVE_BYTES + 40 * MIB;
     tokio::time::sleep(Duration::from_secs(6)).await;
-    // A volume that cannot punch holes: hidden, and refused when opened.
-    let (flat, _) = kid(&fixture).await;
-    flat.set_torrent_engine(s.leecher.clone());
-    flat.set_punches(false);
-    flat.set_free_bytes(free);
-    let versions = VersionsView::open_checked(&flat, params("movie", "tt2", ""), Some("tt2"));
-    let shown = settled(&versions).await;
-    assert!(shown.recommended.is_none(), "{:?}", shown.recommended);
-    assert!(
-        shown
-            .hidden
-            .by_reason
-            .iter()
-            .any(|(r, n)| *r == HideReason::NoSpace && *n > 0),
-        "{:?}",
-        shown.hidden
-    );
-    // The one storage line (play-every-version 2c).
-    assert_eq!(shown.empty.map(|e| e.kind), Some(EmptyKind::NoRoom));
-    let refused = PlaybackView::open(&flat, next.clone(), target("movie", "tt2", "tt2"));
-    until("the playback failed", || {
-        refused.snapshot().phase == PlaybackPhase::Failed
-    })
-    .await;
-    let attempts = refused.snapshot().attempts;
-    assert!(attempts.iter().any(|a| a.error == NO_ROOM), "{attempts:?}");
-    drop(refused);
-    // The refusal let the torrent go but kept its folder: episode 1's bytes
-    // stay (review r3 B P3-1).
-    tokio::time::sleep(Duration::from_millis(500)).await;
-    let kept = folder_bytes(&s.leech_dir().join(&s.info_hash));
-    assert!(kept >= 140 * MIB, "the refusal kept the folder: {kept}");
-    // Episode 1 again, then where holes punch: a window, which evicts
-    // episode 1 first.
-    let t = s
-        .leecher
-        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
-        .await
-        .unwrap();
-    play_first().await;
+    // Episode 2 in a window, which evicts episode 1 first.
     owner.set_free_bytes(free);
     let view = PlaybackView::open(&owner, next, target("movie", "tt2", "tt2"));
     let url = ready(&view).await;
@@ -1671,7 +1616,8 @@ async fn a_packs_played_episode_is_room_for_the_next_only_in_a_window() {
     );
 }
 
-/// Phase 3 (plans/streaming-window.md 3.3): where windows play, a version
+/// Phase 3 (plans/streaming-window.md 3.3): on any volume (a window punches
+/// or deletes piece files, plans/streaming-window-chunks.md), a version
 /// too big for the free space shows with the buffer line, its minutes ahead
 /// on Wi-Fi and none on mobile data, where the engine keeps the device
 /// preset.
@@ -1689,7 +1635,6 @@ async fn a_version_too_big_for_the_free_space_says_its_minutes_ahead() {
     );
     let (owner, _kid) = kid(&fixture).await;
     owner.set_torrent_engine(s.leecher.clone());
-    owner.set_punches(true);
     owner.set_free_bytes(mq_engine::RESERVE_BYTES + (1 << 30));
     owner.set_network(Network::Wifi);
     let versions = VersionsView::open_checked(&owner, params("movie", "tt3", ""), Some("tt3"));

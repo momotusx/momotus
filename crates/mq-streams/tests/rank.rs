@@ -979,12 +979,13 @@ fn seeders_count_up_to_1000_then_the_file_decides() {
     );
 }
 
-/// plans/streaming-window.md 3.1 and 3.2: where windows play, a torrent
-/// that does not fit shows when its window holds 120 s of it ahead and
-/// hides when it holds less; without windows it hides as before, with the
-/// engine's 512 MiB reserve, so a small file on a nearly full device fits.
+/// plans/streaming-window.md 3.1 and 3.2, plans/streaming-window-chunks.md:
+/// where windows play, a torrent that does not fit shows however little its
+/// window holds ahead (a ring plays it, as Stremio's does); without windows
+/// it hides as before, with the engine's 512 MiB reserve, so a small file
+/// on a nearly full device fits.
 #[test]
-fn a_torrent_that_does_not_fit_shows_when_its_window_holds_two_minutes() {
+fn a_torrent_that_does_not_fit_shows_in_a_window_however_short() {
     let case = |free: u64, window: bool, runtime_s: u32| Case {
         conditions: Conditions {
             runtime_s: Some(runtime_s),
@@ -1001,15 +1002,31 @@ fn a_torrent_that_does_not_fit_shows_when_its_window_holds_two_minutes() {
     assert_eq!(shown.rows.len(), 1, "{:?}", shown.hidden);
     let whole = case(1_100_000_000, false, 734).rank(tos());
     assert_eq!(hidden(&whole, HideReason::NoSpace), 1);
-    // A 60 GiB remux in 2 h with 1.5 GiB free: about 40 s ahead, hidden.
-    let remux = vec![seeded(
-        2,
-        "Movie.2020.1080p.BluRay.REMUX.AVC-GRP",
-        300,
-        60.0,
-    )];
-    let ranked = case(3 << 29, true, 7200).rank(remux);
-    assert_eq!(hidden(&ranked, HideReason::NoSpace), 1);
+    // A 60 GiB remux in 2 h with 1.5 GiB free: about 40 s ahead, shown
+    // (it was hidden under 2 minutes).
+    let remux = || {
+        vec![seeded(
+            2,
+            "Movie.2020.1080p.BluRay.REMUX.AVC-GRP",
+            300,
+            60.0,
+        )]
+    };
+    let ranked = case(3 << 29, true, 7200).rank(remux());
+    assert_eq!(ranked.rows.len(), 1, "{:?}", ranked.hidden);
+    // And with no room at all: a ring.
+    let full = case(0, true, 7200).rank(remux());
+    assert!(
+        matches!(
+            full.rows[0].line,
+            ReasonLine::Buffer {
+                ahead_min: Some(0),
+                ..
+            }
+        ),
+        "{:?}",
+        full.rows[0].line
+    );
     // 0.13 GiB with 1.1 GB free fits whole (the 1 GiB spare hid it).
     let small = vec![seeded(3, "Movie.2010.1080p.WEB.x264-GRP", 300, 0.133)];
     assert_eq!(case(1_100_000_000, false, 888).rank(small).rows.len(), 1);
@@ -1144,14 +1161,15 @@ fn the_window_rows_of_the_worked_table() {
             other => assert_eq!(other, line_of(&whole, release, gb), "{release}"),
         }
     }
-    // A 4K remux of 60 GiB in 2 h with 1.5 GiB free: about 40 s ahead.
+    // A 4K remux of 60 GiB in 2 h with 1.5 GiB free: about 40 s ahead,
+    // shown.
     let ranked = windowed_case(3 << 29, Some(7200), caps_4k_dv()).rank(vec![seeded(
         2,
         "Movie.2020.2160p.BluRay.REMUX.HEVC.DV-GRP",
         300,
         60.0,
     )]);
-    assert_eq!(hidden(&ranked, HideReason::NoSpace), 1);
+    assert_eq!(ranked.rows.len(), 1, "{:?}", ranked.hidden);
     // With 8 GiB free the window is the cap: about 4.9 GB stays free.
     let capped = line_of(&windowed_case(8 << 30, Some(9000), stick()), remux, 40.0);
     let ReasonLine::Buffer { budget_bytes, .. } = capped else {
@@ -1361,11 +1379,10 @@ fn an_episode_row_under_a_pack_title_keeps_its_files_size() {
                          "infoHash": "e".repeat(40), "fileIdx": 2, "behaviorHints": hints })]
         };
         // 130 MiB over the reserve: a tenth of the episode would fit whole;
-        // the episode itself has no room even for a window.
+        // the episode itself plays in a ring, with the file's size.
         let short = case(RESERVE + (130 << 20)).rank(row());
-        assert_eq!(
-            hidden(&short, HideReason::NoSpace),
-            1,
+        assert!(
+            matches!(short.rows[0].line, ReasonLine::Buffer { size_bytes: Some(b), .. } if b == EPISODE),
             "{hints}: {:?}",
             short.rows
         );

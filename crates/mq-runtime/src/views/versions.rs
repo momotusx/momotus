@@ -859,9 +859,10 @@ impl VersionsView {
         };
         let eligible = eligible(core, &path);
         let facts = &params.facts;
+        // A window frees space on any volume: punched, or piece files
+        // deleted (plans/streaming-window-chunks.md).
         #[cfg(feature = "torrent")]
-        let (window, (reclaimable_bytes, committed_bytes, held)) =
-            (core.windows_ok(), core.room_counts());
+        let (window, (reclaimable_bytes, committed_bytes, held)) = (true, core.room_counts());
         #[cfg(not(feature = "torrent"))]
         let (window, (reclaimable_bytes, committed_bytes, held)) =
             (false, (None, 0, Default::default()));

@@ -143,10 +143,6 @@ struct Inner {
     pulled: std::sync::atomic::AtomicBool,
     /// Tests: live seeders answered instead of the trackers'.
     live_seeders: std::sync::Mutex<Option<FakeSeeders>>,
-    /// The torrent folder's volume punches holes (plans/streaming-window.md
-    /// 2.6), probed when the engine starts.
-    #[cfg(feature = "torrent")]
-    punches: std::sync::OnceLock<bool>,
     /// Walk builds: the window override (plans/streaming-window.md 4).
     #[cfg_attr(not(feature = "torrent"), allow(dead_code))]
     walk: Option<Walk>,
@@ -245,21 +241,6 @@ impl Core {
         if let Some(walk) = walk {
             walk.watch(core.inner.torrent_dir.clone());
         }
-        // The probe before the first rank (plans/streaming-window.md 2.6),
-        // off the opening thread.
-        #[cfg(feature = "torrent")]
-        {
-            let inner = Arc::downgrade(&core.inner);
-            std::thread::spawn(move || {
-                let Some(inner) = inner.upgrade() else {
-                    return;
-                };
-                let _ = std::fs::create_dir_all(&inner.torrent_dir);
-                let punches = mq_engine::librqbit::punch_supported(&inner.torrent_dir);
-                let _ = inner.punches.set(punches);
-                tracing::info!(punches, "torrent folder probed");
-            });
-        }
         Ok(core)
     }
 
@@ -315,8 +296,6 @@ impl Core {
                 live_seeders: std::sync::Mutex::default(),
                 turkcealtyazi: std::sync::OnceLock::new(),
                 genre_art: std::sync::Mutex::default(),
-                #[cfg(feature = "torrent")]
-                punches: std::sync::OnceLock::new(),
                 walk,
             }),
             profile: profile.into(),
@@ -683,32 +662,12 @@ impl Core {
             .inner
             .engine
             .get_or_try_init(|| async {
-                let engine = mq_engine::Engine::start(self.engine_config())
+                mq_engine::Engine::start(self.engine_config())
                     .await
-                    .map_err(|e| CoreError::Torrent(e.to_string()))?;
-                // The probe, once per launch, unless core open ran it
-                // (2.6).
-                if self.inner.punches.get().is_none() {
-                    let dir = self.inner.torrent_dir.clone();
-                    let punches = tokio::task::spawn_blocking(move || {
-                        mq_engine::librqbit::punch_supported(&dir)
-                    })
-                    .await
-                    .unwrap_or(false);
-                    let _ = self.inner.punches.set(punches);
-                }
-                Ok::<_, CoreError>(engine)
+                    .map_err(|e| CoreError::Torrent(e.to_string()))
             })
             .await?;
         Ok(engine.clone())
-    }
-
-    /// A torrent playback may play in a window (plans/streaming-window.md
-    /// 2.6): the torrent folder's volume punches holes, and the engine runs
-    /// DWH with upload off (as the app's always does).
-    #[cfg(feature = "torrent")]
-    pub(crate) fn windows_ok(&self) -> bool {
-        self.inner.punches.get().copied().unwrap_or(false)
     }
 
     /// `R`, `C` and each torrent folder's bytes for the ranking
@@ -731,13 +690,6 @@ impl Core {
             .and_then(|e| e.counted())
             .unwrap_or_else(|| mq_engine::counted_on_disk(&self.inner.torrent_dir));
         (Some(counted.reclaimable), counted.committed, counted.held)
-    }
-
-    /// Tests: the probe's answer, before the engine starts.
-    #[cfg(feature = "torrent")]
-    #[doc(hidden)]
-    pub fn set_punches(&self, punches: bool) {
-        let _ = self.inner.punches.set(punches);
     }
 
     /// Walk builds: the window every torrent playback gets

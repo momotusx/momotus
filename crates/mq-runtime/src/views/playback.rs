@@ -3113,8 +3113,7 @@ async fn open_torrent(
 
 /// Plays `file` in a window when it does not fit whole
 /// (plans/streaming-window.md 2.1, `WindowInputs::fits_whole`), or in a
-/// walk build's override window; else it plays whole. On a volume that
-/// cannot punch holes a file that does not fit whole is refused.
+/// walk build's override window; else it plays whole.
 #[cfg(feature = "torrent")]
 async fn open_window(
     core: &Core,
@@ -3142,23 +3141,12 @@ async fn open_window(
             (f64::from(p2p) * 125_000.0) as u64,
         )
         .await?;
-    if !core.windows_ok() {
-        if walk.is_some() {
-            tracing::warn!("walk window: this volume cannot punch holes");
-        }
-        // Whole or not at all: the ranking hides such a row (3.1).
-        return if inputs.fits_whole(len) {
-            Ok(())
-        } else {
-            Err(mq_engine::EngineError::DeviceFull)
-        };
-    }
     if walk.is_none() && inputs.fits_whole(len) {
         // A window another file of the torrent left (Up Next in a pack)
         // ends with it.
         return engine.play_whole(torrent, file).await;
     }
-    let mut plan = mq_engine::window_plan(engine.device_class(), inputs)?;
+    let mut plan = mq_engine::window_plan(engine.device_class(), inputs);
     if let Some(w) = walk {
         plan = plan.within(w).ok_or(mq_engine::EngineError::DeviceFull)?;
     }

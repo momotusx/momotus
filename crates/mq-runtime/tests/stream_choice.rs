@@ -5,7 +5,7 @@
 #[path = "../../mq-debrid/tests/common/mod.rs"]
 mod common;
 mod golden;
-use golden::{golden, golden_torrent};
+use golden::golden;
 
 use common::{Server, route};
 use mq_library::AddonRow;
@@ -1956,13 +1956,11 @@ async fn with_nothing_this_device_plays_each_version_stays_startable() {
     assert_eq!(view.candidates(key).len(), 1, "startable");
 }
 
-/// 2a, 2c: with no room even for the playback window `empty` says the
-/// device needs a little free space, with no count and no action. `blocked`
-/// and the hidden count stay as before until every app reads `empty`
-/// (review 2026-10-23 P2-4). Mixed with versions that play nowhere here,
-/// those come first: they stay startable (P3-1).
+/// plans/streaming-window-chunks.md: with no free space at all every
+/// torrent version still shows, as on Stremio's Fire TV: a ring plays it.
+/// Nothing is hidden or blocked for space.
 #[tokio::test]
-async fn with_no_room_for_the_window_the_view_asks_for_a_little_space() {
+async fn with_no_free_space_every_version_still_shows() {
     let (core, _server) = answering(200, &torrents()).await;
     if !core.has_engine() {
         // Store builds never fetch a swarm.
@@ -1970,41 +1968,14 @@ async fn with_no_room_for_the_window_the_view_asks_for_a_little_space() {
     }
     core.set_free_bytes(0);
     let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
-    let empty = empty_of(&view).await;
-    assert_eq!(
-        (kind_and_action(&empty), empty.count, empty.rows.len()),
-        ((EmptyKind::NoRoom, EmptyAction::None), 0, 0)
-    );
-    golden_torrent("versions-empty-noRoom", &view.snapshot());
     let s = view.snapshot();
+    let shown = s.rows.len() + usize::from(s.recommended.is_some());
     assert_eq!(
-        s.blocked.map(|b| (b.reason, b.count)),
-        Some((BlockedReason::NoSpace, 2))
+        (shown, s.empty.is_none(), s.blocked.is_none()),
+        (2, true, true),
+        "{s:?}"
     );
-    assert_eq!(s.hidden.by_reason, [(HideReason::NoSpace, 2)]);
-
-    let mut mixed: serde_json::Value = serde_json::from_str(&torrents()).unwrap();
-    mixed["streams"].as_array_mut().unwrap().push(serde_json::json!(
-        { "name": "Direct", "title": "Show.S01E01.1080p.WEB-DL.x265-CCC", "url": "http://127.0.0.1:9/v.mp4" }
-    ));
-    let (core, _server) = answering(200, &mixed.to_string()).await;
-    core.set_free_bytes(0);
-    let caps = DeviceCaps {
-        decoders: vec![mq_relparse::VideoCodec::H264],
-        has_fallback_engine: false,
-        ..DeviceCaps::basic_1080p()
-    };
-    let view = versions_for(&core, caps).await;
-    let empty = empty_of(&view).await;
-    assert_eq!(
-        (kind_and_action(&empty), empty.count),
-        ((EmptyKind::NothingPlaysHere, EmptyAction::ChooseVersion), 1)
-    );
-    assert_eq!(
-        view.snapshot().blocked.map(|b| b.reason),
-        Some(BlockedReason::NoSpace),
-        "blocked keeps its order"
-    );
+    assert!(s.hidden.by_reason.is_empty(), "{:?}", s.hidden);
 }
 
 /// Plans/play-every-version.md 2e, mid-play stalls: the recommendation,
@@ -2561,5 +2532,5 @@ async fn versions_counted_empty_end_at_20s() {
         s.attempts
     );
     assert_eq!(s.empty, Some(EmptyKind::NotStarted), "{:?}", s.attempts);
-    golden_torrent("playback-empty-notStarted", &s);
+    golden::golden_torrent("playback-empty-notStarted", &s);
 }

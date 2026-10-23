@@ -21,8 +21,6 @@ pub struct RankInput<'a> {
 }
 
 const MAX_REASONS: usize = 3;
-/// A window that holds less than this much of a file ahead hides it (3.1).
-const WINDOW_AHEAD_S: u64 = 120;
 /// Torrents under this many seeders may not start at all.
 const FEW_SEEDERS: u32 = 5;
 /// Seeders count in the score up to this many, then the file decides. The
@@ -122,7 +120,7 @@ enum Room {
     Whole,
     /// In a window of `budget` bytes holding `ahead_s` of it ahead.
     Window { ahead_s: u64, budget: u64 },
-    /// Nowhere: no windows here, or under 120 s ahead.
+    /// Nowhere: no windows here (a build without the engine).
     None,
 }
 
@@ -202,9 +200,7 @@ fn room(s: &ParsedStream, input: &RankInput<'_>, free: u64, size: u64) -> Room {
     };
     let runtime = runtime.filter(|r| *r > 0).map(u64::from);
     i.bitrate = window_rate(s, size, episode, runtime);
-    let Some(p) = mq_engine_sched::window_plan(&mq_engine_sched::Config::standard(), i) else {
-        return Room::None;
-    };
+    let p = mq_engine_sched::window_plan(&mq_engine_sched::Config::standard(), i);
     // The engine plans at the guess when the runtime is unknown, and a
     // remux can stream faster than its guess: the seconds ahead are then
     // counted at no less than the file over the shortest runtime of its
@@ -220,12 +216,11 @@ fn room(s: &ParsedStream, input: &RankInput<'_>, free: u64, size: u64) -> Room {
             },
         ),
     };
-    match p.ahead_secs(rate) {
-        ahead_s if ahead_s >= WINDOW_AHEAD_S => Room::Window {
-            ahead_s,
-            budget: p.budget,
-        },
-        _ => Room::None,
+    // Shown however little it holds ahead: a ring plays it, as Stremio's
+    // does (plans/streaming-window-chunks.md).
+    Room::Window {
+        ahead_s: p.ahead_secs(rate),
+        budget: p.budget,
     }
 }
 

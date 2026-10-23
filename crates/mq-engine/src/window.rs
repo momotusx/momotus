@@ -8,11 +8,11 @@ use std::sync::atomic::Ordering;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-use crate::{
-    DeviceClass, Engine, EngineError, Inner, Result, Torrent, TorrentHandle, adapter, lock,
-};
+use crate::{DeviceClass, Engine, Inner, Torrent, TorrentHandle, adapter, lock};
 
-pub use mq_engine_sched::{APFS_HEAD_BYTES, HeldBytes, RESERVE_BYTES, WindowInputs, WindowPlan};
+pub use mq_engine_sched::{
+    APFS_HEAD_BYTES, HeldBytes, RESERVE_BYTES, RING_BYTES, WindowInputs, WindowPlan,
+};
 
 /// Under a quarter of the reserve the playback ends with "storage full"
 /// before any write fails (2.4).
@@ -29,10 +29,10 @@ const HOLES_FOR: Duration = Duration::from_secs(2);
 /// Failed rounds in a row that end the playback (2.4).
 const FAILED_ROUNDS: u32 = 3;
 
-/// Sizes a window with `class`'s windows (2.1, 2.2), or refuses with
-/// [`EngineError::DeviceFull`] when `room` is under `W_min + 64 MiB`.
-pub fn window_plan(class: DeviceClass, i: WindowInputs) -> Result<WindowPlan> {
-    mq_engine_sched::window_plan(&class.sched(), i).ok_or(EngineError::DeviceFull)
+/// Sizes a window with `class`'s windows (2.1, 2.2), a ring when `room`
+/// is under `W_min + 64 MiB` (plans/streaming-window-chunks.md).
+pub fn window_plan(class: DeviceClass, i: WindowInputs) -> WindowPlan {
+    mq_engine_sched::window_plan(&class.sched(), i)
 }
 
 /// `f_bavail × f_frsize` of the volume holding `dir`.
@@ -337,7 +337,13 @@ async fn keep_windows(engine: &Weak<Inner>, h: TorrentHandle, t: &Arc<Torrent>) 
             engine.trim(h, t, state).await;
             continue;
         }
-        let free = engine.free().unwrap_or(u64::MAX);
+        // A RAM ring needs no disk: no floor, no space guard
+        // (plans/streaming-window-chunks.md).
+        let free = if t.memory.load(Ordering::Relaxed) {
+            u64::MAX
+        } else {
+            engine.free().unwrap_or(u64::MAX)
+        };
         if free < FLOOR_BYTES {
             engine
                 .end_window(t, "storage full", Some(state.generation))
@@ -354,7 +360,7 @@ async fn keep_windows(engine: &Weak<Inner>, h: TorrentHandle, t: &Arc<Torrent>) 
         let Some(written) = engine.ask(t, adapter::Msg::Written).await else {
             continue;
         };
-        let live = (written + free).saturating_sub(RESERVE_BYTES);
+        let live = written.saturating_add(free).saturating_sub(RESERVE_BYTES);
         let full = WindowState {
             shortfall: 0,
             ..state
