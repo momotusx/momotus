@@ -102,6 +102,11 @@ impl Fixture {
 
 const PIN: &str = "1357";
 
+/// The engine's refusals for room, as the viewer reads them
+/// (plans/play-every-version.md 2c).
+#[cfg(feature = "torrent")]
+const NO_ROOM: &str = "This device needs a little free space to play this";
+
 /// The owner with a PIN and `fixture`'s addon, and a kids profile.
 async fn kid(fixture: &Fixture) -> (Core, Core) {
     let owner = Core::temporary(OWNER).unwrap();
@@ -710,7 +715,7 @@ async fn a_torrent_playback_sends_its_rate_to_the_engine() {
 }
 
 /// A torrent file larger than the room on a device under the window's
-/// floor (plans/streaming-window.md 2.1) fails with "this device is full"
+/// floor (plans/streaming-window.md 2.1) fails with the one storage line
 /// before its start is asked for; with room for it, it plays whole.
 #[cfg(feature = "torrent")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -724,10 +729,7 @@ async fn a_torrent_on_a_full_device_is_refused_and_one_that_fits_plays_whole() {
     })
     .await;
     let attempts = view.snapshot().attempts;
-    assert!(
-        attempts.iter().any(|a| a.error == "this device is full"),
-        "{attempts:?}"
-    );
+    assert!(attempts.iter().any(|a| a.error == NO_ROOM), "{attempts:?}");
     assert!(s.leecher.stats(t).await.is_err(), "the torrent went");
     let (s, t, _owner, kid, found) = torrent_kid().await;
     kid.set_punches(true);
@@ -885,7 +887,7 @@ async fn a_title_kept_on_this_device_says_so() {
 
 /// Plans/play-every-version.md 2a: with every source down, the version
 /// this device keeps is offered as "Play from this device", and it plays
-/// with no addon.
+/// with no addon, from the engine even with a streaming account.
 #[cfg(feature = "torrent")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn with_every_source_down_the_kept_version_plays_from_this_device() {
@@ -909,14 +911,32 @@ async fn with_every_source_down_the_kept_version_plays_from_this_device() {
         .library()
         .set_addons(OWNER, &[down], &owner.hlc())
         .unwrap();
+    // A streaming account connected does not take it: the kept source plays
+    // from this device's engine, and the service is never asked.
+    let service = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    kid.set_debrid_origin(&format!("http://{}", service.local_addr().unwrap()));
+    kid.set_debrid_keys(&[(mq_runtime::StoreId::RealDebrid, "rd".into())]);
+    let asked = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let count = asked.clone();
+    tokio::spawn(async move {
+        while let Ok((socket, _)) = service.accept().await {
+            count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            drop(socket);
+        }
+    });
     let versions = VersionsView::open_checked(&kid, params("movie", "tt1", ""), Some("tt1"));
+    // Never Try again first: the kept check settles before the state shows.
+    let try_again = std::cell::Cell::new(false);
     until("play from this device", || {
-        versions
-            .snapshot()
-            .empty
-            .is_some_and(|e| e.action == EmptyAction::PlayFromDevice)
+        let action = versions.snapshot().empty.map(|e| e.action);
+        try_again.set(try_again.get() || action == Some(EmptyAction::TryAgain));
+        action == Some(EmptyAction::PlayFromDevice)
     })
     .await;
+    assert!(
+        !try_again.get(),
+        "Try again shown before Play from this device"
+    );
     let empty = versions.snapshot().empty.unwrap();
     assert_eq!(empty.kind, EmptyKind::Unreachable);
     let key = empty.key.unwrap();
@@ -931,6 +951,9 @@ async fn with_every_source_down_the_kept_version_plays_from_this_device() {
         read_range(&url, 0, len).await == s.movie,
         "from this device"
     );
+    assert!(play.snapshot().attempts.is_empty());
+    let asked = asked.load(std::sync::atomic::Ordering::Relaxed);
+    assert_eq!(asked, 0, "the streaming service was asked");
 }
 
 /// Plans/player-polish.md 2b, after the app was closed: a core opened again
@@ -1385,9 +1408,16 @@ async fn a_packs_played_episode_is_room_for_the_next_only_in_a_window() {
     let versions = VersionsView::open_checked(&flat, params("movie", "tt2", ""), Some("tt2"));
     let shown = settled(&versions).await;
     assert!(shown.recommended.is_none(), "{:?}", shown.recommended);
-    // Hidden silently, with the one storage line (play-every-version 2c).
-    assert_eq!(shown.hidden.count, 0, "{:?}", shown.hidden);
-    assert!(shown.blocked.is_none(), "{:?}", shown.blocked);
+    assert!(
+        shown
+            .hidden
+            .by_reason
+            .iter()
+            .any(|(r, n)| *r == HideReason::NoSpace && *n > 0),
+        "{:?}",
+        shown.hidden
+    );
+    // The one storage line (play-every-version 2c).
     assert_eq!(shown.empty.map(|e| e.kind), Some(EmptyKind::NoRoom));
     let refused = PlaybackView::open(&flat, next.clone(), target("movie", "tt2", "tt2"));
     until("the playback failed", || {
@@ -1395,10 +1425,7 @@ async fn a_packs_played_episode_is_room_for_the_next_only_in_a_window() {
     })
     .await;
     let attempts = refused.snapshot().attempts;
-    assert!(
-        attempts.iter().any(|a| a.error == "this device is full"),
-        "{attempts:?}"
-    );
+    assert!(attempts.iter().any(|a| a.error == NO_ROOM), "{attempts:?}");
     drop(refused);
     // The refusal let the torrent go but kept its folder: episode 1's bytes
     // stay (review r3 B P3-1).

@@ -815,6 +815,14 @@ async fn a_file_the_device_never_opens_never_reaches_the_player() {
         "offered: {:?}",
         view.snapshot().recommended.map(|r| r.line)
     );
+    // The open view says why at once, from the ranking now, not from
+    // before the failure (review 2026-10-23 P2-2).
+    let s = view.snapshot();
+    assert_eq!(
+        s.blocked.map(|b| b.reason),
+        Some(BlockedReason::NothingPlaysHere)
+    );
+    assert_eq!(s.empty.map(|e| e.kind), Some(EmptyKind::NothingPlaysHere));
     drop((playback, view));
 
     let view = versions_for(&core, iphone).await;
@@ -1846,18 +1854,50 @@ async fn with_no_source_the_view_says_add_one() {
     assert!(view.snapshot().empty.is_none());
 }
 
-/// 2a: every addon failing (offline too) offers Try again; with nothing
-/// kept on this device there is nothing to play from it.
+/// 2a: no addon answering (offline too: no connection, or none in time)
+/// offers Try again; with nothing kept on this device there is nothing to
+/// play from it. A status is an answer: a 404 or a 500 reads "No source has
+/// this yet" (review 2026-10-23 P2-3).
 #[tokio::test]
-async fn with_every_source_failing_the_view_offers_try_again() {
-    let (core, _server) = answering(500, "{}").await;
-    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
-    let empty = empty_of(&view).await;
-    assert_eq!(
-        kind_and_action(&empty),
-        (EmptyKind::Unreachable, EmptyAction::TryAgain)
-    );
-    assert_eq!(empty.key, None);
+async fn with_no_source_answering_the_view_offers_try_again() {
+    let unreached = |empty: &mq_runtime::EmptyVersions| {
+        assert_eq!(
+            kind_and_action(empty),
+            (EmptyKind::Unreachable, EmptyAction::TryAgain)
+        );
+        assert_eq!(empty.key, None);
+    };
+    // No connection: the addon's port is closed.
+    let core = Core::temporary("p").unwrap();
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let server = Server::start(vec![]).await;
+    let mut row = addon(&server);
+    row.transport_url = format!("http://127.0.0.1:{port}/manifest.json");
+    core.library().set_addons("p", &[row], &core.hlc()).unwrap();
+    unreached(&empty_of(&versions_for(&core, DeviceCaps::basic_1080p()).await).await);
+    // None in time: past the fan-out's hard deadline (12 s).
+    let server = Server::start(vec![
+        route("GET", "/stream/series/tt1%3A1%3A1.json", 200, &torrents())
+            .delayed(Duration::from_secs(14)),
+        route("GET", "/meta/series/tt1.json", 200, &meta()),
+    ])
+    .await;
+    let core = core_with(&server);
+    unreached(&empty_of(&versions_for(&core, DeviceCaps::basic_1080p()).await).await);
+    // An answer, though an error.
+    for status in [404, 500] {
+        let (core, _server) = answering(status, "{}").await;
+        let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+        assert_eq!(
+            kind_and_action(&empty_of(&view).await),
+            (EmptyKind::NoResults, EmptyAction::None),
+            "{status}"
+        );
+    }
 }
 
 /// 2a: nothing answered, or only another episode, reads "No source has
@@ -1903,9 +1943,11 @@ async fn with_nothing_this_device_plays_each_version_stays_startable() {
     assert_eq!(view.candidates(key).len(), 1, "startable");
 }
 
-/// 2a, 2c: with no room even for the playback window the rows are hidden
-/// silently and the view says the device needs a little free space, with
-/// no action.
+/// 2a, 2c: with no room even for the playback window `empty` says the
+/// device needs a little free space, with no count and no action. `blocked`
+/// and the hidden count stay as before until every app reads `empty`
+/// (review 2026-10-23 P2-4). Mixed with versions that play nowhere here,
+/// those come first: they stay startable (P3-1).
 #[tokio::test]
 async fn with_no_room_for_the_window_the_view_asks_for_a_little_space() {
     let (core, _server) = answering(200, &torrents()).await;
@@ -1916,12 +1958,37 @@ async fn with_no_room_for_the_window_the_view_asks_for_a_little_space() {
     core.set_free_bytes(0);
     let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
     let empty = empty_of(&view).await;
-    // 2c: the one line, no count, no other words.
     assert_eq!(
         (kind_and_action(&empty), empty.count, empty.rows.len()),
         ((EmptyKind::NoRoom, EmptyAction::None), 0, 0)
     );
     let s = view.snapshot();
-    assert!(s.blocked.is_none(), "{:?}", s.blocked);
-    assert_eq!((s.hidden.count, s.hidden.by_reason.len()), (0, 0));
+    assert_eq!(
+        s.blocked.map(|b| (b.reason, b.count)),
+        Some((BlockedReason::NoSpace, 2))
+    );
+    assert_eq!(s.hidden.by_reason, [(HideReason::NoSpace, 2)]);
+
+    let mut mixed: serde_json::Value = serde_json::from_str(&torrents()).unwrap();
+    mixed["streams"].as_array_mut().unwrap().push(serde_json::json!(
+        { "name": "Direct", "title": "Show.S01E01.1080p.WEB-DL.x265-CCC", "url": "http://127.0.0.1:9/v.mp4" }
+    ));
+    let (core, _server) = answering(200, &mixed.to_string()).await;
+    core.set_free_bytes(0);
+    let caps = DeviceCaps {
+        decoders: vec![mq_relparse::VideoCodec::H264],
+        has_fallback_engine: false,
+        ..DeviceCaps::basic_1080p()
+    };
+    let view = versions_for(&core, caps).await;
+    let empty = empty_of(&view).await;
+    assert_eq!(
+        (kind_and_action(&empty), empty.count),
+        ((EmptyKind::NothingPlaysHere, EmptyAction::ChooseVersion), 1)
+    );
+    assert_eq!(
+        view.snapshot().blocked.map(|b| b.reason),
+        Some(BlockedReason::NoSpace),
+        "blocked keeps its order"
+    );
 }

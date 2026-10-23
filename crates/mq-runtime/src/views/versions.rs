@@ -186,9 +186,8 @@ pub struct BlockedVersions {
 pub enum BlockedReason {
     /// Torrents this build opens only through a paid streaming service.
     NeedsAccount,
-    /// Torrents larger than the free space. No longer sent: those rows
-    /// stay silent, and `empty` says noRoom (plans/play-every-version.md
-    /// 2c).
+    /// Torrents larger than the free space. Sent until every app reads
+    /// `empty` (noRoom) instead (plans/play-every-version.md 2c, Step 3).
     NoSpace,
     /// Nothing found plays on this device.
     NothingPlaysHere,
@@ -317,8 +316,18 @@ struct State {
     /// That version's stream from the stream memory, startable with no
     /// addon when every source failed ("Play from this device").
     kept: Option<ParsedStream>,
-    /// The stream addons asked.
+    /// Why nothing is listed, for `empty`: `blocked`'s reasons, a device
+    /// that plays nothing found before free space (its rows stay
+    /// startable).
+    why: Option<BlockedVersions>,
+    /// The stream addons asked, and those that never answered (no
+    /// connection, or none in time): a status is an answer.
     addons: usize,
+    unreached: usize,
+    /// Whether this device keeps the version last played is known
+    /// (`kept_start`): until then every source failing says nothing, so
+    /// Try again never turns into Play from this device.
+    kept_checked: bool,
     /// A kids profile: what keeps it from playing is said in a child's
     /// words.
     kids: bool,
@@ -865,6 +874,9 @@ impl VersionsView {
             ranking: None,
             on_device: None,
             kept: None,
+            why: None,
+            unreached: 0,
+            kept_checked: !cfg!(feature = "torrent"),
             addons: eligible.len(),
             kids: verified.is_some(),
         }));
@@ -937,6 +949,9 @@ impl VersionsView {
             ranking: None,
             on_device: None,
             kept: None,
+            why: None,
+            unreached: 0,
+            kept_checked: true,
             addons: 0,
             kids: true,
         };
@@ -1146,13 +1161,13 @@ async fn kept_start(
     snapshot: SharedObservable<VersionsSnapshot>,
 ) {
     let video = &ranking.params.video_id;
-    let Some(key) = crate::views::playback::kept_start(&core, &ranking.item_id, video).await else {
-        return;
-    };
-    let kept = crate::views::playback::kept_stream(&core, &ranking.item_id, &key);
+    let key = crate::views::playback::kept_start(&core, &ranking.item_id, video).await;
+    let kept = (key.as_deref())
+        .and_then(|k| crate::views::playback::kept_stream(&core, &ranking.item_id, k));
     let mut s = lock(&state);
-    s.on_device = Some(key);
+    s.on_device = key;
     s.kept = kept;
+    s.kept_checked = true;
     snapshot.set(render(&s));
 }
 
@@ -1298,6 +1313,8 @@ fn restart(s: &mut State, addons: &[InstalledAddon]) {
     s.slow.clear();
     s.failed.clear();
     s.blocked = None;
+    s.why = None;
+    s.unreached = 0;
     s.addons = addons.len();
     s.done = addons.is_empty();
 }
@@ -1457,11 +1474,12 @@ async fn collect(
             AddonEvent::Failed {
                 addon_id,
                 transport_url,
-                ..
+                error,
             } => {
                 s.pending.retain(|(url, _)| *url != transport_url);
                 s.slow.retain(|(url, _)| *url != transport_url);
                 s.failed.push(name_of(&transport_url, &addon_id));
+                s.unreached += usize::from(crate::core::unanswered(&error));
             }
             AddonEvent::Done => answered = true,
         }
@@ -1507,7 +1525,7 @@ fn settle(core: &Core, s: &mut State, ranking: &Ranking, rest: bool, counting: b
     if s.done {
         maybe_prefetch(core, s, (target.season, target.episode));
     }
-    s.blocked = blocked(s, ranking);
+    reblock(s, ranking);
 }
 
 /// A cache answer's store (`None`: the default) and lowercase info hash.
@@ -1753,11 +1771,20 @@ fn apply_cache(
     }
 }
 
+/// `blocked` and `why`, from the ranking now: after every rerank, so a
+/// later change (the network, a failure learned) never leaves them stale.
+fn reblock(s: &mut State, ranking: &Ranking) {
+    use BlockedReason::*;
+    s.blocked = blocked(s, ranking, [NeedsAccount, NoSpace, NothingPlaysHere]);
+    s.why = blocked(s, ranking, [NeedsAccount, NothingPlaysHere, NoSpace]);
+}
+
 /// Every addon answered, nothing is listed, and the hidden rows say why
-/// (3.11): the reason, how many, and those rows ranked as they would be
-/// once it is fixed. An account comes first (it opens the most), then free
-/// space, then a device that plays nothing found.
-fn blocked(s: &State, ranking: &Ranking) -> Option<BlockedVersions> {
+/// (3.11): the first reason in `order` that hid any, how many, and those
+/// rows ranked as they would be once it is fixed. `blocked` puts an account
+/// first (it opens the most), then free space, then a device that plays
+/// nothing found.
+fn blocked(s: &State, ranking: &Ranking, order: [BlockedReason; 3]) -> Option<BlockedVersions> {
     if !s.done || !s.ranked.rows.is_empty() {
         return None;
     }
@@ -1772,13 +1799,17 @@ fn blocked(s: &State, ranking: &Ranking) -> Option<BlockedVersions> {
     let params = &ranking.params;
     let mut caps = params.caps.clone();
     let mut c = s.rank.clone();
-    let (reason, streams) = [
-        (BlockedReason::NeedsAccount, of(HideReason::NeedsDebrid)),
-        (BlockedReason::NoSpace, of(HideReason::NoSpace)),
-        (BlockedReason::NothingPlaysHere, of(HideReason::Unplayable)),
-    ]
-    .into_iter()
-    .find(|(_, streams)| !streams.is_empty())?;
+    let (reason, streams) = order
+        .into_iter()
+        .map(|reason| {
+            let hidden = match reason {
+                BlockedReason::NeedsAccount => HideReason::NeedsDebrid,
+                BlockedReason::NoSpace => HideReason::NoSpace,
+                BlockedReason::NothingPlaysHere => HideReason::Unplayable,
+            };
+            (reason, of(hidden))
+        })
+        .find(|(_, streams)| !streams.is_empty())?;
     match reason {
         BlockedReason::NeedsAccount => c.debrid = true,
         BlockedReason::NoSpace => c.free_bytes = None,
@@ -1865,6 +1896,7 @@ fn rerank(s: &mut State, ranking: &Ranking) {
             s.recommended = Some(row);
         }
     }
+    reblock(s, ranking);
 }
 
 /// The same source: one key from one install and one service.
@@ -1952,12 +1984,8 @@ fn render(s: &State) -> VersionsSnapshot {
         .filter(|r| !holds_pick(r))
         .map(|r| row_dto(r, kept, s.rank.debrid))
         .collect();
-    // Rows with no room at all stay silently hidden (play-every-version 2c).
-    let counted: Vec<_> = (s.ranked.hidden.iter())
-        .filter(|h| h.reason != HideReason::NoSpace)
-        .collect();
     let mut by_reason: Vec<(HideReason, u32)> = Vec::new();
-    for h in &counted {
+    for h in &s.ranked.hidden {
         match by_reason.iter_mut().find(|(r, _)| *r == h.reason) {
             Some((_, n)) => *n += 1,
             None => by_reason.push((h.reason, 1)),
@@ -1965,7 +1993,7 @@ fn render(s: &State) -> VersionsSnapshot {
     }
     VersionsSnapshot {
         conditions: s.conditions.clone(),
-        blocked: (s.blocked.clone()).filter(|b| b.reason != BlockedReason::NoSpace),
+        blocked: s.blocked.clone(),
         empty: empty(s),
         note: s.note.clone(),
         recommended: s
@@ -1974,7 +2002,7 @@ fn render(s: &State) -> VersionsSnapshot {
             .map(|r| row_dto(r, kept, s.rank.debrid)),
         rows,
         hidden: HiddenSummary {
-            count: counted.len() as u32,
+            count: s.ranked.hidden.len() as u32,
             by_reason,
         },
         pending_addons: names(&s.pending),
@@ -1987,7 +2015,7 @@ fn render(s: &State) -> VersionsSnapshot {
 }
 
 /// Why nothing can play, once the view is done and nothing is listed
-/// (plans/play-every-version.md 2a): no addon, every addon failed, a kids
+/// (plans/play-every-version.md 2a): no addon, no addon answered, a kids
 /// profile, the hidden rows' reason (an account, room, this device), else
 /// nothing that is a version of this video (another title or episode, an
 /// excluded one).
@@ -2011,7 +2039,11 @@ fn empty(s: &State) -> Option<EmptyVersions> {
     if s.addons == 0 {
         return named(EmptyKind::NoSource, EmptyAction::SettingsAddons);
     }
-    if s.failed.len() >= s.addons {
+    if s.unreached >= s.addons {
+        // Settled first: no Try again that turns into Play from this device.
+        if !s.kept_checked {
+            return None;
+        }
         let key = s.kept.as_ref().map(|k| k.key.clone());
         return Some(EmptyVersions {
             kind: EmptyKind::Unreachable,
@@ -2028,7 +2060,9 @@ fn empty(s: &State) -> Option<EmptyVersions> {
     if s.kids {
         return named(EmptyKind::KidsNothing, EmptyAction::None);
     }
-    if let Some(b) = &s.blocked {
+    // A device that plays nothing found comes before free space: those
+    // versions stay startable ("Choose a version").
+    if let Some(b) = &s.why {
         let (kind, action) = match b.reason {
             BlockedReason::NeedsAccount => (EmptyKind::NeedsAccount, EmptyAction::SettingsAccounts),
             // The one storage line, with no count (2c).
@@ -2276,6 +2310,23 @@ pub(crate) fn rank_for_tests(streams: Vec<ParsedStream>) -> Vec<RankedRow> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Review 2026-10-23 P3: with no addon answering, nothing is said
+    /// until the kept check settles, so Try again never turns into Play
+    /// from this device.
+    #[test]
+    fn no_source_answering_waits_for_the_kept_check() {
+        let core = Core::temporary("p").unwrap();
+        let view = VersionsView::denied_view(&core, &film_params());
+        let action = |checked: bool| {
+            let mut s = lock(&view.state);
+            (s.kids, s.addons, s.unreached, s.done) = (false, 1, 1, true);
+            s.kept_checked = checked;
+            render(&s).empty.map(|e| e.action)
+        };
+        assert_eq!(action(false), None);
+        assert_eq!(action(true), Some(EmptyAction::TryAgain));
+    }
 
     fn wire(json: &str) -> ParsedStream {
         let body = format!(r#"{{"streams":[{json}]}}"#);

@@ -1524,7 +1524,7 @@ struct FakeSeeders {
 
 /// No answer came at all: no connection (no network, no route, a name that
 /// does not resolve) or none in time.
-fn unanswered(error: &AddonError) -> bool {
+pub(crate) fn unanswered(error: &AddonError) -> bool {
     use mq_http::HttpError;
     matches!(
         error,

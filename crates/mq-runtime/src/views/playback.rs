@@ -1634,8 +1634,38 @@ fn attempt(stream: &ParsedStream, error: &str) -> Attempt {
             .service
             .clone()
             .unwrap_or_else(|| stream.addon_name.clone()),
-        error: error.to_owned(),
+        error: viewer_words(error),
     }
+}
+
+/// The engine's refusals for room (`EngineError::DeviceFull`, `Storage`):
+/// a window that does not fit, or one that ended its playback.
+const NO_ROOM: [&str; 3] = [
+    "this device is full",
+    "storage full",
+    "this storage cannot free space while playing",
+];
+
+/// An attempt's error as the viewer reads it: a refusal for room is the one
+/// storage line (plans/play-every-version.md 2c), its reason kept in the
+/// log.
+fn viewer_words(error: &str) -> String {
+    if !NO_ROOM.iter().any(|r| error.contains(r)) {
+        return error.to_owned();
+    }
+    tracing::info!(error, "no room to play");
+    static LINE: OnceLock<String> = OnceLock::new();
+    LINE.get_or_init(|| {
+        let words: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../apps/shared/stream-choice-words.json"
+        ))
+        .expect("the shared words");
+        words["empty"]["noRoom"]["text"]
+            .as_str()
+            .expect("empty.noRoom.text")
+            .to_owned()
+    })
+    .clone()
 }
 
 /// Saves a position. At the end it marks the video watched, with the write
@@ -4301,8 +4331,10 @@ pub(crate) fn kept_stream(core: &Core, item_id: &str, key: &str) -> Option<Parse
     }]});
     let wire = mq_protocol::decode_streams(body.to_string().as_bytes()).ok()?;
     let addon = memory["addonId"].as_str().unwrap_or_default();
-    let mut stream = mq_streams::normalize(wire.streams.first()?, addon, "", 0, 0);
+    let mut stream = mq_streams::normalize(wire.streams.first()?, addon, ON_DEVICE, 0, 0);
     stream.key = key.to_owned();
+    // From this device's engine, an account connected or not.
+    stream.cached = Some(false);
     Some(stream)
 }
 
@@ -4599,6 +4631,24 @@ mod tests {
             1,
             "the same version tried again"
         );
+    }
+
+    /// Plans/play-every-version.md 2c: every refusal for room the engine
+    /// gives reads as the one storage line; other errors stay as they are.
+    #[cfg(feature = "torrent")]
+    #[test]
+    fn a_refusal_for_room_reads_as_the_one_storage_line() {
+        use mq_engine::EngineError;
+        const LINE: &str = "This device needs a little free space to play this";
+        let refusals = [
+            EngineError::DeviceFull,
+            EngineError::Storage("storage full".into()),
+            EngineError::Storage("this storage cannot free space while playing".into()),
+        ];
+        for e in refusals {
+            assert_eq!(viewer_words(&e.to_string()), LINE, "{e}");
+        }
+        assert_eq!(viewer_words("No peer sent"), "No peer sent");
     }
 
     /// The engine's verified bytes and connected peers, one per second
