@@ -8,6 +8,7 @@
     }
   ],
   "audio": [],
+  "audioDescription": false,
   "autoSubtitle": null,
   "bingeGroup": null,
   "chooseAnother": true,

@@ -245,6 +245,8 @@ fn mkv_hdr10() -> Vec<u8> {
                     es(0x22_B59C, "eng"),
                     es(0x22_B59D, "en-US"),
                     eu(0x88, 0),
+                    // FlagVisualImpaired: described for blind viewers.
+                    eu(0x55AC, 1),
                     audio_ch(8),
                 ],
             ),
@@ -254,6 +256,16 @@ fn mkv_hdr10() -> Vec<u8> {
                 vec![
                     es(0x536E, "Commentary"),
                     es(0x22_B59C, "jpn"),
+                    eu(0x88, 0),
+                    audio_ch(2),
+                ],
+            ),
+            mkv_track(
+                2,
+                "A_AAC",
+                vec![
+                    es(0x536E, "English Audio Description"),
+                    es(0x22_B59C, "eng"),
                     eu(0x88, 0),
                     audio_ch(2),
                 ],
@@ -587,9 +599,20 @@ async fn mkv_hevc_hdr10_tracks_fonts_and_tail_cues() {
     assert_eq!(val(&v.hdr), vec![Hdr::Hdr10]);
     assert_eq!(v.dv_profile, Field::unknown());
 
-    let [eac3, truehd, aac] = &p.audio[..] else {
+    let [eac3, truehd, aac, described] = &p.audio[..] else {
         panic!("{:?}", p.audio)
     };
+    // Core backlog C35: the container's flag, or the name.
+    assert_eq!(
+        truehd.audio_description,
+        Field::new(true, Provenance::ContainerHeader)
+    );
+    assert_eq!(
+        described.audio_description,
+        Field::new(true, Provenance::ParsedName)
+    );
+    assert!(eac3.audio_description.value != Some(true));
+    assert!(aac.audio_description.value != Some(true));
     assert_eq!(val(&eac3.codec), AudioCodec::Eac3);
     assert_eq!(val(&eac3.channels), 6);
     assert_eq!(eac3.atmos_hint, Field::new(true, Provenance::ParsedName));
@@ -791,7 +814,7 @@ async fn byte_budget_exhausted_keeps_partial_results() {
     let p = probe(&mem(&mkv_hdr10()), two_blocks, &CancellationToken::new()).await;
     assert!(p.budget_exhausted);
     assert!(p.video.is_some());
-    assert_eq!(p.audio.len(), 3);
+    assert_eq!(p.audio.len(), 4);
     assert!(p.seek_index.value.is_some());
     assert_eq!(p.attachments.len(), 1);
 }

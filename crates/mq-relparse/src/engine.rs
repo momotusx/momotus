@@ -31,6 +31,7 @@ pub(crate) enum F {
     Bitrate,
     Edition,
     Upscaled,
+    AudioDescription,
     Convert,
     Hardcoded,
     Proper,

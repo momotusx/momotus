@@ -1065,6 +1065,8 @@ data class PlaybackSnapshot(
     val autoSubtitle: String? = null,
     /** Every track the start subtitle could turn on failed to read: each one that failed handed over to the next best (its language's next, then the next language, as `autoSubtitle` changes) and none was left. A neutral state with no source: the apps show `player.subtitlesFailed` from apps/shared/stream-choice-words.json. */
     val startSubtitleFailed: Boolean = false,
+    /** The playing file has an audio track described for blind and low-vision viewers (its container flag or its name, read as the file opens): the player's AD mark (core backlog C35). */
+    val audioDescription: Boolean = false,
     /** The next released episode, for an Up Next card. */
     val next: NextEpisode? = null,
     /** The playing stream's binge group; pass it as `bingeGroup` when opening Versions for the next episode so the same release line is picked. */
@@ -1953,7 +1955,7 @@ data class VersionRow(
     val key: String,
     /** "4K", "1440p", "1080p", "720p" or "SD"; when the release names no resolution, its source ("Blu-ray", "WEB-DL") or "Quality not stated". */
     val quality: String,
-    /** Words, never emoji: "Dolby Vision", "HDR10", "Atmos", "5.1", "Remux". */
+    /** Words, never emoji: "Dolby Vision", "HDR10", "Atmos", "5.1", "Remux", and "AD" for audio described for blind and low-vision viewers. */
     val features: List<String> = emptyList(),
     val sizeBytes: Long? = null,
     val status: VersionStatus,

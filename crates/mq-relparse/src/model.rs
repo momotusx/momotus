@@ -153,6 +153,9 @@ pub struct ParsedRelease {
     pub dubbed: bool,
     pub three_d: bool,
     pub upscaled: bool,
+    /// An audio track described for blind and low-vision viewers ("Audio
+    /// Description", "DVS"): the AD badge.
+    pub audio_description: bool,
 }
 
 /// Facts from one addon stream entry: the parsed release plus addon-formatted fields.

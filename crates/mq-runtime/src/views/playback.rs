@@ -109,6 +109,10 @@ pub struct PlaybackSnapshot {
     /// left. A neutral state with no source: the apps show
     /// `player.subtitlesFailed` from apps/shared/stream-choice-words.json.
     pub start_subtitle_failed: bool,
+    /// The playing file has an audio track described for blind and
+    /// low-vision viewers (its container flag or its name, read as the file
+    /// opens): the player's AD mark (core backlog C35).
+    pub audio_description: bool,
     /// The next released episode, for an Up Next card.
     pub next: Option<NextEpisode>,
     /// The playing stream's binge group; pass it as `bingeGroup` when opening
@@ -784,6 +788,7 @@ impl State {
                 subtitle_notes: Vec::new(),
                 auto_subtitle: None,
                 start_subtitle_failed: false,
+                audio_description: false,
                 next: None,
                 binge_group: None,
                 segments: Vec::new(),
@@ -1900,6 +1905,7 @@ fn release_all(s: &mut State) {
     s.snapshot.subtitle_notes.clear();
     s.snapshot.auto_subtitle = None;
     s.snapshot.start_subtitle_failed = false;
+    s.snapshot.audio_description = false;
     // A pick was of this source's tracks: the next one's settle may turn on
     // the title's remembered choice again.
     s.subtitle_picked = false;
@@ -2442,9 +2448,14 @@ async fn resolve_next(
                     // read, whichever source answers first.
                     let rated_done = tokio::sync::Notify::new();
                     let rated = async {
-                        let fps = probed.clone().await.fps.map(|fps| fps as f32);
+                        let found = probed.clone().await;
+                        let fps = found.fps.map(|fps| fps as f32);
                         {
                             let mut s = lock(&state);
+                            if found.described && current(&s, run) {
+                                s.snapshot.audio_description = true;
+                                snapshot.set(s.snapshot.clone());
+                            }
                             // The one writer of the rate.
                             if fps.is_some() && current(&s, run) {
                                 s.playing.fps = fps;
@@ -4492,6 +4503,8 @@ fn release(w: &mq_protocol::WireSubtitle) -> Option<String> {
 struct Probed {
     fps: Option<f64>,
     audio: Vec<String>,
+    /// An audio track is described for blind and low-vision viewers.
+    described: bool,
 }
 
 /// `mq_media::probe` on the playback's reader, within 2 MB and 1.5 s;
@@ -4514,7 +4527,15 @@ async fn probe_video(reader: Option<&dyn mq_media::RangeReader>) -> Probed {
         .map(|l| crate::languages::language(&l).tag)
         .into_iter()
         .collect();
-    Probed { fps, audio }
+    let described = found
+        .audio
+        .iter()
+        .any(|a| a.audio_description.value == Some(true));
+    Probed {
+        fps,
+        audio,
+        described,
+    }
 }
 
 /// The audio's languages: the file's, else the release's when the file says none.
@@ -5147,6 +5168,68 @@ pub(crate) fn kept_stream(core: &Core, item_id: &str, key: &str) -> Option<Parse
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Core backlog C35: the playing file's probe marks it described when
+    /// one of its audio tracks is (Matroska's FlagVisualImpaired here), and
+    /// not otherwise.
+    #[tokio::test]
+    async fn a_described_audio_track_marks_the_file() {
+        struct Mem(bytes::Bytes);
+        impl mq_media::RangeReader for Mem {
+            fn len(
+                &self,
+            ) -> futures_util::future::BoxFuture<'_, Result<u64, mq_media::ProbeError>>
+            {
+                Box::pin(async move { Ok(self.0.len() as u64) })
+            }
+            fn read_at(
+                &self,
+                offset: u64,
+                len: u64,
+            ) -> futures_util::future::BoxFuture<'_, Result<bytes::Bytes, mq_media::ProbeError>>
+            {
+                let start = (offset as usize).min(self.0.len());
+                let end = start.saturating_add(len as usize).min(self.0.len());
+                Box::pin(async move { Ok(self.0.slice(start..end)) })
+            }
+        }
+        // EBML elements, each with an 8-byte size.
+        fn el(id: u32, body: &[u8]) -> Vec<u8> {
+            let mut v: Vec<u8> = id
+                .to_be_bytes()
+                .into_iter()
+                .skip_while(|b| *b == 0)
+                .collect();
+            v.push(0x01);
+            v.extend_from_slice(&(body.len() as u64).to_be_bytes()[1..]);
+            v.extend_from_slice(body);
+            v
+        }
+        let eu = |id: u32, x: u64| el(id, &x.to_be_bytes());
+        let es = |id: u32, x: &str| el(id, x.as_bytes());
+        let mkv = |described: bool| {
+            let mut audio = vec![
+                eu(0xD7, 1),
+                eu(0x83, 2),
+                es(0x86, "A_AAC"),
+                es(0x22_B59C, "eng"),
+            ];
+            if described {
+                audio.push(eu(0x55AC, 1));
+            }
+            let header = el(
+                0x1A45_DFA3,
+                &[eu(0x4286, 1), es(0x4282, "matroska")].concat(),
+            );
+            let info = el(0x1549_A966, &eu(0x2A_D7B1, 1_000_000));
+            let tracks = el(0x1654_AE6B, &el(0xAE, &audio.concat()));
+            let cluster = el(0x1F43_B675, &[eu(0xE7, 0), el(0xA3, &[0x55; 64])].concat());
+            let segment = el(0x1853_8067, &[info, tracks, cluster].concat());
+            bytes::Bytes::from([header, segment].concat())
+        };
+        assert!(probe_video(Some(&Mem(mkv(true)))).await.described);
+        assert!(!probe_video(Some(&Mem(mkv(false)))).await.described);
+    }
 
     /// The words for a move: the version left and why, or "another" when
     /// both versions read the same.

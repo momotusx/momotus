@@ -26,6 +26,7 @@ const TRACK_TYPE: u32 = 0x83;
 const FLAG_DEFAULT: u32 = 0x88;
 const FLAG_FORCED: u32 = 0x55AA;
 const FLAG_HEARING_IMPAIRED: u32 = 0x55AB;
+const FLAG_VISUAL_IMPAIRED: u32 = 0x55AC;
 const DEFAULT_DURATION: u32 = 0x23_E383;
 const NAME: u32 = 0x536E;
 const LANGUAGE: u32 = 0x22_B59C;
@@ -336,6 +337,7 @@ struct Entry<'a> {
     default: Option<bool>,
     forced: Option<bool>,
     hearing_impaired: Option<bool>,
+    visual_impaired: Option<bool>,
     default_duration: Option<u64>,
     video: Option<&'a [u8]>,
     audio: Option<&'a [u8]>,
@@ -356,6 +358,7 @@ fn track(b: &[u8], out: &mut StreamProbe) {
             FLAG_DEFAULT => e.default = uint(v).map(|f| f != 0),
             FLAG_FORCED => e.forced = uint(v).map(|f| f != 0),
             FLAG_HEARING_IMPAIRED => e.hearing_impaired = uint(v).map(|f| f != 0),
+            FLAG_VISUAL_IMPAIRED => e.visual_impaired = uint(v).map(|f| f != 0),
             DEFAULT_DURATION => e.default_duration = uint(v),
             VIDEO => e.video = Some(v),
             AUDIO => e.audio = Some(v),
@@ -403,6 +406,11 @@ fn track(b: &[u8], out: &mut StreamProbe) {
                 default,
                 forced: Field::header(Some(e.forced.unwrap_or(false))),
                 atmos_hint: atmos,
+                audio_description: match e.visual_impaired {
+                    Some(true) => Field::new(true, Provenance::ContainerHeader),
+                    _ if described(name) => Field::new(true, Provenance::ParsedName),
+                    other => Field::header(other),
+                },
             });
         }
         0x11 => out.subtitles.push(SubtitleTrack {
@@ -415,6 +423,24 @@ fn track(b: &[u8], out: &mut StreamProbe) {
         }),
         _ => {}
     }
+}
+
+/// A track named for audio description: "Audio Description", "Described",
+/// "Descriptive Audio"; never a "description" alone ("Director's
+/// description commentary").
+fn described(name: Option<&str>) -> bool {
+    let Some(name) = name else { return false };
+    let words: Vec<String> = name
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .map(str::to_lowercase)
+        .collect();
+    let pair = |a: &str, b: &str| words.windows(2).any(|w| w[0] == a && w[1] == b);
+    pair("audio", "description")
+        || pair("descriptive", "audio")
+        || words
+            .iter()
+            .any(|w| w == "described" || w == "audiodescription")
 }
 
 fn video(e: &Entry<'_>) -> crate::VideoInfo {
@@ -506,4 +532,32 @@ async fn cues(src: &mut Src<'_>, pos: u64, out: &mut StreamProbe) {
         len: end - pos,
     }));
     src.prefetch(pos, end - pos).await;
+}
+
+#[cfg(test)]
+mod described_tests {
+    use super::described;
+
+    /// Core backlog C35, review note 3: the words of audio description, never
+    /// a "description" alone.
+    #[test]
+    fn a_track_name_says_audio_description_in_its_words() {
+        for name in [
+            "English Audio Description",
+            "Described",
+            "Descriptive Audio",
+            "ENG AudioDescription",
+        ] {
+            assert!(described(Some(name)), "{name}");
+        }
+        for name in [
+            "Director's description commentary",
+            "Description",
+            "Commentary",
+            "English",
+        ] {
+            assert!(!described(Some(name)), "{name}");
+        }
+        assert!(!described(None));
+    }
 }

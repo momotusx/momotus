@@ -414,6 +414,7 @@ fn fill_gaps(base: &mut ParsedRelease, other: &ParsedRelease) {
     base.dubbed |= other.dubbed;
     base.three_d |= other.three_d;
     base.upscaled |= other.upscaled;
+    base.audio_description |= other.audio_description;
 }
 
 fn merge_languages(into: &mut Vec<String>, extra: &[String]) {

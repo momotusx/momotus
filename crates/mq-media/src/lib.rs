@@ -186,6 +186,9 @@ pub struct AudioTrack {
     pub default: Field<bool>,
     pub forced: Field<bool>,
     pub atmos_hint: Field<bool>,
+    /// Described for blind and low-vision viewers (audio description): the
+    /// container's flag, or the track's name ("Audio Description").
+    pub audio_description: Field<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]

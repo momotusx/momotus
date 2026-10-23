@@ -71,6 +71,8 @@ const DEFAULTED = new Map([
   ["PlaybackSnapshot.chooseAnother", "false"],
   // Every start subtitle unreadable: an older core never says so.
   ["PlaybackSnapshot.startSubtitleFailed", "false"],
+  // The playing file's audio description (core backlog C35): an older core never says so.
+  ["PlaybackSnapshot.audioDescription", "false"],
   // Discover's preview Library state (core backlog C44b): an older core says nothing.
   ["ItemDetails.inLibrary", "false"],
   // Whether Add to Library can be offered (false on a kids profile): an older core always took it.

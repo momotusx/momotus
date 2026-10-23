@@ -124,6 +124,18 @@ pub(crate) static TABLE: LazyLock<Table> = LazyLock::new(|| {
         rule(F::Upscaled, r"\b(?:AI.?)?(Upscal(ed?|ing)|Enhanced?)\b", Tf::True).ci().into(),
         rule(F::Upscaled, r"\b(?:iris2|regrade|ups(uhd|fhd|hd|4k))\b", Tf::True).ci().into(),
         rule(F::Upscaled, r"\b\.AI\.\b", Tf::True).ci().into(),
+        // Audio described for blind and low-vision viewers; a bare "AD" is
+        // left alone (Anno Domini, a group).
+        // English, German ("Audiodeskription") and Spanish ("Audiodescripción").
+        rule(
+            F::AudioDescription,
+            r"\bAudio.?(?:Descri(?:bed|ption)|Deskription|Descripci[oó]n)\b",
+            Tf::True,
+        )
+        .ci()
+        .rm()
+        .into(),
+        rule(F::AudioDescription, r"\bDVS\b", Tf::True).rm().into(),
         rule(F::Convert, r"\bCONVERT\b", Tf::True).rm().into(),
         rule(F::Hardcoded, r"\b(HC|HARDCODED)\b", Tf::True).rm().into(),
         rule(F::Proper, r"\b(?:REAL.)?PROPER\b", Tf::True).ci().rm().into(),

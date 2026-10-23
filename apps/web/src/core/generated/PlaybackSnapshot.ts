@@ -70,6 +70,12 @@ autoSubtitle: string | null,
  */
 startSubtitleFailed: boolean, 
 /**
+ * The playing file has an audio track described for blind and
+ * low-vision viewers (its container flag or its name, read as the file
+ * opens): the player's AD mark (core backlog C35).
+ */
+audioDescription: boolean, 
+/**
  * The next released episode, for an Up Next card.
  */
 next: NextEpisode | null, 

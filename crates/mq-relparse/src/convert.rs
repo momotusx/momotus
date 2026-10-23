@@ -52,6 +52,7 @@ pub(crate) fn finish(ctx: &Ctx, end: usize) -> ParsedRelease {
         dubbed: ctx.has(F::Dubbed),
         three_d: ctx.has(F::ThreeD),
         upscaled: ctx.has(F::Upscaled),
+        audio_description: ctx.has(F::AudioDescription),
     }
 }
 

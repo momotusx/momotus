@@ -40,7 +40,8 @@ pub struct VersionRow {
     /// "4K", "1440p", "1080p", "720p" or "SD"; when the release names no
     /// resolution, its source ("Blu-ray", "WEB-DL") or "Quality not stated".
     pub quality: String,
-    /// Words, never emoji: "Dolby Vision", "HDR10", "Atmos", "5.1", "Remux".
+    /// Words, never emoji: "Dolby Vision", "HDR10", "Atmos", "5.1", "Remux",
+    /// and "AD" for audio described for blind and low-vision viewers.
     pub features: Vec<String>,
     #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub size_bytes: Option<u64>,
@@ -2350,6 +2351,10 @@ fn features(rel: &mq_relparse::ParsedRelease) -> Vec<String> {
     if rel.quality == Quality::Remux || rel.remux {
         out.push("Remux".into());
     }
+    // Audio described for blind and low-vision viewers (core backlog C35).
+    if rel.audio_description {
+        out.push("AD".into());
+    }
     out
 }
 
@@ -2463,6 +2468,17 @@ pub(crate) fn rank_for_tests(streams: Vec<ParsedStream>) -> Vec<RankedRow> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Core backlog C35: a release with audio description carries the AD
+    /// feature, after the picture and sound ones; one without carries none.
+    #[test]
+    fn a_described_release_carries_the_ad_feature() {
+        let described =
+            mq_relparse::parse("Movie.2020.2160p.WEB-DL.DV.Audio.Description.DDP5.1.H.265-GRP");
+        assert_eq!(features(&described).last().map(String::as_str), Some("AD"));
+        let plain = mq_relparse::parse("Movie.2020.2160p.WEB-DL.DV.DDP5.1.H.265-GRP");
+        assert!(!features(&plain).iter().any(|f| f == "AD"));
+    }
 
     /// Review 2026-10-23 P3: with no addon answering, nothing is said
     /// until the kept check settles, so Try again never turns into Play

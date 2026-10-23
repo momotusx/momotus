@@ -91,6 +91,31 @@ fn prepare(name: &str) -> String {
 mod tests {
     use super::*;
 
+    /// Core backlog C35: a release with audio described for blind and
+    /// low-vision viewers says so in words; a bare "AD" is no mark, and the
+    /// words leave the title alone.
+    #[test]
+    fn audio_description_is_read_from_its_words() {
+        for name in [
+            "Movie.2020.1080p.WEB-DL.Audio.Description.DDP5.1.H.264-GRP",
+            "Movie 2020 1080p WEB AudioDescribed AAC2.0 x264-GRP",
+            "Movie.2020.DVS.1080p.BluRay.x264-GRP",
+            // Review note 1: German and Spanish.
+            "Movie.2020.German.Audiodeskription.1080p.WEB.x264-GRP",
+            "Movie.2020.Spanish.Audiodescripción.1080p.WEB.x264-GRP",
+        ] {
+            let r = parse(name);
+            assert!(r.audio_description, "{name}");
+            assert_eq!(r.title, "Movie", "{name}");
+        }
+        for name in [
+            "Movie.AD.2020.1080p.BluRay.x264-GRP",
+            "The.Matrix.1999.1080p.BluRay.DTS.x264-GRP",
+        ] {
+            assert!(!parse(name).audio_description, "{name}");
+        }
+    }
+
     #[test]
     fn typical_movie_release() {
         let r = parse("The.Matrix.1999.1080p.BluRay.DTS.x264-GRP");

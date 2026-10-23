@@ -13,7 +13,8 @@ export type VersionRow = { key: string,
  */
 quality: string, 
 /**
- * Words, never emoji: "Dolby Vision", "HDR10", "Atmos", "5.1", "Remux".
+ * Words, never emoji: "Dolby Vision", "HDR10", "Atmos", "5.1", "Remux",
+ * and "AD" for audio described for blind and low-vision viewers.
  */
 features: Array<string>, sizeBytes: number | null, status: VersionStatus, 
 /**
