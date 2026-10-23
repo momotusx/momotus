@@ -78,22 +78,17 @@ test("Up Next waits for the end, then counts the last 15 s", () => {
   expect(startsText(-0.5)).toBe("Starts in 0 s");
 });
 
-test("ratings sit side by side as plain text, and a missing score has no slot", () => {
+test("the IMDb score is plain text, and a missing score has no slot", () => {
   const text = (r: Parameters<typeof ratingParts>[0]) => ratingParts(r).map((p) => p.text);
-  expect(text({ imdb: "8.8", rottenTomatoes: "87%" })).toEqual(["IMDb 8.8", "RT 87%"]);
-  expect(text({ imdb: "8.8", rottenTomatoes: null })).toEqual(["IMDb 8.8"]);
-  expect(text({ imdb: null, rottenTomatoes: "0%" })).toEqual(["RT 0%"]);
-  expect(text({ imdb: null, rottenTomatoes: null })).toEqual([]);
+  expect(text({ imdb: "8.8" })).toEqual(["IMDb 8.8"]);
+  expect(text({ imdb: null })).toEqual([]);
   // A recording from before the field: nothing, never a placeholder.
   expect(text(undefined)).toEqual([]);
-  // Only the IMDb score links to IMDb's page.
-  expect(ratingParts({ imdb: "8.8", rottenTomatoes: "87%" }).map((p) => p.imdb)).toEqual([true, false]);
   // The ratings row sets the source's name apart from its score.
-  expect(ratingParts({ imdb: "8.8", rottenTomatoes: "87%" }).map((p) => [p.source, p.score])).toEqual([["IMDb", "8.8"], ["RT", "87%"]]);
-  // A screen reader says the names, not "R T".
-  expect(ratingParts({ imdb: "10.0", rottenTomatoes: "100%" }).map((p) => p.spoken)).toEqual(["IMDb 10.0", "Rotten Tomatoes 100 percent"]);
-  // A poster speaks the scores its chip shows.
-  expect(posterLabel(["Inception", "2010"], { imdb: "8.8", rottenTomatoes: "87%" })).toBe("Inception, 2010, IMDb 8.8, Rotten Tomatoes 87 percent");
-  expect(posterLabel(["Inception", null], { imdb: null, rottenTomatoes: "87%" })).toBe("Inception, Rotten Tomatoes 87 percent");
+  expect(ratingParts({ imdb: "8.8" }).map((p) => [p.source, p.score])).toEqual([["IMDb", "8.8"]]);
+  expect(ratingParts({ imdb: "10.0" }).map((p) => p.spoken)).toEqual(["IMDb 10.0"]);
+  // A poster speaks the score the core sends.
+  expect(posterLabel(["Inception", "2010"], { imdb: "8.8" })).toBe("Inception, 2010, IMDb 8.8");
+  expect(posterLabel(["Inception", null], { imdb: null })).toBe("Inception");
   expect(posterLabel(["Inception"], null)).toBe("Inception");
 });

@@ -35,8 +35,8 @@ struct Tile: Decodable, Hashable, Sendable {
     var playVideoId: String? { videoId ?? (kind == "movie" ? id : nil) }
 }
 
-/// A title's IMDb score, written as shown ("8.8"); null when nobody gave one. The core sends Rotten Tomatoes
-/// too, which shows only in the covers' band (RPDB's), never as text.
+/// A title's IMDb score, written as shown ("8.8"), from the addon's own rating; null when it gave none.
+/// Rotten Tomatoes and Metacritic show only in the covers' band (RPDB's), never as text.
 struct Ratings: Decodable, Hashable, Sendable {
     let imdb: String?
 }
@@ -237,11 +237,6 @@ struct TitleDetails: Decodable, Hashable, Sendable {
     let ratings: Ratings?
     /// The title's IMDb page, where its IMDb score links (not on TV).
     let imdbUrl: String?
-    /// Who the scores come from, each source named for what it gave ("IMDb
-    /// from Cinemeta, Rotten Tomatoes from the Rotten Tomatoes addon"), a
-    /// "Ratings from" row beside "Details from"; nil when MDBList and the
-    /// Rotten Tomatoes addon gave nothing.
-    let ratingsFrom: String?
     let source: String
     /// Trailers the metadata names (YouTube), first is the main one.
     let trailers: [Trailer]

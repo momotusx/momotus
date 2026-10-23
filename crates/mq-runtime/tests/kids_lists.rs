@@ -738,50 +738,29 @@ async fn a_kids_search_shows_no_recent_names() {
     assert_eq!(owners.snapshot().recent, ["up"]);
 }
 
-/// A kids profile asks no one for ratings, but its own tiles carry what the
-/// device's ratings cache holds, on Home, in Search and in its library, as
-/// every other tile does.
+/// A kids profile's own tiles carry RPDB's cover, drawn with the key of the
+/// owner's addon (the list a kids profile reads), on Home, in Search and in
+/// its library, as every other tile does.
 #[tokio::test]
-async fn a_kids_tiles_show_what_the_ratings_cache_holds() {
+async fn a_kids_tiles_show_the_rated_cover() {
     let fixture = Fixture::default();
     let (owner, kid) = kid(&fixture).await;
-    // The band's key comes from the owner's Rotten Tomatoes addon, the
-    // list a kids profile reads.
     let mut addons = owner.library().addons(OWNER).unwrap();
     addons.push(rt_addon());
     owner
         .library()
         .set_addons(OWNER, &addons, &owner.hlc())
         .unwrap();
-    let now = mq_library::hlc::now_ms() as i64;
-    let lib = owner.library();
-    let row = mq_library::RatingRow {
-        imdb_id: "tt1".into(),
-        kind: "movie".into(),
-        imdb: Some(8.3),
-        rt: Some(98),
-        fetched_ms: now,
-    };
-    assert!(lib.put_ratings(&[row], 0, lib.removals()).unwrap());
     allow(&kid, "tt1", "movie", "Up", 1);
     let rated = |tiles: &[mq_runtime::views::home::Tile]| {
-        tiles.iter().find(|t| t.id == "tt1").is_some_and(|t| {
-            t.ratings.imdb.as_deref() == Some("8.3")
-                && t.ratings.rotten_tomatoes.as_deref() == Some("98%")
+        tiles.iter().any(|t| {
+            t.id == "tt1"
+                && t.poster.as_deref()
+                    == Some("https://api.ratingposterdb.com/t0-free-rpdb/imdb/poster-default/tt1.jpg?fallback=true")
         })
     };
     let home = HomeView::open(&kid);
     until("the kids row has RPDB's cover", || {
-        home.snapshot().rows.iter().any(|r| {
-            r.row_id == KIDS_ROW_ID
-                && r.tiles.iter().any(|t| {
-                    t.poster.as_deref()
-                        == Some("https://api.ratingposterdb.com/t0-free-rpdb/imdb/poster-default/tt1.jpg?fallback=true")
-                })
-        })
-    })
-    .await;
-    until("the kids row is rated", || {
         home.snapshot()
             .rows
             .iter()
@@ -790,12 +769,12 @@ async fn a_kids_tiles_show_what_the_ratings_cache_holds() {
     .await;
     let search = SearchView::open(&kid);
     search.set_query("up");
-    until("the kids search is rated", || {
+    until("the kids search has RPDB's cover", || {
         search.snapshot().rows.iter().any(|r| rated(&r.tiles))
     })
     .await;
     let library = LibraryView::open(&kid);
-    until("the kids library is rated", || {
+    until("the kids library has RPDB's cover", || {
         rated(&library.snapshot().items)
     })
     .await;

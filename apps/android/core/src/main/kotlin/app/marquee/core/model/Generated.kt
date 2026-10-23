@@ -1203,11 +1203,10 @@ data class RankKey(
     val within: Int,
 )
 
-/** A title's IMDb and Rotten Tomatoes scores, written as shown: IMDb "8.8", Rotten Tomatoes a number with "%" ("87%"), never a word. A score nobody gave is null: apps show no slot for it, never a placeholder. */
+/** A title's IMDb score, written as shown ("8.8"). A score the addon did not give is null: apps show no slot for it, never a placeholder. */
 @Serializable
 data class Ratings(
     val imdb: String? = null,
-    val rottenTomatoes: String? = null,
 )
 
 @Serializable(with = Reason.Serializer::class)
@@ -1711,7 +1710,7 @@ data class Tile(
     val videoId: String? = null,
     /** The IMDb rating the addon gave, as written ("8.4"). */
     val rating: String? = null,
-    /** The scores to show side by side: MDBList's, with the addon's own IMDb rating when MDBList has none; Rotten Tomatoes a number or nothing, never a word. */
+    /** The IMDb score to show, from the addon's own rating (`rating`). */
     val ratings: Ratings = Ratings(),
 )
 
@@ -1731,12 +1730,10 @@ data class TitleDetails(
     val directors: List<String> = emptyList(),
     /** The IMDb rating the addon gave, as written ("8.4"). */
     val rating: String? = null,
-    /** The IMDb and Rotten Tomatoes scores to show side by side, as on tiles. */
+    /** The IMDb score to show, as on tiles. */
     val ratings: Ratings = Ratings(),
     /** The title's IMDb page, for the IMDb score to link to; null for an id that is not IMDb's. */
     val imdbUrl: String? = null,
-    /** Who the scores come from, a "Ratings from" row beside "Details from", each source named for what it gave ("IMDb and Rotten Tomatoes via MDBList", "IMDb from Cinemeta, Rotten Tomatoes from the Rotten Tomatoes addon"); null when MDBList and the Rotten Tomatoes addon gave nothing. */
-    val ratingsFrom: String? = null,
     val source: String,
     /** Trailers the metadata names (YouTube), first is the main one. */
     val trailers: List<Trailer> = emptyList(),

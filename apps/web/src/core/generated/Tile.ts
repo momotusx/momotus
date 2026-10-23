@@ -26,8 +26,6 @@ videoId: string | null,
  */
 rating: string | null, 
 /**
- * The scores to show side by side: MDBList's, with the addon's own
- * IMDb rating when MDBList has none; Rotten Tomatoes a number or
- * nothing, never a word.
+ * The IMDb score to show, from the addon's own rating (`rating`).
  */
 ratings: Ratings, };

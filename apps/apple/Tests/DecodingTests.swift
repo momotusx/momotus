@@ -161,18 +161,18 @@ private func fixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T 
 }
 
 @Test func textShowsIMDbsNumberAloneAndAMissingScoreHasNoSlot() throws {
-    // The shape mq-runtime's ratings test asserts (tests/ratings.rs).
+    // The shape mq-runtime's Ratings has: the addon's IMDb score alone (ratings.rs).
     let json = #"""
     {"id": "tt0111161", "kind": "movie", "name": "The Shawshank Redemption", "poster": null, "background": null,
      "logo": null, "posterShape": "poster", "releaseInfo": "1994", "progress": null, "videoId": null, "rating": "9.3",
-     "ratings": {"imdb": "9.2", "rottenTomatoes": "89%"}}
+     "ratings": {"imdb": "9.2"}}
     """#
     let tile = try JSONDecoder().decode(Tile.self, from: Data(json.utf8))
     // Rotten Tomatoes shows only in the covers' band, never as text (the owner, 2026-10-23), as Stremio does.
     #expect(ratingParts(tile.ratings) == ["IMDb 9.2"])
     #expect(posterLabel([tile.name, tile.releaseInfo], tile.ratings) == "The Shawshank Redemption, 1994, IMDb 9.2")
-    let rtOnly = try JSONDecoder().decode(Ratings.self, from: Data(#"{"imdb": null, "rottenTomatoes": "89%"}"#.utf8))
-    #expect(ratingParts(rtOnly).isEmpty)
+    let none = try JSONDecoder().decode(Ratings.self, from: Data(#"{"imdb": null}"#.utf8))
+    #expect(ratingParts(none).isEmpty)
     #expect(ratingParts(Ratings(imdb: nil)).isEmpty)
     #expect(ratingParts(nil).isEmpty)
 }

@@ -124,7 +124,6 @@ class TitleCopyTest {
                     .copy(
                         cast = emptyList(),
                         directors = emptyList(),
-                        ratingsFrom = "IMDb and Rotten Tomatoes via MDBList",
                     ),
             ),
         )

@@ -10,7 +10,7 @@ private func tile(_ poster: String?, fallback: String?) throws -> Tile {
     let json = """
     {"id": "tt1375666", "kind": "movie", "name": "Inception", "poster": \(posterJSON), "posterFallback": \(fallbackJSON),
      "background": null, "logo": null, "posterShape": "poster", "releaseInfo": "2010", "progress": null, "videoId": null,
-     "rating": "8.8", "ratings": {"imdb": "8.8", "rottenTomatoes": "87%"}}
+     "rating": "8.8", "ratings": {"imdb": "8.8"}}
     """
     return try JSONDecoder().decode(Tile.self, from: Data(json.utf8))
 }

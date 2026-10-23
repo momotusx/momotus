@@ -8,22 +8,14 @@ export type TitleDetails = { id: string, kind: string, name: string, description
  */
 rating: string | null, 
 /**
- * The IMDb and Rotten Tomatoes scores to show side by side, as on tiles.
+ * The IMDb score to show, as on tiles.
  */
 ratings: Ratings, 
 /**
  * The title's IMDb page, for the IMDb score to link to; null for an id
  * that is not IMDb's.
  */
-imdbUrl: string | null, 
-/**
- * Who the scores come from, a "Ratings from" row beside "Details from",
- * each source named for what it gave ("IMDb and Rotten Tomatoes via
- * MDBList", "IMDb from Cinemeta, Rotten Tomatoes from the Rotten
- * Tomatoes addon"); null when MDBList and the Rotten Tomatoes addon gave
- * nothing.
- */
-ratingsFrom: string | null, source: string, 
+imdbUrl: string | null, source: string, 
 /**
  * Trailers the metadata names (YouTube), first is the main one.
  */

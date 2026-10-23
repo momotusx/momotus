@@ -33,9 +33,8 @@ source "$ROOT/apps/android/scripts/core-engine.sh"
 if [ "$(core_kind)" = store ]; then echo "build-core.sh: store core (STORE=1): no torrent engine"; fi
 # The Trakt app (client id and redirect URI, read by `option_env!`) when this machine has it:
 # .env.trakt.local at the repository root, gitignored. Without the file the core has no Trakt app
-# (notConfigured), as in CI or a fresh clone. The MDBList key (MARQUEE_MDBLIST_KEY) the same way,
-# from .env.mdblist.local: without it the core asks MDBList nothing.
-for env in "$ROOT/.env.trakt.local" "$ROOT/.env.mdblist.local"; do
+# (notConfigured), as in CI or a fresh clone.
+for env in "$ROOT/.env.trakt.local"; do
   if [ -f "$env" ]; then
     set -a
     source "$env"

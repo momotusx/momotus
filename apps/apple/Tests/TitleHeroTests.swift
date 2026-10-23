@@ -17,8 +17,8 @@ private func details(_ overrides: [String: Any] = [:]) throws -> TitleDetails {
         "poster": NSNull(), "background": NSNull(), "logo": NSNull(), "releaseInfo": "Since 2022", "runtime": "46 min",
         "genres": ["Drama", "Thriller", "Crime"], "cast": ["Gary Oldman", "Jack Lowden", "Kristin Scott Thomas"],
         "directors": ["James Hawes", "Jeremy Lovering"], "rating": "8.4",
-        "ratings": ["imdb": "8.4", "rottenTomatoes": "87%"], "imdbUrl": "https://www.imdb.com/title/tt5875444/",
-        "ratingsFrom": NSNull(), "source": "Cinemeta", "trailers": [],
+        "ratings": ["imdb": "8.4"], "imdbUrl": "https://www.imdb.com/title/tt5875444/",
+        "source": "Cinemeta", "trailers": [],
     ]
     for (key, value) in overrides { json[key] = value }
     return try JSONDecoder().decode(TitleDetails.self, from: JSONSerialization.data(withJSONObject: json))

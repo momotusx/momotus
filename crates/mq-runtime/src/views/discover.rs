@@ -203,19 +203,13 @@ impl DiscoverView {
             snapshot: SharedObservable::new(snapshot),
             task: Mutex::new(None),
         });
-        // Taken before the first read of the ratings (`on_listed`).
-        let listed = core.ratings().listed();
         inner.select_first();
-        let (watched, rated, library_watch) = (inner.clone(), inner.clone(), inner.clone());
+        let (watched, library_watch) = (inner.clone(), inner.clone());
         let library = core.library().subscribe();
         let watch = tokio::spawn(async move {
-            let rate = crate::ratings::on_listed(listed, move || {
-                rate_items(&rated.core, &rated.state, &rated.snapshot);
-            });
             futures_util::join!(
                 watch_addons(watched, changes),
-                watch_library(library_watch, library),
-                rate
+                watch_library(library_watch, library)
             );
         });
         Self { inner, watch }
@@ -602,7 +596,7 @@ async fn load_page(
     let parsed = result
         .map_err(|e| e.to_string())
         .and_then(|f| decode_catalog(&f.body).map_err(|e| format!("unreadable catalog: {e}")));
-    let titles = {
+    {
         let mut s = lock(&state);
         s.snapshot.state = match parsed {
             Ok(ResourceResponse::Metas { metas }) => {
@@ -615,7 +609,6 @@ async fn load_page(
                             .push(tile_from_preview(meta, rpdb.as_deref()));
                     }
                 }
-                core.ratings().fill(&mut s.snapshot.items[before..]);
                 // No new titles, or no paging: the catalog is done.
                 if catalog.pages && s.snapshot.items.len() > before {
                     DiscoverState::Ready
@@ -631,12 +624,6 @@ async fn load_page(
         // A preview named before its item came.
         fill_preview(&core, &mut s);
         snapshot.set(s.snapshot.clone());
-        // Every item's, not only this page's: a page asked while the last
-        // lookup was on its way cancelled it.
-        crate::ratings::titles(&s.snapshot.items)
-    };
-    if core.ratings().lookup(&titles).await.is_some() {
-        rate_items(&core, &state, &snapshot);
     }
 }
 
@@ -660,13 +647,4 @@ fn fill_preview(core: &Core, s: &mut State) -> bool {
     let changed = s.snapshot.preview != details;
     s.snapshot.preview = details;
     changed
-}
-
-/// Puts what holds now on every item shown (a lookup landed, or a read of
-/// the lists ended): not what a lookup saw, which a read may have changed.
-fn rate_items(core: &Core, state: &Mutex<State>, snapshot: &SharedObservable<DiscoverSnapshot>) {
-    let mut s = lock(state);
-    if core.ratings().fill(&mut s.snapshot.items) {
-        snapshot.set(s.snapshot.clone());
-    }
 }

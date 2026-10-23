@@ -15,6 +15,7 @@ pub(crate) fn migrations() -> Migrations<'static> {
         M::up(V11),
         M::up(V12),
         M::up_with_hook(V13, hash_addon_links),
+        M::up(V14),
     ])
 }
 
@@ -409,10 +410,79 @@ fn hash_addon_links(tx: &rusqlite::Transaction) -> rusqlite_migration::HookResul
     Ok(())
 }
 
+/// The looked-up scores go (2026-10-23): ratings come from the addons
+/// alone, the IMDb score from the meta addon's own rating and the ratings
+/// band from RPDB's covers, so nothing is looked up or kept.
+const V14: &str = r#"
+DROP INDEX ratings_age;
+DROP TABLE ratings;
+"#;
+
 #[cfg(test)]
 mod tests {
     use super::migrations;
     use rusqlite::Connection;
+
+    /// V14 on a V13 database with looked-up scores: the ratings table and
+    /// its index go, and every other table keeps its schema and its rows.
+    #[test]
+    fn v14_drops_the_ratings_cache_and_touches_nothing_else() {
+        let mut c = Connection::open_in_memory().unwrap();
+        migrations().to_version(&mut c, 13).unwrap();
+        c.execute_batch(
+            "INSERT INTO profiles (id, name, hlc) VALUES ('default', 'Main', '0000000000000000000000000000000a');
+             INSERT INTO library_items (profile_id, item_id, kind, name, added_ms, hlc)
+               VALUES ('default', 'tt1', 'movie', 'One', 1, '1');
+             INSERT INTO ratings (imdb_id, kind, imdb, rt, fetched_ms) VALUES ('tt1', 'movie', 8.8, 87, 1);",
+        )
+        .unwrap();
+        let schema = |c: &Connection| -> Vec<(String, String, Option<String>)> {
+            c.prepare(
+                "SELECT type, name, sql FROM sqlite_master
+                 WHERE tbl_name <> 'ratings' ORDER BY type, name",
+            )
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap()
+        };
+        let rows = |c: &Connection| -> Vec<String> {
+            let mut all = Vec::new();
+            for (kind, table, _) in schema(c) {
+                if kind != "table" || table.starts_with("sqlite_") {
+                    continue;
+                }
+                let mut stmt = c.prepare(&format!("SELECT * FROM \"{table}\"")).unwrap();
+                let n = stmt.column_count();
+                let found = stmt
+                    .query_map([], |r| {
+                        let cells: Vec<String> = (0..n)
+                            .map(|i| format!("{:?}", r.get_ref(i).unwrap()))
+                            .collect();
+                        Ok(format!("{table}: {}", cells.join(", ")))
+                    })
+                    .unwrap()
+                    .collect::<Result<Vec<_>, _>>()
+                    .unwrap();
+                all.extend(found);
+            }
+            all
+        };
+        let (schema_before, rows_before) = (schema(&c), rows(&c));
+        assert!(rows_before.iter().any(|r| r.starts_with("library_items: ")));
+        migrations().to_latest(&mut c).unwrap();
+        let left: i64 = c
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE tbl_name = 'ratings'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(left, 0, "the ratings table and its index are gone");
+        assert_eq!(schema(&c), schema_before);
+        assert_eq!(rows(&c), rows_before);
+    }
 
     /// V10 on a V9 database: every profile still here is standard at the
     /// all-zero hlc and queued; a gone one gets nothing; the generation

@@ -136,7 +136,7 @@ class TvHomeScrollTest {
         name = name,
         posterShape = "poster",
         releaseInfo = "2024",
-        ratings = Ratings(imdb = "7.4", rottenTomatoes = "87%"),
+        ratings = Ratings(imdb = "7.4"),
     )
 
     private fun show(

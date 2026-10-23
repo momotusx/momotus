@@ -166,10 +166,8 @@ class TileCopyTest {
 
     @Test
     fun `text shows IMDb's number alone, as Stremio does, and a missing one has no slot`() {
-        // Rotten Tomatoes shows only in the covers' band, never as text.
-        assertEquals(listOf("IMDb 8.8"), TileCopy.ratings(Ratings(imdb = "8.8", rottenTomatoes = "87%")))
+        // Rotten Tomatoes shows only in the covers' band, never as text: the core sends IMDb alone.
         assertEquals(listOf("IMDb 8.8"), TileCopy.ratings(Ratings(imdb = "8.8")))
-        assertEquals(emptyList(), TileCopy.ratings(Ratings(rottenTomatoes = "0%")))
         assertEquals(emptyList(), TileCopy.ratings(Ratings()))
         // A recording from before the field decodes to no scores, never a placeholder.
         assertEquals(emptyList(), TileCopy.ratings(tile().ratings))

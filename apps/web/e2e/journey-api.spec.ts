@@ -538,7 +538,7 @@ test("Continue Watching keeps its own line under the still, never a ratings line
     const o = Object.fromEntries(Object.entries(v).map(([k, x]) => [k, scored(x)]));
     if (o.id !== "mqjm" || !("ratings" in o)) return o;
     given++;
-    return { ...o, ratings: { imdb: "7.1", rottenTomatoes: "45%" } };
+    return { ...o, ratings: { imdb: "7.1" } };
   };
   for (const [form, viewport] of [["tv", { width: 1920, height: 1080 }], ["desktop", { width: 1440, height: 900 }]] as const) {
     const { context } = await patchedContext(browser, JOURNEY_PORT, { viewport }, (view, snapshot) => (view === "home" ? scored(snapshot) : snapshot));

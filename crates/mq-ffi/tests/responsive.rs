@@ -1,7 +1,7 @@
 //! The core as the apps open it (the binding's own two-thread runtime and
-//! the one request loop) stays responsive while the Rotten Tomatoes addon's
-//! lists are read: a hung list never holds a simple request back. A Pixel
-//! start waited 10 s for the core on 2026-10-22.
+//! the one request loop) stays responsive while an addon's catalog hangs:
+//! a hung page never holds a simple request back. A Pixel start waited
+//! 10 s for the core on 2026-10-22.
 
 use marquee_core::{CoreListener, MarqueeCore};
 use serde_json::{Value, json};
@@ -121,7 +121,7 @@ fn rotten_tomatoes(path: &str) -> Option<String> {
 }
 
 #[test]
-fn a_simple_request_answers_at_once_while_the_lists_are_read() {
+fn a_simple_request_answers_at_once_while_a_catalog_hangs() {
     let data = std::env::temp_dir().join(format!("mq-ffi-responsive-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&data);
     let replies = Arc::new(Replies::default());
@@ -133,7 +133,7 @@ fn a_simple_request_answers_at_once_while_the_lists_are_read() {
     )
     .unwrap();
     let (local, _) = serve(catalog, "");
-    // Every list page hangs: the read stays on its way for the whole test.
+    // Every catalog page hangs: Home's row stays on its way for the whole test.
     let (rt, asked) = serve(rotten_tomatoes, "/catalog/");
     let mut id = 0;
     let mut send = |op: Value| {
@@ -153,7 +153,7 @@ fn a_simple_request_answers_at_once_while_the_lists_are_read() {
     replies
         .wait(home, Duration::from_secs(10))
         .expect("Home opened");
-    // Home's first lookup starts the read of the lists.
+    // Home asks for the hanging catalog.
     let started = Instant::now();
     while !asked
         .lock()
@@ -163,7 +163,7 @@ fn a_simple_request_answers_at_once_while_the_lists_are_read() {
     {
         assert!(
             started.elapsed() < Duration::from_secs(10),
-            "the read never started"
+            "the catalog was never asked"
         );
         std::thread::sleep(Duration::from_millis(10));
     }

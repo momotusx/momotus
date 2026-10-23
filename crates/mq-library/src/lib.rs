@@ -19,7 +19,7 @@ pub use policy::{AllowedList, AllowedRow, Authorization, MAX_ALLOWED, Policy};
 pub use profiles::{DEFAULTS_GIVEN, ProfileRow};
 pub use store::{
     AddonRow, CachedResponse, ContinueItem, FINISHED_RATIO, Library, LibraryEntry, LibraryError,
-    LibraryItemRow, ProgressRow, RatingRow, Table, sweep_temporaries,
+    LibraryItemRow, ProgressRow, Table, sweep_temporaries,
 };
 pub use sync::{
     DEFAULTS_ERA, OWNER, OWNER_NAME, OutboxPage, SignedEntry, Stamp, SyncCursor, SyncRecord, coll,

@@ -16,7 +16,6 @@
 
 use crate::Core;
 use crate::live::{FRAME, coalesce};
-use crate::ratings;
 use crate::views::home::{
     HomeRow, KIDS_ROW_ID, OTHER_KIND, RowState, Tile, kids_tile, kind_label, tile_from_preview,
 };
@@ -278,19 +277,8 @@ async fn run(core: Core, query: String, snapshot: SharedObservable<SearchSnapsho
     let mut top: Option<(RowState, Vec<Tile>)> =
         top_pending.then(|| (RowState::Loading, Vec::new()));
     let mut shown = Shown::default();
-    // Ratings found so far, put on the tiles as each publish renders them
-    // (a filled row shows the tiles it first showed).
-    let mut known = HashMap::new();
-    let mut lookups = JoinSet::new();
-    // Taken before the first read of the ratings (`ratings::on_listed`).
-    let mut listed = core.ratings().listed();
-    let mut publish = |top: &Option<(RowState, Vec<Tile>)>,
-                       rows: &[(RowState, Vec<Tile>)],
-                       known: &HashMap<_, _>| {
-        let mut rows = render(top.as_ref(), &slots, rows, &mut shown);
-        for row in &mut rows {
-            ratings::apply(&mut row.tiles, known);
-        }
+    let mut publish = |top: &Option<(RowState, Vec<Tile>)>, rows: &[(RowState, Vec<Tile>)]| {
+        let rows = render(top.as_ref(), &slots, rows, &mut shown);
         snapshot.set(SearchSnapshot {
             query: query.clone(),
             rows,
@@ -298,7 +286,7 @@ async fn run(core: Core, query: String, snapshot: SharedObservable<SearchSnapsho
             searchable: slots.len() as u32,
         })
     };
-    publish(&top, &rows, &known);
+    publish(&top, &rows);
     let top_work = tokio::time::timeout(HARD_DEADLINE, top_results(&core, &query, &key));
     tokio::pin!(top_work);
     let mut calls = JoinSet::new();
@@ -313,66 +301,30 @@ async fn run(core: Core, query: String, snapshot: SharedObservable<SearchSnapsho
     let soft = tokio::time::sleep(SOFT_DEADLINE);
     tokio::pin!(soft);
     let mut soft_fired = false;
-    // What holds now for every tile shown: a lookup landed, or a read of
-    // the lists ended.
-    let now = |top: &Option<(RowState, Vec<Tile>)>, rows: &[(RowState, Vec<Tile>)]| {
-        let shown = rows.iter().chain(top.as_ref()).flat_map(|r| &r.1);
-        core.ratings().known(&ratings::titles(shown))
-    };
-    // Once the rows are in, the search stays to hear a read of the lists
-    // end, until the next query or the view goes.
     loop {
         tokio::select! {
             Some(joined) = calls.join_next(), if !calls.is_empty() => {
                 let Ok((index, result)) = joined else { continue };
                 rows[index] = outcome(result, &query, rpdb.as_deref());
-                rate(&core, &rows[index].1, &mut known, &mut lookups);
-                publish(&top, &rows, &known);
+                publish(&top, &rows);
             }
             found = &mut top_work, if top_pending => {
                 top_pending = false;
                 // A source that failed leaves the row out: search then
                 // looks as it does without it.
                 top = found.ok().flatten().map(|tiles| (RowState::Ready, tiles));
-                if let Some((_, tiles)) = &top {
-                    rate(&core, tiles, &mut known, &mut lookups);
-                }
-                publish(&top, &rows, &known);
-            }
-            Some(joined) = lookups.join_next(), if !lookups.is_empty() => {
-                if let Ok(Some(_)) = joined {
-                    known.extend(now(&top, &rows));
-                    publish(&top, &rows, &known);
-                }
-            }
-            Ok(()) = listed.changed() => {
-                known.extend(now(&top, &rows));
-                publish(&top, &rows, &known);
+                publish(&top, &rows);
             }
             _ = &mut soft, if !soft_fired => {
                 soft_fired = true;
                 for row in rows.iter_mut().chain(top.as_mut()).filter(|r| r.0 == RowState::Loading) {
                     row.0 = RowState::Slow;
                 }
-                publish(&top, &rows, &known);
+                publish(&top, &rows);
             }
             else => break,
         }
     }
-}
-
-/// What the ratings cache holds for these tiles goes into `known` at once;
-/// a lookup for the rest joins `lookups`.
-fn rate(
-    core: &Core,
-    tiles: &[Tile],
-    known: &mut HashMap<ratings::Title, ratings::Scores>,
-    lookups: &mut JoinSet<Option<HashMap<ratings::Title, ratings::Scores>>>,
-) {
-    let titles = ratings::titles(tiles);
-    known.extend(core.ratings().known(&titles));
-    let core = core.clone();
-    lookups.spawn(async move { core.ratings().lookup(&titles).await });
 }
 
 /// "Top results": the titles Trakt names for the query, led as `lead`
@@ -669,12 +621,7 @@ fn kids_matches(core: &Core, query: &str) -> Vec<HomeRow> {
         title: "Your shows and movies".into(),
         source: "Your list".into(),
         state: RowState::Ready,
-        tiles: {
-            let mut tiles: Vec<Tile> = found.into_iter().map(|(_, t)| t).collect();
-            // What the ratings cache holds, as on every other row.
-            core.ratings().fill(&mut tiles);
-            tiles
-        },
+        tiles: found.into_iter().map(|(_, t)| t).collect(),
     }]
 }
 

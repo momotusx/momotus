@@ -17,23 +17,18 @@ export function bytes(n: number): string {
   return `${Math.max(1, Math.round(n / 1024))} KB`;
 }
 
-/** A title's scores side by side as plain text, the source first: "IMDb 8.8",
- * "RT 87%", with what a screen reader says ("Rotten Tomatoes 87 percent"), the
- * source and the score apart for the ratings row. The core sends Rotten Tomatoes as
- * a number or not at all, never a word. A
- * score the core left null has no slot, and the brands' logos and icons never appear
- * (plans/research/ratings.md). */
-export type RatingPart = { text: string; source: string; score: string; spoken: string; imdb: boolean };
+/** A title's score as plain text, the source first: "IMDb 8.8", with what a screen reader
+ * says, the source and the score apart for the ratings row. The core sends the addon's own
+ * IMDb rating; Rotten Tomatoes and Metacritic come only in the RPDB band drawn into the cover.
+ * A score the core left null has no slot, and the brands' logos and icons never appear as text
+ * (plans/research/ratings-band.md). */
+export type RatingPart = { text: string; source: string; score: string; spoken: string };
 export function ratingParts(r: Ratings | null | undefined): RatingPart[] {
-  const parts: RatingPart[] = [];
-  if (r?.imdb) parts.push({ text: `IMDb ${r.imdb}`, source: "IMDb", score: r.imdb, spoken: `IMDb ${r.imdb}`, imdb: true });
-  const rt = r?.rottenTomatoes;
-  if (rt) parts.push({ text: `RT ${rt}`, source: "RT", score: rt, spoken: `Rotten Tomatoes ${rt.replace("%", " percent")}`, imdb: false });
-  return parts;
+  return r?.imdb ? [{ text: `IMDb ${r.imdb}`, source: "IMDb", score: r.imdb, spoken: `IMDb ${r.imdb}` }] : [];
 }
 
 /** What a screen reader says for a poster: its name and caption, then the
- * scores its cover shows ("Inception, 2010, IMDb 8.8, Rotten Tomatoes 87 percent"). */
+ * score the core sends ("Inception, 2010, IMDb 8.8"). */
 export function posterLabel(parts: (string | null | undefined)[], r: Ratings | null | undefined): string {
   return [...parts.filter((p): p is string => !!p), ...ratingParts(r).map((p) => p.spoken)].join(", ");
 }

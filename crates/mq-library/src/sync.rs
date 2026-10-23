@@ -132,17 +132,15 @@ pub(crate) const PROFILE_TABLES: [&str; 18] = [
 
 /// Tables that hold no profile's rows: sync's own state, the device's, the
 /// tombstones, `http_cache`, which is cleared whole when a profile goes
-/// (its keys are addon URLs, which can carry a profile's keys and searches),
-/// and `ratings`, cleared with it (its ids are titles the profile looked at).
+/// (its keys are addon URLs, which can carry a profile's keys and searches).
 #[cfg(test)]
-pub(crate) const DEVICE_TABLES: [&str; 7] = [
+pub(crate) const DEVICE_TABLES: [&str; 6] = [
     "sync_state",
     "sync_outbox",
     "sync_roster",
     "device_state",
     "profile_gone",
     "http_cache",
-    "ratings",
 ];
 
 /// Deletes every row of a gone profile.
@@ -1341,10 +1339,8 @@ pub(crate) mod sql {
         if first {
             // Cached addon answers are keyed by URLs that may carry the
             // profile's addon keys or searches; the device's version lists
-            // name streams those addons listed (digests of their keys);
-            // looked-up ratings name the titles the profile opened.
+            // name streams those addons listed (digests of their keys).
             c.execute("DELETE FROM http_cache", [])?;
-            c.execute("DELETE FROM ratings", [])?;
             c.execute(
                 "DELETE FROM device_state WHERE key IN ('no_picture', 'did_not_play', 'wrong_file')",
                 [],

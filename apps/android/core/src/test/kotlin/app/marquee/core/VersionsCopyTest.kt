@@ -267,7 +267,7 @@ class VersionsCopyTest {
                 "../ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneTitle.kt",
                 "src/main/kotlin/app/marquee/core/TitleCopy.kt",
             )
-        val names = Regex("""\.via\b|\bvia \$|\.source\b|ratingsFrom|Details from|Ratings from""")
+        val names = Regex("""\.via\b|\bvia \$|\.source\b|Details from|Ratings from""")
         for (path in pages) {
             assertFalse(names.containsMatchIn(File(path).readText()), "$path names an addon")
         }

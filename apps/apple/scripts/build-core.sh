@@ -29,9 +29,7 @@ root="$(cd "$apple/../.." && pwd)"
 # The Trakt app (client id and redirect URI, read by `option_env!`) when this
 # machine has it: .env.trakt.local at the repository root, gitignored. Without
 # the file the core has no Trakt app (notConfigured), as in CI or a fresh clone.
-# The MDBList key (MARQUEE_MDBLIST_KEY) the same way, from .env.mdblist.local:
-# without it the core asks MDBList nothing.
-for env in "$root/.env.trakt.local" "$root/.env.mdblist.local"; do
+for env in "$root/.env.trakt.local"; do
   if [[ -f "$env" ]]; then
     set -a
     source "$env"

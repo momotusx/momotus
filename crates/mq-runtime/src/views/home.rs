@@ -6,7 +6,7 @@
 //! of allowed titles, then its list's 20 newest (plans/m11-kids.md 5).
 
 use crate::live::{FRAME, ListDiff, coalesce};
-use crate::ratings::{self, Ratings, Title};
+use crate::ratings::Ratings;
 use crate::views::playback::{NextEpisode, next_after};
 use crate::views::settings::HomeRows;
 use crate::{Core, CoreError};
@@ -58,9 +58,7 @@ pub struct Tile {
     pub video_id: Option<String>,
     /// The IMDb rating the addon gave, as written ("8.4").
     pub rating: Option<String>,
-    /// The scores to show side by side: MDBList's, with the addon's own
-    /// IMDb rating when MDBList has none; Rotten Tomatoes a number or
-    /// nothing, never a word.
+    /// The IMDb score to show, from the addon's own rating (`rating`).
     pub ratings: Ratings,
     /// What the hero shows beyond the tile; kept off the wire for rows.
     #[serde(skip)]
@@ -245,7 +243,6 @@ impl HomeView {
     pub fn open(core: &Core) -> Self {
         // Subscribed before reading, so no addon change falls in between.
         let changes = core.library().subscribe();
-        let listed = core.ratings().listed();
         let kids = core.policy().kids();
         let access = core.library().subscribe();
         let slots = board(core);
@@ -275,12 +272,6 @@ impl HomeView {
             rows.clone(),
             header.clone(),
         ));
-        tasks.spawn(ratings::on_listed(listed, {
-            let (core, rows, header) = (core.clone(), rows.clone(), header.clone());
-            move || {
-                rerate(&core, &rows, &header);
-            }
-        }));
         tasks.spawn(watch_addons(
             core.clone(),
             changes,
@@ -591,9 +582,7 @@ fn loading_row(slot: &CatalogSlot) -> HomeRow {
 
 /// Follows the installed addons: rows of catalogs that stay keep their tiles
 /// (so nothing flashes), new catalogs load, removed ones go, and the order
-/// follows the addon order. The swap is one batch of diffs. The ratings
-/// shown are put on again then (and, by `on_listed`, when a read of the
-/// Rotten Tomatoes addon's lists ends).
+/// follows the addon order. The swap is one batch of diffs.
 async fn watch_addons(
     core: Core,
     mut changes: tokio::sync::broadcast::Receiver<Vec<Table>>,
@@ -604,9 +593,6 @@ async fn watch_addons(
     let mut loads = JoinSet::new();
     while home_changed(&mut changes).await {
         while loads.try_join_next().is_some() {}
-        // The Rotten Tomatoes addon's mark comes and goes with the addon.
-        let titles = rerate(&core, &rows, &header);
-        loads.spawn(rate(core.clone(), rows.clone(), header.clone(), titles));
         let slots = board(&core);
         let next: Vec<String> = slots.iter().map(|s| s.row_id.clone()).collect();
         if next == ids {
@@ -795,15 +781,13 @@ async fn load_catalogs(
     let soft = tokio::time::sleep(SOFT_DEADLINE);
     tokio::pin!(soft);
     let mut soft_fired = false;
-    let mut lookups = JoinSet::new();
     loop {
         tokio::select! {
             joined = calls.join_next() => {
                 let Some(joined) = joined else { break };
                 let Ok((row_id, result)) = joined else { continue };
-                let titles = apply_catalog(&core, &rows, &row_id, result);
+                apply_catalog(&core, &rows, &row_id, result);
                 maybe_pick_hero(&rows, &header);
-                lookups.spawn(rate(core.clone(), rows.clone(), header.clone(), titles));
             }
             _ = &mut soft, if !soft_fired => {
                 soft_fired = true;
@@ -820,96 +804,29 @@ async fn load_catalogs(
             }
         }
     }
-    // The ratings still on their way.
-    while lookups.join_next().await.is_some() {}
 }
 
-/// Looks up the ratings of `titles`, then puts what holds for them now on
-/// every tile that shows one of them, the hero's too: not what the lookup
-/// saw, since the addon may have gone off meanwhile, and the tiles' fill
-/// may be older still.
-async fn rate(
-    core: Core,
-    rows: Arc<Mutex<ObservableVector<HomeRow>>>,
-    header: SharedObservable<HomeHeader>,
-    titles: Vec<Title>,
-) {
-    core.ratings().lookup(&titles).await;
-    let rater = core.ratings();
-    let _turn = rater.turn();
-    put(&rows, &header, &rater.shown(&titles));
-}
-
-/// Puts on every tile shown, the hero's too, what the ratings cache and
-/// the Rotten Tomatoes addon's lists hold now. The titles shown, for a
-/// lookup. The rows are locked only to read them and to put the answer on.
-fn rerate(
-    core: &Core,
-    rows: &Mutex<ObservableVector<HomeRow>>,
-    header: &SharedObservable<HomeHeader>,
-) -> Vec<Title> {
-    let rater = core.ratings();
-    let _turn = rater.turn();
-    let hero = header.get().hero;
-    let titles = ratings::titles(
-        lock(rows)
-            .iter()
-            .flat_map(|r| &r.tiles)
-            .chain(hero.iter().map(|h| &h.tile)),
-    );
-    put(rows, header, &rater.shown(&titles));
-    titles
-}
-
-/// Gives every tile of a title `known` holds, the hero's too, its row.
-fn put(
-    rows: &Mutex<ObservableVector<HomeRow>>,
-    header: &SharedObservable<HomeHeader>,
-    known: &HashMap<Title, ratings::Scores>,
-) {
-    {
-        let mut rows = lock(rows);
-        for index in 0..rows.len() {
-            let mut row = rows[index].clone();
-            if ratings::apply(&mut row.tiles, known) {
-                rows.set(index, row);
-            }
-        }
-    }
-    header.update_if(|h| {
-        h.hero
-            .as_mut()
-            .is_some_and(|hero| ratings::apply([&mut hero.tile], known))
-    });
-}
-
-/// Fills the row from the catalog's answer; the titles it may show, for
-/// their ratings.
+/// Fills the row from the catalog's answer.
 fn apply_catalog(
     core: &Core,
     rows: &Mutex<ObservableVector<HomeRow>>,
     row_id: &str,
     result: Result<mq_addons::Fetched, mq_addons::AddonError>,
-) -> Vec<Title> {
+) {
     let outcome = result
         .map_err(|e| e.to_string())
         .and_then(|f| decode_catalog(&f.body).map_err(|e| format!("unreadable catalog: {e}")))
         .and_then(|response| match response {
             ResourceResponse::Metas { metas } => {
                 let rpdb = core.rpdb_key();
-                let mut tiles: Vec<Tile> = metas
+                Ok(metas
                     .into_iter()
                     .take(ROW_TILES)
                     .map(|m| tile_from_preview(m, rpdb.as_deref()))
-                    .collect();
-                // What the ratings cache holds, before the rows lock.
-                core.ratings().fill(&mut tiles);
-                Ok(tiles)
+                    .collect::<Vec<Tile>>())
             }
             _ => Err("addon returned no catalog items".to_owned()),
         });
-    // Only the titles the row takes: an answer it refuses asks nothing.
-    let mut titles = Vec::new();
     update_row(rows, row_id, |row| {
         // A row shown again loads again. The first answer fills it; a later
         // success may still replace a failure (an older load that failed
@@ -921,7 +838,6 @@ fn apply_catalog(
         }
         match outcome {
             Ok(tiles) => {
-                titles = ratings::titles(&tiles);
                 row.tiles = tiles;
                 row.state = if row.tiles.is_empty() {
                     RowState::Empty
@@ -932,7 +848,6 @@ fn apply_catalog(
             Err(reason) => row.state = RowState::Failed { reason },
         }
     });
-    titles
 }
 
 /// A title's year line as the apps show it, with no dash (core backlog
@@ -988,7 +903,7 @@ pub(crate) fn tile_from_preview(m: mq_protocol::MetaItemPreview, rpdb: Option<&s
         release_info: year_line(m.release_info.as_deref()),
         progress: None,
         video_id: None,
-        ratings: Ratings::of(None, rating.as_deref()),
+        ratings: Ratings::of(rating.as_deref()),
         rating,
         blurb: Some(blurb),
         poster_fallback: None,
@@ -1049,10 +964,8 @@ async fn watch_continue(
     // A streaming account coming or going changes " · On this device"
     // (`kept_here`): the row is read again then too.
     let (mut accounts, mut open) = (core.account_changes(), true);
-    let mut lookups = JoinSet::new();
-    let titles = refresh_continue(&core, &rows).await;
+    refresh_continue(&core, &rows).await;
     maybe_pick_hero(&rows, &header);
-    lookups.spawn(rate(core.clone(), rows.clone(), header.clone(), titles));
     loop {
         let refresh = tokio::select! {
             tables = crate::views::next_change(&mut changes) => {
@@ -1068,10 +981,8 @@ async fn watch_continue(
             }
         };
         if refresh {
-            let titles = refresh_continue(&core, &rows).await;
+            refresh_continue(&core, &rows).await;
             maybe_pick_hero(&rows, &header);
-            while lookups.try_join_next().is_some() {}
-            lookups.spawn(rate(core.clone(), rows.clone(), header.clone(), titles));
         }
     }
 }
@@ -1110,7 +1021,7 @@ async fn watch_kids_row(
 fn kids_row(core: &Core) -> HomeRow {
     let rpdb = core.rpdb_key();
     let list = core.library().allowed_list(core.profile());
-    let mut tiles: Vec<Tile> = list
+    let tiles: Vec<Tile> = list
         .map(|l| l.counted)
         .unwrap_or_default()
         .iter()
@@ -1118,9 +1029,6 @@ fn kids_row(core: &Core) -> HomeRow {
         .take(ROW_TILES)
         .map(|row| kids_tile(row, rpdb.as_deref()))
         .collect();
-    // What the ratings cache holds, as on every other row (a kids profile
-    // asks nothing itself).
-    core.ratings().fill(&mut tiles);
     HomeRow {
         row_id: KIDS_ROW_ID.into(),
         title: "Your shows and movies".into(),
@@ -1170,7 +1078,7 @@ fn shows(policy: &Policy, kind: &str, id: &str, video: &str) -> bool {
 // A kids profile reads every played title and filters before taking 20, so
 // newer plays of titles off the list never crowd out allowed ones. Answers
 // the titles the row shows, for their ratings.
-async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) -> Vec<Title> {
+async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) {
     let library = core.library();
     let policy = core.policy();
     let rpdb_key = core.rpdb_key();
@@ -1217,7 +1125,7 @@ async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) 
     // A new row shows at once from the library, so it never pushes the page
     // down late; artwork and Next Up follow when the metas answer.
     if find_row(&lock(rows), CONTINUE_ROW_ID).is_none() {
-        let mut quick: Vec<(i64, Tile)> = unfinished
+        let quick: Vec<(i64, Tile)> = unfinished
             .iter()
             .map(|item| {
                 (
@@ -1226,7 +1134,6 @@ async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) 
                 )
             })
             .collect();
-        core.ratings().fill(quick.iter_mut().map(|(_, t)| t));
         apply_continue(core, rows, quick);
     }
     // Metas come from the addon cache after the first look; they give the
@@ -1254,10 +1161,7 @@ async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) 
     }))
     .await;
     items.extend(next_up.into_iter().flatten());
-    core.ratings().fill(items.iter_mut().map(|(_, t)| t));
-    let titles = ratings::titles(items.iter().map(|(_, t)| t));
     apply_continue(core, rows, items);
-    titles
 }
 
 /// A video in progress whose torrent starts from what this device keeps
@@ -1337,7 +1241,7 @@ fn tile_for_next(meta: &mq_protocol::MetaItem, next: NextEpisode, rpdb: Option<&
         progress: None,
         video_id: Some(next.video_id),
         rating: imdb_rating(p),
-        ratings: Ratings::of(None, imdb_rating(p).as_deref()),
+        ratings: Ratings::of(imdb_rating(p).as_deref()),
         blurb: None,
         poster_fallback: None,
     }
@@ -1398,7 +1302,7 @@ fn tile_from_continue(
         release_info: Some(caption),
         progress,
         video_id: Some(item.video_id),
-        ratings: Ratings::of(None, preview.and_then(imdb_rating).as_deref()),
+        ratings: Ratings::of(preview.and_then(imdb_rating).as_deref()),
         rating: preview.and_then(imdb_rating),
         blurb: None,
         poster_fallback: None,

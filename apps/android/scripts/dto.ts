@@ -91,7 +91,7 @@ const DEFAULTED = new Map([
   ["Devices.account", "\"\""],
   // The streaming window's no-punch words: an older core says nothing, as on a volume without windows.
   ["VersionsConditions.window", "false"],
-  // IMDb and Rotten Tomatoes side by side: an older core or recording has no scores to show.
+  // The IMDb score: an older core or recording has no score to show.
   ["Tile.ratings", "Ratings()"],
   ["TitleDetails.ratings", "Ratings()"],
   // The subtitle picker (plans/player-polish.md 2): an older core names no language of its own and no fit.

@@ -4,7 +4,7 @@
 
 use crate::Core;
 use crate::live::{FRAME, ListDiff, coalesce};
-use crate::ratings::{Ratings, Scores, credit, title_of};
+use crate::ratings::Ratings;
 use crate::views::playback::{aired, following};
 use eyeball::SharedObservable;
 use eyeball_im::ObservableVector;
@@ -40,17 +40,11 @@ pub struct TitleDetails {
     pub directors: Vec<String>,
     /// The IMDb rating the addon gave, as written ("8.4").
     pub rating: Option<String>,
-    /// The IMDb and Rotten Tomatoes scores to show side by side, as on tiles.
+    /// The IMDb score to show, as on tiles.
     pub ratings: Ratings,
     /// The title's IMDb page, for the IMDb score to link to; null for an id
     /// that is not IMDb's.
     pub imdb_url: Option<String>,
-    /// Who the scores come from, a "Ratings from" row beside "Details from",
-    /// each source named for what it gave ("IMDb and Rotten Tomatoes via
-    /// MDBList", "IMDb from Cinemeta, Rotten Tomatoes from the Rotten
-    /// Tomatoes addon"); null when MDBList and the Rotten Tomatoes addon gave
-    /// nothing.
-    pub ratings_from: Option<String>,
     pub source: String,
     /// Trailers the metadata names (YouTube), first is the main one.
     pub trailers: Vec<Trailer>,
@@ -192,8 +186,6 @@ pub enum TitleUpdate {
 struct State {
     meta: Option<MetaItem>,
     selected_season: Option<u32>,
-    /// What MDBList answered for the title, once known.
-    scores: Option<Scores>,
     /// The subtitles addons' answer, for the video it was asked for.
     captions: Option<(String, Captions)>,
 }
@@ -253,18 +245,11 @@ impl TitleView {
             state: Arc::new(Mutex::new(State {
                 meta: None,
                 selected_season: None,
-                scores: None,
                 captions: None,
             })),
             _tasks: JoinSet::new(),
         };
         if !view.denied {
-            // Taken before the first read of the ratings, so a read of the
-            // lists that ends after it is heard.
-            let listed = core.ratings().listed();
-            let ctx = view.ctx();
-            view._tasks
-                .spawn(crate::ratings::on_listed(listed, move || ctx.rate()));
             view._tasks.spawn(load_meta(view.ctx()));
             view._tasks.spawn(watch_library(view.ctx()));
             view._tasks.spawn(watch_captions(view.ctx()));
@@ -413,22 +398,10 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 }
 
 async fn load_meta(ctx: Ctx) {
-    let title = title_of(&ctx.kind, &ctx.id);
     match ctx.core.fetch_meta(&ctx.kind, &ctx.id).await {
         Ok((meta, source)) => {
-            // The page shows what the ratings cache holds, then what a
-            // lookup brings.
-            let titles: Vec<_> = title.into_iter().collect();
-            let known = ctx.core.ratings().known(&titles);
-            {
-                let mut state = lock(&ctx.state);
-                state.meta = Some(meta);
-                state.scores = titles.first().and_then(|t| known.get(t)).copied();
-            }
+            lock(&ctx.state).meta = Some(meta);
             ctx.render_with_source(&source);
-            if ctx.core.ratings().lookup(&titles).await.is_some() {
-                ctx.rate();
-            }
         }
         Err(reason) => {
             let mut header = ctx.header.get();
@@ -538,23 +511,6 @@ async fn watch_library(ctx: Ctx) {
 }
 
 impl Ctx {
-    /// Puts what holds now on the page's scores: not what a lookup saw, as
-    /// a read of the lists may have ended since. Nothing before the meta.
-    fn rate(&self) {
-        let Some(title) = title_of(&self.kind, &self.id) else {
-            return;
-        };
-        {
-            let mut state = lock(&self.state);
-            if state.meta.is_none() {
-                return;
-            }
-            let known = self.core.ratings().known(std::slice::from_ref(&title));
-            state.scores = known.get(&title).copied();
-        }
-        self.render();
-    }
-
     fn render(&self) {
         let source = self
             .header
@@ -566,12 +522,11 @@ impl Ctx {
     }
 
     fn render_with_source(&self, source: &str) {
-        let (meta, selected, scores, captions) = {
+        let (meta, selected, captions) = {
             let state = lock(&self.state);
             (
                 state.meta.clone(),
                 state.selected_season,
-                state.scores,
                 state.captions.clone(),
             )
         };
@@ -629,7 +584,7 @@ impl Ctx {
 
         let now = mq_library::hlc::now_ms() as i64;
         let (play_target, next_airs) = play_target(&meta, &self.kind, resume, &watched, now);
-        let mut details = details(&meta, source, scores.as_ref());
+        let mut details = details(&meta, source);
         if self.kids {
             // A trailer is a YouTube hand-off: it leaves the app.
             details.trailers.clear();
@@ -801,7 +756,7 @@ fn episode_label(meta: &MetaItem, video_id: &str) -> Option<String> {
     Some(format!("S{}:E{}", info.season, info.episode))
 }
 
-fn details(meta: &MetaItem, source: &str, scores: Option<&Scores>) -> TitleDetails {
+fn details(meta: &MetaItem, source: &str) -> TitleDetails {
     let p = &meta.preview;
     let links = |category: &str| -> Vec<String> {
         p.links
@@ -824,10 +779,9 @@ fn details(meta: &MetaItem, source: &str, scores: Option<&Scores>) -> TitleDetai
         cast: links("Cast"),
         directors: links("Directors"),
         rating: links("imdb").into_iter().next(),
-        ratings: Ratings::of(scores, links("imdb").first().map(String::as_str)),
+        ratings: Ratings::of(links("imdb").first().map(String::as_str)),
         imdb_url: crate::segments::is_imdb(&p.id)
             .then(|| format!("https://www.imdb.com/title/{}/", p.id)),
-        ratings_from: credit(scores, links("imdb").first().map(String::as_str), source),
         source: source.to_owned(),
         trailers: p
             .trailer_streams
