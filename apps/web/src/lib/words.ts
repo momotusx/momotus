@@ -661,11 +661,7 @@ const numbers = (l: ReasonLine): Fields => {
  * than the size you chose" when the user set the limit; a version that may
  * pause because few people share it says so; a window on mobile data says
  * it keeps only a short stretch ahead instead of its minutes. */
-export function lineWords(
-  l: ReasonLine,
-  /** Fields whose parts are left out: what a row's face already says ("seeders", "size"). */
-  without: string[] = [],
-): { tone: Exclude<Tone, "idle">; text: string; details: string } {
+export function lineWords(l: ReasonLine): { tone: Exclude<Tone, "idle">; text: string; details: string } {
   const w = choice.lines[l.kind];
   const text =
     l.kind === "large" && l.chosen && "textChosen" in w
@@ -673,11 +669,15 @@ export function lineWords(
       : l.kind === "mayPause" && l.smallSwarm && "textSmallSwarm" in w
         ? w.textSmallSwarm
         : w.text;
+  return { tone: w.tone as Exclude<Tone, "idle">, text, details: capital(lineParts(l).join(", ")) };
+}
+
+/** A line's details as its parts, each filled, before they are joined: "shared by 89 people", "4 GB". */
+export function lineParts(l: ReasonLine): string[] {
+  const w = choice.lines[l.kind];
   const f = numbers(l);
   const parts = l.kind === "buffer" && l.aheadMin === null && "detailsMobile" in w ? w.detailsMobile : w.details;
-  const kept = parts.filter((p) => !without.some((name) => p.includes(`{${name}}`)));
-  const details = kept.map((d) => part(d, f)).filter((d) => d !== null);
-  return { tone: w.tone as Exclude<Tone, "idle">, text, details: capital(details.join(", ")) };
+  return parts.map((d) => part(d, f)).filter((d): d is string => d !== null);
 }
 
 // ponytail: the title page's old reads (blockedWords, noVersionWords) stay until design-web's title
@@ -700,7 +700,6 @@ export const noVersionWords = {
 export const bestFor = (f: Form) => (f === "tv" ? choice.page.bestTv : f === "phone" ? choice.page.bestPhone : `Best for ${choice.conditions.devices.desktop}`);
 
 /** Words after a size and a comma start in lower case: "12 GB, may start slowly". */
-const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 
 /** Where a version comes from, in plain words ("ready now", "shared by 412 people"); null when not known. */
 function sourceWords(s: VersionStatus): string | null {
@@ -718,18 +717,17 @@ export function rowWords(row: VersionRow, why: string | null = null): string {
   const line = lineWords(row.line);
   const said = why ?? row.onDevice ?? (line.tone === "ok" ? sourceWords(row.status) : null) ?? line.text;
   // With no size first, the line starts with a capital as any line does.
-  return capital([size, lower(said)].filter(Boolean).join(", "));
+  return capital([size, lowerFirst(said)].filter(Boolean).join(", "));
 }
 
-/** The core's details under a row's one line in its sheet, all but the parts that line already said
- * (as Android's sheetDetails): after a quiet face, its size and, for a shared file, the people sharing
- * it; what only the details say stays ("May be ready in your account", "Room for about 7 min ahead in
- * 2.5 GB"). A warning or a dimmed row's face says neither, so their details stay whole. */
+/** The core's details under a row's one line in its sheet, with one rule on every platform (Android's
+ * and Apple's sheetDetails): each part the face (rowWords) already says is left out, the rest stays.
+ * "2 GB, ready now" drops "Ready now" and "2 GB"; "4 GB, shared by 89 people" keeps "May be ready in
+ * your account"; "7.4 GB, on this device" keeps "7.4 GB; Marquee prefers files up to 5 GB". */
 export function sheetDetails(row: VersionRow, why: string | null = null): string | null {
-  const line = lineWords(row.line);
-  if (why || (!row.onDevice && line.tone !== "ok")) return line.details || null;
-  const said = ["size", ...(!row.onDevice && row.status.kind === "torrent" ? ["seeders"] : [])];
-  return lineWords(row.line, said).details || null;
+  const face = rowWords(row, why).toLowerCase();
+  const kept = lineParts(row.line).filter((p) => !face.includes(p.toLowerCase()));
+  return kept.length ? capital(kept.join(", ")) : null;
 }
 
 /** Why nothing can play, and its actions in order (plans/play-every-version.md, the shared Step 3

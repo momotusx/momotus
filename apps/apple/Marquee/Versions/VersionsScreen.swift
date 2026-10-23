@@ -508,7 +508,7 @@ private struct DetailsSheet: View {
             RowFace(row: row, dimmed: dimmed, big: true)
                 .textFont(Theme.type.callout, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.text)
-            ForEach(VersionWords.detailLines(row), id: \.self) { line in
+            ForEach(VersionWords.detailLines(row, dimmed: dimmed?.text), id: \.self) { line in
                 Text(line)
                     .textFont(Theme.type.callout, relativeTo: .callout)
                     .foregroundStyle(Theme.Palette.muted)

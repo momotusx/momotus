@@ -405,7 +405,7 @@ private func row(_ json: String) throws -> VersionRow {
     #expect(row.contains(".accessibilityFocused($rowFocused)"))
     let sheet = try body(of: "private struct DetailsSheet", in: page)
     #expect(sheet.contains("Button(action: play)") && sheet.contains(".accessibilityAddTraits(.isModal)"))
-    #expect(sheet.contains("VersionWords.detailLines(row)"))
+    #expect(sheet.contains("VersionWords.detailLines(row, dimmed: dimmed?.text)"))
     // Its top is what the row shows (badges, language tag, size and warning), then the seeders, the file, the language.
     #expect(sheet.contains("RowFace(row: row, dimmed: dimmed, big: true)"))
     let face = try body(of: "private struct RowFace", in: page)
@@ -589,4 +589,18 @@ private func golden<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
     #expect(VersionWords.lowerFirst("CAM copy") == "CAM copy")
     #expect(VersionWords.lowerFirst("HDR file, screen without HDR") == "HDR file, screen without HDR")
     #expect(VersionWords.lowerFirst("Shared by 3 people") == "shared by 3 people")
+}
+
+@Test func theSheetDropsEachPartItsFaceSaysAndKeepsTheRest() throws {
+    let gib = 1_073_741_824
+    func r(_ line: String, status: String = #"{"kind": "torrent", "seeds": 89}"#, size: Int = 4 * 1_073_741_824, onDevice: String? = nil) throws -> VersionRow {
+        let kept = onDevice.map { #", "onDevice": "\#($0)""# } ?? ""
+        return try JSONDecoder().decode(VersionRow.self, from: Data(#"{"key": "k", "quality": "1080p", "features": [], "sizeBytes": \#(size), "status": \#(status), "via": "Sample Source", "releaseName": "A.mkv", "languages": [], "reasons": [], "group": "best", "failoverCount": 0, "line": \#(line)\#(kept)}"#.utf8))
+    }
+    // The face says "4 GB, shared by 89 people": the account is said only here.
+    #expect(VersionWords.sheetDetails(try r(#"{"kind": "should", "seeders": 89, "sizeBytes": \#(4 * gib), "service": "TorBox"}"#)) == "May be ready in your account")
+    // A ready file: "2 GB, ready now" says both parts.
+    #expect(VersionWords.sheetDetails(try r(#"{"kind": "ready", "service": null, "sizeBytes": \#(2 * gib)}"#, status: #"{"kind": "ready", "service": null}"#, size: 2 * gib)) == "")
+    // On this device: the size limit stays, as the face does not say it.
+    #expect(VersionWords.sheetDetails(try r(#"{"kind": "large", "sizeBytes": \#(4 * gib), "limitBytes": \#(2 * gib), "chosen": false}"#, status: #"{"kind": "direct"}"#, onDevice: "On this device")) == "4 GB; Marquee prefers files up to 2 GB")
 }

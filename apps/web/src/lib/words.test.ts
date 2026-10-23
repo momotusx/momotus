@@ -266,19 +266,23 @@ test("a quality the release does not state is no badge: nothing, never Unknown",
   expect(qualityCell("WEB-DL")).toBe("WEB-DL");
 });
 
-test("the sheet says nothing twice: it drops only what the face said, and keeps the rest", () => {
-  const row = (line: ReasonLine, onDevice: string | null = null) => ({ line, status: { kind: "torrent", seeds: 1204 }, sizeBytes: 2 * GiB, onDevice }) as VersionRow;
-  // "2 GB, shared by 1,204 people" already said "1,204 seeders, 2 GB".
+test("the sheet says nothing twice: it drops each part the face says, and keeps the rest", () => {
+  const row = (line: ReasonLine, onDevice: string | null = null, status: VersionRow["status"] = { kind: "torrent", seeds: 1204 }, sizeBytes = 2 * GiB) =>
+    ({ line, status, sizeBytes, onDevice }) as VersionRow;
+  // "2 GB, shared by 1,204 people" already said "Shared by 1,204 people, 2 GB".
   expect(sheetDetails(row({ kind: "quick", seeders: 1204, sizeBytes: 2 * GiB }))).toBeNull();
   // What only the details say stays: the account, the window ahead.
   expect(sheetDetails(row({ kind: "should", seeders: 1204, sizeBytes: 2 * GiB, service: "TorBox" }))).toBe("May be ready in your account");
-  expect(sheetDetails(row({ kind: "buffer", seeders: 1204, sizeBytes: 40 * GiB, aheadMin: 7, budgetBytes: 2.5 * GiB }))).toBe("Room for about 7 min ahead in 2.5 GB");
-  // "On this device" names no people: the seeders stay, the size goes.
-  expect(sheetDetails(row({ kind: "quick", seeders: 1204, sizeBytes: 2 * GiB }, "On this device"))).toBe("1,204 seeders");
-  // "117 MB, may not start" says no seeders: they follow.
-  expect(sheetDetails(row({ kind: "veryFew", seeders: 2 }))).toBe("2 seeders");
-  // A dimmed row's line says why it is dimmed, so the core's details follow.
-  expect(sheetDetails(row({ kind: "quick", seeders: 1204, sizeBytes: 2 * GiB }), "Won't play here")).toBe("1,204 seeders, 2 GB");
+  expect(sheetDetails(row({ kind: "buffer", seeders: 1204, sizeBytes: 2 * GiB, aheadMin: 7, budgetBytes: 2.5 * GiB }))).toBe("Room for about 7 min ahead in 2.5 GB");
+  // A ready file: "2 GB, ready now" says both parts.
+  expect(sheetDetails(row({ kind: "ready", service: null, sizeBytes: 2 * GiB }, null, { kind: "ready", service: null }))).toBeNull();
+  // "On this device" names no people and no limit: they stay, the size goes.
+  expect(sheetDetails(row({ kind: "quick", seeders: 1204, sizeBytes: 2 * GiB }, "On this device"))).toBe("Shared by 1,204 people");
+  expect(sheetDetails(row({ kind: "large", sizeBytes: 7.4 * GiB, limitBytes: 5 * GiB, chosen: false }, "On this device", { kind: "direct" }, 7.4 * GiB))).toBe("7.4 GB; Marquee prefers files up to 5 GB");
+  // "117 MB, may not start" says no people: they follow.
+  expect(sheetDetails(row({ kind: "veryFew", seeders: 2 }))).toBe("Shared by 2 people");
+  // A dimmed row's line says its size and why it is dimmed: the people follow.
+  expect(sheetDetails(row({ kind: "quick", seeders: 1204, sizeBytes: 2 * GiB }), "Won't play here")).toBe("Shared by 1,204 people");
 });
 
 test("after the colon a word in capitals stays in capitals", () => {

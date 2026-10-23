@@ -365,7 +365,7 @@ class VersionsCopyTest {
         val should = shared(ReasonLine.Should(89, 4 * gib, "TorBox"))
         assertEquals("4 GB, shared by 89 people", VersionsCopy.rowWords(should))
         assertEquals("May be ready in your account", VersionsCopy.sheetDetails(should, null))
-        val buffer = shared(ReasonLine.Buffer(89, 40 * gib, aheadMin = 7, budgetBytes = (2.5 * gib).toLong()))
+        val buffer = shared(ReasonLine.Buffer(89, 4 * gib, aheadMin = 7, budgetBytes = (2.5 * gib).toLong()))
         assertEquals("Room for about 7 min ahead in 2.5 GB", VersionsCopy.sheetDetails(buffer, null))
         // Nothing is left when the face said it all.
         assertEquals("", VersionsCopy.sheetDetails(shared(ReasonLine.Quick(89, 4 * gib)), null))
@@ -384,6 +384,32 @@ class VersionsCopyTest {
         assertEquals("Shared by 89 people, may be ready in your account", VersionsCopy.sheetDetails(unknown, null))
         // A warning face keeps the details whole: they say what it does not.
         assertEquals("Shared by 3 people", VersionsCopy.sheetDetails(shared(ReasonLine.VeryFew(3)), null))
+        // A ready file: the face says "2 GB, ready now", so neither part is said again.
+        val ready =
+            row(sizeBytes = 2 * gib).copy(
+                status = VersionStatus.Ready(null),
+                line =
+                    ReasonLine.Ready(
+                        null,
+                        2 * gib,
+                    ),
+            )
+        assertEquals("2 GB, ready now", VersionsCopy.rowWords(ready))
+        assertEquals("", VersionsCopy.sheetDetails(ready, null))
+        // On this device: the people and the size limit stay, as the face says neither.
+        val kept = shared(ReasonLine.Quick(89, 4 * gib)).copy(onDevice = "On this device")
+        assertEquals("Shared by 89 people", VersionsCopy.sheetDetails(kept, null))
+        val large =
+            row(sizeBytes = (7.4 * gib).toLong()).copy(
+                onDevice = "On this device",
+                line = ReasonLine.Large((7.4 * gib).toLong(), 5 * gib, chosen = false),
+            )
+        assertEquals("7.4 GB; Marquee prefers files up to 5 GB", VersionsCopy.sheetDetails(large, null))
+        // A dimmed row's face says its size and why it is dimmed: the people follow.
+        assertEquals(
+            "Shared by 89 people",
+            VersionsCopy.sheetDetails(shared(ReasonLine.Quick(89, 4 * gib)), EmptyKind.NeedsAccount),
+        )
     }
 
     @Test

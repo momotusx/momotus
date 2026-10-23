@@ -263,6 +263,13 @@ enum StreamChoice {
     /// limit, so a large file is "larger than the size you chose".
     static func lineWords(_ line: ReasonLine, limitChosen: Bool = false) -> LineWords? {
         guard let w = words.lines[line.kind] else { return nil }
+        let details = lineParts(line).joined(separator: ", ")
+        return LineWords(tone: tone(w.tone), text: lineText(w, line, limitChosen: limitChosen), details: capital(details))
+    }
+
+    /// A line's details as its parts, each filled, before they are joined: "shared by 89 people", "4 GB".
+    static func lineParts(_ line: ReasonLine) -> [String] {
+        guard let w = words.lines[line.kind] else { return [] }
         var fields: [String: String?] = [
             "quality": line.quality,
             // Never the service's name: "your account" when the line names one, as for addons.
@@ -283,8 +290,7 @@ enum StreamChoice {
         }
         // A window on mobile data keeps only a short stretch ahead: no minutes.
         let parts = line.kind == "buffer" && line.aheadMin == nil ? w.detailsMobile ?? w.details : w.details
-        let details = parts.compactMap { fill($0, fields) }.joined(separator: ", ")
-        return LineWords(tone: tone(w.tone), text: lineText(w, line, limitChosen: limitChosen), details: capital(details))
+        return parts.compactMap { fill($0, fields) }
     }
 
     /// The line's words: the size limit's own when the user set it, the small

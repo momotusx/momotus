@@ -264,20 +264,18 @@ object VersionsCopy {
         if (words.length > 1 && words[1].isUpperCase()) words else words.replaceFirstChar(Char::lowercase)
 
     /**
-     * The core's details under a row's face in its sheet: all of them, but the parts the face's quiet line already
-     * said, its size and, for a shared file, the people sharing it. What only the details say stays: "May be ready in
-     * your account", "Room for about 7 min ahead in 2.5 GB".
+     * The core's details under a row's face in its sheet, with one rule on every platform: each part the face
+     * ([rowWords]) already says is left out, the rest stays. "2 GB, ready now" drops "Ready now" and "2 GB"; "4 GB, shared
+     * by 89 people" keeps "May be ready in your account"; "7.4 GB, on this device" keeps "7.4 GB; Marquee prefers files
+     * up to 5 GB", one part the face does not say whole.
      */
     fun sheetDetails(
         row: VersionRow,
         why: EmptyKind?,
     ): String {
-        if (why != null) return StreamChoiceCopy.emptyRowLine(why).details
-        if (quiet(row) == null) return StreamChoiceCopy.rowLine(row).details
-        // The face's quiet line names the people exactly when its source is a shared file's ([quiet]).
-        val shared = row.onDevice == null && (row.status as? VersionStatus.Torrent)?.let(::sharedBy) != null
-        val said = setOfNotNull("size", "people".takeIf { shared })
-        return StreamChoiceCopy.line(row.line, without = said).details
+        val face = rowWords(row, why)
+        val kept = StreamChoiceCopy.parts(row.line).filterNot { face.contains(it, ignoreCase = true) }
+        return kept.joinToString(", ").replaceFirstChar(Char::uppercase)
     }
 
     /** A row's details, reserved under it and shown on focus: the release name, the line's details, its languages and sources. */

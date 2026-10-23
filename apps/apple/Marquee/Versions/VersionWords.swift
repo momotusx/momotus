@@ -288,10 +288,20 @@ enum VersionWords {
         [row.releaseName, rowLine(row)?.details ?? "", detail(row)].filter { !$0.isEmpty }.joined(separator: " \u{B7} ")
     }
 
-    /// The iPhone's details sheet under what the row shows: the line's numbers (the seeders), the file, then its
-    /// languages and sources, one per line, as Android's sheet.
-    static func detailLines(_ row: VersionRow) -> [String] {
-        [rowLine(row)?.details ?? "", row.releaseName, detail(row)].filter { !$0.isEmpty }
+    /// The iPhone's details sheet under what the row shows: the core's details its face does not say, the file,
+    /// then its languages and sources, one per line, as Android's sheet.
+    static func detailLines(_ row: VersionRow, dimmed: String? = nil) -> [String] {
+        [sheetDetails(row, dimmed: dimmed), row.releaseName, detail(row)].filter { !$0.isEmpty }
+    }
+
+    /// The core's details under a row's face in its sheet, with one rule on every platform: each part the face
+    /// ([rowWords]) already says is left out, the rest stays. "2 GB, ready now" drops "Ready now" and "2 GB";
+    /// "7.4 GB, on this device" keeps "7.4 GB; Marquee prefers files up to 5 GB".
+    static func sheetDetails(_ row: VersionRow, dimmed: String? = nil) -> String {
+        let face = rowWords(row, dimmed: dimmed).lowercased()
+        let kept = (row.line.map(StreamChoice.lineParts) ?? []).filter { !face.contains($0.lowercased()) }
+        let joined = kept.joined(separator: ", ")
+        return joined.prefix(1).uppercased() + joined.dropFirst()
     }
 
     /// Words that go on a sentence: the first letter in lower case, unless it opens a word in capitals ("CAM", "HDR").
