@@ -32,7 +32,7 @@ import type { SegmentKind } from "../core/generated/SegmentKind";
 import type { SubtitleSize } from "../core/generated/SubtitleSize";
 import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
 import { videoContext } from "../core/video";
-import { autoFocusSoon, goBack, restoreSoon } from "../focus/dom";
+import { autoFocusSoon, goBack, isBackKey, restoreSoon } from "../focus/dom";
 import { form } from "../form";
 import { backThenReplace, entryFrom, historyBase, historyDepth, markBack, takeBack } from "../history";
 import { Loading, type Wait } from "../player/loading";
@@ -135,8 +135,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     backThenReplace(here);
   };
   // "Choose another version" while it loads (plans/play-every-version.md 2e): Versions opens over
-  // the player with an entry of its own (`?versions`). The attempt keeps running under it, paused if
-  // it becomes ready; Back closes it, and a choice on it replaces this play.
+  // the player with an entry of its own (`?versions`). The attempt keeps resolving under it; nothing
+  // plays or sounds; the layer's order holds. Back closes it, and a choice on it replaces this play.
   const location = useLocation();
   const layer = () => new URLSearchParams(location.search).has("versions");
   const layerHref = () => {
@@ -144,17 +144,27 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     q.set("versions", "");
     return `${location.pathname}?${q}`;
   };
+  // The play's own state (its version, where it came from), never the history stamps (`_depth`).
+  const ownState = () => Object.fromEntries(Object.entries((location.state ?? {}) as object).filter(([k]) => !k.startsWith("_")));
+  // Whether this visit pushed the layer's entry: a reload or a link straight to it did not.
+  let pushed = false;
   const openLayer = (e: MouseEvent) => {
     e.preventDefault();
-    // The play's own state (its version, where it came from), never the history stamps (`_depth`).
-    const state = Object.fromEntries(Object.entries((location.state ?? {}) as object).filter(([k]) => !k.startsWith("_")));
-    navigate(layerHref(), { state });
+    pushed = true;
+    navigate(layerHref(), { state: ownState() });
   };
   // ponytail: the browser's own Back (popstate) closes the layer; design-web's pushBack can take it over.
+  // With no entry of ours under it, the layer gives way in place instead.
+  const closeLayer = () => {
+    if (pushed) return history.back();
+    const q = new URLSearchParams(location.search);
+    q.delete("versions");
+    navigate(`${location.pathname}${q.size ? `?${q}` : ""}`, { replace: true, state: ownState() });
+  };
   let picked: string | null = null;
   const pickInLayer = (key: string) => {
     picked = key;
-    history.back();
+    closeLayer();
   };
   // What a play that replaces this one keeps from it (autoplay, Up Next, a
   // move on to another version): that it was opened on Versions via the title.
@@ -417,8 +427,14 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     const timer = setInterval(() => !paused() && report(), PROGRESS_MS);
     // While the controls are hidden, the first press only shows them.
     const onKey = (e: KeyboardEvent) => {
-      // Versions over the player owns the keys.
-      if (layer()) return;
+      // Versions over the player owns the keys; its Back closes it.
+      if (layer()) {
+        if (isBackKey(e)) {
+          e.preventDefault();
+          closeLayer();
+        }
+        return;
+      }
       // Backspace in the subtitle search deletes a letter.
       const typing = e.target instanceof HTMLInputElement && e.target.type !== "range";
       const back = e.key === "Escape" || (e.key === "Backspace" && !typing) || e.key === "GoBack" || e.keyCode === 10009 || e.keyCode === 461;
@@ -502,9 +518,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         return;
       }
       loaded.load();
-      engine.load(u, prev ? engine.position() : start.next(props.startOver ? 0 : (snap()?.resumeMs ?? 0) / 1000));
-      // Ready under Versions: it waits there, paused.
-      if (untrack(layer)) engine.pause();
+      // Ready under Versions: it loads held there, so nothing plays or sounds until the viewer plays it.
+      engine.load(u, prev ? engine.position() : start.next(props.startOver ? 0 : (snap()?.resumeMs ?? 0) / 1000), untrack(layer));
     }),
   );
 
@@ -679,10 +694,13 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     on(
       layer,
       (open) => {
+        const choice = picked;
+        picked = null;
         if (open) return restoreSoon(false);
+        pushed = false;
         // The app's Back marked a Back for a new screen; the path did not change.
         takeBack();
-        if (picked) return playKey(picked);
+        if (choice) return playKey(choice);
         autoFocusSoon(() => document.querySelector<HTMLElement>('[data-f="player:another"]:not([inert])') ?? document.querySelector<HTMLElement>('[data-f="player:toggle"]'));
       },
       { defer: true },
@@ -860,6 +878,13 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   });
   const another = () => late() && wait() === "start";
 
+  // Laid out from the start, hidden and inert until the offer, so nothing moves and nothing focuses it.
+  const anotherButton = () => (
+    <A class="btn ld-another" classList={{ shown: another() }} href={layerHref()} on:click={openLayer} data-f="player:another" inert={!another()}>
+      <Layers aria-hidden />
+      {nextVersion.another}
+    </A>
+  );
   return (
     <>
     <div
@@ -868,7 +893,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       data-scheme="dark"
       data-subsize={prefs.state.data?.subtitleSize ?? "medium"}
       // Not idle while the loading screen waits: Back, its one control, stays.
-      classList={{ idle: !osd() && !!url() && wait() !== "start", started: started(), paused: pausedNow(), loading: wait() === "start" }}
+      classList={{ idle: !osd() && !!url() && wait() !== "start", started: started(), paused: pausedNow(), loading: wait() === "start", stalling: wait() === "stall" }}
       onPointerMove={wake}
       onPointerDown={(e) => {
         // While the controls are hidden, a click only brings them back.
@@ -916,19 +941,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         name={ctx.details()?.name}
         background={ctx.details()?.background}
         lines={waitLines()}
-        action={
-          <A
-            class="btn ld-another"
-            classList={{ shown: another() }}
-            href={layerHref()}
-            on:click={openLayer}
-            data-f="player:another"
-            inert={!another()}
-          >
-            <Layers aria-hidden />
-            {nextVersion.another}
-          </A>
-        }
+        action={form() === "tv" ? anotherButton() : undefined}
       />
       <p class="sr" aria-live="polite">
         {another() ? nextVersion.anotherReady : ""}
@@ -939,9 +952,13 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       <header class="ptitle">
         {/* A remote has Back; a desktop and a phone have it here, in every state. */}
         <Show when={form() !== "tv"}>
-          <button class="pback" data-f="player:leave" aria-label="Back" onClick={goBack}>
-            <ArrowLeft aria-hidden />
-          </button>
+          {/* Choose another version sits beside Back here (under the stage line on TV): Tab reaches it after Back. */}
+          <div class="pback-row">
+            <button class="pback" data-f="player:leave" aria-label="Back" onClick={goBack}>
+              <ArrowLeft aria-hidden />
+            </button>
+            {anotherButton()}
+          </div>
         </Show>
         <h1>{ctx.details()?.name ?? ""}</h1>
         <Show when={ctx.label()}>{(l) => <p>{l()}</p>}</Show>
@@ -1342,7 +1359,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     </div>
       <Show when={layer()}>
         <div class="vlayer">
-          <VersionsPage kind={props.kind} id={props.id} videoId={props.videoId} retry={props.retry} onPlay={pickInLayer} />
+          <VersionsPage kind={props.kind} id={props.id} videoId={props.videoId} binge={props.binge} retry={props.retry} onPlay={pickInLayer} onBack={closeLayer} hold />
         </div>
       </Show>
     </>

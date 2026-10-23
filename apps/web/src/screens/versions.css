@@ -57,12 +57,9 @@
 .vgroup h3 { flex: 1; display: flex; justify-content: space-between; font: 600 var(--type-caption) / 1 var(--font-text); letter-spacing: .1em; text-transform: uppercase; }
 .vgroup h3 .num { color: var(--muted); }
 .vghead .fold.top { margin: 0; height: 44px; }
-/* The paint skip sits on a padded slot around each row, so the focus ring and
- * the TV lift (scale 1.03 of the row) are never clipped; its negative margin
- * keeps the rows where they were. */
-/* The placeholder is the drawn slot's height per form, measured (TV 106, desktop 66, phone 72). */
-.vslot { content-visibility: auto; contain-intrinsic-size: auto 106px; padding: 6px 24px; margin: -6px -24px; }
-[data-form="desktop"] .vslot { contain-intrinsic-size: auto 66px; }
+/* No paint skip on the rows: with 400 rows it opened slower (64 against 40 ms) and moved rows on a
+ * scroll to the end and back (bench/versions-ux/web-perf.jsonl), and it clipped the ring and the TV
+ * lift. Nothing between a row and the list clips, so the ring and the lift show whole. */
 .vslot:focus-within { position: relative; z-index: 1; }
 .vrow { width: 100%; min-height: 64px; padding: 10px 22px; border-radius: var(--radius-m); border-bottom: 1px solid var(--line);
   font: 500 var(--type-callout) / 1.25 var(--font-text); transform-origin: center; }
@@ -128,7 +125,6 @@
 [data-form="phone"] .vrow .chips span { padding: 3px 6px; font-size: 11px; }
 [data-form="phone"] .vrow .more { display: none; }
 [data-form="phone"] .vghead { padding: 0 6px 0 10px; margin: 14px 0 4px; min-height: 36px; }
-[data-form="phone"] .vslot { contain-intrinsic-size: auto 72px; padding: 4px 8px; margin: -4px -8px; }
 [data-form="phone"] .fold { height: 40px; padding: 0 8px; }
 [data-form="phone"] .pick .blocked.acts { display: grid; gap: 8px; width: 100%; }
 [data-form="phone"] .pick .blocked .btn { width: 100%; justify-content: center; }

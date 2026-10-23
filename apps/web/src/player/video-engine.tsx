@@ -126,7 +126,7 @@ export function createVideoEngine(events: EngineEvents): Engine {
     waiting,
     rate,
     tracks,
-    load(url, startSec) {
+    load(url, startSec, hold = false) {
       if (onMetadata) video.removeEventListener("loadedmetadata", onMetadata);
       start.set(startSec);
       video.src = url;
@@ -139,7 +139,8 @@ export function createVideoEngine(events: EngineEvents): Engine {
       };
       onMetadata = applyStart;
       video.addEventListener("loadedmetadata", applyStart, { once: true });
-      play();
+      if (hold) setPaused(true);
+      else play();
     },
     play,
     pause: () => video?.pause(),

@@ -56,8 +56,9 @@ export interface Engine {
   waiting: Accessor<boolean>;
   rate: Accessor<number>;
   tracks: Accessor<Track[]>;
-  /** A new source (first start or failover), from `startSec`, then plays. */
-  load(url: string, startSec: number): void;
+  /** A new source (first start or failover), from `startSec`, then plays unless `hold`: held, it
+   * loads and shows its first frame but never plays or sounds until `play`. */
+  load(url: string, startSec: number, hold?: boolean): void;
   play(): void;
   pause(): void;
   toggle(): void;

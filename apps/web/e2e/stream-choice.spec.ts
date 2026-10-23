@@ -629,22 +629,53 @@ test.describe("Versions", () => {
     await page.context().close();
   });
 
-  test("the paint skip sits on a padded slot, never on the row: the focus ring is never clipped; its placeholder is the drawn row's height", async ({ browser }) => {
+  test("a row is named by its version and described by its details: the release name is never in its name", async ({ browser }) => {
+    const page = await device(browser, "desktop", PORTS.bridge);
+    await page.goto(path("desktop"));
+    const row = await firstRow(page);
+    const release = await row.locator(".more").textContent();
+    expect(release).toMatch(/\.webm/);
+    await expect(row).not.toHaveAccessibleName(/\.webm/);
+    await expect(row).toHaveAccessibleDescription(release ?? "");
+    // One node per row for the reader: the list item holds the row button and nothing else.
+    await expect(page.locator(".vslot").first()).toMatchAriaSnapshot(`
+      - listitem:
+        - button /^SD/
+    `);
+    await page.context().close();
+  });
+
+  test("nothing between a row and its list clips: the ring's outer pixel and the TV lift show whole", async ({ browser }) => {
     for (const form of ["tv", "desktop", "phone"] as const) {
       const page = await device(browser, form, PORTS.bridge);
       await page.goto(path(form));
       const row = await firstRow(page);
-      const css = await row.evaluate((r) => {
-        const slot = r.parentElement as HTMLElement;
-        const s = getComputedStyle(slot);
-        return { slot: s.contentVisibility, row: getComputedStyle(r).contentVisibility, pad: Math.min(...["paddingTop", "paddingBottom", "paddingLeft", "paddingRight"].map((k) => Number.parseFloat(s[k as "paddingTop"]))) , height: slot.getBoundingClientRect().height, placeholder: Number.parseFloat(s.containIntrinsicHeight.replace("auto", "")) };
+      // Focus from the keyboard, so the ring (or on TV the lift) is drawn.
+      await page.keyboard.press("Shift");
+      await row.focus();
+      const clip = await row.evaluate((r) => {
+        const s = getComputedStyle(r);
+        // The ring's outer edge: its width plus its offset (none on TV, where the row lifts instead).
+        const ring = s.outlineStyle === "none" ? 0 : Number.parseFloat(s.outlineWidth) + Number.parseFloat(s.outlineOffset);
+        const b = r.getBoundingClientRect();
+        const outer = { left: b.left - ring, right: b.right + ring, top: b.top - ring, bottom: b.bottom + ring };
+        const clippers: string[] = [];
+        let inside = true;
+        for (let p = r.parentElement; p && p !== document.body; p = p.parentElement) {
+          const c = getComputedStyle(p);
+          const clips = c.overflowX !== "visible" || c.overflowY !== "visible" || c.contentVisibility === "auto" || /paint|strict|content/.test(c.contain);
+          if (!clips) continue;
+          clippers.push(p.className);
+          const q = p.getBoundingClientRect();
+          if (outer.left < q.left || outer.right > q.right) inside = false;
+          // The list scrolls: its first row's ring may only meet its top and bottom when scrolled there.
+          if (!p.classList.contains("alist") && (outer.top < q.top || outer.bottom > q.bottom)) inside = false;
+        }
+        return { ring, inside, clippers };
       });
-      expect(css.slot).toBe("auto");
-      expect(css.row).not.toBe("auto");
-      // At least the 4 px ring (and on TV the row's 1.03 lift sideways).
-      expect(css.pad).toBeGreaterThanOrEqual(4);
-      // A row not drawn yet holds the space a drawn one takes (measured per form), so the scroll never jumps.
-      expect(Math.abs(css.height - css.placeholder)).toBeLessThanOrEqual(1);
+      if (form === "desktop") expect(clip.ring).toBe(8);
+      expect(clip.clippers.join(" ")).not.toMatch(/vslot|vgroup/);
+      expect(clip.inside, `${form}: ${clip.clippers.join(", ")}`).toBe(true);
       // No breadcrumb and no column heads (plans/versions-web-spec.md 3.1 item 6), on every form.
       await expect(page.locator(".crumbs, nav[aria-label=Breadcrumb]")).toHaveCount(0);
       await expect(page.locator(".thead")).toHaveCount(0);

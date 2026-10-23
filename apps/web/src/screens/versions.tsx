@@ -21,7 +21,7 @@ import type { ReasonLine } from "../core/generated/ReasonLine";
 import type { VersionRow } from "../core/generated/VersionRow";
 import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
 import { videoContext } from "../core/video";
-import { goBack } from "../focus/dom";
+import { focusEl, goBack } from "../focus/dom";
 import { form } from "../form";
 import { bytes, decoded, playPath, playState, releaseParts, titlePath } from "../lib/format";
 import { entryFrom } from "../history";
@@ -115,12 +115,14 @@ function scrollerOf(el: HTMLElement): HTMLElement {
 }
 
 const languages = (r: VersionRow) => r.languages.map(languageName).join(", ");
-const subLine = (r: VersionRow) => [languages(r) || null, r.failoverCount > 0 ? `${r.failoverCount + 1} sources` : null].filter(Boolean).join(", ") || "Language not stated";
+const subLine = (r: VersionRow) => [languages(r) || null, r.failoverCount > 0 ? `${r.failoverCount + 1} sources` : null].filter(Boolean).join(", ");
 
-/** `onPlay`: the player's layer takes the choice (it replaces the paused play); else a new play opens. */
-export function VersionsPage(props: { kind: string; id: string; videoId: string; retry: () => void; onPlay?: (key: string) => void }) {
+/** The player's layer: `onPlay` takes the choice (it replaces the play under it), `onBack` closes it, `hold`
+ * keeps the order the rows had when it opened. Else a choice opens a new play and Back leaves. */
+export function VersionsPage(props: { kind: string; id: string; videoId: string; retry: () => void; binge?: string; onPlay?: (key: string) => void; onBack?: () => void; hold?: boolean }) {
   const navigate = useNavigate();
-  const ctx = videoContext(props.kind, props.id, props.videoId);
+  // The player's layer shares the play's versions view (its binge group), never a second one.
+  const ctx = videoContext(props.kind, props.id, props.videoId, props.binge);
   createEffect(() => {
     const name = ctx.label() ?? ctx.details()?.name;
     if (name) document.title = `Versions · ${name} · Marquee`;
@@ -176,7 +178,18 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
   // group order, so a late addon or a re-rank never rebuilds them: the
   // focused row keeps its element.
   const listed = () => (dimmed() ? empty()?.rows : snap()?.rows) ?? [];
-  const rowsOf = (g: Group) => listed().filter((r) => r.group === g);
+  // Over the player (`hold`), each section keeps the order it showed when the layer opened; keys
+  // that arrive later go after it, so nothing moves under the viewer while the attempt resolves.
+  const held = new Map<Group, string[]>();
+  const rowsOf = (g: Group) => {
+    const rows = listed().filter((r) => r.group === g);
+    if (!props.hold) return rows;
+    const by = new Map(rows.map((r) => [r.key, r]));
+    const kept = (held.get(g) ?? []).filter((k) => by.has(k));
+    const order = [...kept, ...rows.map((r) => r.key).filter((k) => !kept.includes(k))];
+    held.set(g, order);
+    return order.map((k) => by.get(k) as VersionRow);
+  };
   const toggle = (g: Group) => {
     const next = new Set(open());
     if (next.has(g)) next.delete(g);
@@ -188,7 +201,8 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
   // Show all: the section opens and the focus goes to its first row that was hidden.
   const unfold = (g: Group) => {
     toggle(g);
-    at(`v:${rowsOf(g)[SHOWN]?.key ?? ""}`)?.focus();
+    const row = at(`v:${rowsOf(g)[SHOWN]?.key ?? ""}`);
+    if (row) focusEl(row);
   };
   // Show fewer: the section folds and the focus goes to its bottom toggle, with no jump: the bottom
   // toggle stays where it was pressed, or, pressed from the pinned heading, the section's top stays
@@ -273,7 +287,7 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
                   <RefreshCw aria-hidden />
                   Try again
                 </button>
-                <button class="btn" data-f="versions:back" onClick={goBack}>
+                <button class="btn" data-f="versions:back" onClick={() => (props.onBack ?? goBack)()}>
                   <ArrowLeft aria-hidden />
                   Back
                 </button>
@@ -303,7 +317,7 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
                       // The line is the header's status line; here, the state's actions (the shared table).
                       <div class="blocked acts">
                         <EmptyActs empty={e()} at="versions" onVersions retry={props.retry} play={play} />
-                        <button class="btn" classList={{ primary: lone() }} data-f="versions:back" data-autofocus={lone() ? "" : undefined} onClick={goBack}>
+                        <button class="btn" classList={{ primary: lone() }} data-f="versions:back" data-autofocus={lone() ? "" : undefined} onClick={() => (props.onBack ?? goBack)()}>
                           <ArrowLeft aria-hidden />
                           {versionsWords.back}
                         </button>
@@ -374,12 +388,12 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
                     <Play aria-hidden class="fill" />
                     Play this version
                   </button>
-                  <p class="fail">
-                    <RefreshCw aria-hidden />
-                    {p().failoverCount > 0
-                      ? `${p().failoverCount + 1} sources. If one fails, the next starts on its own.`
-                      : "One source for this release."}
-                  </p>
+                  <Show when={p().failoverCount > 0}>
+                    <p class="fail">
+                      <RefreshCw aria-hidden />
+                      {`${p().failoverCount + 1} sources. If one fails, the next starts on its own.`}
+                    </p>
+                  </Show>
                 </>
               )}
             </Show>
@@ -435,12 +449,11 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
                         </div>
                         <div id={`vl-${g}`} role="list" aria-labelledby={`vg-${g}`}>
                           <For each={shown()}>
-                            {(r) => (
-                              // The paint skip sits on this padded slot, not on the row, so the
-                              // focus ring and the TV lift are never clipped.
+                            {(r, i) => (
                               <div class="vslot" role="listitem">
                                 <button
                                   class="vrow"
+                                  aria-describedby={`vd-${g}-${i()}`}
                                   classList={{ open: opened() === r.key, dim: dimmed() }}
                                   data-f={`v:${r.key}`}
                                   aria-expanded={form() === "phone" ? opened() === r.key : undefined}
@@ -465,9 +478,15 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
                                       </span>
                                     )}
                                   </Show>
-                                  {/* Reserved in every row: focus or hover changes only its opacity. */}
-                                  <span class="more">{detailsLine(r)}</span>
+                                  {/* Reserved in every row: focus or hover changes only its opacity. Seen only: the
+                                      reader gets the same words as the row's description (hidden, outside its name). */}
+                                  <span class="more" aria-hidden="true">
+                                    {detailsLine(r)}
+                                  </span>
                                 </button>
+                                <span id={`vd-${g}-${i()}`} hidden>
+                                  {detailsLine(r)}
+                                </span>
                                 <Show when={form() === "phone" && opened() === r.key}>
                                   <div class="vrow-open">
                                     <Show when={!r.onDevice && lineWords(r.line).details}>
@@ -476,7 +495,7 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
                                     <p class="rel">
                                       <Release name={r.releaseName} />
                                     </p>
-                                    <p class="sub">{subLine(r)}</p>
+                                    <Show when={subLine(r)}>{(l) => <p class="sub">{l()}</p>}</Show>
                                     <button class="btn" data-f={`vplay:${r.key}`} onClick={() => play(r.key)}>
                                       <Play aria-hidden class="fill" />
                                       Play this version

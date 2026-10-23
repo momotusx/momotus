@@ -326,6 +326,9 @@ test("the loading screen offers Choose another version at 20 s: laid out from th
     await expect(button).toBeVisible();
     expect(await button.evaluate((b) => (b as HTMLElement).inert)).toBe(false);
     await expect(said).toHaveText("Still loading. Choose another version is available");
+    // Under the stage line on TV; beside Back on a desktop, the next Tab stop after it.
+    if (form === "tv") expect(await button.evaluate((b) => !!b.closest(".ld"))).toBe(true);
+    else expect(await button.evaluate((b) => b.previousElementSibling?.getAttribute("data-f"))).toBe("player:leave");
     // Nothing moved, and it did not take the focus.
     expect(await rects()).toEqual(at);
     expect(await active()).not.toBe("player:another");
@@ -381,12 +384,76 @@ test("the loading screen offers Choose another version at 20 s: laid out from th
     await expect.poll(() => page.evaluate(() => !!document.querySelector("video")?.currentSrc), { timeout: 30_000 }).toBe(true);
     await expect.poll(() => page.evaluate(() => (document.querySelector("video")?.readyState ?? 0) >= 2), { timeout: 30_000 }).toBe(true);
     await page.waitForTimeout(1_000);
+    // Nothing played or sounded under the layer: not one frame of media time went by.
+    const played = () => page.evaluate(() => document.querySelector("video")?.played.length ?? -1);
     expect(await paused()).toBe(true);
+    expect(await played()).toBe(0);
     await back();
     await expect(page.locator(".ld.on")).toHaveCount(0);
     expect(await paused()).toBe(true);
+    expect(await played()).toBe(0);
     await expect(page.locator('[data-f="player:toggle"]')).toBeVisible();
     if (form === "tv") await expect.poll(active).toBe("player:toggle");
     await context.close();
   }
+});
+
+test("Versions over a binge play: it shares the play's versions view, its order holds, and a reload on it closes in place", async ({ browser }) => {
+  hold();
+  let flip = false;
+  const { context, commands, repush } = await patchedContext(browser, LOADING_PORT, { viewport: VIEWPORTS.desktop }, (view, s) => {
+    if (view === "playback" && s) return { ...s, chooseAnother: true };
+    const first = s?.rows?.[0] ?? s?.recommended;
+    if (view !== "versions" || !first) return s;
+    // Three versions; later the core ranks them the other way round and finds a fourth.
+    const rows = [0, 1, 2].map((i) => ({ ...first, key: `${first.key}#${i}`, group: "best" }));
+    return { ...s, recommended: null, rows: flip ? [{ ...first, key: `${first.key}#new`, group: "best" }, ...rows.reverse()] : rows };
+  });
+  const page = await context.newPage();
+  await page.goto("/play/movie/mqlo/mqlo?form=desktop&binge=grp");
+  await mute(page);
+  const button = page.locator('[data-f="player:another"]');
+  // The core's offer (its 20 s).
+  await expect(button).toBeVisible({ timeout: 40_000 });
+  const from = commands.length;
+  await button.click();
+  const layer = page.locator(".vlayer");
+  await expect(layer).toBeVisible();
+  await expect(page).toHaveURL(/binge=grp.*versions|versions.*binge=grp/);
+  // The same view as the play's: opening the layer closes no versions view.
+  await page.locator(".vrow").first().waitFor();
+  expect(commands.slice(from).filter((c) => c.view === "versions" && c.command === null)).toEqual([]);
+  // The order holds while the layer is open; the newcomer goes after the rows already shown.
+  const order = () => page.locator(".vrow").evaluateAll((rs) => rs.map((r) => (r as HTMLElement).dataset.f?.split("#")[1]));
+  expect(await order()).toEqual(["0", "1", "2"]);
+  flip = true;
+  repush("versions");
+  await page.locator('[data-f^="fold:"]').first().click();
+  await expect.poll(order).toEqual(["0", "1", "2", "new"]);
+  // A reload on the layer: no entry of ours under it, so Back closes it in place and stays on the play,
+  // and the browser's own Back after that leaves the play as usual.
+  await page.reload();
+  await mute(page);
+  await expect(layer).toBeVisible({ timeout: 30_000 });
+  await page.keyboard.press("Escape");
+  await expect(layer).toHaveCount(0);
+  await expect(page).toHaveURL(/\/play\/movie\/mqlo\/mqlo\?form=desktop&binge=grp$/);
+  // A link straight to the layer in a new tab (no entry before it): Back closes it in place, and a
+  // choice replaces the play in place too.
+  const deep = await context.newPage();
+  await deep.goto("/play/movie/mqlo/mqlo?form=desktop&binge=grp&versions=");
+  await mute(deep);
+  const deepLayer = deep.locator(".vlayer");
+  await expect(deepLayer).toBeVisible({ timeout: 30_000 });
+  await deep.keyboard.press("Escape");
+  await expect(deepLayer).toHaveCount(0);
+  await expect(deep).toHaveURL(/\/play\/movie\/mqlo\/mqlo\?form=desktop&binge=grp$/);
+  await deep.goto("/play/movie/mqlo/mqlo?form=desktop&binge=grp&versions=");
+  const chosen = (await deep.locator(".vrow").first().getAttribute("data-f", { timeout: 30_000 }))?.slice(2);
+  await deep.locator(".vrow").first().click();
+  await expect(deepLayer).toHaveCount(0);
+  await expect(deep).toHaveURL(/\/play\/movie\/mqlo\/mqlo\?(form=desktop&)?binge=grp$/);
+  expect(await deep.evaluate(() => (history.state as { key?: string } | null)?.key)).toBe(chosen);
+  release();
+  await context.close();
 });

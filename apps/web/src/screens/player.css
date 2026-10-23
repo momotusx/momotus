@@ -63,9 +63,13 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 .picon svg { width: 32px; height: 32px; }
 .pvol { width: 160px; accent-color: var(--primary); }
 /* Back, above the title on a desktop and a phone. */
+.pback-row { display: flex; align-items: center; gap: 20px; margin-bottom: 18px; }
+.pback-row .pback { margin-bottom: 0; }
 .pback { width: 68px; height: 68px; margin-bottom: 18px; border-radius: 50%; display: grid; place-items: center; color: var(--text); background: var(--glass); }
 .pback svg { width: 34px; height: 34px; }
+[data-form="phone"] .pback-row { gap: 12px; margin-bottom: 10px; }
 [data-form="phone"] .pback { width: 44px; height: 44px; margin-bottom: 10px; }
+[data-form="phone"] .pback-row .pback { margin-bottom: 0; }
 [data-form="phone"] .pback svg { width: 24px; height: 24px; }
 .round { position: relative; width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center; color: var(--text);
   background: var(--glass); -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)); backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
@@ -183,7 +187,7 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
    * row between the bar's two ends, not out to the screen's edges. */
   [data-form="phone"] .ptitle { display: grid; grid-template-columns: auto 1fr; column-gap: 14px; align-items: center; }
   [data-form="phone"] .ptitle > * { grid-column: 2; }
-  [data-form="phone"] .ptitle > .pback { grid-column: 1; grid-row: 1; margin-bottom: 0; }
+  [data-form="phone"] .ptitle > .pback-row { grid-column: 1; grid-row: 1; margin-bottom: 0; }
   [data-form="phone"] .ptitle > h1 { grid-row: 1; }
   [data-form="phone"] .pacts { padding: 0 62px; }
 }
@@ -249,6 +253,9 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 .ld-act { pointer-events: auto; }
 .ld-another { visibility: hidden; }
 .ld-another.shown { visibility: inherit; }
+/* Beside Back (desktop, phone) only while it waits: its room is kept from the wait's start, never after it. */
+.ptitle .ld-another { display: none; }
+.player-scr:is(.loading, .stalling) .ptitle .ld-another { display: inline-flex; }
 .ld-mark > * { grid-area: 1 / 1; }
 .ld-faint { opacity: .2; }
 .ld-solid { -webkit-mask-image: linear-gradient(90deg, #000 48.54%, transparent 51.46%); mask-image: linear-gradient(90deg, #000 48.54%, transparent 51.46%);
@@ -272,7 +279,7 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 @keyframes ld-pulse { from { opacity: 1; transform: none; } to { opacity: .78; transform: scale(1.025); } }
 @media (prefers-reduced-motion: reduce) { .ld.on .ld-mark { animation: none; } }
 /* Until the first frame the loading screen has Back alone (off the TV). */
-.player-scr.loading .ptitle > :not(.pback), .player-scr.loading .clock, .player-scr.loading .osd-top, .player-scr.loading .osd-bot { visibility: hidden; }
+.player-scr.loading .ptitle > :not(.pback-row), .player-scr.loading .clock, .player-scr.loading .osd-top, .player-scr.loading .osd-bot { visibility: hidden; }
 
 /* The subtitle picker (plans/player-polish.md 2.4, player/subtitle-picker.tsx),
  * the player's strong glass panel over the picture. TV: two columns, the
