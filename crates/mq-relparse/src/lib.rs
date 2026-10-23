@@ -135,6 +135,21 @@ mod tests {
         );
     }
 
+    /// "Hi10P" with no codec token is H.264; a named codec stays as named.
+    #[test]
+    fn hi10p_without_a_codec_is_h264() {
+        let r = parse("[Group] Spirited Away (2001) [BD 1080p Hi10P FLAC].mkv");
+        assert_eq!((r.codec, r.bit_depth), (VideoCodec::H264, Some(10)));
+        assert_eq!(
+            parse("Spirited.Away.2001.1080p.Hi10P.HEVC-GRP").codec,
+            VideoCodec::H265
+        );
+        assert_eq!(
+            parse("Spirited.Away.2001.1080p.BluRay-GRP").codec,
+            VideoCodec::Unknown
+        );
+    }
+
     #[test]
     fn additions_beyond_ptt() {
         assert_eq!(

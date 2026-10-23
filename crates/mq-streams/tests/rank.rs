@@ -2289,3 +2289,35 @@ fn ten_bit_h264_is_offered_unless_the_device_says_no() {
     };
     assert_eq!(unplayable(&no_hevc10), 2, "10-bit HEVC as before");
 }
+
+/// A Hi10P name with no codec token is 10-bit H.264 all the same: a device that says
+/// `ten_bit_h264: false` is not offered it (plans/apple-second-engine.md 2.1).
+#[test]
+fn a_hi10p_name_without_a_codec_is_unplayable_without_ten_bit_h264() {
+    let prefs = StreamPrefs::default();
+    let caps = DeviceCaps {
+        has_fallback_engine: false,
+        ten_bit_h264: false,
+        ..DeviceCaps::basic_1080p()
+    };
+    let input = RankInput {
+        caps: &caps,
+        prefs: &prefs,
+        target: &target(),
+        last_binge_group: None,
+        kids: None,
+        conditions: engine(),
+    };
+    let ranked = rank(
+        streams(
+            "torrentio",
+            0,
+            json!({ "streams": [
+                { "name": "Torrentio\n1080p", "title": "[GROUP] The Last of Us S02E03 [BD 1080p Hi10P FLAC].mkv\n👤 300 💾 3.9 GB",
+                  "infoHash": "dddddddddddddddddddddddddddddddddddddddd", "fileIdx": 0 }
+            ]}),
+        ),
+        &input,
+    );
+    assert_eq!(hidden(&ranked, HideReason::Unplayable), 1);
+}

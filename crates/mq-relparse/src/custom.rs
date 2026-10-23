@@ -67,6 +67,17 @@ pub(crate) fn bit_depth(ctx: &mut Ctx) -> Option<Hit> {
     None
 }
 
+static HI10P: LazyLock<Regex> = LazyLock::new(|| re(r"\bhi10p?\b", true));
+
+/// "Hi10P" is a 10-bit H.264 profile: a name with it and no codec token is H.264, so a device that cannot
+/// decode it is not offered the row (run after the codec rules).
+pub(crate) fn hi10p_codec(ctx: &mut Ctx) -> Option<Hit> {
+    if !ctx.has(F::Codec) && HI10P.is_match(&ctx.title) {
+        ctx.set(F::Codec, Val::Str("avc".to_string()));
+    }
+    None
+}
+
 static VOLUME: LazyLock<Regex> = LazyLock::new(|| re(r"\bvol(?:ume)?[. -]*(\d{1,2})", true));
 
 pub(crate) fn volumes(ctx: &mut Ctx) -> Option<Hit> {

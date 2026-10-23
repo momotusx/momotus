@@ -191,6 +191,7 @@ pub(crate) static TABLE: LazyLock<Table> = LazyLock::new(|| {
         rule(F::Codec, r"\b(?:mpe?g\d*)\b", Tf::Val(r"mpeg")).ci().rm().again().into(),
         rule(F::Codec, r"\bvp9\b", Tf::Val(r"vp9")).ci().rm().into(),
         rule(F::Codec, r"\bvc-?1\b", Tf::Val(r"vc1")).ci().rm().into(),
+        Handler::Func(custom::hi10p_codec),
         rule(F::Channels, r"5[\.\s]1(?:ch|-S\d+)?\b", Tf::Uniq(r"5.1")).ci().rm().again().into(),
         rule(F::Channels, r"\b(?:x[2-4]|5[\W]1(?:x[2-4])?)\b", Tf::Uniq(r"5.1")).ci().rm().again().into(),
         rule(F::Channels, r"\b7[\.\- ]1(.?ch(annel)?)?\b", Tf::Uniq(r"7.1")).ci().rm().again().into(),
