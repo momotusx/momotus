@@ -486,9 +486,7 @@ private fun SourceRow(
         infos[row.key] = info
         onDispose { if (infos[row.key] === info) infos.remove(row.key) }
     }
-    val colors = Marquee.colors
     val line = why?.let(StreamChoiceCopy::emptyRowLine) ?: StreamChoiceCopy.rowLine(row)
-    val tag = VersionsCopy.languageTag(row)
     val quiet = VersionsCopy.quiet(row).takeIf { why == null }
     val spoken = listOfNotNull(VersionsCopy.rowSpoken(row), line.text.takeIf { quiet == null }).joinToString(", ")
     // The rows of a page where none plays (the core's empty rows) are dimmed, say [why] in place of their line,
@@ -517,18 +515,7 @@ private fun SourceRow(
                     .padding(horizontal = 12.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    BadgeRow(VersionsCopy.badges(row).map { it.text to badgeLook(it.look) })
-                    if (tag != null) LanguageTag(tag)
-                }
-                if (quiet != null) {
-                    MqText(VersionsCopy.rowWords(row), role = TextRole.Callout, color = colors.muted, maxLines = 2)
-                } else {
-                    ToneWord(VersionsCopy.rowWords(row, why), tone(line.tone), icon = why?.let(::whyIcon))
-                }
+                RowFace(row, why)
             }
             Box(Modifier.size(48.dp).clearAndSetSemantics {}, contentAlignment = Alignment.Center) {
                 RoundButton(Icons.Info, StreamChoiceCopy.DETAILS, onInfo, focusRequester = info)
@@ -538,8 +525,34 @@ private fun SourceRow(
 }
 
 /**
- * A row's details in a sheet from the foot (plans/versions-android-spec.md, section 3): its badges, the release name,
- * the people sharing it, its languages and sources, and its own Play. Back and a tap outside close it.
+ * What a row shows, the same in the row and atop its details sheet, so the sheet drops nothing: its badges and
+ * language, then its one line (the size first, then its source, the core's warning or why it is dimmed).
+ */
+@Composable
+private fun RowFace(
+    row: VersionRow,
+    why: EmptyKind?,
+) {
+    val line = why?.let(StreamChoiceCopy::emptyRowLine) ?: StreamChoiceCopy.rowLine(row)
+    val tag = VersionsCopy.languageTag(row)
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BadgeRow(VersionsCopy.badges(row).map { it.text to badgeLook(it.look) })
+        if (tag != null) LanguageTag(tag)
+    }
+    if (VersionsCopy.quiet(row) != null && why == null) {
+        MqText(VersionsCopy.rowWords(row), role = TextRole.Callout, color = Marquee.colors.muted, maxLines = 2)
+    } else {
+        ToneWord(VersionsCopy.rowWords(row, why), tone(line.tone), icon = why?.let(::whyIcon))
+    }
+}
+
+/**
+ * A row's details in a sheet from the foot (plans/versions-android-spec.md, section 3): what the row shows first
+ * ([RowFace]: its badges, its size and its warning), then the people sharing it, the release name, its languages and
+ * sources, and its own Play. Back and a tap outside close it.
  */
 @Composable
 private fun DetailsSheet(
@@ -576,7 +589,7 @@ private fun DetailsSheet(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
         ) {
-            BadgeRow(VersionsCopy.badges(row).map { it.text to badgeLook(it.look) })
+            RowFace(row, why)
             if (line.details.isNotEmpty()) MqText(line.details, role = TextRole.Callout)
             // ponytail: the system monospace face; IBM Plex Mono as on the web when Android bundles it.
             MqText(

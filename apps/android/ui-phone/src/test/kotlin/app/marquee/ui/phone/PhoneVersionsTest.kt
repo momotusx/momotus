@@ -251,6 +251,47 @@ class PhoneVersionsTest {
     }
 
     @Test
+    fun `the details sheet starts with what the row shows, then the seeders, the file and the language`() {
+        val tr =
+            row("a", ReasonLine.VeryFew(0)).copy(
+                sizeBytes = 117L shl 20,
+                group = Group.OtherLanguages,
+                languages = listOf("tr"),
+            )
+        show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), listOf(tr)))
+        // The row itself: its badges, its language, its size and its warning.
+        compose.onNodeWithText("117 MB, may not start", useUnmergedTree = true).assertExists()
+        compose.runOnIdle {
+            compose
+                .onNodeWithContentDescription("1080p, HDR, Turkish", substring = true)
+                .fetchSemanticsNode()
+                .config[SemanticsActions.CustomActions]
+                .single { it.label == "Details" }
+                .action()
+        }
+        compose.onNodeWithTag(DETAILS_SHEET).assertIsDisplayed()
+        val inSheet = hasAnyAncestor(hasTestTag(DETAILS_SHEET))
+
+        fun top(text: String) =
+            compose
+                .onAllNodes(hasText(text, substring = true) and inSheet, useUnmergedTree = true)
+                .fetchSemanticsNodes()
+                .first()
+                .boundsInRoot.top
+        // Nothing the row shows is dropped: the badge, the language, the size and the warning come first.
+        val tops = listOf(top("1080p"), top("117 MB, may not start"), top("0 seeders"), top("a.2010"))
+        assertEquals(tops.sorted(), tops, "badges, the row's line, the seeders, then the file")
+        assertTrue(
+            compose
+                .onAllNodes(
+                    hasText("Turkish") and inSheet,
+                    useUnmergedTree = true,
+                ).fetchSemanticsNodes()
+                .isNotEmpty(),
+        )
+    }
+
+    @Test
     fun `an open sheet is modal, the page under it is out of the reader's reach and the focus is in the sheet`() {
         show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), listOf(row("a", ReasonLine.Quick(1204, 2 * gib)))))
         val spoken = "1080p, HDR, 2 GB, shared by 1,204 people"
