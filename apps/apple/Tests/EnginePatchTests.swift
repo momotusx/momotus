@@ -178,3 +178,23 @@ extension AetherSession.Events {
     #expect(session.engine.state != .playing)
     session.stop()
 }
+
+/// Review apple-aether r4 P2: the open's bound runs only while the session is meant to play. A source opened paused
+/// under the cover waits without a timer; once played, it fails when no frame comes in time. The fixture has sound
+/// and no picture, so no frame ever comes.
+@MainActor @Test func theOpenBoundRunsOnlyWhileTheSessionPlays() async throws {
+    final class Failures { var count = 0 }
+    let failures = Failures()
+    var events = AetherSession.Events.none
+    events.failed = { _ in failures.count += 1 }
+    let session = try #require(AetherSession())
+    let sound = try Data(contentsOf: fixtures.appending(path: "sound-only.mka"))
+    session.load(.custom(DataReader(sound), formatHint: "matroska"), container: "mkv", at: 0, rate: 1, muted: true,
+                 autoplay: false, openWithin: .milliseconds(300), events: events)
+    try await Task.sleep(for: .seconds(1.5))
+    #expect(failures.count == 0, "paused under the cover: no bound")
+    session.play()
+    try await Task.sleep(for: .seconds(1.5))
+    #expect(failures.count == 1, "played, and no frame within the bound")
+    session.stop()
+}

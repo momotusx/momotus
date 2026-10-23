@@ -47,6 +47,9 @@ final class AetherSession {
     private var opening: Task<Void, Never>?
     /// One more per load: a late answer from an earlier load says nothing.
     private var load = 0
+    /// The open's bound, held while a paused load waits (under Versions, after a server move): it runs from the first
+    /// play, never while the viewer browses or sits paused.
+    private var heldBound: (within: Duration, failed: (String) -> Void)?
 
     /// Nil when the engine cannot start on this device.
     init?() {
@@ -158,11 +161,17 @@ final class AetherSession {
                 if self?.load == load { events.failed(error.localizedDescription) }
             }
         }
+        if autoplay { armBound(openWithin, failed: events.failed) } else { heldBound = (openWithin, events.failed) }
+    }
+
+    /// Past `within` with no first frame, the source counts as failed.
+    private func armBound(_ within: Duration, failed: @escaping (String) -> Void) {
+        let load = load
         Task { [weak self] in
-            try? await Task.sleep(for: openWithin)
-            guard let self, self.load == load, !engine.hasFirstFrameReadyForDisplay else { return }
+            try? await Task.sleep(for: within)
+            guard let self, self.load == load, !self.engine.hasFirstFrameReadyForDisplay else { return }
             self.stop()
-            events.failed("the second player did not start this source in time")
+            failed("the second player did not start this source in time")
         }
     }
 
@@ -218,7 +227,13 @@ final class AetherSession {
     func selectText(id: Int) { engine.selectSubtitleTrack(index: id) }
     func clearText() { engine.clearSubtitle() }
 
-    func play() { engine.play() }
+    func play() {
+        if let bound = heldBound {
+            heldBound = nil
+            armBound(bound.within, failed: bound.failed)
+        }
+        engine.play()
+    }
     func pause() { engine.pause() }
     func seek(to seconds: Double) async { await engine.seek(to: seconds) }
     func setRate(_ rate: Float) { engine.setRate(rate) }
@@ -226,6 +241,7 @@ final class AetherSession {
     /// Ends the session: its events stop, the engine tears down.
     func stop() {
         load += 1
+        heldBound = nil
         bag = []
         opening?.cancel()
         opening = nil
