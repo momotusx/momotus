@@ -232,7 +232,12 @@ class PhoneVersionsTest {
         val bounds = rowNode.fetchSemanticsNode().boundsInRoot
         compose.onRoot().performTouchInput { click(Offset(bounds.right + 24 * density, bounds.center.y)) }
         compose.onNodeWithTag(DETAILS_SHEET).assertIsDisplayed()
-        compose.onNodeWithText("1,204 seeders, 2 GB").assertIsDisplayed()
+        // The sheet starts with the row's face; the core's details that say the same again are left out.
+        compose
+            .onNode(
+                hasText("2 GB, shared by 1,204 people") and hasAnyAncestor(hasTestTag(DETAILS_SHEET)),
+            ).assertIsDisplayed()
+        compose.onAllNodesWithText("1,204 seeders", substring = true).assertCountEquals(0)
         compose.onNode(hasText("Play this version") and hasAnyAncestor(hasTestTag(DETAILS_SHEET))).performClick()
         assertEquals(listOf("a", "a"), played)
         // Back closes the sheet; the page stays.

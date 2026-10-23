@@ -590,7 +590,10 @@ private fun DetailsSheet(
             verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
         ) {
             RowFace(row, why)
-            if (line.details.isNotEmpty()) MqText(line.details, role = TextRole.Callout)
+            // The core's details after the face, unless the face's quiet line already said them (its size and source).
+            if (line.details.isNotEmpty() && (why != null || VersionsCopy.quiet(row) == null)) {
+                MqText(line.details, role = TextRole.Callout)
+            }
             // ponytail: the system monospace face; IBM Plex Mono as on the web when Android bundles it.
             MqText(
                 Format.releaseWrapped(row.releaseName),

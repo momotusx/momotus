@@ -116,7 +116,12 @@ internal fun buttonFill(
         else -> SECONDARY_FILL
     }
 
-/** True over the picture (the player's controls, with no scrim): an unfocused button keeps an opaque fill. */
+/**
+ * True over the picture: the player entry provides it (AppRoot), so the transport, the phone's Back 10 and Forward 10
+ * and the secondary buttons over the video keep an opaque fill when unfocused and a white frame never swallows them.
+ * The player's own panels (audio, Up Next, the end card, episodes) sit inside it too; on their dark fill the opaque
+ * one is harmless. The subtitle picker, a panel with its own fills, sets it false. TV focus is the white invert either way.
+ */
 val LocalOverPicture = staticCompositionLocalOf { false }
 
 @Composable

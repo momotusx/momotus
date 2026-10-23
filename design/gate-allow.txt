@@ -12,7 +12,6 @@ apps/web/src/theme/app.css :: .bad .dot, .dot.bad { background: var(--bad); box-
 # The TV focus invert maps the v2 glass fills to the white focus fill, so a glass row turns white with dark words, until 1b removes glass.
 apps/android/design/src/main/kotlin/app/marquee/design/Focus.kt :: glass = primary,
 apps/android/design/src/main/kotlin/app/marquee/design/Focus.kt :: glassStrong = primary,
-# The TV player keeps the v2 white ring until phase 5 (LocalFocusRing; its files belong to plans/player-polish.md).
 # The phone's floating tab capsule is the frame's own glass (design/DECISION.md, Surfaces), laid opaque on the page: Android blurs nothing behind a node.
 apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneShell.kt :: .background(colors.glassStrong.compositeOver(colors.bg))
 # A secondary over artwork blurs what is behind its 16 percent fill, 20 px (design/DECISION.md, Surfaces); only over art, and not on Home's hero.
