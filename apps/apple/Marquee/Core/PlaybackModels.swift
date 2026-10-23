@@ -917,7 +917,8 @@ enum TrackPicker {
     }
 
     /// A file track that names no language, by its place: an only audio track is "Original audio", several
-    /// read "Audio 1", "Audio 2"; subtitles read "Subtitles" alone or numbered.
+    /// read "Audio 1", "Audio 2"; subtitles read "Subtitles" alone or numbered. Apple's own words for now: a
+    /// shared key in stream-choice-words.json replaces them when the other apps add it in the same landing.
     static func placeName(index: Int, count: Int, audio: Bool) -> String {
         if audio { return count == 1 ? "Original audio" : "Audio \(index + 1)" }
         return count == 1 ? "Subtitles" : "Subtitles \(index + 1)"
