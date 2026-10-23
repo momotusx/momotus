@@ -7,6 +7,8 @@ import Observation
     /// Bumped to put the cursor in whichever field shows: Cmd-F, the narrow header's glyph, a window
     /// crossing the header field's width while Search shows.
     var focus = 0
+    /// Bumped by Return in a field: focus moves to the first result.
+    var submit = 0
 }
 
 /// The field's rules, apart from the views for the tests.
@@ -15,6 +17,12 @@ enum SearchRules {
     /// whose results would otherwise change unseen.
     static func bringsSearch(text: String, onSearch: Bool, titleOver: Bool) -> Bool {
         !text.isEmpty && (!onSearch || titleOver)
+    }
+
+    /// Top results' columns on the Mac and iPad: cards at least 360 wide, 20 apart, inside 40 margins,
+    /// three at most (three at 1440, two at 1024, one at 720).
+    static func topResultColumns(width: Double) -> Int {
+        min(3, max(1, Int(((width - 80 + 20) / (360 + 20)).rounded(.down))))
     }
 
     enum Escape: Equatable { case clear, leave }

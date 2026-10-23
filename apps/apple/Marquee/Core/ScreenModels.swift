@@ -12,6 +12,53 @@ struct SearchSnapshot: Decodable, Hashable, Sendable {
     let searchable: Int
 }
 
+/// Search's own words (plans/design-v3-phase7-apple.md 3): what the core searches (titles, G1), and no
+/// addon's name, ever (a group shows by the core's title, a failed one by `HomeRow.stateWords`).
+enum SearchWords {
+    static let hint = "Search movies and series by title."
+    static let noAddons = "None of your addons can search"
+    static let noMatches = "No matches"
+    static let recent = "Recent"
+    static let topResults = "Top results"
+    /// The view could not open: the core's words can name a host or an addon, so these instead.
+    static let failed = "Search did not load."
+    /// The core's Top results row (`TOP_ROW_ID`).
+    static let topRowId = "top"
+
+    /// Under the field before a query: the hint, or that no addon can search.
+    static func idle(_ s: SearchSnapshot?) -> String { s?.searchable == 0 ? noAddons : hint }
+
+    /// After the core answered `query`: that no addon can search, or that nothing matched; nil otherwise.
+    static func answered(_ s: SearchSnapshot?, query: String) -> String? {
+        guard let s, s.query == query.trimmingCharacters(in: .whitespaces) else { return nil }
+        if s.searchable == 0 { return noAddons }
+        return s.rows.isEmpty ? noMatches : nil
+    }
+
+    enum Top: Equatable {
+        case loading
+        case tiles([Tile])
+    }
+
+    /// Top results: its first six titles, skeletons while it loads, nothing when absent, failed or empty.
+    static func top(_ rows: [HomeRow]) -> Top? {
+        guard let row = rows.first(where: { $0.rowId == topRowId }) else { return nil }
+        switch row.state {
+        case .loading, .slow: return .loading
+        case .ready where !row.tiles.isEmpty: return .tiles(Array(row.tiles.prefix(6)))
+        default: return nil
+        }
+    }
+
+    /// The kind groups, in the core's order.
+    static func groups(_ rows: [HomeRow]) -> [HomeRow] { rows.filter { $0.rowId != topRowId } }
+
+    /// "Movie · 2010" under a result's name: Marquee's kind word and the year.
+    static func meta(_ tile: Tile) -> String {
+        [kindWord(tile.kind), tile.releaseInfo].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " \u{B7} ")
+    }
+}
+
 struct DiscoverSnapshot: Decodable, Hashable, Sendable {
     /// The kind, catalog and genre shown: the list a selection and a preview belong to.
     var list: String { "\(kind ?? "")|\(catalog ?? "")|\(genre ?? "")" }

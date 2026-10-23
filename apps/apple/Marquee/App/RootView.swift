@@ -617,6 +617,8 @@ private struct HeaderSearchField: View {
                 .foregroundStyle(Theme.Palette.text)
                 .autocorrectionDisabled()
                 .focused($focused)
+                // The core searches as you type: Return only moves to the first result.
+                .onSubmit { input.submit += 1 }
                 .onKeyPress(.escape) {
                     switch SearchRules.escape(input.text) {
                     case .clear: input.text = ""

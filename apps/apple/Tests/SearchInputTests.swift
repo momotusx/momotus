@@ -44,8 +44,8 @@ private func source(_ path: String) throws -> String {
     #expect(tools.contains("if narrow {") && tools.contains("Button(action: find)") && tools.contains("HeaderSearchField(input: input)"))
     // The page draws its field exactly where the header has none.
     #expect(root.contains(".environment(\\.headerSearchField, windowWidth >= NavToolbar.fieldWidthFrom)"))
-    #expect(search.contains("if !headerField { field.padding(.horizontal, metrics.gutter) }"))
-    #expect(search.contains("TextField(Self.prompt, text: Bindable(input).text)"))
+    #expect(search.contains("if !headerField {\n            SearchField(input: input, prompt: Self.prompt, focused: $fieldFocused)"))
+    #expect(try source("Search/SearchParts.swift").contains("TextField(prompt, text: $input.text)"))
     // Cmd-F and the glyph pop Search to its root and put the cursor in the field that shows.
     let find = try body(of: "private func find()", in: root)
     #expect(find.contains("popToRoot(.search)") && find.contains("searchInput.focus += 1"))

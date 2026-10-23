@@ -158,7 +158,6 @@ apps/apple/Marquee/Profiles/ManageProfiles.swift :: Button("Delete \(target.name
 apps/apple/Marquee/Profiles/ManageProfiles.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/Profiles/PinKeypad.swift :: .overlay(Circle().strokeBorder(Theme.Palette.control, lineWidth: 1))
 apps/apple/Marquee/Profiles/ProfilePicker.swift :: .overlay(RoundedRectangle(cornerRadius: tile * 0.22, style: .continuous).strokeBorder(Theme.Palette.control))
-apps/apple/Marquee/Search/SearchScreen.swift :: .overlay(Capsule().strokeBorder(fieldFocused ? Theme.Palette.accent : Theme.Palette.control, lineWidth: fieldFocused ? 2 : 1))
 apps/apple/Marquee/Settings/AddonsScreen.swift :: Button("Remove", role: .destructive) {
 apps/apple/Marquee/Settings/AddonsScreen.swift :: Button("Remove", glyph: "trash", role: .destructive, action: remove)
 apps/apple/Marquee/Settings/AddonsScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
