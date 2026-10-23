@@ -82,6 +82,37 @@ test("TV: the synopsis opens on its own card, Back closes it and returns to the 
   await context.close();
 });
 
+test("phone: the browser's Back closes the synopsis and the trailer and keeps the page; More gets the focus back", async ({ browser }) => {
+  const { context, page } = await open(browser, "phone", `/title/movie/${BBB_ID}`);
+  await expect(page.locator('[data-f="title:more"]')).toBeVisible({ timeout: 30_000 });
+  const overlay = () => page.evaluate(() => (history.state as { _overlay?: number } | null)?._overlay ?? null);
+  for (const [opener, layer] of [
+    ["title:more", ".syn-layer"],
+    ["title:trailer", ".trailer"],
+  ] as const) {
+    // An edge swipe or a mouse's Back: the overlay closes, the title stays.
+    await page.locator(`[data-f="${opener}"]`).tap();
+    await expect(page.locator(layer)).toBeVisible();
+    expect(await overlay()).not.toBeNull();
+    // The card fits the phone's width.
+    const card = (await page.locator(layer === ".syn-layer" ? ".syn-card" : ".trailer-frame").boundingBox())!;
+    expect(card.x).toBeGreaterThanOrEqual(0);
+    expect(card.x + card.width).toBeLessThanOrEqual(390);
+    await page.goBack();
+    await expect(page.locator(layer)).toHaveCount(0);
+    expect(path(page)).toBe(`/title/movie/${BBB_ID}`);
+    // Closed by its own button: its entry goes with it, so the next Back is the page's.
+    await page.locator(`[data-f="${opener}"]`).tap();
+    await expect(page.locator(layer)).toBeVisible();
+    await page.locator(layer === ".syn-layer" ? '[data-f="synopsis:close"]' : '[data-f="trailer:close"]').tap();
+    await expect(page.locator(layer)).toHaveCount(0);
+    await expect.poll(overlay).toBeNull();
+    await expect.poll(() => focusedKey(page)).toBe(opener);
+    expect(path(page)).toBe(`/title/movie/${BBB_ID}`);
+  }
+  await context.close();
+});
+
 const chosen = (page: Page, group: string) =>
   page.locator(`[data-fgroup="${group}"]`).evaluate((row) => {
     const on = row.querySelector('[aria-checked="true"]');
@@ -158,19 +189,19 @@ test("desktop: a name link opens Search on that query once; what the viewer type
   await context.close();
 });
 
-// The longest words the note can carry: every blocked reason, counted and with or without a window, read
-// from the app's own module (its JSON imports load in the page, not in the runner).
-const longest = (page: Page) =>
+// What the note can carry: every one of the core's `empty` lines, and a failure with a long reason
+// (problemWords passes an unknown one through), read from the app's own module (its JSON imports load in
+// the page, not in the runner).
+const noteWords = (page: Page) =>
   page.evaluate(async (url) => {
     const w = (await import(/* @vite-ignore */ url)) as typeof import("../src/lib/words");
-    const reasons = Object.entries(w.choiceWords.blocked).flatMap(([r, v]) => (typeof v === "object" ? [r as Parameters<typeof w.blockedWords>[0]] : []));
-    return [...reasons.flatMap((r) => [w.blockedWords(r, 2, true).text, w.blockedWords(r, 2, false).text]), `${w.noVersionWords.title}. ${w.noVersionWords.detail}`].reduce((a, b) =>
-      b.length > a.length ? b : a,
-    );
+    const lines = Object.values(w.choiceWords.empty).map((e) => e.text);
+    const failed = `Versions could not load. ${w.problemWords(`the core said ${"something long ".repeat(30)}`).text}`;
+    return { lines, failed };
   }, "/src/lib/words.ts");
 
 for (const form of Object.keys(FORMS) as Form[]) {
-  test(`${form}: the version note's slot is there from the first paint; its longest words move nothing`, async ({ browser }) => {
+  test(`${form}: the version note's slot is there from the first paint, as tall as its longest line and no taller`, async ({ browser }) => {
     const { context, page } = await open(browser, form, `/title/movie/${BBB_ID}`);
     await expect(page.locator('[data-f="title:play"]')).toBeVisible({ timeout: 30_000 });
     const note = page.locator(".vnote[role=status]");
@@ -183,11 +214,24 @@ for (const form of Object.keys(FORMS) as Form[]) {
           return el.classList.contains("vnote") ? [el.className, Math.round(r.y), Math.round(r.height)] : [el.className, Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)];
         }),
       );
-    const words = await longest(page);
+    const { lines, failed } = await noteWords(page);
     const before = await rects();
-    await note.evaluate((p, words) => {
-      p.innerHTML = `<span class="st warn"><i class="dot"></i>${words}</span>`;
-    }, words);
+    const slot = (await note.boundingBox())!.height;
+    const fill = (words: string) =>
+      note.evaluate((p, words) => {
+        p.innerHTML = `<span class="st warn"><i class="dot"></i><span class="vtext"></span></span>`;
+        (p.querySelector(".vtext") as HTMLElement).textContent = words;
+        return (p.querySelector(".st") as HTMLElement).getBoundingClientRect().height;
+      }, words);
+    // Every line fits the slot and moves nothing; the longest needs all of it (the slot is no taller).
+    const needs: number[] = [];
+    for (const line of lines) {
+      needs.push(await fill(line));
+      expect(await rects(), line).toEqual(before);
+    }
+    expect(Math.abs(Math.max(...needs) - slot), `slot ${slot}, lines need ${needs.join(", ")}`).toBeLessThanOrEqual(1);
+    // A long failure is clamped to the slot.
+    await fill(failed);
     expect(await rects()).toEqual(before);
     await context.close();
   });
