@@ -5633,6 +5633,46 @@ mod tests {
         assert_eq!(lock(&view.state).tries, 0);
     }
 
+    /// The budget's end on a streaming service's resolve, in any build: a
+    /// service that takes the request and never answers ends the playback
+    /// as notStarted when the budget runs out, not when its own request
+    /// gives up. The budget starts 87 s in, so the test takes seconds.
+    #[tokio::test]
+    async fn a_silent_service_ends_with_the_budget() {
+        let core = Core::temporary("default").unwrap();
+        // Takes every request and never answers.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move {
+            let mut held = Vec::new();
+            while let Ok((socket, _)) = listener.accept().await {
+                held.push(socket);
+            }
+        });
+        core.set_debrid_origin(&base);
+        core.set_debrid_keys(&[(StoreId::RealDebrid, "rd".into())]);
+        let torrent = stream(&format!(
+            r#"{{"infoHash":"{}","fileIdx":0}}"#,
+            "e".repeat(40)
+        ));
+        let view = PlaybackView::open(&core, vec![torrent], PlayTarget::default());
+        // Before the resolve runs (this test's one thread): 3 s left.
+        let moved = tokio::time::Instant::now();
+        lock(&view.state).start_at = Some(moved - START_BUDGET + Duration::from_secs(3));
+        while view.snapshot().phase != PlaybackPhase::Failed && moved.elapsed().as_secs() < 60 {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        let s = view.snapshot();
+        let ended = moved.elapsed();
+        assert_eq!(s.phase, PlaybackPhase::Failed, "{s:?}");
+        assert!(
+            (Duration::from_millis(2500)..Duration::from_millis(4500)).contains(&ended),
+            "{ended:?} {:?}",
+            s.attempts
+        );
+        assert_eq!(s.empty, Some(EmptyKind::NotStarted), "{:?}", s.attempts);
+    }
+
     /// Review 2026-10-23 P2-2, in any build: a link opening slowly gets
     /// "Choose another version" 20 s into the loading screen, and fails as
     /// notStarted when the budget ends, by the one clock every kind of
