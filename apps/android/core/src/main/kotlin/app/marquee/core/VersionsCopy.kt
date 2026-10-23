@@ -205,7 +205,7 @@ object VersionsCopy {
     fun quiet(row: VersionRow): String? {
         val line = StreamChoiceCopy.line(row.line)
         val size = row.sizeBytes?.let(Format::bytes)
-        if (row.onDevice != null) return listOfNotNull(size, lower(row.onDevice)).joinToString(", ")
+        if (row.onDevice != null) return sized(size, row.onDevice)
         if (line.tone != Tone.Ok) return null
         val source =
             when (val s = row.status) {
@@ -230,7 +230,7 @@ object VersionsCopy {
                     }
                 }
             }
-        return listOfNotNull(size, source).joinToString(", ").ifEmpty { line.text }
+        return source?.let { sized(size, it) } ?: size ?: line.text
     }
 
     /**
@@ -245,15 +245,16 @@ object VersionsCopy {
         val said =
             when {
                 why != null -> StreamChoiceCopy.emptyRowLine(why).text
-
-                else -> return quiet(row)
-                    ?: listOfNotNull(size, lower(StreamChoiceCopy.line(row.line).text)).joinToString(", ")
+                else -> return quiet(row) ?: sized(size, StreamChoiceCopy.line(row.line).text)
             }
-        return listOfNotNull(size, lower(said)).joinToString(", ")
+        return sized(size, said)
     }
 
-    /** Words that follow a size after a comma start in lower case: "12 GB, may start slowly". */
-    private fun lower(words: String) = words.replaceFirstChar { it.lowercase() }
+    /** [words] after the size ("12 GB, may start slowly"), or on their own with a capital ("Did not play on this device"). */
+    private fun sized(
+        size: String?,
+        words: String,
+    ) = size?.let { "$it, ${words.replaceFirstChar(Char::lowercase)}" } ?: words.replaceFirstChar(Char::uppercase)
 
     /** A row's details, reserved under it and shown on focus: the release name, the line's details, its languages and sources. */
     fun details(row: VersionRow): String =

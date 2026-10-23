@@ -412,6 +412,14 @@ class VersionsCopyTest {
         )
         assertEquals("2 GB, ready now", VersionsCopy.rowWords(row(sizeBytes = gb).copy(line = quick)))
         assertEquals("2 GB, needs an account", VersionsCopy.rowWords(row(sizeBytes = gb), EmptyKind.NeedsAccount))
+        // With no size first, the words start with a capital.
+        assertEquals(
+            "On this device",
+            VersionsCopy.rowWords(row(sizeBytes = null).copy(line = quick, onDevice = "On this device")),
+        )
+        assertEquals("Ready now", VersionsCopy.rowWords(row(sizeBytes = null).copy(line = quick)))
+        assertEquals("May start slowly", VersionsCopy.rowWords(row(sizeBytes = null).copy(line = ReasonLine.Few(31))))
+        assertEquals("Needs an account", VersionsCopy.rowWords(row(sizeBytes = null), EmptyKind.NeedsAccount))
         // A warning shows in its place.
         assertNull(VersionsCopy.quiet(row(sizeBytes = gb).copy(line = ReasonLine.Few(31))))
         // Said as its badges, then the quiet line.
