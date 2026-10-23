@@ -109,13 +109,33 @@ android {
 }
 
 // The baseline profile (plans/m6-android.md P9): :macrobenchmark records it on a connected device with
-// `scripts/gw.sh :app:generateBaselineProfile`, never during a build, into src/main/generated/baselineProfiles.
-// The plugin's benchmarkRelease (measured) and nonMinifiedRelease (recorded) are release builds, never shipped.
+// `scripts/gw.sh :app:generateBaselineProfile -Pandroid.testInstrumentationRunnerArguments.class=
+// app.marquee.macrobenchmark.BaselineProfileGenerator` (one argument, no space), never during a build, into
+// src/main/generated/baselineProfiles. The plugin's benchmarkRelease (measured) and nonMinifiedRelease (recorded)
+// are release builds, never shipped.
 baselineProfile {
     automaticGenerationDuringBuild = false
     saveInSrc = true
     mergeIntoMain = true
 }
+
+// Run over the whole :macrobenchmark module (the frame and startup tests skipped), the Pixel's test results listed
+// no profile file, the plugin collected none, and its copy step replaced the app's profile with nothing
+// (2026-10-22); with the generator alone it collected the profile (2026-10-23). A generation that leaves no profile
+// fails here, so it can never ship one silently.
+val checkBaselineProfile by tasks.registering {
+    val profile = layout.projectDirectory.file("src/main/generated/baselineProfiles/baseline-prof.txt").asFile
+    doLast {
+        if (!profile.isFile || profile.length() == 0L) {
+            throw GradleException(
+                "the baseline profile is missing or empty ($profile): restore it with git checkout, then generate " +
+                    "with -Pandroid.testInstrumentationRunnerArguments.class=" +
+                    "app.marquee.macrobenchmark.BaselineProfileGenerator",
+            )
+        }
+    }
+}
+tasks.matching { it.name == "generateBaselineProfile" }.configureEach { finalizedBy(checkBaselineProfile) }
 
 // The plugin's release copies take the release source set (no debug screens or fakes), and say they are
 // benchmark builds: only they and debug builds open a title from a launch extra.

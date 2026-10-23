@@ -5,7 +5,8 @@ plugins {
 
 // Startup, Home scroll and playback start on a device or emulator, and the baseline profile generator.
 // Benchmarks: ANDROID_SERIAL=<serial> ./gradlew :macrobenchmark:connectedBenchmarkReleaseAndroidTest
-// Profile: ANDROID_SERIAL=<serial> ./gradlew :app:generateBaselineProfile
+// Profile (the generator alone, see app/build.gradle.kts): ANDROID_SERIAL=<serial> ./gradlew :app:generateBaselineProfile
+//   -Pandroid.testInstrumentationRunnerArguments.class=app.marquee.macrobenchmark.BaselineProfileGenerator
 android {
     namespace = "app.marquee.macrobenchmark"
     compileSdk = 37
