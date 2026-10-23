@@ -26,7 +26,7 @@ import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
 import { focusEl, remember } from "../focus/dom";
 import { form } from "../form";
 import { airDate, clock, decoded, episodeLabel, offersLibrary, parseVideo, pct, playPath, playState, ratingParts, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
-import { choiceWords, problemWords } from "../lib/words";
+import { blockedWords, choiceWords, problemWords } from "../lib/words";
 import { firstFocus } from "./title-focus";
 import "./title.css";
 
@@ -44,7 +44,7 @@ export default function Title() {
 }
 
 // The core's empty states whose only action is Back (plans/play-every-version.md).
-const BACK_ONLY = new Set<EmptyKind>(["noRoom", "kidsNothing", "noResults"]);
+const BACK_ONLY = new Set<EmptyKind>(["noRoom", "needsAccount", "kidsNothing", "noResults"]);
 
 const released = (e: Episode) => !e.released || new Date(e.released).getTime() <= Date.now();
 
@@ -106,7 +106,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
 
   // A Back-only state (plans/play-every-version.md, the title page's row): Play keeps its place,
   // inert, since a Play that opens a page holding only Back is a dead end; with no video at all the
-  // same. On TV the first focus is the next action: Versions, or Add to Library with no video.
+  // same. On TV the first focus falls to the next action (title-focus.ts).
   const playInert = () => {
     const e = versions()?.state.data?.empty;
     return (!!e && BACK_ONLY.has(e.kind)) || (header()?.state.state === "ready" && !target() && !header()?.nextAirs);
@@ -402,7 +402,10 @@ function VersionNote(props: { target: boolean; noVideo: boolean; view: LiveView<
     if (!props.target || !v) return null;
     if (v.state.status.state === "failed") return `Versions could not load. ${problemWords(v.state.status.reason).text}`;
     const e = v.state.data?.empty;
-    return e ? choiceWords.empty[e.kind].text : null;
+    if (!e) return null;
+    // Versions that need an account are said quietly, with their count and no way to an account (the
+    // owner, 2026-10-23: accounts are set up in Settings only), as Android and Apple say it.
+    return e.kind === "needsAccount" ? blockedWords("needsAccount", e.count).text : choiceWords.empty[e.kind].text;
   };
   return (
     <p class="vnote" role="status">

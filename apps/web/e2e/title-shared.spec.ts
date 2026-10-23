@@ -189,13 +189,14 @@ test("desktop: a name link opens Search on that query once; what the viewer type
   await context.close();
 });
 
-// What the note can carry: every one of the core's `empty` lines, and a failure with a long reason
+// What the note can carry: every one of the core's `empty` lines (needsAccount with its count), and a failure with a long reason
 // (problemWords passes an unknown one through), read from the app's own module (its JSON imports load in
 // the page, not in the runner).
 const noteWords = (page: Page) =>
   page.evaluate(async (url) => {
     const w = (await import(/* @vite-ignore */ url)) as typeof import("../src/lib/words");
-    const lines = Object.values(w.choiceWords.empty).map((e) => e.text);
+    // needsAccount is said with its count (title.tsx, VersionNote): a four-digit count is the longest.
+    const lines = [...Object.values(w.choiceWords.empty).map((e) => e.text), w.blockedWords("needsAccount", 1234).text];
     const failed = `Versions could not load. ${w.problemWords(`the core said ${"something long ".repeat(30)}`).text}`;
     return { lines, failed };
   }, "/src/lib/words.ts");
