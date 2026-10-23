@@ -327,7 +327,7 @@ private struct PickCard: View {
         }
         .flatCard()
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("\(VersionWords.kicker). \(VersionWords.badges(row).map(\.text).joined(separator: ", ")). \(VersionWords.why(row))")
+        .accessibilityLabel(VersionWords.cardSpoken(row))
     }
 }
 
@@ -340,25 +340,52 @@ private struct BadgeRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            ForEach(badges, id: \.self) { badge in
-                let label = Text(badge.text)
-                    .textFont(big ? Theme.type.headline : Theme.type.callout, weight: .semibold, relativeTo: .headline)
-                    .lineLimit(1)
-                switch badge.look {
-                case .filled:
-                    label.foregroundStyle(Theme.Palette.bg)
-                        .padding(.horizontal, 6).padding(.vertical, 1)
-                        .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(tone))
-                case .outlined:
-                    label.foregroundStyle(tone)
-                        .padding(.horizontal, 5).padding(.vertical, 0)
-                        .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).stroke(Theme.Palette.muted, lineWidth: 1))
-                case .plain:
-                    label.foregroundStyle(tone)
-                }
-            }
+            // No badge (a quality not stated, no format): an unseen one keeps the line's height.
+            if badges.isEmpty { badge(.init(text: "4K", look: .filled)).hidden() }
+            ForEach(badges, id: \.self, content: badge)
         }
         .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder private func badge(_ badge: VersionWords.Badge) -> some View {
+        let label = Text(badge.text)
+            .textFont(big ? Theme.type.headline : Theme.type.callout, weight: .semibold, relativeTo: .headline)
+            .lineLimit(1)
+        switch badge.look {
+        case .filled:
+            label.foregroundStyle(Theme.Palette.bg)
+                .padding(.horizontal, 6).padding(.vertical, 1)
+                .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(tone))
+        case .outlined:
+            label.foregroundStyle(tone)
+                .padding(.horizontal, 5).padding(.vertical, 0)
+                .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).stroke(Theme.Palette.muted, lineWidth: 1))
+        case .plain:
+            label.foregroundStyle(tone)
+        }
+    }
+}
+
+/// What a row shows, the same in the row and atop its details sheet, so the sheet drops nothing: its badges and
+/// language tag, then its one line (the size first, then its source, the core's warning or why it is dimmed).
+private struct RowFace: View {
+    let row: VersionRow
+    let dimmed: (text: String, glyph: String)?
+    var big = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            BadgeRow(badges: VersionWords.badges(row), big: big, tone: dimmed == nil ? Theme.Palette.text : Theme.Palette.muted)
+            if let tag = VersionWords.languageTag(row) {
+                Text(tag)
+                    .textFont(Theme.type.caption, relativeTo: .caption)
+                    .lineLimit(1)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(Theme.Palette.raised))
+            }
+        }
+        RowLine(row: row, dimmed: dimmed)
     }
 }
 
@@ -415,18 +442,7 @@ private struct VersionRowView: View {
     private var rowButton: some View {
         Button(action: play) {
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    BadgeRow(badges: VersionWords.badges(row), tone: dimmed == nil ? Theme.Palette.text : Theme.Palette.muted)
-                    if let tag = VersionWords.languageTag(row) {
-                        Text(tag)
-                            .textFont(Theme.type.caption, relativeTo: .caption)
-                            .lineLimit(1)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(Theme.Palette.raised))
-                    }
-                }
-                quiet
+                RowFace(row: row, dimmed: dimmed)
                 if detailsLine {
                     Text(VersionWords.details(row))
                         .textFont(Theme.type.caption, relativeTo: .caption)
@@ -460,11 +476,6 @@ private struct VersionRowView: View {
         }
         .accessibilityFocused($rowFocused)
     }
-
-    /// "12 GB, may start slowly" with its tone as an icon when it warns; dimmed, why with its icon.
-    @ViewBuilder private var quiet: some View {
-        RowLine(row: row, dimmed: dimmed)
-    }
 }
 
 /// A row's quiet line with its icon when it warns or is dimmed.
@@ -494,8 +505,7 @@ private struct DetailsSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            BadgeRow(badges: VersionWords.badges(row), big: true)
-            RowLine(row: row, dimmed: dimmed)
+            RowFace(row: row, dimmed: dimmed, big: true)
                 .textFont(Theme.type.callout, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.text)
             ForEach(VersionWords.detailLines(row), id: \.self) { line in

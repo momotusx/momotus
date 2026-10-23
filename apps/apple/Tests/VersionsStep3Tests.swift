@@ -329,7 +329,26 @@ private func row(_ json: String) throws -> VersionRow {
     // One video and one audio format at most, the best of each.
     let dv = try row(#", "features": ["Dolby Vision", "HDR10", "7.1", "5.1"]"#)
     #expect(VersionWords.badges(dv).map(\.text) == ["1080p", "Dolby Vision", "7.1"])
-    #expect(VersionWords.badges(try row(#", "features": [], "quality": "Quality not stated""#)).map(\.text) == ["Unknown"])
+    // A quality the release does not state gets no badge: its section ("Other") says it. A source in its place is one.
+    #expect(VersionWords.badges(try row(#", "features": [], "quality": "Quality not stated""#)).isEmpty)
+    #expect(VersionWords.badges(try row(#", "features": ["HDR10"], "quality": "Quality not stated""#)).map(\.text) == ["HDR"])
+    #expect(VersionWords.badges(try row(#", "features": [], "quality": "Unknown""#)).isEmpty)
+    #expect(VersionWords.badges(try row(#", "features": [], "quality": "WEB-DL""#)).map(\.text) == ["WEB-DL"])
+    // Said with no empty part; and the badge line keeps its height with none (an unseen badge).
+    let none = try row(#", "features": [], "quality": "Quality not stated", "line": {"kind": "quick"}"#)
+    #expect(VersionWords.cardSpoken(none) == "\(VersionWords.kicker). \(VersionWords.why(none))")
+    let page = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .appending(path: "../Marquee/Versions/VersionsScreen.swift"), encoding: .utf8)
+    #expect(try body(of: "private struct BadgeRow", in: page).contains("if badges.isEmpty { badge(.init(text: \"4K\", look: .filled)).hidden() }"))
+    #expect(try body(of: "private struct PickCard", in: page).contains(".accessibilityLabel(VersionWords.cardSpoken(row))"))
+}
+
+@Test func theCardSaysOnThisDeviceAloneForTheVersionKeptHere() throws {
+    let kept = try row(#", "onDevice": "On this device", "line": {"kind": "quick", "seeders": 22, "sizeBytes": 2147483648}"#)
+    // One idea, as the web and Android: the row keeps the line's numbers for its details.
+    #expect(VersionWords.why(kept) == "On this device")
+    #expect(VersionWords.cardSpoken(kept) == "\(VersionWords.kicker). 1080p, HDR, Dolby Atmos. On this device")
+    #expect(VersionWords.details(kept).contains("22 seeders"))
 }
 
 @Test func aRowIsItsBadgesAndOneQuietLineWithItsSizeFirst() throws {
@@ -363,7 +382,8 @@ private func row(_ json: String) throws -> VersionRow {
     #expect(try body(of: "private func card(", in: player).contains(".fill(Theme.Palette.surface)"))
     #expect(!(try body(of: "private func card(", in: player)).contains(".glass("))
     // A dimmed row's badges take the muted tone with its words, never a faded row.
-    #expect(try body(of: "private struct VersionRowView", in: page).contains("tone: dimmed == nil ? Theme.Palette.text : Theme.Palette.muted"))
+    #expect(try body(of: "private struct RowFace", in: page).contains("tone: dimmed == nil ? Theme.Palette.text : Theme.Palette.muted"))
+    #expect(try body(of: "private var rowButton", in: page).contains("RowFace(row: row, dimmed: dimmed)"))
     #expect(!(try body(of: "private struct VersionRowView", in: page)).contains(".opacity(0.") )
     // The details line is always laid out and only fades: no height change on focus or hover.
     #expect(try body(of: "private struct VersionRowView", in: page).contains(".opacity(hovered || focused ? 1 : 0)"))
@@ -385,9 +405,12 @@ private func row(_ json: String) throws -> VersionRow {
     let sheet = try body(of: "private struct DetailsSheet", in: page)
     #expect(sheet.contains("Button(action: play)") && sheet.contains(".accessibilityAddTraits(.isModal)"))
     #expect(sheet.contains("VersionWords.detailLines(row)"))
-    // Its lines: the release, the line's numbers, languages and sources.
+    // Its top is what the row shows (badges, language tag, size and warning), then the seeders, the file, the language.
+    #expect(sheet.contains("RowFace(row: row, dimmed: dimmed, big: true)"))
+    let face = try body(of: "private struct RowFace", in: page)
+    #expect(face.contains("VersionWords.badges(row)") && face.contains("VersionWords.languageTag(row)") && face.contains("RowLine(row: row, dimmed: dimmed)"))
     let r = try JSONDecoder().decode(VersionRow.self, from: Data(#"{"key": "k", "quality": "720p", "features": [], "sizeBytes": 1, "status": {"kind": "torrent", "seeds": 5}, "via": "Sample Source", "releaseName": "Sintel.720p.mp4", "languages": ["en"], "reasons": [], "group": "best", "failoverCount": 0, "line": {"kind": "few", "seeders": 5}}"#.utf8))
-    #expect(VersionWords.detailLines(r) == ["Sintel.720p.mp4", "5 seeders", "English"])
+    #expect(VersionWords.detailLines(r) == ["5 seeders", "Sintel.720p.mp4", "English"])
 }
 
 @Test func anInertEpisodeOrHeroOpensNoBackOnlyPage() throws {

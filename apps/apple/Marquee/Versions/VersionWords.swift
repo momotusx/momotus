@@ -231,6 +231,7 @@ enum VersionWords {
 
     /// A version's badge row, as Android and the v3 frames draw it: the quality first, then one video
     /// format (Dolby Vision, else HDR10+, else HDR) and one audio format (Dolby Atmos, else 7.1, else 5.1).
+    /// A quality the release does not state gets no badge: its section ("Other") already says so.
     static func badges(_ row: VersionRow) -> [Badge] {
         let f = Set(row.features)
         let video: Badge? = if f.contains("Dolby Vision") { Badge(text: "Dolby Vision", look: .plain) }
@@ -241,7 +242,8 @@ enum VersionWords {
             else if f.contains("7.1") { Badge(text: "7.1", look: .outlined) }
             else if f.contains("5.1") { Badge(text: "5.1", look: .outlined) }
             else { nil }
-        return [Badge(text: cell(row.quality), look: .filled)] + [video, audio].compactMap { $0 }
+        let quality = cell(row.quality) == "Unknown" ? nil : Badge(text: row.quality, look: .filled)
+        return [quality, video, audio].compactMap { $0 }
     }
 
     /// The row's language when it is not the viewer's (the core's `otherLanguages` group): "Turkish".
@@ -285,19 +287,27 @@ enum VersionWords {
     /// A row's details, reserved under it and shown on focus or hover: the release name, the line's
     /// details, its languages and sources.
     static func details(_ row: VersionRow) -> String {
-        detailLines(row).joined(separator: " \u{B7} ")
+        [row.releaseName, rowLine(row)?.details ?? "", detail(row)].filter { !$0.isEmpty }.joined(separator: " \u{B7} ")
     }
 
-    /// The same details one per line, for the iPhone's details sheet.
+    /// The iPhone's details sheet under what the row shows: the line's numbers (the seeders), the file, then its
+    /// languages and sources, one per line, as Android's sheet.
     static func detailLines(_ row: VersionRow) -> [String] {
-        [row.releaseName, rowLine(row)?.details ?? "", detail(row)].filter { !$0.isEmpty }
+        [rowLine(row)?.details ?? "", row.releaseName, detail(row)].filter { !$0.isEmpty }
     }
 
     /// The card's one why line: the core's line and its details joined by a colon ("Starts quickly: 412
-    /// seeders, 2 GB").
+    /// seeders, 2 GB"), or, for the version kept on this device, that alone ("On this device"): one idea,
+    /// as the web and Android say it.
     static func why(_ row: VersionRow) -> String {
+        if let kept = row.onDevice { return kept }
         guard let line = rowLine(row) else { return [bytes(row)].compactMap { $0 }.joined() }
         return line.details.isEmpty ? line.text : "\(line.text): \(line.details)"
+    }
+
+    /// The card as a screen reader says it: its kicker, its badges, its why line, with no empty part.
+    static func cardSpoken(_ row: VersionRow) -> String {
+        [kicker, badges(row).map(\.text).joined(separator: ", "), why(row)].filter { !$0.isEmpty }.joined(separator: ". ")
     }
 
     /// A row as a screen reader says it: its badges, its language, its line.
