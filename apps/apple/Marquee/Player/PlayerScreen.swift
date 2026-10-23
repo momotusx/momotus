@@ -127,6 +127,24 @@ struct PlayerScreen: View {
                         .allowsHitTesting(false)
                         .transition(.opacity)
                 }
+                // The file's bitmap subtitles (PGS, DVD, DVB) on the second engine, where the disc placed them.
+                if model.playback?.phase != "failed" {
+                    let images = model.subtitleImages
+                    if !images.isEmpty {
+                        GeometryReader { geo in
+                            ForEach(images.indices, id: \.self) { index in
+                                let rect = PlayerLayout.imageCueRect(position: images[index].position, video: model.videoSize, view: geo.size)
+                                Image(decorative: images[index].image, scale: 1)
+                                    .resizable()
+                                    .frame(width: rect.width, height: rect.height)
+                                    .position(x: rect.midX, y: rect.midY)
+                            }
+                        }
+                        .ignoresSafeArea()
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                    }
+                }
                 // Over the controls and their scrim, so a line never reads dimmed with
                 // them up (the iPhone walk, round 3); the rules keep it off their buttons.
                 if let text = model.subtitleText, model.playback?.phase != "failed" {

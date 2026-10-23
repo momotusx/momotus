@@ -27,6 +27,8 @@ final class PlayerModel {
     @ObservationIgnored private var engineTextIDs: [Int] = []
     /// On the second engine, the file subtitle's cues decoded so far (the engine hands the whole list each time).
     private(set) var engineCues: [WebVTT.Cue] = []
+    /// On the second engine, the file subtitle's bitmap cues (PGS, DVD, DVB) decoded so far.
+    private(set) var engineImages: [AetherSession.ImageCue] = []
     private(set) var playback: PlaybackSnapshot?
     /// Seconds.
     private(set) var position: Double = 0
@@ -235,7 +237,7 @@ final class PlayerModel {
             choices.choseInFile()
             selectSubtitle(nil)
             aether?.selectText(id: engineTextIDs[index])
-            (textTrack, engineCues) = (index, [])
+            (textTrack, engineCues, engineImages) = (index, [], [])
             subtitleDelay = PlayerLayout.startFileDelay(textTrack: index, kept: outbox.kept)
             return
         }
@@ -686,7 +688,7 @@ final class PlayerModel {
         cues = []
         if backend == .aether, textTrack != nil {
             aether?.clearText()
-            (textTrack, engineCues) = (nil, [])
+            (textTrack, engineCues, engineImages) = (nil, [], [])
         }
         if textTrack != nil, let group = textGroup, group.allowsEmptySelection {
             player.currentItem?.select(nil, in: group)
@@ -720,6 +722,13 @@ final class PlayerModel {
 
     /// The file's line (its timing, or none) and the addon track's (its own): both when the player shows a forced line
     /// beside an addon track.
+    /// The file subtitle's bitmaps on screen now, on the second engine, at the file's timing.
+    var subtitleImages: [AetherSession.ImageCue] {
+        guard backend == .aether, textTrack != nil, subtitle == nil else { return [] }
+        let at = PlayerLayout.cueTime(position: position, delay: fileDelay)
+        return engineImages.filter { $0.start <= at && at < $0.end }
+    }
+
     var subtitleText: String? {
         _ = legibleLines
         let fileAt = PlayerLayout.cueTime(position: position, delay: fileDelay)
@@ -947,7 +956,7 @@ final class PlayerModel {
             return
         }
         aether = session
-        (audioTracks, audioTrack, textTracks, textTrack, textTimeable, engineCues) = ([], nil, [], nil, [], [])
+        (audioTracks, audioTrack, textTracks, textTrack, textTimeable, engineCues, engineImages) = ([], nil, [], nil, [], [], [])
         let mine = { [weak self] in self.map { $0.generation == generation } ?? false }
         #if DEBUG
         let muted = DebugHooks.mute
@@ -965,7 +974,8 @@ final class PlayerModel {
                 self?.fail(PlayerFailure(kind: "other", error: words), notice: "This source failed: \(words). Trying the next one.")
             },
             tracks: { [weak self] tracks in if mine() { self?.engineTracks(tracks) } },
-            cues: { [weak self] cues in if mine() { self?.engineCues = cues } }))
+            cues: { [weak self] text, images in if mine(), let self { (self.engineCues, self.engineImages) = (text, images) } },
+            videoSize: { [weak self] size in if mine() { self?.videoSize = size } }))
         NowPlaying.activate()
     }
 
@@ -1006,8 +1016,7 @@ final class PlayerModel {
         Task { try? await core.command(sub, ["type": "playedOn", "key": key, "engine": Backend.aether.rawValue]) }
     }
 
-    /// The file's tracks on the second engine; a forced-only subtitle shows by itself and is not a choice. Bitmap
-    /// subtitles (PGS, DVD, DVB) are listed but take no timing: the overlay draws text only.
+    /// The file's tracks on the second engine; a forced-only subtitle shows by itself and is not a choice.
     private func engineTracks(_ tracks: AetherSession.Tracks) {
         let (audioArrived, textArrived) = (engineAudioIDs.isEmpty && !tracks.audio.isEmpty, engineTextIDs.isEmpty)
         engineAudioIDs = tracks.audio.map(\.id)
@@ -1020,7 +1029,8 @@ final class PlayerModel {
         textTracks = text.enumerated().map { index, track in
             Self.engineName(track, index: index, of: text.count, one: "Subtitles", many: "Subtitles")
         }
-        textTimeable = text.map { !["hdmv_pgs_subtitle", "dvd_subtitle", "dvb_subtitle"].contains($0.codec) }
+        // Bitmap tracks draw as images (`subtitleImages`) at the file's timing, as text tracks do.
+        textTimeable = text.map { _ in true }
         textTrack = tracks.activeText.flatMap { engineTextIDs.firstIndex(of: $0) }
         // As `loadTracks` does once AVPlayer has them: the picks carried over a reopen, then the file's timing.
         if audioArrived, let index = carriedTracks?.audio {

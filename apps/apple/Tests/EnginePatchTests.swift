@@ -74,6 +74,22 @@ private let fixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent
         space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)?.makeImage())
     let bitmap = SubtitleCue(id: 3, startTime: 6, endTime: 7, body: .image(SubtitleImage(cgImage: image, position: .zero)))
     #expect(AetherSession.cue(bitmap) == nil)
+    // A bitmap is an image cue, placed where the disc put it (review apple-aether P2-5).
+    let drawn = try #require(AetherSession.image(SubtitleCue(id: 4, startTime: 6, endTime: 7,
+        body: .image(SubtitleImage(cgImage: image, position: CGRect(x: 0.25, y: 0.8, width: 0.5, height: 0.1))))))
+    #expect((drawn.start, drawn.end, drawn.position) == (6, 7, CGRect(x: 0.25, y: 0.8, width: 0.5, height: 0.1)))
+    #expect(AetherSession.image(SubtitleCue(id: 5, startTime: 4, endTime: 5, body: .text("plain"))) == nil)
+}
+
+/// A bitmap cue on a 1920x800 film fitted into a 1280x760 window: letterboxed, its [0, 1] rect scales with the
+/// picture, not the window.
+@Test func aBitmapCueSitsOnTheFittedPicture() {
+    let rect = PlayerLayout.imageCueRect(position: CGRect(x: 0.25, y: 0.8, width: 0.5, height: 0.1),
+                                         video: CGSize(width: 1920, height: 800), view: CGSize(width: 1280, height: 760))
+    // The picture is 1280x533.33, 113.33 down from the top.
+    #expect(abs(rect.minX - 320) < 0.01 && abs(rect.width - 640) < 0.01)
+    #expect(abs(rect.minY - (113.333 + 426.667)) < 0.01 && abs(rect.height - 53.333) < 0.01)
+    #expect(PlayerLayout.imageCueRect(position: .zero, video: .zero, view: CGSize(width: 10, height: 10)) == .zero)
 }
 
 /// Review apple-aether P2-4: the engine forgets the speed on a load of another source; the session sets the
@@ -99,6 +115,6 @@ private let fixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent
 
 extension AetherSession.Events {
     static var none: Self {
-        .init(time: { _ in }, duration: { _ in }, state: { _, _ in }, firstFrame: {}, ended: {}, failed: { _ in }, tracks: { _ in }, cues: { _ in })
+        .init(time: { _ in }, duration: { _ in }, state: { _, _ in }, firstFrame: {}, ended: {}, failed: { _ in }, tracks: { _ in }, cues: { _, _ in }, videoSize: { _ in })
     }
 }

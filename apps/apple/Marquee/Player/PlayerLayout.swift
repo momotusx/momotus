@@ -196,6 +196,17 @@ enum PlayerLayout {
         let lines = [file, addon].compactMap { $0 }
         return lines.isEmpty ? nil : lines.joined(separator: "\n")
     }
+    /// Where a bitmap subtitle (PGS, DVD, DVB) sits in `view`: its `position` is [0, 1] against the video frame,
+    /// which is fitted into the view; nothing before the video's size is known.
+    static func imageCueRect(position: CGRect, video: CGSize, view: CGSize) -> CGRect {
+        guard video.width > 0, video.height > 0 else { return .zero }
+        let scale = min(view.width / video.width, view.height / video.height)
+        let fitted = CGSize(width: video.width * scale, height: video.height * scale)
+        let origin = CGPoint(x: (view.width - fitted.width) / 2, y: (view.height - fitted.height) / 2)
+        return CGRect(x: origin.x + position.minX * fitted.width, y: origin.y + position.minY * fitted.height,
+                      width: position.width * fitted.width, height: position.height * fitted.height)
+    }
+
     static let fileTrackPrefix = "file:"
 
     /// "Plus 1.5 seconds", "Minus 0.3 seconds", "0.0 seconds": the signed value as VoiceOver says it,

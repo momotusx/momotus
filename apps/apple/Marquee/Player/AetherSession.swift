@@ -1,5 +1,6 @@
 import AetherEngine
 import Combine
+import CoreGraphics
 import Foundation
 
 /// The second player engine behind `PlayerModel` (plans/apple-second-engine.md 2.4): it owns the vendored
@@ -19,8 +20,18 @@ final class AetherSession {
         var failed: (String) -> Void
         /// The file's audio and subtitle tracks, and the one each plays.
         var tracks: (Tracks) -> Void
-        /// The selected file subtitle's text cues around the playhead (images are not drawn here).
-        var cues: ([WebVTT.Cue]) -> Void
+        /// The selected file subtitle's cues so far: text, and bitmaps (PGS, DVD, DVB) drawn as images.
+        var cues: ([WebVTT.Cue], [ImageCue]) -> Void
+        /// The video's coded size, once the source is open: bitmap cues are placed on it.
+        var videoSize: (CGSize) -> Void
+    }
+
+    /// A bitmap subtitle: its image and where it sits, [0, 1] against the video frame.
+    struct ImageCue: @unchecked Sendable {
+        let start: Double
+        let end: Double
+        let image: CGImage
+        let position: CGRect
     }
 
     /// The file's tracks as the engine lists them.
@@ -83,7 +94,9 @@ final class AetherSession {
             .store(in: &bag)
         engine.$subtitleCues
             .receive(on: DispatchQueue.main)
-            .sink { cues in MainActor.assumeIsolated { if mine() { events.cues(cues.compactMap(Self.cue)) } } }
+            .sink { cues in
+                MainActor.assumeIsolated { if mine() { events.cues(cues.compactMap(Self.cue), cues.compactMap(Self.image)) } }
+            }
             .store(in: &bag)
         // Where the engine's start goes (plans/apple-second-engine.md 2.3), logged at the first frame: the probe
         // (open and find_stream_info), the session (route and remux set up), then the first frame (for a remuxed
@@ -119,9 +132,12 @@ final class AetherSession {
         let engine = engine
         opening = Task { [weak self] in
             do {
-                try await engine.load(source: source, startPosition: start > 1 ? start : nil, options: Self.options)
+                let probe = try await engine.load(source: source, startPosition: start > 1 ? start : nil, options: Self.options)
                 // A stop or another load while this one opened: it does not play.
                 guard self?.load == load else { return }
+                if let probe, probe.videoWidth > 0, probe.videoHeight > 0 {
+                    events.videoSize(CGSize(width: Int(probe.videoWidth), height: Int(probe.videoHeight)))
+                }
                 if rate != 1 { engine.setRate(rate) }
                 engine.play()
             } catch is CancellationError {
@@ -154,6 +170,12 @@ final class AetherSession {
         case .richText(let runs): WebVTT.Cue(start: cue.startTime, end: cue.endTime, text: runs.map(\.text).joined())
         case .image: nil
         }
+    }
+
+    /// A bitmap cue as the overlay draws it; a text cue is not one.
+    static func image(_ cue: SubtitleCue) -> ImageCue? {
+        guard case .image(let image) = cue.body else { return nil }
+        return ImageCue(start: cue.startTime, end: cue.endTime, image: image.cgImage, position: image.position)
     }
 
     func selectAudio(id: Int) { engine.selectAudioTrack(index: id) }
