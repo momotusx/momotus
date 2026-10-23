@@ -208,13 +208,14 @@ class TitleCopyTest {
     )
 
     @Test
-    fun `the primary button never offers Play when nothing can play`() {
+    fun `Play stays while versions arrive, and versions listed with none ready give Choose a version`() {
         val target = PlayTarget("tt1", "Play", null)
         val play = PrimaryAction.Play("Play")
         assertEquals(play, TitleCopy.primary(target, null))
         assertEquals(play, TitleCopy.primary(target, snapshot()), "still asking: Play stays, the line under it waits")
         assertEquals(play, TitleCopy.primary(target, snapshot(recommended = row(), done = true)))
-        assertEquals(PrimaryAction.AddSource, TitleCopy.primary(target, snapshot(done = true)))
+        // Every addon answered with nothing while the core still checks what this device keeps: Play stays.
+        assertEquals(play, TitleCopy.primary(target, snapshot(done = true)))
         assertEquals(
             PrimaryAction.ChooseVersion,
             TitleCopy.primary(target, snapshot(rows = listOf(row()), done = true)),
@@ -223,13 +224,34 @@ class TitleCopyTest {
     }
 
     @Test
-    fun `versions that play only through an account make the button Settings`() {
+    fun `when nothing can play the button is the shared table's first action, Back-only states keep Play`() {
         val target = PlayTarget("tt1", "Play", null)
-        val empty = { kind: EmptyKind -> snapshot(done = true).copy(empty = EmptyVersions(kind, EmptyAction.None, 9)) }
-        assertEquals(PrimaryAction.AddAccount, TitleCopy.primary(target, empty(EmptyKind.NeedsAccount)))
-        assertEquals("Settings", PrimaryAction.AddAccount.label)
-        // Nothing an account fixes: a source is the way on.
-        assertEquals(PrimaryAction.AddSource, TitleCopy.primary(target, empty(EmptyKind.NothingPlaysHere)))
+        val play = PrimaryAction.Play("Play")
+        val empty = { kind: EmptyKind, action: EmptyAction, key: String? ->
+            TitleCopy.primary(target, snapshot(done = true).copy(empty = EmptyVersions(kind, action, 0, key = key)))
+        }
+        assertEquals(PrimaryAction.AddSource, empty(EmptyKind.NoSource, EmptyAction.SettingsAddons, null))
+        assertEquals(PrimaryAction.AddAccount, empty(EmptyKind.NeedsAccount, EmptyAction.SettingsAccounts, null))
+        assertEquals(
+            PrimaryAction.PlayFromDevice("kept"),
+            empty(EmptyKind.Unreachable, EmptyAction.PlayFromDevice, "kept"),
+        )
+        assertEquals(PrimaryAction.TryAgain, empty(EmptyKind.Unreachable, EmptyAction.TryAgain, null))
+        assertEquals(PrimaryAction.ChooseVersion, empty(EmptyKind.NothingPlaysHere, EmptyAction.ChooseVersion, null))
+        for (kind in listOf(EmptyKind.NoRoom, EmptyKind.KidsNothing, EmptyKind.NoResults)) {
+            assertEquals(play, empty(kind, EmptyAction.None, null), "$kind keeps Play")
+        }
+        // The words are the shared table's, never "Add a source" or "Add an account".
+        assertEquals(
+            listOf("Settings", "Settings", "Play from this device", "Try again", "Choose a version"),
+            listOf(
+                PrimaryAction.AddSource,
+                PrimaryAction.AddAccount,
+                PrimaryAction.PlayFromDevice("kept"),
+                PrimaryAction.TryAgain,
+                PrimaryAction.ChooseVersion,
+            ).map { it.label },
+        )
     }
 
     @Test

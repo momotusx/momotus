@@ -102,8 +102,9 @@ private const val RETRY = "retry"
  * @param onPlay Play was chosen with the recommended version [key] of [videoId].
  * @param onVersions the Versions screen for [videoId] was asked for (also what Play does while no
  * version is known yet).
- * @param onAddSource no addon gave a version: go where one is added.
+ * @param onAddSource no addon is installed: go where one is added.
  * @param onAddAccount the versions play only through a streaming service account: go where one is added.
+ * @param onRetry no addon answered: ask them again (Try again).
  * @param onEpisode an episode was chosen: it plays.
  * @param onEpisodeVersions "Choose a version" for an episode, from its hold-select menu.
  */
@@ -116,6 +117,7 @@ fun TvTitle(
     onVersions: (videoId: String) -> Unit,
     onAddSource: () -> Unit,
     onAddAccount: () -> Unit,
+    onRetry: () -> Unit,
     onEpisode: (Episode) -> Unit,
     onEpisodeVersions: (Episode) -> Unit,
     modifier: Modifier = Modifier,
@@ -194,6 +196,7 @@ fun TvTitle(
                                     onVersions,
                                     onAddSource,
                                     onAddAccount,
+                                    onRetry,
                                 )
                             }
                             FactsTable(
@@ -270,6 +273,7 @@ private fun Info(
     onVersions: (String) -> Unit,
     onAddSource: () -> Unit,
     onAddAccount: () -> Unit,
+    onRetry: () -> Unit,
 ) {
     val header = checkNotNull(title.header)
     val details = checkNotNull(header.details)
@@ -302,15 +306,18 @@ private fun Info(
                     when (primary) {
                         is PrimaryAction.Play -> PlayFilled
                         PrimaryAction.ChooseVersion -> Icons.Layers
-                        PrimaryAction.AddSource -> Icons.Plus
-                        PrimaryAction.AddAccount -> Icons.KeyRound
+                        PrimaryAction.AddSource, PrimaryAction.AddAccount -> Icons.Settings
+                        is PrimaryAction.PlayFromDevice -> PlayFilled
+                        PrimaryAction.TryAgain -> Icons.RefreshCw
                     },
                 enabled = primary !is PrimaryAction.Play || target != null,
                 onClick = {
                     when {
                         primary == PrimaryAction.AddSource -> onAddSource()
                         primary == PrimaryAction.AddAccount -> onAddAccount()
+                        primary == PrimaryAction.TryAgain -> onRetry()
                         target == null -> Unit
+                        primary is PrimaryAction.PlayFromDevice -> onPlay(primary.key, target.videoId)
                         primary == PrimaryAction.ChooseVersion || recommended == null -> onVersions(target.videoId)
                         else -> onPlay(recommended.key, target.videoId)
                     }

@@ -1,5 +1,6 @@
 package app.marquee.core
 
+import app.marquee.core.model.EmptyAction
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.Episode
 import app.marquee.core.model.PlayTarget
@@ -21,14 +22,26 @@ sealed interface PrimaryAction {
         override val label: String,
     ) : PrimaryAction
 
-    /** Every addon answered and some versions exist, but none is ready to play: pick one. */
+    /** Versions exist and none is ready, or none plays on this device (nothingPlaysHere): pick one on Versions. */
     data object ChooseVersion : PrimaryAction {
-        override val label = "Choose a version"
+        override val label = StreamChoiceCopy.EMPTY.getValue(EmptyKind.NothingPlaysHere).second!!
     }
 
-    /** Every addon answered and none gave a version: the only useful step is adding a source. */
+    /** No addon is installed (noSource): Settings, where one is added. */
     data object AddSource : PrimaryAction {
-        override val label = "Add a source"
+        override val label = StreamChoiceCopy.SETTINGS
+    }
+
+    /** No addon answered and this device keeps the version last played (unreachable): play [key] from here. */
+    data class PlayFromDevice(
+        val key: String,
+    ) : PrimaryAction {
+        override val label = StreamChoiceCopy.PLAY_FROM_DEVICE
+    }
+
+    /** No addon answered (unreachable): ask them again. */
+    data object TryAgain : PrimaryAction {
+        override val label = StreamChoiceCopy.EMPTY.getValue(EmptyKind.Unreachable).second!!
     }
 
     /** Versions were found, and they play only through a streaming service account: Settings, where one is added. */
@@ -69,27 +82,58 @@ object TitleCopy {
 
     /**
      * What the primary button does. Play stays while versions are still arriving (the line under it
-     * says so); once every addon has answered and nothing plays, it is "Add a source" (no versions at
-     * all) or "Choose a version" (some, none ready), never a Play that can only fail.
+     * says so). When nothing can play it is the core's state's first action from the shared table
+     * (plans/play-every-version.md, "Shared Step 3 decisions"): Settings (noSource, needsAccount), Play
+     * from this device or Try again (unreachable), Choose a version (nothingPlaysHere). A state whose only
+     * action is Back (noRoom, kidsNothing, noResults) keeps Play, with the state's line under it, and Play
+     * opens Versions, which says it with its Back. Versions listed with none ready give Choose a version.
      */
     fun primary(
         target: PlayTarget?,
         versions: VersionsSnapshot?,
         runtime: String? = null,
-    ): PrimaryAction =
-        when {
-            versions != null && versions.done && versions.recommended == null -> {
-                when {
-                    versions.empty?.kind == EmptyKind.NeedsAccount -> PrimaryAction.AddAccount
-                    versions.rows.isEmpty() -> PrimaryAction.AddSource
-                    else -> PrimaryAction.ChooseVersion
+    ): PrimaryAction {
+        val play = PrimaryAction.Play(target?.let { playLabel(it, runtime) } ?: "Play")
+        val empty = versions?.empty?.takeIf { versions.recommended == null }
+        return when {
+            empty != null -> {
+                when (empty.action) {
+                    EmptyAction.SettingsAddons -> {
+                        PrimaryAction.AddSource
+                    }
+
+                    EmptyAction.SettingsAccounts -> {
+                        PrimaryAction.AddAccount
+                    }
+
+                    EmptyAction.PlayFromDevice -> {
+                        empty.key?.let(PrimaryAction::PlayFromDevice)
+                            ?: PrimaryAction.TryAgain
+                    }
+
+                    EmptyAction.TryAgain -> {
+                        PrimaryAction.TryAgain
+                    }
+
+                    EmptyAction.ChooseVersion -> {
+                        PrimaryAction.ChooseVersion
+                    }
+
+                    else -> {
+                        play
+                    }
                 }
             }
 
+            versions != null && versions.done && versions.recommended == null && versions.rows.isNotEmpty() -> {
+                PrimaryAction.ChooseVersion
+            }
+
             else -> {
-                PrimaryAction.Play(target?.let { playLabel(it, runtime) } ?: "Play")
+                play
             }
         }
+    }
 
     /** How many real seasons there are (Specials do not count). */
     fun seasonCount(seasons: List<Int>): Int = seasons.count { it > 0 }

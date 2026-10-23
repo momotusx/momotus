@@ -98,8 +98,9 @@ private val HERO_FADE = 96.dp
  * watched toggles, for a series the seasons and the episodes of the selected one (tap plays, press
  * and hold opens more), and last the details.
  *
- * @param onAddSource no addon gave a version: go where one is added.
+ * @param onAddSource no addon is installed: go where one is added.
  * @param onAddAccount the versions play only through a streaming service account: go where one is added.
+ * @param onRetry no addon answered: ask them again (Try again).
  * @param onEpisode an episode was tapped: it plays.
  * @param onEpisodeVersions "Choose a version" for an episode, from its press-and-hold menu.
  */
@@ -111,6 +112,7 @@ fun PhoneTitle(
     onVersions: (videoId: String) -> Unit,
     onAddSource: () -> Unit,
     onAddAccount: () -> Unit,
+    onRetry: () -> Unit,
     onEpisode: (Episode) -> Unit,
     onEpisodeVersions: (Episode) -> Unit,
     modifier: Modifier = Modifier,
@@ -186,7 +188,7 @@ fun PhoneTitle(
                     ) { Hero(details.background ?: details.poster, details.logo, details.name, hasArt, side) }
                     item(
                         key = "info",
-                    ) { Info(title, versions, versionsFailed, onPlay, onVersions, onAddSource, onAddAccount) }
+                    ) { Info(title, versions, versionsFailed, onPlay, onVersions, onAddSource, onAddAccount, onRetry) }
                     if (header.seasons.isNotEmpty()) {
                         item(key = "seasons") {
                             val compact = TitleCopy.compactSeasons(header.seasons)
@@ -319,6 +321,7 @@ private fun Info(
     onVersions: (String) -> Unit,
     onAddSource: () -> Unit,
     onAddAccount: () -> Unit,
+    onRetry: () -> Unit,
 ) {
     val header = checkNotNull(title.header)
     val details = checkNotNull(header.details)
@@ -352,8 +355,9 @@ private fun Info(
                     when (primary) {
                         is PrimaryAction.Play -> PlayFilled
                         PrimaryAction.ChooseVersion -> Icons.Layers
-                        PrimaryAction.AddSource -> Icons.Plus
-                        PrimaryAction.AddAccount -> Icons.KeyRound
+                        PrimaryAction.AddSource, PrimaryAction.AddAccount -> Icons.Settings
+                        is PrimaryAction.PlayFromDevice -> PlayFilled
+                        PrimaryAction.TryAgain -> Icons.RefreshCw
                     },
                 modifier = Modifier.widthIn(min = PRIMARY_MIN).weight(1f),
                 enabled = primary !is PrimaryAction.Play || target != null,
@@ -361,7 +365,9 @@ private fun Info(
                     when {
                         primary == PrimaryAction.AddSource -> onAddSource()
                         primary == PrimaryAction.AddAccount -> onAddAccount()
+                        primary == PrimaryAction.TryAgain -> onRetry()
                         target == null -> Unit
+                        primary is PrimaryAction.PlayFromDevice -> onPlay(primary.key, target.videoId)
                         primary == PrimaryAction.ChooseVersion || recommended == null -> onVersions(target.videoId)
                         else -> onPlay(recommended.key, target.videoId)
                     }
