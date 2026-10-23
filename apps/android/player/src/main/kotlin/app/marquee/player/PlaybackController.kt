@@ -101,7 +101,10 @@ class PlaybackController(
     var offer: OtherVersion? by mutableStateOf(null)
         private set
 
-    /** Settings was opened from the failure card: the player asks again when it comes back. */
+    /**
+     * Settings was opened from the failure card: the player asks again when it comes back. Read as the player enters
+     * composition, so it relies on the navigation dropping a covered entry (as for [app.marquee.core.views.VersionsView]).
+     */
     var askAgain = false
 
     /** The version this device keeps, when no source answered: the card's "Play from this device". */

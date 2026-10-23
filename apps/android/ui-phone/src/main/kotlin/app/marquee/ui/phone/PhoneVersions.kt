@@ -1,7 +1,10 @@
+@file:OptIn(ExperimentalComposeUiApi::class)
+
 package app.marquee.ui.phone
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -34,10 +37,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
@@ -186,10 +191,30 @@ fun PhoneVersions(
     // The order the rows showed in, recorded after they show: held reads it, and composition changes nothing.
     if (held) LaunchedEffect(sections.flatMap { s -> s.rows.map { it.key } }) { VersionsCopy.record(sections, seen) }
     val open = remember { mutableStateMapOf<String, Boolean>() }
+    // A tapped fold keeps its place under the finger: its offset before the change, put back once the list holds the
+    // change. The index is counted as the list below is built (head, card, shortcuts, then each section's heading,
+    // shown rows and fold); an item added above a fold has to be counted here too.
+    var anchor by remember { mutableStateOf<Pair<String, Int>?>(null) }
+    LaunchedEffect(anchor) {
+        val (group, offset) = anchor ?: return@LaunchedEffect
+        var index = 2 + VersionsCopy.shortcuts(snapshot).size
+        for (section in sections) {
+            index += 1 + if (open[section.id] == true) section.rows.size else minOf(section.rows.size, SHOWN)
+            if (section.id == group) break
+            if (section.rows.size > SHOWN) index++
+        }
+        listState.scrollToItem(index, -offset)
+        anchor = null
+    }
     Box(modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars),
+            // Under an open sheet the page is out of a screen reader's reach, so the sheet reads as a modal.
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .then(if (sheet != null) Modifier.clearAndSetSemantics {} else Modifier),
             contentPadding = PaddingValues(start = side, end = side, top = Marquee.space.m, bottom = Marquee.space.xl),
             verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
         ) {
@@ -275,7 +300,11 @@ fun PhoneVersions(
                     item(key = "fold:$group") {
                         SecondaryButton(
                             if (all) StreamChoiceCopy.SHOW_FEWER else StreamChoiceCopy.showAll(rows.size),
-                            { open[group] = !all },
+                            {
+                                val at = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == "fold:$group" }
+                                open[group] = !all
+                                if (at != null) anchor = group to at.offset
+                            },
                             icon = if (all) Icons.ChevronUp else Icons.ChevronDown,
                             spoken = VersionsCopy.foldSpoken(section.title, rows.size, open = all),
                         )
@@ -520,6 +549,9 @@ private fun DetailsSheet(
     BackHandler(onBack = onClose)
     val colors = Marquee.colors
     val line = why?.let(StreamChoiceCopy::emptyRowLine) ?: StreamChoiceCopy.rowLine(row)
+    // The focus goes into the sheet at once and stays in it until the sheet closes.
+    val play = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { play.requestFocus() } }
     Box(
         Modifier
             .fillMaxSize()
@@ -536,6 +568,8 @@ private fun DetailsSheet(
                 .pointerInput(Unit) { detectTapGestures { } }
                 .testTag(DETAILS_SHEET)
                 .semantics { paneTitle = StreamChoiceCopy.DETAILS }
+                .focusProperties { exit = { FocusRequester.Cancel } }
+                .focusGroup()
                 .windowInsetsPadding(WindowInsets.navigationBars)
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
@@ -555,6 +589,7 @@ private fun DetailsSheet(
                 { onPlay(row.key) },
                 Modifier.fillMaxWidth().heightIn(min = 48.dp),
                 icon = PlayFilled,
+                focusRequester = play,
             )
         }
     }

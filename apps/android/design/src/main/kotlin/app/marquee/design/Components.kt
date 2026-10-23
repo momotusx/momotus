@@ -974,8 +974,9 @@ enum class BadgeLook { Filled, Plain, Outlined }
 
 /**
  * Apple's badge row as measured (design/exploration/v3 `badgeRow`, design/reference/apple-tv.md): one badge per family,
- * 31 tall on TV at its meta row and 13 on the phone, in the palette's `muted` (64 percent white, and dark on a focused
- * row's white); a filled badge's word takes the `surface` color on it, so it reads in both.
+ * at least 31 tall on TV at its meta row and 13 on the phone (11 sp, the phone's floor), in the palette's `muted`
+ * (64 percent white, and dark on a focused row's white); a filled badge's word takes the `surface` color on it, so it
+ * reads in both.
  */
 @Composable
 fun BadgeRow(
@@ -999,7 +1000,9 @@ fun BadgeRow(
                 }
             Box(
                 Modifier
-                    .height(if (tv) 31.dp else 13.dp)
+                    // On the phone a floor, not a height: large text grows the badge instead of spilling out of it.
+                    // TV keeps Apple's measured 31, its text drawn on the fixed point canvas.
+                    .then(if (tv) Modifier.height(31.dp) else Modifier.heightIn(min = 13.dp))
                     .then(box)
                     .padding(
                         horizontal =
@@ -1010,6 +1013,7 @@ fun BadgeRow(
                             } else {
                                 3.dp
                             },
+                        vertical = if (tv) 0.dp else 1.dp,
                     ),
                 contentAlignment = Alignment.Center,
             ) {
@@ -1018,7 +1022,7 @@ fun BadgeRow(
                     style =
                         TextStyle(
                             color = if (look == BadgeLook.Filled) Marquee.colors.surface else ink,
-                            fontSize = if (tv) 23.sp else 10.sp,
+                            fontSize = if (tv) 23.sp else 11.sp,
                             fontWeight = FontWeight.SemiBold,
                             fontFamily = MarqueeFonts.text,
                         ),
