@@ -916,6 +916,17 @@ enum TrackPicker {
         return Language(language: tag, name: t.name, own: audioOwnName(t), codes: codes.sorted(), file: [t], tracks: [])
     }
 
+    /// A file track that names no language, by its place: an only audio track is "Original audio", several
+    /// read "Audio 1", "Audio 2"; subtitles read "Subtitles" alone or numbered.
+    static func placeName(index: Int, count: Int, audio: Bool) -> String {
+        if audio { return count == 1 ? "Original audio" : "Audio \(index + 1)" }
+        return count == 1 ? "Subtitles" : "Subtitles \(index + 1)"
+    }
+
+    /// The audio list has a flag column only when a track names its language; an untagged track then keeps the
+    /// column's space blank, never a "?" mark.
+    static func audioFlags(_ tracks: [FileTrack]) -> Bool { tracks.contains { tag($0.language) != nil } }
+
     /// Audio: a search only past five tracks.
     static func audioSearch(_ count: Int) -> Bool { count > 5 }
 }

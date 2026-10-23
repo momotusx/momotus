@@ -227,7 +227,10 @@ struct TrackPickerPanel: View {
         let isDefault = TrackPicker.marksDefault(index: t.index, defaultIndex: model.audioDefault, count: audio.count)
         let own = TrackPicker.audioOwnName(t)
         return PickerRow(focused: lit(.audio(t.index)), selected: on) {
-            FlagMark(tag: t.language.map(TrackPicker.fileTag) ?? "")
+            // No "?" for a track that names no language: a blank in the flag column, or no column at all.
+            if TrackPicker.audioFlags(audio) {
+                if let tag = TrackPicker.tag(t.language) { FlagMark(tag: TrackPicker.fileTag(tag)) } else { Color.clear.frame(width: 24, height: 24) }
+            }
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 8) {
                     Text(t.name).textFont(Theme.type.body, relativeTo: .body).lineLimit(1).fixedSize()

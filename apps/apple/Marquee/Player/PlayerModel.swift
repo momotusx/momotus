@@ -314,7 +314,7 @@ final class PlayerModel {
             guard let group = try? await asset.loadMediaSelectionGroup(for: .audible),
                   let self, generation == self.generation else { return }
             audioGroup = group
-            audioTracks = Self.names(group.options, one: "Default", many: "Track")
+            audioTracks = Self.names(group.options, audio: true)
             audioTrackLanguages = group.options.map(Self.tag)
             audioDefault = group.defaultOption.flatMap { group.options.firstIndex(of: $0) }
             audioTrack = item.currentMediaSelection.selectedMediaOption(in: group).flatMap { group.options.firstIndex(of: $0) }
@@ -329,7 +329,7 @@ final class PlayerModel {
                 from: group.options, withoutMediaCharacteristics: [.containsOnlyForcedSubtitles])
             (textGroup, textOptions) = (group, options)
             textTimeable = options.map { PlayerLayout.fileTrackTimeable(mediaType: $0.mediaType.rawValue) }
-            textTracks = Self.names(options, one: "Subtitles", many: "Subtitles")
+            textTracks = Self.names(options, audio: false)
             textTrackLanguages = options.map(Self.tag)
             startFile = nil
             textTrack = item.currentMediaSelection.selectedMediaOption(in: group).flatMap { options.firstIndex(of: $0) }
@@ -377,11 +377,11 @@ final class PlayerModel {
 
     /// The options' language names. One tagged "und" (undetermined) or not at
     /// all would read "Unknown language", so it is named by its place instead.
-    private static func names(_ options: [AVMediaSelectionOption], one: String, many: String) -> [String] {
+    private static func names(_ options: [AVMediaSelectionOption], audio: Bool) -> [String] {
         options.enumerated().map { index, option in
             let tag = option.extendedLanguageTag ?? option.locale?.identifier ?? ""
             if !tag.isEmpty, !tag.hasPrefix("und") { return option.displayName }
-            return options.count == 1 ? one : "\(many) \(index + 1)"
+            return TrackPicker.placeName(index: index, count: options.count, audio: audio)
         }
     }
 
@@ -1085,13 +1085,13 @@ final class PlayerModel {
         let (audioArrived, textArrived) = (engineAudioIDs.isEmpty && !tracks.audio.isEmpty, engineTextIDs.isEmpty)
         engineAudioIDs = tracks.audio.map(\.id)
         audioTracks = tracks.audio.enumerated().map { index, track in
-            Self.engineName(track, index: index, of: tracks.audio.count, one: "Default", many: "Track")
+            Self.engineName(track, index: index, of: tracks.audio.count, audio: true)
         }
         audioTrack = tracks.activeAudio.flatMap { engineAudioIDs.firstIndex(of: $0) }
         let text = tracks.text.filter { !$0.isForced }
         engineTextIDs = text.map(\.id)
         textTracks = text.enumerated().map { index, track in
-            Self.engineName(track, index: index, of: text.count, one: "Subtitles", many: "Subtitles")
+            Self.engineName(track, index: index, of: text.count, audio: false)
         }
         (audioTrackLanguages, audioDefault, textTrackLanguages) = AetherSession.pickerTags(audio: tracks.audio, text: text)
         // Bitmap tracks draw as images (`subtitleImages`) at the file's timing, as text tracks do.
@@ -1118,12 +1118,12 @@ final class PlayerModel {
     }
 
     /// A track's language name, else its place, as `names` does for AVPlayer's options.
-    private static func engineName(_ track: TrackInfo, index: Int, of count: Int, one: String, many: String) -> String {
+    private static func engineName(_ track: TrackInfo, index: Int, of count: Int, audio: Bool) -> String {
         if let language = track.language, !language.isEmpty, language != "und",
            let name = Locale(identifier: "en").localizedString(forLanguageCode: language) {
             return name
         }
-        return count == 1 ? one : "\(many) \(index + 1)"
+        return TrackPicker.placeName(index: index, count: count, audio: audio)
     }
 
     private func engineEnded() {

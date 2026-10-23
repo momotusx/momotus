@@ -296,3 +296,26 @@ private let klingon = track(5, "tlh", "tlh", "Klingon")
     // The region stays when the English label says it too.
     #expect(TrackPicker.audioOwnName(TrackPicker.FileTrack(index: 0, name: "German (Germany)", language: "de-DE")) == "Deutsch (Deutschland)")
 }
+
+@Test func anAudioTrackThatNamesNoLanguageIsNamedByItsPlaceWithNoQuestionMark() throws {
+    // One: "Original audio", never "Default" with a "?"; several: "Audio 1", "Audio 2".
+    #expect(TrackPicker.placeName(index: 0, count: 1, audio: true) == "Original audio")
+    #expect(TrackPicker.placeName(index: 1, count: 3, audio: true) == "Audio 2")
+    #expect(TrackPicker.placeName(index: 0, count: 1, audio: false) == "Subtitles")
+    #expect(TrackPicker.placeName(index: 2, count: 3, audio: false) == "Subtitles 3")
+    // No flag column when no track names its language; a blank, not "?", beside tagged ones.
+    let untagged = TrackPicker.FileTrack(index: 0, name: "Original audio", language: nil)
+    #expect(!TrackPicker.audioFlags([untagged]))
+    #expect(!TrackPicker.audioFlags([TrackPicker.FileTrack(index: 0, name: "Audio 1", language: "und")]))
+    #expect(TrackPicker.audioFlags([untagged, TrackPicker.FileTrack(index: 1, name: "German", language: "ger")]))
+    let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
+    let picker = try String(contentsOf: app.appending(path: "Player/SubtitlePicker.swift"), encoding: .utf8)
+    let row = try body(of: "private func audioRow(", in: picker)
+    #expect(row.contains("if TrackPicker.audioFlags(audio) {"))
+    #expect(row.contains("} else { Color.clear.frame(width: 24, height: 24) }"))
+    #expect(!row.contains("?? \"\")"))
+    // Both engines name by place through the one rule.
+    let model = try String(contentsOf: app.appending(path: "Player/PlayerModel.swift"), encoding: .utf8)
+    #expect(model.components(separatedBy: "TrackPicker.placeName(index:").count == 3)
+    #expect(!model.contains("one: \"Default\""))
+}
