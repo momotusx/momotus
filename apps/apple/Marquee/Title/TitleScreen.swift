@@ -42,6 +42,7 @@ struct TitleScreen: View {
     @State private var openedFromLink = false
     @Environment(\.linkRequests) private var links
     @Environment(\.openTab) private var openTab
+    @Environment(SearchInput.self) private var searchInput: SearchInput?
 
     init(route: TitleRoute, core: CoreClient) {
         _model = State(initialValue: TitleModel(route: route, core: core))
@@ -397,7 +398,7 @@ struct TitleScreen: View {
             links?.discover = DiscoverRequest(kind: details?.kind ?? "movie", genre: genre)
             openTab(.discover, link: true)
         case .director(let name):
-            links?.search = name
+            searchInput?.text = name
             openTab(.search, link: true)
         }
     }

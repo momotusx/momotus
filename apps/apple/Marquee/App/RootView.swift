@@ -9,11 +9,11 @@ struct OpenTabAction {
     @MainActor func callAsFunction(_ tab: AppTab, link: Bool = false) { open(tab, link) }
 }
 
-/// A title page's linked chips (plans/design-v3-phase3-apple.md 4.2): Discover on a kind and a
-/// genre, or Search for a name. The place reads its request once it can act on it, then clears it.
+/// A title page's genre chip (plans/design-v3-phase3-apple.md 4.2): Discover on a kind and a genre.
+/// Discover reads the request once it can act on it, then clears it. A director chip writes
+/// `SearchInput` instead.
 @MainActor @Observable final class LinkRequests {
     var discover: DiscoverRequest?
-    var search: String?
 }
 
 extension EnvironmentValues {
@@ -22,8 +22,8 @@ extension EnvironmentValues {
     /// The tab this view is in is the one on screen. On a phone every opened
     /// tab stays alive behind the shown one, so its pages never disappear.
     @Entry var tabShown = true
-    /// Bumped by Cmd-F on the Mac: Search puts the cursor in its field.
-    @Entry var searchRequest = 0
+    /// The Mac header shows the search field, so Search's page draws none of its own.
+    @Entry var headerSearchField = false
 }
 
 /// The navigation: the floating glass capsule at the bottom on iPhone and iPad,
@@ -132,8 +132,8 @@ struct MainShell: View {
     /// Places opened so far, kept alive so each keeps its place (a query, a
     /// catalog and its scroll, a filter, an open title) as a tab bar does.
     @State private var opened: Set<AppTab> = [.home]
-    /// Cmd-F presses, for Search's field.
-    @State private var searchRequests = 0
+    /// The one search query, shared by the Mac header's field and Search's page.
+    @State private var searchInput = SearchInput()
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var typing = false
@@ -156,6 +156,14 @@ struct MainShell: View {
             .environment(\.openTab, OpenTabAction { select($0, link: $1) })
             .environment(\.linkRequests, links)
             .environment(immersion)
+            .environment(searchInput)
+            // Typing shows Search's first page, as Cmd-F does.
+            .onChange(of: searchInput.text) { _, text in
+                if SearchRules.bringsSearch(text: text, onSearch: tab == .search, titleOver: !(titlePaths[.search] ?? []).isEmpty) {
+                    popToRoot(.search)
+                    select(.search)
+                }
+            }
             // Home stays subscribed for the profile's life, so Back lands on the same rows.
             .task(id: home.taskId) { await home.run() }
             // A switch waits until these screens have left.
@@ -249,7 +257,11 @@ struct MainShell: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Theme.Palette.bg)
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { windowWidth = $0 }
-            .toolbar { NavToolbar(selection: tab, select: { select($0) }, profiles: { showProfiles = true }, narrow: windowWidth < NavToolbar.fieldWidthFrom) }
+            .toolbar {
+                NavToolbar(selection: tab, select: { select($0) }, find: find, profiles: { showProfiles = true }, input: searchInput, narrow: windowWidth < NavToolbar.fieldWidthFrom)
+            }
+            // The field moves between the header and the page: the cursor follows it.
+            .onChange(of: windowWidth < NavToolbar.fieldWidthFrom) { if tab == .search { searchInput.focus += 1 } }
             // tv.apple.com's black header.
             .toolbarBackground(Theme.Palette.barDesktop, for: .windowToolbar)
             .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
@@ -264,12 +276,7 @@ struct MainShell: View {
             })
             // The Go menu and its keys, off while the player covers the places.
             .focusedSceneValue(\.places, immersion.active ? nil : OpenTabAction { tab, _ in select(tab) })
-            .focusedSceneValue(\.find, immersion.active ? nil : OpenTabAction { _, _ in
-                // A title open over Search goes first: the field is on Search's first page.
-                popToRoot(.search)
-                select(.search)
-                searchRequests += 1
-            })
+            .focusedSceneValue(\.find, immersion.active ? nil : OpenTabAction { _, _ in find() })
         #else
         places.safeAreaInset(edge: .top, spacing: 0) {
             // Top-level places only, as on Android: a pushed page has no pill to wander into.
@@ -317,6 +324,16 @@ struct MainShell: View {
         tab = item
     }
 
+    #if os(macOS)
+    /// Cmd-F and the narrow header's glyph: Search's first page with the cursor in its field (a title
+    /// open over Search goes first).
+    private func find() {
+        popToRoot(.search)
+        select(.search)
+        searchInput.focus += 1
+    }
+    #endif
+
     private func popToRoot(_ item: AppTab) {
         switch item {
         case .home: homePath = []
@@ -337,7 +354,9 @@ struct MainShell: View {
             ForEach(AppTab.allCases.filter(opened.contains), id: \.self) { item in
                 screen(item)
                     .environment(\.tabShown, item == tab)
-                    .environment(\.searchRequest, searchRequests)
+                    #if os(macOS)
+                    .environment(\.headerSearchField, windowWidth >= NavToolbar.fieldWidthFrom)
+                    #endif
                     .opacity(item == tab ? 1 : 0)
                     .allowsHitTesting(item == tab)
                     .accessibilityHidden(item != tab)
@@ -517,7 +536,10 @@ private struct TabBar: View {
 private struct NavToolbar: ToolbarContent {
     let selection: AppTab
     let select: (AppTab) -> Void
+    /// The narrow header's glyph: Search's page with the cursor in the page's field.
+    let find: () -> Void
     let profiles: () -> Void
+    let input: SearchInput
     /// A window too narrow for the 172 pt field beside the tabs: the field is its glyph alone.
     var narrow = false
     /// The narrowest window that holds the wordmark, the centered tabs, the whole field and the
@@ -554,13 +576,50 @@ private struct NavToolbar: ToolbarContent {
 
     private var tools: some View {
         HStack(spacing: 16) {
-            Button { select(.search) } label: { Label("Search", glyph: "search") }
-                .buttonStyle(SearchFieldStyle(narrow: narrow))
-                // The glyph alone on a narrow window: the pointer still names it.
-                .help("Search")
-                .accessibilityAddTraits(selection == .search ? .isSelected : [])
+            if narrow {
+                Button(action: find) { Label("Search", glyph: "search") }
+                    .buttonStyle(SearchGlyphStyle())
+                    // The glyph alone: the pointer still names it.
+                    .help("Search")
+                    .accessibilityAddTraits(selection == .search ? .isSelected : [])
+            } else {
+                HeaderSearchField(input: input)
+            }
             ProfileButton(size: 28, action: profiles)
         }
+    }
+}
+
+/// The header's search field (tv.apple.com: 172 by 28, a 1 pt white edge, 15/400): where Search is
+/// typed on the Mac. Typing shows Search (`SearchRules.bringsSearch`); Escape clears, then lets go.
+private struct HeaderSearchField: View {
+    @Bindable var input: SearchInput
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 4, style: .continuous)
+        HStack(spacing: 6) {
+            Glyph("search", size: 13).foregroundStyle(Theme.Palette.dim)
+            TextField("Search", text: $input.text, prompt: Text("Search").foregroundStyle(Theme.Palette.dim))
+                .textFieldStyle(.plain)
+                .foregroundStyle(Theme.Palette.text)
+                .autocorrectionDisabled()
+                .focused($focused)
+                .onKeyPress(.escape) {
+                    switch SearchRules.escape(input.text) {
+                    case .clear: input.text = ""
+                    case .leave: focused = false
+                    }
+                    return .handled
+                }
+        }
+        .textFont(15, relativeTo: .callout)
+        .padding(.horizontal, 8)
+        .frame(width: 172, height: 28)
+        .overlay(shape.strokeBorder(Theme.Palette.text, lineWidth: 1))
+        .contentShape(shape)
+        .modifier(FocusRing(shape: shape, active: focused))
+        .onChange(of: input.focus) { focused = true }
     }
 }
 
@@ -592,29 +651,22 @@ private struct DesktopTabStyle: ButtonStyle {
     }
 }
 
-/// The header's search field (tv.apple.com, 172 by 28, a 1 pt white edge): a button that opens Search.
-/// Narrow, a 28 pt square with the glyph alone.
-private struct SearchFieldStyle: ButtonStyle {
-    var narrow = false
-
+/// The narrow header's search: a 28 pt square with the glyph alone and the field's 1 pt edge.
+private struct SearchGlyphStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        Field(configuration: configuration, narrow: narrow)
+        Field(configuration: configuration)
     }
 
     private struct Field: View {
         let configuration: ButtonStyleConfiguration
-        let narrow: Bool
         @KeyboardFocused private var focused
 
         var body: some View {
             let shape = RoundedRectangle(cornerRadius: 4, style: .continuous)
-            Group {
-                if narrow { configuration.label.labelStyle(.iconOnly) } else { configuration.label.labelStyle(PillLabelStyle()) }
-            }
+            configuration.label.labelStyle(.iconOnly)
                 .textFont(15, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.dim)
-                .padding(.horizontal, narrow ? 0 : 8)
-                .frame(width: narrow ? 28 : 172, height: 28, alignment: narrow ? .center : .leading)
+                .frame(width: 28, height: 28)
                 .overlay(shape.strokeBorder(Theme.Palette.text, lineWidth: 1))
                 .contentShape(shape)
                 .modifier(FocusRing(shape: shape, active: focused))

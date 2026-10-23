@@ -4,22 +4,25 @@ import SwiftUI
 /// query; results arrive as rows, recent searches fill the empty state.
 struct SearchScreen: View {
     @State private var search: LiveRecord<SearchSnapshot>
-    @State private var query = ""
     @FocusState private var fieldFocused: Bool
     @Environment(\.metrics) private var metrics
     @Environment(\.tabShown) private var shown
-    @Environment(\.searchRequest) private var searchRequest
-    @Environment(\.linkRequests) private var links
+    @Environment(\.headerSearchField) private var headerField
+    /// The query, shared with the Mac header's field (plans/design-v3-phase7-apple.md 2).
+    @Environment(SearchInput.self) private var input
 
     init(core: CoreClient) {
         _search = State(initialValue: LiveRecord("search", core: core))
     }
 
+    private var query: String { input.text }
+
     var body: some View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: metrics.rowSpacing) {
                 #if !os(tvOS)
-                field.padding(.horizontal, metrics.gutter)
+                // The page draws its field only where the header has none.
+                if !headerField { field.padding(.horizontal, metrics.gutter) }
                 #endif
                 if let failure = search.failure {
                     StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", search.retry)).padding(.horizontal, metrics.gutter)
@@ -45,16 +48,17 @@ struct SearchScreen: View {
         #if os(tvOS)
         // The system's inline keyboard with the results live under it, and
         // dictation, as the TV's own apps search (review apple-journey P2-8).
-        .searchable(text: $query, prompt: Self.prompt)
+        .searchable(text: Bindable(input).text, prompt: Self.prompt)
         .searchSuggestions {
             ForEach(search.snapshot?.recent ?? [], id: \.self) { Label($0, glyph: "history").searchCompletion($0) }
         }
         #endif
         .task(id: search.taskId) { search.start() }
-        .onChange(of: query) { _, value in setQuery(value) }
-        // A title page's director chip: the name, once the view can take a query.
-        .onChange(of: links?.search, initial: true) { takeLink() }
-        .onChange(of: search.snapshot == nil) { takeLink() }
+        .onChange(of: input.text) { _, value in setQuery(value) }
+        // A query typed or linked before the view could take it (a director chip opening Search).
+        .onChange(of: search.snapshot == nil) { _, none in
+            if !none, !query.isEmpty, search.snapshot?.query != query { setQuery(query) }
+        }
         // A title opened from the results covers this page: the query goes into
         // Recent, however the tile was chosen (a tap, VoiceOver, a keyboard, a remote).
         .onDisappear { if !query.trimmingCharacters(in: .whitespaces).isEmpty { search.command(["type": "remember"]) } }
@@ -65,11 +69,11 @@ struct SearchScreen: View {
             // After the view opened and the launch's addons installed.
             guard query.isEmpty, let typed = DebugHooks.search else { return }
             try? await Task.sleep(for: .seconds(8))
-            query = typed
+            input.text = typed
         }
         #endif
-        // Cmd-F on the Mac: the cursor goes in the field every time.
-        .onChange(of: searchRequest) { fieldFocused = true }
+        // Cmd-F, the narrow header's glyph, a window crossing the header field's width.
+        .onChange(of: input.focus) { fieldFocused = true }
         // Out of sight the field lets go, so typing elsewhere never lands in it;
         // on the Mac it takes the cursor again each time Search shows.
         .onChange(of: shown) { _, now in
@@ -78,16 +82,15 @@ struct SearchScreen: View {
             #else
             if !now { fieldFocused = false }
             #endif
+            // Leaving Search on the Mac: Recent keeps the query, then the header's field clears.
+            if SearchRules.clearsOnLeave(text: query, shown: now) {
+                search.command(["type": "remember"])
+                input.text = ""
+            }
         }
     }
 
     private static let prompt = "Search titles"
-
-    private func takeLink() {
-        guard let name = links?.search, search.snapshot != nil else { return }
-        links?.search = nil
-        if query == name { setQuery(name) } else { query = name }
-    }
 
     private func setQuery(_ value: String) {
         search.command(["type": "setQuery", "query": value])
@@ -96,7 +99,7 @@ struct SearchScreen: View {
     private var field: some View {
         HStack(spacing: 12) {
             Glyph("search").foregroundStyle(Theme.Palette.muted)
-            TextField(Self.prompt, text: $query)
+            TextField(Self.prompt, text: Bindable(input).text)
                 .textFieldStyle(.plain)
                 .textFont(Theme.type.headline + 2, relativeTo: .title3)
                 .foregroundStyle(Theme.Palette.text)
@@ -107,7 +110,7 @@ struct SearchScreen: View {
                 .submitLabel(.search)
                 #endif
             if !query.isEmpty {
-                Button { query = "" } label: {
+                Button { input.text = "" } label: {
                     Glyph("circle-x").foregroundStyle(Theme.Palette.muted)
                         .frame(width: 44, height: 44)
                 }
@@ -138,7 +141,7 @@ struct SearchScreen: View {
                     .foregroundStyle(Theme.Palette.muted)
                 FlowRow(spacing: 10) {
                     ForEach(recent, id: \.self) { text in
-                        Button { query = text } label: { Label(text, glyph: "history") }
+                        Button { input.text = text } label: { Label(text, glyph: "history") }
                             .buttonStyle(ChipStyle(selected: false))
                     }
                 }
