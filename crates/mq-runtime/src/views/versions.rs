@@ -1970,7 +1970,10 @@ fn smaller(rows: &[RankedRow], pick: &RankedRow) -> Option<String> {
 fn sharper(rows: &[RankedRow], pick: &RankedRow, screen: u32) -> Option<String> {
     let height = |r: &RankedRow| r.stream.release.resolution.height();
     rows.iter()
-        .find(|r| shortcut(r, pick) && height(r) > height(pick) && height(r) <= screen)
+        .find(|r| {
+            // A pick of no stated resolution has nothing to be sharper than.
+            height(pick) > 0 && shortcut(r, pick) && height(r) > height(pick) && height(r) <= screen
+        })
         .map(|r| r.stream.key.clone())
 }
 
@@ -2466,6 +2469,20 @@ mod tests {
         };
         assert_eq!(action(false), None);
         assert_eq!(action(true), Some(EmptyAction::TryAgain));
+    }
+
+    /// Review 2026-10-23 P3-8: a pick of no stated resolution offers no
+    /// Sharper.
+    #[test]
+    fn no_sharper_than_an_unstated_resolution() {
+        let rows = rank_for_tests(vec![
+            wire(r#"{"title":"Movie.2020.WEB-DL.x264-AAA","url":"https://a.example/a.mkv"}"#),
+            wire(r#"{"title":"Movie.2020.480p.WEB-DL.x264-BBB","url":"https://a.example/b.mkv"}"#),
+        ]);
+        let pick = (rows.iter())
+            .find(|r| r.stream.release.resolution.height() == 0)
+            .unwrap();
+        assert_eq!(sharper(&rows, pick, 1080), None);
     }
 
     fn wire(json: &str) -> ParsedStream {

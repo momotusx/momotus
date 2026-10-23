@@ -139,5 +139,8 @@ empty: EmptyKind | null,
  * source played past its start (or the playback failed). Time the app
  * spends after `ready` (another player engine opening the file) counts
  * against it too (plans/apple-second-engine.md 2.3). Null otherwise.
+ * An app reads it only while it is still opening the source: a video
+ * that plays, or is paused, before its first 30 s is never failed by
+ * it.
  */
 startBudgetEndsAt: number | null, };

@@ -2016,10 +2016,18 @@ async fn a_stall_of_30s_moves_the_recommendation_on_once_with_its_position() {
     }
     let begun = Instant::now();
     playback.stalled(true, 12_500);
+    // A player repeating it while the stall lasts keeps its clock.
+    tokio::time::sleep(Duration::from_secs(10)).await;
+    playback.stalled(true, 12_500);
     until("the move", || {
         playback.snapshot().key.as_ref() == Some(&keys[1])
     })
     .await;
+    assert!(
+        begun.elapsed() < Duration::from_secs(36),
+        "{:?}",
+        begun.elapsed()
+    );
     assert!(
         begun.elapsed() >= Duration::from_secs(30),
         "{:?}",

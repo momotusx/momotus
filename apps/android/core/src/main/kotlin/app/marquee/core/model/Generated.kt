@@ -1038,7 +1038,7 @@ data class PlaybackSnapshot(
     val chooseAnother: Boolean = false,
     /** Why nothing played, once `phase` is `failed`: the zero-playable words for what happened (`empty.<kind>` in stream-choice-words.json): notStarted when the start's budget ran out; else noRoom when every failure was a refusal for room, nothingPlaysHere when every failure was the versions' own on this device, else unreachable. */
     val empty: EmptyKind? = null,
-    /** When a first play's start budget (90 s from its first attempt's add) ends, in epoch ms, while it runs: from the first attempt until a source played past its start (or the playback failed). Time the app spends after `ready` (another player engine opening the file) counts against it too (plans/apple-second-engine.md 2.3). Null otherwise. */
+    /** When a first play's start budget (90 s from its first attempt's add) ends, in epoch ms, while it runs: from the first attempt until a source played past its start (or the playback failed). Time the app spends after `ready` (another player engine opening the file) counts against it too (plans/apple-second-engine.md 2.3). Null otherwise. An app reads it only while it is still opening the source: a video that plays, or is paused, before its first 30 s is never failed by it. */
     val startBudgetEndsAt: Long? = null,
 )
 

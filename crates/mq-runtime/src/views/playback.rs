@@ -157,6 +157,9 @@ pub struct PlaybackSnapshot {
     /// source played past its start (or the playback failed). Time the app
     /// spends after `ready` (another player engine opening the file) counts
     /// against it too (plans/apple-second-engine.md 2.3). Null otherwise.
+    /// An app reads it only while it is still opening the source: a video
+    /// that plays, or is paused, before its first 30 s is never failed by
+    /// it.
     #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub start_budget_ends_at: Option<u64>,
 }
@@ -710,6 +713,9 @@ struct State {
     /// whether this play already moved on for one (at most once).
     stall: u64,
     stall_moved: bool,
+    /// The generation the stall now on began with: a repeated
+    /// `stalled(true)` while it lasts keeps its clock.
+    stall_on: Option<u64>,
     /// The release a Resume plays (the title's remembered one, with a
     /// resume point): a stall never moves it.
     resume_key: Option<String>,
@@ -814,6 +820,7 @@ impl State {
             advancing: false,
             stall: 0,
             stall_moved: false,
+            stall_on: None,
             resume_key: None,
         }
     }
@@ -1414,8 +1421,13 @@ impl PlaybackView {
     /// recommendation and not the Resume release, this play has not moved
     /// for a stall yet, and the network is reachable (a lost one waits).
     /// Otherwise "Choose another version" shows over the stalled frame.
+    /// Only transitions count: a repeated `stalled(true)` while the same
+    /// stall lasts keeps its clock.
     pub fn stalled(&self, on: bool, position_ms: u64) {
         let mut s = lock(&self.state);
+        if on && s.stall_on == Some(s.stall) {
+            return;
+        }
         s.stall += 1;
         if !on || s.snapshot.phase != PlaybackPhase::Ready || s.closed {
             if s.snapshot.choose_another && s.snapshot.phase == PlaybackPhase::Ready {
@@ -1430,6 +1442,7 @@ impl PlaybackView {
             && s.reported_ms.is_some_and(|was| {
                 position_ms >= was && position_ms - was <= PLAYED_STEP.as_millis() as u64
             });
+        s.stall_on = Some(s.stall);
         let stall = Stalled {
             generation: s.stall,
             at: position_ms,
@@ -5670,7 +5683,7 @@ mod tests {
         let ended = moved.elapsed();
         assert_eq!(s.phase, PlaybackPhase::Failed, "{s:?}");
         assert!(
-            (Duration::from_millis(2500)..Duration::from_millis(4500)).contains(&ended),
+            (Duration::from_millis(2500)..Duration::from_millis(8000)).contains(&ended),
             "{ended:?} {:?}",
             s.attempts
         );
