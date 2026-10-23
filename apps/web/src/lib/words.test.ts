@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { addonHost, nextVersion, qualityCell, sheetDetails, languageName, pairingProblem, plainAddress, problemWords, restartLine, serverHost, statusText, subtitleNote } from "./words";
+import { addonHost, nextVersion, qualityCell, sheetDetails, languageName, pairingProblem, plainAddress, problemWords, restartLine, serverHost, statusText, subtitleNote, lowerFirst } from "./words";
 import shared from "../../../shared/stream-choice-words.json";
 import type { EmptyAction } from "../core/generated/EmptyAction";
 import type { EmptyKind } from "../core/generated/EmptyKind";
@@ -279,4 +279,11 @@ test("the sheet says nothing twice: it drops only what the face said, and keeps 
   expect(sheetDetails(row({ kind: "veryFew", seeders: 2 }))).toBe("2 seeders");
   // A dimmed row's line says why it is dimmed, so the core's details follow.
   expect(sheetDetails(row({ kind: "quick", seeders: 1204, sizeBytes: 2 * GiB }), "Won't play here")).toBe("1,204 seeders, 2 GB");
+});
+
+test("after the colon a word in capitals stays in capitals", () => {
+  expect(lowerFirst("CAM copy")).toBe("CAM copy");
+  expect(lowerFirst("HDR file, screen without HDR")).toBe("HDR file, screen without HDR");
+  expect(lowerFirst("Shared by 3 people")).toBe("shared by 3 people");
+  expect(lowerFirst(lineWords({ kind: "copy", quality: "CAM" } as ReasonLine).details)).toBe("CAM copy");
 });

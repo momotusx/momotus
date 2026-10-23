@@ -369,8 +369,34 @@ class VersionsCopyTest {
         assertEquals("Room for about 7 min ahead in 2.5 GB", VersionsCopy.sheetDetails(buffer, null))
         // Nothing is left when the face said it all.
         assertEquals("", VersionsCopy.sheetDetails(shared(ReasonLine.Quick(89, 4 * gib)), null))
+        // A shared file whose count the status does not know: the face says only its size, so the people stay.
+        val unknown =
+            row(sizeBytes = 4 * gib).copy(
+                status = VersionStatus.Torrent(null),
+                line =
+                    ReasonLine.Should(
+                        89,
+                        4 * gib,
+                        "TorBox",
+                    ),
+            )
+        assertEquals("4 GB", VersionsCopy.rowWords(unknown))
+        assertEquals("Shared by 89 people, may be ready in your account", VersionsCopy.sheetDetails(unknown, null))
         // A warning face keeps the details whole: they say what it does not.
         assertEquals("Shared by 3 people", VersionsCopy.sheetDetails(shared(ReasonLine.VeryFew(3)), null))
+    }
+
+    @Test
+    fun `after the colon a word in capitals stays in capitals`() {
+        assertEquals(
+            "Recorded in a cinema, low quality: CAM copy",
+            VersionsCopy.why(row().copy(line = ReasonLine.Copy("CAM"))),
+        )
+        assertEquals(
+            "Colors may look washed out on this screen: HDR file, screen without HDR",
+            VersionsCopy.why(row().copy(line = ReasonLine.WashedOut)),
+        )
+        assertEquals("May not start: shared by 3 people", VersionsCopy.why(row().copy(line = ReasonLine.VeryFew(3))))
     }
 
     @Test

@@ -226,16 +226,15 @@ object VersionsCopy {
                 }
 
                 is VersionStatus.Torrent -> {
-                    s.seeds?.let {
-                        StreamChoiceCopy.SOURCE_SHARED.replace(
-                            "{people}",
-                            StreamChoiceCopy.counted("people", it),
-                        )
-                    }
+                    sharedBy(s)
                 }
             }
         return source?.let { sized(size, it) } ?: size ?: line.text
     }
+
+    /** A shared file's source in plain words, "shared by 412 people"; null while the count is not known. */
+    private fun sharedBy(status: VersionStatus.Torrent) =
+        status.seeds?.let { StreamChoiceCopy.SOURCE_SHARED.replace("{people}", StreamChoiceCopy.counted("people", it)) }
 
     /**
      * A row's one line as it shows: its size first, then its source in plain words, the core's warning, or why it is
@@ -258,7 +257,11 @@ object VersionsCopy {
     private fun sized(
         size: String?,
         words: String,
-    ) = size?.let { "$it, ${words.replaceFirstChar(Char::lowercase)}" } ?: words.replaceFirstChar(Char::uppercase)
+    ) = size?.let { "$it, ${lowerFirst(words)}" } ?: words.replaceFirstChar(Char::uppercase)
+
+    /** Words that go on a sentence: the first letter in lower case, unless it opens a word in capitals ("CAM", "HDR"). */
+    private fun lowerFirst(words: String) =
+        if (words.length > 1 && words[1].isUpperCase()) words else words.replaceFirstChar(Char::lowercase)
 
     /**
      * The core's details under a row's face in its sheet: all of them, but the parts the face's quiet line already
@@ -271,7 +274,9 @@ object VersionsCopy {
     ): String {
         if (why != null) return StreamChoiceCopy.emptyRowLine(why).details
         if (quiet(row) == null) return StreamChoiceCopy.rowLine(row).details
-        val said = setOfNotNull("size", "people".takeIf { row.onDevice == null && row.status is VersionStatus.Torrent })
+        // The face's quiet line names the people exactly when its source is a shared file's ([quiet]).
+        val shared = row.onDevice == null && (row.status as? VersionStatus.Torrent)?.let(::sharedBy) != null
+        val said = setOfNotNull("size", "people".takeIf { shared })
         return StreamChoiceCopy.line(row.line, without = said).details
     }
 
@@ -296,7 +301,7 @@ object VersionsCopy {
         row.onDevice?.let { return it }
         val line = StreamChoiceCopy.line(row.line)
         // After the colon the details go on as one sentence: "May start slowly: shared by 21 people".
-        val details = line.details.replaceFirstChar(Char::lowercase)
+        val details = lowerFirst(line.details)
         return if (details.isEmpty()) line.text else "${line.text}: $details"
     }
 

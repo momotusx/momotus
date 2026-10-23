@@ -625,6 +625,12 @@ function part(line: string, fields: Fields): string | null {
 
 const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
+/** Words that go on a sentence: the first letter in lower case, unless it opens a word in capitals ("CAM", "HDR"). */
+export const lowerFirst = (s: string) => {
+  const second = s.charAt(1);
+  return second !== second.toLowerCase() ? s : s.charAt(0).toLowerCase() + s.slice(1);
+};
+
 /** "1 person", "1,204 people". */
 export const counted = (what: keyof typeof choice.plurals, n: number) =>
   (choice.plurals[what][n === 1 ? 0 : 1] as string).replace("{n}", n.toLocaleString("en-US"));

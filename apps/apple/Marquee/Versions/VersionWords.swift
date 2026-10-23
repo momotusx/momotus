@@ -294,6 +294,13 @@ enum VersionWords {
         [rowLine(row)?.details ?? "", row.releaseName, detail(row)].filter { !$0.isEmpty }
     }
 
+    /// Words that go on a sentence: the first letter in lower case, unless it opens a word in capitals ("CAM", "HDR").
+    static func lowerFirst(_ words: String) -> String {
+        let chars = Array(words)
+        if chars.count > 1, chars[1].isUppercase { return words }
+        return words.prefix(1).lowercased() + words.dropFirst()
+    }
+
     /// The card's one why line: the core's line and its details joined by a colon ("Starts quickly: shared
     /// by 412 people, 2 GB"), or, for the version kept on this device, that alone ("On this device"): one idea,
     /// as the web and Android say it.
@@ -301,7 +308,7 @@ enum VersionWords {
         if let kept = row.onDevice { return kept }
         guard let line = rowLine(row) else { return [bytes(row)].compactMap { $0 }.joined() }
         // After the colon the details go on as one sentence: "May start slowly: shared by 21 people".
-        return line.details.isEmpty ? line.text : "\(line.text): \(line.details.prefix(1).lowercased())\(line.details.dropFirst())"
+        return line.details.isEmpty ? line.text : "\(line.text): \(lowerFirst(line.details))"
     }
 
     /// The card as a screen reader says it: its kicker, its badges, its why line, with no empty part.

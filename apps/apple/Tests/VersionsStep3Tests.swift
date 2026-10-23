@@ -584,3 +584,9 @@ private func golden<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
         #expect(!source.contains("DebridScreen("), "\(file)")
     }
 }
+
+@Test func afterTheColonAWordInCapitalsStays() {
+    #expect(VersionWords.lowerFirst("CAM copy") == "CAM copy")
+    #expect(VersionWords.lowerFirst("HDR file, screen without HDR") == "HDR file, screen without HDR")
+    #expect(VersionWords.lowerFirst("Shared by 3 people") == "shared by 3 people")
+}
