@@ -361,8 +361,8 @@ test("a source that fails before its metadata is not a decode failure, and Try a
   expect(failOvers().length).toBeGreaterThan(0);
   for (const f of failOvers()) expect(f).toMatchObject({ kind: "http", status: 500 });
   await expect(card.locator(".attempts")).toContainText("(500)");
-  // Nothing offered: every source failed.
-  await expect(card.locator(".st")).toHaveText("None of the sources could be played");
+  // Nothing offered: every source failed, and the core says none could be reached.
+  await expect(card.locator(".st")).toHaveText("Can't reach any source");
   await expect(card.locator(".attempts")).not.toContainText("decode");
   // No offer here: Try again is the first action and has the focus.
   await expect(p.locator(".endcard .acts > *").first()).toHaveAttribute("data-f", "player:retry");

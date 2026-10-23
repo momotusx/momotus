@@ -43,7 +43,7 @@ import { bytes, clock, decoded, startsText, episodeLabel, groupFailures, playPat
 import { DELAY_SETTLE_MS } from "../lib/delay";
 import { bufferShare, loadingLines, STALL_AHEAD_S, startFill } from "../lib/loading";
 import { fileChoice, offSummary, pickerLanguages, startOption } from "../lib/subtitles";
-import { emptyWords, languageName, nextVersion, qualityCell, qualityText, restartLine, subtitleNote } from "../lib/words";
+import { choiceWords, emptyWords, languageName, nextVersion, qualityCell, qualityText, restartLine, subtitleNote } from "../lib/words";
 import { VersionsPage } from "./versions";
 import "./player.css";
 
@@ -55,7 +55,6 @@ const NEXT_AT = 20;
 // A wait for data this long after the first frame is a stall (a seek's short wait is not).
 const STALL_MS = 500;
 /** How long the loading screen waits before it offers another version (plans/play-every-version.md 2e). */
-const ANOTHER_MS = 20_000;
 // The profile's subtitle sizes in order, as the picker steps them.
 const SIZES: { size: SubtitleSize; text: string }[] = [
   { size: "small", text: "80%" },
@@ -148,9 +147,13 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   const ownState = () => Object.fromEntries(Object.entries((location.state ?? {}) as object).filter(([k]) => !k.startsWith("_")));
   // Whether this visit pushed the layer's entry: a reload or a link straight to it did not.
   let pushed = false;
+  // Opened over a stalled frame, the play pauses under it and plays again on Back.
+  let resume = false;
   const openLayer = (e: MouseEvent) => {
     e.preventDefault();
     pushed = true;
+    resume = started() && !paused();
+    if (resume) engine.pause();
     navigate(layerHref(), { state: ownState() });
   };
   // ponytail: the browser's own Back (popstate) closes the layer; design-web's pushBack can take it over.
@@ -230,6 +233,10 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   });
   const snap = () => playback()?.state.data ?? null;
   const failed = () => snap()?.phase === "failed";
+  // A failed play's reason in the shared table: no room (Back only), unreachable (Try again), none plays
+  // here (another version); notStarted keeps Try again and Choose another version. A hand pick with an
+  // offer keeps the offer's card.
+  const failedAs = () => (failed() && !snap()?.offer ? (snap()?.empty ?? null) : null);
   const openError = () => {
     const s = playback()?.state.status;
     return s?.state === "failed" ? (s as { reason: string }).reason : null;
@@ -477,6 +484,14 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
           toggleFull();
           return;
         }
+        // A stalled frame offering Choose another version: the first arrow shows the controls with it focused.
+        if (!osd() && wait() === "stall" && another() && e.key.startsWith("Arrow")) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          wake();
+          document.querySelector<HTMLElement>('[data-f="player:another"]')?.focus();
+          return;
+        }
         // Controls hidden: Left and Right skip 10 s and bring the controls up,
         // as a click on the Apple TV remote's edge does.
         if (!osd() && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
@@ -701,6 +716,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         // The app's Back marked a Back for a new screen; the path did not change.
         takeBack();
         if (choice) return playKey(choice);
+        if (resume) engine.play();
+        resume = false;
         autoFocusSoon(() => document.querySelector<HTMLElement>('[data-f="player:another"]:not([inert])') ?? document.querySelector<HTMLElement>('[data-f="player:toggle"]'));
       },
       { defer: true },
@@ -799,7 +816,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       data-autofocus={snap()?.offer || failed() ? undefined : ""}
     >
       <Layers aria-hidden />
-      {failed() || openError() ? nextVersion.another : "Choose a version"}
+      {failed() || openError() ? nextVersion.another : choiceWords.empty.nothingPlaysHere.action}
     </A>
   );
   const status = (): { tone: string; text: string; detail?: string; note?: string; busy: boolean; empty?: EmptyVersions } | null => {
@@ -815,7 +832,9 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     if (s?.phase === "ready") return null;
     // A Try again that failed again at once keeps the card, with "Trying
     // again" under its headline for the hold, as Android and Apple do.
-    if (s?.phase === "failed") return { tone: "bad", text: nextVersion.failed(!!s.offer), note: again() ? nextVersion.tryingAgain : undefined, busy: false };
+    // Why nothing played, in the shared words when the core names it ("This didn't start"); a hand pick
+    // with an offer says so.
+    if (s?.phase === "failed") return { tone: "bad", text: s.empty && !s.offer ? emptyWords({ kind: s.empty, action: "none" }).text : nextVersion.failed(!!s.offer), note: again() ? nextVersion.tryingAgain : undefined, busy: false };
     if (s?.phase === "resolving") {
       // Moving on (the recommendation failed for a reason of its own), or Try again.
       const restart = restartLine(s, again());
@@ -868,15 +887,15 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     return startFill(coreFill(), bufferShare(buffered(), engine.position()));
   };
   const waitLines = () => (wait() === "stall" ? [] : loadingLines(status()?.text ?? startLine(), snap()?.start?.caption));
-  // After 20 s on the loading screen, "Choose another version" under the stage line
-  // (plans/versions-web-spec.md 2.1): laid out from the start but hidden and inert, so nothing
-  // moves and nothing can focus it; never focused by itself; said once when it appears.
-  const [late, setLate] = createSignal(false);
-  onMount(() => {
-    const t = setTimeout(() => setLate(true), ANOTHER_MS);
-    onCleanup(() => clearTimeout(t));
-  });
-  const another = () => late() && wait() === "start";
+  // The core's "Choose another version" (plans/play-every-version.md 2e): 20 s into the start, or over a
+  // stalled frame it may not move on from; under the stage line, laid out from the start but hidden and
+  // inert, so nothing moves and nothing can focus it; never focused by itself; said once when it appears.
+  const another = () => !!snap()?.chooseAnother && (wait() === "start" || wait() === "stall");
+  // A wait for data mid-play, told to the core as it starts and ends (the core judges seeks and pauses).
+  const midStall = createMemo(() => started() && waiting() && !paused() && !ended());
+  createEffect(
+    on(midStall, (stalled) => void playback()?.command({ type: "stalled", stalled, positionMs: Math.round(engine.position() * 1000) }), { defer: true }),
+  );
 
   // Laid out from the start, hidden and inert until the offer, so nothing moves and nothing focuses it.
   const anotherButton = () => (
@@ -1025,7 +1044,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                   </Show>
                   {/* This play again from its first pick (`retry`), or the
                       playback opened again: what failed may be the moment. */}
-                  <Show when={failed() || openError() || titleError()}>
+                  <Show when={(failed() || openError() || titleError()) && failedAs() !== "noRoom" && failedAs() !== "nothingPlaysHere"}>
                     <button
                       class="btn big"
                       classList={{ primary: !snap()?.offer && (!openError() || !!titleError()) }}
@@ -1037,7 +1056,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                       Try again
                     </button>
                   </Show>
-                  <Show when={!openError() && !titleError() && !s().empty}>{chooseVersion()}</Show>
+                  <Show when={!openError() && !titleError() && !s().empty && failedAs() !== "noRoom" && failedAs() !== "unreachable"}>{chooseVersion()}</Show>
                   {/* The one way on when nothing plays and the state has no action of its own. */}
                   <button
                     class="btn big"

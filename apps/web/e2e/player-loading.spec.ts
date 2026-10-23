@@ -296,12 +296,13 @@ test("a torrent's start: the fill steps with it, its words come under the pick's
   await context.close();
 });
 
-test("the loading screen offers Choose another version at 20 s: laid out from the start, inert until then, said once, never focused by itself; Versions opens over the paused attempt", async ({ browser }) => {
+test("the loading screen offers Choose another version when the core does: laid out from the start, inert until then, said once, never focused by itself; Versions opens over the paused attempt", async ({ browser }) => {
   for (const form of ["tv", "desktop"] as const) {
     hold();
-    const { context, commands } = await patchedContext(browser, LOADING_PORT, { viewport: VIEWPORTS[form] }, (_view, s) => s);
+    // The core's offer (its 20 s), as it sends it: off until the test turns it on.
+    let offer = false;
+    const { context, commands, repush } = await patchedContext(browser, LOADING_PORT, { viewport: VIEWPORTS[form] }, (view, s) => (view === "playback" && s ? { ...s, chooseAnother: offer } : s));
     const page = await context.newPage();
-    await page.clock.install();
     await page.goto(`/play/movie/mqlo/mqlo?form=${form}`);
     await mute(page);
     await expect(page.locator(".ld.on")).toBeVisible({ timeout: 30_000 });
@@ -310,10 +311,9 @@ test("the loading screen offers Choose another version at 20 s: laid out from th
     // The button's box and the stage line's top (the logo pulses gently and the stage words change, so only these).
     const rects = () => page.evaluate(() => [JSON.stringify(document.querySelector("[data-f=\"player:another\"]")?.getBoundingClientRect()), document.querySelector(".ld-cap")?.getBoundingClientRect().top]);
     const active = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? null);
-    // The logo in (it sizes the layer), then just before 20 s: its box is there before it shows,
+    // The logo in (it sizes the layer), then before the offer: its box is there before it shows,
     // and what sits around it does not move when it appears.
     await expect.poll(() => page.locator(".ld-logo.ld-solid").evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth > 0)).toBe(true);
-    await page.clock.fastForward(19_000);
     const at = await rects();
     await expect(button).toBeHidden();
     expect(await button.evaluate((b) => (b as HTMLElement).inert)).toBe(true);
@@ -322,7 +322,8 @@ test("the loading screen offers Choose another version at 20 s: laid out from th
       await page.keyboard.press("ArrowDown");
       expect(await active()).not.toBe("player:another");
     }
-    await page.clock.fastForward(1_500);
+    offer = true;
+    repush("playback");
     await expect(button).toBeVisible();
     expect(await button.evaluate((b) => (b as HTMLElement).inert)).toBe(false);
     await expect(said).toHaveText("Still loading. Choose another version is available");
@@ -339,6 +340,8 @@ test("the loading screen offers Choose another version at 20 s: laid out from th
     const start = await depth();
     const layer = page.locator(".vlayer");
     const openLayer = async () => {
+      // A new play shows it once the core offers it (here at once); an arrow before that moves nothing.
+      await expect(button).toBeVisible();
       if (form === "tv") {
         await page.keyboard.press("ArrowDown");
         await expect.poll(active).toBe("player:another");
@@ -377,10 +380,8 @@ test("the loading screen offers Choose another version at 20 s: laid out from th
     expect(await depth()).toBe(start);
     expect(await page.evaluate(() => typeof (history.state as { key?: unknown } | null)?.key)).toBe("string");
     // Ready while Versions is open: the video stays paused, and Back shows it ready.
-    await page.clock.fastForward(21_000);
     await openLayer();
     release();
-    await page.clock.resume();
     await expect.poll(() => page.evaluate(() => !!document.querySelector("video")?.currentSrc), { timeout: 30_000 }).toBe(true);
     await expect.poll(() => page.evaluate(() => (document.querySelector("video")?.readyState ?? 0) >= 2), { timeout: 30_000 }).toBe(true);
     await page.waitForTimeout(1_000);
@@ -407,7 +408,8 @@ test("Versions over a binge play: it shares the play's versions view, its order 
     if (view !== "versions" || !first) return s;
     // Three versions; later the core ranks them the other way round and finds a fourth.
     const rows = [0, 1, 2].map((i) => ({ ...first, key: `${first.key}#${i}`, group: "best" }));
-    return { ...s, recommended: null, rows: flip ? [{ ...first, key: `${first.key}#new`, group: "best" }, ...rows.reverse()] : rows };
+    const listed = flip ? [{ ...first, key: `${first.key}#new`, group: "best" }, ...rows.reverse()] : rows;
+    return { ...s, rows: listed, sections: [{ quality: "fhd", keys: listed.map((r: { key: string }) => r.key) }] };
   });
   const page = await context.newPage();
   await page.goto("/play/movie/mqlo/mqlo?form=desktop&binge=grp");
@@ -454,6 +456,76 @@ test("Versions over a binge play: it shares the play's versions view, its order 
   await expect(deepLayer).toHaveCount(0);
   await expect(deep).toHaveURL(/\/play\/movie\/mqlo\/mqlo\?(form=desktop&)?binge=grp$/);
   expect(await deep.evaluate(() => (history.state as { key?: string } | null)?.key)).toBe(chosen);
+  release();
+  await context.close();
+});
+
+test("a stall mid-play is told to the core; over a stalled frame the core's offer is one arrow away on TV, and Versions opens over the paused play", async ({ browser }) => {
+  hold();
+  let offer = false;
+  const { context, commands, repush } = await patchedContext(browser, LOADING_PORT, { viewport: VIEWPORTS.tv }, (view, s) => (view === "playback" && s ? { ...s, chooseAnother: offer } : s));
+  const page = await context.newPage();
+  await page.goto("/play/movie/mqlo/mqlo?form=tv");
+  await mute(page);
+  release();
+  await expect(page.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
+  await mute(page);
+  await startIfPaused(page);
+  await expect(page.locator(".ld.on")).toHaveCount(0);
+  const stalls = () => commands.filter((c) => (c.command as { type?: string } | null)?.type === "stalled").map((c) => c.command as { stalled: boolean; positionMs: number });
+  const active = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? null);
+  const paused = () => page.evaluate(() => document.querySelector("video")?.paused ?? null);
+  // A wait for data mid-play: the core hears it start, with the position, and the stalled frame shows.
+  await page.evaluate(() => document.querySelector("video")?.dispatchEvent(new Event("waiting")));
+  await expect.poll(() => stalls().at(-1)?.stalled).toBe(true);
+  expect(stalls().at(-1)?.positionMs).toBeGreaterThanOrEqual(0);
+  await expect(page.locator(".ld.on.stall")).toBeVisible({ timeout: 5_000 });
+  const button = page.locator('[data-f="player:another"]');
+  await expect(button).toBeHidden();
+  // The core offers Choose another version over it: the first arrow shows the controls with it focused.
+  offer = true;
+  repush("playback");
+  await expect(button).toBeVisible();
+  // With the controls hidden (they hide on their own over a stalled frame too).
+  await expect(page.locator(".player-scr.idle")).toHaveCount(1, { timeout: 15_000 });
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(active).toBe("player:another");
+  await expect(page.locator('[data-f="player:toggle"]')).toBeVisible();
+  // It opens Versions over the play, paused; Back plays on.
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".vlayer")).toBeVisible();
+  expect(await paused()).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".vlayer")).toHaveCount(0);
+  await expect.poll(paused).toBe(false);
+  // The wait ends: the core hears that too.
+  await page.evaluate(() => document.querySelector("video")?.dispatchEvent(new Event("playing")));
+  await expect.poll(() => stalls().at(-1)?.stalled).toBe(false);
+  await context.close();
+});
+
+test("a play that failed says why in the shared words, with that state's actions", async ({ browser }) => {
+  hold();
+  // The core's reasons for a failed play (plans/play-every-version.md 2e), and the card's actions for each.
+  const CASES = [
+    ["notStarted", "This didn't start", ["Try again", "Choose another version", "Back"]],
+    ["unreachable", "Can't reach any source", ["Try again", "Back"]],
+    ["noRoom", "This device needs a little free space to play this", ["Back"]],
+    ["nothingPlaysHere", "None of these plays on this device", ["Choose another version", "Back"]],
+  ] as const;
+  let kind: string = CASES[0][0];
+  const { context, repush } = await patchedContext(browser, LOADING_PORT, { viewport: VIEWPORTS.tv }, (view, s) =>
+    view === "playback" && s ? { ...s, phase: "failed", empty: kind, offer: null } : s,
+  );
+  const page = await context.newPage();
+  await page.goto("/play/movie/mqlo/mqlo?form=tv");
+  const card = page.locator(".endcard");
+  for (const [k, text, acts] of CASES) {
+    kind = k;
+    repush("playback");
+    await expect(card.locator(".st")).toHaveText(text, { timeout: 30_000 });
+    await expect(card.locator(".acts .btn")).toHaveText([...acts]);
+  }
   release();
   await context.close();
 });
