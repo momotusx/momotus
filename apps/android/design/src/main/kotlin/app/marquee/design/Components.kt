@@ -735,8 +735,8 @@ fun StatusWord(
 
 /**
  * The version a title will play, under its Play button: the facts, then a status with a dot ("1080p  1.6 GB
- * ● Torrent, 10 seeds"), never the addon it comes from (design/DECISION.md, Shelves). It wraps at
- * the gaps and never inside a fact. Screen readers get [spoken] as one sentence.
+ * ● shared by 10 people"), never the addon it comes from (design/DECISION.md, Shelves); no status, no dot. It wraps
+ * at the gaps and never inside a fact. Screen readers get [spoken] as one sentence.
  */
 @Composable
 fun ChosenVersion(
@@ -754,7 +754,7 @@ fun ChosenVersion(
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
         for (fact in facts) MqText(fact, role = TextRole.Callout, maxLines = 1)
-        StatusWord(status, tone)
+        if (status.isNotEmpty()) StatusWord(status, tone)
     }
 }
 

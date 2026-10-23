@@ -95,9 +95,9 @@ class VersionsCopyTest {
         assertEquals(VersionLine.Problem("No version is ready to play yet. Choose one to start it."), notReady)
         val chosen = VersionsCopy.line(snapshot(recommended = row())) as VersionLine.Chosen
         assertEquals(listOf("4K", "HDR10", "1.2 GB"), chosen.facts)
-        assertEquals("Ready", chosen.status)
+        assertEquals("ready now", chosen.status)
         assertEquals(true, chosen.good)
-        assertEquals("4K, HDR10, 1.2 GB, Ready", chosen.spoken)
+        assertEquals("4K, HDR10, 1.2 GB, ready now", chosen.spoken)
         val torrent =
             row().copy(
                 status = VersionStatus.Torrent(10),
@@ -106,7 +106,7 @@ class VersionsCopyTest {
                 via = "Torrentio",
             )
         assertEquals(
-            VersionLine.Chosen(listOf("4K"), "Torrent, 10 seeds", good = false),
+            VersionLine.Chosen(listOf("4K"), "shared by 10 people", good = false),
             VersionsCopy.line(snapshot(recommended = torrent)),
         )
     }
@@ -133,7 +133,13 @@ class VersionsCopyTest {
             listOf("Best quality", "Smaller and faster", "Other languages", "Needs download", "Other versions"),
             Group.entries.map(VersionsCopy::group),
         )
-        assertEquals("Needs download", VersionsCopy.status(VersionStatus.NeedsDownload("Real-Debrid")))
+        // Where a version comes from, in the rows' plain words: never "Torrent" or "seeds".
+        assertEquals("downloads first", VersionsCopy.status(VersionStatus.NeedsDownload("Real-Debrid")))
+        assertEquals("shared by 1,228 people", VersionsCopy.status(VersionStatus.Torrent(1228)))
+        assertEquals("ready now", VersionsCopy.status(VersionStatus.Ready(null)))
+        assertEquals("direct link", VersionsCopy.status(VersionStatus.Direct))
+        // A shared file whose count is not known yet says nothing, and the title's line has no dot for it.
+        assertEquals("", VersionsCopy.status(VersionStatus.Torrent(null)))
         // With the pick above the list, the best group is not "Best quality".
         assertEquals("Other good choices", VersionsCopy.group(Group.Best, pickAbove = true))
         assertEquals("Smaller and faster", VersionsCopy.group(Group.SmallerFaster, pickAbove = true))

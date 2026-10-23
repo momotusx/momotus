@@ -30,7 +30,7 @@ sealed interface VersionLine {
         val good: Boolean,
     ) : VersionLine {
         /** One sentence for a screen reader. */
-        val spoken: String get() = (facts + status).joinToString(", ")
+        val spoken: String get() = (facts + status).filter { it.isNotEmpty() }.joinToString(", ")
     }
 
     /** Why there is nothing to play. */
@@ -94,12 +94,16 @@ object VersionsCopy {
             Group.Unknown -> "Other versions"
         }
 
+    /**
+     * Where a version comes from, in the rows' plain words ("ready now", "shared by 1,228 people"): never "Torrent" or
+     * "seeds". Empty for a shared file whose count is not known yet: nothing to say.
+     */
     fun status(status: VersionStatus): String =
         when (status) {
-            is VersionStatus.Ready -> "Ready"
-            is VersionStatus.Torrent -> status.seeds?.let { "Torrent, $it seeds" } ?: "Torrent"
-            is VersionStatus.NeedsDownload -> "Needs download"
-            VersionStatus.Direct -> "Direct link"
+            is VersionStatus.Ready -> StreamChoiceCopy.SOURCE_READY
+            is VersionStatus.Torrent -> sharedBy(status).orEmpty()
+            is VersionStatus.NeedsDownload -> StreamChoiceCopy.SOURCE_DOWNLOAD
+            VersionStatus.Direct -> StreamChoiceCopy.SOURCE_DIRECT
         }
 
     /** A status with a good dot: it can play now (ready on a service, or a direct link). */

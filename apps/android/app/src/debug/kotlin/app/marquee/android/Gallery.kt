@@ -122,9 +122,9 @@ private fun Gallery() {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 ChosenVersion(
                     facts = listOf("1080p", "1.6 GB"),
-                    status = "Torrent, 10 seeds",
+                    status = "shared by 10 people",
                     tone = Status.Warn,
-                    spoken = "1080p, 1.6 GB, Torrent, 10 seeds",
+                    spoken = "1080p, 1.6 GB, shared by 10 people",
                 )
                 ChosenVersion(
                     facts = listOf("4K", "Dolby Vision", "18 GB"),
