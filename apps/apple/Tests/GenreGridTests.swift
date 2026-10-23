@@ -11,7 +11,10 @@ private func source(_ path: String) throws -> String {
 @Test func threeTilesShareTheWidthAtTwoToThree() throws {
     // The page's content inside the token's phone inset: the frame's 108.7 at 390.
     #expect(abs(GenreGridRules.tile(width: 390 - 2 * Theme.Tile.inset).width - 108.67) < 0.01)
-    #expect(try source("Search/SearchScreen.swift").contains("private var margin: CGFloat { metrics.wide ? DiscoverLayout.margin : Theme.Tile.inset }"))
+    // Every phone page sits on the token's inset: the gutter is the token, and Search reads the gutter.
+    #expect(Metrics.compact.gutter == Theme.Tile.inset)
+    #expect(try source("Theme/ThemeSupport.swift").contains("gutter: Theme.Tile.inset"))
+    #expect(try source("Search/SearchScreen.swift").contains("private var margin: CGFloat { metrics.gutter }"))
     // The frame's 108.7 by 163 at 390 (350 inside 20 margins), then the other phones.
     for (width, side) in [(350.0, 108.67), (335.0, 103.67), (390.0, 122.0)] {
         let size = GenreGridRules.tile(width: width)

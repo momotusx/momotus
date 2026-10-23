@@ -97,9 +97,8 @@ struct SearchScreen: View {
         search.command(["type": "setQuery", "query": value])
     }
 
-    /// The page's edge: the Mac's 40, the phone's token inset, so the field, Recent, the lists and the
-    /// genre tiles all sit on it.
-    private var margin: CGFloat { metrics.wide ? DiscoverLayout.margin : Theme.Tile.inset }
+    /// The page's edge (the token's on the phone): the field, Recent, the lists and the genre tiles sit on it.
+    private var margin: CGFloat { metrics.gutter }
 
     @ViewBuilder private var content: some View {
         #if os(tvOS)

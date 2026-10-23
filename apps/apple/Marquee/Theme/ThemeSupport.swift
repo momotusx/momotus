@@ -192,7 +192,8 @@ struct Metrics: Sendable {
         poster: Theme.TileDesktop.poster, gutter: Theme.Space.l, rowSpacing: Theme.Space.l, wide: true,
         cardName: 15, cardInfo: 13, posterRadius: Theme.TileDesktop.radius)
     static let compact = Metrics(
-        poster: Theme.Tile.poster, gutter: 16, rowSpacing: Theme.Space.m, wide: false,
+        // The phone page's edge is the token's (`tile.phone.inset`), the frames' 20.
+        poster: Theme.Tile.poster, gutter: Theme.Tile.inset, rowSpacing: Theme.Space.m, wide: false,
         cardName: 13, cardInfo: 12, posterRadius: Theme.Tile.radius)
 }
 
