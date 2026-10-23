@@ -1,4 +1,5 @@
 @testable import AetherEngine
+import AetherLibavutil
 import CoreGraphics
 import Foundation
 import Testing
@@ -117,4 +118,17 @@ extension AetherSession.Events {
     static var none: Self {
         .init(time: { _ in }, duration: { _ in }, state: { _, _ in }, firstFrame: {}, ended: {}, failed: { _ in }, tracks: { _ in }, cues: { _, _ in }, videoSize: { _ in })
     }
+}
+
+/// Patch 4: segment 0 ends at the first keyframe at or after 1 s; the later segments keep the absolute 4 s cuts.
+@Test func segmentZeroEndsAtTheFirstKeyframeAfterOneSecond() {
+    let tb = AVRational(num: 1, den: 1000)
+    // A film that opens on a 2.08 s GOP (a logo), then 10 s GOPs.
+    let opening = HLSVideoEngine.buildKeyframeSegmentPlan(
+        keyframes: [0, 2080, 12346, 22346, 32346], videoTimeBase: tb, sourceDurationSeconds: 40)
+    #expect(opening.map { ($0.startSeconds * 1000).rounded() } == [0, 2080, 12346, 22346, 32346])
+    // Keyframes every 0.5 s: segment 0 is 1 s, then the cuts land on 8, 12, 16 s as before.
+    let dense = HLSVideoEngine.buildKeyframeSegmentPlan(
+        keyframes: Array(stride(from: Int64(0), through: 20000, by: 500)), videoTimeBase: tb, sourceDurationSeconds: 20.5)
+    #expect(dense.prefix(4).map { ($0.startSeconds * 1000).rounded() } == [0, 1000, 8000, 12000])
 }

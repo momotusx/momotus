@@ -347,7 +347,10 @@ extension HLSVideoEngine {
         while i < sorted.count {
             let segStartPts = sorted[i]
             let segStartSeconds = Double(segStartPts - startPts0) * tb
-            let thresholdSeconds = Double(segIdx + 1) * target
+            // Marquee patch 4 (VENDOR.md): segment 0 ends at the first keyframe at or after 1 s, not 4 s. AVPlayer
+            // shows nothing until segment 0 is whole, so on a slow source the first frame waits for its bytes alone;
+            // the later segments keep the absolute 4 s thresholds.
+            let thresholdSeconds = segIdx == 0 ? Self.firstSegmentTargetSeconds : Double(segIdx + 1) * target
 
             var j = i + 1
             while j < sorted.count {
@@ -383,6 +386,10 @@ extension HLSVideoEngine {
 
         return plan
     }
+
+    /// Marquee patch 4 (VENDOR.md): where segment 0 may end, at the least. At `minSegmentDurationSeconds`, so
+    /// `collapseShortSegments` never folds it back.
+    static let firstSegmentTargetSeconds: Double = 1.0
 
     /// Segments shorter than this are folded into a neighbour by `collapseShortSegments`. A keyframe
     /// cluster (several IRAPs within a few frames) otherwise makes `buildKeyframeSegmentPlan` emit

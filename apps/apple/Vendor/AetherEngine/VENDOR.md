@@ -28,6 +28,11 @@ Patches (each marked "Marquee patch N" in the source):
    | `Demuxer/Demuxer.swift`, `openWithProvider` (`avformat_open_input(&ctxPtr, nil, inputFormat, &opts)`) | `applyDemuxerOptions` |
    | `Decoder/SubtitleDecoder.swift`, sidecar over a reader (`avformat_open_input(&ctxPtr, nil, nil, &noProtocols)`) | its own empty whitelist |
    | `Decoder/SubtitleDecoder.swift`, sidecar by URL (`avformat_open_input(&ctx, urlString, nil, &noProtocols)`) | its own empty whitelist; Marquee never calls the sidecar API |
+   The `avformat_open_input(` scope is the guard's: inputs only. Output muxers and the probe are not inputs.
+4. `Sources/AetherEngine/Video/HLSVideoEngine+SegmentPlanning.swift`, `buildKeyframeSegmentPlan`: segment 0 ends at
+   the first keyframe at or after 1 s (`firstSegmentTargetSeconds`), not 4 s; later segments keep the absolute 4 s
+   thresholds. AVPlayer shows nothing until segment 0 is whole, so the first frame waits for the first GOP's bytes
+   only, not 4 s of them (bench AS24, AS25). Tested in `apps/apple/Tests/EnginePatchTests.swift`.
 
 To move to a newer tag: copy its `Sources/AetherEngine` and `LICENSE`, take the pins from its
 `Package.resolved`, apply the patches above again, and walk the player before it lands.
