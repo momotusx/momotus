@@ -124,6 +124,8 @@
     "showAll": "Show all {n}",
     "showFewer": "Show fewer",
     "back": "Back",
+    "bestTv": "Best for this TV",
+    "bestPhone": "Best for this phone",
     "smaller": "Smaller file",
     "sharper": "Sharper",
     "sections": { "uhd": "4K", "fhd": "1080p", "hd": "720p and below", "other": "Other" }

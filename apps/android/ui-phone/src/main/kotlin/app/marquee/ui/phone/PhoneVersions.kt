@@ -2,13 +2,14 @@ package app.marquee.ui.phone
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -29,9 +30,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.collapse
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.expand
@@ -54,8 +58,9 @@ import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionsSnapshot
 import app.marquee.core.views.VersionsView
 import app.marquee.core.views.ViewStatus
+import app.marquee.design.BadgeLook
+import app.marquee.design.BadgeRow
 import app.marquee.design.CapsLabel
-import app.marquee.design.FactsGrid
 import app.marquee.design.FocusInk
 import app.marquee.design.GlassBar
 import app.marquee.design.Icons
@@ -274,51 +279,18 @@ private fun Pick(
             }
 
             best != null -> {
-                PickLine()
-                MqText(VersionsCopy.pickHeading(best), role = TextRole.Title1, maxLines = 2)
-                FactsGrid(VersionsCopy.facts(best), tones = mapOf("Status" to statusTone(best)))
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    for (reason in best.reasons.take(3)) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            MqIcon(Icons.Check, tint = colors.ok)
-                            MqText(VersionsCopy.reason(reason, best.status), role = TextRole.Callout, maxLines = 2)
-                        }
-                    }
-                    // A version that plays in a window says so, with its minutes ahead.
-                    StreamChoiceCopy.cardLine(best)?.let { line ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            MqIcon(Icons.Check, tint = colors.ok)
-                            Column {
-                                MqText(line.text, role = TextRole.Callout, maxLines = 2)
-                                MqText(line.details, role = TextRole.Caption, color = colors.muted, maxLines = 3)
-                            }
-                        }
-                    }
-                }
-                // ponytail: the system monospace face; IBM Plex Mono as on the web when Android bundles it.
-                MqText(
-                    Format.releaseWrapped(best.releaseName),
-                    role = TextRole.Caption,
-                    color = colors.muted,
-                    maxLines = 3,
-                    fontFamily = FontFamily.Monospace,
-                )
-                // Said when it comes, before Play.
-                PrimaryButton(
-                    label = "Play this version",
-                    icon = PlayFilled,
-                    onClick = { onPlay(best.key) },
-                    modifier = Modifier.padding(top = 4.dp).fillMaxWidth(),
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                CardParts(
+                    StreamChoiceCopy.BEST_PHONE,
+                    VersionsCopy.badges(best),
+                    VersionsCopy.why(best),
+                    VersionsCopy.cardSpoken(StreamChoiceCopy.BEST_PHONE, best),
                 ) {
-                    MqIcon(Icons.RefreshCw, tint = colors.muted, size = 16.dp)
-                    MqText(VersionsCopy.failover(best), role = TextRole.Caption, color = colors.muted)
+                    PrimaryButton(
+                        label = "Play this version",
+                        icon = PlayFilled,
+                        onClick = { onPlay(best.key) },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    )
                 }
             }
 
@@ -328,11 +300,21 @@ private fun Pick(
 
             // Still asking, or every addon answered with nothing while the core checks what this device keeps.
             snapshot == null || !snapshot.done || snapshot.rows.isEmpty() -> {
-                PickLine()
-                Skeleton(Modifier.size(160.dp, 36.dp), colors.raised)
-                Skeleton(Modifier.size(240.dp, 20.dp), colors.raised)
-                Skeleton(Modifier.size(200.dp, 20.dp), colors.raised)
-                Skeleton(Modifier.fillMaxWidth().height(48.dp), colors.raised)
+                // The card's own parts, unseen, under one block: the pick lands with nothing below it moving.
+                Box(Modifier.testTag(CARD_PLACEHOLDER)) {
+                    Box(Modifier.alpha(0f).clearAndSetSemantics {}) {
+                        CardParts(StreamChoiceCopy.BEST_PHONE, PLACEHOLDER_BADGES, "Starts quickly", "") {
+                            PrimaryButton(
+                                "Play this version",
+                                {},
+                                Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                                icon = PlayFilled,
+                                enabled = false,
+                            )
+                        }
+                    }
+                    Skeleton(Modifier.matchParentSize(), colors.raised)
+                }
             }
 
             else -> {
@@ -506,11 +488,50 @@ private fun SourceRow(
     }
 }
 
-/** The pick card's first line, plain at 64 percent: the frames' words, never an eyebrow. */
+/**
+ * The card's parts (plans/versions-android-spec.md, section 1): the kicker, the version's badges, one why line clamped
+ * to one line, then [play]. Said as one node, [spoken], with the whole why sentence; the button says itself.
+ */
 @Composable
-private fun PickLine() {
-    MqText("Best for this screen", role = TextRole.Callout, color = Marquee.colors.dim, weight = FontWeight.SemiBold)
+private fun CardParts(
+    kicker: String,
+    badges: List<VersionsCopy.Badge>,
+    why: String,
+    spoken: String,
+    play: @Composable () -> Unit,
+) {
+    Column(Modifier.testTag(CARD), verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+        Column(
+            Modifier.clearAndSetSemantics { if (spoken.isNotEmpty()) contentDescription = spoken },
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            MqText(
+                kicker,
+                role = TextRole.Callout,
+                color = Marquee.colors.dim,
+                weight = FontWeight.SemiBold,
+                maxLines = 1,
+            )
+            BadgeRow(badges.map { it.text to badgeLook(it.look) })
+            MqText(why, role = TextRole.Callout, color = Marquee.colors.muted, maxLines = 1)
+        }
+        play()
+    }
 }
+
+/** The core's badge look in the design system's words. */
+private fun badgeLook(look: VersionsCopy.Badge.Look) =
+    when (look) {
+        VersionsCopy.Badge.Look.Filled -> BadgeLook.Filled
+        VersionsCopy.Badge.Look.Plain -> BadgeLook.Plain
+        VersionsCopy.Badge.Look.Outlined -> BadgeLook.Outlined
+    }
+
+/** What the placeholder card holds, unseen, so it is the card's height. */
+private val PLACEHOLDER_BADGES = listOf(VersionsCopy.Badge("4K", VersionsCopy.Badge.Look.Filled))
+
+const val CARD_PLACEHOLDER = "versions-card-placeholder"
+const val CARD = "versions-card"
 
 /** A dimmed row's icon: a lock for an account, a ban for this device; never a warning triangle. */
 private fun whyIcon(kind: EmptyKind) = if (kind == EmptyKind.NeedsAccount) Icons.Lock else Icons.Ban

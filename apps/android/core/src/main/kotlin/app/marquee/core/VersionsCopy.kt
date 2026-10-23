@@ -169,6 +169,49 @@ object VersionsCopy {
     const val NOT_READY_TITLE = "Nothing is ready to play yet"
     const val NOT_READY_BODY = "Choose a version to start it."
 
+    /** One of Apple's badges: the resolution filled, the Dolby words plain, the short marks outlined. */
+    data class Badge(
+        val text: String,
+        val look: Look,
+    ) {
+        enum class Look { Filled, Plain, Outlined }
+    }
+
+    /**
+     * A version's badges as Apple draws its badge row (design/exploration/v3 `badgeRow`): the quality first, then one
+     * video format (Dolby Vision, else HDR10+, else HDR) and one audio format (Dolby Atmos, else 7.1, else 5.1).
+     */
+    fun badges(row: VersionRow): List<Badge> {
+        val f = row.features.toSet()
+        val video =
+            when {
+                "Dolby Vision" in f -> Badge("Dolby Vision", Badge.Look.Plain)
+                "HDR10+" in f -> Badge("HDR10+", Badge.Look.Outlined)
+                "HDR10" in f || "HDR" in f || "HLG" in f -> Badge("HDR", Badge.Look.Outlined)
+                else -> null
+            }
+        val audio =
+            when {
+                "Atmos" in f -> Badge("Dolby Atmos", Badge.Look.Plain)
+                "7.1" in f -> Badge("7.1", Badge.Look.Outlined)
+                "5.1" in f -> Badge("5.1", Badge.Look.Outlined)
+                else -> null
+            }
+        return listOfNotNull(Badge(cell(row.quality), Badge.Look.Filled), video, audio)
+    }
+
+    /** The card's one why line: the core's line and its details joined by a colon ("Starts quickly: 412 seeders, 2 GB"). */
+    fun why(row: VersionRow): String {
+        val line = StreamChoiceCopy.rowLine(row)
+        return if (line.details.isEmpty()) line.text else "${line.text}: ${line.details}"
+    }
+
+    /** The card as a screen reader says it: the kicker, the badges, the whole why sentence. */
+    fun cardSpoken(
+        kicker: String,
+        row: VersionRow,
+    ): String = "$kicker. ${badges(row).joinToString(", ") { it.text }}. ${why(row)}"
+
     /** One section of the Versions list: its [id] keys the heading and the fold ("section:fhd"). */
     data class Section(
         val id: String,
@@ -302,26 +345,6 @@ object VersionsCopy {
             }
         }
     }
-
-    /** A recommendation's facts, in the web's order: size, status, where from, more features, languages. */
-    fun facts(row: VersionRow): List<Pair<String, String>> =
-        listOfNotNull(
-            "Size" to (row.sizeBytes?.let(Format::bytes) ?: "Unknown"),
-            "Status" to status(row.status),
-            ("Features" to row.features.joinToString(", ")).takeIf { row.features.size > 1 },
-            ("Languages" to languages(row)).takeIf { row.languages.isNotEmpty() },
-        )
-
-    /** The quality and the first feature, the card's heading: "4K Dolby Vision". */
-    fun pickHeading(row: VersionRow): String = listOfNotNull(row.quality, row.features.firstOrNull()).joinToString(" ")
-
-    /** The line under Play: how many sources back this release up. */
-    fun failover(row: VersionRow): String =
-        if (row.failoverCount > 0) {
-            "${row.failoverCount + 1} sources. If one fails, the next starts on its own."
-        } else {
-            "One source for this release."
-        }
 
     /** What an opened row adds under its release name: "English, 2 sources", or "Language not stated". */
     fun detail(row: VersionRow): String =

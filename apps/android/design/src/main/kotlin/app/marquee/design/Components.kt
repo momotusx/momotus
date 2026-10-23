@@ -75,6 +75,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import kotlinx.coroutines.flow.first
 
@@ -963,6 +964,67 @@ fun FactsGrid(
                 )
                 tones[label]?.let { StatusDot(it) }
                 MqText(value, role = TextRole.Caption, maxLines = 2)
+            }
+        }
+    }
+}
+
+/** How one of Apple's badges is drawn: the resolution filled, the Dolby words plain, the short marks outlined. */
+enum class BadgeLook { Filled, Plain, Outlined }
+
+/**
+ * Apple's badge row as measured (design/exploration/v3 `badgeRow`, design/reference/apple-tv.md): one badge per family,
+ * 31 tall on TV at its meta row and 13 on the phone, in the badge color (64 percent white on TV, iOS's secondary grey
+ * on the phone); a filled badge's word is near black on it.
+ */
+@Composable
+fun BadgeRow(
+    badges: List<Pair<String, BadgeLook>>,
+    modifier: Modifier = Modifier,
+) {
+    val tv = Marquee.form == Form.Tv
+    val ink = if (tv) Color.White.copy(alpha = 0.64f) else Color(0xFFEBEBF5).copy(alpha = 0.6f)
+    val shape = RoundedCornerShape(if (tv) 5.dp else 2.5.dp)
+    Row(
+        modifier,
+        horizontalArrangement = Arrangement.spacedBy(if (tv) 14.dp else 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        for ((text, look) in badges) {
+            val box =
+                when (look) {
+                    BadgeLook.Filled -> Modifier.background(ink, shape)
+                    BadgeLook.Outlined -> Modifier.border(if (tv) 2.dp else 1.dp, ink, shape)
+                    BadgeLook.Plain -> Modifier
+                }
+            Box(
+                Modifier
+                    .height(if (tv) 31.dp else 13.dp)
+                    .then(box)
+                    .padding(
+                        horizontal =
+                            if (look == BadgeLook.Plain) {
+                                0.dp
+                            } else if (tv) {
+                                8.dp
+                            } else {
+                                3.dp
+                            },
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                BasicText(
+                    text,
+                    style =
+                        TextStyle(
+                            color = if (look == BadgeLook.Filled) Color.Black.copy(alpha = 0.88f) else ink,
+                            fontSize = if (tv) 23.sp else 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = MarqueeFonts.text,
+                        ),
+                    maxLines = 1,
+                    softWrap = false,
+                )
             }
         }
     }

@@ -1,5 +1,6 @@
 package app.marquee.core
 
+import app.marquee.core.VersionsCopy.Badge.Look
 import app.marquee.core.VersionsCopy.EmptyStep
 import app.marquee.core.model.EmptyAction
 import app.marquee.core.model.EmptyKind
@@ -7,6 +8,7 @@ import app.marquee.core.model.EmptyVersions
 import app.marquee.core.model.Group
 import app.marquee.core.model.HiddenSummary
 import app.marquee.core.model.Reason
+import app.marquee.core.model.ReasonLine
 import app.marquee.core.model.SectionQuality
 import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionSection
@@ -63,7 +65,6 @@ class VersionsCopyTest {
     fun `a row reads as quality and features, and no fact names its addon`() {
         assertEquals("4K, HDR10", VersionsCopy.headline(row()))
         assertEquals("4K", VersionsCopy.headline(row(features = emptyList())))
-        assertTrue(VersionsCopy.facts(row()).none { it.first == "Via" || "Real-Debrid" == it.second })
     }
 
     @Test
@@ -213,33 +214,6 @@ class VersionsCopyTest {
     }
 
     @Test
-    fun `the card lists the facts it has, in the web's order`() {
-        val one = row(sizeBytes = null, features = listOf("HDR10")).copy(languages = listOf("eng", "tur"))
-        assertEquals(
-            listOf(
-                "Size" to "Unknown",
-                "Status" to "Ready on Real-Debrid",
-                "Languages" to "English, Turkish",
-            ),
-            VersionsCopy.facts(one),
-        )
-        val two = row(features = listOf("Dolby Vision", "Atmos"))
-        assertEquals(listOf("Size", "Status", "Features"), VersionsCopy.facts(two).map { it.first })
-        assertEquals("4K Dolby Vision", VersionsCopy.pickHeading(two))
-    }
-
-    @Test
-    fun `failover and an opened row say how many sources back a release`() {
-        assertEquals("One source for this release.", VersionsCopy.failover(row()))
-        assertEquals(
-            "3 sources. If one fails, the next starts on its own.",
-            VersionsCopy.failover(row().copy(failoverCount = 2)),
-        )
-        assertEquals("Language not stated", VersionsCopy.detail(row()))
-        assertEquals("English, 2 sources", VersionsCopy.detail(row().copy(languages = listOf("en"), failoverCount = 1)))
-    }
-
-    @Test
     fun `language codes read as English names, an unknown code in capitals`() {
         assertEquals("English", VersionsCopy.languageName("eng"))
         assertEquals("German", VersionsCopy.languageName("ger"))
@@ -358,5 +332,29 @@ class VersionsCopyTest {
         val reranked = listOf(VersionsCopy.Section("section:fhd", "1080p", listOf(r("c"), r("b"), r("a"))))
         assertEquals(listOf("a", "b", "c"), keys(reranked))
         assertEquals(mapOf("a" to 0, "b" to 1), seen, "held changes nothing")
+    }
+
+    @Test
+    fun `badges follow Apple's row - the quality filled, one video and one audio format`() {
+        val badges = { features: List<String> ->
+            VersionsCopy.badges(row(features = features)).map { it.text to it.look }
+        }
+        assertEquals(
+            listOf("4K" to Look.Filled, "Dolby Vision" to Look.Plain, "Dolby Atmos" to Look.Plain),
+            badges(listOf("Dolby Vision", "HDR10", "Atmos", "5.1", "Remux")),
+        )
+        assertEquals(
+            listOf("4K" to Look.Filled, "HDR" to Look.Outlined, "5.1" to Look.Outlined),
+            badges(listOf("HDR10", "5.1")),
+        )
+        assertEquals(listOf("4K" to Look.Filled), badges(emptyList()))
+    }
+
+    @Test
+    fun `the card's why line joins the core's line and details, and says the whole card once`() {
+        val one = row().copy(line = ReasonLine.Quick(412, 2L * 1024 * 1024 * 1024))
+        val why = VersionsCopy.why(one)
+        assertTrue(why.startsWith("Starts quickly: "), why)
+        assertEquals("Best for this TV. 4K, HDR. $why", VersionsCopy.cardSpoken("Best for this TV", one))
     }
 }

@@ -169,6 +169,8 @@ class StreamChoiceCopyTest {
                         put("showAll", SHOW_ALL)
                         put("showFewer", SHOW_FEWER)
                         put("back", BACK)
+                        put("bestTv", BEST_TV)
+                        put("bestPhone", BEST_PHONE)
                         put("smaller", SMALLER)
                         put("sharper", SHARPER)
                         put("sections", buildJsonObject { for ((q, w) in SECTIONS) put(q.wire, w) })
@@ -401,17 +403,12 @@ class StreamChoiceCopyTest {
     }
 
     @Test
-    fun `the recommended card shows the window's line, and no other line`() {
+    fun `the card's why line is the window's line when the version plays in one`() {
         val buffer = ReasonLine.Buffer(53, 545 * mib, aheadMin = 8, budgetBytes = 508 * mib)
         assertEquals(
-            StreamChoiceCopy.Line(
-                ok,
-                "Plays without storing the whole file",
-                "53 seeders, 545 MB, room for about 8 min ahead in 508 MB",
-            ),
-            StreamChoiceCopy.cardLine(VersionsFixtures.row(line = buffer)),
+            "Plays without storing the whole file: 53 seeders, 545 MB, room for about 8 min ahead in 508 MB",
+            VersionsCopy.why(VersionsFixtures.row(line = buffer)),
         )
-        assertNull(StreamChoiceCopy.cardLine(VersionsFixtures.row(line = ReasonLine.Quick(53, gib))))
     }
 
     @Test
@@ -421,7 +418,7 @@ class StreamChoiceCopyTest {
         val line = StreamChoiceCopy.rowLine(held)
         assertEquals("On this device", line.text)
         assertEquals(StreamChoiceCopy.line(quick).details, line.details, "the reason's details stay for focus")
-        assertEquals(line, StreamChoiceCopy.cardLine(held))
+        assertEquals("On this device: ${line.details}", VersionsCopy.why(held), "the card says it too")
         assertEquals(StreamChoiceCopy.line(quick), StreamChoiceCopy.rowLine(held.copy(onDevice = null)))
     }
 

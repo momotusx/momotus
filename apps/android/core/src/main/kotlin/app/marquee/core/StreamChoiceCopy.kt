@@ -199,6 +199,10 @@ object StreamChoiceCopy {
     const val SHOW_FEWER = "Show fewer"
     const val BACK = "Back"
 
+    /** The card's kicker, by form. */
+    const val BEST_TV = "Best for this TV"
+    const val BEST_PHONE = "Best for this phone"
+
     /** The shortcuts under the card (plans/play-every-version.md 2f), in the core's order. */
     const val SMALLER = "Smaller file"
     const val SHARPER = "Sharper"
@@ -499,16 +503,6 @@ object StreamChoiceCopy {
         val line = line(row.line)
         return row.onDevice?.let { Line(VersionsCopy.Tone.Ok, it, line.details) } ?: line
     }
-
-    /** The recommended card's line: "On this device", else a version that plays in a window says so under its reasons. */
-    fun cardLine(row: VersionRow): Line? =
-        if (row.onDevice !=
-            null
-        ) {
-            rowLine(row)
-        } else {
-            (row.line as? ReasonLine.Buffer)?.let(::line)
-        }
 
     /** The speed that decides here: HTTP with a streaming service account or without the engine, else the engine's. */
     fun speedFor(

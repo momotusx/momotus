@@ -4,7 +4,6 @@ package app.marquee.ui.tv
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,9 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -69,8 +66,9 @@ import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionsSnapshot
 import app.marquee.core.views.VersionsView
 import app.marquee.core.views.ViewStatus
+import app.marquee.design.BadgeLook
+import app.marquee.design.BadgeRow
 import app.marquee.design.CapsLabel
-import app.marquee.design.FactsGrid
 import app.marquee.design.FocusInk
 import app.marquee.design.GlassBar
 import app.marquee.design.Icons
@@ -91,11 +89,9 @@ import app.marquee.design.TextRole
 import app.marquee.design.Tokens
 import app.marquee.design.ToneWord
 import app.marquee.design.dimmed
-import app.marquee.design.endFade
 import app.marquee.design.focusClickable
 import app.marquee.design.focusPalette
 import app.marquee.design.marqueeFocus
-import app.marquee.design.scrollByKey
 import kotlinx.coroutines.launch
 
 private const val PLAY = "play"
@@ -277,70 +273,19 @@ private fun Pick(
             }
 
             best != null -> {
-                // The details scroll when they run long (features, languages, three reasons, a long
-                // release name); Play and its fallback line keep their place at the card's foot. Only
-                // then do they take focus (Up from Play), and Up and Down scroll them until an edge,
-                // where the key moves focus on as usual.
-                val details = rememberScrollState()
-                val scope = rememberCoroutineScope()
-                // maxValue is Int.MAX_VALUE until the first measure: not an overflow yet.
-                val overflows = details.maxValue in 1 until Int.MAX_VALUE
-                Column(
-                    Modifier
-                        .weight(1f, fill = false)
-                        .then(
-                            if (overflows) {
-                                Modifier
-                                    .onPreviewKeyEvent { scrollByKey(it, details, scope) }
-                                    .marqueeFocus(Marquee.radius.m, scale = 1f)
-                                    .focusable()
-                            } else {
-                                Modifier
-                            },
-                        ).endFade(details.canScrollForward, vertical = true, length = 48.dp)
-                        .verticalScroll(details),
-                    verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
+                CardParts(
+                    StreamChoiceCopy.BEST_TV,
+                    VersionsCopy.badges(best),
+                    VersionsCopy.why(best),
+                    VersionsCopy.cardSpoken(StreamChoiceCopy.BEST_TV, best),
                 ) {
-                    PickLine()
-                    MqText(VersionsCopy.pickHeading(best), role = TextRole.Title1, maxLines = 1)
-                    FactsGrid(VersionsCopy.facts(best), tones = mapOf("Status" to statusTone(best)))
-                    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-                        for (reason in best.reasons.take(3)) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                MqIcon(Icons.Check, tint = colors.ok, size = 26.dp)
-                                MqText(VersionsCopy.reason(reason, best.status), role = TextRole.Callout, maxLines = 2)
-                            }
-                        }
-                        // A version that plays in a window says so, with its minutes ahead.
-                        StreamChoiceCopy.cardLine(best)?.let { line ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                MqIcon(Icons.Check, tint = colors.ok, size = 26.dp)
-                                Column {
-                                    MqText(line.text, role = TextRole.Callout, maxLines = 2)
-                                    MqText(line.details, role = TextRole.Caption, color = colors.muted, maxLines = 2)
-                                }
-                            }
-                        }
-                    }
-                    Release(best.releaseName, maxLines = 3)
-                }
-                PrimaryButton(
-                    label = "Play this version",
-                    icon = PlayFilled,
-                    onClick = { onPlay(best.key) },
-                    modifier = Modifier.padding(top = Marquee.space.xs),
-                    focusRequester = play,
-                    onFocusChange = focus.watch(null, PLAY),
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    MqIcon(Icons.RefreshCw, tint = colors.muted, size = 22.dp)
-                    MqText(VersionsCopy.failover(best), role = TextRole.Caption, color = colors.muted, maxLines = 2)
+                    PrimaryButton(
+                        label = "Play this version",
+                        icon = PlayFilled,
+                        onClick = { onPlay(best.key) },
+                        focusRequester = play,
+                        onFocusChange = focus.watch(null, PLAY),
+                    )
                 }
             }
 
@@ -350,11 +295,15 @@ private fun Pick(
 
             // Still asking, or every addon answered with nothing while the core checks what this device keeps.
             snapshot == null || !snapshot.done || snapshot.rows.isEmpty() -> {
-                PickLine()
-                Skeleton(Modifier.size(260.dp, 56.dp), colors.raised)
-                Skeleton(Modifier.size(420.dp, 28.dp), colors.raised)
-                Skeleton(Modifier.size(360.dp, 28.dp), colors.raised)
-                Skeleton(Modifier.size(300.dp, 28.dp), colors.raised)
+                // The card's own parts, unseen, under one block: the pick lands with nothing below it moving.
+                Box(Modifier.testTag(CARD_PLACEHOLDER)) {
+                    Box(Modifier.alpha(0f).clearAndSetSemantics {}) {
+                        CardParts(StreamChoiceCopy.BEST_TV, PLACEHOLDER_BADGES, "Starts quickly", "") {
+                            PrimaryButton("Play this version", {}, icon = PlayFilled, enabled = false)
+                        }
+                    }
+                    Skeleton(Modifier.matchParentSize(), colors.raised)
+                }
             }
 
             else -> {
@@ -751,11 +700,50 @@ private fun SourceRow(
     }
 }
 
-/** The pick card's first line, plain at 64 percent: the frames' words, never an eyebrow. */
+/**
+ * The card's parts (plans/versions-android-spec.md, section 1): the kicker, the version's badges, one why line clamped
+ * to one line, then [play]. Said as one node, [spoken], with the whole why sentence; the button says itself.
+ */
 @Composable
-private fun PickLine() {
-    MqText("Best for this screen", role = TextRole.Callout, color = Marquee.colors.dim, weight = FontWeight.SemiBold)
+private fun CardParts(
+    kicker: String,
+    badges: List<VersionsCopy.Badge>,
+    why: String,
+    spoken: String,
+    play: @Composable () -> Unit,
+) {
+    Column(Modifier.testTag(CARD), verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+        Column(
+            Modifier.clearAndSetSemantics { if (spoken.isNotEmpty()) contentDescription = spoken },
+            verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+        ) {
+            MqText(
+                kicker,
+                role = TextRole.Callout,
+                color = Marquee.colors.dim,
+                weight = FontWeight.SemiBold,
+                maxLines = 1,
+            )
+            BadgeRow(badges.map { it.text to badgeLook(it.look) })
+            MqText(why, role = TextRole.Callout, color = Marquee.colors.muted, maxLines = 1)
+        }
+        play()
+    }
 }
+
+/** The core's badge look in the design system's words. */
+private fun badgeLook(look: VersionsCopy.Badge.Look) =
+    when (look) {
+        VersionsCopy.Badge.Look.Filled -> BadgeLook.Filled
+        VersionsCopy.Badge.Look.Plain -> BadgeLook.Plain
+        VersionsCopy.Badge.Look.Outlined -> BadgeLook.Outlined
+    }
+
+/** What the placeholder card holds, unseen, so it is the card's height. */
+private val PLACEHOLDER_BADGES = listOf(VersionsCopy.Badge("4K", VersionsCopy.Badge.Look.Filled))
+
+const val CARD_PLACEHOLDER = "versions-card-placeholder"
+const val CARD = "versions-card"
 
 /** A dimmed row's icon: a lock for an account, a ban for this device; never a warning triangle. */
 private fun whyIcon(kind: EmptyKind) = if (kind == EmptyKind.NeedsAccount) Icons.Lock else Icons.Ban

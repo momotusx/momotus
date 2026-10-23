@@ -33,6 +33,7 @@ import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import app.marquee.core.StreamChoiceCopy
+import app.marquee.core.VersionsCopy
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
 import app.marquee.core.model.EmptyAction
@@ -490,17 +491,11 @@ class TvVersionsTest {
             }
         }
         compose.waitForIdle()
-        val line =
-            compose
-                .onNodeWithText(
-                    "Best for this screen",
-                    useUnmergedTree = true,
-                ).fetchSemanticsNode()
-                .boundsInRoot
+        val line = compose.onNodeWithTag(CARD_PLACEHOLDER, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val dp = compose.density.density
         val image = compose.onRoot().captureToImage().asAndroidBitmap()
-        // The first block (260 x 56) starts under the card's first line; the card's ground is its padding to the left.
-        val y = (line.bottom + 30 * dp).toInt()
+        // The block fills the card's parts; the card's ground is its padding to the left.
+        val y = (line.top + 20 * dp).toInt()
         val block = Color(image.getPixel((line.left + 40 * dp).toInt(), y))
         val ground = Color(image.getPixel((line.left - 8 * dp).toInt(), y))
         val la = block.luminance() + 0.05f
@@ -593,9 +588,13 @@ class TvVersionsTest {
     @Test
     fun `the card reads the pick, the list leaves it out, and the shortcuts are the core's, each one press`() {
         show(coherent())
-        // The card says the pick's own facts.
-        compose.onNodeWithText("1080p HDR10").assertExists()
-        compose.onNodeWithText("4 GB").assertExists()
+        // The card says the pick's own facts, as one node: the kicker, its badges, the whole why sentence; no file
+        // name and no sources line.
+        val pick = coherent().recommended!!
+        compose.onNodeWithContentDescription(VersionsCopy.cardSpoken("Best for this TV", pick)).assertExists()
+        assertTrue(VersionsCopy.cardSpoken("Best for this TV", pick).startsWith("Best for this TV. 1080p, HDR. "))
+        compose.onAllNodesWithText("Sintel.2010.1080p.BluRay.mkv", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("One source", substring = true).assertCountEquals(0)
         // The core keeps the pick out of the sections, so no row repeats it.
         compose.onAllNodesWithContentDescription("1080p, HDR10, 4 GB").assertCountEquals(0)
         // The core's smaller and sharper, in its order, with their own facts.
@@ -672,5 +671,39 @@ class TvVersionsTest {
         for (section in page.sections) {
             for (key in section.keys) assertEquals(quality[section.quality], page.rows.single { it.key == key }.quality)
         }
+    }
+
+    @Test
+    fun `the card's placeholder is the card's height, so nothing below moves when the pick lands`() {
+        var current by mutableStateOf<VersionsView?>(null)
+        compose.setContent {
+            MarqueeTheme(Form.Tv) { TvVersions("Sintel", current, FocusMemory(), {}, {}, {}, {}, {}) }
+        }
+        compose.waitForIdle()
+        val held = compose.onNodeWithTag(CARD_PLACEHOLDER, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val snapshot = coherent()
+        client.attach { text ->
+            val msg = CoreJson.parseToJsonElement(text).jsonObject
+            val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
+            val result =
+                if (msg["op"]?.jsonPrimitive?.content == "subscribe") {
+                    """{"sub":7,"snapshot":${CoreJson.encodeToString(VersionsSnapshot.serializer(), snapshot)}}"""
+                } else {
+                    "{}"
+                }
+            client.onMessage("""{"id":$id,"ok":true,"result":$result}""")
+        }
+        val view = VersionsView(client, scope, JsonObject(emptyMap()))
+        current = view
+        compose.waitForIdle()
+        view.open()
+        compose.waitUntil(60_000) {
+            Snapshot.sendApplyNotifications()
+            compose.onAllNodesWithTag(CARD, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() &&
+                compose.onAllNodesWithTag(CARD_PLACEHOLDER, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()
+        }
+        val card = compose.onNodeWithTag(CARD, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertEquals(held.top, card.top)
+        assertEquals(held.height, card.height, "the placeholder is the card's height")
     }
 }
