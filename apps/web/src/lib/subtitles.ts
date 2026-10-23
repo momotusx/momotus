@@ -130,15 +130,14 @@ export function middle(text: string, max: number): string {
   return `${head}…${tail}`;
 }
 
-/** The quiet line under a track's name, in parts: its source when the name
- * does not already say it, what kind of file it is, the core's match words,
- * then the release text cut in the middle to the line's `max` characters
- * (the whole line when the rest leaves it under 24). */
+/** The quiet line under a track's name, in parts: only what tells tracks apart (what kind of file it
+ * is, the core's match words, then the release text cut in the middle to the line's `max` characters,
+ * the whole line when the rest leaves it under 24). No addon or service is named where a viewer reads
+ * it, so the source never shows. */
 export function trackDetail(t: SubtitleTrack, max = 46): string[] {
-  const source = t.name === t.source || t.name.startsWith(`${t.source} `) ? null : t.source;
   // A rate as written ("23.976", "25"), not the core's float (23.976000785827637).
   const made = t.madeForFps ? `Made for ${Number(t.madeForFps.toFixed(3))} fps` : null;
-  const parts = [source, t.forced ? "Forced" : null, t.hearingImpaired ? "For the hard of hearing" : null, t.hashMatch ? MATCHES : null, t.fits ? FITS : null, made].filter(
+  const parts = [t.forced ? "Forced" : null, t.hearingImpaired ? "For the hard of hearing" : null, t.hashMatch ? MATCHES : null, t.fits ? FITS : null, made].filter(
     (p): p is string => !!p,
   );
   if (!t.release || t.release === t.name) return parts;

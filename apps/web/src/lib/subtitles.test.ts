@@ -147,14 +147,15 @@ test("the Subtitles button counts the languages the picker shows", () => {
   expect(offSummary(0, false)).toEqual({ text: "None found", searching: false });
 });
 
-test("the detail line: the source when the name does not say it, the kind, the match, the release", () => {
-  expect(trackDetail(track("tr", "Turkish", "TOPAZ", { hearingImpaired: true }))).toEqual(["OpenSubtitles v3", "For the hard of hearing"]);
+test("the detail line: the kind, the match, the release; never the source", () => {
+  expect(trackDetail(track("tr", "Turkish", "TOPAZ", { hearingImpaired: true }))).toEqual(["For the hard of hearing"]);
   expect(trackDetail(track("en", "English", "OpenSubtitles v3 2"))).toEqual([]);
   expect(trackDetail(track("en", "English", "OpenSubtitles v3", { forced: true }))).toEqual(["Forced"]);
   const release = "Slow.Horses.S06E02.1080p.WEB.H264-CAKES";
-  // The rest of the line leaves it under 24: it takes a line of its own, cut only past the whole measure.
-  expect(trackDetail(track("en", "English", "CAKES, WEB 1080p", { fits: true, release }))).toEqual(["OpenSubtitles v3", FITS, release]);
-  expect(trackDetail(track("en", "English", "CAKES, WEB 1080p", { fits: true, release }), 34)).toEqual(["OpenSubtitles v3", FITS, middle(release, 34)]);
+  // Room of 24 or more beside the rest: cut to that room.
+  expect(trackDetail(track("en", "English", "CAKES, WEB 1080p", { fits: true, release }))).toEqual([FITS, middle(release, 25)]);
+  // Less: it takes a line of its own, cut only past the whole measure.
+  expect(trackDetail(track("en", "English", "CAKES, WEB 1080p", { fits: true, release }), 34)).toEqual([FITS, middle(release, 34)]);
   expect(middle(release, 34)).toBe("Slow.Horses…1080p.WEB.H264-CAKES");
   // A hash match says so before the group; a file timed for another frame rate says which, as written.
   expect(trackDetail(track("en", "English", "OpenSubtitles v3", { hashMatch: true, fits: true }))).toEqual([MATCHES, FITS]);
@@ -162,7 +163,9 @@ test("the detail line: the source when the name does not say it, the kind, the m
   expect(trackDetail(track("en", "English", "OpenSubtitles v3", { madeForFps: 25 }))).toEqual(["Made for 25 fps"]);
   expect(trackDetail(track("en", "English", "OpenSubtitles v3", { madeForFps: Math.fround(23.976) }))).toEqual(["Made for 23.976 fps"]);
   // The release that is the name itself is said once.
-  expect(trackDetail(track("en", "English", release, { release }))).toEqual(["OpenSubtitles v3"]);
+  expect(trackDetail(track("en", "English", release, { release }))).toEqual([]);
+  // No source anywhere in the line, whatever the track.
+  expect(trackDetail(track("tr", "Turkish", "TOPAZ", { forced: true, fits: true, release })).join(" ")).not.toContain("OpenSubtitles");
 });
 
 test("a long release is cut in the middle at a dot, its group kept", () => {

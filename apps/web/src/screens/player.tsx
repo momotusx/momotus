@@ -2,6 +2,7 @@ import { A, useLocation, useNavigate, useParams, useSearchParams } from "@solidj
 import ArrowLeft from "lucide-solid/icons/arrow-left";
 import AudioLines from "lucide-solid/icons/audio-lines";
 import Captions from "lucide-solid/icons/captions";
+import CaptionsOff from "lucide-solid/icons/captions-off";
 import Check from "lucide-solid/icons/check";
 import CircleAlert from "lucide-solid/icons/circle-alert";
 import Gauge from "lucide-solid/icons/gauge";
@@ -278,6 +279,9 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   // The core's subtitle in use, if any.
   const [track, setTrack] = createSignal<{ url: string; lang: string } | null>(null);
   const [subError, setSubError] = createSignal<string | null>(null);
+  // Every track the start subtitle could turn on failed to read (the core's `startSubtitleFailed`):
+  // said once, quietly, with no source; a pick clears it.
+  const [subQuiet, setSubQuiet] = createSignal<string | null>(null);
   const [ended, setEnded] = createSignal(false);
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
   // The source the engine plays, named in failOver so the core ignores a late error.
@@ -560,6 +564,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   // The core serves every subtitle as UTF-8 WebVTT on a loopback URL.
   const showSubtitle = (t: SubtitleTrack | null) => {
     setSubError(null);
+    setSubQuiet(null);
     const sub = t ? { url: t.url, lang: t.lang } : null;
     setTrack(sub);
     engine.setSubtitle(sub);
@@ -609,8 +614,30 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       if (pick.file.selected) return;
       if (untrack(track)) showSubtitle(null);
       engine.selectTrack("sub", pick.file.id);
-    } else if (!untrack(track)) showSubtitle(pick.track);
+    } else if (untrack(track)?.url !== pick.track.url) showSubtitle(pick.track);
   });
+
+  // The start subtitle the core could not read leaves the list and the core names the next best as
+  // `autoSubtitle` (applied above while the viewer has not chosen): a track that left the list is
+  // off at once, note or no note. With none left, the quiet line.
+  createEffect(() => {
+    // The list is read first, every run: the snapshot is a store, so an effect that skipped reading it
+    // while nothing was on would never hear it change.
+    const listed = new Set((snap()?.subtitles ?? []).map((t) => t.url));
+    const shown = untrack(track);
+    if (shown && !listed.has(shown.url)) {
+      setTrack(null);
+      engine.setSubtitle(null);
+    }
+  });
+  createEffect(
+    on(
+      () => !!snap()?.startSubtitleFailed,
+      (failed) => {
+        if (failed && !chose) setSubQuiet(choiceWords.player.subtitlesFailed);
+      },
+    ),
+  );
 
   // A file the core could not serve plays as an empty track and comes back
   // as a note. Only the picked track is fetched, so a new note is about it:
@@ -622,10 +649,6 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     const picked = untrack(track);
     if (!fresh || !picked) return;
     setSubError(subtitleNote(fresh));
-    if (!snap()?.subtitles.some((t) => t.url === picked.url)) {
-      setTrack(null);
-      engine.setSubtitle(null);
-    }
   });
 
   const remaining = () => Math.max(0, duration() - time());
@@ -1128,6 +1151,14 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
           <CircleAlert aria-hidden />
           {subError()}
         </p>
+      </Show>
+      <Show when={!subError() && subQuiet()}>
+        {(text) => (
+          <p class="toast quiet" role="status">
+            <CaptionsOff aria-hidden />
+            {text()}
+          </p>
+        )}
       </Show>
 
       {/* Not before the first frame: the loading screen has nothing to act on

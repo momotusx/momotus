@@ -172,6 +172,8 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 .toast { position: absolute; left: 50%; top: var(--safe-top); transform: translateX(-50%); display: flex; align-items: center; gap: 12px;
   padding: 14px 22px; border-radius: var(--radius-card); font: 500 var(--type-callout) var(--font-text); }
 .toast svg { width: 28px; height: 28px; color: var(--bad); }
+/* A quiet line (no subtitle could be read): no alarm color. */
+.toast.quiet svg { color: var(--muted); }
 
 /* Phone: compact controls along the bottom. */
 [data-form="phone"] .player-scr { position: fixed; inset: 0; }

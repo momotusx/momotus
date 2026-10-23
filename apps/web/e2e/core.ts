@@ -41,6 +41,8 @@ export const RATINGS_PORT = 17823 + shift;
 export const LOADING_PORT = 17824 + shift;
 /** The addon names spec's own: a core with two local addons whose catalogs share a title. */
 export const NAMES_PORT = 17825 + shift;
+/** The start subtitle spec's own: a core whose one addon names English files that cannot be read. */
+export const SUB_AUTO_PORT = 17826 + shift;
 /** Every browser a run launches takes these: each name but this machine's resolves to the browser's
  * recorder, whose certificate it does not check, so pages load images and frames from the
  * recording and a run needs the network only to record (none with MQ_E2E_OFFLINE=1). A spec that
