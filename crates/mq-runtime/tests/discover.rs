@@ -130,6 +130,59 @@ async fn browses_pages_genres_and_required_filters() {
     assert_eq!(s.state, DiscoverState::End, "no skip extra, so one page");
 }
 
+/// Core backlog C40: a kind and a genre with no catalog (a title page's
+/// genre chip) opens the first catalog of that kind that lists the genre,
+/// keeping it; with none, the kind's catalog without it, and the snapshot
+/// names the genre it could not show.
+#[tokio::test]
+async fn a_genre_opens_the_first_catalog_that_lists_it() {
+    let core = Core::temporary("p").unwrap();
+    let (row, asked) = addon().await;
+    core.library().set_addons("p", &[row], &core.hlc()).unwrap();
+    let view = DiscoverView::open(&core);
+    settle(&view).await;
+    let names = |s: &mq_runtime::DiscoverSnapshot| {
+        let id = s.catalog.clone();
+        s.catalogs
+            .iter()
+            .find(|c| Some(&c.id) == id.as_ref())
+            .map(|c| c.name.clone())
+    };
+    // "2025" is only New's (a required genre); "Drama" is Popular's.
+    view.select(Some("movie"), None, Some(Some("2025")));
+    settle(&view).await;
+    let s = view.snapshot();
+    assert_eq!(
+        (names(&s).as_deref(), s.genre.as_deref()),
+        (Some("New"), Some("2025"))
+    );
+    assert_eq!(s.missing_genre, None);
+    assert!(asked.lock().unwrap().last().unwrap().contains("genre=2025"));
+    view.select(Some("movie"), None, Some(Some("Drama")));
+    settle(&view).await;
+    let s = view.snapshot();
+    assert_eq!(
+        (names(&s).as_deref(), s.genre.as_deref()),
+        (Some("Popular"), Some("Drama"))
+    );
+    // No catalog of the kind lists it: the kind's first catalog, and the
+    // genre named, even with another catalog of the kind open.
+    let new = view.snapshot().catalogs[1].id.clone();
+    view.select(None, Some(&new), None);
+    settle(&view).await;
+    view.select(Some("movie"), None, Some(Some("Western")));
+    settle(&view).await;
+    let s = view.snapshot();
+    assert_eq!(s.kind.as_deref(), Some("movie"));
+    assert_eq!(names(&s).as_deref(), Some("Popular"));
+    assert_eq!(s.genre, None);
+    assert_eq!(s.missing_genre.as_deref(), Some("Western"));
+    // Any other choice clears it.
+    view.select(None, None, Some(None));
+    settle(&view).await;
+    assert_eq!(view.snapshot().missing_genre, None);
+}
+
 #[tokio::test]
 #[ignore = "network"]
 async fn real_cinemeta_discover() {

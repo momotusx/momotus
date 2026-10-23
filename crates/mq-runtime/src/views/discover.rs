@@ -80,6 +80,10 @@ pub struct DiscoverSnapshot {
     pub genre: Option<String>,
     /// The catalog only answers with a genre picked.
     pub genre_required: bool,
+    /// A genre asked with a kind and no catalog (a title page's genre
+    /// chip) that no catalog of that kind lists: Discover shows the kind
+    /// without it, and says so (core backlog C40). None otherwise.
+    pub missing_genre: Option<String>,
     pub items: Vec<Tile>,
     pub state: DiscoverState,
 }
@@ -131,6 +135,7 @@ fn empty_snapshot(catalogs: &[Catalog]) -> DiscoverSnapshot {
         genres: Vec::new(),
         genre: None,
         genre_required: false,
+        missing_genre: None,
         items: Vec::new(),
         state: DiscoverState::End,
     }
@@ -265,10 +270,26 @@ impl Inner {
         {
             let mut s = lock(&self.state);
             let current = s.snapshot.catalog.clone();
-            let chosen = s
-                .catalogs
-                .iter()
-                .find(|c| catalog.is_some_and(|id| c.choice.id == id))
+            // A kind and a genre with no catalog (a title's genre chip): the
+            // first catalog of the kind, in addon order, that lists it (C40).
+            let asked = genre
+                .flatten()
+                .filter(|_| catalog.is_none() && kind.is_some());
+            let of_kind = |c: &&Catalog| Some(c.shelf.as_str()) == kind;
+            let lists = asked.and_then(|g| {
+                (s.catalogs.iter()).find(|c| of_kind(c) && c.genres.iter().any(|x| x == g))
+            });
+            let missing_genre = asked.filter(|_| lists.is_none()).map(str::to_owned);
+            // With none, the kind's first catalog: the one a chip's kind
+            // opens on, not whichever was open last.
+            let lists =
+                lists.or_else(|| missing_genre.as_ref().and(s.catalogs.iter().find(of_kind)));
+            let chosen = lists
+                .or_else(|| {
+                    s.catalogs
+                        .iter()
+                        .find(|c| catalog.is_some_and(|id| c.choice.id == id))
+                })
                 .or_else(|| {
                     kind.and_then(|k| {
                         s.catalogs
@@ -308,6 +329,7 @@ impl Inner {
             s.snapshot.genres = chosen.genres.clone();
             s.snapshot.genre_required = chosen.genre_required;
             s.snapshot.genre = genre;
+            s.snapshot.missing_genre = missing_genre;
             s.snapshot.items.clear();
             s.seen.clear();
             s.snapshot.state = DiscoverState::Loading;
