@@ -1,8 +1,9 @@
-import { A, useNavigate, useParams } from "@solidjs/router";
+import { useNavigate, useParams } from "@solidjs/router";
 import ArrowLeft from "lucide-solid/icons/arrow-left";
-import Check from "lucide-solid/icons/check";
+import Ban from "lucide-solid/icons/ban";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import CircleCheck from "lucide-solid/icons/circle-check";
+import Lock from "lucide-solid/icons/lock";
 import OctagonAlert from "lucide-solid/icons/octagon-alert";
 import Play from "lucide-solid/icons/play";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
@@ -16,7 +17,7 @@ import { EmptyActs } from "../components/empty-acts";
 import { KeyedPage } from "../components/keyed-page";
 import { Why } from "../components/why";
 import { op } from "../core/client";
-import type { Group } from "../core/generated/Group";
+import type { SectionQuality } from "../core/generated/SectionQuality";
 import type { ReasonLine } from "../core/generated/ReasonLine";
 import type { VersionRow } from "../core/generated/VersionRow";
 import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
@@ -27,28 +28,26 @@ import { bytes, decoded, playPath, playState, releaseParts, titlePath } from "..
 import { entryFrom } from "../history";
 import { onProfileReset } from "../core/profiles";
 import {
-  cardLine,
   emptyWords,
   choiceWords,
   counted,
-  groupLabel,
-  groupOrder,
   languageName,
   learnedNote,
   lineWords,
   nextVersion,
   qualityCell,
   qualityText,
-  reasonText,
-  statusText,
   versionsWords,
 } from "../lib/words";
 import "./versions.css";
 
 const SHOWN = 3;
-// The groups the viewer opened ("Show all"), per video: Back from a play
+// The sections the viewer opened ("Show all"), per video: Back from a play
 // finds the row it opened still listed.
-const expandedFor = new Map<string, Set<Group>>();
+// The sections in their fixed order; "found" is the rows listed dimmed when none can play (no heading).
+type Sec = SectionQuality | "found";
+const ORDER: Sec[] = ["uhd", "fhd", "hd", "other", "found"];
+const expandedFor = new Map<string, Set<Sec>>();
 onProfileReset(() => expandedFor.clear());
 
 export default function Versions() {
@@ -77,16 +76,6 @@ export function Release(props: { name: string }) {
   );
 }
 
-function StatusWord(props: { row: VersionRow }) {
-  const st = () => statusText(props.row.status);
-  return (
-    <span class={`st ${st().tone}`}>
-      <i class="dot" />
-      {st().text}
-    </span>
-  );
-}
-
 const toneIcon = { ok: CircleCheck, warn: TriangleAlert, bad: OctagonAlert };
 
 /** The row's line: a tone icon (its shape, never color alone) and the plain
@@ -104,6 +93,15 @@ function LineWord(props: { line: ReasonLine }) {
 /** A row's details on one line: the line's details, the release name, the languages and sources. */
 const detailsLine = (r: VersionRow) =>
   [!r.onDevice ? lineWords(r.line).details : null, r.releaseName, subLine(r)].filter((p): p is string => !!p).join("  ·  ");
+
+/** The card's one why line: the core's line and its details joined by a colon ("On this device" where set). */
+const whyLine = (r: VersionRow) => {
+  if (r.onDevice) return r.onDevice;
+  const w = lineWords(r.line);
+  return w.details ? `${w.text}: ${w.details}` : w.text;
+};
+/** "1080p HDR, 2.1 GB": a version's name for a screen reader. */
+const rowName = (r: VersionRow) => [`${qualityText(r.quality)}${r.features.length ? ` ${r.features.join(" ")}` : ""}`, r.sizeBytes ? bytes(r.sizeBytes) : null].filter(Boolean).join(", ");
 
 /** The element that scrolls `el`: the list on TV and desktop, the page on the phone. */
 function scrollerOf(el: HTMLElement): HTMLElement {
@@ -136,6 +134,11 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
   const empty = () => snap()?.empty ?? null;
   const dimmed = () => !!empty()?.rows.length;
   const startable = () => empty()?.kind !== "needsAccount";
+  // A dimmed row says why in place of its own line: a lock for an account, a ban for this device.
+  const dimWord = () => {
+    const e = empty();
+    return e && dimmed() ? ((choiceWords.empty[e.kind] as { row?: string }).row ?? null) : null;
+  };
   // The one-time learning note (3.9), until Undo.
   const [undone, setUndone] = createSignal(false);
   const note = () => {
@@ -149,8 +152,12 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
     void op("undoLearned", { screenClass: n.screenClass, choice: n.choice }).catch(() => setUndone(false));
   };
   const pick = () => snap()?.recommended ?? null;
+  const shortcut = (id: "smaller" | "sharper") => {
+    const r = snap()?.[id];
+    return r && r.key !== pick()?.key ? r : null;
+  };
   const video = `${props.kind}/${props.id}/${props.videoId}`;
-  const [open, setOpen] = createSignal<Set<Group>>(expandedFor.get(video) ?? new Set());
+  const [open, setOpen] = createSignal<Set<Sec>>(expandedFor.get(video) ?? new Set());
   // The row the remote is on: a collapsed group shows at least down to it,
   // so a better row arriving above never pushes it off the page.
   const [focusedRow, setFocusedRow] = createSignal<string | null>(null);
@@ -174,23 +181,30 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
     });
   });
 
-  // The rows listed now, and one group's of them. Sections come from the fixed
-  // group order, so a late addon or a re-rank never rebuilds them: the
-  // focused row keeps its element.
+  // The rows listed now, and one section's of them (the core's sections, by key). Sections come from
+  // the fixed order, so a late addon or a re-rank never rebuilds them: the focused row keeps its element.
   const listed = () => (dimmed() ? empty()?.rows : snap()?.rows) ?? [];
+  const byKey = createMemo(() => new Map((snap()?.rows ?? []).map((r) => [r.key, r])));
   // Over the player (`hold`), each section keeps the order it showed when the layer opened; keys
   // that arrive later go after it, so nothing moves under the viewer while the attempt resolves.
-  const held = new Map<Group, string[]>();
-  const rowsOf = (g: Group) => {
-    const rows = listed().filter((r) => r.group === g);
-    if (!props.hold) return rows;
-    const by = new Map(rows.map((r) => [r.key, r]));
-    const kept = (held.get(g) ?? []).filter((k) => by.has(k));
-    const order = [...kept, ...rows.map((r) => r.key).filter((k) => !kept.includes(k))];
+  const held = new Map<Sec, string[]>();
+  const keysOf = (g: Sec): string[] => {
+    if (dimmed()) return g === "found" ? listed().map((r) => r.key) : [];
+    const keys = snap()?.sections.find((s) => s.quality === g)?.keys ?? [];
+    if (!props.hold) return keys;
+    const kept = (held.get(g) ?? []).filter((k) => keys.includes(k));
+    const order = [...kept, ...keys.filter((k) => !kept.includes(k))];
     held.set(g, order);
-    return order.map((k) => by.get(k) as VersionRow);
+    return order;
   };
-  const toggle = (g: Group) => {
+  const rowsOf = (g: Sec): VersionRow[] => {
+    const rows = dimmed() ? new Map(listed().map((r) => [r.key, r])) : byKey();
+    return keysOf(g)
+      .map((k) => rows.get(k))
+      .filter((r): r is VersionRow => !!r);
+  };
+  const label = (g: Sec) => (g === "found" ? null : versionsWords.sections[g]);
+  const toggle = (g: Sec) => {
     const next = new Set(open());
     if (next.has(g)) next.delete(g);
     else next.add(g);
@@ -199,7 +213,7 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
   };
   const at = (f: string) => document.querySelector<HTMLElement>(`[data-f="${CSS.escape(f)}"]`);
   // Show all: the section opens and the focus goes to its first row that was hidden.
-  const unfold = (g: Group) => {
+  const unfold = (g: Sec) => {
     toggle(g);
     const row = at(`v:${rowsOf(g)[SHOWN]?.key ?? ""}`);
     if (row) focusEl(row);
@@ -208,7 +222,7 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
   // toggle stays where it was pressed, or, pressed from the pinned heading, the section's top stays
   // where its heading was, so the toggle shows under its rows. The scroll is set here (Safari has no
   // scroll anchoring), from the scroller found before the list shrinks.
-  const foldAt = (g: Group, from: HTMLElement) => {
+  const foldAt = (g: Sec, from: HTMLElement) => {
     const head = from.dataset.f?.startsWith("foldtop:") ? from.closest<HTMLElement>(".vghead") : null;
     const scroller = scrollerOf(from);
     const top = (head ?? from).getBoundingClientRect().top;
@@ -224,7 +238,7 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
   // PageUp does the same on a keyboard.
   const listKeys = (e: KeyboardEvent) => {
     const el = e.target as HTMLElement;
-    const g = el.closest<HTMLElement>("[data-group]")?.dataset.group as Group | undefined;
+    const g = el.closest<HTMLElement>("[data-group]")?.dataset.group as Sec | undefined;
     const onRow = !!el.dataset.f?.startsWith("v:");
     const head = g && open().has(g) && onRow ? at(`foldtop:${g}`) : null;
     if (e.key === "ArrowLeft" && form() === "tv") {
@@ -330,70 +344,49 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
               {(p) => (
                 <>
                   <p class="best">Best for this screen</p>
-                  <h2>
-                    {qualityText(p().quality)}
-                    <Show when={p().features[0]}>{(f) => <> {f()}</>}</Show>
-                  </h2>
-                  <dl class="facts-grid">
-                    <dt>Size</dt>
-                    <dd class="num">{p().sizeBytes ? bytes(p().sizeBytes as number) : "Unknown"}</dd>
-                    <dt>Status</dt>
-                    <dd>
-                      <StatusWord row={p()} />
-                    </dd>
-                    <Show when={p().features.length > 1}>
-                      <dt>Features</dt>
-                      <dd>{p().features.join(", ")}</dd>
-                    </Show>
-                    <Show when={p().languages.length}>
-                      <dt>Languages</dt>
-                      <dd>{languages(p())}</dd>
-                    </Show>
-                  </dl>
-                  <ul class="why">
-                    {/* This device holds its start: it plays with no peer (plans/player-polish.md 2b). */}
-                    <Show when={p().onDevice}>
-                      {(w) => (
-                        <li>
-                          <Check aria-hidden />
-                          {w()}
-                        </li>
-                      )}
-                    </Show>
-                    {/* At most three lines, On this device among them. */}
-                    <For each={p().reasons.slice(0, p().onDevice ? 2 : 3)}>
-                      {(r) => (
-                        <li>
-                          <Check aria-hidden />
-                          {reasonText(r, p().status)}
-                        </li>
-                      )}
-                    </For>
-                    <Show when={cardLine(p())}>
-                      {(w) => (
-                        <li class="window">
-                          <Check aria-hidden />
-                          <span>
-                            {w().text}
-                            <span class="sub">{w().details}</span>
-                          </span>
-                        </li>
-                      )}
-                    </Show>
-                  </ul>
-                  <p class="rel">
-                    <Release name={p().releaseName} />
+                  <h2>{qualityText(p().quality)}</h2>
+                  <Show when={p().features.length}>
+                    <p class="badges">
+                      <For each={p().features}>{(f) => <span>{f}</span>}</For>
+                    </p>
+                  </Show>
+                  {/* One why line (the core's line and its details), clamped; the full sentence describes Play. */}
+                  <p class="why1" id="vwhy">
+                    {whyLine(p())}
                   </p>
-                  <button class="btn primary" data-f="versions:play" data-autofocus onClick={() => play(p().key)}>
+                  <button
+                    class="btn primary"
+                    data-f="versions:play"
+                    data-autofocus
+                    aria-label={`Play ${rowName(p())}`}
+                    aria-describedby="vwhy"
+                    onClick={() => play(p().key)}
+                  >
                     <Play aria-hidden class="fill" />
                     Play this version
                   </button>
-                  <Show when={p().failoverCount > 0}>
-                    <p class="fail">
-                      <RefreshCw aria-hidden />
-                      {`${p().failoverCount + 1} sources. If one fails, the next starts on its own.`}
-                    </p>
-                  </Show>
+                  {/* The core's shortcuts, each only when it is not the pick (it stays in its section too). */}
+                  <For each={["smaller", "sharper"] as const}>
+                    {(id) => (
+                      <Show when={shortcut(id)}>
+                        {(r) => (
+                          <button
+                            class="vshort"
+                            data-f={`vshort:${id}`}
+                            aria-label={`${versionsWords[id]}: ${qualityText(r().quality)}${r().sizeBytes ? `, ${bytes(r().sizeBytes as number)}` : ""}`}
+                            onClick={() => play(r().key)}
+                          >
+                            <span class="w">{versionsWords[id]}</span>
+                            <span class="q">{qualityCell(r().quality)}</span>
+                            <span class="chips">
+                              <For each={r().features}>{(f) => <span>{f}</span>}</For>
+                            </span>
+                            <span class="size num">{r().sizeBytes ? bytes(r().sizeBytes as number) : ""}</span>
+                          </button>
+                        )}
+                      </Show>
+                    )}
+                  </For>
                 </>
               )}
             </Show>
@@ -414,7 +407,7 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
               }}
               onKeyDown={listKeys}
             >
-              <For each={groupOrder}>
+              <For each={ORDER}>
                 {(g) => {
                   const rows = createMemo(() => rowsOf(g));
                   const expanded = () => open().has(g);
@@ -428,26 +421,30 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
                       <section class="vgroup" data-row data-group={g}>
                         {/* An open section's heading holds Show fewer: Up from its first row, or Left
                             from any of its rows (Home on a keyboard), leaves a long list in one press. */}
-                        <div class="vghead">
-                          <h3 id={`vg-${g}`}>
-                            {groupLabel[g]}
-                            <span class="num">{rows().length}</span>
-                          </h3>
+                        <div class="vghead" classList={{ bare: !label(g) }}>
+                          <Show when={label(g)}>
+                            {(l) => (
+                              <h3 id={`vg-${g}`}>
+                                {l()}
+                                <span class="num">{rows().length}</span>
+                              </h3>
+                            )}
+                          </Show>
                           <Show when={expanded()}>
                             <button
                               class="fold top"
                               data-f={`foldtop:${g}`}
                               aria-expanded="true"
                               aria-controls={`vl-${g}`}
-                              aria-label={`Show fewer ${groupLabel[g]} versions`}
+                              aria-label={`${versionsWords.showFewer} ${label(g) ?? ""} versions`.replace("  ", " ")}
                               onClick={(e) => foldAt(g, e.currentTarget)}
                             >
                               <ChevronDown aria-hidden />
-                              Show fewer
+                              {versionsWords.showFewer}
                             </button>
                           </Show>
                         </div>
-                        <div id={`vl-${g}`} role="list" aria-labelledby={`vg-${g}`}>
+                        <div id={`vl-${g}`} role="list" aria-labelledby={label(g) ? `vg-${g}` : undefined}>
                           <For each={shown()}>
                             {(r, i) => (
                               <div class="vslot" role="listitem">
@@ -470,7 +467,19 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
                                   </span>
                                   <span class="size num">{r.sizeBytes ? bytes(r.sizeBytes) : ""}</span>
                                   {/* The core's "On this device" stands for the row's line where it is set. */}
-                                  <Show when={r.onDevice} fallback={<LineWord line={r.line} />}>
+                                  <Show
+                                    when={r.onDevice}
+                                    fallback={
+                                      <Show when={dimWord()} fallback={<LineWord line={r.line} />}>
+                                        {(w) => (
+                                          <span class="st line why">
+                                            <Dynamic component={empty()?.kind === "needsAccount" ? Lock : Ban} aria-hidden class="tone" />
+                                            <span class="lt">{w()}</span>
+                                          </span>
+                                        )}
+                                      </Show>
+                                    }
+                                  >
                                     {(w) => (
                                       <span class="st line ok">
                                         <CircleCheck aria-hidden class="tone" />
@@ -512,11 +521,11 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
                             data-f={`fold:${g}`}
                             aria-expanded={expanded()}
                             aria-controls={`vl-${g}`}
-                            aria-label={expanded() ? `Show fewer ${groupLabel[g]} versions` : `Show all ${rows().length} ${groupLabel[g]} versions`}
+                            aria-label={`${expanded() ? versionsWords.showFewer : versionsWords.showAll(rows().length)} ${label(g) ?? ""} versions`.replace("  ", " ")}
                             onClick={(e) => (expanded() ? foldAt(g, e.currentTarget) : unfold(g))}
                           >
                             <ChevronDown aria-hidden />
-                            {expanded() ? "Show fewer" : `Show all ${rows().length}`}
+                            {expanded() ? versionsWords.showFewer : versionsWords.showAll(rows().length)}
                           </button>
                         </Show>
                       </section>

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { addonHost, nextVersion, languageName, pairingProblem, plainAddress, reasonText, problemWords, restartLine, serverHost, statusText, subtitleNote } from "./words";
+import { addonHost, nextVersion, languageName, pairingProblem, plainAddress, problemWords, restartLine, serverHost, statusText, subtitleNote } from "./words";
 import shared from "../../../shared/stream-choice-words.json";
 import type { EmptyAction } from "../core/generated/EmptyAction";
 import type { EmptyKind } from "../core/generated/EmptyKind";
@@ -9,7 +9,6 @@ import type { VersionsConditions } from "../core/generated/VersionsConditions";
 import {
   anyLearned,
   emptyWords,
-  cardLine,
   choiceSummary,
   choiceWords,
   conditionsLine,
@@ -20,14 +19,6 @@ import {
   screenClass,
   speedFor,
 } from "./words";
-
-test("reasons read as plain sentences", () => {
-  expect(reasonText("readyNow", { kind: "ready", service: "Real-Debrid" })).toBe("Ready now");
-  expect(reasonText("readyNow", { kind: "direct" })).toBe("Ready now");
-  expect(reasonText("smallerFaster", { kind: "direct" })).toBe("Smaller and faster to start");
-  // A film replayed and an episode after the last one alike (Android walk EW-F1).
-  expect(reasonText("sameReleaseAsLast", { kind: "direct" })).toBe("Same release as last time");
-});
 
 test("status always has a word", () => {
   expect(statusText({ kind: "ready", service: "TorBox" }).text).toBe("Ready");
@@ -130,12 +121,6 @@ test("a window says its minutes ahead, or on mobile data that it keeps a short s
   expect(lineWords(buffer)).toEqual({ tone: "ok", text: "Plays without storing the whole file", details: "214 seeders, 40 GB, room for about 7 min ahead in 2.5 GB" });
   expect(lineWords({ ...buffer, aheadMin: null }).details).toBe("214 seeders, 40 GB, keeps only a short stretch ahead on mobile data");
   expect(lineWords({ ...buffer, seeders: null, aheadMin: 10 }).details).toBe("40 GB, room for about 10 min ahead in 2.5 GB");
-});
-
-test("the recommended card shows the window's line, and no other line", () => {
-  const buffer: ReasonLine = { kind: "buffer", seeders: 53, sizeBytes: 545 * 2 ** 20, aheadMin: 8, budgetBytes: 508 * 2 ** 20 };
-  expect(cardLine({ line: buffer })).toEqual({ tone: "ok", text: "Plays without storing the whole file", details: "53 seeders, 545 MB, room for about 8 min ahead in 508 MB" });
-  expect(cardLine({ line: { kind: "quick", seeders: 53, sizeBytes: GiB } })).toBeNull();
 });
 
 test("every zero-playable state reads its shared line with its actions in the table's order", () => {

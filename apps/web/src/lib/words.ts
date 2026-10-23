@@ -2,7 +2,6 @@
  * codes; every UI turns them into the same words. */
 
 import type { Group } from "../core/generated/Group";
-import type { Reason } from "../core/generated/Reason";
 import type { SubtitleNote } from "../core/generated/SubtitleNote";
 import type { SyncReport } from "../core/generated/SyncReport";
 import type { Tile } from "../core/generated/Tile";
@@ -20,24 +19,6 @@ import type { Form } from "../form";
 import { bytes } from "./format";
 import accountShared from "../../../shared/account-words.json";
 import choice from "../../../shared/stream-choice-words.json";
-
-export function reasonText(r: Reason, status: VersionStatus): string {
-  switch (r) {
-    case "readyNow":
-      // No service is named, as no addon is: "Ready now", never "Ready on TorBox".
-      return "Ready now";
-    case "playsDirectly":
-      return "Plays directly on this device";
-    case "matchesScreen":
-      return "Matches your screen";
-    case "sameReleaseAsLast":
-      return "Same release as last time";
-    case "yourLanguage":
-      return "In your language";
-    case "smallerFaster":
-      return "Smaller and faster to start";
-  }
-}
 
 export const groupLabel: Record<Group, string> = {
   best: "Best quality",
@@ -196,21 +177,26 @@ export const nextVersion = {
   listNotLoaded: "Versions could not be loaded",
   tryingAgain: "Trying again",
   /** A version picked by hand, waiting for Versions to list it (as Android). */
-  finding: "Finding this version",
+  finding: choice.player.findingChosen,
   /** The player's way to another version: on the failure card, and on the loading screen after 20 s. */
-  another: "Choose another version",
+  another: choice.player.chooseAnother,
   /** Said once when the loading screen's button appears. */
-  anotherReady: "Still loading. Choose another version is available",
+  anotherReady: choice.player.chooseAnotherSaid,
   /** The loading caption until the pick (never an addon's name). */
-  findingBest: "Finding the best version",
+  findingBest: choice.player.finding,
 };
 
-/** The Versions page's own words (plans/versions-web-spec.md 3.1, 5) until the core's Step 2a
- * moves them into stream-choice-words.json: the header's status line and the states' actions. */
+/** The Versions page's own words (plans/versions-web-spec.md 3.1, 5): the header's status line, the
+ * sections' toggles and Back. */
 export const versionsWords = {
-  finding: "Finding versions",
-  slow: "Still looking for more versions",
-  back: "Back",
+  finding: choice.page.finding,
+  slow: choice.page.stillLooking,
+  showAll: (n: number) => choice.page.showAll.replace("{n}", String(n)),
+  showFewer: choice.page.showFewer,
+  back: choice.page.back,
+  smaller: choice.page.smaller,
+  sharper: choice.page.sharper,
+  sections: choice.page.sections,
 };
 
 /** The busy line while a play starts over: a move on names the version it
@@ -705,12 +691,6 @@ export function emptyWords(e: Pick<EmptyVersions, "kind" | "action">, onVersions
   if (e.kind === "unreachable") steps.push({ step: "tryAgain", text: choice.empty.unreachable.action });
   else if (e.action !== "none" && e.action !== "playFromDevice" && w.action && !(onVersions && e.action === "chooseVersion")) steps.push({ step: e.action, text: w.action });
   return { text: w.text, steps };
-}
-
-/** The recommended card's line: a version that plays in a window says so
- * under its reasons (review r1 A P2-1); other lines stay in the list. */
-export function cardLine(row: { line: ReasonLine }) {
-  return row.line.kind === "buffer" ? lineWords(row.line) : null;
 }
 
 /** What the device line says: the screen, the connection and the disk. */

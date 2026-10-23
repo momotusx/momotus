@@ -356,7 +356,7 @@ test.describe("Versions", () => {
     if (!s.done || !rows.length) return s;
     return { ...s, recommended: null, rows: [], empty: { kind, action, count: listed ? rows.length : 0, rows: listed ? rows : [], key: key ? (rows[0]?.key ?? null) : null } };
   };
-  const words = JSON.parse(readFileSync(new URL("../../shared/stream-choice-words.json", import.meta.url), "utf8")) as { empty: Record<EmptyKind, { text: string }> };
+  const words = JSON.parse(readFileSync(new URL("../../shared/stream-choice-words.json", import.meta.url), "utf8")) as { empty: Record<EmptyKind, { text: string; row?: string }> };
   // Every state, its actions on Versions, then in the player (the shared Step 3 table).
   const STATES: [EmptyKind, EmptyAction, boolean, string[], string[]][] = [
     ["noSource", "settingsAddons", false, ["Settings", "Back"], ["Settings", "Back"]],
@@ -392,7 +392,11 @@ test.describe("Versions", () => {
       if (kind === "noSource") await expect(tv.locator('[data-f="versions:settings"]')).toHaveAttribute("href", "/addons");
       if (kind === "needsAccount") await expect(tv.locator('[data-f="versions:settings"]')).toHaveAttribute("href", "/debrid");
       // Rows only where the table lists them.
-      if (kind === "nothingPlaysHere" || kind === "needsAccount") await expect(tv.locator(".vrow.dim").first()).toBeVisible();
+      if (kind === "nothingPlaysHere" || kind === "needsAccount") {
+        await expect(tv.locator(".vrow.dim").first()).toBeVisible();
+        // Each says why in place of its own line (a lock for an account, a ban for this device).
+        await expect(tv.locator(".vrow.dim:not(:focus) .st.line.why .lt").first()).toHaveText(words.empty[kind].row ?? "");
+      }
       else await expect(tv.locator(".vrow")).toHaveCount(0);
       // Nothing moves: the line sits in the slot reserved from the first paint.
       await desk.goto(path("desktop"));
@@ -558,12 +562,13 @@ test.describe("Versions", () => {
     await listOnly.context().close();
   });
 
-  /** The core's list with `n` rows in the "best" section and 40 in "smallerFaster" (copies of its first row, each its own key). */
+  /** The core's list with `n` rows in its 1080p section and 40 in 720p and below (copies of its first row, each its own key). */
   const longBest = (n: number) => (s: VersionsSnapshot): VersionsSnapshot => {
     const first = s.rows[0] ?? s.recommended;
     if (!first || !s.done) return s;
-    const copy = (g: "best" | "smallerFaster", k: number) => Array.from({ length: k }, (_, i) => ({ ...first, key: `${first.key}#${g}${i}`, group: g }));
-    return { ...s, rows: [...copy("best", n), ...copy("smallerFaster", 40)] };
+    const copy = (q: "fhd" | "hd", k: number) => Array.from({ length: k }, (_, i) => ({ ...first, key: `${first.key}#${q}${i}` }));
+    const [fhd, hd] = [copy("fhd", n), copy("hd", 40)];
+    return { ...s, rows: [...fhd, ...hd], sections: [{ quality: "fhd", keys: fhd.map((r) => r.key) }, { quality: "hd", keys: hd.map((r) => r.key) }] };
   };
 
   test("TV: a long open section is left by Left to its heading's Show fewer, then Left to Play; folding keeps the toggle in place", async ({ browser }) => {
@@ -577,31 +582,31 @@ test.describe("Versions", () => {
     await page.goto(path("tv"));
     await firstRow(page);
     // The section below open too, so the list stays long after a fold (no clamp hides a jump).
-    await page.locator('[data-f="fold:smallerFaster"]').dispatchEvent("click");
-    await expect(page.locator('[data-group="smallerFaster"] .vrow')).toHaveCount(40);
+    await page.locator('[data-f="fold:hd"]').dispatchEvent("click");
+    await expect(page.locator('[data-group="hd"] .vrow')).toHaveCount(40);
     // Show all opens the section with the focus on its first row that was hidden.
-    await page.locator('[data-f="fold:best"]').focus();
+    await page.locator('[data-f="fold:fhd"]').focus();
     await page.keyboard.press("Enter");
-    const fourth = await page.locator('[data-group="best"] .vrow').nth(3).getAttribute("data-f");
+    const fourth = await page.locator('[data-group="fhd"] .vrow').nth(3).getAttribute("data-f");
     await expect.poll(() => focused(page)).toBe(fourth);
     // Row 50: Left goes to the heading's Show fewer, Left again to Play.
-    const row50 = page.locator('[data-group="best"] .vrow').nth(49);
+    const row50 = page.locator('[data-group="fhd"] .vrow').nth(49);
     await row50.focus();
     await page.keyboard.press("ArrowLeft");
-    await expect.poll(() => focused(page)).toBe("foldtop:best");
+    await expect.poll(() => focused(page)).toBe("foldtop:fhd");
     await page.keyboard.press("ArrowLeft");
     await expect.poll(() => focused(page)).toBe("versions:play");
     // Row 50 again: Left, then OK folds it (two presses). The heading stays where it was (no jump,
     // whatever the browser's scroll anchoring) and the bottom toggle, focused, is in view under it.
     await row50.focus();
     await page.keyboard.press("ArrowLeft");
-    const heading = page.locator('[data-group="best"] .vghead');
+    const heading = page.locator('[data-group="fhd"] .vghead');
     const top = await heading.evaluate((e) => e.getBoundingClientRect().top);
     await page.keyboard.press("Enter");
-    await expect.poll(() => focused(page)).toBe("fold:best");
-    await expect(page.locator('[data-group="best"] .vrow')).toHaveCount(3);
+    await expect.poll(() => focused(page)).toBe("fold:fhd");
+    await expect(page.locator('[data-group="fhd"] .vrow')).toHaveCount(3);
     expect(Math.abs((await heading.evaluate((e) => e.getBoundingClientRect().top)) - top)).toBeLessThanOrEqual(1);
-    await expect(page.locator('[data-f="fold:best"]')).toBeInViewport();
+    await expect(page.locator('[data-f="fold:fhd"]')).toBeInViewport();
     await page.context().close();
   });
 
@@ -609,12 +614,60 @@ test.describe("Versions", () => {
     const page = await device(browser, "desktop", PORTS.bridge, { versions: longBest(20) });
     await page.goto(path("desktop"));
     await firstRow(page);
-    await page.locator('[data-f="fold:best"]').click();
-    await expect(page.locator('[data-f="foldtop:best"]')).toHaveAccessibleName("Show fewer Best quality versions");
-    await expect(page.locator("#vg-best")).toHaveText(/^Best quality\s*20$/);
-    await page.locator('[data-group="best"] .vrow').nth(12).focus();
+    await page.locator('[data-f="fold:fhd"]').click();
+    await expect(page.locator('[data-f="foldtop:fhd"]')).toHaveAccessibleName("Show fewer 1080p versions");
+    await expect(page.locator("#vg-fhd")).toHaveText(/^1080p\s*20$/);
+    await page.locator('[data-group="fhd"] .vrow').nth(12).focus();
     await page.keyboard.press("Home");
-    await expect.poll(() => focused(page)).toBe("foldtop:best");
+    await expect.poll(() => focused(page)).toBe("foldtop:fhd");
+    await page.context().close();
+  });
+
+  test("the card: one why line, Play named and described by it; the core's shortcuts under it, each plays its version", async ({ browser }) => {
+    // The core's shortcuts, as two of its rows under their own keys.
+    const short = (s: VersionsSnapshot): VersionsSnapshot => {
+      const a = s.rows[0];
+      return a && s.done ? { ...s, smaller: { ...a, key: `${a.key}#smaller`, sizeBytes: 100 * 2 ** 20 }, sharper: { ...a, key: `${a.key}#sharper`, quality: "1080p" } } : s;
+    };
+    const page = await device(browser, "tv", PORTS.bridge, { versions: short });
+    await page.goto(path("tv"));
+    await firstRow(page);
+    const why = page.locator(".pick .why1");
+    await expect(why).not.toBeEmpty();
+    // One line, clamped; the full sentence describes Play.
+    expect(await why.evaluate((e) => getComputedStyle(e).whiteSpace)).toBe("nowrap");
+    const play = page.locator('[data-f="versions:play"]');
+    await expect(play).toHaveAccessibleDescription((await why.textContent()) ?? "");
+    await expect(play).toHaveAccessibleName(/^Play \S+/);
+    const smaller = page.locator('[data-f="vshort:smaller"]');
+    const sharper = page.locator('[data-f="vshort:sharper"]');
+    await expect(smaller).toHaveAccessibleName(/^Smaller file: .+, 100 MB$/);
+    await expect(sharper).toHaveAccessibleName(/^Sharper: 1080p/);
+    // Down from Play: Smaller file, then Sharper.
+    await expect.poll(() => focused(page)).toBe("versions:play");
+    await page.keyboard.press("ArrowDown");
+    await expect.poll(() => focused(page)).toBe("vshort:smaller");
+    await page.keyboard.press("ArrowDown");
+    await expect.poll(() => focused(page)).toBe("vshort:sharper");
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/play\//);
+    expect(await page.evaluate(() => (history.state as { key?: string } | null)?.key)).toMatch(/#sharper$/);
+    await page.context().close();
+  });
+
+  test("the sections are the core's, in its order, with their names; a shortcut equal to the pick is not drawn", async ({ browser }) => {
+    const sections = (s: VersionsSnapshot): VersionsSnapshot => {
+      const a = s.rows[0];
+      if (!s.done || !a) return s;
+      const rows = [a, { ...a, key: `${a.key}#1` }, { ...a, key: `${a.key}#2` }];
+      return { ...s, rows, smaller: s.recommended, sections: [{ quality: "uhd", keys: rows.slice(1).map((r) => r.key) }, { quality: "other", keys: [a.key] }] };
+    };
+    const page = await device(browser, "desktop", PORTS.bridge, { versions: sections });
+    await page.goto(path("desktop"));
+    await firstRow(page);
+    await expect(page.locator(".vgroup h3")).toHaveText([/^4K\s*\d+$/, /^Other\s*1$/]);
+    await expect(page.locator('[data-group="other"] .vrow')).toHaveCount(1);
+    await expect(page.locator('[data-f^="vshort:"]')).toHaveCount(0);
     await page.context().close();
   });
 
@@ -624,8 +677,8 @@ test.describe("Versions", () => {
     const page = await device(browser, "desktop", PORTS.bridge, { versions: other });
     await page.goto(path("desktop"));
     await firstRow(page);
-    await expect(page.locator('[data-group="otherLanguages"] .vrow .chips .lang').first()).toHaveText("Spanish");
-    await expect(page.locator('[data-group="best"] .vrow .chips .lang')).toHaveCount(0);
+    // One chip, on that row only, whatever its section.
+    await expect(page.locator(".vrow .chips .lang")).toHaveText(["Spanish"]);
     await page.context().close();
   });
 

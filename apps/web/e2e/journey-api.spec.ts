@@ -972,11 +972,14 @@ test("TV: Versions keeps an opened group on Back, and the focused row when bette
   await p.waitForTimeout(500);
   // Two better rows arrive at the top of that group: the focused row is now
   // fifth, and stays listed and focused.
-  type Snap = { rows: { key: string; group: string; release?: unknown }[] };
+  type Snap = { rows: { key: string; group: string; release?: unknown }[]; sections: { quality: string; keys: string[] }[] };
   const snap = view("versions").latest as Snap;
   const first = snap.rows[0];
   if (!first) throw new Error("no rows");
-  view("versions").push({ ...snap, rows: [{ ...first, key: `${first.key}-new1` }, { ...first, key: `${first.key}-new2` }, ...snap.rows] });
+  const added = [`${first.key}-new1`, `${first.key}-new2`];
+  // At the top of the first row's section, as the core lists them.
+  const sections = snap.sections.map((s) => (s.keys.includes(first.key) ? { ...s, keys: [...added, ...s.keys] } : s));
+  view("versions").push({ ...snap, sections, rows: [...added.map((key) => ({ ...first, key })), ...snap.rows] });
   await expect(p.locator(`[data-f="v:${first.key}-new1"]`)).toHaveCount(1);
   expect(await focusedKey(p)).toBe(third);
   expect(await focusedIsMarked(p)).toBe(true);

@@ -33,21 +33,20 @@ test("the version this device holds says so: the row's line with no stale warnin
     await page.goto(`/title/series/${GOT.id}/versions/${GOT.resume}?form=desktop`);
     const row = page.locator(".vrow").first();
     await expect(row).toBeVisible({ timeout: 30_000 });
-    const reasons = page.locator(".why li:not(.window)");
+    const why = page.locator(".pick .why1");
     if (which === "none") {
       // The warning and its details, as the core sent them.
       await expect(row.locator(".st.line .lt")).not.toHaveText("On this device");
       await expect(row.locator(".more")).toContainText("2 seeders");
-      await expect(reasons).toHaveCount(3);
+      await expect(why).not.toHaveText("On this device");
     } else if (which === "row") {
       await expect(row.locator(".st.line .lt")).toHaveText("On this device");
       // The words that stand for the warning take its details with them.
       await expect(row.locator(".more")).not.toContainText("seeders");
-      await expect(page.locator(".why li", { hasText: /^On this device$/ })).toHaveCount(0);
+      await expect(why).not.toHaveText("On this device");
     } else {
-      await expect(page.locator(".why li").first()).toHaveText("On this device");
-      // Still three lines at most: On this device and the first two reasons.
-      await expect(reasons).toHaveCount(3);
+      // The card's one why line says it in place of the core's line.
+      await expect(why).toHaveText("On this device");
       await expect(row.locator(".st.line .lt")).not.toHaveText("On this device");
     }
     await context.close();
