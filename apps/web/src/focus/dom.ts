@@ -79,10 +79,81 @@ function byOwner(current: HTMLElement, dir: Direction): HTMLElement | null {
   return first && first.offsetWidth > 0 ? first : null;
 }
 
+// A held arrow key asks for a new scroll about every 120 ms. The browser's smooth scroll starts
+// each one from rest, so the page stopped dead between presses (a 105 px step, then 2 px). A
+// glide is a critically damped spring: a new aim keeps its speed, so a held key reads as one
+// steady movement, and a single press eases in and out in about 350 ms.
+const SPRING = 20; // per second
+/** `room`: how far the scroller goes; the glide never asks for more, so the browser never clamps it. */
+type Axis = { x: number; v: number; to: number; room: number };
+/** `at`: where the glide last put the scroller, so a scroll by anything else is seen. */
+type Glide = { left: Axis; top: Axis; t: number; at: [number, number] };
+const glides = new Map<HTMLElement, Glide>();
+/** Where a scroller is heading: its glide's aim, else where it is. */
+const aim = (el: HTMLElement) => {
+  const g = glides.get(el);
+  return { left: g?.left.to ?? el.scrollLeft, top: g?.top.to ?? el.scrollTop };
+};
+
+/** The spring's exact step over `dt` seconds; true once it has settled on its aim. */
+export function spring(a: Axis, dt: number): boolean {
+  const e = a.x - a.to;
+  const k = Math.exp(-SPRING * dt);
+  const c = a.v + SPRING * e;
+  a.x = a.to + (e + c * dt) * k;
+  a.v = (a.v - SPRING * c * dt) * k;
+  // An aim turned around at full speed can carry past an end: it stops there.
+  if (a.x < 0 || a.x > a.room) [a.x, a.v] = [Math.min(Math.max(0, a.x), a.room), 0];
+  if (Math.abs(a.x - a.to) > 0.5 || Math.abs(a.v) > 20) return false;
+  [a.x, a.v] = [a.to, 0];
+  return true;
+}
+
+function glide(el: HTMLElement, to: { left?: number; top?: number }) {
+  // A snapping scroller (the phone's rows) pulls every step back to a snap point: the browser's own
+  // smooth scroll lands it.
+  if (getComputedStyle(el).scrollSnapType !== "none") {
+    el.scrollTo({ ...to, behavior: reducedMotion() ? "instant" : "smooth" });
+    return;
+  }
+  const room = { left: el.scrollWidth - el.clientWidth, top: el.scrollHeight - el.clientHeight };
+  const axis = (x: number): Axis => ({ x, v: 0, to: x, room: 0 });
+  const g = glides.get(el) ?? { left: axis(el.scrollLeft), top: axis(el.scrollTop), t: 0, at: [el.scrollLeft, el.scrollTop] };
+  for (const side of ["left", "top"] as const) {
+    g[side].room = Math.max(0, room[side]);
+    const want = to[side];
+    if (want !== undefined) g[side].to = Math.min(Math.max(0, want), g[side].room);
+    // Farther than three screens (a far jump): a glide would race past rows still mounting, so it jumps.
+    const screen = side === "left" ? el.clientWidth : el.clientHeight;
+    if (Math.abs(g[side].to - g[side].x) > 3 * screen) [g[side].x, g[side].v] = [g[side].to, 0];
+  }
+  if (reducedMotion()) {
+    glides.delete(el);
+    el.scrollTo({ left: g.left.to, top: g.top.to, behavior: "instant" });
+    return;
+  }
+  if (glides.has(el)) return;
+  glides.set(el, g);
+  const step = (now: number) => {
+    if (glides.get(el) !== g) return;
+    // Something else scrolled it (a wheel, a touch, the page's own code): that scroll stands.
+    if (Math.abs(el.scrollLeft - g.at[0]) > 1 || Math.abs(el.scrollTop - g.at[1]) > 1) return void glides.delete(el);
+    // A frame the main thread held up resumes the glide, never jumps it.
+    const dt = Math.min(g.t ? now - g.t : 1000 / 60, 1000 / 30) / 1000;
+    g.t = now;
+    const settled = [spring(g.left, dt), spring(g.top, dt)].every(Boolean);
+    if (settled || !el.isConnected) glides.delete(el);
+    else requestAnimationFrame(step);
+    g.at = [Math.round(g.left.x), Math.round(g.top.x)];
+    el.scrollTo({ left: g.at[0], top: g.at[1], behavior: "instant" });
+  };
+  requestAnimationFrame(step);
+}
+
 /** Scrolls the focused element into view inside the scrollers we own:
- * rows scroll sideways with a peek, pages bring the focused row to the top. */
+ * rows scroll sideways with a peek, pages bring the focused row to the top.
+ * Each is judged where its scroller is heading, not where a glide has it now. */
 export function reveal(el: HTMLElement) {
-  const behavior: ScrollBehavior = reducedMotion() ? "auto" : "smooth";
   const track = el.closest<HTMLElement>("[data-hscroll]");
   if (track && el.offsetParent) {
     const pad = Number(track.dataset.hscroll) || 0;
@@ -96,20 +167,21 @@ export function reveal(el: HTMLElement) {
     const left = (el.getBoundingClientRect().left - t.left) / k - track.clientLeft - padL + track.scrollLeft;
     const right = left + el.offsetWidth;
     const view = track.clientWidth - padL - (parseFloat(s.paddingRight) || 0);
+    const at = aim(track).left;
     let target: number | null = null;
-    if (left - pad < track.scrollLeft) target = left - pad;
-    else if (right + pad > track.scrollLeft + view) target = right + pad - view;
-    if (target !== null) track.scrollTo({ left: Math.max(0, target), behavior });
+    if (left - pad < at) target = left - pad;
+    else if (right + pad > at + view) target = right + pad - view;
+    if (target !== null) glide(track, { left: target });
   }
   const page = el.closest<HTMLElement>("[data-vscroll]");
   if (!page) return;
   if (el.closest("[data-reveal-top]")) {
-    if (page.scrollTop > 0) page.scrollTo({ top: 0, behavior });
+    if (aim(page).top > 0) glide(page, { top: 0 });
     return;
   }
   // Scroll margins keep a target clear of the floating navigation, the TV
-  // safe area and a list's fade, and scrollIntoView honours them. They are
-  // canvas pixels while rects are scaled (desktop), so they scale too.
+  // safe area and a list's fade. They are canvas pixels while rects are
+  // scaled (desktop), so they scale too.
   const p = page.getBoundingClientRect();
   const k = p.height / page.offsetHeight || 1;
   const margins = (x: HTMLElement) => {
@@ -126,8 +198,19 @@ export function reveal(el: HTMLElement) {
   const block = row && page.contains(row) && fits(row) ? row : el;
   const [above, below] = margins(block);
   const b = block.getBoundingClientRect();
-  const visible = b.top >= p.top + above && b.bottom <= p.bottom - below;
-  if (!visible) block.scrollIntoView({ block: block === el ? "nearest" : "start", behavior });
+  // Where the block will sit once the page's glide lands.
+  const ahead = (aim(page).top - page.scrollTop) * k;
+  const top = b.top - ahead;
+  const bottom = b.bottom - ahead;
+  if (top >= p.top + above && bottom <= p.bottom - below) return;
+  // A page that does not scroll itself (the phone's, where the document does): the browser finds the scroller.
+  if (page.scrollHeight <= page.clientHeight) {
+    block.scrollIntoView({ block: block === el ? "nearest" : "start", behavior: reducedMotion() ? "auto" : "smooth" });
+    return;
+  }
+  // An element taller than the view shows its top, as scrollIntoView's nearest does.
+  const alignTop = block !== el || top < p.top + above || b.height > p.height - above - below;
+  glide(page, { top: page.scrollTop + (alignTop ? b.top - p.top - above : b.bottom - p.bottom + below) / k });
 }
 
 export function focusEl(el: HTMLElement) {
