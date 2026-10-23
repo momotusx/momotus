@@ -313,7 +313,8 @@ struct OnboardingScreen: View {
             .padding(.horizontal, Theme.Space.s)
             .padding(.vertical, Theme.Space.xs + 2)
             .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
-            .glass(shape)
+            // A row is content: solid surface, no glass (design/DECISION.md, Surfaces).
+            .background(shape.fill(Theme.Palette.surface))
             .overlay(shape.strokeBorder(Theme.Palette.text, lineWidth: on ? 2 : 0))
             .contentShape(Rectangle())
         }

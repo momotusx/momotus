@@ -152,7 +152,6 @@ apps/apple/Marquee/Player/PlayerControls.swift :: .glass(Circle())
 apps/apple/Marquee/Player/PlayerControls.swift :: .glass(Circle())
 apps/apple/Marquee/Player/PlayerControls.swift :: .glass(Capsule())
 apps/apple/Marquee/Player/PlayerControls.swift :: .glass(Circle())
-apps/apple/Marquee/Player/PlayerScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true)
 apps/apple/Marquee/Player/UpNextCard.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true, shadow: true)
 apps/apple/Marquee/Profiles/ManageProfiles.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/Profiles/ManageProfiles.swift :: Button("Delete \(target.name)", role: .destructive) { delete(target) }
@@ -205,15 +204,6 @@ apps/apple/Marquee/Trakt/TraktScreen.swift :: Button(W.signOut, role: .destructi
 apps/apple/Marquee/Trakt/TraktScreen.swift :: .tint(Theme.Palette.accent)
 apps/apple/Marquee/Trakt/TraktScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/Trakt/TraktScreen.swift :: .foregroundStyle(mark.warn ? Theme.Palette.warn : Theme.Palette.ok)
-apps/apple/Marquee/Versions/VersionsScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true)
-apps/apple/Marquee/Versions/VersionsScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true)
-apps/apple/Marquee/Versions/VersionsScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Versions/VersionsScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Versions/VersionsScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-apps/apple/Marquee/Versions/VersionsScreen.swift :: Glyph("check").foregroundStyle(Theme.Palette.ok)
-apps/apple/Marquee/Versions/VersionsScreen.swift :: Glyph("check").foregroundStyle(Theme.Palette.ok)
-apps/apple/Marquee/Versions/VersionsScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true)
-apps/apple/Marquee/Versions/VersionsScreen.swift :: .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
 apps/apple/Marquee/Versions/VersionsScreen.swift :: case .ok: Theme.Palette.ok
 apps/apple/Marquee/Versions/VersionsScreen.swift :: case .warn: Theme.Palette.warn
 apps/apple/Marquee/Versions/VersionsScreen.swift :: case .bad: Theme.Palette.bad
