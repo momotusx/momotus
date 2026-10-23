@@ -147,6 +147,13 @@ enum Theme {
         /// A poster's corners, then a 16:9 card's.
         static let radius: CGFloat = 11
         static let cardRadius: CGFloat = 13
+        /// Discover's grid (`tile.phone.grid`): the screen's width shared by the columns, height by `aspect`.
+        enum Grid {
+            static let columns = 2
+            static let aspect: CGFloat = 1.5
+            static let gap: CGFloat = 12
+            static let rowGap: CGFloat = 18
+        }
     }
 
     /// The Mac's shelves (`tile.desktop`, tv.apple.com's), for `Metrics.regular`.
@@ -156,6 +163,31 @@ enum Theme {
         static let gap: CGFloat = 20
         static let inset: CGFloat = 40
         static let radius: CGFloat = 14
+        /// Discover's grid (`tile.desktop.grid`).
+        enum Grid {
+            static let poster = CGSize(width: 139, height: 208)
+            static let gap: CGFloat = 20
+            static let rowGap: CGFloat = 24
+        }
+    }
+
+    /// Search's Top results (`search`): a card's smallest size and its plain poster.
+    enum Search {
+        static let topCard = CGSize(width: 360, height: 100)
+        static let thumb = CGSize(width: 48, height: 72)
+    }
+
+    /// A pull-down pill's height (`control.pill`).
+    enum Pill {
+        static let desktop: CGFloat = 32
+        static let phone: CGFloat = 44
+    }
+
+    /// Discover's preview panel (`preview`): its width, its gap from the grid, its corners.
+    enum Preview {
+        static let width: CGFloat = 400
+        static let gap: CGFloat = 24
+        static let radius: CGFloat = 16
     }
 
     /// Scrims laid over art: `hover` is tv.apple.com's grey over a card under the pointer.

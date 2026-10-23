@@ -119,6 +119,13 @@ ${radius}
         /// A poster's corners, then a 16:9 card's.
         static let radius: CGFloat = ${tokens.tile.phone.radius}
         static let cardRadius: CGFloat = ${tokens.tile.phone.cardRadius}
+        /// Discover's grid (\`tile.phone.grid\`): the screen's width shared by the columns, height by \`aspect\`.
+        enum Grid {
+            static let columns = ${tokens.tile.phone.grid.columns}
+            static let aspect: CGFloat = ${tokens.tile.phone.grid.aspect}
+            static let gap: CGFloat = ${tokens.tile.phone.grid.gap}
+            static let rowGap: CGFloat = ${tokens.tile.phone.grid.rowGap}
+        }
     }
 
     /// The Mac's shelves (\`tile.desktop\`, tv.apple.com's), for \`Metrics.regular\`.
@@ -128,6 +135,31 @@ ${radius}
         static let gap: CGFloat = ${tokens.tile.desktop.gap}
         static let inset: CGFloat = ${tokens.tile.desktop.inset}
         static let radius: CGFloat = ${tokens.tile.desktop.radius}
+        /// Discover's grid (\`tile.desktop.grid\`).
+        enum Grid {
+            static let poster = CGSize(width: ${tokens.tile.desktop.grid.poster.width}, height: ${tokens.tile.desktop.grid.poster.height})
+            static let gap: CGFloat = ${tokens.tile.desktop.grid.gap}
+            static let rowGap: CGFloat = ${tokens.tile.desktop.grid.rowGap}
+        }
+    }
+
+    /// Search's Top results (\`search\`): a card's smallest size and its plain poster.
+    enum Search {
+        static let topCard = CGSize(width: ${tokens.search.topCard.minWidth}, height: ${tokens.search.topCard.minHeight})
+        static let thumb = CGSize(width: ${tokens.search.thumb.width}, height: ${tokens.search.thumb.height})
+    }
+
+    /// A pull-down pill's height (\`control.pill\`).
+    enum Pill {
+        static let desktop: CGFloat = ${tokens.control.pill.desktop}
+        static let phone: CGFloat = ${tokens.control.pill.phone}
+    }
+
+    /// Discover's preview panel (\`preview\`): its width, its gap from the grid, its corners.
+    enum Preview {
+        static let width: CGFloat = ${tokens.preview.width}
+        static let gap: CGFloat = ${tokens.preview.gap}
+        static let radius: CGFloat = ${tokens.preview.radius}
     }
 
     /// Scrims laid over art: \`hover\` is tv.apple.com's grey over a card under the pointer.
