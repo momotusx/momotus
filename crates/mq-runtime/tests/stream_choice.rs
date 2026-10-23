@@ -11,6 +11,8 @@ use mq_runtime::{
     BlockedReason, Core, EmptyAction, EmptyKind, StoreId, TitleFacts, VersionsParams, VersionsView,
 };
 use mq_streams::{DeviceCaps, HideReason, SourceClass, StreamPrefs, Target};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 const HASH_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -540,6 +542,13 @@ async fn a_pick_while_the_recommendation_starts_waits_for_it() {
 /// time with `pause` between (5 ms: about 12 MB/s, so a read is in flight
 /// long enough to count as a sample).
 async fn range_origin(body: Vec<u8>, pause: Duration) -> String {
+    let up = Arc::new(AtomicBool::new(true));
+    range_origin_while(body, pause, up).await
+}
+
+/// `range_origin` that, while `up` is false, drops every connection it
+/// accepts (a lost network).
+async fn range_origin_while(body: Vec<u8>, pause: Duration, up: Arc<AtomicBool>) -> String {
     let body = std::sync::Arc::new(body);
     let len = body.len();
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -550,6 +559,10 @@ async fn range_origin(body: Vec<u8>, pause: Duration) -> String {
             let Ok((mut socket, _)) = listener.accept().await else {
                 return;
             };
+            if !up.load(Ordering::Relaxed) {
+                drop(socket);
+                continue;
+            }
             let body = body.clone();
             tokio::spawn(async move {
                 let mut head = Vec::new();
@@ -1979,4 +1992,224 @@ async fn with_no_room_for_the_window_the_view_asks_for_a_little_space() {
         Some(BlockedReason::NoSpace),
         "blocked keeps its order"
     );
+}
+
+/// Plans/play-every-version.md 2e, mid-play stalls: the recommendation,
+/// playing steadily, stalls; 30 s on, with the network up, it moves to the
+/// ranking's next version at the stall's position, once. A second stall
+/// shows "Choose another version" instead.
+#[tokio::test]
+async fn a_stall_of_30s_moves_the_recommendation_on_once_with_its_position() {
+    let row = |name| (name, media_fixture("h264.mp4"));
+    let (core, _server, keys) = direct_rows(vec![
+        row("Show.S01E01.1080p.WEB-DL.x264-ONE"),
+        row("Show.S01E01.720p.WEB-DL.x264-TWO"),
+        row("Show.S01E01.480p.WEB-DL.x264-THREE"),
+    ])
+    .await;
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    let playback = play(&core, &view, &keys[0]);
+    until("ready", || playback.snapshot().url.is_some()).await;
+    for at in [10_000, 12_000] {
+        playback.report_progress(at, 600_000, false);
+    }
+    let begun = Instant::now();
+    playback.stalled(true, 12_500);
+    until("the move", || {
+        playback.snapshot().key.as_ref() == Some(&keys[1])
+    })
+    .await;
+    assert!(
+        begun.elapsed() >= Duration::from_secs(30),
+        "{:?}",
+        begun.elapsed()
+    );
+    let s = playback.snapshot();
+    assert_eq!(s.resume_ms, Some(12_500), "the position carries over");
+    assert_eq!(
+        (&s.attempts[0].key, s.attempts[0].error.as_str()),
+        (&keys[0], "The video stopped loading")
+    );
+    assert_eq!(
+        s.moved.as_deref(),
+        Some("Playing 720p WEB: the 1080p WEB stopped loading here")
+    );
+    assert!(!s.choose_another);
+
+    // At most one move a play.
+    for at in [13_000, 14_000] {
+        playback.report_progress(at, 600_000, false);
+    }
+    playback.stalled(true, 14_500);
+    until("choose another", || playback.snapshot().choose_another).await;
+    assert_eq!(playback.snapshot().key.as_ref(), Some(&keys[1]));
+    // Playing again takes it away.
+    playback.stalled(false, 14_500);
+    assert!(!playback.snapshot().choose_another);
+}
+
+/// 2e, bench EW-3's shape: a stall right after a seek (17.2 s there) never
+/// moves the version, however long it lasts; "Choose another version"
+/// shows after 30 s. A version picked by hand never moves either.
+#[tokio::test]
+async fn a_stall_after_a_seek_or_on_a_hand_pick_never_moves() {
+    let row = |name| (name, media_fixture("h264.mp4"));
+    let (core, _server, keys) = direct_rows(vec![
+        row("Show.S01E01.1080p.WEB-DL.x264-ONE"),
+        row("Show.S01E01.720p.WEB-DL.x264-TWO"),
+    ])
+    .await;
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    let seek = play(&core, &view, &keys[0]);
+    let hand = play(&core, &view, &keys[1]);
+    for p in [&seek, &hand] {
+        until("ready", || p.snapshot().url.is_some()).await;
+        for at in [10_000, 12_000] {
+            p.report_progress(at, 600_000, false);
+        }
+    }
+    // The seek, reported, then the wait for its data.
+    seek.report_progress(300_000, 600_000, false);
+    seek.stalled(true, 300_000);
+    hand.stalled(true, 12_500);
+    let begun = Instant::now();
+    until("choose another", || {
+        seek.snapshot().choose_another && hand.snapshot().choose_another
+    })
+    .await;
+    assert!(
+        begun.elapsed() >= Duration::from_secs(29),
+        "{:?}",
+        begun.elapsed()
+    );
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    assert_eq!(seek.snapshot().key.as_ref(), Some(&keys[0]));
+    assert_eq!(hand.snapshot().key.as_ref(), Some(&keys[1]));
+}
+
+/// 2e: a Resume of the remembered release never moves on a stall; the
+/// button shows after 30 s.
+#[tokio::test]
+async fn a_stall_of_the_resume_release_never_moves() {
+    let row = |name| (name, media_fixture("h264.mp4"));
+    let (core, _server, keys) = direct_rows(vec![
+        row("Show.S01E01.1080p.WEB-DL.x264-ONE"),
+        row("Show.S01E01.720p.WEB-DL.x264-TWO"),
+    ])
+    .await;
+    let target = || mq_runtime::PlayTarget {
+        kind: "series".into(),
+        item_id: "tt1".into(),
+        video_id: "tt1:1:1".into(),
+        season: Some(1),
+        episode: Some(1),
+        ..mq_runtime::PlayTarget::default()
+    };
+    let open = |view: &VersionsView| {
+        mq_runtime::PlaybackView::open_picked(&core, view.pick(&keys[0]), target(), &view.plays())
+    };
+    // Played before, to the middle: the title remembers this release.
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    let first = open(&view);
+    until("ready", || first.snapshot().url.is_some()).await;
+    first.report_progress(600_000, 3_000_000, false);
+    drop((first, view));
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    let resume = open(&view);
+    until("ready", || resume.snapshot().url.is_some()).await;
+    assert!(resume.snapshot().resume_ms.is_some(), "a resume");
+    for at in [600_000, 602_000] {
+        resume.report_progress(at, 3_000_000, false);
+    }
+    resume.stalled(true, 602_500);
+    until("choose another", || resume.snapshot().choose_another).await;
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    assert_eq!(resume.snapshot().key.as_ref(), Some(&keys[0]));
+}
+
+/// 2e: with the network lost (every connection dropped, the addon's too)
+/// a stalled recommendation waits instead of moving, the button showing;
+/// once a source answers again it moves on.
+#[tokio::test]
+async fn a_stall_with_the_network_lost_waits_then_moves() {
+    let up = Arc::new(AtomicBool::new(true));
+    let (mut streams, mut keys) = (Vec::new(), Vec::new());
+    for (i, title) in [
+        "Show.S01E01.1080p.WEB-DL.x264-ONE",
+        "Show.S01E01.720p.WEB-DL.x264-TWO",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let origin =
+            range_origin_while(media_fixture("h264.mp4"), Duration::ZERO, up.clone()).await;
+        let url = format!("{origin}/v{i}.mp4");
+        keys.push(format!("url:{url}"));
+        streams.push(serde_json::json!({ "name": "Direct", "title": title, "url": url }));
+    }
+    let streams = serde_json::json!({ "streams": streams }).to_string();
+    let addon = answers_while(streams, meta(), up.clone()).await;
+    let core = Core::temporary("p").unwrap();
+    core.set_free_bytes(FREE);
+    let manifest = serde_json::json!({
+        "id": "test", "version": "1.0.0", "name": "Test",
+        "types": ["series"], "resources": ["stream", "meta"], "catalogs": [], "idPrefixes": ["tt"]
+    });
+    let row = AddonRow {
+        transport_url: format!("{addon}/manifest.json"),
+        manifest_json: manifest.to_string(),
+        position: 0,
+        enabled: true,
+        allow_private: true,
+    };
+    core.library().set_addons("p", &[row], &core.hlc()).unwrap();
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    assert_eq!(view.snapshot().recommended.unwrap().key, keys[0]);
+    let playback = play(&core, &view, &keys[0]);
+    until("ready", || playback.snapshot().url.is_some()).await;
+    for at in [10_000, 12_000] {
+        playback.report_progress(at, 600_000, false);
+    }
+    up.store(false, Ordering::Relaxed);
+    playback.stalled(true, 12_500);
+    until("choose another", || playback.snapshot().choose_another).await;
+    tokio::time::sleep(Duration::from_secs(6)).await;
+    assert_eq!(playback.snapshot().key.as_ref(), Some(&keys[0]), "waits");
+    up.store(true, Ordering::Relaxed);
+    until("the move", || {
+        playback.snapshot().key.as_ref() == Some(&keys[1])
+    })
+    .await;
+}
+
+/// An addon answering `streams` for a stream path and `meta` for anything
+/// else while `up`; else it drops every connection.
+async fn answers_while(streams: String, meta: String, up: Arc<AtomicBool>) -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            if !up.load(Ordering::Relaxed) {
+                continue;
+            }
+            let (streams, meta) = (streams.clone(), meta.clone());
+            tokio::spawn(async move {
+                let mut buf = [0u8; 2048];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                let head = String::from_utf8_lossy(&buf[..n]);
+                let body = if head.contains("/stream/") {
+                    streams
+                } else {
+                    meta
+                };
+                let answer = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(answer.as_bytes()).await;
+            });
+        }
+    });
+    base
 }

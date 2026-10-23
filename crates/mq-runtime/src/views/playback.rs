@@ -695,8 +695,17 @@ struct State {
     #[cfg(feature = "torrent")]
     rate_of: Option<(mq_engine::TorrentHandle, usize, u64)>,
     /// The player's last reported pause, sent to the engine on a change.
-    #[cfg(feature = "torrent")]
     paused: bool,
+    /// The last report moved on by a step of playback (not a seek, not a
+    /// pause): a stall from there may move to the next version.
+    advancing: bool,
+    /// The current stall (bumped at each start and end of one), and
+    /// whether this play already moved on for one (at most once).
+    stall: u64,
+    stall_moved: bool,
+    /// The release a Resume plays (the title's remembered one, with a
+    /// resume point): a stall never moves it.
+    resume_key: Option<String>,
 }
 
 pub struct PlaybackView {
@@ -707,7 +716,7 @@ pub struct PlaybackView {
     snapshot: SharedObservable<PlaybackSnapshot>,
     state: Arc<Mutex<State>>,
     /// The resolve task and its run.
-    task: Mutex<Option<(u64, JoinHandle<()>)>>,
+    task: Arc<TaskSlot>,
     /// The Trakt session; dropped after the last save, which sends the stop.
     trakt: Option<crate::trakt::Scrobble>,
     /// A kids policy refused the target: the view does no work.
@@ -793,8 +802,11 @@ impl State {
             torrents: Vec::new(),
             #[cfg(feature = "torrent")]
             rate_of: None,
-            #[cfg(feature = "torrent")]
             paused: false,
+            advancing: false,
+            stall: 0,
+            stall_moved: false,
+            resume_key: None,
         }
     }
 }
@@ -844,7 +856,7 @@ impl PlaybackView {
                 state: Arc::new(Mutex::new(state)),
                 target: Arc::new(target),
                 plays: plays.into(),
-                task: Mutex::new(None),
+                task: Arc::default(),
                 trakt: None,
                 denied: true,
             };
@@ -860,6 +872,11 @@ impl PlaybackView {
         // reports this one's (plans/streaming-window.md 2.2).
         state.known_duration_ms = progress.map(|(_, dur)| dur as u64).filter(|&d| d > 0);
         state.pick = pick;
+        state.resume_key = resume_ms.and_then(|_| {
+            stream_memory(core, &target)?["key"]
+                .as_str()
+                .map(str::to_owned)
+        });
         let snapshot = SharedObservable::new(state.snapshot.clone());
         let shared = Arc::new(Mutex::new(state));
         let report = {
@@ -885,7 +902,7 @@ impl PlaybackView {
             plays: plays.into(),
             snapshot,
             state: shared,
-            task: Mutex::new(None),
+            task: Arc::default(),
             trakt,
             denied: false,
         };
@@ -1337,12 +1354,15 @@ impl PlaybackView {
         }
         let due = {
             let mut s = lock(&self.state);
-            if let Some(before) = s.reported_ms
-                && position_ms > before
-                && position_ms - before <= PLAYED_STEP.as_millis() as u64
-            {
-                s.played_ms += position_ms - before;
+            let step = s
+                .reported_ms
+                .filter(|&before| position_ms > before)
+                .map(|before| position_ms - before)
+                .filter(|&step| step <= PLAYED_STEP.as_millis() as u64);
+            if let Some(step) = step {
+                s.played_ms += step;
             }
+            s.advancing = step.is_some() && !paused;
             s.reported_ms = Some(position_ms);
             if s.played_ms >= PLAYED_PAST_START.as_millis() as u64 {
                 s.progressed = true;
@@ -1352,9 +1372,10 @@ impl PlaybackView {
             }
             s.last = Some((position_ms, duration_ms));
             s.dirty = true;
+            let changed = s.paused != paused;
+            s.paused = paused;
             #[cfg(feature = "torrent")]
-            if s.paused != paused {
-                s.paused = paused;
+            if changed {
                 // A paused window keeps filling its readahead
                 // (plans/streaming-window.md 2.3).
                 if let Some((torrent, ..)) = s.rate_of {
@@ -1366,11 +1387,53 @@ impl PlaybackView {
                     });
                 }
             }
+            #[cfg(not(feature = "torrent"))]
+            let _ = changed;
             s.saved_at.is_none_or(|t| t.elapsed() >= SAVE_EVERY)
         };
         if due {
             self.save();
         }
+    }
+
+    /// The player waits for data (`on`), or plays again, at `position_ms`
+    /// (plans/play-every-version.md 2e). A stall that lasts `STALL_MOVE`
+    /// moves to the ranking's next version, the position carried over, when
+    /// it did not follow a seek or a pause, the version is the
+    /// recommendation and not the Resume release, this play has not moved
+    /// for a stall yet, and the network is reachable (a lost one waits).
+    /// Otherwise "Choose another version" shows over the stalled frame.
+    pub fn stalled(&self, on: bool, position_ms: u64) {
+        let mut s = lock(&self.state);
+        s.stall += 1;
+        if !on || s.snapshot.phase != PlaybackPhase::Ready || s.closed {
+            if s.snapshot.choose_another && s.snapshot.phase == PlaybackPhase::Ready {
+                s.snapshot.choose_another = false;
+                self.snapshot.set(s.snapshot.clone());
+            }
+            return;
+        }
+        // A stall right after a seek or a pause waits for data it had no
+        // reason to have (bench EW-3: 17.2 s after a seek).
+        let steady = s.advancing
+            && s.reported_ms.is_some_and(|was| {
+                position_ms >= was && position_ms - was <= PLAYED_STEP.as_millis() as u64
+            });
+        let stall = Stalled {
+            generation: s.stall,
+            at: position_ms,
+            steady,
+        };
+        drop(s);
+        let mover = Mover {
+            core: self.core.clone(),
+            target: self.target.clone(),
+            plays: self.plays.clone(),
+            state: Arc::downgrade(&self.state),
+            snapshot: self.snapshot.clone(),
+            task: self.task.clone(),
+        };
+        tokio::spawn(watch_stall(mover, stall));
     }
 
     fn save(&self) {
@@ -1398,27 +1461,218 @@ impl PlaybackView {
     }
 
     fn spawn_resolve(&self) {
-        let run = {
-            let mut s = lock(&self.state);
-            s.run += 1;
-            s.run
-        };
-        let task = tokio::spawn(resolve_next(
-            self.core.clone(),
-            self.target.clone(),
-            self.plays.clone(),
-            self.state.clone(),
-            self.snapshot.clone(),
-            run,
-        ));
-        install(&self.task, run, task);
+        spawn_resolve(
+            &self.core,
+            &self.target,
+            &self.plays,
+            &self.state,
+            &self.snapshot,
+            &self.task,
+        );
     }
+}
+
+/// The view's resolve task and its run.
+type TaskSlot = Mutex<Option<(u64, JoinHandle<()>)>>;
+
+/// A new resolve run of the view, installed as its task.
+fn spawn_resolve(
+    core: &Core,
+    target: &Arc<PlayTarget>,
+    plays: &Arc<[Format]>,
+    state: &Arc<Mutex<State>>,
+    snapshot: &SharedObservable<PlaybackSnapshot>,
+    slot: &TaskSlot,
+) {
+    let run = {
+        let mut s = lock(state);
+        s.run += 1;
+        s.run
+    };
+    let task = tokio::spawn(resolve_next(
+        core.clone(),
+        target.clone(),
+        plays.clone(),
+        state.clone(),
+        snapshot.clone(),
+        run,
+    ));
+    install(slot, run, task);
+}
+
+/// A playing source's stall must last this long before it moves on, or
+/// before "Choose another version" shows over the frame (2e).
+const STALL_MOVE: Duration = Duration::from_secs(30);
+/// The network is reachable when a peer of the playing torrent is
+/// connected, or a source answers within this.
+const REACH: Duration = Duration::from_secs(5);
+/// Why a version was left mid-play, in the words of `moved`.
+const STALLED: &str = "stopped loading here";
+
+/// One stall: its generation (`State::stall`), the position it began at,
+/// and whether it came during steady playback.
+#[derive(Clone, Copy)]
+struct Stalled {
+    generation: u64,
+    at: u64,
+    steady: bool,
+}
+
+/// What a stall's watcher needs of the view to move it on.
+struct Mover {
+    core: Core,
+    target: Arc<PlayTarget>,
+    plays: Arc<[Format]>,
+    state: std::sync::Weak<Mutex<State>>,
+    snapshot: SharedObservable<PlaybackSnapshot>,
+    task: Arc<TaskSlot>,
+}
+
+/// After `STALL_MOVE`, a stall still on moves to the next version when it
+/// may (`PlaybackView::stalled`) and the network is reachable; while the
+/// network is lost it asks again every `REACH`. A stall that may not move
+/// shows "Choose another version" instead.
+async fn watch_stall(m: Mover, stall: Stalled) {
+    tokio::time::sleep(STALL_MOVE).await;
+    loop {
+        let Some(state) = m.state.upgrade() else {
+            return;
+        };
+        let (stream, torrent) = {
+            let mut s = lock(&state);
+            if s.stall != stall.generation || s.closed || s.snapshot.phase != PlaybackPhase::Ready {
+                return;
+            }
+            let playing = s
+                .next
+                .checked_sub(1)
+                .and_then(|i| s.candidates.get(i))
+                .cloned();
+            let moves = stall.steady
+                && !s.stall_moved
+                && playing
+                    .as_ref()
+                    .is_some_and(|p| s.resume_key.as_ref() != Some(&p.key))
+                && s.pick
+                    .as_ref()
+                    .is_some_and(|p| p.recommended() && p.next_version(&s.tried, None).is_some());
+            let Some(stream) = playing.filter(|_| moves) else {
+                if !s.snapshot.choose_another {
+                    s.snapshot.choose_another = true;
+                    m.snapshot.set(s.snapshot.clone());
+                }
+                return;
+            };
+            #[cfg(feature = "torrent")]
+            let torrent = s.rate_of.map(|(t, ..)| t);
+            #[cfg(not(feature = "torrent"))]
+            let torrent = ();
+            (stream, torrent)
+        };
+        if reachable(&m.core, &stream, torrent).await {
+            move_stalled(&m, &state, stall);
+            return;
+        }
+        // A lost network waits; the viewer may choose meanwhile.
+        {
+            let mut s = lock(&state);
+            if s.stall == stall.generation && !s.snapshot.choose_another {
+                s.snapshot.choose_another = true;
+                m.snapshot.set(s.snapshot.clone());
+            }
+        }
+        drop(state);
+        tokio::time::sleep(REACH).await;
+    }
+}
+
+/// The network works: a peer of the playing torrent is connected, or the
+/// source, one of its HTTP trackers or its addon answers within `REACH`
+/// (any status is an answer).
+async fn reachable(
+    core: &Core,
+    stream: &ParsedStream,
+    #[cfg(feature = "torrent")] torrent: Option<mq_engine::TorrentHandle>,
+    #[cfg(not(feature = "torrent"))] _torrent: (),
+) -> bool {
+    #[cfg(feature = "torrent")]
+    if let Some(torrent) = torrent
+        && let Ok(engine) = core.torrent_engine().await
+        && engine.stats(torrent).await.is_ok_and(|s| s.peers > 0)
+    {
+        return true;
+    }
+    let mut urls: Vec<String> = Vec::new();
+    match &stream.source {
+        Source::Http { url } => urls.push(url.to_string()),
+        Source::Torrent { trackers, .. } => urls.extend(
+            trackers
+                .iter()
+                .map(|t| t.trim_start_matches("tracker:"))
+                .filter(|t| t.starts_with("http"))
+                .map(str::to_owned),
+        ),
+        _ => {}
+    }
+    urls.extend(stream.addon_url.as_ref().map(ToString::to_string));
+    let opts = mq_http::RequestOptions {
+        timeout: REACH,
+        allow_private: true,
+        ..Default::default()
+    };
+    for url in urls.iter().take(3) {
+        let asked = tokio::time::timeout(REACH, core.http().get_range(url, 0, 1, &opts)).await;
+        if let Ok(
+            Ok(_) | Err(mq_http::HttpError::Status { .. } | mq_http::HttpError::TooLarge { .. }),
+        ) = asked
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// The stalled version is left for the ranking's next one, at the stall's
+/// position, once in this play.
+fn move_stalled(m: &Mover, state: &Arc<Mutex<State>>, stall: Stalled) {
+    {
+        let mut s = lock(state);
+        if s.stall != stall.generation || s.closed || s.snapshot.phase != PlaybackPhase::Ready {
+            return;
+        }
+        s.stall_moved = true;
+        s.run += 1;
+        release_all(&mut s);
+        if let Some(stream) = s
+            .next
+            .checked_sub(1)
+            .and_then(|i| s.candidates.get(i))
+            .cloned()
+        {
+            s.snapshot
+                .attempts
+                .push(attempt(&stream, "The video stopped loading"));
+        }
+        s.version_failed = Some(STALLED);
+        // The version's other sources carry the same swarm or link: the
+        // next version follows at once.
+        s.next = s.candidates.len();
+        s.snapshot.resume_ms = Some(stall.at);
+        s.snapshot.phase = PlaybackPhase::Resolving;
+        s.snapshot.key = None;
+        s.snapshot.moved = None;
+        s.snapshot.subtitles_pending = false;
+        s.snapshot.choose_another = false;
+        clear_segments(&mut s);
+        m.snapshot.set(s.snapshot.clone());
+    }
+    spawn_resolve(&m.core, &m.target, &m.plays, state, &m.snapshot, &m.task);
 }
 
 /// Keeps `task` as the view's resolve task unless a newer run's task is
 /// already there: two callers racing between spawning and installing never
 /// leave the older task running in place of the newer.
-fn install(slot: &Mutex<Option<(u64, JoinHandle<()>)>>, run: u64, task: JoinHandle<()>) {
+fn install(slot: &TaskSlot, run: u64, task: JoinHandle<()>) {
     let mut slot = lock(slot);
     if slot.as_ref().is_some_and(|(newer, _)| *newer > run) {
         task.abort();

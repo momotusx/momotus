@@ -1980,6 +1980,17 @@ impl Session {
                     .ok_or("ms missing")?;
                 playback.subtitle_delay(&param(command, "url")?, ms);
             }
+            (View::Playback(playback), "stalled") => {
+                let stalled = command
+                    .get("stalled")
+                    .and_then(Value::as_bool)
+                    .ok_or("stalled missing")?;
+                let position_ms = command
+                    .get("positionMs")
+                    .and_then(Value::as_u64)
+                    .ok_or("positionMs missing")?;
+                playback.stalled(stalled, position_ms);
+            }
             (View::Playback(playback), "failOver") => {
                 let error = param(command, "error").unwrap_or_else(|_| "player error".into());
                 let attempt = command.get("attempt").and_then(Value::as_u64);
