@@ -611,9 +611,13 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
               <div class="grab" aria-hidden="true" />
               {/* First what the row shows (its badges and its one line), then what the row keeps for
                   its details: the line's own (the seeders), the file and its languages. */}
-              <div class="vsheet-badges">
-                <Badges row={r()} />
-              </div>
+              {/* Only when it holds a badge: a version with no stated quality, no features and the viewer's
+                  language starts with its one line, with no empty band above it. */}
+              <Show when={qualityCell(r().quality) || r().features.length || (r().group === "otherLanguages" && languages(r()))}>
+                <div class="vsheet-badges">
+                  <Badges row={r()} />
+                </div>
+              </Show>
               <RowLine row={r()} why={dimWord()} lock={empty()?.kind === "needsAccount"} tag="p" />
               <Show when={sheetDetails(r(), dimWord())}>{(d) => <p class="detail">{d()}</p>}</Show>
               <p class="rel">

@@ -70,7 +70,7 @@
 .vrow { width: 100%; min-height: 64px; padding: 10px 22px; border-radius: var(--radius-m); border-bottom: 1px solid var(--line);
   font: 500 var(--type-callout) / 1.25 var(--font-text); transform-origin: center; }
 /* One line tall even empty (a quality the release does not state has no badge), so every row is one height. */
-.vrow .q { font: 700 var(--type-body) var(--font-text); min-height: 1lh; }
+.vrow .q { font: 700 var(--type-body) var(--font-text); min-height: 1.25em; min-height: 1lh; }
 .vrow .chips { display: flex; gap: 6px; min-width: 0; overflow: hidden; }
 .vrow .chips span { font: 600 var(--type-caption) / 1 var(--font-text); padding: 5px 8px; border-radius: var(--radius-s); box-shadow: inset 0 0 0 2px var(--line); white-space: nowrap; }
 .vrow .chips .lang { color: var(--muted); }
@@ -152,7 +152,7 @@
   border-radius: 20px 20px 0 0; background: var(--surface); touch-action: none; }
 .vsheet .grab { justify-self: center; width: 40px; height: 5px; border-radius: 3px; background: var(--line); }
 /* The sheet's top is the row's own: its badges, then its one line. */
-.vsheet-badges { display: flex; align-items: center; gap: 10px; min-height: 24px; }
+.vsheet-badges { display: flex; align-items: center; gap: 10px; }
 .vsheet-badges .q { font: 700 20px / 1.2 var(--font-display); }
 .vsheet-badges .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .vsheet-badges .chips span { font: 600 12px / 1 var(--font-text); padding: 4px 7px; border-radius: var(--radius-s); box-shadow: inset 0 0 0 2px var(--line); }

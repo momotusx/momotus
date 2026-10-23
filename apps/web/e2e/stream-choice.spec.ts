@@ -759,6 +759,24 @@ test.describe("Versions", () => {
     await page.context().close();
   });
 
+  test("phone: a version with nothing to badge opens a sheet that starts with its one line, no empty band", async ({ browser }) => {
+    const bare = (s: VersionsSnapshot): VersionsSnapshot => {
+      const a = s.rows[0];
+      if (!a || !s.done) return s;
+      return { ...s, rows: [{ ...a, quality: "Quality not stated", features: [], group: "best" as const }, ...s.rows.slice(1)] };
+    };
+    const page = await device(browser, "phone", PORTS.bridge, { versions: bare });
+    await page.goto(path("phone"));
+    await firstRow(page);
+    await page.locator(".vslot").first().locator(".vinfo").tap();
+    const sheet = page.locator(".vsheet");
+    await expect(sheet).toBeVisible();
+    await expect(sheet.locator(".vsheet-badges")).toHaveCount(0);
+    // The one line comes right after the grab bar.
+    expect(await sheet.evaluate((s) => s.querySelector(".grab")?.nextElementSibling?.classList.contains("line"))).toBe(true);
+    await page.context().close();
+  });
+
   test("a version in another language than the viewer's shows a chip naming it", async ({ browser }) => {
     const other = (s: VersionsSnapshot): VersionsSnapshot =>
       s.rows.length ? { ...s, rows: s.rows.map((r, i) => (i === 0 ? { ...r, group: "otherLanguages" as const, languages: ["spa"] } : r)) } : s;
