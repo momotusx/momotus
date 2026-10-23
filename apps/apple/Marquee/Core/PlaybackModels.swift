@@ -26,6 +26,25 @@ struct VersionsSnapshot: Decodable, Hashable, Sendable {
     var sharper: VersionRow?
     /// `rows`' keys by quality, in the core's order (2f); empty from an older core.
     var sections: [VersionSection]?
+    /// What was hidden and why, for the versions metric line only (plans/apple-second-engine.md section 4).
+    var hidden: HiddenSummary?
+}
+
+struct HiddenSummary: Decodable, Hashable, Sendable {
+    /// Hide reason ("wrongTitle", "unplayable", ...) and how many it hid.
+    let byReason: [ReasonCount]
+
+    struct ReasonCount: Decodable, Hashable, Sendable {
+        let reason: String
+        let count: Int
+
+        /// The core sends each pair as a two-element array.
+        init(from decoder: any Decoder) throws {
+            var c = try decoder.unkeyedContainer()
+            reason = try c.decode(String.self)
+            count = try c.decode(Int.self)
+        }
+    }
 }
 
 /// Why nothing can play (plans/play-every-version.md 2a), with what the
