@@ -131,6 +131,13 @@ fun PhonePlayer(
     onSettings: ((EmptyKind) -> Unit)? = null,
 ) {
     val stage = controller.stage
+    // Back from Settings opened on the failure card: the start runs again, so what was added plays without a press.
+    LaunchedEffect(controller) {
+        if (controller.askAgain) {
+            controller.askAgain = false
+            if (controller.reopenable) controller.reopen()
+        }
+    }
     val density = LocalDensity.current
     val shortWindow =
         with(density) {
@@ -356,7 +363,13 @@ fun PhonePlayer(
                     cannotOpen = controller.openError != null,
                     empty = controller.empty,
                     kept = controller.keptKey,
-                    onSettings = onSettings,
+                    onSettings =
+                        onSettings?.let { go ->
+                            { kind: EmptyKind ->
+                                controller.askAgain = true
+                                go(kind)
+                            }
+                        },
                     onBack = onBack,
                     focus = remember { FocusRequester() },
                     modifier =

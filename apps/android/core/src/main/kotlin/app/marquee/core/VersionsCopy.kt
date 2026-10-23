@@ -208,7 +208,7 @@ object VersionsCopy {
     fun quiet(row: VersionRow): String? {
         val line = StreamChoiceCopy.line(row.line)
         val size = row.sizeBytes?.let(Format::bytes)
-        if (row.onDevice != null) return listOfNotNull(size, row.onDevice).joinToString(", ")
+        if (row.onDevice != null) return listOfNotNull(size, lower(row.onDevice)).joinToString(", ")
         if (line.tone != Tone.Ok) return null
         val source =
             when (val s = row.status) {
@@ -235,6 +235,28 @@ object VersionsCopy {
             }
         return listOfNotNull(size, source).joinToString(", ").ifEmpty { line.text }
     }
+
+    /**
+     * A row's one line as it shows: its size first, then its source in plain words, the core's warning, or why it is
+     * dimmed ([why]): "1.5 GB, shared by 1,204 people", "12 GB, may start slowly", "2 GB, needs an account".
+     */
+    fun rowWords(
+        row: VersionRow,
+        why: EmptyKind? = null,
+    ): String {
+        val size = row.sizeBytes?.let(Format::bytes)
+        val said =
+            when {
+                why != null -> StreamChoiceCopy.emptyRowLine(why).text
+
+                else -> return quiet(row)
+                    ?: listOfNotNull(size, lower(StreamChoiceCopy.line(row.line).text)).joinToString(", ")
+            }
+        return listOfNotNull(size, lower(said)).joinToString(", ")
+    }
+
+    /** Words that follow a size after a comma start in lower case: "12 GB, may start slowly". */
+    private fun lower(words: String) = words.replaceFirstChar { it.lowercase() }
 
     /** A row's details, reserved under it and shown on focus: the release name, the line's details, its languages and sources. */
     fun details(row: VersionRow): String =

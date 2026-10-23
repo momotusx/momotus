@@ -132,6 +132,13 @@ fun TvPlayer(
 ) {
     val safe = Marquee.safe
     val stage = controller.stage
+    // Back from Settings opened on the failure card: the start runs again, so what was added plays without a press.
+    LaunchedEffect(controller) {
+        if (controller.askAgain) {
+            controller.askAgain = false
+            if (controller.reopenable) controller.reopen()
+        }
+    }
     val live = stage == Stage.Playing || stage == Stage.Paused || stage == Stage.Buffering || stage == Stage.Ended
     // Before the source shows a picture: the loading screen alone, nothing focused; the remote's Back cancels.
     val opening = controller.starting
@@ -449,7 +456,13 @@ fun TvPlayer(
                 cannotOpen = controller.openError != null,
                 empty = controller.empty,
                 kept = controller.keptKey,
-                onSettings = onSettings,
+                onSettings =
+                    onSettings?.let { go ->
+                        { kind: EmptyKind ->
+                            controller.askAgain = true
+                            go(kind)
+                        }
+                    },
             )
         }
 

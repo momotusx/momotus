@@ -380,9 +380,16 @@ class VersionsCopyTest {
             VersionsCopy.quiet(row(sizeBytes = gb).copy(status = VersionStatus.NeedsDownload(null), line = quick)),
         )
         assertEquals(
-            "2 GB, On this device",
+            "2 GB, on this device",
             VersionsCopy.quiet(row(sizeBytes = gb).copy(line = quick, onDevice = "On this device")),
         )
+        // The size always comes first, then the source, the core's warning or why the row is dimmed.
+        assertEquals(
+            "2 GB, may start slowly",
+            VersionsCopy.rowWords(row(sizeBytes = gb).copy(line = ReasonLine.Few(31))),
+        )
+        assertEquals("2 GB, ready now", VersionsCopy.rowWords(row(sizeBytes = gb).copy(line = quick)))
+        assertEquals("2 GB, needs an account", VersionsCopy.rowWords(row(sizeBytes = gb), EmptyKind.NeedsAccount))
         // A warning shows in its place.
         assertNull(VersionsCopy.quiet(row(sizeBytes = gb).copy(line = ReasonLine.Few(31))))
         // Said as its badges, then the quiet line.

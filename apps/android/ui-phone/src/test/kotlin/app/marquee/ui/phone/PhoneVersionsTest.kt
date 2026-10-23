@@ -4,6 +4,9 @@ import android.os.Handler
 import android.os.Looper
 import androidx.activity.OnBackPressedDispatcher
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
@@ -61,6 +64,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
@@ -248,8 +252,8 @@ class PhoneVersionsTest {
             compose.onAllNodesWithText(gone, substring = true).assertCountEquals(0)
         }
         // A dimmed row says why it is dimmed, never how fast it would start.
-        compose.onNodeWithText("Needs an account", substring = true).assertIsDisplayed()
-        compose.onAllNodesWithText("May start slowly", substring = true).assertCountEquals(0)
+        compose.onNodeWithText("2 GB, needs an account").assertIsDisplayed()
+        compose.onAllNodesWithText("may start slowly", substring = true, ignoreCase = true).assertCountEquals(0)
         val settings =
             compose
                 .onNodeWithText(StreamChoiceCopy.SETTINGS)
@@ -278,8 +282,8 @@ class PhoneVersionsTest {
             compose.onAllNodesWithText(gone).assertCountEquals(0)
         }
         // Dimmed, and still startable: a tap opens it to its own Play.
-        compose.onAllNodesWithText("May start slowly", substring = true).assertCountEquals(0)
-        compose.onNodeWithText("Won't play here", substring = true).performClick()
+        compose.onAllNodesWithText("may start slowly", substring = true, ignoreCase = true).assertCountEquals(0)
+        compose.onNodeWithText("2 GB, won't play here").performClick()
         assertEquals(listOf("a"), played)
         compose.onNodeWithText("Back").performClick()
         assertEquals(1, backs)
@@ -334,5 +338,57 @@ class PhoneVersionsTest {
         compose.onNodeWithText("Sharper: 4K, 12 GB").performClick()
         compose.onNodeWithText("Smaller file: 720p, 1.5 GB").performClick()
         assertEquals(listOf("sharp", "small"), played)
+    }
+
+    @Test
+    fun `back from Settings the page asks the core again, so what was added shows without a press`() {
+        var subscribes = 0
+        val rows = listOf(row("a", ReasonLine.Few(31)))
+        val snapshot = snapshot(empty = EmptyVersions(EmptyKind.NeedsAccount, EmptyAction.SettingsAccounts, 1, rows))
+        client.attach { text ->
+            val msg = CoreJson.parseToJsonElement(text).jsonObject
+            val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
+            val result =
+                if (msg["op"]?.jsonPrimitive?.content == "subscribe") {
+                    subscribes++
+                    """{"sub":7,"snapshot":${CoreJson.encodeToString(VersionsSnapshot.serializer(), snapshot)}}"""
+                } else {
+                    "{}"
+                }
+            client.onMessage("""{"id":$id,"ok":true,"result":$result}""")
+        }
+        val view = VersionsView(client, scope, JsonObject(emptyMap()))
+        var shown by mutableStateOf(true)
+        compose.setContent {
+            MarqueeTheme(Form.Phone) {
+                if (shown) {
+                    PhoneVersions("Sintel", view, {}, {}, { accounts++ }, {}, {})
+                }
+            }
+        }
+        compose.waitForIdle()
+        view.open()
+        compose.waitUntil(60_000) {
+            Snapshot.sendApplyNotifications()
+            compose.onAllNodesWithText(StreamChoiceCopy.SETTINGS).fetchSemanticsNodes().isNotEmpty()
+        }
+        assertEquals(1, subscribes)
+        compose.onNodeWithText(StreamChoiceCopy.SETTINGS).performClick()
+        assertEquals(1, accounts)
+        // Settings covers the page, then the viewer comes back.
+        shown = false
+        compose.waitForIdle()
+        shown = true
+        compose.waitUntil(10_000) {
+            shadowOf(Looper.getMainLooper()).idle()
+            subscribes == 2
+        }
+        // Once: coming back again without Settings asks nothing.
+        shown = false
+        compose.waitForIdle()
+        shown = true
+        compose.waitForIdle()
+        Thread.sleep(200)
+        assertEquals(2, subscribes)
     }
 }

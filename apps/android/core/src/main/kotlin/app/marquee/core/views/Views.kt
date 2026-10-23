@@ -346,6 +346,12 @@ class VersionsView(
     scope: CoroutineScope,
     params: JsonObject,
 ) : RecordView<VersionsSnapshot>(client, scope, "versions", params, VersionsSnapshot.serializer()) {
+    /**
+     * Settings was opened from the page that shows this view (an addon or an account to add): the page asks the core
+     * again when it comes back, so what was added shows without a press.
+     */
+    var askAgain = false
+
     /** Send on the first focus move: the pick under the cursor never changes after. */
     fun freeze() {
         CoreLog.d("versions: the pick is frozen")

@@ -3,6 +3,9 @@ package app.marquee.ui.tv
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
@@ -219,5 +222,27 @@ class PlayerFailureCardTest {
         )) {
             compose.onAllNodesWithText(name, substring = true).assertCountEquals(0)
         }
+    }
+
+    @Test
+    fun `back from Settings opened on the failure card the start runs again`() {
+        val events = mutableListOf<String>()
+        var shown by mutableStateOf(true)
+        compose.setContent {
+            MarqueeTheme(Form.Tv) {
+                if (shown) {
+                    TvPlayer(controller, false, {}, null, { _, _ -> }, {}, onSettings = { events += "settings $it" })
+                }
+            }
+        }
+        compose.runOnIdle {
+            controller.fail(StreamChoiceCopy.emptyLine(EmptyKind.NoSource), EmptyKind.NoSource) { events += "again" }
+        }
+        compose.onNodeWithText("Settings").performClick()
+        shown = false
+        compose.waitForIdle()
+        shown = true
+        compose.waitForIdle()
+        assertEquals(listOf("settings NoSource", "again"), events)
     }
 }

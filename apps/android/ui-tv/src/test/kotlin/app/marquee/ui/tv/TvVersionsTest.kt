@@ -80,6 +80,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
@@ -297,9 +298,9 @@ class TvVersionsTest {
         }
         compose.onNodeWithText("Back").performClick()
         assertEquals(1, backs)
-        compose.onAllNodesWithText("May start slowly", substring = true).assertCountEquals(0)
-        assertEquals(1, lines("Won't play here"), "one line at the TV width")
-        compose.onNodeWithText("Won't play here", substring = true).performClick()
+        compose.onAllNodesWithText("may start slowly", substring = true, ignoreCase = true).assertCountEquals(0)
+        assertEquals(1, lines("2 GB, won't play here"), "one line at the TV width")
+        compose.onNodeWithText("2 GB, won't play here").performClick()
         assertEquals(listOf("a"), played)
     }
 
@@ -310,10 +311,10 @@ class TvVersionsTest {
         compose.onNodeWithText("These play through a streaming account", useUnmergedTree = true).assertExists()
         actions(StreamChoiceCopy.SETTINGS, "Back")
         // A dimmed row says why it is dimmed, never how fast it would start.
-        compose.onNodeWithText("Needs an account", substring = true).assertExists()
+        compose.onNodeWithText("2 GB, needs an account").assertExists()
         // On one line at the TV width.
-        assertEquals(1, lines("Needs an account"))
-        compose.onAllNodesWithText("May start slowly", substring = true).assertCountEquals(0)
+        assertEquals(1, lines("2 GB, needs an account"))
+        compose.onAllNodesWithText("may start slowly", substring = true, ignoreCase = true).assertCountEquals(0)
         compose.onNodeWithText(StreamChoiceCopy.SETTINGS).assertIsFocused()
         compose.onNodeWithText(StreamChoiceCopy.SETTINGS).performKeyInput { pressKey(Key.DirectionRight) }
         compose.onNodeWithContentDescription("1080p, HDR, 2 GB").assertIsFocused()
@@ -458,7 +459,7 @@ class TvVersionsTest {
         show(snapshot(empty = EmptyVersions(EmptyKind.NothingPlaysHere, EmptyAction.ChooseVersion, 1, rows)))
         val image = compose.onRoot().captureToImage().asAndroidBitmap()
         val dp = compose.density.density
-        for (text in listOf("1080p", "Won't play here")) {
+        for (text in listOf("1080p", "2 GB, won't play here")) {
             val at = compose.onNodeWithText(text, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
             val y = at.center.y.toInt()
             // Just left of the words: the badge's fill, or the gap after the line's icon.
@@ -625,6 +626,8 @@ class TvVersionsTest {
         // The core's smaller and sharper, in its order, with their own facts.
         compose.onNodeWithText("Smaller file: 720p, 1.5 GB").assertExists()
         compose.onNodeWithText("Sharper: 4K, 12 GB").assertExists()
+        // A row's line has its size first, a warning after it.
+        compose.onNodeWithText("12 GB, may start slowly").assertExists()
         // The core's sections, in its order: 4K, 1080p, 720p and below.
         // Each heading is one heading node: "1080p, 1 version".
         val top = { t: String ->
@@ -775,5 +778,57 @@ class TvVersionsTest {
             )
         }
         compose.onNodeWithContentDescription("1080p, HDR, 44 GB").assertIsFocused()
+    }
+
+    @Test
+    fun `back from Settings the page asks the core again, so what was added shows without a press`() {
+        var subscribes = 0
+        val rows = listOf(row("a", ReasonLine.Few(31)))
+        val snapshot = snapshot(empty = EmptyVersions(EmptyKind.NeedsAccount, EmptyAction.SettingsAccounts, 1, rows))
+        client.attach { text ->
+            val msg = CoreJson.parseToJsonElement(text).jsonObject
+            val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
+            val result =
+                if (msg["op"]?.jsonPrimitive?.content == "subscribe") {
+                    subscribes++
+                    """{"sub":7,"snapshot":${CoreJson.encodeToString(VersionsSnapshot.serializer(), snapshot)}}"""
+                } else {
+                    "{}"
+                }
+            client.onMessage("""{"id":$id,"ok":true,"result":$result}""")
+        }
+        val view = VersionsView(client, scope, JsonObject(emptyMap()))
+        var shown by mutableStateOf(true)
+        compose.setContent {
+            MarqueeTheme(Form.Tv) {
+                if (shown) {
+                    TvVersions("Sintel", view, FocusMemory(), {}, {}, { accounts++ }, {}, {})
+                }
+            }
+        }
+        compose.waitForIdle()
+        view.open()
+        compose.waitUntil(60_000) {
+            Snapshot.sendApplyNotifications()
+            compose.onAllNodesWithText(StreamChoiceCopy.SETTINGS).fetchSemanticsNodes().isNotEmpty()
+        }
+        assertEquals(1, subscribes)
+        compose.onNodeWithText(StreamChoiceCopy.SETTINGS).performClick()
+        assertEquals(1, accounts)
+        // Settings covers the page, then the viewer comes back.
+        shown = false
+        compose.waitForIdle()
+        shown = true
+        compose.waitUntil(10_000) {
+            shadowOf(Looper.getMainLooper()).idle()
+            subscribes == 2
+        }
+        // Once: coming back again without Settings asks nothing.
+        shown = false
+        compose.waitForIdle()
+        shown = true
+        compose.waitForIdle()
+        Thread.sleep(200)
+        assertEquals(2, subscribes)
     }
 }

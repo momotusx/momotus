@@ -101,6 +101,9 @@ class PlaybackController(
     var offer: OtherVersion? by mutableStateOf(null)
         private set
 
+    /** Settings was opened from the failure card: the player asks again when it comes back. */
+    var askAgain = false
+
     /** The version this device keeps, when no source answered: the card's "Play from this device". */
     var keptKey: String? by mutableStateOf(null)
         private set

@@ -130,12 +130,32 @@ fun PhoneVersions(
     val empty = snapshot?.empty?.takeIf { snapshot.recommended == null }
     val step = { it: EmptyStep ->
         when (it) {
-            EmptyStep.PlayFromDevice -> empty?.key?.let(onPlay)
-            EmptyStep.TryAgain -> versions?.retry()
-            EmptyStep.Settings -> if (empty?.action == EmptyAction.SettingsAccounts) onAddAccount() else onAddSource()
-            EmptyStep.Back -> onBack()
+            EmptyStep.PlayFromDevice -> {
+                empty?.key?.let(onPlay)
+            }
+
+            EmptyStep.TryAgain -> {
+                versions?.retry()
+            }
+
+            EmptyStep.Settings -> {
+                // Back from Settings, the page asks again: an addon or an account just added shows by itself.
+                versions?.askAgain = true
+                if (empty?.action == EmptyAction.SettingsAccounts) onAddAccount() else onAddSource()
+            }
+
+            EmptyStep.Back -> {
+                onBack()
+            }
         }
         Unit
+    }
+    // Back from Settings opened here: ask the core again.
+    LaunchedEffect(versions) {
+        if (versions?.askAgain == true) {
+            versions.askAgain = false
+            versions.retry()
+        }
     }
     // The row whose details sheet is open, and each row's info button, which takes the focus back when it closes.
     var sheet by remember { mutableStateOf<VersionRow?>(null) }
@@ -474,9 +494,9 @@ private fun SourceRow(
                     if (tag != null) LanguageTag(tag)
                 }
                 if (quiet != null) {
-                    MqText(quiet, role = TextRole.Callout, color = colors.muted, maxLines = 2)
+                    MqText(VersionsCopy.rowWords(row), role = TextRole.Callout, color = colors.muted, maxLines = 2)
                 } else {
-                    ToneWord(line.text, tone(line.tone), icon = why?.let(::whyIcon))
+                    ToneWord(VersionsCopy.rowWords(row, why), tone(line.tone), icon = why?.let(::whyIcon))
                 }
             }
             Box(Modifier.size(48.dp).clearAndSetSemantics {}, contentAlignment = Alignment.Center) {
