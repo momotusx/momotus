@@ -108,12 +108,14 @@ object VersionsCopy {
     /** The quality in a narrow cell or a small value: "Unknown", one word that never wraps. */
     fun cell(quality: String): String =
         if (quality == "Quality not stated" ||
-            quality == "Unknown"
+            quality == UNKNOWN
         ) {
-            "Unknown"
+            UNKNOWN
         } else {
             quality
         }
+
+    private const val UNKNOWN = "Unknown"
 
     /** The line under the primary button: the recommended version, a wait, or why nothing can play. */
     fun line(
@@ -194,7 +196,9 @@ object VersionsCopy {
                 "5.1" in f -> Badge("5.1", Badge.Look.Outlined)
                 else -> null
             }
-        return listOfNotNull(Badge(cell(row.quality), Badge.Look.Filled), video, audio)
+        // A quality the release does not state gets no badge: its section ("Other") already says so.
+        val quality = Badge(row.quality, Badge.Look.Filled).takeIf { cell(row.quality) != UNKNOWN }
+        return listOfNotNull(quality, video, audio)
     }
 
     /**
@@ -279,7 +283,12 @@ object VersionsCopy {
     fun cardSpoken(
         kicker: String,
         row: VersionRow,
-    ): String = "$kicker. ${badges(row).joinToString(", ") { it.text }}. ${why(row)}"
+    ): String =
+        listOf(
+            kicker,
+            badges(row).joinToString(", ") { it.text },
+            why(row),
+        ).filter { it.isNotEmpty() }.joinToString(". ")
 
     /** One section of the Versions list: its [id] keys the heading and the fold ("section:fhd"). */
     data class Section(

@@ -370,6 +370,18 @@ class VersionsCopyTest {
             badges(listOf("HDR10", "5.1")),
         )
         assertEquals(listOf("4K" to Look.Filled), badges(emptyList()))
+        // A quality the release does not state gets no badge at all: its section says it.
+        val unstated = { quality: String, features: List<String> ->
+            VersionsCopy.badges(row(features = features).copy(quality = quality)).map { it.text }
+        }
+        assertEquals(listOf("HDR"), unstated("Quality not stated", listOf("HDR10")))
+        assertEquals(emptyList(), unstated("Quality not stated", emptyList()))
+        assertEquals(emptyList(), unstated("Unknown", emptyList()))
+        // A source the core names in its place is a badge.
+        assertEquals(listOf("WEB-DL"), unstated("WEB-DL", emptyList()))
+        // Said with no empty part.
+        val none = row(features = emptyList()).copy(quality = "Quality not stated")
+        assertEquals("Best for this TV. ${VersionsCopy.why(none)}", VersionsCopy.cardSpoken("Best for this TV", none))
     }
 
     @Test

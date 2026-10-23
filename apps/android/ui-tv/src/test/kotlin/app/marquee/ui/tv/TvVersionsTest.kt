@@ -816,6 +816,28 @@ class TvVersionsTest {
     }
 
     @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `a version whose quality is not stated has no quality badge, and its row is one height with the rest`() {
+        val known = row("a", ReasonLine.Few(30)).copy(sizeBytes = 1 * gib)
+        val unstated =
+            row(
+                "b",
+                ReasonLine.Few(30),
+            ).copy(sizeBytes = 5 * gib, quality = "Quality not stated", features = emptyList())
+        show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), listOf(known, unstated)))
+        // Its section says it; no badge names nothing.
+        compose.onAllNodesWithText("Unknown", useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithText("Quality not stated", useUnmergedTree = true).assertCountEquals(0)
+        val height = { spoken: String ->
+            compose
+                .onNodeWithContentDescription(spoken)
+                .fetchSemanticsNode()
+                .size.height
+        }
+        assertEquals(height("1080p, HDR, 1 GB"), height("5 GB"), "the badge line keeps its height with no badge")
+    }
+
+    @Test
     fun `back from Settings the page asks the core again, so what was added shows without a press`() {
         var subscribes = 0
         val rows = listOf(row("a", ReasonLine.Few(31)))

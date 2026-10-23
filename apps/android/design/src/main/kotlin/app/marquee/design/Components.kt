@@ -996,8 +996,9 @@ fun BadgeRow(
     val tv = Marquee.form == Form.Tv
     val ink = Marquee.colors.muted
     val shape = RoundedCornerShape(if (tv) 5.dp else 2.5.dp)
+    // The badge line keeps its height with no badge in it, so a row whose quality is not stated is one height too.
     Row(
-        modifier,
+        modifier.heightIn(min = if (tv) 31.dp else 13.dp),
         horizontalArrangement = Arrangement.spacedBy(if (tv) 14.dp else 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
