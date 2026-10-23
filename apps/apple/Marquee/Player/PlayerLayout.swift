@@ -252,6 +252,12 @@ enum PlayerLayout {
         showing && phase != "ready"
     }
 
+    /// Skip shows over the picture while a segment is under the playhead, never over a failure, the end card or an
+    /// open track picker (it drew over the picker's rows).
+    static func skipShows(segment: Bool, failed: Bool, endCard: Bool, pickerOpen: Bool) -> Bool {
+        segment && !failed && !endCard && !pickerOpen
+    }
+
     /// On a refail the card stays, with this line under its headline.
     static func failureNote(tryingAgain: Bool) -> String? {
         tryingAgain ? "Trying again" : nil

@@ -182,7 +182,7 @@ struct PlayerScreen: View {
                 if skipShown, let segment = model.segment {
                     // Netflix places it bottom right on the controls' top line, and it
                     // stays there whether or not the controls show.
-                    SkipButton(segment: segment, showSource: controls) { model.skip(segment) }
+                    SkipButton(segment: segment) { model.skip(segment) }
                         .id(segment)
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { skipHeight = $0 }
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
@@ -375,7 +375,9 @@ struct PlayerScreen: View {
     }
 
     private var skipShown: Bool {
-        model.segment != nil && model.playback?.phase != "failed" && !model.showEndCard
+        PlayerLayout.skipShows(
+            segment: model.segment != nil, failed: model.playback?.phase == "failed", endCard: model.showEndCard,
+            pickerOpen: model.pickerOpen)
     }
 
     private var upNextShown: Bool {
@@ -485,29 +487,19 @@ struct PlayerScreen: View {
     }
 }
 
-/// "Skip intro" and the like. It takes focus when it appears, so a remote can
-/// press it without opening the controls; its data source shows on focus or
-/// with the controls.
+/// "Skip intro" and the like: it says only what it skips, never where its times came from. It takes focus when
+/// it appears, so a remote can press it without opening the controls.
 private struct SkipButton: View {
     let segment: Segment
-    let showSource: Bool
     let skip: () -> Void
     @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(alignment: .trailing, spacing: 10) {
-            // A white pill: the ring shows only with focus, as on every pill.
-            Button(action: skip) { Label(segment.label, glyph: "skip-forward") }
-                .buttonStyle(PillButtonStyle(prominent: true))
-                .focused($focused)
-            Text("Skip data: \(segment.source)")
-                .textFont(Theme.type.caption, relativeTo: .caption)
-                .foregroundStyle(.white.opacity(0.85))
-                .shadow(color: .black.opacity(0.7), radius: 6)
-                .opacity(focused || showSource ? 1 : 0)
-                .accessibilityHidden(!(focused || showSource))
-        }
-        .onAppear { focused = true }
+        // A white pill: the ring shows only with focus, as on every pill.
+        Button(action: skip) { Label(segment.label, glyph: "skip-forward") }
+            .buttonStyle(PillButtonStyle(prominent: true))
+            .focused($focused)
+            .onAppear { focused = true }
     }
 }
 

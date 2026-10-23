@@ -215,3 +215,17 @@ private let klingon = track(5, "tlh", "tlh", "Klingon")
     #expect(picker.contains(".focusable(interactions: .edit)\n            .focusEffectDisabled()\n            .focused($panelFocused)"))
     #expect(try body(of: "private func setRow(", in: picker).contains("Task { @MainActor in panelFocused = true }"))
 }
+
+@Test func skipSaysOnlyWhatItSkipsAndStaysOffAnOpenPicker() throws {
+    // The languages shot: "Skip credits" drew over the picker's Catalan row, with "Skip data: TheIntroDB" under it.
+    #expect(PlayerLayout.skipShows(segment: true, failed: false, endCard: false, pickerOpen: false))
+    #expect(!PlayerLayout.skipShows(segment: true, failed: false, endCard: false, pickerOpen: true))
+    #expect(!PlayerLayout.skipShows(segment: true, failed: true, endCard: false, pickerOpen: false))
+    #expect(!PlayerLayout.skipShows(segment: true, failed: false, endCard: true, pickerOpen: false))
+    #expect(!PlayerLayout.skipShows(segment: false, failed: false, endCard: false, pickerOpen: false))
+    let screen = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .appending(path: "../Marquee/Player/PlayerScreen.swift"), encoding: .utf8)
+    #expect(try body(of: "private var skipShown: Bool", in: screen).contains("pickerOpen: model.pickerOpen"))
+    // The button names no data source.
+    #expect(!screen.contains("Skip data") && !screen.contains("segment.source"))
+}
