@@ -1007,7 +1007,11 @@ fn line(
             size_bytes: size,
         };
     }
-    if let Some(Room::Window { ahead_s, budget }) = window {
+    // A ring holding under a minute ahead reads as a row that fits: no
+    // "about 0 min ahead" (plans/streaming-window-chunks.md).
+    if let Some(Room::Window { ahead_s, budget }) = window
+        && ahead_s >= 60
+    {
         return ReasonLine::Buffer {
             seeders: s.seeders,
             // The file it plays: a pack's episode, not the pack.

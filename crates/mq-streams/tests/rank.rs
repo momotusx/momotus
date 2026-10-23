@@ -1014,15 +1014,13 @@ fn a_torrent_that_does_not_fit_shows_in_a_window_however_short() {
     };
     let ranked = case(3 << 29, true, 7200).rank(remux());
     assert_eq!(ranked.rows.len(), 1, "{:?}", ranked.hidden);
-    // And with no room at all: a ring.
+    // And with no room at all: a ring, under a minute ahead, which reads
+    // as a row that fits (no "about 0 min ahead").
     let full = case(0, true, 7200).rank(remux());
     assert!(
         matches!(
             full.rows[0].line,
-            ReasonLine::Buffer {
-                ahead_min: Some(0),
-                ..
-            }
+            ReasonLine::Quick { .. } | ReasonLine::Should { .. }
         ),
         "{:?}",
         full.rows[0].line
