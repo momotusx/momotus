@@ -43,8 +43,8 @@ final class AetherSession {
         self.engine = engine
     }
 
-    /// Opens `url` at `start` (seconds); `openWithin` bounds the open (the 20 s of plan 2.3, less when the start
-    /// budget has less left), past which the source counts as failed.
+    /// Opens `url` at `start` (seconds); `openWithin` bounds the open to its first frame (what the start budget has
+    /// left, plan 2.3), past which the source counts as failed.
     func load(_ url: URL, at start: Double, muted: Bool, openWithin: Duration, events: Events) {
         stop()
         load += 1
@@ -127,9 +127,9 @@ final class AetherSession {
         }
         Task { [weak self] in
             try? await Task.sleep(for: openWithin)
-            guard let self, self.load == load, !engine.isSessionReady else { return }
+            guard let self, self.load == load, !engine.hasFirstFrameReadyForDisplay else { return }
             self.stop()
-            events.failed("the second player did not open this source within \(Int(openWithin / .seconds(1))) s")
+            events.failed("the second player did not start this source in time")
         }
     }
 

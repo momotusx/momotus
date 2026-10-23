@@ -66,6 +66,14 @@ enum EngineChoice {
         enabled && backend == .avPlayer && !firstFrameShown
     }
 
+    /// The engine's open, to its first frame, gets what the start budget has left (plans/apple-second-engine.md
+    /// 2.3), at least 1 s; 90 s, the whole budget, when the core sends none (a Try again run, which the core ends
+    /// itself, or an older core).
+    static func openWithin(budgetEndsAtMs: Int64?, nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000)) -> Duration {
+        guard let end = budgetEndsAtMs else { return .seconds(90) }
+        return .milliseconds(max(1000, end - nowMs))
+    }
+
     /// The containers and audio the core is told this device plays.
     static func containers(enabled: Bool) -> [String] {
         enabled ? avPlayerContainers + engineContainers : avPlayerContainers

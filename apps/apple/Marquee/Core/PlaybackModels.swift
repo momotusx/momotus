@@ -227,6 +227,9 @@ struct PlaybackSnapshot: Decodable, Hashable, Sendable {
     let audio: [String]?
     /// The second engine this version played on here before ("aether") (optional for older cores).
     let engine: String?
+    /// When the start budget ends, epoch ms, while a first play is still opening; read only then
+    /// (plans/apple-second-engine.md 2.3). Nil otherwise and from an older core.
+    let startBudgetEndsAt: Int64?
 
     var notes: [SubtitleNote] { subtitleNotes ?? [] }
 }

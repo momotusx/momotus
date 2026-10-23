@@ -935,7 +935,7 @@ final class PlayerModel {
         generation += 1
         let generation = generation
         (loadedURL, loadedKey, loadedAttempt) = (address.absoluteString, key, attempt)
-        (pictureShown, playingSince, notice) = (false, nil, nil)
+        (pictureShown, loadStart, playingSince, notice) = (false, start, nil, nil)
         pendingStart = nil
         if start > 1 { position = start }
         backend = .aether
@@ -952,7 +952,7 @@ final class PlayerModel {
         #else
         let muted = false
         #endif
-        session.load(address, at: start, muted: muted, openWithin: .seconds(20), events: .init(
+        session.load(address, at: start, muted: muted, openWithin: EngineChoice.openWithin(budgetEndsAtMs: playback?.startBudgetEndsAt), events: .init(
             time: { [weak self] time in if mine() { self?.engineTick(time) } },
             duration: { [weak self] seconds in if mine() { self?.engineDuration(seconds, key: key) } },
             state: { [weak self] playing, waiting in if mine() { self?.engineState(playing: playing, waiting: waiting) } },
@@ -971,6 +971,7 @@ final class PlayerModel {
         guard pendingStart == nil || time > 0 else { return }
         // The overlay reads the engine's cues at each tick (every 0.1 s); no boundary observer.
         position = time
+        if watchPicture() { return }
         if duration != publishedDuration { publishNowPlaying() }
         if playing, ContinuousClock.now - lastReport > .seconds(5) { report() }
     }
@@ -985,6 +986,8 @@ final class PlayerModel {
 
     private func engineState(playing: Bool, waiting: Bool) {
         (self.playing, self.waiting) = (playing, waiting)
+        // Playing without a pause or a stall: buffering is not a missing picture.
+        playingSince = playing ? playingSince ?? .now : nil
         publishNowPlaying()
         if let paused = PlayerLayout.traktPaused(paused: !playing && !waiting, buffering: waiting, was: self.paused) {
             self.paused = paused
@@ -1125,20 +1128,24 @@ final class PlayerModel {
         if playing { sendStall(stall.see(playing: true, waiting: false, position: position)) }
         // A track delivered whole (HLS) sends nothing more: the observer moves on with the playhead.
         if position > edgesUntil { watchCueEdges() }
-        let watched = PlayerLayout.pictureWatched(floating: floating, windowWatches: windowWatchesFrames(), onScreen: appOnScreen)
-        (loadStart, playingSince) = PlayerLayout.pictureClocks(
-            watched: watched, position: position, loadStart: loadStart, playingSince: playingSince, now: .now)
-        if loadedURL != nil, PlayerLayout.pictureMissing(
-            shown: pictureShown, advanced: position - loadStart,
-            playingFor: playingSince.map { (ContinuousClock.now - $0) / .seconds(1) } ?? 0,
-            watched: watched
-        ) {
-            pictureFailed()
-            return
-        }
+        if watchPicture() { return }
         if let total = player.currentItem?.duration, total.isNumeric { duration = total.seconds }
         if duration != publishedDuration { publishNowPlaying() }
         if playing, ContinuousClock.now - lastReport > .seconds(5) { report() }
+    }
+
+    /// Sound runs but no frame came, on either engine: the source fails over (`pictureFailed`). True when it did.
+    private func watchPicture() -> Bool {
+        let watched = PlayerLayout.pictureWatched(floating: floating, windowWatches: windowWatchesFrames(), onScreen: appOnScreen)
+        (loadStart, playingSince) = PlayerLayout.pictureClocks(
+            watched: watched, position: position, loadStart: loadStart, playingSince: playingSince, now: .now)
+        guard loadedURL != nil, PlayerLayout.pictureMissing(
+            shown: pictureShown, advanced: position - loadStart,
+            playingFor: playingSince.map { (ContinuousClock.now - $0) / .seconds(1) } ?? 0,
+            watched: watched
+        ) else { return false }
+        pictureFailed()
+        return true
     }
 
     /// Saves progress in the core. Nothing before the first frame: a position

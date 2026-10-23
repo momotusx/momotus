@@ -51,3 +51,9 @@ import Testing
     #expect(fixture["audioDecoders"] as? [String] == EngineChoice.audioDecoders(enabled: true))
     #expect(fixture["tenBitH264"] as? Bool == false)
 }
+
+@Test func theEngineOpensWithinWhatTheStartBudgetHasLeft() {
+    #expect(EngineChoice.openWithin(budgetEndsAtMs: 50_000, nowMs: 20_000) == .seconds(30))
+    #expect(EngineChoice.openWithin(budgetEndsAtMs: 20_000, nowMs: 25_000) == .seconds(1), "spent: a last second")
+    #expect(EngineChoice.openWithin(budgetEndsAtMs: nil, nowMs: 25_000) == .seconds(90), "no budget sent")
+}
