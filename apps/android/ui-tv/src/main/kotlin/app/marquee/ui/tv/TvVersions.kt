@@ -51,6 +51,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
@@ -250,7 +251,7 @@ private fun Header(
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
             MqText(heading, role = TextRole.Callout, color = colors.dim, weight = FontWeight.SemiBold, maxLines = 1)
-            MqText("Versions", role = TextRole.Title1, maxLines = 1)
+            MqText("Versions", Modifier.semantics { heading() }, role = TextRole.Title1, maxLines = 1)
         }
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
             VersionsCopy.progress(snapshot)?.let { (text, state) -> StatusWord(text, tone(state)) }
@@ -542,12 +543,17 @@ private fun Sources(
                 }
                 item(key = group) {
                     Heading {
-                        CapsLabel(
-                            section.title,
-                            Modifier.weight(1f),
-                            colors.text,
-                        )
-                        MqText("${rows.size}", role = TextRole.Callout, maxLines = 1)
+                        // A heading to a screen reader: "1080p, 12 versions".
+                        Row(
+                            Modifier.weight(1f).clearAndSetSemantics {
+                                heading()
+                                contentDescription = VersionsCopy.sectionSpoken(section.title, rows.size)
+                            },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            CapsLabel(section.title, Modifier.weight(1f), colors.text)
+                            MqText("${rows.size}", role = TextRole.Callout, maxLines = 1)
+                        }
                         if (all) {
                             SecondaryButton(
                                 StreamChoiceCopy.SHOW_FEWER,
@@ -555,6 +561,7 @@ private fun Sources(
                                 toPlay,
                                 icon = Icons.ChevronUp,
                                 focusRequester = focus.requesterFor(headKey(group)),
+                                spoken = VersionsCopy.foldSpoken(section.title, rows.size, open = true),
                             )
                         }
                     }
@@ -595,6 +602,7 @@ private fun Sources(
                                 .then(toPlay),
                             icon = if (all) Icons.ChevronUp else Icons.ChevronDown,
                             focusRequester = focus.requesterFor(foldKey(group)),
+                            spoken = VersionsCopy.foldSpoken(section.title, rows.size, open = all),
                         )
                     }
                 }

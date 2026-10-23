@@ -46,6 +46,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -181,7 +182,7 @@ fun PhoneVersions(
                         weight = FontWeight.SemiBold,
                         maxLines = 1,
                     )
-                    MqText("Versions", role = TextRole.Title1, maxLines = 1)
+                    MqText("Versions", Modifier.semantics { heading() }, role = TextRole.Title1, maxLines = 1)
                     VersionsCopy.progress(snapshot)?.let { (text, tone) ->
                         StatusWord(text, tone(tone), Modifier.padding(top = 4.dp))
                     }
@@ -224,12 +225,17 @@ fun PhoneVersions(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        CapsLabel(
-                            section.title,
-                            Modifier.weight(1f),
-                            colors.text,
-                        )
-                        MqText("${rows.size}", role = TextRole.Callout, maxLines = 1)
+                        // A heading to a screen reader: "1080p, 12 versions".
+                        Row(
+                            Modifier.weight(1f).clearAndSetSemantics {
+                                heading()
+                                contentDescription = VersionsCopy.sectionSpoken(section.title, rows.size)
+                            },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            CapsLabel(section.title, Modifier.weight(1f), colors.text)
+                            MqText("${rows.size}", role = TextRole.Callout, maxLines = 1)
+                        }
                     }
                 }
                 items(if (all) rows else rows.take(SHOWN), key = { "row:${it.key}" }) { row ->
@@ -251,6 +257,7 @@ fun PhoneVersions(
                             if (all) StreamChoiceCopy.SHOW_FEWER else StreamChoiceCopy.showAll(rows.size),
                             { open[group] = !all },
                             icon = if (all) Icons.ChevronUp else Icons.ChevronDown,
+                            spoken = VersionsCopy.foldSpoken(section.title, rows.size, open = all),
                         )
                     }
                 }

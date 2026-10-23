@@ -12,11 +12,14 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
-import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToKeyAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
@@ -387,8 +390,10 @@ class TvVersionsTest {
         // Told apart by their sizes: 1 GB to 8 GB.
         val rows = (1..8).map { row("r$it", ReasonLine.Few(30 + it)).copy(sizeBytes = it * gib) }
         show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), rows))
-        compose.onNodeWithText("Show all 8").requestFocus()
-        compose.onNodeWithText("Show all 8").performKeyInput { pressKey(Key.DirectionCenter) }
+        compose.onNodeWithContentDescription("Show all 8 Other good choices versions").requestFocus()
+        compose.onNodeWithContentDescription("Show all 8 Other good choices versions").performKeyInput {
+            pressKey(Key.DirectionCenter)
+        }
         compose.waitForIdle()
         println(
             "open-dbg " +
@@ -408,7 +413,7 @@ class TvVersionsTest {
         // Focus goes to the 4th row, the first that was hidden.
         compose.onNodeWithContentDescription("1080p, HDR, 4 GB").assertIsFocused()
         press(Key.DirectionLeft)
-        compose.onNode(isFocused()).assertTextEquals("Show fewer")
+        compose.onNode(isFocused()).assertContentDescriptionEquals("Show fewer Other good choices versions")
         press(Key.DirectionLeft)
         compose.onNodeWithText("Play this version").assertIsFocused()
         // Back into the list on the row it left, Left to the heading, OK folds: two presses from inside the section.
@@ -416,28 +421,34 @@ class TvVersionsTest {
         compose.onNodeWithContentDescription("1080p, HDR, 4 GB").assertIsFocused()
         press(Key.DirectionLeft)
         press(Key.DirectionCenter)
-        compose.onNodeWithText("Show all 8").assertIsFocused()
-        compose.onAllNodesWithText("Show fewer").assertCountEquals(0)
+        compose.onNodeWithContentDescription("Show all 8 Other good choices versions").assertIsFocused()
+        compose.onAllNodesWithContentDescription("Show fewer Other good choices versions").assertCountEquals(0)
     }
 
     @Test
     fun `from the 50th row of a 100-row section Left scrolls back to the heading, and OK folds it`() {
         val rows = (1..100).map { row("r$it", ReasonLine.Few(30 + it)).copy(sizeBytes = it * gib) }
         show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), rows))
-        compose.onNodeWithText("Show all 100").requestFocus()
-        compose.onNodeWithText("Show all 100").performKeyInput { pressKey(Key.DirectionCenter) }
+        compose.onNodeWithContentDescription("Show all 100 Other good choices versions").requestFocus()
+        compose.onNodeWithContentDescription("Show all 100 Other good choices versions").performKeyInput {
+            pressKey(Key.DirectionCenter)
+        }
         compose.waitForIdle()
         compose.onNode(hasScrollToKeyAction()).performScrollToKey("row:r50")
         compose.onNodeWithContentDescription("1080p, HDR, 50 GB").requestFocus()
         compose.onNodeWithContentDescription("1080p, HDR, 50 GB").assertIsFocused()
         // The heading is out of composition this far down: Left brings it back and lands on it, never on Play.
-        compose.onAllNodesWithText("Show fewer").assertCountEquals(0)
+        compose.onAllNodesWithContentDescription("Show fewer Other good choices versions").assertCountEquals(0)
         press(Key.DirectionLeft)
         compose.waitUntil(5_000) {
-            compose.onAllNodes(isFocused() and hasText("Show fewer")).fetchSemanticsNodes().isNotEmpty()
+            compose
+                .onAllNodes(
+                    isFocused() and hasContentDescription("Show fewer Other good choices versions"),
+                ).fetchSemanticsNodes()
+                .isNotEmpty()
         }
         press(Key.DirectionCenter)
-        compose.onNodeWithText("Show all 100").assertIsFocused()
+        compose.onNodeWithContentDescription("Show all 100 Other good choices versions").assertIsFocused()
     }
 
     @Test
@@ -615,11 +626,16 @@ class TvVersionsTest {
         compose.onNodeWithText("Smaller file: 720p, 1.5 GB").assertExists()
         compose.onNodeWithText("Sharper: 4K, 12 GB").assertExists()
         // The core's sections, in its order: 4K, 1080p, 720p and below.
-        // A heading is the first node with its words (a 4K row says "4K" too, under it).
+        // Each heading is one heading node: "1080p, 1 version".
         val top = { t: String ->
-            compose.onAllNodesWithText(t, useUnmergedTree = true).fetchSemanticsNodes().minOf { it.boundsInRoot.top }
+            compose
+                .onNodeWithContentDescription(t)
+                .fetchSemanticsNode()
+                .boundsInRoot.top
         }
-        val tops = listOf(top("4K"), top("1080P"), top("720P AND BELOW"))
+        val tops = listOf(top("4K, 1 version"), top("1080p, 1 version"), top("720p and below, 1 version"))
+        val heading = SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading)
+        compose.onNode(hasContentDescription("1080p, 1 version") and heading).assertExists()
         assertEquals(tops.sorted(), tops)
         // Down from Play reaches Smaller file, whose version is also the 720p row; OK plays it.
         compose.waitUntil(5_000) {
@@ -719,5 +735,45 @@ class TvVersionsTest {
         val card = compose.onNodeWithTag(CARD, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         assertEquals(held.top, card.top)
         assertEquals(held.height, card.height, "the placeholder is the card's height")
+    }
+
+    @Test
+    fun `a 400-row section composes only what shows, and a held Down over 40 rows keeps every row one height`() {
+        // Told apart by their sizes: 1 GB to 400 GB.
+        val rows = (1..400).map { row("r$it", ReasonLine.Few(30)).copy(sizeBytes = it * gib) }
+        val started = System.nanoTime()
+        show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), rows))
+        compose.onNodeWithContentDescription("Show all 400 Other good choices versions").requestFocus()
+        compose.onNodeWithContentDescription("Show all 400 Other good choices versions").performKeyInput {
+            pressKey(Key.DirectionCenter)
+        }
+        compose.waitForIdle()
+        val ms = (System.nanoTime() - started) / 1_000_000
+        val composed =
+            compose
+                .onAllNodes(
+                    hasContentDescription("1080p, HDR, ", substring = true),
+                ).fetchSemanticsNodes()
+                .size
+        println("versions-400 {\"rows\":400,\"composed\":$composed,\"firstCompositionMs\":$ms}")
+        assertTrue(composed < 20, "only what shows is composed: $composed")
+        compose.onNodeWithContentDescription("1080p, HDR, 4 GB").assertIsFocused()
+        val height =
+            compose
+                .onNode(isFocused())
+                .fetchSemanticsNode()
+                .size.height
+        repeat(40) {
+            press(Key.DirectionDown)
+            assertEquals(
+                height,
+                compose
+                    .onNode(isFocused())
+                    .fetchSemanticsNode()
+                    .size.height,
+                "row ${it + 5}",
+            )
+        }
+        compose.onNodeWithContentDescription("1080p, HDR, 44 GB").assertIsFocused()
     }
 }

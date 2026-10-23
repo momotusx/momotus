@@ -325,6 +325,19 @@ object VersionsCopy {
         for (section in sections) for (row in section.rows) if (row.key !in seen) seen[row.key] = seen.size
     }
 
+    /** A section's heading as a screen reader says it: "1080p, 12 versions". */
+    fun sectionSpoken(
+        title: String,
+        n: Int,
+    ): String = "$title, ${StreamChoiceCopy.counted("versions", n)}"
+
+    /** A section's fold as a screen reader says it: "Show all 12 1080p versions", "Show fewer 1080p versions". */
+    fun foldSpoken(
+        title: String,
+        n: Int,
+        open: Boolean,
+    ): String = (if (open) StreamChoiceCopy.SHOW_FEWER else StreamChoiceCopy.showAll(n)) + " $title versions"
+
     /** A shortcut's words: "Smaller file: 1080p, 2 GB". */
     fun shortcutLabel(
         label: String,
