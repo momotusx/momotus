@@ -32,7 +32,12 @@ final class AudioAVPlayerHost {
     // MARK: - Output
 
     /// Created once, reused across replaceCurrentItem swaps for the host's lifetime.
-    let avPlayer = AVPlayer()
+    /// Marquee patch 2 (VENDOR.md): no external playback, as on the native host.
+    let avPlayer: AVPlayer = {
+        let player = AVPlayer()
+        player.allowsExternalPlayback = false
+        return player
+    }()
 
     #if os(tvOS) || os(iOS)
     /// Now-Playing session bound to THIS player. The SHARED MPRemoteCommandCenter / MPNowPlayingInfoCenter aren't

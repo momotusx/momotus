@@ -996,6 +996,11 @@ public final class Demuxer: @unchecked Sendable {
     /// CRA B-frames, NOPTS repair stack stayed load-bearing).
     private static func applyDemuxerOptions(_ opts: inout OpaquePointer?, isLive: Bool = false, skipDurationEstimate: Bool = false) {
         av_dict_set(&opts, "fflags", "+genpts", 0)
+        // Marquee patch 3 (VENDOR.md): no protocol at all. An unset whitelist allows every enabled
+        // protocol (`file` included), so a crafted source probed as HLS could name a `file:` segment;
+        // an empty one allows none. A custom-reader open (every http source) never consults it; a
+        // local-file open fails, which Marquee does not use.
+        av_dict_set(&opts, "protocol_whitelist", "", 0)
         if isLive || skipDurationEstimate {
             // Live sources have no Content-Length; stream-info pass seeks SEEK_END,
             // which latches pb->eof_reached and collapses av_read_frame ~10s in.

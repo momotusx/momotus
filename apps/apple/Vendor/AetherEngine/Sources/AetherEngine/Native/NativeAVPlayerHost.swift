@@ -360,6 +360,9 @@ final class NativeAVPlayerHost {
         self.diagnosticPool = diagnosticPool
         self.diagnosticRead = diagnosticRead
         let player = AVPlayer()
+        // Marquee patch 2 (VENDOR.md): no external video. The loopback server (patch 1) cannot serve a
+        // receiver, so Control Center must not hand the video to one; audio routes still play.
+        player.allowsExternalPlayback = false
         // Keep automaticallyWaitsToMinimizeStalling at default true: false caused permanent startup stall on 4K HEVC (rate dropped to 0 after asset.load and never resumed).
         self.avPlayer = player
         self.playerLayer = AVPlayerLayer(player: player)

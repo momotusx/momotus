@@ -380,7 +380,11 @@ enum SubtitleDecoder {
             // supplied context and NULLs its pointer on failure, so an early assignment would
             // leave a dangling pointer for the defer to double-close (mirrors Demuxer.swift).
             var ctxPtr: UnsafeMutablePointer<AVFormatContext>? = ctx
-            let ret = avformat_open_input(&ctxPtr, nil, nil, nil)
+            // Marquee patch 3 (VENDOR.md): no protocol, as in Demuxer.applyDemuxerOptions.
+            var noProtocols: OpaquePointer?
+            av_dict_set(&noProtocols, "protocol_whitelist", "", 0)
+            defer { av_dict_free(&noProtocols) }
+            let ret = avformat_open_input(&ctxPtr, nil, nil, &noProtocols)
             guard ret == 0 else {
                 reader.close()
                 throw SubtitleDecoderError.openFailed(code: ret)
@@ -389,7 +393,11 @@ enum SubtitleDecoder {
         } else {
             var ctx: UnsafeMutablePointer<AVFormatContext>?
             let urlString = url.isFileURL ? url.path : url.absoluteString
-            let ret = avformat_open_input(&ctx, urlString, nil, nil)
+            // Marquee patch 3 (VENDOR.md): no protocol; this string-URL open then always fails.
+            var noProtocols: OpaquePointer?
+            av_dict_set(&noProtocols, "protocol_whitelist", "", 0)
+            defer { av_dict_free(&noProtocols) }
+            let ret = avformat_open_input(&ctx, urlString, nil, &noProtocols)
             guard ret == 0, ctx != nil else {
                 throw SubtitleDecoderError.openFailed(code: ret)
             }

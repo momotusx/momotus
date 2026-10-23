@@ -183,6 +183,8 @@ targets:
         embed: false
       - sdk: Security.framework
       - sdk: SystemConfiguration.framework
+      # The vendored engine's patches, run for real (Tests/EnginePatchTests.swift).
+      - package: AetherEngine
     sources:
       - path: Tests
         excludes: ["Fixtures/**"]
