@@ -91,9 +91,12 @@ trap 'rm -rf "$gen"' EXIT
 mac="$target_dir/aarch64-apple-darwin/release"
 uniffi-bindgen generate --library "$mac/libmarquee_core.a" --language swift --out-dir "$gen"
 
-mkdir -p "$gen/include"
-cp "$gen/marquee_coreFFI.h" "$gen/include/"
-cp "$gen/marquee_coreFFI.modulemap" "$gen/include/module.modulemap"
+# The module map sits in a folder named after its module: Xcode copies every xcframework's headers into one
+# include folder, where a top-level module.modulemap collides with another package's (LibDovi's, through
+# AetherEngine), and clang finds `marquee_coreFFI/module.modulemap` by the module's name.
+mkdir -p "$gen/include/marquee_coreFFI"
+cp "$gen/marquee_coreFFI.h" "$gen/include/marquee_coreFFI/"
+cp "$gen/marquee_coreFFI.modulemap" "$gen/include/marquee_coreFFI/module.modulemap"
 
 args=(-library "$mac/libmarquee_core.a" -headers "$gen/include")
 for target in "${targets[@]}"; do
