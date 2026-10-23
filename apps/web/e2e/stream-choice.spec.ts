@@ -759,6 +759,32 @@ test.describe("Versions", () => {
     await page.context().close();
   });
 
+  test("phone: the sheet drops only what the row's line said: a should row keeps its account words, a quick row has none left", async ({ browser }) => {
+    let kind: "should" | "quick" = "should";
+    const shared = (s: VersionsSnapshot): VersionsSnapshot => {
+      const a = s.rows[0];
+      if (!a || !s.done) return s;
+      const size = 4 * 2 ** 30;
+      const line = kind === "should" ? { kind, seeders: 89, sizeBytes: size, service: "TorBox" } : { kind, seeders: 89, sizeBytes: size };
+      return { ...s, rows: [{ ...a, status: { kind: "torrent" as const, seeds: 89 }, sizeBytes: size, line }, ...s.rows.slice(1)] };
+    };
+    for (const k of ["should", "quick"] as const) {
+      kind = k;
+      const page = await device(browser, "phone", PORTS.bridge, { versions: shared });
+      await page.goto(path("phone"));
+      await firstRow(page);
+      await page.locator(".vslot").first().locator(".vinfo").tap();
+      const sheet = page.locator(".vsheet");
+      await expect(sheet.locator(".st.line .lt")).toHaveText("4 GB, shared by 89 people");
+      // The seeders and the size are the face's; only what it did not say follows.
+      if (k === "should") await expect(sheet.locator(".detail")).toHaveText("May be ready in your account");
+      else await expect(sheet.locator(".detail")).toHaveCount(0);
+      await expect(sheet).not.toContainText("89 seeders");
+      if (k === "should") await shot(page, "stream-choice-sheet", "phone");
+      await page.context().close();
+    }
+  });
+
   test("phone: a version with nothing to badge opens a sheet that starts with its one line, no empty band", async ({ browser }) => {
     const bare = (s: VersionsSnapshot): VersionsSnapshot => {
       const a = s.rows[0];

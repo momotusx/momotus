@@ -264,11 +264,15 @@ test("a quality the release does not state is no badge: nothing, never Unknown",
   expect(qualityCell("WEB-DL")).toBe("WEB-DL");
 });
 
-test("the sheet says nothing twice: a quiet line has said the seeders and size, a warning keeps its details", () => {
+test("the sheet says nothing twice: it drops only what the face said, and keeps the rest", () => {
   const row = (line: ReasonLine, onDevice: string | null = null) => ({ line, status: { kind: "torrent", seeds: 1204 }, sizeBytes: 2 * GiB, onDevice }) as VersionRow;
   // "2 GB, shared by 1,204 people" already said "1,204 seeders, 2 GB".
   expect(sheetDetails(row({ kind: "quick", seeders: 1204, sizeBytes: 2 * GiB }))).toBeNull();
-  expect(sheetDetails(row({ kind: "quick", seeders: 1204, sizeBytes: 2 * GiB }, "On this device"))).toBeNull();
+  // What only the details say stays: the account, the window ahead.
+  expect(sheetDetails(row({ kind: "should", seeders: 1204, sizeBytes: 2 * GiB, service: "TorBox" }))).toBe("May be ready in your account");
+  expect(sheetDetails(row({ kind: "buffer", seeders: 1204, sizeBytes: 40 * GiB, aheadMin: 7, budgetBytes: 2.5 * GiB }))).toBe("Room for about 7 min ahead in 2.5 GB");
+  // "On this device" names no people: the seeders stay, the size goes.
+  expect(sheetDetails(row({ kind: "quick", seeders: 1204, sizeBytes: 2 * GiB }, "On this device"))).toBe("1,204 seeders");
   // "117 MB, may not start" says no seeders: they follow.
   expect(sheetDetails(row({ kind: "veryFew", seeders: 2 }))).toBe("2 seeders");
   // A dimmed row's line says why it is dimmed, so the core's details follow.
