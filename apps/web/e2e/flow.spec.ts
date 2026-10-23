@@ -234,15 +234,19 @@ test("movie page: trailer overlay and Mark watched by remote", async ({ page }) 
   await expect(watched).toHaveAttribute("aria-pressed", "false");
   await expect(play).toContainText("Resume");
   await expect(play).toContainText("min left");
+  const circle = () => watched.locator("svg").evaluate((el) => getComputedStyle(el).backgroundColor);
+  const unmarked = await circle();
   await watched.focus();
   await page.keyboard.press("Enter");
   await expect(watched).toHaveAttribute("aria-pressed", "true");
   await expect(watched).toHaveText("Watched");
+  // Marked: its circle fills (the owner, 2026-10-23: a small action, not a big pill).
+  await expect.poll(circle).not.toBe(unmarked);
   // Watched: start over, with no resume point beside it.
   await expect(play).toHaveText("Play again");
   await page.keyboard.press("Enter");
   await expect(watched).toHaveAttribute("aria-pressed", "false");
-  await expect(watched).toHaveText("Mark as watched");
+  await expect(watched).toHaveText("Watched");
   await expect(play).toContainText("Resume");
 });
 
@@ -585,15 +589,9 @@ for (const [form, [width, height, scale]] of Object.entries(FORMS)) {
     });
     expect(row.tops).toBe(1);
     expect(row.overflow).toBeLessThanOrEqual(1);
-    // Watched is the labeled pill beside Play, not a secondary action. Their layout boxes, not
-    // their drawn ones: on TV the focused Play rises by focus.rise.
-    const middle = (key: string) =>
-      page.locator(`[data-f="${key}"]`).evaluate((el) => {
-        let y = (el as HTMLElement).offsetHeight / 2;
-        for (let n: HTMLElement | null = el as HTMLElement; n; n = n.offsetParent as HTMLElement | null) y += n.offsetTop;
-        return y;
-      });
-    expect(Math.abs((await middle("title:watched")) - (await middle("title:play")))).toBeLessThan(2);
+    // Watched is a small action in this row, beside Library, never a pill beside Play (the owner, 2026-10-23).
+    await expect(page.locator('.info .acts [data-f="title:watched"]')).toHaveText("Watched");
+    await expect(page.locator('.play-row [data-f="title:watched"]')).toHaveCount(0);
     // Versions shows no device line (plans/versions-web-spec.md 3.1): the count, then the status line.
     await page.goto(`/title/series/${GOT.id}/versions/${GOT.resume}?form=${form}`);
     await expect(page.locator(".vstate")).toContainText(/\d+ versions?/, { timeout: 30_000 });

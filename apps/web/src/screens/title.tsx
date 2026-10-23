@@ -259,19 +259,6 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                         </A>
                       )}
                     </Show>
-                    {/* Movies only (episodes carry their own marks): two labeled
-                        states, the watched one filled with a check. */}
-                    <Show when={props.kind === "movie"}>
-                      <button
-                        class="btn big watched"
-                        data-f="title:watched"
-                        aria-pressed={header()?.watched ?? false}
-                        onClick={() => view.command({ type: "setWatched", videoId: props.id, value: !header()?.watched })}
-                      >
-                        <Check aria-hidden />
-                        {header()?.watched ? "Watched" : "Mark as watched"}
-                      </button>
-                    </Show>
                   </div>
                 </div>
                 <div class="acts">
@@ -308,6 +295,19 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                     </Show>
                     {header()?.inLibrary ? "In Library" : "Add to Library"}
                   </button>
+                  </Show>
+                  {/* Movies only (episodes carry their own marks): a small action beside Library, its
+                      check in the circle, filled once marked (the owner, 2026-10-23). */}
+                  <Show when={props.kind === "movie"}>
+                    <button
+                      class="btn"
+                      data-f="title:watched"
+                      aria-pressed={header()?.watched ?? false}
+                      onClick={() => view.command({ type: "setWatched", videoId: props.id, value: !header()?.watched })}
+                    >
+                      <Check aria-hidden />
+                      Watched
+                    </button>
                   </Show>
                   {/* TV has no remove button on its tiles: the title page carries it
                       while the title is in Continue Watching (or Next Up). */}

@@ -34,11 +34,6 @@
   font: 600 var(--type-callout) / 1.2 var(--font-text); color: var(--text); }
 .airs-next svg { width: 26px; height: 26px; color: var(--muted); }
 
-/* Watched: a labeled pill beside Play with two states; watched is a filled
- * pill with a check (selection is a fill and a check, never a ring: the ring
- * means focus). */
-.btn.watched { flex: none; font-size: var(--type-callout); }
-.btn.watched[aria-pressed="true"] { background: var(--selected-fill); box-shadow: var(--selected-edge); }
 
 /* Secondary actions: the fill in a circle, the word under it. */
 .info .acts { flex-wrap: nowrap; gap: 28px; }
@@ -47,6 +42,8 @@
 .info .acts .btn svg { box-sizing: content-box; width: 28px; height: 28px; padding: 22px; border-radius: 50%; color: #fff; background: var(--fill);
   transition: transform var(--motion-focus) var(--ease); }
 .info .acts .btn .long { max-width: 9em; white-space: normal; text-align: center; line-height: 1.2; }
+/* A pressed action (In Library, Watched) fills its circle: selection is a fill, never a ring (the ring
+ * means focus). */
 .info .acts .btn[aria-pressed="true"] svg { background: var(--selected-fill); box-shadow: var(--selected-edge); }
 .info .acts .btn:focus-visible, [data-form="tv"] .info .acts .btn:focus { outline: none; box-shadow: none; transform: none; }
 .info .acts .btn:focus-visible svg, [data-form="tv"] .info .acts .btn:focus svg { outline: var(--focus-ring) solid var(--key); outline-offset: var(--focus-ring);
@@ -161,7 +158,6 @@
 [data-form="phone"] .airs-next { height: 52px; gap: 8px; }
 [data-form="phone"] .airs-next svg { width: 20px; height: 20px; }
 [data-form="phone"] .play-row .btn { flex: 1; min-width: 0; justify-content: center; }
-[data-form="phone"] .play-row .btn.watched { flex: none; padding: 0 16px; font-size: 14px; }
 [data-form="phone"] .play-row .btn.again { flex: none; padding: 0 16px; }
 /* Secondary actions on a phone: a centered row of circles with their word. */
 [data-form="phone"] .info .acts { display: flex; justify-content: center; gap: 22px; width: 100%; }
