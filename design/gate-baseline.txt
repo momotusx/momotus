@@ -69,13 +69,8 @@ apps/web/src/screens/versions.css :: .crumbs .here { color: var(--text); font-we
 apps/web/src/screens/versions.css :: .vhead h1 { font: 800 var(--type-title1) / 1.05 var(--font-display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 apps/web/src/screens/versions.css :: border-radius: var(--radius-l); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight);
 apps/web/src/screens/versions.css :: .pick h2 { font: 800 var(--type-title1) / 1.02 var(--font-display); margin: 14px 0 20px; }
-apps/web/src/screens/versions.css :: .pick .blocked h2 { margin: 0; font: 800 var(--type-title3) / 1.1 var(--font-display); }
 apps/web/src/screens/versions.css :: background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); font: 500 var(--type-callout) / 1.35 var(--font-text); }
-apps/web/src/screens/versions.css :: .vgroup h3 { position: sticky; top: 0; z-index: 4; display: flex; justify-content: space-between; margin: 16px 0 10px; padding: 12px 22px; border-radius: 10px; background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge);
 apps/web/src/screens/versions.css :: @media (hover: hover) { [data-form="desktop"] .vrow:hover { background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); } }
-apps/web/src/screens/versions.css :: border-radius: var(--radius-m); background: var(--glass-strong); -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-apps/web/src/screens/versions.css :: backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight), var(--glass-shadow);
-apps/web/src/screens/versions.css :: .hidden-row { display: flex; align-items: center; gap: 16px; margin-top: 18px; padding: 16px 22px; border-radius: var(--radius-m); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge);
 apps/web/src/screens/versions.css :: [data-form="phone"] .vrow.open { background: var(--glass); border-bottom-color: transparent; border-radius: 12px 12px 0 0; }
 apps/web/src/screens/versions.css :: [data-form="phone"] .vrow-open { display: grid; gap: 6px; justify-items: start; margin-bottom: 8px; padding: 2px 8px 14px 80px; border-radius: 0 0 12px 12px; background: var(--glass); }
 apps/web/src/theme/app.css :: .glass { background: var(--glass); -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));

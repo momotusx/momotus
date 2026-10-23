@@ -589,9 +589,11 @@ for (const [form, [width, height, scale]] of Object.entries(FORMS)) {
         return y;
       });
     expect(Math.abs((await middle("title:watched")) - (await middle("title:play")))).toBeLessThan(2);
-    // The display class comes from the screen, not the window.
+    // Versions shows no device line (plans/versions-web-spec.md 3.1): the count, then the status line.
     await page.goto(`/title/series/${GOT.id}/versions/${GOT.resume}?form=${form}`);
-    await expect(page.locator(".device")).toContainText(/^This (TV|computer|phone): 1080p,/, { timeout: 30_000 });
+    await expect(page.locator(".vstate")).toContainText(/\d+ versions?/, { timeout: 30_000 });
+    await expect(page.locator(".device")).toHaveCount(0);
+    await expect(page.locator(".versions-scr")).not.toContainText(/This (TV|computer|phone):/);
     await context.close();
   });
 }

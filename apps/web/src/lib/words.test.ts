@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { addonHost, hiddenSummary, nextVersion, languageName, pairingProblem, plainAddress, reasonText, problemWords, restartLine, serverHost, slowWords, statusText, subtitleNote } from "./words";
+import { addonHost, hiddenSummary, nextVersion, languageName, pairingProblem, plainAddress, reasonText, problemWords, restartLine, serverHost, statusText, subtitleNote } from "./words";
 import shared from "../../../shared/stream-choice-words.json";
 import type { Learned } from "../core/generated/Learned";
 import type { ReasonLine } from "../core/generated/ReasonLine";
@@ -10,7 +10,6 @@ import {
   cardLine,
   choiceSummary,
   choiceWords,
-  conditionsHeader,
   conditionsLine,
   counted,
   learnedNote,
@@ -167,10 +166,9 @@ test("the device line reads as one sentence, leaving out what is not known", () 
     screenClass: 480, hdr: false, network: "other", http: prior, p2p: measured, freeBytes: null,
     runtimeMin: 52, sizeLimitBytes: 5 * GiB, minSeeders: 50, engine: true, account: false, window: true,
   };
-  // No account and the engine: the torrent speed decides.
-  expect(conditionsHeader("tv", v)).toBe("This TV: SD, about 42 Mbit/s on this network");
-  // With an account, or without the engine, the HTTP one does.
-  expect(conditionsHeader("desktop", { ...v, account: true })).toBe("This computer: SD, this network");
+  // No account and the engine: the torrent speed decides; with an account, or without the engine, the HTTP one does.
+  expect(speedFor(v, false)).toBe(measured);
+  expect(speedFor(v, true)).toBe(prior);
   expect(speedFor({ ...v, engine: false }, false)).toBe(prior);
 });
 
@@ -236,10 +234,6 @@ test("the next version, tried or offered, by its label", () => {
   expect(nextVersion.failed(false)).toBe("None of the sources could be played");
 });
 
-test("slow addons agree in number", () => {
-  expect(slowWords(["Torrentio"])).toBe("Torrentio is slow, still waiting");
-  expect(slowWords(["Torrentio", "Comet"])).toBe("Torrentio, Comet are slow, still waiting");
-});
 
 test("raw reasons read as sentences, the raw text kept", () => {
   const net = "network: error sending request for url (https://x.example/catalog.json): Connection refused (os error 61)";

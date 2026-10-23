@@ -173,11 +173,14 @@ test("desktop: the core's start fills the logo under the pick's words; the pictu
   expect(last.stage).toBe("opening");
   expect(last.progress).toBeGreaterThan(0);
   await expect.poll(() => fillOf(page)).toBe(String(last.progress));
-  await expect(layer.locator(".ld-cap span")).toHaveText([/^Starting .+ from Loading Fixture$/, ...(last.caption ? [last.caption] : [])]);
+  // The pick's line names no addon (plans/versions-web-spec.md 2).
+  await expect(layer.locator(".ld-cap span")).toHaveText([/^Starting [^,]+(, [\d.]+ [KMG]B)?$/, ...(last.caption ? [last.caption] : [])]);
+  await expect(layer.locator(".ld-cap")).not.toContainText("Loading Fixture");
   // The words carry a halo over a bright backdrop, and a live region that is always there reads them.
   await expect(layer.locator(".ld-cap")).not.toHaveCSS("text-shadow", "none");
   const status = page.locator('.player-scr > p.sr[role="status"]');
-  await expect(status).toHaveText(/^Starting .+ from Loading Fixture/);
+  await expect(status).toHaveText(/^Starting /);
+  await expect(status).not.toContainText("Loading Fixture");
   await expect(page.locator('.ld [role="status"]')).toHaveCount(0);
   await shoot(page, "player-loading-desktop");
 
@@ -283,7 +286,7 @@ test("a torrent's start: the fill steps with it, its words come under the pick's
   start = { ...start, progress: 0.6, caption: "Finding peers, 3 so far" };
   repush("playback");
   await expect.poll(() => fillOf(page)).toBe("0.6");
-  await expect(layer.locator(".ld-cap span")).toHaveText([/^Starting .+ from Loading Fixture$/, "Finding peers, 3 so far"]);
+  await expect(layer.locator(".ld-cap span")).toHaveText([/^Starting [^,]+(, [\d.]+ [KMG]B)?$/, "Finding peers, 3 so far"]);
   await shoot(page, "player-loading-wait-desktop");
   start = { ...start, progress: 0.45, caption: "Buffering, 3.8 of 8.4 MB" };
   repush("playback");
@@ -291,4 +294,51 @@ test("a torrent's start: the fill steps with it, its words come under the pick's
   expect(await fillOf(page)).toBe("0.6");
   expect(errors).toEqual([]);
   await context.close();
+});
+
+test("the loading screen offers Choose another version at 20 s: laid out from the start, inert until then, said once, never focused by itself", async ({ browser }) => {
+  for (const form of ["tv", "desktop"] as const) {
+    hold();
+    const { context, commands } = await patchedContext(browser, LOADING_PORT, { viewport: VIEWPORTS[form] }, (_view, s) => s);
+    const page = await context.newPage();
+    await page.clock.install();
+    await page.goto(`/play/movie/mqlo/mqlo?form=${form}`);
+    await mute(page);
+    await expect(page.locator(".ld.on")).toBeVisible({ timeout: 30_000 });
+    const button = page.locator('[data-f="player:another"]');
+    const said = page.locator('p.sr[aria-live="polite"]');
+    // The button's box and the stage line's top (the logo pulses gently and the stage words change, so only these).
+    const rects = () => page.evaluate(() => [JSON.stringify(document.querySelector("[data-f=\"player:another\"]")?.getBoundingClientRect()), document.querySelector(".ld-cap")?.getBoundingClientRect().top]);
+    const active = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? null);
+    // The logo in (it sizes the layer), then just before 20 s: its box is there before it shows,
+    // and what sits around it does not move when it appears.
+    await expect.poll(() => page.locator(".ld-logo.ld-solid").evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth > 0)).toBe(true);
+    await page.clock.fastForward(19_000);
+    const at = await rects();
+    await expect(button).toBeHidden();
+    expect(await button.evaluate((b) => (b as HTMLElement).inert)).toBe(true);
+    await expect(said).toHaveText("");
+    if (form === "tv") {
+      await page.keyboard.press("ArrowDown");
+      expect(await active()).not.toBe("player:another");
+    }
+    await page.clock.fastForward(1_500);
+    await expect(button).toBeVisible();
+    expect(await button.evaluate((b) => (b as HTMLElement).inert)).toBe(false);
+    await expect(said).toHaveText("Still loading. Choose another version is available");
+    // Nothing moved, and it did not take the focus.
+    expect(await rects()).toEqual(at);
+    expect(await active()).not.toBe("player:another");
+    const before = commands.length;
+    if (form === "tv") {
+      await page.keyboard.press("ArrowDown");
+      await expect.poll(active).toBe("player:another");
+      await page.keyboard.press("Enter");
+    } else await button.click();
+    await expect(page).toHaveURL(/\/versions\//);
+    // The attempt stops: the playback view is closed.
+    expect(commands.slice(before).some((c) => c.command === null)).toBe(true);
+    release();
+    await context.close();
+  }
 });

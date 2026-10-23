@@ -35,10 +35,41 @@ const sent: Msg[] = [];
 const NOTE_PREFS: Prefs["streams"] = { quality: "balanced", maxHeight: null, maxSizeBytes: null, languages: [], avoid: [], sizeLimitBytes: 5 * GiB, minSeeders: 50, hdr: true, preferReady: true, learn: true };
 
 // The words the core's states are said in (shared with Android and Apple).
-const choice = JSON.parse(readFileSync(new URL("../../shared/stream-choice-words.json", import.meta.url), "utf8")) as { nobodySharing: { text: string; details: string } };
+const choice = JSON.parse(readFileSync(new URL("../../shared/stream-choice-words.json", import.meta.url), "utf8")) as { nobodySharing: { text: string } };
 const shot = (page: Page, name: string, form: Form, fullPage = false) =>
   page.waitForTimeout(500).then(() => page.screenshot({ path: `${OUT}/${name}-${form}.jpg`, type: "jpeg", quality: 80, fullPage }));
 const focused = (page: Page) => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? null);
+/** The lowest WCAG contrast of a dimmed row's words on the page: each word's
+ * color with every opacity up to the row, laid on the page color. */
+const dimmedWords = (page: Page) =>
+  page.evaluate(() => {
+    type RGBA = [number, number, number, number];
+    const rgba = (c: string): RGBA => {
+      const [r = 0, g = 0, b = 0, a = 1] = (c.match(/[\d.]+/g) ?? []).map(Number);
+      return [r, g, b, a];
+    };
+    const lum = ([r, g, b]: RGBA) => {
+      const lin = (v: number) => (v / 255 <= 0.04045 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4);
+      return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    };
+    const probe = document.createElement("i");
+    probe.style.color = "var(--bg)";
+    document.body.append(probe);
+    const bg = rgba(getComputedStyle(probe).color);
+    probe.remove();
+    const row = [...document.querySelectorAll<HTMLElement>(".vrow.dim")].find((r) => r !== document.activeElement);
+    const words = [...(row?.querySelectorAll<HTMLElement>(".q, .chips span, .size, .lt") ?? [])].filter((el) => el.textContent?.trim());
+    if (!words.length) return 0;
+    return Math.min(
+      ...words.map((el) => {
+        const [r, g, b] = rgba(getComputedStyle(el).color);
+        let a = rgba(getComputedStyle(el).color)[3];
+        for (let n: HTMLElement | null = el; n && n !== row?.parentElement; n = n.parentElement) a *= Number(getComputedStyle(n).opacity);
+        const fg: RGBA = [r * a + bg[0] * (1 - a), g * a + bg[1] * (1 - a), b * a + bg[2] * (1 - a), 1];
+        return (Math.max(lum(fg), lum(bg)) + 0.05) / (Math.min(lum(fg), lum(bg)) + 0.05);
+      }),
+    );
+  });
 
 test.beforeEach(() => {
   sent.length = 0;
@@ -223,7 +254,8 @@ test.describe("Versions", () => {
   /** The first row, once every addon has answered. */
   async function firstRow(page: Page) {
     await expect(page.locator(".vrow .line").first()).toBeVisible({ timeout: 30_000 });
-    await expect(page.locator(".vstate .live")).toHaveCount(0, { timeout: 60_000 });
+    // Every addon answered: the header's status line is empty (it never names one).
+    await expect(page.locator(".vstatus")).toHaveText("", { timeout: 60_000 });
     return page.locator(".vrow").first();
   }
 
@@ -244,41 +276,53 @@ test.describe("Versions", () => {
     expect(ask).toMatchObject({ kind: "series", videoId: GOT.resume, network: "other" });
     expect(ask.runtime).toMatch(/\d+ min/);
     expect(ask.releaseInfo).toMatch(/^\d{4}/);
-    // The header is the core's conditions, in words.
-    await expect(page.locator(".vstate .device")).toHaveText(/^This TV: (4K|1080p|720p|SD)( HDR)?, this network, speed not measured yet$/);
+    // No device line on Versions (plans/versions-web-spec.md 3.1): the count, then the status line.
+    await expect(page.locator(".vstate")).toHaveText(/^\d+ versions?$/);
+    await expect(page.locator(".device")).toHaveCount(0);
+    await expect(page.locator(".versions-scr")).not.toContainText(/This TV:|speed not measured/);
   });
 
-  test("TV: a focused row shows its line's details under it, with the tone icon", async ({ browser }) => {
-    const page = await device(browser, "tv", PORTS.bridge);
+  /** The rects of rows 2 and 3: a details line that grew row 1 would move them (row 1 itself lifts on TV focus). */
+  const rects = (page: Page) => page.locator(".vrow").evaluateAll((rs) => rs.slice(1, 3).map((r) => JSON.stringify(r.getBoundingClientRect())));
+
+  test("TV: a focused row shows its details in its reserved line, with the tone icon; nothing moves", async ({ browser }) => {
+    const page = await device(browser, "tv", PORTS.bridge, { versions: longBest(10) });
     await page.goto(path("tv"));
     const row = await firstRow(page);
     await expect(row.locator(".line svg.tone")).toHaveCount(1);
+    const more = row.locator(".more");
+    await expect(more).toHaveCSS("opacity", "0");
+    const before = await rects(page);
+    expect(before).toHaveLength(2);
     await row.focus();
-    await expect(row.locator(".more .detail")).toBeVisible();
-    await expect(row.locator(".line .tip")).toBeHidden();
+    await expect(more).toHaveCSS("opacity", "1");
+    await expect(more).not.toHaveText("");
+    expect(await rects(page)).toEqual(before);
+    await expect(page.locator(".tip, .via")).toHaveCount(0);
     await shot(page, "stream-choice-versions", "tv");
   });
 
-  test("desktop: hovering a row shows its details in a tip", async ({ browser }) => {
-    const page = await device(browser, "desktop", PORTS.bridge);
+  test("desktop: hovering a row fades in its reserved details line, which is seen; nothing moves", async ({ browser }) => {
+    const page = await device(browser, "desktop", PORTS.bridge, { versions: longBest(10) });
     await page.goto(path("desktop"));
     const row = await firstRow(page);
-    const tip = row.locator(".line .tip");
-    await expect(tip).toBeHidden();
+    const more = row.locator(".more");
+    await expect(more).toHaveCSS("opacity", "0");
+    const before = await rects(page);
+    expect(before).toHaveLength(2);
     await row.hover();
-    await expect(tip).toBeVisible();
-    await expect.poll(() => tip.evaluate((t) => getComputedStyle(t).opacity)).toBe("1");
-    // The tip says what the TV's focus line says.
-    await expect(tip).toHaveText((await row.locator(".more .detail").textContent()) as string);
-    // It opens below its line, clear of the group's pinned heading above.
-    const at = await row.evaluate((r) => ({
-      tip: (r.querySelector(".line .tip") as HTMLElement).getBoundingClientRect().top,
-      line: (r.querySelector(".line") as HTMLElement).getBoundingClientRect().bottom,
-    }));
-    expect(at.tip).toBeGreaterThan(at.line);
-    // Via shows the source's whole name.
-    const via = row.locator(".via");
-    expect(await via.evaluate((v) => v.scrollWidth <= v.clientWidth)).toBe(true);
+    await expect.poll(() => more.evaluate((m) => getComputedStyle(m).opacity), { timeout: 2_000 }).toBe("1");
+    expect(await rects(page)).toEqual(before);
+    // Seen, not only laid out: the point at the line's middle is the line (not clipped by the
+    // row slot's paint skip), inside the viewport.
+    const seen = await more.evaluate((m) => {
+      const r = m.getBoundingClientRect();
+      const x = r.left + Math.min(r.width, 40) / 2;
+      const y = r.top + r.height / 2;
+      return { hit: document.elementFromPoint(x, y) === m, inside: r.top >= 0 && r.bottom <= innerHeight };
+    });
+    expect(seen).toEqual({ hit: true, inside: true });
+    await expect(page.locator(".tip, .via")).toHaveCount(0);
     await shot(page, "stream-choice-versions", "desktop");
   });
 
@@ -308,22 +352,25 @@ test.describe("Versions", () => {
     return rows.length && s.done ? { ...s, recommended: null, rows: [], blocked: { reason, count: rows.length, rows } } : s;
   };
 
-  test("blocked, nothing plays here: the card says why, and Show them lists the versions", async ({ browser }) => {
+  test("blocked, nothing plays here: the status line says why, the rows are listed dimmed, Back is the one action", async ({ browser }) => {
     for (const form of ["tv", "phone"] as const) {
       const page = await device(browser, form, PORTS.bridge, { versions: blockedAs("nothingPlaysHere") });
       await page.goto(path(form));
-      const card = page.locator(".pick .blocked");
-      await expect(card.locator("p")).toHaveText(/^Found \d+ versions?, but none plays on this device\.$/, { timeout: 60_000 });
-      await expect(page.locator(".vrow")).toHaveCount(0);
-      // The header counts what was found, not the empty list.
-      await expect(page.locator(".vstate .st").first()).not.toHaveText("0 versions");
-      const show = page.locator('[data-f="versions:show"]');
-      if (form === "tv") await expect.poll(() => focused(page)).toBe("versions:show");
+      await expect(page.locator(".vstatus")).toHaveText(/^Found \d+ versions?, but none plays on this device\.$/, { timeout: 60_000 });
+      // The header counts what was found.
+      await expect(page.locator(".vstate")).toHaveText(/^\d+ versions?$/);
+      await expect(page.locator(".vstate")).not.toHaveText("0 versions");
+      // The rows, dimmed, each still an attempt; no Show them, no second action.
+      await expect(page.locator(".vrow.dim").first()).toBeVisible();
+      // Dimmed by their icon and muted words, never an alpha: every word keeps 4.5:1.
+      expect(await dimmedWords(page)).toBeGreaterThanOrEqual(4.5);
+      await expect(page.locator('.vrow[aria-disabled="true"]')).toHaveCount(0);
+      await expect(page.locator('[data-f="versions:show"]')).toHaveCount(0);
+      await expect(page.locator(".pick .blocked .btn")).toHaveCount(1);
+      await expect(page.locator('.pick .blocked [data-f="versions:back"]')).toHaveText("Back");
+      if (form === "tv") await expect.poll(() => focused(page)).toBe("versions:back");
       await shot(page, "stream-choice-blocked", form);
-      await show.click();
-      await expect(show).toHaveAttribute("aria-expanded", "true");
-      await expect(page.locator(".vrow").first()).toBeVisible();
-      // The player sends this reason to Versions, where Show them is: no account to add.
+      // The player sends this reason to Versions: no account to add.
       await page.goto(`/play/series/${GOT.id}/${GOT.resume}?form=${form}`);
       await expect(page.locator(".player-scr")).toContainText("none plays on this device", { timeout: 60_000 });
       await expect(page.locator('[data-f="player:account"]')).toHaveCount(0);
@@ -332,46 +379,52 @@ test.describe("Versions", () => {
     }
   });
 
-  test("blocked, needs an account (the core's own answer): words, Add an account and Show them, on Versions, Title and the player", async ({ browser }) => {
+  test("blocked, needs an account (the core's own answer): the line, Settings and Back, the rows dimmed, on Versions and the player", async ({ browser }) => {
     // Only Torrentio lists S1:E1, and this build has no engine and no
     // account: the core blocks every row (no answer is changed here).
     const page = await device(browser, "desktop", PORTS.bridge);
     await page.goto(`/title/series/${GOT.id}/versions/${GOT.id}:1:1?form=desktop`);
-    const card = page.locator(".pick .blocked");
-    await expect(card.locator("p")).toHaveText(
+    await expect(page.locator(".vstatus")).toHaveText(
       /^Marquee found \d+ versions?\. This version of the app plays them only through a streaming service account \(Real-Debrid, TorBox, AllDebrid or Premiumize\)\. Add one in Settings\.$/,
       { timeout: 60_000 },
     );
-    await expect(page.locator(".vstate .st").first()).toHaveText(/^\d+ versions?$/);
-    await expect(page.locator(".vstate .st").first()).not.toHaveText("0 versions");
-    const account = page.locator('[data-f="versions:account"]');
-    await expect(account).toHaveText("Add an account");
-    await expect(account).toHaveAttribute("href", "/debrid");
-    await expect(page.locator(".vrow")).toHaveCount(0);
+    await expect(page.locator(".vstate")).toHaveText(/^\d+ versions?$/);
+    await expect(page.locator(".vstate")).not.toHaveText("0 versions");
+    // Settings (the accounts screen), then Back; never "Add an account" or "Show them".
+    const settings = page.locator('[data-f="versions:settings"]');
+    await expect(settings).toHaveText("Settings");
+    await expect(settings).toHaveAttribute("href", "/debrid");
+    await expect(page.locator(".pick .blocked .btn")).toHaveText(["Settings", "Back"]);
+    await expect(page.locator(".versions-scr")).not.toContainText(/Add an account|Show them/);
+    // The versions as they would rank with an account, listed dimmed; they cannot be started here.
+    const row = page.locator(".vrow").first();
+    await expect(row).toHaveAttribute("aria-disabled", "true");
+    await expect(row).toHaveClass(/\bdim\b/);
+    const url = page.url();
+    await row.dispatchEvent("click");
+    await page.waitForTimeout(300);
+    expect(page.url()).toBe(url);
     await shot(page, "stream-choice-account", "desktop");
-    // Show them: the versions as they would rank with an account, each with its line.
-    await page.locator('[data-f="versions:show"]').click();
-    await expect(page.locator(".vrow .line").first()).toBeVisible();
-    await shot(page, "stream-choice-account-shown", "desktop");
     // A film with only Torrentio versions: Title's primary leads to the account.
     await page.goto(`/title/movie/${SHAWSHANK}?form=desktop`);
     await expect(page.locator('[data-f="title:addaccount"]')).toHaveText("Add an account", { timeout: 60_000 });
     await expect(page.locator(".vline")).toContainText("only through a streaming service account");
-    // The player, opened straight (a deep link), says the same (no playback is opened), and
-    // Add an account leads to the accounts screen, with Choose a version beside it.
+    // The player, opened straight (a deep link), says the same (no playback is opened): Settings,
+    // then Back, never "Add an account" (accounts live in Settings).
     await page.goto(`/play/movie/${SHAWSHANK}/${SHAWSHANK}?form=desktop`);
     await expect(page.locator(".player-scr")).toContainText("only through a streaming service account", { timeout: 60_000 });
-    const add = page.locator('[data-f="player:account"]');
-    await expect(add).toHaveText("Add an account");
-    await expect(add).toHaveAttribute("href", "/debrid");
-    await expect(page.locator('[data-f="player:versions"]')).not.toHaveClass(/\bprimary\b/);
-    await add.click();
+    const open = page.locator('[data-f="player:settings"]');
+    await expect(open).toHaveText("Settings");
+    await expect(open).toHaveAttribute("href", "/debrid");
+    await expect(page.locator(".endcard .acts .btn")).toHaveText(["Settings", "Back"]);
+    await expect(page.locator('[data-f="player:account"], [data-f="player:versions"]')).toHaveCount(0);
+    await open.click();
     await expect(page).toHaveURL(/\/debrid/);
     await page.context().close();
     // TV: the remote starts on it, and select opens the accounts screen.
     const tv = await device(browser, "tv", PORTS.bridge);
     await tv.goto(`/play/movie/${SHAWSHANK}/${SHAWSHANK}?form=tv`);
-    await expect.poll(() => focused(tv), { timeout: 60_000 }).toBe("player:account");
+    await expect.poll(() => focused(tv), { timeout: 60_000 }).toBe("player:settings");
     await tv.keyboard.press("Enter");
     await expect(tv).toHaveURL(/\/debrid/);
     await tv.context().close();
@@ -410,11 +463,11 @@ test.describe("Versions", () => {
       await expect.poll(() => started(before), { timeout: 30_000 }).toBe(true);
       await disconnect(other);
       await other.context().close();
-      // From the card: Add an account, a key, and Back to the play, which starts.
+      // From the card: Settings, a key, and Back to the play, which starts.
       await page.goto(film);
       await expect(screen).toContainText("only through a streaming service account", { timeout: 60_000 });
       const again = sent.length;
-      await page.locator('[data-f="player:account"]').click();
+      await page.locator('[data-f="player:settings"]').click();
       await expect(page).toHaveURL(/\/debrid/);
       await connect(page);
       await page.goBack();
@@ -428,37 +481,110 @@ test.describe("Versions", () => {
     }
   });
 
-  test("almost nobody sharing is said once: on the card before Play, over the list only with no card", async ({ browser }) => {
-    const words = `${choice.nobodySharing.text}${choice.nobodySharing.details}`;
+  test("almost nobody sharing draws no bar anywhere: the why line says it when it is the reason", async ({ browser }) => {
+    const words = choice.nobodySharing.text;
     for (const form of ["desktop", "phone"] as const) {
       const page = await device(browser, form, PORTS.bridge, { versions: (s) => ({ ...s, nobodySharing: true }) });
       await page.goto(path(form));
       await firstRow(page);
-      const card = page.locator(".pick .nobody");
-      await expect(card).toHaveText(words);
-      await expect(card).toHaveAttribute("role", "status");
-      // Said before Play: the line comes right before the button.
-      await expect(page.locator('.pick .nobody + [data-f="versions:play"]')).toHaveCount(1);
-      // Once per screen: not over the list as well.
-      await expect(page.locator(".nobody")).toHaveCount(1);
-      await shot(page, "stream-choice-nobody-sharing", form);
+      await expect(page.locator(".nobody")).toHaveCount(0);
+      await expect(page.locator(".versions-scr")).not.toContainText(words);
       await page.context().close();
     }
-    // No recommended card: the list says it, once.
     const listOnly = await device(browser, "desktop", PORTS.bridge, { versions: (s) => ({ ...s, nobodySharing: true, recommended: null }) });
     await listOnly.goto(path("desktop"));
     await firstRow(listOnly);
-    await expect(listOnly.locator(".alts .lnote.nobody")).toHaveText(words);
-    await expect(listOnly.locator(".alts .lnote.nobody")).toHaveAttribute("role", "status");
-    await expect(listOnly.locator(".nobody")).toHaveCount(1);
+    await expect(listOnly.locator(".nobody")).toHaveCount(0);
     await listOnly.context().close();
-    // This core has no engine, so no live counts: it never says so.
-    const plain = await device(browser, "desktop", PORTS.bridge);
-    await plain.goto(path("desktop"));
-    await firstRow(plain);
-    await expect(plain.locator(".pick h2")).toBeVisible();
-    await expect(plain.locator(".nobody")).toHaveCount(0);
-    await plain.context().close();
+  });
+
+  /** The core's list with `n` rows in the "best" section and 40 in "smallerFaster" (copies of its first row, each its own key). */
+  const longBest = (n: number) => (s: VersionsSnapshot): VersionsSnapshot => {
+    const first = s.rows[0] ?? s.recommended;
+    if (!first || !s.done) return s;
+    const copy = (g: "best" | "smallerFaster", k: number) => Array.from({ length: k }, (_, i) => ({ ...first, key: `${first.key}#${g}${i}`, group: g }));
+    return { ...s, rows: [...copy("best", n), ...copy("smallerFaster", 40)] };
+  };
+
+  test("TV: a long open section is left by Left to its heading's Show fewer, then Left to Play; folding keeps the toggle in place", async ({ browser }) => {
+    const page = await device(browser, "tv", PORTS.bridge, { versions: longBest(100) });
+    // Stand in for Safari, which has no scroll anchoring: the page must place the toggle itself.
+    await page.addInitScript(() => document.addEventListener("DOMContentLoaded", () => {
+      const s = document.createElement("style");
+      s.textContent = "* { overflow-anchor: none !important; }";
+      document.head.append(s);
+    }));
+    await page.goto(path("tv"));
+    await firstRow(page);
+    // The section below open too, so the list stays long after a fold (no clamp hides a jump).
+    await page.locator('[data-f="fold:smallerFaster"]').dispatchEvent("click");
+    await expect(page.locator('[data-group="smallerFaster"] .vrow')).toHaveCount(40);
+    // Show all opens the section with the focus on its first row that was hidden.
+    await page.locator('[data-f="fold:best"]').focus();
+    await page.keyboard.press("Enter");
+    const fourth = await page.locator('[data-group="best"] .vrow').nth(3).getAttribute("data-f");
+    await expect.poll(() => focused(page)).toBe(fourth);
+    // Row 50: Left goes to the heading's Show fewer, Left again to Play.
+    const row50 = page.locator('[data-group="best"] .vrow').nth(49);
+    await row50.focus();
+    await page.keyboard.press("ArrowLeft");
+    await expect.poll(() => focused(page)).toBe("foldtop:best");
+    await page.keyboard.press("ArrowLeft");
+    await expect.poll(() => focused(page)).toBe("versions:play");
+    // Row 50 again: Left, then OK folds it (two presses). The heading stays where it was (no jump,
+    // whatever the browser's scroll anchoring) and the bottom toggle, focused, is in view under it.
+    await row50.focus();
+    await page.keyboard.press("ArrowLeft");
+    const heading = page.locator('[data-group="best"] .vghead');
+    const top = await heading.evaluate((e) => e.getBoundingClientRect().top);
+    await page.keyboard.press("Enter");
+    await expect.poll(() => focused(page)).toBe("fold:best");
+    await expect(page.locator('[data-group="best"] .vrow')).toHaveCount(3);
+    expect(Math.abs((await heading.evaluate((e) => e.getBoundingClientRect().top)) - top)).toBeLessThanOrEqual(1);
+    await expect(page.locator('[data-f="fold:best"]')).toBeInViewport();
+    await page.context().close();
+  });
+
+  test("desktop: Home from a row of an open section goes to its Show fewer; the heading keeps its name", async ({ browser }) => {
+    const page = await device(browser, "desktop", PORTS.bridge, { versions: longBest(20) });
+    await page.goto(path("desktop"));
+    await firstRow(page);
+    await page.locator('[data-f="fold:best"]').click();
+    await expect(page.locator('[data-f="foldtop:best"]')).toHaveAccessibleName("Show fewer Best quality versions");
+    await expect(page.locator("#vg-best")).toHaveText(/^Best quality\s*20$/);
+    await page.locator('[data-group="best"] .vrow').nth(12).focus();
+    await page.keyboard.press("Home");
+    await expect.poll(() => focused(page)).toBe("foldtop:best");
+    await page.context().close();
+  });
+
+  test("a version in another language than the viewer's shows a chip naming it", async ({ browser }) => {
+    const other = (s: VersionsSnapshot): VersionsSnapshot =>
+      s.rows.length ? { ...s, rows: s.rows.map((r, i) => (i === 0 ? { ...r, group: "otherLanguages" as const, languages: ["spa"] } : r)) } : s;
+    const page = await device(browser, "desktop", PORTS.bridge, { versions: other });
+    await page.goto(path("desktop"));
+    await firstRow(page);
+    await expect(page.locator('[data-group="otherLanguages"] .vrow .chips .lang').first()).toHaveText("Spanish");
+    await expect(page.locator('[data-group="best"] .vrow .chips .lang')).toHaveCount(0);
+    await page.context().close();
+  });
+
+  test("the paint skip sits on a padded slot, never on the row: the focus ring is never clipped", async ({ browser }) => {
+    for (const form of ["tv", "desktop"] as const) {
+      const page = await device(browser, form, PORTS.bridge);
+      await page.goto(path(form));
+      const row = await firstRow(page);
+      const css = await row.evaluate((r) => {
+        const slot = r.parentElement as HTMLElement;
+        const s = getComputedStyle(slot);
+        return { slot: s.contentVisibility, row: getComputedStyle(r).contentVisibility, pad: Math.min(...["paddingTop", "paddingBottom", "paddingLeft", "paddingRight"].map((k) => Number.parseFloat(s[k as "paddingTop"]))) };
+      });
+      expect(css.slot).toBe("auto");
+      expect(css.row).not.toBe("auto");
+      // At least the 4 px ring (and on TV the row's 1.03 lift sideways).
+      expect(css.pad).toBeGreaterThanOrEqual(4);
+      await page.context().close();
+    }
   });
 
   test("the learning note shows once with Undo, which mutes that choice", async ({ browser }) => {

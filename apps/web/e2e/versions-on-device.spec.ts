@@ -37,12 +37,12 @@ test("the version this device holds says so: the row's line with no stale warnin
     if (which === "none") {
       // The warning and its details, as the core sent them.
       await expect(row.locator(".st.line .lt")).not.toHaveText("On this device");
-      await expect(row.locator(".more .detail")).toHaveCount(1);
+      await expect(row.locator(".more")).toContainText("2 seeders");
       await expect(reasons).toHaveCount(3);
     } else if (which === "row") {
       await expect(row.locator(".st.line .lt")).toHaveText("On this device");
       // The words that stand for the warning take its details with them.
-      await expect(row.locator(".more .detail")).toHaveCount(0);
+      await expect(row.locator(".more")).not.toContainText("seeders");
       await expect(page.locator(".why li", { hasText: /^On this device$/ })).toHaveCount(0);
     } else {
       await expect(page.locator(".why li").first()).toHaveText("On this device");

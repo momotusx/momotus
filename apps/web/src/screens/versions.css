@@ -12,8 +12,9 @@
 .vhead h1 { font: 800 var(--type-title1) / 1.05 var(--font-display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .vhead h1 span { font: 400 var(--type-headline) var(--font-text); color: var(--muted); margin-left: 18px; }
 .vstate { display: flex; align-items: center; gap: 36px; flex: none; font: 500 var(--type-caption) / 1 var(--font-text); color: var(--muted); }
-.vstate .device { display: inline-flex; align-items: center; gap: 10px; }
-.vstate svg { width: 26px; height: 26px; }
+/* The header's one status line: its height reserved from the first paint, empty when there is nothing to say. */
+.vstatus { min-height: calc(var(--type-callout) * 1.3); margin-top: 10px; font: 400 var(--type-callout) / 1.3 var(--font-text); color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dot.live, .live .dot { animation: pulse 2.4s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .dot.live, .live .dot { animation: none; } }
@@ -33,91 +34,73 @@
 .pick .btn { margin: 32px 0 14px; }
 .fail { display: flex; align-items: center; gap: 10px; font: 400 var(--type-caption) / 1.3 var(--font-text); color: var(--muted); }
 .fail svg { width: 24px; height: 24px; }
-/* Blocked (3.11): the card says why nothing is listed, with its one action. */
-.pick .blocked { display: grid; justify-items: start; gap: 18px; }
-.pick .blocked h2 { margin: 0; font: 800 var(--type-title3) / 1.1 var(--font-display); }
-.pick .blocked p { font: 400 var(--type-callout) / 1.4 var(--font-text); color: var(--muted); }
-.pick .blocked .btn { margin: 14px 0 0; }
-.pick .blocked .acts { display: flex; flex-wrap: wrap; gap: 0 16px; }
-/* The learning note (3.9): one line over the list, with Undo. */
-.lnote { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; padding: 12px 14px 12px 22px; border-radius: var(--radius-m);
+/* Nothing plays (the shared table): the line is the header's status line; here, the state's actions. */
+.pick .blocked.acts { display: flex; flex-wrap: wrap; gap: 0 16px; }
+.pick .blocked .btn { margin: 0; }
+/* The learning note (3.9): one line under the sections, with Undo. */
+.lnote { display: flex; align-items: center; gap: 16px; margin-top: 18px; padding: 12px 14px 12px 22px; border-radius: var(--radius-m);
   background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); font: 500 var(--type-callout) / 1.35 var(--font-text); }
 .lnote > svg { width: 28px; height: 28px; flex: none; }
 .lnote > span { flex: 1; min-width: 0; }
 .lnote .btn { flex: none; height: 56px; padding: 0 22px; gap: 10px; font-size: var(--type-callout); }
 .lnote .btn svg { width: 24px; height: 24px; }
 [data-form="tv"] .lnote .btn:focus { transform: scale(var(--focus-scale-card)); }
-/* Almost nobody is sharing (the core's nobodySharing): on the card before Play, and over the list. */
-.nobody { display: flex; align-items: flex-start; gap: 14px; }
-.nobody > svg { width: 28px; height: 28px; flex: none; color: var(--warn); }
-.nobody > span { display: grid; gap: 4px; }
-.nobody b { font: 600 var(--type-callout) / 1.3 var(--font-text); color: var(--text); }
-.nobody small { font: 400 var(--type-caption) / 1.35 var(--font-text); color: var(--muted); }
-.pick .nobody { margin-top: 22px; }
 .pick-wait { display: grid; gap: 18px; width: 100%; }
 .pick-wait .skel { height: 64px; border-radius: var(--radius-m); }
 .pick-wait .skel:first-of-type { height: 90px; width: 70%; margin-top: 14px; }
 
 .alts { position: absolute; left: 740px; right: var(--safe-side); top: 232px; bottom: var(--safe-bottom); display: flex; flex-direction: column; }
-/* Via is wide enough for an addon's or a service's full name ("Sample
- * Source", "Real-Debrid"); the features column gives the room. */
-.thead, .vrow { display: grid; grid-template-columns: 128px minmax(0, 1fr) 124px 290px 210px; align-items: center; column-gap: 16px; }
+.thead, .vrow { display: grid; grid-template-columns: 128px minmax(0, 1fr) 124px 290px; align-items: center; column-gap: 16px; }
 .thead { padding: 0 22px 12px; font: 600 var(--type-caption) / 1 var(--font-text); letter-spacing: .08em; text-transform: uppercase;
   color: var(--muted); border-bottom: 2px solid var(--line); }
 .alist { flex: 1; min-height: 0; margin: 0 -36px; padding: 6px 36px 64px; }
 .vgroup { scroll-margin-top: 12px; }
 /* Group headers stay pinned while their rows scroll, so every group always
- * shows its label. */
-.vgroup h3 { position: sticky; top: 0; z-index: 4; display: flex; justify-content: space-between; margin: 16px 0 10px; padding: 12px 22px; border-radius: 10px; background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge);
-  font: 600 var(--type-caption) / 1 var(--font-text); letter-spacing: .1em; text-transform: uppercase; }
+ * shows its label; an open group's holds Show fewer. */
+.vghead { position: sticky; top: 0; z-index: 4; display: flex; align-items: center; gap: 16px; margin: 16px 0 10px; padding: 0 12px 0 22px; min-height: 52px; border-radius: 10px;
+  background: var(--surface); }
+.vgroup h3 { flex: 1; display: flex; justify-content: space-between; font: 600 var(--type-caption) / 1 var(--font-text); letter-spacing: .1em; text-transform: uppercase; }
 .vgroup h3 .num { color: var(--muted); }
+.vghead .fold.top { margin: 0; height: 44px; }
+/* The paint skip sits on a padded slot around each row, so the focus ring and
+ * the TV lift (scale 1.03 of the row) are never clipped; its negative margin
+ * keeps the rows where they were. */
+.vslot { content-visibility: auto; contain-intrinsic-size: auto 104px; padding: 6px 24px; margin: -6px -24px; }
+.vslot:focus-within { position: relative; z-index: 1; }
 .vrow { width: 100%; min-height: 64px; padding: 10px 22px; border-radius: var(--radius-m); border-bottom: 1px solid var(--line);
   font: 500 var(--type-callout) / 1.25 var(--font-text); transform-origin: center; }
 .vrow .q { font: 700 var(--type-body) var(--font-text); }
 .vrow .q.unknown { font: 500 var(--type-caption) / 1.2 var(--font-text); color: var(--muted); }
 .vrow .chips { display: flex; gap: 6px; min-width: 0; overflow: hidden; }
 .vrow .chips span { font: 600 var(--type-caption) / 1 var(--font-text); padding: 5px 8px; border-radius: var(--radius-s); box-shadow: inset 0 0 0 2px var(--line); white-space: nowrap; }
+.vrow .chips .lang { color: var(--muted); }
+/* A blocked list (the shared table's rows listed dimmed): the words drop to muted (4.5:1 or more) and the
+ * tone icon fades; never an alpha on the words. Focus shows the row whole. */
+.vrow.dim:not(:focus), .vrow.dim:not(:focus) :is(.size, .st.line) { color: var(--muted); }
+.vrow.dim:not(:focus) .tone { opacity: .5; }
+.vrow[aria-disabled="true"] { cursor: default; }
 .vrow .size { color: var(--text); }
 .vrow .st { font-size: var(--type-caption); color: var(--muted); white-space: nowrap; overflow: hidden; }
-.vrow .via { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.vrow .more { display: none; grid-column: 2 / -1; margin-top: 10px; }
-.vrow .more .rel { display: block; font: 400 var(--type-caption) / 1.4 var(--font-mono); color: var(--text); }
-.vrow .more .sub { display: block; margin-top: 6px; font: 400 var(--type-caption) / 1.3 var(--font-text); color: var(--muted); }
+/* The details line, reserved in every row: focus or hover changes only its opacity (instant on TV, after a rest on hover). */
+.vrow .more { grid-column: 2 / -1; margin-top: 8px; font: 400 var(--type-caption) / 1.3 var(--font-text); color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0; }
 [data-form="tv"] .vrow:focus { border-bottom-color: transparent; transform: scale(var(--focus-scale-tile)); }
-.vrow:focus-visible .more, [data-form="tv"] .vrow:focus .more { display: block; }
+.vrow:focus-visible .more, [data-form="tv"] .vrow:focus .more { opacity: 1; }
+@media (hover: hover) { [data-form="desktop"] .vrow:hover .more { opacity: 1; transition: opacity var(--motion-focus) var(--ease) 280ms; } }
 @media (hover: hover) { [data-form="desktop"] .vrow:hover { background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); } }
 /* The line (3.7): a tone icon, its shape never color alone, and the words,
- * up to two lines. Its details: under the row on focus (.more), in a glass
- * tip on hover (desktop), in the opened row on a tap (phone). */
-.vrow .st.line { position: relative; align-items: flex-start; gap: 12px; overflow: visible; white-space: normal; color: var(--text); }
+ * one line. Its details: the row's reserved line (TV, desktop), the opened row (phone). */
+.vrow .st.line { position: relative; display: flex; align-items: center; gap: 12px; min-width: 0; color: var(--text); }
 .vrow .line .tone { width: 28px; height: 28px; flex: none; }
 .line.ok .tone { color: var(--ok); }
 .line.warn .tone { color: var(--warn); }
 .line.bad .tone { color: var(--bad); }
-.vrow .line .lt { min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; line-height: 1.22; }
-.vrow .more .detail { display: block; margin-bottom: 8px; font: 500 var(--type-callout) / 1.3 var(--font-text); color: var(--text); }
-/* Below the line, never over the group's pinned heading above the row. */
-.line .tip { position: absolute; z-index: 6; left: -16px; top: calc(100% + 10px); width: max-content; max-width: 480px; padding: 12px 16px;
-  border-radius: var(--radius-m); background: var(--glass-strong); -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight), var(--glass-shadow);
-  font: 500 var(--type-caption) / 1.35 var(--font-text); color: var(--text); text-align: left; pointer-events: none;
-  opacity: 0; visibility: hidden; transform: translateY(-4px);
-  transition: opacity var(--motion-focus) var(--ease), transform var(--motion-focus) var(--ease), visibility 0s linear var(--motion-focus); }
-/* A short rest before it shows, so a pointer passing over rows does not flash tips. */
-@media (hover: hover) {
-  [data-form="desktop"] .vrow:hover .line .tip { opacity: 1; visibility: visible; transform: none; transition-delay: 280ms, 280ms, 280ms; }
-}
-/* Keyboard focus shows the details under the row instead. */
-.vrow:focus-visible .line .tip, [data-form="tv"] .line .tip, [data-form="phone"] .line .tip { display: none; }
+.vrow .line .lt { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.22; }
 .fold { display: inline-flex; align-items: center; gap: 12px; height: 54px; margin-top: 6px; padding: 0 22px; border-radius: 27px;
   font: 600 var(--type-caption) / 1 var(--font-text); color: var(--muted); }
 .fold svg { width: 24px; height: 24px; transition: transform var(--motion-focus) var(--ease); }
 .fold[aria-expanded="true"] svg { transform: rotate(180deg); }
 [data-form="tv"] .fold:focus { color: var(--text); }
-.hidden-row { display: flex; align-items: center; gap: 16px; margin-top: 18px; padding: 16px 22px; border-radius: var(--radius-m); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge);
-  font: 400 var(--type-caption) / 1.3 var(--font-text); color: var(--muted); }
-.hidden-row b { font: 600 var(--type-callout) var(--font-text); color: var(--text); white-space: nowrap; }
-.hidden-row svg { width: 26px; height: 26px; color: var(--text); flex: none; }
 .alist-wait { display: grid; gap: 8px; margin-top: 16px; }
 .alist-wait .skel { height: 64px; border-radius: var(--radius-m); }
 .vempty { position: absolute; left: var(--safe-side); right: var(--safe-side); top: 260px; }
@@ -133,7 +116,7 @@
 [data-form="phone"] .vhead h1 { white-space: normal; }
 [data-form="phone"] .vhead h1 span { display: block; margin: 4px 0 0; font-size: 15px; }
 [data-form="phone"] .vstate { gap: 14px; flex-wrap: wrap; }
-[data-form="phone"] .vstate svg { width: 16px; height: 16px; }
+[data-form="phone"] .vstatus { font-size: 14px; margin-top: 6px; }
 [data-form="phone"] .pick { margin-top: 16px; padding: 18px; border-radius: 16px; }
 [data-form="phone"] .pick h2 { margin: 8px 0 10px; }
 [data-form="phone"] .why svg { width: 18px; height: 18px; }
@@ -143,27 +126,22 @@
 [data-form="phone"] .thead { display: none; }
 [data-form="phone"] .alist { margin: 0; padding: 0; overflow: visible; }
 /* The quality starts on the first line with the size, not floating mid-row. */
-[data-form="phone"] .vrow { grid-template-columns: 56px minmax(0, 1fr) auto; grid-template-areas: "q chips size" "q st st" "q via via"; align-items: start; row-gap: 4px; padding: 10px 8px; }
+[data-form="phone"] .vrow { grid-template-columns: 56px minmax(0, 1fr) auto; grid-template-areas: "q chips size" "q st st"; align-items: start; row-gap: 4px; padding: 10px 8px; }
 [data-form="phone"] .vrow .q { grid-area: q; font-size: 15px; }
 [data-form="phone"] .vrow .chips { grid-area: chips; }
 [data-form="phone"] .vrow .size { grid-area: size; }
 [data-form="phone"] .vrow .st { grid-area: st; }
-[data-form="phone"] .vrow .via { grid-area: via; font-size: 13px; }
 [data-form="phone"] .vrow .chips span { padding: 3px 6px; font-size: 11px; }
 [data-form="phone"] .vrow .more { display: none; }
-[data-form="phone"] .vgroup h3 { padding: 8px 10px; margin: 14px 0 4px; }
+[data-form="phone"] .vghead { padding: 0 6px 0 10px; margin: 14px 0 4px; min-height: 36px; }
+[data-form="phone"] .vslot { contain-intrinsic-size: auto 66px; padding: 4px 8px; margin: -4px -8px; }
 [data-form="phone"] .fold { height: 40px; padding: 0 8px; }
-[data-form="phone"] .hidden-row { flex-wrap: wrap; gap: 8px; padding: 12px; }
-[data-form="phone"] .pick .blocked { gap: 10px; }
-[data-form="phone"] .pick .blocked .btn { margin: 6px 0 0; width: 100%; justify-content: center; }
-[data-form="phone"] .pick .blocked .acts { display: grid; gap: 8px; width: 100%; }
+[data-form="phone"] .pick .blocked.acts { display: grid; gap: 8px; width: 100%; }
+[data-form="phone"] .pick .blocked .btn { width: 100%; justify-content: center; }
 [data-form="phone"] .lnote { flex-wrap: wrap; gap: 8px 10px; margin-bottom: 12px; padding: 10px 12px; font-size: 14px; }
 [data-form="phone"] .lnote > svg { width: 18px; height: 18px; }
 [data-form="phone"] .lnote .btn { height: 36px; padding: 0 14px; font-size: 14px; }
 [data-form="phone"] .lnote .btn svg { width: 16px; height: 16px; }
-[data-form="phone"] .nobody > svg { width: 18px; height: 18px; }
-[data-form="phone"] .nobody b { font-size: 14px; }
-[data-form="phone"] .nobody small { font-size: 12px; }
 [data-form="phone"] .vrow .line .tone { width: 16px; height: 16px; margin-top: 1px; }
 [data-form="phone"] .vrow .st.line { gap: 6px; font-size: 13px; }
 /* A tapped row opens into one card with its details and Play. */
@@ -175,12 +153,10 @@
 [data-form="phone"] .vrow-open .btn { height: 40px; margin-top: 6px; padding: 0 16px; gap: 8px; font-size: 15px; }
 [data-form="phone"] .vrow-open .btn svg { width: 16px; height: 16px; }
 
-.alist { -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 48px), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 48px), transparent); }
-/* A focused row (or a group that fits) stays clear of the 48 px fade; the
- * trailing padding lets the last row get there. */
+/* No fade mask on the list (a mask on a scroller is a live pass every frame). */
 .alist [data-row] { scroll-margin: 12px 0 64px; }
 /* A focused row also clears its group's pinned heading (47 px), its own
  * ring (8 px) and the growth of its focus scale, which its details make
  * taller: 64 px above it. */
 .alist [data-f] { scroll-margin: 64px 0 64px; }
-[data-form="phone"] .alist { -webkit-mask-image: none; mask-image: none; }
+

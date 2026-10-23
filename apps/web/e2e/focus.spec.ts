@@ -63,7 +63,7 @@ test("TV: rows of a group taller than the list clear its pinned heading and the 
   const first = page.locator(".vrow").first();
   await expect(first).toBeVisible({ timeout: 30_000 });
   // Every addon has answered, so the list no longer changes under the copies.
-  await expect(page.locator(".vstate .live")).toHaveCount(0, { timeout: 60_000 });
+  await expect(page.locator(".vstatus")).toHaveText("", { timeout: 60_000 });
   // Live groups hold a row or two: copies of the first row make its group
   // taller than the list. Focus and scrolling read the DOM, not the data.
   await first.evaluate((row) => {

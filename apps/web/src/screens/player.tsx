@@ -5,7 +5,6 @@ import Captions from "lucide-solid/icons/captions";
 import Check from "lucide-solid/icons/check";
 import CircleAlert from "lucide-solid/icons/circle-alert";
 import Gauge from "lucide-solid/icons/gauge";
-import KeyRound from "lucide-solid/icons/key-round";
 import Layers from "lucide-solid/icons/layers";
 import ListVideo from "lucide-solid/icons/list-video";
 import LoaderCircle from "lucide-solid/icons/loader-circle";
@@ -16,6 +15,7 @@ import Play from "lucide-solid/icons/play";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import RotateCcw from "lucide-solid/icons/rotate-ccw";
 import RotateCw from "lucide-solid/icons/rotate-cw";
+import Settings from "lucide-solid/icons/settings";
 import SkipForward from "lucide-solid/icons/skip-forward";
 import Volume2 from "lucide-solid/icons/volume-2";
 import VolumeX from "lucide-solid/icons/volume-x";
@@ -42,7 +42,7 @@ import { bytes, clock, decoded, startsText, episodeLabel, groupFailures, playPat
 import { DELAY_SETTLE_MS } from "../lib/delay";
 import { bufferShare, loadingLines, STALL_AHEAD_S, startFill } from "../lib/loading";
 import { fileChoice, offSummary, pickerLanguages, startOption } from "../lib/subtitles";
-import { blockedWords, choiceWords, languageName, nextVersion, noVersionWords, qualityCell, qualityText, restartLine, subtitleNote } from "../lib/words";
+import { blockedWords, languageName, nextVersion, noVersionWords, qualityCell, qualityText, restartLine, subtitleNote, versionsWords } from "../lib/words";
 import "./player.css";
 
 const SPEEDS = [1, 1.25, 1.5, 2, 0.75];
@@ -52,6 +52,8 @@ const PROGRESS_MS = 5000;
 const NEXT_AT = 20;
 // A wait for data this long after the first frame is a stall (a seek's short wait is not).
 const STALL_MS = 500;
+/** How long the loading screen waits before it offers another version (plans/play-every-version.md 2e). */
+const ANOTHER_MS = 20_000;
 // The profile's subtitle sizes in order, as the picker steps them.
 const SIZES: { size: SubtitleSize; text: string }[] = [
   { size: "small", text: "80%" },
@@ -723,22 +725,22 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     if (s) void op("setPrefs", { patch: { subtitleSize: s.size } }).catch(() => undefined);
   };
   const pct = (x: number) => `${duration() ? Math.min(100, (x / duration()) * 100) : 0}%`;
-  // The failure card's Choose a version: the way on when nothing else is (primary and focused then).
-  // Every version needs a streaming service account: adding one comes first,
-  // as on the title page and in Versions; Choose a version stays beside it.
-  const needsAccount = () => !status()?.busy && versions()?.blocked?.reason === "needsAccount";
+  // The failure card's way to Versions (the plan's shared Step 3 table): "Choose another version"
+  // after a failure, "Choose a version" when nothing plays; primary and focused when nothing else is. Every version needing a streaming account offers Settings instead: never "Add an
+  // account" (accounts live in Settings).
+  const blockedHere = () => (!status()?.busy ? (versions()?.blocked?.reason ?? null) : null);
   const chooseVersion = () => (
     <A
       class="btn big"
-      classList={{ primary: !snap()?.offer && !failed() && !needsAccount() }}
+      classList={{ primary: !snap()?.offer && !failed() }}
       href={versionsPath(props.kind, props.id, props.videoId)}
       replace
       on:click={toVersions}
       data-f="player:versions"
-      data-autofocus={snap()?.offer || failed() || needsAccount() ? undefined : ""}
+      data-autofocus={snap()?.offer || failed() ? undefined : ""}
     >
       <Layers aria-hidden />
-      Choose a version
+      {failed() || openError() ? nextVersion.another : "Choose a version"}
     </A>
   );
   const status = (): { tone: string; text: string; detail?: string; note?: string; busy: boolean } | null => {
@@ -766,13 +768,13 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     const vs = versions();
     if (vs?.blocked) return { tone: "bad", text: blockedWords(vs.blocked.reason, vs.blocked.count, vs.conditions.window).text, busy: false };
     if (vs?.done && !vs.recommended && !vs.rows.length) return { tone: "bad", text: noVersionWords.title, detail: noVersionWords.detail, busy: false };
-    if (vs?.pendingAddons.length) return { tone: "warn", text: `Asking ${vs.pendingAddons.join(", ")} for versions`, busy: true };
-    return { tone: "warn", text: ctx.details() ? "Choosing the best version" : "Opening", busy: true };
+    // Never an addon's name while it waits.
+    return { tone: "warn", text: ctx.details() ? nextVersion.findingBest : "Opening", busy: true };
   };
-  // The pick as it starts: "Starting 1080p, 1.5 GB from Torrentio".
+  // The pick as it starts: "Starting 1080p, 1.5 GB" (no addon's name).
   const startLine = () => {
     const r = playing();
-    return r ? `Starting ${qualityText(r.quality)}${r.sizeBytes ? `, ${bytes(r.sizeBytes)}` : ""} from ${r.via}` : "Starting";
+    return r ? `Starting ${qualityText(r.quality)}${r.sizeBytes ? `, ${bytes(r.sizeBytes)}` : ""}` : "Starting";
   };
 
   // The loading layer (plans/player-polish.md 1.2): while there is no
@@ -807,6 +809,15 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     return startFill(coreFill(), bufferShare(buffered(), engine.position()));
   };
   const waitLines = () => (wait() === "stall" ? [] : loadingLines(status()?.text ?? startLine(), snap()?.start?.caption));
+  // After 20 s on the loading screen, "Choose another version" under the stage line
+  // (plans/versions-web-spec.md 2.1): laid out from the start but hidden and inert, so nothing
+  // moves and nothing can focus it; never focused by itself; said once when it appears.
+  const [late, setLate] = createSignal(false);
+  onMount(() => {
+    const t = setTimeout(() => setLate(true), ANOTHER_MS);
+    onCleanup(() => clearTimeout(t));
+  });
+  const another = () => late() && wait() === "start";
 
   return (
     <div
@@ -855,7 +866,31 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       {/* Paused, the picture steps back and the title says what it is, as
           the Apple TV app, Netflix and Infuse do. */}
       <div class="pdim" aria-hidden="true" />
-      <Loading wait={wait()} fill={fill()} logo={ctx.details()?.logo} name={ctx.details()?.name} background={ctx.details()?.background} lines={waitLines()} />
+      <Loading
+        wait={wait()}
+        fill={fill()}
+        logo={ctx.details()?.logo}
+        name={ctx.details()?.name}
+        background={ctx.details()?.background}
+        lines={waitLines()}
+        action={
+          <A
+            class="btn ld-another"
+            classList={{ shown: another() }}
+            href={versionsPath(props.kind, props.id, props.videoId)}
+            replace
+            on:click={toVersions}
+            data-f="player:another"
+            inert={!another()}
+          >
+            <Layers aria-hidden />
+            {nextVersion.another}
+          </A>
+        }
+      />
+      <p class="sr" aria-live="polite">
+        {another() ? nextVersion.anotherReady : ""}
+      </p>
       <div class="osd-top" />
       <div class="osd-bot" />
 
@@ -926,10 +961,10 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                       longer listed, which Try again cannot bring back, so
                       Choose a version comes first and has the focus. */}
                   <Show when={openError() && !titleError()}>{chooseVersion()}</Show>
-                  <Show when={needsAccount()}>
-                    <A class="btn primary big" href="/debrid" data-f="player:account" data-autofocus>
-                      <KeyRound aria-hidden />
-                      {choiceWords.blocked.needsAccount.action}
+                  <Show when={blockedHere() === "needsAccount"}>
+                    <A class="btn primary big" href="/debrid" data-f="player:settings" data-autofocus>
+                      <Settings aria-hidden />
+                      {versionsWords.settings}
                     </A>
                   </Show>
                   {/* This play again from its first pick (`retry`), or the
@@ -946,7 +981,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                       Try again
                     </button>
                   </Show>
-                  <Show when={!openError() && !titleError()}>{chooseVersion()}</Show>
+                  <Show when={!openError() && !titleError() && blockedHere() !== "needsAccount"}>{chooseVersion()}</Show>
                   <button class="btn big" data-f="player:back" onClick={goBack}>
                     <ArrowLeft aria-hidden />
                     Back

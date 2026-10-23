@@ -243,6 +243,10 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
  * the left by --p (0 to 1) through a mask twice its width plus the feather
  * (6% of the mark), easing to each new value. */
 .ld-mark { display: grid; justify-items: center; align-items: center; }
+/* Under the stage line, its space held from the start: hidden and inert until it shows, then it takes the pointer. */
+.ld-act { pointer-events: auto; }
+.ld-another { visibility: hidden; }
+.ld-another.shown { visibility: inherit; }
 .ld-mark > * { grid-area: 1 / 1; }
 .ld-faint { opacity: .2; }
 .ld-solid { -webkit-mask-image: linear-gradient(90deg, #000 48.54%, transparent 51.46%); mask-image: linear-gradient(90deg, #000 48.54%, transparent 51.46%);

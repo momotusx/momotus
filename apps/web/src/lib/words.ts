@@ -16,7 +16,6 @@ import type { Prefs } from "../core/generated/Prefs";
 import type { ReasonLine } from "../core/generated/ReasonLine";
 import type { Speed } from "../core/generated/Speed";
 import type { StreamPrefs } from "../core/generated/StreamPrefs";
-import type { VersionsConditions } from "../core/generated/VersionsConditions";
 import type { Form } from "../form";
 import { bytes } from "./format";
 import accountShared from "../../../shared/account-words.json";
@@ -225,6 +224,21 @@ export const nextVersion = {
   tryingAgain: "Trying again",
   /** A version picked by hand, waiting for Versions to list it (as Android). */
   finding: "Finding this version",
+  /** The player's way to another version: on the failure card, and on the loading screen after 20 s. */
+  another: "Choose another version",
+  /** Said once when the loading screen's button appears. */
+  anotherReady: "Still loading. Choose another version is available",
+  /** The loading caption until the pick (never an addon's name). */
+  findingBest: "Finding the best version",
+};
+
+/** The Versions page's own words (plans/versions-web-spec.md 3.1, 5) until the core's Step 2a
+ * moves them into stream-choice-words.json: the header's status line and the states' actions. */
+export const versionsWords = {
+  finding: "Finding versions",
+  slow: "Still looking for more versions",
+  settings: "Settings",
+  back: "Back",
 };
 
 /** The busy line while a play starts over: a move on names the version it
@@ -736,14 +750,6 @@ export function conditionsLine(d: DeviceConditions): string {
   return [d.hdr ? part(c.hdr, { screen }) : screen, speed, free].filter((x) => x !== null).join(", ");
 }
 
-/** The Versions header from the conditions the ranking read. */
-export const conditionsHeader = (f: Form, v: VersionsConditions) =>
-  capital(
-    c.header
-      .replace("{device}", deviceName(f))
-      .replace("{conditions}", conditionsLine({ screenClass: v.screenClass, hdr: v.hdr, network: v.network, speed: speedFor(v, v.account), freeBytes: v.freeBytes })),
-  );
-
 /** The one-time note on Versions (3.9), with the preferences now in effect:
  * "On this TV you often picked bigger files, so Marquee now picks files up
  * to 10 GB." Null when the change names no number (no limit, the screen's
@@ -803,7 +809,6 @@ export const noVersionWords = {
 };
 
 /** Addons still answering past their time: "Torrentio is slow", "Torrentio, Comet are slow". */
-export const slowWords = (names: string[]) => `${names.join(", ")} ${names.length > 1 ? "are" : "is"} slow, still waiting`;
 
 /** A raw reason from the core (its HTTP and addon errors, "network: error
  * sending request ...") as a sentence a viewer reads, with the raw text kept

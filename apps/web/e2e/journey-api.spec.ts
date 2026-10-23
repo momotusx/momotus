@@ -948,7 +948,7 @@ test("TV: Versions keeps an opened group on Back, and the focused row when bette
   const { context, page: p, view } = await page(browser, { width: 1920, height: 1080 });
   await p.goto("/title/movie/mqjv/versions/mqjv?form=tv");
   await expect(p.locator(".vrow")).toHaveCount(3, { timeout: 30_000 });
-  await expect(p.locator(".vstate .live")).toHaveCount(0, { timeout: 30_000 });
+  await expect(p.locator(".vstatus")).toHaveText("", { timeout: 30_000 });
   // Show all 4, play the fourth, Back: the group is still open, on that row.
   const fold = p.locator('[data-f^="fold:"]');
   await fold.focus();

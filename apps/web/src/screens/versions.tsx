@@ -4,10 +4,7 @@ import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import CircleCheck from "lucide-solid/icons/circle-check";
-import Eye from "lucide-solid/icons/eye";
-import EyeOff from "lucide-solid/icons/eye-off";
-import KeyRound from "lucide-solid/icons/key-round";
-import MonitorCheck from "lucide-solid/icons/monitor-check";
+import Settings from "lucide-solid/icons/settings";
 import OctagonAlert from "lucide-solid/icons/octagon-alert";
 import Play from "lucide-solid/icons/play";
 import Puzzle from "lucide-solid/icons/puzzle";
@@ -15,7 +12,6 @@ import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Sparkles from "lucide-solid/icons/sparkles";
 import TriangleAlert from "lucide-solid/icons/triangle-alert";
 import Undo2 from "lucide-solid/icons/undo-2";
-import UserRoundX from "lucide-solid/icons/user-round-x";
 import { createEffect, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { Backdrop } from "../components/art";
@@ -36,7 +32,6 @@ import {
   blockedWords,
   cardLine,
   choiceWords,
-  conditionsHeader,
   counted,
   groupLabel,
   groupOrder,
@@ -49,8 +44,8 @@ import {
   qualityCell,
   qualityText,
   reasonText,
-  slowWords,
   statusText,
+  versionsWords,
 } from "../lib/words";
 import "./versions.css";
 
@@ -70,20 +65,6 @@ export default function Versions() {
       read={() => ({ kind: decoded(params.kind), id: decoded(params.id), videoId: decoded(params.videoId), retry: () => setAttempt((n) => n + 1) })}
       page={VersionsPage}
     />
-  );
-}
-
-/** The core's `nobodySharing`: every version is a swarm with one seeder or
- * none right now, said before Play on the card and over the list. */
-function NobodySharing(props: { class: string; status?: boolean }) {
-  return (
-    <p class={props.class} role={props.status ? "status" : undefined}>
-      <UserRoundX aria-hidden />
-      <span>
-        <b>{choiceWords.nobodySharing.text}</b>
-        <small>{choiceWords.nobodySharing.details}</small>
-      </span>
-    </p>
   );
 }
 
@@ -113,20 +94,28 @@ function StatusWord(props: { row: VersionRow }) {
 const toneIcon = { ok: CircleCheck, warn: TriangleAlert, bad: OctagonAlert };
 
 /** The row's line: a tone icon (its shape, never color alone) and the plain
- * words. The details show on focus (TV), hover (desktop) or tap (phone). */
+ * words, one line. Its details sit in the row's reserved details line. */
 function LineWord(props: { line: ReasonLine }) {
   const w = () => lineWords(props.line);
   return (
     <span class={`st line ${w().tone}`}>
       <Dynamic component={toneIcon[w().tone]} aria-hidden class="tone" />
       <span class="lt">{w().text}</span>
-      <Show when={w().details}>
-        <span class="tip" aria-hidden="true">
-          {w().details}
-        </span>
-      </Show>
     </span>
   );
+}
+
+/** A row's details on one line: the line's details, the release name, the languages and sources. */
+const detailsLine = (r: VersionRow) =>
+  [!r.onDevice ? lineWords(r.line).details : null, r.releaseName, subLine(r)].filter((p): p is string => !!p).join("  ·  ");
+
+/** The element that scrolls `el`: the list on TV and desktop, the page on the phone. */
+function scrollerOf(el: HTMLElement): HTMLElement {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const y = getComputedStyle(p).overflowY;
+    if ((y === "auto" || y === "scroll") && p.scrollHeight > p.clientHeight) return p;
+  }
+  return document.scrollingElement as HTMLElement;
 }
 
 const languages = (r: VersionRow) => r.languages.map(languageName).join(", ");
@@ -143,9 +132,11 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
   // Phone: a tap opens the row (its details and Play); elsewhere it plays.
   const [opened, setOpened] = createSignal<string | null>(null);
   const tapRow = (r: VersionRow) => (form() === "phone" ? setOpened(opened() === r.key ? null : r.key) : play(r.key));
-  // Blocked (3.11): "Show them" lists the rows as they would rank once fixed.
-  const [showBlocked, setShowBlocked] = createSignal(false);
+  // Blocked (plans/play-every-version.md, shared Step 3 table): the rows as they would rank once
+  // fixed, listed dimmed; an account's rows cannot be started here, the others are an attempt.
   const blocked = () => snap()?.blocked ?? null;
+  const dimmed = () => !!blocked() && !pick();
+  const startable = () => blocked()?.reason !== "needsAccount";
   // The one-time learning note (3.9), until Undo.
   const [undone, setUndone] = createSignal(false);
   const note = () => {
@@ -175,7 +166,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
     if (v && snap() && !snap()?.frozen) void v.command({ type: "freeze" });
   };
   onMount(() => {
-    const onKey = (e: KeyboardEvent) => e.key.startsWith("Arrow") && freeze();
+    const onKey = (e: KeyboardEvent) => (e.key.startsWith("Arrow") || e.key === "Tab") && freeze();
     window.addEventListener("keydown", onKey, { capture: true });
     window.addEventListener("pointerdown", freeze, { capture: true });
     onCleanup(() => {
@@ -187,7 +178,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
   // The rows listed now, and one group's of them. Sections come from the fixed
   // group order, so a late addon or a re-rank never rebuilds them: the
   // focused row keeps its element.
-  const listed = () => (showBlocked() ? blocked()?.rows : snap()?.rows) ?? [];
+  const listed = () => (dimmed() ? blocked()?.rows : snap()?.rows) ?? [];
   const rowsOf = (g: Group) => listed().filter((r) => r.group === g);
   const toggle = (g: Group) => {
     const next = new Set(open());
@@ -196,16 +187,61 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
     setOpen(next);
     expandedFor.set(video, next);
   };
-  const progress = () => {
+  const at = (f: string) => document.querySelector<HTMLElement>(`[data-f="${CSS.escape(f)}"]`);
+  // Show all: the section opens and the focus goes to its first row that was hidden.
+  const unfold = (g: Group) => {
+    toggle(g);
+    at(`v:${rowsOf(g)[SHOWN]?.key ?? ""}`)?.focus();
+  };
+  // Show fewer: the section folds and the focus goes to its bottom toggle, with no jump: the bottom
+  // toggle stays where it was pressed, or, pressed from the pinned heading, the section's top stays
+  // where its heading was, so the toggle shows under its rows. The scroll is set here (Safari has no
+  // scroll anchoring), from the scroller found before the list shrinks.
+  const foldAt = (g: Group, from: HTMLElement) => {
+    const head = from.dataset.f?.startsWith("foldtop:") ? from.closest<HTMLElement>(".vghead") : null;
+    const scroller = scrollerOf(from);
+    const top = (head ?? from).getBoundingClientRect().top;
+    toggle(g);
+    const t = at(`fold:${g}`);
+    t?.focus({ preventScroll: true });
+    // The heading's own place in its section (it may be pinned where it was drawn), else the toggle's.
+    const section = head?.closest<HTMLElement>("[data-group]");
+    const now = head && section ? section.getBoundingClientRect().top + Number.parseFloat(getComputedStyle(head).marginTop) : t?.getBoundingClientRect().top;
+    if (now !== undefined) scroller.scrollTop += now - top;
+  };
+  // Left from a row of an open section goes to its heading's Show fewer, Left again to Play; Home or
+  // PageUp does the same on a keyboard.
+  const listKeys = (e: KeyboardEvent) => {
+    const el = e.target as HTMLElement;
+    const g = el.closest<HTMLElement>("[data-group]")?.dataset.group as Group | undefined;
+    const onRow = !!el.dataset.f?.startsWith("v:");
+    const head = g && open().has(g) && onRow ? at(`foldtop:${g}`) : null;
+    if (e.key === "ArrowLeft" && form() === "tv") {
+      const to = head ?? at("versions:play");
+      if (!to) return;
+      e.preventDefault();
+      to.focus();
+    } else if ((e.key === "Home" || e.key === "PageUp") && form() === "desktop" && head) {
+      e.preventDefault();
+      head.focus();
+    }
+  };
+  // The header's count, then its one reserved status line: never an addon's name.
+  const count = () => {
     const s = snap();
-    if (ctx.failure()) return { tone: "bad", text: "Could not be opened" };
-    if (!s) return { tone: "idle", text: "Opening" };
-    if (s.pendingAddons.length) return { tone: "warn live", text: `Asking ${s.pendingAddons.join(", ")}` };
-    if (s.slowAddons.length) return { tone: "warn", text: slowWords(s.slowAddons) };
-    if (s.failedAddons.length) return { tone: "bad", text: `${s.failedAddons.join(", ")} did not answer` };
-    // Blocked: what was found, none of it listed (the card says why).
-    if (s.blocked) return { tone: "warn", text: counted("versions", s.blocked.count) };
-    return { tone: "ok", text: `${s.rows.length + (s.recommended ? 1 : 0)} versions` };
+    if (!s) return null;
+    if (s.blocked) return counted("versions", s.blocked.count);
+    const n = s.rows.length + (s.recommended ? 1 : 0);
+    return n ? counted("versions", n) : null;
+  };
+  const statusLine = () => {
+    const s = snap();
+    if (ctx.failure()) return "";
+    const b = blocked();
+    if (b && !pick()) return blockedWords(b.reason, b.count, s?.conditions.window).text;
+    if (!s || (!s.recommended && !s.rows.length && !s.done)) return versionsWords.finding;
+    if (s.pendingAddons.length || s.slowAddons.length) return versionsWords.slow;
+    return "";
   };
 
   return (
@@ -225,20 +261,13 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
             <Show when={ctx.label() ?? ctx.details()?.name}>{(l) => <span>for {l()}</span>}</Show>
           </h1>
           <p class="vstate">
-            <span class={`st ${progress().tone}`}>
-              <i class="dot" />
-              {progress().text}
-            </span>
-            <Show when={snap()?.conditions}>
-              {(c) => (
-                <span class="device">
-                  <MonitorCheck aria-hidden />
-                  {conditionsHeader(form(), c())}
-                </span>
-              )}
-            </Show>
+            <Show when={count()}>{(c) => <span class="num">{c()}</span>}</Show>
           </p>
         </div>
+        {/* Reserved from the first paint, so nothing below moves when it fills or empties. */}
+        <p class="vstatus" role="status">
+          {statusLine()}
+        </p>
       </header>
 
       <Switch>
@@ -292,36 +321,21 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
                     </div>
                   }
                 >
-                  {(b) => {
-                    const w = () => blockedWords(b().reason, b().count, snap()?.conditions.window);
-                    return (
-                      <div class="blocked">
-                        <h2>{noVersionWords.title}</h2>
-                        <p>{w().text}</p>
-                        <Show
-                          when={b().reason === "needsAccount"}
-                          fallback={
-                            <button class="btn primary" data-f="versions:show" data-autofocus aria-expanded={showBlocked()} onClick={() => setShowBlocked(!showBlocked())}>
-                              <Eye aria-hidden />
-                              {w().action}
-                            </button>
-                          }
-                        >
-                          <div class="acts">
-                            <A class="btn primary" href="/debrid" data-f="versions:account" data-autofocus>
-                              <KeyRound aria-hidden />
-                              {w().action}
-                            </A>
-                            {/* The versions as they would rank with an account. */}
-                            <button class="btn" data-f="versions:show" aria-expanded={showBlocked()} onClick={() => setShowBlocked(!showBlocked())}>
-                              <Eye aria-hidden />
-                              {choiceWords.blocked.showRows}
-                            </button>
-                          </div>
-                        </Show>
-                      </div>
-                    );
-                  }}
+                  {(b) => (
+                    // The line is the header's status line; here, the state's actions (the shared table).
+                    <div class="blocked acts">
+                      <Show when={b().reason === "needsAccount"}>
+                        <A class="btn primary" href="/debrid" data-f="versions:settings" data-autofocus>
+                          <Settings aria-hidden />
+                          {versionsWords.settings}
+                        </A>
+                      </Show>
+                      <button class="btn" classList={{ primary: b().reason !== "needsAccount" }} data-f="versions:back" data-autofocus={b().reason !== "needsAccount" ? "" : undefined} onClick={goBack}>
+                        <ArrowLeft aria-hidden />
+                        {versionsWords.back}
+                      </button>
+                    </div>
+                  )}
                 </Show>
               }
             >
@@ -339,8 +353,6 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
                     <dd>
                       <StatusWord row={p()} />
                     </dd>
-                    <dt>Via</dt>
-                    <dd>{p().via}</dd>
                     <Show when={p().features.length > 1}>
                       <dt>Features</dt>
                       <dd>{p().features.join(", ")}</dd>
@@ -384,9 +396,6 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
                   <p class="rel">
                     <Release name={p().releaseName} />
                   </p>
-                  <Show when={snap()?.nobodySharing}>
-                    <NobodySharing class="nobody" status />
-                  </Show>
                   <button class="btn primary" data-f="versions:play" data-autofocus onClick={() => play(p().key)}>
                     <Play aria-hidden class="fill" />
                     Play this version
@@ -403,31 +412,15 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
           </section>
 
           <section class="alts" aria-label="All versions">
-            {/* Once per screen: on the recommended card when there is one. */}
-            <Show when={snap()?.nobodySharing && !pick()}>
-              <NobodySharing class="lnote nobody" status />
-            </Show>
-            <Show when={note()?.text}>
-              {(text) => (
-                <p class="lnote" role="status">
-                  <Sparkles aria-hidden />
-                  <span>{text()}</span>
-                  <button class="btn" data-f="versions:undo" onClick={undo}>
-                    <Undo2 aria-hidden />
-                    {choiceWords.learned.undo}
-                  </button>
-                </p>
-              )}
-            </Show>
             <div class="thead" aria-hidden="true">
               <span>Quality</span>
               <span>Features</span>
               <span>Size</span>
               <span>Status</span>
-              <span>Via</span>
             </div>
             <div
               class="alist"
+              classList={{ dimmed: dimmed() }}
               data-vscroll
               data-fgroup="alts"
               onFocusIn={(e) => {
@@ -437,6 +430,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
               onFocusOut={(e) => {
                 if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocusedRow(null);
               }}
+              onKeyDown={listKeys}
             >
               <For each={groupOrder}>
                 {(g) => {
@@ -449,88 +443,117 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
                   };
                   return (
                     <Show when={rows().length > 0}>
-                    <section class="vgroup" data-row>
-                      <h3>
-                        {groupLabel[g]}
-                        <span class="num">{rows().length}</span>
-                      </h3>
-                      <For each={shown()}>
-                        {(r) => (
-                          <>
+                      <section class="vgroup" data-row data-group={g}>
+                        {/* An open section's heading holds Show fewer: Up from its first row, or Left
+                            from any of its rows (Home on a keyboard), leaves a long list in one press. */}
+                        <div class="vghead">
+                          <h3 id={`vg-${g}`}>
+                            {groupLabel[g]}
+                            <span class="num">{rows().length}</span>
+                          </h3>
+                          <Show when={expanded()}>
                             <button
-                              class="vrow"
-                              classList={{ open: opened() === r.key }}
-                              data-f={`v:${r.key}`}
-                              aria-expanded={form() === "phone" ? opened() === r.key : undefined}
-                              onClick={() => tapRow(r)}
+                              class="fold top"
+                              data-f={`foldtop:${g}`}
+                              aria-expanded="true"
+                              aria-controls={`vl-${g}`}
+                              aria-label={`Show fewer ${groupLabel[g]} versions`}
+                              onClick={(e) => foldAt(g, e.currentTarget)}
                             >
-                              <span class="q" classList={{ unknown: r.quality === "Unknown" }}>
-                                {qualityCell(r.quality)}
-                              </span>
-                              <span class="chips">
-                                <For each={r.features}>{(f) => <span>{f}</span>}</For>
-                              </span>
-                              <span class="size num">{r.sizeBytes ? bytes(r.sizeBytes) : ""}</span>
-                              {/* The core's "On this device" stands for the row's line where it is set. */}
-                              <Show when={r.onDevice} fallback={<LineWord line={r.line} />}>
-                                {(w) => (
-                                  <span class="st line ok">
-                                    <CircleCheck aria-hidden class="tone" />
-                                    <span class="lt">{w()}</span>
-                                  </span>
-                                )}
-                              </Show>
-                              <span class="via">{r.via}</span>
-                              <span class="more">
-                                <Show when={!r.onDevice && lineWords(r.line).details}>
-                                  {(d) => <span class="detail">{d()}</span>}
-                                </Show>
-                                <span class="rel">
-                                  <Release name={r.releaseName} />
-                                </span>
-                                <span class="sub">{subLine(r)}</span>
-                              </span>
+                              <ChevronDown aria-hidden />
+                              Show fewer
                             </button>
-                            <Show when={form() === "phone" && opened() === r.key}>
-                              <div class="vrow-open">
-                                <Show when={!r.onDevice && lineWords(r.line).details}>
-                                  {(d) => <p class="detail">{d()}</p>}
-                                </Show>
-                                <p class="rel">
-                                  <Release name={r.releaseName} />
-                                </p>
-                                <p class="sub">{subLine(r)}</p>
-                                <button class="btn" data-f={`vplay:${r.key}`} onClick={() => play(r.key)}>
-                                  <Play aria-hidden class="fill" />
-                                  Play this version
+                          </Show>
+                        </div>
+                        <div id={`vl-${g}`} role="list" aria-labelledby={`vg-${g}`}>
+                          <For each={shown()}>
+                            {(r) => (
+                              // The paint skip sits on this padded slot, not on the row, so the
+                              // focus ring and the TV lift are never clipped.
+                              <div class="vslot" role="listitem">
+                                <button
+                                  class="vrow"
+                                  classList={{ open: opened() === r.key, dim: dimmed() }}
+                                  data-f={`v:${r.key}`}
+                                  aria-expanded={form() === "phone" ? opened() === r.key : undefined}
+                                  aria-disabled={dimmed() && !startable() ? "true" : undefined}
+                                  onClick={() => (dimmed() && !startable() ? undefined : tapRow(r))}
+                                >
+                                  <span class="q" classList={{ unknown: r.quality === "Unknown" }}>
+                                    {qualityCell(r.quality)}
+                                  </span>
+                                  <span class="chips">
+                                    {/* Another language than the viewer's: the chip names it. */}
+                                    <Show when={r.group === "otherLanguages" && languages(r)}>{(l) => <span class="lang">{l()}</span>}</Show>
+                                    <For each={r.features}>{(f) => <span>{f}</span>}</For>
+                                  </span>
+                                  <span class="size num">{r.sizeBytes ? bytes(r.sizeBytes) : ""}</span>
+                                  {/* The core's "On this device" stands for the row's line where it is set. */}
+                                  <Show when={r.onDevice} fallback={<LineWord line={r.line} />}>
+                                    {(w) => (
+                                      <span class="st line ok">
+                                        <CircleCheck aria-hidden class="tone" />
+                                        <span class="lt">{w()}</span>
+                                      </span>
+                                    )}
+                                  </Show>
+                                  {/* Reserved in every row: focus or hover changes only its opacity. */}
+                                  <span class="more">{detailsLine(r)}</span>
                                 </button>
+                                <Show when={form() === "phone" && opened() === r.key}>
+                                  <div class="vrow-open">
+                                    <Show when={!r.onDevice && lineWords(r.line).details}>
+                                      {(d) => <p class="detail">{d()}</p>}
+                                    </Show>
+                                    <p class="rel">
+                                      <Release name={r.releaseName} />
+                                    </p>
+                                    <p class="sub">{subLine(r)}</p>
+                                    <button class="btn" data-f={`vplay:${r.key}`} onClick={() => play(r.key)}>
+                                      <Play aria-hidden class="fill" />
+                                      Play this version
+                                    </button>
+                                  </div>
+                                </Show>
                               </div>
-                            </Show>
-                          </>
-                        )}
-                      </For>
-                      <Show when={rows().length > SHOWN}>
-                        <button class="fold" data-f={`fold:${g}`} aria-expanded={expanded()} onClick={() => toggle(g)}>
-                          <ChevronDown aria-hidden />
-                          {expanded() ? `Show the best ${SHOWN}` : `Show all ${rows().length}`}
-                        </button>
-                      </Show>
-                    </section>
+                            )}
+                          </For>
+                        </div>
+                        <Show when={rows().length > SHOWN}>
+                          <button
+                            class="fold"
+                            data-f={`fold:${g}`}
+                            aria-expanded={expanded()}
+                            aria-controls={`vl-${g}`}
+                            aria-label={expanded() ? `Show fewer ${groupLabel[g]} versions` : `Show all ${rows().length} ${groupLabel[g]} versions`}
+                            onClick={(e) => (expanded() ? foldAt(g, e.currentTarget) : unfold(g))}
+                          >
+                            <ChevronDown aria-hidden />
+                            {expanded() ? "Show fewer" : `Show all ${rows().length}`}
+                          </button>
+                        </Show>
+                      </section>
                     </Show>
                   );
                 }}
               </For>
-              <Show when={(snap()?.hidden.count ?? 0) > 0}>
-                <p class="hidden-row">
-                  <EyeOff aria-hidden />
-                  <b>Hidden ({snap()?.hidden.count})</b>
-                  <span>{hiddenSummary(snap()?.hidden ?? { count: 0, byReason: [] }, snap()?.conditions.window)}</span>
-                </p>
-              </Show>
               <Show when={snap() && !snap()?.done && listed().length === 0}>
                 <div class="alist-wait" aria-hidden="true">
                   <For each={[0, 1, 2, 3, 4]}>{() => <div class="skel" />}</For>
                 </div>
+              </Show>
+              {/* The learning note under the sections, where its arrival moves nothing above. */}
+              <Show when={note()?.text}>
+                {(text) => (
+                  <p class="lnote" role="status">
+                    <Sparkles aria-hidden />
+                    <span>{text()}</span>
+                    <button class="btn" data-f="versions:undo" onClick={undo}>
+                      <Undo2 aria-hidden />
+                      {choiceWords.learned.undo}
+                    </button>
+                  </p>
+                )}
               </Show>
             </div>
           </section>

@@ -6,7 +6,7 @@
  * edge feathered), or the title's name filled the same way; under it the
  * player's and the core's words, small and quiet. */
 
-import { createMemo, For, Show } from "solid-js";
+import { createMemo, For, type JSX, Show } from "solid-js";
 import { useTrimmedLogo } from "../components/art";
 
 export type Wait = "start" | "stall";
@@ -19,6 +19,8 @@ export function Loading(props: {
   name: string | undefined;
   background: string | null | undefined;
   lines: string[];
+  /** Under the stage line, in the layer's own layout: the player's "Choose another version". */
+  action?: JSX.Element;
 }) {
   const logo = useTrimmedLogo(() => props.logo);
   // One count per wait: each draws its own mark, so a stall never runs its
@@ -37,14 +39,16 @@ export function Loading(props: {
 
   return (
     <>
-      <div class="ld" classList={{ on: !!props.wait, stall: props.wait === "stall" }} aria-hidden="true">
+      {/* The picture parts are hidden from screen readers (the status line below speaks the words); the action is not.
+          While it waits nothing takes the focus by itself (`data-focus-wait`, focus/dom.ts): its action only on a key. */}
+      <div class="ld" classList={{ on: !!props.wait, stall: props.wait === "stall" }} data-focus-wait={props.wait ? "" : undefined}>
         <Show when={props.background}>
-          {(src) => <img class="ld-bd" src={src()} alt="" decoding="async" onLoad={(e) => e.currentTarget.classList.add("in")} />}
+          {(src) => <img class="ld-bd" src={src()} alt="" aria-hidden="true" decoding="async" onLoad={(e) => e.currentTarget.classList.add("in")} />}
         </Show>
         <div class="ld-body">
           <Show when={wait().n} keyed>
             {(n) => (
-              <div class="ld-mark" data-wait={n} style={{ "--p": String(fill().at) }}>
+              <div class="ld-mark" data-wait={n} style={{ "--p": String(fill().at) }} aria-hidden="true">
                 <Show
                   when={!asName() && logo()}
                   fallback={
@@ -77,9 +81,12 @@ export function Loading(props: {
               </div>
             )}
           </Show>
-          <p class="ld-cap">
+          <p class="ld-cap" aria-hidden="true">
             <For each={props.lines}>{(l) => <span>{l}</span>}</For>
           </p>
+          <Show when={props.action}>
+            <div class="ld-act">{props.action}</div>
+          </Show>
         </div>
       </div>
       {/* Read out from a region that is always there: one inside the hidden layer may miss its first words. */}
