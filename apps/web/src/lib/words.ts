@@ -725,9 +725,22 @@ export function rowWords(row: VersionRow, why: string | null = null): string {
  * "2 GB, ready now" drops "Ready now" and "2 GB"; "4 GB, shared by 89 people" keeps "May be ready in
  * your account"; "7.4 GB, on this device" keeps "7.4 GB; Marquee prefers files up to 5 GB". */
 export function sheetDetails(row: VersionRow, why: string | null = null): string | null {
-  const face = rowWords(row, why).toLowerCase();
-  const kept = lineParts(row.line).filter((p) => !face.includes(p.toLowerCase()));
+  const face = rowWords(row, why);
+  const kept = lineParts(row.line).filter((p) => !says(face, p));
   return kept.length ? capital(kept.join(", ")) : null;
+}
+
+/** Whether `face` says `part` whole, case-folded: found at the start or after a space, and followed by
+ * the end or by neither a letter nor a digit, so "4 GB" is not said by "14 GB" or "1.4 GB". */
+function says(face: string, part: string): boolean {
+  const f = face.toLowerCase();
+  const p = part.toLowerCase();
+  for (let at = f.indexOf(p); at >= 0; at = f.indexOf(p, at + 1)) {
+    const before = f.charAt(at - 1);
+    const after = f.charAt(at + p.length);
+    if ((at === 0 || /\s/.test(before)) && !/[\p{L}\p{N}]/u.test(after)) return true;
+  }
+  return false;
 }
 
 /** Why nothing can play, and its actions in order (plans/play-every-version.md, the shared Step 3

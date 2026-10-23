@@ -298,10 +298,25 @@ enum VersionWords {
     /// ([rowWords]) already says is left out, the rest stays. "2 GB, ready now" drops "Ready now" and "2 GB";
     /// "7.4 GB, on this device" keeps "7.4 GB; Marquee prefers files up to 5 GB".
     static func sheetDetails(_ row: VersionRow, dimmed: String? = nil) -> String {
-        let face = rowWords(row, dimmed: dimmed).lowercased()
-        let kept = (row.line.map(StreamChoice.lineParts) ?? []).filter { !face.contains($0.lowercased()) }
+        let face = rowWords(row, dimmed: dimmed)
+        let kept = (row.line.map(StreamChoice.lineParts) ?? []).filter { !says(face, $0) }
         let joined = kept.joined(separator: ", ")
         return joined.prefix(1).uppercased() + joined.dropFirst()
+    }
+
+    /// Whether `face` says `part` whole, case-folded: found at the start or after a space, and followed by the end
+    /// or by neither a letter nor a digit, so "4 GB" is not said by "14 GB" or "1.4 GB".
+    static func says(_ face: String, _ part: String) -> Bool {
+        let f = face.lowercased()
+        let p = part.lowercased()
+        var from = f.startIndex
+        while let found = f.range(of: p, range: from..<f.endIndex) {
+            let beforeOK = found.lowerBound == f.startIndex || f[f.index(before: found.lowerBound)].isWhitespace
+            let afterOK = found.upperBound == f.endIndex || !(f[found.upperBound].isLetter || f[found.upperBound].isNumber)
+            if beforeOK && afterOK { return true }
+            from = f.index(after: found.lowerBound)
+        }
+        return false
     }
 
     /// Words that go on a sentence: the first letter in lower case, unless it opens a word in capitals ("CAM", "HDR").

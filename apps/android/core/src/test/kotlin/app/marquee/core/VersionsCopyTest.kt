@@ -405,6 +405,35 @@ class VersionsCopyTest {
                 line = ReasonLine.Large((7.4 * gib).toLong(), 5 * gib, chosen = false),
             )
         assertEquals("7.4 GB; Marquee prefers files up to 5 GB", VersionsCopy.sheetDetails(large, null))
+        // A part is said only whole: "14 GB" and "1.4 GB" do not say "4 GB".
+        assertEquals(
+            "4 GB",
+            VersionsCopy.sheetDetails(
+                row(sizeBytes = 14 * gib).copy(
+                    status = VersionStatus.Torrent(89),
+                    line =
+                        ReasonLine.Quick(
+                            89,
+                            4 * gib,
+                        ),
+                ),
+                null,
+            ),
+        )
+        assertEquals(
+            "4 GB",
+            VersionsCopy.sheetDetails(
+                row(sizeBytes = (1.4 * gib).toLong()).copy(
+                    status = VersionStatus.Torrent(89),
+                    line =
+                        ReasonLine.Quick(
+                            89,
+                            4 * gib,
+                        ),
+                ),
+                null,
+            ),
+        )
         // A dimmed row's face says its size and why it is dimmed: the people follow.
         assertEquals(
             "Shared by 89 people",

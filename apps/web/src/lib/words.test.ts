@@ -281,6 +281,9 @@ test("the sheet says nothing twice: it drops each part the face says, and keeps 
   expect(sheetDetails(row({ kind: "large", sizeBytes: 7.4 * GiB, limitBytes: 5 * GiB, chosen: false }, "On this device", { kind: "direct" }, 7.4 * GiB))).toBe("7.4 GB; Marquee prefers files up to 5 GB");
   // "117 MB, may not start" says no people: they follow.
   expect(sheetDetails(row({ kind: "veryFew", seeders: 2 }))).toBe("Shared by 2 people");
+  // A part is said only whole: "14 GB" and "1.4 GB" do not say "4 GB".
+  expect(sheetDetails(row({ kind: "quick", seeders: 1204, sizeBytes: 4 * GiB }, null, { kind: "torrent", seeds: 1204 }, 14 * GiB))).toBe("4 GB");
+  expect(sheetDetails(row({ kind: "quick", seeders: 1204, sizeBytes: 4 * GiB }, null, { kind: "torrent", seeds: 1204 }, 1.4 * GiB))).toBe("4 GB");
   // A dimmed row's line says its size and why it is dimmed: the people follow.
   expect(sheetDetails(row({ kind: "quick", seeders: 1204, sizeBytes: 2 * GiB }), "Won't play here")).toBe("Shared by 1,204 people");
 });

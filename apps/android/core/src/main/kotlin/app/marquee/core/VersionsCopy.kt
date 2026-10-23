@@ -274,8 +274,26 @@ object VersionsCopy {
         why: EmptyKind?,
     ): String {
         val face = rowWords(row, why)
-        val kept = StreamChoiceCopy.parts(row.line).filterNot { face.contains(it, ignoreCase = true) }
+        val kept = StreamChoiceCopy.parts(row.line).filterNot { says(face, it) }
         return kept.joinToString(", ").replaceFirstChar(Char::uppercase)
+    }
+
+    /**
+     * Whether [face] says [part] whole, case-folded: found at the start or after a space, and followed by the end or by
+     * neither a letter nor a digit, so "4 GB" is not said by "14 GB" or "1.4 GB".
+     */
+    private fun says(
+        face: String,
+        part: String,
+    ): Boolean {
+        var at = face.indexOf(part, ignoreCase = true)
+        while (at >= 0) {
+            val before = face.getOrNull(at - 1)
+            val after = face.getOrNull(at + part.length)
+            if ((before == null || before.isWhitespace()) && (after == null || !after.isLetterOrDigit())) return true
+            at = face.indexOf(part, at + 1, ignoreCase = true)
+        }
+        return false
     }
 
     /** A row's details, reserved under it and shown on focus: the release name, the line's details, its languages and sources. */
