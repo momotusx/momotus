@@ -5,8 +5,6 @@ import CalendarClock from "lucide-solid/icons/calendar-clock";
 import Check from "lucide-solid/icons/check";
 import CircleAlert from "lucide-solid/icons/circle-alert";
 import CircleX from "lucide-solid/icons/circle-x";
-import LoaderCircle from "lucide-solid/icons/loader-circle";
-import Plus from "lucide-solid/icons/plus";
 import Film from "lucide-solid/icons/film";
 import Layers from "lucide-solid/icons/layers";
 import Play from "lucide-solid/icons/play";
@@ -14,6 +12,7 @@ import RefreshCw from "lucide-solid/icons/refresh-cw";
 import RotateCcw from "lucide-solid/icons/rotate-ccw";
 import { createEffect, createMemo, createSignal, For, type JSX, Match, Show, Switch } from "solid-js";
 import { Backdrop, Logo } from "../components/art";
+import { SynopsisDialog } from "../components/synopsis";
 import { Ratings } from "../components/ratings";
 import { KeyedPage } from "../components/keyed-page";
 import { Why } from "../components/why";
@@ -25,8 +24,8 @@ import type { Episode } from "../core/generated/Episode";
 import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
 import { focusEl, remember } from "../focus/dom";
 import { form } from "../form";
-import { airDate, bytes, clock, decoded, episodeLabel, offersLibrary, parseVideo, pct, playPath, ratingParts, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
-import { blockedWords, kindLabel, noVersionWords, qualityText, statusText } from "../lib/words";
+import { airDate, clock, decoded, episodeLabel, offersLibrary, parseVideo, pct, playPath, ratingParts, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
+import { blockedWords, noVersionWords } from "../lib/words";
 import "./title.css";
 
 export default function Title() {
@@ -57,6 +56,14 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
   const series = () => props.kind !== "movie" && (header()?.seasons.length ?? 0) > 0;
   const [trailerOpen, setTrailerOpen] = createSignal(false);
   const [synOpen, setSynOpen] = createSignal(false);
+  // Closing returns focus to the synopsis that opened it.
+  const closeSynopsis = () => {
+    setSynOpen(false);
+    queueMicrotask(() => {
+      const opener = document.querySelector<HTMLElement>('[data-f="title:synopsis"]');
+      if (opener) focusEl(opener);
+    });
+  };
   const [artMissing, setArtMissing] = createSignal(false);
   // Closing returns focus to the button that opened it.
   const closeTrailer = () => {
@@ -109,7 +116,10 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
       <Show when={trailerOpen() && d()?.trailers.length}>
         <TrailerOverlay trailers={d()?.trailers ?? []} onClose={closeTrailer} />
       </Show>
-      <div class="title-main" inert={trailerOpen() || undefined}>
+      <Show when={synOpen() && d()?.description}>
+        {(text) => <SynopsisDialog name={d()?.name ?? ""} text={text()} onClose={closeSynopsis} />}
+      </Show>
+      <div class="title-main" inert={trailerOpen() || synOpen() || undefined}>
       <Switch>
         <Match when={view.state.status.state === "failed" || header()?.state.state === "failed"}>
           <section class="info">
@@ -156,68 +166,55 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                   </For>
                 </p>
                 <Show when={x().description}>
-                  <button class="syn" classList={{ open: synOpen() }} data-f="title:synopsis" aria-label="Synopsis" aria-expanded={synOpen()} onClick={() => setSynOpen(!synOpen())}>
+                  {/* The full text opens on its own card (components/synopsis.tsx), never in place. */}
+                  <button class="syn" data-f="title:synopsis" aria-label="Synopsis, open the full text" aria-haspopup="dialog" onClick={() => setSynOpen(true)}>
                     {x().description}
                   </button>
                   {/* Touch has no focus to open it: a phone says there is more. */}
-                  <Show when={form() === "phone" && !synOpen() && (x().description?.length ?? 0) > 140}>
-                    <button class="syn-more" onClick={() => setSynOpen(true)}>
+                  <Show when={form() === "phone" && (x().description?.length ?? 0) > 140}>
+                    <button class="syn-more" aria-haspopup="dialog" onClick={() => setSynOpen(true)}>
                       More
                     </button>
                   </Show>
                 </Show>
                 <div class="play">
                   <div class="play-row">
-                    {/* When nothing can play, the way forward is a source, not
-                        a Play button that can only fail. Versions that need a
-                        streaming account get no button: the line below says so
-                        quietly, and accounts are set up in Settings only. */}
+                    {/* Resume or Play is always the primary (plans/play-every-version.md, shared Step 3
+                        decisions): when nothing plays here, the note under the actions says why. */}
+                    {/* The next episode is not out yet: its day, in place of Play
+                        (header.nextAirs). A series watched to its end gets
+                        "Play again from S1:E1" from the core as its label. */}
                     <Show
-                      when={!noVersion(versions()?.state.data ?? null)}
+                      when={target()}
                       fallback={
-                        <Show when={versions()?.state.data?.blocked?.reason !== "needsAccount"}>
-                          <A class="btn primary big" href="/addons" data-f="title:addsource" data-autofocus>
-                            <Plus aria-hidden />
-                            Add a source
-                          </A>
+                        <Show when={header()?.nextAirs}>
+                          {(day) => (
+                            <p class="airs-next" role="status">
+                              <CalendarClock aria-hidden />
+                              Next episode airs {airDate(day())}
+                            </p>
+                          )}
                         </Show>
                       }
                     >
-                      {/* The next episode is not out yet: its day, in place of Play
-                          (header.nextAirs). A series watched to its end gets
-                          "Play again from S1:E1" from the core as its label. */}
-                      <Show
-                        when={target()}
-                        fallback={
-                          <Show when={header()?.nextAirs}>
-                            {(day) => (
-                              <p class="airs-next" role="status">
-                                <CalendarClock aria-hidden />
-                                Next episode airs {airDate(day())}
-                              </p>
-                            )}
+                      {(t) => (
+                        <A class="btn primary big" href={playPath(props.kind, props.id, t().videoId)} data-f="title:play" data-autofocus>
+                          <Play aria-hidden class="fill" />
+                          {t().label}
+                          <Show when={t().resumeMs}>
+                            {(ms) => <small class="num">{resumeText(ms(), t().leftMs, runtimeMinutes(x().runtime))}</small>}
                           </Show>
-                        }
-                      >
-                        {(t) => (
-                          <A class="btn primary big" href={playPath(props.kind, props.id, t().videoId)} data-f="title:play" data-autofocus>
-                            <Play aria-hidden class="fill" />
-                            {t().label}
-                            <Show when={t().resumeMs}>
-                              {(ms) => <small class="num">{resumeText(ms(), t().leftMs, runtimeMinutes(x().runtime))}</small>}
-                            </Show>
-                          </A>
-                        )}
-                      </Show>
-                      {/* Part way in: the same video from its beginning. */}
-                      <Show when={target()?.resumeMs ? target() : null}>
-                        {(t) => (
-                          <A class="btn big again" href={playPath(props.kind, props.id, t().videoId)} state={{ startOver: true }} data-f="title:startover" aria-label="Start over">
-                            <RotateCcw aria-hidden />
-                            <span classList={{ sr: form() === "phone" }}>Start over</span>
-                          </A>
-                        )}
-                      </Show>
+                        </A>
+                      )}
+                    </Show>
+                    {/* Part way in: the same video from its beginning. */}
+                    <Show when={target()?.resumeMs ? target() : null}>
+                      {(t) => (
+                        <A class="btn big again" href={playPath(props.kind, props.id, t().videoId)} state={{ startOver: true }} data-f="title:startover" aria-label="Start over">
+                          <RotateCcw aria-hidden />
+                          <span classList={{ sr: form() === "phone" }}>Start over</span>
+                        </A>
+                      )}
                     </Show>
                     {/* Movies only (episodes carry their own marks): two labeled
                         states, the watched one filled with a check. */}
@@ -233,10 +230,6 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                       </button>
                     </Show>
                   </div>
-                  {/* No target, no versions to find: nothing under the play row. */}
-                  <Show when={target()}>
-                    <VersionLine snap={versions()?.state.data ?? null} />
-                  </Show>
                 </div>
                 <div class="acts">
                   <Show when={target()}>
@@ -284,6 +277,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                     </button>
                   </Show>
                 </div>
+                <VersionNote target={!!target()} view={versions()} />
                 {/* Phone reads top to bottom: episodes before the details. */}
                 <Show when={series() && form() === "phone"}>
                   <Episodes view={view} kind={props.kind} id={props.id} runtime={runtimeMinutes(x().runtime)} art={x().background ?? x().poster} />
@@ -333,10 +327,7 @@ function Fact(props: { label: string; value: string }): JSX.Element {
   );
 }
 
-/** Every addon answered and none offers a version this device can play. */
 const inContinue = (id: string) => homeView().rows.find((r) => r.rowId === CONTINUE_ROW)?.tiles.some((t) => t.id === id) ?? false;
-
-const noVersion = (s: VersionsSnapshot | null) => !!s && s.done && !s.recommended && s.rows.length === 0;
 
 /** "36 min left" from what the file has left (Continue Watching's figure), else from the runtime,
  * else the position. */
@@ -355,47 +346,30 @@ function versionCount(s: VersionsSnapshot | null): number | null {
   return n || null;
 }
 
-/** The chosen version in words, under Play. */
-function VersionLine(props: { snap: VersionsSnapshot | null }) {
-  const pick = () => props.snap?.recommended ?? null;
-  const waiting = () => props.snap && !props.snap.done && !pick();
+/** The version status in one quiet line under the action row, as Apple's VersionNote: only when the
+ * versions could not load, or when every addon answered and none plays here. Its two-line slot is there
+ * from the first paint (`role="status"`), so nothing moves when it fills. "Finding versions" is not said:
+ * Play and the Versions button carry that. */
+function VersionNote(props: { target: boolean; view: { state: { status: { state: string }; data: VersionsSnapshot | null } } | null }) {
+  const words = () => {
+    const v = props.view;
+    if (!props.target || !v) return null;
+    if (v.state.status.state === "failed") return `Versions could not load. ${(v.state.status as { reason?: string }).reason ?? ""}`.trim();
+    const s = v.state.data;
+    if (!s?.done || s.recommended) return null;
+    return s.blocked ? blockedWords(s.blocked.reason, s.blocked.count, s.conditions.window).text : `${noVersionWords.title}. ${noVersionWords.detail}`;
+  };
   return (
-    <Switch fallback={<p class="vline muted">Finding versions</p>}>
-      <Match when={pick()}>
-        {(p) => {
-          const st = () => statusText(p().status);
-          return (
-            <p class="vline">
-              <span>{qualityText(p().quality)}</span>
-              <For each={p().features}>{(f) => <span>{f}</span>}</For>
-              <Show when={p().sizeBytes}>{(b) => <span class="num">{bytes(b())}</span>}</Show>
-              <span class={`st ${st().tone}`}>
-                <i class="dot" />
-                {st().text}
-              </span>
-            </p>
-          );
-        }}
-      </Match>
-      <Match when={waiting()}>
-        <p class="vline muted">
-          <span class="st">
-            <LoaderCircle aria-hidden class="spin" />
-            Finding versions
-          </span>
-        </p>
-      </Match>
-      <Match when={props.snap?.done && !pick()}>
-        <p class="vline muted wrap">
+    <p class="vnote" role="status">
+      <Show when={words()}>
+        {(w) => (
           <span class="st warn">
             <i class="dot" />
-            {props.snap?.blocked
-              ? blockedWords(props.snap.blocked.reason, props.snap.blocked.count, props.snap.conditions.window).text
-              : `${noVersionWords.title}. ${noVersionWords.detail}`}
+            {w()}
           </span>
-        </p>
-      </Match>
-    </Switch>
+        )}
+      </Show>
+    </p>
   );
 }
 
