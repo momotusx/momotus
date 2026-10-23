@@ -5,9 +5,6 @@
 .versions-bd::after { background: color-mix(in srgb, var(--bg) 84%, transparent); }
 
 .vhead { position: absolute; left: var(--safe-side); right: var(--safe-side); top: var(--safe-top); }
-.crumbs { display: flex; align-items: center; gap: 12px; font: 500 var(--type-callout) / 1 var(--font-text); color: var(--muted); }
-.crumbs svg { width: 24px; height: 24px; }
-.crumbs .here { color: var(--text); font-weight: 650; }
 .vhead-row { display: flex; align-items: baseline; justify-content: space-between; gap: 32px; margin-top: 18px; }
 .vhead h1 { font: 800 var(--type-title1) / 1.05 var(--font-display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .vhead h1 span { font: 400 var(--type-headline) var(--font-text); color: var(--muted); margin-left: 18px; }
@@ -50,9 +47,7 @@
 .pick-wait .skel:first-of-type { height: 90px; width: 70%; margin-top: 14px; }
 
 .alts { position: absolute; left: 740px; right: var(--safe-side); top: 232px; bottom: var(--safe-bottom); display: flex; flex-direction: column; }
-.thead, .vrow { display: grid; grid-template-columns: 128px minmax(0, 1fr) 124px 290px; align-items: center; column-gap: 16px; }
-.thead { padding: 0 22px 12px; font: 600 var(--type-caption) / 1 var(--font-text); letter-spacing: .08em; text-transform: uppercase;
-  color: var(--muted); border-bottom: 2px solid var(--line); }
+.vrow { display: grid; grid-template-columns: 128px minmax(0, 1fr) 124px 290px; align-items: center; column-gap: 16px; }
 .alist { flex: 1; min-height: 0; margin: 0 -36px; padding: 6px 36px 64px; }
 .vgroup { scroll-margin-top: 12px; }
 /* Group headers stay pinned while their rows scroll, so every group always
@@ -112,8 +107,6 @@
 [data-form="phone"] .versions-scr { position: relative; padding: 12px 16px 40px; }
 [data-form="phone"] .versions-bd { position: fixed; }
 [data-form="phone"] .vhead, [data-form="phone"] .pick, [data-form="phone"] .alts, [data-form="phone"] .vempty { position: relative; left: auto; right: auto; top: auto; bottom: auto; width: auto; }
-[data-form="phone"] .crumbs { font-size: 13px; gap: 4px; }
-[data-form="phone"] .crumbs svg { width: 14px; height: 14px; }
 [data-form="phone"] .vhead-row { flex-direction: column; align-items: flex-start; gap: 8px; margin-top: 10px; }
 [data-form="phone"] .vhead h1 { white-space: normal; }
 [data-form="phone"] .vhead h1 span { display: block; margin: 4px 0 0; font-size: 15px; }
@@ -125,7 +118,6 @@
 [data-form="phone"] .pick .btn { margin: 16px 0 10px; width: 100%; justify-content: center; }
 [data-form="phone"] .fail svg { width: 16px; height: 16px; }
 [data-form="phone"] .alts { margin-top: 20px; }
-[data-form="phone"] .thead { display: none; }
 [data-form="phone"] .alist { margin: 0; padding: 0; overflow: visible; }
 /* The quality starts on the first line with the size, not floating mid-row. */
 [data-form="phone"] .vrow { grid-template-columns: 56px minmax(0, 1fr) auto; grid-template-areas: "q chips size" "q st st"; align-items: start; row-gap: 4px; padding: 10px 8px; }

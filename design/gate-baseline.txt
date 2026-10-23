@@ -65,7 +65,6 @@ apps/web/src/screens/trakt.css :: .trakt-card { display: grid; gap: 24px; paddin
 apps/web/src/screens/trakt.css :: background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge); }
 apps/web/src/screens/trakt.css :: .trakt-unmapped b { font: 650 var(--type-body) / 1.25 var(--font-text); overflow-wrap: anywhere; }
 apps/web/src/screens/trakt.css :: .trakt-code .step a { color: var(--text); font-weight: 650; text-decoration: underline; text-underline-offset: 4px; overflow-wrap: anywhere; }
-apps/web/src/screens/versions.css :: .crumbs .here { color: var(--text); font-weight: 650; }
 apps/web/src/screens/versions.css :: .vhead h1 { font: 800 var(--type-title1) / 1.05 var(--font-display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 apps/web/src/screens/versions.css :: border-radius: var(--radius-l); background: var(--glass); box-shadow: inset 0 0 0 1px var(--edge), var(--glass-highlight);
 apps/web/src/screens/versions.css :: .pick h2 { font: 800 var(--type-title1) / 1.02 var(--font-display); margin: 14px 0 20px; }

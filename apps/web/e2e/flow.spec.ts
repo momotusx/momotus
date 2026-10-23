@@ -55,8 +55,8 @@ test("remote flow: Home, Title, seasons, Versions and Back restore focus", async
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/versions\/tt0944947:2:3/);
   await expect(page.locator(".vhead h1")).toContainText("S2:E3 What Is Dead May Never Die");
-  // The breadcrumb starts at the title, wherever the viewer came from.
-  await expect(page.locator(".crumbs > span")).toHaveText(["Game of Thrones", "Versions"]);
+  // No breadcrumb (plans/versions-web-spec.md 3.1): the header names the video.
+  await expect(page.locator(".crumbs")).toHaveCount(0);
   await expect(page.locator(".pick h2")).toBeVisible();
   await expect(page.locator(".vrow").first()).toBeVisible();
   await expect.poll(() => focused(page)).toBe("versions:play");

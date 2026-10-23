@@ -645,6 +645,10 @@ test.describe("Versions", () => {
       expect(css.pad).toBeGreaterThanOrEqual(4);
       // A row not drawn yet holds the space a drawn one takes (measured per form), so the scroll never jumps.
       expect(Math.abs(css.height - css.placeholder)).toBeLessThanOrEqual(1);
+      // No breadcrumb and no column heads (plans/versions-web-spec.md 3.1 item 6), on every form.
+      await expect(page.locator(".crumbs, nav[aria-label=Breadcrumb]")).toHaveCount(0);
+      await expect(page.locator(".thead")).toHaveCount(0);
+      await expect(page.locator(".versions-scr")).not.toContainText(/\bQuality\b.*\bFeatures\b/i);
       await page.context().close();
     }
   });

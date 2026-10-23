@@ -2,7 +2,6 @@ import { A, useNavigate, useParams } from "@solidjs/router";
 import ArrowLeft from "lucide-solid/icons/arrow-left";
 import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
-import ChevronRight from "lucide-solid/icons/chevron-right";
 import CircleCheck from "lucide-solid/icons/circle-check";
 import OctagonAlert from "lucide-solid/icons/octagon-alert";
 import Play from "lucide-solid/icons/play";
@@ -246,13 +245,6 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
     <div class="versions-scr">
       <Backdrop src={ctx.details()?.background} class="versions-bd" dim />
       <header class="vhead">
-        {/* Where it sits under its title, wherever the viewer came from
-            (Home, Search or Library). */}
-        <nav class="crumbs" aria-label="Breadcrumb">
-          <span>{ctx.details()?.name ?? "Title"}</span>
-          <ChevronRight aria-hidden />
-          <span class="here">Versions</span>
-        </nav>
         <div class="vhead-row">
           <h1>
             Versions
@@ -394,12 +386,6 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
           </section>
 
           <section class="alts" aria-label="All versions">
-            <div class="thead" aria-hidden="true">
-              <span>Quality</span>
-              <span>Features</span>
-              <span>Size</span>
-              <span>Status</span>
-            </div>
             <div
               class="alist"
               classList={{ dimmed: dimmed() }}
