@@ -6,6 +6,10 @@ import SwiftUI
 /// its rows under the system's keyboard (D9).
 struct SearchScreen: View {
     @State private var search: LiveRecord<SearchSnapshot>
+    /// Browse by genre on the iPhone (C43), opened only there.
+    @State private var genres: LiveRecord<GenresSnapshot>
+    @Environment(\.linkRequests) private var links
+    @Environment(\.openTab) private var openTab
     @FocusState private var fieldFocused: Bool
     /// Return in a field: the first result takes focus.
     @FocusState private var firstResult: Bool
@@ -18,6 +22,7 @@ struct SearchScreen: View {
 
     init(core: CoreClient) {
         _search = State(initialValue: LiveRecord("search", core: core))
+        _genres = State(initialValue: LiveRecord("genres", core: core))
     }
 
     private var query: String { input.text }
@@ -46,6 +51,9 @@ struct SearchScreen: View {
         }
         #endif
         .task(id: search.taskId) { search.start() }
+        #if os(iOS)
+        .task(id: genres.taskId) { if !metrics.wide { genres.start() } }
+        #endif
         .onChange(of: input.text) { _, value in setQuery(value) }
         // A query typed or linked before the view could take it (a director chip opening Search).
         .onChange(of: search.snapshot == nil) { _, none in
@@ -89,7 +97,9 @@ struct SearchScreen: View {
         search.command(["type": "setQuery", "query": value])
     }
 
-    private var margin: CGFloat { metrics.wide ? DiscoverLayout.margin : metrics.gutter }
+    /// The page's edge: the Mac's 40, the phone's token inset, so the field, Recent, the lists and the
+    /// genre tiles all sit on it.
+    private var margin: CGFloat { metrics.wide ? DiscoverLayout.margin : Theme.Tile.inset }
 
     @ViewBuilder private var content: some View {
         #if os(tvOS)
@@ -126,6 +136,16 @@ struct SearchScreen: View {
             if let recent = search.snapshot?.recent, !recent.isEmpty {
                 RecentList(recent: recent, input: input)
             }
+            #if os(iOS)
+            // The phone's genre tiles; a failed grid is not drawn (Search's own words cover the page).
+            if !metrics.wide, genres.failure == nil {
+                GenreGrid(snapshot: genres.snapshot) { kind, genre in
+                    // The genre chip's path: one select of the kind and the genre (C40).
+                    links?.discover = DiscoverRequest(kind: kind, genre: genre)
+                    openTab(.discover, link: true)
+                }
+            }
+            #endif
         }
     }
 

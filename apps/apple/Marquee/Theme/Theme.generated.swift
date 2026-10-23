@@ -144,6 +144,8 @@ enum Theme {
         static let poster = CGSize(width: 99, height: 149)
         static let landscape = CGSize(width: 239, height: 134)
         static let gap: CGFloat = 12
+        /// The phone page's side inset (`tile.phone.inset`).
+        static let inset: CGFloat = 20
         /// A poster's corners, then a 16:9 card's.
         static let radius: CGFloat = 11
         static let cardRadius: CGFloat = 13

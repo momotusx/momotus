@@ -237,3 +237,9 @@ private let spots = [
     let page = tone(palette["bgDesktop"]!)
     #expect(contrast(tone(palette["onKey"]!), on: tone(palette["keyFill"]!), page: page) >= 4.5)
 }
+
+// Browse by genre: the white name on the ramp's floor keeps 4.5:1 over white art (plans/design-v3-genre-tiles.md).
+@Test func aGenresNameReadsOverWhiteArt() {
+    let white = Tone(r: 255, g: 255, b: 255, a: 1)
+    #expect(contrast(white, on: Tone(r: 0, g: 0, b: 0, a: GenreGridRules.rampFloor), page: white) >= 4.5)
+}

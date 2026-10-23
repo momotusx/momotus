@@ -87,3 +87,21 @@ struct DiscoverPreviewAsk: Equatable {
     let id: String
     let list: String
 }
+
+/// Search's Browse by genre on the phone (plans/design-v3-genre-tiles.md).
+enum GenreGridRules {
+    static let columns = 3
+    static let gap: CGFloat = 12
+    /// The share of black under the name, from 38 pt into the 90 pt ramp to the tile's foot: white
+    /// keeps 4.5:1 over white art on it.
+    static let rampFloor = 0.62
+
+    /// A tile in a grid `width` wide: three 2:3 tiles sharing it.
+    static func tile(width: CGFloat) -> CGSize {
+        let side = (width - gap * CGFloat(columns - 1)) / CGFloat(columns)
+        return CGSize(width: side, height: side * 1.5)
+    }
+
+    /// The kinds the grid offers: those with genres, in the core's order.
+    static func kinds(_ s: GenresSnapshot) -> [KindGenres] { s.kinds.filter { !$0.genres.isEmpty } }
+}

@@ -116,6 +116,8 @@ ${radius}
         static let poster = CGSize(width: ${tokens.tile.phone.poster.width}, height: ${tokens.tile.phone.poster.height})
         static let landscape = CGSize(width: ${tokens.tile.phone.landscape.width}, height: ${tokens.tile.phone.landscape.height})
         static let gap: CGFloat = ${tokens.tile.phone.gap}
+        /// The phone page's side inset (\`tile.phone.inset\`).
+        static let inset: CGFloat = ${tokens.tile.phone.inset}
         /// A poster's corners, then a 16:9 card's.
         static let radius: CGFloat = ${tokens.tile.phone.radius}
         static let cardRadius: CGFloat = ${tokens.tile.phone.cardRadius}

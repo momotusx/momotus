@@ -12,6 +12,23 @@ struct SearchSnapshot: Decodable, Hashable, Sendable {
     let searchable: Int
 }
 
+/// The genre grid (core view `genres`, C43): Discover's kinds, each with its catalogs' genres and one art each.
+struct GenresSnapshot: Decodable, Hashable, Sendable {
+    let kinds: [KindGenres]
+}
+
+struct KindGenres: Decodable, Hashable, Sendable {
+    let kind: String
+    let label: String
+    let genres: [GenreTile]
+}
+
+struct GenreTile: Decodable, Hashable, Sendable {
+    let genre: String
+    /// A backdrop URL; nil until fetched, and when the genre's first item has none.
+    let art: String?
+}
+
 /// Search's own words (plans/design-v3-phase7-apple.md 3): what the core searches (titles, G1), and no
 /// addon's name, ever (a group shows by the core's title, a failed one by `HomeRow.stateWords`).
 enum SearchWords {

@@ -161,6 +161,98 @@ private struct ResultMeta: View {
     }
 }
 
+/// Browse by genre on the iPhone's Search (plans/design-v3-genre-tiles.md): the kind control when two or
+/// more kinds have genres, then three 2:3 tiles a row, the core's art under the genre's name. No words
+/// but the title, the kinds and the genres; nothing at all while it is empty or failed.
+struct GenreGrid: View {
+    /// nil while the core's grid has not come.
+    let snapshot: GenresSnapshot?
+    let open: (_ kind: String, _ genre: String) -> Void
+    @State private var kind: String?
+    @State private var width: CGFloat = 0
+
+    var body: some View {
+        let kinds = snapshot.map(GenreGridRules.kinds)
+        if kinds?.isEmpty != true {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Browse by genre")
+                    .display(20)
+                    .foregroundStyle(Theme.Palette.text)
+                    .accessibilityAddTraits(.isHeader)
+                    .padding(.bottom, 4)
+                if let kinds, KindControl.for(count: kinds.count) != .none {
+                    KindSegment(items: kinds.map { (id: $0.kind, title: $0.label) }, selected: shown(kinds)?.kind) { kind = $0 }
+                }
+                VStack {
+                    if width > 0 { grid(kinds.flatMap(shown)) }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+            }
+        }
+    }
+
+    /// The picked kind, else the first.
+    private func shown(_ kinds: [KindGenres]) -> KindGenres? {
+        kinds.first { $0.kind == kind } ?? kinds.first
+    }
+
+    @ViewBuilder private func grid(_ shown: KindGenres?) -> some View {
+        let size = GenreGridRules.tile(width: width)
+        let columns = Array(repeating: GridItem(.fixed(size.width), spacing: GenreGridRules.gap), count: GenreGridRules.columns)
+        LazyVGrid(columns: columns, alignment: .leading, spacing: GenreGridRules.gap) {
+            if let shown {
+                ForEach(shown.genres, id: \.genre) { tile in
+                    Button { open(shown.kind, tile.genre) } label: { GenreTileView(tile: tile, size: size) }
+                        .buttonStyle(CardButtonStyle())
+                        .accessibilityLabel(tile.genre)
+                }
+            } else {
+                // The grid has not come: six blank tiles, no words.
+                ForEach(0..<6, id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: Theme.Tile.radius, style: .continuous)
+                        .fill(Theme.Palette.surface)
+                        .frame(width: size.width, height: size.height)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Loading")
+            }
+        }
+    }
+}
+
+/// One genre: its art cropped to the 2:3 tile, the ramp, the name at the bottom left.
+private struct GenreTileView: View {
+    let tile: GenreTile
+    let size: CGSize
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            ArtImage(url: tile.art)
+                .frame(width: size.width, height: size.height)
+            LinearGradient(
+                stops: [
+                    .init(color: .black.opacity(0), location: 0),
+                    .init(color: .black.opacity(0.13), location: 16 / 90),
+                    .init(color: .black.opacity(0.21), location: 27 / 90),
+                    .init(color: .black.opacity(GenreGridRules.rampFloor), location: 38 / 90),
+                    .init(color: .black.opacity(GenreGridRules.rampFloor), location: 1),
+                ],
+                startPoint: .top, endPoint: .bottom
+            )
+            .frame(height: min(90, size.height))
+            Text(tile.genre)
+                .textFont(16, weight: .bold, relativeTo: .callout)
+                .foregroundStyle(.white)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .padding(8)
+        }
+        .frame(width: size.width, height: size.height, alignment: .bottomLeading)
+        .cardArt(radius: Theme.Tile.radius)
+    }
+}
+
 /// Results still coming: blank cards or rows in their places, no words.
 struct ResultSkeleton: View {
     let count: Int
