@@ -140,10 +140,18 @@ fn imdb_ids_in(body: &[u8]) -> Vec<(String, String)> {
         id: Option<serde_json::Value>,
         imdb_id: Option<serde_json::Value>,
     }
+    /// An entry that is not an object (a stray null or string) is skipped,
+    /// not the whole answer.
+    #[derive(serde::Deserialize)]
+    #[serde(untagged)]
+    enum Entry {
+        Item(Item),
+        Other(serde::de::IgnoredAny),
+    }
     #[derive(serde::Deserialize)]
     struct Answer {
-        metas: Option<Vec<Item>>,
-        meta: Option<Item>,
+        metas: Option<Vec<Entry>>,
+        meta: Option<Entry>,
     }
     let Ok(answer) = serde_json::from_slice::<Answer>(body) else {
         return Vec::new();
@@ -153,7 +161,10 @@ fn imdb_ids_in(body: &[u8]) -> Vec<(String, String)> {
         .unwrap_or_default()
         .into_iter()
         .chain(answer.meta)
-        .filter_map(|item| {
+        .filter_map(|entry| {
+            let Entry::Item(item) = entry else {
+                return None;
+            };
             let id = item.id?.as_str()?.to_owned();
             let imdb = item.imdb_id?.as_str()?.to_owned();
             (!is_imdb(&id) && id.len() <= 128 && is_imdb(&imdb)).then_some((id, imdb))
@@ -205,7 +216,9 @@ mod tests {
             {"id":"kitsu:13874","type":"anime","name":"Fate/Grand Order CMs","imdb_id":null},
             {"id":"kitsu:1","type":"anime","name":"x","imdb_id":"not-an-id"},
             {"id":"tt0111161","type":"movie","name":"y","imdb_id":"tt0111161"},
-            {"type":"anime","imdb_id":"tt1"}
+            {"type":"anime","imdb_id":"tt1"},
+            null,
+            "stray"
         ]}"#;
         assert_eq!(
             imdb_ids_in(catalog),
