@@ -28,10 +28,10 @@ use futures_util::StreamExt;
 use mq_library::Table;
 use mq_runtime::{
     AddonCatalogView, AddonsView, CalendarView, Core, DebridLoginView, DebridRecord,
-    DebridTombstone, DebridView, DiscoverView, HomeView, ImportView, LibrarySort, LibraryView,
-    ListedError, ListedFailure, PairingView, PlayTarget, PlaybackView, ProfileError, ProfilesView,
-    SearchView, SessionState, SettingsView, SignInSnapshot, SignInView, StoreId, TitleFacts,
-    TitleView, TraktLoginView, TraktRecord, TraktView, VersionsParams, VersionsView,
+    DebridTombstone, DebridView, DiscoverView, GenresView, HomeView, ImportView, LibrarySort,
+    LibraryView, ListedError, ListedFailure, PairingView, PlayTarget, PlaybackView, ProfileError,
+    ProfilesView, SearchView, SessionState, SettingsView, SignInSnapshot, SignInView, StoreId,
+    TitleFacts, TitleView, TraktLoginView, TraktRecord, TraktView, VersionsParams, VersionsView,
 };
 use mq_streams::{DeviceCaps, StreamPrefs, Target};
 use mq_sync::SyncConfig;
@@ -553,6 +553,7 @@ enum View {
     SignIn(SignInView),
     Settings { _view: SettingsView },
     Addons { _view: AddonsView },
+    Genres { _view: GenresView },
     AddonCatalog(AddonCatalogView),
     Import { _view: ImportView },
     Profiles { _view: ProfilesView },
@@ -577,6 +578,7 @@ impl View {
             View::SignIn(_) => "signIn",
             View::Settings { .. } => "settings",
             View::Addons { .. } => "addons",
+            View::Genres { .. } => "genres",
             View::AddonCatalog(_) => "addonCatalog",
             View::Import { .. } => "import",
             View::Profiles { .. } => "profiles",
@@ -1827,6 +1829,16 @@ impl Session {
                 let (snapshot, updates) = discover.subscribe();
                 let forward = tokio::spawn(forward(sub, updates, out, fence));
                 (View::Discover(discover), to_value(&snapshot)?, forward)
+            }
+            "genres" => {
+                let genres = GenresView::open(&core);
+                let (snapshot, updates) = genres.subscribe();
+                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                (
+                    View::Genres { _view: genres },
+                    to_value(&snapshot)?,
+                    forward,
+                )
             }
             "calendar" => {
                 let today = params

@@ -501,6 +501,20 @@ data class ForkPreview(
     val head: String,
 )
 
+@Serializable
+data class GenresSnapshot(
+    /** Kinds in Discover's order, each with its genres; empty on a kids profile, which has no Discover. */
+    val kinds: List<KindGenres> = emptyList(),
+)
+
+@Serializable
+data class GenreTile(
+    /** Discover's `select {kind, genre}` opens it. */
+    val genre: String,
+    /** The backdrop of the first item of the first catalog listing the genre; null until it is fetched, and when that item has none. */
+    val art: String? = null,
+)
+
 @Serializable(with = Group.Serializer::class)
 enum class Group(
     val wire: String,
@@ -734,6 +748,15 @@ data class KindCount(
     /** "Movies", "Series", ... */
     val label: String,
     val count: Int,
+)
+
+@Serializable
+data class KindGenres(
+    /** As Discover's `kinds`: the kind to `select` and its label. */
+    val kind: String,
+    val label: String,
+    /** In catalog order, each genre once whatever its case (the first catalog's spelling); years (a catalog's filter by year) left out. */
+    val genres: List<GenreTile> = emptyList(),
 )
 
 /** A language for the settings pickers (journey reviews 2026-10-20, web P2-11, Android P2-4): `code` is the tag the core reads it by, `name` its English name. */

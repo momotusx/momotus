@@ -113,15 +113,15 @@ pub struct ItemDetails {
 }
 
 #[derive(Clone)]
-struct Catalog {
-    choice: CatalogChoice,
-    addon: InstalledAddon,
+pub(crate) struct Catalog {
+    pub(crate) choice: CatalogChoice,
+    pub(crate) addon: InstalledAddon,
     /// The type it is asked with.
-    kind: String,
+    pub(crate) kind: String,
     /// The kind it is filed under (`shelf`).
-    shelf: String,
-    id: String,
-    genres: Vec<String>,
+    pub(crate) shelf: String,
+    pub(crate) id: String,
+    pub(crate) genres: Vec<String>,
     genre_required: bool,
     pages: bool,
 }
@@ -147,15 +147,21 @@ struct Inner {
     task: Mutex<Option<JoinHandle<()>>>,
 }
 
-fn empty_snapshot(catalogs: &[Catalog]) -> DiscoverSnapshot {
+/// The kinds the catalogs are filed under, in their order, with labels:
+/// ("movie", "Movies").
+pub(crate) fn kinds(catalogs: &[Catalog]) -> Vec<(String, String)> {
     let mut kinds: Vec<(String, String)> = Vec::new();
     for c in catalogs {
         if !kinds.iter().any(|(k, _)| *k == c.shelf) {
             kinds.push((c.shelf.clone(), type_label(&c.shelf).to_owned()));
         }
     }
+    kinds
+}
+
+fn empty_snapshot(catalogs: &[Catalog]) -> DiscoverSnapshot {
     DiscoverSnapshot {
-        kinds,
+        kinds: kinds(catalogs),
         kind: None,
         catalogs: Vec::new(),
         catalog: None,
@@ -443,7 +449,7 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 /// tells the two apart (the owner, 2026-10-22). Catalogs of a known type
 /// come before those filed by their name (`shelf`), so a kind picked with a
 /// genre lands on a catalog that offers genres of that kind.
-fn browsable(addons: &[InstalledAddon], rows: &HomeRows) -> Vec<Catalog> {
+pub(crate) fn browsable(addons: &[InstalledAddon], rows: &HomeRows) -> Vec<Catalog> {
     let mut titles = HashSet::new();
     let mut catalogs: Vec<Catalog> = addons
         .iter()

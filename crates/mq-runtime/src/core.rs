@@ -149,6 +149,9 @@ struct Inner {
     /// TurkceAltyazi.org, read on this device: its caches and its one
     /// request at a time.
     turkcealtyazi: std::sync::OnceLock<Arc<mq_turkcealtyazi::Site>>,
+    /// Each genre's art for the genre grids, by catalog and genre (core
+    /// backlog C43), with when it was looked up.
+    genre_art: std::sync::Mutex<HashMap<String, crate::views::genres::Looked>>,
 }
 
 /// What is one per data directory however often it is opened: the library
@@ -307,6 +310,7 @@ impl Core {
                 pulled: std::sync::atomic::AtomicBool::new(false),
                 live_seeders: std::sync::Mutex::default(),
                 turkcealtyazi: std::sync::OnceLock::new(),
+                genre_art: std::sync::Mutex::default(),
                 #[cfg(feature = "torrent")]
                 punches: std::sync::OnceLock::new(),
                 walk,
@@ -335,6 +339,13 @@ impl Core {
     }
 
     /// The built-in TurkceAltyazi.org source.
+    /// The genre grids' art, by catalog and genre (`views::genres`).
+    pub(crate) fn genre_art(
+        &self,
+    ) -> &std::sync::Mutex<HashMap<String, crate::views::genres::Looked>> {
+        &self.inner.genre_art
+    }
+
     pub(crate) fn turkcealtyazi(&self) -> Arc<mq_turkcealtyazi::Site> {
         self.inner
             .turkcealtyazi

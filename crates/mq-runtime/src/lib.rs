@@ -40,6 +40,7 @@ pub use views::calendar::{
     CalendarDay, CalendarItem, CalendarSeries, CalendarSnapshot, CalendarView,
 };
 pub use views::discover::{CatalogChoice, DiscoverSnapshot, DiscoverState, DiscoverView};
+pub use views::genres::{GenreTile, GenresSnapshot, GenresView, KindGenres};
 pub use views::home::{HomeCatalog, HomeRow, HomeUpdate, HomeView, RowState, Tile};
 pub use views::import::{ImportSnapshot, ImportSummary, ImportView};
 pub use views::kids::{

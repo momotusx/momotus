@@ -821,3 +821,135 @@ async fn a_preview_named_before_the_page_is_filled_when_it_comes() {
         Some("A girl looks for her dragon.")
     );
 }
+
+/// Core backlog C43: the genre grid lists each kind's genres in catalog
+/// order, each once whatever its case and no year, with the backdrop of the first item
+/// of the first catalog listing it. The art is fetched once: a grid opened
+/// again shows it at once and asks the addon nothing.
+#[tokio::test]
+async fn the_genre_grid_has_each_genre_once_with_its_first_catalog_s_art() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let asked = Arc::new(Mutex::new(Vec::<String>::new()));
+    let log = asked.clone();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let log = log.clone();
+            tokio::spawn(async move {
+                let mut buf = [0u8; 2048];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                let path = String::from_utf8_lossy(&buf[..n])
+                    .split_whitespace()
+                    .nth(1)
+                    .unwrap_or_default()
+                    .to_owned();
+                log.lock().unwrap().push(path.clone());
+                let art = |name: &str| {
+                    serde_json::json!({"metas": [{"id": "tt1", "type": "movie", "name": "First",
+                        "background": format!("https://img.test/{name}.jpg")}]})
+                };
+                let body = if path.contains("/movie/top/genre=Action") {
+                    art("top-action")
+                } else if path.contains("/movie/top/genre=Drama") {
+                    art("top-drama")
+                } else if path.contains("/movie/new/genre=Comedy") {
+                    serde_json::json!({"metas": [{"id": "tt2", "type": "movie", "name": "Bare"}]})
+                } else if path.contains("/series/feed/genre=Drama") {
+                    art("feed-drama")
+                } else {
+                    serde_json::json!({"metas": []})
+                }
+                .to_string();
+                let reply = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(reply.as_bytes()).await;
+            });
+        }
+    });
+    let manifest = serde_json::json!({
+        "id": "cat", "version": "1.0.0", "name": "Cat", "types": ["movie", "series"], "resources": ["catalog"],
+        "catalogs": [
+            {"type": "movie", "id": "top", "name": "Popular",
+             "extra": [{"name": "genre", "options": ["Action", "Drama"]}]},
+            {"type": "movie", "id": "new", "name": "New",
+             "extra": [{"name": "genre", "options": ["drama", "Comedy", "2026", "1980s"]}]},
+            {"type": "series", "id": "feed", "name": "Series",
+             "extra": [{"name": "genre", "options": ["Drama"]}]}
+        ]
+    });
+    let row = AddonRow {
+        transport_url: format!("http://{addr}/manifest.json"),
+        manifest_json: manifest.to_string(),
+        position: 0,
+        enabled: true,
+        allow_private: true,
+    };
+    let core = Core::temporary("p").unwrap();
+    core.library().set_addons("p", &[row], &core.hlc()).unwrap();
+    let art_count = |s: &mq_runtime::GenresSnapshot| {
+        s.kinds
+            .iter()
+            .flat_map(|k| &k.genres)
+            .filter(|g| g.art.is_some())
+            .count()
+    };
+    let grid = mq_runtime::GenresView::open(&core);
+    for _ in 0..300 {
+        if art_count(&grid.snapshot()) == 3 && asked.lock().unwrap().len() == 4 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let s = grid.snapshot();
+    type Grid<'a> = Vec<(&'a str, Vec<(&'a str, Option<&'a str>)>)>;
+    let read: Grid = s
+        .kinds
+        .iter()
+        .map(|k| {
+            (
+                k.kind.as_str(),
+                k.genres
+                    .iter()
+                    .map(|g| (g.genre.as_str(), g.art.as_deref()))
+                    .collect(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        read,
+        [
+            (
+                "movie",
+                vec![
+                    ("Action", Some("https://img.test/top-action.jpg")),
+                    ("Drama", Some("https://img.test/top-drama.jpg")),
+                    ("Comedy", None),
+                ]
+            ),
+            (
+                "series",
+                vec![("Drama", Some("https://img.test/feed-drama.jpg"))]
+            ),
+        ]
+    );
+    assert_eq!(s.kinds[0].label, "Movies");
+    let asked_once = asked.lock().unwrap().len();
+    assert_eq!(
+        asked_once,
+        4,
+        "one lookup per genre: {:?}",
+        asked.lock().unwrap()
+    );
+
+    drop(grid);
+    let again = mq_runtime::GenresView::open(&core);
+    assert_eq!(art_count(&again.snapshot()), 3, "the art shows at once");
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(
+        asked.lock().unwrap().len(),
+        asked_once,
+        "no request on the second open"
+    );
+}

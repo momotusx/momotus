@@ -222,6 +222,40 @@ async fn a_title_off_the_list_opens_denied_and_trailers_never_show() {
     assert_eq!(owners.snapshot().header.details.unwrap().trailers.len(), 1);
 }
 
+/// C43 review P3: a kids profile has no Discover, so its genre grid is
+/// empty however many catalogs the owner installed.
+#[tokio::test]
+async fn a_kids_profile_has_no_genre_grid() {
+    let fixture = Fixture::default();
+    let (owner, kid) = kid(&fixture).await;
+    let manifest = json!({
+        "id": "cat", "version": "1.0.0", "name": "Cat", "types": ["movie"], "resources": ["catalog"],
+        "catalogs": [{"type": "movie", "id": "top", "name": "Popular",
+            "extra": [{"name": "genre", "options": ["Action", "Drama"]}]}]
+    });
+    let catalog = AddonRow {
+        transport_url: "http://127.0.0.1:9/manifest.json".into(),
+        manifest_json: manifest.to_string(),
+        position: 0,
+        enabled: true,
+        allow_private: true,
+    };
+    let mut rows = owner.library().addons(OWNER).unwrap();
+    rows.push(catalog);
+    owner
+        .library()
+        .set_addons(OWNER, &rows, &owner.hlc())
+        .unwrap();
+    let owners = mq_runtime::GenresView::open(&owner);
+    assert_eq!(
+        owners.snapshot().kinds.len(),
+        1,
+        "the owner's grid has Movies"
+    );
+    let kids = mq_runtime::GenresView::open(&kid);
+    assert!(kids.snapshot().kinds.is_empty(), "{:?}", kids.snapshot());
+}
+
 #[tokio::test]
 async fn versions_need_the_list_and_a_video_of_the_title() {
     let fixture = Fixture::default();

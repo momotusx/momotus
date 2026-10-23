@@ -2,6 +2,7 @@ pub mod addon_catalog;
 pub mod addons;
 pub mod calendar;
 pub mod discover;
+pub mod genres;
 pub mod home;
 pub mod import;
 pub mod kids;
