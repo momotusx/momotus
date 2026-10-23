@@ -41,6 +41,11 @@ struct StreamChoiceWords: Decodable, Sendable {
         let showAll: String
         let showFewer: String
         let back: String
+        let details: String
+        let bestTv: String
+        let bestPhone: String
+        /// How a row starts, after its size: "ready", "direct", "download", "shared" ("shared by {people}").
+        let source: [String: String]
         let smaller: String
         let sharper: String
         /// "uhd", "fhd", "hd", "other" to the section's heading.
@@ -52,6 +57,9 @@ struct StreamChoiceWords: Decodable, Sendable {
         let findingChosen: String
         let chooseAnother: String
         let chooseAnotherSaid: String
+        /// Every start subtitle the core tried could not be read (`startSubtitleFailed`); no source named.
+        /// Optional: the key lands with the core's subtitle hand-over.
+        let subtitlesFailed: String?
     }
 
     struct Learned: Decodable, Sendable {
@@ -295,13 +303,6 @@ enum StreamChoice {
         }
     }
 
-    /// The recommended card's line: a version that plays in a window says
-    /// so under its reasons; other lines stay in the list.
-    static func cardLine(_ row: VersionRow) -> LineWords? {
-        guard let line = row.line, line.kind == "buffer" else { return nil }
-        return lineWords(line)
-    }
-
     /// The speed that decides here: HTTP with a streaming service account or
     /// without the engine, else the torrent engine's.
     static func speed(http: Speed, p2p: Speed, engine: Bool, account: Bool) -> Speed {
@@ -421,11 +422,10 @@ enum StreamChoice {
         return "other"
     }
 
-    /// A row for a screen reader: "1080p, HDR10, 2 GB, May start slowly, 7 seeders"; never its addon.
-    static func spoken(_ row: VersionRow) -> String {
-        let line = row.line.flatMap { lineWords($0) }
-        let state = line.map { [$0.text, $0.details].filter { !$0.isEmpty }.joined(separator: ", ") } ?? VersionWords.status(row.status)
-        return ([row.quality] + row.features + [VersionWords.size(row.sizeBytes), state].compactMap { $0 }).joined(separator: ", ")
+    /// Words that follow a size after a comma start in lower case: "12 GB, may start slowly", as on the
+    /// web and Android; with no size before them they keep their capital.
+    static func lowerFirst(_ words: String) -> String {
+        words.prefix(1).lowercased() + words.dropFirst()
     }
 
     /// The HDR formats the core ranks for: none on a screen without HDR;

@@ -156,7 +156,9 @@ struct HomeScreen: View {
         heroVersions = versions
         switch TitlePlay.of(versions.snapshot) {
         case .player(let key): playing = key.flatMap { versions.play($0) } ?? versions.pending()
-        case .versions, .inert: showHeroVersions = true
+        case .versions: showHeroVersions = true
+        // Back alone would be a dead end: nothing opens, as the title's inert Play.
+        case .inert: break
         }
     }
 

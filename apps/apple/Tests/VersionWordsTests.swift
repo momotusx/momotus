@@ -13,30 +13,6 @@ private func row(
         line: nil, sourceClass: nil, bitrateMbps: nil)
 }
 
-@Test func thePickHasItsFactsInTheWebsOrder() {
-    let bare = row()
-    #expect(VersionWords.facts(bare).map(\.key) == ["Size", "Status"])
-    #expect(VersionWords.facts(bare)[0].value == "Unknown")
-    let full = row(features: ["HDR10", "Atmos"], size: 1_500_000_000, languages: ["eng", "tur"])
-    #expect(VersionWords.facts(full).map(\.key) == ["Size", "Status", "Features", "Languages"])
-    #expect(VersionWords.facts(full)[3].value == "English, Turkish")
-    // One feature is in the heading, not repeated as a fact.
-    #expect(VersionWords.facts(row(features: ["HDR10"])).map(\.key) == ["Size", "Status"])
-    #expect(VersionWords.pickHeading(row(quality: "4K", features: ["Dolby Vision", "Atmos"])) == "4K Dolby Vision")
-}
-
-@Test func reasonsAndFailoverSayWhatTheWebSays() {
-    // Never the service's name.
-    #expect(VersionWords.reason("readyNow", status: .ready(service: "Real-Debrid")) == "Ready now")
-    #expect(VersionWords.reason("readyNow", status: .direct) == "Ready now")
-    #expect(VersionWords.reason("smallerFaster") == "Smaller and faster to start")
-    #expect(VersionWords.failover(row()) == "One source for this release.")
-    #expect(VersionWords.failover(row(failover: 1)) == "2 sources. If one fails, the next starts on its own.")
-    #expect(VersionWords.failover(row(failover: 2)) == "3 sources. If one fails, the next starts on its own.")
-    #expect(VersionWords.status(.needsDownload(service: "TorBox")) == "Needs download")
-    #expect(VersionWords.status(.ready(service: "TorBox")) == "Ready now")
-}
-
 @Test func languageCodesBecomeEnglishNames() {
     #expect(VersionWords.languageName("eng") == "English")
     #expect(VersionWords.languageName("fr") == "French")
@@ -50,24 +26,14 @@ private func row(
     #expect(VersionWords.detail(row()) == "Language not stated")
 }
 
-@Test func oneSeedIsSingular() {
-    #expect(VersionWords.status(.torrent(seeds: 1)) == "Torrent, 1 seed")
-    #expect(VersionWords.status(.torrent(seeds: 153)) == "Torrent, 153 seeds")
-    #expect(VersionWords.status(.torrent(seeds: nil)) == "Torrent")
-}
-
 @Test func wideLayoutsNeedTheRoomTheyWereMadeFor() {
     // iPad Air in portrait (820 pt, 40 pt gutters): the pick above the table, one column per row.
     let ipadPortrait: CGFloat = 820 - 80
     #expect(!WideLayout.pickBesideTable(page: ipadPortrait))
-    #expect(WideLayout.tableColumns(table: ipadPortrait))
     #expect(!WideLayout.creditsBesideEpisodes(page: ipadPortrait))
-    // iPad mini in portrait (744 pt): rows read in two lines.
-    #expect(!WideLayout.tableColumns(table: 744 - 80))
     // iPad Air in landscape (1180 pt): side by side, columns, credits beside the episodes.
     let ipadLandscape: CGFloat = 1180 - 80
     #expect(WideLayout.pickBesideTable(page: ipadLandscape))
-    #expect(WideLayout.tableColumns(table: ipadLandscape - 360 - 40))
     #expect(WideLayout.creditsBesideEpisodes(page: ipadLandscape))
 }
 

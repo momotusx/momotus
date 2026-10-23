@@ -12,6 +12,8 @@ struct PlayerScreen: View {
     @State private var showNextVersions = false
     /// This title's Versions over the paused player: Choose another version, or the failure card's way on.
     @State private var showVersions = false
+    /// Where the card's Settings goes when no version could start: sources or accounts.
+    @State private var settingsPlace: SettingsPlace?
     /// When an OSD menu opened; a pick or the next touch clears it.
     @State private var menuOpenedAt: ContinuousClock.Instant?
     /// The controls stay up and Up Next waits while this holds (`PlayerLayout.menuHolds`).
@@ -51,134 +53,142 @@ struct PlayerScreen: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
-            VideoSurface(player: model.player, onFirstFrame: model.firstFrame, onLayer: attachLayer)
-                .ignoresSafeArea()
-                .accessibilityHidden(true)
-            // Taps on the picture toggle the controls. A gesture on the whole
-            // screen instead would sit over the menus (Audio, Subtitles, ...)
-            // and keep them from opening.
-            #if os(tvOS)
-            // A remote has no picture to tap: with the controls hidden this
-            // invisible target holds focus, and a click or any move brings
-            // them back (Play/Pause is on the whole screen, below).
-            if !controls, model.playback?.phase != "failed", !model.showEndCard {
-                Button { touched(toggle: false) } label: {
-                    Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity).contentShape(Rectangle())
+            // The player under Versions is inert: nothing in it can be reached, read or pressed.
+            ZStack {
+                Color.black.ignoresSafeArea()
+                VideoSurface(player: model.player, onFirstFrame: model.firstFrame, onLayer: attachLayer)
+                    .ignoresSafeArea()
+                    .accessibilityHidden(true)
+                // Taps on the picture toggle the controls. A gesture on the whole
+                // screen instead would sit over the menus (Audio, Subtitles, ...)
+                // and keep them from opening.
+                #if os(tvOS)
+                // A remote has no picture to tap: with the controls hidden this
+                // invisible target holds focus, and a click or any move brings
+                // them back (Play/Pause is on the whole screen, below).
+                if !controls, model.playback?.phase != "failed", !model.showEndCard {
+                    Button { touched(toggle: false) } label: {
+                        Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity).contentShape(Rectangle())
+                    }
+                    .buttonStyle(BareStyle())
+                    .focused($catcherFocused)
+                    .onMoveCommand { _ in touched(toggle: false) }
+                    .onAppear { if model.segment == nil && !model.showNext { catcherFocused = true } }
+                    .ignoresSafeArea()
+                    .accessibilityLabel("Show controls")
                 }
-                .buttonStyle(BareStyle())
-                .focused($catcherFocused)
-                .onMoveCommand { _ in touched(toggle: false) }
-                .onAppear { if model.segment == nil && !model.showNext { catcherFocused = true } }
-                .ignoresSafeArea()
-                .accessibilityLabel("Show controls")
-            }
-            #else
-            Color.clear
-                .contentShape(Rectangle())
-                .ignoresSafeArea()
-                #if os(macOS)
-                // A double click fills the screen, as in every Mac player.
-                .onTapGesture(count: 2) { NSApp.keyWindow?.toggleFullScreen(nil) }
+                #else
+                Color.clear
+                    .contentShape(Rectangle())
+                    .ignoresSafeArea()
+                    #if os(macOS)
+                    // A double click fills the screen, as in every Mac player.
+                    .onTapGesture(count: 2) { NSApp.keyWindow?.toggleFullScreen(nil) }
+                    #endif
+                    .onTapGesture { touched(toggle: true) }
+                    // With the controls hidden, VoiceOver finds one element that brings them back.
+                    .accessibilityElement()
+                    .accessibilityLabel("Show controls")
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction { touched(toggle: false) }
+                    .accessibilityHidden(controls)
                 #endif
-                .onTapGesture { touched(toggle: true) }
-                // With the controls hidden, VoiceOver finds one element that brings them back.
-                .accessibilityElement()
-                .accessibilityLabel("Show controls")
-                .accessibilityAddTraits(.isButton)
-                .accessibilityAction { touched(toggle: false) }
-                .accessibilityHidden(controls)
-            #endif
-            StatusOverlay(
-                model: model, back: close, chooseVersion: model.versions == nil ? nil : { openVersions() },
-                overControls: phoneControls
-                    ? PlayerLayout.statusOverTransport(windowHeight: windowHeight, safeBottom: safeBottom)
-                    : PlayerLayout.statusOverControls(controlsShown: controlsShown, windowHeight: windowHeight, controlsHeight: controlsHeight),
-                spinnerInPlay: phoneControls
-            )
-            if controlsShown {
-                PlayerControls(model: model, versions: model.versions, back: close, hold: { open in
-                    menuOpenedAt = open ? .now : nil
-                    lastTouch = .now
-                }, activity: { lastTouch = .now }, pip: pipControl, windowHeight: windowHeight, measured: { controlsHeight = $0 })
-                    .transition(.opacity)
-            } else if model.playback?.phase != "failed", let trakt = model.playback?.trakt, TraktRules.playbackMark(trakt)?.warn == true {
-                // A Trakt warning stays in sight with the controls hidden: it often comes after they hid.
-                TraktMark(trakt: trakt)
-                    .padding(.horizontal, Theme.Space.s)
-                    .padding(.vertical, Theme.Space.xs)
-                    .background(Capsule().fill(.black.opacity(0.55)))
-                    .frame(maxWidth: 520, alignment: .leading)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .padding(Theme.Space.m)
-                    .allowsHitTesting(false)
-                    .transition(.opacity)
-            }
-            // Over the controls and their scrim, so a line never reads dimmed with
-            // them up (the iPhone walk, round 3); the rules keep it off their buttons.
-            if let text = model.subtitleText, model.playback?.phase != "failed" {
-                GeometryReader { geo in
-                    let place = subtitlePlace(geo.size)
-                    // Its foot stays put; a larger caption style or a second line grows upward.
-                    SubtitleLine(text: text, size: model.subtitleSize)
-                        // The player's own file subtitles were never spoken line by line, so the file's are not; an
-                        // addon track's lines stay readable, as they were.
-                        .accessibilityHidden(model.subtitle == nil)
-                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { subtitleBox = $0 }
-                        .scaleEffect(place.scale, anchor: .bottom)
-                        .frame(width: geo.size.width, height: max(place.foot, 0), alignment: .bottom)
+                StatusOverlay(
+                    model: model, back: close, chooseVersion: model.versions == nil ? nil : { openVersions() },
+                settings: { settingsPlace = $0 },
+                    overControls: phoneControls
+                        ? PlayerLayout.statusOverTransport(windowHeight: windowHeight, safeBottom: safeBottom)
+                        : PlayerLayout.statusOverControls(controlsShown: controlsShown, windowHeight: windowHeight, controlsHeight: controlsHeight),
+                    spinnerInPlay: phoneControls
+                )
+                if controlsShown {
+                    PlayerControls(model: model, versions: model.versions, back: close, hold: { open in
+                        menuOpenedAt = open ? .now : nil
+                        lastTouch = .now
+                    }, activity: { lastTouch = .now }, pip: pipControl, windowHeight: windowHeight, measured: { controlsHeight = $0 })
+                        .transition(.opacity)
+                } else if model.playback?.phase != "failed", let trakt = model.playback?.trakt, TraktRules.playbackMark(trakt)?.warn == true {
+                    // A Trakt warning stays in sight with the controls hidden: it often comes after they hid.
+                    TraktMark(trakt: trakt)
+                        .padding(.horizontal, Theme.Space.s)
+                        .padding(.vertical, Theme.Space.xs)
+                        .background(Capsule().fill(.black.opacity(0.55)))
+                        .frame(maxWidth: 520, alignment: .leading)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .padding(Theme.Space.m)
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
                 }
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
-                .animation(Theme.Motion.panel, value: controls)
-            }
-            if let status = model.subtitleStatus, model.playback?.phase != "failed" {
-                // Why the picked subtitles did not load, for a few seconds, clear of Skip at the other corner.
-                Text(status)
-                    .textFont(Theme.type.callout, relativeTo: .callout)
-                    .foregroundStyle(.white)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, Theme.Space.s)
-                    .padding(.vertical, Theme.Space.xs)
-                    .background(RoundedRectangle(cornerRadius: Theme.Radius.m, style: .continuous).fill(.black.opacity(0.62)))
-                    .frame(maxWidth: 520, alignment: .leading)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                    .padding(.leading, Theme.Space.m)
-                    .padding(.bottom, PlayerLayout.overlayBottom(controlsShown: controlsShown, controlsHeight: controlsHeight))
+                // Over the controls and their scrim, so a line never reads dimmed with
+                // them up (the iPhone walk, round 3); the rules keep it off their buttons.
+                if let text = model.subtitleText, model.playback?.phase != "failed" {
+                    GeometryReader { geo in
+                        let place = subtitlePlace(geo.size)
+                        // Its foot stays put; a larger caption style or a second line grows upward.
+                        SubtitleLine(text: text, size: model.subtitleSize)
+                            // The player's own file subtitles were never spoken line by line, so the file's are not; an
+                            // addon track's lines stay readable, as they were.
+                            .accessibilityHidden(model.subtitle == nil)
+                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { subtitleBox = $0 }
+                            .scaleEffect(place.scale, anchor: .bottom)
+                            .frame(width: geo.size.width, height: max(place.foot, 0), alignment: .bottom)
+                    }
+                    .ignoresSafeArea()
                     .allowsHitTesting(false)
-                    .transition(.opacity)
-            }
-            if skipShown, let segment = model.segment {
-                // Netflix places it bottom right on the controls' top line, and it
-                // stays there whether or not the controls show.
-                SkipButton(segment: segment, showSource: controls) { model.skip(segment) }
-                    .id(segment)
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { skipHeight = $0 }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                    .padding(.trailing, Theme.Space.m)
-                    .padding(.bottom, PlayerLayout.overlayBottom(controlsShown: controlsShown, controlsHeight: controlsHeight))
-                    .transition(.opacity)
-            }
-            if upNextShown {
-                // Just over the measured controls while they show; on a short window it waits for them to hide.
-                UpNextCard(model: model, short: windowHeight > 0 && windowHeight < PlayerLayout.upNextRoom)
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { upNextHeight = $0 }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                    .padding(.horizontal, Theme.Space.m)
-                    .padding(.bottom, PlayerLayout.overlayBottom(controlsShown: controlsShown, controlsHeight: controlsHeight))
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
                     .animation(Theme.Motion.panel, value: controls)
+                }
+                if let status = model.subtitleStatus, model.playback?.phase != "failed" {
+                    // Why the picked subtitles did not load, for a few seconds, clear of Skip at the other corner.
+                    Text(status)
+                        .textFont(Theme.type.callout, relativeTo: .callout)
+                        .foregroundStyle(.white)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, Theme.Space.s)
+                        .padding(.vertical, Theme.Space.xs)
+                        .background(RoundedRectangle(cornerRadius: Theme.Radius.m, style: .continuous).fill(.black.opacity(0.62)))
+                        .frame(maxWidth: 520, alignment: .leading)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                        .padding(.leading, Theme.Space.m)
+                        .padding(.bottom, PlayerLayout.overlayBottom(controlsShown: controlsShown, controlsHeight: controlsHeight))
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                }
+                if skipShown, let segment = model.segment {
+                    // Netflix places it bottom right on the controls' top line, and it
+                    // stays there whether or not the controls show.
+                    SkipButton(segment: segment, showSource: controls) { model.skip(segment) }
+                        .id(segment)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { skipHeight = $0 }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                        .padding(.trailing, Theme.Space.m)
+                        .padding(.bottom, PlayerLayout.overlayBottom(controlsShown: controlsShown, controlsHeight: controlsHeight))
+                        .transition(.opacity)
+                }
+                if upNextShown {
+                    // Just over the measured controls while they show; on a short window it waits for them to hide.
+                    UpNextCard(model: model, short: windowHeight > 0 && windowHeight < PlayerLayout.upNextRoom)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { upNextHeight = $0 }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                        .padding(.horizontal, Theme.Space.m)
+                        .padding(.bottom, PlayerLayout.overlayBottom(controlsShown: controlsShown, controlsHeight: controlsHeight))
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                        .animation(Theme.Motion.panel, value: controls)
+                }
+                if model.showEndCard {
+                    EndCard(model: model, back: close) { showNextVersions = true }
+                        .transition(.opacity)
+                }
             }
-            if model.showEndCard {
-                EndCard(model: model, back: close) { showNextVersions = true }
-                    .transition(.opacity)
-            }
+            .disabled(showVersions)
+            .accessibilityHidden(showVersions)
             if showVersions, let versions = model.versions {
                 // Over the player, which waits paused under it: a pick replaces the play, Back returns to it.
                 VersionsScreen(model: versions, heading: model.route.target.title, core: core, choose: { key in
                     model.switchVersion(key)
                     closeVersions()
                 }, back: { closeVersions() })
+                // Modal: VoiceOver, Tab and the TV's focus stay on the page while it covers the player.
+                .accessibilityAddTraits(.isModal)
                 .transition(.opacity)
             }
         }
@@ -193,6 +203,16 @@ struct PlayerScreen: View {
         // A Trakt warning is said once, when it arrives.
         .onChange(of: model.playback?.trakt) { _, now in
             if let mark = TraktRules.playbackMark(now), mark.warn { announce(mark.label) }
+        }
+        // Back from the card's Settings: the versions are asked again, so a source or account added there plays.
+        .onChange(of: settingsPlace) { old, new in
+            if old != nil, new == nil, model.noPick { model.retryPick() }
+        }
+        .navigationDestination(item: $settingsPlace) { place in
+            switch place {
+            case .addons: AddonsPage(core: core, sourcesOnly: true)
+            case .accounts: DebridScreen(core: core)
+            }
         }
         .navigationDestination(isPresented: $showNextVersions) {
             if let versions = model.nextVersions, let next = model.next {
@@ -484,6 +504,9 @@ private struct SubtitleLine: View {
     }
 }
 
+/// Where the card's Settings goes.
+private enum SettingsPlace: Hashable { case addons, accounts }
+
 /// Starting, buffering, a failed source and a failed playback, in words.
 private struct StatusOverlay: View {
     let model: PlayerModel
@@ -491,6 +514,8 @@ private struct StatusOverlay: View {
     /// Opens this title's Versions over the player: failover only tries the
     /// same release from other sources, so another version is the way on.
     let chooseVersion: (() -> Void)?
+    /// Settings, Addons or Accounts: the shared table's Settings when no version could start.
+    let settings: (SettingsPlace) -> Void
     /// Set when the shown controls reach the middle: the waiting status sits
     /// this far up, just over them (PlayerLayout.statusOverControls).
     var overControls: CGFloat?
@@ -516,8 +541,10 @@ private struct StatusOverlay: View {
         return switch action {
         case .offer: Button(label) { if let key = model.playback?.offer?.key { model.switchVersion(key) } }
         case .playFromDevice: Button(label) { if let key = kept { model.switchVersion(key) } }
-        case .retry: Button(label) { if cannotOpen { model.reopen() } else { model.retry() } }
+        case .retry: Button(label) { if cannotOpen { model.reopen() } else if model.noPick { model.retryPick() } else { model.retry() } }
         case .choose, .versions: Button(label) { chooseVersion?() }
+        case .settingsAddons: Button(label) { settings(.addons) }
+        case .settingsAccounts: Button(label) { settings(.accounts) }
         case .back: Button(label, action: back)
         }
     }
@@ -552,7 +579,8 @@ private struct StatusOverlay: View {
         .foregroundStyle(Theme.Palette.text)
         .padding(Theme.Space.l)
         .frame(maxWidth: 640, alignment: .leading)
-        .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true)
+        // A flat surface with no edge, as every card (design/DECISION.md, Surfaces).
+        .background(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous).fill(Theme.Palette.surface))
         .padding(.horizontal, Theme.Space.m)
         .onAppear { focus = PlayerLayout.failureFocus(order) }
     }
@@ -573,6 +601,7 @@ private struct StatusOverlay: View {
             .fixedSize()
             .opacity(shown ? 1 : 0)
             .disabled(!shown)
+            .allowsHitTesting(shown)
             .accessibilityHidden(!shown)
             .onChange(of: shown) { _, now in
                 if now { AccessibilityNotification.Announcement(StreamChoice.words.player.chooseAnotherSaid).post() }
@@ -591,9 +620,8 @@ private struct StatusOverlay: View {
                  lines: PlayerLayout.failureLines(playback?.attempts ?? []),
                  order: PlayerLayout.failureActions(empty: playback?.empty, offer: playback?.offer != nil, kept: kept != nil, canChoose: canChoose))
         case .noPick:
-            let empty = model.versions?.snapshot?.empty?.kind
-            card(empty.flatMap(VersionWords.emptyLine) ?? "No version was ready in time", lines: [],
-                 order: PlayerLayout.noPickActions(empty, canChoose: canChoose))
+            let empty = PlayerLayout.noPickState(model.versions?.snapshot?.empty, failed: model.versions?.failure != nil)
+            card(PlayerLayout.noPickHeadline(empty), lines: [], order: PlayerLayout.noPickActions(empty, canChoose: canChoose))
         case .cannotOpen:
             card(PlayerLayout.cannotOpenHeadline, lines: [model.openError ?? ""],
                  order: PlayerLayout.cannotOpenActions(canChoose: canChoose), cannotOpen: true)

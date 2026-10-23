@@ -20,13 +20,10 @@ struct VersionsScreen: View {
     @Environment(\.metrics) private var metrics
     @Environment(\.dismiss) private var dismiss
     @State private var expanded: Set<String> = []
-    /// Phone: the one row a tap has opened (its details and Play).
-    @State private var opened: String?
     /// The sections' keys as first shown, kept while over the player.
     @State private var held: [String: [String]] = [:]
     /// TV: the page enters on the pick's Play, or the empty state's first action.
     @FocusState private var pickFocused: Bool
-    @Environment(\.dynamicTypeSize) private var typeSize
     /// The page's width, for the layouts below.
     @State private var width: CGFloat = 0
 
@@ -92,13 +89,6 @@ struct VersionsScreen: View {
 
     /// The pick beside the table only with room for both (not an iPad in portrait).
     private var sideBySide: Bool { metrics.wide && WideLayout.pickBesideTable(page: page) }
-
-    /// The table's columns only with room for them; else each row reads in two lines.
-    private var columns: Bool {
-        // Fixed columns do not grow with the text: at the accessibility sizes rows read in two lines.
-        metrics.wide && !typeSize.isAccessibilitySize
-            && WideLayout.tableColumns(table: sideBySide ? page - Self.pickWidth - Theme.Space.l : page)
-    }
 
     private var title: some View {
         Text("Versions")
@@ -170,9 +160,7 @@ struct VersionsScreen: View {
                 }
                 Capsule().fill(Theme.Palette.surface).frame(height: 48)
             }
-            .padding(Theme.Space.m)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true)
+            .flatCard()
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(StreamChoice.words.page.finding)
         }
@@ -194,32 +182,24 @@ struct VersionsScreen: View {
                 LearnedNoteBar(text: text) { undo(note) }
             }
             let sections = VersionWords.sections(snapshot, held: choose == nil ? nil : held)
-            if columns, !sections.isEmpty {
-                ColumnHeadings()
-            }
             ForEach(sections, id: \.quality) { section in
                 VStack(alignment: .leading, spacing: 0) {
                     if let title = section.title {
-                        HStack {
-                            Text(caps: title)
-                                .tracking(1.6)
-                            Spacer()
-                            Text("\(section.rows.count)").monospacedDigit()
+                        // A plain heading, no outline: "1080p  2".
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            Text(title).textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
+                            Text("\(section.rows.count)").monospacedDigit().foregroundStyle(Theme.Palette.dim)
                         }
-                        .textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
                         .foregroundStyle(Theme.Palette.text)
                         .padding(.horizontal, 14)
-                        .padding(.vertical, 9)
-                        .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-                        .accessibilityElement(children: .combine)
+                        .padding(.vertical, 8)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("\(title), \(StreamChoice.counted("versions", section.rows.count))")
                         .accessibilityAddTraits(.isHeader)
                     }
                     let open = expanded.contains(section.quality)
                     ForEach(open ? section.rows : Array(section.rows.prefix(3))) { row in
-                        VersionRowView(row: row, wide: columns, dimmed: VersionWords.dimmedStatus(snapshot?.empty?.kind),
-                                       tapped: opened == row.key, openRow: { opened = row.key }) {
-                            play(row.key)
-                        }
+                        VersionRowView(row: row, dimmed: VersionWords.dimmedStatus(snapshot?.empty?.kind)) { play(row.key) }
                         Rectangle().fill(Theme.Palette.line.opacity(0.6)).frame(height: 1)
                     }
                     if section.rows.count > 3 {
@@ -290,9 +270,7 @@ private struct EmptyCard: View {
                 button(item).buttonStyle(PillButtonStyle())
             }
         }
-        .padding(Theme.Space.m)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true)
+        .flatCard()
     }
 
     private func button(_ item: VersionWords.EmptyAct) -> some View {
@@ -309,16 +287,24 @@ private struct EmptyCard: View {
     }
 }
 
-/// The recommended version: what it is, why it was picked, and Play.
+extension View {
+    /// A card on the page: a flat `surface` with no edge (design/DECISION.md, Surfaces).
+    func flatCard() -> some View {
+        padding(Theme.Space.m)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous).fill(Theme.Palette.surface))
+    }
+}
+
+/// The recommended version: the kicker, its badges, one why line, Play.
 private struct PickCard: View {
     let row: VersionRow
     let play: () -> Void
     /// TV: the page enters on Play.
     var focus: FocusState<Bool>.Binding
 
-    /// The pick's heading: a plain 64 percent line, not an eyebrow.
     static var kicker: some View {
-        Text("Best for this screen")
+        Text(VersionWords.kicker)
             .textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
             .foregroundStyle(Theme.Palette.dim)
     }
@@ -326,184 +312,135 @@ private struct PickCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Self.kicker
-            Text(VersionWords.pickHeading(row))
-                .display(Theme.type.title1 + 6)
-                .foregroundStyle(Theme.Palette.text)
-            #if os(tvOS)
-            // TV: Play under the heading, where the page enters, so it is in
-            // view whatever the details below run to.
-            playButton
-            #endif
-            Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 6) {
-                ForEach(VersionWords.facts(row), id: \.key) { fact in
-                    self.fact(fact.key, fact.value, dot: fact.key == "Status" ? VersionWords.tone(row.status).color : nil)
-                }
-            }
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(row.reasons.prefix(3), id: \.self) { reason in
-                    Label {
-                        Text(VersionWords.reason(reason, status: row.status))
-                    } icon: {
-                        Glyph("check").foregroundStyle(Theme.Palette.ok)
-                    }
-                    .textFont(Theme.type.callout, relativeTo: .callout)
-                    .foregroundStyle(Theme.Palette.text)
-                }
-                // A version that plays in a window says so, with its minutes ahead.
-                if let line = StreamChoice.cardLine(row) {
-                    Label {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(line.text).foregroundStyle(Theme.Palette.text)
-                            Text(line.details)
-                                .textFont(Theme.type.caption, relativeTo: .caption)
-                                .foregroundStyle(Theme.Palette.muted)
-                        }
-                    } icon: {
-                        Glyph("check").foregroundStyle(Theme.Palette.ok)
-                    }
-                    .textFont(Theme.type.callout, relativeTo: .callout)
-                }
-            }
-            // Wraps at the dots between tokens, never inside one ("mp" / "4"). Not
-            // selectable: a copy would carry the zero-width break points.
-            Text(row.releaseName.replacingOccurrences(of: ".", with: ".\u{200B}"))
-                .font(.mono(Theme.type.caption + 1))
-                .foregroundStyle(Theme.Palette.muted)
-            #if !os(tvOS)
-            playButton.padding(.top, 6)
-            #endif
-            Label(VersionWords.failover(row), glyph: "refresh-cw")
+            BadgeRow(badges: VersionWords.badges(row), big: true)
+            // One line; the whole sentence is read out.
+            Text(VersionWords.why(row))
                 .textFont(Theme.type.callout, relativeTo: .callout)
                 .foregroundStyle(Theme.Palette.muted)
-        }
-        .padding(Theme.Space.m)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true)
-    }
-
-    private var playButton: some View {
-        Button(action: play) {
-            Label("Play this version", glyph: "play-fill").frame(maxWidth: .infinity)
-        }
-        .buttonStyle(PillButtonStyle(prominent: true))
-        .focused(focus)
-    }
-
-    private func fact(_ label: String, _ value: String, dot: Color? = nil) -> some View {
-        GridRow {
-            Text(caps: label)
-                .textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
-                .tracking(1.4)
-                .foregroundStyle(Theme.Palette.muted)
-            HStack(spacing: 6) {
-                if let dot { Circle().fill(dot).frame(width: 8, height: 8) }
-                Text(value)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Button(action: play) {
+                Label("Play this version", glyph: "play-fill").frame(maxWidth: .infinity)
             }
-            .textFont(Theme.type.body)
-            .foregroundStyle(Theme.Palette.text)
+            .buttonStyle(PillButtonStyle(prominent: true))
+            .focused(focus)
         }
+        .flatCard()
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(VersionWords.kicker). \(VersionWords.badges(row).map(\.text).joined(separator: ", ")). \(VersionWords.why(row))")
     }
 }
 
-/// The wide table's column names, over the same widths as its rows.
-private struct ColumnHeadings: View {
+/// Apple's badge row: the quality filled, Dolby words plain, short marks outlined.
+private struct BadgeRow: View {
+    let badges: [VersionWords.Badge]
+    var big = false
+    /// A dimmed row's badges take the muted tone with its words.
+    var tone = Theme.Palette.text
+
     var body: some View {
-        HStack(spacing: 16) {
-            Text("Quality").frame(width: VersionRowView.qualityWidth, alignment: .leading)
-            Text("Features").frame(maxWidth: .infinity, alignment: .leading)
-            Text("Size").frame(width: VersionRowView.sizeWidth, alignment: .trailing)
-            Text("Status").frame(width: VersionRowView.statusWidth, alignment: .leading)
+        HStack(spacing: 8) {
+            ForEach(badges, id: \.self) { badge in
+                let label = Text(badge.text)
+                    .textFont(big ? Theme.type.headline : Theme.type.callout, weight: .semibold, relativeTo: .headline)
+                    .lineLimit(1)
+                switch badge.look {
+                case .filled:
+                    label.foregroundStyle(Theme.Palette.bg)
+                        .padding(.horizontal, 6).padding(.vertical, 1)
+                        .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(tone))
+                case .outlined:
+                    label.foregroundStyle(tone)
+                        .padding(.horizontal, 5).padding(.vertical, 0)
+                        .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).stroke(Theme.Palette.muted, lineWidth: 1))
+                case .plain:
+                    label.foregroundStyle(tone)
+                }
+            }
         }
-        .textFont(Theme.type.caption, weight: .semibold, relativeTo: .caption)
-        .foregroundStyle(Theme.Palette.muted)
-        .padding(.horizontal, 14)
-        .accessibilityHidden(true)
+        .accessibilityElement(children: .combine)
     }
 }
 
-/// One alternative: quality, features, size and status; on a wide table,
-/// focus or the pointer opens it to its release name, languages and sources
-/// (a remote has no hover). Dimmed, it still starts: its words go to the muted
-/// tone (never a faded row) and its status says why it may not play.
+/// One version: its badges and language tag, one quiet line with the size first, and a details line
+/// that is always laid out and fades in on focus or hover, so a row never changes height. Dimmed, it
+/// still starts: its words go to the muted tone (never a faded row) and its line says why.
 private struct VersionRowView: View {
     let row: VersionRow
-    let wide: Bool
     /// The empty state's word and icon for a row that may not play here.
     let dimmed: (text: String, glyph: String)?
-    /// Phone: the first tap opens the row (its details and Play), as on the
-    /// web; one row is open at a time, so a tap on another closes this one.
-    let tapped: Bool
-    let openRow: () -> Void
     let play: () -> Void
     @State private var hovered = false
     @FocusState private var focused: Bool
+    @Environment(\.metrics) private var metrics
+    /// iPhone and iPad: the details sheet, opened from the row's info button.
+    @State private var sheet = false
+    /// VoiceOver goes back to the row when the sheet closes.
+    @AccessibilityFocusState private var rowFocused: Bool
 
-    #if os(tvOS)
-    // Beside the 600 pt pick the table has 960 pt: these leave Features about 320.
-    static let qualityWidth: CGFloat = 150, sizeWidth: CGFloat = 150, statusWidth: CGFloat = 250
-    #else
-    static let qualityWidth: CGFloat = 80, sizeWidth: CGFloat = 90, statusWidth: CGFloat = 200
-    #endif
+    /// Touch (iPhone, and an iPad with no pointer): no hover or focus shows the details, so an info
+    /// button opens them in a sheet. An iPad with a pointer has both.
+    private var touch: Bool {
+        #if os(iOS)
+        true
+        #else
+        false
+        #endif
+    }
 
-    private var open: Bool { hovered || focused }
+    /// The reserved details line: wherever a pointer or focus can show it (not on the iPhone).
+    private var detailsLine: Bool { !touch || metrics.wide }
 
     var body: some View {
-        Button(action: { if wide || tapped { play() } else { openRow() } }) {
+        // The row and its info button are siblings, never a button inside a button.
+        HStack(spacing: 0) {
+            rowButton
+            if touch {
+                Button { sheet = true } label: {
+                    Glyph("info", size: 18).foregroundStyle(Theme.Palette.muted).frame(width: 44, height: 44)
+                }
+                .buttonStyle(FocusPlainStyle(shape: Circle()))
+                // One VoiceOver stop per row: the row carries Details as an action.
+                .accessibilityHidden(true)
+                .sheet(isPresented: $sheet, onDismiss: { rowFocused = true }) {
+                    DetailsSheet(row: row, dimmed: dimmed) {
+                        sheet = false
+                        play()
+                    }
+                }
+            }
+        }
+    }
+
+    private var rowButton: some View {
+        Button(action: play) {
             VStack(alignment: .leading, spacing: 6) {
-                if wide {
-                    HStack(spacing: 16) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(VersionWords.cell(row.quality))
-                                .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
-                                // One word: smaller before it would break inside it.
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.75)
-                            languageChip
-                        }
-                        .frame(width: Self.qualityWidth, alignment: .leading)
-                        Text(row.features.joined(separator: "  "))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Text(VersionWords.size(row.sizeBytes) ?? "")
-                            .monospacedDigit()
-                            .frame(width: Self.sizeWidth, alignment: .trailing)
-                        status.frame(width: Self.statusWidth, alignment: .leading)
+                HStack(spacing: 8) {
+                    BadgeRow(badges: VersionWords.badges(row), tone: dimmed == nil ? Theme.Palette.text : Theme.Palette.muted)
+                    if let tag = VersionWords.languageTag(row) {
+                        Text(tag)
+                            .textFont(Theme.type.caption, relativeTo: .caption)
+                            .lineLimit(1)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(Theme.Palette.raised))
                     }
-                } else {
-                    // Phone: two lines, "720p · HDR10 · 1.2 GB" over "Torrent, 12 seeds".
-                    HStack(spacing: 8) {
-                        Text(([VersionWords.cell(row.quality)] + row.features + [VersionWords.size(row.sizeBytes)].compactMap { $0 })
-                            .joined(separator: " \u{B7} "))
-                            .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
-                        languageChip
-                    }
-                    status
                 }
-                // The line's numbers: "7 seeders", "Ready on TorBox, 2.1 GB".
-                if open || (!wide && tapped), let details = words?.details, !details.isEmpty {
-                    Text(details)
+                quiet
+                if detailsLine {
+                    Text(VersionWords.details(row))
+                        .textFont(Theme.type.caption, relativeTo: .caption)
                         .foregroundStyle(Theme.Palette.muted)
-                }
-                if !wide || open {
-                    // One line on a phone, cut in the middle so the name never splits inside a token;
-                    // an opened wide row shows it whole.
-                    Text(row.releaseName)
-                        .font(.mono(Theme.type.caption))
-                        .foregroundStyle(Theme.Palette.muted)
-                        .lineLimit(wide ? 3 : 1)
+                        .lineLimit(1)
                         .truncationMode(.middle)
-                }
-                if wide && open {
-                    Text(VersionWords.detail(row))
-                        .foregroundStyle(Theme.Palette.muted)
-                }
-                if !wide && tapped {
-                    Label("Play this version", glyph: "play-fill")
-                        .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
-                        .padding(.top, 2)
+                        .opacity(hovered || focused ? 1 : 0)
+                        .animation(Theme.Motion.focus, value: hovered || focused)
+                        .accessibilityHidden(true)
                 }
             }
             .textFont(Theme.type.callout, relativeTo: .callout)
             .foregroundStyle(dimmed == nil ? Theme.Palette.text : Theme.Palette.muted)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 12)
             .padding(.horizontal, 14)
             .contentShape(Rectangle())
@@ -514,44 +451,73 @@ private struct VersionRowView: View {
         #if !os(tvOS)
         .onHover { hovered = $0 }
         #endif
-        .accessibilityLabel([StreamChoice.spoken(row), dimmed?.text].compactMap { $0 }.joined(separator: ", "))
-        // The label already says the details: one activation plays.
-        .accessibilityAction { play() }
+        .accessibilityLabel(VersionWords.rowSpoken(row, dimmed: dimmed?.text))
+        // The details are read after the row (they show on focus or hover, which VoiceOver has not).
+        .accessibilityValue(VersionWords.details(row))
         .accessibilityHint("Plays this version")
-    }
-
-    /// The core's line in words, else (an older core) the status.
-    private var words: LineWords? { row.line.flatMap { StreamChoice.lineWords($0) } }
-
-    /// Another language than the viewer's: its language beside the quality.
-    @ViewBuilder private var languageChip: some View {
-        if row.group == "otherLanguages", !row.languages.isEmpty {
-            Text(VersionWords.languages(row))
-                .textFont(Theme.type.caption, relativeTo: .caption)
-                .lineLimit(1)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(Theme.Palette.surface))
+        .accessibilityActions {
+            if touch { Button(StreamChoice.words.page.details) { sheet = true } }
         }
+        .accessibilityFocused($rowFocused)
     }
 
-    /// How it will start, with its tone as an icon and a word (stream choice 3.7); dimmed, why it may not.
-    @ViewBuilder private var status: some View {
+    /// "12 GB, may start slowly" with its tone as an icon when it warns; dimmed, why with its icon.
+    @ViewBuilder private var quiet: some View {
+        RowLine(row: row, dimmed: dimmed)
+    }
+}
+
+/// A row's quiet line with its icon when it warns or is dimmed.
+private struct RowLine: View {
+    let row: VersionRow
+    let dimmed: (text: String, glyph: String)?
+
+    var body: some View {
+        let text = VersionWords.rowWords(row, dimmed: dimmed?.text)
+        let tone = row.line.flatMap { StreamChoice.lineWords($0) }?.tone ?? .ok
         if let dimmed {
-            Label(dimmed.text, glyph: dimmed.glyph).labelStyle(.titleAndIcon).lineLimit(1)
-        } else if let words {
-            Label {
-                Text(words.text)
-            } icon: {
-                Glyph(words.tone.glyph).foregroundStyle(words.tone.color)
-            }
-            .labelStyle(.titleAndIcon)
+            Label(text, glyph: dimmed.glyph).labelStyle(.titleAndIcon).lineLimit(1)
+        } else if row.onDevice == nil, tone == .warn || tone == .bad {
+            Label { Text(text) } icon: { Glyph(tone.glyph).foregroundStyle(tone.color) }.lineLimit(1)
         } else {
-            HStack(spacing: 6) {
-                Circle().fill(VersionWords.tone(row.status).color).frame(width: 8, height: 8)
-                Text(VersionWords.status(row.status))
-            }
+            Text(text).foregroundStyle(Theme.Palette.muted).lineLimit(1)
         }
+    }
+}
+
+/// iPhone: a row's details in a sheet, with its own Play. A sheet is modal for VoiceOver; closing it
+/// puts VoiceOver back on the info button that opened it.
+private struct DetailsSheet: View {
+    let row: VersionRow
+    let dimmed: (text: String, glyph: String)?
+    let play: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            BadgeRow(badges: VersionWords.badges(row), big: true)
+            RowLine(row: row, dimmed: dimmed)
+                .textFont(Theme.type.callout, relativeTo: .callout)
+                .foregroundStyle(Theme.Palette.text)
+            ForEach(VersionWords.detailLines(row), id: \.self) { line in
+                Text(line)
+                    .textFont(Theme.type.callout, relativeTo: .callout)
+                    .foregroundStyle(Theme.Palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Button(action: play) {
+                Label("Play this version", glyph: "play-fill").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(PillButtonStyle(prominent: true))
+            .padding(.top, 6)
+            Spacer(minLength: 0)
+        }
+        .padding(Theme.Space.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.Palette.bg)
+        .accessibilityAddTraits(.isModal)
+        #if os(iOS)
+        .presentationDetents([.medium, .large])
+        #endif
     }
 }
 
@@ -574,7 +540,7 @@ private struct LearnedNoteBar: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        .background(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).fill(Theme.Palette.surface))
     }
 }
 

@@ -93,9 +93,18 @@ private func snapshot(_ empty: EmptyVersions?, pick: VersionRow? = nil, done: Bo
     #expect(PlayerLayout.failureLabel(.playFromDevice, offer: nil) == "Play from this device")
     #expect(PlayerLayout.failureFocus([.retry, .choose, .back]) == .retry)
     // Play opened the player while versions were found and none could start: Versions holds the way on.
-    #expect(PlayerLayout.noPickActions("needsAccount", canChoose: true) == [.versions, .back])
-    #expect(PlayerLayout.noPickActions(nil, canChoose: true) == [.versions, .back])
-    #expect(PlayerLayout.noPickActions("noResults", canChoose: true) == [.back])
+    // Play opened the player while versions were found, and the core's view ended empty: the table.
+    #expect(PlayerLayout.noPickActions(empty("noSource"), canChoose: true) == [.settingsAddons, .back])
+    #expect(PlayerLayout.noPickActions(empty("needsAccount"), canChoose: true) == [.settingsAccounts, .back])
+    #expect(PlayerLayout.noPickActions(empty("unreachable", key: "bt:kept"), canChoose: true) == [.playFromDevice, .retry, .back])
+    #expect(PlayerLayout.noPickActions(empty("unreachable"), canChoose: true) == [.retry, .back])
+    #expect(PlayerLayout.noPickActions(empty("nothingPlaysHere"), canChoose: true) == [.versions, .back])
+    for kind in ["noRoom", "kidsNothing", "noResults"] {
+        #expect(PlayerLayout.noPickActions(empty(kind), canChoose: true) == [.back], "\(kind)")
+    }
+    #expect(PlayerLayout.noPickHeadline(empty("needsAccount")) == "These play through a streaming account")
+    #expect(PlayerLayout.noPickHeadline(nil) == "No source has this yet")
+    #expect(PlayerLayout.failureLabel(.settingsAccounts, offer: nil) == "Settings")
     // The attempt history is plain words, never the addon's name.
     #expect(PlayerLayout.failureLines(notStarted.attempts) == ["No peer sent any data · 5 sources", "The swarm had no seeders"])
     // The source kept here: the empty state's, else the row the core marks on this device.
@@ -168,7 +177,7 @@ private func snapshot(_ empty: EmptyVersions?, pick: VersionRow? = nil, done: Bo
     let sections = VersionWords.sections(s)
     #expect(sections.map(\.title) == ["4K", "1080p", "720p and below"])
     #expect(sections.map { $0.rows.map(\.key) } == [["bt:4k"], ["bt:1080b", "bt:1080c"], ["bt:720"]])
-    #expect(VersionWords.shortcuts(s).map(\.label) == ["Smaller file: 720p, 1.61 GB", "Sharper: 4K, 12.88 GB"])
+    #expect(VersionWords.shortcuts(s).map(\.label) == ["Smaller file: 720p, 1.5 GB", "Sharper: 4K, 12 GB"])
     // Never the pick as a shortcut.
     var same = s
     same.smaller = s.recommended
@@ -231,7 +240,23 @@ private func literals(_ source: String) -> [String] {
 
 @Test func noViewerReadsTheOldDeadEndWordsOnVersionsTheTitleOrThePlayer() throws {
     let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
-    let banned = ["no playable", "not measured", "add an account", "show them", "hidden (", "via "]
+    let banned = ["no playable", "not measured", "estimated", "add an account", "show them", "hidden (", "via "]
+    // The shared words too: every string but the rules text, by its path. The dead keys that wait for every
+    // app to read `empty` (plan Step 3 item 6).
+    let pending: Set = [
+        "blocked.needsAccount.action", "blocked.nothingPlaysHere.action", "blocked.noSpace.action", "blocked.showRows",
+    ]
+    let json = try JSONSerialization.jsonObject(with: Data(contentsOf: app.appending(path: "../../shared/stream-choice-words.json")))
+    var hits: [String] = []
+    func walk(_ value: Any, _ path: String) {
+        if let text = value as? String, banned.contains(where: text.lowercased().contains) { hits.append(path) }
+        if let list = value as? [Any] { for (i, x) in list.enumerated() { walk(x, "\(path)[\(i)]") } }
+        if let map = value as? [String: Any] { for (k, x) in map where !(path.isEmpty && k == "about") { walk(x, path.isEmpty ? k : "\(path).\(k)") } }
+    }
+    walk(json, "")
+    #expect(Set(hits).subtracting(pending).isEmpty, "\(hits)")
+    // A pending key no longer said leaves the list.
+    #expect(pending.subtracting(hits).isEmpty, "\(pending.subtracting(hits))")
     var scanned = 0
     for folder in ["Versions", "Title", "Player"] {
         for file in try FileManager.default.contentsOfDirectory(atPath: app.appending(path: folder).path()) where file.hasSuffix(".swift") {
@@ -266,11 +291,191 @@ private func literals(_ source: String) -> [String] {
     #expect(try body(of: "private func load(", in: model).contains("if holdPause || covered { holdPause = false } else { player.play() }"))
     #expect(try body(of: "func cover()", in: model).contains("player.pause()"))
     // Play pressed while versions are found: the player waits for the pick itself.
-    #expect(try body(of: "func run() async", in: model).contains("versions.settledPick(tapped: route.tapped, limit: .seconds(30))"))
+    // No app clock before the pick: the wait ends with the core's view, and never in a silent spinner.
+    let run = try body(of: "func run() async", in: model)
+    #expect(run.contains("versions.settledPick(tapped: route.tapped, limit: nil)"))
+    #expect(run.contains("guard let versions else {\n                noPick = true"))
+    #expect(!screen.contains("No version was ready in time"))
+    // Under the cover the player is inert and the cover is modal; the player has no swipe back (its back
+    // button is hidden, which turns the edge swipe off) while Versions covers it or ever.
+    #expect(screen.contains(".disabled(showVersions)\n            .accessibilityHidden(showVersions)"))
+    #expect(screen.contains(".accessibilityAddTraits(.isModal)"))
+    #expect(screen.contains(".navigationBarBackButtonHidden()"))
+    #expect(try body(of: "private func another(", in: screen).contains(".allowsHitTesting(shown)"))
     // Versions opens over the player, never as a pushed page that would close it.
     #expect(screen.contains("chooseVersion: model.versions == nil ? nil : { openVersions() }"))
     #expect(try body(of: "private func openVersions()", in: screen).contains("model.cover()"))
     #expect(try body(of: "private func closeVersions()", in: screen).contains("model.uncover()"))
     #expect(!screen.contains("navigationDestination(isPresented: $showVersions)"))
     #expect(try body(of: "private func another(", in: screen).contains("PlayerLayout.offersAnother(model.playback, status: status)"))
+}
+
+/// A row from a base with `json`'s fields over it (`json` starts with ", ").
+private func row(_ json: String) throws -> VersionRow {
+    let base = #"{"key": "k", "quality": "1080p", "features": ["HDR10", "Atmos"], "sizeBytes": 12884901888, "status": {"kind": "torrent", "seeds": 1204}, "via": "Sample Source", "releaseName": "Sintel.2010.1080p.mkv", "languages": ["en"], "reasons": [], "group": "best", "failoverCount": 1}"#
+    var fields = try #require(JSONSerialization.jsonObject(with: Data(base.utf8)) as? [String: Any])
+    let over = try #require(JSONSerialization.jsonObject(with: Data(("{" + json.dropFirst(2) + "}").utf8)) as? [String: Any])
+    fields.merge(over) { _, new in new }
+    return try JSONDecoder().decode(VersionRow.self, from: JSONSerialization.data(withJSONObject: fields))
+}
+
+@Test func theCardIsItsKickerBadgesAndOneWhyLine() throws {
+    #if os(macOS)
+    #expect(VersionWords.kicker == "Best for this computer")
+    #endif
+    let pick = try row(#", "line": {"kind": "quick", "seeders": 412, "sizeBytes": 2147483648}"#)
+    #expect(VersionWords.badges(pick) == [.init(text: "1080p", look: .filled), .init(text: "HDR", look: .outlined), .init(text: "Dolby Atmos", look: .plain)])
+    #expect(VersionWords.why(pick) == "Starts quickly: 412 seeders, 2 GB")
+    // One video and one audio format at most, the best of each.
+    let dv = try row(#", "features": ["Dolby Vision", "HDR10", "7.1", "5.1"]"#)
+    #expect(VersionWords.badges(dv).map(\.text) == ["1080p", "Dolby Vision", "7.1"])
+    #expect(VersionWords.badges(try row(#", "features": [], "quality": "Quality not stated""#)).map(\.text) == ["Unknown"])
+}
+
+@Test func aRowIsItsBadgesAndOneQuietLineWithItsSizeFirst() throws {
+    // A row that plays as it should: its size, then its source in plain words.
+    #expect(VersionWords.rowWords(try row(#", "line": {"kind": "quick", "seeders": 1204}"#)) == "12 GB, shared by 1,204 people")
+    #expect(VersionWords.rowWords(try row(#", "status": {"kind": "ready", "service": "TorBox"}, "line": {"kind": "ready", "service": "TorBox"}"#)) == "12 GB, ready now")
+    #expect(VersionWords.rowWords(try row(#", "status": {"kind": "direct"}, "line": {"kind": "quick"}"#)) == "12 GB, direct link")
+    // A warning takes the source's place, in lower case after the size, with a capital without one.
+    #expect(VersionWords.rowWords(try row(#", "line": {"kind": "few", "seeders": 5}"#)) == "12 GB, may start slowly")
+    #expect(VersionWords.rowWords(try row(#", "sizeBytes": null, "line": {"kind": "didNotPlay"}"#)) == "Did not play on this device")
+    // Dimmed: why it may not play.
+    #expect(VersionWords.rowWords(try row(#", "line": {"kind": "quick"}"#), dimmed: "Needs an account") == "12 GB, needs an account")
+    // The details, laid out always, shown on focus or hover: the release, the line's numbers, languages and sources.
+    #expect(VersionWords.details(try row(#", "line": {"kind": "few", "seeders": 5}"#)) == "Sintel.2010.1080p.mkv \u{B7} 5 seeders \u{B7} English, 2 sources")
+    // Its language tag only in another language than the viewer's; never the addon in what is read out.
+    let other = try row(#", "group": "otherLanguages", "languages": ["tr"], "line": {"kind": "quick"}"#)
+    #expect(VersionWords.languageTag(other) == "Turkish")
+    #expect(VersionWords.languageTag(try row(#", "line": {"kind": "quick"}"#)) == nil)
+    #expect(VersionWords.rowSpoken(other) == "1080p, HDR, Dolby Atmos, Turkish, 12 GB, shared by 1,204 people")
+    #expect(!VersionWords.rowSpoken(other).contains("Sample Source"))
+}
+
+@Test func thePageIsFlatWithNoTableAndPlainHeadings() throws {
+    let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
+    let page = try String(contentsOf: app.appending(path: "Versions/VersionsScreen.swift"), encoding: .utf8)
+    let player = try String(contentsOf: app.appending(path: "Player/PlayerScreen.swift"), encoding: .utf8)
+    // No glass and no edge on the cards, the failure card included; no column table.
+    #expect(!page.contains(".glass("))
+    #expect(!page.contains("ColumnHeadings") && !page.contains("Text(caps:"))
+    #expect(try body(of: "func flatCard()", in: page).contains(".fill(Theme.Palette.surface)"))
+    #expect(try body(of: "private func card(", in: player).contains(".fill(Theme.Palette.surface)"))
+    #expect(!(try body(of: "private func card(", in: player)).contains(".glass("))
+    // A dimmed row's badges take the muted tone with its words, never a faded row.
+    #expect(try body(of: "private struct VersionRowView", in: page).contains("tone: dimmed == nil ? Theme.Palette.text : Theme.Palette.muted"))
+    #expect(!(try body(of: "private struct VersionRowView", in: page)).contains(".opacity(0.") )
+    // The details line is always laid out and only fades: no height change on focus or hover.
+    #expect(try body(of: "private struct VersionRowView", in: page).contains(".opacity(hovered || focused ? 1 : 0)"))
+}
+
+@Test func onTheIPhoneOneTapPlaysAndTheInfoButtonOpensTheDetails() throws {
+    let page = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .appending(path: "../Marquee/Versions/VersionsScreen.swift"), encoding: .utf8)
+    let row = try body(of: "private struct VersionRowView", in: page)
+    // One tap plays: the row is one button whose action is Play; the info button is its sibling.
+    #expect(try body(of: "private var rowButton", in: row).hasPrefix("{\n        Button(action: play) {"))
+    #expect(row.contains("HStack(spacing: 0) {\n            rowButton\n            if touch {"))
+    // Wherever there is touch (an iPad too), the info button; one VoiceOver stop per row, so the button is
+    // hidden from it and the row carries Details. The sheet is modal with its own Play; VoiceOver goes back
+    // to the row when it closes.
+    #expect(try body(of: "private var touch: Bool", in: row).contains("#if os(iOS)\n        true"))
+    #expect(row.contains(".accessibilityHidden(true)\n                .sheet(isPresented: $sheet, onDismiss: { rowFocused = true })"))
+    #expect(row.contains(".accessibilityFocused($rowFocused)"))
+    let sheet = try body(of: "private struct DetailsSheet", in: page)
+    #expect(sheet.contains("Button(action: play)") && sheet.contains(".accessibilityAddTraits(.isModal)"))
+    #expect(sheet.contains("VersionWords.detailLines(row)"))
+    // Its lines: the release, the line's numbers, languages and sources.
+    let r = try JSONDecoder().decode(VersionRow.self, from: Data(#"{"key": "k", "quality": "720p", "features": [], "sizeBytes": 1, "status": {"kind": "torrent", "seeds": 5}, "via": "Sample Source", "releaseName": "Sintel.720p.mp4", "languages": ["en"], "reasons": [], "group": "best", "failoverCount": 0, "line": {"kind": "few", "seeders": 5}}"#.utf8))
+    #expect(VersionWords.detailLines(r) == ["Sintel.720p.mp4", "5 seeders", "English"])
+}
+
+@Test func anInertEpisodeOrHeroOpensNoBackOnlyPage() throws {
+    let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
+    let title = try String(contentsOf: app.appending(path: "Title/TitleScreen.swift"), encoding: .utf8)
+    let home = try String(contentsOf: app.appending(path: "Home/HomeScreen.swift"), encoding: .utf8)
+    #expect(try body(of: "private func play(_ episode: Episode)", in: title).contains("case .inert: break"))
+    #expect(try body(of: "private func playHero(", in: home).contains("case .inert: break"))
+}
+
+@Test func theTitlesLineUnderPlayIsTheCoresWarningOnly() throws {
+    // Searching or with a pick: nothing under Play, never "Finding versions", badges or a size.
+    #expect(titleWarning(nil) == nil)
+    #expect(titleWarning(snapshot(nil, done: false)) == nil)
+    #expect(titleWarning(try versions("shortcuts")) == nil)
+    #expect(titleWarning(try versions("no-room")) == "This device needs a little free space to play this")
+    let title = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .appending(path: "../Marquee/Title/TitleScreen.swift"), encoding: .utf8)
+    let line = try body(of: "struct VersionLine: View", in: title)
+    #expect(line.contains("titleWarning(versions)"))
+    #expect(!line.contains("Finding versions") && !line.contains("ProgressView") && !line.contains("rowSpoken"))
+    #expect(try body(of: "private struct VersionNote", in: title).contains("titleWarning(versions)"))
+}
+
+@Test func everySizeIsTheSharedOneTheMenuIncluded() throws {
+    let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
+    // One size function on every screen that names a version: 1024-based, as the shared words say.
+    for folder in ["Versions", "Title", "Player"] {
+        for file in try FileManager.default.contentsOfDirectory(atPath: app.appending(path: folder).path()) where file.hasSuffix(".swift") {
+            let source = try String(contentsOf: app.appending(path: "\(folder)/\(file)"), encoding: .utf8)
+            #expect(!source.contains("ByteCountFormatter"), "\(folder)/\(file)")
+        }
+    }
+    let controls = try String(contentsOf: app.appending(path: "Player/PlayerControls.swift"), encoding: .utf8)
+    #expect(controls.contains("Choice(text: VersionWords.rowSpoken(row), selected: row.key == playingKey)"))
+    let row = try JSONDecoder().decode(VersionRow.self, from: Data(#"{"key": "k", "quality": "720p", "features": [], "sizeBytes": 1610612736, "status": {"kind": "direct"}, "via": "Sample Source", "releaseName": "A.mp4", "languages": [], "reasons": [], "group": "best", "failoverCount": 0, "line": {"kind": "quick"}}"#.utf8))
+    #expect(VersionWords.rowSpoken(row) == "720p, 1.5 GB, direct link")
+}
+
+@Test func voiceOverReadsARowsDetailsAndThePhoneRowHasADetailsAction() throws {
+    let page = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .appending(path: "../Marquee/Versions/VersionsScreen.swift"), encoding: .utf8)
+    let row = try body(of: "private struct VersionRowView", in: page)
+    #expect(row.contains(".accessibilityValue(VersionWords.details(row))"))
+    #expect(row.contains("if touch { Button(StreamChoice.words.page.details) { sheet = true } }"))
+    #expect(StreamChoice.words.page.details == "Details")
+}
+
+@Test func tryAgainReallyAsksAgainAndAFailedOpenEndsTheWait() throws {
+    let unreachable = try versions("unreachable")
+    var noKept = unreachable
+    noKept.empty = EmptyVersions(kind: "unreachable", count: 0, rows: [], key: nil)
+    // No source in reach and none kept: the wait ends with no version, so the card shows.
+    #expect(PickWait.ends(snapshot: noKept, failed: false, settled: false))
+    #expect(PickWait.key(noKept) == nil)
+    #expect(PickWait.key(unreachable) == "bt:kept")
+    // Try again: what landed before it is stale, so the player waits again (nothing to read yet) ...
+    #expect(!PickWait.fresh(landed: 4, retriedAt: 4))
+    #expect(!PickWait.ends(snapshot: nil, failed: false, settled: false))
+    // ... and the view asked again finds a pick: the wait ends with it and the player starts it.
+    #expect(PickWait.fresh(landed: 5, retriedAt: 4))
+    let found = try versions("shortcuts")
+    #expect(PickWait.ends(snapshot: found, failed: false, settled: false))
+    #expect(PickWait.key(found) == "bt:pick")
+    #expect(PickWait.fresh(landed: 0, retriedAt: nil))
+    // A view that could not open ends the wait: the card says no source could be reached, with Try again.
+    #expect(PickWait.ends(snapshot: nil, failed: true, settled: false))
+    let failed = PlayerLayout.noPickState(nil, failed: true)
+    #expect(PlayerLayout.noPickHeadline(failed) == "Can't reach any source")
+    #expect(PlayerLayout.noPickActions(failed, canChoose: true) == [.retry, .back])
+    // A real empty state wins over a later failure.
+    #expect(PlayerLayout.noPickState(empty("needsAccount"), failed: true)?.kind == "needsAccount")
+    // Still asking with a pick not yet settled: wait on.
+    let json = try String(contentsOf: fixtures.appending(path: "shortcuts.json"), encoding: .utf8).replacingOccurrences(of: #""done": true"#, with: #""done": false"#)
+    let asking = try JSONDecoder().decode(VersionsSnapshot.self, from: Data(json.utf8))
+    #expect(!PickWait.ends(snapshot: asking, failed: false, settled: false))
+    #expect(PickWait.ends(snapshot: asking, failed: false, settled: true))
+    // The wiring: Try again marks what landed before as stale and asks the view again; the wait loop reads
+    // PickWait; back from the card's Settings the versions are asked again.
+    let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
+    let model = try String(contentsOf: app.appending(path: "Versions/VersionsModel.swift"), encoding: .utf8)
+    let record = try String(contentsOf: app.appending(path: "Core/LiveRecord.swift"), encoding: .utf8)
+    let player = try String(contentsOf: app.appending(path: "Player/PlayerModel.swift"), encoding: .utf8)
+    let screen = try String(contentsOf: app.appending(path: "Player/PlayerScreen.swift"), encoding: .utf8)
+    #expect(try body(of: "func retry()", in: model).contains("retriedAt = record.landed\n        record.retry()"))
+    #expect(try body(of: "func settledPick(", in: model).contains("PickWait.ends(snapshot: snapshot, failed: failure != nil"))
+    #expect(record.contains("case .updates(let values): if let last = values.last { snapshot = last }\n                    }\n                    landed += 1"))
+    #expect(try body(of: "func retryPick()", in: player).contains("versions?.retry()"))
+    #expect(screen.contains("if old != nil, new == nil, model.noPick { model.retryPick() }"))
+    #expect(screen.contains("PlayerLayout.noPickState(model.versions?.snapshot?.empty, failed: model.versions?.failure != nil)"))
 }

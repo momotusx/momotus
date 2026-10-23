@@ -226,6 +226,12 @@ func titleMarks(kind: String, inLibrary: Bool, watched: Bool) -> [TitleMark] {
     kind == "movie" ? [.library(on: inLibrary), .watched(on: watched)] : [.library(on: inLibrary)]
 }
 
+/// The title's reserved warning-only line under Play: the core's line for why nothing plays, else
+/// nothing (no badges, no size, never "Finding versions").
+func titleWarning(_ versions: VersionsSnapshot?) -> String? {
+    versions?.empty.flatMap { VersionWords.emptyLine($0.kind) }
+}
+
 /// What Play does as the versions stand (plans/play-every-version.md, the shared table's title row).
 /// Play is always the title's primary, never Settings or an account step: still searching it opens the
 /// player at once, which starts the pick once it settles; with no source in reach a source kept on this

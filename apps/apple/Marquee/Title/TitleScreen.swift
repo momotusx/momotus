@@ -474,7 +474,9 @@ struct TitleScreen: View {
         guard let model = versions(for: episode) else { return }
         switch TitlePlay.of(model.snapshot) {
         case .player(let key): playing = key.flatMap { model.play($0) } ?? model.pending()
-        case .versions, .inert: chooseVersion(episode)
+        case .versions: chooseVersion(episode)
+        // Back alone would be a dead end: nothing opens, as the title's inert Play.
+        case .inert: break
         }
     }
 
@@ -811,28 +813,16 @@ private struct Backdrop: View {
 #endif
 
 #if os(tvOS)
-/// "720p  472 MB  (dot) Torrent, 153 seeds", or why there is none yet. No addon's name: it shows on
+/// The reserved warning-only line under Play: the core's line for why nothing plays, else nothing. No
+/// addon's name: it shows on
 /// the Addons pages alone (design/DECISION.md, Shelves).
 struct VersionLine: View {
     let versions: VersionsSnapshot?
 
     var body: some View {
-        if let best = versions?.recommended {
-            let dot = Text("\u{25CF}").font(.system(size: 9)).foregroundStyle(VersionWords.tone(best.status).color)
-            Text("\(VersionWords.line(best))   \(dot) \(VersionWords.status(best.status))")
-                .foregroundStyle(Theme.Palette.text)
-                .accessibilityLabel("\(VersionWords.line(best)), \(VersionWords.status(best.status))")
-        } else if let line = versions?.empty.flatMap({ VersionWords.emptyLine($0.kind) }) {
-            // The core's line for why nothing plays, under Play (the title's reserved warning line).
+        if let line = titleWarning(versions) {
             Label(line, glyph: "circle-alert")
                 .foregroundStyle(Theme.Palette.muted)
-        } else if versions?.done != true {
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.mini)
-                Text("Finding versions")
-            }
-            .foregroundStyle(Theme.Palette.muted)
-            .accessibilityElement(children: .combine)
         }
     }
 }
@@ -851,7 +841,7 @@ private struct VersionNote: View {
         Group {
             if let failure {
                 Label("Versions could not load: \(failure)", glyph: "triangle-alert")
-            } else if target != nil, let line = versions?.empty.flatMap({ VersionWords.emptyLine($0.kind) }) {
+            } else if target != nil, let line = titleWarning(versions) {
                 Label(line, glyph: "circle-alert")
             }
         }

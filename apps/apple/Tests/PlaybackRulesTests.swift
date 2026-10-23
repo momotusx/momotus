@@ -224,7 +224,7 @@ private func snapshot(next: String = next, nextAtMs: String = "null", segments: 
         "OpenSubtitles v3 did not answer. Try its subtitles again in a moment.",
         "OpenSubtitles v3 is turning requests away. Marquee will try again in a few minutes.",
         "OpenSubtitles v3 changed its pages, so Marquee cannot read them. An update will fix this.",
-        "A subtitle file from OpenSubtitles v3 could not be read. Pick another one.",
+        "This subtitle could not be read.",
         "Subtitles from OpenSubtitles v3 did not load.",
     ])
 }
@@ -387,15 +387,20 @@ private func phase(_ phase: String, _ extra: String = "") throws -> PlaybackSnap
     #expect(playerFailure(NSError(domain: AVFoundationErrorDomain, code: AVError.Code.decoderNotFound.rawValue)).kind == "decode")
 }
 
-@Test func theStartSubtitleTurnsOnOnceUntilTheViewerPicks() throws {
+@MainActor @Test func theStartSubtitleTurnsOnOnceUntilTheViewerPicks() throws {
     let turkish = sub(1, "tur", "tr", "Turkish", "TurkceAltyazi.org", source: "TurkceAltyazi.org")
     let english = sub(2, "eng", "en", "English", "OpenSubtitles v3")
-    #expect(SubtitleMenu.autoPick(turkish.url, settled: false, tracks: [english, turkish]) == turkish)
-    // The viewer picked (or the start subtitle already applied): nothing turns on.
-    #expect(SubtitleMenu.autoPick(turkish.url, settled: true, tracks: [english, turkish]) == nil)
-    // None from the core, or its track not listed yet.
-    #expect(SubtitleMenu.autoPick(nil, settled: false, tracks: [english]) == nil)
-    #expect(SubtitleMenu.autoPick(turkish.url, settled: false, tracks: [english]) == nil)
+    // None from the core, or its track not listed yet: nothing.
+    #expect(PlayChoices().startSubtitle(nil, tracks: [english]) == nil)
+    #expect(PlayChoices().startSubtitle(turkish.url, tracks: [english]) == nil)
+    let choices = PlayChoices()
+    #expect(choices.startSubtitle(turkish.url, tracks: [english, turkish]) == turkish)
+    // Already applied: nothing turns on again.
+    #expect(choices.startSubtitle(turkish.url, tracks: [english, turkish]) == nil)
+    // The viewer picked: nothing turns on.
+    let picked = PlayChoices()
+    picked.chose(english)
+    #expect(picked.startSubtitle(turkish.url, tracks: [english, turkish]) == nil)
     let auto = try phase("ready", #","autoSubtitle":"http://127.0.0.1:1/sub/1.vtt""#)
     #expect(auto.autoSubtitle == "http://127.0.0.1:1/sub/1.vtt")
     #expect(try phase("ready").autoSubtitle == nil)
@@ -865,4 +870,46 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     // The core's own field, as it sends it.
     let decoded = try JSONDecoder().decode(SubtitleTrack.self, from: Data(#"{"url": "u", "lang": "eng", "label": null, "source": "Walk", "forced": false, "hearingImpaired": false, "hashMatch": true, "madeForFps": 25.0, "delayMs": -500}"#.utf8))
     #expect(decoded.hashMatch == true && decoded.madeForFps == 25 && decoded.delayMs == -500)
+}
+
+@MainActor @Test func theStartSubtitleFollowsTheCoreWhenItsFileCannotBeRead() throws {
+    // Two broken tracks, then a good one: the core moves `autoSubtitle` on each time, with no note, and
+    // the player turns each new one on in the last one's place while the viewer has not chosen.
+    let broken1 = sub(1, "eng", "en", "English", "Subs A")
+    let broken2 = sub(2, "eng", "en", "English", "Subs B")
+    let good = sub(3, "eng", "en", "English", "Subs C")
+    let choices = PlayChoices()
+    var tracks = [broken1, broken2, good]
+    var step = choices.subtitleStep(attempt: 1, auto: broken1.url, tracks: tracks)
+    #expect(step.turnOn == broken1 && !step.drop)
+    tracks.removeFirst()
+    step = choices.subtitleStep(attempt: 1, auto: broken2.url, tracks: tracks)
+    #expect(step.turnOn == broken2 && !step.drop)
+    tracks.removeFirst()
+    step = choices.subtitleStep(attempt: 1, auto: good.url, tracks: tracks)
+    #expect(step.turnOn == good && !step.drop)
+    // It stays: the same auto again turns nothing on.
+    #expect(choices.subtitleStep(attempt: 1, auto: good.url, tracks: tracks).turnOn == nil)
+    // None left: the one shown goes off, and the neutral line names no source.
+    let gone = PlayChoices()
+    _ = gone.subtitleStep(attempt: 1, auto: broken1.url, tracks: [broken1])
+    let last = gone.subtitleStep(attempt: 1, auto: nil, tracks: [])
+    #expect(last.drop && last.turnOn == nil)
+    let failed = try phase("ready", #","startSubtitleFailed":true"#)
+    // The shared player.subtitlesFailed word, which lands with the core's subtitle hand-over.
+    #expect(PlayerLayout.startSubtitleFailedWords(failed) == StreamChoice.words.player.subtitlesFailed)
+    #expect(PlayerLayout.startSubtitleFailedWords(try phase("ready")) == nil)
+    // The viewer's own pick is never moved or turned off by the core's start subtitle.
+    let viewer = PlayChoices()
+    _ = viewer.subtitleStep(attempt: 1, auto: broken1.url, tracks: [broken1, good])
+    viewer.chose(broken1)
+    let after = viewer.subtitleStep(attempt: 1, auto: good.url, tracks: [good])
+    #expect(after.turnOn == nil && !after.drop)
+    #expect(!viewer.subtitleStep(attempt: 1, auto: nil, tracks: []).drop)
+    // A server move renames the same track: it stays on as it was, not turned on again.
+    let moved = PlayChoices()
+    _ = moved.subtitleStep(attempt: 1, auto: good.url, tracks: [good])
+    moved.reopened()
+    let renamed = sub(4, "eng", "en", "English", "Subs C")
+    #expect(moved.subtitleStep(attempt: 2, auto: renamed.url, tracks: [renamed]).turnOn == nil)
 }

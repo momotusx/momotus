@@ -15,6 +15,8 @@ final class LiveRecord<Snapshot: Decodable & Sendable> {
     /// A failed open, command or op, in words.
     private(set) var failure: String?
     private(set) var sub: UInt64?
+    /// One more for each snapshot or failure that lands: what came in after a moment (a retry) is newer.
+    @ObservationIgnored private(set) var landed = 0
 
     @ObservationIgnored let core: CoreClient
     @ObservationIgnored private let params: [String: any Sendable]
@@ -69,11 +71,15 @@ final class LiveRecord<Snapshot: Decodable & Sendable> {
                     case .snapshot(let value): snapshot = value
                     case .updates(let values): if let last = values.last { snapshot = last }
                     }
+                    landed += 1
                     if let snapshot { onSnapshot?(snapshot) }
                 }
             } catch is CancellationError {
             } catch {
-                if run == self?.runs, mine == core.generation { self?.failure = error.localizedDescription }
+                if run == self?.runs, mine == core.generation {
+                    self?.failure = error.localizedDescription
+                    self?.landed += 1
+                }
             }
             if run == self?.runs { self?.sub = nil }
         }

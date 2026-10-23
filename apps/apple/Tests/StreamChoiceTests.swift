@@ -75,15 +75,6 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
     #expect(StreamChoice.lineWords(try line(#"{"kind": "somethingNew"}"#)) == nil)
 }
 
-@Test func theRecommendedCardShowsTheWindowsLineAndNoOther() throws {
-    let row = { (line: String) in
-        try JSONDecoder().decode(VersionRow.self, from: Data((#"{"key": "k", "quality": "1080p", "features": [], "sizeBytes": null, "status": {"kind": "torrent", "seeds": 53}, "via": "Fixture", "releaseName": "A.1080p.mkv", "languages": [], "reasons": [], "group": "best", "failoverCount": 0, "line": "# + line + "}").utf8))
-    }
-    let buffer = try row(#"{"kind": "buffer", "seeders": 53, "sizeBytes": 571473920, "aheadMin": 8, "budgetBytes": 532676608}"#)
-    #expect(StreamChoice.cardLine(buffer) == LineWords(tone: .ok, text: "Plays without storing the whole file", details: "53 seeders, 545 MB, room for about 8 min ahead in 508 MB"))
-    #expect(StreamChoice.cardLine(try row(#"{"kind": "quick", "seeders": 53, "sizeBytes": 571473920}"#)) == nil)
-}
-
 @Test func theDeviceLineNamesTheScreenTheConnectionAndTheDisk() {
     let measured = Speed(mbps: 41.6, samples: 2), estimate = Speed(mbps: 15, samples: 0)
     #expect(StreamChoice.conditionsLine(screenClass: 2160, hdr: true, network: "wifi", speed: measured, freeBytes: 65_498_251_264)
@@ -185,15 +176,6 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
         let p = try await core.client.call("forgetLearned", as: Prefs.self)
         #expect(p.streams.sizeLimitBytes == nil && p.streams.minSeeders == 20)
     }
-}
-
-@Test func aRowReadsItsLineToAScreenReader() throws {
-    let base = #"{"key": "k", "quality": "720p", "features": [], "sizeBytes": 1, "status": {"kind": "torrent", "seeds": 7}, "via": "Torrentio", "releaseName": "A.mp4", "languages": [], "reasons": [], "group": "best", "failoverCount": 0"#
-    let row = try JSONDecoder().decode(VersionRow.self, from: Data((base + #", "line": {"kind": "few", "seeders": 7}}"#).utf8))
-    #expect(StreamChoice.spoken(row) == "720p, 1 byte, May start slowly, 7 seeders")
-    // An older core's row says its status; never its addon.
-    let old = try JSONDecoder().decode(VersionRow.self, from: Data((base + "}").utf8))
-    #expect(StreamChoice.spoken(old) == "720p, 1 byte, Torrent, 7 seeds")
 }
 
 @Test func theResolutionChoiceAndTheScreenClassReadAsTheWebsDo() {

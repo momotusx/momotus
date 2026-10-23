@@ -29,9 +29,12 @@ final class VersionsModel {
         #if DEBUG
         if let fixture = DebugHooks.versionsFixture { return fixture }
         #endif
-        return record.snapshot
+        return PickWait.fresh(landed: record.landed, retriedAt: retriedAt) ? record.snapshot : nil
     }
-    var failure: String? { record.failure }
+    /// The view's open, a command or an op failed (since the last Try again).
+    var failure: String? { PickWait.fresh(landed: record.landed, retriedAt: retriedAt) ? record.failure : nil }
+    /// What had landed when Try again asked the view again: anything up to it is stale.
+    private var retriedAt: Int?
     var sub: UInt64? { record.sub }
 
     func start() {
@@ -40,6 +43,7 @@ final class VersionsModel {
 
     /// Try again when no source could be reached: the view opens again.
     func retry() {
+        retriedAt = record.landed
         record.retry()
     }
 
@@ -64,20 +68,17 @@ final class VersionsModel {
     /// The pick once it settles, as the web waits for it: every addon has
     /// answered, or 3 s have passed since the first pick; with no source in
     /// reach, the one kept on this device. Nil when there is none by then or
-    /// within `limit`.
-    func settledPick(tapped: ContinuousClock.Instant = .now, limit: Duration = .seconds(10)) async -> PlayRoute? {
+    /// within `limit`; no `limit` waits for the core (the view's own
+    /// deadlines end its asking), never an app clock.
+    func settledPick(tapped: ContinuousClock.Instant = .now, limit: Duration? = .seconds(10)) async -> PlayRoute? {
         start()
-        let deadline = ContinuousClock.now + limit
+        let deadline = limit.map { ContinuousClock.now + $0 }
         var firstPick: ContinuousClock.Instant?
-        while ContinuousClock.now < deadline, !Task.isCancelled, snapshot?.done != true {
-            if snapshot?.recommended != nil {
-                let first = firstPick ?? .now
-                firstPick = first
-                if ContinuousClock.now - first >= .seconds(3) { break }
-            }
+        while deadline.map({ ContinuousClock.now < $0 }) ?? true, !Task.isCancelled {
+            if snapshot?.recommended != nil, firstPick == nil { firstPick = .now }
+            if PickWait.ends(snapshot: snapshot, failed: failure != nil, settled: firstPick.map { ContinuousClock.now - $0 >= .seconds(3) } ?? false) { break }
             try? await Task.sleep(for: .milliseconds(100))
         }
-        let kept = snapshot?.empty.flatMap { $0.kind == "unreachable" ? $0.key : nil }
-        return play(kept, tapped: tapped)
+        return PickWait.key(snapshot).flatMap { play($0, tapped: tapped) }
     }
 }

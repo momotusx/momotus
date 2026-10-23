@@ -6,7 +6,7 @@ import SwiftUI
 /// review rounds (plans/android-design-v2.md, slices 14 to 16). Heights are
 /// the real window's, bars included, since the player hides them.
 /// The failure card's actions (plans/play-every-version.md, the shared table): never an account step.
-enum FailureAction: Hashable { case offer, playFromDevice, retry, choose, versions, back }
+enum FailureAction: Hashable { case offer, playFromDevice, retry, choose, versions, settingsAddons, settingsAccounts, back }
 
 /// What the player shows over the picture, first match.
 enum PlayerStatus: Equatable {
@@ -267,6 +267,8 @@ enum PlayerLayout {
         case .retry: empty["notStarted"]?.action ?? "Try again"
         case .choose: StreamChoice.words.player.chooseAnother
         case .versions: empty["nothingPlaysHere"]?.action ?? "Choose a version"
+        case .settingsAddons: empty["noSource"]?.action ?? "Settings"
+        case .settingsAccounts: empty["needsAccount"]?.action ?? "Settings"
         case .back: StreamChoice.words.page.back
         }
     }
@@ -292,11 +294,30 @@ enum PlayerLayout {
         }
     }
 
-    /// Play opened the player while versions were found and none can start: Versions holds the
-    /// state's line, its actions and the rows that can still start; the states with Back alone end here.
-    static func noPickActions(_ empty: String?, canChoose: Bool) -> [FailureAction] {
-        guard canChoose, !TitlePlay.backOnly.contains(empty ?? "") else { return [.back] }
-        return [.versions, .back]
+    /// Play opened the player while versions were found and the core's view ended empty: the shared
+    /// table's actions for its state, Back last (Choose a version for the rows that may still start).
+    static func noPickActions(_ empty: EmptyVersions?, canChoose: Bool) -> [FailureAction] {
+        let first: [FailureAction] = switch empty?.kind {
+        case "noSource": [.settingsAddons]
+        case "unreachable": (empty?.key == nil ? [] : [.playFromDevice]) + [.retry]
+        case "needsAccount": [.settingsAccounts]
+        case "nothingPlaysHere": canChoose ? [.versions] : []
+        default: []
+        }
+        return first + [.back]
+    }
+
+    /// Why no version could start: the view's empty state; with none, when the view failed (its open, a
+    /// command or an op), the unreachable state with no source kept (its line and Try again). A real
+    /// empty state wins over a later failure.
+    static func noPickState(_ empty: EmptyVersions?, failed: Bool) -> EmptyVersions? {
+        empty ?? (failed ? EmptyVersions(kind: "unreachable", count: 0, rows: [], key: nil) : nil)
+    }
+
+    /// The card's headline when the view ended empty: the core's line, else (no view to ask) "No
+    /// source has this yet".
+    static func noPickHeadline(_ empty: EmptyVersions?) -> String {
+        VersionWords.emptyLine(empty?.kind ?? "noResults") ?? VersionWords.emptyLine("noResults") ?? ""
     }
 
     /// A view that could not open: mostly "that version is no longer listed",
@@ -320,6 +341,12 @@ enum PlayerLayout {
     static func kept(_ versions: VersionsSnapshot?) -> String? {
         guard let versions else { return nil }
         return versions.empty?.key ?? ([versions.recommended].compactMap { $0 } + versions.rows).first { $0.onDevice != nil }?.key
+    }
+
+    /// Every start subtitle the core tried could not be read (`startSubtitleFailed`): one neutral line,
+    /// naming no source.
+    static func startSubtitleFailedWords(_ playback: PlaybackSnapshot?) -> String? {
+        playback?.startSubtitleFailed == true ? StreamChoice.words.player.subtitlesFailed : nil
     }
 
     /// "Choose another version" on the loading screen and over a stalled frame: only while the core

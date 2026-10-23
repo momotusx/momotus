@@ -6,9 +6,6 @@ import Foundation
 enum WideLayout {
     /// The pick card (360 pt) beside the Versions table.
     static func pickBesideTable(page: CGFloat) -> Bool { page >= 900 }
-    /// The table's columns (quality, features, size, status) need about
-    /// 680 pt; with less a row reads as the phone's two lines.
-    static func tableColumns(table: CGFloat) -> Bool { table >= 680 }
     /// A series' credits (360 pt) beside its episodes.
     static func creditsBesideEpisodes(page: CGFloat) -> Bool { page >= 1000 }
     /// The title's words over its art: a wide window that is also tall enough.
@@ -43,75 +40,38 @@ enum WideLayout {
     static let starringFrom: CGFloat = 1240
 }
 
+/// Play's wait for the pick, when it opened the player at once: it ends when the core's view is done,
+/// its pick has settled (3 s after the first), or its open failed; never on an app clock. After Try
+/// again, only what lands later counts.
+enum PickWait {
+    static func ends(snapshot: VersionsSnapshot?, failed: Bool, settled: Bool) -> Bool {
+        failed || snapshot?.done == true || (snapshot?.recommended != nil && settled)
+    }
+
+    /// The version to start: with no source in reach the one kept here, else the pick, else (rows and
+    /// no pick named) the core's first row.
+    static func key(_ snapshot: VersionsSnapshot?) -> String? {
+        let kept = snapshot?.empty.flatMap { $0.kind == "unreachable" ? $0.key : nil }
+        return kept ?? snapshot?.recommended?.key ?? snapshot?.rows.first?.key
+    }
+
+    /// Whether what the view holds came in after the last Try again (`retriedAt`, nil for none).
+    static func fresh(landed: Int, retriedAt: Int?) -> Bool {
+        retriedAt.map { landed > $0 } ?? true
+    }
+}
+
 /// Plain words for what the core says about a version, equal to the web's
 /// `lib/words.ts` and Android's `VersionsCopy`. Never emoji, never codes.
 enum VersionWords {
     /// The tone of a line drawn with a dot.
     enum Tone { case idle, ok, warn, bad }
 
-    static func size(_ bytes: Int64?) -> String? {
-        bytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) }
-    }
-
-    static func status(_ status: VersionStatus) -> String {
-        switch status {
-        case .ready: "Ready now"
-        case .torrent(let seeds): seeds.map { "Torrent, \($0) \($0 == 1 ? "seed" : "seeds")" } ?? "Torrent"
-        case .needsDownload: "Needs download"
-        case .direct: "Direct link"
-        }
-    }
-
-    /// Good when it can play now; a torrent or a download has to start first.
-    static func tone(_ status: VersionStatus) -> Tone {
-        switch status {
-        case .ready, .direct: .ok
-        case .torrent, .needsDownload: .warn
-        }
-    }
-
-    /// Why a version is recommended, never naming the streaming service.
-    static func reason(_ reason: String, status: VersionStatus? = nil) -> String {
-        switch reason {
-        case "readyNow":
-            "Ready now"
-        case "playsDirectly": "Plays directly on this device"
-        case "matchesScreen": "Matches your screen"
-        case "sameReleaseAsLast": "Same release as last time"
-        case "yourLanguage": "In your language"
-        case "smallerFaster": "Smaller and faster to start"
-        default: reason
-        }
-    }
-
-    /// The pick's heading, the quality and its first feature: "4K Dolby Vision".
-    static func pickHeading(_ row: VersionRow) -> String {
-        ([row.quality] + row.features.prefix(1)).joined(separator: " ")
-    }
-
-    /// The pick's facts in the web's order: size, status, more features, languages; never its addon.
-    static func facts(_ row: VersionRow) -> [(key: String, value: String)] {
-        var facts = [
-            (key: "Size", value: size(row.sizeBytes) ?? "Unknown"),
-            (key: "Status", value: status(row.status)),
-        ]
-        if row.features.count > 1 { facts.append((key: "Features", value: row.features.joined(separator: ", "))) }
-        if !row.languages.isEmpty { facts.append((key: "Languages", value: languages(row))) }
-        return facts
-    }
-
-    /// The line under Play: how many sources back this release up.
     /// What an opened row adds under its release name, as Android's
     /// `VersionsCopy.detail`: "English, 2 sources", or "Language not stated".
     static func detail(_ row: VersionRow) -> String {
         let parts = [languages(row), row.failoverCount > 0 ? "\(row.failoverCount + 1) sources" : ""].filter { !$0.isEmpty }
         return parts.isEmpty ? "Language not stated" : parts.joined(separator: ", ")
-    }
-
-    static func failover(_ row: VersionRow) -> String {
-        row.failoverCount > 0
-            ? "\(row.failoverCount + 1) sources. If one fails, the next starts on its own."
-            : "One source for this release."
     }
 
     /// "English, Turkish" from the release's codes.
@@ -134,12 +94,6 @@ enum VersionWords {
         "nld": "nl", "pol": "pl", "swe": "sv", "hin": "hi", "gre": "el", "ell": "el", "rum": "ro", "ron": "ro",
         "hun": "hu", "cze": "cs", "ces": "cs", "heb": "he", "per": "fa", "fas": "fa", "pob": "pt-BR",
     ]
-
-    /// The line under Play: "1080p  HDR10  2.4 GB".
-    /// The quality is the core's headline as is ("Quality not stated" at worst).
-    static func line(_ row: VersionRow) -> String {
-        ([row.quality] + row.features + [size(row.sizeBytes)].compactMap { $0 }).joined(separator: "  ")
-    }
 
     /// A short cell (a table column, an OSD value) says "Unknown", one word.
     static func cell(_ quality: String) -> String {
@@ -216,7 +170,7 @@ enum VersionWords {
         return [(words.page.smaller, s.smaller), (words.page.sharper, s.sharper)].compactMap { name, row in
             guard let row, row.key != pick else { return nil }
             // The size as the rows below say it, so a shortcut and its row read the same.
-            let what = ([cell(row.quality)] + [size(row.sizeBytes)].compactMap { $0 }).joined(separator: ", ")
+            let what = ([cell(row.quality)] + [bytes(row)].compactMap { $0 }).joined(separator: ", ")
             return ("\(name): \(what)", row)
         }
     }
@@ -254,6 +208,101 @@ enum VersionWords {
             held[section.quality] = kept + section.keys.filter { !kept.contains($0) }
         }
         return held
+    }
+
+    /// The card's kicker: "Best for this screen" on a computer, "Best for this phone", "Best for this TV".
+    static var kicker: String {
+        #if os(tvOS)
+        words.page.bestTv
+        #elseif os(iOS)
+        // An iPad reads as a phone too: the words have no tablet yet.
+        words.page.bestPhone
+        #else
+        "Best for \(words.conditions.devices["desktop"] ?? "this computer")"
+        #endif
+    }
+
+    /// One of Apple's badges: the resolution filled, the Dolby words plain, the short marks outlined.
+    struct Badge: Hashable {
+        enum Look { case filled, plain, outlined }
+        let text: String
+        let look: Look
+    }
+
+    /// A version's badge row, as Android and the v3 frames draw it: the quality first, then one video
+    /// format (Dolby Vision, else HDR10+, else HDR) and one audio format (Dolby Atmos, else 7.1, else 5.1).
+    static func badges(_ row: VersionRow) -> [Badge] {
+        let f = Set(row.features)
+        let video: Badge? = if f.contains("Dolby Vision") { Badge(text: "Dolby Vision", look: .plain) }
+            else if f.contains("HDR10+") { Badge(text: "HDR10+", look: .outlined) }
+            else if !f.isDisjoint(with: ["HDR10", "HDR", "HLG"]) { Badge(text: "HDR", look: .outlined) }
+            else { nil }
+        let audio: Badge? = if f.contains("Atmos") { Badge(text: "Dolby Atmos", look: .plain) }
+            else if f.contains("7.1") { Badge(text: "7.1", look: .outlined) }
+            else if f.contains("5.1") { Badge(text: "5.1", look: .outlined) }
+            else { nil }
+        return [Badge(text: cell(row.quality), look: .filled)] + [video, audio].compactMap { $0 }
+    }
+
+    /// The row's language when it is not the viewer's (the core's `otherLanguages` group): "Turkish".
+    static func languageTag(_ row: VersionRow) -> String? {
+        row.group == "otherLanguages" && !row.languages.isEmpty ? languages(row) : nil
+    }
+
+    /// A size as every line on the page says it, 1024-based as the shared words' rule: "1.5 GB".
+    private static func bytes(_ row: VersionRow) -> String? { row.sizeBytes.map(StreamChoice.bytes) }
+
+    /// The core's line for a row, "On this device" taking its place for the version kept here.
+    private static func rowLine(_ row: VersionRow) -> LineWords? {
+        let line = row.line.flatMap { StreamChoice.lineWords($0) }
+        guard let kept = row.onDevice else { return line }
+        return LineWords(tone: .ok, text: kept, details: line?.details ?? "")
+    }
+
+    /// A row's one quiet line: its size first, then its source in plain words ("2 GB, shared by 412
+    /// people", "4 GB, ready now"), the core's warning ("12 GB, may start slowly"), or, dimmed, why it
+    /// may not play ("2 GB, needs an account"). Words after a size go on in lower case.
+    static func rowWords(_ row: VersionRow, dimmed: String? = nil) -> String {
+        let line = rowLine(row)
+        let said: String? = if let dimmed { dimmed }
+            else if let kept = row.onDevice { kept }
+            else if line.map({ $0.tone != .ok }) == true { line?.text }
+            else { source(row.status) ?? line?.text }
+        guard let size = bytes(row) else { return said ?? "" }
+        return ([size] + [said.map(StreamChoice.lowerFirst)].compactMap { $0 }).joined(separator: ", ")
+    }
+
+    private static func source(_ status: VersionStatus) -> String? {
+        let s = words.page.source
+        return switch status {
+        case .ready: s["ready"]
+        case .direct: s["direct"]
+        case .needsDownload: s["download"]
+        case .torrent(let seeds): seeds.flatMap { n in s["shared"]?.replacingOccurrences(of: "{people}", with: StreamChoice.counted("people", n)) }
+        }
+    }
+
+    /// A row's details, reserved under it and shown on focus or hover: the release name, the line's
+    /// details, its languages and sources.
+    static func details(_ row: VersionRow) -> String {
+        detailLines(row).joined(separator: " \u{B7} ")
+    }
+
+    /// The same details one per line, for the iPhone's details sheet.
+    static func detailLines(_ row: VersionRow) -> [String] {
+        [row.releaseName, rowLine(row)?.details ?? "", detail(row)].filter { !$0.isEmpty }
+    }
+
+    /// The card's one why line: the core's line and its details joined by a colon ("Starts quickly: 412
+    /// seeders, 2 GB").
+    static func why(_ row: VersionRow) -> String {
+        guard let line = rowLine(row) else { return [bytes(row)].compactMap { $0 }.joined() }
+        return line.details.isEmpty ? line.text : "\(line.text): \(line.details)"
+    }
+
+    /// A row as a screen reader says it: its badges, its language, its line.
+    static func rowSpoken(_ row: VersionRow, dimmed: String? = nil) -> String {
+        (badges(row).map(\.text) + [languageTag(row), rowWords(row, dimmed: dimmed)].compactMap { $0 }).joined(separator: ", ")
     }
 
     /// "Show all 12" for a closed section.

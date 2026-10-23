@@ -194,6 +194,9 @@ struct PlaybackSnapshot: Decodable, Hashable, Sendable {
     /// Why subtitle files did not load, one per source and problem; empty
     /// again after a failover. An older core sends none: read `notes`.
     let subtitleNotes: [SubtitleNote]?
+    /// Every track the start subtitle could turn on failed to read, each handing over to the next as
+    /// `autoSubtitle` changed, and none is left: say so with no source (optional for older cores).
+    var startSubtitleFailed: Bool?
     /// The recommendation failed for a reason of its own and the view moved
     /// on by itself to this version: named while `resolving` (optional for older cores).
     let trying: OtherVersion?
@@ -270,7 +273,7 @@ struct SubtitleNote: Decodable, Hashable, Sendable {
         case "unreachable": "\(source) did not answer. Try its subtitles again in a moment."
         case "blocked": "\(source) is turning requests away. Marquee will try again in a few minutes."
         case "changed": "\(source) changed its pages, so Marquee cannot read them. An update will fix this."
-        case "trackFailed": "A subtitle file from \(source) could not be read. Pick another one."
+        case "trackFailed": "This subtitle could not be read."
         default: "Subtitles from \(source) did not load."
         }
     }
@@ -463,14 +466,6 @@ enum SubtitleMenu {
         return top.isEmpty ? (all, []) : (top, all.filter { !top.contains($0) })
     }
 
-    /// The track to turn on at start: the core's `autoSubtitle`, once, while
-    /// the viewer has not picked anything in this play (a track, one in the
-    /// file, or Off), and only once the track is in the list.
-    static func autoPick(_ auto: String?, settled: Bool, tracks: [SubtitleTrack]) -> SubtitleTrack? {
-        guard !settled, let auto else { return nil }
-        return tracks.first { $0.url == auto }
-    }
-
     /// The languages the menu puts on top, as the core orders the list: the
     /// profile's subtitle languages, then its audio languages, else the
     /// device's language and English (the languages the pick was ranked with).
@@ -562,24 +557,38 @@ struct NextEpisode: Decodable, Hashable, Sendable {
     private(set) var send: ((_ command: [String: any Sendable]) -> Void)?
     /// The viewer picked a track, one in the file, or Off: it wins for the play.
     private(set) var viewerChose = false
-    /// The start subtitle turned on for the current source.
-    private var startApplied = false
+    /// The core's start subtitle (`autoSubtitle`) turned on for the current source. The core moves it on
+    /// when its file cannot be read, so a new one is turned on in its place while the viewer has not chosen.
+    private var appliedAuto: String?
+    /// The view opened again on a new address: the next `autoSubtitle` is the same track renamed.
+    private var adoptNextAuto = false
     /// The source the play is on: the snapshot's `attempt`.
     private var attempt: Int64?
-
-    var subtitleSettled: Bool { viewerChose || startApplied }
 
     /// The playback view `sub` opened: commands go to it, never to an older view.
     func opened(sub: UInt64, deliver: @escaping (_ sub: UInt64, _ command: [String: any Sendable]) -> Void) {
         send = { deliver(sub, $0) }
     }
 
-    /// The start subtitle to turn on now, once per source, as if picked,
-    /// sending nothing; never over the viewer's own choice.
+    /// The start subtitle to turn on now, as if picked, sending nothing: once per `autoSubtitle` the core
+    /// names (a new one when the last could not be read), never over the viewer's own choice.
     func startSubtitle(_ auto: String?, tracks: [SubtitleTrack]) -> SubtitleTrack? {
-        guard let track = SubtitleMenu.autoPick(auto, settled: subtitleSettled, tracks: tracks) else { return nil }
-        startApplied = true
+        guard !viewerChose, let auto, auto != appliedAuto, let track = tracks.first(where: { $0.url == auto }) else { return nil }
+        if adoptNextAuto {
+            // The same track on the new address: it stays on as it was (its cues and timing kept).
+            (appliedAuto, adoptNextAuto) = (auto, false)
+            return nil
+        }
+        appliedAuto = auto
         return track
+    }
+
+    /// The start subtitle the core named has gone with none after it (`startSubtitleFailed`): the one
+    /// shown goes off. Never the viewer's own choice.
+    func startSubtitleGone(_ auto: String?) -> Bool {
+        guard !viewerChose, appliedAuto != nil, auto == nil else { return false }
+        appliedAuto = nil
+        return true
     }
 
     /// The viewer's pick from the menu, or Off (nil): it wins for the rest of
@@ -605,11 +614,12 @@ struct NextEpisode: Decodable, Hashable, Sendable {
     /// back over the viewer's choice.
     func reopened() {
         attempt = nil
+        adoptNextAuto = appliedAuto != nil
     }
 
     /// Another episode or version: its own start subtitle applies.
     func newPlay() {
-        (viewerChose, startApplied, attempt) = (false, false, nil)
+        (viewerChose, appliedAuto, adoptNextAuto, attempt) = (false, nil, false, nil)
     }
 
     /// The snapshot's source. A move on to another source drops the start
@@ -623,7 +633,7 @@ struct NextEpisode: Decodable, Hashable, Sendable {
         // The viewer's pick goes too, as on the web: its file was the old
         // release's. The core's start subtitle for the new list brings back
         // the viewer's language, and Off stays Off (review r4 P3-4).
-        (viewerChose, startApplied) = (false, false)
+        (viewerChose, appliedAuto) = (false, nil)
         return true
     }
 
@@ -632,7 +642,8 @@ struct NextEpisode: Decodable, Hashable, Sendable {
     /// this one call per snapshot.
     func subtitleStep(attempt: Int64?, auto: String?, tracks: [SubtitleTrack]) -> (drop: Bool, turnOn: SubtitleTrack?) {
         let drop = source(attempt)
-        return (drop, startSubtitle(auto, tracks: tracks))
+        let gone = startSubtitleGone(auto)
+        return (drop || gone, startSubtitle(auto, tracks: tracks))
     }
 
     /// Another version of the same video, on the same Versions view: the play

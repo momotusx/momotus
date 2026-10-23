@@ -471,7 +471,7 @@ struct PlayerControls: View {
                 menu("Versions", "layers", currentQuality(snapshot), values: values) {
                     ForEach([snapshot.recommended].compactMap { $0 } + snapshot.rows.prefix(12)) { row in
                         Button { model.switchVersion(row.key); hold(false) } label: {
-                            Choice(text: StreamChoice.spoken(row), selected: row.key == playingKey)
+                            Choice(text: VersionWords.rowSpoken(row), selected: row.key == playingKey)
                         }
                     }
                 }

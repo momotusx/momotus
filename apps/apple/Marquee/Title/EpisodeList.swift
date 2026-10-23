@@ -32,9 +32,7 @@ struct EpisodeList: View {
                         EpisodeRow(
                             episode: episode,
                             current: episode.videoId == current,
-                            minutes: minutes(runtime),
-                            status: nil
-                        ) {
+                            minutes: minutes(runtime)) {
                             play(episode)
                         }
                         // "Airs Oct 21": nothing to play yet.
@@ -187,8 +185,6 @@ private struct EpisodeRow: View {
     /// The play target: its card holds the time left.
     let current: Bool
     let minutes: Int?
-    /// "Finding a version", or why it could not start.
-    let status: String?
     let play: () -> Void
     @Environment(\.metrics) private var metrics
 
@@ -213,13 +209,6 @@ private struct EpisodeRow: View {
                             .foregroundStyle(Theme.Palette.muted)
                             .lineLimit(2)
                             .multilineTextAlignment(.leading)
-                    }
-                    if let status {
-                        Label(status, glyph: status == "Finding a version" ? "clock" : "circle-alert", size: metrics.cardInfo + 2)
-                            .textFont(metrics.cardInfo + 1, relativeTo: .callout)
-                            .foregroundStyle(Theme.Palette.text)
-                            .multilineTextAlignment(.leading)
-                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .padding(.top, 2)

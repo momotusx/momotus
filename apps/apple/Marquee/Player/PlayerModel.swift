@@ -422,8 +422,12 @@ final class PlayerModel {
         // Play pressed while versions were found: the pick, once it settles, opens the view (the page's
         // task drives the run again for the new key); none, and the card says why.
         if route.waitsForPick {
-            guard let versions else { return }
-            guard var pick = await versions.settledPick(tapped: route.tapped, limit: .seconds(30)) else {
+            guard let versions else {
+                noPick = true
+                return
+            }
+            // No app clock: the wait ends when the core's view does (done, or a settled pick).
+            guard var pick = await versions.settledPick(tapped: route.tapped, limit: nil) else {
                 if !Task.isCancelled { noPick = true }
                 return
             }
@@ -581,6 +585,14 @@ final class PlayerModel {
         choices.retry()
     }
 
+    /// Try again on the card of a play that found no version: the versions are asked again and the
+    /// player waits for their pick.
+    func retryPick() {
+        versions?.retry()
+        noPick = false
+        reopen()
+    }
+
     /// Versions opens over the player: it pauses (nothing plays or sounds under the page) and a source
     /// that comes in meanwhile loads paused; the attempt keeps resolving.
     func cover() {
@@ -688,6 +700,10 @@ final class PlayerModel {
             showSubtitleStatus(trouble.say)
             // Its file played as an empty one: the position stays, and no other version is tried.
             if trouble.off { selectSubtitle(nil) }
+        }
+        // Every start subtitle the core tried could not be read: said once, naming no source.
+        if let words = PlayerLayout.startSubtitleFailedWords(snapshot), PlayerLayout.startSubtitleFailedWords(playback) == nil {
+            showSubtitleStatus(words)
         }
         playback = snapshot
         if PlayerLayout.retryRose(old: lastRetries, new: snapshot.retries) { showTryingAgain() }
