@@ -57,7 +57,10 @@ final class AetherSession {
     /// Opens `source` at `start` (seconds) at the viewer's `rate`, which a load of another source does not keep;
     /// `openWithin` bounds the open to its first frame (what the start budget has left, plan 2.3), past which the
     /// source counts as failed.
-    func load(_ source: MediaSource, at start: Double, rate: Float, muted: Bool, openWithin: Duration, events: Events) {
+    func load(
+        _ source: MediaSource, container: String?, at start: Double, rate: Float, muted: Bool, openWithin: Duration,
+        events: Events
+    ) {
         stop()
         load += 1
         let load = load
@@ -104,6 +107,9 @@ final class AetherSession {
         let loaded = ContinuousClock.now
         var passed: [StartupCheckpoint: ContinuousClock.Instant] = [:]
         var logged = false
+        // Matroska carries its codec parameters in its header: 1 MiB first, 8 MiB once more only when what plays
+        // came back without its parameters.
+        var probeMiB: Int64 = Self.firstProbeMiB(container: container)
         engine.$startupProgress
             .receive(on: DispatchQueue.main)
             .sink { progress in
@@ -125,14 +131,19 @@ final class AetherSession {
                         from.flatMap { from in to.map { "\(Int(($0 - from) / .milliseconds(1)))" } } ?? "n/a"
                     }
                     let (probed, session) = (passed[.streamsProbed], passed[.sessionConstructed])
-                    coreLog.notice("metric engine_start probe_ms=\(ms(loaded, probed), privacy: .public) session_ms=\(ms(probed, session), privacy: .public) frame_ms=\(ms(session, .now), privacy: .public)")
+                    coreLog.notice("metric engine_start probe_ms=\(ms(loaded, probed), privacy: .public) session_ms=\(ms(probed, session), privacy: .public) frame_ms=\(ms(session, .now), privacy: .public) probe_mib=\(probeMiB, privacy: .public)")
                 }
             }
             .store(in: &bag)
         let engine = engine
         opening = Task { [weak self] in
             do {
-                let probe = try await engine.load(source: source, startPosition: start > 1 ? start : nil, options: Self.options)
+                var probe = try await engine.load(source: source, startPosition: start > 1 ? start : nil, options: Self.options(probeMiB: probeMiB))
+                guard self?.load == load else { return }
+                if probeMiB < 8, !Self.resolved(probe, audio: engine.audioTracks, active: engine.activeAudioTrackIndex) {
+                    (probeMiB, passed) = (8, [:])
+                    probe = try await engine.load(source: source, startPosition: start > 1 ? start : nil, options: Self.options(probeMiB: probeMiB))
+                }
                 // A stop or another load while this one opened: it does not play.
                 guard self?.load == load else { return }
                 if let probe, probe.videoWidth > 0, probe.videoHeight > 0 {
@@ -155,12 +166,26 @@ final class AetherSession {
 
     /// The probe reads 8 MiB, not the engine's 50: a sparse track with no early packet (a PGS subtitle) makes
     /// find_stream_info read to the budget, which on a torrent goes at the swarm's pace (20 s on a walk, cut by
-    /// the open bound). Video and audio resolve in the first packets; a PGS track that does not is left out (the
-    /// overlay draws text only).
-    static var options: LoadOptions {
+    /// the open bound). A Matroska file (mkv, webm) carries its codec parameters in its Tracks header, so it starts
+    /// at 1 MiB and 2 s of analysis; a track left without its parameters is placed when its first packet arrives.
+    static func options(probeMiB: Int64) -> LoadOptions {
         var options = LoadOptions()
-        options.probesize = 8 << 20
+        options.probesize = probeMiB << 20
+        if probeMiB < 8 { options.maxAnalyzeDuration = 2_000_000 }
         return options
+    }
+
+    static func firstProbeMiB(container: String?) -> Int64 {
+        ["mkv", "webm"].contains(container?.lowercased() ?? "") ? 1 : 8
+    }
+
+    /// Whether the probe came back with what plays: the picture's size, and the playing audio's rate and channels.
+    /// No probe (the engine reports none on some paths) counts as resolved: there is nothing to check.
+    static func resolved(_ probe: SourceProbe?, audio: [TrackInfo], active: Int?) -> Bool {
+        guard let probe else { return true }
+        guard probe.videoWidth > 0, probe.videoHeight > 0 else { return false }
+        guard let track = audio.first(where: { $0.id == active }) ?? audio.first else { return true }
+        return track.sampleRate > 0 && track.channels > 0
     }
 
     /// A text cue as the overlay draws it; a bitmap cue is not text.

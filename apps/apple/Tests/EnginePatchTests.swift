@@ -98,7 +98,7 @@ private let fixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent
 @MainActor @Test func theViewersSpeedHoldsAcrossAnEngineLoad() async throws {
     let session = try #require(AetherSession())
     let mkv = try Data(contentsOf: fixtures.appending(path: "tiny.mkv"))
-    session.load(.custom(DataReader(mkv), formatHint: "matroska"), at: 0, rate: 1.5, muted: true, openWithin: .seconds(30), events: .none)
+    session.load(.custom(DataReader(mkv), formatHint: "matroska"), container: "mkv", at: 0, rate: 1.5, muted: true, openWithin: .seconds(30), events: .none)
     for _ in 0..<100 where session.engine.desiredRate == nil { try await Task.sleep(for: .milliseconds(100)) }
     #expect(session.engine.desiredRate == 1.5)
     session.stop()
@@ -107,7 +107,7 @@ private let fixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent
 @MainActor @Test func aSessionStoppedWhileItOpensDoesNotPlay() async throws {
     let session = try #require(AetherSession())
     let mkv = try Data(contentsOf: fixtures.appending(path: "tiny.mkv"))
-    session.load(.custom(DataReader(mkv), formatHint: "matroska"), at: 0, rate: 1.5, muted: true, openWithin: .seconds(30), events: .none)
+    session.load(.custom(DataReader(mkv), formatHint: "matroska"), container: "mkv", at: 0, rate: 1.5, muted: true, openWithin: .seconds(30), events: .none)
     session.stop()
     try await Task.sleep(for: .seconds(2))
     #expect(session.engine.state != .playing)
@@ -118,6 +118,21 @@ extension AetherSession.Events {
     static var none: Self {
         .init(time: { _ in }, duration: { _ in }, state: { _, _ in }, firstFrame: {}, ended: {}, failed: { _ in }, tracks: { _ in }, cues: { _, _ in }, videoSize: { _ in })
     }
+}
+
+/// Matroska starts at a 1 MiB probe (its codec parameters sit in its header), everything else at 8 MiB; a probe that
+/// came back with the picture and the audio's parameters needs no second one.
+@MainActor @Test func matroskaProbesSmallFirst() throws {
+    #expect(AetherSession.firstProbeMiB(container: "mkv") == 1)
+    #expect(AetherSession.firstProbeMiB(container: "WEBM") == 1)
+    #expect(AetherSession.firstProbeMiB(container: "mp4") == 8)
+    #expect(AetherSession.firstProbeMiB(container: nil) == 8)
+    #expect(AetherSession.options(probeMiB: 1).probesize == 1 << 20)
+    #expect(AetherSession.options(probeMiB: 8).maxAnalyzeDuration == nil)
+    let mkv = try Data(contentsOf: fixtures.appending(path: "tiny.mkv"))
+    let probe = try AetherEngine.probe(source: .custom(DataReader(mkv), formatHint: "matroska"))
+    #expect(AetherSession.resolved(probe, audio: [], active: nil))
+    #expect(AetherSession.resolved(nil, audio: [], active: nil), "no probe, nothing to check")
 }
 
 /// Patch 4: segment 0 ends at the first keyframe at or after 1 s; the later segments keep the absolute 4 s cuts.
@@ -132,3 +147,4 @@ extension AetherSession.Events {
         keyframes: Array(stride(from: Int64(0), through: 20000, by: 500)), videoTimeBase: tb, sourceDurationSeconds: 20.5)
     #expect(dense.prefix(4).map { ($0.startSeconds * 1000).rounded() } == [0, 1000, 8000, 12000])
 }
+
