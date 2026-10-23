@@ -5,6 +5,7 @@
 //! A kids profile's Home asks no catalog and has no hero: Continue Watching
 //! of allowed titles, then its list's 20 newest (plans/m11-kids.md 5).
 
+use crate::covers::{Covers, RPDB};
 use crate::live::{FRAME, ListDiff, coalesce};
 use crate::ratings::Ratings;
 use crate::views::playback::{NextEpisode, next_after};
@@ -66,50 +67,12 @@ pub struct Tile {
     pub(crate) blurb: Option<Blurb>,
 }
 
-const RPDB: &str = "https://api.ratingposterdb.com/";
-
-impl Core {
-    /// The RPDB key an installed, enabled addon was configured with, the
-    /// first in the user's order (its link's config; the default Rotten
-    /// Tomatoes addon carries `{"rpdb_key":"t0-free-rpdb"}`): the ratings
-    /// band on every cover comes from the addons the user added (the owner,
-    /// 2026-10-23). `None` when no enabled addon has a key: covers stay the
-    /// addons' own. A kids profile reads the owner's list, as for every
-    /// addon. Tier 0 serves `poster-default` only (IMDb, Metacritic, Rotten
-    /// Tomatoes); images may be cached for personal use, so the apps' image
-    /// caches must keep them.
-    pub(crate) fn rpdb_key(&self) -> Option<String> {
-        self.installed_addons()
-            .ok()?
-            .iter()
-            .find_map(|a| rpdb_key_in(&a.transport_url))
-    }
-}
-
-/// The `rpdb_key` in an addon link's config segment, when it is a plain
-/// key: it goes into RPDB's path, so anything but letters, digits, `-` and
-/// `_` is refused.
-fn rpdb_key_in(link: &url::Url) -> Option<String> {
-    link.path_segments()?.find_map(|segment| {
-        let config = percent_encoding::percent_decode_str(segment)
-            .decode_utf8()
-            .ok()?;
-        let config: serde_json::Value = serde_json::from_str(&config).ok()?;
-        let key = config.get("rpdb_key")?.as_str()?;
-        let plain = (1..=64).contains(&key.len())
-            && key
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
-        plain.then(|| key.to_owned())
-    })
-}
-
 impl Tile {
-    /// The cover every tile of an IMDb title shows, whatever shape its
-    /// addon gave (the owner, 2026-10-22), when an enabled addon gave an
-    /// RPDB key (`Core::rpdb_key`): RPDB's 2:3 poster with the
-    /// IMDb, Metacritic and Rotten Tomatoes band drawn in, so its shape
-    /// becomes "poster"; the addon's own poster is kept in
+    /// The cover every tile shows whose title has an IMDb id (its own, or
+    /// the one its addon gave), whatever shape its addon gave (the owner,
+    /// 2026-10-22), when an enabled addon gave an RPDB key (`covers`):
+    /// RPDB's 2:3 poster with the IMDb, Metacritic and Rotten Tomatoes band
+    /// drawn in, so its shape becomes "poster"; the addon's own poster is kept in
     /// `poster_fallback` for when it does not load. `?fallback=true` makes
     /// RPDB answer its plain poster for a title it has no ratings for; an
     /// id it does not know still answers 404. Any other tile, or any tile
@@ -117,16 +80,11 @@ impl Tile {
     /// RPDB's already (an app sent a cover back, as `playback`'s `poster`)
     /// is no fallback. Background and still are never touched (Continue
     /// Watching's 16:9 art). Every tile builder ends here.
-    pub(crate) fn rated_cover(mut self, rpdb: Option<&str>) -> Self {
-        if let Some(key) = rpdb
-            && crate::segments::is_imdb(&self.id)
-        {
+    pub(crate) fn rated_cover(mut self, covers: &Covers) -> Self {
+        if let Some(cover) = covers.url(&self.id) {
             "poster".clone_into(&mut self.poster_shape);
             self.poster_fallback = self.poster.take().filter(|p| !p.starts_with(RPDB));
-            self.poster = Some(format!(
-                "{RPDB}{key}/imdb/poster-default/{}.jpg?fallback=true",
-                self.id
-            ));
+            self.poster = Some(cover);
         }
         self
     }
@@ -815,14 +773,17 @@ fn apply_catalog(
 ) {
     let outcome = result
         .map_err(|e| e.to_string())
-        .and_then(|f| decode_catalog(&f.body).map_err(|e| format!("unreadable catalog: {e}")))
+        .and_then(|f| {
+            core.learn_imdb_ids(&f.body);
+            decode_catalog(&f.body).map_err(|e| format!("unreadable catalog: {e}"))
+        })
         .and_then(|response| match response {
             ResourceResponse::Metas { metas } => {
-                let rpdb = core.rpdb_key();
+                let metas: Vec<_> = metas.into_iter().take(ROW_TILES).collect();
+                let covers = core.covers(metas.iter().map(|m| m.id.as_str()));
                 Ok(metas
                     .into_iter()
-                    .take(ROW_TILES)
-                    .map(|m| tile_from_preview(m, rpdb.as_deref()))
+                    .map(|m| tile_from_preview(m, &covers))
                     .collect::<Vec<Tile>>())
             }
             _ => Err("addon returned no catalog items".to_owned()),
@@ -875,7 +836,7 @@ pub(crate) fn year_line(raw: Option<&str>) -> Option<String> {
     })
 }
 
-pub(crate) fn tile_from_preview(m: mq_protocol::MetaItemPreview, rpdb: Option<&str>) -> Tile {
+pub(crate) fn tile_from_preview(m: mq_protocol::MetaItemPreview, covers: &Covers) -> Tile {
     let links = |category: &str| -> Vec<String> {
         m.links
             .iter()
@@ -908,7 +869,7 @@ pub(crate) fn tile_from_preview(m: mq_protocol::MetaItemPreview, rpdb: Option<&s
         blurb: Some(blurb),
         poster_fallback: None,
     }
-    .rated_cover(rpdb)
+    .rated_cover(covers)
 }
 
 /// The hero is the first catalog item with a background, never from Continue
@@ -1019,16 +980,16 @@ async fn watch_kids_row(
 
 /// "Your shows and movies": the 20 most recently allowed of the counted list.
 fn kids_row(core: &Core) -> HomeRow {
-    let rpdb = core.rpdb_key();
     let list = core.library().allowed_list(core.profile());
-    let tiles: Vec<Tile> = list
+    let counted: Vec<AllowedRow> = list
         .map(|l| l.counted)
         .unwrap_or_default()
-        .iter()
+        .into_iter()
         .rev()
         .take(ROW_TILES)
-        .map(|row| kids_tile(row, rpdb.as_deref()))
         .collect();
+    let covers = core.covers(counted.iter().map(|r| r.item_id.as_str()));
+    let tiles: Vec<Tile> = counted.iter().map(|row| kids_tile(row, &covers)).collect();
     HomeRow {
         row_id: KIDS_ROW_ID.into(),
         title: "Your shows and movies".into(),
@@ -1042,7 +1003,7 @@ fn kids_row(core: &Core) -> HomeRow {
     }
 }
 
-pub(crate) fn kids_tile(row: &AllowedRow, rpdb: Option<&str>) -> Tile {
+pub(crate) fn kids_tile(row: &AllowedRow, covers: &Covers) -> Tile {
     Tile {
         id: row.item_id.clone(),
         kind: row.kind.clone(),
@@ -1059,7 +1020,7 @@ pub(crate) fn kids_tile(row: &AllowedRow, rpdb: Option<&str>) -> Tile {
         blurb: None,
         poster_fallback: None,
     }
-    .rated_cover(rpdb)
+    .rated_cover(covers)
 }
 
 /// Whether a Continue Watching tile may show: the title passes the policy,
@@ -1081,8 +1042,6 @@ fn shows(policy: &Policy, kind: &str, id: &str, video: &str) -> bool {
 async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) {
     let library = core.library();
     let policy = core.policy();
-    let rpdb_key = core.rpdb_key();
-    let rpdb = rpdb_key.as_deref();
     let read = if policy.kids() {
         usize::MAX >> 1
     } else {
@@ -1125,12 +1084,13 @@ async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) 
     // A new row shows at once from the library, so it never pushes the page
     // down late; artwork and Next Up follow when the metas answer.
     if find_row(&lock(rows), CONTINUE_ROW_ID).is_none() {
+        let covers = core.covers(unfinished.iter().map(|i| i.item_id.as_str()));
         let quick: Vec<(i64, Tile)> = unfinished
             .iter()
             .map(|item| {
                 (
                     item.updated_ms,
-                    tile_from_continue(item.clone(), None, rpdb),
+                    tile_from_continue(item.clone(), None, &covers),
                 )
             })
             .collect();
@@ -1145,7 +1105,9 @@ async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) 
                 kept_here(core, &item)
             );
             let at = item.updated_ms;
-            let mut tile = tile_from_continue(item, meta.ok().as_ref().map(|m| &m.0), rpdb);
+            // After the meta: its answer may have given an anime its IMDb id.
+            let covers = core.covers([item.item_id.as_str()]);
+            let mut tile = tile_from_continue(item, meta.ok().as_ref().map(|m| &m.0), &covers);
             if kept {
                 let words = crate::views::playback::ON_DEVICE;
                 tile.release_info = tile.release_info.map(|c| format!("{c} \u{b7} {words}"));
@@ -1157,7 +1119,8 @@ async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) 
         // A series or an anime (Kitsu's kind), read where its kind is.
         let (meta, _) = core.fetch_meta(&done.kind, &done.item_id).await.ok()?;
         let next = next_after(&meta, &done.video_id)?;
-        Some((done.updated_ms, tile_for_next(&meta, next, rpdb)))
+        let covers = core.covers([done.item_id.as_str()]);
+        Some((done.updated_ms, tile_for_next(&meta, next, &covers)))
     }))
     .await;
     items.extend(next_up.into_iter().flatten());
@@ -1224,7 +1187,7 @@ fn apply_continue(
     }
 }
 
-fn tile_for_next(meta: &mq_protocol::MetaItem, next: NextEpisode, rpdb: Option<&str>) -> Tile {
+fn tile_for_next(meta: &mq_protocol::MetaItem, next: NextEpisode, covers: &Covers) -> Tile {
     let p = &meta.preview;
     Tile {
         id: p.id.clone(),
@@ -1245,7 +1208,7 @@ fn tile_for_next(meta: &mq_protocol::MetaItem, next: NextEpisode, rpdb: Option<&
         blurb: None,
         poster_fallback: None,
     }
-    .rated_cover(rpdb)
+    .rated_cover(covers)
 }
 
 /// The one caption every app shows under a Continue Watching tile:
@@ -1274,7 +1237,7 @@ pub(crate) fn with_episode(kind: &str, video_id: &str, rest: String) -> String {
 fn tile_from_continue(
     item: ContinueItem,
     meta: Option<&mq_protocol::MetaItem>,
-    rpdb: Option<&str>,
+    covers: &Covers,
 ) -> Tile {
     let progress = (item.duration_ms > 0)
         .then(|| (item.position_ms as f32 / item.duration_ms as f32).clamp(0.0, 1.0));
@@ -1307,7 +1270,7 @@ fn tile_from_continue(
         blurb: None,
         poster_fallback: None,
     }
-    .rated_cover(rpdb)
+    .rated_cover(covers)
 }
 
 fn imdb_rating(p: &mq_protocol::MetaItemPreview) -> Option<String> {
@@ -1349,7 +1312,8 @@ mod tests {
         else {
             panic!("metas");
         };
-        let tile = super::tile_from_preview(metas.into_iter().next().unwrap(), None);
+        let tile =
+            super::tile_from_preview(metas.into_iter().next().unwrap(), &super::Covers::default());
         assert_eq!(tile.release_info.as_deref(), Some("Since 2023"));
     }
 
@@ -1408,6 +1372,7 @@ mod tests {
     #[test]
     fn an_imdb_poster_is_rpdbs_cover_with_the_addons_as_fallback() {
         let keyed = |id: &str, shape: &str, poster: Option<&str>, rpdb: Option<&str>| {
+            let covers = super::Covers::with(rpdb, &[("kitsu:50016", "tt12590266")]);
             super::Tile {
                 id: id.into(),
                 kind: "movie".into(),
@@ -1424,7 +1389,7 @@ mod tests {
                 ratings: Default::default(),
                 blurb: None,
             }
-            .rated_cover(rpdb)
+            .rated_cover(&covers)
         };
         let tile = |id: &str, shape: &str, poster: Option<&str>| {
             keyed(id, shape, poster, Some("t0-free-rpdb"))
@@ -1445,7 +1410,16 @@ mod tests {
         assert_eq!(wide.poster, cover.poster);
         assert_eq!(wide.poster_shape, "poster");
         assert_eq!(wide.poster_fallback.as_deref(), Some(own));
-        // Not an IMDb id: the addon's poster and shape, no fallback.
+        // An anime its addon gave an IMDb id: that id's cover.
+        let anime = tile("kitsu:50016", "poster", Some(own));
+        assert_eq!(
+            anime.poster.as_deref(),
+            Some(
+                "https://api.ratingposterdb.com/t0-free-rpdb/imdb/poster-default/tt12590266.jpg?fallback=true"
+            )
+        );
+        assert_eq!(anime.poster_fallback.as_deref(), Some(own));
+        // No IMDb id at all: the addon's poster and shape, no fallback.
         for (id, shape) in [
             ("kitsu:1", "poster"),
             ("kitsu:2", "landscape"),
@@ -1483,36 +1457,6 @@ mod tests {
                 plain.poster_shape.as_str()
             ),
             (Some(own), None, "landscape")
-        );
-    }
-
-    /// The owner, 2026-10-23: the band comes from the addon the user added,
-    /// so the key is read from its link's config segment; one that could
-    /// leave RPDB's path is refused.
-    #[test]
-    fn the_rpdb_key_is_read_from_the_addon_link() {
-        let key = |link: &str| super::rpdb_key_in(&url::Url::parse(link).unwrap());
-        assert_eq!(
-            key("https://7a82163c306e-rottentomatoes.baby-beamup.club/%7B%22rpdb_key%22%3A%22t0-free-rpdb%22%7D/manifest.json")
-                .as_deref(),
-            Some("t0-free-rpdb")
-        );
-        assert_eq!(
-            key("https://7a82163c306e-rottentomatoes.baby-beamup.club/manifest.json"),
-            None
-        );
-        assert_eq!(
-            key("https://x.example/%7B%22rpdb_key%22%3A%22%22%7D/manifest.json"),
-            None
-        );
-        for bad in ["..%2F..%2Fadmin", "a%3Fb", "a%20b", "t0%2Fx"] {
-            let link =
-                format!("https://x.example/%7B%22rpdb_key%22%3A%22{bad}%22%7D/manifest.json");
-            assert_eq!(key(&link), None, "{bad}");
-        }
-        assert_eq!(
-            key("https://x.example/%7B%22rpdb_key%22%3A7%7D/manifest.json"),
-            None
         );
     }
 

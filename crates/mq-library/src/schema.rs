@@ -412,10 +412,16 @@ fn hash_addon_links(tx: &rusqlite::Transaction) -> rusqlite_migration::HookResul
 
 /// The looked-up scores go (2026-10-23): ratings come from the addons
 /// alone, the IMDb score from the meta addon's own rating and the ratings
-/// band from RPDB's covers, so nothing is looked up or kept.
+/// band from RPDB's covers, so nothing is looked up or kept. In their place,
+/// device-wide: the IMDb id an addon gave (`imdb_id`) for a title it names
+/// by another id (Kitsu's `kitsu:`), so its cover carries the band too.
 const V14: &str = r#"
 DROP INDEX ratings_age;
 DROP TABLE ratings;
+CREATE TABLE imdb_ids (
+    id       TEXT PRIMARY KEY,
+    imdb_id  TEXT NOT NULL
+);
 "#;
 
 #[cfg(test)]
@@ -424,7 +430,8 @@ mod tests {
     use rusqlite::Connection;
 
     /// V14 on a V13 database with looked-up scores: the ratings table and
-    /// its index go, and every other table keeps its schema and its rows.
+    /// its index go, the empty `imdb_ids` table comes, and every other table
+    /// keeps its schema and its rows.
     #[test]
     fn v14_drops_the_ratings_cache_and_touches_nothing_else() {
         let mut c = Connection::open_in_memory().unwrap();
@@ -439,7 +446,7 @@ mod tests {
         let schema = |c: &Connection| -> Vec<(String, String, Option<String>)> {
             c.prepare(
                 "SELECT type, name, sql FROM sqlite_master
-                 WHERE tbl_name <> 'ratings' ORDER BY type, name",
+                 WHERE tbl_name NOT IN ('ratings', 'imdb_ids') ORDER BY type, name",
             )
             .unwrap()
             .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
@@ -480,6 +487,10 @@ mod tests {
             )
             .unwrap();
         assert_eq!(left, 0, "the ratings table and its index are gone");
+        let kept: i64 = c
+            .query_row("SELECT COUNT(*) FROM imdb_ids", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(kept, 0, "imdb_ids comes empty");
         assert_eq!(schema(&c), schema_before);
         assert_eq!(rows(&c), rows_before);
     }

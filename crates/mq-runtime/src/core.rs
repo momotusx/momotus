@@ -883,6 +883,8 @@ impl Core {
                         if kids {
                             meta.videos.retain(|v| Policy::belongs(id, &v.id));
                         }
+                        // An anime's IMDb id, for its cover's band.
+                        self.learn_imdb_ids(&fetched.body);
                         return Ok((meta, name.clone()));
                     }
                     Ok(_) => last_error = format!("{name} has no details for this title"),

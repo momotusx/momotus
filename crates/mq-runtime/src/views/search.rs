@@ -297,7 +297,6 @@ async fn run(core: Core, query: String, snapshot: SharedObservable<SearchSnapsho
             (index, result)
         });
     }
-    let rpdb = core.rpdb_key();
     let soft = tokio::time::sleep(SOFT_DEADLINE);
     tokio::pin!(soft);
     let mut soft_fired = false;
@@ -305,7 +304,7 @@ async fn run(core: Core, query: String, snapshot: SharedObservable<SearchSnapsho
         tokio::select! {
             Some(joined) = calls.join_next(), if !calls.is_empty() => {
                 let Ok((index, result)) = joined else { continue };
-                rows[index] = outcome(result, &query, rpdb.as_deref());
+                rows[index] = outcome(&core, result, &query);
                 publish(&top, &rows);
             }
             found = &mut top_work, if top_pending => {
@@ -346,12 +345,12 @@ async fn top_results(core: &Core, query: &str, key: &str) -> Option<Vec<Tile>> {
             .map(|hit| async move { core.fetch_meta(hit.kind, &hit.imdb_id).await }),
     )
     .await;
-    let rpdb = core.rpdb_key();
+    let metas: Vec<_> = metas.into_iter().filter_map(Result::ok).collect();
+    let covers = core.covers(metas.iter().map(|(m, _)| m.preview.id.as_str()));
     Some(
         metas
             .into_iter()
-            .filter_map(Result::ok)
-            .map(|(meta, _)| tile_from_preview(meta.preview, rpdb.as_deref()))
+            .map(|(meta, _)| tile_from_preview(meta.preview, &covers))
             .collect(),
     )
 }
@@ -384,18 +383,20 @@ fn lead(hits: &[Found], key: &str) -> Vec<Found> {
 }
 
 fn outcome(
+    core: &Core,
     result: Result<mq_addons::Fetched, mq_addons::AddonError>,
     query: &str,
-    rpdb: Option<&str>,
 ) -> (RowState, Vec<Tile>) {
-    let parsed = result
-        .map_err(|e| e.to_string())
-        .and_then(|f| decode_catalog(&f.body).map_err(|e| format!("unreadable results: {e}")));
+    let parsed = result.map_err(|e| e.to_string()).and_then(|f| {
+        core.learn_imdb_ids(&f.body);
+        decode_catalog(&f.body).map_err(|e| format!("unreadable results: {e}"))
+    });
     match parsed {
         Ok(ResourceResponse::Metas { metas }) => {
+            let covers = core.covers(metas.iter().map(|m| m.id.as_str()));
             let mut tiles: Vec<Tile> = metas
                 .into_iter()
-                .map(|m| tile_from_preview(m, rpdb))
+                .map(|m| tile_from_preview(m, &covers))
                 .collect();
             // Addon order is kept, except that a title named exactly what was
             // typed goes first (Cinemeta ranks Pixar's "Up" sixth for "up").
@@ -595,11 +596,13 @@ impl Shown {
 /// title named exactly that first; no row when none does.
 fn kids_matches(core: &Core, query: &str) -> Vec<HomeRow> {
     let wanted = fold(query);
-    let list = core.library().allowed_list(core.profile());
-    let rpdb = core.rpdb_key();
-    let mut found: Vec<(bool, Tile)> = list
+    let counted = core
+        .library()
+        .allowed_list(core.profile())
         .map(|l| l.counted)
-        .unwrap_or_default()
+        .unwrap_or_default();
+    let covers = core.covers(counted.iter().map(|r| r.item_id.as_str()));
+    let mut found: Vec<(bool, Tile)> = counted
         .iter()
         .filter_map(|row| {
             let names: Vec<String> = std::iter::once(&row.name)
@@ -609,7 +612,7 @@ fn kids_matches(core: &Core, query: &str) -> Vec<HomeRow> {
             names
                 .iter()
                 .any(|n| n.contains(&wanted))
-                .then(|| (!names.contains(&wanted), kids_tile(row, rpdb.as_deref())))
+                .then(|| (!names.contains(&wanted), kids_tile(row, &covers)))
         })
         .collect();
     found.sort_by_key(|(inexact, _)| *inexact);
@@ -661,7 +664,7 @@ mod tests {
                         serde_json::json!({"id": id, "type": "movie", "name": id}),
                     )
                     .unwrap(),
-                    None,
+                    &crate::covers::Covers::default(),
                 )
             })
             .collect();

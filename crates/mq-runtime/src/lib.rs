@@ -4,6 +4,7 @@
 //! lists as index-based diffs coalesced to one batch per frame.
 
 mod core;
+mod covers;
 mod debrid;
 pub mod defaults;
 pub mod languages;

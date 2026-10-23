@@ -2,7 +2,16 @@
 import type { Ratings } from "./Ratings";
 import type { Trailer } from "./Trailer";
 
-export type TitleDetails = { id: string, kind: string, name: string, description: string | null, poster: string | null, background: string | null, logo: string | null, releaseInfo: string | null, runtime: string | null, genres: Array<string>, cast: Array<string>, directors: Array<string>, 
+export type TitleDetails = { id: string, kind: string, name: string, description: string | null, poster: string | null, 
+/**
+ * RPDB's cover with the IMDb, Metacritic and Rotten Tomatoes band drawn
+ * in, as the title's tiles show it (`Tile::rated_cover`): for its IMDb
+ * id, or the one its addon gave an anime, with the RPDB key an
+ * installed, enabled addon was configured with. Null with no key or no
+ * IMDb id: show `poster` then, and `poster` too when this one fails to
+ * load.
+ */
+ratedPoster: string | null, background: string | null, logo: string | null, releaseInfo: string | null, runtime: string | null, genres: Array<string>, cast: Array<string>, directors: Array<string>, 
 /**
  * The IMDb rating the addon gave, as written ("8.4").
  */

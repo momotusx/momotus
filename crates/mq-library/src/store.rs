@@ -1137,6 +1137,48 @@ impl Library {
     /// Stores an addon answer fetched while `removals` was the count; one
     /// that a profile removal overtook is dropped (checked under the writer,
     /// which every removal holds). Returns whether it was stored.
+    /// The IMDb id kept for each of these ids (`put_imdb_ids`); ids without
+    /// one are left out.
+    pub fn imdb_ids(
+        &self,
+        ids: &[&str],
+    ) -> Result<std::collections::HashMap<String, String>, LibraryError> {
+        self.read(|c| {
+            let mut stmt = c.prepare_cached("SELECT imdb_id FROM imdb_ids WHERE id = ?1")?;
+            let mut found = std::collections::HashMap::new();
+            for id in ids {
+                if let Some(imdb) = stmt.query_row([id], |r| r.get::<_, String>(0)).optional()? {
+                    found.insert((*id).to_owned(), imdb);
+                }
+            }
+            Ok(found)
+        })
+    }
+
+    /// Keeps the IMDb id an addon gave for each `(id, imdb id)`, replacing
+    /// an older one. Pairs read while `removals` was the count are dropped
+    /// when a profile removal overtook them, as for `cache_put`.
+    pub fn put_imdb_ids(
+        &self,
+        pairs: &[(String, String)],
+        removals: u64,
+    ) -> Result<(), LibraryError> {
+        if pairs.is_empty() {
+            return Ok(());
+        }
+        self.write(|c| {
+            if self.removals() != removals {
+                return Ok(());
+            }
+            let mut stmt =
+                c.prepare_cached("INSERT OR REPLACE INTO imdb_ids (id, imdb_id) VALUES (?1, ?2)")?;
+            for (id, imdb) in pairs {
+                stmt.execute(params![id, imdb])?;
+            }
+            Ok(())
+        })
+    }
+
     pub fn cache_put(
         &self,
         key: &str,

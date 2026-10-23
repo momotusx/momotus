@@ -374,3 +374,38 @@ fn a_finished_anime_episode_is_a_next_up_candidate() {
         .collect();
     assert_eq!(done, [("kitsu:9".to_string(), "anime".to_string())]);
 }
+
+#[test]
+fn imdb_ids_round_trip_and_go_with_a_removed_profile() {
+    use mq_library::Hlc;
+    let lib = Library::temporary().unwrap();
+    let pair = |id: &str, imdb: &str| (id.to_owned(), imdb.to_owned());
+    lib.put_imdb_ids(
+        &[pair("kitsu:1", "tt1"), pair("kitsu:2", "tt2")],
+        lib.removals(),
+    )
+    .unwrap();
+    // A later answer replaces the kept id.
+    lib.put_imdb_ids(&[pair("kitsu:2", "tt3")], lib.removals())
+        .unwrap();
+    let kept = lib.imdb_ids(&["kitsu:1", "kitsu:2", "kitsu:9"]).unwrap();
+    assert_eq!(kept.len(), 2);
+    assert_eq!(kept["kitsu:1"], "tt1");
+    assert_eq!(kept["kitsu:2"], "tt3");
+
+    // A profile removal clears them, and a write it overtook stores nothing.
+    let hlc = |wall_ms: u64| {
+        Hlc {
+            wall_ms,
+            counter: 0,
+            device: 1,
+        }
+        .encode()
+    };
+    lib.create_profile("x", "x", "", hlc(1).as_str()).unwrap();
+    let before = lib.removals();
+    lib.delete_profile("x", hlc(2).as_str()).unwrap();
+    assert!(lib.imdb_ids(&["kitsu:1", "kitsu:2"]).unwrap().is_empty());
+    lib.put_imdb_ids(&[pair("kitsu:1", "tt1")], before).unwrap();
+    assert!(lib.imdb_ids(&["kitsu:1"]).unwrap().is_empty());
+}

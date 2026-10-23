@@ -593,20 +593,19 @@ async fn load_page(
         extra,
     };
     let result = core.addons().fetch(&catalog.addon, &path, TIMEOUT).await;
-    let parsed = result
-        .map_err(|e| e.to_string())
-        .and_then(|f| decode_catalog(&f.body).map_err(|e| format!("unreadable catalog: {e}")));
+    let parsed = result.map_err(|e| e.to_string()).and_then(|f| {
+        core.learn_imdb_ids(&f.body);
+        decode_catalog(&f.body).map_err(|e| format!("unreadable catalog: {e}"))
+    });
     {
         let mut s = lock(&state);
         s.snapshot.state = match parsed {
             Ok(ResourceResponse::Metas { metas }) => {
                 let before = s.snapshot.items.len();
-                let rpdb = core.rpdb_key();
+                let covers = core.covers(metas.iter().map(|m| m.id.as_str()));
                 for meta in metas {
                     if s.seen.insert(meta.id.clone()) {
-                        s.snapshot
-                            .items
-                            .push(tile_from_preview(meta, rpdb.as_deref()));
+                        s.snapshot.items.push(tile_from_preview(meta, &covers));
                     }
                 }
                 // No new titles, or no paging: the catalog is done.

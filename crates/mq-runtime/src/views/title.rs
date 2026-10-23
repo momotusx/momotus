@@ -31,6 +31,13 @@ pub struct TitleDetails {
     pub name: String,
     pub description: Option<String>,
     pub poster: Option<String>,
+    /// RPDB's cover with the IMDb, Metacritic and Rotten Tomatoes band drawn
+    /// in, as the title's tiles show it (`Tile::rated_cover`): for its IMDb
+    /// id, or the one its addon gave an anime, with the RPDB key an
+    /// installed, enabled addon was configured with. Null with no key or no
+    /// IMDb id: show `poster` then, and `poster` too when this one fails to
+    /// load.
+    pub rated_poster: Option<String>,
     pub background: Option<String>,
     pub logo: Option<String>,
     pub release_info: Option<String>,
@@ -584,7 +591,8 @@ impl Ctx {
 
         let now = mq_library::hlc::now_ms() as i64;
         let (play_target, next_airs) = play_target(&meta, &self.kind, resume, &watched, now);
-        let mut details = details(&meta, source);
+        let rated_poster = self.core.covers([self.id.as_str()]).url(&self.id);
+        let mut details = details(&meta, source, rated_poster);
         if self.kids {
             // A trailer is a YouTube hand-off: it leaves the app.
             details.trailers.clear();
@@ -756,7 +764,7 @@ fn episode_label(meta: &MetaItem, video_id: &str) -> Option<String> {
     Some(format!("S{}:E{}", info.season, info.episode))
 }
 
-fn details(meta: &MetaItem, source: &str) -> TitleDetails {
+fn details(meta: &MetaItem, source: &str, rated_poster: Option<String>) -> TitleDetails {
     let p = &meta.preview;
     let links = |category: &str| -> Vec<String> {
         p.links
@@ -771,6 +779,7 @@ fn details(meta: &MetaItem, source: &str) -> TitleDetails {
         name: p.name.clone(),
         description: p.description.clone(),
         poster: p.poster.as_ref().map(|u| u.to_string()),
+        rated_poster,
         background: p.background.as_ref().map(|u| u.to_string()),
         logo: p.logo.as_ref().map(|u| u.to_string()),
         release_info: super::home::year_line(p.release_info.as_deref()),

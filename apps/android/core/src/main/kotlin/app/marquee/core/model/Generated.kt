@@ -1721,6 +1721,8 @@ data class TitleDetails(
     val name: String,
     val description: String? = null,
     val poster: String? = null,
+    /** RPDB's cover with the IMDb, Metacritic and Rotten Tomatoes band drawn in, as the title's tiles show it (`Tile::rated_cover`): for its IMDb id, or the one its addon gave an anime, with the RPDB key an installed, enabled addon was configured with. Null with no key or no IMDb id: show `poster` then, and `poster` too when this one fails to load. */
+    val ratedPoster: String? = null,
     val background: String? = null,
     val logo: String? = null,
     val releaseInfo: String? = null,
