@@ -52,7 +52,7 @@ fun pickVersion(
         known.firstOrNull { it.key == chosen }?.let { return PlayPick.Use(it) }
         // Not in this list (a new view after the app restarted): wait for every addon, then let the core say.
         if (snapshot.done) return PlayPick.Open(chosen)
-        return PlayPick.Wait("Finding this version")
+        return PlayPick.Wait(StreamChoiceCopy.FINDING_CHOSEN)
     }
     val best = snapshot.recommended
     val ready = snapshot.done || snapshot.frozen || settled
@@ -72,7 +72,7 @@ fun pickVersion(
         }
 
         else -> {
-            PlayPick.Wait("Choosing the best version")
+            PlayPick.Wait(StreamChoiceCopy.FINDING_BEST)
         }
     }
 }

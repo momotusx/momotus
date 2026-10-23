@@ -14,7 +14,6 @@ import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class VersionsCopyTest {
@@ -110,12 +109,8 @@ class VersionsCopyTest {
     }
 
     @Test
-    fun `addons that are slow or failed are named`() {
-        assertNull(VersionsCopy.addons(snapshot()))
-        assertEquals(
-            "Waiting for A. Slow: B. No answer from C, D",
-            VersionsCopy.addons(snapshot(pending = listOf("A"), slow = listOf("B"), failed = listOf("C", "D"))),
-        )
+    fun `the group words read plainly`() {
+        assertEquals("Smaller and faster", VersionsCopy.group(Group.SmallerFaster, pickAbove = true))
     }
 
     @Test
@@ -154,25 +149,27 @@ class VersionsCopyTest {
     }
 
     @Test
-    fun `the header says who is still asked, slow or silent, else the count`() {
-        assertEquals("Opening" to VersionsCopy.Tone.Idle, VersionsCopy.progress(null))
+    fun `the header never names an addon - finding, still looking, else the count`() {
+        assertEquals("Finding versions" to VersionsCopy.Tone.Idle, VersionsCopy.progress(null))
         assertEquals(
-            "Asking Torrentio" to VersionsCopy.Tone.Warn,
+            "Finding versions" to VersionsCopy.Tone.Idle,
             VersionsCopy.progress(snapshot(pending = listOf("Torrentio"))),
         )
-        assertEquals(
-            "Torrentio is slow, still waiting" to VersionsCopy.Tone.Warn,
-            VersionsCopy.progress(snapshot(slow = listOf("Torrentio"))),
-        )
-        assertEquals(
-            "Torrentio did not answer" to VersionsCopy.Tone.Bad,
-            VersionsCopy.progress(snapshot(failed = listOf("Torrentio"))),
-        )
+        val found = snapshot(recommended = row(), pending = listOf("Torrentio"), slow = listOf("Comet"))
+        assertEquals("Still looking for more versions" to VersionsCopy.Tone.Idle, VersionsCopy.progress(found))
         assertEquals(
             "1 version" to VersionsCopy.Tone.Ok,
-            VersionsCopy.progress(snapshot(recommended = row(), done = true)),
+            VersionsCopy.progress(snapshot(recommended = row(), done = true, failed = listOf("Torrentio"))),
         )
         assertEquals("0 versions" to VersionsCopy.Tone.Ok, VersionsCopy.progress(snapshot(done = true)))
+        for (s in listOf(
+            found,
+            snapshot(slow = listOf("Torrentio")),
+            snapshot(done = true, failed = listOf("Torrentio")),
+        )) {
+            val (text, _) = VersionsCopy.progress(s)
+            assertFalse("Torrentio" in text || "Comet" in text, text)
+        }
     }
 
     @Test
@@ -247,23 +244,17 @@ class VersionsCopyTest {
     }
 
     @Test
-    fun `the card without a pick says whether it is looking or none is ready`() {
-        val looking = snapshot()
-        assertEquals(
-            "Finding versions" to "Your addons are answering.",
-            VersionsCopy.waitingTitle(looking) to VersionsCopy.waitingBody(looking),
-        )
-        val none = snapshot(done = true)
-        val unready = none.copy(rows = listOf(row().copy(status = VersionStatus.NeedsDownload("Real-Debrid"))))
-        // Done: to choose comes first, then the addon that did not answer.
-        assertEquals(
-            "Choose a version to start it. No answer from Torrentio.",
-            VersionsCopy.waitingBody(unready.copy(failedAddons = listOf("Torrentio"))),
-        )
-        assertEquals(
-            "Nothing is ready to play yet" to "Choose a version to start it.",
-            VersionsCopy.waitingTitle(unready) to VersionsCopy.waitingBody(unready),
-        )
+    fun `the player's starting line gives the quality and size, never where from`() {
+        val line = VersionsCopy.starting(row().copy(via = "Torrentio", sizeBytes = 2L * 1024 * 1024 * 1024))
+        assertEquals("Starting 4K, 2 GB", line)
+        assertFalse("Torrentio" in line || " from " in line, line)
+        assertEquals("Starting 4K", VersionsCopy.starting(row(sizeBytes = null)))
+    }
+
+    @Test
+    fun `the card without a pick says none is ready, with no addon name`() {
+        assertEquals("Nothing is ready to play yet", VersionsCopy.NOT_READY_TITLE)
+        assertEquals("Choose a version to start it.", VersionsCopy.NOT_READY_BODY)
     }
 
     @Test

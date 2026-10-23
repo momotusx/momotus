@@ -111,14 +111,14 @@ class PlayPickTest {
     fun `no version at all waits for the core's state, and waiting never names an addon`() {
         // Every addon answered with nothing while the core still checks what this device keeps: it says nothing yet.
         assertEquals(
-            PlayPick.Wait("Choosing the best version"),
+            PlayPick.Wait("Finding the best version"),
             pickVersion(snapshot(done = true), null, settled = true),
         )
         assertEquals(
-            PlayPick.Wait("Choosing the best version"),
+            PlayPick.Wait("Finding the best version"),
             pickVersion(snapshot(pending = listOf("Cinemeta", "Local")), null, settled = false),
         )
-        assertEquals(PlayPick.Wait("Choosing the best version"), pickVersion(snapshot(), null, settled = false))
+        assertEquals(PlayPick.Wait("Finding the best version"), pickVersion(snapshot(), null, settled = false))
         assertEquals(PlayPick.Wait("Opening"), pickVersion(null, null, settled = false))
     }
 }

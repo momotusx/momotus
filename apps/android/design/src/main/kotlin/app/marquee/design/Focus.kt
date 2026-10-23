@@ -286,6 +286,12 @@ fun focusPalette(focused: Boolean): Palette {
     return if (focused && Marquee.form == Form.Tv && !LocalFocusRing.current) colors.inverted() else colors
 }
 
+/**
+ * A row listed though none of them plays (the Versions empty state): its words drop to `muted`, a level whose
+ * contrast is tested, never to an alpha under it, since the row can still be started.
+ */
+fun Palette.dimmed(): Palette = copy(text = muted)
+
 /** The TV invert: `primary` for the fills, `onPrimary` for the words, at Apple's dark levels. */
 fun Palette.inverted(): Palette =
     copy(

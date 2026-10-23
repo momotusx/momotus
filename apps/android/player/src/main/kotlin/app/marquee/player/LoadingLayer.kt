@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import app.marquee.core.StreamChoiceCopy
 import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.LocalReducedMotion
@@ -196,7 +197,20 @@ private fun ChooseAnother(
     focus: FocusRequester?,
     onFocusChange: ((Boolean) -> Unit)?,
 ) {
-    Box(Modifier.testTag(CHOOSE_TAG), contentAlignment = Alignment.Center) {
+    // Said once, politely, from the visible slot itself: a live region with no size is not read.
+    Box(
+        Modifier.testTag(CHOOSE_TAG).then(
+            if (shown) {
+                Modifier.semantics {
+                    liveRegion = LiveRegionMode.Polite
+                    contentDescription = CHOOSE_SAID
+                }
+            } else {
+                Modifier
+            },
+        ),
+        contentAlignment = Alignment.Center,
+    ) {
         SecondaryButton(
             CHOOSE_ANOTHER,
             { if (shown) choose() },
@@ -207,14 +221,6 @@ private fun ChooseAnother(
             focusRequester = focus,
             onFocusChange = onFocusChange,
         )
-        if (shown) {
-            Box(
-                Modifier.semantics {
-                    liveRegion = LiveRegionMode.Polite
-                    contentDescription = CHOOSE_SAID
-                },
-            )
-        }
     }
 }
 
@@ -231,8 +237,8 @@ fun rememberChooseShown(opening: Boolean): Boolean {
     return shown
 }
 
-const val CHOOSE_ANOTHER = "Choose another version"
-private const val CHOOSE_SAID = "Still loading. Choose another version is available"
+const val CHOOSE_ANOTHER = StreamChoiceCopy.CHOOSE_ANOTHER
+private const val CHOOSE_SAID = StreamChoiceCopy.CHOOSE_ANOTHER_SAID
 const val CHOOSE_AFTER_MS = 20_000L
 const val CHOOSE_TAG = "choose-another"
 

@@ -3,18 +3,26 @@ package app.marquee.ui.tv
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasScrollToKeyAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.requestFocus
 import app.marquee.core.StreamChoiceCopy
@@ -57,9 +65,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /** The Versions screen on a TV with the core's stream choice (plans/m13-stream-choice.md 3.7, 3.11). */
 @OptIn(ExperimentalTestApi::class)
@@ -210,7 +220,9 @@ class TvVersionsTest {
         view.open()
         // Each round applies, idles and looks again: the header counts the versions once the screen drew the snapshot.
         val deadline = System.currentTimeMillis() + 120_000
-        while (compose.onAllNodesWithText(" version", substring = true).fetchSemanticsNodes().isEmpty()) {
+        while (compose.onAllNodesWithText(" version", substring = true).fetchSemanticsNodes().isEmpty() ||
+            compose.onAllNodesWithText(StreamChoiceCopy.FINDING).fetchSemanticsNodes().isNotEmpty()
+        ) {
             check(System.currentTimeMillis() < deadline) {
                 "the screen never drew the snapshot (snapshot ${view.snapshot != null}, status ${view.status})"
             }
@@ -316,9 +328,19 @@ class TvVersionsTest {
     @Test
     fun `a version in another language than the viewer's carries its language`() {
         val turkish = row("tr", ReasonLine.Few(31)).copy(group = Group.OtherLanguages, languages = listOf("tr"))
-        show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), listOf(turkish)))
+        show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), listOf(turkish, row("a", ReasonLine.Few(31)))))
         compose.onNodeWithText("Turkish").assertExists()
         compose.onNodeWithContentDescription("1080p, HDR10, Turkish, 2 GB").assertExists()
+        // The tag sits in the quality cell: the tagged row's features start where every other row's do.
+        val starts =
+            compose
+                .onAllNodesWithText(
+                    "HDR10",
+                    useUnmergedTree = true,
+                ).fetchSemanticsNodes()
+                .map { it.boundsInRoot.left }
+        assertEquals(2, starts.size)
+        assertEquals(starts[0], starts[1])
     }
 
     @Test
@@ -342,5 +364,49 @@ class TvVersionsTest {
         press(Key.DirectionCenter)
         compose.onNodeWithText("Show all 8").assertIsFocused()
         compose.onAllNodesWithText("Show fewer").assertCountEquals(0)
+    }
+
+    @Test
+    fun `from the 50th row of a 100-row section Left scrolls back to the heading, and OK folds it`() {
+        val rows = (1..100).map { row("r$it", ReasonLine.Few(30 + it)).copy(sizeBytes = it * gib) }
+        show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), rows))
+        compose.onNodeWithText("Show all 100").requestFocus()
+        compose.onNodeWithText("Show all 100").performKeyInput { pressKey(Key.DirectionCenter) }
+        compose.waitForIdle()
+        compose.onNode(hasScrollToKeyAction()).performScrollToKey("row:r50")
+        compose.onNodeWithContentDescription("1080p, HDR10, 50 GB").requestFocus()
+        compose.onNodeWithContentDescription("1080p, HDR10, 50 GB").assertIsFocused()
+        // The heading is out of composition this far down: Left brings it back and lands on it, never on Play.
+        compose.onAllNodesWithText("Show fewer").assertCountEquals(0)
+        press(Key.DirectionLeft)
+        compose.waitUntil(5_000) {
+            compose.onAllNodes(isFocused() and hasText("Show fewer")).fetchSemanticsNodes().isNotEmpty()
+        }
+        press(Key.DirectionCenter)
+        compose.onNodeWithText("Show all 100").assertIsFocused()
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `a dimmed row keeps its words at 4_5 to 1, never under an alpha`() {
+        val rows = listOf(row("a", ReasonLine.Few(31)))
+        show(snapshot(empty = EmptyVersions(EmptyKind.NothingPlaysHere, EmptyAction.ChooseVersion, 1, rows)))
+        val image = compose.onRoot().captureToImage().asAndroidBitmap()
+        for (text in listOf("HDR10", "2 GB", "May start slowly")) {
+            val at = compose.onNodeWithText(text, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            val y = at.center.y.toInt()
+            // The cell's empty end, behind the words.
+            val ground = Color(image.getPixel(at.right.toInt() - 2, y))
+            var best = 0f
+            for (x in at.left.toInt() until at.right.toInt()) {
+                for (py in at.top.toInt() until at.bottom.toInt()) {
+                    val la = Color(image.getPixel(x, py)).luminance() + 0.05f
+                    val lb = ground.luminance() + 0.05f
+                    best = maxOf(best, maxOf(la, lb) / minOf(la, lb))
+                }
+            }
+            println("dimmed-row {\"text\":\"$text\",\"ratio\":$best}")
+            assertTrue(best >= 4.5f, "$text: $best")
+        }
     }
 }

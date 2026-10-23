@@ -30,7 +30,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -58,6 +57,7 @@ import app.marquee.core.views.VersionsView
 import app.marquee.core.views.ViewStatus
 import app.marquee.design.CapsLabel
 import app.marquee.design.FactsGrid
+import app.marquee.design.FocusInk
 import app.marquee.design.GlassBar
 import app.marquee.design.Icons
 import app.marquee.design.LanguageTag
@@ -76,15 +76,13 @@ import app.marquee.design.Status
 import app.marquee.design.StatusWord
 import app.marquee.design.TextRole
 import app.marquee.design.ToneWord
+import app.marquee.design.dimmed
 import app.marquee.design.focusClickable
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /** How many rows of a group show before "Show all", as on the web. */
 private const val SHOWN = 3
-
-/** The rows of a page where none plays as listed: dimmed, still startable. */
-private const val DIMMED = 0.5f
 
 /**
  * The ranked sources of one video on a phone (plans/android-design-v2.md 5.6, the web's v2
@@ -193,7 +191,7 @@ fun PhoneVersions(
             if (rows.size > SHOWN) {
                 item(key = "fold:$group") {
                     SecondaryButton(
-                        if (all) "Show fewer" else "Show all ${rows.size}",
+                        if (all) StreamChoiceCopy.SHOW_FEWER else StreamChoiceCopy.showAll(rows.size),
                         { open[group] = !all },
                         icon = if (all) Icons.ChevronUp else Icons.ChevronDown,
                     )
@@ -311,8 +309,8 @@ private fun Pick(
 
             else -> {
                 StateMessage(
-                    title = VersionsCopy.waitingTitle(snapshot),
-                    body = VersionsCopy.waitingBody(snapshot),
+                    title = VersionsCopy.NOT_READY_TITLE,
+                    body = VersionsCopy.NOT_READY_BODY,
                     icon = Icons.CircleAlert,
                     modifier = Modifier.padding(0.dp),
                 )
@@ -414,64 +412,66 @@ private fun SourceRow(
             line.text,
         ).joinToString(", ")
     // The rows of a page where none plays (the core's empty rows) are dimmed and still startable.
-    Column(if (dimmed) Modifier.alpha(DIMMED) else Modifier) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .semantics {
-                    contentDescription = spoken
-                    // Said as expandable: a tap opens it to its details and its own Play.
-                    if (open) {
-                        collapse {
-                            onToggle()
-                            true
+    FocusInk(if (dimmed) Marquee.colors.dimmed() else Marquee.colors) {
+        Column {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .semantics {
+                        contentDescription = spoken
+                        // Said as expandable: a tap opens it to its details and its own Play.
+                        if (open) {
+                            collapse {
+                                onToggle()
+                                true
+                            }
+                        } else {
+                            expand {
+                                onToggle()
+                                true
+                            }
                         }
-                    } else {
-                        expand {
-                            onToggle()
-                            true
-                        }
-                    }
-                }.focusClickable(onToggle, Role.Button)
-                .padding(horizontal = 12.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // One width for every quality, "Unknown" measured at the current text size, so the statuses
-            // line up whatever the font scale.
-            Column(Modifier.width(qualityWidth()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                MqText(VersionsCopy.cell(row.quality), weight = FontWeight.SemiBold, maxLines = 1)
-                if (tag != null) LanguageTag(tag)
-            }
-            // The line on its own line, then the size, the source and the features: both wrap on a
-            // small phone or a large font instead of cutting what helps the choice.
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                ToneWord(line.text, tone(line.tone))
-                MqText(
-                    (
-                        listOfNotNull(row.sizeBytes?.let(Format::bytes)) + row.features
-                    ).joinToString(" · "),
-                    role = TextRole.Caption,
-                    color = colors.muted,
-                    maxLines = 2,
-                )
-            }
-        }
-        if (open) {
-            Column(
-                Modifier.padding(start = qualityWidth() + 26.dp, end = 12.dp, bottom = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                    }.focusClickable(onToggle, Role.Button)
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (line.details.isNotEmpty()) MqText(line.details, role = TextRole.Callout)
-                // ponytail: the system monospace face; IBM Plex Mono as on the web when Android bundles it.
-                MqText(
-                    Format.releaseWrapped(row.releaseName),
-                    role = TextRole.Caption,
-                    color = colors.muted,
-                    fontFamily = FontFamily.Monospace,
-                )
-                MqText(VersionsCopy.detail(row), role = TextRole.Caption, color = colors.muted)
-                SecondaryButton("Play this version", { onPlay(row.key) }, icon = PlayFilled)
+                // One width for every quality, "Unknown" measured at the current text size, so the statuses
+                // line up whatever the font scale.
+                Column(Modifier.width(qualityWidth()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    MqText(VersionsCopy.cell(row.quality), weight = FontWeight.SemiBold, maxLines = 1)
+                    if (tag != null) LanguageTag(tag)
+                }
+                // The line on its own line, then the size, the source and the features: both wrap on a
+                // small phone or a large font instead of cutting what helps the choice.
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    ToneWord(line.text, tone(line.tone))
+                    MqText(
+                        (
+                            listOfNotNull(row.sizeBytes?.let(Format::bytes)) + row.features
+                        ).joinToString(" · "),
+                        role = TextRole.Caption,
+                        color = colors.muted,
+                        maxLines = 2,
+                    )
+                }
+            }
+            if (open) {
+                Column(
+                    Modifier.padding(start = qualityWidth() + 26.dp, end = 12.dp, bottom = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (line.details.isNotEmpty()) MqText(line.details, role = TextRole.Callout)
+                    // ponytail: the system monospace face; IBM Plex Mono as on the web when Android bundles it.
+                    MqText(
+                        Format.releaseWrapped(row.releaseName),
+                        role = TextRole.Caption,
+                        color = colors.muted,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                    MqText(VersionsCopy.detail(row), role = TextRole.Caption, color = colors.muted)
+                    SecondaryButton("Play this version", { onPlay(row.key) }, icon = PlayFilled)
+                }
             }
         }
     }

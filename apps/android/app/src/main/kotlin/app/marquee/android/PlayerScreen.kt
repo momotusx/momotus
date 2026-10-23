@@ -140,7 +140,7 @@ class PlayerHolder(
             return
         }
         controller.mark("versions")
-        controller.showStatus(choice.row?.let { "Starting ${startingLine(it)}" } ?: "Starting")
+        controller.showStatus(choice.row?.let(VersionsCopy::starting) ?: "Starting")
         val ref = Format.parseVideo(route.videoId)
         try {
             val playback =
@@ -219,10 +219,6 @@ class PlayerHolder(
             watcher.cancel()
         }
     }
-
-    // No addon's name while it waits (plans/versions-android-spec.md, section 6): the quality and size alone.
-    private fun startingLine(row: VersionRow): String =
-        listOfNotNull(row.quality, row.sizeBytes?.let(Format::bytes)).joinToString(", ")
 
     /** Reports where the player is and lets go of it; safe to call twice. */
     fun shutdown() {

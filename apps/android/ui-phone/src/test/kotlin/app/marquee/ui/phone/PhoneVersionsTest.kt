@@ -180,7 +180,9 @@ class PhoneVersionsTest {
         view.open()
         // Each round applies, idles and looks again: the header counts the versions once the screen drew the snapshot.
         val deadline = System.currentTimeMillis() + 120_000
-        while (compose.onAllNodesWithText(" version", substring = true).fetchSemanticsNodes().isEmpty()) {
+        while (compose.onAllNodesWithText(" version", substring = true).fetchSemanticsNodes().isEmpty() ||
+            compose.onAllNodesWithText(StreamChoiceCopy.FINDING).fetchSemanticsNodes().isNotEmpty()
+        ) {
             check(System.currentTimeMillis() < deadline) {
                 "the screen never drew the snapshot (snapshot ${view.snapshot != null}, status ${view.status})"
             }
@@ -234,6 +236,23 @@ class PhoneVersionsTest {
         compose.onNodeWithText(StreamChoiceCopy.SETTINGS).performClick()
         compose.onNodeWithText("Back").performClick()
         assertEquals(1 to 1, accounts to backs)
+    }
+
+    @Test
+    fun `none plays here says the core's line over dimmed rows that still start, with Back only`() {
+        val rows = listOf(row("a", ReasonLine.Few(31)))
+        show(snapshot(empty = EmptyVersions(EmptyKind.NothingPlaysHere, EmptyAction.ChooseVersion, 1, rows)))
+        compose.onNodeWithText("None of these plays on this device", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("Back").assertIsDisplayed()
+        for (gone in listOf("Choose a version", "Try again", StreamChoiceCopy.SETTINGS, "Play from this device")) {
+            compose.onAllNodesWithText(gone).assertCountEquals(0)
+        }
+        // Dimmed, and still startable: a tap opens it to its own Play.
+        compose.onNodeWithText("May start slowly", substring = true).performClick()
+        compose.onNodeWithText("Play this version").performClick()
+        assertEquals(listOf("a"), played)
+        compose.onNodeWithText("Back").performClick()
+        assertEquals(1, backs)
     }
 
     @Test

@@ -4,14 +4,19 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import app.marquee.design.Form
@@ -32,6 +37,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * The TV player's loading screen and failure card with no account step (plans/versions-android-spec.md, section 6):
@@ -81,14 +87,31 @@ class PlayerLoadingTest {
         val events = show()
         val slot = compose.onNodeWithTag(CHOOSE_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         compose.onAllNodesWithText(CHOOSE_ANOTHER).assertCountEquals(0)
-        // Before 20 s a D-pad key does not reach it.
-        compose.onNode(isFocused()).performKeyInput { pressKey(Key.DirectionDown) }
-        compose.mainClock.advanceTimeBy(100)
+        compose
+            .onAllNodes(
+                hasTestTag(CHOOSE_TAG) and SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion),
+                true,
+            ).assertCountEquals(0)
+        // Before 20 s no D-pad key reaches it, nor a move that ends on it while it is hidden.
+        for (key in listOf(Key.DirectionDown, Key.DirectionUp, Key.DirectionLeft, Key.DirectionRight, Key.Tab)) {
+            compose.onRoot().performKeyInput { pressKey(key) }
+            compose.mainClock.advanceTimeBy(100)
+        }
         compose.onAllNodesWithText(CHOOSE_ANOTHER).assertCountEquals(0)
         compose.mainClock.advanceTimeBy(CHOOSE_AFTER_MS)
         compose.onNodeWithText(CHOOSE_ANOTHER).assertExists()
-        // It never takes focus by itself; it sits where its slot was, so nothing moved.
+        // It never takes focus by itself, nor took it while hidden; it sits where its slot was, so nothing moved.
+        compose.onNodeWithText(CHOOSE_ANOTHER).assertIsNotFocused()
         assertEquals(slot, compose.onNodeWithTag(CHOOSE_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot)
+        // Said once, politely, from the slot it fills.
+        val said =
+            compose
+                .onNode(
+                    hasTestTag(CHOOSE_TAG) and SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion),
+                    true,
+                ).fetchSemanticsNode()
+        assertEquals(slot, said.boundsInRoot)
+        assertTrue(said.boundsInRoot.width > 0 && said.boundsInRoot.height > 0)
         compose.onNode(isFocused()).performKeyInput { pressKey(Key.DirectionDown) }
         compose.mainClock.advanceTimeBy(100)
         compose.onNodeWithText(CHOOSE_ANOTHER).assertIsFocused()

@@ -3,7 +3,10 @@ package app.marquee.ui.phone
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -66,11 +69,21 @@ class PhonePlayerLoadingTest {
             }
         }
         compose.mainClock.advanceTimeBy(1_000)
+        val slot = compose.onNodeWithTag(CHOOSE_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         compose.onNodeWithTag(CHOOSE_TAG, useUnmergedTree = true).performClick()
         compose.mainClock.advanceTimeBy(100)
         assertEquals(emptyList(), events)
         compose.onAllNodesWithText(CHOOSE_ANOTHER).assertCountEquals(0)
         compose.mainClock.advanceTimeBy(CHOOSE_AFTER_MS)
+        // Where its slot was, so nothing moved, and said once from there.
+        assertEquals(slot, compose.onNodeWithTag(CHOOSE_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot)
+        val said =
+            compose
+                .onNode(
+                    hasTestTag(CHOOSE_TAG) and SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion),
+                    true,
+                ).fetchSemanticsNode()
+        assertEquals(slot, said.boundsInRoot)
         compose.onNodeWithText(CHOOSE_ANOTHER).performClick()
         compose.mainClock.advanceTimeBy(100)
         assertEquals(listOf("versions"), events)

@@ -157,15 +157,16 @@ object VersionsCopy {
         }
     }
 
-    /** The heading of the card shown while there is no recommendation and versions are listed. */
-    fun waitingTitle(snapshot: VersionsSnapshot): String =
-        if (snapshot.done) "Nothing is ready to play yet" else "Finding versions"
+    /**
+     * The player's line while a chosen version starts: "Starting 1080p, 2 GB", the quality and size alone, never an
+     * addon's name (plans/versions-android-spec.md, section 6).
+     */
+    fun starting(row: VersionRow): String =
+        "Starting " + listOfNotNull(row.quality, row.sizeBytes?.let(Format::bytes)).joinToString(", ")
 
-    /** What that card says: while looking, who is slow or failed; once done, to choose one, then any addon that failed. */
-    fun waitingBody(snapshot: VersionsSnapshot): String {
-        if (!snapshot.done) return addons(snapshot) ?: "Your addons are answering."
-        return listOfNotNull("Choose a version to start it.", addons(snapshot)?.let { "$it." }).joinToString(" ")
-    }
+    /** The card when every addon answered, versions are listed and none is recommended. */
+    const val NOT_READY_TITLE = "Nothing is ready to play yet"
+    const val NOT_READY_BODY = "Choose a version to start it."
 
     /** What a zero-playable state offers on the Versions page. */
     enum class EmptyStep(
@@ -174,7 +175,7 @@ object VersionsCopy {
         PlayFromDevice(StreamChoiceCopy.PLAY_FROM_DEVICE),
         TryAgain(StreamChoiceCopy.EMPTY.getValue(EmptyKind.Unreachable).second!!),
         Settings(StreamChoiceCopy.SETTINGS),
-        Back("Back"),
+        Back(StreamChoiceCopy.BACK),
     }
 
     /**
@@ -193,24 +194,19 @@ object VersionsCopy {
     /** The tone of a line drawn with a dot. */
     enum class Tone { Idle, Ok, Warn, Bad }
 
-    /** The header's line: who is still asked, slow or silent, else how many versions there are. */
+    /**
+     * The header's line, never an addon's name (plans/versions-android-spec.md, section 1): "Finding versions" until
+     * the first one, "Still looking for more versions" while addons answer, else how many versions there are.
+     */
     fun progress(snapshot: VersionsSnapshot?): Pair<String, Tone> {
-        val names = { list: List<String> -> list.joinToString(", ") }
+        val found = snapshot?.let { it.rows.size + (if (it.recommended != null) 1 else 0) } ?: 0
         return when {
-            snapshot == null -> {
-                "Opening" to Tone.Idle
+            snapshot == null || (!snapshot.done && found == 0 && snapshot.empty == null) -> {
+                StreamChoiceCopy.FINDING to Tone.Idle
             }
 
-            snapshot.pendingAddons.isNotEmpty() -> {
-                "Asking ${names(snapshot.pendingAddons)}" to Tone.Warn
-            }
-
-            snapshot.slowAddons.isNotEmpty() -> {
-                "${names(snapshot.slowAddons)} is slow, still waiting" to Tone.Warn
-            }
-
-            snapshot.failedAddons.isNotEmpty() -> {
-                "${names(snapshot.failedAddons)} did not answer" to Tone.Bad
+            !snapshot.done && snapshot.empty == null -> {
+                StreamChoiceCopy.STILL_LOOKING to Tone.Idle
             }
 
             // What was found, none of it playable here (the card says why).
@@ -219,8 +215,7 @@ object VersionsCopy {
             }
 
             else -> {
-                val n = snapshot.rows.size + (if (snapshot.recommended != null) 1 else 0)
-                (if (n == 1) "1 version" else "$n versions") to Tone.Ok
+                StreamChoiceCopy.counted("versions", found) to Tone.Ok
             }
         }
     }
@@ -304,15 +299,4 @@ object VersionsCopy {
             "fas" to "fa",
             "pob" to "pt-BR",
         )
-
-    /** Addons still answering or that failed, as one line, or null. */
-    fun addons(snapshot: VersionsSnapshot): String? {
-        val parts =
-            listOfNotNull(
-                snapshot.pendingAddons.takeIf { it.isNotEmpty() }?.let { "Waiting for ${it.joinToString(", ")}" },
-                snapshot.slowAddons.takeIf { it.isNotEmpty() }?.let { "Slow: ${it.joinToString(", ")}" },
-                snapshot.failedAddons.takeIf { it.isNotEmpty() }?.let { "No answer from ${it.joinToString(", ")}" },
-            )
-        return parts.takeIf { it.isNotEmpty() }?.joinToString(". ")
-    }
 }

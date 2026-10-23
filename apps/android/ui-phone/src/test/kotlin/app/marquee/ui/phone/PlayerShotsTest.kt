@@ -140,7 +140,7 @@ class PlayerShotsTest {
                 TitleMark.Name,
                 art("backdrop.jpg").path,
                 { 0.4f },
-                listOf("Choosing the best version"),
+                listOf("Finding the best version"),
             )
         }
     }

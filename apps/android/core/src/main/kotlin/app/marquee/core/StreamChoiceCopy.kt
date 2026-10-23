@@ -176,6 +176,22 @@ object StreamChoiceCopy {
     /** Where a streaming service account is added, from a page whose versions need one. */
     const val SETTINGS = "Settings"
 
+    /** The Versions page's own words ("page"): its status line while the core asks, the section folds, Back. */
+    const val FINDING = "Finding versions"
+    const val STILL_LOOKING = "Still looking for more versions"
+    const val SHOW_ALL = "Show all {n}"
+    const val SHOW_FEWER = "Show fewer"
+    const val BACK = "Back"
+
+    /** What the player says while a version starts ("player"), never an addon's name. */
+    const val FINDING_BEST = "Finding the best version"
+    const val FINDING_CHOSEN = "Finding this version"
+    const val CHOOSE_ANOTHER = "Choose another version"
+    const val CHOOSE_ANOTHER_SAID = "Still loading. Choose another version is available"
+
+    /** "Show all 12". */
+    fun showAll(n: Int): String = SHOW_ALL.replace("{n}", "$n")
+
     val LEARNED =
         mapOf(
             LearnedChoice.Size to

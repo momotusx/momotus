@@ -160,6 +160,25 @@ class StreamChoiceCopyTest {
                     },
                 )
                 put(
+                    "page",
+                    buildJsonObject {
+                        put("finding", FINDING)
+                        put("stillLooking", STILL_LOOKING)
+                        put("showAll", SHOW_ALL)
+                        put("showFewer", SHOW_FEWER)
+                        put("back", BACK)
+                    },
+                )
+                put(
+                    "player",
+                    buildJsonObject {
+                        put("finding", FINDING_BEST)
+                        put("findingChosen", FINDING_CHOSEN)
+                        put("chooseAnother", CHOOSE_ANOTHER)
+                        put("chooseAnotherSaid", CHOOSE_ANOTHER_SAID)
+                    },
+                )
+                put(
                     "learned",
                     buildJsonObject {
                         for ((choice, w) in LEARNED) upDown(choice.wire, w)
@@ -248,6 +267,9 @@ class StreamChoiceCopyTest {
                     .jsonObject - "about",
             )
         assertEquals(shared, ours())
+        // Settings is the empty states' own action word.
+        assertEquals(StreamChoiceCopy.SETTINGS, StreamChoiceCopy.EMPTY.getValue(EmptyKind.NoSource).second)
+        assertEquals("Show all 12", StreamChoiceCopy.showAll(12))
     }
 
     private fun line(l: ReasonLine) = StreamChoiceCopy.line(l)

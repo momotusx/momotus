@@ -18,7 +18,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -32,7 +33,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -85,6 +85,7 @@ import app.marquee.design.StatusWord
 import app.marquee.design.TextRole
 import app.marquee.design.Tokens
 import app.marquee.design.ToneWord
+import app.marquee.design.dimmed
 import app.marquee.design.endFade
 import app.marquee.design.focusClickable
 import app.marquee.design.focusPalette
@@ -194,11 +195,6 @@ private fun rowKey(row: VersionRow) = "row:${row.key}"
 private fun headKey(group: Group) = "head:$group"
 
 private fun foldKey(group: Group) = "fold:$group"
-
-private const val SHOW_FEWER = "Show fewer"
-
-/** The rows of a page where none plays as listed: dimmed, still startable. */
-private const val DIMMED = 0.5f
 
 private fun tone(tone: VersionsCopy.Tone) =
     when (tone) {
@@ -350,8 +346,8 @@ private fun Pick(
 
             else -> {
                 StateMessage(
-                    title = VersionsCopy.waitingTitle(snapshot),
-                    body = VersionsCopy.waitingBody(snapshot),
+                    title = VersionsCopy.NOT_READY_TITLE,
+                    body = VersionsCopy.NOT_READY_BODY,
                     icon = Icons.CircleAlert,
                     modifier = Modifier.padding(0.dp),
                 )
@@ -467,6 +463,31 @@ private fun Sources(
     val focusSoon = { key: String -> scope.launch { focus.focusWhenReady(key, focus.interactions, waitMs = 1_000) } }
     // Looked up when focus moves, so the builder below calls nothing composable.
     val toPlay = Modifier.focusProperties { left = focus.requester(PLAY) ?: FocusRequester.Default }
+    val listState = rememberLazyListState()
+
+    /**
+     * Left from the [at]th row of an open section reaches its heading: by focus search while the heading is
+     * composed, else by scrolling it back in first (a long section leaves it out of composition, and the search
+     * would land on Play).
+     */
+    fun toHeading(
+        group: Group,
+        row: VersionRow,
+        at: Int,
+    ) = Modifier
+        .onPreviewKeyEvent { event ->
+            if (event.type != KeyEventType.KeyDown || event.key != Key.DirectionLeft) return@onPreviewKeyEvent false
+            if (focus.requester(headKey(group)) != null) return@onPreviewKeyEvent false
+            val index =
+                listState.layoutInfo.visibleItemsInfo
+                    .firstOrNull { it.key == rowKey(row) }
+                    ?.index ?: return@onPreviewKeyEvent false
+            scope.launch {
+                listState.scrollToItem(index - at - 1)
+                focus.focusWhenReady(headKey(group), focus.interactions, waitMs = 1_000)
+            }
+            true
+        }.focusProperties { left = focus.requester(headKey(group)) ?: FocusRequester.Default }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
         if (rows.isNotEmpty()) {
             Row(
@@ -482,6 +503,7 @@ private fun Sources(
             Line(colors.lineStrong)
         }
         LazyColumn(
+            state = listState,
             modifier =
                 Modifier
                     .fillMaxWidth()
@@ -512,7 +534,7 @@ private fun Sources(
                         MqText("${rows.size}", role = TextRole.Callout, maxLines = 1)
                         if (all) {
                             SecondaryButton(
-                                SHOW_FEWER,
+                                StreamChoiceCopy.SHOW_FEWER,
                                 { fold() },
                                 toPlay,
                                 icon = Icons.ChevronUp,
@@ -521,28 +543,16 @@ private fun Sources(
                         }
                     }
                 }
-                items(
+                itemsIndexed(
                     if (all) rows else rows.take(SHOWN),
-                    key = { rowKey(it) },
-                ) { row ->
-                    SourceRow(
-                        row,
-                        dimmed,
-                        focus,
-                        onPlay,
-                        if (all) {
-                            Modifier.focusProperties {
-                                left = focus.requester(headKey(group)) ?: FocusRequester.Default
-                            }
-                        } else {
-                            toPlay
-                        },
-                    )
+                    key = { _, row -> rowKey(row) },
+                ) { at, row ->
+                    SourceRow(row, dimmed, focus, onPlay, if (all) toHeading(group, row, at) else toPlay)
                 }
                 if (rows.size > SHOWN) {
                     item(key = "fold:$group") {
                         SecondaryButton(
-                            if (all) SHOW_FEWER else "Show all ${rows.size}",
+                            if (all) StreamChoiceCopy.SHOW_FEWER else StreamChoiceCopy.showAll(rows.size),
                             {
                                 val opening = !all
                                 fold()
@@ -585,8 +595,9 @@ private fun SourceRow(
     val shape = RoundedCornerShape(Marquee.radius.m)
     val watch = focus.watch(ROWS, key)
     var focused by remember { mutableStateOf(false) }
-    // The focused row turns white with dark words (focusPalette).
-    val colors = focusPalette(focused)
+    // The focused row turns white with dark words (focusPalette); the rows of a page where none plays (the core's
+    // empty rows) read dimmed and stay startable.
+    val colors = focusPalette(focused).let { if (dimmed && !focused) it.dimmed() else it }
     val line = StreamChoiceCopy.rowLine(row)
     val tag = VersionsCopy.languageTag(row)
     val spoken =
@@ -598,8 +609,6 @@ private fun SourceRow(
     Column(
         modifier
             .fillMaxWidth()
-            // The rows of a page where none plays as listed (the core's empty rows) are dimmed and still startable.
-            .then(if (dimmed && !focused) Modifier.alpha(DIMMED) else Modifier)
             .focusRequester(focus.requesterFor(key))
             .marqueeFocus(Marquee.radius.m, Tokens.FOCUS_SCALE_TILE)
             .onFocusChanged { state ->
@@ -617,13 +626,11 @@ private fun SourceRow(
     ) {
         FocusInk(colors) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                MqText(
-                    VersionsCopy.cell(row.quality),
-                    Modifier.width(QUALITY),
-                    weight = FontWeight.SemiBold,
-                    maxLines = 1,
-                )
-                if (tag != null) LanguageTag(tag, Modifier.padding(end = 12.dp))
+                // The language tag under the quality, inside its cell, so every column stays under its heading.
+                Column(Modifier.width(QUALITY), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    MqText(VersionsCopy.cell(row.quality), weight = FontWeight.SemiBold, maxLines = 1)
+                    if (tag != null) LanguageTag(tag)
+                }
                 MqText(
                     row.features.joinToString(", "),
                     Modifier.weight(1f),
