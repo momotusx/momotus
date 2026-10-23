@@ -937,6 +937,9 @@ async fn a_dead_swarm_ends_at_20s_closed_and_the_next_source_plays() {
     let took = begun.elapsed().as_secs();
     let s = view.snapshot();
     assert_eq!(s.phase, PlaybackPhase::Ready, "{s:?}");
+    // Still set at ready: an app's own open after it (Apple's second engine)
+    // counts against the same budget (plans/core-protocol.md, playback).
+    assert!(s.start_budget_ends_at.is_some());
     assert_eq!(s.key.as_ref(), Some(&live_src.key));
     assert!((19..26).contains(&took), "{took} s");
     assert_eq!(s.attempts.len(), 1, "{:?}", s.attempts);
@@ -949,6 +952,81 @@ async fn a_dead_swarm_ends_at_20s_closed_and_the_next_source_plays() {
         !live.leech_dir().join(&dead.info_hash).exists(),
         "and its files"
     );
+}
+
+/// Plans/play-every-version.md 2e, review 2026-10-23 P3-6: a swarm that
+/// stalls mid-play with its peers still connected moves the recommendation
+/// on, and is not offered first again: it is remembered as stalled, and the
+/// open Versions view picks the next version.
+#[cfg(feature = "torrent")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_swarm_that_stalls_is_not_offered_first_again() {
+    let first = support::swarm(true).await;
+    let other = support::swarm_movie("other.mkv", vec![9u8; 3 << 20]).await;
+    let engine = first.leecher.clone();
+    let movie = |t| {
+        engine
+            .files(t)
+            .unwrap()
+            .iter()
+            .position(|f| f.path.ends_with(".mkv"))
+            .unwrap()
+    };
+    let a = engine
+        .add_magnet(&first.info_hash, &[], &[first.seeder_addr])
+        .await
+        .unwrap();
+    let b = engine
+        .add_magnet(&other.info_hash, &[], &[other.seeder_addr])
+        .await
+        .unwrap();
+    let fixture = Fixture::default();
+    fixture.set(
+        "/stream/movie/tt1.json",
+        json!({"streams": [
+            {"name": "Fixture", "title": "Up.2009.1080p.WEB.x264-GROUP",
+             "infoHash": first.info_hash, "fileIdx": movie(a)},
+            {"name": "Fixture", "title": "Up.2009.720p.WEB.x264-GROUP",
+             "infoHash": other.info_hash, "fileIdx": movie(b)},
+        ]}),
+    );
+    let (owner, _kid) = kid(&fixture).await;
+    owner.set_torrent_engine(engine.clone());
+    let versions = VersionsView::open(&owner, params("movie", "tt1", "Up"));
+    let s = settled(&versions).await;
+    let (a_key, b_key) = (s.recommended.unwrap().key, s.rows[0].key.clone());
+    let play = PlaybackView::open_picked(
+        &owner,
+        versions.pick(&a_key),
+        target("movie", "tt1", "tt1"),
+        &versions.plays(),
+    );
+    ready(&play).await;
+    for at in [10_000, 12_000] {
+        play.report_progress(at, 600_000, false);
+    }
+    play.stalled(true, 12_500);
+    let deadline = std::time::Instant::now() + Duration::from_secs(50);
+    while play.snapshot().key.as_ref() != Some(&b_key) {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "{:?}",
+            play.snapshot()
+        );
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+    // Not offered first again, here and in a Versions view opened later.
+    until("the open view's pick", || {
+        versions
+            .snapshot()
+            .recommended
+            .is_some_and(|r| r.key == b_key)
+    })
+    .await;
+    let later = settled(&VersionsView::open(&owner, params("movie", "tt1", "Up"))).await;
+    assert_eq!(later.recommended.map(|r| r.key), Some(b_key));
+    let stalled = later.rows.iter().find(|r| r.key == a_key).unwrap();
+    assert_eq!(stalled.line, mq_streams::ReasonLine::Stalled);
 }
 
 /// Plans/play-every-version.md 2a: with every source down, the version

@@ -1659,7 +1659,7 @@ async fn reachable(
 /// The stalled version is left for the ranking's next one, at the stall's
 /// position, once in this play.
 fn move_stalled(m: &Mover, state: &Arc<Mutex<State>>, stall: Stalled) {
-    {
+    let (stalled, pick) = {
         let mut s = lock(state);
         if s.stall != stall.generation || s.closed || s.snapshot.phase != PlaybackPhase::Ready {
             return;
@@ -1667,15 +1667,15 @@ fn move_stalled(m: &Mover, state: &Arc<Mutex<State>>, stall: Stalled) {
         s.stall_moved = true;
         s.run += 1;
         release_all(&mut s);
-        if let Some(stream) = s
+        let stalled = s
             .next
             .checked_sub(1)
             .and_then(|i| s.candidates.get(i))
-            .cloned()
-        {
+            .cloned();
+        if let Some(stream) = &stalled {
             s.snapshot
                 .attempts
-                .push(attempt(&stream, "The video stopped loading"));
+                .push(attempt(stream, "The video stopped loading"));
         }
         s.version_failed = Some(STALLED);
         // The version's other sources carry the same swarm or link: the
@@ -1689,6 +1689,18 @@ fn move_stalled(m: &Mover, state: &Arc<Mutex<State>>, stall: Stalled) {
         s.snapshot.choose_another = false;
         clear_segments(&mut s);
         m.snapshot.set(s.snapshot.clone());
+        (stalled, s.pick.clone())
+    };
+    // Not offered first again: a swarm that stopped sending with the
+    // network up is remembered as stalled here for a day (its line says
+    // so), and the open Versions view lets its frozen pick go.
+    if let Some(stream) = &stalled {
+        if let Source::Torrent { info_hash, .. } = &stream.source {
+            remember_dead(&m.core, vec![info_hash.clone()]);
+        }
+        if let Some(pick) = &pick {
+            pick.failed(&stream.key);
+        }
     }
     spawn_resolve(&m.core, &m.target, &m.plays, state, &m.snapshot, &m.task);
 }
@@ -1846,9 +1858,12 @@ fn note_failure(s: &mut State) {
     } else {
         EmptyKind::Unreachable
     };
-    s.failed_as = Some(match s.failed_as {
-        Some(was) if was != kind => EmptyKind::Unreachable,
-        _ => kind,
+    use EmptyKind::{NoRoom, NotStarted, Unreachable};
+    s.failed_as = Some(match (s.failed_as, kind) {
+        // Room refused some, the others did not start: they did not start.
+        (Some(NoRoom), NotStarted) | (Some(NotStarted), NoRoom) => NotStarted,
+        (Some(was), kind) if was != kind => Unreachable,
+        (_, kind) => kind,
     });
 }
 
@@ -5204,6 +5219,27 @@ mod tests {
             said.error,
             "Your storage is full, the torrent was not added"
         );
+    }
+
+    /// Review 2026-10-23 P3-2: refusals for room mixed with swarms that did
+    /// not start read notStarted; with a source that could not be reached,
+    /// unreachable.
+    #[test]
+    fn room_and_not_started_read_not_started() {
+        let link = stream(r#"{"url":"https://cdn.example/v.mkv"}"#);
+        let fail = |s: &mut State, error: &str, why: Option<&'static str>| {
+            s.snapshot.attempts.push(attempt(&link, error));
+            s.version_failed = why;
+            note_failure(s);
+        };
+        let mut s = State::new(Vec::new(), None);
+        fail(&mut s, no_room_line(), None);
+        fail(&mut s, "the swarm sent almost nothing", Some(NOT_STARTED));
+        assert_eq!(s.failed_as, Some(EmptyKind::NotStarted));
+        fail(&mut s, no_room_line(), None);
+        assert_eq!(s.failed_as, Some(EmptyKind::NotStarted));
+        fail(&mut s, "The source could not be reached", None);
+        assert_eq!(s.failed_as, Some(EmptyKind::Unreachable));
     }
 
     /// The engine's verified bytes and connected peers, one per second
