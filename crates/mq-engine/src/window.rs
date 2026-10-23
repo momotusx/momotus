@@ -398,7 +398,22 @@ mod tests {
     /// offset a 32-bit `off_t` would cut). Sparse: it takes no disk space.
     #[test]
     fn data_past_2_gib_is_found_where_it_is() {
+        use std::os::unix::fs::MetadataExt;
         let dir = tempfile::tempdir().unwrap();
+        // A volume that fills a file in (no holes) would take 3 GiB here,
+        // and answers nothing past 2 GiB this test could read: a small
+        // probe first, and skip there (review P3-1, P3-3).
+        let probe = dir.path().join("probe");
+        let mut f = std::fs::File::create(&probe).unwrap();
+        f.set_len(64 << 20).unwrap();
+        f.seek(SeekFrom::End(-1)).unwrap();
+        f.write_all(&[1]).unwrap();
+        drop(f);
+        let blocks = std::fs::metadata(&probe).unwrap().blocks();
+        if blocks * 512 >= 32 << 20 {
+            eprintln!("skipped: the volume is not sparse ({blocks} blocks for a 64 MiB probe)");
+            return;
+        }
         let path = dir.path().join("file");
         let mut f = std::fs::File::create(&path).unwrap();
         let at = 5u64 << 29; // 2.5 GiB
@@ -406,14 +421,6 @@ mod tests {
         f.seek(SeekFrom::Start(at)).unwrap();
         f.write_all(&[7u8; 4096]).unwrap();
         drop(f);
-        // A volume that fills the file in (no holes) answers nothing past
-        // 2 GiB that this test could read: skip there (review P3-1).
-        use std::os::unix::fs::MetadataExt;
-        let blocks = std::fs::metadata(&path).unwrap().blocks();
-        if blocks * 512 >= 1 << 30 {
-            eprintln!("skipped: the volume is not sparse ({blocks} blocks)");
-            return;
-        }
         let piece = 1 << 20;
         let pieces = data_pieces(&path, 0, piece);
         assert!(pieces.contains(&((at / piece) as u32)), "{pieces:?}");
