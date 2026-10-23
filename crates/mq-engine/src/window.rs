@@ -236,13 +236,11 @@ fn data_pieces(path: &Path, offset: u64, piece_len: u64) -> Vec<u32> {
         let Ok(at) = i64::try_from(pos) else {
             break;
         };
-        // SAFETY: lseek takes plain values.
-        let start = unsafe { libc::lseek(f.as_raw_fd(), at, libc::SEEK_DATA) };
+        let start = seek(f.as_raw_fd(), at, libc::SEEK_DATA);
         if start < 0 {
             break;
         }
-        // SAFETY: as above.
-        let end = unsafe { libc::lseek(f.as_raw_fd(), start, libc::SEEK_HOLE) };
+        let end = seek(f.as_raw_fd(), start, libc::SEEK_HOLE);
         if end <= start {
             break;
         }
@@ -255,6 +253,20 @@ fn data_pieces(path: &Path, offset: u64, piece_len: u64) -> Vec<u32> {
     }
     pieces.dedup();
     pieces
+}
+
+/// `lseek` with a 64-bit offset on every target: 32-bit Android's `off_t`
+/// is 32 bits, so its `lseek` would cut a file past 2 GiB
+/// (plans/play-every-version.md Step 0b).
+#[cfg(unix)]
+fn seek(fd: std::os::fd::RawFd, at: i64, whence: libc::c_int) -> i64 {
+    // SAFETY: lseek takes plain values.
+    #[cfg(any(target_os = "android", target_os = "linux"))]
+    let to = unsafe { libc::lseek64(fd, at, whence) };
+    // SAFETY: as above; `off_t` is 64 bits on Apple's platforms.
+    #[cfg(not(any(target_os = "android", target_os = "linux")))]
+    let to = unsafe { libc::lseek(fd, at, whence) };
+    to
 }
 
 #[cfg(not(unix))]
@@ -372,5 +384,32 @@ async fn keep_windows(engine: &Weak<Inner>, h: TorrentHandle, t: &Arc<Torrent>) 
                 .await;
             break;
         }
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::data_pieces;
+    use std::io::{Seek, SeekFrom, Write};
+
+    /// Step 0b: data past 2 GiB in a sparse file is found where it is (the
+    /// offset a 32-bit `off_t` would cut). Sparse: it takes no disk space.
+    #[test]
+    fn data_past_2_gib_is_found_where_it_is() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("file");
+        let mut f = std::fs::File::create(&path).unwrap();
+        let at = 5u64 << 29; // 2.5 GiB
+        f.set_len(3 << 30).unwrap();
+        f.seek(SeekFrom::Start(at)).unwrap();
+        f.write_all(&[7u8; 4096]).unwrap();
+        drop(f);
+        let piece = 1 << 20;
+        let pieces = data_pieces(&path, 0, piece);
+        assert!(pieces.contains(&((at / piece) as u32)), "{pieces:?}");
+        assert!(
+            pieces.iter().all(|&p| u64::from(p) >= (2 << 30) / piece),
+            "{pieces:?}"
+        );
     }
 }

@@ -1,17 +1,19 @@
 #!/bin/bash
 # Which core build-core.sh makes, shared with its test (scripts/core-engine.test.ts). Every own build carries
 # the torrent engine on arm64-v8a (plans/play-every-version.md, Step 0); armeabi-v7a stays without it until an
-# engine slice is shown to work there (Step 0b). STORE=1 builds the store core without it, on purpose
-# (plans/architecture.md, App Store note).
+# engine slice is shown to work there (Step 0b): MQ_ARMV7_ENGINE=1 builds that slice with it, off by default
+# until the device walk. STORE=1 builds the store core without it, on purpose (plans/architecture.md, App Store
+# note).
 
 # What the app is told it is (BuildConfig.CORE_BUILD): "own" or "store".
 core_kind() {
   if [ "${STORE:-}" = 1 ]; then echo store; else echo own; fi
 }
 
-# Whether the core for one ABI must carry the engine: an own build's arm64-v8a slice.
+# Whether the core for one ABI must carry the engine: an own build's arm64-v8a slice, and its armeabi-v7a slice
+# with MQ_ARMV7_ENGINE=1.
 core_wants_engine() {
-  [ "$(core_kind)" = own ] && [ "$1" = arm64-v8a ]
+  [ "$(core_kind)" = own ] && { [ "$1" = arm64-v8a ] || { [ "$1" = armeabi-v7a ] && [ "${MQ_ARMV7_ENGINE:-}" = 1 ]; }; }
 }
 
 # The ABIs of this build whose core carries the engine, comma-separated (BuildConfig.CORE_ENGINE_ABIS): the app
@@ -61,7 +63,7 @@ core_check_engine() {
     if [ "$(core_kind)" = store ]; then
       echo "build-core.sh: $lib carries the torrent engine, but STORE=1 builds the store core" >&2
     else
-      echo "build-core.sh: $lib carries the torrent engine; $abi stays without it until its slice is shown to work" >&2
+      echo "build-core.sh: $lib carries the torrent engine; $abi stays without it until its slice is shown to work (MQ_ARMV7_ENGINE=1 builds it)" >&2
     fi
     return 1
   fi

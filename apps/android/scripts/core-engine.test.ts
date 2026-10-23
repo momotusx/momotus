@@ -37,6 +37,19 @@ test("an own build carries the engine on arm64-v8a only; STORE=1 builds without 
   ).toBe("");
 });
 
+test("MQ_ARMV7_ENGINE=1 builds the armeabi-v7a slice with the engine; off by default (Step 0b)", () => {
+  const on = { MQ_ARMV7_ENGINE: "1" };
+  expect(run("core_features armeabi-v7a", on).out).toBe("torrent");
+  expect(run("core_engine_abis arm64-v8a armeabi-v7a", on).out).toBe(
+    "arm64-v8a,armeabi-v7a",
+  );
+  // A store build stays without it, and any other value is off.
+  expect(run("core_features armeabi-v7a", { ...on, STORE: "1" }).out).toBe("");
+  expect(
+    run("core_features armeabi-v7a", { MQ_ARMV7_ENGINE: "yes" }).out,
+  ).toBe("");
+});
+
 // The NDK's tools: llvm-nm reads the libraries, its clang makes the stand-in ones.
 const ndk =
   process.env.ANDROID_NDK_HOME ??
@@ -90,6 +103,10 @@ test.skipIf(!hasNdk)(
       expect(check(full, "armeabi-v7a").out).toContain(
         "stays without it until its slice is shown to work",
       );
+      // With the armeabi-v7a slice turned on, that ABI must carry it too.
+      const on = { MQ_ARMV7_ENGINE: "1" };
+      expect(check(full, "armeabi-v7a", on).code).toBe(0);
+      expect(check(store, "armeabi-v7a", on).out).toContain("has no torrent engine");
       expect(check(store, "arm64-v8a", { STORE: "1" }).code).toBe(0);
       const extra = check(full, "arm64-v8a", { STORE: "1" });
       expect(extra.code).toBe(1);
