@@ -17,8 +17,8 @@ export async function patchedContext(browser: Browser, port: number, options: Br
   const subs = new Map<number, { view: string; last: Json }>();
   let page: WebSocketRoute | null = null;
   // The commands the page sent and the views it closed (`command` null), in order, with when they left
-  // it and on which connection (a page load opens a new one, and its subs count from 1 again).
-  const commands: { at: number; conn: number; sub: number; command: Json }[] = [];
+  // it, on which connection (a page load opens a new one, and its subs count from 1 again) and to which view.
+  const commands: { at: number; conn: number; sub: number; view: string | null; command: Json }[] = [];
   let conns = 0;
   await context.routeWebSocket(/\/ws$/, (ws) => {
     page = ws;
@@ -45,7 +45,7 @@ export async function patchedContext(browser: Browser, port: number, options: Br
     ws.onMessage((raw) => {
       const m = JSON.parse(String(raw));
       if (m.op === "subscribe") asked.set(m.id, m.view);
-      if (m.op === "command" || m.op === "unsubscribe") commands.push({ at: Date.now(), conn, sub: m.sub, command: m.command ?? null });
+      if (m.op === "command" || m.op === "unsubscribe") commands.push({ at: Date.now(), conn, sub: m.sub, view: subs.get(m.sub)?.view ?? null, command: m.command ?? null });
       if (upstream.readyState === WebSocket.OPEN) upstream.send(String(raw));
       else early.push(String(raw));
     });

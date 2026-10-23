@@ -32,9 +32,9 @@ import type { SegmentKind } from "../core/generated/SegmentKind";
 import type { SubtitleSize } from "../core/generated/SubtitleSize";
 import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
 import { videoContext } from "../core/video";
-import { autoFocusSoon, goBack } from "../focus/dom";
+import { autoFocusSoon, goBack, restoreSoon } from "../focus/dom";
 import { form } from "../form";
-import { backThenReplace, entryFrom, historyBase, historyDepth, markBack } from "../history";
+import { backThenReplace, entryFrom, historyBase, historyDepth, markBack, takeBack } from "../history";
 import { Loading, type Wait } from "../player/loading";
 import { SubtitlePicker } from "../player/subtitle-picker";
 import { createVideoEngine } from "../player/video-engine";
@@ -44,6 +44,7 @@ import { DELAY_SETTLE_MS } from "../lib/delay";
 import { bufferShare, loadingLines, STALL_AHEAD_S, startFill } from "../lib/loading";
 import { fileChoice, offSummary, pickerLanguages, startOption } from "../lib/subtitles";
 import { emptyWords, languageName, nextVersion, qualityCell, qualityText, restartLine, subtitleNote } from "../lib/words";
+import { VersionsPage } from "./versions";
 import "./player.css";
 
 const SPEEDS = [1, 1.25, 1.5, 2, 0.75];
@@ -133,6 +134,28 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     e.preventDefault();
     backThenReplace(here);
   };
+  // "Choose another version" while it loads (plans/play-every-version.md 2e): Versions opens over
+  // the player with an entry of its own (`?versions`). The attempt keeps running under it, paused if
+  // it becomes ready; Back closes it, and a choice on it replaces this play.
+  const location = useLocation();
+  const layer = () => new URLSearchParams(location.search).has("versions");
+  const layerHref = () => {
+    const q = new URLSearchParams(location.search);
+    q.set("versions", "");
+    return `${location.pathname}?${q}`;
+  };
+  const openLayer = (e: MouseEvent) => {
+    e.preventDefault();
+    // The play's own state (its version, where it came from), never the history stamps (`_depth`).
+    const state = Object.fromEntries(Object.entries((location.state ?? {}) as object).filter(([k]) => !k.startsWith("_")));
+    navigate(layerHref(), { state });
+  };
+  // ponytail: the browser's own Back (popstate) closes the layer; design-web's pushBack can take it over.
+  let picked: string | null = null;
+  const pickInLayer = (key: string) => {
+    picked = key;
+    history.back();
+  };
   // What a play that replaces this one keeps from it (autoplay, Up Next, a
   // move on to another version): that it was opened on Versions via the title.
   const carried = () => ({ viaTitle: props.viaTitle });
@@ -142,7 +165,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   const backWords = () => (entryFrom() === titlePath(props.kind, props.id) ? `Back to ${ctx.details()?.name ?? "the title"}` : "Back");
   createEffect(() => {
     const name = ctx.details()?.name;
-    if (name) document.title = `${name} · Marquee`;
+    if (name && !layer()) document.title = `${name} · Marquee`;
   });
   const prefs = prefsView();
   const versions = () => ctx.versions()?.state.data ?? null;
@@ -394,6 +417,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     const timer = setInterval(() => !paused() && report(), PROGRESS_MS);
     // While the controls are hidden, the first press only shows them.
     const onKey = (e: KeyboardEvent) => {
+      // Versions over the player owns the keys.
+      if (layer()) return;
       // Backspace in the subtitle search deletes a letter.
       const typing = e.target instanceof HTMLInputElement && e.target.type !== "range";
       const back = e.key === "Escape" || (e.key === "Backspace" && !typing) || e.key === "GoBack" || e.keyCode === 10009 || e.keyCode === 461;
@@ -478,6 +503,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       }
       loaded.load();
       engine.load(u, prev ? engine.position() : start.next(props.startOver ? 0 : (snap()?.resumeMs ?? 0) / 1000));
+      // Ready under Versions: it waits there, paused.
+      if (untrack(layer)) engine.pause();
     }),
   );
 
@@ -647,6 +674,20 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   // its own address, on the same Versions view (same binge group).
   const playKey = (key: string) =>
     navigate(`${playPath(props.kind, props.id, props.videoId)}${props.binge ? `?binge=${encodeURIComponent(props.binge)}` : ""}`, { replace: true, state: { ...playState(key), ...carried() } });
+  // The layer opens on its Play; closed, it hands its choice to the player, else the focus comes back here.
+  createEffect(
+    on(
+      layer,
+      (open) => {
+        if (open) return restoreSoon(false);
+        // The app's Back marked a Back for a new screen; the path did not change.
+        takeBack();
+        if (picked) return playKey(picked);
+        autoFocusSoon(() => document.querySelector<HTMLElement>('[data-f="player:another"]:not([inert])') ?? document.querySelector<HTMLElement>('[data-f="player:toggle"]'));
+      },
+      { defer: true },
+    ),
+  );
   // Up Next takes focus when it appears, like Skip buttons on other players.
   createEffect(
     on(showNext, (shown, was) => {
@@ -820,8 +861,10 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   const another = () => late() && wait() === "start";
 
   return (
+    <>
     <div
       class="player-scr"
+      inert={layer() || undefined}
       data-scheme="dark"
       data-subsize={prefs.state.data?.subtitleSize ?? "medium"}
       // Not idle while the loading screen waits: Back, its one control, stays.
@@ -877,9 +920,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
           <A
             class="btn ld-another"
             classList={{ shown: another() }}
-            href={versionsPath(props.kind, props.id, props.videoId)}
-            replace
-            on:click={toVersions}
+            href={layerHref()}
+            on:click={openLayer}
             data-f="player:another"
             inert={!another()}
           >
@@ -1298,5 +1340,11 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         )}
       </Show>
     </div>
+      <Show when={layer()}>
+        <div class="vlayer">
+          <VersionsPage kind={props.kind} id={props.id} videoId={props.videoId} retry={props.retry} onPlay={pickInLayer} />
+        </div>
+      </Show>
+    </>
   );
 }

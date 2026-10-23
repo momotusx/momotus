@@ -3,6 +3,8 @@
 
 .player-scr { position: absolute; inset: 0; background: #000; color: var(--text); overflow: clip; }
 .player-bd { inset: 0; }
+/* Versions over the paused player (Choose another version while it loads): its own page, scrolled here. */
+.vlayer { position: absolute; inset: 0; z-index: 20; overflow-y: auto; background: var(--bg); }
 .video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; opacity: 0; transition: opacity var(--motion-panel) var(--ease); }
 .video.on { opacity: 1; }
 /* mpv draws under the page (desktop shells): every layer above it turns

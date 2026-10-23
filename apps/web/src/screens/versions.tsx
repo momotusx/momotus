@@ -118,7 +118,8 @@ function scrollerOf(el: HTMLElement): HTMLElement {
 const languages = (r: VersionRow) => r.languages.map(languageName).join(", ");
 const subLine = (r: VersionRow) => [languages(r) || null, r.failoverCount > 0 ? `${r.failoverCount + 1} sources` : null].filter(Boolean).join(", ") || "Language not stated";
 
-function VersionsPage(props: { kind: string; id: string; videoId: string; retry: () => void }) {
+/** `onPlay`: the player's layer takes the choice (it replaces the paused play); else a new play opens. */
+export function VersionsPage(props: { kind: string; id: string; videoId: string; retry: () => void; onPlay?: (key: string) => void }) {
   const navigate = useNavigate();
   const ctx = videoContext(props.kind, props.id, props.videoId);
   createEffect(() => {
@@ -155,7 +156,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
   // A play opened here knows whether Versions came from the title page, so
   // its Episodes goes back to that one title entry (player.tsx).
   const play = (key: string) =>
-    navigate(playPath(props.kind, props.id, props.videoId), { state: { ...playState(key), viaTitle: entryFrom() === titlePath(props.kind, props.id) } });
+    props.onPlay ? props.onPlay(key) : navigate(playPath(props.kind, props.id, props.videoId), { state: { ...playState(key), viaTitle: entryFrom() === titlePath(props.kind, props.id) } });
 
   // The pick under the cursor never changes once the user starts moving.
   const freeze = () => {

@@ -296,7 +296,7 @@ test("a torrent's start: the fill steps with it, its words come under the pick's
   await context.close();
 });
 
-test("the loading screen offers Choose another version at 20 s: laid out from the start, inert until then, said once, never focused by itself", async ({ browser }) => {
+test("the loading screen offers Choose another version at 20 s: laid out from the start, inert until then, said once, never focused by itself; Versions opens over the paused attempt", async ({ browser }) => {
   for (const form of ["tv", "desktop"] as const) {
     hold();
     const { context, commands } = await patchedContext(browser, LOADING_PORT, { viewport: VIEWPORTS[form] }, (_view, s) => s);
@@ -329,16 +329,64 @@ test("the loading screen offers Choose another version at 20 s: laid out from th
     // Nothing moved, and it did not take the focus.
     expect(await rects()).toEqual(at);
     expect(await active()).not.toBe("player:another");
-    const before = commands.length;
-    if (form === "tv") {
-      await page.keyboard.press("ArrowDown");
-      await expect.poll(active).toBe("player:another");
-      await page.keyboard.press("Enter");
-    } else await button.click();
-    await expect(page).toHaveURL(/\/versions\//);
-    // The attempt stops: the playback view is closed.
-    expect(commands.slice(before).some((c) => c.command === null)).toBe(true);
+    // Versions opens over the player, which waits paused under it: the attempt keeps running.
+    const closed = (from: number) => commands.slice(from).some((c) => c.view === "playback" && c.command === null);
+    const depth = () => page.evaluate(() => (history.state as { _depth?: number } | null)?._depth ?? 0);
+    const paused = () => page.evaluate(() => document.querySelector("video")?.paused ?? null);
+    const start = await depth();
+    const layer = page.locator(".vlayer");
+    const openLayer = async () => {
+      if (form === "tv") {
+        await page.keyboard.press("ArrowDown");
+        await expect.poll(active).toBe("player:another");
+        await page.keyboard.press("Enter");
+      } else await button.click();
+      await expect(layer).toBeVisible();
+      await expect(page).toHaveURL(/\/play\/movie\/mqlo\/mqlo\?.*versions/);
+      // An entry of its own above the play's, so Back closes it.
+      expect(await depth()).toBe(start + 1);
+      expect(await page.locator(".player-scr").evaluate((p) => (p as HTMLElement).inert)).toBe(true);
+      if (form === "tv") await expect.poll(active).toBe("versions:play");
+    };
+    // Back on the remote, or the browser's own Back.
+    const back = async () => {
+      if (form === "tv") await page.keyboard.press("Escape");
+      else await page.goBack();
+      await expect(layer).toHaveCount(0);
+      await expect(page).not.toHaveURL(/versions/);
+    };
+    let from = commands.length;
+    // Back returns to the player as it was: still loading, the same attempt, the button focused.
+    await openLayer();
+    await back();
+    await expect(page.locator(".ld.on")).toBeVisible();
+    expect(closed(from)).toBe(false);
+    expect(await depth()).toBe(start);
+    if (form === "tv") await expect.poll(active).toBe("player:another");
+    // A choice on Versions replaces the player: the old attempt ends and leaves no entry behind.
+    await openLayer();
+    from = commands.length;
+    await page.locator('[data-f="versions:play"]').click();
+    await expect(layer).toHaveCount(0);
+    await expect(page).not.toHaveURL(/versions/);
+    await expect(page.locator(".ld.on")).toBeVisible();
+    await expect.poll(() => closed(from)).toBe(true);
+    expect(await depth()).toBe(start);
+    expect(await page.evaluate(() => typeof (history.state as { key?: unknown } | null)?.key)).toBe("string");
+    // Ready while Versions is open: the video stays paused, and Back shows it ready.
+    await page.clock.fastForward(21_000);
+    await openLayer();
     release();
+    await page.clock.resume();
+    await expect.poll(() => page.evaluate(() => !!document.querySelector("video")?.currentSrc), { timeout: 30_000 }).toBe(true);
+    await expect.poll(() => page.evaluate(() => (document.querySelector("video")?.readyState ?? 0) >= 2), { timeout: 30_000 }).toBe(true);
+    await page.waitForTimeout(1_000);
+    expect(await paused()).toBe(true);
+    await back();
+    await expect(page.locator(".ld.on")).toHaveCount(0);
+    expect(await paused()).toBe(true);
+    await expect(page.locator('[data-f="player:toggle"]')).toBeVisible();
+    if (form === "tv") await expect.poll(active).toBe("player:toggle");
     await context.close();
   }
 });
