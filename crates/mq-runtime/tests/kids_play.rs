@@ -267,6 +267,8 @@ async fn a_kids_profile_never_writes_the_library() {
     allow(&kid, "tt1", "movie", "Up", &[]);
     let page = TitleView::open(&kid, "movie", "tt1");
     until("the details", || page.snapshot().header.details.is_some()).await;
+    // The page offers no Add to Library (review P2: no dead button).
+    assert!(!page.snapshot().header.library_settable);
     let queued = kid.library().outbox(10_000).unwrap().last_id;
     let refused = page.set_in_library(true);
     assert!(
@@ -284,6 +286,7 @@ async fn a_kids_profile_never_writes_the_library() {
         owners.snapshot().header.details.is_some()
     })
     .await;
+    assert!(owners.snapshot().header.library_settable);
     owners.set_in_library(true).unwrap();
     assert!(owner.library().is_in_library(OWNER, "tt1").unwrap());
 }

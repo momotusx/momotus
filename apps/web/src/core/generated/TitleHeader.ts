@@ -3,7 +3,13 @@ import type { PlayTarget } from "./PlayTarget";
 import type { TitleDetails } from "./TitleDetails";
 import type { TitleState } from "./TitleState";
 
-export type TitleHeader = { state: TitleState, details: TitleDetails | null, inLibrary: boolean, seasons: Array<number>, selectedSeason: number | null, 
+export type TitleHeader = { state: TitleState, details: TitleDetails | null, inLibrary: boolean, 
+/**
+ * Add to Library can be offered: false on a kids profile, whose
+ * Library is the owner's list (`setInLibrary` is refused there). Hide
+ * the button when false.
+ */
+librarySettable: boolean, seasons: Array<number>, selectedSeason: number | null, 
 /**
  * Episode (or the movie itself) the primary button resumes or starts.
  * None while the next episode is not out yet (see `next_airs`).

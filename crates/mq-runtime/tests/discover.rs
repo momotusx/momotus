@@ -976,7 +976,9 @@ async fn the_preview_sets_the_library_with_no_title_view() {
     settle(&view).await;
     let before = asked.load(std::sync::atomic::Ordering::SeqCst);
     view.preview(Some("tt1"));
-    assert!(!view.snapshot().preview.unwrap().in_library);
+    let preview = view.snapshot().preview.unwrap();
+    assert!(!preview.in_library);
+    assert!(preview.library_settable, "an owner's preview offers it");
 
     view.set_in_library("tt1", true).unwrap();
     until(&view, |s| s.preview.as_ref().is_some_and(|p| p.in_library)).await;

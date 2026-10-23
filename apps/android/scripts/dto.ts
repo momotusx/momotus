@@ -73,6 +73,9 @@ const DEFAULTED = new Map([
   ["PlaybackSnapshot.startSubtitleFailed", "false"],
   // Discover's preview Library state (core backlog C44b): an older core says nothing.
   ["ItemDetails.inLibrary", "false"],
+  // Whether Add to Library can be offered (false on a kids profile): an older core always took it.
+  ["TitleHeader.librarySettable", "true"],
+  ["ItemDetails.librarySettable", "true"],
   ["SearchSnapshot.searchable", "0"],
   ["RankKey.pace", "3"],
   ["RankKey.covered", "0"],

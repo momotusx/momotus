@@ -9,4 +9,9 @@ export type ItemDetails = { id: string, description: string | null, genres: Arra
  * In the Library, as it stands now: `setInLibrary {id, value}` on
  * Discover changes it with no title view (core backlog C44b).
  */
-inLibrary: boolean, };
+inLibrary: boolean, 
+/**
+ * Add to Library can be offered: false on a kids profile, as the
+ * title page's `librarySettable`.
+ */
+librarySettable: boolean, };

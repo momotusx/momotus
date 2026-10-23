@@ -113,6 +113,9 @@ pub struct ItemDetails {
     /// In the Library, as it stands now: `setInLibrary {id, value}` on
     /// Discover changes it with no title view (core backlog C44b).
     pub in_library: bool,
+    /// Add to Library can be offered: false on a kids profile, as the
+    /// title page's `librarySettable`.
+    pub library_settable: bool,
 }
 
 #[derive(Clone)]
@@ -648,6 +651,7 @@ fn fill_preview(core: &Core, s: &mut State) -> bool {
                 .library()
                 .is_in_library(core.profile(), &tile.id)
                 .unwrap_or(false),
+            library_settable: !core.policy().kids(),
         })
     });
     let changed = s.snapshot.preview != details;

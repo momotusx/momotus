@@ -708,6 +708,8 @@ data class ItemDetails(
     val runtime: String? = null,
     /** In the Library, as it stands now: `setInLibrary {id, value}` on Discover changes it with no title view (core backlog C44b). */
     val inLibrary: Boolean = false,
+    /** Add to Library can be offered: false on a kids profile, as the title page's `librarySettable`. */
+    val librarySettable: Boolean = true,
 )
 
 @Serializable
@@ -1735,6 +1737,8 @@ data class TitleHeader(
     val state: TitleState,
     val details: TitleDetails? = null,
     val inLibrary: Boolean,
+    /** Add to Library can be offered: false on a kids profile, whose Library is the owner's list (`setInLibrary` is refused there). Hide the button when false. */
+    val librarySettable: Boolean = true,
     val seasons: List<Int> = emptyList(),
     val selectedSeason: Int? = null,
     /** Episode (or the movie itself) the primary button resumes or starts. None while the next episode is not out yet (see `next_airs`). */

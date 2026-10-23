@@ -95,6 +95,10 @@ pub struct TitleHeader {
     pub state: TitleState,
     pub details: Option<TitleDetails>,
     pub in_library: bool,
+    /// Add to Library can be offered: false on a kids profile, whose
+    /// Library is the owner's list (`setInLibrary` is refused there). Hide
+    /// the button when false.
+    pub library_settable: bool,
     pub seasons: Vec<u32>,
     pub selected_season: Option<u32>,
     /// Episode (or the movie itself) the primary button resumes or starts.
@@ -207,6 +211,7 @@ impl TitleView {
             state: TitleState::Loading,
             details: None,
             in_library: false,
+            library_settable: !policy.kids(),
             seasons: Vec::new(),
             selected_season: None,
             play_target: None,
@@ -517,6 +522,7 @@ impl Ctx {
             state: TitleState::Ready,
             details: Some(details),
             in_library,
+            library_settable: !self.kids,
             seasons,
             selected_season: season,
             play_target,
