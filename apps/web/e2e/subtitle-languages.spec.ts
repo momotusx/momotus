@@ -284,7 +284,8 @@ test("a language opens its options: names, the quiet detail, the fit, the chosen
   const opts = panel.locator(".subp-opts");
   await expect(opts.locator(".subp-head h2")).toHaveText("English");
   // The file made for the playing release's group comes first, named by what it says.
-  await expect(opts.locator(".opt b")).toHaveText([/^OPENFILM, WEB\b/, "Many Subs"]);
+  // The other names nothing to tell it apart, so the core names it by its language, never its addon.
+  await expect(opts.locator(".opt b")).toHaveText([/^OPENFILM, WEB\b/, "English"]);
   // Its detail says the core's match words, then the release text, cut in the middle at a dot so
   // its group stays in view.
   const fitting = opts.locator(".opt").first();
@@ -324,7 +325,7 @@ test("a language opens its options: names, the quiet detail, the fit, the chosen
   await expect(timing).toHaveText("+0.1 s");
   await opts.locator(".opt").nth(1).dispatchEvent("click");
   await reopen();
-  await expect(opts.locator(".opt.on b")).toHaveText("Many Subs");
+  await expect(opts.locator(".opt.on b")).toHaveText("English");
   await expect(timing).toHaveText("0.0 s");
   await fitting.dispatchEvent("click");
   await reopen();
