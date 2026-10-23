@@ -89,6 +89,7 @@ import app.marquee.core.model.Segment
 import app.marquee.core.model.SubtitleSize
 import app.marquee.core.model.TraktPlayback
 import app.marquee.design.CapsLabel
+import app.marquee.design.FocusInk
 import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.Marquee
@@ -192,6 +193,8 @@ fun TrackPanel(
     rows: List<TrackChoice>,
     onPick: (String) -> Unit,
     modifier: Modifier = Modifier,
+    /** Shows this row's focused look without focus (screenshots and tests), as [ActionButton]'s. */
+    forceFocus: String? = null,
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
@@ -231,7 +234,9 @@ fun TrackPanel(
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             rows.forEachIndexed { index, row ->
-                item(key = row.id) { TrackRow(row, index, rows.lastIndex, requesters[index], onPick) }
+                item(key = row.id) {
+                    TrackRow(row, index, rows.lastIndex, requesters[index], onPick, forceFocus = row.id == forceFocus)
+                }
             }
         }
     }
@@ -512,11 +517,15 @@ private fun TrackRow(
     last: Int,
     requester: FocusRequester,
     onPick: (String) -> Unit,
+    forceFocus: Boolean = false,
 ) {
-    val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
+    var focusHeld by remember { mutableStateOf(false) }
+    val focused = focusHeld || forceFocus
+    // On TV a focused row turns white with dark words (focusPalette), as every TV row; the chosen row is a filled
+    // row with a check, and the phone's keyboard focus is the ring alone.
+    val colors = focusPalette(focused)
     val shape = RoundedCornerShape(Marquee.radius.m)
-    // The chosen row is a filled row with a check; the ring is for focus alone.
     Row(
         Modifier
             .fillMaxWidth()
@@ -527,9 +536,10 @@ private fun TrackRow(
                 right = FocusRequester.Cancel
                 if (index == 0) up = FocusRequester.Cancel
                 if (index == last) down = FocusRequester.Cancel
-            }.marqueeFocus(Marquee.radius.m, scale = 1.02f)
+            }.marqueeFocus(Marquee.radius.m, scale = 1.02f, forced = forceFocus)
+            .onFocusChanged { focusHeld = it.isFocused }
             .clip(shape)
-            .background(if (row.selected) colors.raised else Color.Transparent)
+            .background(if ((tv && focused) || row.selected) colors.raised else Color.Transparent)
             .semantics {
                 selected = row.selected
                 contentDescription = listOfNotNull(row.name, row.detail).joinToString(", ")
@@ -539,12 +549,14 @@ private fun TrackRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(if (tv) 30.dp else 18.dp)) {
-            if (row.selected) MqIcon(Icons.Check, tint = colors.text)
-        }
-        Column {
-            MqText(row.name, role = TextRole.Callout, weight = FontWeight.SemiBold, maxLines = 1)
-            row.detail?.let { MqText(it, role = TextRole.Caption, color = colors.muted, maxLines = 2) }
+        FocusInk(colors) {
+            Box(Modifier.size(if (tv) 30.dp else 18.dp)) {
+                if (row.selected) MqIcon(Icons.Check, tint = colors.text)
+            }
+            Column {
+                MqText(row.name, role = TextRole.Callout, weight = FontWeight.SemiBold, maxLines = 1)
+                row.detail?.let { MqText(it, role = TextRole.Caption, color = colors.muted, maxLines = 2) }
+            }
         }
     }
 }
@@ -915,14 +927,21 @@ fun ActionButton(
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
     busy: Boolean = false,
+    /** Shows the focused look without focus (screenshots and tests), as a tile's. */
+    forceFocus: Boolean = false,
 ) {
-    val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
+    var focusHeld by remember { mutableStateOf(false) }
+    val focused = focusHeld || forceFocus
+    // On TV a focused action turns white with dark words (focusPalette), so it reads over any frame.
+    val colors = focusPalette(focused)
     Column(
         modifier
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .marqueeFocus(Marquee.radius.m, scale = 1.04f)
+            .marqueeFocus(Marquee.radius.m, scale = 1.04f, forced = forceFocus)
+            .onFocusChanged { focusHeld = it.isFocused }
             .clip(RoundedCornerShape(Marquee.radius.m))
+            .background(if (tv && focused) colors.raised else Color.Transparent)
             .semantics {
                 contentDescription = listOfNotNull(label, detail, BUSY_WORDS.takeIf { busy }).joinToString(", ")
             }.focusClickable(onClick, Role.Button)
@@ -933,12 +952,17 @@ fun ActionButton(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        MqIcon(icon, tint = colors.text, size = if (tv) 32.dp else 20.dp)
-        MqText(label, role = TextRole.Callout, weight = FontWeight.SemiBold, maxLines = 1)
-        detail?.let {
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                MqText(it, role = TextRole.Caption, color = colors.muted, maxLines = 1)
-                if (busy) Spinner(Modifier.testTag(BUSY_TAG), size = if (tv) 14.dp else 10.dp)
+        FocusInk(colors) {
+            MqIcon(icon, tint = colors.text, size = if (tv) 32.dp else 20.dp)
+            MqText(label, role = TextRole.Callout, weight = FontWeight.SemiBold, maxLines = 1)
+            detail?.let {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    MqText(it, role = TextRole.Caption, color = colors.muted, maxLines = 1)
+                    if (busy) Spinner(Modifier.testTag(BUSY_TAG), size = if (tv) 14.dp else 10.dp)
+                }
             }
         }
     }
