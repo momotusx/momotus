@@ -225,6 +225,9 @@ object StreamChoiceCopy {
             SectionQuality.Other to "Other",
         )
 
+    /** A sheet's close ("Done"), one word on every platform. */
+    const val DONE = "Done"
+
     /** What the player says while a version starts ("player"), never an addon's name. */
     const val FINDING_BEST = "Finding the best version"
     const val FINDING_CHOSEN = "Finding this version"
