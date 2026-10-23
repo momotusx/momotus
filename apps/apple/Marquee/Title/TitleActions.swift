@@ -132,7 +132,7 @@ struct WideActions<Play: View>: View {
                 Button { openURL(trailer) } label: { Label("Trailer", glyph: "film", size: HeroLayout.icon) }
                     .buttonStyle(PillButtonStyle())
             }
-            MarkCapsule(marks: marks, toggle: toggle)
+            if !marks.isEmpty { MarkCapsule(marks: marks, toggle: toggle) }
             Button(action: showVersions) { Label("Versions", glyph: "layers", size: HeroLayout.icon) }
                 .buttonStyle(PillButtonStyle())
                 .disabled(!versionsReady)

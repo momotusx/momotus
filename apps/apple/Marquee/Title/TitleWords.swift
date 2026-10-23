@@ -220,10 +220,11 @@ enum PanelOpener: Hashable {
     }
 }
 
-/// The title's marks in the order they show: Library always, Watched only for a movie. The core keeps
-/// no watched mark for a whole series (C14, C41), so a series shows Library alone.
-func titleMarks(kind: String, inLibrary: Bool, watched: Bool) -> [TitleMark] {
-    kind == "movie" ? [.library(on: inLibrary), .watched(on: watched)] : [.library(on: inLibrary)]
+/// The title's marks in the order they show: Library where the profile can set it (not a kids profile,
+/// whose Library is the owner's list), Watched only for a movie. The core keeps no watched mark for a whole
+/// series (C14, C41), so a series shows Library alone.
+func titleMarks(kind: String, inLibrary: Bool, watched: Bool, librarySettable: Bool = true) -> [TitleMark] {
+    (librarySettable ? [.library(on: inLibrary)] : []) + (kind == "movie" ? [.watched(on: watched)] : [])
 }
 
 /// The title's reserved warning-only line under Play: the core's line for why nothing plays, else

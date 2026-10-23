@@ -98,6 +98,28 @@ import Testing
     #expect(titleMarks(kind: "movie", inLibrary: false, watched: true) == [.library(on: false), .watched(on: true)])
 }
 
+@Test func aKidsProfileShowsNoAddToLibrary() throws {
+    // The core says a kids profile cannot set its Library (it is the owner's list): no Library mark or button.
+    #expect(titleMarks(kind: "series", inLibrary: false, watched: false, librarySettable: false).isEmpty)
+    #expect(titleMarks(kind: "movie", inLibrary: true, watched: true, librarySettable: false) == [.watched(on: true)])
+    let header = { (extra: String) in
+        try JSONDecoder().decode(TitleHeader.self, from: Data(#"{"state": {"state": "ready"}, "inLibrary": false, "seasons": [], "watched": false\#(extra)}"#.utf8))
+    }
+    #expect(try header(#", "librarySettable": false"#).canSetLibrary == false)
+    #expect(try header(#", "librarySettable": true"#).canSetLibrary)
+    // An older core sends nothing: Library as before.
+    #expect(try header("").canSetLibrary)
+    // Every place that draws Library asks first: the phone's control, the wide capsule, the TV button.
+    let screen = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .appending(path: "../Marquee/Title/TitleScreen.swift"), encoding: .utf8)
+    #expect(screen.contains("if model.header?.canSetLibrary == true {\n                LibraryControl("))
+    #expect(screen.contains("librarySettable: model.header?.canSetLibrary == true)"))
+    #expect(screen.contains("let settable = header?.canSetLibrary == true"))
+    #expect(screen.contains("#if os(tvOS)\n            if settable {"))
+    #expect(screen.contains("} else if settable {\n                LibraryControl("))
+    #expect(screen.components(separatedBy: "LibraryControl(").count == 3)
+}
+
 @Test func startOverIsLiveOnlyForTheTitleInFront() {
     #expect(startOverAvailable(resume: 600_000, shown: true, covered: false))
     #expect(!startOverAvailable(resume: nil, shown: true, covered: false))

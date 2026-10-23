@@ -310,7 +310,9 @@ struct TitleScreen: View {
     private func wideActions(_ details: TitleDetails) -> some View {
         WideActions(
             trailer: details.trailers.first.flatMap { URL(string: $0.url) },
-            marks: titleMarks(kind: details.kind, inLibrary: model.header?.inLibrary ?? false, watched: model.header?.watched ?? false),
+            marks: titleMarks(
+                kind: details.kind, inLibrary: model.header?.inLibrary ?? false, watched: model.header?.watched ?? false,
+                librarySettable: model.header?.canSetLibrary == true),
             toggle: { toggle($0, details) }, versionsReady: versions != nil, showVersions: { showVersions = true }
         ) { playBlock(details) }
         // Starring keeps clear of the row as drawn (review P2-1).
@@ -329,9 +331,12 @@ struct TitleScreen: View {
                         .foregroundStyle(Theme.Palette.muted)
                 }
             }
-            LibraryControl(on: model.header?.inLibrary ?? false) {
-                model.setInLibrary(!(model.header?.inLibrary ?? false))
-                sync.schedule()
+            // No Library on a kids profile: its Library is the owner's list.
+            if model.header?.canSetLibrary == true {
+                LibraryControl(on: model.header?.inLibrary ?? false) {
+                    model.setInLibrary(!(model.header?.inLibrary ?? false))
+                    sync.schedule()
+                }
             }
         }
     }
@@ -588,6 +593,8 @@ struct TitleScreen: View {
         let header = model.header
         let inLibrary = header?.inLibrary ?? false
         let watched = header?.watched ?? false
+        // No Library on a kids profile: its Library is the owner's list.
+        let settable = header?.canSetLibrary == true
         let count = versions?.snapshot.map { $0.rows.count + ($0.recommended == nil ? 0 : 1) } ?? 0
         let layout = metrics.wide ? AnyLayout(FlowRow(spacing: 26)) : AnyLayout(HStackLayout(alignment: .top, spacing: 8))
         let column = metrics.wide ? nil : CGFloat.infinity
@@ -607,26 +614,31 @@ struct TitleScreen: View {
             }
             #endif
             #if os(tvOS)
-            Button { model.setInLibrary(!inLibrary); sync.schedule() } label: {
-                Label(inLibrary ? "In Library" : "Add to Library", glyph: inLibrary ? "bookmark-check" : "bookmark-plus")
+            if settable {
+                Button { model.setInLibrary(!inLibrary); sync.schedule() } label: {
+                    Label(inLibrary ? "In Library" : "Add to Library", glyph: inLibrary ? "bookmark-check" : "bookmark-plus")
+                }
+                .buttonStyle(RoundButtonStyle(on: inLibrary))
+                .frame(maxWidth: column)
+                // A state, spoken as one: "In Library, toggle, on".
+                .accessibilityLabel("In Library")
+                .accessibilityAddTraits(.isToggle)
+                .accessibilityValue(inLibrary ? "On" : "Off")
             }
-            .buttonStyle(RoundButtonStyle(on: inLibrary))
-            .frame(maxWidth: column)
-            // A state, spoken as one: "In Library, toggle, on".
-            .accessibilityLabel("In Library")
-            .accessibilityAddTraits(.isToggle)
-            .accessibilityValue(inLibrary ? "On" : "Off")
             #else
             if metrics.wide {
                 // The desktop frame's paired capsule: Library, and Watched for a movie.
-                MarkCapsule(marks: titleMarks(kind: details.kind, inLibrary: inLibrary, watched: watched)) { mark in
-                    switch mark {
-                    case .library(let on): model.setInLibrary(!on)
-                    case .watched(let on): model.setWatched(details.id, !on)
+                let marks = titleMarks(kind: details.kind, inLibrary: inLibrary, watched: watched, librarySettable: settable)
+                if !marks.isEmpty {
+                    MarkCapsule(marks: marks) { mark in
+                        switch mark {
+                        case .library(let on): model.setInLibrary(!on)
+                        case .watched(let on): model.setWatched(details.id, !on)
+                        }
+                        sync.schedule()
                     }
-                    sync.schedule()
                 }
-            } else {
+            } else if settable {
                 LibraryControl(on: inLibrary) { model.setInLibrary(!inLibrary); sync.schedule() }
             }
             #endif

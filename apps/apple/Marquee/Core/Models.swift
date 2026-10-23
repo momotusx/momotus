@@ -264,6 +264,12 @@ struct TitleHeader: Decodable, Hashable, Sendable {
     /// A movie the user watched (episodes carry their own flag); toggled with
     /// `setWatched` on the movie's id.
     let watched: Bool
+    /// False on a kids profile, whose Library is the owner's list (`setInLibrary` is refused there); an older
+    /// core sends nothing, which counts as true.
+    let librarySettable: Bool?
+
+    /// Whether the title offers Add to Library.
+    var canSetLibrary: Bool { librarySettable ?? true }
 }
 
 struct Episode: Decodable, Hashable, Sendable {
