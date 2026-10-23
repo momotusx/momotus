@@ -356,6 +356,24 @@ class VersionsCopyTest {
     }
 
     @Test
+    fun `the sheet's details drop only what the face already said, and keep the rest`() {
+        val gib = 1L shl 30
+        val shared = { line: ReasonLine ->
+            row(sizeBytes = 4 * gib).copy(status = VersionStatus.Torrent(89), line = line)
+        }
+        // The face says "4 GB, shared by 89 people"; the account and the window are said only here.
+        val should = shared(ReasonLine.Should(89, 4 * gib, "TorBox"))
+        assertEquals("4 GB, shared by 89 people", VersionsCopy.rowWords(should))
+        assertEquals("May be ready in your account", VersionsCopy.sheetDetails(should, null))
+        val buffer = shared(ReasonLine.Buffer(89, 40 * gib, aheadMin = 7, budgetBytes = (2.5 * gib).toLong()))
+        assertEquals("Room for about 7 min ahead in 2.5 GB", VersionsCopy.sheetDetails(buffer, null))
+        // Nothing is left when the face said it all.
+        assertEquals("", VersionsCopy.sheetDetails(shared(ReasonLine.Quick(89, 4 * gib)), null))
+        // A warning face keeps the details whole: they say what it does not.
+        assertEquals("Shared by 3 people", VersionsCopy.sheetDetails(shared(ReasonLine.VeryFew(3)), null))
+    }
+
+    @Test
     fun `badges follow Apple's row - the quality filled, one video and one audio format`() {
         val badges = { features: List<String> ->
             VersionsCopy.badges(row(features = features)).map { it.text to it.look }

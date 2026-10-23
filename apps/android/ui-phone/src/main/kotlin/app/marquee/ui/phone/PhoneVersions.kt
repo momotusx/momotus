@@ -560,7 +560,6 @@ private fun DetailsSheet(
 ) {
     BackHandler(onBack = onClose)
     val colors = Marquee.colors
-    val line = why?.let(StreamChoiceCopy::emptyRowLine) ?: StreamChoiceCopy.rowLine(row)
     // The focus goes into the sheet at once and stays in it until the sheet closes.
     val play = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { play.requestFocus() } }
@@ -587,10 +586,8 @@ private fun DetailsSheet(
             verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
         ) {
             RowFace(row, why)
-            // The core's details after the face, unless the face's quiet line already said them (its size and source).
-            if (line.details.isNotEmpty() && (why != null || VersionsCopy.quiet(row) == null)) {
-                MqText(line.details, role = TextRole.Callout)
-            }
+            // The core's details after the face, but what the face already said (VersionsCopy.sheetDetails).
+            VersionsCopy.sheetDetails(row, why).takeIf { it.isNotEmpty() }?.let { MqText(it, role = TextRole.Callout) }
             // ponytail: the system monospace face; IBM Plex Mono as on the web when Android bundles it.
             MqText(
                 Format.releaseWrapped(row.releaseName),

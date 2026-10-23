@@ -260,6 +260,21 @@ object VersionsCopy {
         words: String,
     ) = size?.let { "$it, ${words.replaceFirstChar(Char::lowercase)}" } ?: words.replaceFirstChar(Char::uppercase)
 
+    /**
+     * The core's details under a row's face in its sheet: all of them, but the parts the face's quiet line already
+     * said, its size and, for a shared file, the people sharing it. What only the details say stays: "May be ready in
+     * your account", "Room for about 7 min ahead in 2.5 GB".
+     */
+    fun sheetDetails(
+        row: VersionRow,
+        why: EmptyKind?,
+    ): String {
+        if (why != null) return StreamChoiceCopy.emptyRowLine(why).details
+        if (quiet(row) == null) return StreamChoiceCopy.rowLine(row).details
+        val said = setOfNotNull("size", "people".takeIf { row.onDevice == null && row.status is VersionStatus.Torrent })
+        return StreamChoiceCopy.line(row.line, without = said).details
+    }
+
     /** A row's details, reserved under it and shown on focus: the release name, the line's details, its languages and sources. */
     fun details(row: VersionRow): String =
         listOfNotNull(

@@ -496,7 +496,11 @@ object StreamChoiceCopy {
      * that may pause because few people share it says so; a window on mobile data says it keeps only a short
      * stretch ahead instead of its minutes.
      */
-    fun line(l: ReasonLine): Line {
+    fun line(
+        l: ReasonLine,
+        /** Fields whose parts are left out: what a row's face already says ("people", "size"). */
+        without: Set<String> = emptySet(),
+    ): Line {
         val (kind, f) = fields(l)
         val w = LINES.getValue(kind)
         val text =
@@ -506,7 +510,8 @@ object StreamChoiceCopy {
                 else -> w.text
             }
         val details = if (l is ReasonLine.Buffer && l.aheadMin == null) w.detailsMobile ?: w.details else w.details
-        return Line(w.tone, text, capital(details.mapNotNull { part(it, f) }.joinToString(", ")))
+        val kept = details.filterNot { p -> without.any { "{$it}" in p } }
+        return Line(w.tone, text, capital(kept.mapNotNull { part(it, f) }.joinToString(", ")))
     }
 
     /** Why nothing can play, in the core's words; a kind from a newer core reads as noResults, the plainest. */
