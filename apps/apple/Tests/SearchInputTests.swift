@@ -61,10 +61,8 @@ private func source(_ path: String) throws -> String {
 
 @Test func leavingSearchRemembersTheQueryBeforeClearingIt() throws {
     let search = try source("Search/SearchScreen.swift")
-    // Leaving sets `leaving`; remember then clear happen together once the core holds the query.
-    #expect(try body(of: ".onChange(of: shown)", in: search).contains("leaving = SearchRules.clearsOnLeave(text: query, shown: now)"))
-    let shown = try body(of: "private func rememberOnLeave()", in: search)
-    let remember = try #require(shown.range(of: "search.command([\"type\": \"remember\"])"))
+    let shown = try body(of: ".onChange(of: shown)", in: search)
+    let remember = try #require(shown.range(of: "remember()"))
     let clear = try #require(shown.range(of: "input.text = \"\""))
     // The two reach the core in the order sent (CommandOrderTests).
     #expect(remember.upperBound <= clear.lowerBound)
@@ -82,18 +80,18 @@ private func source(_ path: String) throws -> String {
     #expect(try source("Search/SearchScreen.swift").contains(".onAppear { if SearchRules.focusesOnOpen(text: query) { fieldFocused = true } }"))
 }
 
-@Test func leavingWaitsForTheTypedQueryBeforeRemembering() throws {
-    // The core takes a typed query after its debounce; `remember` keeps the core's. A quick Cmd-2 after
-    // the last keystroke must not remember the query before it (review-apple-player P3 1).
-    #expect(SearchRules.remembersNow(text: "dune", answered: "dune"))
-    #expect(!SearchRules.remembersNow(text: "dune", answered: "dun"))
-    #expect(!SearchRules.remembersNow(text: "dune", answered: nil))
-    #expect(SearchRules.remembersNow(text: " dune ", answered: "dune"))
+@Test func rememberSendsTheFieldsText() throws {
+    // The core takes a typed query after its debounce; `remember {query}` keeps the text given instead, so a
+    // quick Cmd-2 or a result opened right after the last keystroke keeps them (G9; core a1697990).
+    #expect(fields(SearchRules.rememberCommand(text: " dune ")) == ["type": "remember", "query": "dune"])
     let search = try source("Search/SearchScreen.swift")
-    let wait = try body(of: "private func rememberOnLeave()", in: search)
-    #expect(wait.contains("guard leaving, SearchRules.remembersNow(text: query, answered: search.snapshot?.query) else { return }"))
-    #expect(search.contains(".onChange(of: search.snapshot?.query) { rememberOnLeave() }"))
+    #expect(try body(of: "private func remember()", in: search).contains("search.command(SearchRules.rememberCommand(text: query))"))
+    // Both ways of remembering go through it: a result opened (the page disappears) and leaving on the Mac.
+    #expect(search.contains(".onDisappear { if typed { remember() } }"))
+    #expect(!search.contains("[\"type\": \"remember\"]"))
 }
+
+private func fields(_ command: [String: any Sendable]) -> [String: String] { command.mapValues { "\($0)" } }
 
 @MainActor @Test func theSameDirectorChipAsksAgain() {
     // A chip naming the query already in the field changes no text, so it bumps a requery instead

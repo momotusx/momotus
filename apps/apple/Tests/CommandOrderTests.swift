@@ -72,3 +72,19 @@ import Testing
         #expect(!text.contains("Task { await prefs.perform(") && !text.contains("Task { await addons.perform("), "\(path) sends an op from a Task")
     }
 }
+
+@MainActor @Test func aRememberRightAfterTypingKeepsTheLastKeystrokes() async throws {
+    // The query lands in the core after its debounce; `remember {query}` keeps the field's text, so leaving
+    // at once still keeps "dune", not the "dun" the core held (G9; core a1697990).
+    let core = RealCore()
+    #expect(await core.ready())
+    let search = LiveRecord<SearchSnapshot>("search", core: core.client)
+    search.start()
+    #expect(await eventually { search.snapshot != nil })
+    search.command(["type": "setQuery", "query": "dun"])
+    #expect(await eventually { search.snapshot?.query == "dun" })
+    search.command(["type": "setQuery", "query": "dune"])
+    search.command(SearchRules.rememberCommand(text: "dune"))
+    search.command(["type": "setQuery", "query": ""])
+    #expect(await eventually { search.snapshot?.recent == ["dune"] })
+}

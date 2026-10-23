@@ -57,9 +57,9 @@ enum SearchRules {
         #endif
     }
 
-    /// `remember` keeps the core's query, which lands after its debounce: leaving Search before the typed
-    /// query landed waits for it, so the old query is never the one remembered.
-    static func remembersNow(text: String, answered: String?) -> Bool {
-        answered == text.trimmingCharacters(in: .whitespaces)
+    /// The field's text for Recent, sent with `remember` so the core keeps it rather than its debounced
+    /// query (G9; core a1697990).
+    static func rememberCommand(text: String) -> [String: any Sendable] {
+        ["type": "remember", "query": text.trimmingCharacters(in: .whitespaces)]
     }
 }

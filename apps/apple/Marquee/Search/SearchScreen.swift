@@ -19,8 +19,6 @@ struct SearchScreen: View {
     /// The query, shared with the Mac header's field (plans/design-v3-phase7-apple.md 2).
     @Environment(SearchInput.self) private var input
     @State private var width: CGFloat = 0
-    /// Search was left with a query the core may not hold yet: remembered and cleared when it does.
-    @State private var leaving = false
 
     init(core: CoreClient) {
         _search = State(initialValue: LiveRecord("search", core: core))
@@ -63,7 +61,7 @@ struct SearchScreen: View {
         }
         // A title opened from the results covers this page: the query goes into
         // Recent, however the tile was chosen (a tap, VoiceOver, a keyboard, a remote).
-        .onDisappear { if typed { search.command(["type": "remember"]) } }
+        .onDisappear { if typed { remember() } }
         // The Mac: the cursor goes in the field on the first visit, not over the results on the way back from
         // a title. The iPhone and iPad: no keyboard until the field is tapped, so Browse by genre shows.
         .onAppear { if SearchRules.focusesOnOpen(text: query) { fieldFocused = true } }
@@ -86,24 +84,22 @@ struct SearchScreen: View {
             #else
             if !now { fieldFocused = false }
             #endif
-            // Leaving Search on the Mac: Recent keeps the query, then the header's field clears; a query the
-            // core has not taken yet (its debounce) is waited for, so the old one is never remembered.
-            leaving = SearchRules.clearsOnLeave(text: query, shown: now)
-            rememberOnLeave()
+            // Leaving Search on the Mac: Recent keeps the query, then the header's field clears.
+            if SearchRules.clearsOnLeave(text: query, shown: now) {
+                remember()
+                input.text = ""
+            }
         }
-        .onChange(of: search.snapshot?.query) { rememberOnLeave() }
         // A link asking for the query already in the field: asked again.
         .onChange(of: input.requery) { setQuery(query) }
     }
 
     private static let prompt = "Search titles"
 
-    /// Remembers and clears once the core holds the typed query (at once when it already does).
-    private func rememberOnLeave() {
-        guard leaving, SearchRules.remembersNow(text: query, answered: search.snapshot?.query) else { return }
-        leaving = false
-        search.command(["type": "remember"])
-        input.text = ""
+    /// Keeps the field's text in Recent: the text itself, not the core's query, which lands after its debounce,
+    /// so a result opened or a place left right after the last keystrokes keeps them (`remember {query}`).
+    private func remember() {
+        search.command(SearchRules.rememberCommand(text: query))
     }
 
     private func setQuery(_ value: String) {
