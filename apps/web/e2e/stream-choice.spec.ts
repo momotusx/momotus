@@ -713,7 +713,7 @@ test.describe("Versions", () => {
     }
   });
 
-  test("phone: the sheet shows first what its row shows (badges, language, the one line), then the seeders, file and languages", async ({ browser }) => {
+  test("phone: the sheet shows first what its row shows (badges, language, the one line), then the people sharing it, file and languages", async ({ browser }) => {
     const spanish = (s: VersionsSnapshot): VersionsSnapshot => {
       const a = s.rows[0];
       if (!a || !s.done) return s;
@@ -733,7 +733,7 @@ test.describe("Versions", () => {
     await expect(sheet.locator(".vsheet-badges .q")).toHaveText(await row.locator(".q").innerText());
     await expect(sheet.locator(".st.line .lt")).toHaveText(said ?? "");
     // Then what the row keeps for its details.
-    await expect(sheet.locator(".detail")).toHaveText("2 seeders");
+    await expect(sheet.locator(".detail")).toHaveText("Shared by 2 people");
     await expect(sheet.locator(".rel")).toContainText(".webm");
     await expect(sheet.locator(".sub")).toContainText("Spanish");
     await page.context().close();
@@ -756,10 +756,10 @@ test.describe("Versions", () => {
       await page.locator(".vslot").first().locator(".vinfo").tap();
       const sheet = page.locator(".vsheet");
       await expect(sheet.locator(".st.line .lt")).toHaveText("4 GB, shared by 89 people");
-      // The seeders and the size are the face's; only what it did not say follows.
+      // The people and the size are the face's; only what it did not say follows.
       if (k === "should") await expect(sheet.locator(".detail")).toHaveText("May be ready in your account");
       else await expect(sheet.locator(".detail")).toHaveCount(0);
-      await expect(sheet).not.toContainText("89 seeders");
+      await expect(sheet).not.toContainText("Shared by 89 people");
       if (k === "should") await shot(page, "stream-choice-sheet", "phone");
       await page.context().close();
     }
