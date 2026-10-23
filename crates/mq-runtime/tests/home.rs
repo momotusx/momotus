@@ -58,6 +58,23 @@ async fn named_catalog_addon(
     }
 }
 
+/// The Rotten Tomatoes addon as the defaults install it: its link carries
+/// RPDB's free key, the key every IMDb cover's ratings band is drawn with.
+/// No catalogs, so nothing is read from it.
+fn rt_addon() -> AddonRow {
+    AddonRow {
+        transport_url: "https://7a82163c306e-rottentomatoes.baby-beamup.club/%7B%22rpdb_key%22%3A%22t0-free-rpdb%22%7D/manifest.json".into(),
+        manifest_json: serde_json::json!({
+            "id": "pw.ers.rottentomatoes", "version": "1.0.9", "name": "Rotten Tomatoes",
+            "types": ["movie", "series"], "resources": ["catalog"], "catalogs": []
+        })
+        .to_string(),
+        position: 0,
+        enabled: true,
+        allow_private: false,
+    }
+}
+
 const METAS: &str = r#"{"metas":[
   {"id":"tt0111161","type":"movie","name":"The Shawshank Redemption","poster":"https://images.metahub.space/poster/medium/tt0111161/img","background":"https://images.metahub.space/background/medium/tt0111161/img","releaseInfo":"1994","runtime":"142 min","description":"A banker convicted of uxoricide forms a friendship over a quarter century with a hardened convict.","links":[{"name":"9.3","category":"imdb","url":"https://imdb.com/title/tt0111161"},{"name":"Drama","category":"Genres","url":"stremio:///discover"},{"name":"Crime","category":"Genres","url":"stremio:///discover"},{"name":"Prison","category":"Genres","url":"stremio:///discover"},{"name":"Classic","category":"Genres","url":"stremio:///discover"},{"name":"Tim Robbins","category":"Cast","url":"stremio:///search"}]},
   {"id":"tt0068646","type":"movie","name":"The Godfather","poster":"https://images.metahub.space/poster/medium/tt0068646/img"}
@@ -80,7 +97,7 @@ async fn rows_fill_in_place_and_mirror_matches_view() {
     let slow = named_catalog_addon("slow", "Slow", Duration::from_millis(2800), 200, METAS).await;
     let broken = named_catalog_addon("broken", "Broken", Duration::ZERO, 500, "{}").await;
     core.library()
-        .set_addons("p", &[fast, slow, broken], &core.hlc())
+        .set_addons("p", &[fast, slow, broken, rt_addon()], &core.hlc())
         .unwrap();
 
     let view = HomeView::open(&core);
@@ -150,6 +167,9 @@ async fn rows_fill_in_place_and_mirror_matches_view() {
 #[tokio::test]
 async fn continue_watching_appears_live_at_the_top() {
     let core = Core::temporary("p").unwrap();
+    core.library()
+        .set_addons("p", &[rt_addon()], &core.hlc())
+        .unwrap();
     let view = HomeView::open(&core);
     let (snapshot, mut updates) = view.subscribe();
     let mut mirror = snapshot.rows.clone();
@@ -341,7 +361,7 @@ async fn a_finished_episode_leaves_its_next_one_in_continue_watching() {
     })
     .to_string();
     core.library()
-        .set_addons("p", &[meta], &core.hlc())
+        .set_addons("p", &[meta, rt_addon()], &core.hlc())
         .unwrap();
     let show = LibraryItemRow {
         item_id: "tt9".into(),
@@ -1278,7 +1298,7 @@ async fn a_landscape_catalog_tile_of_an_imdb_title_gets_the_cover() {
     let core = Core::temporary("p").unwrap();
     let addon = catalog_addon("wide", Duration::ZERO, 200, WIDE).await;
     core.library()
-        .set_addons("p", &[addon], &core.hlc())
+        .set_addons("p", &[addon, rt_addon()], &core.hlc())
         .unwrap();
     let view = HomeView::open(&core);
     for _ in 0..300 {
@@ -1303,4 +1323,62 @@ async fn a_landscape_catalog_tile_of_an_imdb_title_gets_the_cover() {
         tile.background.as_deref(),
         Some("https://img.example/bg.jpg")
     );
+}
+
+/// The band comes from the addons the user added (the owner, 2026-10-23):
+/// with no enabled addon configured with an RPDB key (none, off, keyless),
+/// every tile keeps its addon's poster; with one, whichever addon it is,
+/// the key in its link draws the band.
+#[tokio::test]
+async fn the_band_follows_an_enabled_addons_rpdb_key() {
+    let core = Core::temporary("p").unwrap();
+    let catalog = catalog_addon("fast", Duration::ZERO, 200, METAS).await;
+    let mut off = rt_addon();
+    off.enabled = false;
+    let mut keyless = rt_addon();
+    keyless.transport_url =
+        "https://7a82163c306e-rottentomatoes.baby-beamup.club/manifest.json".into();
+    let paid = AddonRow {
+        transport_url: "https://7a82163c306e-rottentomatoes.baby-beamup.club/%7B%22rpdb_key%22%3A%22t1-paid%22%7D/manifest.json".into(),
+        ..rt_addon()
+    };
+    let other = AddonRow {
+        transport_url: "https://other.example/%7B%22rpdb_key%22%3A%22t2-other%22%7D/manifest.json"
+            .into(),
+        manifest_json: serde_json::json!({
+            "id": "other.posters", "version": "1.0.0", "name": "Other",
+            "types": ["movie"], "resources": ["catalog"], "catalogs": []
+        })
+        .to_string(),
+        ..rt_addon()
+    };
+    let own = "https://images.metahub.space/poster/medium/tt0111161/img";
+    for (rt, cover) in [
+        (None, own.to_owned()),
+        (Some(off), own.to_owned()),
+        (Some(keyless), own.to_owned()),
+        (
+            Some(paid),
+            "https://api.ratingposterdb.com/t1-paid/imdb/poster-default/tt0111161.jpg?fallback=true"
+                .to_owned(),
+        ),
+        (
+            Some(other),
+            "https://api.ratingposterdb.com/t2-other/imdb/poster-default/tt0111161.jpg?fallback=true"
+                .to_owned(),
+        ),
+    ] {
+        let label = format!("{:?}", rt.as_ref().map(|r| (&r.transport_url, r.enabled)));
+        let addons: Vec<AddonRow> = std::iter::once(catalog.clone()).chain(rt).collect();
+        core.library().set_addons("p", &addons, &core.hlc()).unwrap();
+        let view = HomeView::open(&core);
+        for _ in 0..300 {
+            if view.snapshot().rows[0].state == RowState::Ready {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        let tile = view.snapshot().rows[0].tiles[0].clone();
+        assert_eq!(tile.poster.as_deref(), Some(cover.as_str()), "{label}");
+    }
 }

@@ -309,6 +309,7 @@ async fn run(core: Core, query: String, snapshot: SharedObservable<SearchSnapsho
             (index, result)
         });
     }
+    let rpdb = core.rpdb_key();
     let soft = tokio::time::sleep(SOFT_DEADLINE);
     tokio::pin!(soft);
     let mut soft_fired = false;
@@ -324,7 +325,7 @@ async fn run(core: Core, query: String, snapshot: SharedObservable<SearchSnapsho
         tokio::select! {
             Some(joined) = calls.join_next(), if !calls.is_empty() => {
                 let Ok((index, result)) = joined else { continue };
-                rows[index] = outcome(result, &query);
+                rows[index] = outcome(result, &query, rpdb.as_deref());
                 rate(&core, &rows[index].1, &mut known, &mut lookups);
                 publish(&top, &rows, &known);
             }
@@ -393,11 +394,12 @@ async fn top_results(core: &Core, query: &str, key: &str) -> Option<Vec<Tile>> {
             .map(|hit| async move { core.fetch_meta(hit.kind, &hit.imdb_id).await }),
     )
     .await;
+    let rpdb = core.rpdb_key();
     Some(
         metas
             .into_iter()
             .filter_map(Result::ok)
-            .map(|(meta, _)| tile_from_preview(meta.preview))
+            .map(|(meta, _)| tile_from_preview(meta.preview, rpdb.as_deref()))
             .collect(),
     )
 }
@@ -432,13 +434,17 @@ fn lead(hits: &[Found], key: &str) -> Vec<Found> {
 fn outcome(
     result: Result<mq_addons::Fetched, mq_addons::AddonError>,
     query: &str,
+    rpdb: Option<&str>,
 ) -> (RowState, Vec<Tile>) {
     let parsed = result
         .map_err(|e| e.to_string())
         .and_then(|f| decode_catalog(&f.body).map_err(|e| format!("unreadable results: {e}")));
     match parsed {
         Ok(ResourceResponse::Metas { metas }) => {
-            let mut tiles: Vec<Tile> = metas.into_iter().map(tile_from_preview).collect();
+            let mut tiles: Vec<Tile> = metas
+                .into_iter()
+                .map(|m| tile_from_preview(m, rpdb))
+                .collect();
             // Addon order is kept, except that a title named exactly what was
             // typed goes first (Cinemeta ranks Pixar's "Up" sixth for "up").
             let wanted = fold(query);
@@ -638,6 +644,7 @@ impl Shown {
 fn kids_matches(core: &Core, query: &str) -> Vec<HomeRow> {
     let wanted = fold(query);
     let list = core.library().allowed_list(core.profile());
+    let rpdb = core.rpdb_key();
     let mut found: Vec<(bool, Tile)> = list
         .map(|l| l.counted)
         .unwrap_or_default()
@@ -650,7 +657,7 @@ fn kids_matches(core: &Core, query: &str) -> Vec<HomeRow> {
             names
                 .iter()
                 .any(|n| n.contains(&wanted))
-                .then(|| (!names.contains(&wanted), kids_tile(row)))
+                .then(|| (!names.contains(&wanted), kids_tile(row, rpdb.as_deref())))
         })
         .collect();
     found.sort_by_key(|(inexact, _)| *inexact);
@@ -707,6 +714,7 @@ mod tests {
                         serde_json::json!({"id": id, "type": "movie", "name": id}),
                     )
                     .unwrap(),
+                    None,
                 )
             })
             .collect();

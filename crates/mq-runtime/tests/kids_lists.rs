@@ -99,6 +99,23 @@ impl Fixture {
 const PIN: &str = "1357";
 
 /// The owner with a PIN and `fixture`'s addon, and a kids profile.
+/// The Rotten Tomatoes addon as the defaults install it: its link carries
+/// RPDB's free key, the key every IMDb cover's ratings band is drawn with.
+/// No catalogs, so nothing is read from it.
+fn rt_addon() -> AddonRow {
+    AddonRow {
+        transport_url: "https://7a82163c306e-rottentomatoes.baby-beamup.club/%7B%22rpdb_key%22%3A%22t0-free-rpdb%22%7D/manifest.json".into(),
+        manifest_json: serde_json::json!({
+            "id": "pw.ers.rottentomatoes", "version": "1.0.9", "name": "Rotten Tomatoes",
+            "types": ["movie", "series"], "resources": ["catalog"], "catalogs": []
+        })
+        .to_string(),
+        position: 0,
+        enabled: true,
+        allow_private: false,
+    }
+}
+
 async fn kid(fixture: &Fixture) -> (Core, Core) {
     let owner = Core::temporary(OWNER).unwrap();
     owner.set_pin(OWNER, Some(PIN), None).await.unwrap();
@@ -728,6 +745,14 @@ async fn a_kids_search_shows_no_recent_names() {
 async fn a_kids_tiles_show_what_the_ratings_cache_holds() {
     let fixture = Fixture::default();
     let (owner, kid) = kid(&fixture).await;
+    // The band's key comes from the owner's Rotten Tomatoes addon, the
+    // list a kids profile reads.
+    let mut addons = owner.library().addons(OWNER).unwrap();
+    addons.push(rt_addon());
+    owner
+        .library()
+        .set_addons(OWNER, &addons, &owner.hlc())
+        .unwrap();
     let now = mq_library::hlc::now_ms() as i64;
     let lib = owner.library();
     let row = mq_library::RatingRow {

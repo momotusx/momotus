@@ -607,9 +607,12 @@ async fn load_page(
         s.snapshot.state = match parsed {
             Ok(ResourceResponse::Metas { metas }) => {
                 let before = s.snapshot.items.len();
+                let rpdb = core.rpdb_key();
                 for meta in metas {
                     if s.seen.insert(meta.id.clone()) {
-                        s.snapshot.items.push(tile_from_preview(meta));
+                        s.snapshot
+                            .items
+                            .push(tile_from_preview(meta, rpdb.as_deref()));
                     }
                 }
                 core.ratings().fill(&mut s.snapshot.items[before..]);

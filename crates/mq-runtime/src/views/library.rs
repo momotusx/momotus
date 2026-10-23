@@ -227,7 +227,11 @@ fn render(core: &Core, query: &Query) -> LibrarySnapshot {
         LibrarySort::Added => items.sort_by_key(|e| std::cmp::Reverse(e.item.added_ms)),
         LibrarySort::Name => items.sort_by_cached_key(|e| e.item.name.to_lowercase()),
     }
-    let mut items: Vec<Tile> = items.into_iter().map(tile).collect();
+    let rpdb = core.rpdb_key();
+    let mut items: Vec<Tile> = items
+        .into_iter()
+        .map(|e| tile(e, rpdb.as_deref()))
+        .collect();
     core.ratings().fill(&mut items);
     LibrarySnapshot {
         kind: query.kind.clone(),
@@ -237,7 +241,7 @@ fn render(core: &Core, query: &Query) -> LibrarySnapshot {
     }
 }
 
-fn tile(e: &LibraryEntry) -> Tile {
+fn tile(e: &LibraryEntry, rpdb: Option<&str>) -> Tile {
     Tile {
         id: e.item.item_id.clone(),
         kind: e.item.kind.clone(),
@@ -259,7 +263,7 @@ fn tile(e: &LibraryEntry) -> Tile {
         blurb: None,
         poster_fallback: None,
     }
-    .rated_cover()
+    .rated_cover(rpdb)
 }
 
 /// Where the user is with a title, in Continue Watching's words: "S2:E3 ·

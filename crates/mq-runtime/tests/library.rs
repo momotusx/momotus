@@ -1,4 +1,4 @@
-use mq_library::{LibraryItemRow, ProgressRow};
+use mq_library::{AddonRow, LibraryItemRow, ProgressRow};
 use mq_runtime::{Core, LibrarySort, LibraryView};
 use std::time::Duration;
 
@@ -150,11 +150,31 @@ async fn unknown_types_share_one_other_chip() {
     assert_eq!(names(&view), ["Bravo", "Charlie"]);
 }
 
+/// The Rotten Tomatoes addon as the defaults install it: its link carries
+/// RPDB's free key, the key every IMDb cover's ratings band is drawn with.
+/// No catalogs, so nothing is read from it.
+fn rt_addon() -> AddonRow {
+    AddonRow {
+        transport_url: "https://7a82163c306e-rottentomatoes.baby-beamup.club/%7B%22rpdb_key%22%3A%22t0-free-rpdb%22%7D/manifest.json".into(),
+        manifest_json: serde_json::json!({
+            "id": "pw.ers.rottentomatoes", "version": "1.0.9", "name": "Rotten Tomatoes",
+            "types": ["movie", "series"], "resources": ["catalog"], "catalogs": []
+        })
+        .to_string(),
+        position: 0,
+        enabled: true,
+        allow_private: false,
+    }
+}
+
 /// A library title with an IMDb id shows RPDB's cover with the ratings
 /// band, its own poster kept as the fallback; any other id keeps its own.
 #[tokio::test]
 async fn library_covers_carry_the_ratings_band() {
     let core = Core::temporary("p").unwrap();
+    core.library()
+        .set_addons("p", &[rt_addon()], &core.hlc())
+        .unwrap();
     for (id, kind) in [("tt0111161", "movie"), ("kitsu:1", "series")] {
         let row = LibraryItemRow {
             item_id: id.into(),
