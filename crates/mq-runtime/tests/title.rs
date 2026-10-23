@@ -68,6 +68,20 @@ async fn settle(view: &TitleView) -> TitleSnapshot {
     view.snapshot()
 }
 
+/// Core backlog C37: the title's year line has no dash ("2011-2019" from
+/// the addon).
+#[tokio::test]
+async fn the_years_read_from_to() {
+    let core = Core::temporary("p").unwrap();
+    core.library()
+        .set_addons("p", &[meta_addon(SHOW).await], &core.hlc())
+        .unwrap();
+    let view = TitleView::open(&core, "series", "tt0944947");
+    let snap = settle(&view).await;
+    let details = snap.header.details.expect("details");
+    assert_eq!(details.release_info.as_deref(), Some("2011 to 2019"));
+}
+
 #[tokio::test]
 async fn resumes_the_season_being_watched() {
     let core = Core::temporary("p").unwrap();

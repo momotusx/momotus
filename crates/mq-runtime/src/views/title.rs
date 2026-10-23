@@ -652,7 +652,7 @@ fn details(meta: &MetaItem, source: &str, scores: Option<&Scores>) -> TitleDetai
         poster: p.poster.as_ref().map(|u| u.to_string()),
         background: p.background.as_ref().map(|u| u.to_string()),
         logo: p.logo.as_ref().map(|u| u.to_string()),
-        release_info: p.release_info.clone(),
+        release_info: super::home::year_line(p.release_info.as_deref()),
         runtime: p.runtime.clone(),
         genres: links("Genres"),
         cast: links("Cast"),

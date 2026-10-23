@@ -901,6 +901,31 @@ fn apply_catalog(
     titles
 }
 
+/// A title's year line as the apps show it, with no dash (core backlog
+/// C37): an open range ("2023" then a dash, as Cinemeta ends a running
+/// series) reads "Since 2023", a closed one ("2008-2020", "2008 – 2020")
+/// "2008 to 2020", and one year twice that year once. Anything else passes
+/// as the addon wrote it; an empty line is none.
+pub(crate) fn year_line(raw: Option<&str>) -> Option<String> {
+    fn year(s: &str) -> Option<&str> {
+        (s.len() == 4 && s.bytes().all(|b| b.is_ascii_digit())).then_some(s)
+    }
+    let raw = raw?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let Some((from, to)) = raw.split_once(['-', '\u{2013}', '\u{2014}']) else {
+        return Some(raw.to_owned());
+    };
+    let (from, to) = (from.trim(), to.trim());
+    Some(match (year(from), year(to)) {
+        (Some(from), None) if to.is_empty() => format!("Since {from}"),
+        (Some(from), Some(to)) if from == to => from.to_owned(),
+        (Some(from), Some(to)) => format!("{from} to {to}"),
+        _ => raw.to_owned(),
+    })
+}
+
 pub(crate) fn tile_from_preview(m: mq_protocol::MetaItemPreview) -> Tile {
     let links = |category: &str| -> Vec<String> {
         m.links
@@ -926,7 +951,7 @@ pub(crate) fn tile_from_preview(m: mq_protocol::MetaItemPreview) -> Tile {
             .ok()
             .and_then(|v| v.as_str().map(str::to_owned))
             .unwrap_or_else(|| "poster".into()),
-        release_info: m.release_info,
+        release_info: year_line(m.release_info.as_deref()),
         progress: None,
         video_id: None,
         ratings: Ratings::of(None, rating.as_deref()),
@@ -1344,7 +1369,37 @@ fn imdb_rating(p: &mq_protocol::MetaItemPreview) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{catalog_title, without_source};
+    use super::{catalog_title, without_source, year_line};
+
+    /// Core backlog C37: the year line never carries a dash.
+    #[test]
+    fn the_year_line_has_no_dash() {
+        let line = |raw: &str| year_line(Some(raw));
+        assert_eq!(line("2023\u{2013}").as_deref(), Some("Since 2023"));
+        assert_eq!(line("2023-").as_deref(), Some("Since 2023"));
+        assert_eq!(line("2008\u{2013}2020").as_deref(), Some("2008 to 2020"));
+        assert_eq!(line("2008-2020").as_deref(), Some("2008 to 2020"));
+        assert_eq!(line("2008 \u{2014} 2020").as_deref(), Some("2008 to 2020"));
+        assert_eq!(line("2020-2020").as_deref(), Some("2020"));
+        assert_eq!(line("2019").as_deref(), Some("2019"));
+        assert_eq!(line("TBA").as_deref(), Some("TBA"));
+        assert_eq!(line("  "), None);
+        assert_eq!(year_line(None), None);
+    }
+
+    /// C37: a catalog tile (Home, Discover and Search make theirs here)
+    /// carries the year line.
+    #[test]
+    fn a_tile_carries_the_year_line() {
+        let body = br#"{"metas":[{"id":"tt3581920","type":"series","name":"The Last of Us","releaseInfo":"2023\u2013"}]}"#;
+        let mq_protocol::ResourceResponse::Metas { metas } =
+            mq_protocol::decode_catalog(body).unwrap()
+        else {
+            panic!("metas");
+        };
+        let tile = super::tile_from_preview(metas.into_iter().next().unwrap());
+        assert_eq!(tile.release_info.as_deref(), Some("Since 2023"));
+    }
 
     #[test]
     fn a_row_title_names_the_catalog_and_its_kind() {
