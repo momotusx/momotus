@@ -49,6 +49,9 @@ impl From<rusqlite::Error> for LibraryError {
     }
 }
 
+/// The longest recent search kept, in characters.
+const SEARCH_MAX_CHARS: usize = 200;
+
 /// Tables whose changes live views care about.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Table {
@@ -1159,13 +1162,16 @@ impl Library {
         })
     }
 
-    /// Remembers a search the user acted on; keeps the newest 50.
+    /// Remembers a search the user acted on; keeps the newest 50, each at
+    /// most `SEARCH_MAX_CHARS` characters (a pasted page stays a line).
     pub fn record_search(
         &self,
         profile: &str,
         query: &str,
         used_ms: i64,
     ) -> Result<(), LibraryError> {
+        let query: String = query.chars().take(SEARCH_MAX_CHARS).collect();
+        let query = query.as_str();
         self.write(|c| {
             refuse_gone(c, profile)?;
             c.execute(

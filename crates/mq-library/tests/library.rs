@@ -243,6 +243,14 @@ fn search_history_newest_first_and_capped() {
     let recent = lib.recent_searches("p", 100).unwrap();
     assert_eq!(recent.len(), 50);
     assert_eq!(&recent[..2], ["q3", "q59"]);
+
+    // A pasted page is kept as its first 200 characters, cut on a
+    // character, never inside one.
+    let long = "é".repeat(150) + &"x".repeat(150);
+    lib.record_search("p", &long, 200).unwrap();
+    let kept = &lib.recent_searches("p", 1).unwrap()[0];
+    assert_eq!(kept.chars().count(), 200);
+    assert_eq!(*kept, "é".repeat(150) + &"x".repeat(50));
 }
 
 #[test]
