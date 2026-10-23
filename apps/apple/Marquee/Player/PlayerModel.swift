@@ -901,8 +901,8 @@ final class PlayerModel {
     /// The player cannot play this source: the second engine takes it where it is on (plan 2.3), else stop it and
     /// ask the core for the next.
     private func sourceFailed(_ error: Error?) {
-        if fallBack(why: "error") { return }
         let failure = playerFailure(error)
+        if fallBack(why: failure.kind) { return }
         fail(failure, notice: "This source failed: \(failure.error). Trying the next one.")
     }
 
@@ -910,18 +910,18 @@ final class PlayerModel {
     /// audio track. The second engine takes it where it is on, else the core
     /// tries the next version, or says Try again.
     private func pictureFailed() {
-        if fallBack(why: "no_picture") { return }
+        if fallBack(why: "decode") { return }
         fail(PlayerFailure(kind: PlayerLayout.pictureFailureKind(floating: floating), error: "this version's picture cannot be shown on this device"),
              notice: "This version's picture cannot be shown here, trying the next one")
     }
 
     /// AVPlayer refused the source before its first frame: once, at the same position, the second engine opens it,
     /// before the core is told (plan 2.3). False where the switch is off, after the first frame, or on the engine.
-    private func fallBack(why: String) -> Bool {
-        guard EngineChoice.fallsBack(enabled: EngineChoice.enabledHere, from: backend, firstFrameShown: pictureShown),
+    private func fallBack(why kind: String) -> Bool {
+        guard EngineChoice.fallsBack(enabled: EngineChoice.enabledHere, from: backend, firstFrameShown: pictureShown, kind: kind),
               let url = loadedURL, let address = URL(string: url) else { return false }
         let ms = Int((ContinuousClock.now - route.tapped) / .milliseconds(1))
-        coreLog.notice("metric engine_fallback_ms=\(ms, privacy: .public) why=\(why, privacy: .public)")
+        coreLog.notice("metric engine_fallback_ms=\(ms, privacy: .public) why=\(kind, privacy: .public)")
         let at = stoppedPosition(pendingStart: pendingStart, position: position)
         openOnEngine(address, key: loadedKey, attempt: loadedAttempt, at: at, fellBack: true)
         return true

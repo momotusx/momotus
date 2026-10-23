@@ -59,11 +59,12 @@ enum EngineChoice {
         return .avPlayer
     }
 
-    /// AVPlayer could not present a source (an error, or sound with no picture) before its first frame: the second
-    /// engine takes it once, at the same position, before the core is told. Never on a switched-off platform, never
-    /// after the first frame, never from the second engine itself.
-    static func fallsBack(enabled: Bool, from backend: Backend, firstFrameShown: Bool) -> Bool {
-        enabled && backend == .avPlayer && !firstFrameShown
+    /// AVPlayer could not present a source (a decode or other error, or sound with no picture, which is `decode`)
+    /// before its first frame: the second engine takes it once, at the same position, before the core is told. Never
+    /// on a switched-off platform, never after the first frame, never from the second engine itself, and never for a
+    /// source that did not answer (`network`, `timeout`): the engine would wait on it too (plan 2.3).
+    static func fallsBack(enabled: Bool, from backend: Backend, firstFrameShown: Bool, kind: String) -> Bool {
+        enabled && backend == .avPlayer && !firstFrameShown && ["decode", "other"].contains(kind)
     }
 
     /// The engine's open, to its first frame, gets what the start budget has left (plans/apple-second-engine.md

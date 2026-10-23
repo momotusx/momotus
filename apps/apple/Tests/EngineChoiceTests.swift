@@ -16,7 +16,7 @@ import Testing
     #expect(EngineChoice.backend(container: "mp4", audio: ["dts_hd_ma"], engine: nil, enabled: false) == .avPlayer)
     #expect(EngineChoice.backend(container: "mkv", audio: [], engine: "aether", enabled: false) == .avPlayer)
     // A refusal there goes to the core as today: no fallback.
-    #expect(!EngineChoice.fallsBack(enabled: false, from: .avPlayer, firstFrameShown: false))
+    #expect(!EngineChoice.fallsBack(enabled: false, from: .avPlayer, firstFrameShown: false, kind: "decode"))
     #expect(EngineChoice.containers(enabled: false) == ["mp4", "m4v", "mov", "m3u8"])
     #expect(EngineChoice.audioDecoders(enabled: false) == EngineChoice.avPlayerAudio)
 }
@@ -38,9 +38,9 @@ import Testing
     #expect(on("mp4", ["atmos"]) == .avPlayer)
     // A version that played on the engine before goes there first.
     #expect(on("mp4", engine: "aether") == .aether)
-    #expect(EngineChoice.fallsBack(enabled: true, from: .avPlayer, firstFrameShown: false))
-    #expect(!EngineChoice.fallsBack(enabled: true, from: .avPlayer, firstFrameShown: true))
-    #expect(!EngineChoice.fallsBack(enabled: true, from: .aether, firstFrameShown: false))
+    #expect(EngineChoice.fallsBack(enabled: true, from: .avPlayer, firstFrameShown: false, kind: "decode"))
+    #expect(!EngineChoice.fallsBack(enabled: true, from: .avPlayer, firstFrameShown: true, kind: "decode"))
+    #expect(!EngineChoice.fallsBack(enabled: true, from: .aether, firstFrameShown: false, kind: "decode"))
 }
 
 @Test func theCapsAreTheCoresNames() throws {
@@ -56,4 +56,14 @@ import Testing
     #expect(EngineChoice.openWithin(budgetEndsAtMs: 50_000, nowMs: 20_000) == .seconds(30))
     #expect(EngineChoice.openWithin(budgetEndsAtMs: 20_000, nowMs: 25_000) == .seconds(1), "spent: a last second")
     #expect(EngineChoice.openWithin(budgetEndsAtMs: nil, nowMs: 25_000) == .seconds(90), "no budget sent")
+}
+
+@Test func onlyADecodeOrOtherFailureFallsBack() {
+    // Plan 2.3: a source that did not answer goes to the core's next one at once; the engine would wait on it too.
+    for kind in ["decode", "other"] {
+        #expect(EngineChoice.fallsBack(enabled: true, from: .avPlayer, firstFrameShown: false, kind: kind), "\(kind)")
+    }
+    for kind in ["network", "timeout", "http", "audio"] {
+        #expect(!EngineChoice.fallsBack(enabled: true, from: .avPlayer, firstFrameShown: false, kind: kind), "\(kind)")
+    }
 }
