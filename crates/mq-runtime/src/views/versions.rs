@@ -2722,20 +2722,28 @@ mod tests {
         assert_eq!(plays(&caps), [mq_server::Format::Hls]);
     }
 
-    /// Apple's real container list, read from its source: HLS, never DASH.
+    /// Apple's real container lists, read from its source (AVPlayer's, and the
+    /// second engine's where it is on): HLS, never DASH.
     #[test]
     fn apples_caps_play_hls_and_refuse_dash() {
-        let swift = include_str!("../../../../apps/apple/Marquee/Player/DeviceCaps.swift");
-        let line = swift
-            .lines()
-            .find(|l| l.contains("static let containers"))
-            .expect("Apple's containers");
-        let list = &line[line.find('[').unwrap() + 1..line.rfind(']').unwrap()];
+        let swift = include_str!("../../../../apps/apple/Marquee/Player/EngineChoice.swift");
         let mut caps = DeviceCaps::basic_1080p();
-        caps.containers = list
-            .split(',')
-            .map(|c| c.trim().trim_matches('"').to_owned())
-            .collect();
+        caps.containers = [
+            "static let avPlayerContainers",
+            "static let engineContainers",
+        ]
+        .iter()
+        .flat_map(|name| {
+            let line = swift
+                .lines()
+                .find(|l| l.contains(name))
+                .expect("Apple's containers");
+            line[line.find('[').unwrap() + 1..line.rfind(']').unwrap()]
+                .split(',')
+                .map(|c| c.trim().trim_matches('"').to_owned())
+                .collect::<Vec<_>>()
+        })
+        .collect();
         assert!(caps.containers.contains(&"m3u8".to_owned()), "{caps:?}");
         assert_eq!(plays(&caps), [mq_server::Format::Hls]);
     }
