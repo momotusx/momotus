@@ -5,6 +5,7 @@ import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.EmptyVersions
 import app.marquee.core.model.Group
 import app.marquee.core.model.Reason
+import app.marquee.core.model.SectionQuality
 import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionStatus
 import app.marquee.core.model.VersionsSnapshot
@@ -167,6 +168,59 @@ object VersionsCopy {
     /** The card when every addon answered, versions are listed and none is recommended. */
     const val NOT_READY_TITLE = "Nothing is ready to play yet"
     const val NOT_READY_BODY = "Choose a version to start it."
+
+    /** One section of the Versions list: its [id] keys the heading and the fold ("section:fhd"). */
+    data class Section(
+        val id: String,
+        val title: String,
+        val rows: List<VersionRow>,
+    )
+
+    /**
+     * The list's sections (plans/play-every-version.md 2f): the core's quality sections, in its order, each with its
+     * rows in the core's order. [rows] the core's sections do not cover (an older core, or the dimmed rows of a state
+     * where nothing plays) keep today's groups.
+     */
+    fun sections(
+        snapshot: VersionsSnapshot?,
+        rows: List<VersionRow>,
+    ): List<Section> {
+        val byKey = rows.associateBy { it.key }
+        val core =
+            snapshot
+                ?.sections
+                .orEmpty()
+                .mapIndexed { i, s ->
+                    Section(
+                        // A section from a newer core keys by its place, so two never share a key.
+                        "section:${s.quality.wire.ifEmpty { "new$i" }}",
+                        StreamChoiceCopy.SECTIONS[s.quality] ?: StreamChoiceCopy.SECTIONS.getValue(
+                            SectionQuality.Other,
+                        ),
+                        s.keys.mapNotNull(byKey::get),
+                    )
+                }.filter { it.rows.isNotEmpty() }
+        if (core.isNotEmpty()) return core
+        val groups = rows.groupBy { it.group }
+        return Group.entries.mapNotNull { g ->
+            groups[g]?.let { Section("group:${g.wire.ifEmpty { "new" }}", group(g, snapshot?.recommended != null), it) }
+        }
+    }
+
+    /** A shortcut's words: "Smaller file: 1080p, 2 GB". */
+    fun shortcutLabel(
+        label: String,
+        row: VersionRow,
+    ): String = "$label: " + listOfNotNull(row.quality, row.sizeBytes?.let(Format::bytes)).joinToString(", ")
+
+    /** The shortcuts under the card, in the core's order, each only when it is not the card's own version. */
+    fun shortcuts(snapshot: VersionsSnapshot?): List<Pair<String, VersionRow>> {
+        val best = snapshot?.recommended?.key
+        return listOfNotNull(
+            snapshot?.smaller?.takeIf { it.key != best }?.let { StreamChoiceCopy.SMALLER to it },
+            snapshot?.sharper?.takeIf { it.key != best }?.let { StreamChoiceCopy.SHARPER to it },
+        )
+    }
 
     /** What a zero-playable state offers on the Versions page. */
     enum class EmptyStep(

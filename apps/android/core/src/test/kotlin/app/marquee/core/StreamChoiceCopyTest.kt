@@ -169,6 +169,9 @@ class StreamChoiceCopyTest {
                         put("showAll", SHOW_ALL)
                         put("showFewer", SHOW_FEWER)
                         put("back", BACK)
+                        put("smaller", SMALLER)
+                        put("sharper", SHARPER)
+                        put("sections", buildJsonObject { for ((q, w) in SECTIONS) put(q.wire, w) })
                     },
                 )
                 put(

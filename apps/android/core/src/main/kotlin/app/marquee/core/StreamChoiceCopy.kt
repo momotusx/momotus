@@ -6,6 +6,7 @@ import app.marquee.core.model.LearnedChoice
 import app.marquee.core.model.Network
 import app.marquee.core.model.Prefs
 import app.marquee.core.model.ReasonLine
+import app.marquee.core.model.SectionQuality
 import app.marquee.core.model.Speed
 import app.marquee.core.model.StreamPrefs
 import app.marquee.core.model.VersionRow
@@ -197,6 +198,19 @@ object StreamChoiceCopy {
     const val SHOW_ALL = "Show all {n}"
     const val SHOW_FEWER = "Show fewer"
     const val BACK = "Back"
+
+    /** The shortcuts under the card (plans/play-every-version.md 2f), in the core's order. */
+    const val SMALLER = "Smaller file"
+    const val SHARPER = "Sharper"
+
+    /** The quality sections' titles, by the core's section. */
+    val SECTIONS =
+        mapOf(
+            SectionQuality.Uhd to "4K",
+            SectionQuality.Fhd to "1080p",
+            SectionQuality.Hd to "720p and below",
+            SectionQuality.Other to "Other",
+        )
 
     /** What the player says while a version starts ("player"), never an addon's name. */
     const val FINDING_BEST = "Finding the best version"

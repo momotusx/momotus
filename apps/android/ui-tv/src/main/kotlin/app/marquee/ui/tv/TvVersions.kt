@@ -63,7 +63,6 @@ import app.marquee.core.VersionsCopy.EmptyStep
 import app.marquee.core.model.EmptyAction
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.EmptyVersions
-import app.marquee.core.model.Group
 import app.marquee.core.model.LearnedNote
 import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionsSnapshot
@@ -173,8 +172,11 @@ fun TvVersions(
     ) {
         Header(heading, snapshot)
         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(Marquee.space.l)) {
-            Pick(snapshot, failure, { versions?.retry() }, focus, onPlay) {
-                if (empty != null) Empty(empty, step, focus, list.takeIf { empty.rows.isNotEmpty() })
+            Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+                Pick(snapshot, failure, { versions?.retry() }, focus, onPlay) {
+                    if (empty != null) Empty(empty, step, focus, list.takeIf { empty.rows.isNotEmpty() })
+                }
+                Shortcuts(snapshot, focus, list.takeIf { !snapshot?.rows.isNullOrEmpty() }, onPlay)
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
                 // The rows found when none plays are simply listed, dimmed, as they would rank once the reason is
@@ -201,9 +203,9 @@ private val arrows = setOf(Key.DirectionLeft, Key.DirectionRight, Key.DirectionU
 
 private fun rowKey(row: VersionRow) = "row:${row.key}"
 
-private fun headKey(group: Group) = "head:$group"
+private fun headKey(section: String) = "head:$section"
 
-private fun foldKey(group: Group) = "fold:$group"
+private fun foldKey(section: String) = "fold:$section"
 
 private fun tone(tone: VersionsCopy.Tone) =
     when (tone) {
@@ -363,6 +365,34 @@ private fun Pick(
     }
 }
 
+/**
+ * The shortcuts under the card, "Smaller file" and "Sharper", in the core's order, each only when the core sends it
+ * (plans/versions-android-spec.md, section 1): one press plays it. Keyed `short:`, so a version that is also a section
+ * row never shares a key; Right goes to the list.
+ */
+@Composable
+private fun Shortcuts(
+    snapshot: VersionsSnapshot?,
+    focus: FocusMemory,
+    list: FocusRequester?,
+    onPlay: (String) -> Unit,
+) {
+    for ((label, row) in VersionsCopy.shortcuts(snapshot)) {
+        val key = if (label == StreamChoiceCopy.SMALLER) SHORT_SMALLER else SHORT_SHARPER
+        SecondaryButton(
+            VersionsCopy.shortcutLabel(label, row),
+            { onPlay(row.key) },
+            Modifier.focusProperties { if (list != null) right = list },
+            icon = if (key == SHORT_SMALLER) Icons.Gauge else Icons.Gem,
+            focusRequester = focus.requesterFor(key),
+            onFocusChange = focus.watch(null, key),
+        )
+    }
+}
+
+private const val SHORT_SMALLER = "short:smaller"
+private const val SHORT_SHARPER = "short:sharper"
+
 /** A release name in monospace, broken at its dots so it wraps whole. */
 @Composable
 private fun Release(
@@ -464,8 +494,9 @@ private fun Sources(
     modifier: Modifier,
 ) {
     val colors = Marquee.colors
-    val groups = rows.groupBy { it.group }
-    val open = remember { mutableStateMapOf<Group, Boolean>() }
+    // The core's quality sections, or today's groups for rows they do not cover.
+    val sections = VersionsCopy.sections(snapshot, rows)
+    val open = remember { mutableStateMapOf<String, Boolean>() }
     val scope = rememberCoroutineScope()
     // Focus by key once its node is composed (an item a toggle just inserted is not yet attached).
     val focusSoon = { key: String -> scope.launch { focus.focusWhenReady(key, focus.interactions, waitMs = 1_000) } }
@@ -479,7 +510,7 @@ private fun Sources(
      * would land on Play).
      */
     fun toHeading(
-        group: Group,
+        group: String,
         row: VersionRow,
         at: Int,
     ) = Modifier
@@ -534,9 +565,9 @@ private fun Sources(
                 }
                 items(SKELETON_ROWS, key = { "skeleton:$it" }) { RowSkeleton(Modifier.testTag("row-skeleton-$it")) }
             }
-            for (group in Group.entries) {
-                val rows = groups[group].orEmpty()
-                if (rows.isEmpty()) continue
+            for (section in sections) {
+                val group = section.id
+                val rows = section.rows
                 val all = open[group] == true
                 // An open section's heading is a stop holding Show fewer: Left from any of its rows, or Up from
                 // the first, reaches it, so a long section folds in two presses (plans/versions-android-spec.md 2).
@@ -545,10 +576,10 @@ private fun Sources(
                     // Back on the section's Show all once it has folded.
                     if (all) focusSoon(foldKey(group))
                 }
-                item(key = "group:$group") {
+                item(key = group) {
                     Heading {
                         CapsLabel(
-                            VersionsCopy.group(group, snapshot?.recommended != null),
+                            section.title,
                             Modifier.weight(1f),
                             colors.text,
                         )

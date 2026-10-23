@@ -7,7 +7,9 @@ import app.marquee.core.model.EmptyVersions
 import app.marquee.core.model.Group
 import app.marquee.core.model.HiddenSummary
 import app.marquee.core.model.Reason
+import app.marquee.core.model.SectionQuality
 import app.marquee.core.model.VersionRow
+import app.marquee.core.model.VersionSection
 import app.marquee.core.model.VersionStatus
 import app.marquee.core.model.VersionsSnapshot
 import java.io.File
@@ -274,5 +276,60 @@ class VersionsCopyTest {
         for (path in pages) {
             assertFalse(names.containsMatchIn(File(path).readText()), "$path names an addon")
         }
+    }
+
+    @Test
+    fun `the list follows the core's quality sections, and rows they do not cover keep the groups`() {
+        val a = row().copy(key = "a", quality = "4K")
+        val b = row().copy(key = "b", quality = "1080p")
+        val c = row().copy(key = "c", quality = "720p")
+        val shown =
+            snapshot(done = true).copy(
+                rows = listOf(a, b, c),
+                sections =
+                    listOf(
+                        VersionSection(SectionQuality.Fhd, listOf("b")),
+                        VersionSection(SectionQuality.Uhd, listOf("a")),
+                        VersionSection(SectionQuality.Hd, listOf("c", "gone")),
+                        VersionSection(SectionQuality.Unknown, listOf("a")),
+                        VersionSection(SectionQuality.Unknown, listOf("b")),
+                    ),
+            )
+        val sections = VersionsCopy.sections(shown, shown.rows)
+        // The core's order and titles; a key not in the rows is left out; two newer sections never share a key.
+        assertEquals(
+            listOf(
+                "1080p" to listOf("b"),
+                "4K" to listOf("a"),
+                "720p and below" to listOf("c"),
+                "Other" to listOf("a"),
+                "Other" to listOf("b"),
+            ),
+            sections.map { it.title to it.rows.map(VersionRow::key) },
+        )
+        assertEquals(sections.size, sections.map { it.id }.toSet().size)
+        // An older core sends no sections: the groups as before.
+        val older = VersionsCopy.sections(shown.copy(sections = emptyList()), shown.rows)
+        assertEquals(listOf("Best quality"), older.map { it.title })
+    }
+
+    @Test
+    fun `the shortcuts come in the core's order, never the card's own version`() {
+        val best = row().copy(key = "best")
+        val small = row().copy(key = "small")
+        val sharp = row().copy(key = "sharp")
+        val shown = snapshot(recommended = best, done = true).copy(smaller = small, sharper = sharp)
+        assertEquals(
+            listOf("Smaller file" to "small", "Sharper" to "sharp"),
+            VersionsCopy.shortcuts(shown).map { it.first to it.second.key },
+        )
+        assertEquals(
+            listOf("Sharper" to "sharp"),
+            VersionsCopy.shortcuts(shown.copy(smaller = best)).map {
+                it.first to
+                    it.second.key
+            },
+        )
+        assertEquals(emptyList(), VersionsCopy.shortcuts(null))
     }
 }

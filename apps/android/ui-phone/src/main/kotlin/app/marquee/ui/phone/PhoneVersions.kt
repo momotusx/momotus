@@ -49,7 +49,6 @@ import app.marquee.core.VersionsCopy.EmptyStep
 import app.marquee.core.model.EmptyAction
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.EmptyVersions
-import app.marquee.core.model.Group
 import app.marquee.core.model.LearnedNote
 import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionsSnapshot
@@ -138,8 +137,9 @@ fun PhoneVersions(
         }
     }
     // The rows found when none plays are simply listed, dimmed, as they would rank once the reason is fixed.
-    val groups = (empty?.rows ?: snapshot?.rows.orEmpty()).groupBy { it.group }
-    val open = remember { mutableStateMapOf<Group, Boolean>() }
+    // The core's quality sections, or today's groups for rows they do not cover.
+    val sections = VersionsCopy.sections(snapshot, empty?.rows ?: snapshot?.rows.orEmpty())
+    val open = remember { mutableStateMapOf<String, Boolean>() }
     LazyColumn(
         state = listState,
         modifier = modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars),
@@ -166,11 +166,23 @@ fun PhoneVersions(
                 if (empty != null) Empty(empty, step)
             }
         }
-        for (group in Group.entries) {
-            val rows = groups[group].orEmpty()
-            if (rows.isEmpty()) continue
+        // The shortcuts under the card, each one tap to play; keyed apart from the section rows they may repeat.
+        for ((label, row) in VersionsCopy.shortcuts(snapshot)) {
+            val key = if (label == StreamChoiceCopy.SMALLER) "short:smaller" else "short:sharper"
+            item(key = key) {
+                SecondaryButton(
+                    VersionsCopy.shortcutLabel(label, row),
+                    { onPlay(row.key) },
+                    Modifier.fillMaxWidth(),
+                    icon = if (label == StreamChoiceCopy.SMALLER) Icons.Gauge else Icons.Gem,
+                )
+            }
+        }
+        for (section in sections) {
+            val group = section.id
+            val rows = section.rows
             val all = open[group] == true
-            item(key = "group:$group") {
+            item(key = group) {
                 // A plain heading, no outline (design/DECISION.md, Lines).
                 Row(
                     Modifier
@@ -181,7 +193,7 @@ fun PhoneVersions(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     CapsLabel(
-                        VersionsCopy.group(group, snapshot?.recommended != null),
+                        section.title,
                         Modifier.weight(1f),
                         colors.text,
                     )

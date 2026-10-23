@@ -47,10 +47,12 @@ import app.marquee.core.model.Playability
 import app.marquee.core.model.QualityPref
 import app.marquee.core.model.RankKey
 import app.marquee.core.model.ReasonLine
+import app.marquee.core.model.SectionQuality
 import app.marquee.core.model.SourceClass
 import app.marquee.core.model.Speed
 import app.marquee.core.model.StreamPrefs
 import app.marquee.core.model.VersionRow
+import app.marquee.core.model.VersionSection
 import app.marquee.core.model.VersionStatus
 import app.marquee.core.model.VersionsConditions
 import app.marquee.core.model.VersionsSnapshot
@@ -541,5 +543,58 @@ class TvVersionsTest {
         assertEquals(frame.top, first.top, "the first row lands where its frame was")
         assertEquals(frame.height, first.height, "a frame row is a row's height")
         compose.onAllNodesWithTag("row-skeleton-0", useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun `a shortcut under the card plays in one press, and its version still sits in its section`() {
+        val best = row("best", ReasonLine.Ready("TorBox", gib)).copy(quality = "4K")
+        val small = row("s", ReasonLine.Quick(1204, gib))
+        val other = row("o", ReasonLine.Few(31)).copy(quality = "720p", sizeBytes = 3 * gib)
+        show(
+            snapshot(best, listOf(small, other)).copy(
+                smaller = small,
+                sections =
+                    listOf(
+                        VersionSection(SectionQuality.Fhd, listOf("s")),
+                        VersionSection(SectionQuality.Hd, listOf("o")),
+                    ),
+            ),
+        )
+        // The core's sections, in its order.
+        compose.onNodeWithText("1080P", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("720P AND BELOW", useUnmergedTree = true).assertExists()
+        // Down from Play reaches the shortcut; the same version is a 1080p row too.
+        compose.waitUntil(5_000) {
+            compose.onAllNodes(isFocused() and hasText("Play this version")).fetchSemanticsNodes().isNotEmpty()
+        }
+        press(Key.DirectionDown)
+        compose.onNodeWithText("Smaller file: 1080p, 2 GB").assertIsFocused()
+        compose.onNodeWithContentDescription("1080p, HDR10, 2 GB").assertExists()
+        press(Key.DirectionCenter)
+        assertEquals(listOf("s"), played)
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `shot - the card with its shortcuts and the core's sections`() {
+        assumeTrue("MARQUEE_SHOTS is not set", out != null)
+        val best = row("best", ReasonLine.Ready("TorBox", gib)).copy(quality = "4K")
+        val small = row("s", ReasonLine.Quick(1204, gib))
+        val sharp = row("h", ReasonLine.Few(31)).copy(quality = "4K", sizeBytes = 9 * gib)
+        val other = row("o", ReasonLine.Few(31)).copy(quality = "720p", sizeBytes = 3 * gib)
+        show(
+            snapshot(best, listOf(sharp, small, other)).copy(
+                smaller = small,
+                sharper = sharp,
+                sections =
+                    listOf(
+                        VersionSection(SectionQuality.Uhd, listOf("h")),
+                        VersionSection(SectionQuality.Fhd, listOf("s")),
+                        VersionSection(SectionQuality.Hd, listOf("o")),
+                    ),
+            ),
+        )
+        compose.mainClock.advanceTimeBy(2_000)
+        save("tv-versions-shortcuts")
     }
 }

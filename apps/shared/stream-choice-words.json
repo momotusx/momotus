@@ -123,7 +123,10 @@
     "stillLooking": "Still looking for more versions",
     "showAll": "Show all {n}",
     "showFewer": "Show fewer",
-    "back": "Back"
+    "back": "Back",
+    "smaller": "Smaller file",
+    "sharper": "Sharper",
+    "sections": { "uhd": "4K", "fhd": "1080p", "hd": "720p and below", "other": "Other" }
   },
   "player": {
     "finding": "Finding the best version",

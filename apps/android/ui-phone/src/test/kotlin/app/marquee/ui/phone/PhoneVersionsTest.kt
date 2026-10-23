@@ -291,4 +291,12 @@ class PhoneVersionsTest {
         compose.onAllNodesWithText(StreamChoiceCopy.NOBODY_SHARING).assertCountEquals(0)
         compose.onAllNodesWithText(StreamChoiceCopy.NOBODY_SHARING_DETAILS).assertCountEquals(0)
     }
+
+    @Test
+    fun `a shortcut under the card plays in one tap`() {
+        val small = row("s", ReasonLine.Quick(1204, gib))
+        show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), listOf(small)).copy(sharper = small))
+        compose.onNodeWithText("Sharper: 1080p, 2 GB").performClick()
+        assertEquals(listOf("s"), played)
+    }
 }
