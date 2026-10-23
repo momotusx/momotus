@@ -123,10 +123,10 @@ struct DiscoverRequest: Equatable, Sendable {
         return ["type": "select", "kind": kind, "genre": genre]
     }
 
-    /// Sends the pending request once Discover has a snapshot, then clears it, so a later snapshot
-    /// sends nothing.
-    static func follow(_ pending: inout DiscoverRequest?, snapshot: DiscoverSnapshot?, send: ([String: any Sendable]) -> Void) {
-        guard let request = pending, let snapshot else { return }
+    /// Sends the pending request once Discover has a snapshot with its kinds and the view can take a
+    /// command (`canSend`: its subscription is open), then clears it, so a later snapshot sends nothing.
+    static func follow(_ pending: inout DiscoverRequest?, snapshot: DiscoverSnapshot?, canSend: Bool = true, send: ([String: any Sendable]) -> Void) {
+        guard canSend, let request = pending, let snapshot, !snapshot.kinds.isEmpty else { return }
         pending = nil
         if let command = request.selectCommand(kinds: snapshot.kinds) { send(command) }
     }

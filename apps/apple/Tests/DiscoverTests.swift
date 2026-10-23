@@ -194,3 +194,23 @@ private func snapshot(
         #expect(try body(of: name, in: parts).contains(".frame(minWidth: 0, idealWidth: 0, maxWidth: .infinity, alignment: .topLeading)"), "\(name)")
     }
 }
+
+@Test func theGridTakesItsKeysWithoutFullKeyboardAccess() throws {
+    // A Button takes no keyboard focus with Full Keyboard Access off, so keys on the buttons alone were
+    // dead (review-apple-player P2): the grid is focusable itself, a click gives it the keys, and the
+    // arrows move the selection.
+    let grid = try body(of: "struct DiscoverGrid: View", in: source("Discover/DiscoverParts.swift"))
+    for part in [".focusable(interactions: .edit)", ".focusEffectDisabled()", ".focused($gridFocused)",
+                 ".onKeyPress(.leftArrow) { move(.left", ".onKeyPress(.downArrow) { move(.down", ".onKeyPress(.return)"] {
+        #expect(grid.contains(part), "the grid lost \(part)")
+    }
+    #expect(try body(of: "private func activate(_ key: String, _ tile: Tile)", in: grid).contains("gridFocused = true"))
+    #expect(!grid.contains("onMoveCommand"))
+}
+
+@Test func theGridWaitsForItsFirstWidth() throws {
+    // Before the page has measured, fixed columns would draw at a guess and overflow a narrow iPad window
+    // (Slide Over at 320; review-apple-player P3 5).
+    let screen = try source("Discover/DiscoverScreen.swift")
+    #expect(screen.contains("if width > 0 {\n                        DiscoverGrid("))
+}

@@ -32,3 +32,22 @@ private let content = 375 - 2 * Metrics.compact.gutter
     let needed = ["Movies", "Series", "Channels", "Live TV"].map { width($0) + 28 }.reduce(6, +)
     #expect(needed <= content, "the segments need \(needed)")
 }
+
+@Test func calendarSettingsAndThePlayersActionsFitAt375() throws {
+    let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
+    func read(_ path: String) throws -> String { try String(contentsOf: app.appending(path: path), encoding: .utf8) }
+    // Calendar: a flexible column inside the gutter, no fixed width wider than the phone's content.
+    let calendar = try read("Library/CalendarScreen.swift")
+    #expect(calendar.contains(".frame(maxWidth: 880, alignment: .leading)") && calendar.contains(".padding(.horizontal, metrics.gutter)"))
+    let fixed = calendar.matches(of: /\.frame\(width: (\d+)/).compactMap { Double($0.1) }
+    #expect(fixed.allSatisfy { $0 <= content }, "Calendar fixes \(fixed)")
+    // A Settings row: its padding, the 28 pt glyph, the gaps and the chevron leave the words 200 pt or more,
+    // and the words wrap (no line limit).
+    #expect(2 * Theme.Space.s + 28 + Theme.Space.s + Theme.Space.s + 20 + 200 <= content)
+    let row = try body(of: "struct SettingsRow: View", in: read("Settings/SettingsScreen.swift"))
+    #expect(!row.contains("lineLimit"))
+    // The player's actions on a narrow window (PlayerControls.swift:76, not the iPhone's own layout) scroll
+    // sideways rather than overflow.
+    let controls = try read("Player/PlayerControls.swift")
+    #expect(controls.contains("} else {\n                scrolling(actionRow(values: true))\n            }"))
+}

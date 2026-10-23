@@ -172,6 +172,10 @@ struct DiscoverGrid: View {
     @Environment(\.openTitle) private var openTitle
     @FocusState private var focused: String?
     @AccessibilityFocusState private var voiceOver: String?
+    #if os(macOS)
+    /// The grid holds the keys (arrows, Return), with or without Full Keyboard Access.
+    @FocusState private var gridFocused: Bool
+    #endif
 
     var body: some View {
         let keyed = tiles.keyed
@@ -202,7 +206,15 @@ struct DiscoverGrid: View {
         .onChange(of: focused) { _, key in if selects, let key { selection.select(key) } }
         .onChange(of: voiceOver) { _, key in if selects, let key { selection.select(key) } }
         #if os(macOS)
-        .onMoveCommand { direction in move(direction, keys: keyed.map(\.key)) }
+        // The grid itself takes the keys, so the arrows and Return work without Full Keyboard Access (a
+        // Button takes no keyboard focus then); a click in it gives it the keys, as the timing stepper does.
+        .focusable(interactions: .edit)
+        .focusEffectDisabled()
+        .focused($gridFocused)
+        .onKeyPress(.leftArrow) { move(.left, keys: keyed.map(\.key)) }
+        .onKeyPress(.rightArrow) { move(.right, keys: keyed.map(\.key)) }
+        .onKeyPress(.upArrow) { move(.up, keys: keyed.map(\.key)) }
+        .onKeyPress(.downArrow) { move(.down, keys: keyed.map(\.key)) }
         #endif
         .onKeyPress(.return) {
             guard selects, let key = selection.key, let tile = keyed.first(where: { $0.key == key })?.tile else { return .ignored }
@@ -213,23 +225,19 @@ struct DiscoverGrid: View {
 
     /// Every click, Return and Space goes through the selection: only the selected poster opens.
     private func activate(_ key: String, _ tile: Tile) {
+        #if os(macOS)
+        gridFocused = true
+        #endif
         if !selects || selection.activate(key) { openTitle(TitleRoute(tile)) }
     }
 
     #if os(macOS)
-    private func move(_ direction: MoveCommandDirection, keys: [String]) {
-        guard selects, let index = selection.key.flatMap(keys.firstIndex(of:)) else { return }
-        let step: DiscoverSelection.Move
-        switch direction {
-        case .left: step = .left
-        case .right: step = .right
-        case .up: step = .up
-        case .down: step = .down
-        @unknown default: return
-        }
+    private func move(_ step: DiscoverSelection.Move, keys: [String]) -> KeyPress.Result {
+        guard selects, let index = selection.key.flatMap(keys.firstIndex(of:)) else { return .ignored }
         let to = keys[DiscoverSelection.moved(from: index, step, columns: columns, count: keys.count)]
         selection.select(to)
         if focused != nil { focused = to }
+        return .handled
     }
     #endif
 }

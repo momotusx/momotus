@@ -39,6 +39,12 @@ private func fields(_ command: [String: any Sendable]?) -> [String: String]? {
     // No snapshot yet: the request waits.
     DiscoverRequest.follow(&pending, snapshot: nil, send: send)
     #expect(sent.isEmpty && pending != nil)
+    // A first snapshot with no kinds yet: still waiting (review-apple-player P3 3).
+    DiscoverRequest.follow(&pending, snapshot: try snapshot(kind: nil, catalog: nil, genres: [], kinds: []), send: send)
+    // The view has no subscription yet: still waiting (a command would be dropped).
+    DiscoverRequest.follow(&pending, snapshot: try snapshot(kind: "movie", catalog: "cinemeta|movie|top", genres: []), canSend: false, send: send)
+    #expect(sent.isEmpty && pending != nil)
+    #expect(sent.isEmpty && pending != nil)
     let first = try snapshot(kind: "movie", catalog: "cinemeta|movie|top", genres: [])
     DiscoverRequest.follow(&pending, snapshot: first, send: send)
     #expect(sent == [["type": "select", "kind": "series", "genre": "Thriller"]])

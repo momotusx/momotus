@@ -32,9 +32,9 @@ struct DiscoverScreen: View {
             .task(id: discover.taskId) { discover.start() }
             .task(id: addons.taskId) { addons.start() }
             .onChange(of: addons.snapshot?.fresh == true, initial: true) { _, fresh in if fresh { onboarding = true } }
-            // A title page's genre chip (DiscoverRequest): sent once, when there is a snapshot.
+            // A title page's genre chip (DiscoverRequest): sent once, when Discover has its kinds and its subscription.
             .onChange(of: links?.discover, initial: true) { follow() }
-            .onChange(of: discover.snapshot != nil) { follow() }
+            .onChange(of: discover.snapshot?.kinds.isEmpty == false && discover.sub != nil) { follow() }
             // A new kind, catalog or genre selects its first poster; more of the same keeps the selection.
             .onChange(of: discover.snapshot, initial: true) { _, s in
                 guard let s else { return }
@@ -65,9 +65,12 @@ struct DiscoverScreen: View {
         if metrics.wide {
             HStack(alignment: .top, spacing: Theme.Preview.gap) {
                 scroll { DiscoverFilters(snapshot: $0, select: select) } grid: { s in
-                    DiscoverGrid(
-                        tiles: s.items, columns: DiscoverLayout.columns(width: width), selects: preview != nil,
-                        selection: $selection, onEnd: { loadMore(s) })
+                    // Not before the first width: the fixed columns would draw at a guess (a narrow iPad window).
+                    if width > 0 {
+                        DiscoverGrid(
+                            tiles: s.items, columns: DiscoverLayout.columns(width: width), selects: preview != nil,
+                            selection: $selection, onEnd: { loadMore(s) })
+                    }
                 }
                 if let preview {
                     DiscoverPreview(tile: preview, details: discover.snapshot?.preview, open: { openTitle(TitleRoute(preview)) }) { value in
@@ -204,7 +207,7 @@ struct DiscoverScreen: View {
 
     private func follow() {
         guard let links else { return }
-        DiscoverRequest.follow(&links.discover, snapshot: discover.snapshot) { discover.command($0) }
+        DiscoverRequest.follow(&links.discover, snapshot: discover.snapshot, canSend: discover.sub != nil) { discover.command($0) }
     }
 
     private func select(_ fields: [String: any Sendable]) {

@@ -398,7 +398,7 @@ struct TitleScreen: View {
             links?.discover = DiscoverRequest(kind: details?.kind ?? "movie", genre: genre)
             openTab(.discover, link: true)
         case .director(let name):
-            searchInput?.text = name
+            searchInput?.link(name)
             openTab(.search, link: true)
         }
     }
