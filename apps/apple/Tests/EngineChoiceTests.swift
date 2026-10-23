@@ -4,11 +4,12 @@ import Testing
 // plans/apple-second-engine.md 2.2 and 2.5: one switch per platform for the caps, the routing and the fallback;
 // the routing by what the core says about the opened file; the caps in the core's own names.
 
-@Test func theSecondEngineIsOffEverywhereUntilItsPhaseTurnsItOn() {
-    // Phase B turns the Mac on in its last commit, phase C the iPhone; tvOS stays off in v1.
-    for platform in EngineChoice.Platform.allCases {
-        #expect(!EngineChoice.enabled(on: platform), "\(platform)")
-    }
+@Test func theSecondEngineIsOnWhereItsPhaseTurnedItOn() {
+    // Phase B turned the Mac on in its last commit (the owner, 2026-10-23); phase C turns the iPhone on; tvOS stays
+    // off in v1.
+    #expect(EngineChoice.enabled(on: .mac))
+    #expect(!EngineChoice.enabled(on: .phone))
+    #expect(!EngineChoice.enabled(on: .tv))
 }
 
 @Test func whereTheSwitchIsOffEverythingStaysOnAVPlayer() {

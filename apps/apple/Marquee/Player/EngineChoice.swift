@@ -14,11 +14,12 @@ enum EngineChoice {
         case mac, phone, tv
     }
 
-    /// The switch per platform: the Mac at the end of phase B, the iPhone at the end of phase C after its walk and
-    /// resource gate, tvOS off in v1 (unwalked; the owner, 2026-10-21).
+    /// The switch per platform: the Mac on since the end of phase B (walked, bench AS18 to AS38; the owner,
+    /// 2026-10-23), the iPhone at the end of phase C after its walk and resource gate, tvOS off in v1 (unwalked; the
+    /// owner, 2026-10-21).
     static func enabled(on platform: Platform) -> Bool {
         switch platform {
-        case .mac: false
+        case .mac: true
         case .phone: false
         case .tv: false
         }
