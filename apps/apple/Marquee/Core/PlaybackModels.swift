@@ -800,7 +800,7 @@ enum TrackPicker {
                 ?? out.firstIndex(where: { SubtitleMenu.base($0.language) == SubtitleMenu.base(tag) }) {
                 out[i].file.append(f)
             } else {
-                out.append(Language(language: tag, name: englishName(tag), own: nil, codes: Array(Set([tag.lowercased(), raw.lowercased()])).sorted(), file: [f], tracks: []))
+                out.append(Language(language: tag, name: englishName(tag), own: ownName(tag), codes: Array(Set([tag.lowercased(), raw.lowercased()])).sorted(), file: [f], tracks: []))
             }
         }
         if !unknown.isEmpty {
@@ -824,6 +824,14 @@ enum TrackPicker {
 
     static func englishName(_ tag: String) -> String {
         Locale(identifier: "en").localizedString(forIdentifier: tag) ?? tag.uppercased()
+    }
+
+    /// A file's language in its own words, capitalized as a name ("Deutsch", "Français"); nil when it reads as
+    /// the English name or the system has no name for it.
+    static func ownName(_ tag: String) -> String? {
+        let locale = Locale(identifier: tag)
+        guard let own = locale.localizedString(forIdentifier: tag), own != englishName(tag) else { return nil }
+        return own.prefix(1).uppercased(with: locale) + own.dropFirst()
     }
 
     /// Lower case with the accents gone, so "turkce" finds "Türkçe".
@@ -889,6 +897,13 @@ enum TrackPicker {
 
     /// Audio: the file's default track reads Default, once there is more than one to choose from.
     static func marksDefault(index: Int, defaultIndex: Int?, count: Int) -> Bool { count > 1 && index == defaultIndex }
+
+    /// An audio track's own-language name beside its English one ("German" with "Deutsch"); nil for a track that
+    /// names no language, or when the two read the same.
+    static func audioOwnName(_ t: FileTrack) -> String? {
+        guard let raw = tag(t.language) else { return nil }
+        return ownName(fileTag(raw)).flatMap { $0 == t.name ? nil : $0 }
+    }
 
     /// Audio: a search only past five tracks.
     static func audioSearch(_ count: Int) -> Bool { count > 5 }

@@ -224,20 +224,30 @@ struct TrackPickerPanel: View {
         }
     }
 
-    /// One audio track: its flag, its name, Default for the file's own default, the check.
+    /// One audio track: its flag, its name, its own name in quiet text as a subtitle language has, Default for
+    /// the file's own default, the check.
     private func audioRow(_ t: TrackPicker.FileTrack) -> some View {
         let on = model.audioTrack == t.index
         // With one track there is nothing to tell apart.
         let isDefault = TrackPicker.marksDefault(index: t.index, defaultIndex: model.audioDefault, count: audio.count)
+        let own = TrackPicker.audioOwnName(t)
         return PickerRow(focused: lit(.audio(t.index)), selected: on) {
             FlagMark(tag: t.language.map(TrackPicker.fileTag) ?? "")
-            Text(t.name).textFont(Theme.type.body, relativeTo: .body).lineLimit(1)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    Text(t.name).textFont(Theme.type.body, relativeTo: .body).lineLimit(1).fixedSize()
+                    if let own {
+                        Text(own).textFont(Theme.type.callout, relativeTo: .callout).foregroundStyle(Theme.Palette.muted).lineLimit(1).fixedSize()
+                    }
+                }
+                Text(t.name).textFont(Theme.type.body, relativeTo: .body).lineLimit(1)
+            }
             if isDefault { AutoMark(text: "Default") }
             Spacer(minLength: 8)
         } action: { run(.audio(t.index)) }
         .focused($focus, equals: .audio(t.index))
         .id(Row.audio(t.index))
-        .accessibilityLabel([t.name, isDefault ? "Default" : nil, on ? "selected" : nil].compactMap { $0 }.joined(separator: ", "))
+        .accessibilityLabel([t.name, own, isDefault ? "Default" : nil, on ? "selected" : nil].compactMap { $0 }.joined(separator: ", "))
     }
 
     /// A language's options: the file's own tracks first, then the core's by what tells them apart, then the

@@ -31,7 +31,7 @@ private let klingon = track(5, "tlh", "tlh", "Klingon")
     #expect(languages.map(\.language) == ["tr", "en", "pt-BR", "de", ""])
     #expect(languages.map(\.name) == ["Turkish", "English", "Portuguese (Brazil)", "German", "Unknown language"])
     // The own name only where it differs.
-    #expect(languages.map(\.own) == ["Türkçe", nil, "Português (Brasil)", nil, nil])
+    #expect(languages.map(\.own) == ["Türkçe", nil, "Português (Brasil)", "Deutsch", nil])
     // The file's tracks join by tag ("eng" is "en"), else by base language ("pt" joins "pt-BR"); "und" joins none.
     #expect(languages[1].file.map(\.index) == [0] && languages[2].file.map(\.index) == [1])
     #expect(languages[4].file.map(\.index) == [3])
@@ -264,4 +264,16 @@ private let klingon = track(5, "tlh", "tlh", "Klingon")
     let tracks = try body(of: "private func engineTracks(", in: model)
     #expect(tracks.contains("(audioTrackLanguages, audioDefault, textTrackLanguages) = AetherSession.pickerTags(audio: tracks.audio, text: text)"))
     #expect(tracks.contains("if let auto = subtitle, !choices.viewerChose, auto.url == playback?.autoSubtitle { startPick(auto) }"))
+}
+
+@Test func anAudioTrackAndAFileOnlyLanguageCarryTheirOwnName() {
+    // As a subtitle language shows "Français": the system's own-language name, capitalized.
+    #expect(TrackPicker.audioOwnName(TrackPicker.FileTrack(index: 1, name: "German", language: "ger")) == "Deutsch")
+    #expect(TrackPicker.audioOwnName(TrackPicker.FileTrack(index: 0, name: "French", language: "fre")) == "Français")
+    // English reads the same in its own words; a track with no language has none.
+    #expect(TrackPicker.audioOwnName(TrackPicker.FileTrack(index: 0, name: "English", language: "eng")) == nil)
+    #expect(TrackPicker.audioOwnName(TrackPicker.FileTrack(index: 2, name: "Track 3", language: "und")) == nil)
+    // A language only the file has gets its own name too.
+    let only = TrackPicker.languages([], file: [TrackPicker.FileTrack(index: 0, name: "German", language: "deu")])
+    #expect(only.map(\.own) == ["Deutsch"])
 }
