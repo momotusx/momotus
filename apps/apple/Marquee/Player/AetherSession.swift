@@ -82,7 +82,9 @@ final class AetherSession {
                     switch state {
                     case .ended: events.ended()
                     case .error(let message): events.failed(message)
-                    default: events.state(state == .playing && !buffering, state == .loading || buffering)
+                    default:
+                        let (playing, waiting) = Self.playState(state, buffering: buffering)
+                        events.state(playing, waiting)
                     }
                 }
             }
@@ -186,6 +188,13 @@ final class AetherSession {
         guard probe.videoWidth > 0, probe.videoHeight > 0 else { return false }
         guard let track = audio.first(where: { $0.id == active }) ?? audio.first else { return true }
         return track.sampleRate > 0 && track.channels > 0
+    }
+
+    /// Playing, and waiting for data, from the engine's state: `isBuffering` is its mid-play stall (its inner
+    /// player waiting to keep up), the one wait after the first frame that shows the spinner; `.loading` is the
+    /// open, under the loading screen.
+    static func playState(_ state: PlaybackState, buffering: Bool) -> (playing: Bool, waiting: Bool) {
+        (state == .playing && !buffering, state == .loading || buffering)
     }
 
     /// A text cue as the overlay draws it; a bitmap cue is not text.

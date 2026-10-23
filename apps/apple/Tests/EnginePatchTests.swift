@@ -148,3 +148,11 @@ extension AetherSession.Events {
     #expect(dense.prefix(4).map { ($0.startSeconds * 1000).rounded() } == [0, 1000, 8000, 12000])
 }
 
+/// The spinner after the first frame is the engine's real stall only: playing without a rebuffer is no wait, a
+/// rebuffer is, a pause is neither (the lead's PGS strip, 2026-10-23).
+@MainActor @Test func theEnginesWaitIsItsStallOnly() {
+    #expect(AetherSession.playState(.playing, buffering: false) == (true, false))
+    #expect(AetherSession.playState(.playing, buffering: true) == (false, true))
+    #expect(AetherSession.playState(.paused, buffering: false) == (false, false))
+    #expect(AetherSession.playState(.loading, buffering: false) == (false, true))
+}
