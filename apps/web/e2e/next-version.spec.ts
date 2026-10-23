@@ -505,8 +505,9 @@ test("a version changed from the player replaces that play in history: Back goes
   await expect(p).toHaveURL(/\/versions\//);
   // A real file that is a row (the other may be the recommendation by now).
   const rows = REAL.map((f) => p.locator(`[data-f="v:${keyOf(f)}"]`));
-  await expect.poll(async () => (await Promise.all(rows.map((r) => r.count()))).some((n) => n > 0), { timeout: 60_000 }).toBe(true);
   const playRow = async () => {
+    // On every Versions page: once a real file is listed (the list may still be filling).
+    await expect.poll(async () => (await Promise.all(rows.map((r) => r.count()))).some((n) => n > 0), { timeout: 60_000 }).toBe(true);
     const i = (await rows[0]?.count()) ? 0 : 1;
     await rows[i]?.dispatchEvent("click");
     await expect(p).toHaveURL(/\/play\//);
