@@ -172,7 +172,7 @@ pub(crate) static TABLE: LazyLock<Table> = LazyLock::new(|| {
         rule(F::BitDepth, r"\bhevc\s?10\b", Tf::Val(r"10bit")).ci().into(),
         rule(F::BitDepth, r"(?:8|10|12)[-\.]?", Tf::Val(r"$1bit")).ci().rm().la(r"bit\b").into(),
         rule(F::BitDepth, r"\bhdr10\b", Tf::Val(r"10bit")).ci().into(),
-        rule(F::BitDepth, r"\bhi10\b", Tf::Val(r"10bit")).ci().into(),
+        rule(F::BitDepth, r"\bhi10p?\b", Tf::Val(r"10bit")).ci().into(),
         Handler::Func(custom::bit_depth),
         rule(F::Hdr, r"\bDV\b|dolby.?vision|\bDoVi\b", Tf::Uniq(r"DV")).ci().rm().again().into(),
         rule(F::Hdr, r"HDR10(?:\+|[-\.\s]?plus)", Tf::Uniq(r"HDR10+")).ci().rm().again().into(),

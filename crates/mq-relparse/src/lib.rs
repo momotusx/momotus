@@ -117,6 +117,24 @@ mod tests {
         assert_eq!(r.container.as_deref(), Some("mkv"));
     }
 
+    /// Anime releases write 10-bit H.264 as "Hi10P" as often as "Hi10": both
+    /// are 10-bit, which a device without a Hi10P decoder (Apple) is not
+    /// offered (plans/apple-second-engine.md 2.1).
+    #[test]
+    fn hi10p_is_ten_bit() {
+        for name in [
+            "[Group] Spirited Away (2001) [BD 1080p Hi10P FLAC].mkv",
+            "Spirited.Away.2001.1080p.BluRay.Hi10.x264-GRP",
+            "Spirited.Away.2001.1080p.BluRay.10bit.x264-GRP",
+        ] {
+            assert_eq!(parse(name).bit_depth, Some(10), "{name}");
+        }
+        assert_eq!(
+            parse("Spirited.Away.2001.1080p.BluRay.x264-GRP").bit_depth,
+            None
+        );
+    }
+
     #[test]
     fn additions_beyond_ptt() {
         assert_eq!(
