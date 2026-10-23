@@ -773,7 +773,8 @@ enum TrackPicker {
     }
 
     /// The core's languages in its order (one per run of a language), each with the file's tracks of that
-    /// language (joined by tag, else by its base language); a language only the file has comes after them.
+    /// language (joined by tag, else by its base language); a language only the file has comes after them, and
+    /// the file's tracks that name none last, under "Unknown language" (as Android's picker).
     static func languages(_ tracks: [SubtitleTrack], file: [FileTrack]) -> [Language] {
         var out: [Language] = []
         for track in tracks {
@@ -788,8 +789,12 @@ enum TrackPicker {
                 out.append(Language(language: tag, name: name, own: own, codes: Array(Set([tag.lowercased(), track.lang.lowercased()])).sorted(), file: [], tracks: [track]))
             }
         }
+        var unknown: [FileTrack] = []
         for f in file {
-            guard let raw = f.language, !raw.isEmpty, !raw.hasPrefix("und") else { continue }
+            guard let raw = TrackPicker.tag(f.language) else {
+                unknown.append(f)
+                continue
+            }
             let tag = fileTag(raw)
             if let i = out.firstIndex(where: { $0.language.lowercased() == tag.lowercased() })
                 ?? out.firstIndex(where: { SubtitleMenu.base($0.language) == SubtitleMenu.base(tag) }) {
@@ -798,7 +803,16 @@ enum TrackPicker {
                 out.append(Language(language: tag, name: englishName(tag), own: nil, codes: Array(Set([tag.lowercased(), raw.lowercased()])).sorted(), file: [f], tracks: []))
             }
         }
+        if !unknown.isEmpty {
+            out.append(Language(language: "", name: "Unknown language", own: nil, codes: [], file: unknown, tracks: []))
+        }
         return out
+    }
+
+    /// A language tag as a file gives it ("en", "eng", "pt-BR"); nil for none or "und" (undetermined).
+    static func tag(_ language: String?) -> String? {
+        guard let language, !language.isEmpty, !language.hasPrefix("und") else { return nil }
+        return language
     }
 
     /// A file's code as a tag: "eng" is "en", "pt-BR" stays.
@@ -862,8 +876,10 @@ enum TrackPicker {
         return FlagSet.tags.contains(base) ? "flag-\(base)" : nil
     }
 
-    /// The neutral mark's letters: "EN".
-    static func letters(_ tag: String) -> String { String(SubtitleMenu.base(tag).prefix(2)).uppercased() }
+    /// The neutral mark's letters: "EN"; "?" for a track that names no language.
+    static func letters(_ tag: String) -> String {
+        tag.isEmpty ? "?" : String(SubtitleMenu.base(tag).prefix(2)).uppercased()
+    }
 
     /// A language's row read out: "English, Auto, 4 options, selected".
     static func spoken(_ l: Language, auto: Bool, selected: Bool) -> String {

@@ -1,3 +1,4 @@
+import AetherEngine
 import Foundation
 import Testing
 
@@ -26,13 +27,16 @@ private let klingon = track(5, "tlh", "tlh", "Klingon")
     ]
     let languages = TrackPicker.languages([turkish, english1, english2, brazil], file: file)
     // The core's order (it puts the profile's languages first), then a language only the file has.
-    #expect(languages.map(\.language) == ["tr", "en", "pt-BR", "de"])
-    #expect(languages.map(\.name) == ["Turkish", "English", "Portuguese (Brazil)", "German"])
+    // A track that names no language last, under "Unknown language", as on Android.
+    #expect(languages.map(\.language) == ["tr", "en", "pt-BR", "de", ""])
+    #expect(languages.map(\.name) == ["Turkish", "English", "Portuguese (Brazil)", "German", "Unknown language"])
     // The own name only where it differs.
-    #expect(languages.map(\.own) == ["Türkçe", nil, "Português (Brasil)", nil])
+    #expect(languages.map(\.own) == ["Türkçe", nil, "Português (Brasil)", nil, nil])
     // The file's tracks join by tag ("eng" is "en"), else by base language ("pt" joins "pt-BR"); "und" joins none.
     #expect(languages[1].file.map(\.index) == [0] && languages[2].file.map(\.index) == [1])
-    #expect(languages.map(\.count) == [1, 3, 2, 1])
+    #expect(languages[4].file.map(\.index) == [3])
+    #expect(languages.map(\.count) == [1, 3, 2, 1, 1])
+    #expect(TrackPicker.letters("") == "?" && TrackPicker.letters("tlh") == "TL")
 }
 
 @Test func theSearchFindsANameItsOwnNameOrACode() {
@@ -208,8 +212,9 @@ private let klingon = track(5, "tlh", "tlh", "Klingon")
     let picker = try String(contentsOf: app.appending(path: "Player/SubtitlePicker.swift"), encoding: .utf8)
     #expect(try body(of: "private func bare(", in: commands).contains("guard let player, !player.pickerOpen else { return nil }"))
     #expect(screen.contains("PlayerKeys(model: model, close: close, pickerOpen: model.pickerOpen)"))
-    #expect(try body(of: "private func playerKey(", in: screen).contains("guard !model.pickerOpen else { return .ignored }"))
-    #expect(screen.contains(".onKeyPress(.escape) { playerKey { close() } }"))
+    #expect(try body(of: "private func playerKey(", in: screen).contains("guard !showVersions, !model.pickerOpen else { return .ignored }"))
+    // Esc is the picker's while it is open; else it leaves Versions, then the player.
+    #expect(screen.contains(".onKeyPress(.escape) {\n            guard !model.pickerOpen else { return .ignored }\n            escape()"))
     #expect(controls.contains("model.pickerOpen = open != nil"))
     // The panel itself holds the focus (a plain button takes none without Full Keyboard Access), again after a level change.
     #expect(picker.contains(".focusable(interactions: .edit)\n            .focusEffectDisabled()\n            .focused($panelFocused)"))
@@ -228,4 +233,35 @@ private let klingon = track(5, "tlh", "tlh", "Klingon")
     #expect(try body(of: "private var skipShown: Bool", in: screen).contains("pickerOpen: model.pickerOpen"))
     // The button names no data source.
     #expect(!screen.contains("Skip data") && !screen.contains("segment.source"))
+}
+
+@Test func theEnginesFileTracksGiveThePickersTheirLanguagesAndDefault() {
+    let audio = [
+        TrackInfo(id: 1, name: "", codec: "eac3", language: "eng", isDefault: false),
+        TrackInfo(id: 2, name: "", codec: "ac3", language: "tur", isDefault: true),
+        TrackInfo(id: 3, name: "", codec: "aac", language: "und", isDefault: false),
+    ]
+    let text = [
+        TrackInfo(id: 4, name: "", codec: "subrip", language: "fre", isDefault: false),
+        TrackInfo(id: 5, name: "", codec: "hdmv_pgs_subtitle", language: nil, isDefault: false),
+    ]
+    let tags = AetherSession.pickerTags(audio: audio, text: text)
+    // FFmpeg's ISO 639-2 tags as the file gives them; "und" and none are nil.
+    #expect(tags.audio == ["eng", "tur", nil])
+    #expect(tags.audioDefault == 1)
+    #expect(tags.text == ["fre", nil])
+    // A "fre" track joins the core's French and wins its start pick.
+    let file = tags.text.enumerated().map { TrackPicker.FileTrack(index: $0.offset, name: "Subtitles \($0.offset + 1)", language: $0.element) }
+    #expect(TrackPicker.startFile(track(6, "fre", "fr", "French"), in: file) == 0)
+}
+
+@Test func onTheSecondEngineTheStartPickAndTheTagsJoinAsOnAVPlayer() throws {
+    let model = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player/PlayerModel.swift"), encoding: .utf8)
+    // Both engines' branches of selectText mark the core's start pick, not the viewer's.
+    let select = try body(of: "func selectText(_ index: Int, start: Bool = false)", in: model)
+    #expect(select.components(separatedBy: "if start { startFile = index } else { choices.choseInFile() }").count == 3)
+    // The engine's tracks fill the pickers' tags each time, and the start pick runs once the file's text arrives.
+    let tracks = try body(of: "private func engineTracks(", in: model)
+    #expect(tracks.contains("(audioTrackLanguages, audioDefault, textTrackLanguages) = AetherSession.pickerTags(audio: tracks.audio, text: text)"))
+    #expect(tracks.contains("if let auto = subtitle, !choices.viewerChose, auto.url == playback?.autoSubtitle { startPick(auto) }"))
 }

@@ -223,6 +223,12 @@ final class AetherSession {
         return ImageCue(start: cue.startTime, end: cue.endTime, image: image.cgImage, position: image.position)
     }
 
+    /// What the pickers read from the engine's tracks: each one's language tag as the file gives it ("eng"), nil
+    /// for none, and the file's default audio.
+    nonisolated static func pickerTags(audio: [TrackInfo], text: [TrackInfo]) -> (audio: [String?], audioDefault: Int?, text: [String?]) {
+        (audio.map { TrackPicker.tag($0.language) }, audio.firstIndex(where: \.isDefault), text.map { TrackPicker.tag($0.language) })
+    }
+
     func selectAudio(id: Int) { engine.selectAudioTrack(index: id) }
     func selectText(id: Int) { engine.selectSubtitleTrack(index: id) }
     func clearText() { engine.clearSubtitle() }

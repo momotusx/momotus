@@ -349,13 +349,7 @@ final class PlayerModel {
 
     /// An option's language tag, nil when it names none.
     private static func tag(_ option: AVMediaSelectionOption) -> String? {
-        tag(option.extendedLanguageTag ?? option.locale?.identifier)
-    }
-
-    /// A language tag as a file gives it ("en", "eng", "pt-BR"); nil for none or "und" (undetermined).
-    static func tag(_ language: String?) -> String? {
-        guard let language, !language.isEmpty, !language.hasPrefix("und") else { return nil }
-        return language
+        TrackPicker.tag(option.extendedLanguageTag ?? option.locale?.identifier)
     }
 
     /// The file's subtitle tracks as the picker groups them under their languages.
@@ -1099,6 +1093,7 @@ final class PlayerModel {
         textTracks = text.enumerated().map { index, track in
             Self.engineName(track, index: index, of: text.count, one: "Subtitles", many: "Subtitles")
         }
+        (audioTrackLanguages, audioDefault, textTrackLanguages) = AetherSession.pickerTags(audio: tracks.audio, text: text)
         // Bitmap tracks draw as images (`subtitleImages`) at the file's timing, as text tracks do.
         textTimeable = text.map { _ in true }
         textTrack = tracks.activeText.flatMap { engineTextIDs.firstIndex(of: $0) }
@@ -1108,11 +1103,15 @@ final class PlayerModel {
             selectAudio(index)
         }
         guard textArrived, !text.isEmpty else { return }
+        startFile = nil
         if subtitle == nil { subtitleDelay = PlayerLayout.startFileDelay(textTrack: textTrack, kept: outbox.kept) }
         if let index = carriedTracks?.text {
             carriedTracks?.text = nil
             selectText(index)
         }
+        // As on AVPlayer: the file's tracks came after the core's start pick, so its language's track inside the
+        // file takes over.
+        if let auto = subtitle, !choices.viewerChose, auto.url == playback?.autoSubtitle { startPick(auto) }
         #if DEBUG
         if let index = DebugHooks.textTrack { selectText(index) }
         #endif
