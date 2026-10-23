@@ -79,8 +79,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.marquee.core.Format
+import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.TraktCopy
 import app.marquee.core.model.Attempt
+import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.NextEpisode
 import app.marquee.core.model.OtherVersion
 import app.marquee.core.model.Segment
@@ -573,6 +575,8 @@ fun PlayerStatus(
     detail: String? = null,
     /** The core could not open the version: Choose a version comes first, Try again second. */
     cannotOpen: Boolean = false,
+    /** Why nothing played, as the core names it ([PlaybackController.empty]): the shared table's actions. */
+    empty: EmptyKind? = null,
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
@@ -632,17 +636,36 @@ fun PlayerStatus(
                 horizontalArrangement = Arrangement.spacedBy(Marquee.space.m),
                 modifier = Modifier.padding(top = Marquee.space.xs),
             ) {
-                // The core's next version comes first, then Try again (the same versions from the first pick:
-                // what failed may be the moment), then another version, then Back. The first one takes focus.
+                // The first one takes focus (plans/versions-android-spec.md, section 6; the shared table).
+                var backFirst = false
                 if (offer != null) {
+                    // A hand pick did not start: the core's next version, another version, Back.
                     PrimaryButton(
-                        "Play ${offer.label}",
+                        "Play ${offer.label} instead",
                         { onOffer(offer.key) },
                         icon = PlayFilled,
                         focusRequester = focus,
                     )
-                    onRetry?.let { SecondaryButton("Try again", it, icon = Icons.RefreshCw) }
-                    SecondaryButton("Choose a version", onVersions, icon = Icons.Layers)
+                    SecondaryButton(CHOOSE_ANOTHER, onVersions, icon = Icons.Layers)
+                } else if (empty == EmptyKind.NotStarted && onRetry != null) {
+                    // The start's 90 s ran out: Try again, another version, Back.
+                    PrimaryButton(
+                        StreamChoiceCopy.EMPTY_TRY_AGAIN,
+                        onRetry,
+                        icon = Icons.RefreshCw,
+                        focusRequester = focus,
+                    )
+                    SecondaryButton(CHOOSE_ANOTHER, onVersions, icon = Icons.Layers)
+                } else if (empty == EmptyKind.NoRoom) {
+                    // No room here: nothing but Back.
+                    backFirst = true
+                } else if (empty == EmptyKind.Unreachable && onRetry != null) {
+                    PrimaryButton(
+                        StreamChoiceCopy.EMPTY_TRY_AGAIN,
+                        onRetry,
+                        icon = Icons.RefreshCw,
+                        focusRequester = focus,
+                    )
                 } else if (onRetry != null && cannotOpen) {
                     // A version the core could not open is mostly one no longer listed, which Try again opens
                     // to the same answer: another version is the way on, and Try again (it helps after a
@@ -655,7 +678,11 @@ fun PlayerStatus(
                 } else {
                     PrimaryButton("Choose a version", onVersions, icon = Icons.Layers, focusRequester = focus)
                 }
-                SecondaryButton("Back", onBack)
+                if (backFirst) {
+                    PrimaryButton(StreamChoiceCopy.BACK, onBack, icon = Icons.ArrowLeft, focusRequester = focus)
+                } else {
+                    SecondaryButton(StreamChoiceCopy.BACK, onBack)
+                }
             }
         } else {
             if (status != null) {

@@ -443,6 +443,7 @@ fun TvPlayer(
                 tryingAgain = controller.tryingAgain,
                 detail = controller.openError,
                 cannotOpen = controller.openError != null,
+                empty = controller.empty,
             )
         }
 

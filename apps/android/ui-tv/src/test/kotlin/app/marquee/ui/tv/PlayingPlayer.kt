@@ -109,6 +109,13 @@ internal class PlayingPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
         return Futures.immediateVoidFuture()
     }
 
+    /** A failed play stops the player: nothing is prepared or ready after. */
+    override fun handleStop(): ListenableFuture<*> {
+        prepared = false
+        ready = false
+        return Futures.immediateVoidFuture()
+    }
+
     override fun handleSetVideoOutput(videoOutput: Any): ListenableFuture<*> = Futures.immediateVoidFuture()
 
     override fun handleClearVideoOutput(videoOutput: Any?): ListenableFuture<*> = Futures.immediateVoidFuture()

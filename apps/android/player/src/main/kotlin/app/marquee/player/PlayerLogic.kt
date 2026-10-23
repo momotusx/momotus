@@ -3,7 +3,9 @@ package app.marquee.player
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.util.Util
+import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.model.Attempt
+import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.Segment
 import app.marquee.core.model.SegmentKind
 import app.marquee.core.model.SubtitleTrack
@@ -155,8 +157,18 @@ class PictureWait {
  * The failure card's headline: when the core offers another version, only this one failed; otherwise every
  * source did. The same words on the web and Apple.
  */
-fun failedHeadline(offered: Boolean): String =
-    if (offered) "This version could not be played" else "None of the sources could be played"
+fun failedHeadline(
+    offered: Boolean,
+    empty: EmptyKind? = null,
+): String =
+    when {
+        // The core names why nothing played ("This didn't start" when its 90 s ran out): its words.
+        empty != null -> StreamChoiceCopy.emptyLine(empty)
+
+        offered -> "This version could not be played"
+
+        else -> "None of the sources could be played"
+    }
 
 /** The headline when the core could not open the version at all (no longer listed), as on Apple. */
 const val CANNOT_OPEN = "This version could not be opened"

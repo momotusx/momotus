@@ -24,6 +24,7 @@ import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlaybackException
 import app.marquee.core.client.CoreLog
 import app.marquee.core.model.Attempt
+import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.NextEpisode
 import app.marquee.core.model.OtherVersion
 import app.marquee.core.model.PlaybackPhase
@@ -98,6 +99,10 @@ class PlaybackController(
 
     /** A version picked by hand failed for a reason of its own: the failure card offers this one first. */
     var offer: OtherVersion? by mutableStateOf(null)
+        private set
+
+    /** Why nothing played, as the core names it once the play failed (notStarted when its 90 s ran out); null otherwise. */
+    var empty: EmptyKind? by mutableStateOf(null)
         private set
 
     /** The core's play failed: the failure card offers Try again ([retry]). */
@@ -407,6 +412,7 @@ class PlaybackController(
         nextAtMs = s.nextAtMs
         trakt = s.trakt
         offer = s.offer
+        empty = s.empty.takeIf { s.phase == PlaybackPhase.Failed }
         retryable = s.phase == PlaybackPhase.Failed
         // A Try again the core took since the last snapshot, even when the play then failed again at once
         // and the snapshot is otherwise the one before (code review 2026-10-20 r2 P3-6).
@@ -452,10 +458,8 @@ class PlaybackController(
                 } else if (retried) {
                     status = TRYING_AGAIN
                 } else if (handlingFailure) {
-                    val last = s.attempts.lastOrNull()
-                    status =
-                        last?.let { "Source failed (${it.via}: ${it.error}), trying the next one" }
-                            ?: "Trying the next source"
+                    // Never an addon's name while it waits (plans/versions-android-spec.md, section 6).
+                    status = "Trying the next source"
                 }
             }
 
@@ -464,7 +468,7 @@ class PlaybackController(
                 player.clearMediaItems()
                 loadedUrl = null
                 stage = Stage.Failed
-                problem = failedHeadline(offered = s.offer != null)
+                problem = failedHeadline(offered = s.offer != null, empty = s.empty)
                 status = null
                 if (retried) sayTriedAgain()
             }

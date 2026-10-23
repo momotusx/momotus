@@ -166,6 +166,9 @@ object StreamChoiceCopy {
             EmptyKind.NotStarted to ("This didn't start" to "Try again"),
         )
 
+    /** Try again, the unreachable and notStarted states' action. */
+    val EMPTY_TRY_AGAIN = EMPTY.getValue(EmptyKind.NotStarted).second!!
+
     /** What each dimmed row of an empty state says in place of its line: why it is dimmed, never how fast it starts. */
     val EMPTY_ROWS =
         mapOf(

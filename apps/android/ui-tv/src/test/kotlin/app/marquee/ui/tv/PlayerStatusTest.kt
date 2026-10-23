@@ -62,11 +62,11 @@ class PlayerStatusTest {
     }
 
     @Test
-    fun `a failed pick offers the next version first, focused, and Choose a version beside it`() {
+    fun `a failed pick offers the next version instead, focused, and Choose another version beside it`() {
         val events = show(OtherVersion("k3", "720p BluRay"))
-        compose.onNodeWithText("Play 720p BluRay").assertIsFocused()
-        compose.onNodeWithText("Play 720p BluRay").performClick()
-        compose.onNodeWithText("Choose a version").performClick()
+        compose.onNodeWithText("Play 720p BluRay instead").assertIsFocused()
+        compose.onNodeWithText("Play 720p BluRay instead").performClick()
+        compose.onNodeWithText("Choose another version").performClick()
         assertEquals(listOf("offer:k3", "versions"), events)
     }
 
@@ -80,7 +80,7 @@ class PlayerStatusTest {
 
     /** The buttons' texts from the left. */
     private fun order() =
-        listOf("Play 720p BluRay", "Try again", "Choose a version", "Back")
+        listOf("Play 720p BluRay instead", "Try again", "Choose another version", "Choose a version", "Back")
             .filter { compose.onAllNodesWithText(it).fetchSemanticsNodes().isNotEmpty() }
             .sortedBy {
                 compose
@@ -90,12 +90,11 @@ class PlayerStatusTest {
             }
 
     @Test
-    fun `a failed play offers Try again right after the offered version, and it sends retry`() {
-        val events = show(OtherVersion("k3", "720p BluRay"), retry = true)
-        assertEquals(listOf("Play 720p BluRay", "Try again", "Choose a version", "Back"), order())
-        compose.onNodeWithText("Play 720p BluRay").assertIsFocused()
-        compose.onNodeWithText("Try again").performClick()
-        assertEquals(listOf("retry"), events)
+    fun `a failed pick is the next version instead, another version, Back, with no Try again`() {
+        show(OtherVersion("k3", "720p BluRay"), retry = true)
+        // plans/versions-android-spec.md, section 6: a hand pick's card is [offer, choose, back].
+        assertEquals(listOf("Play 720p BluRay instead", "Choose another version", "Back"), order())
+        compose.onNodeWithText("Play 720p BluRay instead").assertIsFocused()
     }
 
     @Test
