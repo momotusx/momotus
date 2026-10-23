@@ -90,6 +90,12 @@ class MarqueeApp :
         DebugEntry.devFakes(this)
         // Open the core on a boot thread right away; the first frame does not wait for it.
         session = CoreSession(this).also { it.start() }
+        // An own build whose core has no engine tells the owner (CoreBuild), never the viewer in words.
+        session.scope.launch {
+            if (runCatching { session.ready.await() }.isSuccess) {
+                CoreBuild.check(BuildConfig.CORE_BUILD, session.hasEngine, debuggable)
+            }
+        }
         sync = SyncController(session, this).also { it.start() }
         profiles = ProfileGate(session, beforeSwitch = { trakt.quiet() }).also { it.start() }
         trakt =

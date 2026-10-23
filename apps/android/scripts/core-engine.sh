@@ -24,10 +24,15 @@ core_features() {
   fi
 }
 
-# Whether an unstripped core library carries the engine: its symbols name the mq-engine crate, mangled as
-# `9mq_engine`. A plain `mq_engine` is not enough: a store core has `15mq_engine_sched`, the scheduler.
+# Whether a core library carries the engine: mq-ffi exports MQ_ENGINE_TORRENT with the torrent feature only, and
+# a store core does not define it (one mark for Android and Apple). It survives stripping, as a dynamic symbol.
+# Before the export, the mangled crate name `9mq_engine` stood in (a plain `mq_engine` also matches a store core's
+# `15mq_engine_sched`, the scheduler). grep -c, not -q: under pipefail, -q closes the pipe early and llvm-nm's
+# SIGPIPE fails the pipeline. NM is llvm-nm (build-core.sh points it at the NDK's).
 core_has_engine() {
-  grep -aqF '9mq_engine' "$1"
+  local found
+  found=$("${NM:-llvm-nm}" -D --defined-only "$1" | grep -c ' MQ_ENGINE_TORRENT$') || true
+  [ "${found:-0}" -gt 0 ]
 }
 
 # Fails when the library for an ABI is not the core it should be: the engine in an own arm64-v8a build, none in

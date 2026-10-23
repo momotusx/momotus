@@ -938,6 +938,7 @@ private fun About() {
                 color = Marquee.colors.muted,
             )
             MqText(AddonsCopy.TURKCEALTYAZI_CREDIT, role = TextRole.Caption, color = Marquee.colors.muted)
+            if (CoreBuild.missing) MqText(CoreBuild.ABOUT_LINE, role = TextRole.Caption, color = Marquee.colors.muted)
         }
     }
 }

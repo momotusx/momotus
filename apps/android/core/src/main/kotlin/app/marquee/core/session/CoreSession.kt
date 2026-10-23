@@ -124,6 +124,11 @@ class CoreSession(
     /** Completes when the core first opens, or fails with why it could not. */
     val ready = CompletableDeferred<Unit>()
 
+    /** What the open core says it carries: the torrent engine (mq-ffi's `has_engine()`); true until it has opened. */
+    @Volatile
+    var hasEngine: Boolean = true
+        private set
+
     /**
      * Returns once the core has first opened, or throws why it could not: the start decision's wait. It waits
      * on [ready], never on a read of [health]. That read can start inside a composition's snapshot, which still
@@ -202,6 +207,9 @@ class CoreSession(
                         logFilter = if (debuggable) "debug" else null,
                     )
                 core = opened
+                hasEngine =
+                    app.marquee.core.ffi
+                        .hasEngine()
                 val native = (System.nanoTime() - started) / 1_000_000
                 // Pushes from a revived `debrid` view wait for this core's restore.
                 debridAccounts.pause()
