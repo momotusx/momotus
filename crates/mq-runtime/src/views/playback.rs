@@ -2179,7 +2179,12 @@ fn save_progress(
             item_id: target.item_id.clone(),
             kind: target.kind.clone(),
             name: name.clone(),
-            poster: target.poster.clone(),
+            // Never RPDB's cover: it carries the user's key into the library
+            // (and sync), and the band is drawn again from the key in use.
+            poster: target
+                .poster
+                .clone()
+                .filter(|p| !p.starts_with(crate::covers::RPDB)),
             poster_shape: None,
             added_ms: mq_library::hlc::now_ms() as i64,
         };
@@ -5156,6 +5161,44 @@ pub(crate) fn kept_stream(core: &Core, item_id: &str, key: &str) -> Option<Parse
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A play record keeps the addon's poster for Continue Watching, never
+    /// RPDB's cover the app sent back: that link carries the user's key
+    /// (review 2026-10-23, P2), and the band is drawn again from the key in use.
+    #[test]
+    fn a_play_record_never_keeps_rpdbs_cover() {
+        let core = Core::temporary("default").unwrap();
+        for (id, poster, kept) in [
+            (
+                "tt0111161",
+                "https://api.ratingposterdb.com/t1-paid/imdb/poster-default/tt0111161.jpg?fallback=true",
+                None,
+            ),
+            (
+                "tt0068646",
+                "https://img.example/godfather.jpg",
+                Some("https://img.example/godfather.jpg"),
+            ),
+        ] {
+            let target = PlayTarget {
+                kind: "movie".into(),
+                item_id: id.into(),
+                video_id: id.into(),
+                name: Some(id.into()),
+                poster: Some(poster.into()),
+                ..PlayTarget::default()
+            };
+            save_progress(&core, &target, 60_000, 6_000_000, true, None).unwrap();
+            let row = core
+                .library()
+                .continue_watching("default", 10)
+                .unwrap()
+                .into_iter()
+                .find(|i| i.item_id == id)
+                .expect("the play is in Continue Watching");
+            assert_eq!(row.poster.as_deref(), kept, "{id}");
+        }
+    }
 
     /// Core backlog C35: the playing file's probe marks it described when
     /// one of its audio tracks is (Matroska's FlagVisualImpaired here), and

@@ -59,10 +59,23 @@ impl Core {
     /// `poster-default` only; images may be cached for personal use, so the
     /// apps' image caches must keep them.
     pub(crate) fn covers<'a>(&self, ids: impl IntoIterator<Item = &'a str>) -> Covers {
-        let key = self
-            .installed_addons()
+        self.covers_with(self.rpdb_key(), ids)
+    }
+
+    /// The RPDB key `covers` draws with, for a caller that reads it once for
+    /// many batches (each reads every installed addon's manifest).
+    pub(crate) fn rpdb_key(&self) -> Option<String> {
+        self.installed_addons()
             .ok()
-            .and_then(|addons| addons.iter().find_map(|a| rpdb_key_in(&a.transport_url)));
+            .and_then(|addons| addons.iter().find_map(|a| rpdb_key_in(&a.transport_url)))
+    }
+
+    /// `covers` with a key read before.
+    pub(crate) fn covers_with<'a>(
+        &self,
+        key: Option<String>,
+        ids: impl IntoIterator<Item = &'a str>,
+    ) -> Covers {
         let others: Vec<&str> = ids.into_iter().filter(|id| !is_imdb(id)).collect();
         let imdb = if key.is_some() && !others.is_empty() {
             self.library().imdb_ids(&others).unwrap_or_default()
@@ -73,11 +86,22 @@ impl Core {
     }
 
     /// Keeps the IMDb ids an addon's answer (a catalog's `metas` or a
-    /// `meta`) gives for titles it names by another id.
+    /// `meta`) gives for titles it names by another id, writing only those
+    /// that are new or changed.
     pub(crate) fn learn_imdb_ids(&self, body: &[u8]) {
-        let pairs = imdb_ids_in(body);
         let library = self.library();
-        if let Err(e) = library.put_imdb_ids(&pairs, library.removals()) {
+        let removals = library.removals();
+        let pairs = imdb_ids_in(body);
+        if pairs.is_empty() {
+            return;
+        }
+        let ids: Vec<&str> = pairs.iter().map(|(id, _)| id.as_str()).collect();
+        let kept = library.imdb_ids(&ids).unwrap_or_default();
+        let new: Vec<(String, String)> = pairs
+            .into_iter()
+            .filter(|(id, imdb)| kept.get(id) != Some(imdb))
+            .collect();
+        if let Err(e) = library.put_imdb_ids(&new, removals) {
             tracing::warn!("IMDb ids not kept: {e}");
         }
     }
@@ -105,6 +129,10 @@ fn rpdb_key_in(link: &url::Url) -> Option<String> {
 /// and whose `imdb_id` is: stremio-core's types drop the field, so it is
 /// read from the raw JSON. Anything else is left out.
 fn imdb_ids_in(body: &[u8]) -> Vec<(String, String)> {
+    // Most addons never write the field: their answers are not read again.
+    if !body.windows(7).any(|w| w == b"imdb_id") {
+        return Vec::new();
+    }
     let Ok(answer) = serde_json::from_slice::<serde_json::Value>(body) else {
         return Vec::new();
     };

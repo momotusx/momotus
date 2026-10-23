@@ -341,3 +341,41 @@ async fn a_meta_answer_gives_an_anime_its_imdb_id_for_good() {
         Some(rpdb("tt12590266").as_str())
     );
 }
+
+/// A cover stored as RPDB's (a play record from an older build) is dropped
+/// once no enabled addon gives a key: no band, and no key that is gone.
+#[tokio::test]
+async fn a_stored_rpdb_cover_goes_with_the_key() {
+    let core = Core::temporary("p").unwrap();
+    let mut off = keyed();
+    off.enabled = false;
+    core.library().set_addons("p", &[off], &core.hlc()).unwrap();
+    let row = LibraryItemRow {
+        item_id: "tt0111161".into(),
+        kind: "movie".into(),
+        name: "The Shawshank Redemption".into(),
+        poster: Some(rpdb("tt0111161")),
+        poster_shape: None,
+        added_ms: 1,
+    };
+    let lib = core.library();
+    lib.upsert_item("p", &row, false, &core.hlc()).unwrap();
+    let p = ProgressRow {
+        video_id: "tt0111161",
+        item_id: "tt0111161",
+        position_ms: 600_000,
+        duration_ms: 3_000_000,
+        updated_ms: 5,
+    };
+    lib.set_progress("p", p, &core.hlc()).unwrap();
+    let home = HomeView::open(&core);
+    let cw = until("Continue Watching", || {
+        home.snapshot()
+            .rows
+            .into_iter()
+            .find(|r| r.row_id == CONTINUE_ROW_ID && !r.tiles.is_empty())
+    })
+    .await;
+    assert_eq!(cw.tiles[0].poster, None);
+    assert_eq!(cw.tiles[0].poster_fallback, None);
+}

@@ -18,8 +18,8 @@ pub use hlc::{Hlc, HlcClock};
 pub use policy::{AllowedList, AllowedRow, Authorization, MAX_ALLOWED, Policy};
 pub use profiles::{DEFAULTS_GIVEN, ProfileRow};
 pub use store::{
-    AddonRow, CachedResponse, ContinueItem, FINISHED_RATIO, Library, LibraryEntry, LibraryError,
-    LibraryItemRow, ProgressRow, Table, sweep_temporaries,
+    AddonRow, CachedResponse, ContinueItem, FINISHED_RATIO, IMDB_ID_ROWS, Library, LibraryEntry,
+    LibraryError, LibraryItemRow, ProgressRow, Table, sweep_temporaries,
 };
 pub use sync::{
     DEFAULTS_ERA, OWNER, OWNER_NAME, OutboxPage, SignedEntry, Stamp, SyncCursor, SyncRecord, coll,

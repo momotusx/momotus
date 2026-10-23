@@ -85,6 +85,10 @@ impl Tile {
             "poster".clone_into(&mut self.poster_shape);
             self.poster_fallback = self.poster.take().filter(|p| !p.starts_with(RPDB));
             self.poster = Some(cover);
+        } else if self.poster.as_deref().is_some_and(|p| p.starts_with(RPDB)) {
+            // A cover stored before the key went (an older play record):
+            // no band without a key, and never a key that is gone.
+            self.poster = None;
         }
         self
     }
@@ -1042,6 +1046,8 @@ fn shows(policy: &Policy, kind: &str, id: &str, video: &str) -> bool {
 async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) {
     let library = core.library();
     let policy = core.policy();
+    // Read once: the tiles below each read their kept IMDb id after their meta.
+    let key = &core.rpdb_key();
     let read = if policy.kids() {
         usize::MAX >> 1
     } else {
@@ -1084,7 +1090,7 @@ async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) 
     // A new row shows at once from the library, so it never pushes the page
     // down late; artwork and Next Up follow when the metas answer.
     if find_row(&lock(rows), CONTINUE_ROW_ID).is_none() {
-        let covers = core.covers(unfinished.iter().map(|i| i.item_id.as_str()));
+        let covers = core.covers_with(key.clone(), unfinished.iter().map(|i| i.item_id.as_str()));
         let quick: Vec<(i64, Tile)> = unfinished
             .iter()
             .map(|item| {
@@ -1106,7 +1112,7 @@ async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) 
             );
             let at = item.updated_ms;
             // After the meta: its answer may have given an anime its IMDb id.
-            let covers = core.covers([item.item_id.as_str()]);
+            let covers = core.covers_with(key.clone(), [item.item_id.as_str()]);
             let mut tile = tile_from_continue(item, meta.ok().as_ref().map(|m| &m.0), &covers);
             if kept {
                 let words = crate::views::playback::ON_DEVICE;
@@ -1119,7 +1125,7 @@ async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) 
         // A series or an anime (Kitsu's kind), read where its kind is.
         let (meta, _) = core.fetch_meta(&done.kind, &done.item_id).await.ok()?;
         let next = next_after(&meta, &done.video_id)?;
-        let covers = core.covers([done.item_id.as_str()]);
+        let covers = core.covers_with(key.clone(), [done.item_id.as_str()]);
         Some((done.updated_ms, tile_for_next(&meta, next, &covers)))
     }))
     .await;
@@ -1440,6 +1446,9 @@ mod tests {
         let back = tile("tt0111161", "poster", cover.poster.as_deref());
         assert_eq!(back.poster, cover.poster);
         assert_eq!(back.poster_fallback, None);
+        // With no key, a stored RPDB cover goes: no band, and no key that is gone.
+        let stale = keyed("tt0111161", "poster", cover.poster.as_deref(), None);
+        assert_eq!((stale.poster, stale.poster_fallback), (None, None));
         // The key is the addon's: a paid one goes into the link as given.
         let paid = keyed("tt0111161", "poster", Some(own), Some("t1-abc_9"));
         assert!(

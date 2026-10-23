@@ -409,3 +409,28 @@ fn imdb_ids_round_trip_and_go_with_a_removed_profile() {
     lib.put_imdb_ids(&[pair("kitsu:1", "tt1")], before).unwrap();
     assert!(lib.imdb_ids(&["kitsu:1"]).unwrap().is_empty());
 }
+
+#[test]
+fn imdb_ids_keep_the_last_written() {
+    let lib = Library::temporary().unwrap();
+    let n = mq_library::IMDB_ID_ROWS as usize;
+    let pairs: Vec<(String, String)> = (0..=n)
+        .map(|i| (format!("kitsu:{i}"), format!("tt{i}")))
+        .collect();
+    lib.put_imdb_ids(&pairs, lib.removals()).unwrap();
+    // One past the cap: the first written goes.
+    assert!(lib.imdb_ids(&["kitsu:0"]).unwrap().is_empty());
+    assert_eq!(
+        lib.imdb_ids(&["kitsu:1", &format!("kitsu:{n}")])
+            .unwrap()
+            .len(),
+        2
+    );
+    // Written again, a row is new: the oldest other one goes in its place.
+    lib.put_imdb_ids(&[("kitsu:1".into(), "tt1".into())], lib.removals())
+        .unwrap();
+    lib.put_imdb_ids(&[("kitsu:x".into(), "tt9".into())], lib.removals())
+        .unwrap();
+    assert_eq!(lib.imdb_ids(&["kitsu:1"]).unwrap().len(), 1);
+    assert!(lib.imdb_ids(&["kitsu:2"]).unwrap().is_empty());
+}

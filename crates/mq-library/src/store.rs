@@ -1113,6 +1113,9 @@ pub(crate) fn restore_waiting(c: &Connection, fallback: &str) -> rusqlite::Resul
 
 /// Rows kept in the HTTP cache; the oldest are trimmed past this.
 const HTTP_CACHE_ROWS: i64 = 2000;
+/// IMDb ids kept for titles named otherwise (`put_imdb_ids`): far more than
+/// the anime a device shows.
+pub const IMDB_ID_ROWS: i64 = 20_000;
 
 impl Library {
     pub fn cache_get(&self, key: &str) -> Result<Option<CachedResponse>, LibraryError> {
@@ -1134,9 +1137,6 @@ impl Library {
         })
     }
 
-    /// Stores an addon answer fetched while `removals` was the count; one
-    /// that a profile removal overtook is dropped (checked under the writer,
-    /// which every removal holds). Returns whether it was stored.
     /// The IMDb id kept for each of these ids (`put_imdb_ids`); ids without
     /// one are left out.
     pub fn imdb_ids(
@@ -1157,7 +1157,8 @@ impl Library {
 
     /// Keeps the IMDb id an addon gave for each `(id, imdb id)`, replacing
     /// an older one. Pairs read while `removals` was the count are dropped
-    /// when a profile removal overtook them, as for `cache_put`.
+    /// when a profile removal overtook them, as for `cache_put`. The table
+    /// keeps the `IMDB_ID_ROWS` written last.
     pub fn put_imdb_ids(
         &self,
         pairs: &[(String, String)],
@@ -1175,10 +1176,19 @@ impl Library {
             for (id, imdb) in pairs {
                 stmt.execute(params![id, imdb])?;
             }
+            // A replaced row takes a new rowid, so the oldest writes go first.
+            c.execute(
+                "DELETE FROM imdb_ids WHERE rowid IN (
+                   SELECT rowid FROM imdb_ids ORDER BY rowid DESC LIMIT -1 OFFSET ?1)",
+                params![IMDB_ID_ROWS],
+            )?;
             Ok(())
         })
     }
 
+    /// Stores an addon answer fetched while `removals` was the count; one
+    /// that a profile removal overtook is dropped (checked under the writer,
+    /// which every removal holds). Returns whether it was stored.
     pub fn cache_put(
         &self,
         key: &str,
