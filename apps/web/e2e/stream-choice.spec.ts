@@ -629,20 +629,22 @@ test.describe("Versions", () => {
     await page.context().close();
   });
 
-  test("the paint skip sits on a padded slot, never on the row: the focus ring is never clipped", async ({ browser }) => {
-    for (const form of ["tv", "desktop"] as const) {
+  test("the paint skip sits on a padded slot, never on the row: the focus ring is never clipped; its placeholder is the drawn row's height", async ({ browser }) => {
+    for (const form of ["tv", "desktop", "phone"] as const) {
       const page = await device(browser, form, PORTS.bridge);
       await page.goto(path(form));
       const row = await firstRow(page);
       const css = await row.evaluate((r) => {
         const slot = r.parentElement as HTMLElement;
         const s = getComputedStyle(slot);
-        return { slot: s.contentVisibility, row: getComputedStyle(r).contentVisibility, pad: Math.min(...["paddingTop", "paddingBottom", "paddingLeft", "paddingRight"].map((k) => Number.parseFloat(s[k as "paddingTop"]))) };
+        return { slot: s.contentVisibility, row: getComputedStyle(r).contentVisibility, pad: Math.min(...["paddingTop", "paddingBottom", "paddingLeft", "paddingRight"].map((k) => Number.parseFloat(s[k as "paddingTop"]))) , height: slot.getBoundingClientRect().height, placeholder: Number.parseFloat(s.containIntrinsicHeight.replace("auto", "")) };
       });
       expect(css.slot).toBe("auto");
       expect(css.row).not.toBe("auto");
       // At least the 4 px ring (and on TV the row's 1.03 lift sideways).
       expect(css.pad).toBeGreaterThanOrEqual(4);
+      // A row not drawn yet holds the space a drawn one takes (measured per form), so the scroll never jumps.
+      expect(Math.abs(css.height - css.placeholder)).toBeLessThanOrEqual(1);
       await page.context().close();
     }
   });
