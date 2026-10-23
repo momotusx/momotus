@@ -23,6 +23,16 @@ final class VersionsModel {
             runtime: target.runtime, releaseInfo: target.releaseInfo, released: target.released,
             episodesInSeason: target.episodesInSeason)) { _, fact in fact }
         record = LiveRecord("versions", params: params, core: core)
+        // Once per settled list, the listed share's figures (plans/apple-second-engine.md section 4).
+        var said = false
+        let id = target.videoId
+        record.onSnapshot = { snapshot in
+            guard snapshot.done, !said else { return }
+            said = true
+            let listed = snapshot.rows.count + (snapshot.recommended == nil ? 0 : 1)
+            let hidden = snapshot.hidden.byReason.map { "\($0.reason):\($0.count)" }.joined(separator: ",")
+            coreLog.notice("metric versions listed=\(listed, privacy: .public) hidden=\(hidden, privacy: .public) id=\(id, privacy: .public)")
+        }
     }
 
     var snapshot: VersionsSnapshot? {
