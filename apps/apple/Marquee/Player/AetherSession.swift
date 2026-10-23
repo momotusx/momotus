@@ -43,9 +43,10 @@ final class AetherSession {
         self.engine = engine
     }
 
-    /// Opens `url` at `start` (seconds); `openWithin` bounds the open to its first frame (what the start budget has
-    /// left, plan 2.3), past which the source counts as failed.
-    func load(_ url: URL, at start: Double, muted: Bool, openWithin: Duration, events: Events) {
+    /// Opens `source` at `start` (seconds) at the viewer's `rate`, which a load of another source does not keep;
+    /// `openWithin` bounds the open to its first frame (what the start budget has left, plan 2.3), past which the
+    /// source counts as failed.
+    func load(_ source: MediaSource, at start: Double, rate: Float, muted: Bool, openWithin: Duration, events: Events) {
         stop()
         load += 1
         let load = load
@@ -118,7 +119,10 @@ final class AetherSession {
         let engine = engine
         opening = Task { [weak self] in
             do {
-                try await engine.load(url: url, startPosition: start > 1 ? start : nil, options: Self.options)
+                try await engine.load(source: source, startPosition: start > 1 ? start : nil, options: Self.options)
+                // A stop or another load while this one opened: it does not play.
+                guard self?.load == load else { return }
+                if rate != 1 { engine.setRate(rate) }
                 engine.play()
             } catch is CancellationError {
             } catch {

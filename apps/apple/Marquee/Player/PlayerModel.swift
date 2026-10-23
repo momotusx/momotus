@@ -954,7 +954,7 @@ final class PlayerModel {
         #else
         let muted = false
         #endif
-        session.load(address, at: start, muted: muted, openWithin: EngineChoice.openWithin(budgetEndsAtMs: playback?.startBudgetEndsAt), events: .init(
+        session.load(.url(address), at: start, rate: rate, muted: muted, openWithin: EngineChoice.openWithin(budgetEndsAtMs: playback?.startBudgetEndsAt), events: .init(
             time: { [weak self] time in if mine() { self?.engineTick(time) } },
             duration: { [weak self] seconds in if mine() { self?.engineDuration(seconds, key: key) } },
             state: { [weak self] playing, waiting in if mine() { self?.engineState(playing: playing, waiting: waiting) } },

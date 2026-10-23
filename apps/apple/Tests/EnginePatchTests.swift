@@ -1,4 +1,4 @@
-import AetherEngine
+@testable import AetherEngine
 import CoreGraphics
 import Foundation
 import Testing
@@ -74,4 +74,31 @@ private let fixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent
         space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)?.makeImage())
     let bitmap = SubtitleCue(id: 3, startTime: 6, endTime: 7, body: .image(SubtitleImage(cgImage: image, position: .zero)))
     #expect(AetherSession.cue(bitmap) == nil)
+}
+
+/// Review apple-aether P2-4: the engine forgets the speed on a load of another source; the session sets the
+/// viewer's again once the source is open. And a stop while it opens means it does not play.
+@MainActor @Test func theViewersSpeedHoldsAcrossAnEngineLoad() async throws {
+    let session = try #require(AetherSession())
+    let mkv = try Data(contentsOf: fixtures.appending(path: "tiny.mkv"))
+    session.load(.custom(DataReader(mkv), formatHint: "matroska"), at: 0, rate: 1.5, muted: true, openWithin: .seconds(30), events: .none)
+    for _ in 0..<100 where session.engine.desiredRate == nil { try await Task.sleep(for: .milliseconds(100)) }
+    #expect(session.engine.desiredRate == 1.5)
+    session.stop()
+}
+
+@MainActor @Test func aSessionStoppedWhileItOpensDoesNotPlay() async throws {
+    let session = try #require(AetherSession())
+    let mkv = try Data(contentsOf: fixtures.appending(path: "tiny.mkv"))
+    session.load(.custom(DataReader(mkv), formatHint: "matroska"), at: 0, rate: 1.5, muted: true, openWithin: .seconds(30), events: .none)
+    session.stop()
+    try await Task.sleep(for: .seconds(2))
+    #expect(session.engine.state != .playing)
+    #expect(session.engine.desiredRate == nil)
+}
+
+extension AetherSession.Events {
+    static var none: Self {
+        .init(time: { _ in }, duration: { _ in }, state: { _, _ in }, firstFrame: {}, ended: {}, failed: { _ in }, tracks: { _ in }, cues: { _ in })
+    }
 }
