@@ -94,6 +94,12 @@ final class LiveRecord<Snapshot: Decodable & Sendable> {
         core.command(sub, fields) { [weak self] error in self?.failure = error.localizedDescription }
     }
 
+    /// Runs a protocol op at once, in call order with every other sent after it (a setting changed
+    /// twice lands as last changed); a failure shows in `failure`, an answer clears it.
+    func performNow(_ op: String, _ fields: [String: any Sendable]) {
+        core.sendNow(op, fields) { [weak self] error in self?.failure = error?.localizedDescription }
+    }
+
     /// Runs a protocol op on the user's behalf; a failure shows in `failure`.
     /// Returns whether it worked.
     @discardableResult

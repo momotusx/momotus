@@ -242,7 +242,7 @@ struct SettingsScreen: View {
     }
 
     private func set(_ patch: [String: any Sendable]) {
-        Task { await prefs.perform("setPrefs", ["patch": patch]) }
+        prefs.performNow("setPrefs", ["patch": patch])
     }
 }
 

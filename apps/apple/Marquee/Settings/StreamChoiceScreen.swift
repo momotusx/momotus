@@ -156,7 +156,7 @@ struct StreamChoiceScreen: View {
 
     private func patch(_ streams: [String: any Sendable]) {
         problem = nil
-        Task { await prefs.perform("setPrefs", ["patch": ["streams": streams] as [String: any Sendable]]) }
+        prefs.performNow("setPrefs", ["patch": ["streams": streams] as [String: any Sendable]])
     }
 
     /// Undo and Forget take their row away: focus goes to the Learn choice, never to Forget.

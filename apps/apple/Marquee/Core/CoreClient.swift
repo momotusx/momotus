@@ -169,20 +169,35 @@ final class CoreClient {
         try await request("command", ["sub": sub, "command": command]) { _ in }
     }
 
-    /// A command delivered at once, so commands reach the core in the order they are called (a
-    /// `Task` around the async one starts whenever the main actor gets to it). Nothing waits on an
-    /// earlier command's reply. A failed reply goes to `failed`; one from before a profile switch is
-    /// dropped, as `request` drops it.
-    func command(_ sub: UInt64, _ command: [String: any Sendable], failed: @escaping @MainActor @Sendable (CoreError) -> Void) {
-        if core == nil, let failure { failed(CoreError(failure)); return }
+    /// An op delivered at once, so it reaches the core in the order called, before anything sent after
+    /// it (a `Task` around `request` starts whenever the main actor gets to it). Nothing waits on an
+    /// earlier reply. `done` gets nil when the core answers, else the failure, or the encoding error
+    /// when a field cannot be sent; a reply from before a profile switch is dropped, as `request` drops it.
+    /// Each call waits in the router until its reply: for user-rate senders, not per-tick ones.
+    func sendNow(_ op: String, _ fields: [String: any Sendable], done: @escaping @MainActor @Sendable (CoreError?) -> Void) {
+        if core == nil, let failure { done(CoreError(failure)); return }
         let router = router
         let id = router.nextId()
-        guard let text = try? Self.encode(op: "command", id: id, fields: ["sub": sub, "command": command]) else { return }
+        let text: String
+        do {
+            text = try Self.encode(op: op, id: id, fields: fields)
+        } catch {
+            done(error as? CoreError ?? CoreError(error.localizedDescription))
+            return
+        }
         router.wait(for: id) { result in
-            guard case .failure(let error) = result, error.code != "switched" else { return }
-            Task { @MainActor in failed(error) }
+            switch result {
+            case .success: Task { @MainActor in done(nil) }
+            case .failure(let error) where error.code == "switched": break
+            case .failure(let error): Task { @MainActor in done(error) }
+            }
         }
         deliver(text)
+    }
+
+    /// A view's command by `sendNow`: in call order, a failure to `failed`.
+    func command(_ sub: UInt64, _ command: [String: any Sendable], failed: @escaping @MainActor @Sendable (CoreError) -> Void) {
+        sendNow("command", ["sub": sub, "command": command]) { error in if let error { failed(error) } }
     }
 
     /// A command sent at once without waiting for its reply, so it reaches the
@@ -284,6 +299,10 @@ final class CoreClient {
         var message: [String: Any] = fields.mapValues { ($0 as? JSONValue)?.foundation ?? $0 }
         message["id"] = id
         message["op"] = op
+        // A value JSON cannot hold (a Date, a struct) throws here: JSONSerialization would stop the app.
+        guard JSONSerialization.isValidJSONObject(message) else {
+            throw CoreError("\(op) has a field the core cannot read", code: "unencodable")
+        }
         return String(decoding: try JSONSerialization.data(withJSONObject: message), as: UTF8.self)
     }
 

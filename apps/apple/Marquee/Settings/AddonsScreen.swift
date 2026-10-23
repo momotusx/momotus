@@ -83,7 +83,7 @@ struct AddonsScreen: View {
     private func act(_ op: String, _ addon: AddonInfo, _ fields: [String: any Sendable]) {
         var all = fields
         all["url"] = addon.url
-        Task { await addons.perform(op, all) }
+        addons.performNow(op, all)
     }
 }
 
