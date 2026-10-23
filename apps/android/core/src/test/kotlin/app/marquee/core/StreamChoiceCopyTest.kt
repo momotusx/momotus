@@ -155,6 +155,7 @@ class StreamChoiceCopyTest {
                                     w.second?.let { put("action", it) }
                                     if (kind == EmptyKind.Unreachable) put("playFromDevice", PLAY_FROM_DEVICE)
                                     if (kind == EmptyKind.NotStarted) put("chooseAnother", CHOOSE_ANOTHER)
+                                    EMPTY_ROWS[kind]?.let { put("row", it) }
                                 },
                             )
                         }
@@ -425,6 +426,9 @@ class StreamChoiceCopyTest {
     fun `the empty line is the core's words, and a newer kind reads as noResults`() {
         assertEquals("These play through a streaming account", StreamChoiceCopy.emptyLine(EmptyKind.NeedsAccount))
         assertEquals("No source has this yet", StreamChoiceCopy.emptyLine(EmptyKind.Unknown))
+        // A dimmed row says why it is dimmed; a newer kind reads as nothingPlaysHere's.
+        assertEquals("Needs a streaming account", StreamChoiceCopy.emptyRowLine(EmptyKind.NeedsAccount).text)
+        assertEquals("Doesn't play on this device", StreamChoiceCopy.emptyRowLine(EmptyKind.Unknown).text)
         assertEquals("2,000 versions", StreamChoiceCopy.counted("versions", 2000))
     }
 

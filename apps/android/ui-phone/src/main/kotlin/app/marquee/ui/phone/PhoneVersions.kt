@@ -1,7 +1,6 @@
 package app.marquee.ui.phone
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -183,7 +182,7 @@ fun PhoneVersions(
             items(if (all) rows else rows.take(SHOWN), key = { "row:${it.key}" }) { row ->
                 SourceRow(
                     row,
-                    empty != null,
+                    empty?.let { StreamChoiceCopy.emptyRowLine(it.kind) },
                     opened == row.key,
                     { opened = if (opened == row.key) null else row.key },
                     onPlay,
@@ -229,8 +228,7 @@ private fun Pick(
         modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(colors.glassStrong)
-            .border(1.dp, colors.edge, shape)
+            .background(colors.surface)
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
     ) {
@@ -397,13 +395,13 @@ private fun LearnedLine(
 @Composable
 private fun SourceRow(
     row: VersionRow,
-    dimmed: Boolean,
+    why: StreamChoiceCopy.Line?,
     open: Boolean,
     onToggle: () -> Unit,
     onPlay: (String) -> Unit,
 ) {
     val colors = Marquee.colors
-    val line = StreamChoiceCopy.rowLine(row)
+    val line = why ?: StreamChoiceCopy.rowLine(row)
     val tag = VersionsCopy.languageTag(row)
     val spoken =
         listOfNotNull(
@@ -412,8 +410,9 @@ private fun SourceRow(
             row.sizeBytes?.let(Format::bytes),
             line.text,
         ).joinToString(", ")
-    // The rows of a page where none plays (the core's empty rows) are dimmed and still startable.
-    FocusInk(if (dimmed) Marquee.colors.dimmed() else Marquee.colors) {
+    // The rows of a page where none plays (the core's empty rows) are dimmed, say [why] in place of their line,
+    // and stay startable.
+    FocusInk(if (why != null) Marquee.colors.dimmed() else Marquee.colors) {
         Column {
             Row(
                 Modifier

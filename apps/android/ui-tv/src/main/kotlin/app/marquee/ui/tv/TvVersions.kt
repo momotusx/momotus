@@ -3,7 +3,6 @@
 package app.marquee.ui.tv
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
@@ -172,11 +171,12 @@ fun TvVersions(
                 if (empty != null) Empty(empty, step, focus, list.takeIf { empty.rows.isNotEmpty() })
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-                // The rows found when none plays are simply listed, dimmed, as they would rank once the reason is fixed.
+                // The rows found when none plays are simply listed, dimmed, as they would rank once the reason is
+                // fixed, each saying why it is dimmed.
                 Sources(
                     snapshot,
                     empty?.rows ?: snapshot?.rows.orEmpty(),
-                    empty != null,
+                    empty?.let { StreamChoiceCopy.emptyRowLine(it.kind) },
                     focus,
                     list,
                     onPlay,
@@ -244,8 +244,7 @@ private fun Pick(
             .then(if (best != null) Modifier.focusProperties { enter = { play } }.focusGroup() else Modifier)
             .width(620.dp)
             .clip(shape)
-            .background(colors.glassStrong)
-            .border(1.dp, colors.edge, shape)
+            .background(colors.surface)
             .padding(32.dp),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
     ) {
@@ -448,7 +447,7 @@ private fun LearnedLine(
 private fun Sources(
     snapshot: VersionsSnapshot?,
     rows: List<VersionRow>,
-    dimmed: Boolean,
+    why: StreamChoiceCopy.Line?,
     focus: FocusMemory,
     list: FocusRequester,
     onPlay: (String) -> Unit,
@@ -546,7 +545,7 @@ private fun Sources(
                     if (all) rows else rows.take(SHOWN),
                     key = { _, row -> rowKey(row) },
                 ) { at, row ->
-                    SourceRow(row, dimmed, focus, onPlay, if (all) toHeading(group, row, at) else toPlay)
+                    SourceRow(row, why, focus, onPlay, if (all) toHeading(group, row, at) else toPlay)
                 }
                 if (rows.size > SHOWN) {
                     item(key = "fold:$group") {
@@ -585,7 +584,7 @@ private fun Line(color: Color) {
 @Composable
 private fun SourceRow(
     row: VersionRow,
-    dimmed: Boolean,
+    why: StreamChoiceCopy.Line?,
     focus: FocusMemory,
     onPlay: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -595,9 +594,9 @@ private fun SourceRow(
     val watch = focus.watch(ROWS, key)
     var focused by remember { mutableStateOf(false) }
     // The focused row turns white with dark words (focusPalette); the rows of a page where none plays (the core's
-    // empty rows) read dimmed and stay startable.
-    val colors = focusPalette(focused).let { if (dimmed && !focused) it.dimmed() else it }
-    val line = StreamChoiceCopy.rowLine(row)
+    // empty rows) read dimmed, say [why] in place of their line, and stay startable.
+    val colors = focusPalette(focused).let { if (why != null && !focused) it.dimmed() else it }
+    val line = why ?: StreamChoiceCopy.rowLine(row)
     val tag = VersionsCopy.languageTag(row)
     val spoken =
         listOfNotNull(

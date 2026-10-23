@@ -219,7 +219,9 @@ class PhoneVersionsTest {
         for (gone in listOf("No playable", "Add an account", "Show them", "Hidden (", "Choose a version")) {
             compose.onAllNodesWithText(gone, substring = true).assertCountEquals(0)
         }
-        compose.onNodeWithText("May start slowly", substring = true).assertIsDisplayed()
+        // A dimmed row says why it is dimmed, never how fast it would start.
+        compose.onNodeWithText("Needs a streaming account", substring = true).assertIsDisplayed()
+        compose.onAllNodesWithText("May start slowly", substring = true).assertCountEquals(0)
         val settings =
             compose
                 .onNodeWithText(StreamChoiceCopy.SETTINGS)
@@ -248,7 +250,8 @@ class PhoneVersionsTest {
             compose.onAllNodesWithText(gone).assertCountEquals(0)
         }
         // Dimmed, and still startable: a tap opens it to its own Play.
-        compose.onNodeWithText("May start slowly", substring = true).performClick()
+        compose.onAllNodesWithText("May start slowly", substring = true).assertCountEquals(0)
+        compose.onNodeWithText("Doesn't play on this device", substring = true).performClick()
         compose.onNodeWithText("Play this version").performClick()
         assertEquals(listOf("a"), played)
         compose.onNodeWithText("Back").performClick()

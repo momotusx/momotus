@@ -182,7 +182,8 @@ class VersionsCopyTest {
             VersionLine.Problem("These play through a streaming account"),
             VersionsCopy.line(empty(EmptyKind.NeedsAccount, 12)),
         )
-        assertEquals("12 versions" to VersionsCopy.Tone.Warn, VersionsCopy.progress(empty(EmptyKind.NeedsAccount, 12)))
+        // Neutral: nothing plays, so no tone says these are good.
+        assertEquals("12 versions" to VersionsCopy.Tone.Idle, VersionsCopy.progress(empty(EmptyKind.NeedsAccount, 12)))
         // Nothing found: the empty line says it, so no "0 versions" beside it.
         assertNull(VersionsCopy.progress(empty(EmptyKind.NoResults, 0)))
         // A kind from a newer core still says something.

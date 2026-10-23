@@ -214,7 +214,7 @@ object VersionsCopy {
             snapshot.empty != null -> {
                 snapshot.empty.count
                     .takeIf { it > 0 }
-                    ?.let { StreamChoiceCopy.counted("versions", it) to Tone.Warn }
+                    ?.let { StreamChoiceCopy.counted("versions", it) to Tone.Idle }
             }
 
             else -> {

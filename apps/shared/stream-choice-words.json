@@ -1,5 +1,5 @@
 {
-  "about": "Smart stream choice words (plans/m13-stream-choice.md 3.7, 3.9, 3.11, 4.4, 4.5), shared by the web, Android and Apple apps. A line's details are parts joined with \", \"; a part shows only when every field it names is known, and the joined details start with a capital letter. Counts use the plurals below and group thousands with a comma. Sizes use 1024-based units, as addons print them: one decimal under 100 GB with a trailing .0 dropped, whole numbers from 100 GB, MB under 1 GB. Mbit/s are whole numbers. The device line shows the HTTP speed with a streaming service account or without the engine, else the torrent speed; a speed with 0 samples is not measured yet. The empty section is why nothing can play, by the snapshot's empty.kind (plans/play-every-version.md 2a), with its one action (empty.action): the kind's action words, or for playFromDevice the unreachable kind's playFromDevice; a kind with no action shows its line alone. The page section is the Versions page's own words and the player section what the player says while a version starts; neither ever names an addon. notStarted is the player's: its budget ran out; chooseAnother is also the loading screen's and the stalled frame's button.",
+  "about": "Smart stream choice words (plans/m13-stream-choice.md 3.7, 3.9, 3.11, 4.4, 4.5), shared by the web, Android and Apple apps. A line's details are parts joined with \", \"; a part shows only when every field it names is known, and the joined details start with a capital letter. Counts use the plurals below and group thousands with a comma. Sizes use 1024-based units, as addons print them: one decimal under 100 GB with a trailing .0 dropped, whole numbers from 100 GB, MB under 1 GB. Mbit/s are whole numbers. The device line shows the HTTP speed with a streaming service account or without the engine, else the torrent speed; a speed with 0 samples is not measured yet. The empty section is why nothing can play, by the snapshot's empty.kind (plans/play-every-version.md 2a), with its one action (empty.action): the kind's action words, or for playFromDevice the unreachable kind's playFromDevice; a kind with no action shows its line alone; a kind's row is what each of its dimmed rows says in place of its own line. The page section is the Versions page's own words and the player section what the player says while a version starts; neither ever names an addon. notStarted is the player's: its budget ran out; chooseAnother is also the loading screen's and the stalled frame's button.",
   "plurals": {
     "seeders": ["{n} seeder", "{n} seeders"],
     "playbacks": ["{n} playback", "{n} playbacks"],
@@ -112,10 +112,10 @@
     "noSource": { "text": "Add a source in Settings", "action": "Settings" },
     "unreachable": { "text": "Can't reach any source", "action": "Try again", "playFromDevice": "Play from this device" },
     "noRoom": { "text": "This device needs a little free space to play this" },
-    "needsAccount": { "text": "These play through a streaming account", "action": "Settings" },
+    "needsAccount": { "text": "These play through a streaming account", "action": "Settings", "row": "Needs a streaming account" },
     "kidsNothing": { "text": "There's nothing here for you to watch" },
     "noResults": { "text": "No source has this yet" },
-    "nothingPlaysHere": { "text": "None of these plays on this device", "action": "Choose a version" },
+    "nothingPlaysHere": { "text": "None of these plays on this device", "action": "Choose a version", "row": "Doesn't play on this device" },
     "notStarted": { "text": "This didn't start", "action": "Try again", "chooseAnother": "Choose another version" }
   },
   "page": {

@@ -261,7 +261,8 @@ class TvVersionsTest {
         }
         compose.onNodeWithText("Back").performClick()
         assertEquals(1, backs)
-        compose.onNodeWithText("May start slowly", substring = true).performClick()
+        compose.onAllNodesWithText("May start slowly", substring = true).assertCountEquals(0)
+        compose.onNodeWithText("Doesn't play on this device", substring = true).performClick()
         assertEquals(listOf("a"), played)
     }
 
@@ -271,7 +272,9 @@ class TvVersionsTest {
         show(snapshot(empty = EmptyVersions(EmptyKind.NeedsAccount, EmptyAction.SettingsAccounts, 12, rows)))
         compose.onNodeWithText("These play through a streaming account", useUnmergedTree = true).assertExists()
         actions(StreamChoiceCopy.SETTINGS, "Back")
-        compose.onNodeWithText("May start slowly", substring = true).assertExists()
+        // A dimmed row says why it is dimmed, never how fast it would start.
+        compose.onNodeWithText("Needs a streaming account", substring = true).assertExists()
+        compose.onAllNodesWithText("May start slowly", substring = true).assertCountEquals(0)
         compose.onNodeWithText(StreamChoiceCopy.SETTINGS).assertIsFocused()
         compose.onNodeWithText(StreamChoiceCopy.SETTINGS).performKeyInput { pressKey(Key.DirectionRight) }
         compose.onNodeWithContentDescription("1080p, HDR10, 2 GB").assertIsFocused()
@@ -397,7 +400,7 @@ class TvVersionsTest {
         val rows = listOf(row("a", ReasonLine.Few(31)))
         show(snapshot(empty = EmptyVersions(EmptyKind.NothingPlaysHere, EmptyAction.ChooseVersion, 1, rows)))
         val image = compose.onRoot().captureToImage().asAndroidBitmap()
-        for (text in listOf("HDR10", "2 GB", "May start slowly")) {
+        for (text in listOf("HDR10", "2 GB", "Doesn't play on this device")) {
             val at = compose.onNodeWithText(text, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
             val y = at.center.y.toInt()
             // The cell's empty end, behind the words.

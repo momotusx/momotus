@@ -166,6 +166,17 @@ object StreamChoiceCopy {
             EmptyKind.NotStarted to ("This didn't start" to "Try again"),
         )
 
+    /** What each dimmed row of an empty state says in place of its line: why it is dimmed, never how fast it starts. */
+    val EMPTY_ROWS =
+        mapOf(
+            EmptyKind.NeedsAccount to "Needs a streaming account",
+            EmptyKind.NothingPlaysHere to "Doesn't play on this device",
+        )
+
+    /** A dimmed row's line; a kind from a newer core reads as nothingPlaysHere's. */
+    fun emptyRowLine(kind: EmptyKind): Line =
+        Line(VersionsCopy.Tone.Warn, EMPTY_ROWS[kind] ?: EMPTY_ROWS.getValue(EmptyKind.NothingPlaysHere), "")
+
     /** The action for `playFromDevice`, with the unreachable kind's words. */
     const val PLAY_FROM_DEVICE = "Play from this device"
 
