@@ -181,6 +181,66 @@ async fn a_genre_opens_the_first_catalog_that_lists_it() {
     view.select(None, None, Some(None));
     settle(&view).await;
     assert_eq!(view.snapshot().missing_genre, None);
+    // Matched whatever the case, shown as the catalog spells it.
+    view.select(Some("movie"), None, Some(Some("drama")));
+    settle(&view).await;
+    let s = view.snapshot();
+    assert_eq!(
+        (names(&s).as_deref(), s.genre.as_deref()),
+        (Some("Popular"), Some("Drama"))
+    );
+    assert_eq!(s.missing_genre, None);
+}
+
+/// C40: with no catalog listing the genre, the kind's first catalog that
+/// needs no genre opens, so no other genre stands in for the missing one;
+/// only when every catalog needs one does its first option show, beside the
+/// missing genre's name.
+#[tokio::test]
+async fn a_missing_genre_never_shows_another_in_its_place() {
+    let manifest = serde_json::json!({
+        "id": "req", "version": "1.0.0", "name": "Req", "types": ["movie", "series"],
+        "resources": ["catalog"],
+        "catalogs": [
+            {"type": "movie", "id": "years", "name": "By year",
+             "extra": [{"name": "genre", "isRequired": true, "options": ["2026", "2025"]}]},
+            {"type": "movie", "id": "all", "name": "All",
+             "extra": [{"name": "genre", "options": ["Drama"]}]},
+            {"type": "series", "id": "only", "name": "Only years",
+             "extra": [{"name": "genre", "isRequired": true, "options": ["2026"]}]}
+        ]
+    });
+    let core = Core::temporary("p").unwrap();
+    core.library()
+        .set_addons("p", &[serving(manifest).await], &core.hlc())
+        .unwrap();
+    let view = DiscoverView::open(&core);
+    settle(&view).await;
+    let name = |s: &mq_runtime::DiscoverSnapshot| {
+        let id = s.catalog.clone();
+        s.catalogs
+            .iter()
+            .find(|c| Some(&c.id) == id.as_ref())
+            .map(|c| c.name.clone())
+    };
+    view.select(Some("movie"), None, Some(Some("Western")));
+    settle(&view).await;
+    let s = view.snapshot();
+    assert_eq!(
+        (name(&s).as_deref(), s.genre.as_deref()),
+        (Some("All"), None)
+    );
+    assert_eq!(s.missing_genre.as_deref(), Some("Western"));
+    // Every series catalog needs a genre: its first option, and the missing
+    // one named beside it.
+    view.select(Some("series"), None, Some(Some("Western")));
+    settle(&view).await;
+    let s = view.snapshot();
+    assert_eq!(
+        (name(&s).as_deref(), s.genre.as_deref()),
+        (Some("Only years"), Some("2026"))
+    );
+    assert_eq!(s.missing_genre.as_deref(), Some("Western"));
 }
 
 #[tokio::test]

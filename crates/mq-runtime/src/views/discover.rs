@@ -82,7 +82,9 @@ pub struct DiscoverSnapshot {
     pub genre_required: bool,
     /// A genre asked with a kind and no catalog (a title page's genre
     /// chip) that no catalog of that kind lists: Discover shows the kind
-    /// without it, and says so (core backlog C40). None otherwise.
+    /// without it, on its first catalog that needs no genre (else its first,
+    /// with that catalog's first genre), and says so (core backlog C40).
+    /// None otherwise.
     pub missing_genre: Option<String>,
     pub items: Vec<Tile>,
     pub state: DiscoverState,
@@ -276,14 +278,27 @@ impl Inner {
                 .flatten()
                 .filter(|_| catalog.is_none() && kind.is_some());
             let of_kind = |c: &&Catalog| Some(c.shelf.as_str()) == kind;
+            // Matched as the addon spells it ("drama" finds "Drama"), and
+            // shown in the catalog's own spelling.
             let lists = asked.and_then(|g| {
-                (s.catalogs.iter()).find(|c| of_kind(c) && c.genres.iter().any(|x| x == g))
+                s.catalogs.iter().filter(of_kind).find_map(|c| {
+                    let own = c.genres.iter().find(|x| x.eq_ignore_ascii_case(g))?;
+                    Some((c, own.clone()))
+                })
             });
             let missing_genre = asked.filter(|_| lists.is_none()).map(str::to_owned);
-            // With none, the kind's first catalog: the one a chip's kind
-            // opens on, not whichever was open last.
-            let lists =
-                lists.or_else(|| missing_genre.as_ref().and(s.catalogs.iter().find(of_kind)));
+            let listed_genre = lists.as_ref().map(|(_, own)| own.clone());
+            // With none, the kind's first catalog that needs no genre (else
+            // its first): the one a chip's kind opens on, not whichever was
+            // open last, and never another genre in place of the missing one
+            // while a catalog can show the kind with none.
+            let lists = lists.map(|(c, _)| c).or_else(|| {
+                missing_genre.as_ref().and(
+                    (s.catalogs.iter().filter(of_kind))
+                        .find(|c| !c.genre_required)
+                        .or_else(|| s.catalogs.iter().find(of_kind)),
+                )
+            });
             let chosen = lists
                 .or_else(|| {
                     s.catalogs
@@ -307,6 +322,7 @@ impl Inner {
             let Some(chosen) = chosen else { return };
             let changed_catalog = current.as_deref() != Some(&chosen.choice.id);
             let genre = match genre {
+                _ if listed_genre.is_some() => listed_genre,
                 Some(g) => g.map(str::to_owned),
                 None if changed_catalog => None,
                 None => s.snapshot.genre.clone(),

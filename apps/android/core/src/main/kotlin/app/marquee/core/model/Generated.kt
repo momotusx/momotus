@@ -390,6 +390,8 @@ data class DiscoverSnapshot(
     val genre: String? = null,
     /** The catalog only answers with a genre picked. */
     val genreRequired: Boolean,
+    /** A genre asked with a kind and no catalog (a title page's genre chip) that no catalog of that kind lists: Discover shows the kind without it, on its first catalog that needs no genre (else its first, with that catalog's first genre), and says so (core backlog C40). None otherwise. */
+    val missingGenre: String? = null,
     val items: List<Tile> = emptyList(),
     val state: DiscoverState,
 )
