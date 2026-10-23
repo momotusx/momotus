@@ -2512,6 +2512,7 @@ dependencies = [
  "futures-util",
  "mq-http",
  "mq-library",
+ "mq-relparse",
  "mq-runtime",
  "mq-streams",
  "mq-sync",

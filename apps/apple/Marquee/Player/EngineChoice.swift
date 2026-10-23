@@ -40,6 +40,12 @@ enum EngineChoice {
     static let avPlayerContainers = ["mp4", "m4v", "mov", "m3u8"]
     /// What the second engine adds (2.5); `wmv`, `flv` and `ogg` only once a walk plays one.
     static let engineContainers = ["mkv", "webm", "ts", "m2ts", "avi"]
+    /// Video the engine decodes in software that a walk admitted per plan 2.5, per platform, in the core's names: on
+    /// the Mac Xvid / DivX (MPEG-4 Part 2) at SD (bench AS31: an XviD AVI at 4.5% of one core). The iPhone waits for
+    /// its gate row; MPEG-2 and VC-1 for theirs.
+    static func engineDecoders(on platform: Platform) -> [String] {
+        platform == .mac ? ["xvid"] : []
+    }
     /// Audio AVPlayer decodes, in the core's names.
     static let avPlayerAudio = ["aac", "ac3", "eac3", "atmos", "flac", "mp3", "pcm"]
     /// Audio AVPlayer does not decode, in the core's names; the engine bridges it.
@@ -78,6 +84,11 @@ enum EngineChoice {
     /// The containers and audio the core is told this device plays.
     static func containers(enabled: Bool) -> [String] {
         enabled ? avPlayerContainers + engineContainers : avPlayerContainers
+    }
+
+    /// The hardware decoders, and the engine's software ones where it is on.
+    static func decoders(hardware: [String], enabled: Bool, on platform: Platform = platform) -> [String] {
+        enabled ? hardware + engineDecoders(on: platform) : hardware
     }
 
     static func audioDecoders(enabled: Bool) -> [String] {

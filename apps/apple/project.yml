@@ -225,6 +225,7 @@ targets:
       - path: Marquee/Player/PlayerLayout.swift
       # The second engine's switch and routing (Tests/EngineChoiceTests.swift).
       - path: Marquee/Player/EngineChoice.swift
+      - path: Marquee/Player/DeviceCaps.swift
       - path: Marquee/Theme/FocusRule.swift
       - path: Marquee/Theme/BackdropStops.swift
       # The hero box, laid out for real in Tests/HeroFrameTests.swift.

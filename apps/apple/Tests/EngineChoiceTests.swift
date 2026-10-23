@@ -49,6 +49,9 @@ import Testing
     let fixture = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
     #expect(fixture["containers"] as? [String] == EngineChoice.containers(enabled: true))
     #expect(fixture["audioDecoders"] as? [String] == EngineChoice.audioDecoders(enabled: true))
+    #expect(fixture["decoders"] as? [String] == EngineChoice.decoders(hardware: ["h264", "h265", "av1"], enabled: true, on: .mac))
+    #expect(EngineChoice.decoders(hardware: ["h264", "h265"], enabled: false, on: .mac) == ["h264", "h265"], "off: hardware only")
+    #expect(EngineChoice.decoders(hardware: ["h264", "h265"], enabled: true, on: .phone) == ["h264", "h265"], "the iPhone waits for its gate")
     #expect(fixture["tenBitH264"] as? Bool == false)
 }
 
@@ -66,4 +69,10 @@ import Testing
     for kind in ["network", "timeout", "http", "audio"] {
         #expect(!EngineChoice.fallsBack(enabled: true, from: .avPlayer, firstFrameShown: false, kind: kind), "\(kind)")
     }
+}
+
+/// The Mac claims Dolby Vision only after a Profile 5 and a Profile 7 row are walked on it (plan 2.7, bench AS34,
+/// AS36): those walks come first, then this line changes with the claim.
+@Test func theMacDoesNotClaimDolbyVisionYet() {
+    #expect(!DeviceCaps.claimsDolbyVision)
 }

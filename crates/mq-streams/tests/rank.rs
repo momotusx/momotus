@@ -2321,3 +2321,53 @@ fn a_hi10p_name_without_a_codec_is_unplayable_without_ten_bit_h264() {
     );
     assert_eq!(hidden(&ranked, HideReason::Unplayable), 1);
 }
+
+/// Apple's caps with its second engine on (the fixture the app and the bridge read too): an XviD AVI is listed;
+/// with the engine off (AVPlayer's containers, its hardware decoders) it is hidden as unplayable
+/// (plans/apple-second-engine.md 2.5, bench AS31).
+#[test]
+fn an_xvid_avi_is_listed_only_where_apples_second_engine_is_on() {
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../apps/apple/Tests/Fixtures/engine-caps.json"
+    ))
+    .unwrap();
+    let list = |key: &str| fixture[key].clone();
+    let on = DeviceCaps {
+        decoders: serde_json::from_value(list("decoders")).unwrap(),
+        audio_decoders: serde_json::from_value(list("audioDecoders")).unwrap(),
+        containers: serde_json::from_value(list("containers")).unwrap(),
+        has_fallback_engine: false,
+        ten_bit_h264: false,
+        ..DeviceCaps::basic_1080p()
+    };
+    let off = DeviceCaps {
+        decoders: vec![VideoCodec::H264, VideoCodec::H265],
+        containers: ["mp4", "m4v", "mov", "m3u8"].map(str::to_owned).to_vec(),
+        ..on.clone()
+    };
+    let prefs = StreamPrefs::default();
+    let hidden_on = |caps: &DeviceCaps| {
+        let input = RankInput {
+            caps,
+            prefs: &prefs,
+            target: &target(),
+            last_binge_group: None,
+            kids: None,
+            conditions: engine(),
+        };
+        let ranked = rank(
+            streams(
+                "torrentio",
+                0,
+                json!({ "streams": [
+                    { "name": "Torrentio\nSD", "title": "The.Last.of.Us.S02E03.DVDRip.XviD.MP3-GROUP.avi\n👤 300 💾 700 MB",
+                      "infoHash": "ffffffffffffffffffffffffffffffffffffffff", "fileIdx": 0 }
+                ]}),
+            ),
+            &input,
+        );
+        hidden(&ranked, HideReason::Unplayable)
+    };
+    assert_eq!(hidden_on(&on), 0, "listed with the engine on");
+    assert_eq!(hidden_on(&off), 1, "hidden with it off");
+}

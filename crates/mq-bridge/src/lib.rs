@@ -2395,6 +2395,7 @@ mod tests {
             .expect("every name is known")
             .caps;
         assert!(caps.opens("mkv") && caps.opens("avi") && !caps.ten_bit_h264);
+        assert!(caps.decoders.contains(&mq_relparse::VideoCodec::Xvid));
         assert_eq!(caps.audio_decoders.len(), 13);
     }
 

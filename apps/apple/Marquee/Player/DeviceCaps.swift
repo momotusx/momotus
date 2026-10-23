@@ -13,8 +13,11 @@ enum DeviceCaps {
     @MainActor static func params() -> [String: any Sendable] {
         let decoders = Self.decoders
         #if os(macOS)
-        // The Mac has no list of HDR modes: an HDR screen plays HDR10 and HLG; Dolby Vision is not claimed.
-        let hdr = StreamChoice.hdrNames(eligible: AVPlayer.eligibleForHDRPlayback, hdr10: true, hlg: true, dolbyVision: false)
+        // The Mac has no list of HDR modes: an HDR screen plays HDR10 and HLG. Dolby Vision follows VideoToolbox's
+        // `dvh1` decode (an M4 Pro: yes, bench AS36) once `claimsDolbyVision` is on (plan 2.7).
+        let hdr = StreamChoice.hdrNames(
+            eligible: AVPlayer.eligibleForHDRPlayback, hdr10: true, hlg: true,
+            dolbyVision: claimsDolbyVision && VTIsHardwareDecodeSupported(kCMVideoCodecType_DolbyVisionHEVC))
         #else
         let modes = AVPlayer.availableHDRModes
         let hdr = StreamChoice.hdrNames(
@@ -38,6 +41,10 @@ enum DeviceCaps {
         ]
     }
 
+    /// The Mac claims Dolby Vision only once a Profile 5 and a Profile 7 row have been walked on it: the engine path
+    /// showed both P8.1 rows as HDR10 (bench AS34), and a claim only steers the ranking toward DV rows (plan 2.7).
+    static let claimsDolbyVision = false
+
     /// The device's first preferred language as its base code ("tr").
     /// `Locale.current` follows the app's own localizations, English only, so
     /// on a Turkish iPhone it says "en".
@@ -52,7 +59,7 @@ enum DeviceCaps {
         var decoders = ["h264"]
         if VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC) { decoders.append("h265") }
         if VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1) { decoders.append("av1") }
-        return decoders
+        return EngineChoice.decoders(hardware: decoders, enabled: EngineChoice.enabledHere)
     }
 
     /// The screen as the stream choice words name it: "4K HDR, about 42 Mbit/s on Wi-Fi".
