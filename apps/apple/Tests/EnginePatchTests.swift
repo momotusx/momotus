@@ -131,8 +131,17 @@ extension AetherSession.Events {
     #expect(AetherSession.options(probeMiB: 8).maxAnalyzeDuration == nil)
     let mkv = try Data(contentsOf: fixtures.appending(path: "tiny.mkv"))
     let probe = try AetherEngine.probe(source: .custom(DataReader(mkv), formatHint: "matroska"))
-    #expect(AetherSession.resolved(probe, audio: [], active: nil))
-    #expect(AetherSession.resolved(nil, audio: [], active: nil), "no probe, nothing to check")
+    let size = CGSize(width: Int(probe.videoWidth), height: Int(probe.videoHeight))
+    #expect(AetherSession.resolved(video: size, audio: [], active: nil))
+    #expect(AetherSession.resolved(video: nil, audio: [], active: nil), "no probe, nothing to check")
+    // What sends the probe round again at 8 MiB (review apple-aether r2 P3).
+    let stereo = TrackInfo(id: 1, name: "", codec: "aac", language: nil, channels: 2, isDefault: true, sampleRate: 48000)
+    #expect(AetherSession.resolved(video: size, audio: [stereo], active: 1))
+    #expect(!AetherSession.resolved(video: .zero, audio: [stereo], active: 1), "no picture size")
+    let noRate = TrackInfo(id: 1, name: "", codec: "dts", language: nil, channels: 6, isDefault: true, sampleRate: 0)
+    let noChannels = TrackInfo(id: 2, name: "", codec: "dts", language: nil, channels: 0, isDefault: true, sampleRate: 48000)
+    #expect(!AetherSession.resolved(video: size, audio: [noRate], active: 1), "no sample rate")
+    #expect(!AetherSession.resolved(video: size, audio: [stereo, noChannels], active: 2), "the playing track has no channels")
 }
 
 /// Patch 4: segment 0 ends at the first keyframe at or after 1 s; the later segments keep the absolute 4 s cuts.

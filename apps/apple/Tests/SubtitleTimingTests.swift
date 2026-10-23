@@ -177,7 +177,7 @@ func body(of signature: String, in text: String) throws -> String {
     return String(text[open...index])
 }
 
-private func playerModel() throws -> String {
+func playerModel() throws -> String {
     let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player/PlayerModel.swift")
     return try String(contentsOf: file, encoding: .utf8)
 }

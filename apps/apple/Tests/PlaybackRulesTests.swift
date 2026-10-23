@@ -924,3 +924,15 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     }
     #expect(stoppedPosition(pendingStart: pending, position: position) == 720)
 }
+
+/// Review apple-aether r2 P2: the wiring of the resume on the engine, read from the source (the model needs a live
+/// player): the start stays pending from the open to the first frame, and the engine's ticks pass through `ticked`.
+@Test func theEngineKeepsTheStartPendingUntilItsFirstFrame() throws {
+    let text = try playerModel()
+    #expect(try body(of: "private func openOnEngine(", in: text).contains("pendingStart = start > 1 ? start : nil"))
+    let first = try body(of: "private func engineFirstFrame(", in: text)
+    let cleared = try #require(first.range(of: "pendingStart = nil"))
+    let shown = try #require(first.range(of: "firstFrame()"))
+    #expect(cleared.lowerBound < shown.lowerBound, "cleared before the first frame is told")
+    #expect(try body(of: "private func engineTick(", in: text).contains("ticked(time: time, pending: pendingStart)"))
+}

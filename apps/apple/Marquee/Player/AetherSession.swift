@@ -142,7 +142,7 @@ final class AetherSession {
             do {
                 var probe = try await engine.load(source: source, startPosition: start > 1 ? start : nil, options: Self.options(probeMiB: probeMiB))
                 guard self?.load == load else { return }
-                if probeMiB < 8, !Self.resolved(probe, audio: engine.audioTracks, active: engine.activeAudioTrackIndex) {
+                if probeMiB < 8, !Self.resolved(video: probe.map { CGSize(width: Int($0.videoWidth), height: Int($0.videoHeight)) }, audio: engine.audioTracks, active: engine.activeAudioTrackIndex) {
                     (probeMiB, passed) = (8, [:])
                     probe = try await engine.load(source: source, startPosition: start > 1 ? start : nil, options: Self.options(probeMiB: probeMiB))
                 }
@@ -182,10 +182,12 @@ final class AetherSession {
     }
 
     /// Whether the probe came back with what plays: the picture's size, and the playing audio's rate and channels.
-    /// No probe (the engine reports none on some paths) counts as resolved: there is nothing to check.
-    static func resolved(_ probe: SourceProbe?, audio: [TrackInfo], active: Int?) -> Bool {
-        guard let probe else { return true }
-        guard probe.videoWidth > 0, probe.videoHeight > 0 else { return false }
+    /// No probe (the engine reports none on some paths) counts as resolved: there is nothing to check. The 2 s of
+    /// analysis can leave the frame rate or interlacing unknown for a file with no DefaultDuration; this does not
+    /// look at them (plan 2.3).
+    static func resolved(video: CGSize?, audio: [TrackInfo], active: Int?) -> Bool {
+        guard let video else { return true }
+        guard video.width > 0, video.height > 0 else { return false }
         guard let track = audio.first(where: { $0.id == active }) ?? audio.first else { return true }
         return track.sampleRate > 0 && track.channels > 0
     }
