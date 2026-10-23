@@ -915,6 +915,10 @@ const ANDROID_CA_DIRS: [&str; 2] = [
     "/system/etc/security/cacerts",
 ];
 
+/// System CAs the user turned off in Settings, by the same file names.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+const ANDROID_CA_REMOVED: &str = "/data/misc/user/0/cacerts-removed";
+
 /// The roots every HTTPS client of the core verifies against: on Android
 /// the device's own CA store, read once, checked by rustls's WebPKI with no
 /// online revocation, as OkHttp, ExoPlayer and Chrome on Android do (core
@@ -922,38 +926,51 @@ const ANDROID_CA_DIRS: [&str; 2] = [
 /// it replaces scanned the whole store on every new certificate and fetched
 /// the CA's revocation list inside the handshake: 4 to 5 s per new host, and
 /// a Let's Encrypt site failed as "Revoked" when that list's host was out
-/// of reach. `None` elsewhere: each system's own verifier.
+/// of reach. CAs the user installed are not trusted (as for any app
+/// targeting API 24 and up), and ones the user turned off are left out.
+/// `None` elsewhere, and on a device whose store cannot be read: each
+/// system's own verifier then, never an empty store that trusts nothing.
 pub fn device_roots() -> Option<Vec<reqwest::Certificate>> {
     #[cfg(target_os = "android")]
     {
-        static ROOTS: std::sync::LazyLock<Vec<reqwest::Certificate>> =
-            std::sync::LazyLock::new(|| roots_in(&ANDROID_CA_DIRS.map(std::path::Path::new)));
-        Some(ROOTS.clone())
+        static ROOTS: std::sync::LazyLock<Option<Vec<reqwest::Certificate>>> =
+            std::sync::LazyLock::new(|| {
+                roots_in(
+                    &ANDROID_CA_DIRS.map(std::path::Path::new),
+                    std::path::Path::new(ANDROID_CA_REMOVED),
+                )
+            });
+        ROOTS.clone()
     }
     #[cfg(not(target_os = "android"))]
     None
 }
 
 /// Every certificate in the first of `dirs` that holds any (one PEM file a
-/// certificate, Android's layout); a file that is no certificate is passed
-/// over.
+/// certificate, Android's layout), less the ones a file of the same name in
+/// `removed` turns off; a file that is no certificate is passed over. None
+/// when no folder holds one.
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
-fn roots_in(dirs: &[&std::path::Path]) -> Vec<reqwest::Certificate> {
+fn roots_in(
+    dirs: &[&std::path::Path],
+    removed: &std::path::Path,
+) -> Option<Vec<reqwest::Certificate>> {
     for dir in dirs {
         let Ok(entries) = std::fs::read_dir(dir) else {
             continue;
         };
         let roots: Vec<_> = entries
             .flatten()
+            .filter(|e| !removed.join(e.file_name()).exists())
             .filter_map(|e| std::fs::read(e.path()).ok())
             .filter_map(|pem| trust_anchor(&pem))
             .collect();
         if !roots.is_empty() {
-            return roots;
+            return Some(roots);
         }
     }
-    tracing::warn!("no CA certificates found in {dirs:?}");
-    Vec::new()
+    tracing::warn!("no CA certificates found in {dirs:?}: the platform verifier stays");
+    None
 }
 
 /// A PEM file's certificate when rustls takes it as a root; reqwest itself
@@ -1231,7 +1248,11 @@ impl HttpClient {
         req: Request,
         opts: &RequestOptions,
     ) -> Result<(reqwest::Response, budget::Permit), HttpError> {
-        let host = req.url.host_str().unwrap_or_default().to_owned();
+        // A host on this machine or the LAN is never named in the log.
+        let host = match req.url.host_str().unwrap_or_default() {
+            h if is_private_host(h) => "private".to_owned(),
+            h => h.to_owned(),
+        };
         let started = std::time::Instant::now();
         let fetched = self.fetch_hops(req, opts).await;
         tracing::debug!(
@@ -1601,24 +1622,93 @@ mod tests {
         let empty = std::env::temp_dir().join(format!("mq-cacerts-{}", std::process::id()));
         std::fs::create_dir_all(&empty).unwrap();
         let missing = empty.join("apex-cacerts");
+        let count = |dirs: &[&std::path::Path], removed: &std::path::Path| {
+            roots_in(dirs, removed).map(|r| r.len())
+        };
         assert_eq!(
-            roots_in(&[&fixture]).len(),
-            1,
+            count(&[&fixture], &missing),
+            Some(1),
             "one certificate, the notes passed over"
         );
         assert_eq!(
-            roots_in(&[&missing, &fixture]).len(),
-            1,
+            count(&[&missing, &fixture], &missing),
+            Some(1),
             "no APEX folder: the system one"
         );
         assert_eq!(
-            roots_in(&[&empty, &fixture]).len(),
-            1,
+            count(&[&empty, &fixture], &missing),
+            Some(1),
             "an empty APEX folder: the system one"
         );
-        assert!(roots_in(&[&missing]).is_empty());
+        // Review P2: nothing readable is no store at all, never an empty one.
+        assert_eq!(count(&[&missing], &missing), None);
+        assert_eq!(count(&[&empty], &missing), None);
+        // Review P3: a CA the user turned off, by its file name, is left out.
+        std::fs::write(empty.join("5a1b2c3d.0"), b"").unwrap();
+        assert_eq!(count(&[&fixture], &empty), None, "the one CA turned off");
+        std::fs::remove_file(empty.join("5a1b2c3d.0")).unwrap();
         assert!(device_roots().is_none(), "this host keeps its own verifier");
         std::fs::remove_dir(&empty).unwrap();
+    }
+
+    /// Review P3: a client on the device roots takes a server whose chain
+    /// ends at one of them, and refuses one it does not know, with WebPKI
+    /// and no revocation fetch. The fixture root signed a leaf for
+    /// 127.0.0.1; the other root is the self-signed test certificate.
+    #[tokio::test]
+    async fn the_device_roots_accept_their_chain_and_refuse_another() {
+        use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+        install_crypto_provider();
+        let dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tls/webpki");
+        let leaf = CertificateDer::from(std::fs::read(dir.join("leaf.der")).unwrap());
+        let key = PrivatePkcs8KeyDer::from(std::fs::read(dir.join("leaf.key.der")).unwrap());
+        let config = rustls::ServerConfig::builder_with_provider(std::sync::Arc::new(
+            rustls::crypto::ring::default_provider(),
+        ))
+        .with_safe_default_protocol_versions()
+        .unwrap()
+        .with_no_client_auth()
+        .with_single_cert(vec![leaf], PrivateKeyDer::Pkcs8(key))
+        .unwrap();
+        let config = std::sync::Arc::new(config);
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            for socket in listener.incoming().flatten() {
+                let Ok(conn) = rustls::ServerConnection::new(config.clone()) else {
+                    continue;
+                };
+                let mut tls = rustls::StreamOwned::new(conn, socket);
+                let mut buf = [0u8; 1024];
+                if tls.read(&mut buf).is_ok() {
+                    let _ = tls.write_all(
+                        b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok",
+                    );
+                    let _ = tls.flush();
+                }
+            }
+        });
+        let missing = dir.join("none");
+        let client = |roots: Vec<reqwest::Certificate>| {
+            reqwest::Client::builder()
+                .no_proxy()
+                .tls_certs_only(roots)
+                .build()
+                .unwrap()
+        };
+        let url = format!("https://127.0.0.1:{port}/");
+        let known = client(roots_in(&[&dir.join("cacerts")], &missing).unwrap());
+        let answer = known.get(&url).send().await.expect("its own root");
+        assert_eq!(answer.text().await.unwrap(), "ok");
+        let other = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/tls/android-cacerts");
+        let unknown = client(roots_in(&[&other], &missing).unwrap());
+        assert!(
+            unknown.get(&url).send().await.is_err(),
+            "a root it does not know"
+        );
     }
 
     /// The dev recorder takes a public host's request whole (path encoding,
