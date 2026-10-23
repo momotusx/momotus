@@ -1908,6 +1908,10 @@ impl Session {
                 discover.select(text("kind"), text("catalog"), genre);
             }
             (View::Discover(discover), "loadMore") => discover.load_more(),
+            // An absent or null id clears the preview.
+            (View::Discover(discover), "preview") => {
+                discover.preview(command.get("id").and_then(Value::as_str));
+            }
             (View::Pairing(pairing), "confirm") => pairing.confirm(),
             (View::Pairing(pairing), "reject") => pairing.reject(),
             (View::SignIn(sign_in), "returned") => sign_in.returned(&param(command, "fragment")?),

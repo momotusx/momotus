@@ -87,7 +87,29 @@ pub struct DiscoverSnapshot {
     /// None otherwise.
     pub missing_genre: Option<String>,
     pub items: Vec<Tile>,
+    /// The item `preview {id}` named, with what its catalog said of it, so
+    /// a preview shows its synopsis without opening a title view (core
+    /// backlog C44a). Null until one is named and listed: an id named
+    /// before its page came is filled in when it comes. A `None` or a new
+    /// list (another kind, catalog or genre) clears it.
+    pub preview: Option<ItemDetails>,
     pub state: DiscoverState,
+}
+
+/// A catalog item's synopsis, up to three genres and runtime, as its
+/// catalog gave them; any may be missing.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub struct ItemDetails {
+    pub id: String,
+    pub description: Option<String>,
+    pub genres: Vec<String>,
+    pub runtime: Option<String>,
 }
 
 #[derive(Clone)]
@@ -108,6 +130,9 @@ struct State {
     catalogs: Vec<Catalog>,
     snapshot: DiscoverSnapshot,
     seen: HashSet<String>,
+    /// The id `preview` named: kept until a select or a `None`, so an item
+    /// named before its page came is filled in when it does.
+    preview: Option<String>,
 }
 
 pub struct DiscoverView {
@@ -139,6 +164,7 @@ fn empty_snapshot(catalogs: &[Catalog]) -> DiscoverSnapshot {
         genre_required: false,
         missing_genre: None,
         items: Vec::new(),
+        preview: None,
         state: DiscoverState::End,
     }
 }
@@ -160,6 +186,7 @@ impl DiscoverView {
                 catalogs,
                 snapshot: snapshot.clone(),
                 seen: HashSet::new(),
+                preview: None,
             })),
             snapshot: SharedObservable::new(snapshot),
             task: Mutex::new(None),
@@ -204,6 +231,17 @@ impl DiscoverView {
     /// or asks a failed page again.
     pub fn load_more(&self) {
         self.inner.load_more();
+    }
+
+    /// Names the item a preview shows (`None` clears): `preview` carries
+    /// its details from the catalog's own answer, with no request, once the
+    /// item is listed.
+    pub fn preview(&self, id: Option<&str>) {
+        let mut s = lock(&self.inner.state);
+        s.preview = id.map(str::to_owned);
+        if fill_preview(&mut s) {
+            self.inner.snapshot.set(s.snapshot.clone());
+        }
     }
 }
 
@@ -347,6 +385,8 @@ impl Inner {
             s.snapshot.genre = genre;
             s.snapshot.missing_genre = missing_genre;
             s.snapshot.items.clear();
+            s.snapshot.preview = None;
+            s.preview = None;
             s.seen.clear();
             s.snapshot.state = DiscoverState::Loading;
             self.snapshot.set(s.snapshot.clone());
@@ -532,6 +572,8 @@ async fn load_page(
             },
             Err(reason) => DiscoverState::Failed { reason },
         };
+        // A preview named before its item came.
+        fill_preview(&mut s);
         snapshot.set(s.snapshot.clone());
         // Every item's, not only this page's: a page asked while the last
         // lookup was on its way cancelled it.
@@ -540,6 +582,23 @@ async fn load_page(
     if core.ratings().lookup(&titles).await.is_some() {
         rate_items(&core, &state, &snapshot);
     }
+}
+
+/// The named item's details, when it is listed; true when they changed.
+fn fill_preview(s: &mut State) -> bool {
+    let details = s.preview.as_deref().and_then(|id| {
+        let tile = s.snapshot.items.iter().find(|t| t.id == id)?;
+        let blurb = tile.blurb.clone().unwrap_or_default();
+        Some(ItemDetails {
+            id: tile.id.clone(),
+            description: blurb.description,
+            genres: blurb.genres,
+            runtime: blurb.runtime,
+        })
+    });
+    let changed = s.snapshot.preview != details;
+    s.snapshot.preview = details;
+    changed
 }
 
 /// Puts what holds now on every item shown (a lookup landed, or a read of

@@ -393,6 +393,8 @@ data class DiscoverSnapshot(
     /** A genre asked with a kind and no catalog (a title page's genre chip) that no catalog of that kind lists: Discover shows the kind without it, on its first catalog that needs no genre (else its first, with that catalog's first genre), and says so (core backlog C40). None otherwise. */
     val missingGenre: String? = null,
     val items: List<Tile> = emptyList(),
+    /** The item `preview {id}` named, with what its catalog said of it, so a preview shows its synopsis without opening a title view (core backlog C44a). Null until one is named and listed: an id named before its page came is filled in when it comes. A `None` or a new list (another kind, catalog or genre) clears it. */
+    val preview: ItemDetails? = null,
     val state: DiscoverState,
 )
 
@@ -682,6 +684,15 @@ enum class Installed(
 
     object Serializer : FallbackEnumSerializer<Installed>("Installed", Installed.entries, Installed::wire, Unknown)
 }
+
+/** A catalog item's synopsis, up to three genres and runtime, as its catalog gave them; any may be missing. */
+@Serializable
+data class ItemDetails(
+    val id: String,
+    val description: String? = null,
+    val genres: List<String> = emptyList(),
+    val runtime: String? = null,
+)
 
 @Serializable
 data class KidsKeys(

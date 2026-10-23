@@ -646,13 +646,28 @@ async fn a_catalog_of_an_unknown_type_is_filed_by_its_name() {
 
 /// An addon serving `manifest` whose every catalog answers one movie.
 async fn serving(manifest: serde_json::Value) -> AddonRow {
+    serving_metas(
+        manifest,
+        r#"{"metas": [{"id": "tt0", "type": "movie", "name": "M0"}]}"#,
+        Arc::default(),
+    )
+    .await
+}
+
+/// An addon serving `manifest` whose every catalog answers `body`,
+/// counting the requests in `asked`.
+async fn serving_metas(
+    manifest: serde_json::Value,
+    body: &'static str,
+    asked: Arc<std::sync::atomic::AtomicUsize>,
+) -> AddonRow {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
         while let Ok((mut socket, _)) = listener.accept().await {
             let mut buf = [0u8; 2048];
             let _ = socket.read(&mut buf).await;
-            let body = r#"{"metas": [{"id": "tt0", "type": "movie", "name": "M0"}]}"#;
+            asked.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             let reply = format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
                 body.len()
@@ -710,5 +725,99 @@ async fn a_name_files_without_its_addon_and_known_types_come_first() {
     assert_eq!(
         (s.catalog.as_deref(), s.genre.as_deref()),
         (Some("lists|movie|top"), Some("Action"))
+    );
+}
+
+/// Core backlog C44a: `preview {id}` gives the item's synopsis, up to three
+/// genres and runtime from the catalog's own answer, with no request; an id
+/// not listed, a null id or a new list clears it.
+#[tokio::test]
+async fn a_preview_carries_the_item_s_details_with_no_request() {
+    let asked = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let row = serving_metas(
+        serde_json::json!({
+            "id": "cat", "version": "1.0.0", "name": "Cat", "types": ["movie"], "resources": ["catalog"],
+            "catalogs": [{"type": "movie", "id": "top", "name": "Popular",
+                "extra": [{"name": "genre", "options": ["Action", "Drama"]}]}]
+        }),
+        r#"{"metas": [
+            {"id": "tt1", "type": "movie", "name": "Sintel", "description": "A girl looks for her dragon.",
+             "runtime": "15 min", "links": [
+                {"name": "Animation", "category": "Genres", "url": "stremio:///discover"},
+                {"name": "Fantasy", "category": "Genres", "url": "stremio:///discover"},
+                {"name": "Short", "category": "Genres", "url": "stremio:///discover"},
+                {"name": "Drama", "category": "Genres", "url": "stremio:///discover"},
+                {"name": "7.4", "category": "imdb", "url": "https://imdb.com/title/tt1727587"}]},
+            {"id": "tt2", "type": "movie", "name": "Bare"}
+        ]}"#,
+        asked.clone(),
+    )
+    .await;
+    let core = Core::temporary("p").unwrap();
+    core.library().set_addons("p", &[row], &core.hlc()).unwrap();
+    let view = DiscoverView::open(&core);
+    settle(&view).await;
+    assert_eq!(view.snapshot().preview, None);
+    let before = asked.load(std::sync::atomic::Ordering::SeqCst);
+
+    view.preview(Some("tt1"));
+    let preview = view.snapshot().preview.expect("details");
+    assert_eq!(
+        (
+            preview.id.as_str(),
+            preview.description.as_deref(),
+            preview.runtime.as_deref()
+        ),
+        ("tt1", Some("A girl looks for her dragon."), Some("15 min"))
+    );
+    assert_eq!(
+        preview.genres,
+        ["Animation", "Fantasy", "Short"],
+        "three at most"
+    );
+    view.preview(Some("tt2"));
+    let bare = view.snapshot().preview.expect("an item with no details");
+    assert_eq!(
+        (bare.description, bare.genres.len(), bare.runtime),
+        (None, 0, None)
+    );
+    assert_eq!(
+        asked.load(std::sync::atomic::Ordering::SeqCst),
+        before,
+        "no request for a preview"
+    );
+
+    view.preview(Some("tt9"));
+    assert_eq!(view.snapshot().preview, None, "not listed yet");
+    view.preview(Some("tt1"));
+    view.preview(None);
+    assert_eq!(view.snapshot().preview, None, "cleared");
+    view.preview(Some("tt1"));
+    view.select(None, None, Some(Some("Drama")));
+    assert_eq!(view.snapshot().preview, None, "a new list starts with none");
+}
+
+/// Review note 1: a preview named before the items come is kept and filled
+/// in when its page lands; only a select or a `None` clears it.
+#[tokio::test]
+async fn a_preview_named_before_the_page_is_filled_when_it_comes() {
+    let row = serving_metas(
+        serde_json::json!({
+            "id": "cat", "version": "1.0.0", "name": "Cat", "types": ["movie"], "resources": ["catalog"],
+            "catalogs": [{"type": "movie", "id": "top", "name": "Popular"}]
+        }),
+        r#"{"metas": [{"id": "tt1", "type": "movie", "name": "Sintel", "description": "A girl looks for her dragon."}]}"#,
+        Arc::default(),
+    )
+    .await;
+    let core = Core::temporary("p").unwrap();
+    core.library().set_addons("p", &[row], &core.hlc()).unwrap();
+    let view = DiscoverView::open(&core);
+    view.preview(Some("tt1"));
+    settle(&view).await;
+    let filled = view.snapshot().preview.expect("filled when the page came");
+    assert_eq!(
+        filled.description.as_deref(),
+        Some("A girl looks for her dragon.")
     );
 }
