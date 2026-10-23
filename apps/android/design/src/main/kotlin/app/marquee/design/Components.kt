@@ -962,6 +962,26 @@ fun FactsGrid(
     }
 }
 
+/** A version's language when it is not the viewer's ("Turkish"): a quiet tag on the `raised` fill beside its quality. */
+@Composable
+fun LanguageTag(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    val tv = Marquee.form == Form.Tv
+    val shape = RoundedCornerShape(Marquee.radius.s)
+    MqText(
+        text,
+        modifier =
+            modifier
+                .background(Marquee.colors.raised, shape)
+                .padding(horizontal = if (tv) 10.dp else 6.dp, vertical = if (tv) 2.dp else 1.dp),
+        role = TextRole.Caption,
+        color = Marquee.colors.muted,
+        maxLines = 1,
+    )
+}
+
 /** A small label in `dim` spaced capitals: a card's kicker, a table's column, a group's name. */
 @Composable
 fun CapsLabel(

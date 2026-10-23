@@ -116,9 +116,6 @@ object VersionsCopy {
             quality
         }
 
-    /** "1.2 GB, Real-Debrid" (the size is left out when the source does not say). */
-    fun source(row: VersionRow): String = listOfNotNull(row.sizeBytes?.let(Format::bytes), row.via).joinToString(", ")
-
     /** The line under the primary button: the recommended version, a wait, or why nothing can play. */
     fun line(
         snapshot: VersionsSnapshot?,
@@ -278,7 +275,6 @@ object VersionsCopy {
         listOfNotNull(
             "Size" to (row.sizeBytes?.let(Format::bytes) ?: "Unknown"),
             "Status" to status(row.status),
-            "Via" to row.via,
             ("Features" to row.features.joinToString(", ")).takeIf { row.features.size > 1 },
             ("Languages" to languages(row)).takeIf { row.languages.isNotEmpty() },
         )
@@ -300,6 +296,13 @@ object VersionsCopy {
             languages(row).takeIf { it.isNotEmpty() },
             "${row.failoverCount + 1} sources".takeIf { row.failoverCount > 0 },
         ).joinToString(", ").ifEmpty { "Language not stated" }
+
+    /**
+     * The row's language tag when it is in another language than the viewer's (the core's `otherLanguages` group):
+     * "Turkish", or null when the release names none (plans/versions-android-spec.md, section 1).
+     */
+    fun languageTag(row: VersionRow): String? =
+        languages(row).takeIf { row.group == Group.OtherLanguages && it.isNotEmpty() }
 
     /** "English, Turkish" from the release's codes. */
     fun languages(row: VersionRow): String = row.languages.joinToString(", ", transform = ::languageName)

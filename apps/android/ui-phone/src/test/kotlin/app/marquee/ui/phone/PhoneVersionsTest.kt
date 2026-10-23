@@ -51,7 +51,6 @@ import org.robolectric.annotation.Config
 import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 /** The Versions screen on a phone with the core's stream choice (plans/m13-stream-choice.md 3.7, 3.9, 3.11). */
 @RunWith(RobolectricTestRunner::class)
@@ -188,9 +187,10 @@ class PhoneVersionsTest {
     }
 
     @Test
-    fun `a row says its line, and a tap opens it to the details and its own Play`() {
+    fun `a row says its line with no addon name, and a tap opens it to the details and its own Play`() {
         show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), listOf(row("a", ReasonLine.Quick(1204, 2 * gib)))))
-        compose.onNodeWithText("This phone: 1080p, about 42 Mbit/s on Wi-Fi").assertIsDisplayed()
+        compose.onAllNodesWithText("This phone", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("Torrentio", substring = true).assertCountEquals(0)
         compose.onNodeWithText("Starts quickly", substring = true).assertIsDisplayed()
         compose.onAllNodesWithText("1,204 seeders, 2 GB").assertCountEquals(0)
         compose.onNodeWithText("Starts quickly", substring = true).performClick()
@@ -205,20 +205,27 @@ class PhoneVersionsTest {
     }
 
     @Test
-    fun `versions that play only through an account say why, with Add an account and Show them`() {
+    fun `account-only versions say why over dimmed rows with Settings and no account step`() {
         show(snapshot(blocked = BlockedVersions(BlockedReason.NeedsAccount, 12, listOf(row("a", ReasonLine.Few(31))))))
-        compose.onNodeWithText("No playable version found").assertIsDisplayed()
         compose
             .onNodeWithText(
                 "Marquee found 12 versions. This version of the app",
                 substring = true,
             ).assertIsDisplayed()
         compose.onNodeWithText("12 versions").assertIsDisplayed()
-        compose.onAllNodesWithText("May start slowly", substring = true).assertCountEquals(0)
-        compose.onNodeWithText("Add an account").performClick()
-        assertEquals(1, accounts)
-        compose.onNodeWithText("Show them").performClick()
+        for (gone in listOf("No playable version found", "Add an account", "Show them")) {
+            compose.onAllNodesWithText(gone).assertCountEquals(0)
+        }
         compose.onNodeWithText("May start slowly", substring = true).assertIsDisplayed()
+        compose.onNodeWithText(StreamChoiceCopy.SETTINGS).performClick()
+        assertEquals(1, accounts)
+    }
+
+    @Test
+    fun `a version in another language than the viewer's carries its language`() {
+        val turkish = row("tr", ReasonLine.Few(31)).copy(group = Group.OtherLanguages, languages = listOf("tr"))
+        show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), listOf(turkish)))
+        compose.onNodeWithText("Turkish").assertIsDisplayed()
     }
 
     @Test
@@ -233,28 +240,9 @@ class PhoneVersionsTest {
     }
 
     @Test
-    fun `almost nobody sharing shows once, right before Play`() {
+    fun `almost nobody sharing never shows its own bar, the why line says it`() {
         show(snapshot(row("best", ReasonLine.Few(1)), listOf(row("a", ReasonLine.Few(0))), nobodySharing = true))
-        // Once, on the card with its details line; not again over the list.
-        compose.onAllNodesWithText(StreamChoiceCopy.NOBODY_SHARING).assertCountEquals(1)
-        compose.onAllNodesWithText(StreamChoiceCopy.NOBODY_SHARING_DETAILS).assertCountEquals(1)
-        // The card's line comes right before Play: above it, and nothing else between them.
-        val lines = compose.onAllNodesWithText(StreamChoiceCopy.NOBODY_SHARING_DETAILS).fetchSemanticsNodes()
-        val play =
-            compose
-                .onAllNodesWithText("Play this version")
-                .fetchSemanticsNodes()
-                .first()
-                .boundsInRoot
-        val card = lines.map { it.boundsInRoot }.filter { it.bottom <= play.top }.maxByOrNull { it.bottom }
-        assertTrue(card != null && play.top - card.bottom < 48, "the line sits right over Play")
-    }
-
-    @Test
-    fun `almost nobody sharing shows once over the list when there is no recommended card`() {
-        show(snapshot(rows = listOf(row("a", ReasonLine.Few(0)), row("b", ReasonLine.Few(1))), nobodySharing = true))
-        compose.onAllNodesWithText("Play this version").assertCountEquals(0)
-        compose.onAllNodesWithText(StreamChoiceCopy.NOBODY_SHARING).assertCountEquals(1)
-        compose.onAllNodesWithText(StreamChoiceCopy.NOBODY_SHARING_DETAILS).assertCountEquals(1)
+        compose.onAllNodesWithText(StreamChoiceCopy.NOBODY_SHARING).assertCountEquals(0)
+        compose.onAllNodesWithText(StreamChoiceCopy.NOBODY_SHARING_DETAILS).assertCountEquals(0)
     }
 }

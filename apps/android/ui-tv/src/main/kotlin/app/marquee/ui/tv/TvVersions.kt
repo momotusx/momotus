@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -43,10 +44,8 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
@@ -69,6 +68,7 @@ import app.marquee.design.FactsGrid
 import app.marquee.design.FocusInk
 import app.marquee.design.GlassBar
 import app.marquee.design.Icons
+import app.marquee.design.LanguageTag
 import app.marquee.design.LiveSpoken
 import app.marquee.design.Marquee
 import app.marquee.design.MqIcon
@@ -131,15 +131,15 @@ fun TvVersions(
     val blocked = snapshot?.blocked?.takeIf { snapshot.recommended == null }
     val nothing =
         snapshot != null && snapshot.done && snapshot.recommended == null && snapshot.rows.isEmpty() && blocked == null
-    // "Show them": the blocked rows, as they would rank once the reason is fixed.
-    var showBlocked by remember { mutableStateOf(false) }
-    // The list, for Right from Show them: Add an account reaches further right, so focus search alone stops there.
+    // The list, for Right from the blocked line's Settings.
     val list = remember { FocusRequester() }
     // The target exists once there is something to focus: the card's Play (or Try again, or the blocked
-    // card's action, or Add a source), else the first row.
+    // line's Settings, or Add a source), else the first row.
     val target =
         when {
-            failure != null || snapshot?.recommended != null || blocked != null -> PLAY
+            failure != null || snapshot?.recommended != null -> PLAY
+            blocked?.reason == BlockedReason.NeedsAccount -> PLAY
+            blocked != null -> blocked.rows.firstOrNull()?.let { rowKey(it) }
             nothing -> ADD
             else -> snapshot?.rows?.firstOrNull()?.let { rowKey(it) }
         }
@@ -162,24 +162,20 @@ fun TvVersions(
         Header(heading, snapshot)
         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(Marquee.space.l)) {
             Pick(snapshot, failure, { versions?.retry() }, onAddSource, focus, onPlay) {
-                if (blocked != null) {
-                    Blocked(snapshot, blocked, showBlocked, { showBlocked = !showBlocked }, onAddAccount, focus, list)
-                }
+                if (blocked != null) Blocked(snapshot, blocked, onAddAccount, focus, list)
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-                // Once per screen: the card says it right before Play; the list only when there is no such card.
-                if (snapshot?.nobodySharing == true && (failure != null || snapshot.recommended == null)) {
-                    GlassBar { NobodySharing() }
-                }
-                snapshot?.note?.let { LearnedLine(it, onUndo) }
+                // The blocked rows are simply listed, dimmed, as they would rank once the reason is fixed.
                 Sources(
                     snapshot,
-                    if (showBlocked && blocked != null) blocked.rows else snapshot?.rows.orEmpty(),
+                    blocked?.rows ?: snapshot?.rows.orEmpty(),
+                    blocked != null,
                     focus,
                     list,
                     onPlay,
                     Modifier.weight(1f),
                 )
+                snapshot?.note?.let { LearnedLine(it, onUndo) }
             }
         }
     }
@@ -188,6 +184,15 @@ fun TvVersions(
 private val arrows = setOf(Key.DirectionLeft, Key.DirectionRight, Key.DirectionUp, Key.DirectionDown)
 
 private fun rowKey(row: VersionRow) = "row:${row.key}"
+
+private fun headKey(group: Group) = "head:$group"
+
+private fun foldKey(group: Group) = "fold:$group"
+
+private const val SHOW_FEWER = "Show fewer"
+
+/** The rows of a page where none plays as listed: dimmed, still startable. */
+private const val DIMMED = 0.5f
 
 private fun tone(tone: VersionsCopy.Tone) =
     when (tone) {
@@ -199,13 +204,12 @@ private fun tone(tone: VersionsCopy.Tone) =
 
 private fun statusTone(row: VersionRow) = if (VersionsCopy.good(row.status)) Status.Ok else Status.Warn
 
-/** The heading in a plain line over "Versions", and at the right how the search goes and what the ranking read of this TV. */
+/** The heading in a plain line over "Versions", and at the right how the search goes. */
 @Composable
 private fun Header(
     heading: String,
     snapshot: VersionsSnapshot?,
 ) {
-    val device = snapshot?.conditions?.let { StreamChoiceCopy.header(tv = true, it) }
     val colors = Marquee.colors
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
@@ -215,15 +219,6 @@ private fun Header(
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
             val (text, state) = VersionsCopy.progress(snapshot)
             StatusWord(text, tone(state))
-            if (device != null) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    MqIcon(Icons.Monitor, tint = colors.muted, size = 24.dp)
-                    MqText(device, role = TextRole.Callout, color = colors.muted, maxLines = 1)
-                }
-            }
         }
     }
 }
@@ -318,8 +313,6 @@ private fun Pick(
                     }
                     Release(best.releaseName, maxLines = 3)
                 }
-                // Outside the details, so it never scrolls away from Play; said when it comes.
-                if (snapshot.nobodySharing) NobodySharing(Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                 PrimaryButton(
                     label = "Play this version",
                     icon = PlayFilled,
@@ -387,65 +380,33 @@ private fun Release(
 private val QUALITY: Dp = 150.dp
 private val SIZE: Dp = 150.dp
 private val STATUS: Dp = 300.dp
-private val VIA: Dp = 220.dp
 
 /**
- * Why no version is listed, in the core's words, with its way on: "Add an account" (and "Show them"
- * beside it) when the versions play only through a streaming service account, else "Show them".
+ * Why no version plays, in the core's words, and the rows simply listed dimmed beside it. Versions that play only
+ * through a streaming service account give Settings (where an account is added), the one action; nothing else asks
+ * anything of the viewer here (plans/versions-android-spec.md, section 5).
  */
 @Composable
 private fun Blocked(
     snapshot: VersionsSnapshot,
     blocked: BlockedVersions,
-    shown: Boolean,
-    onShow: () -> Unit,
-    onAddAccount: () -> Unit,
+    onSettings: () -> Unit,
     focus: FocusMemory,
     list: FocusRequester,
 ) {
-    val (text, action) =
-        StreamChoiceCopy.blocked(blocked.reason, blocked.count, snapshot.conditions.window)
-            ?: (null to StreamChoiceCopy.SHOW_ROWS)
-    val account = blocked.reason == BlockedReason.NeedsAccount
-    StateMessage(
-        title = "No playable version found",
-        // A reason from a newer core: the hidden rows say why.
-        body = text ?: VersionsCopy.waitingBody(snapshot),
-        actionLabel = action,
-        onAction = if (account) onAddAccount else onShow,
-        actionFocus = focus.requesterFor(PLAY),
-        actionIcon =
-            if (account) {
-                Icons.KeyRound
-            } else if (shown) {
-                Icons.EyeOff
-            } else {
-                Icons.Eye
-            },
-        secondaryLabel = StreamChoiceCopy.SHOW_ROWS.takeIf { account },
-        onSecondary = onShow.takeIf { account },
-        secondaryModifier = Modifier.focusProperties { if (shown) right = list },
-        secondaryIcon = if (shown) Icons.EyeOff else Icons.Eye,
-        modifier = Modifier.padding(0.dp),
-    )
-}
-
-/**
- * The core's `nobodySharing`: every version is a swarm with one seeder or none right now, said once: right
- * before Play on the recommended card, or over the list when there is no such card (plans/m13-stream-choice.md).
- */
-@Composable
-private fun NobodySharing(modifier: Modifier = Modifier) {
-    val colors = Marquee.colors
-    Row(
-        modifier.semantics(mergeDescendants = true) {},
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.Top,
-    ) {
-        MqIcon(Icons.UserRoundX, tint = colors.warn, size = 26.dp)
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            MqText(StreamChoiceCopy.NOBODY_SHARING, role = TextRole.Callout, weight = FontWeight.SemiBold, maxLines = 2)
-            MqText(StreamChoiceCopy.NOBODY_SHARING_DETAILS, role = TextRole.Caption, color = colors.muted, maxLines = 3)
+    val text =
+        StreamChoiceCopy.blocked(blocked.reason, blocked.count, snapshot.conditions.window)?.first
+            ?: VersionsCopy.waitingBody(snapshot)
+    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+        MqText(text, role = TextRole.Headline, weight = FontWeight.SemiBold, maxLines = 4)
+        if (blocked.reason == BlockedReason.NeedsAccount) {
+            PrimaryButton(
+                StreamChoiceCopy.SETTINGS,
+                onSettings,
+                Modifier.focusProperties { right = list },
+                icon = Icons.Settings,
+                focusRequester = focus.requesterFor(PLAY),
+            )
         }
     }
 }
@@ -478,6 +439,7 @@ private fun LearnedLine(
 private fun Sources(
     snapshot: VersionsSnapshot?,
     rows: List<VersionRow>,
+    dimmed: Boolean,
     focus: FocusMemory,
     list: FocusRequester,
     onPlay: (VersionRow) -> Unit,
@@ -486,6 +448,11 @@ private fun Sources(
     val colors = Marquee.colors
     val groups = rows.groupBy { it.group }
     val open = remember { mutableStateMapOf<Group, Boolean>() }
+    val scope = rememberCoroutineScope()
+    // Focus by key once its node is composed (an item a toggle just inserted is not yet attached).
+    val focusSoon = { key: String -> scope.launch { focus.focusWhenReady(key, focus.interactions, waitMs = 1_000) } }
+    // Looked up when focus moves, so the builder below calls nothing composable.
+    val toPlay = Modifier.focusProperties { left = focus.requester(PLAY) ?: FocusRequester.Default }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
         if (rows.isNotEmpty()) {
             Row(
@@ -497,7 +464,6 @@ private fun Sources(
                 CapsLabel("Features", Modifier.weight(1f))
                 CapsLabel("Size", Modifier.width(SIZE))
                 CapsLabel("Status", Modifier.width(STATUS))
-                CapsLabel("Via", Modifier.width(VIA))
             }
             Line(colors.lineStrong)
         }
@@ -515,6 +481,13 @@ private fun Sources(
                 val rows = groups[group].orEmpty()
                 if (rows.isEmpty()) continue
                 val all = open[group] == true
+                // An open section's heading is a stop holding Show fewer: Left from any of its rows, or Up from
+                // the first, reaches it, so a long section folds in two presses (plans/versions-android-spec.md 2).
+                val fold = {
+                    open[group] = !all
+                    // Back on the section's Show all once it has folded.
+                    if (all) focusSoon(foldKey(group))
+                }
                 item(key = "group:$group") {
                     GlassBar(Modifier.padding(top = Marquee.space.xs)) {
                         CapsLabel(
@@ -523,19 +496,50 @@ private fun Sources(
                             colors.text,
                         )
                         MqText("${rows.size}", role = TextRole.Callout, maxLines = 1)
+                        if (all) {
+                            SecondaryButton(
+                                SHOW_FEWER,
+                                { fold() },
+                                toPlay,
+                                icon = Icons.ChevronUp,
+                                focusRequester = focus.requesterFor(headKey(group)),
+                            )
+                        }
                     }
                 }
                 items(
                     if (all) rows else rows.take(SHOWN),
                     key = { rowKey(it) },
-                ) { row -> SourceRow(row, focus, onPlay) }
+                ) { row ->
+                    SourceRow(
+                        row,
+                        dimmed,
+                        focus,
+                        onPlay,
+                        if (all) {
+                            Modifier.focusProperties {
+                                left = focus.requester(headKey(group)) ?: FocusRequester.Default
+                            }
+                        } else {
+                            toPlay
+                        },
+                    )
+                }
                 if (rows.size > SHOWN) {
                     item(key = "fold:$group") {
                         SecondaryButton(
-                            if (all) "Show the best $SHOWN" else "Show all ${rows.size}",
-                            { open[group] = !all },
-                            Modifier.padding(start = 22.dp, top = 4.dp),
+                            if (all) SHOW_FEWER else "Show all ${rows.size}",
+                            {
+                                val opening = !all
+                                fold()
+                                // Opening: the 4th row, the first that was hidden, once it is composed.
+                                if (opening) focusSoon(rowKey(rows[SHOWN]))
+                            },
+                            Modifier
+                                .padding(start = 22.dp, top = 4.dp)
+                                .then(toPlay),
                             icon = if (all) Icons.ChevronUp else Icons.ChevronDown,
+                            focusRequester = focus.requesterFor(foldKey(group)),
                         )
                     }
                 }
@@ -579,8 +583,10 @@ private fun Line(color: Color) {
 @Composable
 private fun SourceRow(
     row: VersionRow,
+    dimmed: Boolean,
     focus: FocusMemory,
     onPlay: (VersionRow) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val key = rowKey(row)
     val shape = RoundedCornerShape(Marquee.radius.m)
@@ -589,15 +595,18 @@ private fun SourceRow(
     // The focused row turns white with dark words (focusPalette).
     val colors = focusPalette(focused)
     val line = StreamChoiceCopy.rowLine(row)
+    val tag = VersionsCopy.languageTag(row)
     val spoken =
         listOfNotNull(
             VersionsCopy.headline(row),
+            tag,
             row.sizeBytes?.let(Format::bytes),
-            "via ${row.via}",
         ).joinToString(", ")
     Column(
-        Modifier
+        modifier
             .fillMaxWidth()
+            // The rows of a page where none plays as listed (the core's blocked rows) are dimmed and still startable.
+            .then(if (dimmed && !focused) Modifier.alpha(DIMMED) else Modifier)
             .focusRequester(focus.requesterFor(key))
             .marqueeFocus(Marquee.radius.m, Tokens.FOCUS_SCALE_TILE)
             .onFocusChanged { state ->
@@ -621,6 +630,7 @@ private fun SourceRow(
                     weight = FontWeight.SemiBold,
                     maxLines = 1,
                 )
+                if (tag != null) LanguageTag(tag, Modifier.padding(end = 12.dp))
                 MqText(
                     row.features.joinToString(", "),
                     Modifier.weight(1f),
@@ -637,7 +647,6 @@ private fun SourceRow(
                 )
                 // A long line ("Colors may look washed out on this screen") takes a second line, as on the web.
                 ToneWord(line.text, tone(line.tone), Modifier.width(STATUS))
-                MqText(row.via, Modifier.width(VIA), role = TextRole.Callout, maxLines = 1)
             }
             if (focused) {
                 Column(Modifier.padding(start = QUALITY), verticalArrangement = Arrangement.spacedBy(2.dp)) {

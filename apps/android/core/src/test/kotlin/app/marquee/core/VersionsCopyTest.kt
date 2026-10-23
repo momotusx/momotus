@@ -59,11 +59,20 @@ class VersionsCopyTest {
     )
 
     @Test
-    fun `a row reads as quality and features, then size and source`() {
+    fun `a row reads as quality and features, and no fact names its addon`() {
         assertEquals("4K, HDR10", VersionsCopy.headline(row()))
-        assertEquals("1.2 GB, Real-Debrid", VersionsCopy.source(row()))
-        assertEquals("Real-Debrid", VersionsCopy.source(row(sizeBytes = null)))
         assertEquals("4K", VersionsCopy.headline(row(features = emptyList())))
+        assertTrue(VersionsCopy.facts(row()).none { it.first == "Via" || "Real-Debrid" == it.second })
+    }
+
+    @Test
+    fun `a row in another language than the viewer's carries its language`() {
+        assertEquals(
+            "Turkish",
+            VersionsCopy.languageTag(row().copy(group = Group.OtherLanguages, languages = listOf("tr"))),
+        )
+        assertEquals(null, VersionsCopy.languageTag(row().copy(group = Group.Best, languages = listOf("tr"))))
+        assertEquals(null, VersionsCopy.languageTag(row().copy(group = Group.OtherLanguages, languages = emptyList())))
     }
 
     @Test
@@ -206,13 +215,12 @@ class VersionsCopyTest {
             listOf(
                 "Size" to "Unknown",
                 "Status" to "Ready on Real-Debrid",
-                "Via" to "Real-Debrid",
                 "Languages" to "English, Turkish",
             ),
             VersionsCopy.facts(one),
         )
         val two = row(features = listOf("Dolby Vision", "Atmos"))
-        assertEquals(listOf("Size", "Status", "Via", "Features"), VersionsCopy.facts(two).map { it.first })
+        assertEquals(listOf("Size", "Status", "Features"), VersionsCopy.facts(two).map { it.first })
         assertEquals("4K Dolby Vision", VersionsCopy.pickHeading(two))
     }
 

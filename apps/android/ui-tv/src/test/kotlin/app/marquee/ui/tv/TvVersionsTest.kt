@@ -7,6 +7,8 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -57,7 +59,6 @@ import org.robolectric.annotation.Config
 import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 /** The Versions screen on a TV with the core's stream choice (plans/m13-stream-choice.md 3.7, 3.11). */
 @OptIn(ExperimentalTestApi::class)
@@ -147,6 +148,11 @@ class TvVersionsTest {
         nobodySharing = nobodySharing,
     )
 
+    private fun press(key: Key) {
+        compose.onNode(isFocused()).performKeyInput { pressKey(key) }
+        compose.waitForIdle()
+    }
+
     private val played = mutableListOf<String>()
     private var accounts = 0
     private val undone = mutableListOf<LearnedNote>()
@@ -196,9 +202,11 @@ class TvVersionsTest {
     }
 
     @Test
-    fun `a row says its line, and focus opens it to the details`() {
+    fun `a row says its line, and focus opens it to the details, with no device line and no addon name`() {
         show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), listOf(row("a", ReasonLine.Quick(1204, 2 * gib)))))
-        compose.onNodeWithText("This TV: 1080p, about 42 Mbit/s on Wi-Fi").assertExists()
+        compose.onAllNodesWithText("This TV", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("Torrentio", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("Via", substring = true, ignoreCase = true).assertCountEquals(0)
         compose.onNodeWithText("Starts quickly", substring = true).assertExists()
         compose.onAllNodesWithText("1,204 seeders, 2 GB", substring = true).assertCountEquals(0)
         compose.onNodeWithText("Starts quickly", substring = true).requestFocus()
@@ -208,34 +216,35 @@ class TvVersionsTest {
     }
 
     @Test
-    fun `versions that none of plays here say why, and Show them lists them`() {
+    fun `versions that none of plays here say why over their rows, dimmed and still startable, with no button`() {
         show(
             snapshot(
                 blocked = BlockedVersions(BlockedReason.NothingPlaysHere, 42, listOf(row("a", ReasonLine.Few(31)))),
             ),
         )
         compose.onNodeWithText("Found 42 versions, but none plays on this device.").assertExists()
-        compose.onAllNodesWithText("Add an account").assertCountEquals(0)
-        compose.onAllNodesWithText("May start slowly", substring = true).assertCountEquals(0)
-        compose.onNodeWithText("Show them").performClick()
-        compose.onNodeWithText("May start slowly", substring = true).assertExists()
+        for (gone in listOf("Add an account", "Show them", StreamChoiceCopy.SETTINGS)) {
+            compose.onAllNodesWithText(gone).assertCountEquals(0)
+        }
+        compose.onNodeWithText("May start slowly", substring = true).performClick()
+        assertEquals(listOf("a"), played)
     }
 
     @Test
-    fun `versions that need an account offer Add an account, and Right from Show them enters the list`() {
+    fun `versions that need an account give Settings, focused, over their dimmed rows, and Right enters the list`() {
         show(snapshot(blocked = BlockedVersions(BlockedReason.NeedsAccount, 12, listOf(row("a", ReasonLine.Few(31))))))
-        compose.onNodeWithText("Add an account").performClick()
+        compose.onAllNodesWithText("Add an account").assertCountEquals(0)
+        compose.onAllNodesWithText("Show them").assertCountEquals(0)
+        compose.onNodeWithText("May start slowly", substring = true).assertExists()
+        compose.onNodeWithText(StreamChoiceCopy.SETTINGS).assertIsFocused()
+        compose.onNodeWithText(StreamChoiceCopy.SETTINGS).performKeyInput { pressKey(Key.DirectionRight) }
+        compose.onNodeWithContentDescription("1080p, HDR10, 2 GB").assertIsFocused()
+        compose.onNodeWithText(StreamChoiceCopy.SETTINGS).performClick()
         assertEquals(1, accounts)
-        compose.onNodeWithText("Show them").performClick()
-        compose.onNodeWithText("Show them").requestFocus()
-        compose.onNodeWithText("Show them").performKeyInput { pressKey(Key.DirectionRight) }
-        // ponytail: Robolectric's narrow fonts keep the two buttons on one line, so this checks where Right ends,
-        // not the rule for the wrapped buttons of a real TV (Add an account above, reaching further right).
-        compose.onNodeWithContentDescription("1080p, HDR10, 2 GB, via Torrentio").assertIsFocused()
     }
 
     @Test
-    fun `the learned note shows with Undo over the list, and Undo sends it back`() {
+    fun `the learned note shows with Undo under the list, and Undo sends it back`() {
         val note = LearnedNote(2160, LearnedChoice.Hdr, up = false, prefs = streams(null))
         show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), note = note))
         compose.onNodeWithText("Undo").performClick()
@@ -245,28 +254,40 @@ class TvVersionsTest {
     }
 
     @Test
-    fun `almost nobody sharing shows once, right before Play`() {
+    fun `almost nobody sharing never shows its own bar, the why line says it`() {
         show(snapshot(row("best", ReasonLine.Few(1)), listOf(row("a", ReasonLine.Few(0))), nobodySharing = true))
-        // Once, on the card with its details line; not again over the list.
-        compose.onAllNodesWithText(StreamChoiceCopy.NOBODY_SHARING).assertCountEquals(1)
-        compose.onAllNodesWithText(StreamChoiceCopy.NOBODY_SHARING_DETAILS).assertCountEquals(1)
-        // The card's line comes right before Play: above it, and nothing else between them.
-        val lines = compose.onAllNodesWithText(StreamChoiceCopy.NOBODY_SHARING_DETAILS).fetchSemanticsNodes()
-        val play =
-            compose
-                .onAllNodesWithText("Play this version")
-                .fetchSemanticsNodes()
-                .first()
-                .boundsInRoot
-        val card = lines.map { it.boundsInRoot }.filter { it.bottom <= play.top }.maxByOrNull { it.bottom }
-        assertTrue(card != null && play.top - card.bottom < 64, "the line sits right over Play")
+        compose.onAllNodesWithText(StreamChoiceCopy.NOBODY_SHARING).assertCountEquals(0)
+        compose.onAllNodesWithText(StreamChoiceCopy.NOBODY_SHARING_DETAILS).assertCountEquals(0)
     }
 
     @Test
-    fun `almost nobody sharing shows once over the list when there is no recommended card`() {
-        show(snapshot(rows = listOf(row("a", ReasonLine.Few(0)), row("b", ReasonLine.Few(1))), nobodySharing = true))
-        compose.onAllNodesWithText("Play this version").assertCountEquals(0)
-        compose.onAllNodesWithText(StreamChoiceCopy.NOBODY_SHARING).assertCountEquals(1)
-        compose.onAllNodesWithText(StreamChoiceCopy.NOBODY_SHARING_DETAILS).assertCountEquals(1)
+    fun `a version in another language than the viewer's carries its language`() {
+        val turkish = row("tr", ReasonLine.Few(31)).copy(group = Group.OtherLanguages, languages = listOf("tr"))
+        show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), listOf(turkish)))
+        compose.onNodeWithText("Turkish").assertExists()
+        compose.onNodeWithContentDescription("1080p, HDR10, Turkish, 2 GB").assertExists()
+    }
+
+    @Test
+    fun `an open section's heading holds Show fewer, Left from any of its rows reaches it, Left again Play`() {
+        // Told apart by their sizes: 1 GB to 8 GB.
+        val rows = (1..8).map { row("r$it", ReasonLine.Few(30 + it)).copy(sizeBytes = it * gib) }
+        show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), rows))
+        compose.onNodeWithText("Show all 8").requestFocus()
+        compose.onNodeWithText("Show all 8").performKeyInput { pressKey(Key.DirectionCenter) }
+        compose.waitForIdle()
+        // Focus goes to the 4th row, the first that was hidden.
+        compose.onNodeWithContentDescription("1080p, HDR10, 4 GB").assertIsFocused()
+        press(Key.DirectionLeft)
+        compose.onNode(isFocused()).assertTextEquals("Show fewer")
+        press(Key.DirectionLeft)
+        compose.onNodeWithText("Play this version").assertIsFocused()
+        // Back into the list on the row it left, Left to the heading, OK folds: two presses from inside the section.
+        press(Key.DirectionRight)
+        compose.onNodeWithContentDescription("1080p, HDR10, 4 GB").assertIsFocused()
+        press(Key.DirectionLeft)
+        press(Key.DirectionCenter)
+        compose.onNodeWithText("Show all 8").assertIsFocused()
+        compose.onAllNodesWithText("Show fewer").assertCountEquals(0)
     }
 }

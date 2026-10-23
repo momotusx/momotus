@@ -114,7 +114,6 @@ apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneTitle.kt :: colo
 apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneTitle.kt :: // A glass card per episode (design/DECISION.md v2, Episodes).
 apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: import app.marquee.design.GlassBar
 apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: * recommendation as a glass card with its facts; every other source by group with its line (a tone
-apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: item(key = "nobody") { GlassBar(Modifier.padding(bottom = Marquee.space.xs)) { NobodySharing() } }
 apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: GlassBar(Modifier.padding(top = Marquee.space.xs)) {
 apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: GlassBar(Modifier.padding(top = Marquee.space.s)) {
 apps/android/ui-phone/src/main/kotlin/app/marquee/ui/phone/PhoneVersions.kt :: .background(colors.glassStrong)
@@ -125,7 +124,6 @@ apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvTitle.kt :: // back, so t
 apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvTitle.kt :: .background(if (open) Marquee.colors.glassStrong else Color.Transparent)
 apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvVersions.kt :: import app.marquee.design.GlassBar
 apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvVersions.kt :: * heading, how the search goes and what the ranking read of this TV; the recommendation as a glass
-apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvVersions.kt :: GlassBar { NobodySharing() }
 apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvVersions.kt :: .background(colors.glassStrong)
 apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvVersions.kt :: GlassBar {
 apps/android/ui-tv/src/main/kotlin/app/marquee/ui/tv/TvVersions.kt :: GlassBar(Modifier.padding(top = Marquee.space.xs)) {

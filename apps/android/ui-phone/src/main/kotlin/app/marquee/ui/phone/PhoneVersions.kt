@@ -30,14 +30,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.collapse
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.expand
-import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -60,6 +59,7 @@ import app.marquee.design.CapsLabel
 import app.marquee.design.FactsGrid
 import app.marquee.design.GlassBar
 import app.marquee.design.Icons
+import app.marquee.design.LanguageTag
 import app.marquee.design.LiveSpoken
 import app.marquee.design.Marquee
 import app.marquee.design.MarqueeFonts
@@ -81,6 +81,9 @@ import kotlinx.coroutines.launch
 
 /** How many rows of a group show before "Show all", as on the web. */
 private const val SHOWN = 3
+
+/** The rows of a page where none plays as listed: dimmed, still startable. */
+private const val DIMMED = 0.5f
 
 /**
  * The ranked sources of one video on a phone (plans/android-design-v2.md 5.6, the web's v2
@@ -112,8 +115,6 @@ fun PhoneVersions(
     val colors = Marquee.colors
     val snapshot = versions?.snapshot
     val blocked = snapshot?.blocked?.takeIf { snapshot.recommended == null }
-    // "Show them": the blocked rows, as they would rank once the reason is fixed.
-    var showBlocked by remember { mutableStateOf(false) }
     // The row a tap opened to its details and Play.
     var opened by remember { mutableStateOf<String?>(null) }
     val failure = (versions?.status as? ViewStatus.Failed)?.reason
@@ -126,7 +127,8 @@ fun PhoneVersions(
             versions.freeze()
         }
     }
-    val groups = (if (showBlocked && blocked != null) blocked.rows else snapshot?.rows.orEmpty()).groupBy { it.group }
+    // The blocked rows are simply listed, dimmed, as they would rank once the reason is fixed.
+    val groups = (blocked?.rows ?: snapshot?.rows.orEmpty()).groupBy { it.group }
     val open = remember { mutableStateMapOf<Group, Boolean>() }
     LazyColumn(
         state = listState,
@@ -140,13 +142,6 @@ fun PhoneVersions(
                 MqText("Versions", role = TextRole.Title1, maxLines = 1)
                 val (text, tone) = VersionsCopy.progress(snapshot)
                 StatusWord(text, tone(tone), Modifier.padding(top = 4.dp))
-                val device = snapshot?.conditions?.let { StreamChoiceCopy.header(tv = false, it) }
-                if (device != null) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
-                        MqIcon(Icons.Monitor, tint = colors.muted, size = 16.dp)
-                        MqText(device, role = TextRole.Caption, color = colors.muted)
-                    }
-                }
             }
         }
         item(key = "best") {
@@ -158,16 +153,9 @@ fun PhoneVersions(
                 onPlay,
                 Modifier.padding(vertical = Marquee.space.s),
             ) {
-                if (blocked != null) {
-                    Blocked(snapshot, blocked, showBlocked, { showBlocked = !showBlocked }, onAddAccount)
-                }
+                if (blocked != null) Blocked(snapshot, blocked, onAddAccount)
             }
         }
-        // Once per screen: the card says it right before Play; the list only when there is no such card.
-        if (snapshot?.nobodySharing == true && (failure != null || snapshot.recommended == null)) {
-            item(key = "nobody") { GlassBar(Modifier.padding(bottom = Marquee.space.xs)) { NobodySharing() } }
-        }
-        snapshot?.note?.let { note -> item(key = "note") { LearnedLine(note, onUndo) } }
         for (group in Group.entries) {
             val rows = groups[group].orEmpty()
             if (rows.isEmpty()) continue
@@ -183,18 +171,25 @@ fun PhoneVersions(
                 }
             }
             items(if (all) rows else rows.take(SHOWN), key = { "row:${it.key}" }) { row ->
-                SourceRow(row, opened == row.key, { opened = if (opened == row.key) null else row.key }, onPlay)
+                SourceRow(
+                    row,
+                    blocked != null,
+                    opened == row.key,
+                    { opened = if (opened == row.key) null else row.key },
+                    onPlay,
+                )
             }
             if (rows.size > SHOWN) {
                 item(key = "fold:$group") {
                     SecondaryButton(
-                        if (all) "Show the best $SHOWN" else "Show all ${rows.size}",
+                        if (all) "Show fewer" else "Show all ${rows.size}",
                         { open[group] = !all },
                         icon = if (all) Icons.ChevronUp else Icons.ChevronDown,
                     )
                 }
             }
         }
+        snapshot?.note?.let { note -> item(key = "note") { LearnedLine(note, onUndo) } }
         val hidden = snapshot?.hidden?.takeIf { it.count > 0 }
         if (hidden != null) {
             item(key = "hidden") {
@@ -293,7 +288,6 @@ private fun Pick(
                     fontFamily = FontFamily.Monospace,
                 )
                 // Said when it comes, before Play.
-                if (snapshot.nobodySharing) NobodySharing(Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                 PrimaryButton(
                     label = "Play this version",
                     icon = PlayFilled,
@@ -354,58 +348,23 @@ private fun qualityWidth(): Dp {
 }
 
 /**
- * Why no version is listed, in the core's words, with its way on: "Add an account" (and "Show them"
- * beside it) when the versions play only through a streaming service account, else "Show them".
+ * Why no version plays, in the core's words, over the rows simply listed dimmed. Versions that play only through a
+ * streaming service account give Settings (where an account is added), the one action (plans/versions-android-spec.md,
+ * section 5).
  */
 @Composable
 private fun Blocked(
     snapshot: VersionsSnapshot,
     blocked: BlockedVersions,
-    shown: Boolean,
-    onShow: () -> Unit,
-    onAddAccount: () -> Unit,
+    onSettings: () -> Unit,
 ) {
-    val (text, action) =
-        StreamChoiceCopy.blocked(blocked.reason, blocked.count, snapshot.conditions.window)
-            ?: (null to StreamChoiceCopy.SHOW_ROWS)
-    val account = blocked.reason == BlockedReason.NeedsAccount
-    StateMessage(
-        title = "No playable version found",
-        // A reason from a newer core: the hidden rows say why.
-        body = text ?: VersionsCopy.waitingBody(snapshot),
-        actionLabel = action,
-        onAction = if (account) onAddAccount else onShow,
-        actionIcon =
-            if (account) {
-                Icons.KeyRound
-            } else if (shown) {
-                Icons.EyeOff
-            } else {
-                Icons.Eye
-            },
-        secondaryLabel = StreamChoiceCopy.SHOW_ROWS.takeIf { account },
-        onSecondary = onShow.takeIf { account },
-        secondaryIcon = if (shown) Icons.EyeOff else Icons.Eye,
-        modifier = Modifier.padding(0.dp),
-    )
-}
-
-/**
- * The core's `nobodySharing`: every version is a swarm with one seeder or none right now, said once: right
- * before Play on the recommended card, or over the list when there is no such card (plans/m13-stream-choice.md).
- */
-@Composable
-private fun NobodySharing(modifier: Modifier = Modifier) {
-    val colors = Marquee.colors
-    Row(
-        modifier.semantics(mergeDescendants = true) {},
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.Top,
-    ) {
-        MqIcon(Icons.UserRoundX, tint = colors.warn, size = 20.dp)
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            MqText(StreamChoiceCopy.NOBODY_SHARING, role = TextRole.Callout, weight = FontWeight.SemiBold, maxLines = 2)
-            MqText(StreamChoiceCopy.NOBODY_SHARING_DETAILS, role = TextRole.Caption, color = colors.muted, maxLines = 3)
+    val text =
+        StreamChoiceCopy.blocked(blocked.reason, blocked.count, snapshot.conditions.window)?.first
+            ?: VersionsCopy.waitingBody(snapshot)
+    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+        MqText(text, role = TextRole.Headline, weight = FontWeight.SemiBold)
+        if (blocked.reason == BlockedReason.NeedsAccount) {
+            SecondaryButton(StreamChoiceCopy.SETTINGS, onSettings, icon = Icons.Settings)
         }
     }
 }
@@ -441,20 +400,23 @@ private fun LearnedLine(
 @Composable
 private fun SourceRow(
     row: VersionRow,
+    dimmed: Boolean,
     open: Boolean,
     onToggle: () -> Unit,
     onPlay: (VersionRow) -> Unit,
 ) {
     val colors = Marquee.colors
     val line = StreamChoiceCopy.rowLine(row)
+    val tag = VersionsCopy.languageTag(row)
     val spoken =
         listOfNotNull(
             VersionsCopy.headline(row),
+            tag,
             row.sizeBytes?.let(Format::bytes),
-            "via ${row.via}",
             line.text,
         ).joinToString(", ")
-    Column {
+    // The rows of a page where none plays as listed (the core's blocked rows) are dimmed and still startable.
+    Column(if (dimmed) Modifier.alpha(DIMMED) else Modifier) {
         Row(
             Modifier
                 .fillMaxWidth()
@@ -479,22 +441,17 @@ private fun SourceRow(
         ) {
             // One width for every quality, "Unknown" measured at the current text size, so the statuses
             // line up whatever the font scale.
-            MqText(
-                VersionsCopy.cell(row.quality),
-                Modifier.width(qualityWidth()),
-                weight = FontWeight.SemiBold,
-                maxLines = 1,
-            )
+            Column(Modifier.width(qualityWidth()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                MqText(VersionsCopy.cell(row.quality), weight = FontWeight.SemiBold, maxLines = 1)
+                if (tag != null) LanguageTag(tag)
+            }
             // The line on its own line, then the size, the source and the features: both wrap on a
             // small phone or a large font instead of cutting what helps the choice.
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 ToneWord(line.text, tone(line.tone))
                 MqText(
                     (
-                        listOfNotNull(
-                            row.sizeBytes?.let(Format::bytes),
-                            "via ${row.via}",
-                        ) + row.features
+                        listOfNotNull(row.sizeBytes?.let(Format::bytes)) + row.features
                     ).joinToString(" · "),
                     role = TextRole.Caption,
                     color = colors.muted,

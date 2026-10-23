@@ -167,7 +167,11 @@ object StreamChoiceCopy {
 
     /** The no-room text on a storage that plays no window: too large for it, whatever its free space. */
     const val NO_SPACE_NO_WINDOW = "{versionsAre} too large for this storage."
+
     const val SHOW_ROWS = "Show them"
+
+    /** Where a streaming service account is added, from a page whose versions need one. */
+    const val SETTINGS = "Settings"
 
     val LEARNED =
         mapOf(
