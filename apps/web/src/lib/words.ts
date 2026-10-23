@@ -95,8 +95,9 @@ export const caption = (tile: Tile): string | null =>
 /** A version's headline as the core words it: the resolution, else the
  * source ("WEB-DL"), else "Quality not stated"; never "unknown". */
 export const qualityText = (q: string) => (q === "Unknown" ? "Quality not stated" : q);
-/** The same fact in a table cell or a small value: one word that never wraps. */
-export const qualityCell = (q: string) => (q === "Unknown" || q === "Quality not stated" ? "Unknown" : q);
+/** The same fact as a badge or a small value: one word that never wraps, and nothing at all when the
+ * release does not state it (its section, Other, already says so; never "Unknown"). */
+export const qualityCell = (q: string) => (q === "Unknown" || q === "Quality not stated" ? "" : q);
 
 export function kindLabel(kind: string): string {
   const labels: Record<string, string> = { movie: "Movie", series: "Series", channel: "Channel", tv: "Live TV", anime: "Anime" };

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { addonHost, nextVersion, languageName, pairingProblem, plainAddress, problemWords, restartLine, serverHost, statusText, subtitleNote } from "./words";
+import { addonHost, nextVersion, qualityCell, languageName, pairingProblem, plainAddress, problemWords, restartLine, serverHost, statusText, subtitleNote } from "./words";
 import shared from "../../../shared/stream-choice-words.json";
 import type { EmptyAction } from "../core/generated/EmptyAction";
 import type { EmptyKind } from "../core/generated/EmptyKind";
@@ -254,4 +254,12 @@ test("the card's kicker names the form: this TV, this phone, this computer", () 
   expect(bestFor("tv")).toBe("Best for this TV");
   expect(bestFor("phone")).toBe("Best for this phone");
   expect(bestFor("desktop")).toBe("Best for this computer");
+});
+
+test("a quality the release does not state is no badge: nothing, never Unknown", () => {
+  expect(qualityCell("Quality not stated")).toBe("");
+  expect(qualityCell("Unknown")).toBe("");
+  expect(qualityCell("1080p")).toBe("1080p");
+  // A source the core names in its place is a badge.
+  expect(qualityCell("WEB-DL")).toBe("WEB-DL");
 });

@@ -711,6 +711,54 @@ test.describe("Versions", () => {
     await page.context().close();
   });
 
+  test("a version whose quality is not stated has no quality badge, and its row is one height with the rest", async ({ browser }) => {
+    // Two copies of the first row in one section, the first with no stated quality.
+    const unstated = (s: VersionsSnapshot): VersionsSnapshot => {
+      const a = s.rows[0];
+      if (!a || !s.done) return s;
+      const rows = [{ ...a, key: `${a.key}#none`, quality: "Quality not stated" }, { ...a, key: `${a.key}#sd` }];
+      return { ...s, rows, sections: [{ quality: "other", keys: rows.map((r) => r.key) }] };
+    };
+    for (const form of ["tv", "desktop", "phone"] as const) {
+      const page = await device(browser, form, PORTS.bridge, { versions: unstated });
+      await page.goto(path(form));
+      await firstRow(page);
+      const [none, known] = [page.locator(".vrow").nth(0), page.locator(".vrow").nth(1)];
+      await expect(none.locator(".q")).toHaveText("");
+      await expect(known.locator(".q")).not.toHaveText("");
+      await expect(page.locator(".alts")).not.toContainText(/Unknown/);
+      const h = (l: typeof none) => l.evaluate((e) => Math.round(e.getBoundingClientRect().height));
+      expect(await h(none)).toBe(await h(known));
+      await page.context().close();
+    }
+  });
+
+  test("phone: the sheet shows first what its row shows (badges, language, the one line), then the seeders, file and languages", async ({ browser }) => {
+    const spanish = (s: VersionsSnapshot): VersionsSnapshot => {
+      const a = s.rows[0];
+      if (!a || !s.done) return s;
+      const row = { ...a, group: "otherLanguages" as const, languages: ["spa"], features: ["HDR"], sizeBytes: 117 * 2 ** 20, line: { kind: "veryFew" as const, seeders: 2 } };
+      return { ...s, rows: [row, ...s.rows.slice(1)] };
+    };
+    const page = await device(browser, "phone", PORTS.bridge, { versions: spanish });
+    await page.goto(path("phone"));
+    const row = await firstRow(page);
+    const said = await row.locator(".lt").textContent();
+    expect(said).toBe("117 MB, may not start");
+    await page.locator(".vslot").first().locator(".vinfo").tap();
+    const sheet = page.locator(".vsheet");
+    await expect(sheet).toBeVisible();
+    // The row's top, as the row shows it.
+    await expect(sheet.locator(".vsheet-badges .chips span")).toHaveText(["Spanish", "HDR"]);
+    await expect(sheet.locator(".vsheet-badges .q")).toHaveText(await row.locator(".q").innerText());
+    await expect(sheet.locator(".st.line .lt")).toHaveText(said ?? "");
+    // Then what the row keeps for its details.
+    await expect(sheet.locator(".detail")).toHaveText("2 seeders");
+    await expect(sheet.locator(".rel")).toContainText(".webm");
+    await expect(sheet.locator(".sub")).toContainText("Spanish");
+    await page.context().close();
+  });
+
   test("a version in another language than the viewer's shows a chip naming it", async ({ browser }) => {
     const other = (s: VersionsSnapshot): VersionsSnapshot =>
       s.rows.length ? { ...s, rows: s.rows.map((r, i) => (i === 0 ? { ...r, group: "otherLanguages" as const, languages: ["spa"] } : r)) } : s;

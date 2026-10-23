@@ -80,6 +80,32 @@ export function Release(props: { name: string }) {
 
 const toneIcon = { ok: CircleCheck, warn: TriangleAlert, bad: OctagonAlert };
 
+/** A version's one line, as the row and its sheet show it: the size first, then where it comes from, the
+ * core's warning, or why it is dimmed (`why`, with a lock for an account, a ban for this device). */
+function RowLine(props: { row: VersionRow; why: string | null; lock: boolean; tag?: "span" | "p" }) {
+  const tone = () => (props.why ? "why" : props.row.onDevice ? "ok" : lineWords(props.row.line).tone);
+  return (
+    <Dynamic component={props.tag ?? "span"} class={`st line ${tone()}`}>
+      <Dynamic component={props.why ? (props.lock ? Lock : Ban) : props.row.onDevice ? CircleCheck : toneIcon[lineWords(props.row.line).tone]} aria-hidden class="tone" />
+      <span class="lt">{rowWords(props.row, props.why)}</span>
+    </Dynamic>
+  );
+}
+
+/** A version's badges, as the row and its sheet show them: its quality when the release states it, a
+ * language chip when it is another language than the viewer's, then its features. */
+function Badges(props: { row: VersionRow }) {
+  return (
+    <>
+      <span class="q">{qualityCell(props.row.quality)}</span>
+      <span class="chips">
+        <Show when={props.row.group === "otherLanguages" && languages(props.row)}>{(l) => <span class="lang">{l()}</span>}</Show>
+        <For each={props.row.features}>{(f) => <span>{f}</span>}</For>
+      </span>
+    </>
+  );
+}
+
 /** A row's details on one line: the line's details, the release name, the languages and sources. */
 const detailsLine = (r: VersionRow) =>
   [!r.onDevice ? lineWords(r.line).details : null, r.releaseName, subLine(r)].filter((p): p is string => !!p).join("  ·  ");
@@ -503,24 +529,8 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
                                     aria-disabled={dimmed() && !startable() ? "true" : undefined}
                                     onClick={() => (dimmed() && !startable() ? undefined : play(r.key))}
                                   >
-                                    <span class="q" classList={{ unknown: r.quality === "Unknown" }}>
-                                      {qualityCell(r.quality)}
-                                    </span>
-                                    <span class="chips">
-                                      {/* Another language than the viewer's: the chip names it. */}
-                                      <Show when={r.group === "otherLanguages" && languages(r)}>{(l) => <span class="lang">{l()}</span>}</Show>
-                                      <For each={r.features}>{(f) => <span>{f}</span>}</For>
-                                    </span>
-                                    {/* One line: the size first, then where it comes from, the core's warning, or why it
-                                        is dimmed (a lock for an account, a ban for this device). */}
-                                    <span class={`st line ${dimWord() ? "why" : r.onDevice ? "ok" : lineWords(r.line).tone}`}>
-                                      <Dynamic
-                                        component={dimWord() ? (empty()?.kind === "needsAccount" ? Lock : Ban) : r.onDevice ? CircleCheck : toneIcon[lineWords(r.line).tone]}
-                                        aria-hidden
-                                        class="tone"
-                                      />
-                                      <span class="lt">{rowWords(r, dimWord())}</span>
-                                    </span>
+                                    <Badges row={r} />
+                                    <RowLine row={r} why={dimWord()} lock={empty()?.kind === "needsAccount"} />
                                     {/* Reserved in every row: focus or hover changes only its opacity. Seen only: the
                                         reader gets the same words as the row's description (hidden, outside its name). */}
                                     <span class="more" aria-hidden="true">
@@ -590,7 +600,7 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
               class="vsheet"
               role="dialog"
               aria-modal="true"
-              aria-labelledby="vsheet-h"
+              aria-label={rowName(r())}
               onPointerDown={(e) => (swipeFrom = e.clientY)}
               onPointerUp={(e) => {
                 if (swipeFrom !== null && e.clientY - swipeFrom > 60) closeSheet();
@@ -598,12 +608,13 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
               }}
             >
               <div class="grab" aria-hidden="true" />
-              <h2 id="vsheet-h">
-                {qualityText(r().quality)}
-                <Show when={r().features.length}> {r().features.join(" ")}</Show>
-                <Show when={r().sizeBytes}>{(b) => <span class="num">, {bytes(b())}</span>}</Show>
-              </h2>
-              <p class="why1">{dimWord() ?? whyLine(r())}</p>
+              {/* First what the row shows (its badges and its one line), then what the row keeps for
+                  its details: the line's own (the seeders), the file and its languages. */}
+              <div class="vsheet-badges">
+                <Badges row={r()} />
+              </div>
+              <RowLine row={r()} why={dimWord()} lock={empty()?.kind === "needsAccount"} tag="p" />
+              <Show when={!r().onDevice && lineWords(r().line).details}>{(d) => <p class="detail">{d()}</p>}</Show>
               <p class="rel">
                 <Release name={r().releaseName} />
               </p>

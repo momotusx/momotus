@@ -69,8 +69,8 @@
 .vslot:focus-within { position: relative; z-index: 1; }
 .vrow { width: 100%; min-height: 64px; padding: 10px 22px; border-radius: var(--radius-m); border-bottom: 1px solid var(--line);
   font: 500 var(--type-callout) / 1.25 var(--font-text); transform-origin: center; }
-.vrow .q { font: 700 var(--type-body) var(--font-text); }
-.vrow .q.unknown { font: 500 var(--type-caption) / 1.2 var(--font-text); color: var(--muted); }
+/* One line tall even empty (a quality the release does not state has no badge), so every row is one height. */
+.vrow .q { font: 700 var(--type-body) var(--font-text); min-height: 1lh; }
 .vrow .chips { display: flex; gap: 6px; min-width: 0; overflow: hidden; }
 .vrow .chips span { font: 600 var(--type-caption) / 1 var(--font-text); padding: 5px 8px; border-radius: var(--radius-s); box-shadow: inset 0 0 0 2px var(--line); white-space: nowrap; }
 .vrow .chips .lang { color: var(--muted); }
@@ -151,8 +151,16 @@
 .vsheet { display: grid; gap: 10px; width: 100%; max-height: 80%; overflow-y: auto; padding: 10px 20px calc(20px + env(safe-area-inset-bottom));
   border-radius: 20px 20px 0 0; background: var(--surface); touch-action: none; }
 .vsheet .grab { justify-self: center; width: 40px; height: 5px; border-radius: 3px; background: var(--line); }
-.vsheet h2 { font: 700 20px / 1.2 var(--font-display); }
-.vsheet .why1 { font: 400 15px / 1.35 var(--font-text); }
+/* The sheet's top is the row's own: its badges, then its one line. */
+.vsheet-badges { display: flex; align-items: center; gap: 10px; min-height: 24px; }
+.vsheet-badges .q { font: 700 20px / 1.2 var(--font-display); }
+.vsheet-badges .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.vsheet-badges .chips span { font: 600 12px / 1 var(--font-text); padding: 4px 7px; border-radius: var(--radius-s); box-shadow: inset 0 0 0 2px var(--line); }
+.vsheet-badges .chips .lang { color: var(--muted); }
+.vsheet .st.line { display: flex; align-items: center; gap: 8px; font: 500 15px / 1.35 var(--font-text); }
+.vsheet .st.line .tone { width: 18px; height: 18px; flex: none; }
+.vsheet .detail { font: 400 13px / 1.3 var(--font-text); }
+.vsheet .st.line.why .tone { color: var(--muted); }
 .vsheet .rel { font: 400 12px / 1.4 var(--font-mono); color: var(--muted); overflow-wrap: anywhere; }
 .vsheet .sub { font: 400 13px / 1.3 var(--font-text); color: var(--muted); }
 .vsheet .acts { display: grid; gap: 8px; margin-top: 8px; }
