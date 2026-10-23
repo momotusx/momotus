@@ -21,6 +21,8 @@ struct StartOverAction {
 struct PlayerKeys {
     let model: PlayerModel
     let close: @MainActor () -> Void
+    /// A track picker is open: its rows and search take the bare keys.
+    var pickerOpen = false
 }
 
 /// The Mac's menus: Settings, Search and the places, the player's keys, and no
@@ -73,10 +75,11 @@ struct AppCommands: Commands {
         }
     }
 
-    /// A key alone, only while the player is up: with no player a text field
-    /// keeps its spaces and arrows.
+    /// A key alone, only while the player is up and no track picker is open: a text field, or the picker's
+    /// rows and search, keep their spaces, arrows and Esc.
     private func bare(_ key: KeyEquivalent) -> KeyboardShortcut? {
-        player == nil ? nil : KeyboardShortcut(key, modifiers: [])
+        guard let player, !player.pickerOpen else { return nil }
+        return KeyboardShortcut(key, modifiers: [])
     }
 
     /// Off, the profile's languages, then the file's own tracks; the rest

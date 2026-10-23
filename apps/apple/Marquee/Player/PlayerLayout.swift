@@ -104,10 +104,6 @@ enum PlayerLayout {
     /// every 100 ms moving 0.1 s times min(whole seconds held + 3, 6); within 60 s either way. Plus
     /// shows the words later. The core keeps the value per track once it rests for 700 ms.
     static let subtitleStep = 0.1
-    /// The timing stepper opens over the action row, which sits at the screen's foot: iOS keeps the edge it is
-    /// given, and below the row it hung off the iPhone's screen (the iphone-a walk, 2026-10-23). The Mac flips a
-    /// popover that has no room, and keeps its place.
-    static func timingArrowEdge(ios: Bool) -> Edge { ios ? .bottom : .top }
     static let maxSubtitleDelay = 60.0
     static let firstRepeatMs = 350
     static let repeatMs = 100
@@ -211,8 +207,6 @@ enum PlayerLayout {
 
     /// "Plus 1.5 seconds", "Minus 0.3 seconds", "0.0 seconds": the signed value as VoiceOver says it,
     /// once it settles. Never "earlier" or "later" (the owner, 2026-10-22).
-    /// What VoiceOver says for the Subtitles menu's Timing item: "Subtitle timing, plus 0.3 seconds".
-    static func timingItemLabel(_ delay: Double) -> String { "Subtitle timing, " + delayWords(delay).lowercased() }
 
     static func delayWords(_ delay: Double) -> String {
         let amount = String(format: "%.1f seconds", abs(delay))

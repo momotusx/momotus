@@ -84,12 +84,22 @@ final class PlayerModel {
     private(set) var skippedAt: Int64?
     /// The file's audio tracks by name, and the index of the one playing.
     private(set) var audioTracks: [String] = []
+    /// Each audio track's language tag as the file gives it, for the picker's flags; nil for none.
+    private(set) var audioTrackLanguages: [String?] = []
+    /// The file's own default audio track, marked in the picker.
+    private(set) var audioDefault: Int?
     private(set) var audioTrack: Int?
     @ObservationIgnored private var audioGroup: AVMediaSelectionGroup?
     /// The file's own subtitles (a stream's WebVTT renditions, a file's text
     /// tracks) by name, and the index of the one on. AVKit draws them in the
     /// viewer's caption style; an addon's subtitle is drawn by the app instead.
     private(set) var textTracks: [String] = []
+    /// Each of the file's subtitle tracks' language tag, for the picker; nil for none.
+    private(set) var textTrackLanguages: [String?] = []
+    /// A track picker is open over the player: the Mac menu's bare keys (arrows, Space, Esc) are the picker's.
+    var pickerOpen = false
+    /// The file's track the core's start pick turned on in place of its own (nil for none).
+    @ObservationIgnored private var startFile: Int?
     private(set) var textTrack: Int?
     @ObservationIgnored private var textGroup: AVMediaSelectionGroup?
     @ObservationIgnored private var textOptions: [AVMediaSelectionOption] = []
@@ -231,10 +241,11 @@ final class PlayerModel {
 
     /// Turns one of the file's own subtitles on, in place of an addon's: the
     /// viewer's pick for this play, which the core does not know of.
-    func selectText(_ index: Int) {
+    /// `start`: the core's start pick turned it on (its language's track inside the file wins), not the viewer.
+    func selectText(_ index: Int, start: Bool = false) {
         if backend == .aether {
             guard engineTextIDs.indices.contains(index) else { return }
-            choices.choseInFile()
+            if start { startFile = index } else { choices.choseInFile() }
             selectSubtitle(nil)
             aether?.selectText(id: engineTextIDs[index])
             (textTrack, engineCues, engineImages) = (index, [], [])
@@ -242,7 +253,7 @@ final class PlayerModel {
             return
         }
         guard let group = textGroup, textOptions.indices.contains(index) else { return }
-        choices.choseInFile()
+        if start { startFile = index } else { choices.choseInFile() }
         selectSubtitle(nil)
         player.currentItem?.select(textOptions[index], in: group)
         textTrack = index
@@ -295,8 +306,8 @@ final class PlayerModel {
 
     /// Reads the audio and subtitle tracks once the file is open.
     private func loadTracks(_ item: AVPlayerItem, generation: Int) {
-        (audioTracks, audioTrack, audioGroup) = ([], nil, nil)
-        (textTracks, textTrack, textGroup, textOptions, textTimeable) = ([], nil, nil, [], [])
+        (audioTracks, audioTrackLanguages, audioDefault, audioTrack, audioGroup) = ([], [], nil, nil, nil)
+        (textTracks, textTrackLanguages, textTrack, textGroup, textOptions, textTimeable) = ([], [], nil, nil, [], [])
 
         let asset = item.asset
         Task { [weak self] in
@@ -304,6 +315,8 @@ final class PlayerModel {
                   let self, generation == self.generation else { return }
             audioGroup = group
             audioTracks = Self.names(group.options, one: "Default", many: "Track")
+            audioTrackLanguages = group.options.map(Self.tag)
+            audioDefault = group.defaultOption.flatMap { group.options.firstIndex(of: $0) }
             audioTrack = item.currentMediaSelection.selectedMediaOption(in: group).flatMap { group.options.firstIndex(of: $0) }
             if let index = carriedTracks?.audio { selectAudio(index) }
             carriedTracks?.audio = nil
@@ -317,6 +330,8 @@ final class PlayerModel {
             (textGroup, textOptions) = (group, options)
             textTimeable = options.map { PlayerLayout.fileTrackTimeable(mediaType: $0.mediaType.rawValue) }
             textTracks = Self.names(options, one: "Subtitles", many: "Subtitles")
+            textTrackLanguages = options.map(Self.tag)
+            startFile = nil
             textTrack = item.currentMediaSelection.selectedMediaOption(in: group).flatMap { options.firstIndex(of: $0) }
             // The live timing follows the new item's track: where that track was left this play, else none (another
             // version or source never plays at the last file's timing).
@@ -324,9 +339,45 @@ final class PlayerModel {
 
             if let index = carriedTracks?.text { selectText(index) }
             carriedTracks?.text = nil
+            // The file's tracks came after the core's start pick: its language's track inside the file takes over.
+            if let auto = subtitle, !choices.viewerChose, auto.url == playback?.autoSubtitle { startPick(auto) }
             #if DEBUG
             if let index = DebugHooks.textTrack { selectText(index) }
             #endif
+        }
+    }
+
+    /// An option's language tag, nil when it names none.
+    private static func tag(_ option: AVMediaSelectionOption) -> String? {
+        tag(option.extendedLanguageTag ?? option.locale?.identifier)
+    }
+
+    /// A language tag as a file gives it ("en", "eng", "pt-BR"); nil for none or "und" (undetermined).
+    static func tag(_ language: String?) -> String? {
+        guard let language, !language.isEmpty, !language.hasPrefix("und") else { return nil }
+        return language
+    }
+
+    /// The file's subtitle tracks as the picker groups them under their languages.
+    var fileTextTracks: [TrackPicker.FileTrack] {
+        textTracks.indices.map { TrackPicker.FileTrack(index: $0, name: textTracks[$0], language: textTrackLanguages[safe: $0] ?? nil) }
+    }
+
+    /// The track on is the core's start pick, not the viewer's (its file track included): the picker marks
+    /// its language Auto.
+    var subtitleIsAuto: Bool {
+        TrackPicker.isAuto(
+            subtitleURL: subtitle?.url, autoURL: playback?.autoSubtitle, textTrack: textTrack, startFile: startFile,
+            viewerChose: choices.viewerChose)
+    }
+
+    /// The core's start subtitle: a track inside the file of its language wins once the file has its tracks
+    /// (design/DECISION.md, Subtitle picker); else the core's own track.
+    private func startPick(_ track: SubtitleTrack) {
+        if let index = TrackPicker.startFile(track, in: fileTextTracks) {
+            selectText(index, start: true)
+        } else {
+            selectSubtitle(track)
         }
     }
 
@@ -785,7 +836,7 @@ final class PlayerModel {
         let step = choices.subtitleStep(attempt: snapshot.attempt, auto: snapshot.autoSubtitle, tracks: snapshot.subtitles)
         if step.drop { selectSubtitle(nil) }
         if let track = step.turnOn {
-            selectSubtitle(track)
+            startPick(track)
             coreLog.notice("metric start_subtitle_ms=\(self.sinceTap, privacy: .public)")
         }
         if wasPending, !snapshot.subtitlesPending {

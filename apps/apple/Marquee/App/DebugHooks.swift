@@ -128,6 +128,15 @@ enum DebugHooks {
     /// message a panicking core sends, to walk a core death and its restart.
     static var killCoreAfter: Int { UserDefaults.standard.integer(forKey: "MQKillCoreAfter") }
 
+    /// `-MQOpenPicker subtitles` (or `audio`) opens that picker once the player has its tracks; with
+    /// `-MQPickerLanguage en` the subtitle picker opens on that language's options. For a walk's shots.
+    static var openPicker: String? { UserDefaults.standard.string(forKey: "MQOpenPicker") }
+    static var pickerLanguage: String? { UserDefaults.standard.string(forKey: "MQPickerLanguage") }
+    /// `-MQSubtitleLanguages en,tr` sets the profile's subtitle languages at launch, so the core turns one on by itself.
+    static var subtitleLanguages: [String] {
+        UserDefaults.standard.string(forKey: "MQSubtitleLanguages")?.split(separator: ",").map(String.init) ?? []
+    }
+
     /// `-MQShowVersions YES` opens the Versions page once versions are in.
     static var showVersions: Bool { UserDefaults.standard.bool(forKey: "MQShowVersions") }
 

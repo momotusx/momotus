@@ -184,6 +184,9 @@ struct MainShell: View {
                         coreLog.notice("debug install from \(host, privacy: .public): \(error.localizedDescription, privacy: .public)")
                     }
                 }
+                if !DebugHooks.subtitleLanguages.isEmpty {
+                    try? await core.perform("setPrefs", ["patch": ["subtitleLanguages": DebugHooks.subtitleLanguages]])
+                }
             }
             #endif
     }

@@ -28,8 +28,10 @@ struct PlayerControls: View {
     var measured: (CGFloat) -> Void = { _ in }
     @State private var actionsWidth: CGFloat = 0
     @State private var moreAfter = false
-    /// The subtitle Timing stepper is open over the actions.
-    @State private var timingShown = false
+    /// The subtitle or audio picker over the picture (a sheet on the iPhone).
+    @State private var picker: TrackPickerPanel.Kind?
+    /// The bottom controls' height, which the picker panel sits over.
+    @State private var bottomHeight: CGFloat = 200
     /// TV seeking: how many quick presses in a row, and the last one's direction and time.
     @State private var seekRun = 0
     @State private var lastSeek: (direction: Int, at: ContinuousClock.Instant)?
@@ -94,6 +96,52 @@ struct PlayerControls: View {
             .allowsHitTesting(false)
         }
         .foregroundStyle(.white)
+        // Mac, iPad and TV: the picker is a panel over the picture, just over the controls.
+        .overlay(alignment: metrics.wide ? .bottomTrailing : .bottom) {
+            if let picker, !Self.phone {
+                TrackPickerPanel(kind: picker, model: model, close: closePicker)
+                    #if !os(tvOS)
+                    .frame(width: 400)
+                    .frame(maxHeight: TrackPicker.panelHeight(window: windowHeight, below: bottomHeight + footPadding + Theme.Space.s))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true)
+                    #endif
+                    .padding(.trailing, metrics.wide ? metrics.gutter : 0)
+                    .padding(.bottom, bottomHeight + footPadding + Theme.Space.s)
+                    .transition(.opacity)
+            }
+        }
+        #if os(iOS)
+        // The iPhone: a full-height sheet over the landscape player.
+        .sheet(item: Binding(get: { Self.phone ? picker : nil }, set: { if $0 == nil { closePicker() } })) { kind in
+            TrackPickerPanel(kind: kind, model: model, close: closePicker)
+                .presentationDetents([.large])
+                .presentationBackground(Theme.Palette.raised)
+        }
+        #endif
+        .onChange(of: picker) { _, open in
+            hold(open != nil)
+            model.pickerOpen = open != nil
+        }
+        #if DEBUG
+        .task {
+            // A walk's shot: the picker once the core's subtitles are in (or the file's audio).
+            while !Task.isCancelled, picker == nil, let kind = DebugHooks.openPicker {
+                if kind == "audio" ? !model.audioTracks.isEmpty : (model.playback?.subtitles.count ?? 0) > 20 {
+                    openPicker(kind == "audio" ? .audio : .subtitles)
+                }
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+        #endif
+    }
+
+    private func openPicker(_ kind: TrackPickerPanel.Kind) {
+        withAnimation(Theme.Motion.panel) { picker = picker == kind ? nil : kind }
+    }
+
+    private func closePicker() {
+        withAnimation(Theme.Motion.panel) { picker = nil }
     }
 
     private var target: PlayTargetInfo { model.route.target }
@@ -231,7 +279,10 @@ struct PlayerControls: View {
             }
         }
         // Skip and Up Next sit just over this, the controls' own height and their foot padding.
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { measured($0 + footPadding) }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: {
+            measured($0 + footPadding)
+            bottomHeight = $0
+        }
     }
 
     private var footPadding: CGFloat { metrics.wide ? Theme.Space.m : Theme.Space.s }
@@ -351,26 +402,6 @@ struct PlayerControls: View {
                 scrolling(actionRow(values: true))
             }
         }
-        #if !os(tvOS)
-        // Over the actions, not on one of the row's copies above (only one is drawn).
-        .popover(isPresented: $timingShown, arrowEdge: PlayerLayout.timingArrowEdge(ios: Self.ios)) {
-            SubtitleTimingStepper(value: model.subtitleDelay, track: model.timingKey ?? "") { by, spoken in
-                model.setSubtitleDelay(PlayerLayout.nudge(model.subtitleDelay, by: by), spoken: spoken)
-                hold(true)
-            } reset: {
-                model.setSubtitleDelay(0)
-                hold(true)
-            }
-            .padding(Theme.Space.m)
-            // Solid: the system's glass let a bright picture wash out Reset (the Mac walk).
-            .presentationBackground(Theme.Palette.raised)
-            .presentationCompactAdaptation(.popover)
-        }
-        // Open, it keeps the controls up; closed, they hide as usual again.
-        .onChange(of: timingShown) { _, open in hold(open) }
-        // Its track went off: nothing left to time.
-        .onChange(of: model.timingKey == nil) { _, off in if off { timingShown = false } }
-        #endif
     }
 
     /// Room for a focus ring and the lift, which a scroll view would clip.
@@ -399,72 +430,11 @@ struct PlayerControls: View {
 
     private func actionRow(values: Bool) -> some View {
         HStack(spacing: metrics.wide ? 26 : 16) {
-            menu("Audio", "volume-2", audioValue, values: values) {
-                if model.audioTracks.isEmpty {
-                    Choice(text: "As the file has it", selected: true)
-                }
-                ForEach(Array(model.audioTracks.enumerated()), id: \.offset) { index, name in
-                    Button { model.selectAudio(index); hold(false) } label: {
-                        Choice(text: name, selected: model.audioTrack == index)
-                    }
-                }
-            }
-            .focused($focus, equals: .audio)
-            menu("Subtitles", "captions", subtitleValue.text, searching: subtitleValue.searching, values: values) {
-                Button { model.chooseSubtitle(nil); hold(false) } label: {
-                    Choice(text: "Off", selected: model.subtitle == nil && model.textTrack == nil)
-                }
-                // A submenu per language, the profile's on top (plans/m13-subtitle-languages.md 2).
-                let groups = SubtitleMenu.groups(model.playback?.subtitles ?? [], preferred: model.subtitleLanguages)
-                ForEach(groups.top, id: \.language) { languageMenu($0) }
-                if !groups.other.isEmpty {
-                    Menu("Other languages") {
-                        ForEach(groups.other, id: \.language) { languageMenu($0) }
-                            .onAppear { hold(true) }
-                    }
-                }
-                // An addon track's timing: Stremio's stepper, which a menu item cannot be (no hold),
-                // so the item opens it over the actions. The core keeps the value for the track.
-                if model.timingKey != nil {
-                    #if os(tvOS)
-                    Section("Timing: \(PlayerLayout.delayText(model.subtitleDelay))") {
-                        Button { model.setSubtitleDelay(PlayerLayout.nudge(model.subtitleDelay, by: -PlayerLayout.subtitleStep)); hold(true) } label: {
-                            Label("\u{2212}0.1 s", glyph: "minus")
-                        }
-                        // The menu stays open for the next press: finding the timing takes several.
-                        .menuActionDismissBehavior(.disabled)
-                        Button { model.setSubtitleDelay(PlayerLayout.nudge(model.subtitleDelay, by: PlayerLayout.subtitleStep)); hold(true) } label: {
-                            Label("+0.1 s", glyph: "plus")
-                        }
-                        .menuActionDismissBehavior(.disabled)
-                        if model.subtitleDelay != 0 {
-                            Button { model.setSubtitleDelay(0); hold(false) } label: { Label("Reset", glyph: "rotate-ccw") }
-                        }
-                    }
-                    #else
-                    // A menu draws only a plain image: a glyph view left the item unlabelled for VoiceOver.
-                    Button("Timing: \(PlayerLayout.delayText(model.subtitleDelay))", glyph: "clock") { timingShown = true }
-                        .accessibilityLabel(PlayerLayout.timingItemLabel(model.subtitleDelay))
-                    #endif
-                }
-                // Captions carried in the video: the legible output cannot hand over their layout.
-                if model.subtitle == nil, model.textTrack != nil, !model.textTrackTimeable {
-                    Section("Timing") { Text("Captions in the video take no timing") }
-                }
-                if !model.textTracks.isEmpty {
-                    Section("In the file") {
-                        ForEach(Array(model.textTracks.enumerated()), id: \.offset) { index, name in
-                            Button { model.selectText(index); hold(false) } label: {
-                                Choice(text: name, selected: model.textTrack == index)
-                            }
-                        }
-                    }
-                }
-                // Why a source's files did not load, in the core's order, for as long as the core says so.
-                if let notes = model.playback?.notes, !notes.isEmpty {
-                    Divider()
-                    ForEach(notes, id: \.self) { Text($0.words) }
-                }
+            Button { openPicker(.audio) } label: { action("Audio", "volume-2", audioValue, shown: values) }
+                .focused($focus, equals: .audio)
+            // Languages with flags and a search, then a language's options and its timing (plans/player-polish.md 2.4).
+            Button { openPicker(.subtitles) } label: {
+                action("Subtitles", "captions", subtitleValue.text, searching: subtitleValue.searching, shown: values)
             }
             .focused($focus, equals: .subtitles)
             if let versions, let snapshot = versions.snapshot {
@@ -490,21 +460,6 @@ struct PlayerControls: View {
         .buttonStyle(FocusPlainStyle(shape: RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous)))
     }
 
-    /// One language's tracks, each by its name with its source, Forced and SDH beneath.
-    private func languageMenu(_ group: SubtitleMenu.Group) -> some View {
-        Menu {
-            ForEach(group.tracks) { track in
-                Button { model.chooseSubtitle(track); hold(false) } label: {
-                    Choice(text: SubtitleMenu.title(track), detail: SubtitleMenu.detail(track), selected: model.subtitle == track)
-                }
-            }
-            // A submenu opened is the viewer still choosing: the hold starts again.
-            .onAppear { hold(true) }
-        } label: {
-            Choice(text: group.heading, selected: model.subtitle.map(group.tracks.contains) ?? false)
-        }
-    }
-
     /// An OSD menu that keeps the controls up while it is open, so they never
     /// hide (and close it) under the viewer's finger. Each pick ends the hold;
     /// iOS never calls the content's `onDisappear`, so a tap outside ends it
@@ -513,8 +468,7 @@ struct PlayerControls: View {
         Menu {
             Group { items() }
                 .onAppear { hold(true) }
-                // Timing closes the menu as it opens its stepper, which holds on.
-                .onDisappear { hold(timingShown) }
+                .onDisappear { hold(false) }
         } label: {
             action(title, symbol, value, searching: searching, shown: values)
         }
@@ -562,10 +516,13 @@ struct PlayerControls: View {
         model.audioTrack.flatMap { model.audioTracks.indices.contains($0) ? model.audioTracks[$0] : nil } ?? "Default"
     }
 
+    /// The language on, "English, Auto" when the core turned it on by itself.
     private var subtitleValue: (text: String, searching: Bool) {
         let file = model.textTrack.flatMap { model.textTracks.indices.contains($0) ? model.textTracks[$0] : nil }
         return PlayerLayout.subtitleValue(
-            picked: model.subtitle.map(SubtitleMenu.heading) ?? file,
+            picked: TrackPicker.buttonValue(
+                core: model.subtitle.map(SubtitleMenu.heading), file: file, auto: model.subtitleIsAuto,
+                autoLanguage: model.playback?.subtitles.first { $0.url == model.playback?.autoSubtitle }.map(SubtitleMenu.heading)),
             found: (model.playback?.subtitles.count ?? 0) + model.textTracks.count,
             pending: model.playback?.subtitlesPending == true,
             ready: model.playback?.phase == "ready"
@@ -606,21 +563,13 @@ private struct SkipGlyph: View {
 /// A menu entry that shows a checkmark when it is the current choice.
 private struct Choice: View {
     let text: String
-    /// A menu shows it as the item's second line.
-    var detail: String?
     let selected: Bool
 
     var body: some View {
         if selected {
-            Label {
-                Text(text)
-                if let detail { Text(detail) }
-            } icon: {
-                Image("check")
-            }
+            Label { Text(text) } icon: { Image("check") }
         } else {
             Text(text)
-            if let detail { Text(detail) }
         }
     }
 }
@@ -636,6 +585,9 @@ struct SubtitleTimingStepper: View {
     let value: Double
     /// The track the value is for: a new one ends a hold under way.
     let track: String
+    /// The Mac: the value takes the keyboard focus as it shows. False inside the picker, whose rows keep the
+    /// arrows; there it takes its keys only once focused on purpose (a click, Tab).
+    var takesFocus = true
     /// A step by the signed amount; `spoken` false for VoiceOver's own adjust, which it reads itself.
     let move: (Double, _ spoken: Bool) -> Void
     let reset: () -> Void
@@ -676,7 +628,7 @@ struct SubtitleTimingStepper: View {
             hold = TimingHold { move($0, true) }
             #if os(macOS)
             // The keyboard's way in; a touch screen draws no focus.
-            focus = .value
+            if takesFocus { focus = .value }
             #endif
         }
         .onDisappear { stop(single: false) }

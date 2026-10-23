@@ -300,12 +300,18 @@ struct PlayerScreen: View {
         .toolbarVisibility(.hidden, for: .windowToolbar)
         .focusable()
         .focusEffectDisabled()
-        // Under Versions the keys are the page's: Escape goes back to the player.
+        // Under Versions the keys are the page's: Escape goes back to the player. With a track picker open the keys
+        // are its own: these pass them on.
         .onKeyPress(.space) { playerKey { model.togglePlay() } }
         .onKeyPress(.leftArrow) { playerKey { model.skip(-10) } }
         .onKeyPress(.rightArrow) { playerKey { model.skip(10) } }
-        .onKeyPress(.escape) { escape(); return .handled }
-        .focusedSceneValue(\.playerKeys, PlayerKeys(model: model, close: close))
+        .onKeyPress(.escape) {
+            guard !model.pickerOpen else { return .ignored }
+            escape()
+            return .handled
+        }
+        // A new value as a picker opens or closes, so the menu's bare keys follow it.
+        .focusedSceneValue(\.playerKeys, PlayerKeys(model: model, close: close, pickerOpen: model.pickerOpen))
         #elseif os(tvOS)
         // Back one step at a time, as Leanback and the Android TV app do: an
         // open menu closes itself first, then the controls hide, then the player leaves.
@@ -419,9 +425,9 @@ struct PlayerScreen: View {
     }
 
     #if os(macOS)
-    /// The player's own keys, not while Versions is over it.
+    /// The player's own keys, not while Versions or a track picker is over it.
     private func playerKey(_ action: () -> Void) -> KeyPress.Result {
-        guard !showVersions else { return .ignored }
+        guard !showVersions, !model.pickerOpen else { return .ignored }
         action()
         return .handled
     }
@@ -454,6 +460,10 @@ struct PlayerScreen: View {
     private func autoHide() async {
         while !Task.isCancelled {
             try? await Task.sleep(for: .milliseconds(500))
+            #if DEBUG
+            // A walk's picker shot keeps the controls (and the picker in them) up.
+            if DebugHooks.openPicker != nil { continue }
+            #endif
             if controls, model.playing, !menuOpen, !assistiveTechRunning, ContinuousClock.now - lastTouch > .seconds(3) {
                 withAnimation(Theme.Motion.panel) { controls = false }
                 #if os(macOS)

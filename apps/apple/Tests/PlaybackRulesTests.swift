@@ -312,9 +312,9 @@ private func sub(_ n: Int, _ lang: String, _ language: String, _ heading: String
     #expect(groups.top.map(\.heading) == ["Turkish", "English"])
     #expect(groups.other.map(\.language) == ["yue", "zh-Hant", "cnr", "pt-BR", "es-419"])
     #expect(groups.top[1].tracks.map(SubtitleMenu.title) == ["OpenSubtitles v3 1", "Tenzing.2026.1080p.WEB"])
-    // The line already names the source: nothing beneath it. A release line gets its source and SDH.
+    // Nothing beneath a plain line; a release line gets SDH, never its source.
     #expect(SubtitleMenu.detail(tracks[1]) == nil)
-    #expect(SubtitleMenu.detail(tracks[2]) == "OpenSubtitles v3, For the hard of hearing")
+    #expect(SubtitleMenu.detail(tracks[2]) == "For the hard of hearing")
     // A preference in any ISO 639 spelling counts for every region of its language.
     #expect(SubtitleMenu.groups(tracks, preferred: ["por"]).top.map(\.language) == ["pt-BR"])
     #expect(SubtitleMenu.base("ger") == SubtitleMenu.base("de-AT"))
@@ -327,7 +327,8 @@ private func sub(_ n: Int, _ lang: String, _ language: String, _ heading: String
     let old = try JSONDecoder().decode(SubtitleTrack.self, from: Data(#"{"url": "u", "lang": "tur", "label": null, "source": "SubSense", "forced": true, "hearingImpaired": false}"#.utf8))
     #expect(old.language == nil && old.name == nil)
     #expect(SubtitleMenu.heading(old) == "Turkish")
-    #expect(SubtitleMenu.title(old) == "SubSense")
+    // No name or label: its language, never the source.
+    #expect(SubtitleMenu.title(old) == "Turkish")
     #expect(SubtitleMenu.detail(old) == "Forced")
     #expect(SubtitleMenu.groups([old], preferred: ["tr"]).top.map(\.language) == ["tur"])
     let new = try JSONDecoder().decode(SubtitleTrack.self, from: Data(#"{"url": "u", "lang": "pob", "label": null, "source": "OpenSubtitles v3", "forced": false, "hearingImpaired": false, "language": "pt-BR", "languageName": "Portuguese (Brazil)", "name": "OpenSubtitles v3 2"}"#.utf8))
@@ -840,8 +841,10 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     // The release, cut in the middle at a dot with its group kept; said once when it is the name.
     let release = "Slow.Horses.S06E02.1080p.WEB.H264-CAKES"
     #expect(SubtitleMenu.middle(release, max: 34) == "Slow.Horses\u{2026}1080p.WEB.H264-CAKES")
-    #expect(SubtitleMenu.detail(track("CAKES, WEB 1080p", fits: true, release: release)) == "OpenSubtitles v3, Same release group, \(release)")
-    #expect(SubtitleMenu.detail(track(release, release: release)) == "OpenSubtitles v3")
+    // The source never shows: what tells the tracks apart does.
+    // The release takes the room the parts leave (26 of 46 here), cut in the middle, as the web's trackDetail.
+    #expect(SubtitleMenu.detail(track("CAKES, WEB 1080p", fits: true, release: release)) == "Same release group, \(SubtitleMenu.middle(release, max: 26))")
+    #expect(SubtitleMenu.detail(track(release, release: release)) == nil)
     let raw = "Slow.Horses.S06E02.Daddy.Issues.1080p.ATVP.WEB-DL.DDP5.1.Atmos.H.264-FLUX"
     let cut = SubtitleMenu.middle(raw, max: 46)
     #expect(cut.count <= 46 && cut.hasPrefix("Slow.Horses") && cut.hasSuffix("-FLUX") && cut.contains("\u{2026}"), "\(cut)")

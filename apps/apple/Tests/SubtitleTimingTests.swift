@@ -223,10 +223,12 @@ func playerModel() throws -> String {
 @Test func noTimingControlSaysEarlierOrLater() throws {
     // The owner: the timing is a signed value. The tvOS items and the stepper's labels, as drawn
     // and as VoiceOver reads them; comments may say which way a sign moves the words.
-    let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player/PlayerControls.swift")
-    let code = try String(contentsOf: file, encoding: .utf8).split(separator: "\n")
+    let player = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player")
+    let code = try ["PlayerControls.swift", "SubtitlePicker.swift"].map { try String(contentsOf: player.appending(path: $0), encoding: .utf8) }
+        .joined(separator: "\n").split(separator: "\n")
         .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }.joined(separator: "\n")
     #expect(code.range(of: #"earlier|later"#, options: [.regularExpression, .caseInsensitive]) == nil)
+    // The stepper's labels, and tvOS's three buttons in the picker's options.
     for label in [#"Label("\u{2212}0.1 s", glyph: "minus")"#, #"Label("+0.1 s", glyph: "plus")"#,
                   #"label: "Minus 0.1 seconds""#, #"label: "Plus 0.1 seconds""#] {
         #expect(code.contains(label), "\(label)")
@@ -255,17 +257,10 @@ func playerModel() throws -> String {
     #expect(text.components(separatedBy: "AVPlayerItemLegibleOutput()").count == 2, "one output, made once")
 }
 
-@Test func theTimingStepperOpensOnTheScreenAndItsItemIsLabelled() throws {
-    // The iphone-a walk (2026-10-23): under the action row at the screen's foot, iOS hung the stepper off the screen.
-    #expect(PlayerLayout.timingArrowEdge(ios: true) == .bottom)
-    #expect(PlayerLayout.timingArrowEdge(ios: false) == .top)
-    let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player/PlayerControls.swift")
-    let text = try String(contentsOf: url, encoding: .utf8)
-    #expect(text.contains("arrowEdge: PlayerLayout.timingArrowEdge(ios: Self.ios)"))
-    // A menu item takes the plain image: with a glyph view VoiceOver found an empty cell.
-    #expect(text.contains(#"Button("Timing: \(PlayerLayout.delayText(model.subtitleDelay))", glyph: "clock")"#))
-    #expect(text.contains(".accessibilityLabel(PlayerLayout.timingItemLabel(model.subtitleDelay))"))
-    #expect(PlayerLayout.timingItemLabel(0.3) == "Subtitle timing, plus 0.3 seconds")
-    #expect(PlayerLayout.timingItemLabel(-1.2) == "Subtitle timing, minus 1.2 seconds")
-    #expect(PlayerLayout.timingItemLabel(0) == "Subtitle timing, 0.0 seconds")
+@Test func theTimingStepperSitsInTheLanguagesOptions() throws {
+    // The picker's second level ends with the timing row while a track that takes one is on (plans/player-polish.md 2.4).
+    let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player/SubtitlePicker.swift")
+    let options = try body(of: "private func options(", in: try String(contentsOf: url, encoding: .utf8))
+    #expect(options.contains("if model.timingKey != nil, chosen == l.language {"))
+    #expect(options.contains("SubtitleTimingStepper(value: model.subtitleDelay"))
 }

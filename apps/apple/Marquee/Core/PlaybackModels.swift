@@ -507,17 +507,17 @@ enum SubtitleMenu {
         nonEmpty(track.languageName) ?? Locale(identifier: "en").localizedString(forLanguageCode: track.lang) ?? track.lang
     }
 
-    /// A track's line in its group.
+    /// A track's line in its group; with no name or label its language, never the source (as Android's TrackNames).
     static func title(_ track: SubtitleTrack) -> String {
-        nonEmpty(track.name) ?? nonEmpty(track.label) ?? track.source
+        nonEmpty(track.name) ?? nonEmpty(track.label) ?? heading(track)
     }
 
     /// Beneath the line, as the web and Android say it: the source unless the line starts with it,
     /// Forced, SDH, the core's match ("Matches this file", else "Same release group"), "Made for 25
     /// fps", then the release text cut in the middle to the line's `max` characters.
     static func detail(_ track: SubtitleTrack, max: Int = 46) -> String? {
+        // Never the source: no addon is named where a viewer reads it.
         var parts = [
-            title(track).hasPrefix(track.source) ? nil : track.source,
             track.forced ? "Forced" : nil,
             track.hearingImpaired ? "For the hard of hearing" : nil,
             track.hashMatch == true ? "Matches this file" : track.fits == true ? "Same release group" : nil,
@@ -738,4 +738,240 @@ struct PlayRoute: Hashable, Identifiable {
     /// Play pressed while versions are still found: the player opens at once
     /// and starts the pick once it settles (plans/play-every-version.md Step 3).
     var waitsForPick: Bool { key.isEmpty }
+}
+
+/// The subtitle and audio pickers (plans/player-polish.md 2.4, design/DECISION.md "Subtitle picker"): the
+/// languages first, in the core's order with the profile's on top, each with its flag, English name, own name
+/// and count; then one language's options, the file's own tracks first. The web's `lib/subtitles.ts`.
+enum TrackPicker {
+    /// One of the file's own tracks, by its place in the player's list.
+    struct FileTrack: Hashable {
+        let index: Int
+        let name: String
+        /// Its language tag as the file gives it ("en", "eng", "pt-BR"); nil or "und" for none.
+        let language: String?
+    }
+
+    struct Language: Hashable, Identifiable {
+        let language: String
+        let name: String
+        /// Its own name ("Türkçe") when it differs from the English one.
+        let own: String?
+        /// What a search matches as a code: the tag and every spelling the tracks carry.
+        let codes: [String]
+        var file: [FileTrack]
+        let tracks: [SubtitleTrack]
+
+        var id: String { language }
+        /// Every option the language opens.
+        var count: Int { file.count + tracks.count }
+    }
+
+    enum Option: Hashable {
+        case file(Int)
+        case track(SubtitleTrack)
+    }
+
+    /// The core's languages in its order (one per run of a language), each with the file's tracks of that
+    /// language (joined by tag, else by its base language); a language only the file has comes after them.
+    static func languages(_ tracks: [SubtitleTrack], file: [FileTrack]) -> [Language] {
+        var out: [Language] = []
+        for track in tracks {
+            let tag = track.language ?? track.lang
+            if let last = out.last, last.language == tag {
+                out[out.count - 1] = Language(
+                    language: last.language, name: last.name, own: last.own,
+                    codes: Array(Set(last.codes + [track.lang.lowercased()])).sorted(), file: [], tracks: last.tracks + [track])
+            } else {
+                let name = SubtitleMenu.heading(track)
+                let own = track.nativeName.flatMap { $0.isEmpty || $0 == name ? nil : $0 }
+                out.append(Language(language: tag, name: name, own: own, codes: Array(Set([tag.lowercased(), track.lang.lowercased()])).sorted(), file: [], tracks: [track]))
+            }
+        }
+        for f in file {
+            guard let raw = f.language, !raw.isEmpty, !raw.hasPrefix("und") else { continue }
+            let tag = fileTag(raw)
+            if let i = out.firstIndex(where: { $0.language.lowercased() == tag.lowercased() })
+                ?? out.firstIndex(where: { SubtitleMenu.base($0.language) == SubtitleMenu.base(tag) }) {
+                out[i].file.append(f)
+            } else {
+                out.append(Language(language: tag, name: englishName(tag), own: nil, codes: Array(Set([tag.lowercased(), raw.lowercased()])).sorted(), file: [f], tracks: []))
+            }
+        }
+        return out
+    }
+
+    /// A file's code as a tag: "eng" is "en", "pt-BR" stays.
+    static func fileTag(_ code: String) -> String {
+        let parts = code.split(separator: "-", maxSplits: 1).map(String.init)
+        let base = SubtitleMenu.base(parts[0])
+        return parts.count > 1 ? "\(base)-\(parts[1])" : base
+    }
+
+    static func englishName(_ tag: String) -> String {
+        Locale(identifier: "en").localizedString(forIdentifier: tag) ?? tag.uppercased()
+    }
+
+    /// Lower case with the accents gone, so "turkce" finds "Türkçe".
+    private static func fold(_ s: String) -> String {
+        s.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "en")).lowercased()
+    }
+
+    private static func words(_ s: String) -> [String] {
+        fold(s).split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+    }
+
+    /// The search's rule: a word of the English name or of the own name starts with what was typed, or a code
+    /// does ("pt", "pob", "deu", "pt-br").
+    static func matches(_ l: Language, _ typed: String) -> Bool {
+        let code = fold(typed.trimmingCharacters(in: .whitespaces))
+        guard !code.isEmpty else { return true }
+        let q = words(code).joined(separator: " ")
+        let starts = { (text: String) in (" " + words(text).joined(separator: " ")).contains(" " + q) }
+        return starts(l.name) || l.own.map(starts) == true || l.codes.contains { $0.hasPrefix(code) || $0.hasPrefix(q) }
+    }
+
+    /// What picking a language turns on at once: the file's own track (it always fits the file), else the
+    /// core's best match, its first.
+    static func best(_ l: Language) -> Option? {
+        if let f = l.file.first { return .file(f.index) }
+        return l.tracks.first.map(Option.track)
+    }
+
+    /// The core's start pick inside the file: the first of the file's tracks in its language (by tag, else by base
+    /// language), which wins over the core's own track (design/DECISION.md, Subtitle picker).
+    static func startFile(_ auto: SubtitleTrack, in file: [FileTrack]) -> Int? {
+        let tag = auto.language ?? auto.lang
+        let tagged = file.compactMap { f in f.language.flatMap { $0.isEmpty || $0.hasPrefix("und") ? nil : (f, fileTag($0)) } }
+        return (tagged.first { $0.1.lowercased() == tag.lowercased() } ?? tagged.first { SubtitleMenu.base($0.1) == SubtitleMenu.base(tag) })?.0.index
+    }
+
+    /// The language that is on: the one holding the core's track playing, or the file's track playing.
+    static func chosen(_ languages: [Language], subtitle: SubtitleTrack?, fileIndex: Int?) -> String? {
+        languages.first { l in
+            subtitle.map(l.tracks.contains) == true || fileIndex.map { i in l.file.contains { $0.index == i } } == true
+        }?.language
+    }
+
+    /// The circle-flags image for a tag: the tag itself ("pt-br"), else its language ("zh" for "zh-Hant"); nil
+    /// gives the neutral round mark with two letters.
+    static func flag(_ tag: String) -> String? {
+        let lower = tag.lowercased()
+        let base = SubtitleMenu.base(lower)
+        if FlagSet.tags.contains(lower) { return "flag-\(lower)" }
+        return FlagSet.tags.contains(base) ? "flag-\(base)" : nil
+    }
+
+    /// The neutral mark's letters: "EN".
+    static func letters(_ tag: String) -> String { String(SubtitleMenu.base(tag).prefix(2)).uppercased() }
+
+    /// A language's row read out: "English, Auto, 4 options, selected".
+    static func spoken(_ l: Language, auto: Bool, selected: Bool) -> String {
+        ([l.name, l.own, auto ? "Auto" : nil, "\(l.count) \(l.count == 1 ? "option" : "options")", selected ? "selected" : nil]
+            .compactMap { $0 }).joined(separator: ", ")
+    }
+
+    /// Audio: the file's default track reads Default, once there is more than one to choose from.
+    static func marksDefault(index: Int, defaultIndex: Int?, count: Int) -> Bool { count > 1 && index == defaultIndex }
+
+    /// Audio: a search only past five tracks.
+    static func audioSearch(_ count: Int) -> Bool { count > 5 }
+}
+
+/// The picker's rows, keys and what a press does, apart from the view, so a Mac key walk is a test.
+extension TrackPicker {
+    enum Row: Hashable {
+        case search, off, back, language(String), opener(String), option(Int), audio(Int)
+    }
+
+    /// A file track's option row is its index past this, so it never meets a core track's place in the list.
+    static let fileRow = 10_000
+
+    enum Key { case up, down, left, right, escape, enter }
+
+    /// What a press or a key on a row does.
+    enum Act: Equatable {
+        case focus(Row)
+        case open(String)
+        case back
+        case close
+        case off
+        case turnOn(Option)
+        case audio(Int)
+        case none
+    }
+
+    /// The focusable rows of the level showing, in order: the languages (search, Off, each language), a
+    /// language's options (back, the file's tracks, the core's), or the audio tracks (search past five).
+    static func order(audio: [FileTrack]?, open: Language?, shown: [Language]) -> [Row] {
+        if let audio { return (audioSearch(audio.count) ? [Row.search] : []) + audio.map { .audio($0.index) } }
+        if let open { return [.back] + open.file.map { .option(fileRow + $0.index) } + open.tracks.indices.map { .option($0) } }
+        return [.search, .off] + shown.map { .language($0.language) }
+    }
+
+    /// A row's press (a click, a tap, Return): a language turns its best option on at once; its chevron opens it.
+    static func press(_ row: Row, languages: [Language], open: Language?) -> Act {
+        switch row {
+        case .off: return .off
+        case .language(let tag): return languages.first { $0.language == tag }.flatMap(best).map(Act.turnOn) ?? .none
+        case .opener(let tag): return .open(tag)
+        case .option(let id):
+            guard let open else { return .none }
+            if id >= fileRow { return .turnOn(.file(id - fileRow)) }
+            return open.tracks.indices.contains(id) ? .turnOn(.track(open.tracks[id])) : .none
+        case .audio(let index): return .audio(index)
+        case .back: return .back
+        case .search: return .none
+        }
+    }
+
+    /// The Mac's keys over the rows (the timing stepper keeps its own while it has the focus on purpose): Up and
+    /// Down move, Right opens the focused language, Left goes back, Esc goes back or closes, Return presses.
+    static func key(_ key: Key, focus: Row?, order: [Row], languages: [Language], open: Language?) -> Act {
+        // A language's chevron moves and opens as its row.
+        let current = focus.map { row -> Row in if case .opener(let tag) = row { .language(tag) } else { row } }
+        switch key {
+        case .up, .down:
+            guard !order.isEmpty else { return .none }
+            let at = current.flatMap(order.firstIndex(of:)) ?? (key == .down ? -1 : order.count)
+            return .focus(order[max(0, min(order.count - 1, at + (key == .down ? 1 : -1)))])
+        case .right:
+            if case .language(let tag)? = current { return .open(tag) }
+            return .none
+        case .left: return open == nil ? .none : .back
+        case .escape: return open == nil ? .close : .back
+        case .enter: return focus.map { press($0, languages: languages, open: open) } ?? .none
+        }
+    }
+
+    /// The option a language's level lands on: the one playing when the language is the chosen one, else its best.
+    static func landing(_ l: Language, subtitle: SubtitleTrack?, fileIndex: Int?) -> Row {
+        if let i = fileIndex, l.file.contains(where: { $0.index == i }) { return .option(fileRow + i) }
+        if let subtitle, let i = l.tracks.firstIndex(of: subtitle) { return .option(i) }
+        switch best(l) {
+        case .file(let i): return .option(fileRow + i)
+        default: return .option(0)
+        }
+    }
+
+    /// The Subtitles button's value: the language on, "English, Auto" for the core's start pick, its file track
+    /// included (the language, not the file's own name for its track); else the track the viewer chose.
+    static func buttonValue(core: String?, file: String?, auto: Bool, autoLanguage: String?) -> String? {
+        guard auto, let language = core ?? autoLanguage else { return core ?? file }
+        return "\(language), Auto"
+    }
+
+    /// The Mac and iPad panel's height: up to the area under the title bar (its row and padding, about 110 pt),
+    /// at most 70 percent of the window, never under 320; `below` is the controls under it.
+    static func panelHeight(window: CGFloat, below: CGFloat) -> CGFloat {
+        max(320, min(window * 0.7, window - below - 110))
+    }
+
+    /// The track on is the core's start pick, not the viewer's own: the core's track itself, or the file's track
+    /// that won in its language. Its language reads Auto.
+    static func isAuto(subtitleURL: String?, autoURL: String?, textTrack: Int?, startFile: Int?, viewerChose: Bool) -> Bool {
+        guard !viewerChose else { return false }
+        if let textTrack { return textTrack == startFile }
+        return subtitleURL != nil && subtitleURL == autoURL
+    }
 }
