@@ -144,9 +144,12 @@ impl SearchView {
         *lock(&self.task) = Some(task);
     }
 
-    /// The user opened a result: keep the query in recent searches.
-    pub fn remember(&self) -> Result<(), crate::CoreError> {
-        let query = self.snapshot.get().query;
+    /// The user opened a result: keep the query in recent searches. With
+    /// `query`, that text, as the field holds it now: the snapshot's query
+    /// waits out the typing debounce, so a result opened (or the page left)
+    /// within it would keep the text before the last keystrokes.
+    pub fn remember(&self, query: Option<&str>) -> Result<(), crate::CoreError> {
+        let query = query.map_or_else(|| self.snapshot.get().query, |q| q.trim().to_owned());
         if !query.is_empty() {
             let now = mq_library::hlc::now_ms() as i64;
             self.core

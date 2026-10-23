@@ -118,9 +118,18 @@ async fn debounces_dedupes_and_drops_empty_rows() {
     assert_eq!(ids, vec![vec!["tt1", "tt2", "tt3"]]);
     assert_eq!(s.rows[0].title, "Movies");
 
-    view.remember().unwrap();
+    view.remember(None).unwrap();
     view.set_query("  ");
     assert_eq!(view.snapshot().recent, vec!["sintel".to_string()]);
+
+    // Left within the debounce after the last keystrokes: the text given
+    // is remembered, not the query the debounce still holds.
+    view.set_query("sintel");
+    view.set_query("sintel 2010");
+    view.remember(Some("  sintel 2010 ")).unwrap();
+    view.set_query("  ");
+    let recent = view.snapshot().recent;
+    assert!(recent.iter().any(|q| q == "sintel 2010"), "{recent:?}");
 
     // A title named exactly what was typed moves to the front of its row.
     view.set_query("TT2");

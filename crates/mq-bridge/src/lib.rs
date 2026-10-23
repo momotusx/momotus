@@ -1966,7 +1966,10 @@ impl Session {
                     return Err(format!("no Home row {row_id}"));
                 }
             }
-            (View::Search(search), "remember") => search.remember().map_err(|e| e.to_string())?,
+            // `query`, when given, is the field's text now (the debounce may not have caught up).
+            (View::Search(search), "remember") => search
+                .remember(command.get("query").and_then(Value::as_str))
+                .map_err(|e| e.to_string())?,
             (View::Playback(playback), "progress") => {
                 let ms = |key: &str| {
                     command

@@ -704,7 +704,7 @@ async fn a_kids_search_shows_no_recent_names() {
     let search = SearchView::open(&kid);
     search.set_query("up");
     until("the match", || search_ids(&search) == ["tt1"]).await;
-    search.remember().unwrap();
+    search.remember(None).unwrap();
     remove(&kid, "tt1");
     search.set_query("");
     assert!(
@@ -716,7 +716,7 @@ async fn a_kids_search_shows_no_recent_names() {
     let owners = SearchView::open(&owner);
     owners.set_query("up");
     until("the owner's query", || owners.snapshot().query == "up").await;
-    owners.remember().unwrap();
+    owners.remember(None).unwrap();
     owners.set_query("");
     assert_eq!(owners.snapshot().recent, ["up"]);
 }
