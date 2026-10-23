@@ -570,9 +570,20 @@ final class PlayerModel {
         sendStall(stall.interrupted())
         if backend == .aether, let aether {
             let target = max(0, min(seconds, duration > 0 ? duration : seconds))
-            (position, ended) = (target, false)
+            (position, ended, loadStart) = (target, false, target)
+            // As on AVPlayer: the clock's old point does not come back before the seek lands, and only the last
+            // seek's landing hands over.
+            pendingStart = target
             linesChanged()
-            Task { await aether.seek(to: target); self.report(); self.publishNowPlaying() }
+            seekToken += 1
+            let (token, generation) = (seekToken, generation)
+            Task {
+                await aether.seek(to: target)
+                guard token == self.seekToken, generation == self.generation else { return }
+                self.pendingStart = nil
+                self.report()
+                self.publishNowPlaying()
+            }
             return
         }
         let target = CMTime(seconds: max(0, min(seconds, duration > 0 ? duration : seconds)), preferredTimescale: 600)
@@ -1058,7 +1069,7 @@ final class PlayerModel {
     }
 
     private func engineEnded() {
-        ended = true
+        (ended, playing, waiting) = (true, false, false)
         report()
         if next != nil, autoplayNext, !nextCancelled {
             Task { await playNext() }
@@ -1093,7 +1104,8 @@ final class PlayerModel {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] status in
                 MainActor.assumeIsolated {
-                    guard let self else { return }
+                    // AVPlayer's own state only: on the second engine it sits empty and paused.
+                    guard let self, self.backend == .avPlayer else { return }
                     self.playing = status == .playing
                     self.waiting = status == .waitingToPlayAtSpecifiedRate
                     // Versions over the player paused it: the stall stays as it was until Back.

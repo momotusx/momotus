@@ -58,3 +58,18 @@ test("both players refuse external playback, and the server listens on loopback"
   expect(server).toContain('addr.sin_addr.s_addr = inet_addr("127.0.0.1")');
   expect(server).not.toContain('inet_addr("0.0.0.0")');
 });
+
+test("the app never hands the engine a subtitle URL to open", () => {
+  // The sidecar decoder opens a URL with FFmpeg (plans/apple-second-engine.md 2.6): Marquee draws addon
+  // subtitles itself and never calls it.
+  const app = join(import.meta.dir, "..", "Marquee");
+  const calls = swiftFiles(app).flatMap((path) =>
+    (readFileSync(path, "utf8").match(/\b(addExternalSubtitleTrack|selectSidecarSubtitle|selectSecondarySidecarSubtitle)\b/g) ?? []).map(
+      (call) => `${relative(app, path)}: ${call}`,
+    ),
+  );
+  expect(calls).toEqual([]);
+  // AetherSession is the one place that drives the engine's playback.
+  const loads = swiftFiles(app).filter((path) => /\.load\((url|source):/.test(readFileSync(path, "utf8")));
+  expect(loads.map((path) => relative(app, path))).toEqual(["Player/AetherSession.swift"]);
+});
