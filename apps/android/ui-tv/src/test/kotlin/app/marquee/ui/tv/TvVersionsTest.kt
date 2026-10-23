@@ -3,6 +3,9 @@ package app.marquee.ui.tv
 import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -17,8 +20,11 @@ import androidx.compose.ui.test.hasScrollToKeyAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -499,5 +505,41 @@ class TvVersionsTest {
         )
         assertTrue(ratio > 1.05f, "the skeleton melts into its card: $ratio")
         if (out != null) save("tv-versions-loading")
+    }
+
+    @Test
+    fun `the table's frame holds the first row's place while versions are found, so nothing moves`() {
+        var current by mutableStateOf<VersionsView?>(null)
+        compose.setContent {
+            MarqueeTheme(Form.Tv) { TvVersions("Sintel", current, FocusMemory(), {}, {}, {}, {}, {}) }
+        }
+        compose.waitForIdle()
+        compose.onNodeWithText("Quality", ignoreCase = true).assertExists()
+        val frame = compose.onNodeWithTag("row-skeleton-0", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        // The card's Play takes the focus, so the first row sits as it would, unlifted.
+        val snapshot = snapshot(row("best", ReasonLine.Ready("TorBox", gib)), listOf(row("a", ReasonLine.Few(31))))
+        client.attach { text ->
+            val msg = CoreJson.parseToJsonElement(text).jsonObject
+            val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
+            val result =
+                if (msg["op"]?.jsonPrimitive?.content == "subscribe") {
+                    """{"sub":7,"snapshot":${CoreJson.encodeToString(VersionsSnapshot.serializer(), snapshot)}}"""
+                } else {
+                    "{}"
+                }
+            client.onMessage("""{"id":$id,"ok":true,"result":$result}""")
+        }
+        val view = VersionsView(client, scope, JsonObject(emptyMap()))
+        current = view
+        compose.waitForIdle()
+        view.open()
+        compose.waitUntil(60_000) {
+            Snapshot.sendApplyNotifications()
+            compose.onAllNodesWithContentDescription("1080p, HDR10, 2 GB").fetchSemanticsNodes().isNotEmpty()
+        }
+        val first = compose.onNodeWithContentDescription("1080p, HDR10, 2 GB").fetchSemanticsNode().boundsInRoot
+        assertEquals(frame.top, first.top, "the first row lands where its frame was")
+        assertEquals(frame.height, first.height, "a frame row is a row's height")
+        compose.onAllNodesWithTag("row-skeleton-0", useUnmergedTree = true).assertCountEquals(0)
     }
 }

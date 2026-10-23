@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -32,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -43,7 +46,9 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -178,6 +183,9 @@ fun TvVersions(
                     snapshot,
                     empty?.rows ?: snapshot?.rows.orEmpty(),
                     empty?.kind,
+                    // Nothing to list yet and nothing said: the table's frame waits in place, so nothing moves.
+                    failure == null && snapshot?.recommended == null && snapshot?.empty == null &&
+                        snapshot?.rows.isNullOrEmpty(),
                     focus,
                     list,
                     onPlay,
@@ -449,6 +457,7 @@ private fun Sources(
     snapshot: VersionsSnapshot?,
     rows: List<VersionRow>,
     why: EmptyKind?,
+    loading: Boolean,
     focus: FocusMemory,
     list: FocusRequester,
     onPlay: (String) -> Unit,
@@ -488,7 +497,7 @@ private fun Sources(
             true
         }.focusProperties { left = focus.requester(headKey(group)) ?: FocusRequester.Default }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-        if (rows.isNotEmpty()) {
+        if (rows.isNotEmpty() || loading) {
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -512,6 +521,19 @@ private fun Sources(
             contentPadding = PaddingValues(vertical = Marquee.space.xs),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
+            if (loading && rows.isEmpty()) {
+                // A heading and four rows of the real heights, so the first rows land where these were.
+                item(key = "skeleton:head") {
+                    // A real heading's words, unseen, so it is a heading's height.
+                    Heading {
+                        Row(Modifier.weight(1f).alpha(0f).clearAndSetSemantics {}) {
+                            CapsLabel("Best quality", Modifier.weight(1f))
+                            MqText("0", role = TextRole.Callout, maxLines = 1)
+                        }
+                    }
+                }
+                items(SKELETON_ROWS, key = { "skeleton:$it" }) { RowSkeleton(Modifier.testTag("row-skeleton-$it")) }
+            }
             for (group in Group.entries) {
                 val rows = groups[group].orEmpty()
                 if (rows.isEmpty()) continue
@@ -524,15 +546,7 @@ private fun Sources(
                     if (all) focusSoon(foldKey(group))
                 }
                 item(key = "group:$group") {
-                    // A plain heading, no outline (design/DECISION.md, Lines).
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(top = Marquee.space.xs)
-                            .padding(horizontal = 22.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
+                    Heading {
                         CapsLabel(
                             VersionsCopy.group(group, snapshot?.recommended != null),
                             Modifier.weight(1f),
@@ -576,6 +590,37 @@ private fun Sources(
                 }
             }
         }
+    }
+}
+
+/** A section's heading: plain, no outline (design/DECISION.md, Lines). */
+@Composable
+private fun Heading(content: @Composable RowScope.() -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = Marquee.space.xs)
+            .padding(horizontal = 22.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        content = content,
+    )
+}
+
+/** How many rows the table's frame shows while versions are found. */
+private const val SKELETON_ROWS = 4
+
+/** A row's frame while versions are found: the cells of a real row, unseen, under one block, so its height is a row's. */
+@Composable
+private fun RowSkeleton(modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 14.dp)) {
+        Row(Modifier.alpha(0f).clearAndSetSemantics {}, verticalAlignment = Alignment.CenterVertically) {
+            MqText("1080p", Modifier.width(QUALITY), weight = FontWeight.SemiBold, maxLines = 1)
+            MqText("HDR10", Modifier.weight(1f), role = TextRole.Callout, maxLines = 1)
+            MqText("2 GB", Modifier.width(SIZE), role = TextRole.Callout, maxLines = 1)
+            ToneWord("Starts quickly", Status.Ok, Modifier.width(STATUS))
+        }
+        Skeleton(Modifier.matchParentSize())
     }
 }
 
