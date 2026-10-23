@@ -7,10 +7,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import app.marquee.core.client.CoreClient
@@ -120,14 +122,17 @@ class TvTitleActionsTest {
     private val calls = mutableListOf<String>()
 
     /** The title page on a view whose core answers with [title], and [first] for its versions. */
-    private fun show(first: VersionsSnapshot) {
+    private fun show(
+        first: VersionsSnapshot,
+        page: TitleSnapshot = title,
+    ) {
         shown = first
         client.attach { text ->
             val msg = CoreJson.parseToJsonElement(text).jsonObject
             val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
             val result =
                 if (msg["op"]?.jsonPrimitive?.content == "subscribe") {
-                    """{"sub":7,"snapshot":${CoreJson.encodeToString(TitleSnapshot.serializer(), title)}}"""
+                    """{"sub":7,"snapshot":${CoreJson.encodeToString(TitleSnapshot.serializer(), page)}}"""
                 } else {
                     "{}"
                 }
@@ -142,9 +147,6 @@ class TvTitleActionsTest {
                     FocusMemory(),
                     onPlay = { key, id -> calls += "play $key $id" },
                     onVersions = { calls += "versions $it" },
-                    onAddSource = { calls += "sources" },
-                    onAddAccount = { calls += "accounts" },
-                    onRetry = { calls += "retry" },
                     onEpisode = {},
                     onEpisodeVersions = {},
                 )
@@ -153,7 +155,7 @@ class TvTitleActionsTest {
         compose.waitForIdle()
         view.open()
         val deadline = System.currentTimeMillis() + 120_000
-        while (compose.onAllNodes(hasContentDescription("Versions")).fetchSemanticsNodes().isEmpty()) {
+        while (compose.onAllNodes(hasContentDescription("Add to Library")).fetchSemanticsNodes().isEmpty()) {
             check(System.currentTimeMillis() < deadline) { "the title never drew" }
             Snapshot.sendApplyNotifications()
             compose.waitForIdle()
@@ -162,27 +164,35 @@ class TvTitleActionsTest {
     }
 
     @Test
-    fun `Try again asks again, Play from this device plays the kept key, Choose a version opens Versions`() {
-        show(versions(EmptyKind.Unreachable, EmptyAction.TryAgain))
-        compose.onNodeWithText("Try again").performClick()
-        assertEquals(listOf("retry"), calls)
-        shown = versions(EmptyKind.Unreachable, EmptyAction.PlayFromDevice, key = "kept")
-        compose.onNodeWithText("Play from this device").performClick()
-        assertEquals(listOf("retry", "play kept tt1"), calls)
-        shown = versions(EmptyKind.NothingPlaysHere, EmptyAction.ChooseVersion)
-        compose.onNodeWithText("Choose a version").performClick()
-        assertEquals(listOf("retry", "play kept tt1", "versions tt1"), calls)
+    fun `Play is the one primary - it plays the kept version, opens Versions, or is inert`() {
+        show(versions(EmptyKind.Unreachable, EmptyAction.PlayFromDevice, key = "kept"))
+        val play = { compose.onNodeWithText("Play").performClick() }
+        play()
+        assertEquals(listOf("play kept tt1"), calls)
+        // No Settings or account step on the play surface: Play opens Versions, which holds them.
+        for ((kind, action) in listOf(
+            EmptyKind.NoSource to EmptyAction.SettingsAddons,
+            EmptyKind.NeedsAccount to EmptyAction.SettingsAccounts,
+            EmptyKind.Unreachable to EmptyAction.TryAgain,
+            EmptyKind.NothingPlaysHere to EmptyAction.ChooseVersion,
+        )) {
+            shown = versions(kind, action)
+            compose.waitForIdle()
+            for (gone in listOf("Settings", "Try again", "Play from this device", "Choose a version")) {
+                compose.onAllNodesWithText(gone).assertCountEquals(0)
+            }
+            calls.clear()
+            play()
+            assertEquals(listOf("versions tt1"), calls, "$kind")
+        }
         // A state whose only way on is Back: Play keeps its place, inert, with the state's line under it.
         shown = versions(EmptyKind.NoResults, EmptyAction.None)
         compose.waitForIdle()
         compose.onNodeWithText("No source has this yet", substring = true, useUnmergedTree = true).assertExists()
         compose.onNodeWithText("Play").assertIsNotEnabled()
-        compose.onNodeWithText("Play").performClick()
-        assertEquals(listOf("retry", "play kept tt1", "versions tt1"), calls)
-        // Focus starts on the next action, never on the inert Play.
-        compose.waitUntil(
-            5_000,
-        ) { compose.onAllNodes(isFocused() and hasContentDescription("Versions")).fetchSemanticsNodes().isNotEmpty() }
+        calls.clear()
+        play()
+        assertEquals(emptyList(), calls)
     }
 
     @Test
@@ -190,6 +200,19 @@ class TvTitleActionsTest {
         show(versions(EmptyKind.KidsNothing, EmptyAction.None))
         compose.waitUntil(5_000) {
             compose.onAllNodes(isFocused() and hasContentDescription("Versions")).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("Play").assertIsNotEnabled()
+    }
+
+    @Test
+    fun `with no video to play, focus starts on Add to Library and Play does nothing`() {
+        show(versions(EmptyKind.NoResults, EmptyAction.None), title.copy(header = title.header.copy(playTarget = null)))
+        compose.waitUntil(5_000) {
+            compose
+                .onAllNodes(
+                    isFocused() and hasContentDescription("Add to Library"),
+                ).fetchSemanticsNodes()
+                .isNotEmpty()
         }
         compose.onNodeWithText("Play").assertIsNotEnabled()
     }

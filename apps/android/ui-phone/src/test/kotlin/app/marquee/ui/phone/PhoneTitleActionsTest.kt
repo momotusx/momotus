@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -114,7 +115,7 @@ class PhoneTitleActionsTest {
     )
 
     @Test
-    fun `Try again asks again, Play from this device plays the kept key, Choose a version opens Versions`() {
+    fun `Play is the one primary - it plays the kept version, opens Versions, or is inert`() {
         client.attach { text ->
             val msg = CoreJson.parseToJsonElement(text).jsonObject
             val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
@@ -127,7 +128,7 @@ class PhoneTitleActionsTest {
             client.onMessage("""{"id":$id,"ok":true,"result":$result}""")
         }
         val view = TitleView(client, scope, "movie", "tt1")
-        var shown by mutableStateOf(versions(EmptyKind.Unreachable, EmptyAction.TryAgain))
+        var shown by mutableStateOf(versions(EmptyKind.Unreachable, EmptyAction.PlayFromDevice, key = "kept"))
         val calls = mutableListOf<String>()
         compose.setContent {
             MarqueeTheme(Form.Phone) {
@@ -136,9 +137,6 @@ class PhoneTitleActionsTest {
                     shown,
                     onPlay = { key, id -> calls += "play $key $id" },
                     onVersions = { calls += "versions $it" },
-                    onAddSource = { calls += "sources" },
-                    onAddAccount = { calls += "accounts" },
-                    onRetry = { calls += "retry" },
                     onEpisode = {},
                     onEpisodeVersions = {},
                 )
@@ -147,26 +145,38 @@ class PhoneTitleActionsTest {
         compose.waitForIdle()
         view.open()
         val deadline = System.currentTimeMillis() + 120_000
-        while (compose.onAllNodesWithText("Try again").fetchSemanticsNodes().isEmpty()) {
+        while (compose.onAllNodesWithText("Play").fetchSemanticsNodes().isEmpty()) {
             check(System.currentTimeMillis() < deadline) { "the title never drew" }
             Snapshot.sendApplyNotifications()
             compose.waitForIdle()
             Thread.sleep(10)
         }
-        compose.onNodeWithText("Try again").performClick()
-        assertEquals(listOf("retry"), calls)
-        shown = versions(EmptyKind.Unreachable, EmptyAction.PlayFromDevice, key = "kept")
-        compose.onNodeWithText("Play from this device").performClick()
-        assertEquals(listOf("retry", "play kept tt1"), calls)
-        shown = versions(EmptyKind.NothingPlaysHere, EmptyAction.ChooseVersion)
-        compose.onNodeWithText("Choose a version").performClick()
-        assertEquals(listOf("retry", "play kept tt1", "versions tt1"), calls)
+        val play = { compose.onNodeWithText("Play").performClick() }
+        play()
+        assertEquals(listOf("play kept tt1"), calls)
+        // No Settings or account step on the play surface: Play opens Versions, which holds them.
+        for ((kind, action) in listOf(
+            EmptyKind.NoSource to EmptyAction.SettingsAddons,
+            EmptyKind.NeedsAccount to EmptyAction.SettingsAccounts,
+            EmptyKind.Unreachable to EmptyAction.TryAgain,
+            EmptyKind.NothingPlaysHere to EmptyAction.ChooseVersion,
+        )) {
+            shown = versions(kind, action)
+            compose.waitForIdle()
+            for (gone in listOf("Settings", "Try again", "Play from this device", "Choose a version")) {
+                compose.onAllNodesWithText(gone).assertCountEquals(0)
+            }
+            calls.clear()
+            play()
+            assertEquals(listOf("versions tt1"), calls, "$kind")
+        }
         // A state whose only way on is Back: Play keeps its place, inert, with the state's line under it.
         shown = versions(EmptyKind.NoResults, EmptyAction.None)
         compose.waitForIdle()
         compose.onNodeWithText("No source has this yet", substring = true, useUnmergedTree = true).assertExists()
         compose.onNodeWithText("Play").assertIsNotEnabled()
-        compose.onNodeWithText("Play").performClick()
-        assertEquals(listOf("retry", "play kept tt1", "versions tt1"), calls)
+        calls.clear()
+        play()
+        assertEquals(emptyList(), calls)
     }
 }

@@ -45,7 +45,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.marquee.core.Format
-import app.marquee.core.PrimaryAction
 import app.marquee.core.TileCopy
 import app.marquee.core.TitleCopy
 import app.marquee.core.VersionLine
@@ -98,9 +97,6 @@ private val HERO_FADE = 96.dp
  * watched toggles, for a series the seasons and the episodes of the selected one (tap plays, press
  * and hold opens more), and last the details.
  *
- * @param onAddSource no addon is installed: go where one is added.
- * @param onAddAccount the versions play only through a streaming service account: go where one is added.
- * @param onRetry no addon answered: ask them again (Try again).
  * @param onEpisode an episode was tapped: it plays.
  * @param onEpisodeVersions "Choose a version" for an episode, from its press-and-hold menu.
  */
@@ -110,9 +106,6 @@ fun PhoneTitle(
     versions: VersionsSnapshot?,
     onPlay: (key: String, videoId: String) -> Unit,
     onVersions: (videoId: String) -> Unit,
-    onAddSource: () -> Unit,
-    onAddAccount: () -> Unit,
-    onRetry: () -> Unit,
     onEpisode: (Episode) -> Unit,
     onEpisodeVersions: (Episode) -> Unit,
     modifier: Modifier = Modifier,
@@ -188,7 +181,7 @@ fun PhoneTitle(
                     ) { Hero(details.background ?: details.poster, details.logo, details.name, hasArt, side) }
                     item(
                         key = "info",
-                    ) { Info(title, versions, versionsFailed, onPlay, onVersions, onAddSource, onAddAccount, onRetry) }
+                    ) { Info(title, versions, versionsFailed, onPlay, onVersions) }
                     if (header.seasons.isNotEmpty()) {
                         item(key = "seasons") {
                             val compact = TitleCopy.compactSeasons(header.seasons)
@@ -319,9 +312,6 @@ private fun Info(
     versionsFailed: Boolean,
     onPlay: (String, String) -> Unit,
     onVersions: (String) -> Unit,
-    onAddSource: () -> Unit,
-    onAddAccount: () -> Unit,
-    onRetry: () -> Unit,
 ) {
     val header = checkNotNull(title.header)
     val details = checkNotNull(header.details)
@@ -351,24 +341,19 @@ private fun Info(
         ) {
             PrimaryButton(
                 label = primary.label,
-                icon =
-                    when (primary) {
-                        is PrimaryAction.Play -> PlayFilled
-                        PrimaryAction.ChooseVersion -> Icons.Layers
-                        PrimaryAction.SourceSettings, PrimaryAction.AccountSettings -> Icons.Settings
-                        is PrimaryAction.PlayFromDevice -> PlayFilled
-                        PrimaryAction.TryAgain -> Icons.RefreshCw
-                    },
+                icon = PlayFilled,
                 modifier = Modifier.widthIn(min = PRIMARY_MIN).weight(1f),
                 enabled = TitleCopy.live(primary, target),
                 onClick = {
+                    val kept = primary.keptKey
                     when {
-                        primary == PrimaryAction.SourceSettings -> onAddSource()
-                        primary == PrimaryAction.AccountSettings -> onAddAccount()
-                        primary == PrimaryAction.TryAgain -> onRetry()
                         target == null -> Unit
-                        primary is PrimaryAction.PlayFromDevice -> onPlay(primary.key, target.videoId)
-                        primary == PrimaryAction.ChooseVersion || recommended == null -> onVersions(target.videoId)
+
+                        kept != null -> onPlay(kept, target.videoId)
+
+                        // Nothing recommended: Versions holds the line, its action and the rows that can start.
+                        recommended == null -> onVersions(target.videoId)
+
                         else -> onPlay(recommended.key, target.videoId)
                     }
                 },

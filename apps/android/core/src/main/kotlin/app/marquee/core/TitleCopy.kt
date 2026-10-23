@@ -1,7 +1,6 @@
 package app.marquee.core
 
 import app.marquee.core.model.EmptyAction
-import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.Episode
 import app.marquee.core.model.PlayTarget
 import app.marquee.core.model.TitleDetails
@@ -12,47 +11,17 @@ import java.util.Locale
 import java.util.TimeZone
 import kotlin.math.roundToInt
 
-/** What a title page's primary button is for. */
-sealed interface PrimaryAction {
-    /** The words on the button. */
-    val label: String
-
-    /**
-     * Play (or Resume): [label] says which. [inert] in a state whose only way on is Back (noRoom, kidsNothing,
-     * noResults): it keeps its place, dimmed, not focusable, and does nothing, with the state's line under it.
-     */
-    data class Play(
-        override val label: String,
-        val inert: Boolean = false,
-    ) : PrimaryAction
-
-    /** Versions exist and none is ready, or none plays on this device (nothingPlaysHere): pick one on Versions. */
-    data object ChooseVersion : PrimaryAction {
-        override val label = StreamChoiceCopy.EMPTY.getValue(EmptyKind.NothingPlaysHere).second!!
-    }
-
-    /** No addon is installed (noSource): Settings, where one is added. */
-    data object SourceSettings : PrimaryAction {
-        override val label = StreamChoiceCopy.SETTINGS
-    }
-
-    /** No addon answered and this device keeps the version last played (unreachable): play [key] from here. */
-    data class PlayFromDevice(
-        val key: String,
-    ) : PrimaryAction {
-        override val label = StreamChoiceCopy.PLAY_FROM_DEVICE
-    }
-
-    /** No addon answered (unreachable): ask them again. */
-    data object TryAgain : PrimaryAction {
-        override val label = StreamChoiceCopy.EMPTY.getValue(EmptyKind.Unreachable).second!!
-    }
-
-    /** Versions were found, and they play only through a streaming service account: Settings, where one is added. */
-    data object AccountSettings : PrimaryAction {
-        override val label = StreamChoiceCopy.SETTINGS
-    }
-}
+/**
+ * The title page's one primary: Play (or Resume), always, never a Settings or account step (the owner, through
+ * the lead, 2026-10-23; plans/play-every-version.md, the title-page row). [label] says Play or Resume.
+ */
+data class PrimaryAction(
+    val label: String,
+    /** A state whose only way on is Back (noRoom, kidsNothing, noResults): in place, dimmed, not focusable, no action. */
+    val inert: Boolean = false,
+    /** No addon answered and this device keeps the version last played (unreachable): Play plays it. */
+    val keptKey: String? = null,
+)
 
 /** The words of the title page, shared by both UI trees and equal to the web family's. */
 object TitleCopy {
@@ -85,72 +54,31 @@ object TitleCopy {
     private fun minutesLeft(leftMs: Long) = "${((leftMs + 59_999) / 60_000).coerceAtLeast(1)} min left"
 
     /**
-     * What the primary button does. Play stays while versions are still arriving (the line under it
-     * says so). When nothing can play it is the core's state's first action from the shared table
-     * (plans/play-every-version.md, "Shared Step 3 decisions"): Settings (noSource, needsAccount), Play
-     * from this device or Try again (unreachable), Choose a version (nothingPlaysHere). A state whose only
-     * action is Back (noRoom, kidsNothing, noResults) keeps Play in its place but inert, with the state's line
-     * under it: a Play that opens a page holding only Back is a dead end. Versions listed with none ready give
-     * Choose a version. An action that needs the video (Play from this device, Choose a version) is never
-     * offered without a [target]: Try again or the disabled Play takes its place.
+     * What Play does (plans/play-every-version.md, the title-page row in the shared table). While versions arrive
+     * and once one is recommended it plays it. When nothing can play the core's line sits under it, and: unreachable
+     * with a kept version plays that version; noRoom, kidsNothing and noResults leave it inert (a Play that opens a
+     * page holding only Back is a dead end); every other state opens Versions, which holds the line, its action
+     * and the rows that can still start.
      */
     fun primary(
         target: PlayTarget?,
         versions: VersionsSnapshot?,
         runtime: String? = null,
     ): PrimaryAction {
-        val play = PrimaryAction.Play(target?.let { playLabel(it, runtime) } ?: "Play")
+        val label = target?.let { playLabel(it, runtime) } ?: "Play"
         val empty = versions?.empty?.takeIf { versions.recommended == null }
-        return when {
-            empty != null -> {
-                when (empty.action) {
-                    EmptyAction.SettingsAddons -> {
-                        PrimaryAction.SourceSettings
-                    }
-
-                    EmptyAction.SettingsAccounts -> {
-                        PrimaryAction.AccountSettings
-                    }
-
-                    EmptyAction.PlayFromDevice -> {
-                        empty.key?.takeIf { target != null }?.let(PrimaryAction::PlayFromDevice)
-                            ?: PrimaryAction.TryAgain
-                    }
-
-                    EmptyAction.TryAgain -> {
-                        PrimaryAction.TryAgain
-                    }
-
-                    EmptyAction.ChooseVersion -> {
-                        if (target != null) PrimaryAction.ChooseVersion else play
-                    }
-
-                    EmptyAction.None -> {
-                        play.copy(inert = true)
-                    }
-
-                    else -> {
-                        play
-                    }
-                }
-            }
-
-            target != null && versions != null && versions.done && versions.recommended == null &&
-                versions.rows.isNotEmpty() -> {
-                PrimaryAction.ChooseVersion
-            }
-
-            else -> {
-                play
-            }
+        return when (empty?.action) {
+            EmptyAction.PlayFromDevice -> PrimaryAction(label, keptKey = empty.key)
+            EmptyAction.None -> PrimaryAction(label, inert = true)
+            else -> PrimaryAction(label)
         }
     }
 
-    /** Whether the primary button does something: Play needs the video and is never [PrimaryAction.Play.inert]. */
+    /** Whether Play does something: it needs the video and is never [PrimaryAction.inert]. */
     fun live(
         primary: PrimaryAction,
         target: PlayTarget?,
-    ): Boolean = primary !is PrimaryAction.Play || (target != null && !primary.inert)
+    ): Boolean = target != null && !primary.inert
 
     /** How many real seasons there are (Specials do not count). */
     fun seasonCount(seasons: List<Int>): Int = seasons.count { it > 0 }

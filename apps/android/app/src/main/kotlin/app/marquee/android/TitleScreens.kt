@@ -99,8 +99,6 @@ fun TitleScreen(
     onPlay: (key: String, videoId: String, title: String) -> Unit,
     onVersions: (videoId: String, title: String) -> Unit,
     onPlayEpisode: (videoId: String, title: String) -> Unit,
-    onAddSource: () -> Unit,
-    onAddAccount: () -> Unit,
 ) {
     val holder =
         viewModel<TitleHolder>(
@@ -154,9 +152,6 @@ fun TitleScreen(
                 holder.focus,
                 play,
                 onVersions = { onVersions(it, title) },
-                onAddSource = onAddSource,
-                onAddAccount = onAddAccount,
-                onRetry = { versions?.retry() },
                 onEpisode = episode,
                 onEpisodeVersions = episodeVersions,
                 versionsFailed = failed,
@@ -167,9 +162,6 @@ fun TitleScreen(
                 snapshot,
                 play,
                 onVersions = { onVersions(it, title) },
-                onAddSource = onAddSource,
-                onAddAccount = onAddAccount,
-                onRetry = { versions?.retry() },
                 onEpisode = episode,
                 onEpisodeVersions = episodeVersions,
                 versionsFailed = failed,

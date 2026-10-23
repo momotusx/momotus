@@ -210,36 +210,32 @@ class TitleCopyTest {
     )
 
     @Test
-    fun `Play stays while versions arrive, and versions listed with none ready give Choose a version`() {
-        val target = PlayTarget("tt1", "Play", null)
-        val play = PrimaryAction.Play("Play")
-        assertEquals(play, TitleCopy.primary(target, null))
-        assertEquals(play, TitleCopy.primary(target, snapshot()), "still asking: Play stays, the line under it waits")
-        assertEquals(play, TitleCopy.primary(target, snapshot(recommended = row(), done = true)))
-        // Every addon answered with nothing while the core still checks what this device keeps: Play stays.
-        assertEquals(play, TitleCopy.primary(target, snapshot(done = true)))
-        assertEquals(
-            PrimaryAction.ChooseVersion,
-            TitleCopy.primary(target, snapshot(rows = listOf(row()), done = true)),
-        )
-        assertEquals(PrimaryAction.Play("Play"), TitleCopy.primary(null, null))
+    fun `with the next episode not out, the page says when it airs where Play would be`() {
+        assertEquals("Next episode airs Nov 3, 2026", TitleCopy.nothingToPlay("2026-11-03"))
+        assertEquals("Nothing to play yet", TitleCopy.nothingToPlay(null))
     }
 
     @Test
-    fun `when nothing can play the button is the shared table's first action, Back-only states keep Play`() {
+    fun `Play is the one primary in every state - it plays, plays the kept version, opens Versions, or is inert`() {
         val target = PlayTarget("tt1", "Play", null)
-        val play = PrimaryAction.Play("Play")
+        val play = PrimaryAction("Play")
+        assertEquals(play, TitleCopy.primary(target, null))
+        assertEquals(play, TitleCopy.primary(target, snapshot()), "still asking")
+        assertEquals(play, TitleCopy.primary(target, snapshot(recommended = row(), done = true)))
+        assertEquals(play, TitleCopy.primary(target, snapshot(rows = listOf(row()), done = true)), "none ready")
         val empty = { kind: EmptyKind, action: EmptyAction, key: String? ->
             TitleCopy.primary(target, snapshot(done = true).copy(empty = EmptyVersions(kind, action, 0, key = key)))
         }
-        assertEquals(PrimaryAction.SourceSettings, empty(EmptyKind.NoSource, EmptyAction.SettingsAddons, null))
-        assertEquals(PrimaryAction.AccountSettings, empty(EmptyKind.NeedsAccount, EmptyAction.SettingsAccounts, null))
-        assertEquals(
-            PrimaryAction.PlayFromDevice("kept"),
-            empty(EmptyKind.Unreachable, EmptyAction.PlayFromDevice, "kept"),
-        )
-        assertEquals(PrimaryAction.TryAgain, empty(EmptyKind.Unreachable, EmptyAction.TryAgain, null))
-        assertEquals(PrimaryAction.ChooseVersion, empty(EmptyKind.NothingPlaysHere, EmptyAction.ChooseVersion, null))
+        assertEquals(play.copy(keptKey = "kept"), empty(EmptyKind.Unreachable, EmptyAction.PlayFromDevice, "kept"))
+        // No Settings or account step on the play surface: Play opens Versions, which holds them.
+        for ((kind, action) in listOf(
+            EmptyKind.NoSource to EmptyAction.SettingsAddons,
+            EmptyKind.NeedsAccount to EmptyAction.SettingsAccounts,
+            EmptyKind.Unreachable to EmptyAction.TryAgain,
+            EmptyKind.NothingPlaysHere to EmptyAction.ChooseVersion,
+        )) {
+            assertEquals(play, empty(kind, action, null), "$kind: Play opens Versions")
+        }
         // A Back-only state keeps Play in its place, inert: a Play that opens a page with only Back is a dead end.
         for (kind in listOf(EmptyKind.NoRoom, EmptyKind.KidsNothing, EmptyKind.NoResults)) {
             val primary = empty(kind, EmptyAction.None, null)
@@ -247,38 +243,6 @@ class TitleCopyTest {
             assertFalse(TitleCopy.live(primary, target), "$kind: Play does nothing")
         }
         assertTrue(TitleCopy.live(play, target))
-        assertTrue(TitleCopy.live(PrimaryAction.TryAgain, null))
-        // The words are the shared table's, never "Add a source" or "Add an account".
-        assertEquals(
-            listOf("Settings", "Settings", "Play from this device", "Try again", "Choose a version"),
-            listOf(
-                PrimaryAction.SourceSettings,
-                PrimaryAction.AccountSettings,
-                PrimaryAction.PlayFromDevice("kept"),
-                PrimaryAction.TryAgain,
-                PrimaryAction.ChooseVersion,
-            ).map { it.label },
-        )
-    }
-
-    @Test
-    fun `with the next episode not out, the page says when it airs where Play would be`() {
-        assertEquals("Next episode airs Nov 3, 2026", TitleCopy.nothingToPlay("2026-11-03"))
-        assertEquals("Nothing to play yet", TitleCopy.nothingToPlay(null))
-    }
-
-    @Test
-    fun `with no video to play, nothing that needs one is offered`() {
-        val empty = { action: EmptyAction, key: String? ->
-            TitleCopy.primary(
-                null,
-                snapshot(done = true).copy(empty = EmptyVersions(EmptyKind.Unreachable, action, 0, key = key)),
-            )
-        }
-        assertEquals(PrimaryAction.TryAgain, empty(EmptyAction.PlayFromDevice, "kept"))
-        val choose = empty(EmptyAction.ChooseVersion, null)
-        assertEquals(PrimaryAction.Play("Play"), choose)
-        assertFalse(TitleCopy.live(choose, null))
-        assertEquals(PrimaryAction.Play("Play"), TitleCopy.primary(null, snapshot(rows = listOf(row()), done = true)))
+        assertFalse(TitleCopy.live(play, null), "no video, no Play")
     }
 }

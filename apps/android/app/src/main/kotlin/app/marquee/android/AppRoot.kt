@@ -672,8 +672,6 @@ private fun AppNav(
                             onPlayEpisode = { videoId, name ->
                                 backStack.add(Route.Player(route.kind, route.id, videoId, name))
                             },
-                            onAddSource = { backStack.add(Route.Sources) },
-                            onAddAccount = { backStack.add(Route.Debrid) },
                         )
                     }
                     entry<Route.Versions> { route ->
