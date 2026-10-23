@@ -1,0 +1,141 @@
+{
+  "blocked": {
+    "count": 1,
+    "reason": "nothingPlaysHere",
+    "rows": [
+      {
+        "bitrateMbps": null,
+        "failoverCount": 0,
+        "features": [],
+        "group": "best",
+        "key": "url:http://127.0.0.1:1/v.mp4",
+        "languages": [],
+        "line": {
+          "kind": "ready",
+          "service": null,
+          "sizeBytes": null
+        },
+        "onDevice": null,
+        "quality": "1080p",
+        "reasons": [
+          "readyNow",
+          "matchesScreen"
+        ],
+        "releaseName": "Show.S01E01.1080p.WEB-DL.x265-AAA",
+        "score": {
+          "binge": false,
+          "covered": 0,
+          "effectiveHeight": 1080,
+          "language": true,
+          "legit": true,
+          "pace": 3,
+          "playability": "needsFallbackEngine",
+          "sizeOk": true,
+          "start": 4,
+          "sustains": true,
+          "tier": 3,
+          "viable": true,
+          "within": 545,
+          "yearOk": true
+        },
+        "sizeBytes": null,
+        "sourceClass": "ready",
+        "status": {
+          "kind": "direct"
+        },
+        "via": "Test"
+      }
+    ]
+  },
+  "conditions": {
+    "account": false,
+    "engine": false,
+    "freeBytes": 1099511627776,
+    "hdr": false,
+    "http": {
+      "mbps": 15.0,
+      "samples": 0
+    },
+    "minSeeders": 50,
+    "network": "other",
+    "p2p": {
+      "mbps": 10.0,
+      "samples": 0
+    },
+    "runtimeMin": 52,
+    "screenClass": 1080,
+    "sizeLimitBytes": 5368709120,
+    "window": false
+  },
+  "done": true,
+  "empty": {
+    "action": "chooseVersion",
+    "count": 1,
+    "key": null,
+    "kind": "nothingPlaysHere",
+    "rows": [
+      {
+        "bitrateMbps": null,
+        "failoverCount": 0,
+        "features": [],
+        "group": "best",
+        "key": "url:http://127.0.0.1:1/v.mp4",
+        "languages": [],
+        "line": {
+          "kind": "ready",
+          "service": null,
+          "sizeBytes": null
+        },
+        "onDevice": null,
+        "quality": "1080p",
+        "reasons": [
+          "readyNow",
+          "matchesScreen"
+        ],
+        "releaseName": "Show.S01E01.1080p.WEB-DL.x265-AAA",
+        "score": {
+          "binge": false,
+          "covered": 0,
+          "effectiveHeight": 1080,
+          "language": true,
+          "legit": true,
+          "pace": 3,
+          "playability": "needsFallbackEngine",
+          "sizeOk": true,
+          "start": 4,
+          "sustains": true,
+          "tier": 3,
+          "viable": true,
+          "within": 545,
+          "yearOk": true
+        },
+        "sizeBytes": null,
+        "sourceClass": "ready",
+        "status": {
+          "kind": "direct"
+        },
+        "via": "Test"
+      }
+    ]
+  },
+  "failedAddons": [],
+  "frozen": false,
+  "hidden": {
+    "byReason": [
+      [
+        "unplayable",
+        1
+      ]
+    ],
+    "count": 1
+  },
+  "nobodySharing": false,
+  "note": null,
+  "pendingAddons": [],
+  "recommended": null,
+  "rows": [],
+  "sections": [],
+  "sharper": null,
+  "slowAddons": [],
+  "smaller": null
+}

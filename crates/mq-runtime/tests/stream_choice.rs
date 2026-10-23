@@ -4,6 +4,8 @@
 
 #[path = "../../mq-debrid/tests/common/mod.rs"]
 mod common;
+mod golden;
+use golden::{golden, golden_torrent};
 
 use common::{Server, route};
 use mq_library::AddonRow;
@@ -113,6 +115,7 @@ async fn without_engine_or_account_versions_say_an_account_opens_them() {
     let view = VersionsView::open(&core, params(TitleFacts::default()));
     until("done", || view.snapshot().done).await;
     let s = view.snapshot();
+    golden("versions-empty-needsAccount", &s);
     assert!(s.recommended.is_none() && s.rows.is_empty(), "{s:?}");
     let blocked = s.blocked.expect("blocked");
     assert_eq!(
@@ -1285,6 +1288,7 @@ async fn try_again_starts_the_pick_afresh() {
     let failed = || playback.snapshot().phase == mq_runtime::PlaybackPhase::Failed;
     until("the last move to fail", failed).await;
     assert_eq!(playback.snapshot().empty, Some(EmptyKind::NothingPlaysHere));
+    golden("playback-empty-nothingPlaysHere", &playback.snapshot());
     playback.retry();
     let s = playback.snapshot();
     assert!(s.trying.is_none() && s.attempts.is_empty() && s.empty.is_none());
@@ -1848,6 +1852,7 @@ async fn with_no_source_the_view_says_add_one() {
         kind_and_action(&empty_of(&view).await),
         (EmptyKind::NoSource, EmptyAction::SettingsAddons)
     );
+    golden("versions-empty-noSource", &view.snapshot());
     let (core, _server) = answering(200, &torrents()).await;
     if !core.has_engine() {
         core.set_debrid_keys(&[(StoreId::RealDebrid, "rd".into())]);
@@ -1880,7 +1885,9 @@ async fn with_no_source_answering_the_view_offers_try_again() {
     let mut row = addon(&server);
     row.transport_url = format!("http://127.0.0.1:{port}/manifest.json");
     core.library().set_addons("p", &[row], &core.hlc()).unwrap();
-    unreached(&empty_of(&versions_for(&core, DeviceCaps::basic_1080p()).await).await);
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    unreached(&empty_of(&view).await);
+    golden("versions-empty-unreachable", &view.snapshot());
     // None in time: past the fan-out's hard deadline (12 s).
     let server = Server::start(vec![
         route("GET", "/stream/series/tt1%3A1%3A1.json", 200, &torrents())
@@ -1919,6 +1926,9 @@ async fn with_no_version_of_this_video_no_source_has_it() {
             (EmptyKind::NoResults, EmptyAction::None),
             "{streams}"
         );
+        if streams == r#"{"streams":[]}"# {
+            golden("versions-empty-noResults", &view.snapshot());
+        }
     }
 }
 
@@ -1941,6 +1951,7 @@ async fn with_nothing_this_device_plays_each_version_stays_startable() {
         (kind_and_action(&empty), empty.count),
         ((EmptyKind::NothingPlaysHere, EmptyAction::ChooseVersion), 1)
     );
+    golden("versions-empty-nothingPlaysHere", &view.snapshot());
     let key = &empty.rows[0].key;
     assert_eq!(view.candidates(key).len(), 1, "startable");
 }
@@ -1964,6 +1975,7 @@ async fn with_no_room_for_the_window_the_view_asks_for_a_little_space() {
         (kind_and_action(&empty), empty.count, empty.rows.len()),
         ((EmptyKind::NoRoom, EmptyAction::None), 0, 0)
     );
+    golden_torrent("versions-empty-noRoom", &view.snapshot());
     let s = view.snapshot();
     assert_eq!(
         s.blocked.map(|b| (b.reason, b.count)),
@@ -2148,6 +2160,7 @@ async fn playing_on_ends_a_stall_the_player_did_not_end() {
     }
     playback.stalled(true, 19_500);
     until("choose another", || playback.snapshot().choose_another).await;
+    golden("playback-chooseAnother", &playback.snapshot());
     for at in [20_000, 22_000] {
         playback.report_progress(at, 600_000, false);
     }
@@ -2548,4 +2561,5 @@ async fn versions_counted_empty_end_at_20s() {
         s.attempts
     );
     assert_eq!(s.empty, Some(EmptyKind::NotStarted), "{:?}", s.attempts);
+    golden_torrent("playback-empty-notStarted", &s);
 }

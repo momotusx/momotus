@@ -9,6 +9,8 @@ use mq_runtime::{
     Core, EmptyAction, EmptyKind, PlayTarget, PlaybackPhase, PlaybackView, TitleView,
     VersionsParams, VersionsView,
 };
+mod golden;
+use golden::golden;
 use mq_streams::{DeviceCaps, HideReason, StreamPrefs, Target};
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -345,6 +347,7 @@ async fn nothing_playable_leaves_no_pick_and_the_owner_counts_none() {
         Some("tt1"),
     ))
     .await;
+    golden("versions-empty-kidsNothing", &s);
     assert!(s.recommended.is_none() && s.rows.is_empty());
     assert_eq!(s.empty.map(|e| e.kind), Some(EmptyKind::KidsNothing));
     // "View as": the owner runs the same view as the kid.
@@ -732,6 +735,7 @@ async fn a_torrent_on_a_full_device_is_refused_and_one_that_fits_plays_whole() {
     assert!(attempts.iter().any(|a| a.error == NO_ROOM), "{attempts:?}");
     // The failure card says why (play-every-version 2e).
     assert_eq!(view.snapshot().empty, Some(EmptyKind::NoRoom));
+    golden::golden_torrent("playback-empty-noRoom", &view.snapshot());
     assert!(s.leecher.stats(t).await.is_err(), "the torrent went");
     let (s, t, _owner, kid, found) = torrent_kid().await;
     kid.set_punches(true);

@@ -1,0 +1,38 @@
+{
+  "attempt": 2,
+  "attempts": [
+    {
+      "error": "The video stopped loading",
+      "key": "url:http://127.0.0.1:1/v0.mp4",
+      "via": "Test"
+    }
+  ],
+  "audio": [],
+  "autoSubtitle": null,
+  "bingeGroup": null,
+  "chooseAnother": true,
+  "container": null,
+  "empty": null,
+  "engine": null,
+  "filename": null,
+  "key": "url:http://127.0.0.1:1/v1.mp4",
+  "manifest": false,
+  "moved": "Playing 720p WEB: the 1080p WEB stopped loading here",
+  "next": null,
+  "nextAtMs": null,
+  "offer": null,
+  "phase": "ready",
+  "resumeMs": 16500,
+  "retries": 0,
+  "segments": [],
+  "sizeBytes": null,
+  "start": null,
+  "startBudgetEndsAt": 0,
+  "startSubtitleFailed": false,
+  "subtitleNotes": [],
+  "subtitles": [],
+  "subtitlesPending": false,
+  "trakt": "off",
+  "trying": null,
+  "url": "http://127.0.0.1:1/s/0000000000000000000000000000000000000000000000000000000000000000/.mkv"
+}

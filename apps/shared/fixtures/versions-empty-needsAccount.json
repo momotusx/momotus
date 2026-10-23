@@ -1,0 +1,231 @@
+{
+  "blocked": {
+    "count": 2,
+    "reason": "needsAccount",
+    "rows": [
+      {
+        "bitrateMbps": 5.506368637084961,
+        "failoverCount": 0,
+        "features": [],
+        "group": "best",
+        "key": "bt:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0",
+        "languages": [],
+        "line": {
+          "kind": "quick",
+          "seeders": 900,
+          "sizeBytes": 2147483648
+        },
+        "onDevice": null,
+        "quality": "1080p",
+        "reasons": [
+          "playsDirectly",
+          "matchesScreen"
+        ],
+        "releaseName": "Show.S01E01.1080p.WEB-DL.x264-AAA",
+        "score": {
+          "binge": false,
+          "covered": 0,
+          "effectiveHeight": 1080,
+          "language": true,
+          "legit": true,
+          "pace": 3,
+          "playability": "native",
+          "sizeOk": true,
+          "start": 3,
+          "sustains": true,
+          "tier": 2,
+          "viable": true,
+          "within": 534,
+          "yearOk": true
+        },
+        "sizeBytes": 2147483648,
+        "sourceClass": "unknown",
+        "status": {
+          "kind": "torrent",
+          "seeds": 900
+        },
+        "via": "Test"
+      },
+      {
+        "bitrateMbps": 4.129776477813721,
+        "failoverCount": 0,
+        "features": [],
+        "group": "best",
+        "key": "bt:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:1",
+        "languages": [],
+        "line": {
+          "kind": "should",
+          "seeders": 100,
+          "service": null,
+          "sizeBytes": 1610612736
+        },
+        "onDevice": null,
+        "quality": "1080p",
+        "reasons": [
+          "playsDirectly",
+          "matchesScreen"
+        ],
+        "releaseName": "Show.S01E01.1080p.WEB-DL.x264-BBB",
+        "score": {
+          "binge": false,
+          "covered": 0,
+          "effectiveHeight": 1080,
+          "language": true,
+          "legit": true,
+          "pace": 3,
+          "playability": "native",
+          "sizeOk": true,
+          "start": 2,
+          "sustains": true,
+          "tier": 2,
+          "viable": true,
+          "within": 502,
+          "yearOk": true
+        },
+        "sizeBytes": 1610612736,
+        "sourceClass": "unknown",
+        "status": {
+          "kind": "torrent",
+          "seeds": 100
+        },
+        "via": "Test"
+      }
+    ]
+  },
+  "conditions": {
+    "account": false,
+    "engine": false,
+    "freeBytes": 1099511627776,
+    "hdr": false,
+    "http": {
+      "mbps": 15.0,
+      "samples": 0
+    },
+    "minSeeders": 50,
+    "network": "other",
+    "p2p": {
+      "mbps": 10.0,
+      "samples": 0
+    },
+    "runtimeMin": 52,
+    "screenClass": 1080,
+    "sizeLimitBytes": 5368709120,
+    "window": false
+  },
+  "done": true,
+  "empty": {
+    "action": "settingsAccounts",
+    "count": 2,
+    "key": null,
+    "kind": "needsAccount",
+    "rows": [
+      {
+        "bitrateMbps": 5.506368637084961,
+        "failoverCount": 0,
+        "features": [],
+        "group": "best",
+        "key": "bt:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0",
+        "languages": [],
+        "line": {
+          "kind": "quick",
+          "seeders": 900,
+          "sizeBytes": 2147483648
+        },
+        "onDevice": null,
+        "quality": "1080p",
+        "reasons": [
+          "playsDirectly",
+          "matchesScreen"
+        ],
+        "releaseName": "Show.S01E01.1080p.WEB-DL.x264-AAA",
+        "score": {
+          "binge": false,
+          "covered": 0,
+          "effectiveHeight": 1080,
+          "language": true,
+          "legit": true,
+          "pace": 3,
+          "playability": "native",
+          "sizeOk": true,
+          "start": 3,
+          "sustains": true,
+          "tier": 2,
+          "viable": true,
+          "within": 534,
+          "yearOk": true
+        },
+        "sizeBytes": 2147483648,
+        "sourceClass": "unknown",
+        "status": {
+          "kind": "torrent",
+          "seeds": 900
+        },
+        "via": "Test"
+      },
+      {
+        "bitrateMbps": 4.129776477813721,
+        "failoverCount": 0,
+        "features": [],
+        "group": "best",
+        "key": "bt:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:1",
+        "languages": [],
+        "line": {
+          "kind": "should",
+          "seeders": 100,
+          "service": null,
+          "sizeBytes": 1610612736
+        },
+        "onDevice": null,
+        "quality": "1080p",
+        "reasons": [
+          "playsDirectly",
+          "matchesScreen"
+        ],
+        "releaseName": "Show.S01E01.1080p.WEB-DL.x264-BBB",
+        "score": {
+          "binge": false,
+          "covered": 0,
+          "effectiveHeight": 1080,
+          "language": true,
+          "legit": true,
+          "pace": 3,
+          "playability": "native",
+          "sizeOk": true,
+          "start": 2,
+          "sustains": true,
+          "tier": 2,
+          "viable": true,
+          "within": 502,
+          "yearOk": true
+        },
+        "sizeBytes": 1610612736,
+        "sourceClass": "unknown",
+        "status": {
+          "kind": "torrent",
+          "seeds": 100
+        },
+        "via": "Test"
+      }
+    ]
+  },
+  "failedAddons": [],
+  "frozen": false,
+  "hidden": {
+    "byReason": [
+      [
+        "needsDebrid",
+        2
+      ]
+    ],
+    "count": 2
+  },
+  "nobodySharing": false,
+  "note": null,
+  "pendingAddons": [],
+  "recommended": null,
+  "rows": [],
+  "sections": [],
+  "sharper": null,
+  "slowAddons": [],
+  "smaller": null
+}

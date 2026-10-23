@@ -1,0 +1,38 @@
+{
+  "attempt": 0,
+  "attempts": [
+    {
+      "error": "No peer sent the torrent's details in time",
+      "key": "bt:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:1",
+      "via": "Test"
+    }
+  ],
+  "audio": [],
+  "autoSubtitle": null,
+  "bingeGroup": null,
+  "chooseAnother": false,
+  "container": null,
+  "empty": "notStarted",
+  "engine": null,
+  "filename": null,
+  "key": null,
+  "manifest": false,
+  "moved": null,
+  "next": null,
+  "nextAtMs": null,
+  "offer": null,
+  "phase": "failed",
+  "resumeMs": null,
+  "retries": 0,
+  "segments": [],
+  "sizeBytes": null,
+  "start": null,
+  "startBudgetEndsAt": null,
+  "startSubtitleFailed": false,
+  "subtitleNotes": [],
+  "subtitles": [],
+  "subtitlesPending": false,
+  "trakt": "off",
+  "trying": null,
+  "url": null
+}

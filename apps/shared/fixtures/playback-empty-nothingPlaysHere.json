@@ -1,0 +1,51 @@
+{
+  "attempt": 0,
+  "attempts": [
+    {
+      "error": "This file's video shows no picture on this device",
+      "key": "url:http://127.0.0.1:1/v0.mp4",
+      "via": "Test"
+    },
+    {
+      "error": "This file's video shows no picture on this device",
+      "key": "url:http://127.0.0.1:1/v1.mp4",
+      "via": "Test"
+    },
+    {
+      "error": "This file's video shows no picture on this device",
+      "key": "url:http://127.0.0.1:1/v2.mp4",
+      "via": "Test"
+    }
+  ],
+  "audio": [],
+  "autoSubtitle": null,
+  "bingeGroup": null,
+  "chooseAnother": false,
+  "container": null,
+  "empty": "nothingPlaysHere",
+  "engine": null,
+  "filename": null,
+  "key": null,
+  "manifest": false,
+  "moved": null,
+  "next": null,
+  "nextAtMs": null,
+  "offer": null,
+  "phase": "failed",
+  "resumeMs": null,
+  "retries": 0,
+  "segments": [],
+  "sizeBytes": null,
+  "start": null,
+  "startBudgetEndsAt": null,
+  "startSubtitleFailed": false,
+  "subtitleNotes": [],
+  "subtitles": [],
+  "subtitlesPending": false,
+  "trakt": "off",
+  "trying": {
+    "key": "url:http://127.0.0.1:1/v2.mp4",
+    "label": "SD WEB"
+  },
+  "url": null
+}

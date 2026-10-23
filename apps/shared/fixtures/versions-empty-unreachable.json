@@ -1,0 +1,48 @@
+{
+  "blocked": null,
+  "conditions": {
+    "account": false,
+    "engine": false,
+    "freeBytes": null,
+    "hdr": false,
+    "http": {
+      "mbps": 15.0,
+      "samples": 0
+    },
+    "minSeeders": 50,
+    "network": "other",
+    "p2p": {
+      "mbps": 10.0,
+      "samples": 0
+    },
+    "runtimeMin": 52,
+    "screenClass": 1080,
+    "sizeLimitBytes": 5368709120,
+    "window": false
+  },
+  "done": true,
+  "empty": {
+    "action": "tryAgain",
+    "count": 0,
+    "key": null,
+    "kind": "unreachable",
+    "rows": []
+  },
+  "failedAddons": [
+    "Test"
+  ],
+  "frozen": false,
+  "hidden": {
+    "byReason": [],
+    "count": 0
+  },
+  "nobodySharing": false,
+  "note": null,
+  "pendingAddons": [],
+  "recommended": null,
+  "rows": [],
+  "sections": [],
+  "sharper": null,
+  "slowAddons": [],
+  "smaller": null
+}
