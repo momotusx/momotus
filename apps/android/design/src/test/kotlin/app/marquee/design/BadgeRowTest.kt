@@ -59,6 +59,21 @@ class BadgeRowTest {
     @Test
     fun `at one and a half times the text size every badge holds its word`() = scaled(1.5f)
 
+    /**
+     * A TV badge on the full point canvas, measured with real text: its 23 sp line (28 tall) fits Apple's 31, so a word
+     * that goes below the line ("Portuguese", "jpgy") is drawn whole (seen in a NATIVE render on 2026-10-23).
+     */
+    @Test
+    @Config(qualifiers = "w1920dp-h1080dp")
+    fun `a TV badge holds a word with descenders`() {
+        compose.setContent {
+            MarqueeTheme(Form.Tv) { BadgeRow(listOf("Portuguese" to BadgeLook.Outlined, "jpgy" to BadgeLook.Filled)) }
+        }
+        for (text in listOf("Portuguese", "jpgy")) {
+            assertFalse(layout(text).didOverflowHeight, "TV $text is cut by its badge")
+        }
+    }
+
     @Test
     fun `at twice the text size every badge holds its word`() = scaled(2f)
 }
