@@ -22,8 +22,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -49,10 +52,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import app.marquee.design.Form
+import app.marquee.design.Icons
 import app.marquee.design.LocalReducedMotion
 import app.marquee.design.Marquee
 import app.marquee.design.MarqueeFonts
 import app.marquee.design.MqText
+import app.marquee.design.SecondaryButton
 import app.marquee.design.TextRole
 import coil3.SingletonImageLoader
 import coil3.compose.AsyncImage
@@ -61,6 +66,7 @@ import coil3.request.SuccessResult
 import coil3.request.allowHardware
 import coil3.toBitmap
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 /**
@@ -68,8 +74,10 @@ import kotlinx.coroutines.withContext
  * [backdrop] at 30 percent with a light blur over black; on a later stall no backdrop, so the paused frame shows.
  * The title's [mark] (its logo trimmed, [rememberTitleMark], or its name in display type when it has no logo; nothing
  * while the logo loads) fills from a faint copy to solid as [fill] goes from 0 to 1; under it the core's [lines],
- * small and quiet. A gentle pulse, none under reduced motion. Nothing here takes focus: on a TV the remote's Back
- * cancels. [fill] is read here only, and its easing only where the mark is drawn, so the fill redraws and
+ * small and quiet, and under them [choose] ("Choose another version") in a slot reserved from the first frame, shown
+ * once [chooseShown] (20 s on the loading screen, [rememberChooseShown]) and said once. A gentle pulse, none under
+ * reduced motion. Nothing here takes focus by itself: on a TV the first D-pad key after the button shows moves to
+ * [chooseFocus], and the remote's Back cancels. [fill] is read here only, and its easing only where the mark is drawn, so the fill redraws and
  * recomposes nothing around it.
  */
 @Composable
@@ -82,6 +90,11 @@ fun LoadingLayer(
     modifier: Modifier = Modifier,
     /** Until the first frame: the black stage under the backdrop. False over a paused frame. */
     opening: Boolean = true,
+    /** Choose another version: stops this start and opens Versions; null where it is not offered. */
+    choose: (() -> Unit)? = null,
+    chooseShown: Boolean = false,
+    chooseFocus: FocusRequester? = null,
+    chooseFocusChange: ((Boolean) -> Unit)? = null,
 ) {
     val tv = Marquee.form == Form.Tv
     val reduced = LocalReducedMotion.current
@@ -166,10 +179,62 @@ fun LoadingLayer(
                         MqText(it, role = TextRole.Caption, color = Marquee.colors.muted, textAlign = TextAlign.Center)
                     }
                 }
+                if (choose != null) ChooseAnother(choose, chooseShown, chooseFocus, chooseFocusChange)
             }
         }
     }
 }
+
+/**
+ * "Choose another version" under the stage line (plans/versions-android-spec.md, section 6): drawn from the first
+ * frame so nothing shifts when it shows, invisible, not focusable and silent until [shown]; then said once.
+ */
+@Composable
+private fun ChooseAnother(
+    choose: () -> Unit,
+    shown: Boolean,
+    focus: FocusRequester?,
+    onFocusChange: ((Boolean) -> Unit)?,
+) {
+    Box(Modifier.testTag(CHOOSE_TAG), contentAlignment = Alignment.Center) {
+        SecondaryButton(
+            CHOOSE_ANOTHER,
+            { if (shown) choose() },
+            Modifier
+                .then(if (shown) Modifier else Modifier.alpha(0f).clearAndSetSemantics { })
+                .focusProperties { canFocus = shown },
+            icon = Icons.Layers,
+            focusRequester = focus,
+            onFocusChange = onFocusChange,
+        )
+        if (shown) {
+            Box(
+                Modifier.semantics {
+                    liveRegion = LiveRegionMode.Polite
+                    contentDescription = CHOOSE_SAID
+                },
+            )
+        }
+    }
+}
+
+/** Whether the loading screen offers [CHOOSE_ANOTHER]: [CHOOSE_AFTER_MS] after it first showed for this start. */
+@Composable
+fun rememberChooseShown(opening: Boolean): Boolean {
+    val shown by produceState(false, opening) {
+        value = false
+        if (opening) {
+            delay(CHOOSE_AFTER_MS)
+            value = true
+        }
+    }
+    return shown
+}
+
+const val CHOOSE_ANOTHER = "Choose another version"
+private const val CHOOSE_SAID = "Still loading. Choose another version is available"
+const val CHOOSE_AFTER_MS = 20_000L
+const val CHOOSE_TAG = "choose-another"
 
 /** The faint copy of [content] and over it the solid copy revealed from the left to [fill], its edge feathered. */
 @Composable

@@ -79,7 +79,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.marquee.core.Format
-import app.marquee.core.PrimaryAction
 import app.marquee.core.TraktCopy
 import app.marquee.core.model.Attempt
 import app.marquee.core.model.NextEpisode
@@ -574,8 +573,6 @@ fun PlayerStatus(
     detail: String? = null,
     /** The core could not open the version: Choose a version comes first, Try again second. */
     cannotOpen: Boolean = false,
-    /** Every version found plays only through a streaming service account: Add an account comes first, as on Versions. */
-    onAddAccount: (() -> Unit)? = null,
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
@@ -645,14 +642,6 @@ fun PlayerStatus(
                         focusRequester = focus,
                     )
                     onRetry?.let { SecondaryButton("Try again", it, icon = Icons.RefreshCw) }
-                    SecondaryButton("Choose a version", onVersions, icon = Icons.Layers)
-                } else if (onAddAccount != null) {
-                    PrimaryButton(
-                        PrimaryAction.AddAccount.label,
-                        onAddAccount,
-                        icon = Icons.KeyRound,
-                        focusRequester = focus,
-                    )
                     SecondaryButton("Choose a version", onVersions, icon = Icons.Layers)
                 } else if (onRetry != null && cannotOpen) {
                     // A version the core could not open is mostly one no longer listed, which Try again opens

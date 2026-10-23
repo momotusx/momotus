@@ -48,7 +48,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import app.marquee.core.model.BlockedReason
 import app.marquee.core.model.NextEpisode
 import app.marquee.core.model.SubtitleSize
 import app.marquee.design.Icons
@@ -80,6 +79,7 @@ import app.marquee.player.clockText
 import app.marquee.player.endsAt
 import app.marquee.player.loadingLines
 import app.marquee.player.nextSpeed
+import app.marquee.player.rememberChooseShown
 import app.marquee.player.rememberTitleMark
 import app.marquee.player.rememberTouchExploration
 import app.marquee.player.seekStepMs
@@ -97,6 +97,9 @@ private const val SEEK_MS = 10_000L
 private enum class Panel { Audio, Subtitles }
 
 private val selectKeys = setOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)
+
+private val dpadKeys =
+    setOf(Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight, Key.DirectionCenter, Key.Enter)
 
 /**
  * The player on TV: the picture, and over it the title top left, the position bar and the
@@ -124,8 +127,6 @@ fun TvPlayer(
     onOffer: (String) -> Unit = {},
     /** The subtitle picker's Size: the profile's subtitle size, for this video and the next. */
     onSubtitleSize: (SubtitleSize) -> Unit = {},
-    /** Where a streaming service account is added: the failure card's way on when every version needs one. */
-    onAddAccount: (() -> Unit)? = null,
 ) {
     val safe = Marquee.safe
     val stage = controller.stage
@@ -142,6 +143,10 @@ fun TvPlayer(
     var panel by remember { mutableStateOf<Panel?>(null) }
     val ended = stage == Stage.Ended
     val showControls = osd && live && !ended && !opening
+    // Choose another version on the loading screen, 20 s after it showed (plans/versions-android-spec.md, 6).
+    val chooseShown = rememberChooseShown(opening)
+    val chooseFocus = remember { FocusRequester() }
+    var chooseFocused by remember { mutableStateOf(false) }
     val showEnd = ended && !(autoplayNext && controller.next != null)
 
     val root = remember { FocusRequester() }
@@ -283,6 +288,11 @@ fun TvPlayer(
             .focusRequester(root)
             .onPreviewKeyEvent { event ->
                 if (!active || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                // The button never takes focus by itself: the first D-pad key after it shows moves there.
+                if (opening && chooseShown && !chooseFocused && event.key in dpadKeys) {
+                    runCatching { chooseFocus.requestFocus() }
+                    return@onPreviewKeyEvent true
+                }
                 when (event.key) {
                     Key.MediaPlayPause -> {
                         controller.togglePlay()
@@ -378,6 +388,10 @@ fun TvPlayer(
                 fill = { controller.loadingFill },
                 lines = loadingLines(controller.status, controller.start?.caption),
                 opening = opening,
+                choose = onVersions.takeIf { opening },
+                chooseShown = chooseShown,
+                chooseFocus = chooseFocus,
+                chooseFocusChange = { chooseFocused = it },
             )
         }
 
@@ -429,7 +443,6 @@ fun TvPlayer(
                 tryingAgain = controller.tryingAgain,
                 detail = controller.openError,
                 cannotOpen = controller.openError != null,
-                onAddAccount = onAddAccount?.takeIf { controller.blocked == BlockedReason.NeedsAccount },
             )
         }
 

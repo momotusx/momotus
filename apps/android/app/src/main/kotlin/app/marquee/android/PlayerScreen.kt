@@ -188,20 +188,18 @@ class PlayerHolder(
                     while (true) {
                         when (val pick = pickVersion(snapshot, route.key, settled)) {
                             is PlayPick.Use -> {
-                                controller.picked()
                                 chosen.complete(Choice(pick.row.key, pick.row))
                                 return@collectLatest
                             }
 
                             is PlayPick.Open -> {
-                                controller.picked()
                                 chosen.complete(Choice(pick.key, null))
                                 return@collectLatest
                             }
 
                             is PlayPick.None -> {
-                                // Waiting for an account, the list stays followed: one added makes it playable.
-                                if (!controller.cannotPlay(pick)) chosen.complete(null)
+                                controller.fail(pick.reason)
+                                chosen.complete(null)
                                 return@collectLatest
                             }
 
@@ -222,8 +220,9 @@ class PlayerHolder(
         }
     }
 
+    // No addon's name while it waits (plans/versions-android-spec.md, section 6): the quality and size alone.
     private fun startingLine(row: VersionRow): String =
-        listOfNotNull(row.quality, row.sizeBytes?.let(Format::bytes)).joinToString(", ") + " from ${row.via}"
+        listOfNotNull(row.quality, row.sizeBytes?.let(Format::bytes)).joinToString(", ")
 
     /** Reports where the player is and lets go of it; safe to call twice. */
     fun shutdown() {
@@ -246,7 +245,6 @@ class PlayerHolder(
  * @param onTitle the title page of a series, for its episodes; null for a movie.
  * @param onNext the next episode (it replaces the player).
  * @param onOffer the version the failure card offers, by its key (it replaces the player).
- * @param onAddAccount where a streaming service account is added, when every version found needs one.
  */
 @Composable
 fun PlayerScreen(
@@ -260,7 +258,6 @@ fun PlayerScreen(
     onTitle: (() -> Unit)?,
     onNext: (NextEpisode, String?) -> Unit,
     onOffer: (String) -> Unit,
-    onAddAccount: () -> Unit,
 ) {
     val context = LocalContext.current
     val holder =
@@ -305,7 +302,6 @@ fun PlayerScreen(
             active = active,
             onOffer = offer,
             onSubtitleSize = holder::setSubtitleSize,
-            onAddAccount = onAddAccount,
         )
     } else {
         PhonePlayer(
@@ -319,7 +315,6 @@ fun PlayerScreen(
             leave,
             onOffer = offer,
             onSubtitleSize = holder::setSubtitleSize,
-            onAddAccount = onAddAccount,
         )
     }
 }

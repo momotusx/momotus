@@ -75,7 +75,7 @@ class PlayPickTest {
         assertIs<PlayPick.Wait>(pickVersion(snapshot(best = best, pending = listOf("X")), "gone", settled = false))
         // Three quiet seconds are no reason to play another version than the one picked.
         assertEquals(
-            PlayPick.Wait("Asking X for versions"),
+            PlayPick.Wait("Finding this version"),
             pickVersion(snapshot(best = best, pending = listOf("X")), "gone", settled = true),
         )
         assertEquals(PlayPick.Wait("Finding this version"), pickVersion(snapshot(best = best), "gone", settled = true))
@@ -95,12 +95,9 @@ class PlayPickTest {
     fun `versions that none of plays here say why instead of failing over nothing`() {
         val blocked = snapshot(done = true).copy(blocked = BlockedVersions(BlockedReason.NothingPlaysHere, 42))
         assertEquals(
-            PlayPick.None("Found 42 versions, but none plays on this device.", BlockedReason.NothingPlaysHere),
+            PlayPick.None("Found 42 versions, but none plays on this device."),
             pickVersion(blocked, null, settled = true),
         )
-        // The reason goes with the words, so the player's card offers what Versions offers.
-        val account = snapshot(done = true).copy(blocked = BlockedVersions(BlockedReason.NeedsAccount, 3))
-        assertEquals(BlockedReason.NeedsAccount, (pickVersion(account, null, settled = true) as PlayPick.None).blocked)
     }
 
     @Test
@@ -109,13 +106,13 @@ class PlayPickTest {
     }
 
     @Test
-    fun `no version at all says so, and waiting names who is asked`() {
+    fun `no version at all says so, and waiting never names an addon`() {
         assertEquals(
             PlayPick.None("No playable version found"),
             pickVersion(snapshot(done = true), null, settled = true),
         )
         assertEquals(
-            PlayPick.Wait("Asking Cinemeta, Local for versions"),
+            PlayPick.Wait("Choosing the best version"),
             pickVersion(snapshot(pending = listOf("Cinemeta", "Local")), null, settled = false),
         )
         assertEquals(PlayPick.Wait("Choosing the best version"), pickVersion(snapshot(), null, settled = false))

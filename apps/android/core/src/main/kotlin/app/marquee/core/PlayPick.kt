@@ -1,6 +1,5 @@
 package app.marquee.core
 
-import app.marquee.core.model.BlockedReason
 import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionsSnapshot
 
@@ -24,10 +23,9 @@ sealed interface PlayPick {
         val key: String,
     ) : PlayPick
 
-    /** Nothing can be played; [blocked] when versions were found and none plays here (3.11). */
+    /** Nothing can be played. */
     data class None(
         val reason: String,
-        val blocked: BlockedReason? = null,
     ) : PlayPick
 }
 
@@ -54,7 +52,7 @@ fun pickVersion(
         known.firstOrNull { it.key == chosen }?.let { return PlayPick.Use(it) }
         // Not in this list (a new view after the app restarted): wait for every addon, then let the core say.
         if (snapshot.done) return PlayPick.Open(chosen)
-        return PlayPick.Wait(asking(snapshot) ?: "Finding this version")
+        return PlayPick.Wait("Finding this version")
     }
     val best = snapshot.recommended
     val ready = snapshot.done || snapshot.frozen || settled
@@ -74,18 +72,11 @@ fun pickVersion(
 
                     else -> "No version is ready to play yet"
                 },
-                snapshot.blocked?.reason,
             )
         }
 
         else -> {
-            PlayPick.Wait(asking(snapshot) ?: "Choosing the best version")
+            PlayPick.Wait("Choosing the best version")
         }
     }
 }
-
-/** "Asking Torrentio, Local for versions" while addons still answer. */
-private fun asking(snapshot: VersionsSnapshot): String? =
-    snapshot.pendingAddons
-        .takeIf { it.isNotEmpty() }
-        ?.let { "Asking ${it.joinToString(", ")} for versions" }

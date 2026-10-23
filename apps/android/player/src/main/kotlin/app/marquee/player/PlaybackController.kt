@@ -22,10 +22,8 @@ import androidx.media3.common.VideoSize
 import androidx.media3.common.text.Cue
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlaybackException
-import app.marquee.core.PlayPick
 import app.marquee.core.client.CoreLog
 import app.marquee.core.model.Attempt
-import app.marquee.core.model.BlockedReason
 import app.marquee.core.model.NextEpisode
 import app.marquee.core.model.OtherVersion
 import app.marquee.core.model.PlaybackPhase
@@ -93,10 +91,6 @@ class PlaybackController(
 
     /** Why nothing plays, when [stage] is [Stage.Failed]. */
     var problem: String? by mutableStateOf(null)
-        private set
-
-    /** Versions were found and none plays here, for this reason (3.11): the card offers its way on. */
-    var blocked: BlockedReason? by mutableStateOf(null)
         private set
 
     var attempts: List<Attempt> by mutableStateOf(emptyList())
@@ -395,32 +389,6 @@ class PlaybackController(
     fun fail(reason: String) {
         stage = Stage.Failed
         problem = reason
-        blocked = null
-        status = null
-    }
-
-    /**
-     * The versions gave nothing to play: why, and when versions were found that none plays here, the reason's way on.
-     * True when the player should keep following the versions ([waitsForAccount]).
-     */
-    fun cannotPlay(pick: PlayPick.None): Boolean {
-        fail(pick.reason)
-        blocked = pick.blocked
-        return waitsForAccount
-    }
-
-    /**
-     * Every version found needs an account: the versions stay asked, as the core ranks them again once one is
-     * added (Add an account, then Back), and [picked] starts the play then.
-     */
-    val waitsForAccount: Boolean get() = blocked == BlockedReason.NeedsAccount
-
-    /** The versions gave one to play: a card that waited for an account goes, and the loading screen comes back. */
-    fun picked() {
-        if (blocked == null) return
-        blocked = null
-        problem = null
-        stage = Stage.Opening
         status = null
     }
 
