@@ -142,13 +142,21 @@
 [data-form="phone"] .vrow .line .tone { width: 16px; height: 16px; margin-top: 1px; }
 [data-form="phone"] .vrow .st.line { gap: 6px; font-size: 13px; }
 /* A tapped row opens into one card with its details and Play. */
-[data-form="phone"] .vrow.open { background: var(--glass); border-bottom-color: transparent; border-radius: 12px 12px 0 0; }
-[data-form="phone"] .vrow-open { display: grid; gap: 6px; justify-items: start; margin-bottom: 8px; padding: 2px 8px 14px 80px; border-radius: 0 0 12px 12px; background: var(--glass); }
-[data-form="phone"] .vrow-open .detail { font: 600 14px / 1.35 var(--font-text); }
-[data-form="phone"] .vrow-open .rel { font: 400 12px / 1.4 var(--font-mono); color: var(--muted); overflow-wrap: anywhere; }
-[data-form="phone"] .vrow-open .sub { font: 400 12px / 1.3 var(--font-text); color: var(--muted); }
-[data-form="phone"] .vrow-open .btn { height: 40px; margin-top: 6px; padding: 0 16px; gap: 8px; font-size: 15px; }
-[data-form="phone"] .vrow-open .btn svg { width: 16px; height: 16px; }
+/* Phone: one tap plays the row; the info button beside it (44 px) opens its sheet. */
+[data-form="phone"] .vslot { display: grid; grid-template-columns: minmax(0, 1fr) 44px; align-items: center; column-gap: 4px; }
+.vinfo { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; color: var(--muted); }
+.vinfo svg { width: 22px; height: 22px; }
+/* The row's sheet: its details and Play, over the page; a swipe down, Done or Back closes it. */
+.vsheet-scrim { position: fixed; inset: 0; z-index: 30; display: flex; align-items: flex-end; background: var(--scrim); }
+.vsheet { display: grid; gap: 10px; width: 100%; max-height: 80%; overflow-y: auto; padding: 10px 20px calc(20px + env(safe-area-inset-bottom));
+  border-radius: 20px 20px 0 0; background: var(--surface); touch-action: none; }
+.vsheet .grab { justify-self: center; width: 40px; height: 5px; border-radius: 3px; background: var(--line); }
+.vsheet h2 { font: 700 20px / 1.2 var(--font-display); }
+.vsheet .why1 { font: 400 15px / 1.35 var(--font-text); }
+.vsheet .rel { font: 400 12px / 1.4 var(--font-mono); color: var(--muted); overflow-wrap: anywhere; }
+.vsheet .sub { font: 400 13px / 1.3 var(--font-text); color: var(--muted); }
+.vsheet .acts { display: grid; gap: 8px; margin-top: 8px; }
+.vsheet .btn { justify-content: center; }
 
 /* No fade mask on the list (a mask on a scroller is a live pass every frame). */
 .alist [data-row] { scroll-margin: 12px 0 64px; }

@@ -328,23 +328,54 @@ test.describe("Versions", () => {
     await shot(page, "stream-choice-versions", "desktop");
   });
 
-  test("phone: a tap opens the row with its details and Play, a second tap closes it", async ({ browser }) => {
+  test("phone: one tap plays a row; its info button opens a sheet on an entry of its own, closed by Back, Done or a swipe", async ({ browser }) => {
     const page = await device(browser, "phone", PORTS.bridge);
     await page.goto(path("phone"));
     const row = await firstRow(page);
     const url = page.url();
-    await row.tap();
-    await expect(row).toHaveAttribute("aria-expanded", "true");
-    const open = page.locator(".vrow-open");
-    await expect(open).toHaveCount(1);
-    await expect(open.locator(".detail")).toBeVisible();
-    await expect(open.locator("button", { hasText: "Play this version" })).toBeVisible();
-    expect(page.url()).toBe(url);
-    await open.scrollIntoViewIfNeeded();
+    const key = (await row.getAttribute("data-f"))?.slice(2);
+    // The info button: beside the row, 44 px, out of the reader's way (the row's description says the same).
+    const info = page.locator(".vslot").first().locator(".vinfo");
+    expect(await info.boundingBox()).toMatchObject({ width: 44, height: 44 });
+    await expect(info).toHaveAttribute("aria-hidden", "true");
+    const sheet = page.locator(".vsheet");
+    // The sheet: the row's details and Play; Back closes it and leaves the page where it was.
+    await info.tap();
+    await expect(sheet).toBeVisible();
+    await expect(sheet).toHaveAttribute("role", "dialog");
+    await expect(sheet.locator(".rel")).toContainText(".webm");
+    await expect.poll(() => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f)).toBe("vsheet:play");
+    await expect(page).toHaveURL(/[?&]info/);
     await shot(page, "stream-choice-versions", "phone");
-    await row.tap();
-    await expect(open).toHaveCount(0);
+    await page.goBack();
+    await expect(sheet).toHaveCount(0);
     expect(page.url()).toBe(url);
+    await expect.poll(() => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f)).toBe(`v:${key}`);
+    // Done, and a swipe down.
+    await info.tap();
+    await sheet.locator('[data-f="vsheet:done"]').tap();
+    await expect(sheet).toHaveCount(0);
+    expect(page.url()).toBe(url);
+    await info.tap();
+    const box = await sheet.boundingBox();
+    if (!box) throw new Error("no sheet");
+    await page.mouse.move(box.x + box.width / 2, box.y + 10);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2, box.y + 140, { steps: 5 });
+    await page.mouse.up();
+    await expect(sheet).toHaveCount(0);
+    expect(page.url()).toBe(url);
+    // The sheet's Play plays that version, and its entry is gone first: Back from the play is this page.
+    await info.tap();
+    await sheet.locator('[data-f="vsheet:play"]').tap();
+    await expect(page).toHaveURL(/\/play\//);
+    expect(await page.evaluate(() => (history.state as { key?: string } | null)?.key)).toBe(key);
+    await page.goBack();
+    expect(page.url()).toBe(url);
+    // One tap on a row plays it.
+    await (await firstRow(page)).tap();
+    await expect(page).toHaveURL(/\/play\//);
+    await page.context().close();
   });
 
   /** The core's zero-playable state `kind` (plans/play-every-version.md 2a), put on the

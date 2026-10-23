@@ -197,6 +197,7 @@ export const versionsWords = {
   smaller: choice.page.smaller,
   sharper: choice.page.sharper,
   sections: choice.page.sections,
+  done: choice.page.done,
 };
 
 /** The busy line while a play starts over: a move on names the version it

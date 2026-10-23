@@ -124,3 +124,7 @@ export function resetHistoryBase(depth = historyDepth()) {
     // Kept for this page only.
   }
 }
+
+/** A page's own state from its history entry (its version, where it came from), without the stamps
+ * the history calls write (`_depth`, `_profile`, `_from`): for a new entry on the same page. */
+export const ownState = (state: unknown) => Object.fromEntries(Object.entries((state ?? {}) as object).filter(([k]) => !k.startsWith("_")));

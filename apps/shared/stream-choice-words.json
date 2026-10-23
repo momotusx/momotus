@@ -130,7 +130,8 @@
     "source": { "ready": "ready now", "direct": "direct link", "download": "downloads first", "shared": "shared by {people}" },
     "smaller": "Smaller file",
     "sharper": "Sharper",
-    "sections": { "uhd": "4K", "fhd": "1080p", "hd": "720p and below", "other": "Other" }
+    "sections": { "uhd": "4K", "fhd": "1080p", "hd": "720p and below", "other": "Other" },
+    "done": "Done"
   },
   "player": {
     "finding": "Finding the best version",

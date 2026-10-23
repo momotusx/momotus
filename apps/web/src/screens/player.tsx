@@ -34,7 +34,7 @@ import type { SubtitleTrack } from "../core/generated/SubtitleTrack";
 import { videoContext } from "../core/video";
 import { autoFocusSoon, goBack, isBackKey, restoreSoon } from "../focus/dom";
 import { form } from "../form";
-import { backThenReplace, entryFrom, historyBase, historyDepth, markBack, takeBack } from "../history";
+import { backThenReplace, entryFrom, historyBase, historyDepth, markBack, ownState, takeBack } from "../history";
 import { Loading, type Wait } from "../player/loading";
 import { SubtitlePicker } from "../player/subtitle-picker";
 import { createVideoEngine } from "../player/video-engine";
@@ -143,8 +143,6 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     q.set("versions", "");
     return `${location.pathname}?${q}`;
   };
-  // The play's own state (its version, where it came from), never the history stamps (`_depth`).
-  const ownState = () => Object.fromEntries(Object.entries((location.state ?? {}) as object).filter(([k]) => !k.startsWith("_")));
   // Whether this visit pushed the layer's entry: a reload or a link straight to it did not.
   let pushed = false;
   // Opened over a stalled frame, the play pauses under it and plays again on Back.
@@ -154,7 +152,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     pushed = true;
     resume = started() && !paused();
     if (resume) engine.pause();
-    navigate(layerHref(), { state: ownState() });
+    navigate(layerHref(), { state: ownState(location.state) });
   };
   // ponytail: the browser's own Back (popstate) closes the layer; design-web's pushBack can take it over.
   // With no entry of ours under it, the layer gives way in place instead.
@@ -162,7 +160,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     if (pushed) return history.back();
     const q = new URLSearchParams(location.search);
     q.delete("versions");
-    navigate(`${location.pathname}${q.size ? `?${q}` : ""}`, { replace: true, state: ownState() });
+    navigate(`${location.pathname}${q.size ? `?${q}` : ""}`, { replace: true, state: ownState(location.state) });
   };
   let picked: string | null = null;
   const pickInLayer = (key: string) => {

@@ -1,8 +1,9 @@
-import { useNavigate, useParams } from "@solidjs/router";
+import { useLocation, useNavigate, useParams } from "@solidjs/router";
 import ArrowLeft from "lucide-solid/icons/arrow-left";
 import Ban from "lucide-solid/icons/ban";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import CircleCheck from "lucide-solid/icons/circle-check";
+import Info from "lucide-solid/icons/info";
 import Lock from "lucide-solid/icons/lock";
 import OctagonAlert from "lucide-solid/icons/octagon-alert";
 import Play from "lucide-solid/icons/play";
@@ -10,7 +11,7 @@ import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Sparkles from "lucide-solid/icons/sparkles";
 import TriangleAlert from "lucide-solid/icons/triangle-alert";
 import Undo2 from "lucide-solid/icons/undo-2";
-import { createEffect, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { Backdrop } from "../components/art";
 import { EmptyActs } from "../components/empty-acts";
@@ -25,7 +26,7 @@ import { videoContext } from "../core/video";
 import { focusEl, goBack } from "../focus/dom";
 import { form } from "../form";
 import { bytes, decoded, playPath, playState, releaseParts, titlePath } from "../lib/format";
-import { entryFrom } from "../history";
+import { entryFrom, ownState } from "../history";
 import { onProfileReset } from "../core/profiles";
 import {
   emptyWords,
@@ -126,9 +127,6 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
     if (name) document.title = `Versions · ${name} · Marquee`;
   });
   const snap = (): VersionsSnapshot | null => ctx.versions()?.state.data ?? null;
-  // Phone: a tap opens the row (its details and Play); elsewhere it plays.
-  const [opened, setOpened] = createSignal<string | null>(null);
-  const tapRow = (r: VersionRow) => (form() === "phone" ? setOpened(opened() === r.key ? null : r.key) : play(r.key));
   // Why nothing can play (plans/play-every-version.md, the shared Step 3 table): the rows found, if
   // any, listed dimmed as they would rank; an account's rows cannot be started here, the others are an attempt.
   const empty = () => snap()?.empty ?? null;
@@ -212,6 +210,46 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
     expandedFor.set(video, next);
   };
   const at = (f: string) => document.querySelector<HTMLElement>(`[data-f="${CSS.escape(f)}"]`);
+  // Phone: a row's info opens a sheet with its details and Play, on a history entry of its own
+  // (`?info`), so Back closes it first. ponytail: popstate until design-web's pushBack lands.
+  const location = useLocation();
+  const [sheet, setSheet] = createSignal<VersionRow | null>(null);
+  const infoOpen = () => new URLSearchParams(location.search).has("info");
+  const withInfo = (on: boolean) => {
+    const q = new URLSearchParams(location.search);
+    if (on) q.set("info", "");
+    else q.delete("info");
+    return `${location.pathname}${q.size ? `?${q}` : ""}`;
+  };
+  const openSheet = (r: VersionRow) => {
+    setSheet(r);
+    navigate(withInfo(true), { state: ownState(location.state) });
+  };
+  // A sheet's Play waits for its entry to go, so the play (or the layer's choice) follows the page's.
+  let playAfter: string | null = null;
+  const closeSheet = (then: string | null = null) => {
+    playAfter = then;
+    history.back();
+  };
+  // A reload or Back to the page brings no row with it: the entry gives way in place.
+  onMount(() => infoOpen() && navigate(withInfo(false), { replace: true, state: ownState(location.state) }));
+  createEffect(
+    on(
+      infoOpen,
+      (open) => {
+        if (open) return queueMicrotask(() => at("vsheet:play")?.focus({ preventScroll: true }));
+        const r = sheet();
+        const then = playAfter;
+        setSheet(null);
+        playAfter = null;
+        if (then) return play(then);
+        if (r) at(`v:${r.key}`)?.focus({ preventScroll: true });
+      },
+      { defer: true },
+    ),
+  );
+  // A swipe down on the sheet closes it.
+  let swipeFrom: number | null = null;
   // Show all: the section opens and the focus goes to its first row that was hidden.
   const unfold = (g: Sec) => {
     toggle(g);
@@ -451,11 +489,10 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
                                 <button
                                   class="vrow"
                                   aria-describedby={`vd-${g}-${i()}`}
-                                  classList={{ open: opened() === r.key, dim: dimmed() }}
+                                  classList={{ dim: dimmed() }}
                                   data-f={`v:${r.key}`}
-                                  aria-expanded={form() === "phone" ? opened() === r.key : undefined}
                                   aria-disabled={dimmed() && !startable() ? "true" : undefined}
-                                  onClick={() => (dimmed() && !startable() ? undefined : tapRow(r))}
+                                  onClick={() => (dimmed() && !startable() ? undefined : play(r.key))}
                                 >
                                   <span class="q" classList={{ unknown: r.quality === "Unknown" }}>
                                     {qualityCell(r.quality)}
@@ -496,20 +533,12 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
                                 <span id={`vd-${g}-${i()}`} hidden>
                                   {detailsLine(r)}
                                 </span>
-                                <Show when={form() === "phone" && opened() === r.key}>
-                                  <div class="vrow-open">
-                                    <Show when={!r.onDevice && lineWords(r.line).details}>
-                                      {(d) => <p class="detail">{d()}</p>}
-                                    </Show>
-                                    <p class="rel">
-                                      <Release name={r.releaseName} />
-                                    </p>
-                                    <Show when={subLine(r)}>{(l) => <p class="sub">{l()}</p>}</Show>
-                                    <button class="btn" data-f={`vplay:${r.key}`} onClick={() => play(r.key)}>
-                                      <Play aria-hidden class="fill" />
-                                      Play this version
-                                    </button>
-                                  </div>
+                                {/* Phone: one tap plays; the info button beside the row opens its sheet. The row
+                                    is one node for the reader (its details are its description). */}
+                                <Show when={form() === "phone"}>
+                                  <button class="vinfo" aria-hidden="true" tabindex="-1" onClick={() => openSheet(r)}>
+                                    <Info />
+                                  </button>
                                 </Show>
                               </div>
                             )}
@@ -555,6 +584,47 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
           </section>
         </Match>
       </Switch>
+
+      <Show when={infoOpen() && sheet()}>
+        {(r) => (
+          <div class="vsheet-scrim" onClick={(e) => e.target === e.currentTarget && closeSheet()}>
+            <section
+              class="vsheet"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="vsheet-h"
+              onPointerDown={(e) => (swipeFrom = e.clientY)}
+              onPointerUp={(e) => {
+                if (swipeFrom !== null && e.clientY - swipeFrom > 60) closeSheet();
+                swipeFrom = null;
+              }}
+            >
+              <div class="grab" aria-hidden="true" />
+              <h2 id="vsheet-h">
+                {qualityText(r().quality)}
+                <Show when={r().features.length}> {r().features.join(" ")}</Show>
+                <Show when={r().sizeBytes}>{(b) => <span class="num">, {bytes(b())}</span>}</Show>
+              </h2>
+              <p class="why1">{dimWord() ?? whyLine(r())}</p>
+              <p class="rel">
+                <Release name={r().releaseName} />
+              </p>
+              <Show when={subLine(r())}>{(l) => <p class="sub">{l()}</p>}</Show>
+              <div class="acts">
+                <Show when={!dimmed() || startable()}>
+                  <button class="btn primary" data-f="vsheet:play" onClick={() => closeSheet(r().key)}>
+                    <Play aria-hidden class="fill" />
+                    Play this version
+                  </button>
+                </Show>
+                <button class="btn" data-f="vsheet:done" onClick={() => closeSheet()}>
+                  {versionsWords.done}
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
+      </Show>
     </div>
   );
 }
