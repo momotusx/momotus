@@ -1,4 +1,5 @@
 import AVFoundation
+import AetherEngine
 import SwiftUI
 
 /// Full-screen playback with an OSD that hides itself while playing.
@@ -56,9 +57,16 @@ struct PlayerScreen: View {
             // The player under Versions is inert: nothing in it can be reached, read or pressed.
             ZStack {
                 Color.black.ignoresSafeArea()
-                VideoSurface(player: model.player, onFirstFrame: model.firstFrame, onLayer: attachLayer)
-                    .ignoresSafeArea()
-                    .accessibilityHidden(true)
+                Group {
+                    // The second engine draws into its own view (plans/apple-second-engine.md 2.4).
+                    if model.backend == .aether, let engine = model.aether?.engine {
+                        AetherPlayerSurface(engine: engine)
+                    } else {
+                        VideoSurface(player: model.player, onFirstFrame: model.firstFrame, onLayer: attachLayer)
+                    }
+                }
+                .ignoresSafeArea()
+                .accessibilityHidden(true)
                 // Taps on the picture toggle the controls. A gesture on the whole
                 // screen instead would sit over the menus (Audio, Subtitles, ...)
                 // and keep them from opening.

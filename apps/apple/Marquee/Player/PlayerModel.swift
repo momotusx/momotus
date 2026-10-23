@@ -12,6 +12,15 @@ import UIKit
 final class PlayerModel {
     private(set) var route: PlayRoute
     let player = AVPlayer()
+    /// Which engine plays the current source (plans/apple-second-engine.md 2.2): AVPlayer, or the second engine
+    /// (`aether`) where `EngineChoice` turns it on.
+    private(set) var backend: Backend = .avPlayer
+    /// The second engine, made the first time a source needs it.
+    @ObservationIgnored private(set) var aether: AetherSession?
+    /// The current source reached the second engine because AVPlayer refused it: its first frame tells the core
+    /// (`playedOn`), so the next play of the version goes there first.
+    @ObservationIgnored private var fellBack = false
+    @ObservationIgnored private var loadedKey: String?
     private(set) var playback: PlaybackSnapshot?
     /// Seconds.
     private(set) var position: Double = 0
@@ -47,7 +56,10 @@ final class PlayerModel {
     private(set) var cues: [WebVTT.Cue] = [] { didSet { watchCueEdges() } }
     var rate: Float = 1 {
         // The Lock Screen extrapolates the playhead from the rate: it hears every change at once.
-        didSet { player.defaultRate = rate; if playing { player.rate = rate }; publishNowPlaying() }
+        didSet {
+            if backend == .aether { aether?.setRate(rate) } else { player.defaultRate = rate; if playing { player.rate = rate } }
+            publishNowPlaying()
+        }
     }
 
     /// The Versions view this playback came from; held so the core keeps it.
@@ -309,7 +321,7 @@ final class PlayerModel {
     func playAgain() {
         (nextFailure, nextVersions, nextCancelled, skippedAt) = (nil, nil, false, nil)
         seek(to: 0)
-        player.play()
+        if backend == .aether { aether?.play() } else { player.play() }
     }
 
     /// The segment under the playhead, while Up Next is not on screen.
@@ -524,11 +536,22 @@ final class PlayerModel {
     }
 
     func togglePlay() {
+        if backend == .aether, let aether {
+            if playing { aether.pause(); report(paused: true) } else { if ended { seek(to: 0) }; aether.play() }
+            return
+        }
         if playing { player.pause(); report(paused: true) } else { if ended { seek(to: 0) }; player.play() }
     }
 
     func seek(to seconds: Double) {
         sendStall(stall.interrupted())
+        if backend == .aether, let aether {
+            let target = max(0, min(seconds, duration > 0 ? duration : seconds))
+            (position, ended) = (target, false)
+            linesChanged()
+            Task { await aether.seek(to: target); self.report(); self.publishNowPlaying() }
+            return
+        }
         let target = CMTime(seconds: max(0, min(seconds, duration > 0 ? duration : seconds)), preferredTimescale: 600)
         position = target.seconds
         // A seek is not playback: the missing-picture count starts again where it lands.
@@ -568,7 +591,7 @@ final class PlayerModel {
         firstFrameMs = ms
         // The key's kind only ("url", "bt", "rel"): a "url:" key is the stream link, which can carry an addon's key.
         let kind = String(route.key.prefix { $0 != ":" })
-        coreLog.notice("metric first_frame_ms=\(ms, privacy: .public) key=\(kind, privacy: .public)")
+        coreLog.notice("metric first_frame_ms=\(ms, privacy: .public) key=\(kind, privacy: .public) backend=\(self.backend.rawValue, privacy: .public)")
     }
 
     /// The viewer's pick from the menu, or Off: it wins for the rest of the
@@ -760,9 +783,19 @@ final class PlayerModel {
     /// the picked version: an unknown one is not sent.
     private func load(_ url: String, key: String?, attempt: Int64?, at start: Double) {
         guard let address = URL(string: url) else { return }
+        let pick = EngineChoice.backend(
+            container: playback?.container, audio: playback?.audio ?? [], engine: playback?.engine,
+            enabled: EngineChoice.enabledHere)
+        if pick == .aether {
+            openOnEngine(address, key: key, attempt: attempt, at: start, fellBack: false)
+            return
+        }
+        aether?.stop()
+        backend = .avPlayer
         generation += 1
         let generation = generation
         loadedURL = url
+        loadedKey = key
         loadedAttempt = attempt
         notice = nil
         itemBag = []
@@ -839,23 +872,120 @@ final class PlayerModel {
         if holdPause || covered { holdPause = false } else { player.play() }
     }
 
-    /// The player cannot play this source: stop it, then ask the core for the next.
+    /// The player cannot play this source: the second engine takes it where it is on (plan 2.3), else stop it and
+    /// ask the core for the next.
     private func sourceFailed(_ error: Error?) {
+        if fallBack(why: "error") { return }
         let failure = playerFailure(error)
         fail(failure, notice: "This source failed: \(failure.error). Trying the next one.")
     }
 
     /// The sound runs but no frame ever came: never a spinner over a running
-    /// audio track. The core tries the next version, or says Try again.
+    /// audio track. The second engine takes it where it is on, else the core
+    /// tries the next version, or says Try again.
     private func pictureFailed() {
+        if fallBack(why: "no_picture") { return }
         fail(PlayerFailure(kind: PlayerLayout.pictureFailureKind(floating: floating), error: "this version's picture cannot be shown on this device"),
              notice: "This version's picture cannot be shown here, trying the next one")
+    }
+
+    /// AVPlayer refused the source before its first frame: once, at the same position, the second engine opens it,
+    /// before the core is told (plan 2.3). False where the switch is off, after the first frame, or on the engine.
+    private func fallBack(why: String) -> Bool {
+        guard EngineChoice.fallsBack(enabled: EngineChoice.enabledHere, from: backend, firstFrameShown: pictureShown),
+              let url = loadedURL, let address = URL(string: url) else { return false }
+        let ms = Int((ContinuousClock.now - route.tapped) / .milliseconds(1))
+        coreLog.notice("metric engine_fallback_ms=\(ms, privacy: .public) why=\(why, privacy: .public)")
+        let at = stoppedPosition(pendingStart: pendingStart, position: position)
+        openOnEngine(address, key: loadedKey, attempt: loadedAttempt, at: at, fellBack: true)
+        return true
+    }
+
+    /// Plays `address` on the second engine; AVPlayer lets go first (one engine alive at a time).
+    private func openOnEngine(_ address: URL, key: String?, attempt: Int64?, at start: Double, fellBack: Bool) {
+        player.pause()
+        player.replaceCurrentItem(with: nil)
+        itemBag = []
+        generation += 1
+        let generation = generation
+        (loadedURL, loadedKey, loadedAttempt) = (address.absoluteString, key, attempt)
+        (pictureShown, playingSince, notice) = (false, nil, nil)
+        pendingStart = nil
+        if start > 1 { position = start }
+        backend = .aether
+        self.fellBack = fellBack
+        guard let session = aether ?? AetherSession() else {
+            fail(PlayerFailure(kind: "other", error: "the second player could not start on this device"), notice: "This source failed. Trying the next one.")
+            return
+        }
+        aether = session
+        let mine = { [weak self] in self.map { $0.generation == generation } ?? false }
+        #if DEBUG
+        let muted = DebugHooks.mute
+        #else
+        let muted = false
+        #endif
+        session.load(address, at: start, muted: muted, openWithin: .seconds(20), events: .init(
+            time: { [weak self] time in if mine() { self?.engineTick(time) } },
+            duration: { [weak self] seconds in if mine() { self?.engineDuration(seconds, key: key) } },
+            state: { [weak self] playing, waiting in if mine() { self?.engineState(playing: playing, waiting: waiting) } },
+            firstFrame: { [weak self] in if mine() { self?.engineFirstFrame() } },
+            ended: { [weak self] in if mine() { self?.engineEnded() } },
+            failed: { [weak self] words in
+                guard mine() else { return }
+                self?.fail(PlayerFailure(kind: "other", error: words), notice: "This source failed: \(words). Trying the next one.")
+            }))
+        NowPlaying.activate()
+    }
+
+    private func engineTick(_ time: Double) {
+        guard pendingStart == nil || time > 0 else { return }
+        position = time
+        if position > edgesUntil { watchCueEdges() }
+        if duration != publishedDuration { publishNowPlaying() }
+        if playing, ContinuousClock.now - lastReport > .seconds(5) { report() }
+    }
+
+    private func engineDuration(_ seconds: Double, key: String?) {
+        duration = seconds
+        // The core looks up skip segments once it knows this version's length.
+        guard let key, let sub, durationSent.insert(key).inserted else { return }
+        let ms = Int(seconds * 1000)
+        Task { try? await core.command(sub, ["type": "duration", "key": key, "durationMs": ms]) }
+    }
+
+    private func engineState(playing: Bool, waiting: Bool) {
+        (self.playing, self.waiting) = (playing, waiting)
+        publishNowPlaying()
+        if let paused = PlayerLayout.traktPaused(paused: !playing && !waiting, buffering: waiting, was: self.paused) {
+            self.paused = paused
+            report()
+        }
+    }
+
+    private func engineFirstFrame() {
+        firstFrame()
+        guard fellBack, let sub, let key = loadedKey else { return }
+        fellBack = false
+        // The core keeps it for this version on this device: its next play opens here first.
+        Task { try? await core.command(sub, ["type": "playedOn", "key": key, "engine": Backend.aether.rawValue]) }
+    }
+
+    private func engineEnded() {
+        ended = true
+        report()
+        if next != nil, autoplayNext, !nextCancelled {
+            Task { await playNext() }
+        }
     }
 
     private func fail(_ failure: PlayerFailure, notice words: String) {
         coreLog.error("source failed: \(failure.error, privacy: .public)")
         notice = words
         generation += 1
+        aether?.stop()
+        backend = .avPlayer
+        fellBack = false
         player.pause()
         player.replaceCurrentItem(with: nil)
         // A delay not sent yet goes first, while the failed source's version is the current one.
@@ -919,7 +1049,8 @@ final class PlayerModel {
     }
 
     private func tick(_ time: CMTime) {
-        guard time.isNumeric else { return }
+        // AVPlayer's clock only: the second engine reports through `engineTick`.
+        guard time.isNumeric, backend == .avPlayer else { return }
         if let now = ticked(time: time.seconds, pending: pendingStart) { position = now }
         if playing { sendStall(stall.see(playing: true, waiting: false, position: position)) }
         // A track delivered whole (HLS) sends nothing more: the observer moves on with the playhead.
@@ -963,6 +1094,7 @@ final class PlayerModel {
         flushDelay()
         report()
         player.pause()
+        aether?.pause()
     }
 
     private func stop() {
@@ -973,6 +1105,8 @@ final class PlayerModel {
         itemBag = []
         player.pause()
         player.replaceCurrentItem(with: nil)
+        aether?.stop()
+        backend = .avPlayer
         sub = nil
     }
 }
