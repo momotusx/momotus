@@ -2382,6 +2382,22 @@ fn versions_network(params: &Value) -> Result<Option<mq_runtime::speed::Network>
 mod tests {
     use super::*;
 
+    /// The caps the Apple app sends with its second engine on, read from the
+    /// file its own test reads too (plans/apple-second-engine.md 2.5): every
+    /// name is the core's, or every Versions request would fail.
+    #[test]
+    fn apples_engine_caps_are_the_cores_names() {
+        let params: Value = serde_json::from_str(include_str!(
+            "../../../apps/apple/Tests/Fixtures/engine-caps.json"
+        ))
+        .unwrap();
+        let caps = versions_params(&params, StreamPrefs::default())
+            .expect("every name is known")
+            .caps;
+        assert!(caps.opens("mkv") && caps.opens("avi") && !caps.ten_bit_h264);
+        assert_eq!(caps.audio_decoders.len(), 13);
+    }
+
     #[test]
     fn versions_params_carry_what_the_device_can_do() {
         let params = json!({
