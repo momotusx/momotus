@@ -57,12 +57,14 @@
   [data-form="desktop"] .info .acts .btn:hover { background: none; box-shadow: none; color: var(--text); }
   [data-form="desktop"] .info .acts .btn:hover svg { background: rgba(255, 255, 255, .24); }
 }
-/* The version note's slot, there from the first paint and empty until it has something to say: as tall as
- * its longest words (the account reason), three lines at 820 on TV and in desktop's column, four on the phone. */
-.vnote { min-height: calc(3 * 1.3 * var(--type-callout)); margin-top: 16px; font: 600 var(--type-callout) / 1.3 var(--font-text); max-width: 820px; }
+/* The version note's slot, there from the first paint and empty until it has something to say: as tall
+ * as the longest of the core's `empty` lines (one line on TV and desktop, two at the phone's 358). A
+ * failure's words are clamped to it. */
+.vnote { --vnote-lines: 1; min-height: calc(var(--vnote-lines) * 1.3 * var(--type-callout)); margin-top: 16px; font: 600 var(--type-callout) / 1.3 var(--font-text); max-width: 820px; }
 .vnote .st { display: flex; align-items: flex-start; }
 .vnote .dot { margin-top: .35em; }
-[data-form="phone"] .vnote { min-height: calc(4 * 1.3 * var(--type-callout)); margin-top: 10px; text-align: left; }
+.vnote .vtext { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--vnote-lines); overflow: hidden; }
+[data-form="phone"] .vnote { --vnote-lines: 2; margin-top: 10px; text-align: left; }
 .muted { color: var(--muted); }
 /* The facts: a key and value table on solid `surface` (content, so no glass and no edge). */
 .facts { margin-top: var(--space-l); display: grid; grid-template-columns: max-content 1fr; width: 100%; max-width: 760px;
@@ -196,6 +198,8 @@
  * and the 72 px of trailing room lets the last card come clear of the edge. No pill above this list:
  * its own top margin, not the page's. */
 .toc [data-f] { scroll-margin: 14px 0 72px; }
+/* A wheel run: no row takes the hover while the list moves under the pointer (title.tsx, holdHover). */
+.toc.wheeling .ep { pointer-events: none; }
 
 /* Trailer over the page: the frame, then its title and our own controls. */
 .trailer { position: absolute; inset: 0; z-index: 30; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px;
@@ -212,7 +216,7 @@
 [data-form="phone"] .trailer-bar p { font-size: 17px; flex-basis: 100%; }
 
 /* The full synopsis on a solid card over the page (components/synopsis.tsx). */
-.syn-layer { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; padding: var(--safe-top) var(--safe-side) var(--safe-bottom); }
+.syn-layer { position: absolute; inset: 0; z-index: 30; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: var(--safe-top) var(--safe-side) var(--safe-bottom); }
 .syn-scrim { position: absolute; inset: 0; background: var(--scrim); }
 .syn-card { position: relative; width: 1000px; max-width: 100%; max-height: 100%; overflow-y: auto; padding: 36px 40px 40px; border-radius: var(--radius-l);
   background: var(--surface); display: grid; gap: 18px; }
@@ -225,6 +229,9 @@
 [data-form="desktop"] .syn-head h2 { font-size: calc(22 * var(--px)); }
 [data-form="desktop"] .syn-text { font-size: calc(15 * var(--px)); }
 [data-form="phone"] .syn-layer { position: fixed; padding: 24px 16px; }
+/* A touch on the scrim, or a card scrolled to its end, never scrolls the page behind. */
+[data-form="phone"] .syn-scrim { touch-action: none; }
+[data-form="phone"] .syn-card { overscroll-behavior: contain; }
 [data-form="phone"] .syn-card { padding: 20px; gap: 12px; border-radius: 14px; }
 [data-form="phone"] .syn-head h2 { font-size: 20px; }
 [data-form="phone"] .syn-text { font-size: 15px; }

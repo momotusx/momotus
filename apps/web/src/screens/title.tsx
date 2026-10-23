@@ -19,13 +19,14 @@ import { Why } from "../components/why";
 import { askOnce, CONTINUE_ROW, removeFromContinue } from "../components/row";
 import { separators } from "../components/separators";
 import { TrailerOverlay } from "../components/trailer";
-import { homeView, type TitleView, titleView, versionsView } from "../core/client";
+import { homeView, type LiveView, type TitleView, titleView, versionsView } from "../core/client";
+import type { EmptyKind } from "../core/generated/EmptyKind";
 import type { Episode } from "../core/generated/Episode";
 import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
 import { focusEl, remember } from "../focus/dom";
 import { form } from "../form";
-import { airDate, clock, decoded, episodeLabel, offersLibrary, parseVideo, pct, playPath, ratingParts, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
-import { blockedWords, noVersionWords } from "../lib/words";
+import { airDate, clock, decoded, episodeLabel, offersLibrary, parseVideo, pct, playPath, playState, ratingParts, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
+import { choiceWords, problemWords } from "../lib/words";
 import "./title.css";
 
 export default function Title() {
@@ -40,6 +41,9 @@ export default function Title() {
     />
   );
 }
+
+// The core's empty states whose only action is Back (plans/play-every-version.md).
+const BACK_ONLY = new Set<EmptyKind>(["noRoom", "kidsNothing", "noResults"]);
 
 const released = (e: Episode) => !e.released || new Date(e.released).getTime() <= Date.now();
 
@@ -56,11 +60,20 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
   const series = () => props.kind !== "movie" && (header()?.seasons.length ?? 0) > 0;
   const [trailerOpen, setTrailerOpen] = createSignal(false);
   const [synOpen, setSynOpen] = createSignal(false);
-  // Closing returns focus to the synopsis that opened it.
+  // What is shown and what makes the page inert are one condition, so a dialog that unmounts (its
+  // text gone in a refresh) never leaves the page inert.
+  const synText = () => (synOpen() && d()?.description) || null;
+  const trailerShown = () => trailerOpen() && (d()?.trailers.length ?? 0) > 0;
+  // Closing returns focus to what opened it: the synopsis, or the phone's More.
+  let synOpener = "title:synopsis";
+  const openSynopsis = (key: string) => {
+    synOpener = key;
+    setSynOpen(true);
+  };
   const closeSynopsis = () => {
     setSynOpen(false);
     queueMicrotask(() => {
-      const opener = document.querySelector<HTMLElement>('[data-f="title:synopsis"]');
+      const opener = document.querySelector<HTMLElement>(`[data-f="${synOpener}"]`);
       if (opener) focusEl(opener);
     });
   };
@@ -90,6 +103,24 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
     });
   });
 
+  // A Back-only state (plans/play-every-version.md, the title page's row): Play keeps its place,
+  // inert, since a Play that opens a page holding only Back is a dead end; with no video at all the
+  // same. On TV the first focus is the next action: Versions, or Add to Library with no video.
+  const playInert = () => {
+    const e = versions()?.state.data?.empty;
+    return (!!e && BACK_ONLY.has(e.kind)) || (header()?.state.state === "ready" && !target() && !header()?.nextAirs);
+  };
+
+  // Where Play goes when the core says nothing plays as is (the lead, 2026-10-23): the kept version when
+  // the sources are unreachable, else Versions, which holds the state's line, its action and the rows
+  // that start. The title page itself never offers Settings, Try again or Choose a version.
+  const playTo = (videoId: string): { href: string; state?: object } => {
+    const e = versions()?.state.data?.empty;
+    if (e?.kind === "unreachable" && e.key) return { href: playPath(props.kind, props.id, videoId), state: playState(e.key) };
+    if (e) return { href: versionsPath(props.kind, props.id, videoId) };
+    return { href: playPath(props.kind, props.id, videoId) };
+  };
+
   const metaLine = () => {
     const x = d();
     if (!x) return [];
@@ -104,8 +135,8 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
 
   return (
     <div class="title-scr" classList={{ movie: !series(), noart: artMissing() }}>
-      {/* No backdrop (none named, or it does not load): the poster, blurred
-          and faint, keeps the page from opening on a blank half. */}
+      {/* No backdrop (none named, or it does not load): the poster's upper part,
+          faint, keeps the page from opening on a blank half. */}
       <Backdrop
         src={d()?.background}
         fallback={d()?.poster}
@@ -113,13 +144,13 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
         ramp={form() === "phone" ? "titlePhone" : series() ? "title" : "titleMovie"}
         onMissing={() => d() && setArtMissing(true)}
       />
-      <Show when={trailerOpen() && d()?.trailers.length}>
+      <Show when={trailerShown()}>
         <TrailerOverlay trailers={d()?.trailers ?? []} onClose={closeTrailer} />
       </Show>
-      <Show when={synOpen() && d()?.description}>
+      <Show when={synText()}>
         {(text) => <SynopsisDialog name={d()?.name ?? ""} text={text()} onClose={closeSynopsis} />}
       </Show>
-      <div class="title-main" inert={trailerOpen() || synOpen() || undefined}>
+      <div class="title-main" inert={trailerShown() || !!synText() || undefined}>
       <Switch>
         <Match when={view.state.status.state === "failed" || header()?.state.state === "failed"}>
           <section class="info">
@@ -167,12 +198,12 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                 </p>
                 <Show when={x().description}>
                   {/* The full text opens on its own card (components/synopsis.tsx), never in place. */}
-                  <button class="syn" data-f="title:synopsis" aria-label="Synopsis, open the full text" aria-haspopup="dialog" onClick={() => setSynOpen(true)}>
+                  <button class="syn" data-f="title:synopsis" aria-label="Synopsis, open the full text" aria-haspopup="dialog" onClick={() => openSynopsis("title:synopsis")}>
                     {x().description}
                   </button>
                   {/* Touch has no focus to open it: a phone says there is more. */}
                   <Show when={form() === "phone" && (x().description?.length ?? 0) > 140}>
-                    <button class="syn-more" aria-haspopup="dialog" onClick={() => setSynOpen(true)}>
+                    <button class="syn-more" data-f="title:more" aria-haspopup="dialog" onClick={() => openSynopsis("title:more")}>
                       More
                     </button>
                   </Show>
@@ -180,14 +211,14 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                 <div class="play">
                   <div class="play-row">
                     {/* Resume or Play is always the primary (plans/play-every-version.md, shared Step 3
-                        decisions): when nothing plays here, the note under the actions says why. */}
-                    {/* The next episode is not out yet: its day, in place of Play
-                        (header.nextAirs). A series watched to its end gets
-                        "Play again from S1:E1" from the core as its label. */}
+                        decisions): when nothing plays here, the note under the actions says why.
+                        The next episode not out yet: its day, in place of Play (header.nextAirs). A
+                        series watched to its end gets "Play again from S1:E1" from the core as its
+                        label. */}
                     <Show
-                      when={target()}
+                      when={!playInert() && target()}
                       fallback={
-                        <Show when={header()?.nextAirs}>
+                        <Show when={header()?.nextAirs} fallback={<InertPlay label={target()?.label ?? "Play"} />}>
                           {(day) => (
                             <p class="airs-next" role="status">
                               <CalendarClock aria-hidden />
@@ -198,7 +229,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                       }
                     >
                       {(t) => (
-                        <A class="btn primary big" href={playPath(props.kind, props.id, t().videoId)} data-f="title:play" data-autofocus>
+                        <A class="btn primary big" href={playTo(t().videoId).href} state={playTo(t().videoId).state} data-f="title:play" data-autofocus>
                           <Play aria-hidden class="fill" />
                           {t().label}
                           <Show when={t().resumeMs}>
@@ -207,8 +238,9 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                         </A>
                       )}
                     </Show>
-                    {/* Part way in: the same video from its beginning. */}
-                    <Show when={target()?.resumeMs ? target() : null}>
+                    {/* Part way in: the same video from its beginning (not in a Back-only state: it
+                        would open the same dead end). */}
+                    <Show when={!playInert() && target()?.resumeMs ? target() : null}>
                       {(t) => (
                         <A class="btn big again" href={playPath(props.kind, props.id, t().videoId)} state={{ startOver: true }} data-f="title:startover" aria-label="Start over">
                           <RotateCcw aria-hidden />
@@ -234,7 +266,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                 <div class="acts">
                   <Show when={target()}>
                     {(t) => (
-                      <A class="btn" href={versionsPath(props.kind, props.id, t().videoId)} data-f="title:versions">
+                      <A class="btn" href={versionsPath(props.kind, props.id, t().videoId)} data-f="title:versions" data-autofocus={playInert() ? "" : undefined}>
                         <Layers aria-hidden />
                         {/* One inline label, so the count never wraps apart from its word. */}
                         <span>
@@ -256,7 +288,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                   <button
                     class="btn"
                     data-f="title:library"
-                    data-autofocus={!target() && header()?.nextAirs ? "" : undefined}
+                    data-autofocus={!target() && (header()?.nextAirs || playInert()) ? "" : undefined}
                     aria-pressed={header()?.inLibrary ?? false}
                     onClick={() => view.command({ type: "setInLibrary", value: !header()?.inLibrary })}
                   >
@@ -277,7 +309,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                     </button>
                   </Show>
                 </div>
-                <VersionNote target={!!target()} view={versions()} />
+                <VersionNote target={!!target()} noVideo={playInert() && !target()} view={versions()} />
                 {/* Phone reads top to bottom: episodes before the details. */}
                 <Show when={series() && form() === "phone"}>
                   <Episodes view={view} kind={props.kind} id={props.id} runtime={runtimeMinutes(x().runtime)} art={x().background ?? x().poster} />
@@ -346,18 +378,20 @@ function versionCount(s: VersionsSnapshot | null): number | null {
   return n || null;
 }
 
-/** The version status in one quiet line under the action row, as Apple's VersionNote: only when the
- * versions could not load, or when every addon answered and none plays here. Its two-line slot is there
- * from the first paint (`role="status"`), so nothing moves when it fills. "Finding versions" is not said:
- * Play and the Versions button carry that. */
-function VersionNote(props: { target: boolean; view: { state: { status: { state: string }; data: VersionsSnapshot | null } } | null }) {
+/** The version status in one quiet line under the action row, as Apple's VersionNote: the core's
+ * reason nothing plays here (its `empty` line, apps/shared/stream-choice-words.json), or that the
+ * versions could not load (in plain words, `problemWords`). Its slot is as tall as the longest `empty`
+ * line from the first paint (`role="status"`), and a longer failure is clamped to it, so nothing moves
+ * when it fills. "Finding versions" is not said: Play and the Versions button carry that. */
+function VersionNote(props: { target: boolean; noVideo: boolean; view: LiveView<VersionsSnapshot> | null }) {
   const words = () => {
+    // ponytail: no video and nothing airing has no core state yet; it reads as noResults.
+    if (props.noVideo) return choiceWords.empty.noResults.text;
     const v = props.view;
     if (!props.target || !v) return null;
-    if (v.state.status.state === "failed") return `Versions could not load. ${(v.state.status as { reason?: string }).reason ?? ""}`.trim();
-    const s = v.state.data;
-    if (!s?.done || s.recommended) return null;
-    return s.blocked ? blockedWords(s.blocked.reason, s.blocked.count, s.conditions.window).text : `${noVersionWords.title}. ${noVersionWords.detail}`;
+    if (v.state.status.state === "failed") return `Versions could not load. ${problemWords(v.state.status.reason).text}`;
+    const e = v.state.data?.empty;
+    return e ? choiceWords.empty[e.kind].text : null;
   };
   return (
     <p class="vnote" role="status">
@@ -365,11 +399,21 @@ function VersionNote(props: { target: boolean; view: { state: { status: { state:
         {(w) => (
           <span class="st warn">
             <i class="dot" />
-            {w()}
+            <span class="vtext">{w()}</span>
           </span>
         )}
       </Show>
     </p>
+  );
+}
+
+/** Play in a Back-only state, or with no video: in its place, dimmed, not focusable, doing nothing. */
+function InertPlay(props: { label: string }) {
+  return (
+    <span class="btn primary big" aria-disabled="true">
+      <Play aria-hidden class="fill" />
+      {props.label}
+    </span>
   );
 }
 
@@ -397,6 +441,20 @@ function Episodes(props: { view: TitleView; kind: string; id: string; runtime: n
     }
   });
   const select = (s: number) => setQuery({ season: String(s) }, { replace: true });
+  // A wheel run holds the rows' hover off until it settles (150 ms after its last event): rows sliding
+  // under a still pointer would change their hover on every frame and repaint the list each time.
+  const holdHover = (list: HTMLOListElement) => {
+    let settle: number | undefined;
+    list.addEventListener(
+      "wheel",
+      () => {
+        list.classList.add("wheeling");
+        clearTimeout(settle);
+        settle = window.setTimeout(() => list.classList.remove("wheeling"), 150);
+      },
+      { passive: true },
+    );
+  };
   const left = (e: Episode) => {
     if (e.watched) return "Watched";
     if (e.leftMs) return minutesLeft(e.leftMs);
@@ -430,7 +488,7 @@ function Episodes(props: { view: TitleView; kind: string; id: string; runtime: n
           </For>
         </div>
       </header>
-      <ol class="toc" id="season-episodes" role="tabpanel" aria-label={seasonName(header()?.selectedSeason ?? 1)} data-vscroll data-fgroup="episodes">
+      <ol class="toc" id="season-episodes" role="tabpanel" aria-label={seasonName(header()?.selectedSeason ?? 1)} data-vscroll data-fgroup="episodes" ref={holdHover}>
         <For each={props.view.state.episodes}>
           {(e) => {
             const [broken, setBroken] = createSignal(false);
