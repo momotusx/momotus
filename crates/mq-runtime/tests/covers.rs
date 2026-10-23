@@ -18,6 +18,9 @@ use tokio::net::TcpListener;
 const MOVIE: &str = r#"{"id":"tt0111161","type":"movie","name":"The Shawshank Redemption","poster":"https://img.example/tt0111161.jpg","background":"https://img.example/bg.jpg"}"#;
 const ANIME: &str = r#"{"id":"kitsu:50016","type":"anime","name":"Cyberpunk: Edgerunners II","poster":"https://img.example/50016.jpg","imdb_id":"tt12590266"}"#;
 const UNMAPPED: &str = r#"{"id":"kitsu:13874","type":"anime","name":"Fate/Grand Order CMs","poster":"https://img.example/13874.jpg","imdb_id":null}"#;
+/// A catalog item whose addon serves an RPDB poster itself, under its own key
+/// (the TMDB addon and AIOMetadata take one in their own config).
+const SERVED: &str = r#"{"id":"tt0068646","type":"movie","name":"The Godfather","poster":"https://api.ratingposterdb.com/addon-own/imdb/poster-default/tt0068646.jpg"}"#;
 const ANIME_META: &str = r#"{"meta":{"id":"kitsu:50016","type":"anime","name":"Cyberpunk: Edgerunners II","poster":"https://img.example/50016.jpg","imdb_id":"tt12590266","videos":[
   {"id":"kitsu:50016:1","title":"One","season":1,"episode":1,"released":"2020-01-01T00:00:00Z"},
   {"id":"kitsu:50016:2","title":"Two","season":1,"episode":2,"released":"2020-01-08T00:00:00Z"}]}}"#;
@@ -47,7 +50,10 @@ async fn fixture() -> AddonRow {
                     .decode_utf8_lossy()
                     .into_owned();
                 let (status, body) = if path.starts_with("/catalog/") {
-                    (200, format!(r#"{{"metas":[{MOVIE},{ANIME},{UNMAPPED}]}}"#))
+                    (
+                        200,
+                        format!(r#"{{"metas":[{MOVIE},{ANIME},{UNMAPPED},{SERVED}]}}"#),
+                    )
                 } else if path.starts_with("/meta/") && path.contains("kitsu:50016") {
                     (200, ANIME_META.to_owned())
                 } else if path.starts_with("/meta/") && path.contains("kitsu:13874") {
@@ -181,7 +187,7 @@ async fn every_surface_that_shows_a_cover_shows_the_band() {
         home.snapshot()
             .rows
             .into_iter()
-            .find(|r| r.row_id != CONTINUE_ROW_ID && r.tiles.len() == 3)
+            .find(|r| r.row_id != CONTINUE_ROW_ID && r.tiles.len() == 4)
     })
     .await;
     all_three("Home row", &row.tiles);
@@ -222,7 +228,7 @@ async fn every_surface_that_shows_a_cover_shows_the_band() {
     let discover = DiscoverView::open(&core);
     let items = until("Discover's items", || {
         let items = discover.snapshot().items;
-        (items.len() == 3).then_some(items)
+        (items.len() == 4).then_some(items)
     })
     .await;
     all_three("Discover", &items);
@@ -235,7 +241,7 @@ async fn every_surface_that_shows_a_cover_shows_the_band() {
             .snapshot()
             .rows
             .into_iter()
-            .find(|r| r.tiles.len() == 3)
+            .find(|r| r.tiles.len() == 4)
             .map(|r| r.tiles)
     })
     .await;
@@ -278,7 +284,7 @@ async fn without_a_key_no_surface_shows_the_band() {
         home.snapshot()
             .rows
             .into_iter()
-            .find(|r| r.tiles.len() == 3)
+            .find(|r| r.tiles.len() == 4)
     })
     .await;
     assert_eq!(
@@ -288,6 +294,11 @@ async fn without_a_key_no_surface_shows_the_band() {
     assert_eq!(
         poster(&row.tiles, "kitsu:50016"),
         Some("https://img.example/50016.jpg")
+    );
+    // An RPDB poster the addon serves itself stays: no key of ours is in it.
+    assert_eq!(
+        poster(&row.tiles, "tt0068646"),
+        Some("https://api.ratingposterdb.com/addon-own/imdb/poster-default/tt0068646.jpg")
     );
     let view = TitleView::open(&core, "movie", "tt0111161");
     let details = until("the title page", || {

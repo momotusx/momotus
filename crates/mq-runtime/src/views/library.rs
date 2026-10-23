@@ -237,7 +237,7 @@ fn tile(e: &LibraryEntry, covers: &crate::covers::Covers) -> Tile {
         blurb: None,
         poster_fallback: None,
     }
-    .rated_cover(covers)
+    .rated_stored_cover(covers)
 }
 
 /// Where the user is with a title, in Continue Watching's words: "S2:E3 ·

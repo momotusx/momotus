@@ -85,12 +85,17 @@ impl Tile {
             "poster".clone_into(&mut self.poster_shape);
             self.poster_fallback = self.poster.take().filter(|p| !p.starts_with(RPDB));
             self.poster = Some(cover);
-        } else if self.poster.as_deref().is_some_and(|p| p.starts_with(RPDB)) {
-            // A cover stored before the key went (an older play record):
-            // no band without a key, and never a key that is gone.
-            self.poster = None;
         }
         self
+    }
+
+    /// `rated_cover` for a tile built from a stored row (Continue Watching,
+    /// Library, a kids list): an RPDB cover stored before (an older play
+    /// record) goes when no key draws one now, so the band never outlives
+    /// the key. A catalog tile keeps an RPDB poster its addon serves itself.
+    pub(crate) fn rated_stored_cover(mut self, covers: &Covers) -> Self {
+        self.poster = self.poster.filter(|p| !p.starts_with(RPDB));
+        self.rated_cover(covers)
     }
 }
 
@@ -1024,7 +1029,7 @@ pub(crate) fn kids_tile(row: &AllowedRow, covers: &Covers) -> Tile {
         blurb: None,
         poster_fallback: None,
     }
-    .rated_cover(covers)
+    .rated_stored_cover(covers)
 }
 
 /// Whether a Continue Watching tile may show: the title passes the policy,
@@ -1256,7 +1261,8 @@ fn tile_from_continue(
         id: item.item_id,
         kind: item.kind,
         name: item.name,
-        poster: item.poster.or_else(|| {
+        // A stored RPDB cover never stands in for the addon's (`rated_stored_cover`).
+        poster: item.poster.filter(|p| !p.starts_with(RPDB)).or_else(|| {
             preview
                 .and_then(|p| p.poster.as_ref())
                 .map(|u| u.to_string())
@@ -1377,25 +1383,26 @@ mod tests {
     /// tile keeps the addon's poster.
     #[test]
     fn an_imdb_poster_is_rpdbs_cover_with_the_addons_as_fallback() {
+        let bare = |id: &str, shape: &str, poster: Option<&str>| super::Tile {
+            id: id.into(),
+            kind: "movie".into(),
+            name: "x".into(),
+            poster: poster.map(str::to_owned),
+            poster_fallback: None,
+            background: None,
+            logo: None,
+            poster_shape: shape.into(),
+            release_info: None,
+            progress: None,
+            video_id: None,
+            rating: None,
+            ratings: Default::default(),
+            blurb: None,
+        };
+        let covers =
+            |rpdb: Option<&str>| super::Covers::with(rpdb, &[("kitsu:50016", "tt12590266")]);
         let keyed = |id: &str, shape: &str, poster: Option<&str>, rpdb: Option<&str>| {
-            let covers = super::Covers::with(rpdb, &[("kitsu:50016", "tt12590266")]);
-            super::Tile {
-                id: id.into(),
-                kind: "movie".into(),
-                name: "x".into(),
-                poster: poster.map(str::to_owned),
-                poster_fallback: None,
-                background: None,
-                logo: None,
-                poster_shape: shape.into(),
-                release_info: None,
-                progress: None,
-                video_id: None,
-                rating: None,
-                ratings: Default::default(),
-                blurb: None,
-            }
-            .rated_cover(&covers)
+            bare(id, shape, poster).rated_cover(&covers(rpdb))
         };
         let tile = |id: &str, shape: &str, poster: Option<&str>| {
             keyed(id, shape, poster, Some("t0-free-rpdb"))
@@ -1446,9 +1453,22 @@ mod tests {
         let back = tile("tt0111161", "poster", cover.poster.as_deref());
         assert_eq!(back.poster, cover.poster);
         assert_eq!(back.poster_fallback, None);
-        // With no key, a stored RPDB cover goes: no band, and no key that is gone.
-        let stale = keyed("tt0111161", "poster", cover.poster.as_deref(), None);
-        assert_eq!((stale.poster, stale.poster_fallback), (None, None));
+        // With no key, a catalog tile keeps an RPDB poster its addon serves
+        // itself (review 2026-10-23); a tile from a stored row drops one, so
+        // the band never outlives the key.
+        let served = keyed("tt0111161", "poster", cover.poster.as_deref(), None);
+        assert_eq!(served.poster, cover.poster);
+        let stored =
+            bare("tt0111161", "poster", cover.poster.as_deref()).rated_stored_cover(&covers(None));
+        assert_eq!((stored.poster, stored.poster_fallback), (None, None));
+        let stored = bare("tt0111161", "poster", cover.poster.as_deref())
+            .rated_stored_cover(&covers(Some("t0-free-rpdb")));
+        assert_eq!(
+            (stored.poster, stored.poster_fallback),
+            (cover.poster.clone(), None)
+        );
+        let own_stored = bare("kitsu:13874", "poster", Some(own)).rated_stored_cover(&covers(None));
+        assert_eq!(own_stored.poster.as_deref(), Some(own));
         // The key is the addon's: a paid one goes into the link as given.
         let paid = keyed("tt0111161", "poster", Some(own), Some("t1-abc_9"));
         assert!(

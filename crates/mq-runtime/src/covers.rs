@@ -133,21 +133,30 @@ fn imdb_ids_in(body: &[u8]) -> Vec<(String, String)> {
     if !body.windows(7).any(|w| w == b"imdb_id") {
         return Vec::new();
     }
-    let Ok(answer) = serde_json::from_slice::<serde_json::Value>(body) else {
+    // Only the two fields are kept: Cinemeta writes `imdb_id` on every item,
+    // and its answers are long.
+    #[derive(serde::Deserialize)]
+    struct Item {
+        id: Option<serde_json::Value>,
+        imdb_id: Option<serde_json::Value>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Answer {
+        metas: Option<Vec<Item>>,
+        meta: Option<Item>,
+    }
+    let Ok(answer) = serde_json::from_slice::<Answer>(body) else {
         return Vec::new();
     };
-    let items = match (answer.get("metas"), answer.get("meta")) {
-        (Some(serde_json::Value::Array(metas)), _) => metas.iter().collect(),
-        (_, Some(meta)) => vec![meta],
-        _ => Vec::new(),
-    };
-    items
+    answer
+        .metas
+        .unwrap_or_default()
         .into_iter()
+        .chain(answer.meta)
         .filter_map(|item| {
-            let id = item.get("id")?.as_str()?;
-            let imdb = item.get("imdb_id")?.as_str()?;
-            (!is_imdb(id) && id.len() <= 128 && is_imdb(imdb))
-                .then(|| (id.to_owned(), imdb.to_owned()))
+            let id = item.id?.as_str()?.to_owned();
+            let imdb = item.imdb_id?.as_str()?.to_owned();
+            (!is_imdb(&id) && id.len() <= 128 && is_imdb(&imdb)).then_some((id, imdb))
         })
         .collect()
 }
