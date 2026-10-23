@@ -184,3 +184,13 @@ private func snapshot(
     #expect(preview.contains("if let inLibrary = DiscoverWords.library(tile, details) {"))
     #expect(preview.contains("Button { setLibrary(!inLibrary) }"))
 }
+
+@Test func discoversGridNeverHoldsTheWindowOpen() throws {
+    // The fixed columns and the skeleton follow the width; with a minimum of their own they kept the last,
+    // wider layout when the Mac's window narrowed (the walk at 720 showed six columns cut) and held the
+    // window's content min size at that width.
+    let parts = try source("Discover/DiscoverParts.swift")
+    for name in ["struct DiscoverGrid: View", "struct DiscoverSkeleton: View"] {
+        #expect(try body(of: name, in: parts).contains(".frame(minWidth: 0, idealWidth: 0, maxWidth: .infinity, alignment: .topLeading)"), "\(name)")
+    }
+}

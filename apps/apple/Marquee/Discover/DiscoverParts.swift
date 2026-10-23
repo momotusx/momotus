@@ -196,6 +196,9 @@ struct DiscoverGrid: View {
                 .onAppear { if key == keyed.last?.key { onEnd?() } }
             }
         }
+        // No minimum width of its own: the fixed columns follow the window, so they must never hold it open (a
+        // window narrowed under the last layout kept that layout, and the Mac's content min size with it).
+        .frame(minWidth: 0, idealWidth: 0, maxWidth: .infinity, alignment: .topLeading)
         .onChange(of: focused) { _, key in if selects, let key { selection.select(key) } }
         .onChange(of: voiceOver) { _, key in if selects, let key { selection.select(key) } }
         #if os(macOS)
@@ -348,6 +351,7 @@ struct DiscoverSkeleton: View {
                     .frame(width: size.width, height: size.height)
             }
         }
+        .frame(minWidth: 0, idealWidth: 0, maxWidth: .infinity, alignment: .topLeading)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Loading")
     }
