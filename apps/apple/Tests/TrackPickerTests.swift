@@ -277,3 +277,19 @@ private let klingon = track(5, "tlh", "tlh", "Klingon")
     let only = TrackPicker.languages([], file: [TrackPicker.FileTrack(index: 0, name: "German", language: "deu")])
     #expect(only.map(\.own) == ["Deutsch"])
 }
+
+@Test func audioSearchFindsATrackByItsOwnName() {
+    let german = TrackPicker.FileTrack(index: 1, name: "German", language: "ger")
+    let english = TrackPicker.FileTrack(index: 0, name: "English", language: "eng")
+    // "deutsch" finds German, as "turkce" finds Türkçe among the subtitles.
+    #expect(TrackPicker.matches(TrackPicker.audioLanguage(german), "deutsch"))
+    #expect(!TrackPicker.matches(TrackPicker.audioLanguage(english), "deutsch"))
+    #expect(TrackPicker.audioLanguage(german).own == "Deutsch")
+}
+
+@Test func aRegionalAudioTagTakesItsBaseLanguagesOwnName() {
+    // "de-DE" beside a plain "German": "Deutsch", not "Deutsch (Deutschland)".
+    #expect(TrackPicker.audioOwnName(TrackPicker.FileTrack(index: 0, name: "German", language: "de-DE")) == "Deutsch")
+    // The region stays when the English label says it too.
+    #expect(TrackPicker.audioOwnName(TrackPicker.FileTrack(index: 0, name: "German (Germany)", language: "de-DE")) == "Deutsch (Deutschland)")
+}

@@ -76,12 +76,7 @@ struct TrackPickerPanel: View {
 
     private var shownAudio: [TrackPicker.FileTrack] {
         guard TrackPicker.audioSearch(audio.count), !query.isEmpty else { return audio }
-        return audio.filter { TrackPicker.matches(audioLanguage($0), query) }
-    }
-
-    private func audioLanguage(_ t: TrackPicker.FileTrack) -> TrackPicker.Language {
-        let tag = t.language.map(TrackPicker.fileTag) ?? ""
-        return TrackPicker.Language(language: tag, name: t.name, own: nil, codes: [tag.lowercased()], file: [t], tracks: [])
+        return audio.filter { TrackPicker.matches(TrackPicker.audioLanguage($0), query) }
     }
 
     // MARK: the forms

@@ -900,9 +900,19 @@ enum TrackPicker {
 
     /// An audio track's own-language name beside its English one ("German" with "Deutsch"); nil for a track that
     /// names no language, or when the two read the same.
+    /// A regional tag ("de-DE") gives its base language's own name ("Deutsch") unless the English label says the
+    /// region too ("German (Germany)" with "Deutsch (Deutschland)").
     static func audioOwnName(_ t: FileTrack) -> String? {
         guard let raw = tag(t.language) else { return nil }
-        return ownName(fileTag(raw)).flatMap { $0 == t.name ? nil : $0 }
+        let full = fileTag(raw)
+        let said = englishName(full) == t.name ? full : SubtitleMenu.base(full)
+        return ownName(said).flatMap { $0 == t.name ? nil : $0 }
+    }
+
+    /// An audio track as the search reads it: its name, its own name ("deutsch" finds German) and its code.
+    static func audioLanguage(_ t: FileTrack) -> Language {
+        let tag = t.language.map(fileTag) ?? ""
+        return Language(language: tag, name: t.name, own: audioOwnName(t), codes: [tag.lowercased()], file: [t], tracks: [])
     }
 
     /// Audio: a search only past five tracks.
