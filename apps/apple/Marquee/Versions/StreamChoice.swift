@@ -329,12 +329,12 @@ enum StreamChoice {
         words.conditions.screens[String(screenClass)] ?? "\(screenClass)p"
     }
 
-    /// "4K HDR, about 42 Mbit/s on Wi-Fi, 61 GB free"; the speed only once a playback measured it.
+    /// "4K HDR, about 42 Mbit/s on Wi-Fi, 61 GB free"; an unmeasured speed names the network alone.
     static func conditionsLine(screenClass: Int, hdr: Bool, network: String, speed: Speed, freeBytes: Int64?) -> String {
         let c = words.conditions
         let screen = screenWord(screenClass)
         let net = c.networks[network] ?? c.networks["other"] ?? network
-        let speedPart = speed.samples > 0 ? fill(c.speed, ["mbps": String(Int(speed.mbps.rounded())), "network": net]) : nil
+        let speedPart = speed.samples > 0 ? fill(c.speed, ["mbps": String(Int(speed.mbps.rounded())), "network": net]) : net
         let free = freeBytes.flatMap { fill(c.free, ["free": bytes($0)]) }
         return [hdr ? fill(c.hdr, ["screen": screen]) : screen, speedPart, free].compactMap { $0 }.joined(separator: ", ")
     }
