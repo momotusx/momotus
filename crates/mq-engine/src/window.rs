@@ -262,6 +262,8 @@ fn data_pieces(path: &Path, offset: u64, piece_len: u64) -> Vec<u32> {
 fn seek(fd: std::os::fd::RawFd, at: i64, whence: libc::c_int) -> i64 {
     // SAFETY: lseek takes plain values.
     #[cfg(any(target_os = "android", target_os = "linux"))]
+    // libc 1.0 makes `off_t` 64 bits on 32-bit Android and drops the
+    // `*64` names: then this is plain `lseek` again.
     let to = unsafe { libc::lseek64(fd, at, whence) };
     // SAFETY: as above; `off_t` is 64 bits on Apple's platforms.
     #[cfg(not(any(target_os = "android", target_os = "linux")))]
@@ -404,6 +406,14 @@ mod tests {
         f.seek(SeekFrom::Start(at)).unwrap();
         f.write_all(&[7u8; 4096]).unwrap();
         drop(f);
+        // A volume that fills the file in (no holes) answers nothing past
+        // 2 GiB that this test could read: skip there (review P3-1).
+        use std::os::unix::fs::MetadataExt;
+        let blocks = std::fs::metadata(&path).unwrap().blocks();
+        if blocks * 512 >= 1 << 30 {
+            eprintln!("skipped: the volume is not sparse ({blocks} blocks)");
+            return;
+        }
         let piece = 1 << 20;
         let pieces = data_pieces(&path, 0, piece);
         assert!(pieces.contains(&((at / piece) as u32)), "{pieces:?}");
