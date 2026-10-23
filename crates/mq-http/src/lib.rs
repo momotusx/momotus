@@ -1157,7 +1157,27 @@ impl HttpClient {
     /// Sends `req` and returns the answer with the host slot it holds.
     /// Unscoped, the first URL is checked against `allow_private` and reqwest
     /// follows redirects under `redirect`; scoped, `follow` does it all.
+    /// `fetch_hops`, timed: time to headers by host, logged at debug for the
+    /// walks (debug builds log debug), every request and stream alike.
     async fn fetch(
+        &self,
+        req: Request,
+        opts: &RequestOptions,
+    ) -> Result<(reqwest::Response, budget::Permit), HttpError> {
+        let host = req.url.host_str().unwrap_or_default().to_owned();
+        let started = std::time::Instant::now();
+        let fetched = self.fetch_hops(req, opts).await;
+        tracing::debug!(
+            target: "mq_http::timing",
+            host,
+            ms = started.elapsed().as_millis() as u64,
+            ok = fetched.is_ok(),
+            "headers"
+        );
+        fetched
+    }
+
+    async fn fetch_hops(
         &self,
         req: Request,
         opts: &RequestOptions,
