@@ -230,3 +230,10 @@ private let spots = [
         #expect(contrast(Tone(r: 255, g: 255, b: 255, a: 0.7), on: Tone(r: 0, g: 0, b: 0, a: 0), page: under) >= 4.5, "word, \(name)")
     }
 }
+
+// A selected state that needs the key color takes `keyFill` with the white `onKey` label (the key blue on
+// the track is about 3.65:1; plans/design-v3-phase7-apple.md 4.1).
+@Test func theKeyFillCarriesItsLabel() {
+    let page = tone(palette["bgDesktop"]!)
+    #expect(contrast(tone(palette["onKey"]!), on: tone(palette["keyFill"]!), page: page) >= 4.5)
+}

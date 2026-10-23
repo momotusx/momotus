@@ -127,6 +127,8 @@ private struct Interactive<S: InsettableShape>: View {
     let content: AnyView
     /// A card: its art carries the ring (`cardArt`) and the card lifts.
     var card = false
+    /// Lifted as a focused card is, without the ring: Discover's selected poster.
+    var lifted = false
 
     @KeyboardFocused private var focused
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -140,8 +142,9 @@ private struct Interactive<S: InsettableShape>: View {
             .brightness(hovered && !focused && !card ? 0.04 : 0)
             .scaleEffect(reduceMotion ? 1 : scale, anchor: card ? .bottom : .center)
             // A card lifts for focus; the pointer only greys its art, as tv.apple.com.
-            .offset(y: card && !reduceMotion && focused ? -6 : 0)
+            .offset(y: card && !reduceMotion && (focused || lifted) ? -6 : 0)
             .animation(Theme.Motion.focus, value: focused)
+            .animation(Theme.Motion.focus, value: lifted)
             .animation(Theme.Motion.focus, value: hovered)
             .animation(Theme.Motion.focus, value: configuration.isPressed)
             #if !os(tvOS)
@@ -151,7 +154,7 @@ private struct Interactive<S: InsettableShape>: View {
 
     private var scale: CGFloat {
         if configuration.isPressed { return 0.97 }
-        if focused { return focusScale }
+        if focused || lifted { return focusScale }
         return hovered && !card ? 1.03 : 1
     }
 }
@@ -161,6 +164,8 @@ struct CardButtonStyle: ButtonStyle {
     /// A corner radius rings the whole card; nil leaves the ring to its art.
     var radius: CGFloat?
     var scale = Theme.Focus.scaleCard
+    /// Discover's selected poster: the focus lift, no ring.
+    var lifted = false
 
     func makeBody(configuration: Configuration) -> some View {
         Interactive(
@@ -168,7 +173,8 @@ struct CardButtonStyle: ButtonStyle {
             shape: RoundedRectangle(cornerRadius: radius ?? Theme.Radius.m, style: .continuous),
             focusScale: scale,
             content: AnyView(configuration.label),
-            card: radius == nil
+            card: radius == nil,
+            lifted: lifted
         )
     }
 }

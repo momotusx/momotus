@@ -1,0 +1,343 @@
+import SwiftUI
+
+#if !os(tvOS)
+/// Discover's filters on the Mac, iPad and iPhone (plans/design-v3-phase7-apple.md 4.1): the kinds as a
+/// segmented control (a pull-down past four), then the catalog and the genre as pull-downs, then the
+/// quiet line after a genre chip no catalog lists. Every word comes from `DiscoverWords`.
+struct DiscoverFilters: View {
+    let snapshot: DiscoverSnapshot
+    let select: ([String: any Sendable]) -> Void
+    @Environment(\.metrics) private var metrics
+
+    var body: some View {
+        if metrics.wide {
+            HStack(spacing: 12) { kinds; catalogs; genres; missing }
+        } else {
+            VStack(alignment: .leading, spacing: 12) {
+                kinds
+                HStack(spacing: 22) { catalogs; genres }
+                missing
+            }
+        }
+    }
+
+    @ViewBuilder private var kinds: some View {
+        let s = snapshot
+        switch KindControl.for(count: s.kinds.count) {
+        case .none: EmptyView()
+        case .segmented:
+            KindSegment(items: DiscoverWords.kinds(s), selected: s.kind) { select(["kind": $0]) }
+        case .pullDown:
+            pull(DiscoverWords.kind(s)) {
+                ForEach(DiscoverWords.kinds(s), id: \.id) { item in
+                    choice(item.title, on: item.id == s.kind) { select(["kind": item.id]) }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var catalogs: some View {
+        let s = snapshot
+        if !s.catalogs.isEmpty {
+            pull(DiscoverWords.catalog(s)) {
+                ForEach(DiscoverWords.catalogs(s), id: \.id) { item in
+                    choice(item.title, on: item.id == s.catalog) { select(["catalog": item.id]) }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var genres: some View {
+        let s = snapshot
+        if !s.genres.isEmpty {
+            pull(DiscoverWords.genre(s)) {
+                ForEach(DiscoverWords.genres(s), id: \.title) { item in
+                    choice(item.title, on: item.id == s.genre) { select(["genre": item.id ?? NSNull()]) }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var missing: some View {
+        if let line = DiscoverWords.missingGenre(snapshot.missingGenre) {
+            Text(line)
+                .textFont(13, relativeTo: .footnote)
+                .foregroundStyle(Theme.Palette.dim)
+                .accessibilityElement(children: .combine)
+        }
+    }
+
+    @ViewBuilder private func pull<Items: View>(_ title: String, @ViewBuilder items: @escaping () -> Items) -> some View {
+        if metrics.wide {
+            PullDownPill(title: title, size: 13, items: items)
+        } else {
+            PhonePull(title: title, items: items)
+        }
+    }
+
+    private func choice(_ title: String, on: Bool, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            if on { Label(title, glyph: "check") } else { Text(title) }
+        }
+    }
+}
+
+/// The kinds as a segmented control: the track grey, the selected segment on `selected.fill` with white
+/// words, 13/600 and 32 tall on the Mac and iPad, 15/600 and 44 on the iPhone.
+struct KindSegment: View {
+    let items: [(id: String, title: String)]
+    let selected: String?
+    let select: (String) -> Void
+    @Environment(\.metrics) private var metrics
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(items, id: \.id) { item in
+                let on = item.id == selected
+                Button(item.title) { select(item.id) }
+                    .buttonStyle(SegmentStyle(on: on, wide: metrics.wide))
+                    .accessibilityAddTraits(on ? .isSelected : [])
+            }
+        }
+        .padding(3)
+        .background(Capsule().fill(ChipFill.trackColor.opacity(ChipFill.rest)))
+        .fixedSize(horizontal: metrics.wide, vertical: false)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Kind")
+    }
+}
+
+private struct SegmentStyle: ButtonStyle {
+    let on: Bool
+    let wide: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        Segment(configuration: configuration, on: on, wide: wide)
+    }
+
+    private struct Segment: View {
+        let configuration: ButtonStyleConfiguration
+        let on: Bool
+        let wide: Bool
+        @KeyboardFocused private var focused
+
+        var body: some View {
+            configuration.label
+                .textFont(wide ? 13 : 15, weight: .semibold, relativeTo: wide ? .footnote : .subheadline)
+                .foregroundStyle(on ? Color.white : Theme.Palette.muted)
+                .lineLimit(1)
+                .padding(.horizontal, 14)
+                .frame(maxWidth: wide ? nil : .infinity, minHeight: (wide ? Theme.Pill.desktop : Theme.Pill.phone) - 6)
+                .background { if on { Capsule().fill(Theme.Palette.selectedFill) } }
+                .contentShape(Capsule())
+                .pressVeil(Capsule(), pressed: configuration.isPressed)
+                .modifier(FocusRing(shape: Capsule(), active: focused))
+        }
+    }
+}
+
+/// The iPhone's pull-down (phone.ts `.pull`): plain 17/600 words and the up-down chevrons, no fill.
+struct PhonePull<Items: View>: View {
+    let title: String
+    @ViewBuilder let items: () -> Items
+
+    var body: some View {
+        Menu(content: items) {
+            HStack(spacing: 5) {
+                Text(title).lineLimit(1)
+                Glyph("chevrons-up-down", size: 15)
+            }
+            .textFont(17, weight: .semibold, relativeTo: .body)
+            .foregroundStyle(Theme.Palette.text)
+            .frame(minHeight: Theme.Pill.phone)
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+}
+
+/// Discover's grid on the Mac and iPad: 139 by 208 covers with no caption (the cover's band carries the
+/// scores). Beside the preview a first activation selects and the selected poster opens; without it, a
+/// click opens. Focus (the keyboard's and VoiceOver's) moves the selection.
+struct DiscoverGrid: View {
+    let tiles: [Tile]
+    let columns: Int
+    /// Select then open, beside the preview.
+    let selects: Bool
+    @Binding var selection: DiscoverSelection
+    var onEnd: (() -> Void)?
+    @Environment(\.openTitle) private var openTitle
+    @FocusState private var focused: String?
+    @AccessibilityFocusState private var voiceOver: String?
+
+    var body: some View {
+        let keyed = tiles.keyed
+        let poster = DiscoverLayout.poster
+        LazyVGrid(
+            columns: Array(repeating: GridItem(.fixed(poster.width), spacing: DiscoverLayout.gap, alignment: .top), count: columns),
+            alignment: .leading, spacing: Theme.TileDesktop.Grid.rowGap
+        ) {
+            ForEach(keyed, id: \.key) { key, tile in
+                let on = selects && selection.key == key
+                Button { activate(key, tile) } label: {
+                    ArtImage(url: tile.poster, fallbackURL: tile.posterFallback, fallback: tile.name)
+                        .frame(width: poster.width, height: poster.height)
+                        .cardArt(radius: Theme.TileDesktop.radius)
+                }
+                .buttonStyle(CardButtonStyle(lifted: on))
+                .focused($focused, equals: key)
+                .accessibilityFocused($voiceOver, equals: key)
+                .accessibilityLabel(posterLabel([tile.name, tile.releaseInfo], tile.ratings))
+                .accessibilityAddTraits(on ? .isSelected : [])
+                .accessibilityAction(named: "Select") { selection.select(key) }
+                .onAppear { if key == keyed.last?.key { onEnd?() } }
+            }
+        }
+        .onChange(of: focused) { _, key in if selects, let key { selection.select(key) } }
+        .onChange(of: voiceOver) { _, key in if selects, let key { selection.select(key) } }
+        #if os(macOS)
+        .onMoveCommand { direction in move(direction, keys: keyed.map(\.key)) }
+        #endif
+        .onKeyPress(.return) {
+            guard selects, let key = selection.key, let tile = keyed.first(where: { $0.key == key })?.tile else { return .ignored }
+            openTitle(TitleRoute(tile))
+            return .handled
+        }
+    }
+
+    /// Every click, Return and Space goes through the selection: only the selected poster opens.
+    private func activate(_ key: String, _ tile: Tile) {
+        if !selects || selection.activate(key) { openTitle(TitleRoute(tile)) }
+    }
+
+    #if os(macOS)
+    private func move(_ direction: MoveCommandDirection, keys: [String]) {
+        guard selects, let index = selection.key.flatMap(keys.firstIndex(of:)) else { return }
+        let step: DiscoverSelection.Move
+        switch direction {
+        case .left: step = .left
+        case .right: step = .right
+        case .up: step = .up
+        case .down: step = .down
+        @unknown default: return
+        }
+        let to = keys[DiscoverSelection.moved(from: index, step, columns: columns, count: keys.count)]
+        selection.select(to)
+        if focused != nil { focused = to }
+    }
+    #endif
+}
+
+/// The selected poster at the right of the Mac's and iPad's grid: a solid `surface` panel (DECISION
+/// Grids), from the catalog item and the details the core sends for it (`preview`, C44a), never a title
+/// view, so no torrent engine and no versions view.
+struct DiscoverPreview: View {
+    let tile: Tile
+    /// The snapshot's `preview`: shown only when it is this tile's.
+    let details: ItemDetails?
+    let open: () -> Void
+
+    var body: some View {
+        let words = DiscoverWords.preview(tile, details)
+        VStack(alignment: .leading, spacing: 14) {
+            // The backdrop, else the plain poster from its top.
+            ArtImage(url: tile.background ?? tile.plainPoster, maxPixels: ArtSize.backdrop, alignment: tile.background == nil ? .top : .center)
+                .frame(height: 207)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .accessibilityHidden(true)
+            TitleLogo(logo: tile.logo, name: tile.name, maxWidth: 300, height: 54, nameSize: 28)
+            MetaLine(ratings: ratingParts(tile.ratings), parts: words.parts, size: 13)
+            if let synopsis = words.synopsis {
+                Text(synopsis)
+                    .textFont(15, relativeTo: .body)
+                    .foregroundStyle(Theme.Palette.muted)
+                    .lineLimit(5)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack(spacing: 12) {
+                Button("Show", action: open).buttonStyle(PillButtonStyle(prominent: true))
+                // Add to Library joins here with C44b (the preview's Library state and set).
+            }
+        }
+        .padding(16)
+        .frame(width: Theme.Preview.width, alignment: .topLeading)
+        .background(Theme.Palette.surface, in: RoundedRectangle(cornerRadius: Theme.Preview.radius, style: .continuous))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Preview")
+    }
+}
+
+/// The iPhone's grid: two columns sharing the width at 2:3, the name (two lines) and the year under each,
+/// no ratings line (the cover carries the scores). A tap opens the title.
+struct PhoneDiscoverGrid: View {
+    let tiles: [Tile]
+    var onEnd: (() -> Void)?
+    @State private var width: CGFloat = 0
+
+    var body: some View {
+        VStack {
+            if width > 0 { grid }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+    }
+
+    private var grid: some View {
+        let size = DiscoverLayout.phonePoster(width: width)
+        let keyed = tiles.keyed
+        return LazyVGrid(
+            columns: Array(repeating: GridItem(.fixed(size.width), spacing: Theme.Tile.Grid.gap, alignment: .top), count: Theme.Tile.Grid.columns),
+            alignment: .leading, spacing: Theme.Tile.Grid.rowGap
+        ) {
+            ForEach(keyed, id: \.key) { key, tile in
+                NavigationLink(value: TitleRoute(tile)) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ArtImage(url: tile.poster, fallbackURL: tile.posterFallback, fallback: tile.name)
+                            .frame(width: size.width, height: size.height)
+                            .cardArt(radius: Theme.Tile.radius)
+                        Text(tile.name)
+                            .textFont(15, weight: .semibold, relativeTo: .subheadline)
+                            .foregroundStyle(Theme.Palette.text)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                        if let year = tile.releaseInfo, !year.isEmpty {
+                            Text(year)
+                                .textFont(13, relativeTo: .footnote)
+                                .foregroundStyle(Theme.Palette.dim)
+                        }
+                    }
+                    .frame(width: size.width, alignment: .leading)
+                }
+                .buttonStyle(CardButtonStyle())
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(posterLabel([tile.name, tile.releaseInfo], tile.ratings))
+                .accessibilityAddTraits(.isButton)
+                .onAppear { if key == keyed.last?.key { onEnd?() } }
+            }
+        }
+    }
+}
+
+/// A first page loading: one row of blank covers in the grid's places, no words.
+struct DiscoverSkeleton: View {
+    let count: Int
+    let size: CGSize
+    let gap: CGFloat
+    let radius: CGFloat
+
+    var body: some View {
+        HStack(spacing: gap) {
+            ForEach(0..<count, id: \.self) { _ in
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(Theme.Palette.surface)
+                    .frame(width: size.width, height: size.height)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading")
+    }
+}
+#endif

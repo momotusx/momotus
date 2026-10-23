@@ -90,8 +90,8 @@ struct TitleHeroFacts {
     init(_ details: TitleDetails) {
         name = details.name
         logo = details.logo
-        let kind = details.kind == "movie" ? "Movie" : details.kind == "series" ? "Series" : details.kind.capitalized
-        kindLines = (0...min(2, details.genres.count)).reversed().map { ([kind] + details.genres.prefix($0)).joined(separator: " \u{B7} ") }
+        let kind = [kindWord(details.kind)].compactMap { $0 }
+        kindLines = (0...min(2, details.genres.count)).reversed().map { (kind + details.genres.prefix($0)).joined(separator: " \u{B7} ") }
         genres = Array(details.genres.prefix(3))
         directors = Array(details.directors.prefix(3))
         meta = [details.releaseInfo, details.runtime].compactMap { $0 }

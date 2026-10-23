@@ -219,6 +219,7 @@ targets:
       - path: Marquee/App/TabBarRule.swift
       - path: Marquee/App/Places.swift
       - path: Marquee/App/SearchInput.swift
+      - path: Marquee/Discover/DiscoverRules.swift
       - path: Marquee/Common/ChipRule.swift
       - path: Marquee/Versions/VersionWords.swift
       - path: Marquee/Core/ProfileModels.swift

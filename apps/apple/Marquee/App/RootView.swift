@@ -9,6 +9,14 @@ struct OpenTabAction {
     @MainActor func callAsFunction(_ tab: AppTab, link: Bool = false) { open(tab, link) }
 }
 
+/// Pushes a title on this place's stack: Discover opens its selected poster this way, after a first
+/// activation only selected it.
+struct OpenTitleAction {
+    let open: @MainActor (TitleRoute) -> Void
+
+    @MainActor func callAsFunction(_ route: TitleRoute) { open(route) }
+}
+
 /// A title page's genre chip (plans/design-v3-phase3-apple.md 4.2): Discover on a kind and a genre.
 /// Discover reads the request once it can act on it, then clears it. A director chip writes
 /// `SearchInput` instead.
@@ -18,6 +26,7 @@ struct OpenTabAction {
 
 extension EnvironmentValues {
     @Entry var openTab = OpenTabAction { _, _ in }
+    @Entry var openTitle = OpenTitleAction { _ in }
     @Entry var linkRequests: LinkRequests? = nil
     /// The tab this view is in is the one on screen. On a phone every opened
     /// tab stays alive behind the shown one, so its pages never disappear.
@@ -354,6 +363,9 @@ struct MainShell: View {
             ForEach(AppTab.allCases.filter(opened.contains), id: \.self) { item in
                 screen(item)
                     .environment(\.tabShown, item == tab)
+                    .environment(\.openTitle, OpenTitleAction { route in
+                        if item == .home { homePath.append(route) } else { titlePaths[item, default: []].append(route) }
+                    })
                     #if os(macOS)
                     .environment(\.headerSearchField, windowWidth >= NavToolbar.fieldWidthFrom)
                     #endif

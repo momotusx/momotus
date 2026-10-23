@@ -196,6 +196,19 @@ struct Metrics: Sendable {
         cardName: 13, cardInfo: 12, posterRadius: Theme.Tile.radius)
 }
 
+extension Metrics {
+    /// A page's large title: 40 on wide screens, the phone's title1 + 6. Discover and Search take the
+    /// desktop frames' 28 on the Mac and iPad (`desktop`); tvOS keeps 40 (D9).
+    func screenTitle(desktop: Bool = false) -> CGFloat {
+        guard wide else { return Theme.type.title1 + 6 }
+        #if os(tvOS)
+        return 40
+        #else
+        return desktop ? 28 : 40
+        #endif
+    }
+}
+
 extension EnvironmentValues {
     @Entry var metrics = Metrics.regular
 }

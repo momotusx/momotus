@@ -48,6 +48,19 @@ func ratingParts(_ ratings: Ratings?) -> [String] {
     [ratings?.imdb.map { "IMDb \($0)" }].compactMap { $0 }
 }
 
+/// One title's kind in words ("Movie"), for the kinds Marquee knows (the core's `kind_label`); nil for any
+/// other type, which is never shown as is: an addon's own type is often its name.
+func kindWord(_ kind: String) -> String? {
+    switch kind {
+    case "movie": "Movie"
+    case "series": "Series"
+    case "channel": "Channel"
+    case "tv": "Live TV"
+    case "anime": "Anime"
+    default: nil
+    }
+}
+
 /// What VoiceOver says for a poster: its name and caption, then the score ("Inception, 2010, IMDb 8.8").
 func posterLabel(_ parts: [String?], _ ratings: Ratings?) -> String {
     (parts.compactMap { $0 } + ratingParts(ratings)).joined(separator: ", ")

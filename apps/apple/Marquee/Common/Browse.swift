@@ -76,6 +76,10 @@ private extension View {
     }
 }
 
+extension ChipFill {
+    static var trackColor: Color { Color(red: track.r / 255, green: track.g / 255, blue: track.b / 255) }
+}
+
 /// The segmented control's chips: the selected one on `selected.fill` with white words and its
 /// check, the rest on the track grey (`ChipFill`). A fill, never an edge.
 struct ChipStyle: ButtonStyle {
@@ -109,10 +113,7 @@ struct ChipStyle: ButtonStyle {
                 #endif
         }
 
-        private var track: Color {
-            let t = ChipFill.track
-            return Color(red: t.r / 255, green: t.g / 255, blue: t.b / 255).opacity(hovered ? ChipFill.hover : ChipFill.rest)
-        }
+        private var track: Color { ChipFill.trackColor.opacity(hovered ? ChipFill.hover : ChipFill.rest) }
     }
 }
 
@@ -176,11 +177,13 @@ struct CardCaption: View {
 /// The page title in the display face.
 struct ScreenTitle: View {
     let text: String
+    /// The desktop frames' 28 on the Mac and iPad: Discover and Search only, for now.
+    var desktop = false
     @Environment(\.metrics) private var metrics
 
     var body: some View {
         Text(text)
-            .display(metrics.wide ? 40 : Theme.type.title1 + 6)
+            .display(metrics.screenTitle(desktop: desktop))
             .foregroundStyle(Theme.Palette.text)
             .accessibilityAddTraits(.isHeader)
     }

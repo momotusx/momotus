@@ -140,8 +140,7 @@ struct HeroView: View {
 
     /// "Movie · Drama · Thriller": the kind, then the core's genres.
     private func genreLine(_ hero: Hero) -> String {
-        let kind = hero.tile.kind == "movie" ? "Movie" : hero.tile.kind == "series" ? "Series" : hero.tile.kind.capitalized
-        return ([kind] + (hero.genres ?? []).prefix(2)).joined(separator: " \u{B7} ")
+        return ([kindWord(hero.tile.kind)].compactMap { $0 } + (hero.genres ?? []).prefix(2)).joined(separator: " \u{B7} ")
     }
 }
 

@@ -13,6 +13,9 @@ struct SearchSnapshot: Decodable, Hashable, Sendable {
 }
 
 struct DiscoverSnapshot: Decodable, Hashable, Sendable {
+    /// The kind, catalog and genre shown: the list a selection and a preview belong to.
+    var list: String { "\(kind ?? "")|\(catalog ?? "")|\(genre ?? "")" }
+
     /// Types with at least one catalog: ("movie", "Movies").
     let kinds: [KindLabel]
     let kind: String?
@@ -28,6 +31,16 @@ struct DiscoverSnapshot: Decodable, Hashable, Sendable {
     let state: DiscoverState
     /// The genre a kind-plus-genre select asked for that no catalog of the kind lists (C40).
     let missingGenre: String?
+    /// The item `preview {id}` named, with what its catalog said of it (C44a); nil until it is named and listed.
+    let preview: ItemDetails?
+}
+
+/// A catalog item's synopsis, up to three genres and runtime, as its catalog gave them (C44a).
+struct ItemDetails: Decodable, Hashable, Sendable {
+    let id: String
+    let description: String?
+    let genres: [String]
+    let runtime: String?
 }
 
 /// A title page's genre chip: one `select {kind, genre}`, and the core opens the first catalog of
@@ -51,10 +64,47 @@ struct DiscoverRequest: Equatable, Sendable {
     }
 }
 
-/// Discover's own words (no addon name ever reaches them).
+/// Discover's own words. A catalog shows by its name, never its addon's (`CatalogChoice.source`), and a
+/// failure never by the core's reason, which can name a host or an addon.
 enum DiscoverWords {
     /// The quiet line beside the filters after a genre chip no catalog lists.
     static func missingGenre(_ genre: String?) -> String? { genre.map { "No \($0) here" } }
+
+    static let failed = "This catalog did not load."
+    static let empty = "Nothing here for this choice."
+    static let needsGenre = "This catalog lists titles by genre. Pick one above."
+    static let allGenres = "All genres"
+
+    /// The kind control's choices: the core's labels ("Movies", "Series").
+    static func kinds(_ s: DiscoverSnapshot) -> [(id: String, title: String)] { s.kinds.map { ($0.id, $0.label) } }
+    static func kind(_ s: DiscoverSnapshot) -> String { s.kinds.first { $0.id == s.kind }?.label ?? "Kind" }
+
+    static func catalogs(_ s: DiscoverSnapshot) -> [(id: String, title: String)] { s.catalogs.map { ($0.id, $0.name) } }
+    static func catalog(_ s: DiscoverSnapshot) -> String { s.catalogs.first { $0.id == s.catalog }?.name ?? "Catalog" }
+
+    /// The genre pull-down: "All genres" first (nil), unless the catalog needs a genre.
+    static func genres(_ s: DiscoverSnapshot) -> [(id: String?, title: String)] {
+        (s.genreRequired ? [] : [(nil, allGenres)]) + s.genres.map { ($0, $0) }
+    }
+    static func genre(_ s: DiscoverSnapshot) -> String { s.genre ?? (s.genreRequired ? "Genre" : allGenres) }
+
+    /// The preview's meta line ("Movie · 2010 · Action, Sci-Fi · 148 min") and synopsis, from the tile
+    /// and the core's details for it (`preview`); details for another item are not this tile's.
+    static func preview(_ tile: Tile, _ details: ItemDetails?) -> (parts: [String], synopsis: String?) {
+        let own = details?.id == tile.id ? details : nil
+        let genres = own.map { $0.genres.joined(separator: ", ") }.flatMap { $0.isEmpty ? nil : $0 }
+        let parts = [kindWord(tile.kind), tile.releaseInfo, genres, own?.runtime].compactMap { $0 }.filter { !$0.isEmpty }
+        return (parts, own?.description.flatMap { $0.isEmpty ? nil : $0 })
+    }
+
+    /// The state line under the filters, if any.
+    static func state(_ s: DiscoverSnapshot) -> String? {
+        switch s.state {
+        case .failed: failed
+        case .end where s.items.isEmpty: empty
+        default: s.genreRequired && s.genre == nil ? needsGenre : nil
+        }
+    }
 }
 
 /// A type and its label; the core sends each pair as a two-element array.
