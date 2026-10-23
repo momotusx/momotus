@@ -599,7 +599,9 @@ final class HLSLocalServer: @unchecked Sendable {
         // onto a new server, but a readiness-gate swap (`airPlayHostSwapped`) and a held edge re-read after a
         // reload hand the LAN URL to the server already listening. LAN exposure is bounded instead by the
         // head deadlines and the loopback reserve in the accept loop.
-        addr.sin_addr.s_addr = inet_addr("0.0.0.0")
+        // Marquee patch (VENDOR.md): loopback only. No other host on the network reaches the stream;
+        // the cost is AirPlay of a stream this server feeds, which Marquee does not offer on this path.
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
 
         let bindResult = withUnsafePointer(to: &addr) { ptr -> Int32 in
             ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sa in
