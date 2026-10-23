@@ -913,3 +913,14 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     let renamed = sub(4, "eng", "en", "English", "Subs C")
     #expect(moved.subtitleStep(attempt: 2, auto: renamed.url, tracks: [renamed]).turnOn == nil)
 }
+
+/// Review apple-aether P2-2: a resume at 12:00 on the second engine, whose clock begins at 0, fails before its first
+/// frame: the start stays pending through the engine's ticks, and the next version starts at 12:00.
+@Test func aResumeOnTheEngineSurvivesItsFailure() {
+    let pending: Double? = 720
+    var position = 720.0
+    for tick in [0, 0.1, 0.25] {
+        if let now = ticked(time: tick, pending: pending) { position = now }
+    }
+    #expect(stoppedPosition(pendingStart: pending, position: position) == 720)
+}

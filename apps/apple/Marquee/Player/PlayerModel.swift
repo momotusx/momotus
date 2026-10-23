@@ -936,7 +936,9 @@ final class PlayerModel {
         let generation = generation
         (loadedURL, loadedKey, loadedAttempt) = (address.absoluteString, key, attempt)
         (pictureShown, loadStart, playingSince, notice) = (false, start, nil, nil)
-        pendingStart = nil
+        // The start stays pending until the first frame: the engine's clock begins at 0, and a failure before the
+        // picture stops at the start, not there (review apple-aether P2-2).
+        pendingStart = start > 1 ? start : nil
         if start > 1 { position = start }
         backend = .aether
         self.fellBack = fellBack
@@ -968,10 +970,10 @@ final class PlayerModel {
     }
 
     private func engineTick(_ time: Double) {
-        guard pendingStart == nil || time > 0 else { return }
-        // The overlay reads the engine's cues at each tick (every 0.1 s); no boundary observer.
-        position = time
         if watchPicture() { return }
+        guard let now = ticked(time: time, pending: pendingStart) else { return }
+        // The overlay reads the engine's cues at each tick (every 0.1 s); no boundary observer.
+        position = now
         if duration != publishedDuration { publishNowPlaying() }
         if playing, ContinuousClock.now - lastReport > .seconds(5) { report() }
     }
@@ -996,6 +998,7 @@ final class PlayerModel {
     }
 
     private func engineFirstFrame() {
+        pendingStart = nil
         firstFrame()
         guard fellBack, let sub, let key = loadedKey else { return }
         fellBack = false
