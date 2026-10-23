@@ -112,8 +112,11 @@ test("TV: 400 rows in one open section open at once, scroll at frame rate and st
     appendFileSync(BENCH, `${JSON.stringify({ date: new Date().toISOString(), check: "web-versions-400-rows", paintSkip: false, browser: browser.version(), canvas: "tv 1920x1080", ...result })}\n`);
   expect(result.offsetsKept).toBe(true);
   expect(result.nodesPerRow).toBeLessThanOrEqual(12);
-  // The spec's starting bounds (3.5): the measured 40 ms open well under 150, no frame over 33 ms.
-  expect(result.openMs).toBeLessThan(150);
-  expect(result.over33ms).toBe(0);
+  // About 1.5 times the worst of three runs on 2026-10-23 (open 42.8 ms, frame p95 16.8 ms, key to frame
+  // p95 15.9 ms); one long frame is allowed in a 7 s run.
+  expect(result.openMs).toBeLessThan(65);
+  expect(result.frameMs.p95).toBeLessThan(25);
+  expect(result.keyToFrameMs.p95).toBeLessThan(24);
+  expect(result.over33ms).toBeLessThanOrEqual(1);
   await context.close();
 });

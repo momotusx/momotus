@@ -36,18 +36,19 @@ test("the version this device holds says so: the row's line with no stale warnin
     const why = page.locator(".pick .why1");
     if (which === "none") {
       // The warning and its details, as the core sent them.
-      await expect(row.locator(".st.line .lt")).not.toHaveText("On this device");
+      await expect(row.locator(".st.line .lt")).not.toContainText("on this device");
       await expect(row.locator(".more")).toContainText("2 seeders");
       await expect(why).not.toHaveText("On this device");
     } else if (which === "row") {
-      await expect(row.locator(".st.line .lt")).toHaveText("On this device");
+      // Its size first, then the core's words.
+      await expect(row.locator(".st.line .lt")).toHaveText(/^\S+ [KMG]B, on this device$/);
       // The words that stand for the warning take its details with them.
       await expect(row.locator(".more")).not.toContainText("seeders");
       await expect(why).not.toHaveText("On this device");
     } else {
       // The card's one why line says it in place of the core's line.
       await expect(why).toHaveText("On this device");
-      await expect(row.locator(".st.line .lt")).not.toHaveText("On this device");
+      await expect(row.locator(".st.line .lt")).not.toContainText("on this device");
     }
     await context.close();
   }

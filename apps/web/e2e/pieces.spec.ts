@@ -104,7 +104,7 @@ for (const form of Object.keys(FORMS) as Form[]) {
     await context.close();
   });
 
-  test(`${form}: no eyebrow over a page title, and Versions' pick says Best for this screen`, async ({ browser }) => {
+  test(`${form}: no eyebrow over a page title, and Versions' pick says what it is best for`, async ({ browser }) => {
     const { context, page } = await open(browser, form, "/discover");
     await expect(page.locator(".browse h1")).toHaveText("Discover", { timeout: 30_000 });
     expect((await style(page, ".browse h1", "::before")).content).toBe("none");
@@ -112,7 +112,8 @@ for (const form of Object.keys(FORMS) as Form[]) {
     await page.goto(`/title/series/${GOT.id}/versions/${GOT.resume}?form=${form}`);
     // The pick once it is chosen (its waiting state says the same).
     await expect(page.locator(".pick h2").first()).toBeVisible({ timeout: 30_000 });
-    await expect(page.locator(".pick .best")).toHaveText("Best for this screen", { timeout: 30_000 });
+    // The form's own words, one per device on every platform: this TV, this phone, this computer.
+    await expect(page.locator(".pick .best")).toHaveText({ tv: "Best for this TV", phone: "Best for this phone", desktop: "Best for this computer" }[form], { timeout: 30_000 });
     expect((await style(page, ".pick .best")).color).toBe(form === "phone" ? "rgba(235, 235, 245, 0.6)" : "rgba(255, 255, 255, 0.64)");
     await context.close();
   });

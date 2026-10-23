@@ -408,8 +408,11 @@ test("Versions over a binge play: it shares the play's versions view, its order 
     if (view !== "versions" || !first) return s;
     // Three versions; later the core ranks them the other way round and finds a fourth.
     const rows = [0, 1, 2].map((i) => ({ ...first, key: `${first.key}#${i}`, group: "best" }));
-    const listed = flip ? [{ ...first, key: `${first.key}#new`, group: "best" }, ...rows.reverse()] : rows;
-    return { ...s, rows: listed, sections: [{ quality: "fhd", keys: listed.map((r: { key: string }) => r.key) }] };
+    // Later the old pick is listed too, under the core's new one.
+    const listed = flip ? [{ ...first, key: `${first.key}#new`, group: "best" }, ...rows.reverse(), { ...first, group: "best" }] : rows;
+    // The core picks another version meanwhile: the card holds the one it showed.
+    const recommended = flip ? { ...first, key: `${first.key}#pick2`, quality: "1080p" } : s.recommended;
+    return { ...s, recommended, rows: listed, sections: [{ quality: "fhd", keys: listed.map((r: { key: string }) => r.key) }] };
   });
   const page = await context.newPage();
   await page.goto("/play/movie/mqlo/mqlo?form=desktop&binge=grp");
@@ -418,6 +421,8 @@ test("Versions over a binge play: it shares the play's versions view, its order 
   // The core's offer (its 20 s).
   await expect(button).toBeVisible({ timeout: 40_000 });
   const from = commands.length;
+  const depth = () => page.evaluate(() => (history.state as { _depth?: number } | null)?._depth ?? 0);
+  const playDepth = await depth();
   await button.click();
   const layer = page.locator(".vlayer");
   await expect(layer).toBeVisible();
@@ -426,12 +431,13 @@ test("Versions over a binge play: it shares the play's versions view, its order 
   await page.locator(".vrow").first().waitFor();
   expect(commands.slice(from).filter((c) => c.view === "versions" && c.command === null)).toEqual([]);
   // The order holds while the layer is open; the newcomer goes after the rows already shown.
-  const order = () => page.locator(".vrow").evaluateAll((rs) => rs.map((r) => (r as HTMLElement).dataset.f?.split("#")[1]));
+  const order = () => page.locator(".vrow").evaluateAll((rs) => rs.map((r) => (r as HTMLElement).dataset.f?.split("#")[1] ?? "pick"));
   expect(await order()).toEqual(["0", "1", "2"]);
   flip = true;
   repush("versions");
   await page.locator('[data-f^="fold:"]').first().click();
-  await expect.poll(order).toEqual(["0", "1", "2", "new"]);
+  await expect.poll(order).toEqual(["0", "1", "2", "new", "pick"]);
+  await expect(page.locator(".pick h2")).toHaveText("SD");
   // A reload on the layer: no entry of ours under it, so Back closes it in place and stays on the play,
   // and the browser's own Back after that leaves the play as usual.
   await page.reload();
@@ -440,6 +446,8 @@ test("Versions over a binge play: it shares the play's versions view, its order 
   await page.keyboard.press("Escape");
   await expect(layer).toHaveCount(0);
   await expect(page).toHaveURL(/\/play\/movie\/mqlo\/mqlo\?form=desktop&binge=grp$/);
+  // Back to the play's own entry: no second copy of it in history.
+  expect(await depth()).toBe(playDepth);
   // A link straight to the layer in a new tab (no entry before it): Back closes it in place, and a
   // choice replaces the play in place too.
   const deep = await context.newPage();
@@ -528,4 +536,37 @@ test("a play that failed says why in the shared words, with that state's actions
   }
   release();
   await context.close();
+});
+
+test("desktop and phone: over a stalled frame the core's offer stays in sight beside Back, with the controls hidden", async ({ browser }) => {
+  for (const form of ["desktop", "phone"] as const) {
+    hold();
+    let offer = false;
+    const { context, repush } = await patchedContext(browser, LOADING_PORT, { viewport: VIEWPORTS[form] }, (view, s) => (view === "playback" && s ? { ...s, chooseAnother: offer } : s));
+    const page = await context.newPage();
+    await page.goto(`/play/movie/mqlo/mqlo?form=${form}`);
+    await mute(page);
+    release();
+    await expect(page.locator('[data-f="player:toggle"]')).toBeVisible({ timeout: 30_000 });
+    await mute(page);
+    await startIfPaused(page);
+    await page.evaluate(() => document.querySelector("video")?.dispatchEvent(new Event("waiting")));
+    await expect(page.locator(".ld.on.stall")).toBeVisible({ timeout: 5_000 });
+    offer = true;
+    repush("playback");
+    const button = page.locator('[data-f="player:another"]');
+    await expect(button).toBeVisible();
+    // The controls hide on their own; the offer and Back do not.
+    await expect(page.locator(".player-scr.idle")).toHaveCount(1, { timeout: 15_000 });
+    const seen = () =>
+      button.evaluate((b) => {
+        const r = b.getBoundingClientRect();
+        return getComputedStyle(b.closest(".ptitle") as Element).opacity === "1" && document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest("[data-f]") === b;
+      });
+    expect(await seen()).toBe(true);
+    await button.click();
+    await expect(page.locator(".vlayer")).toBeVisible();
+    release();
+    await context.close();
+  }
 });

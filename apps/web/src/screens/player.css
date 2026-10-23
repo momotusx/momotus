@@ -4,7 +4,7 @@
 .player-scr { position: absolute; inset: 0; background: #000; color: var(--text); overflow: clip; }
 .player-bd { inset: 0; }
 /* Versions over the paused player (Choose another version while it loads): its own page, scrolled here. */
-.vlayer { position: absolute; inset: 0; z-index: 20; overflow-y: auto; background: var(--bg); }
+.vlayer { position: fixed; inset: 0; z-index: 20; overflow-y: auto; background: var(--bg); }
 .video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; opacity: 0; transition: opacity var(--motion-panel) var(--ease); }
 .video.on { opacity: 1; }
 /* mpv draws under the page (desktop shells): every layer above it turns
@@ -33,6 +33,10 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
 .player-scr.idle { cursor: none; }
 .player-scr.idle .osd-top, .player-scr.idle .osd-bot, .player-scr.idle .ptitle, .player-scr.idle .clock, .player-scr.idle .osd { opacity: 0; pointer-events: none; }
+/* An offer to choose another version stays in sight with the controls hidden (a stalled frame, desktop and
+ * phone): Back and the offer only. */
+.player-scr.idle.offering .ptitle { opacity: 1; pointer-events: auto; }
+.player-scr.idle.offering .ptitle > :not(.pback-row) { visibility: hidden; }
 
 .ptitle { position: absolute; left: var(--safe-side); top: var(--safe-top); max-width: 1200px; }
 .ptitle h1 { font: 800 var(--type-title2) / 1.05 var(--font-display); }

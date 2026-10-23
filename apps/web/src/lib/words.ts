@@ -5,6 +5,7 @@ import type { Group } from "../core/generated/Group";
 import type { SubtitleNote } from "../core/generated/SubtitleNote";
 import type { SyncReport } from "../core/generated/SyncReport";
 import type { Tile } from "../core/generated/Tile";
+import type { VersionRow } from "../core/generated/VersionRow";
 import type { VersionStatus } from "../core/generated/VersionStatus";
 import type { BlockedReason } from "../core/generated/BlockedReason";
 import type { EmptyAction } from "../core/generated/EmptyAction";
@@ -680,6 +681,32 @@ export const noVersionWords = {
   title: "No playable version found",
   detail: "None of your addons found a stream for this. A source addon finds them; add one in Addons.",
 };
+
+/** The card's kicker for this form: "Best for this TV", "Best for this phone", and on a desktop the shared
+ * device word, as Apple's Mac says it: "Best for this computer". */
+export const bestFor = (f: Form) => (f === "tv" ? choice.page.bestTv : f === "phone" ? choice.page.bestPhone : `Best for ${choice.conditions.devices.desktop}`);
+
+/** Words after a size and a comma start in lower case: "12 GB, may start slowly". */
+const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+
+/** Where a version comes from, in plain words ("ready now", "shared by 412 people"); null when not known. */
+function sourceWords(s: VersionStatus): string | null {
+  if (s.kind === "ready") return choice.page.source.ready;
+  if (s.kind === "direct") return choice.page.source.direct;
+  if (s.kind === "needsDownload") return choice.page.source.download;
+  return s.seeds === null ? null : choice.page.source.shared.replace("{people}", counted("people", s.seeds));
+}
+
+/** A row's one line: its size first, then where it comes from, the core's warning, or why it is dimmed
+ * (`why`): "1.5 GB, shared by 1,204 people", "12 GB, may start slowly", "2 GB, needs an account". The
+ * size is never dropped for a warning. */
+export function rowWords(row: VersionRow, why: string | null = null): string {
+  const size = row.sizeBytes ? bytes(row.sizeBytes) : null;
+  const line = lineWords(row.line);
+  const said = why ?? row.onDevice ?? (line.tone === "ok" ? sourceWords(row.status) : null) ?? line.text;
+  // With no size first, the line starts with a capital as any line does.
+  return capital([size, lower(said)].filter(Boolean).join(", "));
+}
 
 /** Why nothing can play, and its actions in order (plans/play-every-version.md, the shared Step 3
  * table): Play from this device with a kept source and Try again when no source answered, else the

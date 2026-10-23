@@ -64,11 +64,12 @@ for (const form of ["tv", "desktop"] as const) {
 test("phone: a version row's quality starts on its size's line", async ({ browser }) => {
   const { context, page, go } = await open(browser, "phone", `/title/series/${GOT.id}/versions/${GOT.resume}`);
   await go();
-  const row = page.locator(".vrow").filter({ has: page.locator(".size:not(:empty)") }).first();
+  // The size leads the row's one line (plans/versions-web-spec.md 3.1 item 4).
+  const row = page.locator(".vrow").filter({ hasText: /\d [KMG]B/ }).first();
   await expect(row).toBeVisible({ timeout: 30_000 });
   const tops = await row.evaluate((r) => ({
     q: (r.querySelector(".q") as HTMLElement).getBoundingClientRect().top,
-    size: (r.querySelector(".size") as HTMLElement).getBoundingClientRect().top,
+    size: (r.querySelector(".st.line .lt") as HTMLElement).getBoundingClientRect().top,
   }));
   expect(Math.abs(tops.q - tops.size)).toBeLessThanOrEqual(3);
   await context.close();

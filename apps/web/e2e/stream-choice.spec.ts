@@ -158,7 +158,8 @@ test.describe("Settings > Stream choice", () => {
     // No streaming service account: its row is not shown.
     await expect(page.locator('[data-fgroup="choice-ready"]')).toHaveCount(0);
     // The core's conditions: priors only, so nothing measured and no Measure again.
-    await expect(page.locator(".device-line .cond")).toHaveText(/^(4K|1080p|720p)( HDR)?, (Wi-Fi|Ethernet|mobile data|this network), speed not measured yet$/);
+    // No speed is said until a playback has measured it: the network alone.
+    await expect(page.locator(".device-line .cond")).toHaveText(/^(4K|1080p|720p)( HDR)?, (Wi-Fi|Ethernet|mobile data|this network)(, \d+ GB free)?$/);
     await expect(page.locator('[data-f="choice:measure"]')).toHaveCount(0);
     expect(sent.some((m) => m.op === "streamConditions")).toBe(true);
 
@@ -224,7 +225,8 @@ test.describe("Settings > Stream choice", () => {
     await shot(page, "stream-choice-device", "tv");
     await page.keyboard.press("Enter");
     await expect(page.locator(".device-line .st")).toHaveText("Measuring at the next playback");
-    await expect(cond).toContainText("speed not measured yet");
+    // The old speed is gone and none is said until the next playback measures one.
+    await expect(cond).not.toContainText("Mbit/s");
     // Spent, not gone: focus stays on it, and a second press asks nothing.
     await expect.poll(() => focused(page)).toBe("choice:measure");
     await expect(again).toHaveAttribute("aria-disabled", "true");
@@ -258,6 +260,9 @@ test.describe("Versions", () => {
     await expect(page.locator(".vrow .line").first()).toBeVisible({ timeout: 30_000 });
     // Every addon answered: the header's status line is empty (it never names one).
     await expect(page.locator(".vstatus")).toHaveText("", { timeout: 60_000 });
+    // Said once the list is done: the count, never each row; the status line itself is not a live region.
+    await expect(page.locator('.versions-scr p.sr[role="status"]')).toHaveText(/^\d+ versions?$/);
+    await expect(page.locator(".vstatus")).not.toHaveAttribute("role", "status");
     return page.locator(".vrow").first();
   }
 
@@ -346,6 +351,10 @@ test.describe("Versions", () => {
     await expect(sheet.locator(".rel")).toContainText(".webm");
     await expect.poll(() => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f)).toBe("vsheet:play");
     await expect(page).toHaveURL(/[?&]info/);
+    // Nothing behind it can be reached: a row there takes no focus.
+    await row.evaluate((r) => (r as HTMLElement).focus());
+    await expect(row).not.toBeFocused();
+    await expect(page.locator(".vsheet-scrim")).toHaveCSS("overscroll-behavior", "contain");
     await shot(page, "stream-choice-versions", "phone");
     await page.goBack();
     await expect(sheet).toHaveCount(0);
@@ -426,7 +435,7 @@ test.describe("Versions", () => {
       if (kind === "nothingPlaysHere" || kind === "needsAccount") {
         await expect(tv.locator(".vrow.dim").first()).toBeVisible();
         // Each says why in place of its own line (a lock for an account, a ban for this device).
-        await expect(tv.locator(".vrow.dim:not(:focus) .st.line.why .lt").first()).toHaveText(words.empty[kind].row ?? "");
+        await expect(tv.locator(".vrow.dim:not(:focus) .st.line.why .lt").first()).toHaveText(new RegExp(`^(\\S+ [KMG]B, )?${(words.empty[kind].row ?? "").replace(/^./, (x) => x.toLowerCase())}$`));
       }
       else await expect(tv.locator(".vrow")).toHaveCount(0);
       // Nothing moves: the line sits in the slot reserved from the first paint.

@@ -143,21 +143,21 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     q.set("versions", "");
     return `${location.pathname}?${q}`;
   };
-  // Whether this visit pushed the layer's entry: a reload or a link straight to it did not.
-  let pushed = false;
   // Opened over a stalled frame, the play pauses under it and plays again on Back.
   let resume = false;
   const openLayer = (e: MouseEvent) => {
     e.preventDefault();
-    pushed = true;
     resume = started() && !paused();
     if (resume) engine.pause();
-    navigate(layerHref(), { state: ownState(location.state) });
+    // Marked as the app's own, so a remount (Try again) or a reload still closes it by going back.
+    navigate(layerHref(), { state: { ...ownState(location.state), _layer: true } });
   };
   // ponytail: the browser's own Back (popstate) closes the layer; design-web's pushBack can take it over.
   // With no entry of ours under it, the layer gives way in place instead.
   const closeLayer = () => {
-    if (pushed) return history.back();
+    // A row's sheet over the layer goes first; a link straight to the layer has no entry of the app's
+    // under it, so it gives way in place.
+    if (new URLSearchParams(location.search).has("info") || (history.state as { _layer?: boolean } | null)?._layer) return history.back();
     const q = new URLSearchParams(location.search);
     q.delete("versions");
     navigate(`${location.pathname}${q.size ? `?${q}` : ""}`, { replace: true, state: ownState(location.state) });
@@ -710,7 +710,6 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         const choice = picked;
         picked = null;
         if (open) return restoreSoon(false);
-        pushed = false;
         // The app's Back marked a Back for a new screen; the path did not change.
         takeBack();
         if (choice) return playKey(choice);
@@ -910,7 +909,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       data-scheme="dark"
       data-subsize={prefs.state.data?.subtitleSize ?? "medium"}
       // Not idle while the loading screen waits: Back, its one control, stays.
-      classList={{ idle: !osd() && !!url() && wait() !== "start", started: started(), paused: pausedNow(), loading: wait() === "start", stalling: wait() === "stall" }}
+      classList={{ idle: !osd() && !!url() && wait() !== "start", started: started(), paused: pausedNow(), loading: wait() === "start", stalling: wait() === "stall", offering: another() }}
       onPointerMove={wake}
       onPointerDown={(e) => {
         // While the controls are hidden, a click only brings them back.

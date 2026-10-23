@@ -5,9 +5,12 @@ import type { EmptyAction } from "../core/generated/EmptyAction";
 import type { EmptyKind } from "../core/generated/EmptyKind";
 import type { Learned } from "../core/generated/Learned";
 import type { ReasonLine } from "../core/generated/ReasonLine";
+import type { VersionRow } from "../core/generated/VersionRow";
 import type { VersionsConditions } from "../core/generated/VersionsConditions";
 import {
   anyLearned,
+  bestFor,
+  rowWords,
   emptyWords,
   choiceSummary,
   choiceWords,
@@ -232,4 +235,23 @@ test("raw reasons read as sentences, the raw text kept", () => {
   expect(problemWords("addon returned no catalog items").text).toBe("It sent an empty list.");
   // The core's own sentences stay as they are.
   expect(problemWords("Cinemeta did not answer in time")).toEqual({ text: "Cinemeta did not answer in time", raw: null });
+});
+
+test("a row's one line starts with its size, then where it comes from, a warning or why it is dimmed", () => {
+  const row = (line: ReasonLine, status: VersionRow["status"], sizeBytes: number | null = 1.5 * GiB, onDevice: string | null = null) =>
+    ({ line, status, sizeBytes, onDevice }) as VersionRow;
+  expect(rowWords(row({ kind: "quick", seeders: 1204, sizeBytes: GiB }, { kind: "torrent", seeds: 1204 }))).toBe("1.5 GB, shared by 1,204 people");
+  expect(rowWords(row({ kind: "ready", service: "TorBox", sizeBytes: GiB }, { kind: "ready", service: "TorBox" }))).toBe("1.5 GB, ready now");
+  expect(rowWords(row({ kind: "quick", seeders: 1, sizeBytes: GiB }, { kind: "torrent", seeds: 1 }))).toBe("1.5 GB, shared by 1 person");
+  // A warning never drops the size.
+  expect(rowWords(row({ kind: "few", seeders: 31 }, { kind: "torrent", seeds: 31 }, 12 * GiB))).toBe("12 GB, may start slowly");
+  expect(rowWords(row({ kind: "few", seeders: 31 }, { kind: "torrent", seeds: 31 }), "Needs an account")).toBe("1.5 GB, needs an account");
+  expect(rowWords(row({ kind: "quick", seeders: null, sizeBytes: null }, { kind: "direct" }, null, "On this device"))).toBe("On this device");
+  expect(rowWords(row({ kind: "quick", seeders: null, sizeBytes: null }, { kind: "torrent", seeds: null }, null))).toBe("Starts quickly");
+});
+
+test("the card's kicker names the form: this TV, this phone, this computer", () => {
+  expect(bestFor("tv")).toBe("Best for this TV");
+  expect(bestFor("phone")).toBe("Best for this phone");
+  expect(bestFor("desktop")).toBe("Best for this computer");
 });
