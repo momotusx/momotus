@@ -1,7 +1,9 @@
 package app.marquee.ui.tv
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import app.marquee.design.Form
 import app.marquee.design.Icons
 import app.marquee.design.MarqueeTheme
+import app.marquee.design.RoundButton
 import app.marquee.player.ActionButton
 import app.marquee.player.TrackChoice
 import app.marquee.player.TrackPanel
@@ -135,5 +138,31 @@ class TvFocusInvertTest {
         val (fillOnDark, overDark, dark) = look()
         assertTrue(contrast(fillOnDark, dark) >= 3f, "the focused action is not white: ${contrast(fillOnDark, dark)}:1")
         assertTrue(overDark >= 4.5f, "the focused action's words read at $overDark:1 on its fill")
+    }
+
+    @Test
+    fun `while an action holds the focus the white Play yields, so the screen keeps one white`() {
+        var actionFocused by mutableStateOf(false)
+        compose.setContent {
+            MarqueeTheme(Form.Tv) {
+                Row(
+                    Modifier.background(Color.Black).padding(48.dp),
+                    horizontalArrangement = Arrangement.spacedBy(48.dp),
+                ) {
+                    RoundButton(Icons.Pause, "Pause", {}, main = true)
+                    ActionButton(Icons.Layers, "Versions", "720p", {}, forceFocus = actionFocused)
+                }
+            }
+        }
+
+        // The middle of the Play circle, beside its glyph: its fill.
+        fun play(): Color {
+            compose.mainClock.advanceTimeBy(1_000)
+            val at = bounds("Pause")
+            return compose.onRoot().captureToImage().toPixelMap()[at.left.toInt() + 8, at.center.y.toInt()]
+        }
+        assertTrue(play().luminance() > 0.7f, "Play is the white main action while nothing else holds the focus")
+        actionFocused = true
+        assertTrue(play().luminance() < 0.3f, "Play stayed white beside the focused action: ${play()}")
     }
 }

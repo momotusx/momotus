@@ -726,8 +726,10 @@ fun RoundButton(
     var focused by remember { mutableStateOf(false) }
     ButtonFocused(focused)
     // White is the main action or a TV focus, in the player too; a selected circle is the selected grey with a
-    // white glyph.
-    val lit = main || (tv && focused)
+    // white glyph. The main action yields its white on TV while another control holds the focus (one white per screen).
+    val buttons = LocalButtonFocus.current
+    val yields = tv && main && !focused && (buttons?.intValue ?: 0) > 0
+    val lit = (main && !yields) || (tv && focused)
     val fill = buttonFill(primary = lit, selected, tvFocused = false, colors, overPicture = LocalOverPicture.current)
     val ink = if (lit) colors.onPrimary else Color.White
     Column(

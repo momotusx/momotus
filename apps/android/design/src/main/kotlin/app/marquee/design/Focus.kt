@@ -227,7 +227,7 @@ val LocalButtonFocus = staticCompositionLocalOf<MutableIntState?> { null }
  * its own row today. Scope it to the row (a provider per row) if one ever does.
  */
 @Composable
-internal fun ButtonFocused(focused: Boolean) {
+fun ButtonFocused(focused: Boolean) {
     val count = LocalButtonFocus.current ?: return
     DisposableEffect(focused, count) {
         if (focused) count.intValue++

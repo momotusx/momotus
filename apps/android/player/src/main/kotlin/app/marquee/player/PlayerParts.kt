@@ -88,6 +88,7 @@ import app.marquee.core.model.OtherVersion
 import app.marquee.core.model.Segment
 import app.marquee.core.model.SubtitleSize
 import app.marquee.core.model.TraktPlayback
+import app.marquee.design.ButtonFocused
 import app.marquee.design.CapsLabel
 import app.marquee.design.FocusInk
 import app.marquee.design.Form
@@ -934,6 +935,8 @@ fun ActionButton(
     val tv = Marquee.form == Form.Tv
     var focusHeld by remember { mutableStateOf(false) }
     val focused = focusHeld || forceFocus
+    // Counted with the buttons, so the white Play yields while an action holds the focus (one white per screen).
+    ButtonFocused(focused)
     // On TV a focused action turns white with dark words (focusPalette), so it reads over any frame.
     val colors = focusPalette(focused)
     Column(
