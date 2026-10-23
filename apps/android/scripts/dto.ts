@@ -108,6 +108,8 @@ const DEFAULTED = new Map([
 ]);
 const INT = new Set([
   "overCount",
+  // Captions.languages: how many subtitle languages a video has (C34).
+  "languages",
   "delayMs",
   "retries",
   "searchable",

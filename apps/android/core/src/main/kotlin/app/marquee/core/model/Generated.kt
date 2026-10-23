@@ -188,6 +188,15 @@ data class CalendarSnapshot(
     val series: Int,
 )
 
+/** What the subtitles addons list for one video. */
+@Serializable
+data class Captions(
+    /** Languages with at least one track, each once ("en" and "en-US" apart, as the player's menu groups them): 0 means none, no CC. */
+    val languages: Int,
+    /** A track is for the hard of hearing (the addon says so, or its file name: "SDH", ".HI."): the SDH badge. */
+    val hearingImpaired: Boolean,
+)
+
 @Serializable
 data class CatalogChoice(
     /** `addon id|type|catalog id`, the value `select` takes. */
@@ -1739,6 +1748,8 @@ data class TitleHeader(
     val inLibrary: Boolean,
     /** Add to Library can be offered: false on a kids profile, whose Library is the owner's list (`setInLibrary` is refused there). Hide the button when false. */
     val librarySettable: Boolean = true,
+    /** Subtitles for the video Play plays (core backlog C34): what the subtitles addons list for it, for the CC and SDH badges. Null until they answered, and with no subtitles addon. */
+    val captions: Captions? = null,
     val seasons: List<Int> = emptyList(),
     val selectedSeason: Int? = null,
     /** Episode (or the movie itself) the primary button resumes or starts. None while the next episode is not out yet (see `next_airs`). */

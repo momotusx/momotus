@@ -468,3 +468,177 @@ async fn an_imdb_rating_field_beside_links_shows() {
     let details = settle(&view).await.header.details.expect("details");
     assert_eq!(details.ratings.imdb.as_deref(), Some("7.4"));
 }
+
+/// A subtitles addon answering `body` for every video, recording the paths
+/// it was asked.
+async fn subtitles_addon(
+    body: &'static str,
+) -> (AddonRow, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
+    slow_subtitles_addon("subs.test", body, Duration::ZERO).await
+}
+
+/// `subtitles_addon` with its own id, answering after `delay`.
+async fn slow_subtitles_addon(
+    id: &str,
+    body: &'static str,
+    delay: Duration,
+) -> (AddonRow, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let asked = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let log = asked.clone();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let log = log.clone();
+            tokio::spawn(async move {
+                let mut buf = [0u8; 2048];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                let path = String::from_utf8_lossy(&buf[..n])
+                    .split_whitespace()
+                    .nth(1)
+                    .unwrap_or_default()
+                    .to_owned();
+                log.lock().unwrap().push(path);
+                tokio::time::sleep(delay).await;
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = socket.write_all(resp.as_bytes()).await;
+            });
+        }
+    });
+    let manifest = serde_json::json!({
+        "id": id, "version": "1.0.0", "name": id,
+        "types": ["series", "movie"], "resources": ["subtitles"], "catalogs": [], "idPrefixes": ["tt"]
+    });
+    let row = AddonRow {
+        transport_url: format!("http://{addr}/manifest.json"),
+        manifest_json: manifest.to_string(),
+        position: 1,
+        enabled: true,
+        allow_private: true,
+    };
+    (row, asked)
+}
+
+/// Core backlog C34: the header says what the subtitles addons list for
+/// the video Play plays (the series' first episode here): its languages,
+/// each once, and whether a track is for the hard of hearing, read from
+/// its file name as the player reads it. With no subtitles addon it says
+/// nothing.
+#[tokio::test]
+async fn the_header_counts_the_subtitles_of_the_video_play_plays() {
+    let (subs, asked) = subtitles_addon(
+        r#"{"subtitles":[
+            {"id":"1","lang":"eng","url":"https://subs.test/1.srt","subtitleFileName":"Game.of.Thrones.S01E01.720p.HDTV.SDH.srt"},
+            {"id":"2","lang":"eng","url":"https://subs.test/2.srt","subtitleFileName":"Game.of.Thrones.S01E01.720p.HDTV.srt"},
+            {"id":"3","lang":"fre","url":"https://subs.test/3.srt"}
+        ]}"#,
+    )
+    .await;
+    let core = Core::temporary("p").unwrap();
+    core.library()
+        .set_addons("p", &[meta_addon(SHOW).await, subs], &core.hlc())
+        .unwrap();
+    let view = TitleView::open(&core, "series", "tt0944947");
+    let (_, mut updates) = view.subscribe();
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    while view.snapshot().header.captions.is_none() {
+        assert!(tokio::time::Instant::now() < deadline, "no captions");
+        let _ = tokio::time::timeout(Duration::from_millis(200), updates.next()).await;
+    }
+    let header = view.snapshot().header;
+    let captions = header.captions.unwrap();
+    assert_eq!((captions.languages, captions.hearing_impaired), (2, true));
+    let video = header.play_target.unwrap().video_id;
+    assert_eq!(video, "tt0944947:1:1");
+    assert!(
+        asked
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|p| p.contains("tt0944947:1:1") || p.contains("tt0944947%3A1%3A1")),
+        "{:?}",
+        asked.lock().unwrap()
+    );
+
+    // No subtitles addon: nothing to say.
+    let core = Core::temporary("p").unwrap();
+    core.library()
+        .set_addons("p", &[meta_addon(SHOW).await], &core.hlc())
+        .unwrap();
+    let view = TitleView::open(&core, "series", "tt0944947");
+    settle(&view).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(view.snapshot().header.captions, None);
+}
+
+/// Review P2: each addon's answer shows as it comes, so a slow addon never
+/// holds back a quick one's: English at once, French when the slow one
+/// answers.
+#[tokio::test]
+async fn a_slow_subtitles_addon_does_not_hold_back_a_quick_one() {
+    const EN: &str = r#"{"subtitles":[{"id":"1","lang":"eng","url":"https://subs.test/1.srt"}]}"#;
+    const FR: &str = r#"{"subtitles":[{"id":"2","lang":"fre","url":"https://subs.test/2.srt"}]}"#;
+    let (quick, _) = slow_subtitles_addon("quick", EN, Duration::ZERO).await;
+    let (slow, _) = slow_subtitles_addon("slow", FR, Duration::from_secs(3)).await;
+    let core = Core::temporary("p").unwrap();
+    core.library()
+        .set_addons("p", &[meta_addon(SHOW).await, quick, slow], &core.hlc())
+        .unwrap();
+    let view = TitleView::open(&core, "series", "tt0944947");
+    let opened = tokio::time::Instant::now();
+    let languages = |v: &TitleView| v.snapshot().header.captions.map(|c| c.languages);
+    let (_, mut updates) = view.subscribe();
+    while languages(&view).is_none() {
+        assert!(
+            opened.elapsed() < Duration::from_secs(2),
+            "the quick answer waited"
+        );
+        let _ = tokio::time::timeout(Duration::from_millis(100), updates.next()).await;
+    }
+    assert_eq!(languages(&view), Some(1), "English, before the slow addon");
+    while languages(&view) != Some(2) {
+        assert!(opened.elapsed() < Duration::from_secs(10), "no French");
+        let _ = tokio::time::timeout(Duration::from_millis(200), updates.next()).await;
+    }
+}
+
+/// Review P3: an open page asks again when the addons change: a subtitles
+/// addon installed adds its languages, and with none left the header says
+/// nothing.
+#[tokio::test]
+async fn the_captions_follow_the_installed_addons() {
+    const EN: &str = r#"{"subtitles":[{"id":"1","lang":"eng","url":"https://subs.test/1.srt"}]}"#;
+    const FR: &str = r#"{"subtitles":[{"id":"2","lang":"fre","url":"https://subs.test/2.srt"}]}"#;
+    let (en, _) = slow_subtitles_addon("en", EN, Duration::ZERO).await;
+    let (fr, _) = slow_subtitles_addon("fr", FR, Duration::ZERO).await;
+    let meta = meta_addon(SHOW).await;
+    let core = Core::temporary("p").unwrap();
+    core.library()
+        .set_addons("p", &[meta.clone(), en.clone()], &core.hlc())
+        .unwrap();
+    let view = TitleView::open(&core, "series", "tt0944947");
+    let (_, mut updates) = view.subscribe();
+    let languages = |v: &TitleView| v.snapshot().header.captions.map(|c| c.languages);
+    for (want, then) in [
+        (Some(1), Some(vec![meta.clone(), en, fr])),
+        (Some(2), Some(vec![meta])),
+        (None, None),
+    ] {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        while languages(&view) != want {
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "never {want:?}: {:?}",
+                languages(&view)
+            );
+            let _ = tokio::time::timeout(Duration::from_millis(100), updates.next()).await;
+        }
+        if let Some(rows) = then {
+            core.library().set_addons("p", &rows, &core.hlc()).unwrap();
+        }
+    }
+}

@@ -99,6 +99,10 @@ pub struct TitleHeader {
     /// Library is the owner's list (`setInLibrary` is refused there). Hide
     /// the button when false.
     pub library_settable: bool,
+    /// Subtitles for the video Play plays (core backlog C34): what the
+    /// subtitles addons list for it, for the CC and SDH badges. Null until
+    /// they answered, and with no subtitles addon.
+    pub captions: Option<Captions>,
     pub seasons: Vec<u32>,
     pub selected_season: Option<u32>,
     /// Episode (or the movie itself) the primary button resumes or starts.
@@ -156,6 +160,23 @@ pub struct Episode {
     pub left_ms: Option<i64>,
 }
 
+/// What the subtitles addons list for one video.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub struct Captions {
+    /// Languages with at least one track, each once ("en" and "en-US"
+    /// apart, as the player's menu groups them): 0 means none, no CC.
+    pub languages: u32,
+    /// A track is for the hard of hearing (the addon says so, or its file
+    /// name: "SDH", ".HI."): the SDH badge.
+    pub hearing_impaired: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(
     feature = "ts",
@@ -173,6 +194,8 @@ struct State {
     selected_season: Option<u32>,
     /// What MDBList answered for the title, once known.
     scores: Option<Scores>,
+    /// The subtitles addons' answer, for the video it was asked for.
+    captions: Option<(String, Captions)>,
 }
 
 /// A live title page. Dropping it cancels its work.
@@ -212,6 +235,7 @@ impl TitleView {
             details: None,
             in_library: false,
             library_settable: !policy.kids(),
+            captions: None,
             seasons: Vec::new(),
             selected_season: None,
             play_target: None,
@@ -230,6 +254,7 @@ impl TitleView {
                 meta: None,
                 selected_season: None,
                 scores: None,
+                captions: None,
             })),
             _tasks: JoinSet::new(),
         };
@@ -242,6 +267,7 @@ impl TitleView {
                 .spawn(crate::ratings::on_listed(listed, move || ctx.rate()));
             view._tasks.spawn(load_meta(view.ctx()));
             view._tasks.spawn(watch_library(view.ctx()));
+            view._tasks.spawn(watch_captions(view.ctx()));
             // Versions usually come next: their first scrape finds the
             // trackers resolved and connected.
             let core = core.clone();
@@ -412,6 +438,91 @@ async fn load_meta(ctx: Ctx) {
     }
 }
 
+/// Asks the subtitles addons about the video Play plays, each time that
+/// video changes (a series moves on) and each time the addons change, for
+/// the header's `captions`. The player asks again for itself: it sends the
+/// file's hash and name, which OpenSubtitles matches by, so this answer
+/// cannot stand in for its own.
+async fn watch_captions(ctx: Ctx) {
+    let mut headers = ctx.header.subscribe();
+    let mut addons = ctx.core.library().subscribe();
+    let mut asked: Option<String> = None;
+    loop {
+        let video = ctx.header.get().play_target.map(|t| t.video_id);
+        if let Some(video) = video.filter(|v| asked.as_ref() != Some(v)) {
+            asked = Some(video.clone());
+            ask_captions(&ctx, &video).await;
+        }
+        tokio::select! {
+            header = headers.next() => {
+                if header.is_none() {
+                    return;
+                }
+            }
+            changed = crate::views::addons_changed(&mut addons) => {
+                if !changed {
+                    return;
+                }
+                // Installed, removed or switched: ask the addons as they are.
+                asked = None;
+            }
+        }
+    }
+}
+
+/// Shows what the subtitles addons list for `video` as each one answers:
+/// the language count only grows and the hard-of-hearing mark only turns
+/// on, so a slow addon never holds back a quick one's answer. With no
+/// subtitles addon the header says nothing.
+async fn ask_captions(ctx: &Ctx, video: &str) {
+    let path = mq_protocol::ResourcePath {
+        resource: "subtitles".into(),
+        r#type: ctx.kind.clone(),
+        id: video.to_owned(),
+        extra: Vec::new(),
+    };
+    let addons: Vec<_> = ctx
+        .core
+        .installed_addons()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|a| {
+            a.supports(&path)
+                && !crate::turkcealtyazi::is_builtin(a.transport_url.as_str(), Some(&a.manifest.id))
+        })
+        .collect();
+    let show = |captions: Option<Captions>| {
+        lock(&ctx.state).captions = captions.map(|c| (video.to_owned(), c));
+        ctx.render();
+    };
+    if addons.is_empty() {
+        show(None);
+        return;
+    }
+    let mut fanout = ctx
+        .core
+        .addons()
+        .fan_out(&addons, &path, mq_addons::Deadlines::default());
+    let (mut languages, mut hearing_impaired) = (HashSet::new(), false);
+    while let Some(event) = fanout.next().await {
+        let mq_addons::AddonEvent::Arrived { body, .. } = event else {
+            continue;
+        };
+        let found = mq_protocol::decode_subtitles(&body)
+            .map(|r| r.subtitles)
+            .unwrap_or_default();
+        for w in &found {
+            let t = crate::views::playback::listed_track(w);
+            languages.insert(t.language.clone());
+            hearing_impaired |= t.hearing_impaired;
+        }
+        show(Some(Captions {
+            languages: languages.len() as u32,
+            hearing_impaired,
+        }));
+    }
+}
+
 async fn watch_library(ctx: Ctx) {
     let mut changes = ctx.core.library().subscribe();
     // Catch writes made between open and this subscription.
@@ -455,9 +566,14 @@ impl Ctx {
     }
 
     fn render_with_source(&self, source: &str) {
-        let (meta, selected, scores) = {
+        let (meta, selected, scores, captions) = {
             let state = lock(&self.state);
-            (state.meta.clone(), state.selected_season, state.scores)
+            (
+                state.meta.clone(),
+                state.selected_season,
+                state.scores,
+                state.captions.clone(),
+            )
         };
         let Some(meta) = meta else { return };
         let profile = self.core.profile();
@@ -523,6 +639,10 @@ impl Ctx {
             details: Some(details),
             in_library,
             library_settable: !self.kids,
+            // Only the answer for the video Play plays now.
+            captions: captions
+                .filter(|(video, _)| play_target.as_ref().is_some_and(|t| t.video_id == *video))
+                .map(|(_, c)| c),
             seasons,
             selected_season: season,
             play_target,

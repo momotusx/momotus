@@ -4338,6 +4338,13 @@ fn problem(p: mq_turkcealtyazi::Problem) -> SubtitleProblem {
     }
 }
 
+/// A listed track as the player reads it (its language, the file name's
+/// language included, and the hard-of-hearing mark), for the title page's
+/// captions (core backlog C34): no address, no source.
+pub(crate) fn listed_track(w: &mq_protocol::WireSubtitle) -> SubtitleTrack {
+    track(w, "", "", String::new(), false)
+}
+
 /// A track served through the loopback server as UTF-8 WebVTT, whatever
 /// format and charset the addon's file has; `None` once its playback is
 /// released. `title_forced`: the playing file's name has the word
