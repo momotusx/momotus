@@ -577,6 +577,10 @@ fun PlayerStatus(
     cannotOpen: Boolean = false,
     /** Why nothing played, as the core names it ([PlaybackController.empty]): the shared table's actions. */
     empty: EmptyKind? = null,
+    /** The version this device keeps, when no source answered: "Play from this device" ([onOffer] plays it). */
+    kept: String? = null,
+    /** Settings for the addons (noSource) or the accounts (needsAccount); null leaves the button out. */
+    onSettings: ((EmptyKind) -> Unit)? = null,
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
@@ -621,15 +625,9 @@ fun PlayerStatus(
                 verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
             ) {
                 for (failed in groupFailures(attempts)) {
-                    // One spoken line per row: the addon, then why.
-                    Row(
-                        Modifier.semantics(mergeDescendants = true) {},
-                        horizontalArrangement = Arrangement.spacedBy(Marquee.space.s),
-                    ) {
-                        MqText(failed.via, role = TextRole.Callout, weight = FontWeight.SemiBold)
-                        // The core words the reason in plain sentences ("The link no longer exists (404)").
-                        MqText(failed.words, role = TextRole.Callout, color = colors.muted)
-                    }
+                    // The core words the reason in plain sentences ("The link no longer exists (404)"), never the
+                    // addon's name: the logs keep it.
+                    MqText(failed.words, role = TextRole.Callout, color = colors.muted)
                 }
             }
             Row(
@@ -656,14 +654,48 @@ fun PlayerStatus(
                         focusRequester = focus,
                     )
                     SecondaryButton(CHOOSE_ANOTHER, onVersions, icon = Icons.Layers)
-                } else if (empty == EmptyKind.NoRoom) {
-                    // No room here: nothing but Back.
+                } else if (empty == EmptyKind.NoRoom || empty == EmptyKind.KidsNothing ||
+                    empty == EmptyKind.NoResults
+                ) {
+                    // Nothing to do here but leave: Back alone, never a way to a page that holds only Back.
                     backFirst = true
-                } else if (empty == EmptyKind.Unreachable && onRetry != null) {
+                } else if ((empty == EmptyKind.NoSource || empty == EmptyKind.NeedsAccount) && onSettings != null) {
+                    // An addon or an account is what is missing: Settings, where it is added.
                     PrimaryButton(
-                        StreamChoiceCopy.EMPTY_TRY_AGAIN,
-                        onRetry,
-                        icon = Icons.RefreshCw,
+                        StreamChoiceCopy.SETTINGS,
+                        { onSettings(empty) },
+                        icon = Icons.Settings,
+                        focusRequester = focus,
+                    )
+                } else if (empty == EmptyKind.Unreachable) {
+                    // No source answered: the version this device keeps, then Try again.
+                    if (kept != null) {
+                        PrimaryButton(
+                            StreamChoiceCopy.PLAY_FROM_DEVICE,
+                            { onOffer(kept) },
+                            icon = PlayFilled,
+                            focusRequester = focus,
+                        )
+                    }
+                    onRetry?.let {
+                        if (kept == null) {
+                            PrimaryButton(
+                                StreamChoiceCopy.EMPTY_TRY_AGAIN,
+                                it,
+                                icon = Icons.RefreshCw,
+                                focusRequester = focus,
+                            )
+                        } else {
+                            SecondaryButton(StreamChoiceCopy.EMPTY_TRY_AGAIN, it, icon = Icons.RefreshCw)
+                        }
+                    }
+                    backFirst = kept == null && onRetry == null
+                } else if (empty == EmptyKind.NothingPlaysHere) {
+                    // None plays here: Versions lists them, each still startable.
+                    PrimaryButton(
+                        StreamChoiceCopy.EMPTY.getValue(EmptyKind.NothingPlaysHere).second!!,
+                        onVersions,
+                        icon = Icons.Layers,
                         focusRequester = focus,
                     )
                 } else if (onRetry != null && cannotOpen) {

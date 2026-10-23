@@ -101,6 +101,10 @@ class PlaybackController(
     var offer: OtherVersion? by mutableStateOf(null)
         private set
 
+    /** The version this device keeps, when no source answered: the card's "Play from this device". */
+    var keptKey: String? by mutableStateOf(null)
+        private set
+
     /** The core offers Choose another version: the start has taken 20 s, or a stall over the picture 30 s. */
     var chooseAnother by mutableStateOf(false)
         private set
@@ -390,15 +394,29 @@ class PlaybackController(
         opener = null
         openError = null
         problem = null
+        empty = null
+        keptKey = null
         stage = Stage.Opening
         again()
     }
 
-    /** Nothing can be played and the core has no attempts to show (no version, or the core did not answer). */
-    fun fail(reason: String) {
+    /**
+     * Nothing can be played and the core has no attempts to show (no version, or the core did not answer): [reason] in
+     * words, the core's [kind] when it names why (the card follows the shared table), the version this device keeps
+     * ([kept], for "Play from this device"), and [again] for Try again.
+     */
+    fun fail(
+        reason: String,
+        kind: EmptyKind? = null,
+        kept: String? = null,
+        again: (() -> Unit)? = null,
+    ) {
         stage = Stage.Failed
         problem = reason
         status = null
+        empty = kind
+        keptKey = kept
+        opener = again
     }
 
     fun mark(name: String) {
@@ -469,6 +487,7 @@ class PlaybackController(
             }
 
             PlaybackPhase.Failed -> {
+                stallEnded()
                 player.stop()
                 player.clearMediaItems()
                 loadedUrl = null
@@ -486,10 +505,22 @@ class PlaybackController(
         refreshTracks()
     }
 
+    /**
+     * A stall over the picture is over, however it ended (data again, a seek, a pause, another source, a failure, the
+     * player let go): the core's stall clock stops (plans/play-every-version.md 2e).
+     */
+    private fun stallEnded() {
+        if (stalledAt == 0L) return
+        CoreLog.d("stall ${SystemClock.elapsedRealtime() - stalledAt} ms")
+        stalledAt = 0L
+        view?.stalled(false, player.currentPosition.coerceAtLeast(0L))
+    }
+
     private fun load(
         s: PlaybackSnapshot,
         url: String,
     ) {
+        stallEnded()
         val again = loadedUrl != null || handlingFailure
         val from = if (again) lastPositionMs else s.resumeMs ?: 0L
         loadedUrl = url
@@ -587,11 +618,7 @@ class PlaybackController(
 
             Player.STATE_READY -> {
                 mark("buffer ready")
-                if (stalledAt != 0L) {
-                    CoreLog.d("stall ${SystemClock.elapsedRealtime() - stalledAt} ms")
-                    stalledAt = 0L
-                    view?.stalled(false, player.currentPosition)
-                }
+                stallEnded()
                 if (!raised) {
                     raised = true
                     if (wantPlay) player.playWhenReady = true
@@ -793,11 +820,13 @@ class PlaybackController(
     }
 
     fun pause() {
+        stallEnded()
         wantPlay = false
         player.playWhenReady = false
     }
 
     fun seekTo(ms: Long) {
+        stallEnded()
         val end = player.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
         player.seekTo(ms.coerceIn(0L, end))
         positionMs = player.currentPosition.coerceAtLeast(0L)
@@ -1156,6 +1185,7 @@ class PlaybackController(
     /** Reports where the player is and lets go of it. */
     fun release() {
         if (released) return
+        stallEnded()
         report()
         sendDelay()
         released = true

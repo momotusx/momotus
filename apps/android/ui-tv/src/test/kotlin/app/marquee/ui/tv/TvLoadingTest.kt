@@ -356,6 +356,28 @@ class TvLoadingTest {
         }
     }
 
+    @Test
+    fun `a stall that ends by a pause tells the core it is over`() {
+        compose.setContent { MarqueeTheme(Form.Tv) { TvPlayer(controller, false, {}, null, { _, _ -> }, {}) } }
+        compose.runOnIdle { controller.attach(readyView()) }
+        val until = { stage: PlaybackController.Stage ->
+            compose.waitUntil(10_000) {
+                Snapshot.sendApplyNotifications()
+                shadowOf(Looper.getMainLooper()).idle()
+                controller.stage == stage
+            }
+        }
+        until(PlaybackController.Stage.Buffering)
+        compose.runOnIdle { player.open() }
+        until(PlaybackController.Stage.Playing)
+        compose.runOnIdle { player.stall() }
+        until(PlaybackController.Stage.Buffering)
+        compose.waitUntil(10_000) { sent.any { "\"stalled\":true" in it } }
+        // The viewer pauses during the stall: no data came, but the stall is over for the core's clock.
+        compose.runOnIdle { controller.pause() }
+        compose.waitUntil(10_000) { sent.any { "\"stalled\":false" in it } }
+    }
+
     private val out = System.getenv("MARQUEE_SHOTS")?.let(::File)
 
     @Test

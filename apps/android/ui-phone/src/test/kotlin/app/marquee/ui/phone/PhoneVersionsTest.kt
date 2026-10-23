@@ -294,9 +294,18 @@ class PhoneVersionsTest {
 
     @Test
     fun `a shortcut under the card plays in one tap`() {
-        val small = row("s", ReasonLine.Quick(1204, gib))
-        show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), listOf(small)).copy(sharper = small))
-        compose.onNodeWithText("Sharper: 1080p, 2 GB").performClick()
-        assertEquals(listOf("s"), played)
+        // The coherent page the core would send: a 1080p pick of 4 GB, Smaller file a 720p of 1.5 GB, Sharper a
+        // 4K of 12 GB.
+        val pick =
+            row(
+                "pick",
+                ReasonLine.Ready("TorBox", 4 * gib),
+            ).copy(sizeBytes = 4 * gib, status = VersionStatus.Ready("TorBox"))
+        val small = row("small", ReasonLine.Quick(1204, 3 * gib / 2)).copy(quality = "720p", sizeBytes = 3 * gib / 2)
+        val sharp = row("sharp", ReasonLine.Few(31)).copy(quality = "4K", sizeBytes = 12 * gib)
+        show(snapshot(pick, listOf(sharp, small)).copy(smaller = small, sharper = sharp))
+        compose.onNodeWithText("Sharper: 4K, 12 GB").performClick()
+        compose.onNodeWithText("Smaller file: 720p, 1.5 GB").performClick()
+        assertEquals(listOf("sharp", "small"), played)
     }
 }

@@ -200,24 +200,37 @@ object VersionsCopy {
                         s.keys.mapNotNull(byKey::get),
                     )
                 }.filter { it.rows.isNotEmpty() }
-        if (core.isNotEmpty()) return core
-        val groups = rows.groupBy { it.group }
-        return Group.entries.mapNotNull { g ->
-            groups[g]?.let { Section("group:${g.wire.ifEmpty { "new" }}", group(g, snapshot?.recommended != null), it) }
-        }
+        // The rows those sections do not cover (all of them from an older core) follow under today's groups.
+        val covered = core.flatMap { section -> section.rows.map { it.key } }.toSet()
+        val groups = rows.filter { it.key !in covered }.groupBy { it.group }
+        return core +
+            Group.entries.mapNotNull { g ->
+                groups[g]?.let {
+                    Section(
+                        "group:${g.wire.ifEmpty { "new" }}",
+                        group(g, snapshot?.recommended != null),
+                        it,
+                    )
+                }
+            }
     }
 
     /**
-     * [sections] with each one's rows in the order they were first seen ([seen] remembers it, and is filled here):
+     * [sections] with each one's rows in the order they were first seen ([seen], filled by [record] after they show):
      * while Versions is open over the player, a re-rank under it never moves a row, and a new version goes after
-     * the ones already there in its section.
+     * the ones already there in its section, in the core's order. Reads [seen] only.
      */
     fun held(
         sections: List<Section>,
+        seen: Map<String, Int>,
+    ): List<Section> = sections.map { s -> s.copy(rows = s.rows.sortedBy { seen[it.key] ?: Int.MAX_VALUE }) }
+
+    /** Remembers the order [sections] show their rows in, for [held]: a key seen before keeps its place. */
+    fun record(
+        sections: List<Section>,
         seen: MutableMap<String, Int>,
-    ): List<Section> {
-        for (section in sections) for (row in section.rows) seen.getOrPut(row.key) { seen.size }
-        return sections.map { s -> s.copy(rows = s.rows.sortedBy { seen.getValue(it.key) }) }
+    ) {
+        for (section in sections) for (row in section.rows) if (row.key !in seen) seen[row.key] = seen.size
     }
 
     /** A shortcut's words: "Smaller file: 1080p, 2 GB". */

@@ -308,6 +308,11 @@ class VersionsCopyTest {
             sections.map { it.title to it.rows.map(VersionRow::key) },
         )
         assertEquals(sections.size, sections.map { it.id }.toSet().size)
+        // A row no section covers still shows, under its group after the sections.
+        val extra = row().copy(key = "x", quality = "SD")
+        val more = VersionsCopy.sections(shown.copy(rows = shown.rows + extra), shown.rows + extra)
+        assertEquals(listOf("x"), more.last().rows.map(VersionRow::key))
+        assertEquals("Best quality", more.last().title)
         // An older core sends no sections: the groups as before.
         val older = VersionsCopy.sections(shown.copy(sections = emptyList()), shown.rows)
         assertEquals(listOf("Best quality"), older.map { it.title })
@@ -337,24 +342,21 @@ class VersionsCopyTest {
     fun `held over the player, rows keep the order they opened in, and a new one goes after them in its section`() {
         val seen = mutableMapOf<String, Int>()
         val r = { key: String -> row().copy(key = key) }
-        val first = listOf(VersionsCopy.Section("section:fhd", "1080p", listOf(r("a"), r("b"))))
-        assertEquals(
-            listOf("a", "b"),
+        val keys = { sections: List<VersionsCopy.Section> ->
             VersionsCopy
-                .held(first, seen)
+                .held(sections, seen)
                 .single()
                 .rows
-                .map(VersionRow::key),
-        )
+                .map(VersionRow::key)
+        }
+        val first = listOf(VersionsCopy.Section("section:fhd", "1080p", listOf(r("a"), r("b"))))
+        assertEquals(listOf("a", "b"), keys(first))
+        // Recorded once they show; held reads only.
+        assertEquals(emptyMap(), seen)
+        VersionsCopy.record(VersionsCopy.held(first, seen), seen)
         // The core re-ranks b over a and finds c, ranked first.
         val reranked = listOf(VersionsCopy.Section("section:fhd", "1080p", listOf(r("c"), r("b"), r("a"))))
-        assertEquals(
-            listOf("a", "b", "c"),
-            VersionsCopy
-                .held(reranked, seen)
-                .single()
-                .rows
-                .map(VersionRow::key),
-        )
+        assertEquals(listOf("a", "b", "c"), keys(reranked))
+        assertEquals(mapOf("a" to 0, "b" to 1), seen, "held changes nothing")
     }
 }

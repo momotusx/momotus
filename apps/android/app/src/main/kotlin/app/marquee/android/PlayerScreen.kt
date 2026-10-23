@@ -14,6 +14,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import app.marquee.core.Format
 import app.marquee.core.PlayPick
 import app.marquee.core.VersionsCopy
+import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.NextEpisode
 import app.marquee.core.model.SubtitleSize
 import app.marquee.core.model.VersionRow
@@ -198,7 +199,11 @@ class PlayerHolder(
                             }
 
                             is PlayPick.None -> {
-                                controller.fail(pick.reason)
+                                // The core's state names the card's actions; Try again asks the addons again.
+                                controller.fail(pick.reason, pick.kind, pick.key) {
+                                    view.retry()
+                                    viewModelScope.launch { start() }
+                                }
                                 chosen.complete(null)
                                 return@collectLatest
                             }
@@ -254,6 +259,8 @@ fun PlayerScreen(
     onTitle: (() -> Unit)?,
     onNext: (NextEpisode, String?) -> Unit,
     onOffer: (String) -> Unit,
+    /** The failure card's Settings: the addons or the accounts, by the core's state. */
+    onSettings: (EmptyKind) -> Unit = {},
 ) {
     val context = LocalContext.current
     val holder =
@@ -298,6 +305,7 @@ fun PlayerScreen(
             active = active,
             onOffer = offer,
             onSubtitleSize = holder::setSubtitleSize,
+            onSettings = onSettings,
         )
     } else {
         PhonePlayer(
@@ -311,6 +319,7 @@ fun PlayerScreen(
             leave,
             onOffer = offer,
             onSubtitleSize = holder::setSubtitleSize,
+            onSettings = onSettings,
         )
     }
 }

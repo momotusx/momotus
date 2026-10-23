@@ -397,9 +397,8 @@ fun sameLanguage(
     b: String,
 ): Boolean = Util.normalizeLanguageCode(a) == Util.normalizeLanguageCode(b)
 
-/** Sources that failed the same way, from one addon, said once. */
+/** Sources that failed the same way, said once; never with an addon's name (the logs keep it). */
 data class FailedSources(
-    val via: String,
     val error: String,
     val count: Int,
 ) {
@@ -407,8 +406,8 @@ data class FailedSources(
     val words: String get() = if (count > 1) "$error · $count sources" else error
 }
 
-/** The failure history with each addon and reason once, in the order they first failed. */
+/** The failure history with each reason once, in the order it first failed. */
 fun groupFailures(attempts: List<Attempt>): List<FailedSources> =
     attempts
-        .groupBy { it.via to it.error }
-        .map { (reason, all) -> FailedSources(reason.first, reason.second, all.size) }
+        .groupBy { it.error }
+        .map { (error, all) -> FailedSources(error, all.size) }

@@ -25,6 +25,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -500,8 +501,10 @@ private fun Sources(
     val colors = Marquee.colors
     // The core's quality sections, or today's groups for rows they do not cover; held in their first order over the
     // player, so a re-rank under it never moves a row.
-    val seen = remember { mutableMapOf<String, Int>() }
+    val seen = remember { mutableStateMapOf<String, Int>() }
     val sections = VersionsCopy.sections(snapshot, rows).let { if (held) VersionsCopy.held(it, seen) else it }
+    // The order the rows showed in, recorded after they show: held reads it, and composition changes nothing.
+    if (held) LaunchedEffect(sections.flatMap { s -> s.rows.map { it.key } }) { VersionsCopy.record(sections, seen) }
     val open = remember { mutableStateMapOf<String, Boolean>() }
     val scope = rememberCoroutineScope()
     // Focus by key once its node is composed (an item a toggle just inserted is not yet attached).

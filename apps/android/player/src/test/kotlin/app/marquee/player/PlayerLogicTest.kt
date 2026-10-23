@@ -223,11 +223,8 @@ class PlayerLogicTest {
                     .Attempt(key = "d", via = "Torrentio", error = gone),
             )
         val grouped = groupFailures(attempts)
-        assertEquals(
-            listOf("Torrentio" to slow, "Torrentio" to gone, "Local" to gone),
-            grouped.map { it.via to it.error },
-        )
-        assertEquals(listOf(slow, "$gone · 2 sources", gone), grouped.map { it.words })
+        // Said by reason alone: no addon's name where a viewer reads it.
+        assertEquals(listOf(slow, "$gone · 3 sources"), grouped.map { it.words })
     }
 
     @Test

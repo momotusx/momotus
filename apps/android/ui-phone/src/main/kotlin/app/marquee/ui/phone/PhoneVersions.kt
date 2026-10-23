@@ -140,11 +140,13 @@ fun PhoneVersions(
     }
     // The rows found when none plays are simply listed, dimmed, as they would rank once the reason is fixed.
     // The core's quality sections, or today's groups for rows they do not cover.
-    val seen = remember { mutableMapOf<String, Int>() }
+    val seen = remember { mutableStateMapOf<String, Int>() }
     val sections =
         VersionsCopy.sections(snapshot, empty?.rows ?: snapshot?.rows.orEmpty()).let {
             if (held) VersionsCopy.held(it, seen) else it
         }
+    // The order the rows showed in, recorded after they show: held reads it, and composition changes nothing.
+    if (held) LaunchedEffect(sections.flatMap { s -> s.rows.map { it.key } }) { VersionsCopy.record(sections, seen) }
     val open = remember { mutableStateMapOf<String, Boolean>() }
     LazyColumn(
         state = listState,

@@ -1,5 +1,6 @@
 package app.marquee.core
 
+import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionsSnapshot
 
@@ -23,9 +24,14 @@ sealed interface PlayPick {
         val key: String,
     ) : PlayPick
 
-    /** Nothing can be played. */
+    /**
+     * Nothing can be played: [reason] in words, and when the core names why, its [kind] (the failure card takes
+     * that state's actions from the shared table) and the version this device keeps for "Play from this device".
+     */
     data class None(
         val reason: String,
+        val kind: EmptyKind? = null,
+        val key: String? = null,
     ) : PlayPick
 }
 
@@ -63,7 +69,7 @@ fun pickVersion(
 
         // Nothing can play: why, in the core's words (plans/play-every-version.md 2a).
         snapshot.empty != null -> {
-            PlayPick.None(StreamChoiceCopy.emptyLine(snapshot.empty.kind))
+            PlayPick.None(StreamChoiceCopy.emptyLine(snapshot.empty.kind), snapshot.empty.kind, snapshot.empty.key)
         }
 
         // Every addon answered, versions are listed and none is recommended: sources that need a download first.

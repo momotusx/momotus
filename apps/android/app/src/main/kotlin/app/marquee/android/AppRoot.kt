@@ -46,6 +46,7 @@ import app.marquee.core.AccountRules
 import app.marquee.core.Format
 import app.marquee.core.PendingRemoval
 import app.marquee.core.TileCopy
+import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.HomeCatalog
 import app.marquee.core.model.Tile
 import app.marquee.core.model.playVideoId
@@ -735,6 +736,10 @@ private fun AppNav(
                                 },
                                 // The same video and Versions view, the offered version's key.
                                 onOffer = { key -> replacePlayer(route, route.copy(key = key)) },
+                                // Where an addon or an account is added, as the core's state says.
+                                onSettings = { kind ->
+                                    backStack.add(if (kind == EmptyKind.NeedsAccount) Route.Debrid else Route.Sources)
+                                },
                             )
                         }
                     }

@@ -94,12 +94,18 @@ class PlayPickTest {
 
     @Test
     fun `nothing that plays says the core's empty line instead of failing over nothing`() {
-        val empty = { kind: EmptyKind -> snapshot(done = true).copy(empty = EmptyVersions(kind, EmptyAction.None, 42)) }
+        val empty = { kind: EmptyKind, key: String? ->
+            snapshot(done = true).copy(empty = EmptyVersions(kind, EmptyAction.None, 42, key = key))
+        }
+        // The core's line, its kind for the card's actions, and the version this device keeps.
         assertEquals(
-            PlayPick.None("None of these plays on this device"),
-            pickVersion(empty(EmptyKind.NothingPlaysHere), null, settled = true),
+            PlayPick.None("None of these plays on this device", EmptyKind.NothingPlaysHere),
+            pickVersion(empty(EmptyKind.NothingPlaysHere, null), null, settled = true),
         )
-        assertEquals(PlayPick.None("Can't reach any source"), pickVersion(empty(EmptyKind.Unreachable), null, false))
+        assertEquals(
+            PlayPick.None("Can't reach any source", EmptyKind.Unreachable, "kept"),
+            pickVersion(empty(EmptyKind.Unreachable, "kept"), null, false),
+        )
     }
 
     @Test

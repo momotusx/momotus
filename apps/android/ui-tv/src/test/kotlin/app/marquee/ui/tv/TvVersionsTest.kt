@@ -653,4 +653,24 @@ class TvVersionsTest {
         val tops = listOf(top("1 GB"), top("2 GB"), top("3 GB"))
         assertEquals(tops.sorted(), tops, "a, then b, then the new c")
     }
+
+    @Test
+    fun `the coherent page keeps the core's promises, so a fixture cannot drift from the core`() {
+        val page = coherent()
+        val pick = page.recommended!!
+        val height = { quality: String -> mapOf("4K" to 2160, "1080p" to 1080, "720p" to 720).getValue(quality) }
+        // The pick is the card, never a row; the shortcuts are rows of the list.
+        assertTrue(page.rows.none { it.key == pick.key })
+        assertTrue(page.rows.any { it.key == page.smaller!!.key } && page.rows.any { it.key == page.sharper!!.key })
+        // Smaller file is under half the pick's size; Sharper is sharper than the pick.
+        assertTrue(page.smaller!!.sizeBytes!! < pick.sizeBytes!! / 2)
+        assertTrue(height(page.sharper!!.quality) > height(pick.quality))
+        // Every section key is a row, every row is in one section, each in the section of its quality.
+        val keys = page.sections.flatMap { it.keys }
+        assertEquals(page.rows.map { it.key }.sorted(), keys.sorted())
+        val quality = mapOf(SectionQuality.Uhd to "4K", SectionQuality.Fhd to "1080p", SectionQuality.Hd to "720p")
+        for (section in page.sections) {
+            for (key in section.keys) assertEquals(quality[section.quality], page.rows.single { it.key == key }.quality)
+        }
+    }
 }

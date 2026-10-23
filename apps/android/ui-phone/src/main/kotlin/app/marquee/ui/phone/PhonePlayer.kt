@@ -51,6 +51,7 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.NextEpisode
 import app.marquee.core.model.SubtitleSize
 import app.marquee.design.Icons
@@ -126,6 +127,8 @@ fun PhonePlayer(
     onOffer: (String) -> Unit = {},
     /** The subtitle picker's Size: the profile's subtitle size, for this video and the next. */
     onSubtitleSize: (SubtitleSize) -> Unit = {},
+    /** The failure card's Settings: the addons (noSource) or the accounts (needsAccount). */
+    onSettings: ((EmptyKind) -> Unit)? = null,
 ) {
     val stage = controller.stage
     val density = LocalDensity.current
@@ -352,6 +355,8 @@ fun PhonePlayer(
                     detail = controller.openError,
                     cannotOpen = controller.openError != null,
                     empty = controller.empty,
+                    kept = controller.keptKey,
+                    onSettings = onSettings,
                     onBack = onBack,
                     focus = remember { FocusRequester() },
                     modifier =
