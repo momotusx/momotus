@@ -692,6 +692,8 @@ private fun AppNav(
                             onAddAccount = { backStack.add(Route.Debrid) },
                             onBack = ::pop,
                             onUndo = { session.ops.undoLearned(it.screenClass, it.choice) },
+                            // Over the paused player its attempt keeps resolving: the rows hold their order.
+                            held = backStack.getOrNull(backStack.indexOf(route) - 1) is Route.Player,
                         )
                     }
                     entry<Route.Player> { route ->

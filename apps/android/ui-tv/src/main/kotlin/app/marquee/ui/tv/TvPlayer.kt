@@ -79,7 +79,6 @@ import app.marquee.player.clockText
 import app.marquee.player.endsAt
 import app.marquee.player.loadingLines
 import app.marquee.player.nextSpeed
-import app.marquee.player.rememberChooseShown
 import app.marquee.player.rememberTitleMark
 import app.marquee.player.rememberTouchExploration
 import app.marquee.player.seekStepMs
@@ -145,9 +144,9 @@ fun TvPlayer(
     val showControls = osd && live && !ended && !opening
     // The loading screen over the paused picture while it waits for data.
     val stalled = stage == Stage.Buffering && controller.picture
-    // Choose another version on the loading screen, 20 s after it showed, and over a stalled frame when the core
-    // offers it (30 s, plans/versions-android-spec.md, 6).
-    val chooseShown = rememberChooseShown(opening) || (stalled && controller.chooseAnother)
+    // Choose another version when the core offers it, on the loading screen (20 s into the start) and over a stalled
+    // frame (30 s): one clock, the core's, for every kind of source (plans/versions-android-spec.md, 6).
+    val chooseShown = (opening || stalled) && controller.chooseAnother
     val chooseFocus = remember { FocusRequester() }
     var chooseFocused by remember { mutableStateOf(false) }
     val showEnd = ended && !(autoplayNext && controller.next != null)

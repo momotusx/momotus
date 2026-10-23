@@ -1,5 +1,6 @@
 package app.marquee.ui.tv
 
+import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -10,10 +11,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasTestTag
@@ -52,12 +55,15 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import org.junit.After
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
@@ -326,6 +332,57 @@ class TvLoadingTest {
         compose.runOnIdle { assertEquals(1, versions) }
         compose.runOnIdle { player.resume() }
         compose.waitUntil(10_000) { sent.any { "\"stalled\":false" in it } }
+    }
+
+    @Test
+    fun `a start that becomes ready while Versions is over the player stays still and silent`() {
+        compose.setContent { MarqueeTheme(Form.Tv) { TvPlayer(controller, false, {}, null, { _, _ -> }, {}) } }
+        compose.runOnIdle { controller.attach(readyView()) }
+        compose.waitUntil(10_000) {
+            Snapshot.sendApplyNotifications()
+            shadowOf(Looper.getMainLooper()).idle()
+            controller.stage == PlaybackController.Stage.Buffering
+        }
+        // Versions opens over the player while the start is still under way, as the screen marks it.
+        compose.runOnIdle { controller.covered = true }
+        compose.runOnIdle { player.open() }
+        compose.waitUntil(10_000) {
+            shadowOf(Looper.getMainLooper()).idle()
+            controller.stage == PlaybackController.Stage.Paused || controller.stage == PlaybackController.Stage.Playing
+        }
+        compose.runOnIdle {
+            assertEquals(PlaybackController.Stage.Paused, controller.stage, "nothing plays under Versions")
+            assertEquals(false, player.playWhenReady, "and nothing makes a sound")
+        }
+    }
+
+    private val out = System.getenv("MARQUEE_SHOTS")?.let(::File)
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `shot - Choose another version over a stalled frame`() {
+        assumeTrue("MARQUEE_SHOTS is not set", out != null)
+        compose.setContent { MarqueeTheme(Form.Tv) { TvPlayer(controller, false, {}, null, { _, _ -> }, {}) } }
+        compose.runOnIdle { controller.attach(readyView(READY_CHOOSE)) }
+        val until = { stage: PlaybackController.Stage ->
+            compose.waitUntil(10_000) {
+                Snapshot.sendApplyNotifications()
+                shadowOf(Looper.getMainLooper()).idle()
+                controller.stage == stage
+            }
+        }
+        until(PlaybackController.Stage.Buffering)
+        compose.runOnIdle { player.open() }
+        until(PlaybackController.Stage.Playing)
+        compose.runOnIdle { player.stall() }
+        until(PlaybackController.Stage.Buffering)
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(2_000)
+        val image = compose.onRoot().captureToImage().asAndroidBitmap()
+        File(
+            out,
+            "tv-player-stalled-choose.jpg",
+        ).outputStream().use { image.compress(Bitmap.CompressFormat.JPEG, 90, it) }
     }
 }
 

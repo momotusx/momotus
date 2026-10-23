@@ -99,6 +99,7 @@ private const val SHOWN = 3
  * @param onAddAccount the versions play only through a streaming service account: go where one is added.
  * @param onBack the empty state's Back.
  * @param onUndo Undo on the learned note.
+ * @param held the page is open over the player: rows keep the order they opened in, new ones after them.
  */
 @Composable
 fun PhoneVersions(
@@ -110,6 +111,7 @@ fun PhoneVersions(
     onBack: () -> Unit,
     onUndo: suspend (LearnedNote) -> Unit,
     modifier: Modifier = Modifier,
+    held: Boolean = false,
 ) {
     val side = Marquee.safe.side
     val colors = Marquee.colors
@@ -138,7 +140,11 @@ fun PhoneVersions(
     }
     // The rows found when none plays are simply listed, dimmed, as they would rank once the reason is fixed.
     // The core's quality sections, or today's groups for rows they do not cover.
-    val sections = VersionsCopy.sections(snapshot, empty?.rows ?: snapshot?.rows.orEmpty())
+    val seen = remember { mutableMapOf<String, Int>() }
+    val sections =
+        VersionsCopy.sections(snapshot, empty?.rows ?: snapshot?.rows.orEmpty()).let {
+            if (held) VersionsCopy.held(it, seen) else it
+        }
     val open = remember { mutableStateMapOf<String, Boolean>() }
     LazyColumn(
         state = listState,

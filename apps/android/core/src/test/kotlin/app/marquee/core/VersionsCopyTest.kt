@@ -332,4 +332,29 @@ class VersionsCopyTest {
         )
         assertEquals(emptyList(), VersionsCopy.shortcuts(null))
     }
+
+    @Test
+    fun `held over the player, rows keep the order they opened in, and a new one goes after them in its section`() {
+        val seen = mutableMapOf<String, Int>()
+        val r = { key: String -> row().copy(key = key) }
+        val first = listOf(VersionsCopy.Section("section:fhd", "1080p", listOf(r("a"), r("b"))))
+        assertEquals(
+            listOf("a", "b"),
+            VersionsCopy
+                .held(first, seen)
+                .single()
+                .rows
+                .map(VersionRow::key),
+        )
+        // The core re-ranks b over a and finds c, ranked first.
+        val reranked = listOf(VersionsCopy.Section("section:fhd", "1080p", listOf(r("c"), r("b"), r("a"))))
+        assertEquals(
+            listOf("a", "b", "c"),
+            VersionsCopy
+                .held(reranked, seen)
+                .single()
+                .rows
+                .map(VersionRow::key),
+        )
+    }
 }

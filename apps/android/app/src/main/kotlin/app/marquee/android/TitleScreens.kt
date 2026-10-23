@@ -195,6 +195,8 @@ fun VersionsScreen(
     onAddAccount: () -> Unit,
     onBack: () -> Unit,
     onUndo: suspend (LearnedNote) -> Unit,
+    /** Open over the paused player: rows keep the order they opened in. */
+    held: Boolean = false,
 ) {
     val key = keyFor(route.kind, route.videoId, route.title)
     LaunchedEffect(key) { app.versions.use(key) }
@@ -203,9 +205,9 @@ fun VersionsScreen(
         key.episode?.let { "${route.title}, ${Format.episodeLabel(key.season ?: 0, it)}" } ?: route.title
     if (form == Form.Tv) {
         val focus = viewModel<VersionsFocus>(key = "versions:${route.videoId}").focus
-        TvVersions(heading, view, focus, onPlay, onAddSource, onAddAccount, onBack, onUndo)
+        TvVersions(heading, view, focus, onPlay, onAddSource, onAddAccount, onBack, onUndo, held = held)
     } else {
-        PhoneVersions(heading, view, onPlay, onAddSource, onAddAccount, onBack, onUndo)
+        PhoneVersions(heading, view, onPlay, onAddSource, onAddAccount, onBack, onUndo, held = held)
     }
 }
 

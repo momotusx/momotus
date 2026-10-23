@@ -207,6 +207,19 @@ object VersionsCopy {
         }
     }
 
+    /**
+     * [sections] with each one's rows in the order they were first seen ([seen] remembers it, and is filled here):
+     * while Versions is open over the player, a re-rank under it never moves a row, and a new version goes after
+     * the ones already there in its section.
+     */
+    fun held(
+        sections: List<Section>,
+        seen: MutableMap<String, Int>,
+    ): List<Section> {
+        for (section in sections) for (row in section.rows) seen.getOrPut(row.key) { seen.size }
+        return sections.map { s -> s.copy(rows = s.rows.sortedBy { seen.getValue(it.key) }) }
+    }
+
     /** A shortcut's words: "Smaller file: 1080p, 2 GB". */
     fun shortcutLabel(
         label: String,

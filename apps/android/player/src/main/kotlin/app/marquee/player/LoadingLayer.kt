@@ -67,7 +67,6 @@ import coil3.request.SuccessResult
 import coil3.request.allowHardware
 import coil3.toBitmap
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 /**
@@ -76,7 +75,7 @@ import kotlinx.coroutines.withContext
  * The title's [mark] (its logo trimmed, [rememberTitleMark], or its name in display type when it has no logo; nothing
  * while the logo loads) fills from a faint copy to solid as [fill] goes from 0 to 1; under it the core's [lines],
  * small and quiet, and under them [choose] ("Choose another version") in a slot reserved from the first frame, shown
- * once [chooseShown] (20 s on the loading screen, [rememberChooseShown]) and said once. A gentle pulse, none under
+ * once [chooseShown] (the core's chooseAnother: 20 s into the start, 30 s into a stall) and said once. A gentle pulse, none under
  * reduced motion. Nothing here takes focus by itself: on a TV the first D-pad key after the button shows moves to
  * [chooseFocus], and the remote's Back cancels. [fill] is read here only, and its easing only where the mark is drawn, so the fill redraws and
  * recomposes nothing around it.
@@ -224,22 +223,8 @@ private fun ChooseAnother(
     }
 }
 
-/** Whether the loading screen offers [CHOOSE_ANOTHER]: [CHOOSE_AFTER_MS] after it first showed for this start. */
-@Composable
-fun rememberChooseShown(opening: Boolean): Boolean {
-    val shown by produceState(false, opening) {
-        value = false
-        if (opening) {
-            delay(CHOOSE_AFTER_MS)
-            value = true
-        }
-    }
-    return shown
-}
-
 const val CHOOSE_ANOTHER = StreamChoiceCopy.CHOOSE_ANOTHER
 private const val CHOOSE_SAID = StreamChoiceCopy.CHOOSE_ANOTHER_SAID
-const val CHOOSE_AFTER_MS = 20_000L
 const val CHOOSE_TAG = "choose-another"
 
 /** The faint copy of [content] and over it the solid copy revealed from the left to [fill], its edge feathered. */

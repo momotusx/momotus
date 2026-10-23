@@ -119,6 +119,7 @@ private const val SHOWN = 3
  * @param onAddAccount the versions play only through a streaming service account: go where one is added.
  * @param onBack the empty state's Back.
  * @param onUndo Undo on the learned note.
+ * @param held the page is open over the player: rows keep the order they opened in, new ones after them.
  */
 @Composable
 fun TvVersions(
@@ -131,6 +132,7 @@ fun TvVersions(
     onBack: () -> Unit,
     onUndo: suspend (LearnedNote) -> Unit,
     modifier: Modifier = Modifier,
+    held: Boolean = false,
 ) {
     val safe = Marquee.safe
     val snapshot = versions?.snapshot
@@ -185,6 +187,7 @@ fun TvVersions(
                     snapshot,
                     empty?.rows ?: snapshot?.rows.orEmpty(),
                     empty?.kind,
+                    held,
                     // Nothing to list yet and nothing said: the table's frame waits in place, so nothing moves.
                     failure == null && snapshot?.recommended == null && snapshot?.empty == null &&
                         snapshot?.rows.isNullOrEmpty(),
@@ -487,6 +490,7 @@ private fun Sources(
     snapshot: VersionsSnapshot?,
     rows: List<VersionRow>,
     why: EmptyKind?,
+    held: Boolean,
     loading: Boolean,
     focus: FocusMemory,
     list: FocusRequester,
@@ -494,8 +498,10 @@ private fun Sources(
     modifier: Modifier,
 ) {
     val colors = Marquee.colors
-    // The core's quality sections, or today's groups for rows they do not cover.
-    val sections = VersionsCopy.sections(snapshot, rows)
+    // The core's quality sections, or today's groups for rows they do not cover; held in their first order over the
+    // player, so a re-rank under it never moves a row.
+    val seen = remember { mutableMapOf<String, Int>() }
+    val sections = VersionsCopy.sections(snapshot, rows).let { if (held) VersionsCopy.held(it, seen) else it }
     val open = remember { mutableStateMapOf<String, Boolean>() }
     val scope = rememberCoroutineScope()
     // Focus by key once its node is composed (an item a toggle just inserted is not yet attached).

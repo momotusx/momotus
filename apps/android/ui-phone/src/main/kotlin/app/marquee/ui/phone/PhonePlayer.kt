@@ -82,7 +82,6 @@ import app.marquee.player.audioDetail
 import app.marquee.player.clockText
 import app.marquee.player.loadingLines
 import app.marquee.player.nextSpeed
-import app.marquee.player.rememberChooseShown
 import app.marquee.player.rememberTitleMark
 import app.marquee.player.rememberTouchExploration
 import app.marquee.player.scrubTo
@@ -274,8 +273,8 @@ fun PhonePlayer(
                 opening = opening,
                 // Choose another version, 20 s after the loading screen showed (plans/versions-android-spec.md, 6).
                 choose = onVersions.takeIf { opening || stalled },
-                // 20 s into the start, or when the core offers it over a stalled frame (30 s).
-                chooseShown = rememberChooseShown(opening) || (stalled && controller.chooseAnother),
+                // When the core offers it: 20 s into the start, 30 s into a stall (one clock, the core's).
+                chooseShown = controller.chooseAnother,
             )
         }
 

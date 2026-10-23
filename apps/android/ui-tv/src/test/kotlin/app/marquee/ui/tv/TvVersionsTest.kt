@@ -197,7 +197,10 @@ class TvVersionsTest {
     private val undone = mutableListOf<LearnedNote>()
 
     /** The screen on a view whose core answers the subscribe with [snapshot]. */
-    private fun show(snapshot: VersionsSnapshot) {
+    private fun show(
+        snapshot: VersionsSnapshot,
+        held: Boolean = false,
+    ) {
         client.attach { text ->
             val msg = CoreJson.parseToJsonElement(text).jsonObject
             val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
@@ -221,6 +224,7 @@ class TvVersionsTest {
                     onAddAccount = { accounts++ },
                     onBack = { backs++ },
                     onUndo = { undone += it },
+                    held = held,
                 )
             }
         }
@@ -596,5 +600,31 @@ class TvVersionsTest {
         )
         compose.mainClock.advanceTimeBy(2_000)
         save("tv-versions-shortcuts")
+    }
+
+    @Test
+    fun `over the player the rows hold their order through a re-rank, and a new one goes after them`() {
+        val a = row("a", ReasonLine.Few(31)).copy(sizeBytes = 1 * gib)
+        val b = row("b", ReasonLine.Few(31)).copy(sizeBytes = 2 * gib)
+        val c = row("c", ReasonLine.Few(31)).copy(sizeBytes = 3 * gib)
+        val best = row("best", ReasonLine.Ready("TorBox", gib)).copy(quality = "4K")
+        show(snapshot(best, listOf(a, b)), held = true)
+        // The core re-ranks b over a and finds c, ranked first.
+        val reranked = snapshot(best, listOf(c, b, a))
+        client.onMessage(
+            """{"sub":7,"updates":[${CoreJson.encodeToString(VersionsSnapshot.serializer(), reranked)}]}""",
+        )
+        compose.waitUntil(10_000) {
+            Snapshot.sendApplyNotifications()
+            compose.onAllNodesWithContentDescription("1080p, HDR10, 3 GB").fetchSemanticsNodes().isNotEmpty()
+        }
+        val top = { size: String ->
+            compose
+                .onNodeWithContentDescription("1080p, HDR10, $size")
+                .fetchSemanticsNode()
+                .boundsInRoot.top
+        }
+        val tops = listOf(top("1 GB"), top("2 GB"), top("3 GB"))
+        assertEquals(tops.sorted(), tops, "a, then b, then the new c")
     }
 }
