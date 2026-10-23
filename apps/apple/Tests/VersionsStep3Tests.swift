@@ -363,7 +363,7 @@ private func row(_ json: String) throws -> VersionRow {
     // Dimmed: why it may not play.
     #expect(VersionWords.rowWords(try row(#", "line": {"kind": "quick"}"#), dimmed: "Needs an account") == "12 GB, needs an account")
     // The details, laid out always, shown on focus or hover: the release, the line's numbers, languages and sources.
-    #expect(VersionWords.details(try row(#", "line": {"kind": "few", "seeders": 5}"#)) == "Sintel.2010.1080p.mkv \u{B7} 5 seeders \u{B7} English, 2 sources")
+    #expect(VersionWords.details(try row(#", "line": {"kind": "few", "seeders": 5}"#)) == "Sintel.2010.1080p.mkv \u{B7} Shared by 5 people \u{B7} English, 2 sources")
     // Its language tag only in another language than the viewer's; never the addon in what is read out.
     let other = try row(#", "group": "otherLanguages", "languages": ["tr"], "line": {"kind": "quick"}"#)
     #expect(VersionWords.languageTag(other) == "Turkish")
