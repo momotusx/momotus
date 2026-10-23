@@ -553,6 +553,9 @@ fn playability(s: &ParsedStream, input: &RankInput<'_>) -> Option<Playability> {
         VideoCodec::H265 if r.bit_depth == Some(10) => {
             caps.ten_bit_hevc && caps.decoders.contains(&VideoCodec::H265)
         }
+        VideoCodec::H264 if r.bit_depth == Some(10) => {
+            caps.ten_bit_h264 && caps.decoders.contains(&VideoCodec::H264)
+        }
         codec => caps.decoders.contains(&codec),
     };
     let hdr_ok = r.hdr.iter().all(|h| shows(*h, caps));

@@ -1040,6 +1040,12 @@ data class PlaybackSnapshot(
     val empty: EmptyKind? = null,
     /** When a first play's start budget (90 s from its first attempt's add) ends, in epoch ms, while it runs: from the first attempt until a source played past its start (or the playback failed). Time the app spends after `ready` (another player engine opening the file) counts against it too (plans/apple-second-engine.md 2.3). Null otherwise. An app reads it only while it is still opening the source: a video that plays, or is paused, before its first 30 s is never failed by it. */
     val startBudgetEndsAt: Long? = null,
+    /** The container of the file playing ("mkv", "mp4"), once `ready`: the opened file's name as the core parses it, else what an earlier play of this version opened, else the release's; null when unknown. Apple picks its player engine by it (plans/apple-second-engine.md 2.1). */
+    val container: String? = null,
+    /** The playing release's audio formats in the core's names ("dts_hd_ma", "true_hd", "atmos"), once `ready`; empty when unknown. */
+    val audio: List<String> = emptyList(),
+    /** The second engine this version played on here before (`playedOn`), after the first refused it ("aether"): the app opens it there first. */
+    val engine: String? = null,
 )
 
 @Serializable

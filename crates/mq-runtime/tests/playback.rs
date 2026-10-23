@@ -1544,6 +1544,38 @@ async fn a_pick_before_the_wait_stays_the_pick() {
     );
 }
 
+/// What Apple picks its player engine by (plans/apple-second-engine.md
+/// 2.1): the opened file's container and the release's audio, once
+/// `ready`; and `playedOn`, which the next play of the same version reports
+/// back as `engine`, on this device only.
+#[tokio::test]
+async fn the_snapshot_names_the_container_audio_and_the_engine_that_played() {
+    let (video, _) = counted_origin().await;
+    let core = Core::temporary("p").unwrap();
+    let streams = serde_json::json!({"streams": [{
+        "url": format!("{video}/v"),
+        "title": "Sintel.2010.1080p.BluRay.DTS-HD.MA.5.1.x264-GRP",
+        "behaviorHints": { "filename": "Sintel.2010.1080p.BluRay.DTS-HD.MA.5.1.x264-GRP.mkv" },
+    }]})
+    .to_string();
+    let open = || PlaybackView::open(&core, setup(&core, &streams), target());
+    let view = open();
+    let s = until(&view, "ready", |s| s.phase == PlaybackPhase::Ready).await;
+    assert_eq!(s.container.as_deref(), Some("mkv"));
+    assert_eq!(s.audio, ["dts_hd_ma"]);
+    assert_eq!(s.engine, None);
+    assert!(view.played_on("vlc").is_err(), "only a known engine");
+    view.played_on("aether").unwrap();
+    assert_eq!(view.snapshot().engine.as_deref(), Some("aether"));
+    drop(view);
+    let again = until(&open(), "ready again", |s| s.phase == PlaybackPhase::Ready).await;
+    assert_eq!(
+        again.engine.as_deref(),
+        Some("aether"),
+        "remembered for the version"
+    );
+}
+
 /// The track every app turns on at start: only when the profile set
 /// subtitle languages and the audio is in none of them; the user's own
 /// choice (a track, or Off) wins and is remembered for the title.

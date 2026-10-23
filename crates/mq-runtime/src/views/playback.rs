@@ -162,6 +162,17 @@ pub struct PlaybackSnapshot {
     /// it.
     #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub start_budget_ends_at: Option<u64>,
+    /// The container of the file playing ("mkv", "mp4"), once `ready`: the
+    /// opened file's name as the core parses it, else what an earlier play
+    /// of this version opened, else the release's; null when unknown. Apple
+    /// picks its player engine by it (plans/apple-second-engine.md 2.1).
+    pub container: Option<String>,
+    /// The playing release's audio formats in the core's names
+    /// ("dts_hd_ma", "true_hd", "atmos"), once `ready`; empty when unknown.
+    pub audio: Vec<String>,
+    /// The second engine this version played on here before (`playedOn`),
+    /// after the first refused it ("aether"): the app opens it there first.
+    pub engine: Option<String>,
 }
 
 /// One start of the playback, from the first source it tries to `ready`
@@ -768,6 +779,9 @@ impl State {
                 choose_another: false,
                 empty: None,
                 start_budget_ends_at: None,
+                container: None,
+                audio: Vec::new(),
+                engine: None,
             },
             tried: candidates.iter().map(|c| c.key.clone()).collect(),
             first: candidates.clone(),
@@ -947,6 +961,31 @@ impl PlaybackView {
     /// whole run: each wait is cut to what is left, and when it is spent the
     /// run ends with the attempt "Tried again for 3 minutes" (via
     /// "Marquee"). Ignored unless the playback failed.
+    /// The app's second player engine (`engine`, "aether") played the
+    /// version playing after the first refused it: its next play here goes
+    /// there first (`engine` in the snapshot). Kept per version and target
+    /// on this device, never synced. Ignored before `ready`.
+    pub fn played_on(&self, engine: &str) -> Result<(), String> {
+        if engine != "aether" {
+            return Err(format!("unknown engine: {engine}"));
+        }
+        let mut s = lock(&self.state);
+        let Some(key) = s
+            .snapshot
+            .key
+            .clone()
+            .filter(|_| s.snapshot.phase == PlaybackPhase::Ready)
+        else {
+            return Ok(());
+        };
+        let played_for = (self.target.season, self.target.episode);
+        let now = mq_library::hlc::now_ms();
+        crate::speed::record_engine(self.core.library(), &key, played_for, engine, now);
+        s.snapshot.engine = Some(engine.to_owned());
+        self.snapshot.set(s.snapshot.clone());
+        Ok(())
+    }
+
     pub fn retry(&self) {
         {
             let mut s = lock(&self.state);
@@ -1826,6 +1865,9 @@ fn release_all(s: &mut State) {
     s.stall += 1;
     s.snapshot.url = None;
     s.snapshot.manifest = false;
+    s.snapshot.container = None;
+    s.snapshot.audio.clear();
+    s.snapshot.engine = None;
     s.snapshot.subtitles.clear();
     s.snapshot.subtitle_notes.clear();
     s.snapshot.auto_subtitle = None;
@@ -1835,6 +1877,14 @@ fn release_all(s: &mut State) {
     s.start_settled = false;
     s.order.clear();
     s.lease = None;
+}
+
+/// A release's audio formats in the core's serde names ("dts_hd_ma").
+fn audio_names(audio: &[mq_relparse::Audio]) -> Vec<String> {
+    audio
+        .iter()
+        .filter_map(|a| serde_json::to_value(a).ok()?.as_str().map(str::to_owned))
+        .collect()
 }
 
 /// Whether `run` still owns the view's source and tracks.
@@ -2294,6 +2344,19 @@ async fn resolve_next(
                     s.snapshot.key = Some(stream.key.clone());
                     s.snapshot.filename = filename.clone();
                     s.snapshot.size_bytes = size.or(stream.size_bytes);
+                    let played_for = (target.season, target.episode);
+                    s.snapshot.container = filename
+                        .as_deref()
+                        .and_then(|f| {
+                            mq_relparse::parse(f.rsplit('/').next().unwrap_or(f)).container
+                        })
+                        .or_else(|| {
+                            crate::speed::container_of(core.library(), &stream.key, played_for)
+                        })
+                        .or_else(|| stream.release.container.clone());
+                    s.snapshot.audio = audio_names(&stream.release.audio);
+                    s.snapshot.engine =
+                        crate::speed::engine_of(core.library(), &stream.key, played_for);
                     s.snapshot.subtitles = own_tracks;
                     let own: Vec<String> =
                         s.snapshot.subtitles.iter().map(|t| t.url.clone()).collect();

@@ -64,6 +64,7 @@ fn android(height: u32, hdr: Vec<Hdr>, av1: bool) -> DeviceCaps {
         display_hdr: hdr,
         decoders,
         ten_bit_hevc: true,
+        ten_bit_h264: true,
         containers: [
             "mkv", "mp4", "m4v", "webm", "ts", "m2ts", "mov", "m3u8", "mpd",
         ]

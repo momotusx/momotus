@@ -1968,6 +1968,9 @@ impl Session {
                 playback.report_duration(&param(command, "key")?, duration_ms);
             }
             (View::Playback(playback), "retry") => playback.retry(),
+            (View::Playback(playback), "playedOn") => {
+                playback.played_on(&param(command, "engine")?)?;
+            }
             (View::Playback(playback), "subtitleChosen") => {
                 let url = command.get("url").and_then(Value::as_str);
                 let language = command.get("language").and_then(Value::as_str);
@@ -2292,7 +2295,8 @@ async fn watch_gone(
 /// Versions params: `kind`, `videoId`, `title` (for wrong-content checks),
 /// optional `season`, `episode`, `bingeGroup`, and what the device can do:
 /// `displayHeight`, `hdr` ("dolby_vision", "hdr10", "hdr10_plus", "hlg"),
-/// `decoders` ("h264", "h265", "av1", "vp9", ...), `tenBitHevc`,
+/// `decoders` ("h264", "h265", "av1", "vp9", ...), `tenBitHevc`, `tenBitH264`
+/// (true when left out: Apple sends false until its second engine is measured),
 /// `passthrough` and `audioDecoders` ("aac", "ac3", "eac3", "dts",
 /// "true_hd", "atmos", ...), `containers` ("mkv", "mp4", ...) and
 /// `hasFallbackEngine`, and `hvc1Only` (Apple: HEVC in MP4 shows only from
@@ -2326,6 +2330,9 @@ fn versions_params(params: &Value, mut prefs: StreamPrefs) -> Result<VersionsPar
     }
     if let Some(ten_bit) = field(params, "tenBitHevc")? {
         caps.ten_bit_hevc = ten_bit;
+    }
+    if let Some(ten_bit) = field(params, "tenBitH264")? {
+        caps.ten_bit_h264 = ten_bit;
     }
     if let Some(passthrough) = field(params, "passthrough")? {
         caps.passthrough = passthrough;
@@ -2390,6 +2397,15 @@ mod tests {
         assert_eq!(caps.display_height, 2160);
         assert_eq!(json!(caps.decoders), json!(["h264", "h265", "av1"]));
         assert!(!caps.ten_bit_hevc && !caps.has_fallback_engine && caps.hvc1_only);
+        // Left out, 10-bit H.264 stays on (the default); Apple says false.
+        assert!(caps.ten_bit_h264);
+        let apple = json!({ "kind": "movie", "videoId": "tt1", "tenBitH264": false });
+        assert!(
+            !versions_params(&apple, StreamPrefs::default())
+                .unwrap()
+                .caps
+                .ten_bit_h264
+        );
         assert_eq!(json!(caps.passthrough), json!(["eac3", "atmos"]));
         assert_eq!(json!(caps.audio_decoders), json!(["aac", "opus"]));
         assert_eq!(caps.containers, ["mp4", "webm"]);

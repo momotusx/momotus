@@ -47,6 +47,7 @@ fn caps_4k_dv() -> DeviceCaps {
         display_hdr: vec![Hdr::DolbyVision, Hdr::Hdr10],
         decoders: vec![VideoCodec::H264, VideoCodec::H265, VideoCodec::Av1],
         ten_bit_hevc: true,
+        ten_bit_h264: true,
         passthrough: vec![mq_relparse::Audio::Eac3, mq_relparse::Audio::Atmos],
         has_fallback_engine: true,
         ..DeviceCaps::basic_1080p()
@@ -2237,4 +2238,54 @@ fn the_size_limit_lets_rows_back_rather_than_leave_nothing() {
     assert_eq!(hidden(&none_fit, HideReason::TooLarge), 0);
     assert_eq!(hidden(&none_fit, HideReason::WrongEpisode), 1);
     assert_eq!(hidden(&none_fit, HideReason::WrongTitle), 1);
+}
+
+/// 10-bit H.264 ("10bit x264", Hi10P) has no hardware decoder on Apple's chips: a device
+/// that says `ten_bit_h264: false` is not offered it, every other device
+/// (the default) is, and a 10-bit HEVC row is judged as before
+/// (plans/apple-second-engine.md 2.1).
+#[test]
+fn ten_bit_h264_is_offered_unless_the_device_says_no() {
+    let prefs = StreamPrefs::default();
+    let all = || {
+        streams(
+            "torrentio",
+            0,
+            json!({ "streams": [
+                { "name": "Torrentio\n1080p", "title": "The.Last.of.Us.S02E03.1080p.BluRay.10bit.x264-GROUP.mkv\n👤 300 💾 3.9 GB",
+                  "infoHash": "dddddddddddddddddddddddddddddddddddddddd", "fileIdx": 0 },
+                { "name": "Torrentio\n1080p", "title": "The.Last.of.Us.S02E03.1080p.WEB.x265.10bit-GROUP.mkv\n👤 40 💾 1.9 GB",
+                  "infoHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "fileIdx": 0 }
+            ]}),
+        )
+    };
+    let unplayable = |caps: &DeviceCaps| {
+        let input = RankInput {
+            caps,
+            prefs: &prefs,
+            target: &target(),
+            last_binge_group: None,
+            kids: None,
+            conditions: engine(),
+        };
+        hidden(&rank(all(), &input), HideReason::Unplayable)
+    };
+    // No second engine to fall back on, as Apple's caps say.
+    let default = DeviceCaps {
+        has_fallback_engine: false,
+        ..DeviceCaps::basic_1080p()
+    };
+    assert!(default.ten_bit_h264, "a device that does not say lists it");
+    assert_eq!(unplayable(&default), 0);
+    let apple = DeviceCaps {
+        ten_bit_h264: false,
+        ..default.clone()
+    };
+    assert_eq!(unplayable(&apple), 1, "the 10-bit H.264 row only");
+    let no_hevc10 = DeviceCaps {
+        ten_bit_h264: false,
+        ten_bit_hevc: false,
+        ..default.clone()
+    };
+    assert_eq!(unplayable(&no_hevc10), 2, "10-bit HEVC as before");
 }

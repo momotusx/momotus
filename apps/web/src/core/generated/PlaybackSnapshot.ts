@@ -143,4 +143,21 @@ empty: EmptyKind | null,
  * that plays, or is paused, before its first 30 s is never failed by
  * it.
  */
-startBudgetEndsAt: number | null, };
+startBudgetEndsAt: number | null, 
+/**
+ * The container of the file playing ("mkv", "mp4"), once `ready`: the
+ * opened file's name as the core parses it, else what an earlier play
+ * of this version opened, else the release's; null when unknown. Apple
+ * picks its player engine by it (plans/apple-second-engine.md 2.1).
+ */
+container: string | null, 
+/**
+ * The playing release's audio formats in the core's names
+ * ("dts_hd_ma", "true_hd", "atmos"), once `ready`; empty when unknown.
+ */
+audio: Array<string>, 
+/**
+ * The second engine this version played on here before (`playedOn`),
+ * after the first refused it ("aether"): the app opens it there first.
+ */
+engine: string | null, };

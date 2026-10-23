@@ -232,6 +232,12 @@ const WRONG_FILE_KEY: &str = "wrong_file";
 /// The container of the file a version opened, for the target it opened
 /// for, as `{target_digest}:{extension}`: a file does not change.
 const CONTAINERS_KEY: &str = "containers";
+/// The versions an app's second player engine played after its first
+/// refused them, for the target they played for, as
+/// `{target_digest}:{engine}` (plans/apple-second-engine.md 2.1): the next
+/// play goes to that engine first. A file does not change: kept until the
+/// list is full, as `CONTAINERS_KEY`.
+const ENGINES_KEY: &str = "engines";
 /// How long a version the player could not decode stays demoted.
 // ponytail: 30 days, as a decoder rarely changes; a one-off decode error
 // demotes a version for that long, never hides it.
@@ -353,6 +359,47 @@ pub fn record_container(
 ) {
     let entry = format!("{}:{container}", target_digest(stream_key, season, episode));
     stamp(lib, CONTAINERS_KEY, entry, u64::MAX, now_ms);
+}
+
+/// The container an earlier play of `stream_key` for this target opened
+/// (`record_container`), if any.
+pub fn container_of(
+    lib: &Library,
+    stream_key: &str,
+    (season, episode): (Option<u32>, Option<u32>),
+) -> Option<String> {
+    let digest = target_digest(stream_key, season, episode);
+    containers(lib)
+        .into_iter()
+        .find(|(d, _)| *d == digest)
+        .map(|(_, c)| c)
+}
+
+/// The version `stream_key` played on an app's second engine (`engine`,
+/// "aether") for an episode or a film, after its first engine refused it.
+pub fn record_engine(
+    lib: &Library,
+    stream_key: &str,
+    (season, episode): (Option<u32>, Option<u32>),
+    engine: &str,
+    now_ms: u64,
+) {
+    let entry = format!("{}:{engine}", target_digest(stream_key, season, episode));
+    stamp(lib, ENGINES_KEY, entry, u64::MAX, now_ms);
+}
+
+/// The second engine `stream_key` played on for this target, if it did.
+pub fn engine_of(
+    lib: &Library,
+    stream_key: &str,
+    (season, episode): (Option<u32>, Option<u32>),
+) -> Option<String> {
+    let digest = target_digest(stream_key, season, episode);
+    stamped(lib, ENGINES_KEY, u64::MAX, 0)
+        .into_iter()
+        .filter_map(|e| e.split_once(':').map(|(d, c)| (d.to_owned(), c.to_owned())))
+        .find(|(d, _)| *d == digest)
+        .map(|(_, engine)| engine)
 }
 
 /// Lists written before digests kept raw stream keys: each becomes its

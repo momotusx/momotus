@@ -14,6 +14,9 @@ pub struct DeviceCaps {
     /// Codecs with a decoder that plays them smoothly at `display_height`.
     pub decoders: Vec<VideoCodec>,
     pub ten_bit_hevc: bool,
+    /// The decoder plays 10-bit H.264 (Hi10P), which has no hardware path on
+    /// Apple's chips. True unless a device says otherwise.
+    pub ten_bit_h264: bool,
     /// Formats the audio output accepts as passthrough.
     pub passthrough: Vec<Audio>,
     /// Audio formats the primary engine decodes itself.
@@ -37,6 +40,7 @@ impl DeviceCaps {
             display_hdr: vec![],
             decoders: vec![VideoCodec::H264, VideoCodec::H265],
             ten_bit_hevc: true,
+            ten_bit_h264: true,
             passthrough: vec![],
             audio_decoders: vec![
                 Audio::Aac,
