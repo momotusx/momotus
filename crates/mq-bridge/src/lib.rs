@@ -1969,7 +1969,7 @@ impl Session {
             }
             (View::Playback(playback), "retry") => playback.retry(),
             (View::Playback(playback), "playedOn") => {
-                playback.played_on(&param(command, "engine")?)?;
+                playback.played_on(&param(command, "key")?, &param(command, "engine")?)?;
             }
             (View::Playback(playback), "subtitleChosen") => {
                 let url = command.get("url").and_then(Value::as_str);

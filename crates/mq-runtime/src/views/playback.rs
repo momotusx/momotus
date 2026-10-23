@@ -961,31 +961,6 @@ impl PlaybackView {
     /// whole run: each wait is cut to what is left, and when it is spent the
     /// run ends with the attempt "Tried again for 3 minutes" (via
     /// "Marquee"). Ignored unless the playback failed.
-    /// The app's second player engine (`engine`, "aether") played the
-    /// version playing after the first refused it: its next play here goes
-    /// there first (`engine` in the snapshot). Kept per version and target
-    /// on this device, never synced. Ignored before `ready`.
-    pub fn played_on(&self, engine: &str) -> Result<(), String> {
-        if engine != "aether" {
-            return Err(format!("unknown engine: {engine}"));
-        }
-        let mut s = lock(&self.state);
-        let Some(key) = s
-            .snapshot
-            .key
-            .clone()
-            .filter(|_| s.snapshot.phase == PlaybackPhase::Ready)
-        else {
-            return Ok(());
-        };
-        let played_for = (self.target.season, self.target.episode);
-        let now = mq_library::hlc::now_ms();
-        crate::speed::record_engine(self.core.library(), &key, played_for, engine, now);
-        s.snapshot.engine = Some(engine.to_owned());
-        self.snapshot.set(s.snapshot.clone());
-        Ok(())
-    }
-
     pub fn retry(&self) {
         {
             let mut s = lock(&self.state);
@@ -1018,6 +993,27 @@ impl PlaybackView {
             self.snapshot.set(s.snapshot.clone());
         }
         self.spawn_resolve();
+    }
+
+    /// The app's second player engine (`engine`, "aether") played the
+    /// version playing after the first refused it: its next play here goes
+    /// there first (`engine` in the snapshot). Kept per version and target
+    /// on this device, never synced. Ignored before `ready` and for another
+    /// version than `key`, as `report_duration` is.
+    pub fn played_on(&self, key: &str, engine: &str) -> Result<(), String> {
+        if engine != "aether" {
+            return Err(format!("unknown engine: {engine}"));
+        }
+        let mut s = lock(&self.state);
+        if s.snapshot.phase != PlaybackPhase::Ready || s.snapshot.key.as_deref() != Some(key) {
+            return Ok(());
+        }
+        let played_for = (self.target.season, self.target.episode);
+        let now = mq_library::hlc::now_ms();
+        crate::speed::record_engine(self.core.library(), key, played_for, engine, now);
+        s.snapshot.engine = Some(engine.to_owned());
+        self.snapshot.set(s.snapshot.clone());
+        Ok(())
     }
 
     /// Tests: whether a swarm that falls short would be cut at its first

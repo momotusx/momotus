@@ -1564,8 +1564,9 @@ async fn the_snapshot_names_the_container_audio_and_the_engine_that_played() {
     assert_eq!(s.container.as_deref(), Some("mkv"));
     assert_eq!(s.audio, ["dts_hd_ma"]);
     assert_eq!(s.engine, None);
-    assert!(view.played_on("vlc").is_err(), "only a known engine");
-    view.played_on("aether").unwrap();
+    let key = s.key.clone().unwrap();
+    assert!(view.played_on(&key, "vlc").is_err(), "only a known engine");
+    view.played_on(&key, "aether").unwrap();
     assert_eq!(view.snapshot().engine.as_deref(), Some("aether"));
     drop(view);
     let again = until(&open(), "ready again", |s| s.phase == PlaybackPhase::Ready).await;
@@ -1573,6 +1574,43 @@ async fn the_snapshot_names_the_container_audio_and_the_engine_that_played() {
         again.engine.as_deref(),
         Some("aether"),
         "remembered for the version"
+    );
+}
+
+/// `playedOn` counts only once `ready` and for the version playing, as
+/// `duration` does; a failover clears what the snapshot said of the source.
+#[tokio::test]
+async fn played_on_waits_for_ready_and_its_version_and_a_failover_clears_the_source() {
+    let base = origin().await;
+    let core = Core::temporary("p").unwrap();
+    let streams = format!(
+        r#"{{"streams":[
+          {{"name":"Live","url":"{base}/ok.mkv","title":"Sintel.2010.1080p.BluRay.DTS-HD.MA.5.1.x264-GRP","behaviorHints":{{"filename":"Sintel.2010.1080p.BluRay.DTS-HD.MA.5.1.x264-GRP.mkv","proxyHeaders":{{"request":{{"x-key":"1"}}}}}}}},
+          {{"name":"Dead","url":"{base}/dead.mkv"}}
+        ]}}"#
+    );
+    let view = PlaybackView::open(&core, setup(&core, &streams), target());
+    // No await yet: the resolve has not run, so the view is not ready.
+    let early = view.snapshot();
+    assert_ne!(early.phase, PlaybackPhase::Ready);
+    view.played_on(early.key.as_deref().unwrap_or("any"), "aether")
+        .unwrap();
+    assert_eq!(view.snapshot().engine, None, "before ready");
+    let s = until(&view, "ready", |s| s.phase == PlaybackPhase::Ready).await;
+    assert_eq!(s.engine, None, "the early mark was not kept");
+    view.played_on("another version", "aether").unwrap();
+    assert_eq!(view.snapshot().engine, None, "another version");
+    view.played_on(s.key.as_deref().unwrap(), "aether").unwrap();
+    let marked = view.snapshot();
+    assert_eq!(marked.container.as_deref(), Some("mkv"));
+    assert_eq!(marked.audio, ["dts_hd_ma"]);
+    assert_eq!(marked.engine.as_deref(), Some("aether"));
+    view.fail_over(Some(s.attempt), None, None, "decoder error");
+    let after = settled(&view).await;
+    assert_eq!(after.phase, PlaybackPhase::Failed, "{after:?}");
+    assert_eq!(
+        (after.container, after.audio.len(), after.engine),
+        (None, 0, None)
     );
 }
 
