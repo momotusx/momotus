@@ -359,6 +359,45 @@ async fn a_relaunch_fetches_a_piece_the_disk_lost() {
     );
 }
 
+/// A whole file an earlier build kept, on a volume that now keeps piece
+/// files (plans/streaming-window-chunks.md): the relaunch deletes it, its
+/// bitfield fails the check, and the head is fetched again, never read as
+/// the zeros of a missing piece file.
+#[cfg(feature = "test-hooks")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_whole_file_from_before_becomes_piece_files() {
+    use mq_engine::librqbit::sync_log::{self, Fail};
+    let s = support::swarm(true).await;
+    let dir = tempfile::tempdir().unwrap();
+    let head = 64 << 10;
+    let first = engine_on(dir.path()).await;
+    let t = first
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let movie = first
+        .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
+        .await
+        .unwrap();
+    read_range(&first, t, movie, 0, head as u64).await;
+    first.remove(t, true).await.unwrap();
+    drop(first);
+    let file = find(&dir.path().join(&s.info_hash), "movie.mkv").expect("the movie file");
+    sync_log::fail(dir.path(), Fail::PunchRefused, usize::MAX);
+    let again = engine_on(dir.path()).await;
+    let t = again
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let movie = again
+        .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
+        .await
+        .unwrap();
+    let got = read_range(&again, t, movie, 0, head as u64).await;
+    assert!(got == s.movie[..head], "the head read wrong");
+    assert!(file.is_dir(), "not piece files: {file:?}");
+}
+
 /// The file named `name` under `dir`, at any depth.
 fn find(dir: &Path, name: &str) -> Option<std::path::PathBuf> {
     for e in std::fs::read_dir(dir).ok()?.flatten() {

@@ -1212,3 +1212,95 @@ async fn engine_with(dir: &Path, dwh: bool) -> Engine {
     }
     Engine::start(config()).await.unwrap()
 }
+
+/// Piece files (plans/streaming-window-chunks.md), for a volume that cannot
+/// punch: three files of a torrent in 1000-byte pieces, none starting on a
+/// piece (0..2500, 2500..2700 inside piece 2, 2700..6100). Writes and reads
+/// cross piece files; an eviction deletes only the piece files wholly in
+/// its range, an evicted piece reads zeros, its neighbours keep their bytes,
+/// and the folder's allocated bytes fall.
+#[test]
+fn piece_files_read_write_and_evict_across_boundaries() {
+    use mq_engine::librqbit::storage::filesystem::{Chunked, allocated, is_chunked};
+    let td = tempfile::tempdir().unwrap();
+    let layout = [(0u64, 2500u64), (2500, 200), (2700, 3400)];
+    let dirs: Vec<PathBuf> = (0..3).map(|i| td.path().join(format!("f{i}"))).collect();
+    let files: Vec<Chunked> = layout
+        .iter()
+        .zip(&dirs)
+        .map(|(&(start, len), dir)| Chunked::new(dir.clone(), start, 1000, len))
+        .collect();
+    let data: Vec<Vec<u8>> = layout
+        .iter()
+        .map(|&(start, len)| (0..len).map(|i| (i * 7 + start) as u8).collect())
+        .collect();
+    let pieces = |dir: &Path| {
+        let mut v: Vec<u64> = std::fs::read_dir(dir)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_str().unwrap().parse().unwrap())
+            .collect();
+        v.sort_unstable();
+        v
+    };
+    let read = |c: &Chunked, at: u64, len: u64| {
+        let mut buf = vec![0xee; len as usize];
+        c.read_exact_at(at, &mut buf).unwrap();
+        buf
+    };
+    for ((c, d), dir) in files.iter().zip(&data).zip(&dirs) {
+        std::fs::create_dir_all(dir).unwrap();
+        for at in (0..d.len()).step_by(333) {
+            let end = (at + 333).min(d.len());
+            c.write_all_at(at as u64, &d[at..end]).unwrap();
+        }
+        assert_eq!(read(c, 0, d.len() as u64), *d);
+    }
+    assert_eq!(pieces(&dirs[0]), [0, 1, 2]);
+    assert_eq!(pieces(&dirs[1]), [2], "inside one piece");
+    assert_eq!(pieces(&dirs[2]), [2, 3, 4, 5, 6]);
+    assert_eq!(
+        read(&files[0], 900, 300),
+        data[0][900..1200],
+        "across pieces"
+    );
+    let mut over = [0u8; 2];
+    assert!(
+        files[0].read_exact_at(2499, &mut over).is_err(),
+        "past the end"
+    );
+
+    // The third file: piece 3 is its bytes 300..1300, piece 4 1300..2300.
+    let (c, d, dir) = (&files[2], &data[2], &dirs[2]);
+    let before = allocated(dir);
+    assert_eq!(
+        c.punch(310, 2000).unwrap(),
+        1300..2300,
+        "only piece 4 whole"
+    );
+    assert_eq!(pieces(dir), [2, 3, 5, 6]);
+    assert_eq!(c.punch(300, 1000).unwrap(), 300..1300, "piece 3 exactly");
+    assert_eq!(c.punch(0, 299).unwrap(), 0..0, "a part of piece 2 stays");
+    assert_eq!(pieces(dir), [2, 5, 6]);
+    assert!(
+        allocated(dir) < before,
+        "{} not under {before}",
+        allocated(dir)
+    );
+    assert_eq!(read(c, 0, 300), d[..300], "piece 2's part kept");
+    assert_eq!(read(c, 300, 2000), vec![0; 2000], "evicted reads zeros");
+    assert_eq!(read(c, 2300, 1100), d[2300..], "the rest kept");
+    assert_eq!(
+        read(&files[0], 2000, 500),
+        data[0][2000..],
+        "piece 2 elsewhere"
+    );
+    assert_eq!(read(&files[1], 0, 200), data[1]);
+    // The last piece is short (6000..6100): it goes whole too.
+    assert_eq!(c.punch(3300, 100).unwrap(), 3300..3400);
+    // Written again after an eviction, it reads back.
+    c.write_all_at(1300, &d[1300..2300]).unwrap();
+    assert_eq!(read(c, 1300, 1000), d[1300..2300]);
+    assert!(is_chunked(dir));
+    assert!(!is_chunked(td.path()), "a folder of folders is no file");
+}

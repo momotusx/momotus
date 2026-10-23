@@ -606,7 +606,17 @@ impl Engine {
         let lock_file = std::fs::File::create(cfg.data_dir.join(".lock"))?;
         lock_file.try_lock().map_err(lock_error)?;
         let scopes = Scopes::new(&cfg.policy);
-        let opts = session_options(&cfg, &scopes);
+        let mut opts = session_options(&cfg, &scopes);
+        // Where holes do not punch, files are kept as piece files, so a
+        // window frees space everywhere (plans/streaming-window-chunks.md).
+        let dir = cfg.data_dir.clone();
+        let punches = tokio::task::spawn_blocking(move || librqbit::punch_supported(&dir))
+            .await
+            .unwrap_or(false);
+        tracing::info!(punches, "torrent folder probed");
+        opts.default_storage_factory = Some(librqbit::storage::StorageFactoryExt::boxed(
+            librqbit::storage::filesystem::FilesystemStorageFactory { chunked: !punches },
+        ));
         let session = Session::new_with_opts(cfg.data_dir.clone(), opts).await?;
         let scraper = scrape::Scraper::new(scopes.trackers.clone());
         let engine = Self {
@@ -2000,8 +2010,18 @@ fn ready_on_disk(
     let path = dir.join(&f.path);
     // A `.have` whose data is gone or cut short (a purge, a crash in an
     // eviction) is no start: the engine gives a file its whole length when
-    // it starts.
-    if !std::fs::metadata(&path).is_ok_and(|m| m.is_file() && m.len() == f.len) {
+    // it starts, or keeps it as piece files.
+    let chunked = path.is_dir().then(|| {
+        let start = files[..file].iter().map(|f| f.len).sum();
+        librqbit::storage::filesystem::Chunked::new(
+            path.clone(),
+            start,
+            u64::from(piece_len),
+            f.len,
+        )
+    });
+    if chunked.is_none() && !std::fs::metadata(&path).is_ok_and(|m| m.is_file() && m.len() == f.len)
+    {
         return false;
     }
     let lens: Vec<u64> = files.iter().map(|f| f.len).collect();
@@ -2019,10 +2039,14 @@ fn ready_on_disk(
     if let Some((file, n)) = tr.index_wanted() {
         use std::io::Read;
         let mut head = vec![0u8; n as usize];
-        if std::fs::File::open(&path)
-            .and_then(|mut f| f.read_exact(&mut head))
-            .is_err()
-        {
+        let read = if let Some(c) = &chunked {
+            c.read_exact_at(0, &mut head).is_ok()
+        } else {
+            std::fs::File::open(&path)
+                .and_then(|mut f| f.read_exact(&mut head))
+                .is_ok()
+        };
+        if !read {
             return false;
         }
         tr.index_found(file, &head);
@@ -2177,16 +2201,7 @@ fn readahead_for(
 /// Bytes actually allocated on disk (sparse files count what is written).
 /// What one file takes on disk (none when it is not there).
 fn file_allocated(path: &Path) -> u64 {
-    std::fs::metadata(path).map_or(0, |m| {
-        #[cfg(unix)]
-        {
-            std::os::unix::fs::MetadataExt::blocks(&m) * 512
-        }
-        #[cfg(not(unix))]
-        {
-            m.len()
-        }
-    })
+    librqbit::storage::filesystem::allocated(path)
 }
 
 /// [`window::counted_on_disk`]'s folders, but those in `held`.
@@ -2217,7 +2232,8 @@ fn single_file(dir: &Path) -> Option<u64> {
     while let Some(d) = dirs.pop() {
         for e in std::fs::read_dir(&d).ok()?.flatten() {
             let m = e.metadata().ok()?;
-            if m.is_dir() {
+            // A file kept as piece files is a folder of them.
+            if m.is_dir() && !librqbit::storage::filesystem::is_chunked(&e.path()) {
                 dirs.push(e.path());
             } else if found.replace(file_allocated(&e.path())).is_some() {
                 return None;

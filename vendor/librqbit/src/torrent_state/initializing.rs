@@ -208,13 +208,7 @@ impl TorrentStateInitializing {
                 .options
                 .output_folder
                 .join(&fi.relative_filename);
-            held += match std::fs::metadata(path) {
-                #[cfg(unix)]
-                Ok(m) => std::os::unix::fs::MetadataExt::blocks(&m) * 512,
-                #[cfg(not(unix))]
-                Ok(m) => m.len(),
-                Err(_) => 0,
-            };
+            held += crate::storage::filesystem::allocated(&path);
         }
         held < wanted / 8
     }

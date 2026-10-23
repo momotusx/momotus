@@ -259,18 +259,41 @@ impl Written {
             if !pieces.clone().any(&new) {
                 continue;
             }
-            // Write access: Windows flushes only a writable handle
-            // (engine review r5, P3-4). No create, no truncate.
-            match std::fs::OpenOptions::new().write(true).open(path) {
-                Ok(f) => f.sync_data()?,
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
-                Err(e) => return Err(e),
+            // Piece files (plans/streaming-window-chunks.md): those of the
+            // new pieces.
+            let synced = if path.is_dir() {
+                let mut any = false;
+                for i in pieces.clone().filter(|i| new(*i)) {
+                    any |= sync_file(&path.join(i.to_string()))?;
+                }
+                // The new files' names too.
+                #[cfg(unix)]
+                if any {
+                    std::fs::File::open(path)?.sync_all()?;
+                }
+                any
+            } else {
+                sync_file(path)?
+            };
+            if !synced {
+                continue;
             }
             #[cfg(feature = "sync-log")]
             sync_log::push(sync_log::Event::DataSynced(path.clone()));
         }
         self.last = Some(next.to_bitvec().into_boxed_bitslice());
         Ok(())
+    }
+}
+
+/// Syncs the data of the file at `path`; false when it is not there.
+fn sync_file(path: &Path) -> std::io::Result<bool> {
+    // Write access: Windows flushes only a writable handle (engine review
+    // r5, P3-4). No create, no truncate.
+    match std::fs::OpenOptions::new().write(true).open(path) {
+        Ok(f) => f.sync_data().map(|()| true),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(e),
     }
 }
 

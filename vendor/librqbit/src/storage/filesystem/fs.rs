@@ -17,7 +17,11 @@ use crate::storage::{StorageFactory, TorrentStorage};
 use super::opened_file::OpenedFile;
 
 #[derive(Default, Clone, Copy)]
-pub struct FilesystemStorageFactory {}
+pub struct FilesystemStorageFactory {
+    /// Marquee fork (plans/streaming-window-chunks.md): new files are kept
+    /// as piece files, for a volume that cannot punch holes.
+    pub chunked: bool,
+}
 
 impl StorageFactory for FilesystemStorageFactory {
     type Storage = FilesystemStorage;
@@ -30,6 +34,7 @@ impl StorageFactory for FilesystemStorageFactory {
         Ok(FilesystemStorage {
             output_folder: shared.options.output_folder.clone(),
             opened_files: Default::default(),
+            chunked: self.chunked,
         })
     }
 
@@ -41,6 +46,7 @@ impl StorageFactory for FilesystemStorageFactory {
 pub struct FilesystemStorage {
     pub(crate) output_folder: PathBuf,
     pub(crate) opened_files: Vec<OpenedFile>,
+    chunked: bool,
 }
 
 impl FilesystemStorage {
@@ -53,21 +59,25 @@ impl FilesystemStorage {
                 .map(|f| f.take_clone())
                 .collect::<anyhow::Result<Vec<_>>>()?,
             output_folder: self.output_folder.clone(),
+            chunked: self.chunked,
         })
     }
 }
 
 impl TorrentStorage for FilesystemStorage {
     fn pread_exact(&self, file_id: usize, offset: u64, buf: &mut [u8]) -> anyhow::Result<()> {
-        self.opened_files
-            .get(file_id)
-            .context("no such file")?
-            .lock_read()?
-            .pread_exact(offset, buf)
+        let of = self.opened_files.get(file_id).context("no such file")?;
+        if let Some(c) = of.chunks() {
+            return c.read_exact_at(offset, buf);
+        }
+        of.lock_read()?.pread_exact(offset, buf)
     }
 
     fn pwrite_all(&self, file_id: usize, offset: u64, buf: &[u8]) -> anyhow::Result<()> {
         let of = self.opened_files.get(file_id).context("no such file")?;
+        if let Some(c) = of.chunks() {
+            return c.write_all_at(offset, buf);
+        }
         #[cfg(windows)]
         return of.try_mark_sparse()?.pwrite_all(offset, buf);
         #[cfg(not(windows))]
@@ -81,6 +91,11 @@ impl TorrentStorage for FilesystemStorage {
         bufs: [IoSlice<'_>; 2],
     ) -> anyhow::Result<usize> {
         let of = self.opened_files.get(file_id).context("no such file")?;
+        if let Some(c) = of.chunks() {
+            c.write_all_at(offset, &bufs[0])?;
+            c.write_all_at(offset + bufs[0].len() as u64, &bufs[1])?;
+            return Ok(bufs[0].len() + bufs[1].len());
+        }
         #[cfg(windows)]
         return of.try_mark_sparse()?.pwrite_all_vectored(offset, bufs);
         #[cfg(not(windows))]
@@ -88,7 +103,11 @@ impl TorrentStorage for FilesystemStorage {
     }
 
     fn remove_file(&self, _file_id: usize, filename: &Path) -> anyhow::Result<()> {
-        Ok(std::fs::remove_file(self.output_folder.join(filename))?)
+        let path = self.output_folder.join(filename);
+        if path.is_dir() {
+            return Ok(std::fs::remove_dir_all(path)?);
+        }
+        Ok(std::fs::remove_file(path)?)
     }
 
     fn punch(&self, file_id: usize, offset: u64, len: u64) -> anyhow::Result<std::ops::Range<u64>> {
@@ -98,6 +117,9 @@ impl TorrentStorage for FilesystemStorage {
 
     fn ensure_file_length(&self, file_id: usize, len: u64) -> anyhow::Result<()> {
         let f = &self.opened_files.get(file_id).context("no such file")?;
+        if f.chunks().is_some() {
+            return Ok(());
+        }
         #[cfg(windows)]
         f.try_mark_sparse()?;
         Ok(f.lock_read()?.set_len(len)?)
@@ -111,6 +133,7 @@ impl TorrentStorage for FilesystemStorage {
                 .map(|f| f.take_clone())
                 .collect::<anyhow::Result<Vec<_>>>()?,
             output_folder: self.output_folder.clone(),
+            chunked: self.chunked,
         }))
     }
 
@@ -143,6 +166,23 @@ impl TorrentStorage for FilesystemStorage {
                 continue;
             };
             std::fs::create_dir_all(full_path.parent().context("bug: no parent")?)?;
+            // Marquee fork (plans/streaming-window-chunks.md): a folder at
+            // the path is piece files. A whole file where piece files are
+            // wanted is from an earlier build: deleted, so the bitfield that
+            // claims it fails the fast-resume check and is cleared.
+            if full_path.is_dir() || self.chunked {
+                if full_path.is_file() {
+                    std::fs::remove_file(&full_path)?;
+                }
+                std::fs::create_dir_all(&full_path)?;
+                files.push(OpenedFile::new_chunked(super::chunks::Chunked::new(
+                    full_path,
+                    file_details.offset_in_torrent,
+                    u64::from(metadata.lengths().default_piece_length()),
+                    file_details.len,
+                )));
+                continue;
+            }
             let f = if shared.options.allow_overwrite {
                 OpenOptions::new()
                     .create(true)

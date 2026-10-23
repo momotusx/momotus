@@ -192,6 +192,35 @@ async fn a_window_never_holds_more_than_its_budget() {
     );
 }
 
+/// The same read where the data folder cannot punch holes (the Fire TV's
+/// ext4, plans/streaming-window-chunks.md): the engine keeps the video as
+/// piece files, the window evicts by deleting them, the folder never holds
+/// more than `W`, and every byte is right.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_window_without_punch_holds_its_budget_in_piece_files() {
+    let s = support::swarm_big(48 << 20, PIECE).await;
+    let root = tempfile::tempdir().unwrap();
+    sync_log::fail(root.path(), Fail::PunchRefused, usize::MAX);
+    let w = windowed_on(s, root, plan(), None).await;
+    let sampler = Sampler::start(w.dir());
+    let len = w.s.movie.len() as u64;
+    let got = w.read(0, len).await;
+    assert!(got == w.s.movie, "bytes differ");
+    let max = sampler.max();
+    assert!(max <= W, "allocated {max} over {W}");
+    let movie = w.dir().join(&w.engine.files(w.t).unwrap()[w.movie].path);
+    assert!(movie.is_dir(), "not piece files: {movie:?}");
+    let pieces = std::fs::read_dir(&movie).unwrap().count() as u64;
+    assert!(pieces * u64::from(PIECE) <= W, "{pieces} piece files kept");
+    let s = w.stats().await;
+    assert!(s.evict_rounds > 0 && s.held_bytes.unwrap() <= W);
+    let evicted = sync_log::under(&w.dir())
+        .iter()
+        .filter(|e| matches!(e, sync_log::Event::Punched { .. }))
+        .count();
+    assert!(evicted > 0, "nothing was evicted");
+}
+
 /// m. A parked read whose readahead (12 MiB here) wants more than the
 /// window has room for: the torrent fills up to the cap. Then, the
 /// bitfield's fsync held (a round can free nothing until it ends), a seek:

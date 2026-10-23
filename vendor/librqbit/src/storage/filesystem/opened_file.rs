@@ -6,9 +6,11 @@ use std::{
 };
 
 use anyhow::Context;
-use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use parking_lot::{MappedRwLockReadGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::Error;
+
+use super::chunks::Chunked;
 
 pub trait OurFileExt {
     fn pwrite_all_vectored(&self, offset: u64, bufs: [IoSlice<'_>; 2]) -> anyhow::Result<usize>;
@@ -127,6 +129,9 @@ fn portable_pwrite_all_vectored(
 struct OpenedFileLocked {
     path: PathBuf,
     fd: Option<File>,
+    /// Marquee fork (plans/streaming-window-chunks.md): kept as piece
+    /// files, with no `fd`.
+    chunked: Option<Chunked>,
     #[cfg(windows)]
     tried_marking_sparse: bool,
 }
@@ -156,10 +161,28 @@ impl OpenedFile {
             file: RwLock::new(OpenedFileLocked {
                 path,
                 fd: Some(f),
+                chunked: None,
                 #[cfg(windows)]
                 tried_marking_sparse: false,
             }),
         }
+    }
+
+    /// Marquee fork (plans/streaming-window-chunks.md): a file kept as
+    /// piece files.
+    pub fn new_chunked(c: Chunked) -> Self {
+        Self {
+            file: RwLock::new(OpenedFileLocked {
+                chunked: Some(c),
+                ..Default::default()
+            }),
+        }
+    }
+
+    /// The piece files, when the file is kept so; `None` after `take_clone`
+    /// as for a descriptor.
+    pub fn chunks(&self) -> Option<MappedRwLockReadGuard<'_, Chunked>> {
+        RwLockReadGuard::try_map(self.file.read(), |f| f.chunked.as_ref()).ok()
     }
 
     pub fn new_dummy() -> Self {
@@ -185,6 +208,9 @@ impl OpenedFile {
     /// [`crate::storage::TorrentStorage::punch`].
     pub fn punch(&self, offset: u64, len: u64) -> anyhow::Result<std::ops::Range<u64>> {
         let g = self.file.read();
+        if let Some(c) = &g.chunked {
+            return Ok(c.punch(offset, len)?);
+        }
         let f = g.fd.as_ref().ok_or(Error::FsFileIsNone)?;
         Ok(super::punch::punch_file(f, &g.path, offset, len)?)
     }
