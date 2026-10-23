@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test";
-import { airDate, bytes, clock, startsText, episodeLabel, groupFailures, parseVideo, playPath, posterLabel, ratingParts, releaseParts, runtimeMinutes } from "./format";
+import { airDate, bytes, clock, startsText, episodeLabel, groupFailures, offersLibrary, parseVideo, playPath, posterLabel, ratingParts, releaseParts, runtimeMinutes } from "./format";
+
+test("Add to Library shows only when the core says the Library can be set", () => {
+  expect(offersLibrary({ librarySettable: true })).toBe(true);
+  // A kids profile: no dead button (C44b review P2).
+  expect(offersLibrary({ librarySettable: false })).toBe(false);
+  expect(offersLibrary(undefined)).toBe(true);
+});
 
 test("bytes are 1024-based, as addons print sizes", () => {
   expect(bytes(5368709120)).toBe("5 GB");

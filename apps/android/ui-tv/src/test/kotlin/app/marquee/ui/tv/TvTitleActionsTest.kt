@@ -166,6 +166,8 @@ class TvTitleActionsTest {
     @Test
     fun `Play is the one primary - it plays the kept version, opens Versions, or is inert`() {
         show(versions(EmptyKind.Unreachable, EmptyAction.PlayFromDevice, key = "kept"))
+        // An owner's page offers Add to Library (the core's librarySettable).
+        compose.onAllNodes(hasContentDescription("Add to Library")).assertCountEquals(1)
         val play = { compose.onNodeWithText("Play").performClick() }
         play()
         assertEquals(listOf("play kept tt1"), calls)
@@ -221,5 +223,46 @@ class TvTitleActionsTest {
                 .isNotEmpty()
         }
         compose.onNodeWithText("Play").assertIsNotEnabled()
+    }
+
+    @Test
+    fun `a kids profile's page shows no Add to Library`() {
+        val kids = title.copy(header = title.header.copy(librarySettable = false))
+        client.attach { text ->
+            val msg = CoreJson.parseToJsonElement(text).jsonObject
+            val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
+            val result =
+                if (msg["op"]?.jsonPrimitive?.content == "subscribe") {
+                    """{"sub":7,"snapshot":${CoreJson.encodeToString(TitleSnapshot.serializer(), kids)}}"""
+                } else {
+                    "{}"
+                }
+            client.onMessage("""{"id":$id,"ok":true,"result":$result}""")
+        }
+        val view = TitleView(client, scope, "movie", "tt1")
+        compose.setContent {
+            MarqueeTheme(Form.Tv) {
+                TvTitle(
+                    view,
+                    versions(EmptyKind.Unreachable, EmptyAction.TryAgain).copy(empty = null, done = false),
+                    FocusMemory(),
+                    onPlay = { _, _ -> },
+                    onVersions = {},
+                    onEpisode = {},
+                    onEpisodeVersions = {},
+                )
+            }
+        }
+        compose.waitForIdle()
+        view.open()
+        val deadline = System.currentTimeMillis() + 120_000
+        while (compose.onAllNodesWithText("Play").fetchSemanticsNodes().isEmpty()) {
+            check(System.currentTimeMillis() < deadline) { "the title never drew" }
+            Snapshot.sendApplyNotifications()
+            compose.waitForIdle()
+            Thread.sleep(10)
+        }
+        compose.onAllNodes(hasContentDescription("Add to Library")).assertCountEquals(0)
+        compose.onAllNodes(hasContentDescription("In Library")).assertCountEquals(0)
     }
 }

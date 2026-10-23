@@ -278,6 +278,8 @@ test("no dead ends: Add a source when nothing plays, a card with Back when nothi
   await expect(add).toHaveText("Add a source", { timeout: 60_000 });
   await expect(page.locator('[data-f="title:play"]')).toHaveCount(0);
   await expect.poll(() => focused(page)).toBe("title:addsource");
+  // An owner's page offers Add to Library (the core's librarySettable; a kids profile's hides it).
+  await expect(page.locator('[data-f="title:library"]')).toBeVisible();
   // The title page keeps its own line until its empty-state step (design-web's).
   await expect(page.locator(".vline")).toContainText("No playable version found");
   // The player: the core's line.

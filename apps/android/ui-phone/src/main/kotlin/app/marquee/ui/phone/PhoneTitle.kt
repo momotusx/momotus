@@ -385,14 +385,17 @@ private fun Info(
                     showLabel = true,
                 )
             }
-            RoundButton(
-                icon = if (header.inLibrary) Icons.BookmarkCheck else Icons.BookmarkPlus,
-                label = if (header.inLibrary) "In Library" else "Add to Library",
-                onClick = { title.setInLibrary(!header.inLibrary) },
-                modifier = Modifier.weight(1f),
-                selected = header.inLibrary,
-                showLabel = true,
-            )
+            // A kids profile's Library is the owner's list: the core says so, and no dead button shows.
+            if (header.librarySettable) {
+                RoundButton(
+                    icon = if (header.inLibrary) Icons.BookmarkCheck else Icons.BookmarkPlus,
+                    label = if (header.inLibrary) "In Library" else "Add to Library",
+                    onClick = { title.setInLibrary(!header.inLibrary) },
+                    modifier = Modifier.weight(1f),
+                    selected = header.inLibrary,
+                    showLabel = true,
+                )
+            }
         }
     }
 }

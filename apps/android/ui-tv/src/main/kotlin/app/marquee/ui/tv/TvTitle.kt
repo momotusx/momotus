@@ -330,15 +330,18 @@ private fun Info(
                     onFocusChange = focus.watch(ACTIONS, "trailer"),
                 )
             }
-            RoundButton(
-                icon = if (header.inLibrary) Icons.BookmarkCheck else Icons.BookmarkPlus,
-                label = if (header.inLibrary) "In Library" else "Add to Library",
-                onClick = { title.setInLibrary(!header.inLibrary) },
-                selected = header.inLibrary,
-                showLabel = true,
-                focusRequester = focus.requesterFor("library"),
-                onFocusChange = focus.watch(ACTIONS, "library"),
-            )
+            // A kids profile's Library is the owner's list: the core says so, and no dead button shows.
+            if (header.librarySettable) {
+                RoundButton(
+                    icon = if (header.inLibrary) Icons.BookmarkCheck else Icons.BookmarkPlus,
+                    label = if (header.inLibrary) "In Library" else "Add to Library",
+                    onClick = { title.setInLibrary(!header.inLibrary) },
+                    selected = header.inLibrary,
+                    showLabel = true,
+                    focusRequester = focus.requesterFor("library"),
+                    onFocusChange = focus.watch(ACTIONS, "library"),
+                )
+            }
             if (details.kind == "movie") {
                 RoundButton(
                     icon = Icons.Check,

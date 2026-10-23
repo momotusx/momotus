@@ -1,6 +1,11 @@
 /** Small, pure formatters shared by screens. */
 
 import type { Ratings } from "../core/generated/Ratings";
+import type { TitleHeader } from "../core/generated/TitleHeader";
+
+/** Whether the title page offers Add to Library: the core's word (`librarySettable`, false on a kids
+ * profile, whose Library is the owner's list), and yes while the header is still on its way. */
+export const offersLibrary = (h: Pick<TitleHeader, "librarySettable"> | null | undefined): boolean => h?.librarySettable ?? true;
 
 /** A stream's size in the 1024-based units addons print: 5368709120 is
  * "5 GB", as Torrentio lists it and as the size limit reads. */

@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -151,6 +152,8 @@ class PhoneTitleActionsTest {
             compose.waitForIdle()
             Thread.sleep(10)
         }
+        // An owner's page offers Add to Library (the core's librarySettable).
+        compose.onAllNodes(hasContentDescription("Add to Library")).assertCountEquals(1)
         val play = { compose.onNodeWithText("Play").performClick() }
         play()
         assertEquals(listOf("play kept tt1"), calls)
@@ -184,5 +187,45 @@ class PhoneTitleActionsTest {
         calls.clear()
         play()
         assertEquals(emptyList(), calls)
+    }
+
+    @Test
+    fun `a kids profile's page shows no Add to Library`() {
+        val kids = title.copy(header = title.header.copy(librarySettable = false))
+        client.attach { text ->
+            val msg = CoreJson.parseToJsonElement(text).jsonObject
+            val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
+            val result =
+                if (msg["op"]?.jsonPrimitive?.content == "subscribe") {
+                    """{"sub":7,"snapshot":${CoreJson.encodeToString(TitleSnapshot.serializer(), kids)}}"""
+                } else {
+                    "{}"
+                }
+            client.onMessage("""{"id":$id,"ok":true,"result":$result}""")
+        }
+        val view = TitleView(client, scope, "movie", "tt1")
+        compose.setContent {
+            MarqueeTheme(Form.Phone) {
+                PhoneTitle(
+                    view,
+                    versions(EmptyKind.Unreachable, EmptyAction.TryAgain).copy(empty = null, done = false),
+                    onPlay = { _, _ -> },
+                    onVersions = {},
+                    onEpisode = {},
+                    onEpisodeVersions = {},
+                )
+            }
+        }
+        compose.waitForIdle()
+        view.open()
+        val deadline = System.currentTimeMillis() + 120_000
+        while (compose.onAllNodesWithText("Play").fetchSemanticsNodes().isEmpty()) {
+            check(System.currentTimeMillis() < deadline) { "the title never drew" }
+            Snapshot.sendApplyNotifications()
+            compose.waitForIdle()
+            Thread.sleep(10)
+        }
+        compose.onAllNodes(hasContentDescription("Add to Library")).assertCountEquals(0)
+        compose.onAllNodes(hasContentDescription("In Library")).assertCountEquals(0)
     }
 }

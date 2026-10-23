@@ -26,7 +26,7 @@ import type { Episode } from "../core/generated/Episode";
 import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
 import { focusEl, remember } from "../focus/dom";
 import { form } from "../form";
-import { airDate, bytes, clock, decoded, episodeLabel, parseVideo, pct, playPath, ratingParts, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
+import { airDate, bytes, clock, decoded, episodeLabel, offersLibrary, parseVideo, pct, playPath, ratingParts, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
 import { blockedWords, choiceWords, kindLabel, noVersionWords, qualityText, statusText } from "../lib/words";
 import "./title.css";
 
@@ -266,6 +266,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                       Trailer
                     </button>
                   </Show>
+                  <Show when={offersLibrary(header())}>
                   <button
                     class="btn"
                     data-f="title:library"
@@ -278,6 +279,7 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                     </Show>
                     {header()?.inLibrary ? "In Library" : "Add to Library"}
                   </button>
+                  </Show>
                   {/* TV has no remove button on its tiles: the title page carries it
                       while the title is in Continue Watching (or Next Up). */}
                   <Show when={form() === "tv" && inContinue(props.id)}>
