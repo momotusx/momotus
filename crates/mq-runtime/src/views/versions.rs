@@ -241,6 +241,9 @@ pub enum EmptyKind {
     NoResults,
     /// Versions exist, none plays on this device.
     NothingPlaysHere,
+    /// The player only: its start budget (90 s) ran out with nothing
+    /// playing (plans/play-every-version.md 2e).
+    NotStarted,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -424,14 +427,6 @@ impl PickHandle {
     /// The pick was the recommendation.
     pub fn recommended(&self) -> bool {
         self.recommended
-    }
-
-    /// Almost nobody is sharing any version of the title right now (the
-    /// view's `nobody_sharing`, read now). False once the view is gone.
-    pub fn nobody_sharing(&self) -> bool {
-        self.state
-            .upgrade()
-            .is_some_and(|state| nobody_sharing(&lock(&state)))
     }
 
     /// The version the ranking picks after the sources `tried` (stream

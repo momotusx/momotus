@@ -9,7 +9,7 @@ use crate::Core;
 use crate::live::{FRAME, coalesce};
 use crate::segments::{self, Segment, Target};
 use crate::turkcealtyazi::{self, NAME as BUILT_IN};
-use crate::views::versions::{FailedOn, version_label};
+use crate::views::versions::{EmptyKind, FailedOn, version_label};
 use eyeball::SharedObservable;
 use futures_util::{FutureExt, Stream, StreamExt};
 use mq_addons::{AddonEvent, Deadlines, InstalledAddon};
@@ -142,6 +142,16 @@ pub struct PlaybackSnapshot {
     /// the 1080p Blu-ray did not start here", "... did not play on this
     /// device". Null otherwise.
     pub moved: Option<String>,
+    /// The start has taken `CHOOSE_AFTER` (20 s): the loading screen shows
+    /// the quiet "Choose another version" beside Back
+    /// (plans/play-every-version.md 2e).
+    pub choose_another: bool,
+    /// Why nothing played, once `phase` is `failed`: the zero-playable words
+    /// for what happened (`empty.<kind>` in stream-choice-words.json):
+    /// notStarted when the start's budget ran out; else noRoom when every
+    /// failure was a refusal for room, nothingPlaysHere when every failure
+    /// was the versions' own on this device, else unreachable.
+    pub empty: Option<EmptyKind>,
 }
 
 /// One start of the playback, from the first source it tries to `ready`
@@ -586,6 +596,15 @@ struct State {
     left_because: Option<&'static str>,
     /// The pick's own chain, for "Try again" to start afresh.
     first: Vec<ParsedStream>,
+    /// A first play's start: its first attempt's add (the budget's origin,
+    /// `START_BUDGET`) and the attempts begun in it. Cleared once a source
+    /// played past its start, and for a "Try again" run (its own budget).
+    start_at: Option<tokio::time::Instant>,
+    tries: u32,
+    /// When the loading screen began: `choose_another` after `CHOOSE_AFTER`.
+    loading_since: tokio::time::Instant,
+    /// What the failures of this start say, for `empty`.
+    failed_as: Option<EmptyKind>,
     /// The playing source played `PLAYED_PAST_START`, counted from the
     /// first position reported after it started: a decode error after that
     /// is not the version's.
@@ -724,9 +743,15 @@ impl State {
                 retries: 0,
                 start: None,
                 moved: None,
+                choose_another: false,
+                empty: None,
             },
             tried: candidates.iter().map(|c| c.key.clone()).collect(),
             first: candidates.clone(),
+            start_at: None,
+            tries: 0,
+            loading_since: tokio::time::Instant::now(),
+            failed_as: None,
             candidates,
             next: 0,
             version_failed: None,
@@ -901,6 +926,9 @@ impl PlaybackView {
             s.candidates = s.first.clone();
             s.tried = s.first.iter().map(|c| c.key.clone()).collect();
             s.retry_until = Some(tokio::time::Instant::now() + RETRY_BUDGET);
+            s.start_at = None;
+            s.failed_as = None;
+            s.snapshot.empty = None;
             s.hops = 0;
             s.next = 0;
             s.version_failed = None;
@@ -927,13 +955,13 @@ impl PlaybackView {
         may_cut_early(&lock(&self.state))
     }
 
-    /// Tests: how a torrent's start would be judged now: an early cut,
-    /// the deadline, and how long a swarm where no peer unchokes is given.
+    /// Tests: how a "Try again" run would judge a torrent's start now: an
+    /// early cut, the deadline and the cap.
     #[doc(hidden)]
     #[cfg(feature = "torrent")]
-    pub fn start_rule(&self) -> (bool, bool, Duration, Option<Duration>, Duration) {
+    pub fn start_rule(&self) -> (bool, bool, Duration, Duration) {
         let r = start_rule(&lock(&self.state));
-        (r.windows, r.elsewhere, r.deadline, r.quiet, r.cap)
+        (r.windows, r.elsewhere, r.deadline, r.cap)
     }
 
     /// A kids policy refused the target at open.
@@ -1075,14 +1103,13 @@ impl PlaybackView {
                 // The version's other sources carry the same file, codecs
                 // and all: when another version follows, it starts at once.
                 follows = s.pick.as_ref().is_some_and(|p| {
-                    p.recommended()
-                        && s.hops < HOPS
-                        && p.next_version(&s.tried, s.failed_on.as_ref()).is_some()
+                    p.recommended() && p.next_version(&s.tried, s.failed_on.as_ref()).is_some()
                 });
                 if follows {
                     s.next = s.candidates.len();
                 }
             }
+            note_failure(&mut s);
             s.snapshot.phase = PlaybackPhase::Resolving;
             s.snapshot.key = None;
             s.snapshot.moved = None;
@@ -1319,6 +1346,9 @@ impl PlaybackView {
             s.reported_ms = Some(position_ms);
             if s.played_ms >= PLAYED_PAST_START.as_millis() as u64 {
                 s.progressed = true;
+                // A later move begins a start of its own.
+                s.start_at = None;
+                s.failed_as = None;
             }
             s.last = Some((position_ms, duration_ms));
             s.dirty = true;
@@ -1520,6 +1550,33 @@ fn current(s: &State, run: u64) -> bool {
     !s.closed && s.run == run
 }
 
+/// A source failed (its attempt just listed): what it says of the start,
+/// for `empty`. A refusal for room reads noRoom, a failure of the version's
+/// own on this device nothingPlaysHere, while every failure says the same;
+/// anything else reads unreachable.
+fn note_failure(s: &mut State) {
+    let no_room = (s.snapshot.attempts.last()).is_some_and(|a| a.error == no_room_line());
+    let kind = if no_room {
+        EmptyKind::NoRoom
+    } else if s.version_failed == Some(NOT_HERE) {
+        EmptyKind::NothingPlaysHere
+    } else {
+        EmptyKind::Unreachable
+    };
+    s.failed_as = Some(match s.failed_as {
+        Some(was) if was != kind => EmptyKind::Unreachable,
+        _ => kind,
+    });
+}
+
+/// Nothing played: the failure card, with why.
+fn failed(s: &mut State) {
+    s.snapshot.phase = PlaybackPhase::Failed;
+    s.snapshot.start = None;
+    s.snapshot.choose_another = false;
+    s.snapshot.empty = Some(s.failed_as.unwrap_or(EmptyKind::Unreachable));
+}
+
 /// The version did not play here, for a reason of its own.
 fn not_here(state: &Mutex<State>) {
     lock(state).version_failed = Some(NOT_HERE);
@@ -1554,6 +1611,7 @@ fn adopt(s: &mut State, run: u64, lease: Lease) -> bool {
     s.retry_until = None;
     s.patient = false;
     s.snapshot.trying = None;
+    s.snapshot.choose_another = false;
     s.failed_on = None;
     s.snapshot.moved = s.left_because.and_then(|why| {
         let playing = s.candidates.get(s.next.checked_sub(1)?)?;
@@ -1654,6 +1712,11 @@ fn viewer_words(error: &str) -> String {
         return error.to_owned();
     }
     tracing::info!(error, "no room to play");
+    no_room_line().to_owned()
+}
+
+/// `empty.noRoom.text` from stream-choice-words.json.
+fn no_room_line() -> &'static str {
     static LINE: OnceLock<String> = OnceLock::new();
     LINE.get_or_init(|| {
         let words: serde_json::Value = serde_json::from_str(include_str!(
@@ -1665,7 +1728,6 @@ fn viewer_words(error: &str) -> String {
             .expect("empty.noRoom.text")
             .to_owned()
     })
-    .clone()
 }
 
 /// Saves a position. At the end it marks the video watched, with the write
@@ -1740,12 +1802,12 @@ async fn resolve_next(
         Ok(server) => server,
         Err(e) => {
             let mut s = lock(&state);
-            s.snapshot.phase = PlaybackPhase::Failed;
             s.snapshot.attempts.push(Attempt {
                 key: String::new(),
                 via: "Marquee".into(),
                 error: format!("local stream server did not start: {e}"),
             });
+            failed(&mut s);
             snapshot.set(s.snapshot.clone());
             return;
         }
@@ -1763,13 +1825,18 @@ async fn resolve_next(
                 if s.pick.as_ref().is_some_and(|p| !p.recommended()) {
                     move_on(&mut s);
                 }
-                s.snapshot.attempts.push(Attempt {
-                    key: String::new(),
-                    via: "Marquee".into(),
-                    error: RETRY_GAVE_UP.into(),
-                });
-                s.snapshot.phase = PlaybackPhase::Failed;
-                s.snapshot.start = None;
+                // A first play's attempts say what failed; a "Try again"
+                // run says it gave up.
+                if s.retry_until.is_some() {
+                    s.snapshot.attempts.push(Attempt {
+                        key: String::new(),
+                        via: "Marquee".into(),
+                        error: RETRY_GAVE_UP.into(),
+                    });
+                }
+                // The budget ran out: "This didn't start".
+                s.failed_as = Some(EmptyKind::NotStarted);
+                failed(&mut s);
                 snapshot.set(s.snapshot.clone());
                 return;
             }
@@ -1777,12 +1844,16 @@ async fn resolve_next(
                 snapshot.set(s.snapshot.clone());
             }
             let Some(stream) = s.candidates.get(s.next).cloned() else {
-                s.snapshot.phase = PlaybackPhase::Failed;
-                s.snapshot.start = None;
+                failed(&mut s);
                 snapshot.set(s.snapshot.clone());
                 return;
             };
             s.next += 1;
+            // A first play's attempt: the first one's add starts the budget.
+            if !s.patient {
+                s.start_at.get_or_insert_with(tokio::time::Instant::now);
+                s.tries += 1;
+            }
             let swarm = matches!(stream.source, Source::Torrent { .. })
                 && by_engine(&stream, core.debrid().is_some(), core.has_engine());
             begin_start(
@@ -1996,6 +2067,7 @@ async fn resolve_next(
                 let pick = {
                     let mut s = lock(&state);
                     s.snapshot.attempts.push(attempt(&stream, &error));
+                    note_failure(&mut s);
                     snapshot.set(s.snapshot.clone());
                     s.pick.clone()
                 };
@@ -2039,48 +2111,64 @@ const PLAYED_STEP: Duration = Duration::from_secs(15);
 const RETRY_BUDGET: Duration = Duration::from_secs(180);
 const RETRY_GAVE_UP: &str = "Tried again for 3 minutes";
 
-/// What is left of a "Try again" run's budget; None outside one.
+/// What is left of the budget: a "Try again" run's, else a first play's
+/// start (`START_BUDGET`); None before a start's first attempt.
 fn budget_left(s: &State) -> Option<Duration> {
-    s.retry_until
-        .map(|until| until.saturating_duration_since(tokio::time::Instant::now()))
+    let until = s.retry_until.or(s.start_at.map(|at| at + START_BUDGET))?;
+    Some(until.saturating_duration_since(tokio::time::Instant::now()))
 }
 
-/// `wait`, cut to what is left of a "Try again" run's budget.
+/// `wait`, cut to what is left of the budget.
 fn within_budget(state: &Mutex<State>, wait: Duration) -> Duration {
     budget_left(&lock(state)).map_or(wait, |left| wait.min(left))
 }
 
-/// The recommendation moves on by itself at most this many times.
-const HOPS: u8 = 2;
+/// A first play's start budget (plans/play-every-version.md 2e): from the
+/// first attempt's add, every attempt and every move to another version
+/// ends within it, and the player shows why nothing played at its end,
+/// never later. From bench/torrent/start-latency.jsonl (333 healthy runs):
+/// Ready p50 8.2 s, p90 20.3 s, max 64.3 s; first unchoke p50 2.4 s, p90
+/// 7.3 s, p99 27.9 s. Every swarm dead: attempts at 0, 20, 32, 44, 56 and
+/// 68 s, the last running to 90 s.
+const START_BUDGET: Duration = Duration::from_secs(90);
+/// An attempt with no unchoke this long after its add is a dead swarm: the
+/// first attempt (cuts 3.5 % of healthy starts, 12 s would cut 6.0 %), then
+/// every later one.
+#[cfg(any(test, feature = "torrent"))]
+const DEAD_FIRST: Duration = Duration::from_secs(20);
+#[cfg(any(test, feature = "torrent"))]
+const DEAD_LATER: Duration = Duration::from_secs(12);
+/// An attempt with peers unchoked runs this long after its add, then ends
+/// unless its window grows (what it received rose in the last `GROWING`).
+/// One that begins with less than this left of the budget, or with nothing
+/// else to play after it, is the last: it runs to the budget's end.
+#[cfg(any(test, feature = "torrent"))]
+const LIVE: Duration = Duration::from_secs(30);
+#[cfg(any(test, feature = "torrent"))]
+const GROWING: Duration = Duration::from_secs(5);
+/// The loading screen offers "Choose another version" this long into a
+/// start.
+const CHOOSE_AFTER: Duration = Duration::from_secs(20);
 /// Why a version was left, in the words of `moved`.
 const NOT_HERE: &str = "did not play on this device";
 #[cfg(feature = "torrent")]
 const NOT_STARTED: &str = "did not start here";
 
-/// How a torrent's start is judged: whether a swarm that falls short may be
-/// cut at its first window, the deadline, and how long a swarm where no
-/// peer unchokes is given. When almost nobody is sharing any version of the
-/// title, the stall windows stay and the deadline is the full 60 s, but a
-/// swarm where no peer unchoked by the end of the first window is let go
-/// (code review 2026-10-20 P1-1); never after "Try again".
-/// The deadline reads only whether something else can play: the
-/// nobodySharing rule turns the window cut on, but says nothing of another
-/// source (code review 2026-10-20 r3 P2-1). In a "Try again" run every
-/// limit is cut to what is left of its budget.
+/// How a "Try again" run judges a torrent's start (a first play's attempts
+/// follow `Attempting`): whether a swarm that falls short may be cut at its
+/// first window, and the deadline, each limit cut to what is left of its
+/// budget.
 #[cfg(feature = "torrent")]
 fn start_rule(s: &State) -> Rule {
     let elsewhere = may_cut_early(s);
-    let hopeless = !s.patient && s.pick.as_ref().is_some_and(|p| p.nobody_sharing());
     let mut rule = Rule {
-        windows: elsewhere || hopeless,
+        windows: elsewhere,
         elsewhere,
         deadline: TORRENT_READY_TIMEOUT,
-        quiet: hopeless.then_some(STALL.first),
         cap: 3 * TORRENT_READY_TIMEOUT,
     };
     if let Some(left) = budget_left(s) {
         rule.deadline = rule.deadline.min(left);
-        rule.quiet = rule.quiet.map(|q| q.min(left));
         rule.cap = rule.cap.min(left);
     }
     rule
@@ -2096,8 +2184,6 @@ struct Rule {
     /// a swarm still in its window is cut.
     elsewhere: bool,
     deadline: Duration,
-    /// With no unchoke by then, the swarm is let go.
-    quiet: Option<Duration>,
     /// Never past this.
     cap: Duration,
 }
@@ -2108,16 +2194,16 @@ struct Rule {
 /// Never after "Try again".
 fn may_cut_early(s: &State) -> bool {
     let next_version = || {
-        s.pick.as_ref().is_some_and(|p| {
-            p.recommended() && s.hops < HOPS && p.next_version(&s.tried, None).is_some()
-        })
+        s.pick
+            .as_ref()
+            .is_some_and(|p| p.recommended() && p.next_version(&s.tried, None).is_some())
     };
     !s.patient && (s.next < s.candidates.len() || next_version())
 }
 
 /// Every source of the version failed. When it failed for a reason of its
 /// own, the ranking's next version follows: by itself when the
-/// recommendation started (at most `HOPS` times, `trying` names it), as the
+/// recommendation started (within the start's budget, `trying` names it), as the
 /// failure card's offer when the user picked the version by hand. Whether
 /// a version is next comes from the Versions view, read now.
 fn move_on(s: &mut State) -> bool {
@@ -2127,9 +2213,6 @@ fn move_on(s: &mut State) -> bool {
     let Some(pick) = &s.pick else {
         return false;
     };
-    if pick.recommended() && s.hops >= HOPS {
-        return false;
-    }
     let Some(next) = pick.next_version(&s.tried, s.failed_on.as_ref()) else {
         return false;
     };
@@ -2266,13 +2349,14 @@ async fn open_torrent(
     let state = run.0;
     let hash = torrent_id(info_hash);
     let begun = tokio::time::Instant::now();
-    {
+    let policy = {
         let mut s = lock(state);
         if s.failed_hashes.contains(&hash) {
             failed_to_start(&mut s);
             return Err(SAME_TORRENT.into());
         }
-    }
+        attempt_policy(&s, begun)
+    };
     let engine = core.torrent_engine().await.map_err(|e| e.to_string())?;
     // This playback's own check, read before the torrent is touched: a
     // hold placed after it (the title left a kids list) is never lifted by
@@ -2324,7 +2408,18 @@ async fn open_torrent(
         stage: StartStage::Details,
         ..Sample::default()
     };
-    let wait = within_budget(state, METADATA_TIMEOUT);
+    // A first play's attempt has its details within its own window; a "Try
+    // again" run's gets the full wait, cut to its budget.
+    let (wait, full) = match policy {
+        Some(p) => {
+            let window = p.window();
+            (window, window >= p.dead)
+        }
+        None => {
+            let wait = within_budget(state, METADATA_TIMEOUT);
+            (wait, wait == METADATA_TIMEOUT)
+        }
+    };
     let tick = || {
         publish_start(run, details);
         ahead_now();
@@ -2341,7 +2436,7 @@ async fn open_torrent(
                 let mut s = lock(state);
                 failed_to_start(&mut s);
                 s.failed_hashes.push(hash.clone());
-                if wait == METADATA_TIMEOUT {
+                if full {
                     s.dead.failed(info_hash, false)
                 } else {
                     Vec::new()
@@ -2467,7 +2562,10 @@ async fn open_torrent(
             })
         };
         let rule = start_rule(&lock(state));
-        let ready = watch_start(ready, progress, STALL, rule).await;
+        let ready = match policy {
+            Some(p) => watch_policy(ready, progress, p).await,
+            None => watch_start(ready, progress, STALL, rule).await,
+        };
         Ok::<_, mq_engine::EngineError>((file, info, ready))
     };
     let started = started.await;
@@ -2729,6 +2827,11 @@ impl Default for Sample {
 /// The next source of the version starts: its start goes on from where the
 /// last source's got (one start never goes back), at `stage`.
 fn begin_start(s: &mut State, stage: StartStage) {
+    // A loading screen begins with its first source.
+    if s.snapshot.start.is_none() {
+        s.loading_since = tokio::time::Instant::now();
+    }
+    s.snapshot.choose_another = s.loading_since.elapsed() >= CHOOSE_AFTER;
     let progress = s.snapshot.start.as_ref().map_or(0.0, |p| p.progress);
     s.start_base = progress;
     s.source_since = tokio::time::Instant::now();
@@ -2750,6 +2853,7 @@ fn begin_start(s: &mut State, stage: StartStage) {
 /// when the source began, never back, and the stage's words once the source
 /// has taken long.
 fn show_start(s: &mut State, x: Sample) {
+    s.snapshot.choose_another = s.loading_since.elapsed() >= CHOOSE_AFTER;
     let long = s.source_since.elapsed() >= LONG_STAGE;
     let base = s.start_base;
     let Some(start) = s.snapshot.start.as_mut() else {
@@ -2935,12 +3039,118 @@ struct Progress {
     unchoked: bool,
 }
 
+/// How a first play's attempt is judged (plans/play-every-version.md 2e),
+/// from its add: with no unchoke it ends at `dead`; with one, at `LIVE`
+/// unless its window grows; never past `until`, the budget's end. The last
+/// attempt that fits runs to `until`.
+#[cfg(any(test, feature = "torrent"))]
+#[cfg_attr(not(feature = "torrent"), allow(dead_code))]
+#[derive(Clone, Copy, Debug)]
+struct Attempting {
+    added: tokio::time::Instant,
+    dead: Duration,
+    until: tokio::time::Instant,
+    last: bool,
+}
+
+#[cfg(any(test, feature = "torrent"))]
+#[cfg_attr(not(feature = "torrent"), allow(dead_code))]
+impl Attempting {
+    /// How long its details may take: its dead window, or to the budget's
+    /// end for the last attempt.
+    fn window(&self) -> Duration {
+        let left = self.until.saturating_duration_since(self.added);
+        if self.last { left } else { self.dead.min(left) }
+    }
+}
+
+/// The policy of a first play's attempt added at `added`; None in a "Try
+/// again" run, which waits patiently (`start_rule`). The first attempt of
+/// the start gets `DEAD_FIRST`, every later one `DEAD_LATER`; it is the
+/// last when less than `LIVE` is left or nothing else can play after it.
+#[cfg(feature = "torrent")]
+fn attempt_policy(s: &State, added: tokio::time::Instant) -> Option<Attempting> {
+    let start = s.start_at.filter(|_| !s.patient)?;
+    Some(attempting(start, s.tries, added, may_cut_early(s)))
+}
+
+/// Attempt `tries` (from 1) of a start begun at `start`, added at `added`;
+/// `more`: something else can play after it.
+#[cfg(any(test, feature = "torrent"))]
+#[cfg_attr(not(feature = "torrent"), allow(dead_code))]
+fn attempting(
+    start: tokio::time::Instant,
+    tries: u32,
+    added: tokio::time::Instant,
+    more: bool,
+) -> Attempting {
+    let until = start + START_BUDGET;
+    Attempting {
+        added,
+        dead: if tries <= 1 { DEAD_FIRST } else { DEAD_LATER },
+        until,
+        last: until.saturating_duration_since(added) < LIVE || !more,
+    }
+}
+
+/// Waits for `ready` under a first play's `Attempting`: each second it reads
+/// whether a peer unchoked and what the swarm received, which is what
+/// buffers ahead of the playhead before Ready. A dead swarm ends as `Late`,
+/// a live one whose window stopped growing as `Stalled`.
+#[cfg(any(test, feature = "torrent"))]
+async fn watch_policy<T, P, F>(
+    ready: impl std::future::Future<Output = T>,
+    mut progress: P,
+    p: Attempting,
+) -> Started<T>
+where
+    P: FnMut() -> F,
+    F: std::future::Future<Output = Option<Progress>>,
+{
+    tokio::pin!(ready);
+    let mut unchoked = false;
+    let mut first = None;
+    // What it had received each second, over the last `GROWING`.
+    let mut seen = std::collections::VecDeque::new();
+    let mut tick = tokio::time::interval(Duration::from_secs(1));
+    loop {
+        tokio::select! {
+            out = &mut ready => return Started::Ready(out),
+            _ = tick.tick() => {
+                let now = tokio::time::Instant::now();
+                if now >= p.until {
+                    return Started::Late { unchoked };
+                }
+                if let Some(x) = progress().await {
+                    unchoked |= x.unchoked;
+                    first.get_or_insert(x.received);
+                    seen.push_back((now, x.received));
+                }
+                while seen.front().is_some_and(|&(at, _)| now - at > GROWING) {
+                    seen.pop_front();
+                }
+                let age = now - p.added;
+                if p.last {
+                    continue;
+                }
+                if !unchoked && age >= p.dead {
+                    return Started::Late { unchoked: false };
+                }
+                let growing = seen.front().zip(seen.back()).is_some_and(|(a, b)| b.1 > a.1);
+                if unchoked && age >= LIVE && !growing {
+                    let received = seen.back().map(|&(_, r)| r);
+                    return Started::Stalled { nothing: received == first };
+                }
+            }
+        }
+    }
+}
+
 /// Waits for `ready` while the swarm keeps sending: a window opens at its
 /// first unchoke (the metadata is already in), and each `floor` of
 /// received payload must come within it (`first`, then `later`). A swarm
 /// that falls short is cut when `others` can play instead; otherwise, and
-/// with no unchoke at all, it gets until `deadline`, or `quiet` when no
-/// peer unchoked by then. Past the deadline a swarm still in its window is
+/// with no unchoke at all, it gets until `deadline`. Past the deadline a swarm still in its window is
 /// kept only when nothing else can play, and never past three deadlines
 /// (code review 2026-10-20 r2 P2-1: a trickle must not hold the start).
 #[cfg(any(test, feature = "torrent"))]
@@ -2967,9 +3177,8 @@ where
                 let now = tokio::time::Instant::now();
                 // Within its current window, a swarm is progressing.
                 let progressing = window.is_some_and(|(_, since, length)| now - since < length);
-                let silent = window.is_none() && rule.quiet.is_some_and(|q| now - start >= q);
                 let past = now - start >= rule.deadline && (rule.elsewhere || !progressing);
-                if silent || past || now - start >= rule.cap {
+                if past || now - start >= rule.cap {
                     return Started::Late { unchoked: window.is_some() };
                 }
                 let Some(p) = progress().await else { continue };
@@ -4670,25 +4879,151 @@ mod tests {
     const KIB: u64 = 1 << 10;
     const DEADLINE: Duration = Duration::from_secs(60);
 
+    /// Attempt `tries` of a start begun `start_s` seconds ago, added now,
+    /// watched with the swarm `at` and Ready after `ready_after`: how it
+    /// ended, and when.
+    async fn attempt_at(
+        start_s: u64,
+        tries: u32,
+        more: bool,
+        ready_after: Option<Duration>,
+        at: impl Fn(u64) -> (u64, usize),
+    ) -> (Started<()>, Duration) {
+        let added = tokio::time::Instant::now();
+        let start = added - Duration::from_secs(start_s);
+        let policy = attempting(start, tries, added, more);
+        let ready = async move {
+            match ready_after {
+                Some(d) => tokio::time::sleep(d).await,
+                None => std::future::pending::<()>().await,
+            }
+        };
+        let started = watch_policy(ready, fake(at), policy).await;
+        (started, added.elapsed())
+    }
+
+    const fn secs(s: u64) -> Option<Duration> {
+        Some(Duration::from_secs(s))
+    }
+
+    /// Plans/play-every-version.md 2e, paused clock: a first attempt with
+    /// no unchoke still waits at 19 s and ends at 20 s; a later one still
+    /// waits at 11 s and ends at 12 s.
+    #[tokio::test(start_paused = true)]
+    async fn a_dead_swarm_ends_at_20s_first_then_12s() {
+        let dead = |_| (0, 0);
+        let (started, _) = attempt_at(0, 1, true, secs(19), dead).await;
+        assert!(matches!(started, Started::Ready(())), "19 s: still waiting");
+        let (started, took) = attempt_at(0, 1, true, secs(21), dead).await;
+        assert!(matches!(started, Started::Late { unchoked: false }));
+        assert_eq!(took.as_secs(), 20);
+        let (started, _) = attempt_at(20, 2, true, secs(11), dead).await;
+        assert!(matches!(started, Started::Ready(())), "11 s: still waiting");
+        let (started, took) = attempt_at(20, 2, true, secs(13), dead).await;
+        assert!(matches!(started, Started::Late { unchoked: false }));
+        assert_eq!(took.as_secs(), 12);
+    }
+
+    /// 2e: a swarm that unchoked runs to 30 s, then on only while what it
+    /// received rose in the last 5 s. A healthy but slow first swarm, Ready
+    /// at 25 s, plays.
+    #[tokio::test(start_paused = true)]
+    async fn a_live_swarm_runs_to_30s_then_while_its_window_grows() {
+        let slow = |t| (t * 100 * KIB, 3);
+        let (started, _) = attempt_at(0, 1, true, secs(25), slow).await;
+        assert!(matches!(started, Started::Ready(())));
+        // Growing all along: on past 30 s, Ready at 45 s.
+        let (started, _) = attempt_at(0, 2, true, secs(45), slow).await;
+        assert!(matches!(started, Started::Ready(())));
+        // Flat from 20 s: cut at 30 s.
+        let (started, took) = attempt_at(0, 2, true, None, |t| (t.min(20) * KIB, 3)).await;
+        assert!(matches!(started, Started::Stalled { nothing: false }));
+        assert_eq!(took.as_secs(), 30);
+        // Flat from 28 s: it grew within 5 s at 30 s, not at 33 s.
+        let (started, took) = attempt_at(0, 2, true, None, |t| (t.min(28) * KIB, 3)).await;
+        assert!(matches!(started, Started::Stalled { nothing: false }));
+        assert_eq!(took.as_secs(), 33);
+        // Unchoked, nothing ever sent.
+        let (started, took) = attempt_at(0, 2, true, None, |_| (0, 3)).await;
+        assert!(matches!(started, Started::Stalled { nothing: true }));
+        assert_eq!(took.as_secs(), 30);
+    }
+
+    /// 2e: the last attempt that fits (under 30 s of the budget left, or
+    /// nothing after it) runs to the budget's end, and nothing runs past it.
+    #[tokio::test(start_paused = true)]
+    async fn the_last_attempt_runs_to_the_budgets_end() {
+        let (started, took) = attempt_at(68, 6, true, None, |_| (0, 0)).await;
+        assert!(matches!(started, Started::Late { unchoked: false }));
+        assert_eq!(took.as_secs(), 22);
+        let (started, took) = attempt_at(0, 1, false, None, |_| (0, 0)).await;
+        assert!(matches!(started, Started::Late { unchoked: false }));
+        assert_eq!(took.as_secs(), 90);
+        let (started, took) = attempt_at(50, 3, true, None, |t| (t * KIB, 3)).await;
+        assert!(matches!(started, Started::Late { unchoked: true }));
+        assert_eq!(took.as_secs(), 40, "growing, cut at the budget's end");
+    }
+
+    /// 2e: the loading screen offers "Choose another version" 20 s into a
+    /// start, and not before.
+    #[tokio::test(start_paused = true)]
+    async fn choose_another_shows_20s_into_a_loading_screen() {
+        let mut s = State::new(Vec::new(), None);
+        begin_start(&mut s, StartStage::Details);
+        assert!(!s.snapshot.choose_another);
+        tokio::time::advance(Duration::from_secs(19)).await;
+        show_start(&mut s, Sample::default());
+        assert!(!s.snapshot.choose_another, "19 s");
+        tokio::time::advance(Duration::from_secs(1)).await;
+        show_start(&mut s, Sample::default());
+        assert!(s.snapshot.choose_another, "20 s");
+        // The next source of the same start keeps it.
+        begin_start(&mut s, StartStage::Connecting);
+        assert!(s.snapshot.choose_another);
+    }
+
+    /// 2e: a source that played past its start ends the start: a later
+    /// move (a decode failure, a stall) begins a budget of its own.
+    #[tokio::test]
+    async fn playing_past_the_start_ends_its_budget() {
+        let core = Core::temporary("default").unwrap();
+        let view = PlaybackView::open(&core, Vec::new(), PlayTarget::default());
+        lock(&view.state).start_at = Some(tokio::time::Instant::now());
+        for at in (0..=30_000).step_by(10_000) {
+            view.report_progress(at, 600_000, false);
+        }
+        assert!(lock(&view.state).start_at.is_none());
+    }
+
+    /// 2e: every swarm dead, the attempts begin at 0, 20, 32, 44, 56 and 68
+    /// s, six tries, and the last ends at 90 s.
+    #[tokio::test(start_paused = true)]
+    async fn every_swarm_dead_gives_six_tries_in_90s() {
+        let start = tokio::time::Instant::now();
+        let mut begun = Vec::new();
+        for tries in 1.. {
+            let added = tokio::time::Instant::now();
+            if added >= start + START_BUDGET {
+                break;
+            }
+            begun.push((added - start).as_secs());
+            let policy = attempting(start, tries, added, true);
+            let never = std::future::pending::<()>();
+            watch_policy(never, fake(|_| (0, 0)), policy).await;
+        }
+        assert_eq!(begun, [0, 20, 32, 44, 56, 68]);
+        assert_eq!((tokio::time::Instant::now() - start).as_secs(), 90);
+    }
+
     async fn watch(
         ready_after: Option<Duration>,
         at: impl Fn(u64) -> (u64, usize),
         others: bool,
     ) -> (Started<()>, Duration) {
-        watch_quiet(ready_after, at, others, None).await
-    }
-
-    async fn watch_quiet(
-        ready_after: Option<Duration>,
-        at: impl Fn(u64) -> (u64, usize),
-        others: bool,
-        quiet: Option<Duration>,
-    ) -> (Started<()>, Duration) {
         let rule = Rule {
             windows: others,
             elsewhere: others,
             deadline: DEADLINE,
-            quiet,
             cap: 3 * DEADLINE,
         };
         watch_rule(ready_after, at, rule).await
@@ -4708,27 +5043,6 @@ mod tests {
         };
         let started = watch_start(ready, fake(at), STALL, rule).await;
         (started, begun.elapsed())
-    }
-
-    /// Code review 2026-10-20 r3 P2-1: on a title almost nobody shares, the
-    /// window cut is on, but with nothing else to play a lone swarm that
-    /// keeps sending is kept past the deadline, up to three: ready at 90 s
-    /// it plays; never ready, it is let go at 180 s.
-    #[tokio::test(start_paused = true)]
-    async fn nobody_sharing_keeps_a_lone_working_swarm_up_to_three_deadlines() {
-        let rule = Rule {
-            windows: true,
-            elsewhere: false,
-            deadline: DEADLINE,
-            quiet: Some(Duration::from_secs(30)),
-            cap: 3 * DEADLINE,
-        };
-        let trickle = |t| (t * 30 * KIB, 1);
-        let (started, took) = watch_rule(Some(Duration::from_secs(90)), trickle, rule).await;
-        assert!(matches!(started, Started::Ready(())), "{took:?}");
-        let (started, took) = watch_rule(None, trickle, rule).await;
-        assert!(matches!(started, Started::Late { unchoked: true }));
-        assert!((180..182).contains(&took.as_secs()), "{took:?}");
     }
 
     /// Code review 2026-10-20 r3 P3-3, P3-4: a file larger than the version
@@ -4895,6 +5209,31 @@ mod tests {
         assert_eq!(within_budget(&view.state, METADATA_TIMEOUT), left);
     }
 
+    /// Plans/play-every-version.md 2e: a first play whose only swarm never
+    /// answers runs to the budget's end and fails then, never later, with
+    /// "This didn't start".
+    #[cfg(feature = "torrent")]
+    #[tokio::test(start_paused = true)]
+    async fn a_first_play_fails_at_90s_as_not_started() {
+        let core = Core::temporary("default").unwrap();
+        let hash = "f".repeat(40);
+        let swarm = stream(&format!(r#"{{"infoHash":"{hash}","fileIdx":0}}"#));
+        let begun = tokio::time::Instant::now();
+        let view = PlaybackView::open(&core, vec![swarm], PlayTarget::default());
+        while view.snapshot().phase != PlaybackPhase::Failed && begun.elapsed().as_secs() < 200 {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        let s = view.snapshot();
+        assert_eq!(s.phase, PlaybackPhase::Failed, "{s:?}");
+        assert!(
+            (90..92).contains(&begun.elapsed().as_secs()),
+            "{:?}",
+            begun.elapsed()
+        );
+        assert_eq!(s.empty, Some(EmptyKind::NotStarted));
+        assert!(!s.choose_another);
+    }
+
     /// Code review 2026-10-20 r4 P3-1: a metadata wait a "Try again" budget
     /// cut short is not taken for a dead swarm, though a peer was reached
     /// before in the chain.
@@ -4907,7 +5246,9 @@ mod tests {
         let view = PlaybackView::open(&core, vec![swarm], PlayTarget::default());
         {
             let mut s = lock(&view.state);
+            // A "Try again" run, as `retry` starts it.
             s.retry_until = Some(tokio::time::Instant::now() + Duration::from_secs(5));
+            s.patient = true;
             s.dead.reached = true;
         }
         for _ in 0..600 {
@@ -4990,21 +5331,6 @@ mod tests {
         let (started, took) = watch(None, trickle, false).await;
         assert!(matches!(started, Started::Late { unchoked: true }));
         assert!((180..182).contains(&took.as_secs()), "{took:?}");
-    }
-
-    /// Almost nobody sharing: a swarm where no peer unchoked by 30 s is let
-    /// go then; one that unchoked and still delivers keeps its windows and
-    /// is not cut at 30 s.
-    #[tokio::test(start_paused = true)]
-    async fn nobody_sharing_lets_a_silent_swarm_go_at_30s_only() {
-        let quiet = Some(Duration::from_secs(30));
-        let (started, took) = watch_quiet(None, |_| (0, 0), true, quiet).await;
-        assert!(matches!(started, Started::Late { unchoked: false }));
-        assert!((30..32).contains(&took.as_secs()), "{took:?}");
-        let delivering = |t: u64| (t * 30 * KIB, 1);
-        let ready = Some(Duration::from_secs(45));
-        let (started, took) = watch_quiet(ready, delivering, true, quiet).await;
-        assert!(matches!(started, Started::Ready(())), "{took:?}");
     }
 
     /// 3.4: the engine's file must be the version listed; only larger

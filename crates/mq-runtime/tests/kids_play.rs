@@ -730,6 +730,8 @@ async fn a_torrent_on_a_full_device_is_refused_and_one_that_fits_plays_whole() {
     .await;
     let attempts = view.snapshot().attempts;
     assert!(attempts.iter().any(|a| a.error == NO_ROOM), "{attempts:?}");
+    // The failure card says why (play-every-version 2e).
+    assert_eq!(view.snapshot().empty, Some(EmptyKind::NoRoom));
     assert!(s.leecher.stats(t).await.is_err(), "the torrent went");
     let (s, t, _owner, kid, found) = torrent_kid().await;
     kid.set_punches(true);
@@ -883,6 +885,70 @@ async fn a_title_kept_on_this_device_says_so() {
                 .is_some_and(|r| r.on_device.as_deref() == Some("On this device"))
     })
     .await;
+}
+
+/// Plans/play-every-version.md 2e: on a first play a swarm where no peer
+/// unchokes ends 20 s after its add, its torrent closed (its files and
+/// peers) before the next source starts, and the next source plays.
+#[cfg(feature = "torrent")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_dead_swarm_ends_at_20s_closed_and_the_next_source_plays() {
+    let dead = support::swarm_movie("dead.mkv", vec![7u8; 3 << 20]).await;
+    let live = support::swarm(true).await;
+    let engine = live.leecher.clone();
+    // Known to the app's engine with no peer at all: none ever unchokes.
+    let dead_t = engine
+        .add_torrent_bytes(dead.torrent.clone(), &[])
+        .await
+        .unwrap();
+    let live_t = engine
+        .add_magnet(&live.info_hash, &[], &[live.seeder_addr])
+        .await
+        .unwrap();
+    let movie = |t| {
+        engine
+            .files(t)
+            .unwrap()
+            .iter()
+            .position(|f| f.path.ends_with(".mkv"))
+            .unwrap()
+    };
+    let source = |hash: &str, file: usize| {
+        let body = json!({"streams": [{"name": "Fixture", "title": "Up.2009.1080p.WEB.x264-GROUP",
+                                       "infoHash": hash, "fileIdx": file}]});
+        let wire = mq_protocol::decode_streams(body.to_string().as_bytes()).unwrap();
+        mq_streams::normalize(&wire.streams[0], "fixture", "Fixture", 0, 0)
+    };
+    let (dead_src, live_src) = (
+        source(&dead.info_hash, movie(dead_t)),
+        source(&live.info_hash, movie(live_t)),
+    );
+    let core = Core::temporary(OWNER).unwrap();
+    core.set_torrent_engine(engine.clone());
+    let begun = std::time::Instant::now();
+    let view = PlaybackView::open(
+        &core,
+        vec![dead_src, live_src.clone()],
+        target("movie", "tt1", "tt1"),
+    );
+    while view.snapshot().phase == PlaybackPhase::Resolving && begun.elapsed().as_secs() < 40 {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    let took = begun.elapsed().as_secs();
+    let s = view.snapshot();
+    assert_eq!(s.phase, PlaybackPhase::Ready, "{s:?}");
+    assert_eq!(s.key.as_ref(), Some(&live_src.key));
+    assert!((19..26).contains(&took), "{took} s");
+    assert_eq!(s.attempts.len(), 1, "{:?}", s.attempts);
+    assert_eq!(
+        s.attempts[0].error,
+        "the swarm did not send the start of the video in time"
+    );
+    assert!(engine.stats(dead_t).await.is_err(), "the dead torrent went");
+    assert!(
+        !live.leech_dir().join(&dead.info_hash).exists(),
+        "and its files"
+    );
 }
 
 /// Plans/play-every-version.md 2a: with every source down, the version

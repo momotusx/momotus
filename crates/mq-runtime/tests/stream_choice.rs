@@ -866,10 +866,10 @@ async fn a_version_picked_by_hand_offers_the_next_one() {
     assert_eq!((&offer.key, offer.label.as_str()), (fine, "1080p WEB"));
 }
 
-/// The recommendation moves on at most twice, then stops with the
-/// failure card: the fourth version is never started.
+/// The recommendation moves on by itself, within the start's budget, until
+/// a version plays (plans/play-every-version.md 2e: no count of moves).
 #[tokio::test]
-async fn the_recommendation_moves_on_at_most_twice() {
+async fn the_recommendation_moves_on_until_a_version_plays() {
     let (core, _server, keys) = direct_rows(vec![
         ("Show.S01E01.1080p.WEB-DL.HEVC-A", bare_hev1()),
         ("Show.S01E01.720p.WEB-DL.HEVC-B", bare_hev1()),
@@ -880,13 +880,12 @@ async fn the_recommendation_moves_on_at_most_twice() {
     let view = versions_for(&core, apple()).await;
     assert_eq!(view.snapshot().recommended.unwrap().key, keys[0]);
     let playback = play(&core, &view, &keys[0]);
-    let failed = || playback.snapshot().phase == mq_runtime::PlaybackPhase::Failed;
-    until("the last move to fail", failed).await;
+    until("a version to play", || playback.snapshot().url.is_some()).await;
     let s = playback.snapshot();
     let tried: Vec<&String> = s.attempts.iter().map(|a| &a.key).collect();
     assert_eq!(tried, [&keys[0], &keys[1], &keys[2]]);
-    assert_eq!(s.trying.map(|t| t.key), Some(keys[2].clone()));
-    assert!(s.offer.is_none());
+    assert_eq!(s.key.as_ref(), Some(&keys[3]));
+    assert!(s.trying.is_none() && s.offer.is_none());
 }
 
 /// A version that showed no picture here did not play on this device, as
@@ -1081,8 +1080,8 @@ fn settled(playback: &mq_runtime::PlaybackView) -> bool {
     s.key.is_some() || s.phase == mq_runtime::PlaybackPhase::Failed
 }
 
-/// After the second move no other version follows, so a version that did
-/// not play here still tries its other sources.
+/// With no other version left to move to, a version that did not play
+/// here still tries its other sources.
 #[tokio::test]
 async fn after_the_last_move_the_other_sources_are_tried() {
     let row = |name| (name, media_fixture("h264.mp4"));
@@ -1091,7 +1090,6 @@ async fn after_the_last_move_the_other_sources_are_tried() {
         row("Show.S01E01.720p.WEB-DL.AAC.x264-B"),
         row("Show.S01E01.480p.WEB-DL.AAC.x264-C"),
         row("Show.S01E01.480p.WEB-DL.AAC.x264-C"),
-        row("Show.S01E01.360p.WEB-DL.AAC.x264-D"),
     ])
     .await;
     let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
@@ -1257,31 +1255,31 @@ async fn done_does_not_wait_for_the_counts_when_a_ready_file_leads() {
 }
 
 /// Code review 2026-10-20 P1-1: "Try again" is a fresh start of the pick
-/// itself after any moves on: its chain, nothing tried, no moves made. Here
-/// the device learned the first three have no picture, so the pick fails
-/// again and moves on to the one that plays.
+/// itself after any moves on: its chain, nothing tried, no moves made. No
+/// version shows a picture here, so every move fails, and the retry starts
+/// with the pick again. The failure says why (play-every-version 2e).
 #[tokio::test]
 async fn try_again_starts_the_pick_afresh() {
     let (core, _server, keys) = direct_rows(vec![
         ("Show.S01E01.1080p.WEB-DL.HEVC-A", bare_hev1()),
         ("Show.S01E01.720p.WEB-DL.HEVC-B", bare_hev1()),
         ("Show.S01E01.480p.WEB-DL.HEVC-C", bare_hev1()),
-        ("Show.S01E01.360p.WEB-DL.HEVC-D", media_fixture("hvc1.mp4")),
     ])
     .await;
     let view = versions_for(&core, apple()).await;
     let playback = play(&core, &view, &keys[0]);
     let failed = || playback.snapshot().phase == mq_runtime::PlaybackPhase::Failed;
     until("the last move to fail", failed).await;
+    assert_eq!(playback.snapshot().empty, Some(EmptyKind::NothingPlaysHere));
     playback.retry();
     let s = playback.snapshot();
-    assert!(s.trying.is_none() && s.attempts.is_empty());
+    assert!(s.trying.is_none() && s.attempts.is_empty() && s.empty.is_none());
     assert_eq!(s.retries, 1, "a retry that refails still differs");
-    until("the retry to play", || playback.snapshot().url.is_some()).await;
+    until("the retry to fail", failed).await;
     let s = playback.snapshot();
     let tried: Vec<&String> = s.attempts.iter().map(|a| &a.key).collect();
+    // The others are known now to show no picture here: none follows.
     assert_eq!(tried, [&keys[0]], "the pick first again");
-    assert_eq!(s.key.as_ref(), Some(&keys[3]));
 }
 
 /// Code review 2026-10-20 P2-1: the open Versions view learns its own
@@ -1599,24 +1597,14 @@ async fn almost_nobody_sharing_is_said_before_play() {
             mq_runtime::PlaybackView::open_picked(&core, view.pick(&key), target, &view.plays());
         (server, view, playback)
     };
-    let (_server, view, playback) = open([(HASH_A, 1), (HASH_B, 1)]).await;
+    // The start itself follows the first play's policy (a dead swarm
+    // ends at 20 s, plans/play-every-version.md 2e), whoever shares.
+    let (_server, view, _playback) = open([(HASH_A, 1), (HASH_B, 1)]).await;
     assert!(view.snapshot().nobody_sharing, "{:?}", view.snapshot());
-    // The stall windows and the full deadline stay; a swarm where no peer
-    // unchoked is let go at 30 s (code review 2026-10-20 P1-1).
-    // Nothing else can play once the only source started: the deadline
-    // does not cut a swarm still sending.
-    until("nothing else to play", || !playback.start_rule().1).await;
-    let (windows, _, deadline, quiet, cap) = playback.start_rule();
-    assert!(windows, "the window cut is on");
-    assert_eq!(deadline, Duration::from_secs(60));
-    assert_eq!(quiet, Some(Duration::from_secs(30)));
-    assert_eq!(cap, Duration::from_secs(180));
-    drop((playback, view));
+    drop(view);
 
-    let (_server, view, playback) = open([(HASH_A, 1), (HASH_B, 12)]).await;
+    let (_server, view, _playback) = open([(HASH_A, 1), (HASH_B, 12)]).await;
     assert!(!view.snapshot().nobody_sharing, "one healthy version");
-    let (_, _, deadline, quiet, _) = playback.start_rule();
-    assert_eq!((deadline, quiet), (Duration::from_secs(60), None));
 }
 
 /// Code review 2026-10-20 r4 P3-2, P3-8: once a source of a "Try again" run
@@ -1651,7 +1639,7 @@ async fn a_source_that_plays_ends_the_try_again_run() {
     until("every source failed", failed).await;
     view.retry();
     until("a plays again", || view.snapshot().url.is_some()).await;
-    let (windows, _, _, _, cap) = view.start_rule();
+    let (windows, _, _, cap) = view.start_rule();
     assert!(
         windows,
         "no longer patient: a source falling short may be cut"

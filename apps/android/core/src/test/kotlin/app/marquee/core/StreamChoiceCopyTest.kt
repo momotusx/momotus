@@ -154,6 +154,7 @@ class StreamChoiceCopyTest {
                                     put("text", w.first)
                                     w.second?.let { put("action", it) }
                                     if (kind == EmptyKind.Unreachable) put("playFromDevice", PLAY_FROM_DEVICE)
+                                    if (kind == EmptyKind.NotStarted) put("chooseAnother", CHOOSE_ANOTHER)
                                 },
                             )
                         }

@@ -163,6 +163,7 @@ object StreamChoiceCopy {
             EmptyKind.KidsNothing to ("There's nothing here for you to watch" to null),
             EmptyKind.NoResults to ("No source has this yet" to null),
             EmptyKind.NothingPlaysHere to ("None of these plays on this device" to "Choose a version"),
+            EmptyKind.NotStarted to ("This didn't start" to "Try again"),
         )
 
     /** The action for `playFromDevice`, with the unreachable kind's words. */

@@ -445,6 +445,7 @@ enum class EmptyKind(
     KidsNothing("kidsNothing"),
     NoResults("noResults"),
     NothingPlaysHere("nothingPlaysHere"),
+    NotStarted("notStarted"),
 
     /** A value from a newer core that this app does not know yet. */
     Unknown(""),
@@ -1033,6 +1034,10 @@ data class PlaybackSnapshot(
     val start: StartProgress? = null,
     /** The version playing is not the one the start announced: the recommendation moved on (`trying`) and this one plays. The core's words, for the apps to show once from `ready`: "Playing 720p WEB: the 1080p Blu-ray did not start here", "... did not play on this device". Null otherwise. */
     val moved: String? = null,
+    /** The start has taken `CHOOSE_AFTER` (20 s): the loading screen shows the quiet "Choose another version" beside Back (plans/play-every-version.md 2e). */
+    val chooseAnother: Boolean = false,
+    /** Why nothing played, once `phase` is `failed`: the zero-playable words for what happened (`empty.<kind>` in stream-choice-words.json): notStarted when the start's budget ran out; else noRoom when every failure was a refusal for room, nothingPlaysHere when every failure was the versions' own on this device, else unreachable. */
+    val empty: EmptyKind? = null,
 )
 
 @Serializable
