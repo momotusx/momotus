@@ -490,7 +490,11 @@ fun StateMessage(
 
 /** A placeholder block that pulses while content loads (static when animations are off). */
 @Composable
-fun Skeleton(modifier: Modifier = Modifier) {
+fun Skeleton(
+    modifier: Modifier = Modifier,
+    /** `raised` when the block sits on a `surface` card, so it stays seen there. */
+    color: Color = Marquee.colors.surface,
+) {
     val reduced = LocalReducedMotion.current
     val pulse =
         rememberInfiniteTransition(label = "skeleton").animateFloat(
@@ -504,7 +508,7 @@ fun Skeleton(modifier: Modifier = Modifier) {
             // Read in the draw phase: the pulse redraws this block and recomposes nothing.
             .graphicsLayer { alpha = if (reduced) 1f else pulse.value }
             .clip(RoundedCornerShape(Marquee.radius.m))
-            .background(Marquee.colors.surface),
+            .background(color),
     )
 }
 

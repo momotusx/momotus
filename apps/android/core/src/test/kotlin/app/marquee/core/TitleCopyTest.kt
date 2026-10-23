@@ -13,6 +13,8 @@ import app.marquee.core.model.VersionStatus
 import app.marquee.core.model.VersionsSnapshot
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class TitleCopyTest {
     @Test
@@ -230,23 +232,28 @@ class TitleCopyTest {
         val empty = { kind: EmptyKind, action: EmptyAction, key: String? ->
             TitleCopy.primary(target, snapshot(done = true).copy(empty = EmptyVersions(kind, action, 0, key = key)))
         }
-        assertEquals(PrimaryAction.AddSource, empty(EmptyKind.NoSource, EmptyAction.SettingsAddons, null))
-        assertEquals(PrimaryAction.AddAccount, empty(EmptyKind.NeedsAccount, EmptyAction.SettingsAccounts, null))
+        assertEquals(PrimaryAction.SourceSettings, empty(EmptyKind.NoSource, EmptyAction.SettingsAddons, null))
+        assertEquals(PrimaryAction.AccountSettings, empty(EmptyKind.NeedsAccount, EmptyAction.SettingsAccounts, null))
         assertEquals(
             PrimaryAction.PlayFromDevice("kept"),
             empty(EmptyKind.Unreachable, EmptyAction.PlayFromDevice, "kept"),
         )
         assertEquals(PrimaryAction.TryAgain, empty(EmptyKind.Unreachable, EmptyAction.TryAgain, null))
         assertEquals(PrimaryAction.ChooseVersion, empty(EmptyKind.NothingPlaysHere, EmptyAction.ChooseVersion, null))
+        // A Back-only state keeps Play in its place, inert: a Play that opens a page with only Back is a dead end.
         for (kind in listOf(EmptyKind.NoRoom, EmptyKind.KidsNothing, EmptyKind.NoResults)) {
-            assertEquals(play, empty(kind, EmptyAction.None, null), "$kind keeps Play")
+            val primary = empty(kind, EmptyAction.None, null)
+            assertEquals(play.copy(inert = true), primary, "$kind keeps an inert Play")
+            assertFalse(TitleCopy.live(primary, target), "$kind: Play does nothing")
         }
+        assertTrue(TitleCopy.live(play, target))
+        assertTrue(TitleCopy.live(PrimaryAction.TryAgain, null))
         // The words are the shared table's, never "Add a source" or "Add an account".
         assertEquals(
             listOf("Settings", "Settings", "Play from this device", "Try again", "Choose a version"),
             listOf(
-                PrimaryAction.AddSource,
-                PrimaryAction.AddAccount,
+                PrimaryAction.SourceSettings,
+                PrimaryAction.AccountSettings,
                 PrimaryAction.PlayFromDevice("kept"),
                 PrimaryAction.TryAgain,
                 PrimaryAction.ChooseVersion,
@@ -258,5 +265,20 @@ class TitleCopyTest {
     fun `with the next episode not out, the page says when it airs where Play would be`() {
         assertEquals("Next episode airs Nov 3, 2026", TitleCopy.nothingToPlay("2026-11-03"))
         assertEquals("Nothing to play yet", TitleCopy.nothingToPlay(null))
+    }
+
+    @Test
+    fun `with no video to play, nothing that needs one is offered`() {
+        val empty = { action: EmptyAction, key: String? ->
+            TitleCopy.primary(
+                null,
+                snapshot(done = true).copy(empty = EmptyVersions(EmptyKind.Unreachable, action, 0, key = key)),
+            )
+        }
+        assertEquals(PrimaryAction.TryAgain, empty(EmptyAction.PlayFromDevice, "kept"))
+        val choose = empty(EmptyAction.ChooseVersion, null)
+        assertEquals(PrimaryAction.Play("Play"), choose)
+        assertFalse(TitleCopy.live(choose, null))
+        assertEquals(PrimaryAction.Play("Play"), TitleCopy.primary(null, snapshot(rows = listOf(row()), done = true)))
     }
 }

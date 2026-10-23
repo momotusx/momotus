@@ -337,10 +337,10 @@ private fun Pick(
             // Still asking, or every addon answered with nothing while the core checks what this device keeps.
             snapshot == null || !snapshot.done || snapshot.rows.isEmpty() -> {
                 PickLine()
-                Skeleton(Modifier.size(260.dp, 56.dp))
-                Skeleton(Modifier.size(420.dp, 28.dp))
-                Skeleton(Modifier.size(360.dp, 28.dp))
-                Skeleton(Modifier.size(300.dp, 28.dp))
+                Skeleton(Modifier.size(260.dp, 56.dp), colors.raised)
+                Skeleton(Modifier.size(420.dp, 28.dp), colors.raised)
+                Skeleton(Modifier.size(360.dp, 28.dp), colors.raised)
+                Skeleton(Modifier.size(300.dp, 28.dp), colors.raised)
             }
 
             else -> {

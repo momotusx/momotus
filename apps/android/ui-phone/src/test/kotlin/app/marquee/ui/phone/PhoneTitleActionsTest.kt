@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -159,6 +160,13 @@ class PhoneTitleActionsTest {
         assertEquals(listOf("retry", "play kept tt1"), calls)
         shown = versions(EmptyKind.NothingPlaysHere, EmptyAction.ChooseVersion)
         compose.onNodeWithText("Choose a version").performClick()
+        assertEquals(listOf("retry", "play kept tt1", "versions tt1"), calls)
+        // A state whose only way on is Back: Play keeps its place, inert, with the state's line under it.
+        shown = versions(EmptyKind.NoResults, EmptyAction.None)
+        compose.waitForIdle()
+        compose.onNodeWithText("No source has this yet", substring = true, useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("Play").assertIsNotEnabled()
+        compose.onNodeWithText("Play").performClick()
         assertEquals(listOf("retry", "play kept tt1", "versions tt1"), calls)
     }
 }

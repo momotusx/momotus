@@ -128,12 +128,17 @@ fun TvTitle(
     val details = header?.details
     val failed = header?.state is TitleState.Failed
     // Focus goes to Play once the page has loaded (or to Try again when it could not), not before:
-    // the buttons do not exist while the skeleton shows. Try again asks again.
+    // the buttons do not exist while the skeleton shows. Try again asks again. An inert or disabled Play
+    // takes no focus: it starts on the next action, Versions, or Add to Library when there is no video.
+    val target = header?.playTarget
+    val live = details != null && TitleCopy.live(TitleCopy.primary(target, versions, details.runtime), target)
     focus.FirstFocus(
         when {
             failed -> RETRY
-            details != null -> PLAY
-            else -> null
+            details == null -> null
+            live -> PLAY
+            target != null -> "versions"
+            else -> "library"
         },
         ask = failed,
     )
@@ -306,15 +311,15 @@ private fun Info(
                     when (primary) {
                         is PrimaryAction.Play -> PlayFilled
                         PrimaryAction.ChooseVersion -> Icons.Layers
-                        PrimaryAction.AddSource, PrimaryAction.AddAccount -> Icons.Settings
+                        PrimaryAction.SourceSettings, PrimaryAction.AccountSettings -> Icons.Settings
                         is PrimaryAction.PlayFromDevice -> PlayFilled
                         PrimaryAction.TryAgain -> Icons.RefreshCw
                     },
-                enabled = primary !is PrimaryAction.Play || target != null,
+                enabled = TitleCopy.live(primary, target),
                 onClick = {
                     when {
-                        primary == PrimaryAction.AddSource -> onAddSource()
-                        primary == PrimaryAction.AddAccount -> onAddAccount()
+                        primary == PrimaryAction.SourceSettings -> onAddSource()
+                        primary == PrimaryAction.AccountSettings -> onAddAccount()
                         primary == PrimaryAction.TryAgain -> onRetry()
                         target == null -> Unit
                         primary is PrimaryAction.PlayFromDevice -> onPlay(primary.key, target.videoId)
@@ -322,7 +327,8 @@ private fun Info(
                         else -> onPlay(recommended.key, target.videoId)
                     }
                 },
-                focusRequester = focus.requesterFor(PLAY),
+                // An inert Play is no focus target, so the first focus and the memory pass it by.
+                focusRequester = if (TitleCopy.live(primary, target)) focus.requesterFor(PLAY) else null,
                 onFocusChange = focus.watch(ACTIONS, PLAY),
             )
             // Always there once there is something to play, so focus on it is never pulled out from under the viewer.

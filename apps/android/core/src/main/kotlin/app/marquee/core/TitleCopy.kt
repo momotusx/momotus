@@ -17,9 +17,13 @@ sealed interface PrimaryAction {
     /** The words on the button. */
     val label: String
 
-    /** Play (or Resume): [label] says which. */
+    /**
+     * Play (or Resume): [label] says which. [inert] in a state whose only way on is Back (noRoom, kidsNothing,
+     * noResults): it keeps its place, dimmed, not focusable, and does nothing, with the state's line under it.
+     */
     data class Play(
         override val label: String,
+        val inert: Boolean = false,
     ) : PrimaryAction
 
     /** Versions exist and none is ready, or none plays on this device (nothingPlaysHere): pick one on Versions. */
@@ -28,7 +32,7 @@ sealed interface PrimaryAction {
     }
 
     /** No addon is installed (noSource): Settings, where one is added. */
-    data object AddSource : PrimaryAction {
+    data object SourceSettings : PrimaryAction {
         override val label = StreamChoiceCopy.SETTINGS
     }
 
@@ -45,7 +49,7 @@ sealed interface PrimaryAction {
     }
 
     /** Versions were found, and they play only through a streaming service account: Settings, where one is added. */
-    data object AddAccount : PrimaryAction {
+    data object AccountSettings : PrimaryAction {
         override val label = StreamChoiceCopy.SETTINGS
     }
 }
@@ -85,8 +89,10 @@ object TitleCopy {
      * says so). When nothing can play it is the core's state's first action from the shared table
      * (plans/play-every-version.md, "Shared Step 3 decisions"): Settings (noSource, needsAccount), Play
      * from this device or Try again (unreachable), Choose a version (nothingPlaysHere). A state whose only
-     * action is Back (noRoom, kidsNothing, noResults) keeps Play, with the state's line under it, and Play
-     * opens Versions, which says it with its Back. Versions listed with none ready give Choose a version.
+     * action is Back (noRoom, kidsNothing, noResults) keeps Play in its place but inert, with the state's line
+     * under it: a Play that opens a page holding only Back is a dead end. Versions listed with none ready give
+     * Choose a version. An action that needs the video (Play from this device, Choose a version) is never
+     * offered without a [target]: Try again or the disabled Play takes its place.
      */
     fun primary(
         target: PlayTarget?,
@@ -99,15 +105,15 @@ object TitleCopy {
             empty != null -> {
                 when (empty.action) {
                     EmptyAction.SettingsAddons -> {
-                        PrimaryAction.AddSource
+                        PrimaryAction.SourceSettings
                     }
 
                     EmptyAction.SettingsAccounts -> {
-                        PrimaryAction.AddAccount
+                        PrimaryAction.AccountSettings
                     }
 
                     EmptyAction.PlayFromDevice -> {
-                        empty.key?.let(PrimaryAction::PlayFromDevice)
+                        empty.key?.takeIf { target != null }?.let(PrimaryAction::PlayFromDevice)
                             ?: PrimaryAction.TryAgain
                     }
 
@@ -116,7 +122,11 @@ object TitleCopy {
                     }
 
                     EmptyAction.ChooseVersion -> {
-                        PrimaryAction.ChooseVersion
+                        if (target != null) PrimaryAction.ChooseVersion else play
+                    }
+
+                    EmptyAction.None -> {
+                        play.copy(inert = true)
                     }
 
                     else -> {
@@ -125,7 +135,8 @@ object TitleCopy {
                 }
             }
 
-            versions != null && versions.done && versions.recommended == null && versions.rows.isNotEmpty() -> {
+            target != null && versions != null && versions.done && versions.recommended == null &&
+                versions.rows.isNotEmpty() -> {
                 PrimaryAction.ChooseVersion
             }
 
@@ -134,6 +145,12 @@ object TitleCopy {
             }
         }
     }
+
+    /** Whether the primary button does something: Play needs the video and is never [PrimaryAction.Play.inert]. */
+    fun live(
+        primary: PrimaryAction,
+        target: PlayTarget?,
+    ): Boolean = primary !is PrimaryAction.Play || (target != null && !primary.inert)
 
     /** How many real seasons there are (Specials do not count). */
     fun seasonCount(seasons: List<Int>): Int = seasons.count { it > 0 }

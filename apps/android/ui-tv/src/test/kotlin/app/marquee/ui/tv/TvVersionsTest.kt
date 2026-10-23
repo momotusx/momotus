@@ -468,4 +468,36 @@ class TvVersionsTest {
         compose.mainClock.advanceTimeBy(2_000)
         save("tv-versions-unreachable")
     }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `the loading card's skeletons stand out from the card they sit on`() {
+        compose.setContent {
+            MarqueeTheme(Form.Tv) {
+                TvVersions("Sintel", null, FocusMemory(), {}, {}, {}, {}, {})
+            }
+        }
+        compose.waitForIdle()
+        val line =
+            compose
+                .onNodeWithText(
+                    "Best for this screen",
+                    useUnmergedTree = true,
+                ).fetchSemanticsNode()
+                .boundsInRoot
+        val dp = compose.density.density
+        val image = compose.onRoot().captureToImage().asAndroidBitmap()
+        // The first block (260 x 56) starts under the card's first line; the card's ground is its padding to the left.
+        val y = (line.bottom + 30 * dp).toInt()
+        val block = Color(image.getPixel((line.left + 40 * dp).toInt(), y))
+        val ground = Color(image.getPixel((line.left - 8 * dp).toInt(), y))
+        val la = block.luminance() + 0.05f
+        val lb = ground.luminance() + 0.05f
+        val ratio = maxOf(la, lb) / minOf(la, lb)
+        println(
+            "skeleton {\"ratio\":$ratio,\"block\":\"$block\",\"ground\":\"$ground\",\"line\":\"$line\",\"dp\":$dp,\"w\":${image.width}}",
+        )
+        assertTrue(ratio > 1.05f, "the skeleton melts into its card: $ratio")
+        if (out != null) save("tv-versions-loading")
+    }
 }

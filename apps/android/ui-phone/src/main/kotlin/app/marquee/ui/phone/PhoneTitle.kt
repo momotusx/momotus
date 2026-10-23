@@ -355,16 +355,16 @@ private fun Info(
                     when (primary) {
                         is PrimaryAction.Play -> PlayFilled
                         PrimaryAction.ChooseVersion -> Icons.Layers
-                        PrimaryAction.AddSource, PrimaryAction.AddAccount -> Icons.Settings
+                        PrimaryAction.SourceSettings, PrimaryAction.AccountSettings -> Icons.Settings
                         is PrimaryAction.PlayFromDevice -> PlayFilled
                         PrimaryAction.TryAgain -> Icons.RefreshCw
                     },
                 modifier = Modifier.widthIn(min = PRIMARY_MIN).weight(1f),
-                enabled = primary !is PrimaryAction.Play || target != null,
+                enabled = TitleCopy.live(primary, target),
                 onClick = {
                     when {
-                        primary == PrimaryAction.AddSource -> onAddSource()
-                        primary == PrimaryAction.AddAccount -> onAddAccount()
+                        primary == PrimaryAction.SourceSettings -> onAddSource()
+                        primary == PrimaryAction.AccountSettings -> onAddAccount()
                         primary == PrimaryAction.TryAgain -> onRetry()
                         target == null -> Unit
                         primary is PrimaryAction.PlayFromDevice -> onPlay(primary.key, target.videoId)
