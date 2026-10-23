@@ -273,9 +273,13 @@ object VersionsCopy {
         (badges(row).map { it.text } + listOfNotNull(languageTag(row), quiet(row) ?: row.sizeBytes?.let(Format::bytes)))
             .joinToString(", ")
 
-    /** The card's one why line: the core's line and its details joined by a colon ("Starts quickly: 412 seeders, 2 GB"). */
+    /**
+     * The card's one why line: the core's line and its details joined by a colon ("Starts quickly: 412 seeders, 2 GB"),
+     * or, for the version kept on this device, that alone ("On this device"): one idea, as on the web.
+     */
     fun why(row: VersionRow): String {
-        val line = StreamChoiceCopy.rowLine(row)
+        row.onDevice?.let { return it }
+        val line = StreamChoiceCopy.line(row.line)
         return if (line.details.isEmpty()) line.text else "${line.text}: ${line.details}"
     }
 

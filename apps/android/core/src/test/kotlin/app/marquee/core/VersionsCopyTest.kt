@@ -385,6 +385,16 @@ class VersionsCopyTest {
     }
 
     @Test
+    fun `the card's why line for the version kept here says that alone, one idea`() {
+        val kept = row().copy(line = ReasonLine.Quick(22, 2L * 1024 * 1024 * 1024), onDevice = "On this device")
+        assertEquals("On this device", VersionsCopy.why(kept))
+        assertEquals(
+            "Best for this phone. 4K, HDR. On this device",
+            VersionsCopy.cardSpoken("Best for this phone", kept),
+        )
+    }
+
+    @Test
     fun `the card's why line joins the core's line and details, and says the whole card once`() {
         val one = row().copy(line = ReasonLine.Quick(412, 2L * 1024 * 1024 * 1024))
         val why = VersionsCopy.why(one)

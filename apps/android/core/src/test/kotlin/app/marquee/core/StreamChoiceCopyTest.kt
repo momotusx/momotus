@@ -430,7 +430,7 @@ class StreamChoiceCopyTest {
         val line = StreamChoiceCopy.rowLine(held)
         assertEquals("On this device", line.text)
         assertEquals(StreamChoiceCopy.line(quick).details, line.details, "the reason's details stay for focus")
-        assertEquals("On this device: ${line.details}", VersionsCopy.why(held), "the card says it too")
+        assertEquals("On this device", VersionsCopy.why(held), "the card says it too, alone: one idea")
         assertEquals(StreamChoiceCopy.line(quick), StreamChoiceCopy.rowLine(held.copy(onDevice = null)))
     }
 
