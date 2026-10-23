@@ -339,7 +339,11 @@ private func row(_ json: String) throws -> VersionRow {
     #expect(VersionWords.cardSpoken(none) == "\(VersionWords.kicker). \(VersionWords.why(none))")
     let page = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         .appending(path: "../Marquee/Versions/VersionsScreen.swift"), encoding: .utf8)
-    #expect(try body(of: "private struct BadgeRow", in: page).contains("if badges.isEmpty { badge(.init(text: \"4K\", look: .filled)).hidden() }"))
+    let badgeRow = try body(of: "private struct BadgeRow", in: page)
+    #expect(badgeRow.contains("if badges.isEmpty { badge(.init(text: \"4K\", look: .filled)).hidden() }"))
+    // No badge is no VoiceOver stop; an outlined badge is as tall as a filled one (1 pt each way).
+    #expect(badgeRow.contains(".accessibilityHidden(badges.isEmpty)"))
+    #expect(badgeRow.contains(".padding(.horizontal, 5).padding(.vertical, 1)") && badgeRow.contains(".padding(.horizontal, 6).padding(.vertical, 1)"))
     #expect(try body(of: "private struct PickCard", in: page).contains(".accessibilityLabel(VersionWords.cardSpoken(row))"))
 }
 

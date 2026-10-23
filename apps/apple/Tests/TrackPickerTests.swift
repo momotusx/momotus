@@ -285,6 +285,9 @@ private let klingon = track(5, "tlh", "tlh", "Klingon")
     #expect(TrackPicker.matches(TrackPicker.audioLanguage(german), "deutsch"))
     #expect(!TrackPicker.matches(TrackPicker.audioLanguage(english), "deutsch"))
     #expect(TrackPicker.audioLanguage(german).own == "Deutsch")
+    // The file's own spelling of the code finds it too, as a subtitle language's: "nld" is in neither name.
+    let dutch = TrackPicker.audioLanguage(TrackPicker.FileTrack(index: 2, name: "Dutch", language: "nld"))
+    #expect(TrackPicker.matches(dutch, "nld") && TrackPicker.matches(dutch, "nl"))
 }
 
 @Test func aRegionalAudioTagTakesItsBaseLanguagesOwnName() {

@@ -345,6 +345,8 @@ private struct BadgeRow: View {
             ForEach(badges, id: \.self, content: badge)
         }
         .accessibilityElement(children: .combine)
+        // No badge is no VoiceOver stop.
+        .accessibilityHidden(badges.isEmpty)
     }
 
     @ViewBuilder private func badge(_ badge: VersionWords.Badge) -> some View {
@@ -358,7 +360,8 @@ private struct BadgeRow: View {
                 .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(tone))
         case .outlined:
             label.foregroundStyle(tone)
-                .padding(.horizontal, 5).padding(.vertical, 0)
+                // 1 pt as the filled badge's, so a row of outlined badges only is as tall.
+                .padding(.horizontal, 5).padding(.vertical, 1)
                 .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).stroke(Theme.Palette.muted, lineWidth: 1))
         case .plain:
             label.foregroundStyle(tone)

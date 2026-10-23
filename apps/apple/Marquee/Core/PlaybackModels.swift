@@ -912,7 +912,8 @@ enum TrackPicker {
     /// An audio track as the search reads it: its name, its own name ("deutsch" finds German) and its code.
     static func audioLanguage(_ t: FileTrack) -> Language {
         let tag = t.language.map(fileTag) ?? ""
-        return Language(language: tag, name: t.name, own: audioOwnName(t), codes: [tag.lowercased()], file: [t], tracks: [])
+        let codes = Set([tag.lowercased(), t.language?.lowercased()].compactMap { $0 }.filter { !$0.isEmpty })
+        return Language(language: tag, name: t.name, own: audioOwnName(t), codes: codes.sorted(), file: [t], tracks: [])
     }
 
     /// Audio: a search only past five tracks.
