@@ -305,7 +305,7 @@ class SubtitleFailureTest {
             "the file's own tracks came on",
         )
         // One message, the note's: no "did not load" on top.
-        assertEquals("A subtitle file from SubSense could not be read. Pick another one.", controller.notice)
+        assertEquals("This subtitle could not be read.", controller.notice)
         assertEquals(null, controller.status, "the note came with the waiting mark")
         assertEquals(0, player.stops)
         assertTrue(failOvers().isEmpty())

@@ -14,7 +14,7 @@ import { BBB_ID, NAME, startSource } from "./source";
 
 const CINEMETA = "https://v3-cinemeta.strem.io/manifest.json";
 const GONE = "Flaky Subs did not answer. Try its subtitles again in a moment.";
-const BROKEN = "A subtitle file from Flaky Subs could not be read. Pick another one.";
+const BROKEN = "This subtitle could not be read.";
 
 let core: { proc: ChildProcess; data: string } | null = null;
 let addon: Server | null = null;

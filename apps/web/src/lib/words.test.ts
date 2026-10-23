@@ -55,7 +55,7 @@ test("a subtitle note names its source and what to do", () => {
   expect(say("unreachable")).toBe("OpenSubtitles v3 did not answer. Try its subtitles again in a moment.");
   expect(say("blocked")).toBe("OpenSubtitles v3 is turning requests away. Marquee will try again in a few minutes.");
   expect(say("changed")).toBe("OpenSubtitles v3 changed its pages, so Marquee cannot read them. An update will fix this.");
-  expect(say("trackFailed")).toBe("A subtitle file from OpenSubtitles v3 could not be read. Pick another one.");
+  expect(say("trackFailed")).toBe("This subtitle could not be read.");
 });
 
 const GiB = 1024 ** 3;

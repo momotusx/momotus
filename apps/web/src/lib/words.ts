@@ -82,7 +82,7 @@ export function subtitleNote({ source, problem }: SubtitleNote): string {
     case "changed":
       return `${source} changed its pages, so Marquee cannot read them. An update will fix this.`;
     case "trackFailed":
-      return `A subtitle file from ${source} could not be read. Pick another one.`;
+      return "This subtitle could not be read.";
   }
 }
 

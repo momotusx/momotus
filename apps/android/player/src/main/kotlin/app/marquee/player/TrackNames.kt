@@ -163,7 +163,7 @@ fun subtitleNoteWords(note: SubtitleNote): String =
         }
 
         SubtitleProblem.TrackFailed -> {
-            "A subtitle file from ${note.source} could not be read. Pick another one."
+            "This subtitle could not be read."
         }
 
         SubtitleProblem.Unknown -> {

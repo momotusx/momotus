@@ -17,7 +17,7 @@ class SubtitleNoteWordsTest {
                 "TurkceAltyazi.org did not answer. Try its subtitles again in a moment.",
                 "TurkceAltyazi.org is turning requests away. Marquee will try again in a few minutes.",
                 "TurkceAltyazi.org changed its pages, so Marquee cannot read them. An update will fix this.",
-                "A subtitle file from TurkceAltyazi.org could not be read. Pick another one.",
+                "This subtitle could not be read.",
                 "Subtitles from TurkceAltyazi.org did not load.",
             ),
             listOf(
