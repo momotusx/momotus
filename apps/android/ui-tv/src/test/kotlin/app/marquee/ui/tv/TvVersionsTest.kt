@@ -549,55 +549,81 @@ class TvVersionsTest {
         compose.onAllNodesWithTag("row-skeleton-0", useUnmergedTree = true).assertCountEquals(0)
     }
 
-    @Test
-    fun `a shortcut under the card plays in one press, and its version still sits in its section`() {
-        val best = row("best", ReasonLine.Ready("TorBox", gib)).copy(quality = "4K")
-        val small = row("s", ReasonLine.Quick(1204, gib))
-        val other = row("o", ReasonLine.Few(31)).copy(quality = "720p", sizeBytes = 3 * gib)
-        show(
-            snapshot(best, listOf(small, other)).copy(
-                smaller = small,
-                sections =
-                    listOf(
-                        VersionSection(SectionQuality.Fhd, listOf("s")),
-                        VersionSection(SectionQuality.Hd, listOf("o")),
-                    ),
-            ),
+    /**
+     * A coherent page: the pick a 1080p of 4 GB (the core keeps it out of the list), Smaller file a 720p of 1.5 GB,
+     * Sharper a 4K of 12 GB, and one more 1080p, each in the core's section for its quality.
+     */
+    private fun coherent(): VersionsSnapshot {
+        val pick =
+            row(
+                "pick",
+                ReasonLine.Ready("TorBox", 4 * gib),
+            ).copy(
+                sizeBytes = 4 * gib,
+                status = VersionStatus.Ready("TorBox"),
+                releaseName = "Sintel.2010.1080p.BluRay.mkv",
+            )
+        val small =
+            row(
+                "small",
+                ReasonLine.Quick(1204, 3 * gib / 2),
+            ).copy(quality = "720p", sizeBytes = 3 * gib / 2, releaseName = "Sintel.2010.720p.WEB.mkv")
+        val sharp =
+            row(
+                "sharp",
+                ReasonLine.Few(31),
+            ).copy(quality = "4K", sizeBytes = 12 * gib, releaseName = "Sintel.2010.2160p.BluRay.mkv")
+        val other =
+            row(
+                "other",
+                ReasonLine.Few(31),
+            ).copy(sizeBytes = 3 * gib, releaseName = "Sintel.2010.1080p.WEB.mkv")
+        return snapshot(pick, listOf(sharp, other, small)).copy(
+            smaller = small,
+            sharper = sharp,
+            sections =
+                listOf(
+                    VersionSection(SectionQuality.Uhd, listOf("sharp")),
+                    VersionSection(SectionQuality.Fhd, listOf("other")),
+                    VersionSection(SectionQuality.Hd, listOf("small")),
+                ),
         )
-        // The core's sections, in its order.
-        compose.onNodeWithText("1080P", useUnmergedTree = true).assertExists()
-        compose.onNodeWithText("720P AND BELOW", useUnmergedTree = true).assertExists()
-        // Down from Play reaches the shortcut; the same version is a 1080p row too.
+    }
+
+    @Test
+    fun `the card reads the pick, the list leaves it out, and the shortcuts are the core's, each one press`() {
+        show(coherent())
+        // The card says the pick's own facts.
+        compose.onNodeWithText("1080p HDR10").assertExists()
+        compose.onNodeWithText("4 GB").assertExists()
+        // The core keeps the pick out of the sections, so no row repeats it.
+        compose.onAllNodesWithContentDescription("1080p, HDR10, 4 GB").assertCountEquals(0)
+        // The core's smaller and sharper, in its order, with their own facts.
+        compose.onNodeWithText("Smaller file: 720p, 1.5 GB").assertExists()
+        compose.onNodeWithText("Sharper: 4K, 12 GB").assertExists()
+        // The core's sections, in its order: 4K, 1080p, 720p and below.
+        // A heading is the first node with its words (a 4K row says "4K" too, under it).
+        val top = { t: String ->
+            compose.onAllNodesWithText(t, useUnmergedTree = true).fetchSemanticsNodes().minOf { it.boundsInRoot.top }
+        }
+        val tops = listOf(top("4K"), top("1080P"), top("720P AND BELOW"))
+        assertEquals(tops.sorted(), tops)
+        // Down from Play reaches Smaller file, whose version is also the 720p row; OK plays it.
         compose.waitUntil(5_000) {
             compose.onAllNodes(isFocused() and hasText("Play this version")).fetchSemanticsNodes().isNotEmpty()
         }
         press(Key.DirectionDown)
-        compose.onNodeWithText("Smaller file: 1080p, 2 GB").assertIsFocused()
-        compose.onNodeWithContentDescription("1080p, HDR10, 2 GB").assertExists()
+        compose.onNodeWithText("Smaller file: 720p, 1.5 GB").assertIsFocused()
+        compose.onNodeWithContentDescription("720p, HDR10, 1.5 GB").assertExists()
         press(Key.DirectionCenter)
-        assertEquals(listOf("s"), played)
+        assertEquals(listOf("small"), played)
     }
 
     @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun `shot - the card with its shortcuts and the core's sections`() {
         assumeTrue("MARQUEE_SHOTS is not set", out != null)
-        val best = row("best", ReasonLine.Ready("TorBox", gib)).copy(quality = "4K")
-        val small = row("s", ReasonLine.Quick(1204, gib))
-        val sharp = row("h", ReasonLine.Few(31)).copy(quality = "4K", sizeBytes = 9 * gib)
-        val other = row("o", ReasonLine.Few(31)).copy(quality = "720p", sizeBytes = 3 * gib)
-        show(
-            snapshot(best, listOf(sharp, small, other)).copy(
-                smaller = small,
-                sharper = sharp,
-                sections =
-                    listOf(
-                        VersionSection(SectionQuality.Uhd, listOf("h")),
-                        VersionSection(SectionQuality.Fhd, listOf("s")),
-                        VersionSection(SectionQuality.Hd, listOf("o")),
-                    ),
-            ),
-        )
+        show(coherent())
         compose.mainClock.advanceTimeBy(2_000)
         save("tv-versions-shortcuts")
     }
