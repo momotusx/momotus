@@ -22,6 +22,7 @@ import androidx.media3.common.VideoSize
 import androidx.media3.common.text.Cue
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlaybackException
+import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.client.CoreLog
 import app.marquee.core.model.Attempt
 import app.marquee.core.model.EmptyKind
@@ -289,6 +290,9 @@ class PlaybackController(
     /** The start subtitle already turned on, so a repeat of it does nothing. */
     private var started: String? = null
 
+    /** The core's `startSubtitleFailed` as last heard, so its line is said once. */
+    private var startSubtitleFailed = false
+
     /** Addon subtitle files that did not load in this play: not offered again. */
     private val dead = HashSet<String>()
     private var released = false
@@ -450,6 +454,10 @@ class PlaybackController(
         snapshotSubs = s.subtitles
         val added = newSubtitleNotes(subtitleNotes, s.subtitleNotes)
         subtitleNotes = s.subtitleNotes
+        // Every start subtitle failed to read (the core handed over to the next until none was left): said once,
+        // with no source; a later choice clears it in the core, and a new failure is said again.
+        if (s.startSubtitleFailed && !startSubtitleFailed) announce(StreamChoiceCopy.SUBTITLES_FAILED)
+        startSubtitleFailed = s.startSubtitleFailed
         // A note while one of the core's tracks is on is about it (only the picked file is fetched).
         if (pick?.external == true) added.lastOrNull()?.let { announce(subtitleNoteWords(it)) }
         // The picked file left the list (the core could not read it): it goes off quietly, as the note above
@@ -940,7 +948,7 @@ class PlaybackController(
                         null
                     }
                 if (cues == null) {
-                    dropTrack(track.url, "Subtitles from ${track.source} did not load")
+                    dropTrack(track.url, UNREADABLE)
                     return@launch
                 }
                 fetched[track.url] = cues
@@ -1206,6 +1214,9 @@ class PlaybackController(
         const val TICK_MS = 500L
         const val REPORT_MS = 5_000L
         const val NOTICE_MS = 4_000L
+
+        /** A subtitle file that did not load or read, said with no source, as the core's trackFailed note is. */
+        const val UNREADABLE = "This subtitle could not be read."
         const val TRYING_AGAIN_MS = 1_500L
         const val LATE = "late:"
 

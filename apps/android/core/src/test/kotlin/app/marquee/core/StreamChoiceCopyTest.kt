@@ -193,6 +193,7 @@ class StreamChoiceCopyTest {
                         put("findingChosen", FINDING_CHOSEN)
                         put("chooseAnother", CHOOSE_ANOTHER)
                         put("chooseAnotherSaid", CHOOSE_ANOTHER_SAID)
+                        put("subtitlesFailed", SUBTITLES_FAILED)
                     },
                 )
                 put(

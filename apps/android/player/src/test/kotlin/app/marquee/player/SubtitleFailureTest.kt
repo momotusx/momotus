@@ -18,6 +18,7 @@ import androidx.media3.common.Tracks
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlaybackException
+import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
 import app.marquee.core.client.CoreLog
@@ -251,7 +252,8 @@ class SubtitleFailureTest {
         assertEquals(0, player.stops, "the video was stopped")
         assertTrue(failOvers().isEmpty(), "a subtitle failed the video over")
         assertNotEquals(PlaybackController.Stage.Failed, controller.stage)
-        assertEquals("Subtitles from SubSense did not load", controller.notice)
+        // Said with no source, as no addon is named.
+        assertEquals("This subtitle could not be read.", controller.notice)
         assertEquals(null, controller.status, "the note came with the waiting mark")
 
         // The video's own failure still fails over.
@@ -370,6 +372,44 @@ class SubtitleFailureTest {
         assertEquals(1, player.items.size)
         assertEquals(listOf(subtitle), fetches)
         assertEquals(emptyList(), chosen(), "the start subtitle is not the viewer's pick")
+        controller.release()
+    }
+
+    @Test
+    fun `the core hands the start subtitle on past two unreadable files to a good one, and nothing goes back`() {
+        val one = "http://127.0.0.1:7781/one/tur.srt"
+        val two = "http://127.0.0.1:7781/two/tur.srt"
+        val (player, controller) = open(snapshot(subtitles = listOf(one, two, other)))
+        push(snapshot(subtitles = listOf(one, two, other), extra = "\"autoSubtitle\":\"$one\","))
+        until("the first is tried and dropped") {
+            fetches == listOf(one) && controller.text.none { it.id == "late:$one" }
+        }
+        // The core could not read it either: it leaves the list, and the start subtitle is the next best.
+        val failed = """{"source":"OpenSubtitles v3","problem":"trackFailed"}"""
+        push(snapshot(subtitles = listOf(two, other), notes = "[$failed]", extra = "\"autoSubtitle\":\"$two\","))
+        until("the second is tried and dropped") {
+            fetches == listOf(one, two) && controller.text.none { it.id == "late:$two" }
+        }
+        val both = "[$failed,$failed]"
+        push(snapshot(subtitles = listOf(other), notes = both, extra = "\"autoSubtitle\":\"$other\","))
+        until("the good one is drawn") { controller.drawnAt(1_500) == listOf("Selam") }
+        assertEquals(listOf(one, two, other), fetches)
+        assertEquals(emptyList(), chosen(), "the start subtitle is not the viewer's pick")
+        assertEquals(1, player.items.size)
+        assertTrue(failOvers().isEmpty())
+        controller.release()
+    }
+
+    @Test
+    fun `when no start subtitle can be read the player says so with no source, and the video plays on`() {
+        val (player, controller) = open(snapshot(subtitles = listOf(subtitle, other)))
+        val failed = """{"source":"SubSense","problem":"trackFailed"}"""
+        push(snapshot(subtitles = emptyList(), notes = "[$failed]", extra = "\"startSubtitleFailed\":true,"))
+        until("the line is said") { controller.notice == StreamChoiceCopy.SUBTITLES_FAILED }
+        assertFalse("SubSense" in controller.notice.orEmpty())
+        assertEquals(1, player.items.size)
+        assertEquals(0, player.stops)
+        assertTrue(failOvers().isEmpty())
         controller.release()
     }
 

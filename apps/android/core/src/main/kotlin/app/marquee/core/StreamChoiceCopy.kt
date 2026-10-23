@@ -234,6 +234,9 @@ object StreamChoiceCopy {
     const val CHOOSE_ANOTHER = "Choose another version"
     const val CHOOSE_ANOTHER_SAID = "Still loading. Choose another version is available"
 
+    /** Every start subtitle failed to read (`startSubtitleFailed`): said with no source. */
+    const val SUBTITLES_FAILED = "Subtitles could not be loaded"
+
     /** "Show all 12". */
     fun showAll(n: Int): String = SHOW_ALL.replace("{n}", "$n")
 
