@@ -1016,7 +1016,7 @@ data class PlaybackSnapshot(
     val subtitleNotes: List<SubtitleNote> = emptyList(),
     /** The track (its `url`) every app turns on at start, once, when the list has settled: the profile set subtitle languages and the audio is in none of them, or the user chose one for this title before. Null otherwise. The user's own pick, or Off, always wins: send `subtitleChosen` (plans/m13-subtitle-languages.md 6). */
     val autoSubtitle: String? = null,
-    /** Every track the start subtitle could turn on failed to read: each one that failed handed over to the next best (its language's next, then the next language, as `autoSubtitle` changes) and none was left. A neutral state with no source: the apps word it themselves. */
+    /** Every track the start subtitle could turn on failed to read: each one that failed handed over to the next best (its language's next, then the next language, as `autoSubtitle` changes) and none was left. A neutral state with no source: the apps show `player.subtitlesFailed` from apps/shared/stream-choice-words.json. */
     val startSubtitleFailed: Boolean = false,
     /** The next released episode, for an Up Next card. */
     val next: NextEpisode? = null,
