@@ -169,6 +169,22 @@ final class CoreClient {
         try await request("command", ["sub": sub, "command": command]) { _ in }
     }
 
+    /// A command delivered at once, so commands reach the core in the order they are called (a
+    /// `Task` around the async one starts whenever the main actor gets to it). Nothing waits on an
+    /// earlier command's reply. A failed reply goes to `failed`; one from before a profile switch is
+    /// dropped, as `request` drops it.
+    func command(_ sub: UInt64, _ command: [String: any Sendable], failed: @escaping @MainActor @Sendable (CoreError) -> Void) {
+        if core == nil, let failure { failed(CoreError(failure)); return }
+        let router = router
+        let id = router.nextId()
+        guard let text = try? Self.encode(op: "command", id: id, fields: ["sub": sub, "command": command]) else { return }
+        router.wait(for: id) { result in
+            guard case .failure(let error) = result, error.code != "switched" else { return }
+            Task { @MainActor in failed(error) }
+        }
+        deliver(text)
+    }
+
     /// A command sent at once without waiting for its reply, so it reaches the
     /// core before anything sent after it (an unsubscribe, for example).
     func commandNow(_ sub: UInt64, _ command: [String: any Sendable]) {

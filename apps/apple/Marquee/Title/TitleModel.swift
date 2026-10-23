@@ -86,13 +86,8 @@ final class TitleModel {
 
     private func send(_ command: [String: any Sendable]) {
         guard let sub else { return }
-        Task {
-            do {
-                try await core.command(sub, command)
-            } catch {
-                failure = error.localizedDescription
-            }
-        }
+        // At once, in call order: a quick Library on then off lands as off.
+        core.command(sub, command) { [weak self] error in self?.failure = error.localizedDescription }
     }
 
     private func apply(_ event: ViewEvent<TitleSnapshot, TitleUpdate>) {

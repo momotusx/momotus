@@ -85,18 +85,13 @@ final class LiveRecord<Snapshot: Decodable & Sendable> {
         }
     }
 
-    /// Sends a command to this view; a failure shows in `failure`.
+    /// Sends a command to this view at once, so commands reach the core in the order they are sent
+    /// (Search's `remember` before the `setQuery` that clears the query) and none waits on another;
+    /// a failure shows in `failure`.
     func command(_ fields: [String: any Sendable]) {
         // A number from a core that was replaced could name another view on the new one.
         guard let sub, generation == core.generation else { return }
-        Task {
-            do {
-                try await core.command(sub, fields)
-            } catch is CancellationError {
-            } catch {
-                failure = error.localizedDescription
-            }
-        }
+        core.command(sub, fields) { [weak self] error in self?.failure = error.localizedDescription }
     }
 
     /// Runs a protocol op on the user's behalf; a failure shows in `failure`.

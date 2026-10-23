@@ -538,7 +538,7 @@ final class PlayerModel {
             let view = try await core.open("playback", params: params, as: (PlaybackSnapshot.self, PlaybackSnapshot.self))
             sub = view.sub
             let core = core
-            choices.opened(sub: view.sub) { sub, command in Task { try? await core.command(sub, command) } }
+            choices.opened(sub: view.sub) { sub, command in core.commandNow(sub, command) }
             for await event in view.events {
                 switch event {
                 case .snapshot(let value): apply(value)
@@ -716,7 +716,7 @@ final class PlayerModel {
     private func sendStall(_ change: Bool?) {
         guard let change, let sub else { return }
         let command = StallWatch.command(change, position: position)
-        Task { try? await core.command(sub, command) }
+        core.commandNow(sub, command)
     }
 
     /// The stepper's value for the addon track on: drawn at once, sent to the core (which keeps it for
@@ -933,7 +933,7 @@ final class PlayerModel {
                     guard let self, let key, time.isNumeric, time.seconds > 0, generation == self.generation,
                           let sub = self.sub, self.durationSent.insert(key).inserted else { return }
                     let ms = Int(time.seconds * 1000)
-                    Task { try? await self.core.command(sub, ["type": "duration", "key": key, "durationMs": ms]) }
+                    self.core.commandNow(sub, ["type": "duration", "key": key, "durationMs": ms])
                 }
             }
             .store(in: &itemBag)
@@ -1055,7 +1055,7 @@ final class PlayerModel {
         // The core looks up skip segments once it knows this version's length.
         guard let key, let sub, durationSent.insert(key).inserted else { return }
         let ms = Int(seconds * 1000)
-        Task { try? await core.command(sub, ["type": "duration", "key": key, "durationMs": ms]) }
+        core.commandNow(sub, ["type": "duration", "key": key, "durationMs": ms])
     }
 
     private func engineState(playing: Bool, waiting: Bool) {
@@ -1077,7 +1077,7 @@ final class PlayerModel {
         guard fellBack, let sub, let key = loadedKey else { return }
         fellBack = false
         // The core keeps it for this version on this device: its next play opens here first.
-        Task { try? await core.command(sub, ["type": "playedOn", "key": key, "engine": Backend.aether.rawValue]) }
+        core.commandNow(sub, ["type": "playedOn", "key": key, "engine": Backend.aether.rawValue])
     }
 
     /// The file's tracks on the second engine; a forced-only subtitle shows by itself and is not a choice.
@@ -1150,7 +1150,7 @@ final class PlayerModel {
         pendingStart = nil
         (loadedURL, loadedAttempt) = (nil, nil)
         guard let sub else { return }
-        Task { [command] in try? await core.command(sub, command) }
+        core.commandNow(sub, command)
     }
 
     /// For the model's lifetime: the player goes with it, so nothing removes these.
