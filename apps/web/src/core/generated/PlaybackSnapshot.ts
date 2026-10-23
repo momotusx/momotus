@@ -132,4 +132,12 @@ chooseAnother: boolean,
  * failure was a refusal for room, nothingPlaysHere when every failure
  * was the versions' own on this device, else unreachable.
  */
-empty: EmptyKind | null, };
+empty: EmptyKind | null, 
+/**
+ * When a first play's start budget (90 s from its first attempt's add)
+ * ends, in epoch ms, while it runs: from the first attempt until a
+ * source played past its start (or the playback failed). Time the app
+ * spends after `ready` (another player engine opening the file) counts
+ * against it too (plans/apple-second-engine.md 2.3). Null otherwise.
+ */
+startBudgetEndsAt: number | null, };

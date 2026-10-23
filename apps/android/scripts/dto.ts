@@ -21,6 +21,7 @@ const handWritten = new Set(["ListDiff"]);
 
 const LONG = new Set([
   "resumeMs",
+  "startBudgetEndsAt",
   "leftMs",
   "issuedAtMs",
   "expiresInMs",
