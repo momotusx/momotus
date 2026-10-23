@@ -133,10 +133,7 @@ private fun Gallery() {
                     spoken = "4K, Dolby Vision, 18 GB, Ready on Real-Debrid",
                 )
                 StatusNote("Finding versions", busy = true)
-                StatusNote(
-                    "No playable version found. A source is an addon that finds a playable stream for a title.",
-                    tone = Status.Warn,
-                )
+                StatusNote("No source has this yet", tone = Status.Warn)
             }
         }
 

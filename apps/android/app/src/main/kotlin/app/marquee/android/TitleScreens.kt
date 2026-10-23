@@ -30,7 +30,6 @@ import app.marquee.core.TitleCopy
 import app.marquee.core.client.TitleFacts
 import app.marquee.core.model.Episode
 import app.marquee.core.model.LearnedNote
-import app.marquee.core.model.VersionRow
 import app.marquee.core.route.Route
 import app.marquee.core.session.CoreSession
 import app.marquee.core.views.TitleView
@@ -197,9 +196,10 @@ fun VersionsScreen(
     route: Route.Versions,
     app: AppState,
     form: Form,
-    onPlay: (VersionRow) -> Unit,
+    onPlay: (String) -> Unit,
     onAddSource: () -> Unit,
     onAddAccount: () -> Unit,
+    onBack: () -> Unit,
     onUndo: suspend (LearnedNote) -> Unit,
 ) {
     val key = keyFor(route.kind, route.videoId, route.title)
@@ -209,9 +209,9 @@ fun VersionsScreen(
         key.episode?.let { "${route.title}, ${Format.episodeLabel(key.season ?: 0, it)}" } ?: route.title
     if (form == Form.Tv) {
         val focus = viewModel<VersionsFocus>(key = "versions:${route.videoId}").focus
-        TvVersions(heading, view, focus, onPlay, onAddSource, onAddAccount, onUndo)
+        TvVersions(heading, view, focus, onPlay, onAddSource, onAddAccount, onBack, onUndo)
     } else {
-        PhoneVersions(heading, view, onPlay, onAddSource, onAddAccount, onUndo)
+        PhoneVersions(heading, view, onPlay, onAddSource, onAddAccount, onBack, onUndo)
     }
 }
 

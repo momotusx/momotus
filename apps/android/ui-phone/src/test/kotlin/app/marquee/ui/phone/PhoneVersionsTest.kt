@@ -12,8 +12,9 @@ import androidx.compose.ui.test.performClick
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
-import app.marquee.core.model.BlockedReason
-import app.marquee.core.model.BlockedVersions
+import app.marquee.core.model.EmptyAction
+import app.marquee.core.model.EmptyKind
+import app.marquee.core.model.EmptyVersions
 import app.marquee.core.model.Group
 import app.marquee.core.model.HiddenSummary
 import app.marquee.core.model.LearnedChoice
@@ -51,6 +52,7 @@ import org.robolectric.annotation.Config
 import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /** The Versions screen on a phone with the core's stream choice (plans/m13-stream-choice.md 3.7, 3.9, 3.11). */
 @RunWith(RobolectricTestRunner::class)
@@ -114,7 +116,7 @@ class PhoneVersionsTest {
     private fun snapshot(
         recommended: VersionRow? = null,
         rows: List<VersionRow> = emptyList(),
-        blocked: BlockedVersions? = null,
+        empty: EmptyVersions? = null,
         note: LearnedNote? = null,
         nobodySharing: Boolean = false,
     ) = VersionsSnapshot(
@@ -129,11 +131,11 @@ class PhoneVersionsTest {
                 engine = false,
                 account = true,
             ),
-        blocked = blocked,
+        empty = empty,
         note = note,
         recommended = recommended,
         rows = rows,
-        hidden = HiddenSummary(blocked?.count ?: 0),
+        hidden = HiddenSummary(0),
         done = true,
         frozen = false,
         nobodySharing = nobodySharing,
@@ -141,6 +143,7 @@ class PhoneVersionsTest {
 
     private val played = mutableListOf<String>()
     private var accounts = 0
+    private var backs = 0
     private val undone = mutableListOf<LearnedNote>()
 
     /** The screen on a view whose core answers the subscribe with [snapshot]. */
@@ -162,9 +165,10 @@ class PhoneVersionsTest {
                 PhoneVersions(
                     "Sintel",
                     view,
-                    onPlay = { played += it.key },
+                    onPlay = { played += it },
                     onAddSource = {},
                     onAddAccount = { accounts++ },
+                    onBack = { backs++ },
                     onUndo = { undone += it },
                 )
             }
@@ -205,20 +209,40 @@ class PhoneVersionsTest {
     }
 
     @Test
-    fun `account-only versions say why over dimmed rows with Settings and no account step`() {
-        show(snapshot(blocked = BlockedVersions(BlockedReason.NeedsAccount, 12, listOf(row("a", ReasonLine.Few(31))))))
-        compose
-            .onNodeWithText(
-                "Marquee found 12 versions. This version of the app",
-                substring = true,
-            ).assertIsDisplayed()
+    fun `account-only versions say the core's line over dimmed rows with Settings, then Back`() {
+        val rows = listOf(row("a", ReasonLine.Few(31)))
+        show(snapshot(empty = EmptyVersions(EmptyKind.NeedsAccount, EmptyAction.SettingsAccounts, 12, rows)))
+        compose.onNodeWithText("These play through a streaming account", useUnmergedTree = true).assertIsDisplayed()
         compose.onNodeWithText("12 versions").assertIsDisplayed()
-        for (gone in listOf("No playable version found", "Add an account", "Show them")) {
-            compose.onAllNodesWithText(gone).assertCountEquals(0)
+        for (gone in listOf("No playable", "Add an account", "Show them", "Hidden (", "Choose a version")) {
+            compose.onAllNodesWithText(gone, substring = true).assertCountEquals(0)
         }
         compose.onNodeWithText("May start slowly", substring = true).assertIsDisplayed()
+        val settings =
+            compose
+                .onNodeWithText(StreamChoiceCopy.SETTINGS)
+                .fetchSemanticsNode()
+                .boundsInRoot.top
+        assertTrue(
+            settings <
+                compose
+                    .onNodeWithText("Back")
+                    .fetchSemanticsNode()
+                    .boundsInRoot.top,
+            "Settings, then Back",
+        )
         compose.onNodeWithText(StreamChoiceCopy.SETTINGS).performClick()
-        assertEquals(1, accounts)
+        compose.onNodeWithText("Back").performClick()
+        assertEquals(1 to 1, accounts to backs)
+    }
+
+    @Test
+    fun `no source answering with one kept here plays it from this device`() {
+        show(snapshot(empty = EmptyVersions(EmptyKind.Unreachable, EmptyAction.PlayFromDevice, 0, key = "kept")))
+        compose.onNodeWithText("Can't reach any source", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("Try again").assertIsDisplayed()
+        compose.onNodeWithText("Play from this device").performClick()
+        assertEquals(listOf("kept"), played)
     }
 
     @Test

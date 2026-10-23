@@ -1,12 +1,12 @@
 package app.marquee.core
 
-import app.marquee.core.model.BlockedReason
-import app.marquee.core.model.BlockedVersions
+import app.marquee.core.VersionsCopy.EmptyStep
+import app.marquee.core.model.EmptyAction
+import app.marquee.core.model.EmptyKind
+import app.marquee.core.model.EmptyVersions
 import app.marquee.core.model.Group
 import app.marquee.core.model.HiddenSummary
-import app.marquee.core.model.HideReason
 import app.marquee.core.model.Reason
-import app.marquee.core.model.Tuple2
 import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionStatus
 import app.marquee.core.model.VersionsSnapshot
@@ -14,7 +14,6 @@ import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -80,8 +79,8 @@ class VersionsCopyTest {
         assertEquals(VersionLine.Finding, VersionsCopy.line(null))
         assertEquals(VersionLine.Finding, VersionsCopy.line(snapshot()))
         assertEquals(VersionLine.Problem("Sources could not load"), VersionsCopy.line(null, failed = true))
-        val none = VersionsCopy.line(snapshot(done = true))
-        assertEquals(true, none is VersionLine.Problem && none.text.startsWith("No playable version found."))
+        // Every addon answered with nothing while the core checks what this device keeps: still finding.
+        assertEquals(VersionLine.Finding, VersionsCopy.line(snapshot(done = true)))
         // Every addon answered, rows exist, none is recommended: say so and let the viewer choose.
         val notReady = VersionsCopy.line(snapshot(done = true).copy(rows = listOf(row())))
         assertEquals(VersionLine.Problem("No version is ready to play yet. Choose one to start it."), notReady)
@@ -108,17 +107,6 @@ class VersionsCopyTest {
         assertEquals("Unknown", VersionsCopy.cell("Quality not stated"))
         assertEquals("720p", VersionsCopy.cell("720p"))
         assertEquals("WEB-DL", VersionsCopy.cell("WEB-DL"))
-    }
-
-    @Test
-    fun `hidden releases are counted, with the reasons in the web's words`() {
-        val hidden =
-            HiddenSummary(
-                4,
-                listOf(Tuple2(HideReason.WrongTitle, 3), Tuple2(HideReason.TooLarge, 1)),
-            )
-        assertEquals("Hidden (4)", VersionsCopy.hiddenTitle(hidden))
-        assertEquals("3 are for other titles, 1 is over your size limit", VersionsCopy.hiddenDetail(hidden))
     }
 
     @Test
@@ -155,7 +143,7 @@ class VersionsCopyTest {
         val words =
             Reason.entries.map { VersionsCopy.reason(it) } +
                 Group.entries.map(VersionsCopy::group) +
-                HideReason.entries.map { VersionsCopy.hiddenDetail(HiddenSummary(2, listOf(Tuple2(it, 2)))) } +
+                EmptyKind.entries.map(StreamChoiceCopy::emptyLine) +
                 listOf(
                     VersionsCopy.status(VersionStatus.Ready(null)),
                     VersionsCopy.status(VersionStatus.Torrent(12)),
@@ -188,23 +176,37 @@ class VersionsCopyTest {
     }
 
     @Test
-    fun `versions that none of plays here say why under Play and in the header`() {
-        val blocked =
-            snapshot(done = true).copy(
-                blocked = BlockedVersions(BlockedReason.NeedsAccount, 12),
-                hidden = HiddenSummary(12, listOf(Tuple2(HideReason.NeedsDebrid, 12))),
-            )
-        val line = VersionsCopy.line(blocked)
-        assertIs<VersionLine.Problem>(line)
-        assertTrue(line.text.startsWith("Marquee found 12 versions. This version of the app plays them only through"))
-        assertEquals("12 versions" to VersionsCopy.Tone.Warn, VersionsCopy.progress(blocked))
-        // A reason from a newer core still says something.
-        val unknown = blocked.copy(blocked = BlockedVersions(BlockedReason.Unknown, 3))
+    fun `nothing that plays says the core's line under Play, and the header counts what was found`() {
+        val empty = { kind: EmptyKind, count: Int ->
+            snapshot(done = true).copy(empty = EmptyVersions(kind, EmptyAction.None, count))
+        }
         assertEquals(
-            VersionLine.Problem(
-                "No playable version found. A source is an addon that finds a playable stream for a title.",
-            ),
-            VersionsCopy.line(unknown),
+            VersionLine.Problem("These play through a streaming account"),
+            VersionsCopy.line(empty(EmptyKind.NeedsAccount, 12)),
+        )
+        assertEquals("12 versions" to VersionsCopy.Tone.Warn, VersionsCopy.progress(empty(EmptyKind.NeedsAccount, 12)))
+        assertEquals("0 versions" to VersionsCopy.Tone.Ok, VersionsCopy.progress(empty(EmptyKind.NoResults, 0)))
+        // A kind from a newer core still says something.
+        assertEquals(VersionLine.Problem("No source has this yet"), VersionsCopy.line(empty(EmptyKind.Unknown, 0)))
+    }
+
+    @Test
+    fun `each zero-playable state offers its actions in the shared order, Back last`() {
+        val steps = { action: EmptyAction -> VersionsCopy.emptySteps(EmptyVersions(EmptyKind.Unknown, action, 0)) }
+        assertEquals(
+            listOf(EmptyStep.PlayFromDevice, EmptyStep.TryAgain, EmptyStep.Back),
+            steps(EmptyAction.PlayFromDevice),
+        )
+        assertEquals(listOf(EmptyStep.TryAgain, EmptyStep.Back), steps(EmptyAction.TryAgain))
+        assertEquals(listOf(EmptyStep.Settings, EmptyStep.Back), steps(EmptyAction.SettingsAddons))
+        assertEquals(listOf(EmptyStep.Settings, EmptyStep.Back), steps(EmptyAction.SettingsAccounts))
+        // Choose a version is the player's and the title's: Versions lists the rows instead.
+        assertEquals(listOf(EmptyStep.Back), steps(EmptyAction.ChooseVersion))
+        assertEquals(listOf(EmptyStep.Back), steps(EmptyAction.None))
+        assertEquals(listOf(EmptyStep.Back), steps(EmptyAction.Unknown))
+        assertEquals(
+            listOf("Play from this device", "Try again", "Settings", "Back"),
+            EmptyStep.entries.map { it.label },
         )
     }
 
@@ -245,23 +247,19 @@ class VersionsCopyTest {
     }
 
     @Test
-    fun `the card without a pick says whether it is looking, nothing came, all was hidden, or none is ready`() {
+    fun `the card without a pick says whether it is looking or none is ready`() {
         val looking = snapshot()
         assertEquals(
             "Finding versions" to "Your addons are answering.",
             VersionsCopy.waitingTitle(looking) to VersionsCopy.waitingBody(looking),
         )
         val none = snapshot(done = true)
-        assertEquals("No playable version found", VersionsCopy.waitingTitle(none))
-        assertTrue(VersionsCopy.waitingBody(none).startsWith("None of your addons returned a stream"))
-        val hidden = none.copy(hidden = HiddenSummary(2, listOf(Tuple2(HideReason.Unplayable, 2))))
-        assertEquals("Every result was hidden: 2 cannot play on this device.", VersionsCopy.waitingBody(hidden))
-        // Done: why nothing plays comes first, then the addon that did not answer.
-        assertEquals(
-            "Every result was hidden: 2 cannot play on this device. No answer from Torrentio.",
-            VersionsCopy.waitingBody(hidden.copy(failedAddons = listOf("Torrentio"))),
-        )
         val unready = none.copy(rows = listOf(row().copy(status = VersionStatus.NeedsDownload("Real-Debrid"))))
+        // Done: to choose comes first, then the addon that did not answer.
+        assertEquals(
+            "Choose a version to start it. No answer from Torrentio.",
+            VersionsCopy.waitingBody(unready.copy(failedAddons = listOf("Torrentio"))),
+        )
         assertEquals(
             "Nothing is ready to play yet" to "Choose a version to start it.",
             VersionsCopy.waitingTitle(unready) to VersionsCopy.waitingBody(unready),

@@ -399,38 +399,9 @@ class StreamChoiceCopyTest {
     }
 
     @Test
-    fun `on a storage with no windows the blocked state says the versions are too large for it`() {
-        assertEquals(
-            "3 versions are too large for this storage.",
-            StreamChoiceCopy.blocked(BlockedReason.NoSpace, 3, window = false)?.first,
-        )
-        assertEquals(
-            "1 version is too large for this storage.",
-            StreamChoiceCopy.blocked(BlockedReason.NoSpace, 1, window = false)?.first,
-        )
-        assertEquals(
-            "Found 3 versions, but none plays on this device.",
-            StreamChoiceCopy.blocked(BlockedReason.NothingPlaysHere, 3, window = false)?.first,
-        )
-    }
-
-    @Test
-    fun `the blocked state counts the versions it found`() {
-        assertTrue(
-            StreamChoiceCopy
-                .blocked(BlockedReason.NeedsAccount, 1)!!
-                .first
-                .startsWith("Marquee found 1 version. This version of the app"),
-        )
-        assertEquals(
-            "Found 42 versions, but none plays on this device." to "Show them",
-            StreamChoiceCopy.blocked(BlockedReason.NothingPlaysHere, 42),
-        )
-        assertEquals(
-            "Marquee found 3 versions, but this device is nearly full, so none can play here.",
-            StreamChoiceCopy.blocked(BlockedReason.NoSpace, 3)?.first,
-        )
-        assertNull(StreamChoiceCopy.blocked(BlockedReason.Unknown, 3))
+    fun `the empty line is the core's words, and a newer kind reads as noResults`() {
+        assertEquals("These play through a streaming account", StreamChoiceCopy.emptyLine(EmptyKind.NeedsAccount))
+        assertEquals("No source has this yet", StreamChoiceCopy.emptyLine(EmptyKind.Unknown))
         assertEquals("2,000 versions", StreamChoiceCopy.counted("versions", 2000))
     }
 

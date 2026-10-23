@@ -681,17 +681,18 @@ private fun AppNav(
                             route,
                             app,
                             form,
-                            onPlay = { row ->
+                            onPlay = { key ->
                                 val next =
                                     afterChoice(
                                         routes,
-                                        Route.Player(route.kind, route.id, route.videoId, route.title, row.key),
+                                        Route.Player(route.kind, route.id, route.videoId, route.title, key),
                                     )
                                 backStack.clear()
                                 backStack.addAll(next)
                             },
                             onAddSource = { backStack.add(Route.Sources) },
                             onAddAccount = { backStack.add(Route.Debrid) },
+                            onBack = ::pop,
                             onUndo = { session.ops.undoLearned(it.screenClass, it.choice) },
                         )
                     }

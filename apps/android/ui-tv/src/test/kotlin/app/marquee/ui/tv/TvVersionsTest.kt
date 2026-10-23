@@ -20,8 +20,9 @@ import androidx.compose.ui.test.requestFocus
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
-import app.marquee.core.model.BlockedReason
-import app.marquee.core.model.BlockedVersions
+import app.marquee.core.model.EmptyAction
+import app.marquee.core.model.EmptyKind
+import app.marquee.core.model.EmptyVersions
 import app.marquee.core.model.Group
 import app.marquee.core.model.HiddenSummary
 import app.marquee.core.model.LearnedChoice
@@ -123,7 +124,7 @@ class TvVersionsTest {
     private fun snapshot(
         recommended: VersionRow? = null,
         rows: List<VersionRow> = emptyList(),
-        blocked: BlockedVersions? = null,
+        empty: EmptyVersions? = null,
         note: LearnedNote? = null,
         nobodySharing: Boolean = false,
     ) = VersionsSnapshot(
@@ -138,11 +139,11 @@ class TvVersionsTest {
                 engine = false,
                 account = true,
             ),
-        blocked = blocked,
+        empty = empty,
         note = note,
         recommended = recommended,
         rows = rows,
-        hidden = HiddenSummary(blocked?.count ?: 0),
+        hidden = HiddenSummary(0),
         done = true,
         frozen = false,
         nobodySharing = nobodySharing,
@@ -155,6 +156,23 @@ class TvVersionsTest {
 
     private val played = mutableListOf<String>()
     private var accounts = 0
+    private var sources = 0
+    private var backs = 0
+
+    /** The empty state's buttons: exactly [labels], top to bottom. */
+    private fun actions(vararg labels: String) {
+        val all = listOf("Play from this device", "Try again", StreamChoiceCopy.SETTINGS, "Back", "Choose a version")
+        for (gone in all - labels.toSet()) compose.onAllNodesWithText(gone).assertCountEquals(0)
+        val tops =
+            labels.map {
+                compose
+                    .onNodeWithText(it)
+                    .fetchSemanticsNode()
+                    .boundsInRoot.top
+            }
+        assertEquals(tops.sorted(), tops, "in the shared order")
+    }
+
     private val undone = mutableListOf<LearnedNote>()
 
     /** The screen on a view whose core answers the subscribe with [snapshot]. */
@@ -177,9 +195,10 @@ class TvVersionsTest {
                     "Sintel",
                     view,
                     FocusMemory(),
-                    onPlay = { played += it.key },
-                    onAddSource = {},
+                    onPlay = { played += it },
+                    onAddSource = { sources++ },
                     onAddAccount = { accounts++ },
+                    onBack = { backs++ },
                     onUndo = { undone += it },
                 )
             }
@@ -216,31 +235,65 @@ class TvVersionsTest {
     }
 
     @Test
-    fun `versions that none of plays here say why over their rows, dimmed and still startable, with no button`() {
-        show(
-            snapshot(
-                blocked = BlockedVersions(BlockedReason.NothingPlaysHere, 42, listOf(row("a", ReasonLine.Few(31)))),
-            ),
-        )
-        compose.onNodeWithText("Found 42 versions, but none plays on this device.").assertExists()
-        for (gone in listOf("Add an account", "Show them", StreamChoiceCopy.SETTINGS)) {
-            compose.onAllNodesWithText(gone).assertCountEquals(0)
+    fun `none plays here says the core's line over the rows, dimmed and startable, with Back only, focused`() {
+        val rows = listOf(row("a", ReasonLine.Few(31)))
+        show(snapshot(empty = EmptyVersions(EmptyKind.NothingPlaysHere, EmptyAction.ChooseVersion, 42, rows)))
+        compose.onNodeWithText("None of these plays on this device", useUnmergedTree = true).assertExists()
+        actions("Back")
+        compose.onNodeWithText("Back").assertIsFocused()
+        for (gone in listOf("Add an account", "Show them", "Hidden (")) {
+            compose.onAllNodesWithText(gone, substring = true).assertCountEquals(0)
         }
+        compose.onNodeWithText("Back").performClick()
+        assertEquals(1, backs)
         compose.onNodeWithText("May start slowly", substring = true).performClick()
         assertEquals(listOf("a"), played)
     }
 
     @Test
-    fun `versions that need an account give Settings, focused, over their dimmed rows, and Right enters the list`() {
-        show(snapshot(blocked = BlockedVersions(BlockedReason.NeedsAccount, 12, listOf(row("a", ReasonLine.Few(31))))))
-        compose.onAllNodesWithText("Add an account").assertCountEquals(0)
-        compose.onAllNodesWithText("Show them").assertCountEquals(0)
+    fun `versions that need an account give Settings, focused, then Back, and Right enters the list`() {
+        val rows = listOf(row("a", ReasonLine.Few(31)))
+        show(snapshot(empty = EmptyVersions(EmptyKind.NeedsAccount, EmptyAction.SettingsAccounts, 12, rows)))
+        compose.onNodeWithText("These play through a streaming account", useUnmergedTree = true).assertExists()
+        actions(StreamChoiceCopy.SETTINGS, "Back")
         compose.onNodeWithText("May start slowly", substring = true).assertExists()
         compose.onNodeWithText(StreamChoiceCopy.SETTINGS).assertIsFocused()
         compose.onNodeWithText(StreamChoiceCopy.SETTINGS).performKeyInput { pressKey(Key.DirectionRight) }
         compose.onNodeWithContentDescription("1080p, HDR10, 2 GB").assertIsFocused()
         compose.onNodeWithText(StreamChoiceCopy.SETTINGS).performClick()
-        assertEquals(1, accounts)
+        assertEquals(1 to 0, accounts to sources)
+    }
+
+    @Test
+    fun `no addon gives Settings for the sources, then Back`() {
+        show(snapshot(empty = EmptyVersions(EmptyKind.NoSource, EmptyAction.SettingsAddons, 0)))
+        compose.onNodeWithText("Add a source in Settings", useUnmergedTree = true).assertExists()
+        actions(StreamChoiceCopy.SETTINGS, "Back")
+        compose.onNodeWithText(StreamChoiceCopy.SETTINGS).assertIsFocused()
+        compose.onNodeWithText(StreamChoiceCopy.SETTINGS).performClick()
+        assertEquals(0 to 1, accounts to sources)
+    }
+
+    @Test
+    fun `no source answering with one kept here offers Play from this device first, then Try again and Back`() {
+        show(snapshot(empty = EmptyVersions(EmptyKind.Unreachable, EmptyAction.PlayFromDevice, 0, key = "kept")))
+        compose.onNodeWithText("Can't reach any source", useUnmergedTree = true).assertExists()
+        actions("Play from this device", "Try again", "Back")
+        compose.onNodeWithText("Play from this device").assertIsFocused()
+        compose.onNodeWithText("Play from this device").performClick()
+        assertEquals(listOf("kept"), played)
+    }
+
+    @Test
+    fun `no room says the one storage line with Back only`() {
+        show(snapshot(empty = EmptyVersions(EmptyKind.NoRoom, EmptyAction.None, 0)))
+        compose
+            .onNodeWithText(
+                "This device needs a little free space to play this",
+                useUnmergedTree = true,
+            ).assertExists()
+        actions("Back")
+        compose.onNodeWithText("Back").assertIsFocused()
     }
 
     @Test

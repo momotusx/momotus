@@ -61,18 +61,14 @@ fun pickVersion(
             PlayPick.Use(best)
         }
 
-        // Every addon answered and nothing is recommended: sources that need a download first, or none at all.
-        best == null && snapshot.done -> {
-            PlayPick.None(
-                when {
-                    // Versions were found and none plays here: say why (3.11).
-                    snapshot.blocked != null -> VersionsCopy.blockedText(snapshot) ?: "No playable version found"
+        // Nothing can play: why, in the core's words (plans/play-every-version.md 2a).
+        snapshot.empty != null -> {
+            PlayPick.None(StreamChoiceCopy.emptyLine(snapshot.empty.kind))
+        }
 
-                    snapshot.rows.isEmpty() -> "No playable version found"
-
-                    else -> "No version is ready to play yet"
-                },
-            )
+        // Every addon answered, versions are listed and none is recommended: sources that need a download first.
+        best == null && snapshot.done && snapshot.rows.isNotEmpty() -> {
+            PlayPick.None("No version is ready to play yet")
         }
 
         else -> {

@@ -1,7 +1,8 @@
 package app.marquee.core
 
-import app.marquee.core.model.BlockedReason
-import app.marquee.core.model.BlockedVersions
+import app.marquee.core.model.EmptyAction
+import app.marquee.core.model.EmptyKind
+import app.marquee.core.model.EmptyVersions
 import app.marquee.core.model.Group
 import app.marquee.core.model.HiddenSummary
 import app.marquee.core.model.Reason
@@ -92,12 +93,13 @@ class PlayPickTest {
     }
 
     @Test
-    fun `versions that none of plays here say why instead of failing over nothing`() {
-        val blocked = snapshot(done = true).copy(blocked = BlockedVersions(BlockedReason.NothingPlaysHere, 42))
+    fun `nothing that plays says the core's empty line instead of failing over nothing`() {
+        val empty = { kind: EmptyKind -> snapshot(done = true).copy(empty = EmptyVersions(kind, EmptyAction.None, 42)) }
         assertEquals(
-            PlayPick.None("Found 42 versions, but none plays on this device."),
-            pickVersion(blocked, null, settled = true),
+            PlayPick.None("None of these plays on this device"),
+            pickVersion(empty(EmptyKind.NothingPlaysHere), null, settled = true),
         )
+        assertEquals(PlayPick.None("Can't reach any source"), pickVersion(empty(EmptyKind.Unreachable), null, false))
     }
 
     @Test
@@ -106,9 +108,10 @@ class PlayPickTest {
     }
 
     @Test
-    fun `no version at all says so, and waiting never names an addon`() {
+    fun `no version at all waits for the core's state, and waiting never names an addon`() {
+        // Every addon answered with nothing while the core still checks what this device keeps: it says nothing yet.
         assertEquals(
-            PlayPick.None("No playable version found"),
+            PlayPick.Wait("Choosing the best version"),
             pickVersion(snapshot(done = true), null, settled = true),
         )
         assertEquals(

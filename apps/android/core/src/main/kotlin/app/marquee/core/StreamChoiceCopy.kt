@@ -136,7 +136,10 @@ object StreamChoiceCopy {
     const val SPEED_MEASURED = "measured from {playbacks}"
     const val SPEED_ESTIMATED = "estimated"
 
-    /** By reason: the words and the one action. */
+    /**
+     * By reason: the words and the one action. Shown nowhere since every page reads [EMPTY]; kept until the core
+     * stops sending `blocked` and stream-choice-words.json drops it (plans/play-every-version.md Step 3 item 6).
+     */
     val BLOCKED =
         mapOf(
             BlockedReason.NeedsAccount to
@@ -440,21 +443,8 @@ object StreamChoiceCopy {
         return Line(w.tone, text, capital(details.mapNotNull { part(it, f) }.joinToString(", ")))
     }
 
-    /**
-     * Why no version is visible, and its one action (3.11); null for a reason from a newer core. `window`: the
-     * storage plays a torrent too big for its free space in a window (the snapshot's conditions).
-     */
-    fun blocked(
-        reason: BlockedReason,
-        count: Int,
-        window: Boolean = true,
-    ): Pair<String, String>? =
-        BLOCKED[reason]?.let { (text, action) ->
-            val words = if (reason == BlockedReason.NoSpace && !window) NO_SPACE_NO_WINDOW else text
-            words
-                .replace("{versions}", counted("versions", count))
-                .replace("{versionsAre}", counted("versionsAre", count)) to action
-        }
+    /** Why nothing can play, in the core's words; a kind from a newer core reads as noResults, the plainest. */
+    fun emptyLine(kind: EmptyKind): String = (EMPTY[kind] ?: EMPTY.getValue(EmptyKind.NoResults)).first
 
     /**
      * A version row's line: the core's "On this device" where this device holds the start of the version last

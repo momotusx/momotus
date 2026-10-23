@@ -47,8 +47,9 @@ import androidx.compose.ui.unit.dp
 import app.marquee.core.Format
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.VersionsCopy
-import app.marquee.core.model.BlockedReason
-import app.marquee.core.model.BlockedVersions
+import app.marquee.core.VersionsCopy.EmptyStep
+import app.marquee.core.model.EmptyAction
+import app.marquee.core.model.EmptyVersions
 import app.marquee.core.model.Group
 import app.marquee.core.model.LearnedNote
 import app.marquee.core.model.VersionRow
@@ -89,32 +90,43 @@ private const val DIMMED = 0.5f
  * The ranked sources of one video on a phone (plans/android-design-v2.md 5.6, the web's v2
  * screen): the heading, how the search goes and what the ranking read of this phone; the
  * recommendation as a glass card with its facts; every other source by group with its line (a tone
- * and plain words, plans/m13-stream-choice.md 3.7); and what is hidden and why. A tap opens a row to
- * the line's details and its own Play, so the card's white Play stays the one primary. When versions
- * were found and none plays here, the card says why with its way on (3.11). A note says once what
- * the picks taught, with Undo. The first scroll freezes the recommendation so it does not change
+ * and plain words, plans/m13-stream-choice.md 3.7). A tap opens a row to the line's details and its
+ * own Play, so the card's white Play stays the one primary. When nothing can play, the card says why
+ * in the core's words with its actions (plans/play-every-version.md 2a), the rows found listed
+ * dimmed. A note says once what the picks taught, with Undo. The first scroll freezes the recommendation so it does not change
  * while results still stream in.
  *
  * @param heading what the screen is about ("Sintel" or "Sintel, S1:E2").
- * @param onPlay a version was chosen.
- * @param onAddSource no addon gave a version: go where one is added.
+ * @param onPlay a version was chosen, by its key.
+ * @param onAddSource no addon is installed: go where one is added.
  * @param onAddAccount the versions play only through a streaming service account: go where one is added.
+ * @param onBack the empty state's Back.
  * @param onUndo Undo on the learned note.
  */
 @Composable
 fun PhoneVersions(
     heading: String,
     versions: VersionsView?,
-    onPlay: (VersionRow) -> Unit,
+    onPlay: (String) -> Unit,
     onAddSource: () -> Unit,
     onAddAccount: () -> Unit,
+    onBack: () -> Unit,
     onUndo: suspend (LearnedNote) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val side = Marquee.safe.side
     val colors = Marquee.colors
     val snapshot = versions?.snapshot
-    val blocked = snapshot?.blocked?.takeIf { snapshot.recommended == null }
+    val empty = snapshot?.empty?.takeIf { snapshot.recommended == null }
+    val step = { it: EmptyStep ->
+        when (it) {
+            EmptyStep.PlayFromDevice -> empty?.key?.let(onPlay)
+            EmptyStep.TryAgain -> versions?.retry()
+            EmptyStep.Settings -> if (empty?.action == EmptyAction.SettingsAccounts) onAddAccount() else onAddSource()
+            EmptyStep.Back -> onBack()
+        }
+        Unit
+    }
     // The row a tap opened to its details and Play.
     var opened by remember { mutableStateOf<String?>(null) }
     val failure = (versions?.status as? ViewStatus.Failed)?.reason
@@ -127,8 +139,8 @@ fun PhoneVersions(
             versions.freeze()
         }
     }
-    // The blocked rows are simply listed, dimmed, as they would rank once the reason is fixed.
-    val groups = (blocked?.rows ?: snapshot?.rows.orEmpty()).groupBy { it.group }
+    // The rows found when none plays are simply listed, dimmed, as they would rank once the reason is fixed.
+    val groups = (empty?.rows ?: snapshot?.rows.orEmpty()).groupBy { it.group }
     val open = remember { mutableStateMapOf<Group, Boolean>() }
     LazyColumn(
         state = listState,
@@ -149,11 +161,10 @@ fun PhoneVersions(
                 snapshot,
                 failure,
                 { versions?.retry() },
-                onAddSource,
                 onPlay,
                 Modifier.padding(vertical = Marquee.space.s),
             ) {
-                if (blocked != null) Blocked(snapshot, blocked, onAddAccount)
+                if (empty != null) Empty(empty, step)
             }
         }
         for (group in Group.entries) {
@@ -173,7 +184,7 @@ fun PhoneVersions(
             items(if (all) rows else rows.take(SHOWN), key = { "row:${it.key}" }) { row ->
                 SourceRow(
                     row,
-                    blocked != null,
+                    empty != null,
                     opened == row.key,
                     { opened = if (opened == row.key) null else row.key },
                     onPlay,
@@ -190,23 +201,6 @@ fun PhoneVersions(
             }
         }
         snapshot?.note?.let { note -> item(key = "note") { LearnedLine(note, onUndo) } }
-        val hidden = snapshot?.hidden?.takeIf { it.count > 0 }
-        if (hidden != null) {
-            item(key = "hidden") {
-                GlassBar(Modifier.padding(top = Marquee.space.s)) {
-                    MqIcon(Icons.EyeOff, tint = colors.muted)
-                    MqText(
-                        "${VersionsCopy.hiddenTitle(hidden)}  ${
-                            VersionsCopy.hiddenDetail(hidden, snapshot.conditions.window)
-                        }",
-                        role = TextRole.Callout,
-                        color = colors.muted,
-                        maxLines = 3,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-        }
     }
 }
 
@@ -225,10 +219,9 @@ private fun Pick(
     snapshot: VersionsSnapshot?,
     failure: String?,
     onRetry: () -> Unit,
-    onAddSource: () -> Unit,
-    onPlay: (VersionRow) -> Unit,
+    onPlay: (String) -> Unit,
     modifier: Modifier,
-    blocked: @Composable () -> Unit,
+    empty: @Composable () -> Unit,
 ) {
     val colors = Marquee.colors
     val shape = RoundedCornerShape(Marquee.radius.l)
@@ -291,7 +284,7 @@ private fun Pick(
                 PrimaryButton(
                     label = "Play this version",
                     icon = PlayFilled,
-                    onClick = { onPlay(best) },
+                    onClick = { onPlay(best.key) },
                     modifier = Modifier.padding(top = 4.dp).fillMaxWidth(),
                 )
                 Row(
@@ -303,11 +296,12 @@ private fun Pick(
                 }
             }
 
-            snapshot?.blocked != null -> {
-                blocked()
+            snapshot?.empty != null -> {
+                empty()
             }
 
-            snapshot == null || !snapshot.done -> {
+            // Still asking, or every addon answered with nothing while the core checks what this device keeps.
+            snapshot == null || !snapshot.done || snapshot.rows.isEmpty() -> {
                 PickLine()
                 Skeleton(Modifier.size(160.dp, 36.dp))
                 Skeleton(Modifier.size(240.dp, 20.dp))
@@ -316,13 +310,10 @@ private fun Pick(
             }
 
             else -> {
-                val none = snapshot.rows.isEmpty()
                 StateMessage(
                     title = VersionsCopy.waitingTitle(snapshot),
                     body = VersionsCopy.waitingBody(snapshot),
                     icon = Icons.CircleAlert,
-                    actionLabel = "Add a source".takeIf { none },
-                    onAction = onAddSource.takeIf { none },
                     modifier = Modifier.padding(0.dp),
                 )
             }
@@ -348,23 +339,30 @@ private fun qualityWidth(): Dp {
 }
 
 /**
- * Why no version plays, in the core's words, over the rows simply listed dimmed. Versions that play only through a
- * streaming service account give Settings (where an account is added), the one action (plans/versions-android-spec.md,
- * section 5).
+ * Why nothing can play, in the core's words, said once when it appears, with its actions in the shared order under
+ * it (plans/versions-android-spec.md, section 5), over the rows listed dimmed when there are some.
  */
 @Composable
-private fun Blocked(
-    snapshot: VersionsSnapshot,
-    blocked: BlockedVersions,
-    onSettings: () -> Unit,
+private fun Empty(
+    empty: EmptyVersions,
+    onStep: (EmptyStep) -> Unit,
 ) {
-    val text =
-        StreamChoiceCopy.blocked(blocked.reason, blocked.count, snapshot.conditions.window)?.first
-            ?: VersionsCopy.waitingBody(snapshot)
+    val text = StreamChoiceCopy.emptyLine(empty.kind)
     Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
-        MqText(text, role = TextRole.Headline, weight = FontWeight.SemiBold)
-        if (blocked.reason == BlockedReason.NeedsAccount) {
-            SecondaryButton(StreamChoiceCopy.SETTINGS, onSettings, icon = Icons.Settings)
+        LiveSpoken(text, ON_ARRIVAL_MS) { MqText(text, role = TextRole.Headline, weight = FontWeight.SemiBold) }
+        for ((i, step) in VersionsCopy.emptySteps(empty).withIndex()) {
+            val icon =
+                when (step) {
+                    EmptyStep.PlayFromDevice -> PlayFilled
+                    EmptyStep.TryAgain -> Icons.RefreshCw
+                    EmptyStep.Settings -> Icons.Settings
+                    EmptyStep.Back -> Icons.ArrowLeft
+                }
+            if (i == 0) {
+                PrimaryButton(step.label, { onStep(step) }, Modifier.fillMaxWidth(), icon = icon)
+            } else {
+                SecondaryButton(step.label, { onStep(step) }, icon = icon)
+            }
         }
     }
 }
@@ -403,7 +401,7 @@ private fun SourceRow(
     dimmed: Boolean,
     open: Boolean,
     onToggle: () -> Unit,
-    onPlay: (VersionRow) -> Unit,
+    onPlay: (String) -> Unit,
 ) {
     val colors = Marquee.colors
     val line = StreamChoiceCopy.rowLine(row)
@@ -415,7 +413,7 @@ private fun SourceRow(
             row.sizeBytes?.let(Format::bytes),
             line.text,
         ).joinToString(", ")
-    // The rows of a page where none plays as listed (the core's blocked rows) are dimmed and still startable.
+    // The rows of a page where none plays (the core's empty rows) are dimmed and still startable.
     Column(if (dimmed) Modifier.alpha(DIMMED) else Modifier) {
         Row(
             Modifier
@@ -473,7 +471,7 @@ private fun SourceRow(
                     fontFamily = FontFamily.Monospace,
                 )
                 MqText(VersionsCopy.detail(row), role = TextRole.Caption, color = colors.muted)
-                SecondaryButton("Play this version", { onPlay(row) }, icon = PlayFilled)
+                SecondaryButton("Play this version", { onPlay(row.key) }, icon = PlayFilled)
             }
         }
     }

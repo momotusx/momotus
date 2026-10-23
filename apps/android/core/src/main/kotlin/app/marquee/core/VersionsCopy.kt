@@ -1,8 +1,9 @@
 package app.marquee.core
 
+import app.marquee.core.model.EmptyAction
+import app.marquee.core.model.EmptyKind
+import app.marquee.core.model.EmptyVersions
 import app.marquee.core.model.Group
-import app.marquee.core.model.HiddenSummary
-import app.marquee.core.model.HideReason
 import app.marquee.core.model.Reason
 import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionStatus
@@ -140,15 +141,14 @@ object VersionsCopy {
                 VersionLine.Finding
             }
 
-            // Versions were found and none plays here: why, in the core's words (3.11).
-            blockedText(snapshot) != null -> {
-                VersionLine.Problem(blockedText(snapshot)!!)
+            // Nothing can play, in the core's words (plans/play-every-version.md 2a).
+            snapshot.empty != null -> {
+                VersionLine.Problem(StreamChoiceCopy.emptyLine(snapshot.empty.kind))
             }
 
+            // Every addon answered with nothing listed while the core still checks what this device keeps.
             snapshot.rows.isEmpty() -> {
-                VersionLine.Problem(
-                    "No playable version found. A source is an addon that finds a playable stream for a title.",
-                )
+                VersionLine.Finding
             }
 
             else -> {
@@ -157,83 +157,38 @@ object VersionsCopy {
         }
     }
 
-    /** Why every version found is hidden ("Marquee found 12 versions. This version of the app..."), or null. */
-    fun blockedText(snapshot: VersionsSnapshot?): String? =
-        snapshot?.blocked?.let { StreamChoiceCopy.blocked(it.reason, it.count, snapshot.conditions.window)?.first }
-
-    /** The heading of the card shown while there is no recommendation. */
+    /** The heading of the card shown while there is no recommendation and versions are listed. */
     fun waitingTitle(snapshot: VersionsSnapshot): String =
-        when {
-            !snapshot.done -> "Finding versions"
-            snapshot.rows.isEmpty() -> "No playable version found"
-            else -> "Nothing is ready to play yet"
-        }
+        if (snapshot.done) "Nothing is ready to play yet" else "Finding versions"
 
-    /**
-     * What the card says while there is no recommendation: while looking, who is slow or failed; once
-     * done, why nothing is ready first, then any addon that failed.
-     */
+    /** What that card says: while looking, who is slow or failed; once done, to choose one, then any addon that failed. */
     fun waitingBody(snapshot: VersionsSnapshot): String {
         if (!snapshot.done) return addons(snapshot) ?: "Your addons are answering."
-        val window = snapshot.conditions.window
-        val why =
-            when {
-                snapshot.rows.isNotEmpty() -> "Choose a version to start it."
-                snapshot.hidden.count > 0 -> "Every result was hidden: ${hiddenDetail(snapshot.hidden, window)}."
-                else -> "None of your addons returned a stream for this video. A source addon finds playable streams."
-            }
-        return listOfNotNull(why, addons(snapshot)?.let { "$it." }).joinToString(" ")
+        return listOfNotNull("Choose a version to start it.", addons(snapshot)?.let { "$it." }).joinToString(" ")
     }
 
-    private fun hideText(
-        reason: HideReason,
-        one: Boolean,
-        window: Boolean,
-    ): String =
-        when (reason) {
-            HideReason.WrongTitle -> if (one) "is for another title" else "are for other titles"
+    /** What a zero-playable state offers on the Versions page. */
+    enum class EmptyStep(
+        val label: String,
+    ) {
+        PlayFromDevice(StreamChoiceCopy.PLAY_FROM_DEVICE),
+        TryAgain(StreamChoiceCopy.EMPTY.getValue(EmptyKind.Unreachable).second!!),
+        Settings(StreamChoiceCopy.SETTINGS),
+        Back("Back"),
+    }
 
-            HideReason.WrongEpisode -> if (one) "is another episode" else "are other episodes"
-
-            HideReason.Excluded -> if (one) "matches your avoid list" else "match your avoid list"
-
-            HideReason.TooLarge -> if (one) "is over your size limit" else "are over your size limit"
-
-            HideReason.Unplayable -> "cannot play on this device"
-
-            HideReason.UnsupportedSource -> "${if (one) "uses a source" else "use a source"} this app cannot open yet"
-
-            // Kids profiles only.
-            HideReason.LeavesApp -> "would open outside Marquee"
-
-            HideReason.NotForKids -> if (one) "is not for kids" else "are not for kids"
-
-            HideReason.NeedsDebrid -> "${if (one) "needs" else "need"} a paid streaming service account"
-
-            HideReason.NoSpace -> noRoom(one, window)
-
-            // A reason from a newer core: still counted, in general words.
-            HideReason.Unknown -> if (one) "is hidden for another reason" else "are hidden for another reason"
-        }
-
-    /** No room to play: on a storage that plays no window, too large for it, whatever its free space. */
-    private fun noRoom(
-        one: Boolean,
-        window: Boolean,
-    ): String =
-        when {
-            !window -> "${if (one) "is" else "are"} too large for this storage"
-            else -> "${if (one) "has" else "have"} no room to play here, even a few minutes at a time"
-        }
-
-    /** "Hidden (5)": the bold half of the hidden row. */
-    fun hiddenTitle(summary: HiddenSummary): String = "Hidden (${summary.count})"
-
-    /** "3 are for other titles, 2 are over your size limit": the other half. `window` as in [StreamChoiceCopy.blocked]. */
-    fun hiddenDetail(
-        summary: HiddenSummary,
-        window: Boolean = true,
-    ): String = summary.byReason.joinToString(", ") { (reason, n) -> "$n ${hideText(reason, n == 1, window)}" }
+    /**
+     * A zero-playable state's actions on the Versions page, in order (plans/play-every-version.md, "Shared Step 3
+     * decisions"): Back always last. "Choose a version" is the player's and the title's action; here the rows are
+     * listed.
+     */
+    fun emptySteps(empty: EmptyVersions): List<EmptyStep> =
+        when (empty.action) {
+            EmptyAction.PlayFromDevice -> listOf(EmptyStep.PlayFromDevice, EmptyStep.TryAgain)
+            EmptyAction.TryAgain -> listOf(EmptyStep.TryAgain)
+            EmptyAction.SettingsAddons, EmptyAction.SettingsAccounts -> listOf(EmptyStep.Settings)
+            else -> emptyList()
+        } + EmptyStep.Back
 
     /** The tone of a line drawn with a dot. */
     enum class Tone { Idle, Ok, Warn, Bad }
@@ -258,9 +213,9 @@ object VersionsCopy {
                 "${names(snapshot.failedAddons)} did not answer" to Tone.Bad
             }
 
-            // What was found, none of it listed (the card says why).
-            snapshot.blocked != null -> {
-                StreamChoiceCopy.counted("versions", snapshot.blocked.count) to Tone.Warn
+            // What was found, none of it playable here (the card says why).
+            snapshot.empty != null && snapshot.empty.count > 0 -> {
+                StreamChoiceCopy.counted("versions", snapshot.empty.count) to Tone.Warn
             }
 
             else -> {

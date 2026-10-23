@@ -1,6 +1,7 @@
 package app.marquee.core
 
 import app.marquee.core.client.CoreJson
+import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.FallbackEnumSerializer
 import app.marquee.core.model.Group
 import app.marquee.core.model.HideReason
@@ -39,10 +40,6 @@ class UnknownValueTest {
         )
         assertEquals(Group.Unknown, versions.recommended?.group)
         assertEquals(listOf(Reason.PlaysDirectly, Reason.Unknown), versions.recommended?.reasons)
-        assertEquals(
-            "2 are hidden for another reason, 1 is over your size limit, 1 is hidden for another reason",
-            VersionsCopy.hiddenDetail(versions.hidden),
-        )
     }
 
     private enum class Speed(
@@ -82,13 +79,19 @@ class UnknownValueTest {
     fun `a known value still goes out by its wire name`() {
         assertEquals("\"tooLarge\"", CoreJson.encodeToString(HideReason.TooLarge))
         assertEquals(HideReason.NotForKids, CoreJson.decodeFromString(HideReason.serializer(), "\"notForKids\""))
-        // M13's hide reasons are known, with their own words.
+        // M13's hide reasons are known.
         val m13 = snapshot.replace("geoBlocked", "needsDebrid").replace("expired", "noSpace")
         val known = CoreJson.decodeFromString(VersionsSnapshot.serializer(), m13)
         assertEquals(
-            "2 need a paid streaming service account, 1 is over your size limit, " +
-                "1 has no room to play here, even a few minutes at a time",
-            VersionsCopy.hiddenDetail(known.hidden),
+            listOf(HideReason.NeedsDebrid, HideReason.TooLarge, HideReason.NoSpace),
+            known.hidden.byReason.map { it.first },
         )
+        // A zero-playable state from a newer core reads as Unknown, and its line as noResults's.
+        val empty =
+            snapshot.replace(
+                "\"blocked\":null",
+                "\"empty\":{\"kind\":\"farAway\",\"action\":\"none\",\"count\":0}",
+            )
+        assertEquals(EmptyKind.Unknown, CoreJson.decodeFromString(VersionsSnapshot.serializer(), empty).empty?.kind)
     }
 }
