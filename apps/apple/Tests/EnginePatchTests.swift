@@ -165,3 +165,16 @@ extension AetherSession.Events {
     #expect(AetherSession.playState(.paused, buffering: false) == (false, false))
     #expect(AetherSession.playState(.loading, buffering: false) == (false, true))
 }
+
+/// A source the engine opens under the Versions cover loads and waits paused (`autoplay` false).
+@MainActor @Test func aSessionOpenedUnderTheCoverWaitsPaused() async throws {
+    let session = try #require(AetherSession())
+    let mkv = try Data(contentsOf: fixtures.appending(path: "tiny.mkv"))
+    session.load(.custom(DataReader(mkv), formatHint: "matroska"), container: "mkv", at: 0, rate: 1.5, muted: true,
+                 autoplay: false, openWithin: .seconds(30), events: .none)
+    // The rate is set once the source is open, just before the play that autoplay false leaves out.
+    for _ in 0..<100 where session.engine.desiredRate == nil { try await Task.sleep(for: .milliseconds(100)) }
+    try await Task.sleep(for: .seconds(1))
+    #expect(session.engine.state != .playing)
+    session.stop()
+}

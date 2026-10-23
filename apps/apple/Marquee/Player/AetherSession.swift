@@ -58,8 +58,8 @@ final class AetherSession {
     /// `openWithin` bounds the open to its first frame (what the start budget has left, plan 2.3), past which the
     /// source counts as failed.
     func load(
-        _ source: MediaSource, container: String?, at start: Double, rate: Float, muted: Bool, openWithin: Duration,
-        events: Events
+        _ source: MediaSource, container: String?, at start: Double, rate: Float, muted: Bool, autoplay: Bool = true,
+        openWithin: Duration, events: Events
     ) {
         stop()
         load += 1
@@ -152,7 +152,7 @@ final class AetherSession {
                     events.videoSize(CGSize(width: Int(probe.videoWidth), height: Int(probe.videoHeight)))
                 }
                 if rate != 1 { engine.setRate(rate) }
-                engine.play()
+                if autoplay { engine.play() }
             } catch is CancellationError {
             } catch {
                 if self?.load == load { events.failed(error.localizedDescription) }

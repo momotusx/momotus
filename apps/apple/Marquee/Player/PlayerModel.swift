@@ -655,14 +655,16 @@ final class PlayerModel {
     func cover() {
         guard !covered else { return }
         (covered, playsAfterCover) = (true, !paused)
-        player.pause()
+        if backend == .aether { aether?.pause() } else { player.pause() }
     }
 
     /// Back from Versions: the player as it was, playing again unless the viewer had paused it.
     func uncover() {
         guard covered else { return }
         covered = false
-        if playsAfterCover, loadedURL != nil, playback?.phase != "failed" { player.play() }
+        if playsAfterCover, loadedURL != nil, playback?.phase != "failed" {
+            if backend == .aether { aether?.play() } else { player.play() }
+        }
     }
 
     /// Tells the core a mid-play stall started or ended (plans/play-every-version.md 2e).
@@ -974,7 +976,10 @@ final class PlayerModel {
         #else
         let muted = false
         #endif
-        session.load(.url(address), container: playback?.container, at: start, rate: rate, muted: muted, openWithin: EngineChoice.openWithin(budgetEndsAtMs: playback?.startBudgetEndsAt), events: .init(
+        // As AVPlayer's load: a source opened under Versions, or again after the server moved, waits paused.
+        let autoplay = !(holdPause || covered)
+        holdPause = false
+        session.load(.url(address), container: playback?.container, at: start, rate: rate, muted: muted, autoplay: autoplay, openWithin: EngineChoice.openWithin(budgetEndsAtMs: playback?.startBudgetEndsAt), events: .init(
             time: { [weak self] time in if mine() { self?.engineTick(time) } },
             duration: { [weak self] seconds in if mine() { self?.engineDuration(seconds, key: key) } },
             state: { [weak self] playing, waiting in if mine() { self?.engineState(playing: playing, waiting: waiting) } },
@@ -995,6 +1000,7 @@ final class PlayerModel {
         guard let now = ticked(time: time, pending: pendingStart) else { return }
         // The overlay reads the engine's cues at each tick (every 0.1 s); no boundary observer.
         position = now
+        if playing { sendStall(stall.see(playing: true, waiting: false, position: position)) }
         if duration != publishedDuration { publishNowPlaying() }
         if playing, ContinuousClock.now - lastReport > .seconds(5) { report() }
     }
@@ -1016,6 +1022,8 @@ final class PlayerModel {
             self.paused = paused
             report()
         }
+        // The engine's stall reaches the core as AVPlayer's does (plans/play-every-version.md 2e).
+        if !covered { sendStall(stall.see(playing: playing, waiting: waiting, position: position)) }
     }
 
     private func engineFirstFrame() {

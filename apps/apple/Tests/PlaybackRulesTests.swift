@@ -936,3 +936,14 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     #expect(cleared.lowerBound < shown.lowerBound, "cleared before the first frame is told")
     #expect(try body(of: "private func engineTick(", in: text).contains("ticked(time: time, pending: pendingStart)"))
 }
+
+/// The second engine joins Versions Step 3 as AVPlayer does, read from the source: its stall reaches the core, the
+/// Versions cover pauses and resumes it, and a source opened under the cover (or after the server moved) waits paused.
+@Test func theEngineJoinsTheStallFeedAndTheCover() throws {
+    let text = try playerModel()
+    #expect(try body(of: "private func engineState(", in: text).contains("if !covered { sendStall(stall.see(playing: playing, waiting: waiting, position: position)) }"))
+    #expect(try body(of: "private func engineTick(", in: text).contains("if playing { sendStall(stall.see(playing: true, waiting: false, position: position)) }"))
+    #expect(try body(of: "func cover(", in: text).contains("if backend == .aether { aether?.pause() } else { player.pause() }"))
+    #expect(try body(of: "func uncover(", in: text).contains("if backend == .aether { aether?.play() } else { player.play() }"))
+    #expect(try body(of: "private func openOnEngine(", in: text).contains("let autoplay = !(holdPause || covered)"))
+}
