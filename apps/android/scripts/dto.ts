@@ -94,6 +94,10 @@ const DEFAULTED = new Map([
   ["SubtitleTrack.hashMatch", "false"],
   // Its remembered delay: an older core remembers none.
   ["SubtitleTrack.delayMs", "0"],
+  // What Apple picks its player engine by (plans/apple-second-engine.md 2.1): an older core names none.
+  ["PlaybackSnapshot.container", "null"],
+  ["PlaybackSnapshot.audio", "emptyList()"],
+  ["PlaybackSnapshot.engine", "null"],
 ]);
 const INT = new Set([
   "overCount",
