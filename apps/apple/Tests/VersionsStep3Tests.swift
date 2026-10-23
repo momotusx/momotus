@@ -479,3 +479,62 @@ private func row(_ json: String) throws -> VersionRow {
     #expect(screen.contains("if old != nil, new == nil, model.noPick { model.retryPick() }"))
     #expect(screen.contains("PlayerLayout.noPickState(model.versions?.snapshot?.empty, failed: model.versions?.failure != nil)"))
 }
+
+/// What the core really sends (apps/shared/fixtures, kept true by the core's own tests against the live views).
+private func golden<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
+    let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../../shared/fixtures/\(name).json")
+    return try JSONDecoder().decode(T.self, from: Data(contentsOf: url))
+}
+
+@Test func theCoresRealEmptyStatesReadAsTheSharedTable() throws {
+    // Each zero-playable state as the core sends it: the title's Play, the Versions page's actions, its rows.
+    let table: [(kind: String, play: TitlePlay, acts: [VersionWords.EmptyAct], coreAction: String)] = [
+        ("noSource", .versions, [.settingsAddons, .back], "settingsAddons"),
+        ("unreachable", .versions, [.tryAgain, .back], "tryAgain"),
+        ("needsAccount", .versions, [.settingsAccounts, .back], "settingsAccounts"),
+        ("nothingPlaysHere", .versions, [.back], "chooseVersion"),
+        ("noRoom", .inert, [.back], "none"),
+        ("kidsNothing", .inert, [.back], "none"),
+        ("noResults", .inert, [.back], "none"),
+    ]
+    for row in table {
+        let s = try golden("versions-empty-\(row.kind)", as: VersionsSnapshot.self)
+        let empty = try #require(s.empty, "\(row.kind)")
+        #expect(empty.kind == row.kind)
+        #expect(TitlePlay.of(s) == row.play, "\(row.kind)")
+        #expect(VersionWords.emptyActs(empty) == row.acts, "\(row.kind)")
+        #expect(VersionWords.emptyLine(row.kind) != nil, "\(row.kind)")
+        #expect(titleWarning(s) == VersionWords.emptyLine(row.kind), "\(row.kind)")
+        // The core's own action for the state agrees with the table's first step (Choose a version is the title's).
+        let json = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appending(path: "../../shared/fixtures/versions-empty-\(row.kind).json"))) as? [String: Any]
+        #expect((json?["empty"] as? [String: Any])?["action"] as? String == row.coreAction, "\(row.kind)")
+    }
+    // The rows a state keeps are listed dimmed with why, and counted.
+    let locked = try golden("versions-empty-needsAccount", as: VersionsSnapshot.self)
+    #expect(VersionWords.sections(locked).flatMap(\.rows).count == 2)
+    #expect(VersionWords.count(locked) == "2 versions")
+    #expect(VersionWords.dimmedStatus(locked.empty?.kind)?.glyph == "lock")
+    let foreign = try golden("versions-empty-nothingPlaysHere", as: VersionsSnapshot.self)
+    #expect(VersionWords.sections(foreign).flatMap(\.rows).count == 1)
+    #expect(VersionWords.dimmedStatus(foreign.empty?.kind)?.glyph == "ban")
+    #expect(VersionWords.count(try golden("versions-empty-noSource", as: VersionsSnapshot.self)) == nil)
+}
+
+@Test func theCoresRealPlaybackEndsReadAsTheSharedTable() throws {
+    let notStarted = try golden("playback-empty-notStarted", as: PlaybackSnapshot.self)
+    #expect(PlayerLayout.failureHeadline(empty: notStarted.empty, offer: notStarted.offer != nil) == "This didn't start")
+    #expect(PlayerLayout.failureActions(empty: notStarted.empty, offer: notStarted.offer != nil, canChoose: true) == [.retry, .choose, .back])
+    let noRoom = try golden("playback-empty-noRoom", as: PlaybackSnapshot.self)
+    #expect(PlayerLayout.failureActions(empty: noRoom.empty, offer: noRoom.offer != nil, canChoose: true) == [.back])
+    let foreign = try golden("playback-empty-nothingPlaysHere", as: PlaybackSnapshot.self)
+    #expect(PlayerLayout.failureActions(empty: foreign.empty, offer: foreign.offer != nil, canChoose: true) == [.choose, .back])
+    // The attempt history never names the addon the core still sends as `via`.
+    for p in [notStarted, noRoom, foreign] {
+        #expect(!PlayerLayout.failureLines(p.attempts).joined().contains("Test"))
+    }
+    // Over a stalled frame the core says Choose another version, and the player shows it.
+    let stalled = try golden("playback-chooseAnother", as: PlaybackSnapshot.self)
+    #expect(stalled.phase == "ready" && stalled.chooseAnother == true)
+    #expect(PlayerLayout.offersAnother(stalled, status: PlayerLayout.status(phase: stalled.phase, cannotOpen: false, firstFrameShown: true, waiting: true)))
+}
