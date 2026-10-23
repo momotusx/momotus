@@ -49,13 +49,15 @@ private func snapshot(
 }
 
 @Test func reasonsAndFailoverSayWhatTheWebSays() {
-    #expect(VersionWords.reason("readyNow", status: .ready(service: "Real-Debrid")) == "Ready now, cached on Real-Debrid")
+    // Never the service's name.
+    #expect(VersionWords.reason("readyNow", status: .ready(service: "Real-Debrid")) == "Ready now")
     #expect(VersionWords.reason("readyNow", status: .direct) == "Ready now")
     #expect(VersionWords.reason("smallerFaster") == "Smaller and faster to start")
     #expect(VersionWords.failover(row()) == "One source for this release.")
     #expect(VersionWords.failover(row(failover: 1)) == "2 sources. If one fails, the next starts on its own.")
     #expect(VersionWords.failover(row(failover: 2)) == "3 sources. If one fails, the next starts on its own.")
-    #expect(VersionWords.status(.needsDownload(service: "TorBox")) == "Needs download on TorBox")
+    #expect(VersionWords.status(.needsDownload(service: "TorBox")) == "Needs download")
+    #expect(VersionWords.status(.ready(service: "TorBox")) == "Ready now")
 }
 
 @Test func withoutAPickTheReasonComesBeforeTheFailedAddon() {

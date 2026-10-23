@@ -55,9 +55,9 @@ enum VersionWords {
 
     static func status(_ status: VersionStatus) -> String {
         switch status {
-        case .ready(let service): service.map { "Ready on \($0)" } ?? "Ready"
+        case .ready: "Ready now"
         case .torrent(let seeds): seeds.map { "Torrent, \($0) \($0 == 1 ? "seed" : "seeds")" } ?? "Torrent"
-        case .needsDownload(let service): service.map { "Needs download on \($0)" } ?? "Needs download"
+        case .needsDownload: "Needs download"
         case .direct: "Direct link"
         }
     }
@@ -70,11 +70,11 @@ enum VersionWords {
         }
     }
 
-    /// Why a version is recommended; "cached on X" when the status names the service.
+    /// Why a version is recommended, never naming the streaming service.
     static func reason(_ reason: String, status: VersionStatus? = nil) -> String {
         switch reason {
         case "readyNow":
-            if case .ready(let service?)? = status { "Ready now, cached on \(service)" } else { "Ready now" }
+            "Ready now"
         case "playsDirectly": "Plays directly on this device"
         case "matchesScreen": "Matches your screen"
         case "sameReleaseAsLast": "Same release as last time"
@@ -230,7 +230,7 @@ enum VersionWords {
         "hun": "hu", "cze": "cs", "ces": "cs", "heb": "he", "per": "fa", "fas": "fa", "pob": "pt-BR",
     ]
 
-    /// The line under Play: "1080p  HDR10  2.4 GB  Ready on Real-Debrid".
+    /// The line under Play: "1080p  HDR10  2.4 GB".
     /// The quality is the core's headline as is ("Quality not stated" at worst).
     static func line(_ row: VersionRow) -> String {
         ([row.quality] + row.features + [size(row.sizeBytes)].compactMap { $0 }).joined(separator: "  ")

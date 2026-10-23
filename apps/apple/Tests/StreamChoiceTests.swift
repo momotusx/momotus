@@ -48,10 +48,12 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
     #expect(try words(#"{"kind": "copy", "quality": "CAM"}"#).details == "CAM copy")
     #expect(try words(#"{"kind": "otherYear", "year": 1999}"#).details == "The release says 1999")
     // A part whose field is unknown is left out, and the rest starts with a capital.
+    // No service is named: "your account" stands for it, as for addons.
     #expect(try words(#"{"kind": "should", "seeders": null, "sizeBytes": 1181116006, "service": "Real-Debrid"}"#).details
-        == "1.1 GB, may be ready on Real-Debrid")
+        == "1.1 GB, may be ready in your account")
+    #expect(try words(#"{"kind": "fetch", "service": "TorBox"}"#).details == "Your account does not have it yet")
     #expect(try words(#"{"kind": "fetch", "service": null}"#).details == "")
-    #expect(try words(#"{"kind": "ready", "service": "TorBox", "sizeBytes": null}"#) == LineWords(tone: .ok, text: "Starts right away", details: "Ready on TorBox"))
+    #expect(try words(#"{"kind": "ready", "service": "TorBox", "sizeBytes": null}"#) == LineWords(tone: .ok, text: "Starts right away", details: "Ready now"))
     #expect(try words(#"{"kind": "quick", "seeders": 120, "sizeBytes": 164626432}"#).details == "120 seeders, 157 MB")
     // Measured from playbacks, or an estimate.
     #expect(try words(#"{"kind": "mayPause", "needMbps": 31.6, "haveMbps": 9.4, "samples": 3}"#).details

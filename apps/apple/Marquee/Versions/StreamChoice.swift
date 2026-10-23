@@ -265,7 +265,8 @@ enum StreamChoice {
         guard let w = words.lines[line.kind] else { return nil }
         var fields: [String: String?] = [
             "quality": line.quality,
-            "service": line.service,
+            // Never the service's name: "your account" when the line names one, as for addons.
+            "account": line.service.map { _ in "your account" },
             "year": line.year.map(String.init),
             "seeders": line.seeders.map { counted("seeders", $0) },
             "size": line.sizeBytes.map(bytes),
