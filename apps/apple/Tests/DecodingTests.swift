@@ -160,6 +160,17 @@ private func fixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T 
     #expect(hero.description?.hasPrefix("A banker") == true)
 }
 
+@Test func theTitlePageCarriesTheRatedCoverWhenTheCoreGivesOne() throws {
+    // The shape mq-runtime's TitleDetails has (views/title.rs `rated_poster`); a core from before it sends none.
+    let base = #"{"id": "kitsu:50016", "kind": "anime", "name": "Cyberpunk: Edgerunners II", "description": null, "poster": "https://img.example/50016.jpg", "background": null, "logo": null, "releaseInfo": null, "runtime": null, "genres": [], "cast": [], "directors": [], "rating": null, "ratings": {"imdb": null}, "imdbUrl": null, "source": "Kitsu", "trailers": []"#
+    let rated = "https://api.ratingposterdb.com/t0-free-rpdb/imdb/poster-default/tt12590266.jpg?fallback=true"
+    let with = try JSONDecoder().decode(TitleDetails.self, from: Data((base + #", "ratedPoster": "\#(rated)"}"#).utf8))
+    #expect(with.ratedPoster == rated)
+    #expect(with.poster == "https://img.example/50016.jpg")
+    let older = try JSONDecoder().decode(TitleDetails.self, from: Data((base + "}").utf8))
+    #expect(older.ratedPoster == nil)
+}
+
 @Test func textShowsIMDbsNumberAloneAndAMissingScoreHasNoSlot() throws {
     // The shape mq-runtime's Ratings has: the addon's IMDb score alone (ratings.rs).
     let json = #"""
