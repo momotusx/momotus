@@ -18,8 +18,8 @@ export function EmptyActs(props: { empty: EmptyVersions; at: string; big?: boole
     <For each={emptyWords(props.empty, props.onVersions).steps}>
       {(s, i) => (
         <Switch>
-          <Match when={s.step === "settingsAddons" || s.step === "settingsAccounts"}>
-            <A classList={cls(i())} href={s.step === "settingsAddons" ? "/addons" : "/debrid"} data-f={`${props.at}:settings`} data-autofocus={first(i())}>
+          <Match when={s.step === "settingsAddons"}>
+            <A classList={cls(i())} href="/addons" data-f={`${props.at}:settings`} data-autofocus={first(i())}>
               <Settings aria-hidden />
               {s.text}
             </A>

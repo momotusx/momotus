@@ -94,8 +94,7 @@
   },
   "blocked": {
     "needsAccount": {
-      "text": "Marquee found {versions}. This version of the app plays them only through a streaming service account (Real-Debrid, TorBox, AllDebrid or Premiumize). Add one in Settings.",
-      "action": "Add an account"
+      "text": "Found {versions}, but none plays on this device."
     },
     "noSpace": {
       "text": "Marquee found {versions}, but this device is nearly full, so none can play here.",
@@ -112,7 +111,7 @@
     "noSource": { "text": "Add a source in Settings", "action": "Settings" },
     "unreachable": { "text": "Can't reach any source", "action": "Try again", "playFromDevice": "Play from this device" },
     "noRoom": { "text": "This device needs a little free space to play this" },
-    "needsAccount": { "text": "These play through a streaming account", "action": "Settings", "row": "Needs an account" },
+    "needsAccount": { "text": "None of these plays on this device", "row": "Won't play here" },
     "kidsNothing": { "text": "There's nothing here for you to watch" },
     "noResults": { "text": "No source has this yet" },
     "nothingPlaysHere": { "text": "None of these plays on this device", "action": "Choose a version", "row": "Won't play here" },

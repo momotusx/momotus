@@ -179,8 +179,9 @@ class PlayerFailureCardTest {
             compose.waitForIdle()
             compose.onNodeWithText(StreamChoiceCopy.emptyLine(kind)).assertExists()
         }
-        // Nothing to do but leave: Back alone, focused; never a way to a page that holds only Back.
-        for (kind in listOf(EmptyKind.NoRoom, EmptyKind.KidsNothing, EmptyKind.NoResults)) {
+        // Nothing to do but leave: Back alone, focused; never a way to a page that holds only Back. needsAccount
+        // too: an account is set up in Settings only, so the card has no Settings and no account words.
+        for (kind in listOf(EmptyKind.NoRoom, EmptyKind.NeedsAccount, EmptyKind.KidsNothing, EmptyKind.NoResults)) {
             fail(kind, null)
             buttons("Back")
             compose.onNodeWithText("Back").assertIsFocused()
@@ -189,9 +190,10 @@ class PlayerFailureCardTest {
         buttons("Settings", "Back")
         compose.onNodeWithText("Settings").performClick()
         fail(EmptyKind.NeedsAccount, null)
-        buttons("Settings", "Back")
-        compose.onNodeWithText("Settings").performClick()
-        assertEquals(listOf("settings NoSource", "settings NeedsAccount"), events)
+        for (gone in listOf("Add an account", "account")) {
+            compose.onAllNodesWithText(gone, substring = true, ignoreCase = true).assertCountEquals(0)
+        }
+        assertEquals(listOf("settings NoSource"), events)
         events.clear()
         fail(EmptyKind.Unreachable, "kept")
         buttons("Play from this device", "Try again", "Back")

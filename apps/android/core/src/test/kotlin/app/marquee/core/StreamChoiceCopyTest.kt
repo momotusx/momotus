@@ -136,7 +136,7 @@ class StreamChoiceCopyTest {
                                 buildJsonObject {
                                     put("text", w.first)
                                     if (reason == BlockedReason.NoSpace) put("textNoWindow", NO_SPACE_NO_WINDOW)
-                                    put("action", w.second)
+                                    w.second?.let { put("action", it) }
                                 },
                             )
                         }
@@ -436,10 +436,12 @@ class StreamChoiceCopyTest {
 
     @Test
     fun `the empty line is the core's words, and a newer kind reads as noResults`() {
-        assertEquals("These play through a streaming account", StreamChoiceCopy.emptyLine(EmptyKind.NeedsAccount))
+        // Quiet, with no account words: an account is set up in Settings only.
+        assertEquals("None of these plays on this device", StreamChoiceCopy.emptyLine(EmptyKind.NeedsAccount))
+        assertNull(StreamChoiceCopy.EMPTY.getValue(EmptyKind.NeedsAccount).second, "needsAccount has no action")
         assertEquals("No source has this yet", StreamChoiceCopy.emptyLine(EmptyKind.Unknown))
         // A dimmed row says why it is dimmed; a newer kind reads as nothingPlaysHere's.
-        assertEquals("Needs an account", StreamChoiceCopy.emptyRowLine(EmptyKind.NeedsAccount).text)
+        assertEquals("Won't play here", StreamChoiceCopy.emptyRowLine(EmptyKind.NeedsAccount).text)
         assertEquals("Won't play here", StreamChoiceCopy.emptyRowLine(EmptyKind.Unknown).text)
         assertEquals("2,000 versions", StreamChoiceCopy.counted("versions", 2000))
     }

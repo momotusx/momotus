@@ -200,7 +200,6 @@ class TvVersionsTest {
     }
 
     private val played = mutableListOf<String>()
-    private var accounts = 0
     private var sources = 0
     private var backs = 0
 
@@ -245,7 +244,6 @@ class TvVersionsTest {
                     FocusMemory(),
                     onPlay = { played += it },
                     onAddSource = { sources++ },
-                    onAddAccount = { accounts++ },
                     onBack = { backs++ },
                     onUndo = { undone += it },
                     held = held,
@@ -310,21 +308,22 @@ class TvVersionsTest {
     }
 
     @Test
-    fun `versions that need an account give Settings, focused, then Back, and Right enters the list`() {
+    fun `versions that need an account say one quiet line over dimmed rows, Back alone and focused, no account step`() {
         val rows = listOf(row("a", ReasonLine.Few(31)))
-        show(snapshot(empty = EmptyVersions(EmptyKind.NeedsAccount, EmptyAction.SettingsAccounts, 12, rows)))
-        compose.onNodeWithText("These play through a streaming account", useUnmergedTree = true).assertExists()
-        actions(StreamChoiceCopy.SETTINGS, "Back")
-        // A dimmed row says why it is dimmed, never how fast it would start.
-        compose.onNodeWithText("2 GB, needs an account").assertExists()
-        // On one line at the TV width.
-        assertEquals(1, lines("2 GB, needs an account"))
+        show(snapshot(empty = EmptyVersions(EmptyKind.NeedsAccount, EmptyAction.None, 12, rows)))
+        compose.onNodeWithText("None of these plays on this device", useUnmergedTree = true).assertExists()
+        actions("Back")
+        compose.onNodeWithText("Back").assertIsFocused()
+        // Accounts are set up in Settings only (the owner, 2026-10-23): no button, no service, no account words.
+        for (gone in listOf("Add an account", "Show them", "Hidden (", "Settings", "account")) {
+            compose.onAllNodesWithText(gone, substring = true, ignoreCase = true).assertCountEquals(0)
+        }
+        // A dimmed row says why it is dimmed, never how fast it would start, on one line at the TV width.
+        compose.onNodeWithText("2 GB, won't play here").assertExists()
+        assertEquals(1, lines("2 GB, won't play here"))
         compose.onAllNodesWithText("may start slowly", substring = true, ignoreCase = true).assertCountEquals(0)
-        compose.onNodeWithText(StreamChoiceCopy.SETTINGS).assertIsFocused()
-        compose.onNodeWithText(StreamChoiceCopy.SETTINGS).performKeyInput { pressKey(Key.DirectionRight) }
-        compose.onNodeWithContentDescription("1080p, HDR, 2 GB").assertIsFocused()
-        compose.onNodeWithText(StreamChoiceCopy.SETTINGS).performClick()
-        assertEquals(1 to 0, accounts to sources)
+        compose.onNodeWithText("Back").performClick()
+        assertEquals(0 to 1, sources to backs)
     }
 
     @Test
@@ -336,7 +335,7 @@ class TvVersionsTest {
         actions(StreamChoiceCopy.SETTINGS, "Back")
         compose.onNodeWithText(StreamChoiceCopy.SETTINGS).assertIsFocused()
         compose.onNodeWithText(StreamChoiceCopy.SETTINGS).performClick()
-        assertEquals(0 to 1, accounts to sources)
+        assertEquals(1, sources)
     }
 
     @Test
@@ -502,7 +501,7 @@ class TvVersionsTest {
                 row("b", ReasonLine.Quick(1204, 2 * gib)).copy(sizeBytes = 3 * gib),
                 row("tr", ReasonLine.Few(12)).copy(group = Group.OtherLanguages, languages = listOf("tr")),
             )
-        show(snapshot(empty = EmptyVersions(EmptyKind.NeedsAccount, EmptyAction.SettingsAccounts, 3, rows)))
+        show(snapshot(empty = EmptyVersions(EmptyKind.NeedsAccount, EmptyAction.None, 3, rows)))
         compose.mainClock.advanceTimeBy(2_000)
         save("tv-versions-needs-account")
     }
@@ -521,7 +520,7 @@ class TvVersionsTest {
     fun `the loading card's skeletons stand out from the card they sit on`() {
         compose.setContent {
             MarqueeTheme(Form.Tv) {
-                TvVersions("Sintel", null, FocusMemory(), {}, {}, {}, {}, {})
+                TvVersions("Sintel", null, FocusMemory(), {}, {}, {}, {})
             }
         }
         compose.waitForIdle()
@@ -546,7 +545,7 @@ class TvVersionsTest {
     fun `the table's frame holds the first row's place while versions are found, so nothing moves`() {
         var current by mutableStateOf<VersionsView?>(null)
         compose.setContent {
-            MarqueeTheme(Form.Tv) { TvVersions("Sintel", current, FocusMemory(), {}, {}, {}, {}, {}) }
+            MarqueeTheme(Form.Tv) { TvVersions("Sintel", current, FocusMemory(), {}, {}, {}, {}) }
         }
         compose.waitForIdle()
         val frame = compose.onNodeWithTag("row-skeleton-0", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
@@ -719,7 +718,7 @@ class TvVersionsTest {
     fun `the card's placeholder is the card's height, so nothing below moves when the pick lands`() {
         var current by mutableStateOf<VersionsView?>(null)
         compose.setContent {
-            MarqueeTheme(Form.Tv) { TvVersions("Sintel", current, FocusMemory(), {}, {}, {}, {}, {}) }
+            MarqueeTheme(Form.Tv) { TvVersions("Sintel", current, FocusMemory(), {}, {}, {}, {}) }
         }
         compose.waitForIdle()
         val held = compose.onNodeWithTag(CARD_PLACEHOLDER, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
@@ -840,8 +839,7 @@ class TvVersionsTest {
     @Test
     fun `back from Settings the page asks the core again, so what was added shows without a press`() {
         var subscribes = 0
-        val rows = listOf(row("a", ReasonLine.Few(31)))
-        val snapshot = snapshot(empty = EmptyVersions(EmptyKind.NeedsAccount, EmptyAction.SettingsAccounts, 1, rows))
+        val snapshot = snapshot(empty = EmptyVersions(EmptyKind.NoSource, EmptyAction.SettingsAddons, 0, emptyList()))
         client.attach { text ->
             val msg = CoreJson.parseToJsonElement(text).jsonObject
             val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
@@ -859,7 +857,7 @@ class TvVersionsTest {
         compose.setContent {
             MarqueeTheme(Form.Tv) {
                 CompositionLocalProvider(LocalLifecycleOwner provides entry) {
-                    TvVersions("Sintel", view, FocusMemory(), {}, {}, { accounts++ }, {}, {})
+                    TvVersions("Sintel", view, FocusMemory(), {}, { sources++ }, {}, {})
                 }
             }
         }
@@ -871,7 +869,7 @@ class TvVersionsTest {
         }
         assertEquals(1, subscribes)
         compose.onNodeWithText(StreamChoiceCopy.SETTINGS).performClick()
-        assertEquals(1, accounts)
+        assertEquals(1, sources)
         // Settings covers the page, then the viewer comes back.
         compose.runOnIdle { entry.covered() }
         compose.runOnIdle { entry.back() }

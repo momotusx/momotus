@@ -18,7 +18,7 @@
  "sections": [],
  "empty": {
   "kind": "needsAccount",
-  "action": "settingsAccounts",
+  "action": "none",
   "count": 3,
   "rows": [
    {

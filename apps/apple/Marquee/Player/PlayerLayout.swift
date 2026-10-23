@@ -6,7 +6,7 @@ import SwiftUI
 /// review rounds (plans/android-design-v2.md, slices 14 to 16). Heights are
 /// the real window's, bars included, since the player hides them.
 /// The failure card's actions (plans/play-every-version.md, the shared table): never an account step.
-enum FailureAction: Hashable { case offer, playFromDevice, retry, choose, versions, settingsAddons, settingsAccounts, back }
+enum FailureAction: Hashable { case offer, playFromDevice, retry, choose, versions, settingsAddons, back }
 
 /// What the player shows over the picture, first match.
 enum PlayerStatus: Equatable {
@@ -279,7 +279,6 @@ enum PlayerLayout {
         case .choose: StreamChoice.words.player.chooseAnother
         case .versions: empty["nothingPlaysHere"]?.action ?? "Choose a version"
         case .settingsAddons: empty["noSource"]?.action ?? "Settings"
-        case .settingsAccounts: empty["needsAccount"]?.action ?? "Settings"
         case .back: StreamChoice.words.page.back
         }
     }
@@ -311,7 +310,6 @@ enum PlayerLayout {
         let first: [FailureAction] = switch empty?.kind {
         case "noSource": [.settingsAddons]
         case "unreachable": (empty?.key == nil ? [] : [.playFromDevice]) + [.retry]
-        case "needsAccount": [.settingsAccounts]
         case "nothingPlaysHere": canChoose ? [.versions] : []
         default: []
         }

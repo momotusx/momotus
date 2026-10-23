@@ -436,7 +436,6 @@ enum class EmptyAction(
     SettingsAddons("settingsAddons"),
     TryAgain("tryAgain"),
     PlayFromDevice("playFromDevice"),
-    SettingsAccounts("settingsAccounts"),
     ChooseVersion("chooseVersion"),
     None("none"),
 

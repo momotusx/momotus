@@ -4,7 +4,6 @@ import Ban from "lucide-solid/icons/ban";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import CircleCheck from "lucide-solid/icons/circle-check";
 import Info from "lucide-solid/icons/info";
-import Lock from "lucide-solid/icons/lock";
 import OctagonAlert from "lucide-solid/icons/octagon-alert";
 import Play from "lucide-solid/icons/play";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
@@ -82,12 +81,12 @@ export function Release(props: { name: string }) {
 const toneIcon = { ok: CircleCheck, warn: TriangleAlert, bad: OctagonAlert };
 
 /** A version's one line, as the row and its sheet show it: the size first, then where it comes from, the
- * core's warning, or why it is dimmed (`why`, with a lock for an account, a ban for this device). */
-function RowLine(props: { row: VersionRow; why: string | null; lock: boolean; tag?: "span" | "p" }) {
+ * core's warning, or why it is dimmed (`why`, with a ban). */
+function RowLine(props: { row: VersionRow; why: string | null; tag?: "span" | "p" }) {
   const tone = () => (props.why ? "why" : props.row.onDevice ? "ok" : lineWords(props.row.line).tone);
   return (
     <Dynamic component={props.tag ?? "span"} class={`st line ${tone()}`}>
-      <Dynamic component={props.why ? (props.lock ? Lock : Ban) : props.row.onDevice ? CircleCheck : toneIcon[lineWords(props.row.line).tone]} aria-hidden class="tone" />
+      <Dynamic component={props.why ? Ban : props.row.onDevice ? CircleCheck : toneIcon[lineWords(props.row.line).tone]} aria-hidden class="tone" />
       <span class="lt">{rowWords(props.row, props.why)}</span>
     </Dynamic>
   );
@@ -148,7 +147,7 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
   const empty = () => snap()?.empty ?? null;
   const dimmed = () => !!empty()?.rows.length;
   const startable = () => empty()?.kind !== "needsAccount";
-  // A dimmed row says why in place of its own line: a lock for an account, a ban for this device.
+  // A dimmed row says why in place of its own line, with a ban.
   const dimWord = () => {
     const e = empty();
     return e && dimmed() ? ((choiceWords.empty[e.kind] as { row?: string }).row ?? null) : null;
@@ -531,7 +530,7 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
                                     onClick={() => (dimmed() && !startable() ? undefined : play(r.key))}
                                   >
                                     <Badges row={r} />
-                                    <RowLine row={r} why={dimWord()} lock={empty()?.kind === "needsAccount"} />
+                                    <RowLine row={r} why={dimWord()} />
                                     {/* Reserved in every row: focus or hover changes only its opacity. Seen only: the
                                         reader gets the same words as the row's description (hidden, outside its name). */}
                                     <span class="more" aria-hidden="true">
@@ -618,7 +617,7 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
                   <Badges row={r()} />
                 </div>
               </Show>
-              <RowLine row={r()} why={dimWord()} lock={empty()?.kind === "needsAccount"} tag="p" />
+              <RowLine row={r()} why={dimWord()} tag="p" />
               <Show when={sheetDetails(r(), dimWord())}>{(d) => <p class="detail">{d()}</p>}</Show>
               <p class="rel">
                 <Release name={r().releaseName} />

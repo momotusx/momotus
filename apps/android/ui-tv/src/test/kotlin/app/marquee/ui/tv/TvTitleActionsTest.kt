@@ -180,7 +180,6 @@ class TvTitleActionsTest {
         // No Settings or account step on the play surface: Play opens Versions, which holds them.
         for ((kind, action) in listOf(
             EmptyKind.NoSource to EmptyAction.SettingsAddons,
-            EmptyKind.NeedsAccount to EmptyAction.SettingsAccounts,
             EmptyKind.Unreachable to EmptyAction.TryAgain,
             EmptyKind.NothingPlaysHere to EmptyAction.ChooseVersion,
         )) {
@@ -197,6 +196,23 @@ class TvTitleActionsTest {
         shown = versions(EmptyKind.NoResults, EmptyAction.None)
         compose.waitForIdle()
         compose.onNodeWithText("No source has this yet", substring = true, useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("Play").assertIsNotEnabled()
+        calls.clear()
+        play()
+        assertEquals(emptyList(), calls)
+        // Versions that need an account: the quiet line, Play inert, and no account step anywhere on the page
+        // (accounts are set up in Settings only).
+        shown = versions(EmptyKind.NeedsAccount, EmptyAction.None)
+        compose.waitForIdle()
+        compose
+            .onNodeWithText(
+                "None of these plays on this device",
+                substring = true,
+                useUnmergedTree = true,
+            ).assertExists()
+        for (gone in listOf("Add an account", "Settings", "streaming account")) {
+            compose.onAllNodesWithText(gone, substring = true, useUnmergedTree = true).assertCountEquals(0)
+        }
         compose.onNodeWithText("Play").assertIsNotEnabled()
         calls.clear()
         play()

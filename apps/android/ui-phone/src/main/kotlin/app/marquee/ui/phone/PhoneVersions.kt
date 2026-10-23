@@ -62,7 +62,6 @@ import app.marquee.core.Format
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.VersionsCopy
 import app.marquee.core.VersionsCopy.EmptyStep
-import app.marquee.core.model.EmptyAction
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.EmptyVersions
 import app.marquee.core.model.LearnedNote
@@ -113,7 +112,6 @@ private const val SHOWN = 3
  * @param heading what the screen is about ("Sintel" or "Sintel, S1:E2").
  * @param onPlay a version was chosen, by its key.
  * @param onAddSource no addon is installed: go where one is added.
- * @param onAddAccount the versions play only through a streaming service account: go where one is added.
  * @param onBack the empty state's Back.
  * @param onUndo Undo on the learned note.
  * @param held the page is open over the player: rows keep the order they opened in, new ones after them.
@@ -124,7 +122,6 @@ fun PhoneVersions(
     versions: VersionsView?,
     onPlay: (String) -> Unit,
     onAddSource: () -> Unit,
-    onAddAccount: () -> Unit,
     onBack: () -> Unit,
     onUndo: suspend (LearnedNote) -> Unit,
     modifier: Modifier = Modifier,
@@ -145,9 +142,9 @@ fun PhoneVersions(
             }
 
             EmptyStep.Settings -> {
-                // Back from Settings, the page asks again: an addon or an account just added shows by itself.
+                // Back from Settings, the page asks again: an addon just added shows by itself.
                 versions?.askAgain = true
-                if (empty?.action == EmptyAction.SettingsAccounts) onAddAccount() else onAddSource()
+                onAddSource()
             }
 
             EmptyStep.Back -> {
@@ -545,7 +542,7 @@ private fun RowFace(
     if (VersionsCopy.quiet(row) != null && why == null) {
         MqText(VersionsCopy.rowWords(row), role = TextRole.Callout, color = Marquee.colors.muted, maxLines = 2)
     } else {
-        ToneWord(VersionsCopy.rowWords(row, why), tone(line.tone), icon = why?.let(::whyIcon))
+        ToneWord(VersionsCopy.rowWords(row, why), tone(line.tone), icon = why?.let { Icons.Ban })
     }
 }
 
@@ -659,6 +656,3 @@ private val PLACEHOLDER_BADGES = listOf(VersionsCopy.Badge("4K", VersionsCopy.Ba
 
 const val CARD_PLACEHOLDER = "versions-card-placeholder"
 const val CARD = "versions-card"
-
-/** A dimmed row's icon: a lock for an account, a ban for this device; never a warning triangle. */
-private fun whyIcon(kind: EmptyKind) = if (kind == EmptyKind.NeedsAccount) Icons.Lock else Icons.Ban

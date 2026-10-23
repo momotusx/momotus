@@ -230,14 +230,13 @@ struct PlayerScreen: View {
         .onChange(of: model.playback?.trakt) { _, now in
             if let mark = TraktRules.playbackMark(now), mark.warn { announce(mark.label) }
         }
-        // Back from the card's Settings: the versions are asked again, so a source or account added there plays.
+        // Back from the card's Settings: the versions are asked again, so a source added there plays.
         .onChange(of: settingsPlace) { old, new in
             if old != nil, new == nil, model.noPick { model.retryPick() }
         }
         .navigationDestination(item: $settingsPlace) { place in
             switch place {
             case .addons: AddonsPage(core: core, sourcesOnly: true)
-            case .accounts: DebridScreen(core: core)
             }
         }
         .navigationDestination(isPresented: $showNextVersions) {
@@ -533,7 +532,7 @@ private struct SubtitleLine: View {
 }
 
 /// Where the card's Settings goes.
-private enum SettingsPlace: Hashable { case addons, accounts }
+private enum SettingsPlace: Hashable { case addons }
 
 /// Starting, buffering, a failed source and a failed playback, in words.
 private struct StatusOverlay: View {
@@ -572,7 +571,6 @@ private struct StatusOverlay: View {
         case .retry: Button(label) { if cannotOpen { model.reopen() } else if model.noPick { model.retryPick() } else { model.retry() } }
         case .choose, .versions: Button(label) { chooseVersion?() }
         case .settingsAddons: Button(label) { settings(.addons) }
-        case .settingsAccounts: Button(label) { settings(.accounts) }
         case .back: Button(label, action: back)
         }
     }

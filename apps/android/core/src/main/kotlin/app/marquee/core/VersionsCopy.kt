@@ -239,7 +239,7 @@ object VersionsCopy {
 
     /**
      * A row's one line as it shows: its size first, then its source in plain words, the core's warning, or why it is
-     * dimmed ([why]): "1.5 GB, shared by 1,204 people", "12 GB, may start slowly", "2 GB, needs an account".
+     * dimmed ([why]): "1.5 GB, shared by 1,204 people", "12 GB, may start slowly", "2 GB, won't play here".
      */
     fun rowWords(
         row: VersionRow,
@@ -405,7 +405,7 @@ object VersionsCopy {
         when (empty.action) {
             EmptyAction.PlayFromDevice -> listOf(EmptyStep.PlayFromDevice, EmptyStep.TryAgain)
             EmptyAction.TryAgain -> listOf(EmptyStep.TryAgain)
-            EmptyAction.SettingsAddons, EmptyAction.SettingsAccounts -> listOf(EmptyStep.Settings)
+            EmptyAction.SettingsAddons -> listOf(EmptyStep.Settings)
             else -> emptyList()
         } + EmptyStep.Back
 

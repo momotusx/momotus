@@ -591,7 +591,7 @@ fun PlayerStatus(
     empty: EmptyKind? = null,
     /** The version this device keeps, when no source answered: "Play from this device" ([onOffer] plays it). */
     kept: String? = null,
-    /** Settings for the addons (noSource) or the accounts (needsAccount); null leaves the button out. */
+    /** Settings for the addons (noSource); null leaves the button out. */
     onSettings: ((EmptyKind) -> Unit)? = null,
 ) {
     val colors = Marquee.colors
@@ -667,12 +667,13 @@ fun PlayerStatus(
                     )
                     SecondaryButton(CHOOSE_ANOTHER, onVersions, icon = Icons.Layers)
                 } else if (empty == EmptyKind.NoRoom || empty == EmptyKind.KidsNothing ||
-                    empty == EmptyKind.NoResults
+                    empty == EmptyKind.NoResults || empty == EmptyKind.NeedsAccount
                 ) {
                     // Nothing to do here but leave: Back alone, never a way to a page that holds only Back.
+                    // needsAccount too: an account is set up in Settings only (the owner, 2026-10-23).
                     backFirst = true
-                } else if ((empty == EmptyKind.NoSource || empty == EmptyKind.NeedsAccount) && onSettings != null) {
-                    // An addon or an account is what is missing: Settings, where it is added.
+                } else if (empty == EmptyKind.NoSource && onSettings != null) {
+                    // An addon is what is missing: Settings, where it is added.
                     PrimaryButton(
                         StreamChoiceCopy.SETTINGS,
                         { onSettings(empty) },

@@ -98,10 +98,10 @@ async fn until(what: &str, done: impl Fn() -> bool) {
 }
 
 /// 3.11, mutation 16: with no engine and no account every torrent is
-/// hidden, and the view says an account opens them, with those versions
-/// ranked as they would be.
+/// hidden, with those versions ranked as they would be. The view says so
+/// quietly, with no action: an account is set up in Settings only.
 #[tokio::test]
-async fn without_engine_or_account_versions_say_an_account_opens_them() {
+async fn without_engine_or_account_versions_say_so_with_no_action() {
     let server = Server::start(vec![
         route("GET", "/stream/series/tt1%3A1%3A1.json", 200, &torrents()),
         route("GET", "/meta/series/tt1.json", 200, &meta()),
@@ -125,7 +125,7 @@ async fn without_engine_or_account_versions_say_an_account_opens_them() {
     let empty = s.empty.expect("empty");
     assert_eq!(
         (empty.kind, empty.action, empty.count, empty.rows.len()),
-        (EmptyKind::NeedsAccount, EmptyAction::SettingsAccounts, 2, 2)
+        (EmptyKind::NeedsAccount, EmptyAction::None, 2, 2)
     );
     let names: Vec<&str> = blocked
         .rows

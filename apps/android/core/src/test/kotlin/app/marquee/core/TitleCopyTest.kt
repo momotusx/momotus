@@ -230,14 +230,13 @@ class TitleCopyTest {
         // No Settings or account step on the play surface: Play opens Versions, which holds them.
         for ((kind, action) in listOf(
             EmptyKind.NoSource to EmptyAction.SettingsAddons,
-            EmptyKind.NeedsAccount to EmptyAction.SettingsAccounts,
             EmptyKind.Unreachable to EmptyAction.TryAgain,
             EmptyKind.NothingPlaysHere to EmptyAction.ChooseVersion,
         )) {
             assertEquals(play, empty(kind, action, null), "$kind: Play opens Versions")
         }
         // A Back-only state keeps Play in its place, inert: a Play that opens a page with only Back is a dead end.
-        for (kind in listOf(EmptyKind.NoRoom, EmptyKind.KidsNothing, EmptyKind.NoResults)) {
+        for (kind in listOf(EmptyKind.NoRoom, EmptyKind.NeedsAccount, EmptyKind.KidsNothing, EmptyKind.NoResults)) {
             val primary = empty(kind, EmptyAction.None, null)
             assertEquals(play.copy(inert = true), primary, "$kind keeps an inert Play")
             assertFalse(TitleCopy.live(primary, target), "$kind: Play does nothing")

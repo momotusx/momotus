@@ -128,7 +128,7 @@ fun TvPlayer(
     onOffer: (String) -> Unit = {},
     /** The subtitle picker's Size: the profile's subtitle size, for this video and the next. */
     onSubtitleSize: (SubtitleSize) -> Unit = {},
-    /** The failure card's Settings: the addons (noSource) or the accounts (needsAccount). */
+    /** The failure card's Settings: the addons (noSource). */
     onSettings: ((EmptyKind) -> Unit)? = null,
 ) {
     val safe = Marquee.safe

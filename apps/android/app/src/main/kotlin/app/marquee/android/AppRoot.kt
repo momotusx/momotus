@@ -46,7 +46,6 @@ import app.marquee.core.AccountRules
 import app.marquee.core.Format
 import app.marquee.core.PendingRemoval
 import app.marquee.core.TileCopy
-import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.HomeCatalog
 import app.marquee.core.model.Tile
 import app.marquee.core.model.playVideoId
@@ -700,7 +699,6 @@ private fun AppNav(
                                 backStack.addAll(next)
                             },
                             onAddSource = { backStack.add(Route.Sources) },
-                            onAddAccount = { backStack.add(Route.Debrid) },
                             onBack = ::pop,
                             onUndo = { session.ops.undoLearned(it.screenClass, it.choice) },
                             // Over the paused player its attempt keeps resolving: the rows hold their order.
@@ -746,10 +744,8 @@ private fun AppNav(
                                 },
                                 // The same video and Versions view, the offered version's key.
                                 onOffer = { key -> replacePlayer(route, route.copy(key = key)) },
-                                // Where an addon or an account is added, as the core's state says.
-                                onSettings = { kind ->
-                                    backStack.add(if (kind == EmptyKind.NeedsAccount) Route.Debrid else Route.Sources)
-                                },
+                                // Where an addon is added (noSource). Accounts are set up in Settings only.
+                                onSettings = { backStack.add(Route.Sources) },
                             )
                         }
                     }

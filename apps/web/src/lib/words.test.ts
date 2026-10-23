@@ -132,7 +132,9 @@ test("every zero-playable state reads its shared line with its actions in the ta
   expect(steps("noSource", "settingsAddons")).toEqual(["Settings"]);
   expect(steps("unreachable", "playFromDevice")).toEqual(["Play from this device", "Try again"]);
   expect(steps("unreachable", "tryAgain")).toEqual(["Try again"]);
-  expect(steps("needsAccount", "settingsAccounts")).toEqual(["Settings"]);
+  // An account is set up in Settings only: the state is said quietly, with no step.
+  expect(steps("needsAccount", "none")).toEqual([]);
+  expect(emptyWords({ kind: "needsAccount", action: "none" }).text).toBe("None of these plays on this device");
   expect(steps("nothingPlaysHere", "chooseVersion")).toEqual(["Choose a version"]);
   // Choose a version is the player's and the title's, never Versions' own.
   expect(steps("nothingPlaysHere", "chooseVersion", true)).toEqual([]);
@@ -245,7 +247,7 @@ test("a row's one line starts with its size, then where it comes from, a warning
   expect(rowWords(row({ kind: "quick", seeders: 1, sizeBytes: GiB }, { kind: "torrent", seeds: 1 }))).toBe("1.5 GB, shared by 1 person");
   // A warning never drops the size.
   expect(rowWords(row({ kind: "few", seeders: 31 }, { kind: "torrent", seeds: 31 }, 12 * GiB))).toBe("12 GB, may start slowly");
-  expect(rowWords(row({ kind: "few", seeders: 31 }, { kind: "torrent", seeds: 31 }), "Needs an account")).toBe("1.5 GB, needs an account");
+  expect(rowWords(row({ kind: "few", seeders: 31 }, { kind: "torrent", seeds: 31 }), "Won't play here")).toBe("1.5 GB, won't play here");
   expect(rowWords(row({ kind: "quick", seeders: null, sizeBytes: null }, { kind: "direct" }, null, "On this device"))).toBe("On this device");
   expect(rowWords(row({ kind: "quick", seeders: null, sizeBytes: null }, { kind: "torrent", seeds: null }, null))).toBe("Starts quickly");
 });
@@ -276,5 +278,5 @@ test("the sheet says nothing twice: it drops only what the face said, and keeps 
   // "117 MB, may not start" says no seeders: they follow.
   expect(sheetDetails(row({ kind: "veryFew", seeders: 2 }))).toBe("2 seeders");
   // A dimmed row's line says why it is dimmed, so the core's details follow.
-  expect(sheetDetails(row({ kind: "quick", seeders: 1204, sizeBytes: 2 * GiB }), "Needs an account")).toBe("1,204 seeders, 2 GB");
+  expect(sheetDetails(row({ kind: "quick", seeders: 1204, sizeBytes: 2 * GiB }), "Won't play here")).toBe("1,204 seeders, 2 GB");
 });

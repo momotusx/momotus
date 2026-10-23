@@ -307,8 +307,6 @@ pub enum EmptyAction {
     /// Pick `key`: the last played source, kept on this device, starts with
     /// no addon.
     PlayFromDevice,
-    /// A link to Settings, Accounts.
-    SettingsAccounts,
     /// The rows, each startable.
     ChooseVersion,
     None,
@@ -2218,7 +2216,9 @@ fn empty(s: &State) -> Option<EmptyVersions> {
     // versions stay startable ("Choose a version").
     if let Some(b) = &s.why {
         let (kind, action) = match b.reason {
-            BlockedReason::NeedsAccount => (EmptyKind::NeedsAccount, EmptyAction::SettingsAccounts),
+            // Said quietly, with no action: an account is set up in
+            // Settings only (the owner, 2026-10-23).
+            BlockedReason::NeedsAccount => (EmptyKind::NeedsAccount, EmptyAction::None),
             // The one storage line, with no count (2c).
             BlockedReason::NoSpace => return named(EmptyKind::NoRoom, EmptyAction::None),
             BlockedReason::NothingPlaysHere => {

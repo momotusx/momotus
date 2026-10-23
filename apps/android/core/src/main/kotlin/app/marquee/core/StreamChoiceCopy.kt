@@ -138,17 +138,13 @@ object StreamChoiceCopy {
     const val SPEED_MEASURED = "measured from {playbacks}"
 
     /**
-     * By reason: the words and the one action. Shown nowhere since every page reads [EMPTY]; kept until the core
+     * By reason: the words and the one action, if any. Shown nowhere since every page reads [EMPTY]; kept until the core
      * stops sending `blocked` and stream-choice-words.json drops it (plans/play-every-version.md Step 3 item 6).
      */
     val BLOCKED =
         mapOf(
-            BlockedReason.NeedsAccount to
-                (
-                    "Marquee found {versions}. This version of the app plays them only through a streaming service " +
-                        "account (Real-Debrid, TorBox, AllDebrid or Premiumize). Add one in Settings." to
-                        "Add an account"
-                ),
+            // Said quietly, with no action: an account is set up in Settings only.
+            BlockedReason.NeedsAccount to ("Found {versions}, but none plays on this device." to null),
             BlockedReason.NoSpace to
                 ("Marquee found {versions}, but this device is nearly full, so none can play here." to "Show them"),
             BlockedReason.NothingPlaysHere to ("Found {versions}, but none plays on this device." to "Show them"),
@@ -160,7 +156,8 @@ object StreamChoiceCopy {
             EmptyKind.NoSource to ("Add a source in Settings" to "Settings"),
             EmptyKind.Unreachable to ("Can't reach any source" to "Try again"),
             EmptyKind.NoRoom to ("This device needs a little free space to play this" to null),
-            EmptyKind.NeedsAccount to ("These play through a streaming account" to "Settings"),
+            // Said quietly, with no action: an account is set up in Settings only (the owner, 2026-10-23).
+            EmptyKind.NeedsAccount to ("None of these plays on this device" to null),
             EmptyKind.KidsNothing to ("There's nothing here for you to watch" to null),
             EmptyKind.NoResults to ("No source has this yet" to null),
             EmptyKind.NothingPlaysHere to ("None of these plays on this device" to "Choose a version"),
@@ -173,7 +170,7 @@ object StreamChoiceCopy {
     /** What each dimmed row of an empty state says in place of its line: why it is dimmed, never how fast it starts. */
     val EMPTY_ROWS =
         mapOf(
-            EmptyKind.NeedsAccount to "Needs an account",
+            EmptyKind.NeedsAccount to "Won't play here",
             EmptyKind.NothingPlaysHere to "Won't play here",
         )
 
@@ -189,7 +186,7 @@ object StreamChoiceCopy {
 
     const val SHOW_ROWS = "Show them"
 
-    /** Where a streaming service account is added, from a page whose versions need one. */
+    /** Where a source is added, from a page with none. */
     const val SETTINGS = "Settings"
 
     /** The Versions page's own words ("page"): its status line while the core asks, the section folds, Back. */

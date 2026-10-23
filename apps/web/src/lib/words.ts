@@ -675,11 +675,11 @@ export function lineWords(
 
 // ponytail: the title page's old reads (blockedWords, noVersionWords) stay until design-web's title
 // step moves it to the empty state; delete both then.
-/** Why no version is visible, with its one action (3.11). */
+/** Why no version is visible (3.11). */
 export function blockedWords(reason: BlockedReason, count: number, window = true) {
   const w = choice.blocked[reason];
   const text = !window && "textNoWindow" in w ? w.textNoWindow : w.text;
-  return { text: text.replace("{versions}", counted("versions", count)).replace("{versionsAre}", counted("versionsAre", count)), action: w.action };
+  return { text: text.replace("{versions}", counted("versions", count)).replace("{versionsAre}", counted("versionsAre", count)) };
 }
 
 /** No addon found a stream: the title page's wording. */
@@ -704,7 +704,7 @@ function sourceWords(s: VersionStatus): string | null {
 }
 
 /** A row's one line: its size first, then where it comes from, the core's warning, or why it is dimmed
- * (`why`): "1.5 GB, shared by 1,204 people", "12 GB, may start slowly", "2 GB, needs an account". The
+ * (`why`): "1.5 GB, shared by 1,204 people", "12 GB, may start slowly", "2 GB, won't play here". The
  * size is never dropped for a warning. */
 export function rowWords(row: VersionRow, why: string | null = null): string {
   const size = row.sizeBytes ? bytes(row.sizeBytes) : null;

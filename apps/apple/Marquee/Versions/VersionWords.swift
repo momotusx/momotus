@@ -110,7 +110,7 @@ enum VersionWords {
 
     /// What the Versions page offers when nothing can play, in the shared table's order, Back last.
     enum EmptyAct: Hashable {
-        case settingsAddons, settingsAccounts, playFromDevice(key: String), tryAgain, back
+        case settingsAddons, playFromDevice(key: String), tryAgain, back
     }
 
     /// nothingPlaysHere offers Back only: its rows are listed dimmed, each startable, and Choose a
@@ -119,7 +119,6 @@ enum VersionWords {
         let first: [EmptyAct] = switch empty.kind {
         case "noSource": [.settingsAddons]
         case "unreachable": (empty.key.map { [.playFromDevice(key: $0)] } ?? []) + [.tryAgain]
-        case "needsAccount": [.settingsAccounts]
         default: []
         }
         return first + [.back]
@@ -129,7 +128,6 @@ enum VersionWords {
         let w = words.empty
         return switch act {
         case .settingsAddons: w["noSource"]?.action ?? "Settings"
-        case .settingsAccounts: w["needsAccount"]?.action ?? "Settings"
         case .playFromDevice: w["unreachable"]?.playFromDevice ?? "Play from this device"
         case .tryAgain: w["unreachable"]?.action ?? "Try again"
         case .back: words.page.back
@@ -139,7 +137,7 @@ enum VersionWords {
     /// A dimmed row's one-line status, why it waits, with its icon; nil for a row that can play.
     static func dimmedStatus(_ kind: String?) -> (text: String, glyph: String)? {
         switch kind {
-        case "needsAccount": words.empty["needsAccount"]?.row.map { ($0, "lock") }
+        case "needsAccount": words.empty["needsAccount"]?.row.map { ($0, "ban") }
         case "nothingPlaysHere": words.empty["nothingPlaysHere"]?.row.map { ($0, "ban") }
         default: nil
         }

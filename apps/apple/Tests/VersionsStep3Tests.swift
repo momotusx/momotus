@@ -29,21 +29,20 @@ private func snapshot(_ empty: EmptyVersions?, pick: VersionRow? = nil, done: Bo
     #expect(VersionWords.emptyActs(empty("noSource")) == [.settingsAddons, .back])
     #expect(VersionWords.emptyActs(empty("unreachable")) == [.tryAgain, .back])
     #expect(VersionWords.emptyActs(empty("unreachable", key: "bt:kept")) == [.playFromDevice(key: "bt:kept"), .tryAgain, .back])
-    #expect(VersionWords.emptyActs(empty("needsAccount")) == [.settingsAccounts, .back])
     // Choose a version is the title's and the player's: on Versions the rows are listed, each startable.
     #expect(VersionWords.emptyActs(empty("nothingPlaysHere")) == [.back])
-    for kind in ["noRoom", "kidsNothing", "noResults", "somethingNew"] {
+    // No account call to action anywhere but Settings (the owner's rule): needsAccount offers Back alone.
+    for kind in ["noRoom", "kidsNothing", "noResults", "needsAccount", "somethingNew"] {
         #expect(VersionWords.emptyActs(empty(kind)) == [.back], "\(kind)")
     }
-    #expect(VersionWords.emptyActs(empty("needsAccount")).map(VersionWords.emptyActWord) == ["Settings", "Back"])
     #expect(VersionWords.emptyActs(empty("unreachable", key: "k")).map(VersionWords.emptyActWord) == ["Play from this device", "Try again", "Back"])
-    #expect(VersionWords.emptyLine("needsAccount") == "These play through a streaming account")
+    #expect(VersionWords.emptyLine("needsAccount") == "None of these plays on this device")
     #expect(VersionWords.emptyLine("notStarted") == "This didn't start")
 }
 
 @Test func aDimmedRowSaysWhyInOneLineWithItsIcon() throws {
-    #expect(VersionWords.dimmedStatus("needsAccount")?.text == "Needs an account")
-    #expect(VersionWords.dimmedStatus("needsAccount")?.glyph == "lock")
+    #expect(VersionWords.dimmedStatus("needsAccount")?.text == "Won't play here")
+    #expect(VersionWords.dimmedStatus("needsAccount")?.glyph == "ban")
     #expect(VersionWords.dimmedStatus("nothingPlaysHere")?.text == "Won't play here")
     #expect(VersionWords.dimmedStatus("nothingPlaysHere")?.glyph == "ban")
     #expect(VersionWords.dimmedStatus(nil) == nil)
@@ -64,11 +63,11 @@ private func snapshot(_ empty: EmptyVersions?, pick: VersionRow? = nil, done: Bo
     // No source in reach: the source kept here plays, else Versions holds the line and Try again.
     #expect(TitlePlay.of(snapshot(empty("unreachable", key: "bt:kept"))) == .player(key: "bt:kept"))
     #expect(TitlePlay.of(snapshot(empty("unreachable"))) == .versions)
-    for kind in ["noSource", "needsAccount", "nothingPlaysHere"] {
+    for kind in ["noSource", "nothingPlaysHere"] {
         #expect(TitlePlay.of(snapshot(empty(kind))) == .versions, "\(kind)")
     }
     // Back alone would be a dead end: Play stays, inert.
-    for kind in ["noRoom", "kidsNothing", "noResults"] {
+    for kind in ["noRoom", "kidsNothing", "noResults", "needsAccount"] {
         #expect(TitlePlay.of(snapshot(empty(kind))) == .inert, "\(kind)")
     }
 }
@@ -95,16 +94,14 @@ private func snapshot(_ empty: EmptyVersions?, pick: VersionRow? = nil, done: Bo
     // Play opened the player while versions were found and none could start: Versions holds the way on.
     // Play opened the player while versions were found, and the core's view ended empty: the table.
     #expect(PlayerLayout.noPickActions(empty("noSource"), canChoose: true) == [.settingsAddons, .back])
-    #expect(PlayerLayout.noPickActions(empty("needsAccount"), canChoose: true) == [.settingsAccounts, .back])
     #expect(PlayerLayout.noPickActions(empty("unreachable", key: "bt:kept"), canChoose: true) == [.playFromDevice, .retry, .back])
     #expect(PlayerLayout.noPickActions(empty("unreachable"), canChoose: true) == [.retry, .back])
     #expect(PlayerLayout.noPickActions(empty("nothingPlaysHere"), canChoose: true) == [.versions, .back])
-    for kind in ["noRoom", "kidsNothing", "noResults"] {
+    for kind in ["noRoom", "kidsNothing", "noResults", "needsAccount"] {
         #expect(PlayerLayout.noPickActions(empty(kind), canChoose: true) == [.back], "\(kind)")
     }
-    #expect(PlayerLayout.noPickHeadline(empty("needsAccount")) == "These play through a streaming account")
+    #expect(PlayerLayout.noPickHeadline(empty("needsAccount")) == "None of these plays on this device")
     #expect(PlayerLayout.noPickHeadline(nil) == "No source has this yet")
-    #expect(PlayerLayout.failureLabel(.settingsAccounts, offer: nil) == "Settings")
     // The attempt history is plain words, never the addon's name.
     #expect(PlayerLayout.failureLines(notStarted.attempts) == ["No peer sent any data · 5 sources", "The swarm had no seeders"])
     // The source kept here: the empty state's, else the row the core marks on this device.
@@ -244,7 +241,7 @@ private func literals(_ source: String) -> [String] {
     // The shared words too: every string but the rules text, by its path. The dead keys that wait for every
     // app to read `empty` (plan Step 3 item 6).
     let pending: Set = [
-        "blocked.needsAccount.action", "blocked.nothingPlaysHere.action", "blocked.noSpace.action", "blocked.showRows",
+        "blocked.nothingPlaysHere.action", "blocked.noSpace.action", "blocked.showRows",
     ]
     let json = try JSONSerialization.jsonObject(with: Data(contentsOf: app.appending(path: "../../shared/stream-choice-words.json")))
     var hits: [String] = []
@@ -518,7 +515,7 @@ private func golden<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
     let table: [(kind: String, play: TitlePlay, acts: [VersionWords.EmptyAct], coreAction: String)] = [
         ("noSource", .versions, [.settingsAddons, .back], "settingsAddons"),
         ("unreachable", .versions, [.tryAgain, .back], "tryAgain"),
-        ("needsAccount", .versions, [.settingsAccounts, .back], "settingsAccounts"),
+        ("needsAccount", .inert, [.back], "none"),
         ("nothingPlaysHere", .versions, [.back], "chooseVersion"),
         ("noRoom", .inert, [.back], "none"),
         ("kidsNothing", .inert, [.back], "none"),
@@ -541,7 +538,7 @@ private func golden<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
     let locked = try golden("versions-empty-needsAccount", as: VersionsSnapshot.self)
     #expect(VersionWords.sections(locked).flatMap(\.rows).count == 2)
     #expect(VersionWords.count(locked) == "2 versions")
-    #expect(VersionWords.dimmedStatus(locked.empty?.kind)?.glyph == "lock")
+    #expect(VersionWords.dimmedStatus(locked.empty?.kind)?.glyph == "ban")
     let foreign = try golden("versions-empty-nothingPlaysHere", as: VersionsSnapshot.self)
     #expect(VersionWords.sections(foreign).flatMap(\.rows).count == 1)
     #expect(VersionWords.dimmedStatus(foreign.empty?.kind)?.glyph == "ban")
@@ -564,4 +561,26 @@ private func golden<T: Decodable>(_ name: String, as type: T.Type) throws -> T {
     let stalled = try golden("playback-chooseAnother", as: PlaybackSnapshot.self)
     #expect(stalled.phase == "ready" && stalled.chooseAnother == true)
     #expect(PlayerLayout.offersAnother(stalled, status: PlayerLayout.status(phase: stalled.phase, cannotOpen: false, firstFrameShown: true, waiting: true)))
+}
+
+@Test func needsAccountShowsNoAccountCallToActionOnVersionsTheTitleOrThePlayer() throws {
+    // The owner's rule: an account is added in Settings only. needsAccount offers Back alone everywhere.
+    let words = [VersionWords.emptyLine("needsAccount"), VersionWords.dimmedStatus("needsAccount")?.text,
+                 PlayerLayout.noPickHeadline(empty("needsAccount"))].compactMap { $0 }
+        + VersionWords.emptyActs(empty("needsAccount")).map(VersionWords.emptyActWord)
+        + PlayerLayout.noPickActions(empty("needsAccount"), canChoose: true).map { PlayerLayout.failureLabel($0, offer: nil) }
+    for word in words {
+        for banned in ["add an account", "settings", "account", "streaming service", "real-debrid", "torbox"] {
+            #expect(!word.lowercased().contains(banned), "\(word)")
+        }
+    }
+    #expect(VersionWords.emptyActs(empty("needsAccount")) == [.back])
+    #expect(PlayerLayout.noPickActions(empty("needsAccount"), canChoose: true) == [.back])
+    #expect(TitlePlay.of(snapshot(empty("needsAccount"))) == .inert)
+    // No account page is reached from Versions or the player: DebridScreen opens from Settings alone.
+    let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
+    for file in ["Versions/VersionsScreen.swift", "Player/PlayerScreen.swift", "Title/TitleScreen.swift"] {
+        let source = try String(contentsOf: app.appending(path: file), encoding: .utf8)
+        #expect(!source.contains("DebridScreen("), "\(file)")
+    }
 }

@@ -14,7 +14,6 @@ struct VersionsScreen: View {
     var back: (() -> Void)?
     @State private var playing: PlayRoute?
     @State private var addSource = false
-    @State private var addAccount = false
     /// The learning note was undone here: it goes at once.
     @State private var undone = false
     @Environment(\.metrics) private var metrics
@@ -60,7 +59,6 @@ struct VersionsScreen: View {
             PlayerScreen(route: route, versions: model, core: core)
         }
         .navigationDestination(isPresented: $addSource) { AddonsPage(core: core, sourcesOnly: true) }
-        .navigationDestination(isPresented: $addAccount) { DebridScreen(core: core) }
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -169,7 +167,6 @@ struct VersionsScreen: View {
     private func act(_ act: VersionWords.EmptyAct) {
         switch act {
         case .settingsAddons: addSource = true
-        case .settingsAccounts: addAccount = true
         case .playFromDevice(let key): play(key)
         case .tryAgain: model.retry()
         case .back: leave()
@@ -279,7 +276,7 @@ private struct EmptyCard: View {
 
     static func glyph(_ act: VersionWords.EmptyAct) -> String {
         switch act {
-        case .settingsAddons, .settingsAccounts: "settings"
+        case .settingsAddons: "settings"
         case .playFromDevice: "play-fill"
         case .tryAgain: "refresh-cw"
         case .back: "chevron-left"

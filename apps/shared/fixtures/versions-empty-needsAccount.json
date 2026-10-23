@@ -114,7 +114,7 @@
   },
   "done": true,
   "empty": {
-    "action": "settingsAccounts",
+    "action": "none",
     "count": 2,
     "key": null,
     "kind": "needsAccount",

@@ -6,7 +6,6 @@ import Check from "lucide-solid/icons/check";
 import CircleAlert from "lucide-solid/icons/circle-alert";
 import CircleX from "lucide-solid/icons/circle-x";
 import LoaderCircle from "lucide-solid/icons/loader-circle";
-import KeyRound from "lucide-solid/icons/key-round";
 import Plus from "lucide-solid/icons/plus";
 import Film from "lucide-solid/icons/film";
 import Layers from "lucide-solid/icons/layers";
@@ -27,7 +26,7 @@ import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
 import { focusEl, remember } from "../focus/dom";
 import { form } from "../form";
 import { airDate, bytes, clock, decoded, episodeLabel, offersLibrary, parseVideo, pct, playPath, ratingParts, runtimeMinutes, seasonName, versionsPath } from "../lib/format";
-import { blockedWords, choiceWords, kindLabel, noVersionWords, qualityText, statusText } from "../lib/words";
+import { blockedWords, kindLabel, noVersionWords, qualityText, statusText } from "../lib/words";
 import "./title.css";
 
 export default function Title() {
@@ -170,22 +169,16 @@ function TitlePage(props: { kind: string; id: string; retry: () => void }) {
                 <div class="play">
                   <div class="play-row">
                     {/* When nothing can play, the way forward is a source, not
-                        a Play button that can only fail. */}
+                        a Play button that can only fail. Versions that need a
+                        streaming account get no button: the line below says so
+                        quietly, and accounts are set up in Settings only. */}
                     <Show
                       when={!noVersion(versions()?.state.data ?? null)}
                       fallback={
-                        <Show
-                          when={versions()?.state.data?.blocked?.reason === "needsAccount"}
-                          fallback={
-                            <A class="btn primary big" href="/addons" data-f="title:addsource" data-autofocus>
-                              <Plus aria-hidden />
-                              Add a source
-                            </A>
-                          }
-                        >
-                          <A class="btn primary big" href="/debrid" data-f="title:addaccount" data-autofocus>
-                            <KeyRound aria-hidden />
-                            {choiceWords.blocked.needsAccount.action}
+                        <Show when={versions()?.state.data?.blocked?.reason !== "needsAccount"}>
+                          <A class="btn primary big" href="/addons" data-f="title:addsource" data-autofocus>
+                            <Plus aria-hidden />
+                            Add a source
                           </A>
                         </Show>
                       }

@@ -245,7 +245,7 @@ enum TitlePlay: Equatable {
     case inert
 
     /// The states whose only action is Back.
-    static let backOnly: Set<String> = ["noRoom", "kidsNothing", "noResults"]
+    static let backOnly: Set<String> = ["noRoom", "kidsNothing", "noResults", "needsAccount"]
 
     static func of(_ versions: VersionsSnapshot?) -> TitlePlay {
         guard let empty = versions?.empty else { return .player(key: versions?.recommended?.key) }

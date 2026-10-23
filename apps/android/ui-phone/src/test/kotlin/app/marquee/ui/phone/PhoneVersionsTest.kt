@@ -167,7 +167,7 @@ class PhoneVersionsTest {
     )
 
     private val played = mutableListOf<String>()
-    private var accounts = 0
+    private var sources = 0
     private var back: OnBackPressedDispatcher? = null
     private var backs = 0
     private val undone = mutableListOf<LearnedNote>()
@@ -193,8 +193,7 @@ class PhoneVersionsTest {
                     "Sintel",
                     view,
                     onPlay = { played += it },
-                    onAddSource = {},
-                    onAddAccount = { accounts++ },
+                    onAddSource = { sources++ },
                     onBack = { backs++ },
                     onUndo = { undone += it },
                 )
@@ -388,33 +387,28 @@ class PhoneVersionsTest {
     }
 
     @Test
-    fun `account-only versions say the core's line over dimmed rows with Settings, then Back`() {
+    fun `account-only versions say one quiet line over dimmed rows, Back alone, with no account step`() {
         val rows = listOf(row("a", ReasonLine.Few(31)))
-        show(snapshot(empty = EmptyVersions(EmptyKind.NeedsAccount, EmptyAction.SettingsAccounts, 12, rows)))
-        compose.onNodeWithText("These play through a streaming account", useUnmergedTree = true).assertIsDisplayed()
+        show(snapshot(empty = EmptyVersions(EmptyKind.NeedsAccount, EmptyAction.None, 12, rows)))
+        compose.onNodeWithText("None of these plays on this device", useUnmergedTree = true).assertIsDisplayed()
         compose.onNodeWithText("12 versions").assertIsDisplayed()
-        for (gone in listOf("No playable", "Add an account", "Show them", "Hidden (", "Choose a version")) {
-            compose.onAllNodesWithText(gone, substring = true).assertCountEquals(0)
+        // Accounts are set up in Settings only (the owner, 2026-10-23): no button, no service, no account words.
+        for (gone in listOf(
+            "No playable",
+            "Add an account",
+            "Show them",
+            "Hidden (",
+            "Choose a version",
+            "Settings",
+            "account",
+        )) {
+            compose.onAllNodesWithText(gone, substring = true, ignoreCase = true).assertCountEquals(0)
         }
         // A dimmed row says why it is dimmed, never how fast it would start.
-        compose.onNodeWithText("2 GB, needs an account").assertIsDisplayed()
+        compose.onNodeWithText("2 GB, won't play here").assertIsDisplayed()
         compose.onAllNodesWithText("may start slowly", substring = true, ignoreCase = true).assertCountEquals(0)
-        val settings =
-            compose
-                .onNodeWithText(StreamChoiceCopy.SETTINGS)
-                .fetchSemanticsNode()
-                .boundsInRoot.top
-        assertTrue(
-            settings <
-                compose
-                    .onNodeWithText("Back")
-                    .fetchSemanticsNode()
-                    .boundsInRoot.top,
-            "Settings, then Back",
-        )
-        compose.onNodeWithText(StreamChoiceCopy.SETTINGS).performClick()
         compose.onNodeWithText("Back").performClick()
-        assertEquals(1 to 1, accounts to backs)
+        assertEquals(0 to 1, sources to backs)
     }
 
     @Test
@@ -488,8 +482,7 @@ class PhoneVersionsTest {
     @Test
     fun `back from Settings the page asks the core again, so what was added shows without a press`() {
         var subscribes = 0
-        val rows = listOf(row("a", ReasonLine.Few(31)))
-        val snapshot = snapshot(empty = EmptyVersions(EmptyKind.NeedsAccount, EmptyAction.SettingsAccounts, 1, rows))
+        val snapshot = snapshot(empty = EmptyVersions(EmptyKind.NoSource, EmptyAction.SettingsAddons, 0, emptyList()))
         client.attach { text ->
             val msg = CoreJson.parseToJsonElement(text).jsonObject
             val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
@@ -507,7 +500,7 @@ class PhoneVersionsTest {
         compose.setContent {
             MarqueeTheme(Form.Phone) {
                 CompositionLocalProvider(LocalLifecycleOwner provides entry) {
-                    PhoneVersions("Sintel", view, {}, {}, { accounts++ }, {}, {})
+                    PhoneVersions("Sintel", view, {}, { sources++ }, {}, {})
                 }
             }
         }
@@ -519,7 +512,7 @@ class PhoneVersionsTest {
         }
         assertEquals(1, subscribes)
         compose.onNodeWithText(StreamChoiceCopy.SETTINGS).performClick()
-        assertEquals(1, accounts)
+        assertEquals(1, sources)
         // Settings covers the page, then the viewer comes back.
         compose.runOnIdle { entry.covered() }
         compose.runOnIdle { entry.back() }

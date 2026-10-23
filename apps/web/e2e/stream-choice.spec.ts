@@ -403,7 +403,7 @@ test.describe("Versions", () => {
     ["unreachable", "playFromDevice", true, ["Play from this device", "Try again", "Back"], ["Play from this device", "Try again", "Back"]],
     ["unreachable", "tryAgain", false, ["Try again", "Back"], ["Try again", "Back"]],
     ["noRoom", "none", false, ["Back"], ["Back"]],
-    ["needsAccount", "settingsAccounts", false, ["Settings", "Back"], ["Settings", "Back"]],
+    ["needsAccount", "none", false, ["Back"], ["Back"]],
     ["kidsNothing", "none", false, ["Back"], ["Back"]],
     ["noResults", "none", false, ["Back"], ["Back"]],
     ["nothingPlaysHere", "chooseVersion", false, ["Back"], ["Choose a version", "Back"]],
@@ -430,11 +430,10 @@ test.describe("Versions", () => {
       if (onVersions.length === 1) await expect(tv.locator('[data-f="versions:back"]')).toHaveClass(/\bprimary\b/);
       await expect.poll(() => focused(tv)).toBe(await tv.locator(".pick .blocked .btn").first().getAttribute("data-f"));
       if (kind === "noSource") await expect(tv.locator('[data-f="versions:settings"]')).toHaveAttribute("href", "/addons");
-      if (kind === "needsAccount") await expect(tv.locator('[data-f="versions:settings"]')).toHaveAttribute("href", "/debrid");
       // Rows only where the table lists them.
       if (kind === "nothingPlaysHere" || kind === "needsAccount") {
         await expect(tv.locator(".vrow.dim").first()).toBeVisible();
-        // Each says why in place of its own line (a lock for an account, a ban for this device).
+        // Each says why in place of its own line, with a ban.
         await expect(tv.locator(".vrow.dim:not(:focus) .st.line.why .lt").first()).toHaveText(new RegExp(`^(\\S+ [KMG]B, )?${(words.empty[kind].row ?? "").replace(/^./, (x) => x.toLowerCase())}$`));
       }
       else await expect(tv.locator(".vrow")).toHaveCount(0);
@@ -486,20 +485,22 @@ test.describe("Versions", () => {
     }
   });
 
-  test("blocked, needs an account (the core's own answer): the line, Settings and Back, the rows dimmed, on Versions and the player", async ({ browser }) => {
+  test("blocked, needs an account (the core's own answer): one quiet line and Back, the rows dimmed, no account step on Versions, the title or the player", async ({ browser }) => {
     // Only Torrentio lists S1:E1, and this build has no engine and no
     // account: the core blocks every row (no answer is changed here).
+    const line = "None of these plays on this device";
+    // Accounts are set up in Settings only (the owner, 2026-10-23): no button, link or service name here.
+    const noAccountStep = async (p: Page, scope: string) => {
+      await expect(p.locator(scope)).not.toContainText(/Add an account|Show them|Real-Debrid|TorBox|AllDebrid|Premiumize|streaming account/);
+      await expect(p.locator(scope).locator('a[href^="/debrid"], [data-f$=":settings"], [data-f$=":account"], [data-f$=":addaccount"]')).toHaveCount(0);
+    };
     const page = await device(browser, "desktop", PORTS.bridge);
     await page.goto(`/title/series/${GOT.id}/versions/${GOT.id}:1:1?form=desktop`);
-    await expect(page.locator(".vstatus")).toHaveText("These play through a streaming account", { timeout: 60_000 });
+    await expect(page.locator(".vstatus")).toHaveText(line, { timeout: 60_000 });
     await expect(page.locator(".vstate")).toHaveText(/^\d+ versions?$/);
     await expect(page.locator(".vstate")).not.toHaveText("0 versions");
-    // Settings (the accounts screen), then Back; never "Add an account" or "Show them".
-    const settings = page.locator('[data-f="versions:settings"]');
-    await expect(settings).toHaveText("Settings");
-    await expect(settings).toHaveAttribute("href", "/debrid");
-    await expect(page.locator(".pick .blocked .btn")).toHaveText(["Settings", "Back"]);
-    await expect(page.locator(".versions-scr")).not.toContainText(/Add an account|Show them/);
+    await expect(page.locator(".pick .blocked .btn")).toHaveText(["Back"]);
+    await noAccountStep(page, ".versions-scr");
     // The versions as they would rank with an account, listed dimmed; they cannot be started here.
     const row = page.locator(".vrow").first();
     await expect(row).toHaveAttribute("aria-disabled", "true");
@@ -509,78 +510,54 @@ test.describe("Versions", () => {
     await page.waitForTimeout(300);
     expect(page.url()).toBe(url);
     await shot(page, "stream-choice-account", "desktop");
-    // A film with only Torrentio versions: Title's primary leads to the account.
+    // A film with only Torrentio versions: the title says so under the hero, with no button for it.
     await page.goto(`/title/movie/${SHAWSHANK}?form=desktop`);
-    await expect(page.locator('[data-f="title:addaccount"]')).toHaveText("Add an account", { timeout: 60_000 });
-    await expect(page.locator(".vline")).toContainText("only through a streaming service account");
-    // The player, opened straight (a deep link), says the same (no playback is opened): Settings,
-    // then Back, never "Add an account" (accounts live in Settings).
+    await expect(page.locator(".vline")).toContainText("none plays on this device", { timeout: 60_000 });
+    await noAccountStep(page, ".title-scr");
+    // The player, opened straight (a deep link), says the same (no playback is opened), with Back alone.
     await page.goto(`/play/movie/${SHAWSHANK}/${SHAWSHANK}?form=desktop`);
-    await expect(page.locator(".player-scr")).toContainText("These play through a streaming account", { timeout: 60_000 });
-    const open = page.locator('[data-f="player:settings"]');
-    await expect(open).toHaveText("Settings");
-    await expect(open).toHaveAttribute("href", "/debrid");
-    await expect(page.locator(".endcard .acts .btn")).toHaveText(["Settings", "Back"]);
-    await expect(page.locator('[data-f="player:account"], [data-f="player:versions"]')).toHaveCount(0);
-    await open.click();
-    await expect(page).toHaveURL(/\/debrid/);
+    await expect(page.locator(".player-scr")).toContainText(line, { timeout: 60_000 });
+    await expect(page.locator(".endcard .acts .btn")).toHaveText(["Back"]);
+    await noAccountStep(page, ".player-scr");
     await page.context().close();
-    // TV: the remote starts on it, and select opens the accounts screen.
+    // TV: the remote starts on Back.
     const tv = await device(browser, "tv", PORTS.bridge);
     await tv.goto(`/play/movie/${SHAWSHANK}/${SHAWSHANK}?form=tv`);
-    await expect.poll(() => focused(tv), { timeout: 60_000 }).toBe("player:settings");
-    await tv.keyboard.press("Enter");
-    await expect(tv).toHaveURL(/\/debrid/);
+    await expect.poll(() => focused(tv), { timeout: 60_000 }).toBe("player:back");
+    await noAccountStep(tv, ".player-scr");
     await tv.context().close();
   });
 
-  test("blocked for an account: an account added while the card shows, or from it and Back, starts the play", async ({ browser }) => {
+  test("blocked for an account: an account added in Settings while the card shows starts the play", async ({ browser }) => {
     const KEY = "MQDUMMYE2EKEY1";
     const film = `/play/movie/${SHAWSHANK}/${SHAWSHANK}?form=desktop`;
+    const line = "None of these plays on this device";
     // Playback subscribes are held back here (no playback is opened): one for a version is the start.
     const started = (from: number) =>
       sent.slice(from).some((m) => m.op === "subscribe" && m.view === "playback" && typeof (m.params as { key?: unknown } | undefined)?.key === "string");
-    const connect = async (p: Page) => {
-      await p.locator('[data-f="debrid:premiumize:field"]').fill(KEY);
-      await p.locator('[data-f="debrid:premiumize:save"]').click();
-      await expect(p.locator('.dcard[aria-label="Premiumize"] .dcard-head .st')).toHaveText("Connected");
-    };
-    const disconnect = async (p: Page) => {
-      await p.goto("/debrid?form=desktop");
-      const button = p.locator('[data-f="debrid:premiumize:disconnect"]');
+    const page = await device(browser, "desktop", PORTS.bridge);
+    const other = await device(browser, "desktop", PORTS.bridge);
+    const screen = page.locator(".player-scr");
+    try {
+      await page.goto(film);
+      await expect(screen).toContainText(line, { timeout: 60_000 });
+      const before = sent.length;
+      // Settings, in another tab or on another device: the card moves on by itself.
+      await other.goto("/debrid?form=desktop");
+      await other.locator('[data-f="debrid:premiumize:field"]').fill(KEY);
+      await other.locator('[data-f="debrid:premiumize:save"]').click();
+      await expect(other.locator('.dcard[aria-label="Premiumize"] .dcard-head .st')).toHaveText("Connected");
+      await expect(screen).not.toContainText(line, { timeout: 30_000 });
+      await expect.poll(() => started(before), { timeout: 30_000 }).toBe(true);
+    } finally {
+      // The rest of this spec runs with no account.
+      await other.goto("/debrid?form=desktop");
+      const button = other.locator('[data-f="debrid:premiumize:disconnect"]');
       await button.click();
       await expect(button).toHaveText("Press again to disconnect");
       await button.click();
-      await expect(p.locator('.dcard[aria-label="Premiumize"]').getByText("Disconnected")).toBeVisible();
-    };
-    const page = await device(browser, "desktop", PORTS.bridge);
-    const screen = page.locator(".player-scr");
-    try {
-      // While the card shows: an account added elsewhere (another device, another tab) moves it on.
-      await page.goto(film);
-      await expect(screen).toContainText("These play through a streaming account", { timeout: 60_000 });
-      const before = sent.length;
-      const other = await device(browser, "desktop", PORTS.bridge);
-      await other.goto("/debrid?form=desktop");
-      await connect(other);
-      await expect(screen).not.toContainText("These play through a streaming account", { timeout: 30_000 });
-      await expect.poll(() => started(before), { timeout: 30_000 }).toBe(true);
-      await disconnect(other);
+      await expect(other.locator('.dcard[aria-label="Premiumize"]').getByText("Disconnected")).toBeVisible();
       await other.context().close();
-      // From the card: Settings, a key, and Back to the play, which starts.
-      await page.goto(film);
-      await expect(screen).toContainText("These play through a streaming account", { timeout: 60_000 });
-      const again = sent.length;
-      await page.locator('[data-f="player:settings"]').click();
-      await expect(page).toHaveURL(/\/debrid/);
-      await connect(page);
-      await page.goBack();
-      await expect(page).toHaveURL(/\/play\/movie\//);
-      await expect(screen).not.toContainText("These play through a streaming account", { timeout: 30_000 });
-      await expect.poll(() => started(again), { timeout: 30_000 }).toBe(true);
-    } finally {
-      // The rest of this spec runs with no account.
-      await disconnect(page);
       await page.context().close();
     }
   });
