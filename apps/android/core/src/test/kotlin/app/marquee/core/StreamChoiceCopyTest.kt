@@ -427,8 +427,8 @@ class StreamChoiceCopyTest {
         assertEquals("These play through a streaming account", StreamChoiceCopy.emptyLine(EmptyKind.NeedsAccount))
         assertEquals("No source has this yet", StreamChoiceCopy.emptyLine(EmptyKind.Unknown))
         // A dimmed row says why it is dimmed; a newer kind reads as nothingPlaysHere's.
-        assertEquals("Needs a streaming account", StreamChoiceCopy.emptyRowLine(EmptyKind.NeedsAccount).text)
-        assertEquals("Doesn't play on this device", StreamChoiceCopy.emptyRowLine(EmptyKind.Unknown).text)
+        assertEquals("Needs an account", StreamChoiceCopy.emptyRowLine(EmptyKind.NeedsAccount).text)
+        assertEquals("Won't play here", StreamChoiceCopy.emptyRowLine(EmptyKind.Unknown).text)
         assertEquals("2,000 versions", StreamChoiceCopy.counted("versions", 2000))
     }
 

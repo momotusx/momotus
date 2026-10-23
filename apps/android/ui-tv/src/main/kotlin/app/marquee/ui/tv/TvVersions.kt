@@ -56,6 +56,7 @@ import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.VersionsCopy
 import app.marquee.core.VersionsCopy.EmptyStep
 import app.marquee.core.model.EmptyAction
+import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.EmptyVersions
 import app.marquee.core.model.Group
 import app.marquee.core.model.LearnedNote
@@ -176,7 +177,7 @@ fun TvVersions(
                 Sources(
                     snapshot,
                     empty?.rows ?: snapshot?.rows.orEmpty(),
-                    empty?.let { StreamChoiceCopy.emptyRowLine(it.kind) },
+                    empty?.kind,
                     focus,
                     list,
                     onPlay,
@@ -447,7 +448,7 @@ private fun LearnedLine(
 private fun Sources(
     snapshot: VersionsSnapshot?,
     rows: List<VersionRow>,
-    why: StreamChoiceCopy.Line?,
+    why: EmptyKind?,
     focus: FocusMemory,
     list: FocusRequester,
     onPlay: (String) -> Unit,
@@ -523,7 +524,15 @@ private fun Sources(
                     if (all) focusSoon(foldKey(group))
                 }
                 item(key = "group:$group") {
-                    GlassBar(Modifier.padding(top = Marquee.space.xs)) {
+                    // A plain heading, no outline (design/DECISION.md, Lines).
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = Marquee.space.xs)
+                            .padding(horizontal = 22.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         CapsLabel(
                             VersionsCopy.group(group, snapshot?.recommended != null),
                             Modifier.weight(1f),
@@ -584,7 +593,7 @@ private fun Line(color: Color) {
 @Composable
 private fun SourceRow(
     row: VersionRow,
-    why: StreamChoiceCopy.Line?,
+    why: EmptyKind?,
     focus: FocusMemory,
     onPlay: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -596,7 +605,7 @@ private fun SourceRow(
     // The focused row turns white with dark words (focusPalette); the rows of a page where none plays (the core's
     // empty rows) read dimmed, say [why] in place of their line, and stay startable.
     val colors = focusPalette(focused).let { if (why != null && !focused) it.dimmed() else it }
-    val line = why ?: StreamChoiceCopy.rowLine(row)
+    val line = why?.let(StreamChoiceCopy::emptyRowLine) ?: StreamChoiceCopy.rowLine(row)
     val tag = VersionsCopy.languageTag(row)
     val spoken =
         listOfNotNull(
@@ -644,7 +653,7 @@ private fun SourceRow(
                     maxLines = 1,
                 )
                 // A long line ("Colors may look washed out on this screen") takes a second line, as on the web.
-                ToneWord(line.text, tone(line.tone), Modifier.width(STATUS))
+                ToneWord(line.text, tone(line.tone), Modifier.width(STATUS), icon = why?.let(::whyIcon))
             }
             if (focused) {
                 Column(Modifier.padding(start = QUALITY), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -662,3 +671,6 @@ private fun SourceRow(
 private fun PickLine() {
     MqText("Best for this screen", role = TextRole.Callout, color = Marquee.colors.dim, weight = FontWeight.SemiBold)
 }
+
+/** A dimmed row's icon: a lock for an account, a ban for this device; never a warning triangle. */
+private fun whyIcon(kind: EmptyKind) = if (kind == EmptyKind.NeedsAccount) Icons.Lock else Icons.Ban

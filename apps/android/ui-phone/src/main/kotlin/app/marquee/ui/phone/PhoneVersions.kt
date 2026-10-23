@@ -47,6 +47,7 @@ import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.VersionsCopy
 import app.marquee.core.VersionsCopy.EmptyStep
 import app.marquee.core.model.EmptyAction
+import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.EmptyVersions
 import app.marquee.core.model.Group
 import app.marquee.core.model.LearnedNote
@@ -170,7 +171,15 @@ fun PhoneVersions(
             if (rows.isEmpty()) continue
             val all = open[group] == true
             item(key = "group:$group") {
-                GlassBar(Modifier.padding(top = Marquee.space.xs)) {
+                // A plain heading, no outline (design/DECISION.md, Lines).
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = Marquee.space.xs)
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     CapsLabel(
                         VersionsCopy.group(group, snapshot?.recommended != null),
                         Modifier.weight(1f),
@@ -182,7 +191,7 @@ fun PhoneVersions(
             items(if (all) rows else rows.take(SHOWN), key = { "row:${it.key}" }) { row ->
                 SourceRow(
                     row,
-                    empty?.let { StreamChoiceCopy.emptyRowLine(it.kind) },
+                    empty?.kind,
                     opened == row.key,
                     { opened = if (opened == row.key) null else row.key },
                     onPlay,
@@ -395,13 +404,13 @@ private fun LearnedLine(
 @Composable
 private fun SourceRow(
     row: VersionRow,
-    why: StreamChoiceCopy.Line?,
+    why: EmptyKind?,
     open: Boolean,
     onToggle: () -> Unit,
     onPlay: (String) -> Unit,
 ) {
     val colors = Marquee.colors
-    val line = why ?: StreamChoiceCopy.rowLine(row)
+    val line = why?.let(StreamChoiceCopy::emptyRowLine) ?: StreamChoiceCopy.rowLine(row)
     val tag = VersionsCopy.languageTag(row)
     val spoken =
         listOfNotNull(
@@ -445,7 +454,7 @@ private fun SourceRow(
                 // The line on its own line, then the size, the source and the features: both wrap on a
                 // small phone or a large font instead of cutting what helps the choice.
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    ToneWord(line.text, tone(line.tone))
+                    ToneWord(line.text, tone(line.tone), icon = why?.let(::whyIcon))
                     MqText(
                         (
                             listOfNotNull(row.sizeBytes?.let(Format::bytes)) + row.features
@@ -482,3 +491,6 @@ private fun SourceRow(
 private fun PickLine() {
     MqText("Best for this screen", role = TextRole.Callout, color = Marquee.colors.dim, weight = FontWeight.SemiBold)
 }
+
+/** A dimmed row's icon: a lock for an account, a ban for this device; never a warning triangle. */
+private fun whyIcon(kind: EmptyKind) = if (kind == EmptyKind.NeedsAccount) Icons.Lock else Icons.Ban

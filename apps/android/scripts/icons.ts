@@ -13,6 +13,7 @@ const nodesPath = join(import.meta.dir, "../node_modules/lucide-static/icon-node
 
 export const ICONS = [
   "arrow-left",
+  "ban",
   "bookmark",
   "bookmark-check",
   "bookmark-plus",

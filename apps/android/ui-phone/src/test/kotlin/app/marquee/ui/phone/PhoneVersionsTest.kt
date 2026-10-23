@@ -220,7 +220,7 @@ class PhoneVersionsTest {
             compose.onAllNodesWithText(gone, substring = true).assertCountEquals(0)
         }
         // A dimmed row says why it is dimmed, never how fast it would start.
-        compose.onNodeWithText("Needs a streaming account", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Needs an account", substring = true).assertIsDisplayed()
         compose.onAllNodesWithText("May start slowly", substring = true).assertCountEquals(0)
         val settings =
             compose
@@ -251,7 +251,7 @@ class PhoneVersionsTest {
         }
         // Dimmed, and still startable: a tap opens it to its own Play.
         compose.onAllNodesWithText("May start slowly", substring = true).assertCountEquals(0)
-        compose.onNodeWithText("Doesn't play on this device", substring = true).performClick()
+        compose.onNodeWithText("Won't play here", substring = true).performClick()
         compose.onNodeWithText("Play this version").performClick()
         assertEquals(listOf("a"), played)
         compose.onNodeWithText("Back").performClick()

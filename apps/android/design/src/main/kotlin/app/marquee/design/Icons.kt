@@ -13,6 +13,14 @@ object Icons {
         )
     }
 
+    val Ban: ImageVector by lazy {
+        strokeIcon(
+            "ban",
+        "M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0z",
+        "M4.929 4.929 19.07 19.071",
+        )
+    }
+
     val Bookmark: ImageVector by lazy {
         strokeIcon(
             "bookmark",

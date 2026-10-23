@@ -567,6 +567,8 @@ fun ToneWord(
     tone: Status,
     modifier: Modifier = Modifier,
     maxLines: Int = 2,
+    /** In place of the tone's own icon, for words that are no warning (a row dimmed for a reason). */
+    icon: ImageVector? = null,
 ) {
     val tv = Marquee.form == Form.Tv
     // The icon stays by the first line when the words take two.
@@ -576,7 +578,7 @@ fun ToneWord(
         verticalAlignment = Alignment.Top,
     ) {
         MqIcon(
-            when (tone) {
+            icon ?: when (tone) {
                 Status.Bad -> Icons.OctagonAlert
                 Status.Warn -> Icons.TriangleAlert
                 else -> Icons.CircleCheck
