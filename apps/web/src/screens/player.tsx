@@ -15,16 +15,17 @@ import Play from "lucide-solid/icons/play";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import RotateCcw from "lucide-solid/icons/rotate-ccw";
 import RotateCw from "lucide-solid/icons/rotate-cw";
-import Settings from "lucide-solid/icons/settings";
 import SkipForward from "lucide-solid/icons/skip-forward";
 import Volume2 from "lucide-solid/icons/volume-2";
 import VolumeX from "lucide-solid/icons/volume-x";
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from "solid-js";
 import { Backdrop } from "../components/art";
+import { EmptyActs } from "../components/empty-acts";
 import { Why } from "../components/why";
 import { KeyedPage } from "../components/keyed-page";
 import { TraktMark } from "../components/trakt-mark";
 import { liveView, op, prefsView, serverMoves } from "../core/client";
+import type { EmptyVersions } from "../core/generated/EmptyVersions";
 import type { PlaybackSnapshot } from "../core/generated/PlaybackSnapshot";
 import type { Segment } from "../core/generated/Segment";
 import type { SegmentKind } from "../core/generated/SegmentKind";
@@ -42,7 +43,7 @@ import { bytes, clock, decoded, startsText, episodeLabel, groupFailures, playPat
 import { DELAY_SETTLE_MS } from "../lib/delay";
 import { bufferShare, loadingLines, STALL_AHEAD_S, startFill } from "../lib/loading";
 import { fileChoice, offSummary, pickerLanguages, startOption } from "../lib/subtitles";
-import { blockedWords, languageName, nextVersion, noVersionWords, qualityCell, qualityText, restartLine, subtitleNote, versionsWords } from "../lib/words";
+import { emptyWords, languageName, nextVersion, qualityCell, qualityText, restartLine, subtitleNote } from "../lib/words";
 import "./player.css";
 
 const SPEEDS = [1, 1.25, 1.5, 2, 0.75];
@@ -726,9 +727,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   };
   const pct = (x: number) => `${duration() ? Math.min(100, (x / duration()) * 100) : 0}%`;
   // The failure card's way to Versions (the plan's shared Step 3 table): "Choose another version"
-  // after a failure, "Choose a version" when nothing plays; primary and focused when nothing else is. Every version needing a streaming account offers Settings instead: never "Add an
-  // account" (accounts live in Settings).
-  const blockedHere = () => (!status()?.busy ? (versions()?.blocked?.reason ?? null) : null);
+  // after a failure, "Choose a version" when none plays here; primary and focused when nothing else is.
+  const lone = (e?: EmptyVersions) => !!e && !emptyWords(e).steps.length;
   const chooseVersion = () => (
     <A
       class="btn big"
@@ -743,7 +743,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       {failed() || openError() ? nextVersion.another : "Choose a version"}
     </A>
   );
-  const status = (): { tone: string; text: string; detail?: string; note?: string; busy: boolean } | null => {
+  const status = (): { tone: string; text: string; detail?: string; note?: string; busy: boolean; empty?: EmptyVersions } | null => {
     const t = titleError();
     if (t) return { tone: "bad", text: nextVersion.titleNotOpened, detail: t, busy: false };
     const v = ctx.versions();
@@ -766,8 +766,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     // A version picked by hand that Versions has not listed yet.
     if (props.chosen && !key()) return { tone: "warn", text: nextVersion.finding, busy: true };
     const vs = versions();
-    if (vs?.blocked) return { tone: "bad", text: blockedWords(vs.blocked.reason, vs.blocked.count, vs.conditions.window).text, busy: false };
-    if (vs?.done && !vs.recommended && !vs.rows.length) return { tone: "bad", text: noVersionWords.title, detail: noVersionWords.detail, busy: false };
+    // Why nothing can play, with its actions (the shared Step 3 table).
+    if (vs?.empty) return { tone: "bad", text: emptyWords(vs.empty).text, busy: false, empty: vs.empty };
     // Never an addon's name while it waits.
     return { tone: "warn", text: ctx.details() ? nextVersion.findingBest : "Opening", busy: true };
   };
@@ -961,11 +961,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                       longer listed, which Try again cannot bring back, so
                       Choose a version comes first and has the focus. */}
                   <Show when={openError() && !titleError()}>{chooseVersion()}</Show>
-                  <Show when={blockedHere() === "needsAccount"}>
-                    <A class="btn primary big" href="/debrid" data-f="player:settings" data-autofocus>
-                      <Settings aria-hidden />
-                      {versionsWords.settings}
-                    </A>
+                  <Show when={s().empty}>
+                    {(e) => <EmptyActs empty={e()} at="player" big retry={props.retry} play={playKey} choose={chooseVersion()} />}
                   </Show>
                   {/* This play again from its first pick (`retry`), or the
                       playback opened again: what failed may be the moment. */}
@@ -981,8 +978,15 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                       Try again
                     </button>
                   </Show>
-                  <Show when={!openError() && !titleError() && blockedHere() !== "needsAccount"}>{chooseVersion()}</Show>
-                  <button class="btn big" data-f="player:back" onClick={goBack}>
+                  <Show when={!openError() && !titleError() && !s().empty}>{chooseVersion()}</Show>
+                  {/* The one way on when nothing plays and the state has no action of its own. */}
+                  <button
+                    class="btn big"
+                    classList={{ primary: lone(s().empty) }}
+                    data-f="player:back"
+                    data-autofocus={lone(s().empty) ? "" : undefined}
+                    onClick={goBack}
+                  >
                     <ArrowLeft aria-hidden />
                     Back
                   </button>

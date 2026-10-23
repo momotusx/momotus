@@ -2,14 +2,14 @@
  * codes; every UI turns them into the same words. */
 
 import type { Group } from "../core/generated/Group";
-import type { HiddenSummary } from "../core/generated/HiddenSummary";
-import type { HideReason } from "../core/generated/HideReason";
 import type { Reason } from "../core/generated/Reason";
 import type { SubtitleNote } from "../core/generated/SubtitleNote";
 import type { SyncReport } from "../core/generated/SyncReport";
 import type { Tile } from "../core/generated/Tile";
 import type { VersionStatus } from "../core/generated/VersionStatus";
 import type { BlockedReason } from "../core/generated/BlockedReason";
+import type { EmptyAction } from "../core/generated/EmptyAction";
+import type { EmptyVersions } from "../core/generated/EmptyVersions";
 import type { LearnedChoice } from "../core/generated/LearnedChoice";
 import type { Network } from "../core/generated/Network";
 import type { Prefs } from "../core/generated/Prefs";
@@ -47,33 +47,6 @@ export const groupLabel: Record<Group, string> = {
 };
 
 export const groupOrder: Group[] = ["best", "smallerFaster", "otherLanguages", "needsDownload"];
-
-const hideText: Record<HideReason, [one: string, many: string]> = {
-  wrongTitle: ["is for another title", "are for other titles"],
-  wrongEpisode: ["is another episode", "are other episodes"],
-  excluded: ["matches your avoid list", "match your avoid list"],
-  tooLarge: ["is over your size limit", "are over your size limit"],
-  unplayable: ["cannot play on this device", "cannot play on this device"],
-  unsupportedSource: ["uses a source this app cannot open yet", "use a source this app cannot open yet"],
-  // Kids profiles only.
-  leavesApp: ["would open outside Marquee", "would open outside Marquee"],
-  notForKids: ["is not for kids", "are not for kids"],
-  needsDebrid: ["needs a paid streaming service account", "need a paid streaming service account"],
-  noSpace: ["has no room to play here, even a few minutes at a time", "have no room to play here, even a few minutes at a time"],
-};
-
-/** No room on a volume that cannot play a window: the file is too large
- * for this storage, whatever its free space. */
-const tooLargeHere: [one: string, many: string] = ["is too large for this storage", "are too large for this storage"];
-
-/** "19 are for other titles, 1 is another episode". `window`: the storage
- * plays a torrent too big for its free space in a window (the snapshot's
- * conditions). */
-export function hiddenSummary(h: HiddenSummary, window = true): string {
-  return h.byReason
-    .map(([reason, n]) => `${n} ${(reason === "noSpace" && !window ? tooLargeHere : hideText[reason])[n === 1 ? 0 : 1]}`)
-    .join(", ");
-}
 
 export type Tone = "ok" | "warn" | "bad" | "idle";
 
@@ -237,7 +210,6 @@ export const nextVersion = {
 export const versionsWords = {
   finding: "Finding versions",
   slow: "Still looking for more versions",
-  settings: "Settings",
   back: "Back",
 };
 
@@ -707,12 +679,32 @@ export function lineWords(l: ReasonLine): { tone: Exclude<Tone, "idle">; text: s
   return { tone: w.tone as Exclude<Tone, "idle">, text, details: capital(details.join(", ")) };
 }
 
-/** Why no version is visible, with its one action (3.11); `window` as in
- * `hiddenSummary`. */
+// ponytail: the title page's old reads (blockedWords, noVersionWords) stay until design-web's title
+// step moves it to the empty state; delete both then.
+/** Why no version is visible, with its one action (3.11). */
 export function blockedWords(reason: BlockedReason, count: number, window = true) {
   const w = choice.blocked[reason];
   const text = !window && "textNoWindow" in w ? w.textNoWindow : w.text;
   return { text: text.replace("{versions}", counted("versions", count)).replace("{versionsAre}", counted("versionsAre", count)), action: w.action };
+}
+
+/** No addon found a stream: the title page's wording. */
+export const noVersionWords = {
+  title: "No playable version found",
+  detail: "None of your addons found a stream for this. A source addon finds them; add one in Addons.",
+};
+
+/** Why nothing can play, and its actions in order (plans/play-every-version.md, the shared Step 3
+ * table): Play from this device with a kept source and Try again when no source answered, else the
+ * kind's one action. Back follows every list. Choose a version is the player's and the title's,
+ * never Versions' own (`onVersions`). */
+export function emptyWords(e: Pick<EmptyVersions, "kind" | "action">, onVersions = false) {
+  const w: { text: string; action?: string } = choice.empty[e.kind];
+  const steps: { step: Exclude<EmptyAction, "none">; text: string }[] = [];
+  if (e.action === "playFromDevice") steps.push({ step: "playFromDevice", text: choice.empty.unreachable.playFromDevice });
+  if (e.kind === "unreachable") steps.push({ step: "tryAgain", text: choice.empty.unreachable.action });
+  else if (e.action !== "none" && e.action !== "playFromDevice" && w.action && !(onVersions && e.action === "chooseVersion")) steps.push({ step: e.action, text: w.action });
+  return { text: w.text, steps };
 }
 
 /** The recommended card's line: a version that plays in a window says so
@@ -801,14 +793,6 @@ export function choiceSummary(p: Pick<StreamPrefs, "sizeLimitBytes" | "minSeeder
 /** `displayHeight` to the core's screen class (3.3): an iPhone (1179 lines)
  * and a 1440 phone are 1080. */
 export const screenClass = (lines: number) => (lines >= 2000 ? 2160 : lines >= 1000 ? 1080 : lines >= 700 ? 720 : 480);
-
-/** No addon found a stream: one wording on the title page, Versions and the player. */
-export const noVersionWords = {
-  title: "No playable version found",
-  detail: "None of your addons found a stream for this. A source addon finds them; add one in Addons.",
-};
-
-/** Addons still answering past their time: "Torrentio is slow", "Torrentio, Comet are slow". */
 
 /** A raw reason from the core (its HTTP and addon errors, "network: error
  * sending request ...") as a sentence a viewer reads, with the raw text kept

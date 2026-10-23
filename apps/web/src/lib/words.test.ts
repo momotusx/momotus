@@ -1,12 +1,14 @@
 import { expect, test } from "bun:test";
-import { addonHost, hiddenSummary, nextVersion, languageName, pairingProblem, plainAddress, reasonText, problemWords, restartLine, serverHost, statusText, subtitleNote } from "./words";
+import { addonHost, nextVersion, languageName, pairingProblem, plainAddress, reasonText, problemWords, restartLine, serverHost, statusText, subtitleNote } from "./words";
 import shared from "../../../shared/stream-choice-words.json";
+import type { EmptyAction } from "../core/generated/EmptyAction";
+import type { EmptyKind } from "../core/generated/EmptyKind";
 import type { Learned } from "../core/generated/Learned";
 import type { ReasonLine } from "../core/generated/ReasonLine";
 import type { VersionsConditions } from "../core/generated/VersionsConditions";
 import {
   anyLearned,
-  blockedWords,
+  emptyWords,
   cardLine,
   choiceSummary,
   choiceWords,
@@ -33,12 +35,6 @@ test("status always has a word", () => {
   expect(statusText({ kind: "torrent", seeds: 45 })).toEqual({ tone: "warn", text: "Torrent, 45 seeds" });
   expect(statusText({ kind: "torrent", seeds: null }).text).toBe("Torrent");
   expect(statusText({ kind: "ready", service: null }).text).toBe("Ready");
-});
-
-test("hidden summary counts each reason", () => {
-  expect(hiddenSummary({ count: 20, byReason: [["wrongTitle", 19], ["wrongEpisode", 1]] })).toBe(
-    "19 are for other titles, 1 is another episode",
-  );
 });
 
 test("language codes become names", () => {
@@ -136,24 +132,26 @@ test("a window says its minutes ahead, or on mobile data that it keeps a short s
   expect(lineWords({ ...buffer, seeders: null, aheadMin: 10 }).details).toBe("40 GB, room for about 10 min ahead in 2.5 GB");
 });
 
-test("a hidden row with no room says so, or that it is too large for a storage with no windows", () => {
-  expect(hiddenSummary({ count: 2, byReason: [["noSpace", 2]] })).toBe("2 have no room to play here, even a few minutes at a time");
-  expect(hiddenSummary({ count: 3, byReason: [["noSpace", 1], ["tooLarge", 2]] }, false)).toBe("1 is too large for this storage, 2 are over your size limit");
-  expect(blockedWords("noSpace", 3, false).text).toBe("3 versions are too large for this storage.");
-  expect(blockedWords("noSpace", 1, false).text).toBe("1 version is too large for this storage.");
-  expect(blockedWords("nothingPlaysHere", 3, false).text).toBe("Found 3 versions, but none plays on this device.");
-});
-
 test("the recommended card shows the window's line, and no other line", () => {
   const buffer: ReasonLine = { kind: "buffer", seeders: 53, sizeBytes: 545 * 2 ** 20, aheadMin: 8, budgetBytes: 508 * 2 ** 20 };
   expect(cardLine({ line: buffer })).toEqual({ tone: "ok", text: "Plays without storing the whole file", details: "53 seeders, 545 MB, room for about 8 min ahead in 508 MB" });
   expect(cardLine({ line: { kind: "quick", seeders: 53, sizeBytes: GiB } })).toBeNull();
 });
 
-test("the blocked state counts the versions it found", () => {
-  expect(blockedWords("needsAccount", 1).text).toStartWith("Marquee found 1 version. This version of the app");
-  expect(blockedWords("nothingPlaysHere", 42)).toEqual({ text: "Found 42 versions, but none plays on this device.", action: "Show them" });
-  expect(blockedWords("noSpace", 3).text).toBe("Marquee found 3 versions, but this device is nearly full, so none can play here.");
+test("every zero-playable state reads its shared line with its actions in the table's order", () => {
+  const steps = (kind: EmptyKind, action: EmptyAction, onVersions = false) => emptyWords({ kind, action }, onVersions).steps.map((s) => s.text);
+  expect(emptyWords({ kind: "noSource", action: "settingsAddons" }).text).toBe("Add a source in Settings");
+  expect(steps("noSource", "settingsAddons")).toEqual(["Settings"]);
+  expect(steps("unreachable", "playFromDevice")).toEqual(["Play from this device", "Try again"]);
+  expect(steps("unreachable", "tryAgain")).toEqual(["Try again"]);
+  expect(steps("needsAccount", "settingsAccounts")).toEqual(["Settings"]);
+  expect(steps("nothingPlaysHere", "chooseVersion")).toEqual(["Choose a version"]);
+  // Choose a version is the player's and the title's, never Versions' own.
+  expect(steps("nothingPlaysHere", "chooseVersion", true)).toEqual([]);
+  for (const kind of ["noRoom", "kidsNothing", "noResults"] as const) {
+    expect(steps(kind, "none")).toEqual([]);
+    expect(emptyWords({ kind, action: "none" }).text).toBe(shared.empty[kind].text);
+  }
   expect(counted("versions", 2000)).toBe("2,000 versions");
 });
 

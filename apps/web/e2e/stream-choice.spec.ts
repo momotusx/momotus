@@ -11,6 +11,8 @@
 import { type Browser, type BrowserContext, expect, type Page, test } from "@playwright/test";
 import type { ChildProcess } from "node:child_process";
 import { readFileSync } from "node:fs";
+import type { EmptyAction } from "../src/core/generated/EmptyAction";
+import type { EmptyKind } from "../src/core/generated/EmptyKind";
 import type { Prefs } from "../src/core/generated/Prefs";
 import type { StreamConditions } from "../src/core/generated/StreamConditions";
 import type { VersionsSnapshot } from "../src/core/generated/VersionsSnapshot";
@@ -345,18 +347,79 @@ test.describe("Versions", () => {
     expect(page.url()).toBe(url);
   });
 
-  /** Every version as blocked for `reason` (3.11), for a reason this build's
-   * core cannot reach on its own. */
-  const blockedAs = (reason: "nothingPlaysHere") => (s: VersionsSnapshot): VersionsSnapshot => {
+  /** The core's zero-playable state `kind` (plans/play-every-version.md 2a), put on the
+   * snapshot once the view is done, for a state this build's core does not reach here. The
+   * states that list rows list every version found; `key` is the kept version. */
+  const emptyAs = (kind: EmptyKind, action: EmptyAction, key = false) => (s: VersionsSnapshot): VersionsSnapshot => {
     const rows = [...(s.recommended ? [s.recommended] : []), ...s.rows];
-    return rows.length && s.done ? { ...s, recommended: null, rows: [], blocked: { reason, count: rows.length, rows } } : s;
+    const listed = kind === "nothingPlaysHere" || kind === "needsAccount";
+    if (!s.done || !rows.length) return s;
+    return { ...s, recommended: null, rows: [], empty: { kind, action, count: listed ? rows.length : 0, rows: listed ? rows : [], key: key ? (rows[0]?.key ?? null) : null } };
   };
+  const words = JSON.parse(readFileSync(new URL("../../shared/stream-choice-words.json", import.meta.url), "utf8")) as { empty: Record<EmptyKind, { text: string }> };
+  // Every state, its actions on Versions, then in the player (the shared Step 3 table).
+  const STATES: [EmptyKind, EmptyAction, boolean, string[], string[]][] = [
+    ["noSource", "settingsAddons", false, ["Settings", "Back"], ["Settings", "Back"]],
+    ["unreachable", "playFromDevice", true, ["Play from this device", "Try again", "Back"], ["Play from this device", "Try again", "Back"]],
+    ["unreachable", "tryAgain", false, ["Try again", "Back"], ["Try again", "Back"]],
+    ["noRoom", "none", false, ["Back"], ["Back"]],
+    ["needsAccount", "settingsAccounts", false, ["Settings", "Back"], ["Settings", "Back"]],
+    ["kidsNothing", "none", false, ["Back"], ["Back"]],
+    ["noResults", "none", false, ["Back"], ["Back"]],
+    ["nothingPlaysHere", "chooseVersion", false, ["Back"], ["Choose a version", "Back"]],
+  ];
+
+  test("every zero-playable state: the core's line in the reserved status line, its actions in the table's order, the first focused", async ({ browser }) => {
+    let state: (s: VersionsSnapshot) => VersionsSnapshot = (s) => s;
+    const tv = await device(browser, "tv", PORTS.bridge, { versions: (s) => state(s) });
+    const desk = await device(browser, "desktop", PORTS.bridge, { versions: (s) => state(s) });
+    const rects = () =>
+      desk.evaluate(() => [".vhead", ".vstatus"].map((q) => JSON.stringify(document.querySelector(q)?.getBoundingClientRect())));
+    // The header and its status line as a page with versions draws them.
+    await desk.goto(path("desktop"));
+    await expect(desk.locator(".vrow").first()).toBeVisible({ timeout: 60_000 });
+    await expect(desk.locator(".vstatus")).toHaveText("");
+    const listed = await rects();
+    for (const [kind, action, key, onVersions, inPlayer] of STATES) {
+      state = emptyAs(kind, action, key);
+      const text = words.empty[kind].text;
+      await tv.goto(path("tv"));
+      await expect(tv.locator(".vstatus")).toHaveText(text, { timeout: 60_000 });
+      await expect(tv.locator(".pick .blocked .btn")).toHaveText(onVersions);
+      // Back leads when it is the one action.
+      if (onVersions.length === 1) await expect(tv.locator('[data-f="versions:back"]')).toHaveClass(/\bprimary\b/);
+      await expect.poll(() => focused(tv)).toBe(await tv.locator(".pick .blocked .btn").first().getAttribute("data-f"));
+      if (kind === "noSource") await expect(tv.locator('[data-f="versions:settings"]')).toHaveAttribute("href", "/addons");
+      if (kind === "needsAccount") await expect(tv.locator('[data-f="versions:settings"]')).toHaveAttribute("href", "/debrid");
+      // Rows only where the table lists them.
+      if (kind === "nothingPlaysHere" || kind === "needsAccount") await expect(tv.locator(".vrow.dim").first()).toBeVisible();
+      else await expect(tv.locator(".vrow")).toHaveCount(0);
+      // Nothing moves: the line sits in the slot reserved from the first paint.
+      await desk.goto(path("desktop"));
+      await expect(desk.locator(".vstatus")).toHaveText(text, { timeout: 60_000 });
+      expect(await rects()).toEqual(listed);
+      // The player's card: the same line, its actions (Choose a version is the player's).
+      await tv.goto(`/play/series/${GOT.id}/${GOT.resume}?form=tv`);
+      const card = tv.locator(".endcard");
+      await expect(card.locator(".st")).toHaveText(text, { timeout: 60_000 });
+      await expect(card.locator(".acts .btn")).toHaveText(inPlayer);
+      if (inPlayer.length === 1) await expect(tv.locator('[data-f="player:back"]')).toHaveClass(/\bprimary\b/);
+      await expect.poll(() => focused(tv)).toBe(await card.locator(".acts .btn").first().getAttribute("data-f"));
+    }
+    // Play from this device starts the kept version.
+    state = emptyAs("unreachable", "playFromDevice", true);
+    await desk.goto(path("desktop"));
+    await desk.locator('[data-f="versions:device"]').click({ timeout: 60_000 });
+    await expect(desk).toHaveURL(new RegExp(`/play/series/${GOT.id}/`));
+    await tv.context().close();
+    await desk.context().close();
+  });
 
   test("blocked, nothing plays here: the status line says why, the rows are listed dimmed, Back is the one action", async ({ browser }) => {
     for (const form of ["tv", "phone"] as const) {
-      const page = await device(browser, form, PORTS.bridge, { versions: blockedAs("nothingPlaysHere") });
+      const page = await device(browser, form, PORTS.bridge, { versions: emptyAs("nothingPlaysHere", "chooseVersion") });
       await page.goto(path(form));
-      await expect(page.locator(".vstatus")).toHaveText(/^Found \d+ versions?, but none plays on this device\.$/, { timeout: 60_000 });
+      await expect(page.locator(".vstatus")).toHaveText("None of these plays on this device", { timeout: 60_000 });
       // The header counts what was found.
       await expect(page.locator(".vstate")).toHaveText(/^\d+ versions?$/);
       await expect(page.locator(".vstate")).not.toHaveText("0 versions");
@@ -372,7 +435,7 @@ test.describe("Versions", () => {
       await shot(page, "stream-choice-blocked", form);
       // The player sends this reason to Versions: no account to add.
       await page.goto(`/play/series/${GOT.id}/${GOT.resume}?form=${form}`);
-      await expect(page.locator(".player-scr")).toContainText("none plays on this device", { timeout: 60_000 });
+      await expect(page.locator(".player-scr")).toContainText("None of these plays on this device", { timeout: 60_000 });
       await expect(page.locator('[data-f="player:account"]')).toHaveCount(0);
       await expect(page.locator('[data-f="player:versions"]')).toHaveClass(/\bprimary\b/);
       await page.context().close();
@@ -384,10 +447,7 @@ test.describe("Versions", () => {
     // account: the core blocks every row (no answer is changed here).
     const page = await device(browser, "desktop", PORTS.bridge);
     await page.goto(`/title/series/${GOT.id}/versions/${GOT.id}:1:1?form=desktop`);
-    await expect(page.locator(".vstatus")).toHaveText(
-      /^Marquee found \d+ versions?\. This version of the app plays them only through a streaming service account \(Real-Debrid, TorBox, AllDebrid or Premiumize\)\. Add one in Settings\.$/,
-      { timeout: 60_000 },
-    );
+    await expect(page.locator(".vstatus")).toHaveText("These play through a streaming account", { timeout: 60_000 });
     await expect(page.locator(".vstate")).toHaveText(/^\d+ versions?$/);
     await expect(page.locator(".vstate")).not.toHaveText("0 versions");
     // Settings (the accounts screen), then Back; never "Add an account" or "Show them".
@@ -412,7 +472,7 @@ test.describe("Versions", () => {
     // The player, opened straight (a deep link), says the same (no playback is opened): Settings,
     // then Back, never "Add an account" (accounts live in Settings).
     await page.goto(`/play/movie/${SHAWSHANK}/${SHAWSHANK}?form=desktop`);
-    await expect(page.locator(".player-scr")).toContainText("only through a streaming service account", { timeout: 60_000 });
+    await expect(page.locator(".player-scr")).toContainText("These play through a streaming account", { timeout: 60_000 });
     const open = page.locator('[data-f="player:settings"]');
     await expect(open).toHaveText("Settings");
     await expect(open).toHaveAttribute("href", "/debrid");
@@ -454,25 +514,25 @@ test.describe("Versions", () => {
     try {
       // While the card shows: an account added elsewhere (another device, another tab) moves it on.
       await page.goto(film);
-      await expect(screen).toContainText("only through a streaming service account", { timeout: 60_000 });
+      await expect(screen).toContainText("These play through a streaming account", { timeout: 60_000 });
       const before = sent.length;
       const other = await device(browser, "desktop", PORTS.bridge);
       await other.goto("/debrid?form=desktop");
       await connect(other);
-      await expect(screen).not.toContainText("only through a streaming service account", { timeout: 30_000 });
+      await expect(screen).not.toContainText("These play through a streaming account", { timeout: 30_000 });
       await expect.poll(() => started(before), { timeout: 30_000 }).toBe(true);
       await disconnect(other);
       await other.context().close();
       // From the card: Settings, a key, and Back to the play, which starts.
       await page.goto(film);
-      await expect(screen).toContainText("only through a streaming service account", { timeout: 60_000 });
+      await expect(screen).toContainText("These play through a streaming account", { timeout: 60_000 });
       const again = sent.length;
       await page.locator('[data-f="player:settings"]').click();
       await expect(page).toHaveURL(/\/debrid/);
       await connect(page);
       await page.goBack();
       await expect(page).toHaveURL(/\/play\/movie\//);
-      await expect(screen).not.toContainText("only through a streaming service account", { timeout: 30_000 });
+      await expect(screen).not.toContainText("These play through a streaming account", { timeout: 30_000 });
       await expect.poll(() => started(again), { timeout: 30_000 }).toBe(true);
     } finally {
       // The rest of this spec runs with no account.

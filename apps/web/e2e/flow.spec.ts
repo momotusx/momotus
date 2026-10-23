@@ -270,25 +270,22 @@ test("onboarding: one decision per step, Back walks the steps", async ({ page })
   await expect(page.locator(".check")).not.toContainText("Core");
 });
 
-test("no dead ends: Add a source when nothing plays, a card when nothing plays in the player", async ({ page }) => {
-  // Tom & Cherry: no addon here lists a version this browser can play.
+test("no dead ends: Add a source when nothing plays, a card with Back when nothing plays in the player", async ({ page }) => {
+  // Tom & Cherry: no addon here lists a version of it (the core's noResults).
   await page.goto("/title/movie/tt43718175?form=tv");
   const add = page.locator('[data-f="title:addsource"]');
   await expect(add).toHaveText("Add a source", { timeout: 60_000 });
   await expect(page.locator('[data-f="title:play"]')).toHaveCount(0);
   await expect.poll(() => focused(page)).toBe("title:addsource");
-  // One wording for it on the title page and in the player.
-  const none = "No playable version found";
-  const why = "None of your addons found a stream for this. A source addon finds them; add one in Addons.";
-  await expect(page.locator(".vline")).toContainText(`${none}. ${why}`);
+  // The title page keeps its own line until its empty-state step (design-web's).
+  await expect(page.locator(".vline")).toContainText("No playable version found");
+  // The player: the core's line.
+  const none = "No source has this yet";
 
-  // Straight into the player: a centered card offers a version or Back.
+  // Straight into the player: a centered card with the line and Back, its one action.
   await page.goto("/play/movie/tt43718175/tt43718175?form=tv");
   await expect(page.locator(".endcard .st")).toHaveText(none, { timeout: 60_000 });
-  await expect(page.locator(".endcard .end-detail")).toHaveText(why);
-  await expect.poll(() => focused(page)).toBe("player:versions");
-  await expect(page.locator('[data-f="player:versions"]')).toHaveText("Choose a version");
-  await page.keyboard.press("ArrowRight");
+  await expect(page.locator(".endcard .acts .btn")).toHaveText(["Back"]);
   await expect.poll(() => focused(page)).toBe("player:back");
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/title\/movie\/tt43718175/);

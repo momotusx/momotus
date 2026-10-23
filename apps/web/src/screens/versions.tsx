@@ -4,10 +4,8 @@ import Check from "lucide-solid/icons/check";
 import ChevronDown from "lucide-solid/icons/chevron-down";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import CircleCheck from "lucide-solid/icons/circle-check";
-import Settings from "lucide-solid/icons/settings";
 import OctagonAlert from "lucide-solid/icons/octagon-alert";
 import Play from "lucide-solid/icons/play";
-import Puzzle from "lucide-solid/icons/puzzle";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Sparkles from "lucide-solid/icons/sparkles";
 import TriangleAlert from "lucide-solid/icons/triangle-alert";
@@ -15,6 +13,7 @@ import Undo2 from "lucide-solid/icons/undo-2";
 import { createEffect, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { Backdrop } from "../components/art";
+import { EmptyActs } from "../components/empty-acts";
 import { KeyedPage } from "../components/keyed-page";
 import { Why } from "../components/why";
 import { op } from "../core/client";
@@ -29,18 +28,16 @@ import { bytes, decoded, playPath, playState, releaseParts, titlePath } from "..
 import { entryFrom } from "../history";
 import { onProfileReset } from "../core/profiles";
 import {
-  blockedWords,
   cardLine,
+  emptyWords,
   choiceWords,
   counted,
   groupLabel,
   groupOrder,
-  hiddenSummary,
   languageName,
   learnedNote,
   lineWords,
   nextVersion,
-  noVersionWords,
   qualityCell,
   qualityText,
   reasonText,
@@ -132,11 +129,11 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
   // Phone: a tap opens the row (its details and Play); elsewhere it plays.
   const [opened, setOpened] = createSignal<string | null>(null);
   const tapRow = (r: VersionRow) => (form() === "phone" ? setOpened(opened() === r.key ? null : r.key) : play(r.key));
-  // Blocked (plans/play-every-version.md, shared Step 3 table): the rows as they would rank once
-  // fixed, listed dimmed; an account's rows cannot be started here, the others are an attempt.
-  const blocked = () => snap()?.blocked ?? null;
-  const dimmed = () => !!blocked() && !pick();
-  const startable = () => blocked()?.reason !== "needsAccount";
+  // Why nothing can play (plans/play-every-version.md, the shared Step 3 table): the rows found, if
+  // any, listed dimmed as they would rank; an account's rows cannot be started here, the others are an attempt.
+  const empty = () => snap()?.empty ?? null;
+  const dimmed = () => !!empty()?.rows.length;
+  const startable = () => empty()?.kind !== "needsAccount";
   // The one-time learning note (3.9), until Undo.
   const [undone, setUndone] = createSignal(false);
   const note = () => {
@@ -178,7 +175,7 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
   // The rows listed now, and one group's of them. Sections come from the fixed
   // group order, so a late addon or a re-rank never rebuilds them: the
   // focused row keeps its element.
-  const listed = () => (dimmed() ? blocked()?.rows : snap()?.rows) ?? [];
+  const listed = () => (dimmed() ? empty()?.rows : snap()?.rows) ?? [];
   const rowsOf = (g: Group) => listed().filter((r) => r.group === g);
   const toggle = (g: Group) => {
     const next = new Set(open());
@@ -230,16 +227,16 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
   const count = () => {
     const s = snap();
     if (!s) return null;
-    if (s.blocked) return counted("versions", s.blocked.count);
-    const n = s.rows.length + (s.recommended ? 1 : 0);
+    const n = s.empty ? s.empty.count : s.rows.length + (s.recommended ? 1 : 0);
     return n ? counted("versions", n) : null;
   };
   const statusLine = () => {
     const s = snap();
     if (ctx.failure()) return "";
-    const b = blocked();
-    if (b && !pick()) return blockedWords(b.reason, b.count, s?.conditions.window).text;
-    if (!s || (!s.recommended && !s.rows.length && !s.done)) return versionsWords.finding;
+    const e = empty();
+    if (e) return emptyWords(e).text;
+    // Until a row or the core's answer (once every addon is done, it may still check a kept source).
+    if (!s || (!s.recommended && !s.rows.length)) return versionsWords.finding;
     if (s.pendingAddons.length || s.slowAddons.length) return versionsWords.slow;
     return "";
   };
@@ -291,27 +288,13 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
             </section>
           )}
         </Match>
-        <Match when={snap()?.done && !pick() && (snap()?.rows.length ?? 0) === 0 && !blocked()}>
-          <section class="vempty problem">
-            <h2>{noVersionWords.title}</h2>
-            <p>
-              <Show when={(snap()?.hidden.count ?? 0) > 0} fallback={noVersionWords.detail}>
-                Every result was hidden: {hiddenSummary(snap()?.hidden ?? { count: 0, byReason: [] }, snap()?.conditions.window)}.
-              </Show>
-            </p>
-            <A class="btn primary" href="/addons" data-f="versions:addons" data-autofocus>
-              <Puzzle aria-hidden />
-              Addons
-            </A>
-          </section>
-        </Match>
         <Match when={true}>
           <section class="pick" aria-label="Recommended version">
             <Show
               when={pick()}
               fallback={
                 <Show
-                  when={blocked()}
+                  when={empty()}
                   fallback={
                     <div class="pick-wait" aria-busy="true">
                       <p class="best">Best for this screen</p>
@@ -321,21 +304,19 @@ function VersionsPage(props: { kind: string; id: string; videoId: string; retry:
                     </div>
                   }
                 >
-                  {(b) => (
-                    // The line is the header's status line; here, the state's actions (the shared table).
-                    <div class="blocked acts">
-                      <Show when={b().reason === "needsAccount"}>
-                        <A class="btn primary" href="/debrid" data-f="versions:settings" data-autofocus>
-                          <Settings aria-hidden />
-                          {versionsWords.settings}
-                        </A>
-                      </Show>
-                      <button class="btn" classList={{ primary: b().reason !== "needsAccount" }} data-f="versions:back" data-autofocus={b().reason !== "needsAccount" ? "" : undefined} onClick={goBack}>
-                        <ArrowLeft aria-hidden />
-                        {versionsWords.back}
-                      </button>
-                    </div>
-                  )}
+                  {(e) => {
+                    const lone = () => !emptyWords(e(), true).steps.length;
+                    return (
+                      // The line is the header's status line; here, the state's actions (the shared table).
+                      <div class="blocked acts">
+                        <EmptyActs empty={e()} at="versions" onVersions retry={props.retry} play={play} />
+                        <button class="btn" classList={{ primary: lone() }} data-f="versions:back" data-autofocus={lone() ? "" : undefined} onClick={goBack}>
+                          <ArrowLeft aria-hidden />
+                          {versionsWords.back}
+                        </button>
+                      </div>
+                    );
+                  }}
                 </Show>
               }
             >
