@@ -1,5 +1,6 @@
 import Accessibility
 import AVFoundation
+import AetherEngine
 import Combine
 import Observation
 #if canImport(UIKit)
@@ -21,6 +22,11 @@ final class PlayerModel {
     /// (`playedOn`), so the next play of the version goes there first.
     @ObservationIgnored private var fellBack = false
     @ObservationIgnored private var loadedKey: String?
+    /// The engine's ids for the listed audio and file subtitle tracks, in `audioTracks` and `textTracks` order.
+    @ObservationIgnored private var engineAudioIDs: [Int] = []
+    @ObservationIgnored private var engineTextIDs: [Int] = []
+    /// On the second engine, the file subtitle's cues decoded so far (the engine hands the whole list each time).
+    private(set) var engineCues: [WebVTT.Cue] = []
     private(set) var playback: PlaybackSnapshot?
     /// Seconds.
     private(set) var position: Double = 0
@@ -210,6 +216,12 @@ final class PlayerModel {
     var showEndCard: Bool { ended || nextFailure != nil }
 
     func selectAudio(_ index: Int) {
+        if backend == .aether {
+            guard engineAudioIDs.indices.contains(index) else { return }
+            aether?.selectAudio(id: engineAudioIDs[index])
+            audioTrack = index
+            return
+        }
         guard let group = audioGroup, group.options.indices.contains(index) else { return }
         player.currentItem?.select(group.options[index], in: group)
         audioTrack = index
@@ -218,6 +230,15 @@ final class PlayerModel {
     /// Turns one of the file's own subtitles on, in place of an addon's: the
     /// viewer's pick for this play, which the core does not know of.
     func selectText(_ index: Int) {
+        if backend == .aether {
+            guard engineTextIDs.indices.contains(index) else { return }
+            choices.choseInFile()
+            selectSubtitle(nil)
+            aether?.selectText(id: engineTextIDs[index])
+            (textTrack, engineCues) = (index, [])
+            subtitleDelay = PlayerLayout.startFileDelay(textTrack: index, kept: outbox.kept)
+            return
+        }
         guard let group = textGroup, textOptions.indices.contains(index) else { return }
         choices.choseInFile()
         selectSubtitle(nil)
@@ -663,6 +684,10 @@ final class PlayerModel {
         }
         subtitle = track
         cues = []
+        if backend == .aether, textTrack != nil {
+            aether?.clearText()
+            (textTrack, engineCues) = (nil, [])
+        }
         if textTrack != nil, let group = textGroup, group.allowsEmptySelection {
             player.currentItem?.select(nil, in: group)
             textTrack = nil
@@ -697,8 +722,9 @@ final class PlayerModel {
     /// beside an addon track.
     var subtitleText: String? {
         _ = legibleLines
+        let fileAt = PlayerLayout.cueTime(position: position, delay: fileDelay)
         return PlayerLayout.overlayText(
-            file: legibleLog.text(at: PlayerLayout.cueTime(position: position, delay: fileDelay)),
+            file: backend == .aether ? WebVTT.text(at: fileAt, in: engineCues) : legibleLog.text(at: fileAt),
             addon: WebVTT.text(at: PlayerLayout.cueTime(position: position, delay: subtitleDelay), in: cues))
     }
 
@@ -919,6 +945,7 @@ final class PlayerModel {
             return
         }
         aether = session
+        (audioTracks, audioTrack, textTracks, textTrack, textTimeable, engineCues) = ([], nil, [], nil, [], [])
         let mine = { [weak self] in self.map { $0.generation == generation } ?? false }
         #if DEBUG
         let muted = DebugHooks.mute
@@ -934,14 +961,16 @@ final class PlayerModel {
             failed: { [weak self] words in
                 guard mine() else { return }
                 self?.fail(PlayerFailure(kind: "other", error: words), notice: "This source failed: \(words). Trying the next one.")
-            }))
+            },
+            tracks: { [weak self] tracks in if mine() { self?.engineTracks(tracks) } },
+            cues: { [weak self] cues in if mine() { self?.engineCues = cues } }))
         NowPlaying.activate()
     }
 
     private func engineTick(_ time: Double) {
         guard pendingStart == nil || time > 0 else { return }
+        // The overlay reads the engine's cues at each tick (every 0.1 s); no boundary observer.
         position = time
-        if position > edgesUntil { watchCueEdges() }
         if duration != publishedDuration { publishNowPlaying() }
         if playing, ContinuousClock.now - lastReport > .seconds(5) { report() }
     }
@@ -969,6 +998,47 @@ final class PlayerModel {
         fellBack = false
         // The core keeps it for this version on this device: its next play opens here first.
         Task { try? await core.command(sub, ["type": "playedOn", "key": key, "engine": Backend.aether.rawValue]) }
+    }
+
+    /// The file's tracks on the second engine; a forced-only subtitle shows by itself and is not a choice. Bitmap
+    /// subtitles (PGS, DVD, DVB) are listed but take no timing: the overlay draws text only.
+    private func engineTracks(_ tracks: AetherSession.Tracks) {
+        let (audioArrived, textArrived) = (engineAudioIDs.isEmpty && !tracks.audio.isEmpty, engineTextIDs.isEmpty)
+        engineAudioIDs = tracks.audio.map(\.id)
+        audioTracks = tracks.audio.enumerated().map { index, track in
+            Self.engineName(track, index: index, of: tracks.audio.count, one: "Default", many: "Track")
+        }
+        audioTrack = tracks.activeAudio.flatMap { engineAudioIDs.firstIndex(of: $0) }
+        let text = tracks.text.filter { !$0.isForced }
+        engineTextIDs = text.map(\.id)
+        textTracks = text.enumerated().map { index, track in
+            Self.engineName(track, index: index, of: text.count, one: "Subtitles", many: "Subtitles")
+        }
+        textTimeable = text.map { !["hdmv_pgs_subtitle", "dvd_subtitle", "dvb_subtitle"].contains($0.codec) }
+        textTrack = tracks.activeText.flatMap { engineTextIDs.firstIndex(of: $0) }
+        // As `loadTracks` does once AVPlayer has them: the picks carried over a reopen, then the file's timing.
+        if audioArrived, let index = carriedTracks?.audio {
+            carriedTracks?.audio = nil
+            selectAudio(index)
+        }
+        guard textArrived, !text.isEmpty else { return }
+        if subtitle == nil { subtitleDelay = PlayerLayout.startFileDelay(textTrack: textTrack, kept: outbox.kept) }
+        if let index = carriedTracks?.text {
+            carriedTracks?.text = nil
+            selectText(index)
+        }
+        #if DEBUG
+        if let index = DebugHooks.textTrack { selectText(index) }
+        #endif
+    }
+
+    /// A track's language name, else its place, as `names` does for AVPlayer's options.
+    private static func engineName(_ track: TrackInfo, index: Int, of count: Int, one: String, many: String) -> String {
+        if let language = track.language, !language.isEmpty, language != "und",
+           let name = Locale(identifier: "en").localizedString(forLanguageCode: language) {
+            return name
+        }
+        return count == 1 ? one : "\(many) \(index + 1)"
     }
 
     private func engineEnded() {

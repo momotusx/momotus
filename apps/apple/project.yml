@@ -216,6 +216,7 @@ targets:
       - path: Marquee/Core/DebridStore.swift
       - path: Marquee/Core/DebridAccounts.swift
       - path: Marquee/Player/WebVTT.swift
+      - path: Marquee/Player/AetherSession.swift
       - path: Marquee/Player/LegibleLog.swift
       - path: Marquee/Player/PlayerLayout.swift
       # The second engine's switch and routing (Tests/EngineChoiceTests.swift).

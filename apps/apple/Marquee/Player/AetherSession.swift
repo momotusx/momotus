@@ -17,6 +17,18 @@ final class AetherSession {
         var ended: () -> Void
         /// The engine could not play the source, in its own words; the model sends it to the core.
         var failed: (String) -> Void
+        /// The file's audio and subtitle tracks, and the one each plays.
+        var tracks: (Tracks) -> Void
+        /// The selected file subtitle's text cues around the playhead (images are not drawn here).
+        var cues: ([WebVTT.Cue]) -> Void
+    }
+
+    /// The file's tracks as the engine lists them.
+    struct Tracks {
+        var audio: [TrackInfo]
+        var activeAudio: Int?
+        var text: [TrackInfo]
+        var activeText: Int?
     }
 
     let engine: AetherEngine
@@ -60,6 +72,18 @@ final class AetherSession {
                 }
             }
             .store(in: &bag)
+        engine.$audioTracks.combineLatest(engine.$activeAudioTrackIndex, engine.$subtitleTracks, engine.$activeSubtitleTrackIndex)
+            .receive(on: DispatchQueue.main)
+            .sink { audio, activeAudio, text, activeText in
+                MainActor.assumeIsolated {
+                    if mine() { events.tracks(Tracks(audio: audio, activeAudio: activeAudio, text: text, activeText: activeText)) }
+                }
+            }
+            .store(in: &bag)
+        engine.$subtitleCues
+            .receive(on: DispatchQueue.main)
+            .sink { cues in MainActor.assumeIsolated { if mine() { events.cues(cues.compactMap(Self.cue)) } } }
+            .store(in: &bag)
         engine.$hasFirstFrameReadyForDisplay
             .receive(on: DispatchQueue.main)
             .sink { shown in MainActor.assumeIsolated { if mine(), shown { events.firstFrame() } } }
@@ -81,6 +105,19 @@ final class AetherSession {
             events.failed("the second player did not open this source within \(Int(openWithin / .seconds(1))) s")
         }
     }
+
+    /// A text cue as the overlay draws it; a bitmap cue is not text.
+    static func cue(_ cue: SubtitleCue) -> WebVTT.Cue? {
+        switch cue.body {
+        case .text(let text): WebVTT.Cue(start: cue.startTime, end: cue.endTime, text: text)
+        case .richText(let runs): WebVTT.Cue(start: cue.startTime, end: cue.endTime, text: runs.map(\.text).joined())
+        case .image: nil
+        }
+    }
+
+    func selectAudio(id: Int) { engine.selectAudioTrack(index: id) }
+    func selectText(id: Int) { engine.selectSubtitleTrack(index: id) }
+    func clearText() { engine.clearSubtitle() }
 
     func play() { engine.play() }
     func pause() { engine.pause() }

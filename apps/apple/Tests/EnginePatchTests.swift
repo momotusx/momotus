@@ -1,4 +1,5 @@
 import AetherEngine
+import CoreGraphics
 import Foundation
 import Testing
 
@@ -61,4 +62,16 @@ private let fixtures = URL(fileURLWithPath: #filePath).deletingLastPathComponent
     #expect(throws: (any Error).self) {
         _ = try AetherEngine.probe(url: fixtures.appending(path: "tiny.mkv"))
     }
+}
+
+/// The engine's cues as the overlay draws them: a styled cue reads as all its runs, a bitmap cue is not text.
+@MainActor @Test func aStyledCueReadsAsItsWholeText() throws {
+    let runs = [SubtitleTextRun(text: "two ", color: nil, isItalic: true), SubtitleTextRun(text: "runs", color: nil)]
+    let styled = try #require(AetherSession.cue(SubtitleCue(id: 1, startTime: 2, endTime: 3.5, body: .richText(runs))))
+    #expect((styled.start, styled.end, styled.text) == (2, 3.5, "two runs"))
+    #expect(AetherSession.cue(SubtitleCue(id: 2, startTime: 4, endTime: 5, body: .text("plain")))?.text == "plain")
+    let image = try #require(CGContext(data: nil, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+        space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)?.makeImage())
+    let bitmap = SubtitleCue(id: 3, startTime: 6, endTime: 7, body: .image(SubtitleImage(cgImage: image, position: .zero)))
+    #expect(AetherSession.cue(bitmap) == nil)
 }
