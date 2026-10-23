@@ -125,7 +125,6 @@ class StreamChoiceCopyTest {
                     "speedSource",
                     buildJsonObject {
                         put("measured", SPEED_MEASURED)
-                        put("estimated", SPEED_ESTIMATED)
                     },
                 )
                 put(
@@ -260,7 +259,6 @@ class StreamChoiceCopyTest {
                         put("screens", buildJsonObject { for ((cls, v) in SCREENS) put("$cls", v) })
                         put("hdr", SCREEN_HDR)
                         put("speed", SPEED)
-                        put("speedUnknown", SPEED_UNKNOWN)
                         put("free", FREE)
                         put("networks", buildJsonObject { for ((n, v) in NETWORKS) put(n.wire, v) })
                     },
@@ -371,11 +369,9 @@ class StreamChoiceCopyTest {
     }
 
     @Test
-    fun `may pause says where its speed comes from`() {
-        assertEquals(
-            "Needs about 32 Mbit/s; this connection gives about 18 (estimated)",
-            line(ReasonLine.MayPause(31.6f, 17.5f, 0)).details,
-        )
+    fun `may pause says a speed only once a playback measured it`() {
+        // Not measured yet: no speed, no "estimated".
+        assertEquals("", line(ReasonLine.MayPause(31.6f, 17.5f, 0)).details)
         assertEquals(
             "Needs about 79 Mbit/s; this connection gives about 25 (measured from 1 playback)",
             line(ReasonLine.MayPause(79f, 25f, 1)).details,
@@ -384,10 +380,14 @@ class StreamChoiceCopyTest {
     }
 
     @Test
-    fun `may pause on a small swarm says few people share it, and keeps the speed`() {
+    fun `may pause on a small swarm says few people share it, and keeps a measured speed`() {
         val small = line(ReasonLine.MayPause(31.6f, 17.5f, 0, smallSwarm = true))
         assertEquals("May pause: only a few people are sharing it", small.text)
-        assertEquals("Needs about 32 Mbit/s; this connection gives about 18 (estimated)", small.details)
+        assertEquals("", small.details)
+        assertEquals(
+            "Needs about 32 Mbit/s; this connection gives about 18 (measured from 2 playbacks)",
+            line(ReasonLine.MayPause(31.6f, 17.5f, 2, smallSwarm = true)).details,
+        )
         assertEquals("May pause on this connection", line(ReasonLine.MayPause(31.6f, 17.5f, 0)).text)
     }
 
@@ -451,7 +451,7 @@ class StreamChoiceCopyTest {
             StreamChoiceCopy.conditionsLine(2160, true, Network.Wifi, measured, 61 * gib),
         )
         assertEquals(
-            "1080p, mobile data, speed not measured yet",
+            "1080p, mobile data",
             StreamChoiceCopy.conditionsLine(1080, false, Network.Cellular, prior, null),
         )
         val v =
@@ -471,13 +471,13 @@ class StreamChoiceCopyTest {
         assertEquals("This TV: SD, about 42 Mbit/s on this network", StreamChoiceCopy.header(tv = true, v))
         // With an account, or without the engine, the HTTP one does.
         assertEquals(
-            "This phone: SD, this network, speed not measured yet",
+            "This phone: SD, this network",
             StreamChoiceCopy.header(tv = false, v.copy(account = true)),
         )
         assertEquals(prior, StreamChoiceCopy.speedFor(prior, measured, engine = false, account = false))
         // A network type from a newer core reads as "this network".
         assertEquals(
-            "1080p, this network, speed not measured yet",
+            "1080p, this network",
             StreamChoiceCopy.conditionsLine(1080, false, Network.Unknown, prior, null),
         )
     }

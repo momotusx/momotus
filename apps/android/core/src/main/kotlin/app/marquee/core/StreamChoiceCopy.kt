@@ -136,7 +136,6 @@ object StreamChoiceCopy {
         )
 
     const val SPEED_MEASURED = "measured from {playbacks}"
-    const val SPEED_ESTIMATED = "estimated"
 
     /**
      * By reason: the words and the one action. Shown nowhere since every page reads [EMPTY]; kept until the core
@@ -355,7 +354,6 @@ object StreamChoiceCopy {
     val SCREENS = mapOf(2160 to "4K", 1080 to "1080p", 720 to "720p", 480 to "SD")
     const val SCREEN_HDR = "{screen} HDR"
     const val SPEED = "about {mbps} Mbit/s on {network}"
-    const val SPEED_UNKNOWN = "{network}, speed not measured yet"
     const val FREE = "{free} free"
     val NETWORKS =
         mapOf(
@@ -431,14 +429,9 @@ object StreamChoiceCopy {
             }
 
             is ReasonLine.MayPause -> {
-                val source =
-                    if (l.samples >
-                        0
-                    ) {
-                        SPEED_MEASURED.replace("{playbacks}", counted("playbacks", l.samples))
-                    } else {
-                        SPEED_ESTIMATED
-                    }
+                // A speed is said only once a playback measured it; before that the details are left out.
+                val playbacks = if (l.samples > 0) counted("playbacks", l.samples) else null
+                val source = playbacks?.let { SPEED_MEASURED.replace("{playbacks}", it) }
                 "mayPause" to mapOf("need" to whole(l.needMbps), "have" to whole(l.haveMbps), "speedSource" to source)
             }
 
@@ -537,12 +530,9 @@ object StreamChoiceCopy {
     ): String {
         val screen = screenWord(screenClass)
         val net = NETWORKS[network] ?: NETWORKS.getValue(Network.Other)
-        val said =
-            if (speed.samples > 0) {
-                SPEED.replace("{mbps}", "${whole(speed.mbps)}").replace("{network}", net)
-            } else {
-                SPEED_UNKNOWN.replace("{network}", net)
-            }
+        // A speed only once a playback measured it; before that the network alone.
+        val measured = speed.samples > 0
+        val said = if (measured) SPEED.replace("{mbps}", "${whole(speed.mbps)}").replace("{network}", net) else net
         val free = freeBytes?.let { FREE.replace("{free}", Format.bytes(it)) }
         return listOfNotNull(if (hdr) SCREEN_HDR.replace("{screen}", screen) else screen, said, free).joinToString(", ")
     }
