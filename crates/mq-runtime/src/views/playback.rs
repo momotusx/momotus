@@ -1414,6 +1414,12 @@ impl PlaybackView {
                 s.played_ms += step;
             }
             s.advancing = step.is_some() && !paused;
+            // Playing on ends a stall whose `stalled(false)` never came: its
+            // watcher stands down, and a later stall counts as new.
+            if s.advancing && s.stall_on == Some(s.stall) {
+                s.stall += 1;
+                s.stall_on = None;
+            }
             s.reported_ms = Some(position_ms);
             if s.played_ms >= PLAYED_PAST_START.as_millis() as u64 {
                 s.progressed = true;

@@ -2104,6 +2104,44 @@ async fn a_stall_ends_with_its_source() {
     assert!(!s.choose_another);
 }
 
+/// 2e, review 2026-10-23: playing on ends a stall whose "stalled: false"
+/// never came. The first stall's clock stops, and a later real stall gets
+/// its own 30 s instead of being taken for a repeat.
+#[tokio::test]
+async fn playing_on_ends_a_stall_the_player_did_not_end() {
+    let row = |name| (name, media_fixture("h264.mp4"));
+    let (core, _server, keys) = direct_rows(vec![
+        row("Show.S01E01.1080p.WEB-DL.x264-ONE"),
+        row("Show.S01E01.720p.WEB-DL.x264-TWO"),
+    ])
+    .await;
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    let playback = play(&core, &view, &keys[0]);
+    until("ready", || playback.snapshot().url.is_some()).await;
+    for at in [10_000, 12_000] {
+        playback.report_progress(at, 600_000, false);
+    }
+    let begun = Instant::now();
+    playback.stalled(true, 12_500);
+    // It plays on with no "stalled: false", then stalls for real.
+    tokio::time::sleep(Duration::from_secs(5)).await;
+    for at in [14_000, 16_000] {
+        playback.report_progress(at, 600_000, false);
+    }
+    tokio::time::sleep(Duration::from_secs(5)).await;
+    playback.stalled(true, 16_500);
+    until("the move", || {
+        playback.snapshot().key.as_ref() == Some(&keys[1])
+    })
+    .await;
+    let took = begun.elapsed();
+    assert!(
+        took >= Duration::from_secs(39),
+        "the first stall's clock: {took:?}"
+    );
+    assert_eq!(playback.snapshot().resume_ms, Some(16_500));
+}
+
 /// 2e, bench EW-3's shape: a stall right after a seek (17.2 s there) never
 /// moves the version, however long it lasts; "Choose another version"
 /// shows after 30 s. A version picked by hand never moves either.
