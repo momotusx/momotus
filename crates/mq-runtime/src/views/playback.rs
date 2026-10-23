@@ -20,7 +20,7 @@ use mq_relparse::fit;
 use mq_server::{Format, Lease, SubtitleSlot, SubtitleTrouble, Upstream};
 use mq_streams::{DeviceCaps, ParsedStream};
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::time::{Duration, Instant};
@@ -103,6 +103,12 @@ pub struct PlaybackSnapshot {
     /// Null otherwise. The user's own pick, or Off, always wins: send
     /// `subtitleChosen` (plans/m13-subtitle-languages.md 6).
     pub auto_subtitle: Option<String>,
+    /// Every track the start subtitle could turn on failed to read: each
+    /// one that failed handed over to the next best (its language's next,
+    /// then the next language, as `autoSubtitle` changes) and none was
+    /// left. A neutral state with no source: the apps show
+    /// `player.subtitlesFailed` from apps/shared/stream-choice-words.json.
+    pub start_subtitle_failed: bool,
     /// The next released episode, for an Up Next card.
     pub next: Option<NextEpisode>,
     /// The playing stream's binge group; pass it as `bingeGroup` when opening
@@ -687,6 +693,13 @@ struct State {
     /// This source's start subtitle is decided: a slower source's tracks
     /// still list, but never change it.
     start_settled: bool,
+    /// What the start subtitle was decided with, to pick the next best
+    /// when its file cannot be read.
+    start_wants: Option<StartWants>,
+    /// The start subtitles that failed in this source's play: the next one
+    /// is picked from the rest. An unreachable one stays listed (it may
+    /// load when picked again), so the list alone cannot tell.
+    start_tried: HashSet<String>,
     /// The subtitle delay the title remembers for the playing version and
     /// video: the track's origin (`SubtitleTrack::origin`) and its ms.
     delay: Option<(String, i32)>,
@@ -766,6 +779,7 @@ impl State {
                 subtitles_pending: false,
                 subtitle_notes: Vec::new(),
                 auto_subtitle: None,
+                start_subtitle_failed: false,
                 next: None,
                 binge_group: None,
                 segments: Vec::new(),
@@ -816,6 +830,8 @@ impl State {
             playing: OwnedPlaying::default(),
             subtitle_picked: false,
             start_settled: false,
+            start_wants: None,
+            start_tried: HashSet::new(),
             delay: None,
             start_base: 0.0,
             source_since: tokio::time::Instant::now(),
@@ -1236,7 +1252,8 @@ impl PlaybackView {
             (None, None) => Some(OFF.to_owned()),
         };
         s.subtitle_picked = true;
-        if s.snapshot.auto_subtitle.take().is_some() {
+        let failed = std::mem::take(&mut s.snapshot.start_subtitle_failed);
+        if s.snapshot.auto_subtitle.take().is_some() || failed {
             self.snapshot.set(s.snapshot.clone());
         }
         let binge_group = s.snapshot.binge_group.clone();
@@ -1878,10 +1895,13 @@ fn release_all(s: &mut State) {
     s.snapshot.subtitles.clear();
     s.snapshot.subtitle_notes.clear();
     s.snapshot.auto_subtitle = None;
+    s.snapshot.start_subtitle_failed = false;
     // A pick was of this source's tracks: the next one's settle may turn on
     // the title's remembered choice again.
     s.subtitle_picked = false;
     s.start_settled = false;
+    s.start_wants = None;
+    s.start_tried.clear();
     s.order.clear();
     s.lease = None;
 }
@@ -3987,7 +4007,11 @@ fn listen_for_trouble(
             return;
         };
         let mut s = lock(&state);
-        if current(&s, run) && note_trouble(&mut s.snapshot, url, trouble) {
+        // Unreadable or not answering, the start subtitle hands over.
+        if current(&s, run)
+            && (start_track_failed(&mut s, url, trouble == SubtitleTrouble::Unreadable)
+                || note_trouble(&mut s.snapshot, url, trouble))
+        {
             snapshot.set(s.snapshot.clone());
         }
     });
@@ -4011,6 +4035,41 @@ fn note_trouble(snapshot: &mut PlaybackSnapshot, url: &str, trouble: SubtitleTro
     };
     let removed = trouble == SubtitleTrouble::Unreadable;
     add_note(snapshot, source, problem) || removed
+}
+
+/// The start subtitle's file cannot be read (`unreadable`: it leaves the
+/// list) or did not come (it stays listed, as it may load when picked
+/// again): the next best track not tried yet takes its place as
+/// `autoSubtitle`, with no note and no source named, as subtitles are never
+/// left to a manual pick; with none left, `start_subtitle_failed`, the list
+/// kept. False for any other track (the viewer's own pick keeps its note
+/// and stays theirs).
+fn start_track_failed(s: &mut State, url: &str, unreadable: bool) -> bool {
+    if s.snapshot.auto_subtitle.as_deref() != Some(url) {
+        return false;
+    }
+    if unreadable {
+        s.snapshot.subtitles.retain(|t| t.url != url);
+    }
+    s.start_tried.insert(url.to_owned());
+    // ponytail: a copy of the untried tracks, a few dozen at most.
+    let tracks: Vec<SubtitleTrack> = s
+        .snapshot
+        .subtitles
+        .iter()
+        .filter(|t| !s.start_tried.contains(&t.url))
+        .cloned()
+        .collect();
+    let tracks = &tracks;
+    // The title's remembered language spent, the profile's languages in
+    // order: subtitles are never left to a manual pick.
+    let next = s.start_wants.as_ref().and_then(|w| {
+        auto_subtitle(w.remembered.as_deref(), &w.explicit, &w.audio, tracks)
+            .or_else(|| auto_subtitle(None, &w.explicit, &w.audio, tracks))
+    });
+    s.snapshot.start_subtitle_failed = next.is_none();
+    s.snapshot.auto_subtitle = next;
+    true
 }
 
 /// Adds the note once; false when it was there.
@@ -4220,7 +4279,22 @@ impl BuiltInFetch {
         }
         let state = self.state.upgrade()?;
         let mut s = lock(&state);
-        if current(&s, self.run) && note_fetched(&mut s.snapshot, self.url.get(), &fetched) {
+        // A file that cannot be read or did not come: the start subtitle
+        // hands over (the site's blocks and changes keep their notes).
+        let fault = matches!(fetched, mq_turkcealtyazi::Fetched::Fault { .. });
+        let gone = fault
+            || matches!(
+                fetched,
+                mq_turkcealtyazi::Fetched::Problem(mq_turkcealtyazi::Problem::Unreachable)
+            );
+        if current(&s, self.run)
+            && ((gone
+                && self
+                    .url
+                    .get()
+                    .is_some_and(|u| start_track_failed(&mut s, u, fault)))
+                || note_fetched(&mut s.snapshot, self.url.get(), &fetched))
+        {
             self.snapshot.set(s.snapshot.clone());
         }
         None
@@ -4397,6 +4471,7 @@ fn audio_of(probed: Probed, stream: &ParsedStream) -> Vec<String> {
 /// What the start subtitle is chosen with, read once per settle: the
 /// title's remembered choice, the profile's subtitle languages and the
 /// audio's.
+#[derive(Clone)]
 struct StartWants {
     remembered: Option<String>,
     explicit: Vec<String>,
@@ -4466,6 +4541,7 @@ fn settle_start(
         return false;
     }
     s.start_settled = true;
+    s.start_wants = Some(wants.clone());
     s.snapshot.auto_subtitle = pick;
     if last {
         s.snapshot.subtitles_pending = false;

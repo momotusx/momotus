@@ -567,6 +567,51 @@ async fn a_site_problem_or_a_bad_file_leaves_a_note() {
         .map(|n| (n.source.as_str(), n.problem))
         .collect();
     assert_eq!(notes, [(NAME, SubtitleProblem::TrackFailed)]);
+
+    // The same file as the start subtitle: it hands over to the next best
+    // with no note (or ends neutral with none left), naming no source.
+    let core = core_at(port);
+    core.set_prefs(&serde_json::json!({ "subtitleLanguages": ["tur"] }))
+        .unwrap();
+    install(&core, &[built_in_row(), row(&own, "own", "stream", true)]);
+    let view = PlaybackView::open(&core, listed(&own, &streams), s01e01());
+    let s = until(&view, "the start subtitle", |s| {
+        settled(s) && s.auto_subtitle.is_some()
+    })
+    .await;
+    let start = s.auto_subtitle.clone().unwrap();
+    let vtt = http.get(&start, &local).await.unwrap();
+    assert_eq!(&vtt.body[..], b"WEBVTT\n\n");
+    let after = until(&view, "the hand-over", |s| {
+        s.auto_subtitle.as_ref() != Some(&start)
+    })
+    .await;
+    assert!(after.subtitles.iter().all(|t| t.url != start), "{after:?}");
+    assert!(after.subtitle_notes.is_empty(), "{after:?}");
+    assert!(after.auto_subtitle.is_some() || after.start_subtitle_failed);
+
+    // A file the site does not answer for (a 503) hands over the same way,
+    // and stays listed.
+    let (port, _) =
+        site(|r| (r.method == "POST").then(|| reply("503 Service Unavailable", &[], b"down")));
+    let core = core_at(port);
+    core.set_prefs(&serde_json::json!({ "subtitleLanguages": ["tur"] }))
+        .unwrap();
+    install(&core, &[built_in_row(), row(&own, "own", "stream", true)]);
+    let view = PlaybackView::open(&core, listed(&own, &streams), s01e01());
+    let s = until(&view, "the start subtitle", |s| {
+        settled(s) && s.auto_subtitle.is_some()
+    })
+    .await;
+    let start = s.auto_subtitle.clone().unwrap();
+    let vtt = http.get(&start, &local).await.unwrap();
+    assert_eq!(&vtt.body[..], b"WEBVTT\n\n");
+    let after = until(&view, "the hand-over", |s| {
+        s.auto_subtitle.as_ref() != Some(&start)
+    })
+    .await;
+    assert!(after.subtitle_notes.is_empty(), "{after:?}");
+    assert!(after.subtitles.iter().any(|t| t.url == start), "{after:?}");
 }
 
 #[tokio::test]

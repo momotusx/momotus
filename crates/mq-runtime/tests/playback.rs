@@ -298,7 +298,7 @@ async fn subtitle_tracks_take_their_reach_from_their_install() {
 }
 
 /// A loopback origin with a one-byte video, `/down.srt` and `/down2.srt`
-/// answering 502, and anything else 200 with no cues.
+/// answering 502, `/good.srt` one cue, and anything else 200 with no cues.
 async fn failing_subtitles() -> String {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
@@ -312,6 +312,8 @@ async fn failing_subtitles() -> String {
                     ("206 Partial Content\r\nContent-Range: bytes 0-0/10", "M")
                 } else if head.starts_with("GET /down") {
                     ("502 Bad Gateway", "")
+                } else if head.starts_with("GET /good") {
+                    ("200 OK", "1\n00:00:01,000 --> 00:00:02,000\nHello\n")
                 } else {
                     ("200 OK", "no cues in here")
                 };
@@ -377,6 +379,232 @@ async fn a_failing_subtitle_leaves_a_note() {
     .await;
     assert!(next.subtitle_notes.is_empty(), "{next:?}");
     assert_eq!(next.subtitles.len(), 3);
+}
+
+/// Opens Sintel on `failing_subtitles` with the stream's own `subtitles`
+/// (`[lang, path]`), the profile's subtitle languages `languages`, and
+/// waits for the list to settle.
+async fn start_with_files(
+    languages: &[&str],
+    files: &[[&str; 2]],
+) -> (PlaybackView, PlaybackSnapshot) {
+    let core = Core::temporary("p").unwrap();
+    core.set_prefs(&serde_json::json!({ "subtitleLanguages": languages }))
+        .unwrap();
+    open_files(&core, files).await
+}
+
+/// Opens Sintel on `failing_subtitles` with the stream's own `subtitles`
+/// on `core`, and waits for the list to settle.
+async fn open_files(core: &Core, files: &[[&str; 2]]) -> (PlaybackView, PlaybackSnapshot) {
+    let base = failing_subtitles().await;
+    let subs: Vec<_> = files
+        .iter()
+        .enumerate()
+        .map(|(i, [lang, path])| serde_json::json!({"id": i.to_string(), "lang": lang, "url": format!("{base}/{path}")}))
+        .collect();
+    let streams =
+        serde_json::json!({"streams": [{"url": format!("{base}/video.mkv"), "subtitles": subs}]})
+            .to_string();
+    let view = PlaybackView::open(core, setup(core, &streams), target());
+    let s = settled_list(&view).await;
+    (view, s)
+}
+
+/// The player loads the start subtitle's URL, as the apps do, and gets
+/// its body; then the snapshot once the core has heard how it went.
+async fn load_start(view: &PlaybackView, s: &PlaybackSnapshot) -> (String, PlaybackSnapshot) {
+    let url = s.auto_subtitle.clone().expect("a start subtitle");
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let local = RequestOptions {
+        allow_private: true,
+        ..Default::default()
+    };
+    let body = http.get(&url, &local).await.unwrap().body;
+    let body = String::from_utf8_lossy(&body).into_owned();
+    if body.contains("Hello") {
+        return (body, view.snapshot());
+    }
+    let next = until(view, "the start subtitle moved on", |n| {
+        n.auto_subtitle.as_deref() != Some(url.as_str())
+    })
+    .await;
+    (body, next)
+}
+
+/// The Mac walk: a start subtitle whose file cannot be read hands over to
+/// its language's next best track with no note and no source named, so
+/// two unreadable files then a good one end with the good one on.
+#[tokio::test]
+async fn an_unreadable_start_subtitle_hands_over_to_the_next_best() {
+    let (view, s) = start_with_files(
+        &["eng"],
+        &[
+            ["eng", "bad1.srt"],
+            ["eng", "bad2.srt"],
+            ["eng", "good.srt"],
+        ],
+    )
+    .await;
+    let (body, s) = load_start(&view, &s).await;
+    assert_eq!(body, "WEBVTT\n\n");
+    let (body, s) = load_start(&view, &s).await;
+    assert_eq!(body, "WEBVTT\n\n");
+    let (body, s) = load_start(&view, &s).await;
+    assert!(body.contains("Hello"), "{body}");
+    assert_eq!(s.subtitles.len(), 1, "the two unreadable left: {s:?}");
+    assert_eq!(s.auto_subtitle.as_ref(), Some(&s.subtitles[0].url));
+    assert!(
+        s.subtitle_notes.is_empty(),
+        "no note: {:?}",
+        s.subtitle_notes
+    );
+    assert!(!s.start_subtitle_failed);
+}
+
+/// A start subtitle whose file does not answer (a 502 here, as a timeout)
+/// hands over as an unreadable one does, with no note, and stays listed:
+/// it may load when picked again (review P2). With every one unreachable
+/// the start ends neutral and the list stays whole.
+#[tokio::test]
+async fn an_unreachable_start_subtitle_hands_over_too() {
+    let (view, s) = start_with_files(&["eng"], &[["eng", "down.srt"], ["eng", "good.srt"]]).await;
+    let down = s.auto_subtitle.clone().unwrap();
+    let (body, s) = load_start(&view, &s).await;
+    assert_eq!(body, "WEBVTT\n\n");
+    let (body, s) = load_start(&view, &s).await;
+    assert!(body.contains("Hello"), "{body}");
+    assert_eq!(s.subtitles.len(), 2, "the unreachable one stays: {s:?}");
+    assert!(s.subtitles.iter().any(|t| t.url == down));
+    assert!(
+        s.subtitle_notes.is_empty(),
+        "no note: {:?}",
+        s.subtitle_notes
+    );
+
+    let (view, mut s) =
+        start_with_files(&["eng"], &[["eng", "down.srt"], ["eng", "down2.srt"]]).await;
+    // The network down: every start track unreachable, each tried once.
+    let mut picked = Vec::new();
+    while let Some(url) = s.auto_subtitle.clone() {
+        picked.push(url);
+        let (_, next) = load_start(&view, &s).await;
+        s = next;
+    }
+    assert_eq!(picked.len(), 2, "none picked twice: {picked:?}");
+    assert_ne!(picked[0], picked[1]);
+    assert!(s.start_subtitle_failed, "{s:?}");
+    assert_eq!(s.subtitles.len(), 2, "both stay listed, still pickable");
+}
+
+/// The viewer's own pick stays theirs: when its file cannot be read it
+/// leaves the list with its note, and nothing else turns on.
+#[tokio::test]
+async fn a_hand_picked_unreadable_track_never_hands_over() {
+    let (view, s) = start_with_files(&["eng"], &[["eng", "bad1.srt"], ["eng", "good.srt"]]).await;
+    let picked = s.auto_subtitle.clone().expect("a start subtitle");
+    view.subtitle_chosen(Some(&picked), None);
+    let http = HttpClient::new(ClientConfig::default()).unwrap();
+    let local = RequestOptions {
+        allow_private: true,
+        ..Default::default()
+    };
+    let body = http.get(&picked, &local).await.unwrap().body;
+    assert_eq!(&body[..], b"WEBVTT\n\n");
+    let after = until(&view, "the note", |n| !n.subtitle_notes.is_empty()).await;
+    assert_eq!(
+        after.subtitle_notes[0].problem,
+        SubtitleProblem::TrackFailed
+    );
+    assert!(after.subtitles.iter().all(|t| t.url != picked));
+    assert_eq!(after.auto_subtitle, None, "no move on a hand pick");
+    assert!(!after.start_subtitle_failed);
+}
+
+/// Review P3-3: the title's remembered language (French, picked by hand
+/// in an earlier play) with every track unreadable falls back to the
+/// profile's other languages in order before giving up.
+#[tokio::test]
+async fn a_remembered_language_spent_falls_back_to_the_profile() {
+    let core = Core::temporary("p").unwrap();
+    core.set_prefs(&serde_json::json!({ "subtitleLanguages": ["eng"] }))
+        .unwrap();
+    let (view, s) = open_files(&core, &[["fre", "good.srt"], ["eng", "good.srt"]]).await;
+    let french = s
+        .subtitles
+        .iter()
+        .find(|t| t.lang == "fre")
+        .unwrap()
+        .url
+        .clone();
+    view.subtitle_chosen(Some(&french), None);
+    drop(view);
+    let (view, s) = open_files(&core, &[["fre", "bad1.srt"], ["eng", "good.srt"]]).await;
+    let start = |s: &PlaybackSnapshot| {
+        let url = s.auto_subtitle.as_ref()?;
+        s.subtitles
+            .iter()
+            .find(|t| &t.url == url)
+            .map(|t| t.lang.clone())
+    };
+    assert_eq!(start(&s).as_deref(), Some("fre"), "the title's own first");
+    let (_, s) = load_start(&view, &s).await;
+    assert_eq!(start(&s).as_deref(), Some("eng"), "{s:?}");
+    let (body, s) = load_start(&view, &s).await;
+    assert!(body.contains("Hello"), "{body}");
+    assert!(!s.start_subtitle_failed);
+}
+
+/// Review P3-1: a pick after every start subtitle failed clears
+/// `startSubtitleFailed`.
+#[tokio::test]
+async fn a_pick_clears_the_failed_start() {
+    let (view, mut s) = start_with_files(&["eng"], &[["eng", "bad1.srt"]]).await;
+    let (_, next) = load_start(&view, &s).await;
+    s = next;
+    assert!(s.start_subtitle_failed, "{s:?}");
+    view.subtitle_chosen(None, None);
+    assert!(!view.snapshot().start_subtitle_failed);
+}
+
+/// Every candidate unreadable, the language's then the next language's:
+/// the start subtitle ends null with the neutral `startSubtitleFailed`,
+/// and still no note names a source.
+#[tokio::test]
+async fn every_start_subtitle_unreadable_ends_neutral() {
+    let (view, mut s) = start_with_files(
+        &["eng", "fre"],
+        &[
+            ["eng", "bad1.srt"],
+            ["eng", "bad2.srt"],
+            ["fre", "bad3.srt"],
+        ],
+    )
+    .await;
+    let mut tried = Vec::new();
+    while s.auto_subtitle.is_some() {
+        let lang = |s: &PlaybackSnapshot| {
+            let url = s.auto_subtitle.as_ref().unwrap();
+            s.subtitles
+                .iter()
+                .find(|t| &t.url == url)
+                .unwrap()
+                .lang
+                .clone()
+        };
+        tried.push(lang(&s));
+        let (body, next) = load_start(&view, &s).await;
+        assert_eq!(body, "WEBVTT\n\n");
+        s = next;
+    }
+    assert_eq!(tried, ["eng", "eng", "fre"]);
+    assert!(s.start_subtitle_failed, "{s:?}");
+    assert!(s.subtitles.is_empty());
+    assert!(
+        s.subtitle_notes.is_empty(),
+        "no note: {:?}",
+        s.subtitle_notes
+    );
 }
 
 /// A loopback origin whose video ignores `Range` (so no subtitle hash is

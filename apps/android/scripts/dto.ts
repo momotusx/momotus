@@ -69,6 +69,8 @@ const DEFAULTED = new Map([
   ["PlaybackSnapshot.retries", "0"],
   // plans/play-every-version.md 2e: an older core never offers another version mid-start.
   ["PlaybackSnapshot.chooseAnother", "false"],
+  // Every start subtitle unreadable: an older core never says so.
+  ["PlaybackSnapshot.startSubtitleFailed", "false"],
   ["SearchSnapshot.searchable", "0"],
   ["RankKey.pace", "3"],
   ["RankKey.covered", "0"],

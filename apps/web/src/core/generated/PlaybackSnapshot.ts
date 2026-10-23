@@ -62,6 +62,13 @@ subtitleNotes: Array<SubtitleNote>,
  */
 autoSubtitle: string | null, 
 /**
+ * Every track the start subtitle could turn on failed to read: each
+ * one that failed handed over to the next best (its language's next,
+ * then the next language, as `autoSubtitle` changes) and none was
+ * left. A neutral state with no source: the apps word it themselves.
+ */
+startSubtitleFailed: boolean, 
+/**
  * The next released episode, for an Up Next card.
  */
 next: NextEpisode | null, 

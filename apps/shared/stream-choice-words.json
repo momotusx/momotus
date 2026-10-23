@@ -137,7 +137,8 @@
     "finding": "Finding the best version",
     "findingChosen": "Finding this version",
     "chooseAnother": "Choose another version",
-    "chooseAnotherSaid": "Still loading. Choose another version is available"
+    "chooseAnotherSaid": "Still loading. Choose another version is available",
+    "subtitlesFailed": "Subtitles could not be loaded"
   },
   "learned": {
     "size": {
