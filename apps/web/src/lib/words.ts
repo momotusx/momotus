@@ -709,6 +709,15 @@ export function rowWords(row: VersionRow, why: string | null = null): string {
   return capital([size, lower(said)].filter(Boolean).join(", "));
 }
 
+/** The core's details under a row's one line in its sheet, unless that line already said them: a quiet
+ * line (its size and where it comes from, or the version this device holds) has said the seeders and
+ * the size, so the sheet says nothing twice; a warning or a dimmed row keeps them (as Android). */
+export function sheetDetails(row: VersionRow, why: string | null = null): string | null {
+  const line = lineWords(row.line);
+  const quiet = !why && (!!row.onDevice || line.tone === "ok");
+  return quiet || !line.details ? null : line.details;
+}
+
 /** Why nothing can play, and its actions in order (plans/play-every-version.md, the shared Step 3
  * table): Play from this device with a kept source and Try again when no source answered, else the
  * kind's one action. Back follows every list. Choose a version is the player's and the title's,

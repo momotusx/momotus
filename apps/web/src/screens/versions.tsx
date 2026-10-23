@@ -39,6 +39,7 @@ import {
   qualityCell,
   qualityText,
   rowWords,
+  sheetDetails,
   versionsWords,
 } from "../lib/words";
 import "./versions.css";
@@ -614,7 +615,7 @@ export function VersionsPage(props: { kind: string; id: string; videoId: string;
                 <Badges row={r()} />
               </div>
               <RowLine row={r()} why={dimWord()} lock={empty()?.kind === "needsAccount"} tag="p" />
-              <Show when={!r().onDevice && lineWords(r().line).details}>{(d) => <p class="detail">{d()}</p>}</Show>
+              <Show when={sheetDetails(r(), dimWord())}>{(d) => <p class="detail">{d()}</p>}</Show>
               <p class="rel">
                 <Release name={r().releaseName} />
               </p>

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { addonHost, nextVersion, qualityCell, languageName, pairingProblem, plainAddress, problemWords, restartLine, serverHost, statusText, subtitleNote } from "./words";
+import { addonHost, nextVersion, qualityCell, sheetDetails, languageName, pairingProblem, plainAddress, problemWords, restartLine, serverHost, statusText, subtitleNote } from "./words";
 import shared from "../../../shared/stream-choice-words.json";
 import type { EmptyAction } from "../core/generated/EmptyAction";
 import type { EmptyKind } from "../core/generated/EmptyKind";
@@ -262,4 +262,15 @@ test("a quality the release does not state is no badge: nothing, never Unknown",
   expect(qualityCell("1080p")).toBe("1080p");
   // A source the core names in its place is a badge.
   expect(qualityCell("WEB-DL")).toBe("WEB-DL");
+});
+
+test("the sheet says nothing twice: a quiet line has said the seeders and size, a warning keeps its details", () => {
+  const row = (line: ReasonLine, onDevice: string | null = null) => ({ line, status: { kind: "torrent", seeds: 1204 }, sizeBytes: 2 * GiB, onDevice }) as VersionRow;
+  // "2 GB, shared by 1,204 people" already said "1,204 seeders, 2 GB".
+  expect(sheetDetails(row({ kind: "quick", seeders: 1204, sizeBytes: 2 * GiB }))).toBeNull();
+  expect(sheetDetails(row({ kind: "quick", seeders: 1204, sizeBytes: 2 * GiB }, "On this device"))).toBeNull();
+  // "117 MB, may not start" says no seeders: they follow.
+  expect(sheetDetails(row({ kind: "veryFew", seeders: 2 }))).toBe("2 seeders");
+  // A dimmed row's line says why it is dimmed, so the core's details follow.
+  expect(sheetDetails(row({ kind: "quick", seeders: 1204, sizeBytes: 2 * GiB }), "Needs an account")).toBe("1,204 seeders, 2 GB");
 });
