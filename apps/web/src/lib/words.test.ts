@@ -116,7 +116,8 @@ test("a large file says whether the size was the user's choice", () => {
 });
 
 test("may pause says where its speed comes from", () => {
-  expect(lineWords({ kind: "mayPause", needMbps: 31.6, haveMbps: 17.5, samples: 0, smallSwarm: false }).details).toBe("Needs about 32 Mbit/s; this connection gives about 18 (estimated)");
+  // An unmeasured speed is never said: the part is left out.
+  expect(lineWords({ kind: "mayPause", needMbps: 31.6, haveMbps: 17.5, samples: 0, smallSwarm: false }).details).toBe("");
   expect(lineWords({ kind: "mayPause", needMbps: 79, haveMbps: 25, samples: 1, smallSwarm: false }).details).toBe("Needs about 79 Mbit/s; this connection gives about 25 (measured from 1 playback)");
   expect(lineWords({ kind: "mayPause", needMbps: 79, haveMbps: 25, samples: 6, smallSwarm: false }).details).toContain("(measured from 6 playbacks)");
 });
@@ -124,7 +125,8 @@ test("may pause says where its speed comes from", () => {
 test("may pause on a small swarm says few people share it", () => {
   const thin = lineWords({ kind: "mayPause", needMbps: 2.1, haveMbps: 1.7, samples: 0, smallSwarm: true });
   expect(thin.text).toBe("May pause: only a few people are sharing it");
-  expect(thin.details).toBe("Needs about 2 Mbit/s; this connection gives about 2 (estimated)");
+  expect(thin.details).toBe("");
+  expect(lineWords({ kind: "mayPause", needMbps: 2.1, haveMbps: 1.7, samples: 2, smallSwarm: true }).details).toBe("Needs about 2 Mbit/s; this connection gives about 2 (measured from 2 playbacks)");
   expect(lineWords({ kind: "mayPause", needMbps: 2.1, haveMbps: 1.7, samples: 0, smallSwarm: false }).text).toBe("May pause on this connection");
 });
 
@@ -160,7 +162,7 @@ test("the device line reads as one sentence, leaving out what is not known", () 
   const measured = { mbps: 42.2, samples: 3 };
   const prior = { mbps: 15, samples: 0 };
   expect(conditionsLine({ screenClass: 2160, hdr: true, network: "wifi", speed: measured, freeBytes: 61 * GiB })).toBe("4K HDR, about 42 Mbit/s on Wi-Fi, 61 GB free");
-  expect(conditionsLine({ screenClass: 1080, hdr: false, network: "cellular", speed: prior, freeBytes: null })).toBe("1080p, mobile data, speed not measured yet");
+  expect(conditionsLine({ screenClass: 1080, hdr: false, network: "cellular", speed: prior, freeBytes: null })).toBe("1080p, mobile data");
   const v: VersionsConditions = {
     screenClass: 480, hdr: false, network: "other", http: prior, p2p: measured, freeBytes: null,
     runtimeMin: 52, sizeLimitBytes: 5 * GiB, minSeeders: 50, engine: true, account: false, window: true,
@@ -168,7 +170,7 @@ test("the device line reads as one sentence, leaving out what is not known", () 
   // No account and the engine: the torrent speed decides.
   expect(conditionsHeader("tv", v)).toBe("This TV: SD, about 42 Mbit/s on this network");
   // With an account, or without the engine, the HTTP one does.
-  expect(conditionsHeader("desktop", { ...v, account: true })).toBe("This computer: SD, this network, speed not measured yet");
+  expect(conditionsHeader("desktop", { ...v, account: true })).toBe("This computer: SD, this network");
   expect(speedFor({ ...v, engine: false }, false)).toBe(prior);
 });
 

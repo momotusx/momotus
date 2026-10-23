@@ -668,7 +668,8 @@ const numbers = (l: ReasonLine): Fields => {
   if (l.kind === "mayPause") {
     f.need = Math.round(l.needMbps);
     f.have = Math.round(l.haveMbps);
-    f.speedSource = l.samples > 0 ? choice.speedSource.measured.replace("{playbacks}", counted("playbacks", l.samples)) : choice.speedSource.estimated;
+    // Only a measured speed is ever said (the core sends may pause from one alone); unmeasured, the part is left out.
+    f.speedSource = l.samples > 0 ? choice.speedSource.measured.replace("{playbacks}", counted("playbacks", l.samples)) : null;
   }
   return f;
 };
@@ -729,7 +730,8 @@ const screenWord = (cls: number) => c.screens[String(cls) as keyof typeof c.scre
 export function conditionsLine(d: DeviceConditions): string {
   const screen = screenWord(d.screenClass);
   const network = c.networks[d.network];
-  const speed = d.speed.samples > 0 ? part(c.speed, { mbps: Math.round(d.speed.mbps), network }) : part(c.speedUnknown, { network });
+  // The speed once a playback has measured it; until then the network alone, never a guess.
+  const speed = d.speed.samples > 0 ? part(c.speed, { mbps: Math.round(d.speed.mbps), network }) : network;
   const free = d.freeBytes === null ? null : part(c.free, { free: bytes(d.freeBytes) });
   return [d.hdr ? part(c.hdr, { screen }) : screen, speed, free].filter((x) => x !== null).join(", ");
 }
