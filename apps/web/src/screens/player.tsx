@@ -1376,7 +1376,6 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
               <SkipForward aria-hidden />
               {SKIP[s.kind]}
             </button>
-            <p class="skip-src">Skip data: {s.source}</p>
           </div>
         )}
       </Show>

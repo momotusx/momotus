@@ -162,8 +162,9 @@ async function skipCredits(page: Page, time: () => Promise<number>, seekTo: (s: 
       return { fill: s.backgroundColor, edge: s.boxShadow.includes("inset"), ring: s.outlineStyle === "none" || s.outlineColor === "rgba(0, 0, 0, 0)" ? null : s.outlineColor };
     });
   await expect.poll(look).toEqual({ fill: "rgba(255, 255, 255, 0.92)", edge: false, ring: "rgb(255, 255, 255)" });
-  await expect(page.locator(".skip-src")).toHaveText("Skip data: TheIntroDB");
-  await expect(page.locator(".skip-src")).toHaveCSS("opacity", "1");
+  // The button says what it skips; no provider is named where a viewer reads it.
+  await expect(page.locator(".skip-wrap")).toHaveText("Skip credits");
+  await expect(page.locator(".player-scr")).not.toContainText("TheIntroDB");
 
   // It never jumps by itself: the credits keep playing until the press, and
   // the button stays on screen with the controls hidden.

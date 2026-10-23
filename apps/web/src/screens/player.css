@@ -145,13 +145,9 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 .player-scr:not(.idle) .skip-wrap { transform: translateY(-188px); }
 /* Skip: the white pill (design/DECISION.md); the accent shows only as the focus ring. */
 .player-scr .btn.skip-btn { background: var(--primary); color: var(--on-primary); box-shadow: var(--lift-primary-shadow); transform-origin: right center; }
-.skip-src { font: 500 var(--type-caption) / 1 var(--font-text); color: var(--muted); text-shadow: 0 1px 8px var(--halo);
-  opacity: 0; transition: opacity var(--motion-focus) var(--ease); }
-.skip-wrap:focus-within .skip-src, .player-scr:not(.idle) .skip-src { opacity: 1; }
 /* Phone portrait: under the letterboxed video, clear of the controls. */
 [data-form="phone"] .skip-wrap { right: 12px; bottom: 190px; gap: 18px; }
 [data-form="phone"] .player-scr .skip-wrap { transform: none; }
-[data-form="phone"] .skip-src { font-size: 12px; }
 
 /* End card and the no-version card: over the last frame at 72% black, the
  * next step centered and focused. */
