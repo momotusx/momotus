@@ -14,6 +14,7 @@ import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class VersionsCopyTest {
@@ -167,7 +168,7 @@ class VersionsCopyTest {
             snapshot(slow = listOf("Torrentio")),
             snapshot(done = true, failed = listOf("Torrentio")),
         )) {
-            val (text, _) = VersionsCopy.progress(s)
+            val text = VersionsCopy.progress(s)?.first.orEmpty()
             assertFalse("Torrentio" in text || "Comet" in text, text)
         }
     }
@@ -182,7 +183,8 @@ class VersionsCopyTest {
             VersionsCopy.line(empty(EmptyKind.NeedsAccount, 12)),
         )
         assertEquals("12 versions" to VersionsCopy.Tone.Warn, VersionsCopy.progress(empty(EmptyKind.NeedsAccount, 12)))
-        assertEquals("0 versions" to VersionsCopy.Tone.Ok, VersionsCopy.progress(empty(EmptyKind.NoResults, 0)))
+        // Nothing found: the empty line says it, so no "0 versions" beside it.
+        assertNull(VersionsCopy.progress(empty(EmptyKind.NoResults, 0)))
         // A kind from a newer core still says something.
         assertEquals(VersionLine.Problem("No source has this yet"), VersionsCopy.line(empty(EmptyKind.Unknown, 0)))
     }
@@ -258,9 +260,9 @@ class VersionsCopyTest {
     }
 
     @Test
-    fun `a title page never names an addon, the Versions screens do`() {
-        // The owner, 2026-10-22 (design/DECISION.md, Shelves): addon names only on the Addons pages and in Versions:
-        // not the version's addon, nor where the details or the scores came from.
+    fun `a title page never names an addon`() {
+        // The owner, 2026-10-22 (design/DECISION.md, Shelves): addon names only on the Addons pages (Versions names
+        // none either since the Versions spec): not the version's addon, nor where the details or the scores came from.
         val pages =
             listOf(
                 "../ui-tv/src/main/kotlin/app/marquee/ui/tv/TvTitle.kt",

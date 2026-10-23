@@ -150,8 +150,9 @@ fun PhoneVersions(
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 MqText(heading, role = TextRole.Callout, color = colors.dim, weight = FontWeight.SemiBold, maxLines = 1)
                 MqText("Versions", role = TextRole.Title1, maxLines = 1)
-                val (text, tone) = VersionsCopy.progress(snapshot)
-                StatusWord(text, tone(tone), Modifier.padding(top = 4.dp))
+                VersionsCopy.progress(snapshot)?.let { (text, tone) ->
+                    StatusWord(text, tone(tone), Modifier.padding(top = 4.dp))
+                }
             }
         }
         item(key = "best") {

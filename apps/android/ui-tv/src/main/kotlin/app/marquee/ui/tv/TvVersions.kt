@@ -219,8 +219,7 @@ private fun Header(
             MqText("Versions", role = TextRole.Title1, maxLines = 1)
         }
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
-            val (text, state) = VersionsCopy.progress(snapshot)
-            StatusWord(text, tone(state))
+            VersionsCopy.progress(snapshot)?.let { (text, state) -> StatusWord(text, tone(state)) }
         }
     }
 }

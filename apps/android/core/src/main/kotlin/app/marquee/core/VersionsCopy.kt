@@ -196,9 +196,10 @@ object VersionsCopy {
 
     /**
      * The header's line, never an addon's name (plans/versions-android-spec.md, section 1): "Finding versions" until
-     * the first one, "Still looking for more versions" while addons answer, else how many versions there are.
+     * the first one, "Still looking for more versions" while addons answer, else how many versions there are; null
+     * when nothing can play and nothing was found, since the empty state's line says it.
      */
-    fun progress(snapshot: VersionsSnapshot?): Pair<String, Tone> {
+    fun progress(snapshot: VersionsSnapshot?): Pair<String, Tone>? {
         val found = snapshot?.let { it.rows.size + (if (it.recommended != null) 1 else 0) } ?: 0
         return when {
             snapshot == null || (!snapshot.done && found == 0 && snapshot.empty == null) -> {
@@ -209,9 +210,11 @@ object VersionsCopy {
                 StreamChoiceCopy.STILL_LOOKING to Tone.Idle
             }
 
-            // What was found, none of it playable here (the card says why).
-            snapshot.empty != null && snapshot.empty.count > 0 -> {
-                StreamChoiceCopy.counted("versions", snapshot.empty.count) to Tone.Warn
+            // What was found, none of it playable here (the card says why), or nothing to count.
+            snapshot.empty != null -> {
+                snapshot.empty.count
+                    .takeIf { it > 0 }
+                    ?.let { StreamChoiceCopy.counted("versions", it) to Tone.Warn }
             }
 
             else -> {

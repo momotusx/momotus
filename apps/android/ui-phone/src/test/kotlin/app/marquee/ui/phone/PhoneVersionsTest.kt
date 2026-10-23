@@ -178,9 +178,9 @@ class PhoneVersionsTest {
         // and the screen stays on "Opening" (seen once in about 75 gate runs, on a cold build).
         compose.waitForIdle()
         view.open()
-        // Each round applies, idles and looks again: the header counts the versions once the screen drew the snapshot.
+        // Each round applies, idles and looks again: the header leaves "Finding versions" once the screen drew the snapshot.
         val deadline = System.currentTimeMillis() + 120_000
-        while (compose.onAllNodesWithText(" version", substring = true).fetchSemanticsNodes().isEmpty() ||
+        while (view.snapshot == null ||
             compose.onAllNodesWithText(StreamChoiceCopy.FINDING).fetchSemanticsNodes().isNotEmpty()
         ) {
             check(System.currentTimeMillis() < deadline) {

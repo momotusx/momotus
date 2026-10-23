@@ -1,5 +1,6 @@
 package app.marquee.ui.tv
 
+import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.runtime.snapshots.Snapshot
@@ -60,12 +61,14 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import org.junit.After
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import java.io.File
 import java.util.concurrent.Executors
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.assertEquals
@@ -218,9 +221,9 @@ class TvVersionsTest {
         // and the screen stays on "Opening" (seen once in about 75 gate runs, on a cold build).
         compose.waitForIdle()
         view.open()
-        // Each round applies, idles and looks again: the header counts the versions once the screen drew the snapshot.
+        // Each round applies, idles and looks again: the header leaves "Finding versions" once the screen drew the snapshot.
         val deadline = System.currentTimeMillis() + 120_000
-        while (compose.onAllNodesWithText(" version", substring = true).fetchSemanticsNodes().isEmpty() ||
+        while (view.snapshot == null ||
             compose.onAllNodesWithText(StreamChoiceCopy.FINDING).fetchSemanticsNodes().isNotEmpty()
         ) {
             check(System.currentTimeMillis() < deadline) {
@@ -280,6 +283,8 @@ class TvVersionsTest {
     fun `no addon gives Settings for the sources, then Back`() {
         show(snapshot(empty = EmptyVersions(EmptyKind.NoSource, EmptyAction.SettingsAddons, 0)))
         compose.onNodeWithText("Add a source in Settings", useUnmergedTree = true).assertExists()
+        // The line says it: no "0 versions" beside it.
+        compose.onAllNodesWithText("0 versions").assertCountEquals(0)
         actions(StreamChoiceCopy.SETTINGS, "Back")
         compose.onNodeWithText(StreamChoiceCopy.SETTINGS).assertIsFocused()
         compose.onNodeWithText(StreamChoiceCopy.SETTINGS).performClick()
@@ -408,5 +413,37 @@ class TvVersionsTest {
             println("dimmed-row {\"text\":\"$text\",\"ratio\":$best}")
             assertTrue(best >= 4.5f, "$text: $best")
         }
+    }
+
+    private val out = System.getenv("MARQUEE_SHOTS")?.let(::File)
+
+    private fun save(name: String) {
+        assumeTrue("MARQUEE_SHOTS is not set", out != null)
+        val image = compose.onRoot().captureToImage().asAndroidBitmap()
+        File(out, "$name.jpg").outputStream().use { image.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `shot - versions that need an account, their rows dimmed`() {
+        assumeTrue("MARQUEE_SHOTS is not set", out != null)
+        val rows =
+            listOf(
+                row("a", ReasonLine.Few(31)),
+                row("b", ReasonLine.Quick(1204, 2 * gib)).copy(sizeBytes = 3 * gib),
+                row("tr", ReasonLine.Few(12)).copy(group = Group.OtherLanguages, languages = listOf("tr")),
+            )
+        show(snapshot(empty = EmptyVersions(EmptyKind.NeedsAccount, EmptyAction.SettingsAccounts, 3, rows)))
+        compose.mainClock.advanceTimeBy(2_000)
+        save("tv-versions-needs-account")
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `shot - no source answering, with one kept here`() {
+        assumeTrue("MARQUEE_SHOTS is not set", out != null)
+        show(snapshot(empty = EmptyVersions(EmptyKind.Unreachable, EmptyAction.PlayFromDevice, 0, key = "kept")))
+        compose.mainClock.advanceTimeBy(2_000)
+        save("tv-versions-unreachable")
     }
 }
