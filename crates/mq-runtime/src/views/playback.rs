@@ -1879,6 +1879,21 @@ fn release_all(s: &mut State) {
     s.lease = None;
 }
 
+/// The container of the file a source opened (plans/apple-second-engine.md
+/// 2.1): the opened file's name as the core parses it, else what an
+/// earlier play of this version opened (`remembered`), else the release's.
+/// A torrent pack's file says what its release cannot ("Movie.mp4" in a
+/// release listed as mp4 can be an mkv).
+fn playing_container(
+    file: Option<&str>,
+    remembered: impl FnOnce() -> Option<String>,
+    release: Option<&str>,
+) -> Option<String> {
+    file.and_then(|f| mq_relparse::parse(f.rsplit('/').next().unwrap_or(f)).container)
+        .or_else(remembered)
+        .or_else(|| release.map(str::to_owned))
+}
+
 /// A release's audio formats in the core's serde names ("dts_hd_ma").
 fn audio_names(audio: &[mq_relparse::Audio]) -> Vec<String> {
     audio
@@ -2345,15 +2360,11 @@ async fn resolve_next(
                     s.snapshot.filename = filename.clone();
                     s.snapshot.size_bytes = size.or(stream.size_bytes);
                     let played_for = (target.season, target.episode);
-                    s.snapshot.container = filename
-                        .as_deref()
-                        .and_then(|f| {
-                            mq_relparse::parse(f.rsplit('/').next().unwrap_or(f)).container
-                        })
-                        .or_else(|| {
-                            crate::speed::container_of(core.library(), &stream.key, played_for)
-                        })
-                        .or_else(|| stream.release.container.clone());
+                    s.snapshot.container = playing_container(
+                        filename.as_deref(),
+                        || crate::speed::container_of(core.library(), &stream.key, played_for),
+                        stream.release.container.as_deref(),
+                    );
                     s.snapshot.audio = audio_names(&stream.release.audio);
                     s.snapshot.engine =
                         crate::speed::engine_of(core.library(), &stream.key, played_for);
@@ -4968,6 +4979,27 @@ mod tests {
 
     /// The words for a move: the version left and why, or "another" when
     /// both versions read the same.
+    /// A torrent pack's file names its container: an mkv in a release
+    /// listed as mp4 is an mkv; without a file name, what an earlier play
+    /// opened; then the release's; else nothing.
+    #[test]
+    fn the_playing_container_follows_the_opened_file() {
+        let none = || None;
+        assert_eq!(
+            playing_container(Some("Pack/Movie.2010.1080p.mkv"), none, Some("mp4")).as_deref(),
+            Some("mkv")
+        );
+        assert_eq!(
+            playing_container(None, || Some("avi".into()), Some("mp4")).as_deref(),
+            Some("avi")
+        );
+        assert_eq!(
+            playing_container(Some("stream"), none, Some("mp4")).as_deref(),
+            Some("mp4")
+        );
+        assert_eq!(playing_container(None, none, None), None);
+    }
+
     #[test]
     fn moved_words_name_both_versions_and_why() {
         assert_eq!(
