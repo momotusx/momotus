@@ -369,7 +369,10 @@ internal fun SubtitleStepPage(
     }
 }
 
-/** One language of the subtitles step: its name, a line when it has one, a check when chosen. One focus stop. */
+/**
+ * One language of the subtitles step: its name, a line when it has one, a check when chosen. One focus stop. Chosen
+ * is a fill, not an edge (design/DECISION.md, Selected): `raised` under the chosen row, `surface` under the rest.
+ */
 @Composable
 private fun LanguageRow(
     name: String,
@@ -388,8 +391,7 @@ private fun LanguageRow(
                 .marqueeFocus(Marquee.radius.l, Tokens.FOCUS_SCALE_TILE)
                 .onFocusChanged { focused = it.isFocused }
                 .clip(shape)
-                .background(colors.surface)
-                .border(if (chosen) 2.dp else 1.dp, if (chosen) colors.text else colors.edge, shape)
+                .background(if (chosen) colors.raised else colors.surface)
                 .focusSelectable(chosen, onClick)
                 .heightIn(min = 56.dp)
                 .padding(horizontal = Marquee.space.s, vertical = 10.dp),

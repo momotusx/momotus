@@ -10,7 +10,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -178,6 +181,35 @@ class SubtitleStepScreenTest {
         compose.onNodeWithText("Continue").performClick()
         until { done == 1 }
         assertTrue(wrote("[]"), "No subtitles writes an empty list: $sent")
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = "w412dp-h915dp-xxhdpi")
+    fun `the chosen language is a raised fill with no edge, the others the plain surface`() {
+        val step = step("tr")
+        var raised = Color.Unspecified
+        var surface = Color.Unspecified
+        page(Form.Phone) {
+            raised = Marquee.colors.raised
+            surface = Marquee.colors.surface
+            SubtitleStepPage(step) {}
+        }
+        until { shows("This device's language") && ready() }
+        val pixels = compose.onRoot().captureToImage().toPixelMap()
+
+        // Just inside a row's left edge, where an outline would draw, and well inside it, at its middle.
+        fun at(text: String): Pair<Color, Color> {
+            val row = compose.onNodeWithText(text).fetchSemanticsNode().boundsInRoot
+            val y = row.center.y.toInt()
+            return pixels[row.left.toInt() + 2, y] to pixels[row.left.toInt() + 20, y]
+        }
+        val (chosenEdge, chosenInside) = at("Turkish")
+        assertEquals(raised.toArgb(), chosenInside.toArgb(), "the chosen row is raised")
+        assertEquals(chosenInside.toArgb(), chosenEdge.toArgb(), "the chosen row has no edge")
+        val (otherEdge, otherInside) = at(SubtitleStep.NONE)
+        assertEquals(surface.toArgb(), otherInside.toArgb(), "a row not chosen is the surface")
+        assertEquals(otherInside.toArgb(), otherEdge.toArgb(), "a row not chosen has no edge")
     }
 
     @Test
