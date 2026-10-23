@@ -91,27 +91,13 @@ struct EpisodePanel: View {
     }
 
     private var seasonMenu: some View {
-        Menu {
+        PullDownPill(title: seasonName(selected ?? ordered.first ?? 1)) {
             ForEach(ordered, id: \.self) { season in
                 Button { select(season) } label: {
                     if season == selected { Label(seasonName(season), glyph: "check") } else { Text(seasonName(season)) }
                 }
             }
-        } label: {
-            HStack(spacing: 6) {
-                Text(seasonName(selected ?? ordered.first ?? 1))
-                Glyph("chevron-down", size: 14)
-            }
-            .textFont(15, weight: .semibold, relativeTo: .subheadline)
-            .foregroundStyle(Theme.Palette.text)
-            .padding(.horizontal, 14)
-            .frame(height: metrics.wide ? 32 : 44)
-            .background(.white.opacity(0.1), in: Capsule())
         }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .fixedSize()
         .focused($seasonFocused)
     }
 
