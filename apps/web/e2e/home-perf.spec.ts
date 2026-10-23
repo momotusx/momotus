@@ -136,3 +136,81 @@ test("phone: a fling down Home and back paints little", async ({ browser }) => {
   expect(result.passesPerFrame, JSON.stringify(result)).toBeLessThanOrEqual(2.5);
   await context.close();
 });
+
+// The Title page (plans/design-v3-phase34-web.md, rule 6): Game of Thrones, a series with episodes.
+const TITLE = "/title/series/tt0944947";
+
+test("TV: the title's episodes walked by the remote and back paint little", async ({ browser }) => {
+  const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+  await page.goto(`${TITLE}?form=tv`);
+  const play = page.locator('[data-f="title:play"]');
+  await expect(play).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('[data-f^="ep:"]').first()).toBeVisible({ timeout: 30_000 });
+  await page.waitForTimeout(1500);
+  await page.locator('[data-f^="ep:"]').first().focus();
+  const result = await traced(page, browser, async () => {
+    for (const key of ["ArrowDown", "ArrowDown", "ArrowDown", "ArrowUp", "ArrowUp", "ArrowUp"]) {
+      await page.keyboard.press(key);
+      await page.waitForTimeout(400);
+    }
+  });
+  report("tv-title-episodes", result);
+  // Step 0 baseline (three runs, before phase 3/4): bounds at 1.5x the worst run and the passes plus 0.5;
+  // they tighten once step 1 takes the title's live blurs and masks away.
+  expect(result.paintMs, JSON.stringify(result)).toBeLessThan(36);
+  expect(result.passesPerFrame, JSON.stringify(result)).toBeLessThanOrEqual(5.5);
+  await page.close();
+});
+
+test("desktop: a wheel run over the title page paints little", async ({ browser }) => {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await page.goto(`${TITLE}?form=desktop`);
+  await expect(page.locator('[data-f^="ep:"]').first()).toBeVisible({ timeout: 30_000 });
+  await page.waitForTimeout(1500);
+  // The pointer over the episodes, so a hover's transitioned shadow would show.
+  const ep = await page.locator('[data-f^="ep:"]').first().boundingBox();
+  const result = await traced(page, browser, async () => {
+    await page.mouse.move((ep?.x ?? 1000) + 40, (ep?.y ?? 400) + 20);
+    for (const dir of [1, -1]) {
+      for (let i = 0; i < 16; i++) {
+        await page.mouse.wheel(0, dir * 120);
+        await page.waitForTimeout(50);
+      }
+    }
+  });
+  report("desktop-title-wheel", result);
+  // Step 0 baseline (three runs, before phase 3/4): bounds at 1.5x the worst run and the passes plus 0.5;
+  // they tighten once step 1 takes the title's live blurs and masks away.
+  expect(result.paintMs, JSON.stringify(result)).toBeLessThan(29);
+  expect(result.passesPerFrame, JSON.stringify(result)).toBeLessThanOrEqual(5);
+  await page.close();
+});
+
+test("phone: a glide down the title page and back paints little", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const page = await context.newPage();
+  await page.goto(`${TITLE}?form=phone`);
+  await expect(page.locator('[data-f^="ep:"]').first()).toBeAttached({ timeout: 30_000 });
+  await page.waitForTimeout(1500);
+  const glide = (top: number) =>
+    page.evaluate(
+      (top) =>
+        new Promise<number>((done) => {
+          window.scrollBy({ top, behavior: "smooth" });
+          setTimeout(() => done(window.scrollY), 900);
+        }),
+      top,
+    );
+  let scrolled = 0;
+  const result = await traced(page, browser, async () => {
+    scrolled = await glide(1200);
+    await glide(-1200);
+  });
+  report("phone-title-glide", { ...result, scrolled });
+  expect(scrolled).toBeGreaterThan(400);
+  // Step 0 baseline (three runs, before phase 3/4): bounds at 1.5x the worst run and the passes plus 0.5;
+  // they tighten once step 1 takes the title's live blurs and masks away.
+  expect(result.paintMs, JSON.stringify(result)).toBeLessThan(7);
+  expect(result.passesPerFrame, JSON.stringify(result)).toBeLessThanOrEqual(4.2);
+  await context.close();
+});
