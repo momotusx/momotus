@@ -21,7 +21,7 @@ import {
 } from "./words";
 
 test("reasons read as plain sentences", () => {
-  expect(reasonText("readyNow", { kind: "ready", service: "Real-Debrid" })).toBe("Ready now, cached on Real-Debrid");
+  expect(reasonText("readyNow", { kind: "ready", service: "Real-Debrid" })).toBe("Ready now");
   expect(reasonText("readyNow", { kind: "direct" })).toBe("Ready now");
   expect(reasonText("smallerFaster", { kind: "direct" })).toBe("Smaller and faster to start");
   // A film replayed and an episode after the last one alike (Android walk EW-F1).
@@ -29,6 +29,8 @@ test("reasons read as plain sentences", () => {
 });
 
 test("status always has a word", () => {
+  expect(statusText({ kind: "ready", service: "TorBox" }).text).toBe("Ready");
+  expect(statusText({ kind: "needsDownload", service: "TorBox" }).text).toBe("Needs download");
   expect(statusText({ kind: "torrent", seeds: 45 })).toEqual({ tone: "warn", text: "Torrent, 45 seeds" });
   expect(statusText({ kind: "torrent", seeds: null }).text).toBe("Torrent");
   expect(statusText({ kind: "ready", service: null }).text).toBe("Ready");
@@ -74,12 +76,14 @@ test("the web renders the shared stream choice words as they are", () => {
   for (const [kind, w] of Object.entries(shared.lines)) {
     const line = { kind, seeders: 3, year: 1999, service: "TorBox", sizeBytes: GiB, limitBytes: 5 * GiB, chosen: false, needMbps: 30, haveMbps: 12, samples: 0, quality: "cam", aheadMin: 7, budgetBytes: 2.5 * GiB } as unknown as ReasonLine;
     expect(lineWords(line)).toMatchObject({ tone: w.tone, text: w.text });
+    // The viewer's streaming service is never named, as no addon is.
+    expect(lineWords(line).details).not.toContain("TorBox");
   }
 });
 
 test("every line has its tone, its plain text and its numbers in the details", () => {
   expect(lineWords({ kind: "copy", quality: "telesync" })).toEqual({ tone: "bad", text: "Recorded in a cinema, low quality", details: "Telesync copy" });
-  expect(lineWords({ kind: "fetch", service: "Real-Debrid" })).toEqual({ tone: "bad", text: "Not ready yet, has to download first", details: "Real-Debrid does not have it yet" });
+  expect(lineWords({ kind: "fetch", service: "Real-Debrid" })).toEqual({ tone: "bad", text: "Not ready yet, has to download first", details: "Your account does not have it yet" });
   expect(lineWords({ kind: "veryFew", seeders: 1 }).details).toBe("1 seeder");
   expect(lineWords({ kind: "veryFew", seeders: 3 })).toEqual({ tone: "bad", text: "May not start", details: "3 seeders" });
   expect(lineWords({ kind: "otherYear", year: 2004 })).toEqual({ tone: "warn", text: "May be a different film or show", details: "The release says 2004" });
@@ -88,19 +92,20 @@ test("every line has its tone, its plain text and its numbers in the details", (
   expect(lineWords({ kind: "noPicture" })).toEqual({ tone: "bad", text: "No picture on this device", details: "Its HEVC video is stored in a form this device cannot show" });
   expect(lineWords({ kind: "didNotPlay" })).toEqual({ tone: "bad", text: "Did not play on this device", details: "This device could not decode it when it last tried" });
   expect(lineWords({ kind: "few", seeders: 31 })).toEqual({ tone: "warn", text: "May start slowly", details: "31 seeders" });
-  expect(lineWords({ kind: "ready", service: "TorBox", sizeBytes: 7.4 * GiB })).toEqual({ tone: "ok", text: "Starts right away", details: "Ready on TorBox, 7.4 GB" });
+  expect(lineWords({ kind: "ready", service: "TorBox", sizeBytes: 7.4 * GiB })).toEqual({ tone: "ok", text: "Starts right away", details: "Ready now, 7.4 GB" });
   expect(lineWords({ kind: "quick", seeders: 1204, sizeBytes: 2.2 * GiB })).toEqual({ tone: "ok", text: "Starts quickly", details: "1,204 seeders, 2.2 GB" });
   expect(lineWords({ kind: "should", seeders: 89, sizeBytes: 4 * GiB, service: "Real-Debrid" })).toEqual({
     tone: "ok",
     text: "Should start quickly",
-    details: "89 seeders, 4 GB, may be ready on Real-Debrid",
+    details: "89 seeders, 4 GB, may be ready in your account",
   });
 });
 
 test("a detail with an unknown number is left out, never shown with a gap", () => {
   expect(lineWords({ kind: "should", seeders: null, sizeBytes: null, service: null }).details).toBe("");
   expect(lineWords({ kind: "quick", seeders: null, sizeBytes: 3 * GiB }).details).toBe("3 GB");
-  expect(lineWords({ kind: "ready", service: null, sizeBytes: 3 * GiB }).details).toBe("3 GB");
+  expect(lineWords({ kind: "ready", service: null, sizeBytes: 3 * GiB }).details).toBe("Ready now, 3 GB");
+  expect(lineWords({ kind: "ready", service: null, sizeBytes: null }).details).toBe("Ready now");
   expect(lineWords({ kind: "fetch", service: null }).details).toBe("");
 });
 

@@ -25,7 +25,8 @@ import choice from "../../../shared/stream-choice-words.json";
 export function reasonText(r: Reason, status: VersionStatus): string {
   switch (r) {
     case "readyNow":
-      return status.kind === "ready" && status.service ? `Ready now, cached on ${status.service}` : "Ready now";
+      // No service is named, as no addon is: "Ready now", never "Ready on TorBox".
+      return "Ready now";
     case "playsDirectly":
       return "Plays directly on this device";
     case "matchesScreen":
@@ -81,13 +82,13 @@ export type Tone = "ok" | "warn" | "bad" | "idle";
 export function statusText(s: VersionStatus): { tone: Tone; text: string } {
   switch (s.kind) {
     case "ready":
-      return { tone: "ok", text: s.service ? `Ready on ${s.service}` : "Ready" };
+      return { tone: "ok", text: "Ready" };
     case "direct":
       return { tone: "ok", text: "Direct link" };
     case "torrent":
       return { tone: "warn", text: s.seeds === null ? "Torrent" : `Torrent, ${s.seeds} seeds` };
     case "needsDownload":
-      return { tone: "warn", text: s.service ? `Needs download on ${s.service}` : "Needs download" };
+      return { tone: "warn", text: "Needs download" };
   }
 }
 
@@ -657,6 +658,8 @@ const numbers = (l: ReasonLine): Fields => {
   const f: Fields = { ...l };
   if ("seeders" in l) f.seeders = l.seeders === null ? null : counted("seeders", l.seeders);
   if ("sizeBytes" in l) f.size = l.sizeBytes === null ? null : bytes(l.sizeBytes);
+  // The viewer's streaming service is said as their account, never by its name.
+  if ("service" in l) f.account = l.service ? "your account" : null;
   if (l.kind === "large") f.limit = bytes(l.limitBytes);
   if (l.kind === "buffer") {
     f.minutes = l.aheadMin;
