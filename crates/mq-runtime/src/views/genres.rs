@@ -107,6 +107,17 @@ impl Source {
     }
 }
 
+/// Puts `art` on the shown list in one step (no refresh lands in between),
+/// telling subscribers only when the list has that genre.
+fn apply_art(
+    shown: &SharedObservable<GenresSnapshot>,
+    kind: &str,
+    genre: &str,
+    art: Option<String>,
+) {
+    shown.update_if(|s| put_art(s, kind, genre, art));
+}
+
 /// Puts `art` on `kind`'s `genre` when the list has it; false when it does
 /// not (the list changed since the lookup started).
 fn put_art(snapshot: &mut GenresSnapshot, kind: &str, genre: &str, art: Option<String>) -> bool {
@@ -237,10 +248,7 @@ impl Inner {
             };
             lock(self.core.genre_art()).insert(s.key(), looked);
             let Ok(art) = art else { continue };
-            let mut snapshot = self.snapshot.get();
-            if put_art(&mut snapshot, &s.kind, &s.genre, art) {
-                self.snapshot.set(snapshot);
-            }
+            apply_art(&self.snapshot, &s.kind, &s.genre, art);
         }
     }
 }
@@ -355,6 +363,22 @@ mod tests {
             want.kinds[0].genres[0].art = Some("d.jpg".into());
             want
         });
+    }
+
+    /// Review P3: the shown list takes a result in one step, and a result
+    /// for a genre it lacks tells no subscriber anything.
+    #[tokio::test]
+    async fn a_result_for_a_gone_genre_tells_no_one() {
+        let shown = SharedObservable::new(grid(&["Drama"]));
+        let mut seen = shown.subscribe();
+        apply_art(&shown, "movie", "Action", Some("a.jpg".into()));
+        assert!(
+            futures_util::FutureExt::now_or_never(seen.next()).is_none(),
+            "no update for a genre the list lacks"
+        );
+        apply_art(&shown, "movie", "Drama", Some("d.jpg".into()));
+        let drama = seen.next().await.unwrap();
+        assert_eq!(drama.kinds[0].genres[0].art.as_deref(), Some("d.jpg"));
     }
 
     /// Review P3: found art holds a day, a failed lookup a minute.
