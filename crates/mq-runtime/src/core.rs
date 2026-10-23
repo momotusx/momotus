@@ -67,6 +67,11 @@ pub enum CoreError {
     /// reads the owner's addons).
     #[error("default addons: {0}")]
     Defaults(String),
+    /// A title-level watched mark sent before the title's meta is in: the
+    /// core cannot tell its episodes yet. Send it again once the header is
+    /// `ready`.
+    #[error("the title has not loaded yet")]
+    NotLoaded,
 }
 
 #[derive(Debug, Clone)]

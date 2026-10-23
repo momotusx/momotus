@@ -33,7 +33,7 @@ async fn addon_answering(status: &'static str, body: &'static str) -> AddonRow {
     });
     let manifest = serde_json::json!({
         "id": "meta.test", "version": "1.0.0", "name": "Meta Test",
-        "types": ["series", "movie"], "resources": ["meta"], "catalogs": [], "idPrefixes": ["tt"]
+        "types": ["series", "movie", "anime"], "resources": ["meta"], "catalogs": [], "idPrefixes": ["tt"]
     });
     AddonRow {
         transport_url: format!("http://{addr}/manifest.json"),
@@ -120,6 +120,125 @@ async fn a_series_is_watched_as_a_whole() {
     }
     view.set_watched("tt0944947", false).unwrap();
     assert!(watched(&core).is_empty());
+}
+
+/// A series announced, none of its episodes out yet.
+const UPCOMING: &str = r#"{"meta":{
+  "id":"tt9999991","type":"series","name":"Upcoming","releaseInfo":"2099-",
+  "videos":[
+    {"id":"tt9999991:1:1","title":"One","season":1,"episode":1,"released":"2099-01-01T00:00:00.000Z"},
+    {"id":"tt9999991:1:2","title":"Two","season":1,"episode":2,"released":"2099-01-08T00:00:00.000Z"}
+  ]}}"#;
+
+/// C41: a series with no aired episode never reads Watched, and marking
+/// it marks nothing.
+#[tokio::test]
+async fn a_series_with_nothing_aired_is_never_watched() {
+    let core = Core::temporary("p").unwrap();
+    core.library()
+        .set_addons("p", &[meta_addon(UPCOMING).await], &core.hlc())
+        .unwrap();
+    let view = TitleView::open(&core, "series", "tt9999991");
+    let snap = settle(&view).await;
+    assert!(snap.header.details.is_some());
+    assert!(!snap.header.watched);
+    view.set_watched("tt9999991", true).unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(
+        core.library()
+            .watched_videos("p", "tt9999991")
+            .unwrap()
+            .is_empty()
+    );
+    assert!(!view.snapshot().header.watched);
+}
+
+/// An anime with seasons, as a Kitsu-style addon serves it.
+const ANIME: &str = r#"{"meta":{
+  "id":"tt7777771","type":"anime","name":"Anime",
+  "videos":[
+    {"id":"tt7777771:0:1","title":"OVA","season":0,"episode":1,"released":"2015-01-01T00:00:00.000Z"},
+    {"id":"tt7777771:1:1","title":"One","season":1,"episode":1,"released":"2015-04-01T00:00:00.000Z"},
+    {"id":"tt7777771:1:2","title":"Two","season":1,"episode":2,"released":"2015-04-08T00:00:00.000Z"}
+  ]}}"#;
+
+/// An anime whose episodes carry no season, one not out yet.
+const SEASONLESS: &str = r#"{"meta":{
+  "id":"tt7777772","type":"anime","name":"Seasonless",
+  "videos":[
+    {"id":"tt7777772:1","title":"One","released":"2016-01-01T00:00:00.000Z"},
+    {"id":"tt7777772:2","title":"Two","released":"2016-01-08T00:00:00.000Z"},
+    {"id":"tt7777772:3","title":"Three","released":"2099-01-01T00:00:00.000Z"}
+  ]}}"#;
+
+/// Marks a title with episodes as one on its own id and returns the
+/// videos marked, once the header reads Watched.
+async fn mark_as_one(body: &'static str, kind: &str, id: &str) -> Vec<String> {
+    let core = Core::temporary("p").unwrap();
+    core.library()
+        .set_addons("p", &[meta_addon(body).await], &core.hlc())
+        .unwrap();
+    let view = TitleView::open(&core, kind, id);
+    assert!(!settle(&view).await.header.watched);
+    view.set_watched(id, true).unwrap();
+    let (_, mut updates) = view.subscribe();
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+    while !view.snapshot().header.watched {
+        assert!(tokio::time::Instant::now() < deadline, "not marked watched");
+        let _ = tokio::time::timeout(Duration::from_millis(200), updates.next()).await;
+    }
+    let mut marked = core.library().watched_videos("p", id).unwrap();
+    marked.sort();
+    marked
+}
+
+/// C41 review P2: any kind with episodes is watched as a whole, not only
+/// `series`.
+#[tokio::test]
+async fn an_anime_is_watched_as_a_whole() {
+    let marked = mark_as_one(ANIME, "anime", "tt7777771").await;
+    assert_eq!(marked, ["tt7777771:1:1", "tt7777771:1:2"], "not the OVA");
+}
+
+/// C41 review P3-3: episodes with no season count as regular ones, so a
+/// seasonless anime can be Watched; the one not out yet is left out.
+#[tokio::test]
+async fn a_seasonless_anime_is_watched_as_a_whole() {
+    let marked = mark_as_one(SEASONLESS, "anime", "tt7777772").await;
+    assert_eq!(marked, ["tt7777772:1", "tt7777772:2"]);
+}
+
+/// C41 review P3-1: a title-level mark sent before the meta is in is
+/// refused, never a silent no-op.
+#[tokio::test]
+async fn marking_a_series_before_it_loads_is_refused() {
+    let core = Core::temporary("p").unwrap();
+    core.library()
+        .set_addons("p", &[meta_addon(SHOW).await], &core.hlc())
+        .unwrap();
+    // The fetch is spawned and this test's runtime has one thread: it has
+    // not run yet.
+    let view = TitleView::open(&core, "series", "tt0944947");
+    let refused = view.set_watched("tt0944947", true);
+    assert!(
+        matches!(refused, Err(mq_runtime::CoreError::NotLoaded)),
+        "{refused:?}"
+    );
+    assert!(
+        core.library()
+            .watched_videos("p", "tt0944947")
+            .unwrap()
+            .is_empty()
+    );
+    settle(&view).await;
+    view.set_watched("tt0944947", true).unwrap();
+    assert_eq!(
+        core.library()
+            .watched_videos("p", "tt0944947")
+            .unwrap()
+            .len(),
+        3
+    );
 }
 
 #[tokio::test]

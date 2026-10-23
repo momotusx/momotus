@@ -972,6 +972,43 @@ async fn hand_marks_go_out_in_one_batch_and_unmarks_as_removals() {
     assert!(body["episodes"][0].get("watched_at").is_none(), "{body}");
 }
 
+/// Core backlog C41: a whole series marked by hand queues one Trakt write
+/// per aired regular episode (the special left out) and goes out in one
+/// batch; the episode Trakt cannot name stays out of it.
+#[tokio::test]
+async fn a_series_marked_as_one_goes_out_episode_by_episode() {
+    let (core, fake) = signed_in("a-series").await;
+    let title = TitleView::open(&core, "series", SHOW);
+    until("the title's details", || {
+        title.snapshot().header.details.is_some()
+    })
+    .await;
+    title.set_watched(SHOW, true).unwrap();
+    assert_eq!(
+        pending(&core, "a-series"),
+        6,
+        "six regular episodes, no special"
+    );
+    core.trakt_sync().await.unwrap();
+    assert_eq!(
+        history_writes(&fake),
+        [(
+            "/sync/history".to_owned(),
+            vec![1001, 1002, 1003, 1005, 1006]
+        )]
+    );
+    title.set_watched(SHOW, false).unwrap();
+    core.trakt_sync().await.unwrap();
+    let writes = history_writes(&fake);
+    assert_eq!(
+        writes[1],
+        (
+            "/sync/history/remove".to_owned(),
+            vec![1001, 1002, 1003, 1005, 1006]
+        )
+    );
+}
+
 #[tokio::test]
 async fn history_not_found_is_unmapped_and_a_200_acknowledges() {
     let (core, fake) = signed_in("a-notfound").await;

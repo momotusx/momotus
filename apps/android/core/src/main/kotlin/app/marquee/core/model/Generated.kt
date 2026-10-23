@@ -1703,7 +1703,7 @@ data class TitleHeader(
     val playTarget: PlayTarget? = null,
     /** The day the next episode comes out ("YYYY-MM-DD", as `Episode::released`) when it is not out yet: there is no play target, and the page says "Next episode airs <date>". */
     val nextAirs: String? = null,
-    /** A movie the user watched (episodes carry their own flag); toggled with `setWatched` on the movie's id. */
+    /** A movie the user watched, or a title with episodes (a series, an anime) whose every aired regular episode is watched (specials left out, as Trakt counts a show complete; an episode with no season counts; core backlog C41). Toggled with `setWatched` on the title's id: with episodes that marks or unmarks every such one. */
     val watched: Boolean,
 )
 

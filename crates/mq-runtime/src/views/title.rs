@@ -104,10 +104,11 @@ pub struct TitleHeader {
     /// `Episode::released`) when it is not out yet: there is no play target,
     /// and the page says "Next episode airs <date>".
     pub next_airs: Option<String>,
-    /// A movie the user watched, or a series whose every aired episode of
-    /// its regular seasons is watched (specials left out, as Trakt counts a
-    /// show complete; core backlog C41). Toggled with `setWatched` on the
-    /// title's id: for a series that marks or unmarks every such episode.
+    /// A movie the user watched, or a title with episodes (a series, an
+    /// anime) whose every aired regular episode is watched (specials left
+    /// out, as Trakt counts a show complete; an episode with no season
+    /// counts; core backlog C41). Toggled with `setWatched` on the title's
+    /// id: with episodes that marks or unmarks every such one.
     pub watched: bool,
 }
 
@@ -323,24 +324,30 @@ impl TitleView {
     }
 
     /// Marks or unmarks by hand. With Trakt connected, a mark that flips
-    /// queues the write for Trakt in the same transaction. The series' own
-    /// id marks every aired episode of its regular seasons (C41).
+    /// queues the write for Trakt in the same transaction. A title's own id,
+    /// when it has episodes, marks every aired regular episode (C41); before
+    /// its meta is in, that is refused with `NotLoaded`.
     pub fn set_watched(&self, video_id: &str, watched: bool) -> Result<(), crate::CoreError> {
         // No watched row for a title off the kids list.
         if self.denied {
             return Ok(());
         }
-        if self.kind == "series" && video_id == self.id {
-            let now = mq_library::hlc::now_ms() as i64;
-            let episodes = lock(&self.state)
-                .meta
-                .as_ref()
-                .map(|m| aired_episodes(m, now))
-                .unwrap_or_default();
-            for episode in episodes {
-                self.set_watched(&episode, watched)?;
+        if self.kind != "movie" && video_id == self.id {
+            let episodes = {
+                let state = lock(&self.state);
+                let meta = state.meta.as_ref().ok_or(crate::CoreError::NotLoaded)?;
+                series_like(&self.kind, meta)
+                    .then(|| aired_episodes(meta, mq_library::hlc::now_ms() as i64))
+            };
+            if let Some(episodes) = episodes {
+                // ponytail: one transaction (and one Trakt queue row) per
+                // episode, so a long anime costs hundreds; batch them in one
+                // transaction if that is ever felt.
+                for episode in episodes {
+                    self.set_watched(&episode, watched)?;
+                }
+                return Ok(());
             }
-            return Ok(());
         }
         let (library, profile) = (self.core.library(), self.core.profile());
         let account = library.tracker_account(profile, crate::trakt::TRACKER)?;
@@ -519,12 +526,11 @@ impl Ctx {
             selected_season: season,
             play_target,
             next_airs,
-            watched: match self.kind.as_str() {
-                "movie" => watched.contains(&self.id),
-                _ => {
-                    let aired = aired_episodes(&meta, now);
-                    !aired.is_empty() && aired.iter().all(|v| watched.contains(v))
-                }
+            watched: if series_like(&self.kind, &meta) {
+                let aired = aired_episodes(&meta, now);
+                !aired.is_empty() && aired.iter().all(|v| watched.contains(v))
+            } else {
+                watched.contains(&self.id)
             },
         };
         if self.header.get() != header {
@@ -545,12 +551,19 @@ fn season_of(meta: &MetaItem, video_id: &str) -> Option<u32> {
         .and_then(|v| v.series_info.as_ref().map(|s| s.season))
 }
 
-/// A series' aired episodes of its regular seasons (season 0, the
-/// specials, left out): what a series-level watched mark counts.
+/// A title played episode by episode: any kind but a movie (a series, an
+/// anime, a channel) with videos. Without videos it plays, and is marked,
+/// as one, like a movie.
+fn series_like(kind: &str, meta: &MetaItem) -> bool {
+    kind != "movie" && !meta.videos.is_empty()
+}
+
+/// A title's aired regular episodes (season 0, the specials, left out; an
+/// episode with no season counts): what a title-level watched mark counts.
 fn aired_episodes(meta: &MetaItem, now_ms: i64) -> Vec<String> {
     meta.videos
         .iter()
-        .filter(|v| v.series_info.as_ref().is_some_and(|i| i.season > 0))
+        .filter(|v| v.series_info.as_ref().is_none_or(|i| i.season > 0))
         .filter(|v| aired(v, now_ms))
         .map(|v| v.id.clone())
         .collect()
@@ -593,7 +606,7 @@ fn play_target(
         };
         return (Some(target), None);
     }
-    if kind == "movie" || meta.videos.is_empty() {
+    if !series_like(kind, meta) {
         let again = watched.contains(&meta.preview.id);
         let target = PlayTarget {
             video_id: meta.preview.id.clone(),
