@@ -1,0 +1,32 @@
+{
+  "_": "The caps the Apple app sends with its second engine on (plans/apple-second-engine.md 2.5). Read by Tests/EngineChoiceTests.swift and by mq-bridge's versions_params test, so a name the core does not know fails both.",
+  "kind": "movie",
+  "videoId": "tt1",
+  "tenBitH264": false,
+  "containers": [
+    "mp4",
+    "m4v",
+    "mov",
+    "m3u8",
+    "mkv",
+    "webm",
+    "ts",
+    "m2ts",
+    "avi"
+  ],
+  "audioDecoders": [
+    "aac",
+    "ac3",
+    "eac3",
+    "atmos",
+    "flac",
+    "mp3",
+    "pcm",
+    "dts",
+    "dts_hd",
+    "dts_hd_ma",
+    "dts_x",
+    "true_hd",
+    "opus"
+  ]
+}

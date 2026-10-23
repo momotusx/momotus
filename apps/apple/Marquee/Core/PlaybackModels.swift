@@ -220,6 +220,13 @@ struct PlaybackSnapshot: Decodable, Hashable, Sendable {
     /// its words (plans/player-polish.md 1.3); nil before the first source
     /// starts, from `ready` on, and from an older core.
     var start: StartProgress?
+    /// The file's container ("mkv"), once `ready`: the opened file's, else what an earlier play of the
+    /// version opened, else the release's (optional for older cores).
+    let container: String?
+    /// The release's audio formats in the core's names ("dts_hd_ma") (optional for older cores).
+    let audio: [String]?
+    /// The second engine this version played on here before ("aether") (optional for older cores).
+    let engine: String?
 
     var notes: [SubtitleNote] { subtitleNotes ?? [] }
 }

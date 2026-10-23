@@ -3,8 +3,8 @@ import SwiftUI
 import VideoToolbox
 
 /// What this device's player can play, sent with every Versions view so the
-/// core ranks and hides sources for it. AVPlayer is the engine for now: it
-/// opens MP4 and MOV, not MKV, and there is no fallback engine yet.
+/// core ranks and hides sources for it. AVPlayer opens MP4 and MOV; where the second engine is on
+/// (`EngineChoice`), MKV, AVI and DTS or TrueHD audio too.
 enum DeviceCaps {
     /// The connection speed is measured for: "wifi", "ethernet", "cellular"
     /// or "other", kept by `SystemEvents` from the network path.
@@ -27,7 +27,9 @@ enum DeviceCaps {
             "network": network,
             "decoders": decoders,
             "tenBitHevc": decoders.contains("h265"),
-            "audioDecoders": ["aac", "ac3", "eac3", "atmos", "flac", "mp3", "pcm"],
+            // No hardware decodes 10-bit H.264 here; software decode waits for the resource gate (plan 2.5).
+            "tenBitH264": false,
+            "audioDecoders": EngineChoice.audioDecoders(enabled: EngineChoice.enabledHere),
             "containers": containers,
             "hasFallbackEngine": false,
             // AVFoundation shows HEVC in MP4 only from an entry with its parameter sets.
@@ -43,8 +45,8 @@ enum DeviceCaps {
         Locale.preferredLanguages.first.flatMap { Locale(identifier: $0).language.languageCode?.identifier }
     }
 
-    /// AVPlayer's files, and HLS playlists (`m3u8`), which it plays natively.
-    private static let containers = ["mp4", "m4v", "mov", "m3u8"]
+    /// AVPlayer's files and HLS playlists, and the second engine's containers where it is on.
+    private static var containers: [String] { EngineChoice.containers(enabled: EngineChoice.enabledHere) }
 
     private static var decoders: [String] {
         var decoders = ["h264"]
