@@ -35,6 +35,9 @@ settings:
     # own: the core carries the torrent engine, checked before the app compiles; store: a store core,
     # engine-free on purpose (STORE=1 for build-core.sh). The app reads it as MarqueeCoreBuild.
     MARQUEE_CORE_BUILD: own
+    # A walk build (plans/apple-second-engine.md section 3): Release with MARQUEE_WALK_BUILD="DEBUG MARQUEE_WALK"
+    # on the xcodebuild line, the walk hooks and the sampler compiled into the app only, never into the engine.
+    MARQUEE_WALK_BUILD: ""
 targetTemplates:
   App:
     type: application
@@ -111,6 +114,7 @@ targetTemplates:
         # The asset catalog holds icons only; there is no app icon set yet.
         ASSETCATALOG_COMPILER_APPICON_NAME: ""
         CODE_SIGN_ENTITLEMENTS: $(MARQUEE_ENTITLEMENTS)
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) $(MARQUEE_WALK_BUILD)
 targets:
   Marquee-macOS:
     templates: [App]

@@ -52,6 +52,9 @@ struct MarqueeApp: App {
         // Said at launch, before anything can play: a walk checks it first.
         coreLog.notice("debug: players start \(DebugHooks.mute ? "muted" : "with sound", privacy: .public)")
         #endif
+        #if MARQUEE_WALK
+        WalkSampler.start()
+        #endif
     }
 
     /// D13's removal resumes on the owner, unlocked, when the core says one is left.
