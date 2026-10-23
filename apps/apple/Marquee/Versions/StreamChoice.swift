@@ -152,7 +152,6 @@ struct StreamChoiceWords: Decodable, Sendable {
         let screens: [String: String]
         let hdr: String
         let speed: String
-        let speedUnknown: String
         let free: String
         let networks: [String: String]
     }
@@ -276,10 +275,9 @@ enum StreamChoice {
             "minutes": line.aheadMin.map(String.init),
             "budget": line.budgetBytes.map(bytes),
         ]
-        if let samples = line.samples {
-            fields["speedSource"] = samples > 0
-                ? words.speedSource["measured"]?.replacingOccurrences(of: "{playbacks}", with: counted("playbacks", samples))
-                : words.speedSource["estimated"]
+        // Only a speed a playback measured is said: an unmeasured one leaves its part out (plan 2g).
+        if let samples = line.samples, samples > 0 {
+            fields["speedSource"] = words.speedSource["measured"]?.replacingOccurrences(of: "{playbacks}", with: counted("playbacks", samples))
         }
         // A window on mobile data keeps only a short stretch ahead: no minutes.
         let parts = line.kind == "buffer" && line.aheadMin == nil ? w.detailsMobile ?? w.details : w.details
@@ -331,14 +329,12 @@ enum StreamChoice {
         words.conditions.screens[String(screenClass)] ?? "\(screenClass)p"
     }
 
-    /// "4K HDR, about 42 Mbit/s on Wi-Fi, 61 GB free".
+    /// "4K HDR, about 42 Mbit/s on Wi-Fi, 61 GB free"; the speed only once a playback measured it.
     static func conditionsLine(screenClass: Int, hdr: Bool, network: String, speed: Speed, freeBytes: Int64?) -> String {
         let c = words.conditions
         let screen = screenWord(screenClass)
         let net = c.networks[network] ?? c.networks["other"] ?? network
-        let speedPart = speed.samples > 0
-            ? fill(c.speed, ["mbps": String(Int(speed.mbps.rounded())), "network": net])
-            : fill(c.speedUnknown, ["network": net])
+        let speedPart = speed.samples > 0 ? fill(c.speed, ["mbps": String(Int(speed.mbps.rounded())), "network": net]) : nil
         let free = freeBytes.flatMap { fill(c.free, ["free": bytes($0)]) }
         return [hdr ? fill(c.hdr, ["screen": screen]) : screen, speedPart, free].compactMap { $0 }.joined(separator: ", ")
     }

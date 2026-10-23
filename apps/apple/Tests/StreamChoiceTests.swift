@@ -55,11 +55,10 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
     #expect(try words(#"{"kind": "fetch", "service": null}"#).details == "")
     #expect(try words(#"{"kind": "ready", "service": "TorBox", "sizeBytes": null}"#) == LineWords(tone: .ok, text: "Starts right away", details: "Ready now"))
     #expect(try words(#"{"kind": "quick", "seeders": 120, "sizeBytes": 164626432}"#).details == "120 seeders, 157 MB")
-    // Measured from playbacks, or an estimate.
+    // Measured from playbacks; an unmeasured speed is never said ("estimated" goes, plan 2g).
     #expect(try words(#"{"kind": "mayPause", "needMbps": 31.6, "haveMbps": 9.4, "samples": 3}"#).details
         == "Needs about 32 Mbit/s; this connection gives about 9 (measured from 3 playbacks)")
-    #expect(try words(#"{"kind": "mayPause", "needMbps": 31.6, "haveMbps": 10, "samples": 0}"#).details
-        == "Needs about 32 Mbit/s; this connection gives about 10 (estimated)")
+    #expect(try words(#"{"kind": "mayPause", "needMbps": 31.6, "haveMbps": 10, "samples": 0}"#).details == "")
     // Large: the default words, or the chosen limit's.
     let large = try line(#"{"kind": "large", "sizeBytes": 9663676416, "limitBytes": 5368709120}"#)
     #expect(StreamChoice.lineWords(large)?.text == "Large file")
@@ -111,7 +110,7 @@ private func prefs(uhd: String = learned(), fhd: String = learned(), epoch: Int 
     #expect(StreamChoice.conditionsLine(screenClass: 2160, hdr: true, network: "wifi", speed: measured, freeBytes: 65_498_251_264)
         == "4K HDR, about 42 Mbit/s on Wi-Fi, 61 GB free")
     #expect(StreamChoice.conditionsLine(screenClass: 1080, hdr: false, network: "other", speed: estimate, freeBytes: nil)
-        == "1080p, this network, speed not measured yet")
+        == "1080p")
     // With an account, or without the engine, HTTP decides; else the torrent engine.
     #expect(StreamChoice.speed(http: measured, p2p: estimate, engine: true, account: false) == estimate)
     #expect(StreamChoice.speed(http: measured, p2p: estimate, engine: true, account: true) == measured)
