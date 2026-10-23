@@ -13,8 +13,6 @@ struct DiscoverScreen: View {
     @Environment(ProfileSession.self) private var profiles
     @State private var onboarding = false
     @Environment(\.linkRequests) private var links
-    /// The request whose kind was asked for, so the kind is asked once.
-    @State private var askedKind: DiscoverRequest?
 
     init(core: CoreClient) {
         self.core = core
@@ -43,9 +41,9 @@ struct DiscoverScreen: View {
         .task(id: discover.taskId) { discover.start() }
         .task(id: addons.taskId) { addons.start() }
         .onChange(of: addons.snapshot?.fresh == true, initial: true) { _, fresh in if fresh { onboarding = true } }
-        // A title page's genre chip (DiscoverRequest).
+        // A title page's genre chip (DiscoverRequest): sent once, when there is a snapshot.
         .onChange(of: links?.discover, initial: true) { follow() }
-        .onChange(of: discover.snapshot) { follow() }
+        .onChange(of: discover.snapshot != nil) { follow() }
         .modifier(FullScreen(isPresented: $onboarding) {
             NavigationStack {
                 OnboardingScreen(core: core) { onboarding = false }
@@ -74,6 +72,11 @@ struct DiscoverScreen: View {
                     label: "Genre", chips: all + s.genres.map { Chip(id: $0, title: $0) },
                     isSelected: { $0 == (s.genre ?? "") },
                     select: { select(["genre": $0.isEmpty ? NSNull() : $0]) })
+            }
+            if let line = DiscoverWords.missingGenre(s.missingGenre) {
+                Text(line)
+                    .textFont(13, relativeTo: .footnote)
+                    .foregroundStyle(Theme.Palette.dim)
             }
         }
     }
@@ -109,23 +112,9 @@ struct DiscoverScreen: View {
         s.catalogs.first { $0.id == s.catalog }?.name ?? "this catalog"
     }
 
-    /// Moves Discover to a chip's kind, then its genre, as `DiscoverRequest.step` says.
     private func follow() {
-        guard let request = links?.discover, let snapshot = discover.snapshot else { return }
-        switch request.step(snapshot) {
-        case .wait:
-            if snapshot.kind != request.kind, askedKind != request {
-                askedKind = request
-                select(["kind": request.kind])
-            }
-            return
-        case .select(let genre):
-            if snapshot.genre != genre { select(["genre": genre]) }
-        case .none:
-            if snapshot.genre != nil { select(["genre": NSNull()]) }
-        }
-        links?.discover = nil
-        askedKind = nil
+        guard let links else { return }
+        DiscoverRequest.follow(&links.discover, snapshot: discover.snapshot) { discover.command($0) }
     }
 
     private func select(_ fields: [String: any Sendable]) {

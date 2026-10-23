@@ -25,6 +25,8 @@ private func fixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T 
     #expect(!discover.genres.isEmpty)
     #expect(!discover.items.isEmpty)
     #expect(discover.state == .ready)
+    // A snapshot without the key (a core from before C40) decodes with no missing genre.
+    #expect(discover.missingGenre == nil)
 }
 
 @Test func libraryCountsKinds() throws {

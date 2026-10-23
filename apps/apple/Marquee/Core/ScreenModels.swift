@@ -26,32 +26,35 @@ struct DiscoverSnapshot: Decodable, Hashable, Sendable {
     let genreRequired: Bool
     let items: [Tile]
     let state: DiscoverState
+    /// The genre a kind-plus-genre select asked for that no catalog of the kind lists (C40).
+    let missingGenre: String?
 }
 
-/// A title page's genre chip: Discover on the title's kind, then the genre once that kind's snapshot
-/// lists it (plans/design-v3-phase3-apple.md 4.2). Until the core can open a genre on whichever
-/// catalog offers it (C40), a genre the default catalog does not list leaves the kind with no genre.
+/// A title page's genre chip: one `select {kind, genre}`, and the core opens the first catalog of
+/// the kind listing the genre (C40; plans/design-v3-phase7-apple.md 4.5).
 struct DiscoverRequest: Equatable, Sendable {
     let kind: String
     let genre: String
 
-    enum Step: Equatable {
-        /// Ask for the kind, or wait for its catalog to load.
-        case wait
-        /// The genre as the catalog spells it.
-        case select(String)
-        /// The kind with no genre: the catalog does not list it, or Discover has no such kind.
-        case none
+    /// The select to send, or nil when Discover has no such kind (Discover then opens untouched).
+    func selectCommand(kinds: [KindLabel]) -> [String: any Sendable]? {
+        guard kinds.contains(where: { $0.id == kind }) else { return nil }
+        return ["type": "select", "kind": kind, "genre": genre]
     }
 
-    /// What to do with `snapshot`. A snapshot of another kind (the one from before the switch) only
-    /// waits; the genre is matched without case.
-    func step(_ snapshot: DiscoverSnapshot?) -> Step {
-        guard let snapshot else { return .wait }
-        guard snapshot.kinds.contains(where: { $0.id == kind }) else { return .none }
-        guard snapshot.kind == kind, snapshot.catalog != nil else { return .wait }
-        return snapshot.genres.first { $0.caseInsensitiveCompare(genre) == .orderedSame }.map(Step.select) ?? .none
+    /// Sends the pending request once Discover has a snapshot, then clears it, so a later snapshot
+    /// sends nothing.
+    static func follow(_ pending: inout DiscoverRequest?, snapshot: DiscoverSnapshot?, send: ([String: any Sendable]) -> Void) {
+        guard let request = pending, let snapshot else { return }
+        pending = nil
+        if let command = request.selectCommand(kinds: snapshot.kinds) { send(command) }
     }
+}
+
+/// Discover's own words (no addon name ever reaches them).
+enum DiscoverWords {
+    /// The quiet line beside the filters after a genre chip no catalog lists.
+    static func missingGenre(_ genre: String?) -> String? { genre.map { "No \($0) here" } }
 }
 
 /// A type and its label; the core sends each pair as a two-element array.

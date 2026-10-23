@@ -1,11 +1,12 @@
 import Foundation
 import Testing
 
-// A title page's genre chip opens Discover on the title's kind, then the genre once that kind's
-// snapshot lists it (plans/design-v3-phase3-apple.md 4.2).
+// A title page's genre chip opens Discover with one select of the kind and the genre; the core
+// opens the first catalog listing it (C40; plans/design-v3-phase7-apple.md 4.5).
 
-private func snapshot(kind: String?, catalog: String?, genres: [String], kinds: [String] = ["movie", "series"]) throws -> DiscoverSnapshot {
+private func snapshot(kind: String?, catalog: String?, genres: [String], kinds: [String] = ["movie", "series"], missingGenre: String? = nil) throws -> DiscoverSnapshot {
     let json: [String: Any] = [
+        "missingGenre": missingGenre ?? NSNull(),
         "kinds": kinds.map { [$0, $0.capitalized] },
         "kind": kind ?? NSNull(),
         "catalogs": catalog.map { [["id": $0, "name": "Popular", "source": "Cinemeta"]] } ?? [],
@@ -19,21 +20,43 @@ private func snapshot(kind: String?, catalog: String?, genres: [String], kinds: 
     return try JSONDecoder().decode(DiscoverSnapshot.self, from: JSONSerialization.data(withJSONObject: json))
 }
 
-@Test func aGenreChipWaitsForItsKindThenTakesTheGenreAsTheCatalogSpellsIt() throws {
-    let request = DiscoverRequest(kind: "series", genre: "thriller")
-    // Before the switch: the movie snapshot, even one listing the genre, only waits.
-    #expect(request.step(try snapshot(kind: "movie", catalog: "cinemeta|movie|top", genres: ["Thriller"])) == .wait)
-    // The kind arrived but its catalog has not loaded.
-    #expect(request.step(try snapshot(kind: "series", catalog: nil, genres: [])) == .wait)
-    #expect(request.step(try snapshot(kind: "series", catalog: "cinemeta|series|top", genres: ["Drama", "Thriller"])) == .select("Thriller"))
-    #expect(request.step(nil) == .wait)
+private func fields(_ command: [String: any Sendable]?) -> [String: String]? {
+    command?.mapValues { "\($0)" }
 }
 
-@Test func aGenreTheCatalogDoesNotListLeavesTheKindWithNoGenre() throws {
-    let request = DiscoverRequest(kind: "series", genre: "Reality-TV")
-    #expect(request.step(try snapshot(kind: "series", catalog: "cinemeta|series|top", genres: ["Drama"])) == .none)
-    // Discover has no such kind at all: nothing to wait for.
-    #expect(DiscoverRequest(kind: "anime", genre: "Drama").step(try snapshot(kind: "movie", catalog: "cinemeta|movie|top", genres: ["Drama"])) == .none)
+@Test func aGenreChipSendsTheKindAndTheGenreWithNoCatalog() throws {
+    let kinds = try snapshot(kind: "movie", catalog: "cinemeta|movie|top", genres: []).kinds
+    let command = DiscoverRequest(kind: "series", genre: "Thriller").selectCommand(kinds: kinds)
+    #expect(fields(command) == ["type": "select", "kind": "series", "genre": "Thriller"])
+    // Discover has no such kind: no select, Discover opens as it is.
+    #expect(DiscoverRequest(kind: "anime", genre: "Drama").selectCommand(kinds: kinds) == nil)
+}
+
+@Test func aGenreChipIsSentOnceWhenDiscoverHasASnapshot() throws {
+    var pending: DiscoverRequest? = DiscoverRequest(kind: "series", genre: "Thriller")
+    var sent: [[String: String]] = []
+    let send: ([String: any Sendable]) -> Void = { sent.append(fields($0)!) }
+    // No snapshot yet: the request waits.
+    DiscoverRequest.follow(&pending, snapshot: nil, send: send)
+    #expect(sent.isEmpty && pending != nil)
+    let first = try snapshot(kind: "movie", catalog: "cinemeta|movie|top", genres: [])
+    DiscoverRequest.follow(&pending, snapshot: first, send: send)
+    #expect(sent == [["type": "select", "kind": "series", "genre": "Thriller"]])
+    #expect(pending == nil)
+    // The core's answer, and any later snapshot, sends nothing more.
+    DiscoverRequest.follow(&pending, snapshot: try snapshot(kind: "series", catalog: "cinemeta|series|top", genres: ["Thriller"]), send: send)
+    #expect(sent.count == 1)
+    // A kind Discover lacks: cleared, nothing sent.
+    pending = DiscoverRequest(kind: "anime", genre: "Drama")
+    DiscoverRequest.follow(&pending, snapshot: first, send: send)
+    #expect(sent.count == 1 && pending == nil)
+}
+
+@Test func aGenreNoCatalogListsShowsOneQuietLine() throws {
+    let missing = try snapshot(kind: "movie", catalog: "cinemeta|movie|top", genres: ["Drama"], missingGenre: "Anime")
+    #expect(missing.missingGenre == "Anime")
+    #expect(DiscoverWords.missingGenre(missing.missingGenre) == "No Anime here")
+    #expect(DiscoverWords.missingGenre(try snapshot(kind: "movie", catalog: nil, genres: []).missingGenre) == nil)
 }
 
 // A chip on a title opened from Search or Discover: the place is already on screen with the title
