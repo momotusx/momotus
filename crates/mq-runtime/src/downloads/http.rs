@@ -41,7 +41,8 @@ pub(super) enum Ended {
 pub(super) fn downloadable(core: &Core, s: &ParsedStream) -> bool {
     match &s.source {
         Source::Http { url } => !looks_like_playlist(url.path()),
-        Source::ClientResolve(_) | Source::Torrent { .. } => core.debrid().is_some(),
+        Source::Torrent { .. } => core.debrid().is_some() || core.has_engine(),
+        Source::ClientResolve(_) => core.debrid().is_some(),
         _ => false,
     }
 }

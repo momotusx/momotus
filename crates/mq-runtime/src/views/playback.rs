@@ -2403,9 +2403,8 @@ async fn resolve_next(
                     if !adopt(&mut s, run, lease) {
                         return;
                     }
-                    // A file on this device takes nothing from the network.
-                    s.streaming = (!matches!(upstream, Upstream::File { .. }))
-                        .then(|| core.downloads().streaming());
+                    s.streaming = streams_from_network(&core, &stream, &target, &upstream)
+                        .map(|torrent| core.downloads().streaming(torrent.as_deref()));
                     let proven = s.dead.reached();
                     if let Some(pick) = &s.pick {
                         pick.ready();
@@ -2753,6 +2752,22 @@ async fn open_source(
     if let Some(local) = downloaded_file(core, stream, target) {
         return Ok(local);
     }
+    // A torrent download of this version plays from the engine's folder,
+    // a streaming account connected or not.
+    #[cfg(feature = "torrent")]
+    if let Source::Torrent {
+        info_hash,
+        file_idx,
+        trackers,
+        ..
+    } = &stream.source
+        && core
+            .downloads()
+            .torrent_download(&target.item_id, &target.video_id)
+            .is_some_and(|(key, _, _)| key == stream.key)
+    {
+        return open_torrent(core, stream, target, run, info_hash, *file_idx, trackers).await;
+    }
     let (url, headers, filename, size, addon_url) = match &stream.source {
         Source::Http { url } => (
             url.to_string(),
@@ -2824,6 +2839,37 @@ async fn open_source(
         filename,
         size,
     ))
+}
+
+/// Whether the playing source takes from the network, and the torrent it
+/// plays if one: a file on this device and a whole torrent download take
+/// nothing, so downloads go on beside them (plans/offline-downloads.md 4.4).
+#[cfg_attr(not(feature = "torrent"), allow(unused_variables))]
+fn streams_from_network(
+    core: &Core,
+    stream: &ParsedStream,
+    target: &PlayTarget,
+    upstream: &Upstream,
+) -> Option<Option<String>> {
+    match upstream {
+        Upstream::File { .. } => None,
+        Upstream::Http { .. } => Some(None),
+        #[cfg(feature = "torrent")]
+        Upstream::Torrent { .. } => {
+            let kept = core
+                .downloads()
+                .torrent_download(&target.item_id, &target.video_id)
+                .filter(|(key, _, _)| *key == stream.key);
+            match kept {
+                Some((_, _, true)) => None,
+                Some((_, t, false)) => Some(Some(t.hash)),
+                None => match &stream.source {
+                    Source::Torrent { info_hash, .. } => Some(Some(info_hash.clone())),
+                    _ => Some(None),
+                },
+            }
+        }
+    }
 }
 
 /// The download of this version of the video, when it plays from disk now

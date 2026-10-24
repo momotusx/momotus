@@ -748,7 +748,15 @@ impl Core {
             .engine
             .get()
             .and_then(|e| e.counted())
-            .unwrap_or_else(|| mq_engine::counted_on_disk(&self.inner.torrent_dir));
+            .unwrap_or_else(|| {
+                let kept: Vec<String> = self
+                    .downloads()
+                    .kept_torrents()
+                    .into_iter()
+                    .map(|(hash, _)| hash)
+                    .collect();
+                mq_engine::counted_on_disk_keeping(&self.inner.torrent_dir, &kept)
+            });
         (Some(counted.reclaimable), counted.committed, counted.held)
     }
 
@@ -771,6 +779,9 @@ impl Core {
         mq_engine::EngineConfig {
             upload: false,
             cache_budget_bytes: self.free_bytes().map_or(budget, |f| budget.min(f / 2)),
+            // Offline downloads' files: never swept (plans/offline-downloads.md
+            // 4.6).
+            kept: self.downloads().kept_torrents(),
             ..mq_engine::EngineConfig::new(&self.inner.torrent_dir, self.http().torrent_scope(&[]))
         }
     }

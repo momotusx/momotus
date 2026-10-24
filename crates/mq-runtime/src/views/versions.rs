@@ -2253,8 +2253,14 @@ fn downloaded(core: &Core, s: &State, ranking: &Ranking) -> Option<RankedRow> {
     let downloads = core.downloads();
     let (stream, row) = downloads.kept(&ranking.item_id, &ranking.params.video_id)?;
     let partial = row.bytes_done > 0 && row.state != crate::downloads::DownloadState::Done;
-    let plays =
-        row.state == crate::downloads::DownloadState::Done || (partial && downloads.link().offline);
+    // A partial torrent plays at once when its start is on disk (its reader
+    // fetches the rest first); a dead swarm's never beats a ready version
+    // (apps r2 P2-2).
+    let start_on_disk =
+        partial && torrent_start_on_disk(core, &ranking.item_id, &ranking.params.video_id);
+    let plays = row.state == crate::downloads::DownloadState::Done
+        || start_on_disk
+        || (partial && downloads.link().offline);
     if !plays {
         return None;
     }
@@ -2268,6 +2274,17 @@ fn downloaded(core: &Core, s: &State, ranking: &Ranking) -> Option<RankedRow> {
         conditions: &s.rank,
     };
     mq_streams::rank_kept(stream, &input)
+}
+
+/// A torrent download's start (its head and index) is verified on disk.
+fn torrent_start_on_disk(core: &Core, item_id: &str, video_id: &str) -> bool {
+    #[cfg(feature = "torrent")]
+    if let Some((_, t, _)) = core.downloads().torrent_download(item_id, video_id) {
+        return mq_engine::cached_on_disk(core.torrent_dir(), &t.hash, t.file, 0)
+            .is_some_and(|c| c.ready);
+    }
+    let _ = (core, item_id, video_id);
+    false
 }
 
 /// The same source: one key from one install and one service.

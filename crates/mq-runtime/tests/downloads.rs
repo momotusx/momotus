@@ -127,15 +127,20 @@ static SUBTITLE_ASKS: AtomicUsize = AtomicUsize::new(0);
 /// One addon answering meta and streams: Sintel with one direct stream, or
 /// a series with two episodes. `delay` holds every stream answer.
 async fn addon(stream_url: &str, delay: Duration) -> AddonRow {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    let streams = serde_json::json!({ "streams": [{
+    let stream = serde_json::json!({
         "name": "Direct\n1080p",
         "title": "Sintel.2010.1080p.WEB-DL.mp4",
         "url": stream_url,
         "behaviorHints": { "filename": "Sintel.2010.1080p.WEB-DL.mp4" }
-    }]})
-    .to_string();
+    });
+    addon_listing(stream, delay).await
+}
+
+/// [`addon`] listing `stream` as Sintel's one stream.
+async fn addon_listing(stream: serde_json::Value, delay: Duration) -> AddonRow {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let streams = serde_json::json!({ "streams": [stream] }).to_string();
     let meta = serde_json::json!({ "meta": {
         "id": ITEM, "type": "movie", "name": "Sintel", "runtime": "15 min",
         "releaseInfo": "2010", "poster": "https://images.example/sintel.jpg"
@@ -444,7 +449,7 @@ async fn the_queue_waits_for_what_holds_it() {
     })
     .await;
     downloads.set_link(Link::default());
-    let playing = downloads.streaming();
+    let playing = downloads.streaming(None);
     until(&core, id, "waits while a stream plays", |r| {
         r.reason == Some(DownloadReason::Playing)
     })
@@ -802,4 +807,89 @@ async fn an_unwritable_folder_waits_and_never_fails() {
         r.state == DownloadState::Waiting && r.reason == Some(DownloadReason::Space)
     })
     .await;
+}
+
+// Torrents (feature `torrent`): a loopback swarm with discovery off, the
+// leecher installed as the device's engine.
+
+#[cfg(feature = "torrent")]
+#[path = "../../mq-engine/tests/support/mod.rs"]
+#[allow(dead_code)]
+mod support;
+
+/// A torrent download, then a play with no network: the engine's folder
+/// holds the whole file, the Versions view recommends it before any addon
+/// answers, and the player reads it from disk.
+#[cfg(feature = "torrent")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_torrent_download_plays_offline() {
+    let s = support::swarm(true).await;
+    // Known to the engine with its peer: the job's own add finds it.
+    let t = s
+        .leecher
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let file = s
+        .leecher
+        .files(t)
+        .unwrap()
+        .iter()
+        .position(|f| f.path.ends_with("movie.mkv"))
+        .unwrap();
+    let stream = serde_json::json!({
+        "name": "Fixture\n1080p", "title": "Sintel.2010.1080p.WEB.x264-GROUP",
+        "infoHash": s.info_hash, "fileIdx": file
+    });
+    let core = core_with(addon_listing(stream.clone(), Duration::ZERO).await).await;
+    core.set_torrent_engine(s.leecher.clone());
+    let ids = mq_runtime::downloads::add(&core, movie()).await.unwrap();
+    until(&core, &ids[0], "done", |r| r.state == DownloadState::Done).await;
+    let row = row_of(&core, &ids[0]).unwrap();
+    assert_eq!(row.bytes_total, Some(s.movie.len() as u64));
+    assert_eq!(
+        s.leecher.stats(t).await.unwrap().readers,
+        0,
+        "no reader fetched it"
+    );
+
+    // Offline, the addon slow: the download is the pick at once.
+    let slow = addon_listing(stream, Duration::from_secs(30)).await;
+    core.library()
+        .set_addons(core.profile(), &[slow], &core.hlc())
+        .unwrap();
+    core.downloads().set_link(Link {
+        offline: true,
+        ..Link::default()
+    });
+    let view = VersionsView::open(&core, params());
+    let pick = view.snapshot().recommended.expect("the download, at once");
+    assert_eq!(pick.on_device.as_deref(), Some("Downloaded"));
+    let playback = PlaybackView::open_picked(&core, view.pick(&pick.key), target(), &view.plays());
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    while playback.snapshot().phase != PlaybackPhase::Ready {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "{:?}",
+            playback.snapshot()
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let url = playback.snapshot().url.unwrap();
+    let http = mq_http::HttpClient::new(Default::default()).unwrap();
+    let opts = mq_http::RequestOptions {
+        allow_private: true,
+        max_bytes: 64 << 20,
+        ..Default::default()
+    };
+    let got = http.get_range(&url, 100_000, 4096, &opts).await.unwrap();
+    assert_eq!(got.body[..], s.movie[100_000..104_096]);
+    // A whole download played takes nothing from the network: downloads
+    // go on beside it.
+    let others = core.downloads();
+    assert!(
+        row_of(&core, &ids[0]).is_some_and(|r| r.state == DownloadState::Done),
+        "{:?}",
+        others.board().get()
+    );
 }

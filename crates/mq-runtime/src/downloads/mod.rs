@@ -9,6 +9,8 @@
 //! and is published with them at most twice a second.
 
 mod http;
+#[cfg(feature = "torrent")]
+mod torrent;
 
 use crate::core::WeakCore;
 use crate::{Core, CoreError};
@@ -180,6 +182,20 @@ pub(crate) struct Version {
     /// The file's extension on disk ("mkv"), once its first answer named it.
     #[serde(default)]
     pub(crate) ext: Option<String>,
+    /// A torrent the engine keeps: its file, once chosen.
+    #[serde(default)]
+    pub(crate) torrent: Option<TorrentRef>,
+}
+
+/// A downloaded file of a torrent, in the engine's folder.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TorrentRef {
+    /// Lowercase info hash.
+    pub(crate) hash: String,
+    pub(crate) file: usize,
+    /// Its path in the torrent.
+    pub(crate) name: String,
 }
 
 /// One download as the screens show it.
@@ -367,8 +383,10 @@ pub struct Downloads {
     running: Mutex<HashMap<String, Running>>,
     link: Mutex<Link>,
     allowed: Mutex<Allowed>,
-    /// Network playbacks right now (the playing rule, 4.4).
-    streaming: Arc<std::sync::atomic::AtomicUsize>,
+    /// Network playbacks right now (the playing rule, 4.4), each with the
+    /// torrent it plays, if one.
+    streams: Mutex<HashMap<u64, Option<String>>>,
+    next_stream: std::sync::atomic::AtomicU64,
     wake: Arc<Notify>,
     started: std::sync::Once,
     /// Jobs that met a space error: admitted on the disk's own figure until
@@ -381,16 +399,17 @@ pub struct Downloads {
 }
 
 /// Held by a playback streaming from the network: downloads wait while
-/// one lives.
+/// one lives, but a torrent's own download while it plays (its scheduler
+/// puts the reader first, 4.4).
 pub struct Streaming {
-    count: Arc<std::sync::atomic::AtomicUsize>,
+    id: u64,
     downloads: std::sync::Weak<Downloads>,
 }
 
 impl Drop for Streaming {
     fn drop(&mut self) {
-        self.count.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
         if let Some(d) = self.downloads.upgrade() {
+            lock(&d.streams).remove(&self.id);
             d.wake.notify_one();
         }
     }
@@ -412,7 +431,8 @@ impl Downloads {
                 allowed: true,
                 free: None,
             }),
-            streaming: Arc::default(),
+            streams: Mutex::default(),
+            next_stream: std::sync::atomic::AtomicU64::new(1),
             wake: Arc::new(Notify::new()),
             started: std::sync::Once::new(),
             strict: Mutex::default(),
@@ -495,13 +515,16 @@ impl Downloads {
         self.changed();
     }
 
-    /// A playback streams from the network until the guard drops.
-    pub fn streaming(self: &Arc<Self>) -> Streaming {
-        self.streaming
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    /// A playback streams from the network until the guard drops; `torrent`
+    /// is the info hash it plays, if a torrent.
+    pub fn streaming(self: &Arc<Self>, torrent: Option<&str>) -> Streaming {
+        let id = self
+            .next_stream
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        lock(&self.streams).insert(id, torrent.map(str::to_ascii_lowercase));
         self.wake.notify_one();
         Streaming {
-            count: self.streaming.clone(),
+            id,
             downloads: Arc::downgrade(self),
         }
     }
@@ -525,7 +548,13 @@ impl Downloads {
             let state = DownloadState::read(&row.state);
             let fix = match state {
                 DownloadState::Running => Some(DownloadState::Queued),
-                DownloadState::Done if !self.complete(&row) => Some(DownloadState::Missing),
+                // A torrent whose folder is there goes on from what it
+                // holds; anything else is gone.
+                DownloadState::Done if !self.complete(&row) => Some(if self.folder_there(&row) {
+                    DownloadState::Queued
+                } else {
+                    DownloadState::Missing
+                }),
                 _ => None,
             };
             if let Some(fix) = fix {
@@ -548,6 +577,13 @@ impl Downloads {
     /// A done download's file is all there (4.8): its length is the size
     /// its source gave.
     fn complete(&self, row: &DownloadRecord) -> bool {
+        #[cfg(feature = "torrent")]
+        if let Some(t) = self.torrent_ref(row) {
+            let Some(core) = self.core() else {
+                return false;
+            };
+            return mq_engine::complete_on_disk(core.torrent_dir(), &t.hash, t.file);
+        }
         let Some(local) = self.file_of(row) else {
             return false;
         };
@@ -555,8 +591,46 @@ impl Downloads {
             .is_ok_and(|m| Some(m.len() as i64) == row.bytes_total && row.bytes_total.is_some())
     }
 
+    /// The torrent file a download keeps, once chosen.
+    fn torrent_ref(&self, row: &DownloadRecord) -> Option<TorrentRef> {
+        serde_json::from_str::<Version>(row.version.as_deref()?)
+            .ok()?
+            .torrent
+    }
+
+    /// A torrent download's folder is there (its data may only lag its
+    /// bitfield).
+    fn folder_there(&self, row: &DownloadRecord) -> bool {
+        #[cfg(feature = "torrent")]
+        if let (Some(t), Some(core)) = (self.torrent_ref(row), self.core()) {
+            return core.torrent_dir().join(&t.hash).exists();
+        }
+        let _ = row;
+        false
+    }
+
+    /// Every torrent file downloads keep, for the engine's start: none of
+    /// them is ever swept (4.6).
+    #[cfg(feature = "torrent")]
+    pub(crate) fn kept_torrents(&self) -> Vec<(String, usize)> {
+        let Some(core) = self.core() else {
+            return Vec::new();
+        };
+        core.library()
+            .downloads()
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|r| self.torrent_ref(r))
+            .map(|t| (t.hash, t.file))
+            .collect()
+    }
+
     /// The video file of a download, where it is or will be.
     fn file_of(&self, row: &DownloadRecord) -> Option<PathBuf> {
+        #[cfg(feature = "torrent")]
+        if let (Some(t), Some(core)) = (self.torrent_ref(row), self.core()) {
+            return Some(core.torrent_dir().join(&t.hash).join(&t.name));
+        }
         let version: Version = serde_json::from_str(row.version.as_deref()?).ok()?;
         let ext = version.ext.unwrap_or_else(|| "mkv".into());
         let name = if DownloadState::read(&row.state) == DownloadState::Done {
@@ -623,6 +697,7 @@ impl Downloads {
                     key: first.key.clone(),
                     chain: chain.iter().map(StoredStream::of).collect(),
                     ext: None,
+                    torrent: None,
                 })
                 .ok()
             });
@@ -689,8 +764,25 @@ impl Downloads {
             match action {
                 Action::Remove => {
                     self.stop(id);
+                    let torrent = self.torrent_ref(&row);
                     core.library().delete_download(id)?;
                     self.forget_files(id);
+                    #[cfg(feature = "torrent")]
+                    if let Some(t) = torrent {
+                        let core = core.clone();
+                        tokio::spawn(async move {
+                            match core.torrent_engine().await {
+                                Ok(engine) => {
+                                    if let Err(e) = engine.delete_file(&t.hash, t.file).await {
+                                        tracing::warn!("download delete: {e}");
+                                    }
+                                }
+                                Err(e) => tracing::warn!("download delete: {e}"),
+                            }
+                        });
+                    }
+                    #[cfg(not(feature = "torrent"))]
+                    let _ = torrent;
                     continue;
                 }
                 Action::Pause => {
@@ -767,6 +859,10 @@ impl Downloads {
         let core = self.core()?;
         let row = core.library().download_of(item_id, video_id).ok()??;
         let version: Version = serde_json::from_str(row.version.as_deref()?).ok()?;
+        // A torrent plays through the engine (`torrent_download`).
+        if version.torrent.is_some() {
+            return None;
+        }
         let state = DownloadState::read(&row.state);
         let path = self.file_of(&row)?;
         let len = u64::try_from(row.bytes_total?).ok()?;
@@ -823,6 +919,21 @@ impl Downloads {
             .into_iter()
             .find(|r| r.id == id)?;
         self.file_of(&row).filter(|p| p.exists())
+    }
+
+    /// The torrent download of `video_id` of `item_id`, with its version's
+    /// key and whether it is done: it plays through the engine, from disk.
+    #[cfg(feature = "torrent")]
+    pub(crate) fn torrent_download(
+        &self,
+        item_id: &str,
+        video_id: &str,
+    ) -> Option<(String, TorrentRef, bool)> {
+        let core = self.core()?;
+        let row = core.library().download_of(item_id, video_id).ok()??;
+        let version: Version = serde_json::from_str(row.version.as_deref()?).ok()?;
+        let done = DownloadState::read(&row.state) == DownloadState::Done;
+        Some((version.key, version.torrent?, done))
     }
 
     /// The stored stream of a download, rebuilt for a Versions row with no
@@ -898,8 +1009,9 @@ impl Downloads {
         fits
     }
 
-    /// Why nothing may run now for a job, if anything holds it.
-    fn held_by(&self, mobile_data: bool) -> Option<DownloadReason> {
+    /// Why nothing may run now for a job of `torrent` (its info hash, for
+    /// a torrent), if anything holds it.
+    fn held_by(&self, mobile_data: bool, torrent: Option<&str>) -> Option<DownloadReason> {
         let link = self.link();
         if link.offline {
             return Some(DownloadReason::Network);
@@ -915,7 +1027,10 @@ impl Downloads {
                 return Some(DownloadReason::Wifi);
             }
         }
-        if self.streaming.load(std::sync::atomic::Ordering::SeqCst) > 0 {
+        let other = lock(&self.streams)
+            .values()
+            .any(|played| played.is_none() || played.as_deref() != torrent);
+        if other {
             return Some(DownloadReason::Playing);
         }
         None
@@ -943,7 +1058,7 @@ impl Downloads {
         }
         for mut row in rows {
             let state = DownloadState::read(&row.state);
-            let hold = self.held_by(row.mobile_data);
+            let hold = self.held_by(row.mobile_data, torrent_of(&row).as_deref());
             match (state, hold) {
                 (DownloadState::Running, Some(reason)) => {
                     self.stop(&row.id);
@@ -1170,6 +1285,7 @@ async fn run_job(me: std::sync::Weak<Downloads>, core: Core, mut row: DownloadRe
                     key: chain[0].key.clone(),
                     chain: chain.iter().map(StoredStream::of).collect(),
                     ext: None,
+                    torrent: None,
                 })
                 .ok();
                 let _ = core.library().save_download(&row);
@@ -1194,7 +1310,15 @@ async fn run_job(me: std::sync::Weak<Downloads>, core: Core, mut row: DownloadRe
         let Some(d) = me.upgrade() else {
             return Outcome::Wait(DownloadReason::App);
         };
-        let ended = http::fetch(&d, &core, &mut row, &source.stream()).await;
+        let stream = source.stream();
+        #[cfg(feature = "torrent")]
+        let ended = if crate::views::playback::by_engine(&stream, core.debrid().is_some(), true) {
+            torrent::fetch(&d, &core, &mut row, &stream).await
+        } else {
+            http::fetch(&d, &core, &mut row, &stream).await
+        };
+        #[cfg(not(feature = "torrent"))]
+        let ended = http::fetch(&d, &core, &mut row, &stream).await;
         drop(d);
         match ended {
             http::Ended::Done => return Outcome::Done,
@@ -1408,4 +1532,16 @@ fn sanitize(name: &str) -> String {
     name.chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
         .collect()
+}
+
+/// The info hash of a job's torrent, chosen or listed.
+fn torrent_of(row: &DownloadRecord) -> Option<String> {
+    let version: Version = serde_json::from_str(row.version.as_deref()?).ok()?;
+    if let Some(t) = version.torrent {
+        return Some(t.hash);
+    }
+    match &version.chain.first()?.stream().source {
+        mq_protocol::Source::Torrent { info_hash, .. } => Some(info_hash.to_ascii_lowercase()),
+        _ => None,
+    }
 }
