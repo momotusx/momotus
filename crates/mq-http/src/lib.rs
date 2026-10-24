@@ -1242,17 +1242,15 @@ impl HttpClient {
     /// Unscoped, the first URL is checked against `allow_private` and reqwest
     /// follows redirects under `redirect`; scoped, `follow` does it all.
     /// `fetch_hops`, timed: time to headers by host, logged at debug for the
-    /// walks (debug builds log debug), every request and stream alike.
+    /// walks (debug builds log debug), every request and stream alike. The
+    /// host is logged as its tag, never by name: logs never name an origin.
     async fn fetch(
         &self,
         req: Request,
         opts: &RequestOptions,
     ) -> Result<(reqwest::Response, budget::Permit), HttpError> {
-        // A host on this machine or the LAN is never named in the log.
-        let host = match req.url.host_str().unwrap_or_default() {
-            h if is_private_host(h) => "private".to_owned(),
-            h => h.to_owned(),
-        };
+        // No host is named in the log, a public one neither: its tag.
+        let host = host_tag(req.url.host_str().unwrap_or_default());
         let started = std::time::Instant::now();
         let fetched = self.fetch_hops(req, opts).await;
         tracing::debug!(
@@ -1607,9 +1605,26 @@ fn over_limit(len: u64, max_bytes: usize) -> bool {
     len > max_bytes as u64
 }
 
+/// A short tag of `host` for the timing log: stable across builds and
+/// runs (FNV-1a), so a walk still tells hosts apart without naming them.
+fn host_tag(host: &str) -> String {
+    let hash = host.bytes().fold(0xcbf2_9ce4_8422_2325_u64, |h, b| {
+        (h ^ u64::from(b)).wrapping_mul(0x100_0000_01b3)
+    });
+    format!("{:08x}", hash >> 32)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The timing log's host tag is the same in every build and run (a
+    /// walk compares hosts across builds) and is not the name.
+    #[test]
+    fn a_host_tag_is_stable_and_not_the_name() {
+        assert_eq!(host_tag("v3-cinemeta.strem.io"), "26e0eede");
+        assert_ne!(host_tag("a.test"), host_tag("b.test"));
+    }
 
     /// Core backlog C29: Android's CA folder read as Android lays it out
     /// (each file a PEM certificate followed by its text dump), a file that
