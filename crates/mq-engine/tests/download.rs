@@ -4,6 +4,7 @@
 
 #![cfg(feature = "test-hooks")]
 
+#[allow(dead_code)]
 mod support;
 
 use std::path::Path;

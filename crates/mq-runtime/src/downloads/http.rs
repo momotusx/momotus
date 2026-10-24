@@ -258,7 +258,10 @@ async fn one_request(
     row.bytes_total = Some(total as i64);
     row.bytes_done = from as i64;
     let _ = core.library().save_download(row);
-    if !d.fits(core, &row.id, total.saturating_sub(from)) {
+    if !d
+        .fits_making_room(core, &row.id, total.saturating_sub(from))
+        .await
+    {
         return Request::Ended(Ended::Wait(DownloadReason::Space));
     }
     let part = dir.join(format!("video.{ext}.part"));

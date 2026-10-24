@@ -9,6 +9,7 @@
 //! and is published with them at most twice a second.
 
 mod http;
+mod subtitles;
 #[cfg(feature = "torrent")]
 mod torrent;
 
@@ -234,6 +235,8 @@ pub struct DownloadRow {
     pub eta_secs: Option<u64>,
     /// "1080p", from the version kept.
     pub quality: Option<String>,
+    /// The languages of the subtitles kept with it, as tags.
+    pub subtitles: Vec<String>,
 }
 
 /// The download control's state for one video (3.1).
@@ -396,6 +399,21 @@ pub struct Downloads {
     /// When each job began waiting for space: one whose size is unknown
     /// looks again after a minute, not at every wake.
     space_since: Mutex<HashMap<String, std::time::Instant>>,
+    /// Downloads whose subtitles are being fetched.
+    subtitling: Mutex<std::collections::HashSet<String>>,
+    /// Smart downloads waiting for their next episode (4.14).
+    smart: Mutex<Vec<Smart>>,
+    /// The loopback URLs of downloads' posters and stills (4.11), by file,
+    /// with the server port they were made on.
+    images: Mutex<HashMap<PathBuf, (u16, String, mq_server::Lease)>>,
+}
+
+/// A finished episode a smart download deletes once `next` is done.
+struct Smart {
+    finished: String,
+    next: Option<String>,
+    /// The profile that finished it.
+    by: String,
 }
 
 /// Held by a playback streaming from the network: downloads wait while
@@ -437,6 +455,9 @@ impl Downloads {
             started: std::sync::Once::new(),
             strict: Mutex::default(),
             space_since: Mutex::default(),
+            subtitling: Mutex::default(),
+            smart: Mutex::default(),
+            images: Mutex::default(),
         })
     }
 
@@ -646,11 +667,22 @@ impl Downloads {
         let Some(core) = self.core() else { return };
         let rows = core.library().downloads().unwrap_or_default();
         let running = lock(&self.running);
+        let images: HashMap<PathBuf, String> = lock(&self.images)
+            .iter()
+            .map(|(path, (_, url, _))| (path.clone(), url.clone()))
+            .collect();
         let shown: Vec<DownloadRow> = rows
             .iter()
             .map(|r| {
-                let live = running.get(&r.id);
-                row_of(r, live)
+                let mut row = row_of(r, running.get(&r.id));
+                // The kept copy, which plays with no network.
+                let dir = self.job_dir(&r.id);
+                for (slot, name) in [(&mut row.poster, "poster"), (&mut row.still, "still")] {
+                    if let Some(url) = images.get(&dir.join(name)) {
+                        *slot = Some(url.clone());
+                    }
+                }
+                row
             })
             .collect();
         drop(running);
@@ -740,6 +772,7 @@ impl Downloads {
                 };
                 core.library().save_download(&stored)?;
             }
+            self.fetch_images(&core, &stored.id, &video.facts);
             ids.push(stored.id);
         }
         self.changed();
@@ -838,6 +871,87 @@ impl Downloads {
             .filter(|r| r.item_id == item_id)
             .map(|r| r.id)
             .collect()
+    }
+
+    /// Leases the posters and stills downloads keep on the stream server,
+    /// again when the server moved to another port (a resume).
+    async fn lease_images(&self, core: &Core) {
+        let Ok(server) = core.stream_server().await else {
+            return;
+        };
+        let port = server.addr().port();
+        let rows = core.library().downloads().unwrap_or_default();
+        let mut added = false;
+        for r in &rows {
+            for name in ["poster", "still"] {
+                let path = self.job_dir(&r.id).join(name);
+                let fresh = lock(&self.images)
+                    .get(&path)
+                    .is_some_and(|(p, _, _)| *p == port);
+                if fresh {
+                    continue;
+                }
+                let Ok(meta) = tokio::fs::metadata(&path).await else {
+                    continue;
+                };
+                let lease = server.register(
+                    mq_server::Upstream::File {
+                        path: path.clone(),
+                        len: meta.len(),
+                        held: None,
+                    },
+                    &format!("{name}.jpg"),
+                );
+                let url = lease.url.clone();
+                lock(&self.images).insert(path, (port, url, lease));
+                added = true;
+            }
+        }
+        // Gone downloads' leases go.
+        let ids: Vec<&str> = rows.iter().map(|r| r.id.as_str()).collect();
+        lock(&self.images).retain(|path, _| {
+            path.parent()
+                .and_then(|p| p.file_name())
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| ids.contains(&n))
+        });
+        if added {
+            self.publish();
+        }
+    }
+
+    /// Fetches the poster and the still a download shows offline, once.
+    fn fetch_images(&self, core: &Core, id: &str, facts: &Facts) {
+        let dir = self.job_dir(id);
+        let wanted: Vec<(PathBuf, String)> = [("poster", &facts.poster), ("still", &facts.still)]
+            .into_iter()
+            .filter_map(|(name, url)| Some((dir.join(name), url.clone()?)))
+            .filter(|(path, _)| !path.exists())
+            .collect();
+        if wanted.is_empty() {
+            return;
+        }
+        let (core, wake) = (core.clone(), self.wake.clone());
+        tokio::spawn(async move {
+            let opts = mq_http::RequestOptions {
+                timeout: std::time::Duration::from_secs(20),
+                max_bytes: 8 << 20,
+                ..Default::default()
+            };
+            for (path, url) in wanted {
+                let Ok(answer) = core.http().get(&url, &opts).await else {
+                    continue;
+                };
+                if answer.status != 200 || answer.body.is_empty() {
+                    continue;
+                }
+                if let Some(dir) = path.parent() {
+                    let _ = tokio::fs::create_dir_all(dir).await;
+                }
+                let _ = tokio::fs::write(&path, &answer.body).await;
+            }
+            wake.notify_one();
+        });
     }
 
     fn stop(&self, id: &str) {
@@ -1009,6 +1123,21 @@ impl Downloads {
         fits
     }
 
+    /// Whether `remaining` more bytes fit for job `id`, the idle stream
+    /// cache deleted first when that is what makes them fit (4.9).
+    async fn fits_making_room(&self, core: &Core, id: &str, remaining: u64) -> bool {
+        if self.fits(core, id, remaining) {
+            return true;
+        }
+        #[cfg(feature = "torrent")]
+        if let Some(engine) = core.running_engine() {
+            let need = remaining + RESERVE + self.committed(id);
+            engine.make_room(need).await;
+            return self.fits(core, id, remaining);
+        }
+        false
+    }
+
     /// Why nothing may run now for a job of `torrent` (its info hash, for
     /// a torrent), if anything holds it.
     fn held_by(&self, mobile_data: bool, torrent: Option<&str>) -> Option<DownloadReason> {
@@ -1043,6 +1172,7 @@ impl Downloads {
         let Ok(rows) = core.library().downloads() else {
             return;
         };
+        self.settle_smart(&core);
         // Runs whose row went or stopped being running.
         let gone: Vec<String> = lock(&self.running)
             .keys()
@@ -1100,10 +1230,160 @@ impl Downloads {
                     }
                 }
                 (DownloadState::Queued, None) => self.try_start(&core, row),
+                (DownloadState::Done, _) if row.subtitles_state == "pending" => {
+                    self.keep_subtitles(&core, row);
+                }
                 _ => {}
             }
         }
         self.publish();
+    }
+
+    /// Fetches a done download's subtitles once (4.10), and again at a
+    /// later look while no source answered.
+    fn keep_subtitles(self: &Arc<Self>, core: &Core, row: DownloadRecord) {
+        if self.link().offline || !lock(&self.subtitling).insert(row.id.clone()) {
+            return;
+        }
+        let me = Arc::downgrade(self);
+        let core = core.clone();
+        tokio::spawn(async move {
+            let Some(d) = me.upgrade() else { return };
+            let kept = subtitles::keep(&d, &core, &row).await;
+            lock(&d.subtitling).remove(&row.id);
+            let subtitles::Kept::Done(kept) = kept else {
+                return;
+            };
+            let Ok(Some(mut row)) = core
+                .library()
+                .downloads()
+                .map(|rows| rows.into_iter().find(|r| r.id == row.id))
+            else {
+                return;
+            };
+            row.subtitles_state = if kept.is_empty() { "none" } else { "done" }.into();
+            row.subtitles = serde_json::to_string(&kept).unwrap_or_else(|_| "[]".into());
+            let _ = core.library().save_download(&row);
+            d.changed();
+        });
+    }
+
+    /// Smart downloads (4.14): `core`'s profile finished `video_id` of
+    /// `item_id`. When it is a done download and smart downloads are on, the
+    /// next aired episode is added (ranked as the finished one was), and the
+    /// finished one goes once the next is done, or at once with no next;
+    /// never while another profile, a kids one included, has it started and
+    /// unfinished. A kids profile triggers nothing.
+    pub(crate) fn finished(self: &Arc<Self>, core: &Core, item_id: &str, video_id: &str) {
+        if !self.settings().smart || core.policy().kids() {
+            return;
+        }
+        let Ok(Some(row)) = core.library().download_of(item_id, video_id) else {
+            return;
+        };
+        if DownloadState::read(&row.state) != DownloadState::Done || row.season.is_none() {
+            return;
+        }
+        // Each save past the end calls again: once is enough.
+        if lock(&self.smart).iter().any(|s| s.finished == row.id) {
+            return;
+        }
+        lock(&self.smart).push(Smart {
+            finished: row.id.clone(),
+            next: Some(String::new()),
+            by: core.profile().to_owned(),
+        });
+        let me = Arc::downgrade(self);
+        let core = core.clone();
+        tokio::spawn(async move {
+            let Some(d) = me.upgrade() else { return };
+            let next = smart_next(&core, &row).await;
+            let added = match next {
+                Some(video) => {
+                    let request = serde_json::from_str(&row.request).unwrap_or_default();
+                    d.add(
+                        &row.added_by,
+                        &row.kind,
+                        &row.item_id,
+                        vec![video],
+                        request,
+                        None,
+                    )
+                    .ok()
+                    .and_then(|ids| ids.into_iter().next())
+                }
+                None => None,
+            };
+            if let Some(s) = lock(&d.smart).iter_mut().find(|s| s.finished == row.id) {
+                s.next = added;
+            }
+            d.changed();
+        });
+    }
+
+    /// Smart downloads whose next episode is done (or that have none)
+    /// delete the finished one, unless another profile is part way in.
+    fn settle_smart(&self, core: &Core) {
+        let rows = core.library().downloads().unwrap_or_default();
+        let state = |id: &str| {
+            rows.iter()
+                .find(|r| r.id == id)
+                .map(|r| DownloadState::read(&r.state))
+        };
+        let ready: Vec<Smart> = {
+            let mut smart = lock(&self.smart);
+            // `Some("")`: the next one is still being looked up.
+            let (ready, wait): (Vec<Smart>, Vec<Smart>) = smart.drain(..).partition(|s| {
+                s.next.as_deref().is_none_or(|n| {
+                    !n.is_empty() && matches!(state(n), Some(DownloadState::Done) | None)
+                })
+            });
+            *smart = wait;
+            ready
+        };
+        for s in ready {
+            let Some(row) = rows.iter().find(|r| r.id == s.finished) else {
+                continue;
+            };
+            if part_way_elsewhere(core, row, &s.by) {
+                continue;
+            }
+            let _ = self.act(std::slice::from_ref(&s.finished), Action::Remove);
+        }
+    }
+
+    /// The subtitles a download of `key` for `video_id` of `item_id` kept,
+    /// with their files.
+    pub(crate) fn kept_subtitles(
+        &self,
+        item_id: &str,
+        video_id: &str,
+        key: &str,
+    ) -> Vec<(subtitles::StoredSubtitle, PathBuf)> {
+        let Some(core) = self.core() else {
+            return Vec::new();
+        };
+        let Ok(Some(row)) = core.library().download_of(item_id, video_id) else {
+            return Vec::new();
+        };
+        let same = row
+            .version
+            .as_deref()
+            .and_then(|v| serde_json::from_str::<Version>(v).ok())
+            .is_some_and(|v| v.key == key);
+        if !same {
+            return Vec::new();
+        }
+        let stored: Vec<subtitles::StoredSubtitle> =
+            serde_json::from_str(&row.subtitles).unwrap_or_default();
+        stored
+            .into_iter()
+            .map(|s| {
+                let path = subtitles::file_path(self, &row.id, &s);
+                (s, path)
+            })
+            .filter(|(_, path)| path.is_file())
+            .collect()
     }
 
     fn try_start(self: &Arc<Self>, core: &Core, mut row: DownloadRecord) {
@@ -1250,6 +1530,18 @@ fn row_of(r: &DownloadRecord, live: Option<&Running>) -> DownloadRow {
         speed_bps: speed,
         eta_secs: eta,
         quality,
+        subtitles: {
+            let kept: Vec<subtitles::StoredSubtitle> =
+                serde_json::from_str(&r.subtitles).unwrap_or_default();
+            let mut tags: Vec<String> = Vec::new();
+            for s in kept {
+                let tag = crate::views::playback::listed_track(&s.wire).language;
+                if !tags.contains(&tag) {
+                    tags.push(tag);
+                }
+            }
+            tags
+        },
     }
 }
 
@@ -1259,6 +1551,9 @@ async fn run_queue(me: std::sync::Weak<Downloads>) {
     loop {
         let Some(d) = me.upgrade() else { return };
         d.tick();
+        if let Some(core) = d.core() {
+            d.lease_images(&core).await;
+        }
         let busy = !lock(&d.running).is_empty();
         let wait = if busy {
             PUBLISH_EVERY
@@ -1381,7 +1676,7 @@ async fn pick_version(core: &Core, row: &DownloadRecord) -> Option<Vec<ParsedStr
     let params =
         crate::views::versions::VersionsParams::from_json(&params, core.prefs().streams).ok()?;
     let view =
-        crate::views::versions::VersionsView::open_checked(&core, params, Some(&row.item_id));
+        crate::views::versions::VersionsView::open_to_download(&core, params, Some(&row.item_id));
     let (_, mut updates) = view.subscribe();
     let settle = tokio::time::sleep(Duration::from_secs(60));
     tokio::pin!(settle);
@@ -1532,6 +1827,50 @@ fn sanitize(name: &str) -> String {
     name.chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
         .collect()
+}
+
+/// The aired episode after `row`'s, as a download wants it, when the
+/// title's meta can be read and it has no download yet.
+async fn smart_next(core: &Core, row: &DownloadRecord) -> Option<AddVideo> {
+    let (meta, _) = core.fetch_meta(&row.kind, &row.item_id).await.ok()?;
+    let (next, _) = crate::views::playback::following(&meta, &row.video_id)?;
+    let now = mq_library::hlc::now_ms() as i64;
+    if !crate::views::playback::aired(next, now) {
+        return None;
+    }
+    if core
+        .library()
+        .download_of(&row.item_id, &next.id)
+        .ok()?
+        .is_some()
+    {
+        return None;
+    }
+    let req = AddRequest {
+        kind: row.kind.clone(),
+        item_id: row.item_id.clone(),
+        scope: Scope::Video,
+        video_id: Some(next.id.clone()),
+        season: None,
+        params: serde_json::Value::Null,
+        pick: None,
+    };
+    expand(&meta, &req, now).into_iter().next()
+}
+
+/// Another profile on the device has `row`'s video started and not
+/// finished: a smart download keeps it.
+fn part_way_elsewhere(core: &Core, row: &DownloadRecord, by: &str) -> bool {
+    let profiles = core.library().profiles().unwrap_or_default();
+    profiles.iter().filter(|p| p.id != by).any(|p| {
+        core.library()
+            .progress(&p.id, &row.video_id)
+            .ok()
+            .flatten()
+            .is_some_and(|(pos, dur)| {
+                pos > 0 && (dur <= 0 || (pos as f64) < dur as f64 * mq_library::FINISHED_RATIO)
+            })
+    })
 }
 
 /// The info hash of a job's torrent, chosen or listed.

@@ -2084,6 +2084,14 @@ impl Engine {
         })
     }
 
+    /// Deletes idle stream cache, oldest first, until the volume has
+    /// `need_free` bytes free or nothing idle is left: a download that fits
+    /// only by it comes first (plans/offline-downloads.md 4.9). Kept and
+    /// claimed torrents stay.
+    pub async fn make_room(&self, need_free: u64) {
+        self.enforce_budget(None, need_free).await;
+    }
+
     /// Ends one running download of `t`'s `file`; the last one stops the
     /// scheduler's fetch. The file stays kept.
     async fn end_download(&self, t: &Torrent, file: usize) {

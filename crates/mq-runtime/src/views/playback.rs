@@ -2232,6 +2232,9 @@ fn save_progress(
         if let Some(trakt) = trakt.filter(|_| holds) {
             trakt.held();
         }
+        // Smart downloads (plans/offline-downloads.md 4.14).
+        core.downloads()
+            .finished(core, &target.item_id, &target.video_id);
     }
     Ok(())
 }
@@ -2458,6 +2461,13 @@ async fn resolve_next(
                 remember_stream(&core, &target, &stream, played);
                 // The addons ask with the hash; the built-in source lists at
                 // once and ranks with the frame rate. Pending ends with both.
+                add_kept_tracks(
+                    &core,
+                    &target,
+                    &stream,
+                    &wanted,
+                    (&slot, run, &state, &snapshot),
+                );
                 let subtitles = async {
                     // With no network no source is asked: nothing waits on a
                     // request that cannot go (plans/offline-downloads.md 4.12).
@@ -4479,7 +4489,7 @@ fn track(
     // OpenSubtitles marks a match on the hash we sent with `"m": "h"`; any
     // other addon could mark every row, so only its mark counts. Its
     // `fpsMilli` is the rate the file was timed for.
-    let hash = addon_id == OPENSUBTITLES && w.extra.get("m").and_then(|m| m.as_str()) == Some("h");
+    let hash = hash_match(w, addon_id);
     let fps = w
         .extra
         .get("fpsMilli")
@@ -4510,6 +4520,11 @@ fn track(
 fn forced_mark(text: &str) -> bool {
     text.split(|c: char| !c.is_alphanumeric())
         .any(|w| w.eq_ignore_ascii_case("forced"))
+}
+
+/// OpenSubtitles made `w` for the very file asked about (its hash).
+pub(crate) fn hash_match(w: &mq_protocol::WireSubtitle, addon_id: &str) -> bool {
+    addon_id == OPENSUBTITLES && w.extra.get("m").and_then(|m| m.as_str()) == Some("h")
 }
 
 /// The OpenSubtitles v3 addon's manifest id: the one whose hash match counts.
@@ -4869,7 +4884,7 @@ async fn video_reader(
 
 /// The OpenSubtitles hash and size when they can be had (first and last
 /// 64 KiB, read in process for files), and the filename.
-async fn video_extra(
+pub(crate) async fn video_extra(
     reader: Option<&dyn mq_media::RangeReader>,
     filename: Option<&str>,
 ) -> Vec<ExtraValue> {
@@ -4966,13 +4981,64 @@ async fn find_subtitles(
             s.order.entry(url.clone()).or_insert((position, *rank));
         }
         for t in fresh {
-            if !s.snapshot.subtitles.iter().any(|known| known.url == t.url) {
+            // A file a download kept is listed once, as kept.
+            let known = |k: &SubtitleTrack| k.url == t.url || k.origin == t.origin;
+            if !s.snapshot.subtitles.iter().any(known) {
                 s.snapshot.subtitles.push(t);
             }
         }
         reorder(&mut s, wanted);
         snapshot.set(s.snapshot.clone());
     }
+}
+
+/// The tracks a download of this version kept (plans/offline-downloads.md
+/// 4.10), served from their files, ordered as their sources listed them.
+fn add_kept_tracks(
+    core: &Core,
+    target: &PlayTarget,
+    stream: &ParsedStream,
+    wanted: &[String],
+    (slot, run, state, snapshot): (
+        &SubtitleSlot,
+        u64,
+        &Mutex<State>,
+        &SharedObservable<PlaybackSnapshot>,
+    ),
+) {
+    let kept = core
+        .downloads()
+        .kept_subtitles(&target.item_id, &target.video_id, &stream.key);
+    if kept.is_empty() {
+        return;
+    }
+    let title_forced = lock(state).playing.title_forced;
+    let mut tracks = Vec::new();
+    for (stored, path) in kept {
+        let fetch: mq_server::Fetch = Arc::new(move || {
+            let path = path.clone();
+            Box::pin(async move { tokio::fs::read(path).await.ok() })
+        });
+        let w = &stored.wire;
+        let key = format!("kept:{}:{}", stored.addon_id, w.url);
+        let Some(url) = slot.add_fetched(&key, &w.lang, fetch) else {
+            return;
+        };
+        let t = track(w, &stored.source, &stored.addon_id, url, title_forced);
+        tracks.push((t, stored.position, stored.rank));
+    }
+    let mut s = lock(state);
+    if !current(&s, run) {
+        return;
+    }
+    for (t, position, rank) in tracks {
+        s.order.entry(t.url.clone()).or_insert((position, rank));
+        if !s.snapshot.subtitles.iter().any(|k| k.origin == t.origin) {
+            s.snapshot.subtitles.push(t);
+        }
+    }
+    reorder(&mut s, wanted);
+    snapshot.set(s.snapshot.clone());
 }
 
 fn extra_value(name: &str, value: String) -> ExtraValue {

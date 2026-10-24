@@ -122,7 +122,20 @@ async fn origin(data: Arc<Vec<u8>>, how: How) -> (String, Seen) {
 const ITEM: &str = "tt1727587";
 
 /// Subtitle requests the test addons got.
-static SUBTITLE_ASKS: AtomicUsize = AtomicUsize::new(0);
+/// Subtitle requests each test addon got, by its port: tests run at once.
+static SUBTITLE_ASKS: Mutex<std::collections::BTreeMap<u16, usize>> =
+    Mutex::new(std::collections::BTreeMap::new());
+
+/// The subtitle requests `row`'s addon got.
+fn asks(row: &AddonRow) -> usize {
+    let port = url::Url::parse(&row.transport_url).unwrap().port().unwrap();
+    SUBTITLE_ASKS
+        .lock()
+        .unwrap()
+        .get(&port)
+        .copied()
+        .unwrap_or(0)
+}
 
 /// One addon answering meta and streams: Sintel with one direct stream, or
 /// a series with two episodes. `delay` holds every stream answer.
@@ -138,12 +151,43 @@ async fn addon(stream_url: &str, delay: Duration) -> AddonRow {
 
 /// [`addon`] listing `stream` as Sintel's one stream.
 async fn addon_listing(stream: serde_json::Value, delay: Duration) -> AddonRow {
+    addon_serving(stream, delay, Extras::default()).await
+}
+
+/// What a test addon also serves.
+#[derive(Default, Clone)]
+struct Extras {
+    /// Subtitles it lists, each `(id, lang, forced)`: its file at
+    /// `/subfile/<id>.srt` says the id.
+    subtitles: Vec<(&'static str, &'static str, bool)>,
+    /// A name that resolves public to this server (`test_dns`): the meta's
+    /// poster is `http://<name>:<port>/poster.jpg`.
+    public_name: Option<&'static str>,
+}
+
+/// The poster a test addon serves.
+const POSTER: &[u8] = b"\xFF\xD8\xFF\xE0 a poster";
+
+async fn addon_serving(stream: serde_json::Value, delay: Duration, extras: Extras) -> AddonRow {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let streams = serde_json::json!({ "streams": [stream] }).to_string();
+    let poster = match extras.public_name {
+        Some(name) => {
+            mq_http::test_dns::set_public(name, &[std::net::Ipv4Addr::LOCALHOST.into()]);
+            format!("http://{name}:{}/poster.jpg", addr.port())
+        }
+        None => "https://images.example/sintel.jpg".to_owned(),
+    };
+    let subtitles =
+        serde_json::json!({ "subtitles": extras.subtitles.iter().map(|(id, lang, forced)| {
+        serde_json::json!({ "id": id, "lang": lang, "forced": forced,
+                            "url": format!("http://{addr}/subfile/{id}.srt") })
+    }).collect::<Vec<_>>() })
+        .to_string();
     let meta = serde_json::json!({ "meta": {
         "id": ITEM, "type": "movie", "name": "Sintel", "runtime": "15 min",
-        "releaseInfo": "2010", "poster": "https://images.example/sintel.jpg"
+        "releaseInfo": "2010", "poster": poster
     }})
     .to_string();
     let series = serde_json::json!({ "meta": {
@@ -163,16 +207,45 @@ async fn addon_listing(stream: serde_json::Value, delay: Duration) -> AddonRow {
             let Ok((mut socket, _)) = listener.accept().await else {
                 return;
             };
-            let (streams, meta, series) = (streams.clone(), meta.clone(), series.clone());
+            let (streams, meta, series, subtitles) = (
+                streams.clone(),
+                meta.clone(),
+                series.clone(),
+                subtitles.clone(),
+            );
             tokio::spawn(async move {
                 let mut buf = [0u8; 2048];
                 let n = socket.read(&mut buf).await.unwrap_or(0);
                 let head = String::from_utf8_lossy(&buf[..n]).into_owned();
                 if head.contains("/subtitles/") {
-                    SUBTITLE_ASKS.fetch_add(1, Ordering::SeqCst);
+                    *SUBTITLE_ASKS
+                        .lock()
+                        .unwrap()
+                        .entry(addr.port())
+                        .or_default() += 1;
+                }
+                if head.starts_with("GET /poster.jpg") {
+                    let mut resp = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\n\r\n",
+                        POSTER.len()
+                    )
+                    .into_bytes();
+                    resp.extend_from_slice(POSTER);
+                    let _ = socket.write_all(&resp).await;
+                    return;
+                }
+                if let Some(rest) = head.strip_prefix("GET /subfile/") {
+                    let id = rest.split(".srt").next().unwrap_or_default();
+                    let srt = format!("1\n00:00:01,000 --> 00:00:02,000\nline of {id}\n");
+                    let resp = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{srt}",
+                        srt.len()
+                    );
+                    let _ = socket.write_all(resp.as_bytes()).await;
+                    return;
                 }
                 let body = if head.contains("/subtitles/") {
-                    r#"{"subtitles":[]}"#.to_owned()
+                    subtitles
                 } else if head.contains("/meta/series/") {
                     series
                 } else if head.contains("/meta/") {
@@ -303,7 +376,7 @@ async fn a_download_plays_offline_before_any_addon_answers() {
     // is the pick at once.
     let slow = addon(&url, Duration::from_secs(30)).await;
     core.library()
-        .set_addons(core.profile(), &[slow], &core.hlc())
+        .set_addons(core.profile(), std::slice::from_ref(&slow), &core.hlc())
         .unwrap();
     core.downloads().set_link(Link {
         offline: true,
@@ -318,7 +391,7 @@ async fn a_download_plays_offline_before_any_addon_answers() {
     assert_eq!(pick.on_device.as_deref(), Some("Downloaded"));
     assert!(snapshot.empty.is_none());
 
-    let asked = SUBTITLE_ASKS.load(Ordering::SeqCst);
+    let asked = asks(&slow);
     let playback = PlaybackView::open_picked(&core, view.pick(&pick.key), target(), &view.plays());
     let deadline = std::time::Instant::now() + Duration::from_secs(20);
     while playback.snapshot().phase != PlaybackPhase::Ready {
@@ -331,7 +404,7 @@ async fn a_download_plays_offline_before_any_addon_answers() {
     }
     // Offline no subtitle source is asked.
     tokio::time::sleep(Duration::from_millis(1500)).await;
-    assert_eq!(SUBTITLE_ASKS.load(Ordering::SeqCst), asked);
+    assert_eq!(asks(&slow), asked);
     assert!(!playback.snapshot().subtitles_pending);
     let url = playback.snapshot().url.unwrap();
     let http = mq_http::HttpClient::new(Default::default()).unwrap();
@@ -919,4 +992,224 @@ async fn a_partial_torrent_with_nothing_on_disk_is_no_pick() {
     core.downloads().set_link(Link::default());
     let view = VersionsView::open(&core, params());
     assert!(view.snapshot().recommended.is_none());
+}
+
+/// Subtitles download with the video, for the languages of every profile on
+/// the device and the device's own (5 each, forced ones beside), and play
+/// with no network from their files; a delay set while streaming applies
+/// to the kept track (plans/offline-downloads.md 4.10).
+#[tokio::test]
+async fn subtitles_download_with_the_video_and_play_offline() {
+    let data = video(4 << 20);
+    let (url, _) = origin(data, How::default()).await;
+    let stream = serde_json::json!({
+        "name": "Direct\n1080p", "title": "Sintel.2010.1080p.WEB-DL.mp4", "url": url,
+        "behaviorHints": { "filename": "Sintel.2010.1080p.WEB-DL.mp4" }
+    });
+    let extras = Extras {
+        subtitles: vec![
+            ("en1", "eng", false),
+            ("en2", "eng", false),
+            ("en3", "eng", false),
+            ("en4", "eng", false),
+            ("en5", "eng", false),
+            ("en6", "eng", false),
+            ("enf", "eng", true),
+            ("tr1", "tur", false),
+            ("fr1", "fre", false),
+        ],
+        public_name: None,
+    };
+    let source = addon_serving(stream, Duration::ZERO, extras).await;
+    let core = core_with(source.clone()).await;
+    core.set_prefs(&serde_json::json!({ "subtitleLanguages": ["en"] }))
+        .unwrap();
+    // Streamed first: a delay set on en1 is remembered for this version.
+    let view = VersionsView::open(&core, params());
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    while !(view.snapshot().done && view.snapshot().recommended.is_some()) {
+        assert!(std::time::Instant::now() < deadline);
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let key = view.snapshot().recommended.unwrap().key;
+    let online = PlaybackView::open_picked(&core, view.pick(&key), target(), &view.plays());
+    let first_english = |s: &mq_runtime::PlaybackSnapshot| {
+        s.subtitles
+            .iter()
+            .find(|t| t.language == "en" && !t.forced)
+            .map(|t| t.url.clone())
+    };
+    loop {
+        let s = online.snapshot();
+        if s.subtitles.len() == 9 {
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline, "{:?}", s.subtitles);
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let url = first_english(&online.snapshot()).unwrap();
+    online.subtitle_delay(&url, 1500);
+    drop(online);
+    drop(view);
+
+    let mut request = movie();
+    request.params = serde_json::json!({ "language": "tr" });
+    let ids = mq_runtime::downloads::add(&core, request).await.unwrap();
+    until(&core, &ids[0], "done with its subtitles", |r| {
+        r.state == DownloadState::Done && !r.subtitles.is_empty()
+    })
+    .await;
+    let row = row_of(&core, &ids[0]).unwrap();
+    assert_eq!(
+        row.subtitles,
+        ["en", "tr"],
+        "French is no one's language here"
+    );
+
+    core.downloads().set_link(Link {
+        offline: true,
+        ..Link::default()
+    });
+    let asked = asks(&source);
+    let view = VersionsView::open(&core, params());
+    let pick = view.snapshot().recommended.unwrap();
+    let playback = PlaybackView::open_picked(&core, view.pick(&pick.key), target(), &view.plays());
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    loop {
+        let s = playback.snapshot();
+        if s.phase == PlaybackPhase::Ready && s.subtitles.len() == 7 {
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline, "{:?}", s.subtitles);
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let s = playback.snapshot();
+    let english = s.subtitles.iter().filter(|t| t.language == "en").count();
+    assert_eq!(english, 6, "five and the forced one");
+    assert!(s.subtitles.iter().any(|t| t.language == "tr"));
+    // The delay set while streaming holds for the kept track: one
+    // identity, the source's and the file's.
+    let kept = s
+        .subtitles
+        .iter()
+        .find(|t| t.language == "en" && !t.forced)
+        .unwrap();
+    assert_eq!(kept.delay_ms, 1500);
+    // Its file, served on loopback with no network.
+    let first = &s.subtitles[0];
+    let http = mq_http::HttpClient::new(Default::default()).unwrap();
+    let opts = mq_http::RequestOptions {
+        allow_private: true,
+        ..Default::default()
+    };
+    let vtt = http.get(&first.url, &opts).await.unwrap();
+    let text = String::from_utf8_lossy(&vtt.body);
+    assert!(
+        text.starts_with("WEBVTT") && text.contains("line of"),
+        "{text}"
+    );
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert_eq!(asks(&source), asked, "a source asked offline");
+}
+
+/// A download's poster is kept and served on loopback, so the Downloads
+/// screen shows it with no network (4.11).
+#[tokio::test]
+async fn a_downloads_poster_is_kept_and_served() {
+    let (url, _) = origin(video(1 << 20), How::default()).await;
+    let stream = serde_json::json!({ "name": "Direct\n1080p", "title": "Sintel.2010.1080p.WEB-DL.mp4", "url": url });
+    let extras = Extras {
+        public_name: Some("posters.downloads.test"),
+        ..Extras::default()
+    };
+    let core = core_with(addon_serving(stream, Duration::ZERO, extras).await).await;
+    let ids = mq_runtime::downloads::add(&core, movie()).await.unwrap();
+    until(&core, &ids[0], "a loopback poster", |r| {
+        r.poster
+            .as_deref()
+            .is_some_and(|p| p.starts_with("http://127.0.0.1"))
+    })
+    .await;
+    let poster = row_of(&core, &ids[0]).unwrap().poster.unwrap();
+    let http = mq_http::HttpClient::new(Default::default()).unwrap();
+    let opts = mq_http::RequestOptions {
+        allow_private: true,
+        ..Default::default()
+    };
+    assert_eq!(&http.get(&poster, &opts).await.unwrap().body[..], POSTER);
+}
+
+/// Smart downloads: a downloaded episode watched to its end brings the
+/// next one, and goes once the next is done; a kid half way through it
+/// keeps it (4.14).
+#[tokio::test]
+async fn a_finished_episode_brings_the_next_and_goes() {
+    let (url, _) = origin(video(1 << 20), How::default()).await;
+    let stream = serde_json::json!({ "name": "Direct\n1080p", "title": "Show.S02.1080p.WEB-DL.mp4", "url": url });
+    let core = core_with(addon_listing(stream, Duration::ZERO).await).await;
+    let one = AddRequest {
+        kind: "series".into(),
+        item_id: "tt9".into(),
+        scope: Scope::Video,
+        video_id: Some("tt9:2:1".into()),
+        season: None,
+        params: serde_json::json!({}),
+        pick: None,
+    };
+    let ids = mq_runtime::downloads::add(&core, one).await.unwrap();
+    until(&core, &ids[0], "e1 done", |r| {
+        r.state == DownloadState::Done
+    })
+    .await;
+    let e1 = || PlayTarget {
+        kind: "series".into(),
+        item_id: "tt9".into(),
+        video_id: "tt9:2:1".into(),
+        name: None,
+        poster: None,
+        season: Some(2),
+        episode: Some(1),
+    };
+    let play_to_the_end = |core: Core| async move {
+        let view = VersionsView::open(
+            &core,
+            VersionsParams {
+                kind: "series".into(),
+                video_id: "tt9:2:1".into(),
+                target: Target {
+                    title: "Show".into(),
+                    year: None,
+                    season: Some(2),
+                    episode: Some(1),
+                },
+                ..params()
+            },
+        );
+        let pick = view.snapshot().recommended.expect("e1 downloaded");
+        let playback = PlaybackView::open_picked(&core, view.pick(&pick.key), e1(), &view.plays());
+        let deadline = std::time::Instant::now() + Duration::from_secs(20);
+        while playback.snapshot().phase != PlaybackPhase::Ready {
+            assert!(std::time::Instant::now() < deadline);
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        playback.report_progress(3_000_000, 3_100_000, false);
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        drop(playback);
+    };
+    play_to_the_end(core.clone()).await;
+    let board = || core.downloads().board().get().rows;
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    loop {
+        let rows = board();
+        let e2_done = rows
+            .iter()
+            .any(|r| r.video_id == "tt9:2:2" && r.state == DownloadState::Done);
+        let e1_gone = !rows.iter().any(|r| r.video_id == "tt9:2:1");
+        assert!(!e1_gone || e2_done, "e1 went before e2 was whole: {rows:?}");
+        if e2_done && e1_gone {
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline, "{rows:?}");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
 }

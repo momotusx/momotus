@@ -1737,6 +1737,10 @@ pub(crate) fn content_type(name: &str) -> &'static str {
         Some("mpg" | "mpeg") => "video/mpeg",
         Some("wmv") => "video/x-ms-wmv",
         Some("flv") => "video/x-flv",
+        // A download's poster and still (plans/offline-downloads.md 4.11).
+        Some("jpg" | "jpeg") => "image/jpeg",
+        Some("png") => "image/png",
+        Some("webp") => "image/webp",
         _ => "application/octet-stream",
     }
 }

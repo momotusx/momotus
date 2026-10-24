@@ -119,6 +119,9 @@ fn gate(s: &ParsedStream, input: &RankInput<'_>) -> Result<SourceClass, HideReas
         return Err(reason);
     }
     let class = class(s, input.conditions).ok_or(HideReason::NeedsDebrid)?;
+    if input.conditions.download {
+        return download_gate(s, class, input).map(|()| class);
+    }
     // The engine fetches one episode of a pack, so the pack guard's size
     // is what must fit (code review r2 P2-4).
     if class == SourceClass::Swarm
@@ -128,6 +131,37 @@ fn gate(s: &ParsedStream, input: &RankInput<'_>) -> Result<SourceClass, HideReas
         return Err(HideReason::NoSpace);
     }
     Ok(class)
+}
+
+/// Free space a download leaves (plans/offline-downloads.md decision 11).
+const DOWNLOAD_RESERVE: u64 = 1 << 30;
+
+/// What a download cannot keep (plans/offline-downloads.md 4.5): a playlist
+/// (HLS, DASH), a file a service has not prepared, and a file that does
+/// not fit whole with 1 GiB to spare, the idle stream cache counted free.
+fn download_gate(
+    s: &ParsedStream,
+    class: SourceClass,
+    input: &RankInput<'_>,
+) -> Result<(), HideReason> {
+    let playlist = match &s.source {
+        Source::Http { url } => {
+            let path = url.path().to_ascii_lowercase();
+            path.ends_with(".m3u8") || path.ends_with(".mpd")
+        }
+        _ => false,
+    };
+    if playlist || class == SourceClass::Fetch {
+        return Err(HideReason::UnsupportedSource);
+    }
+    let c = input.conditions;
+    if let (Some(free), Some(size)) = (c.free_bytes, file_size(s, input)) {
+        let room = (free + c.reclaimable_bytes.unwrap_or(0)).saturating_sub(c.committed_bytes);
+        if size + DOWNLOAD_RESERVE > room {
+            return Err(HideReason::NoSpace);
+        }
+    }
+    Ok(())
 }
 
 /// Where a swarm row plays (plans/streaming-window.md 3.1).
@@ -893,10 +927,14 @@ fn score(stream: ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Sco
     let judged = speed(s, class, input);
     let speed = judged.map(|(sp, _)| sp);
     let safe = speed.map(|sp| sp.mbps * SAFE_SHARE);
-    let sustains = match (bitrate, safe) {
-        (Some(b), Some(safe)) => b <= safe,
-        _ => true,
-    };
+    let download = input.conditions.download;
+    // A download is judged by what it keeps, not by a speed it never
+    // streams at.
+    let sustains = download
+        || match (bitrate, safe) {
+            (Some(b), Some(safe)) => b <= safe,
+            _ => true,
+        };
     // Seeders an addon lists are a hint; a swarm that stalled here is not
     // started first again.
     let dead = matches!(class, SourceClass::Swarm | SourceClass::Unknown)
@@ -915,8 +953,16 @@ fn score(stream: ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Sco
         legit: legit(s),
         year_ok: year_ok(s, input.conditions, input.target),
         sustains,
-        pace: pace(bitrate, speed.map(|sp| sp.mbps)),
-        covered: covered(bitrate, speed.map(|sp| sp.mbps)),
+        pace: if download {
+            3
+        } else {
+            pace(bitrate, speed.map(|sp| sp.mbps))
+        },
+        covered: if download {
+            0
+        } else {
+            covered(bitrate, speed.map(|sp| sp.mbps))
+        },
         playability: if fails_here {
             Playability::NeedsTranscode
         } else {
@@ -928,14 +974,25 @@ fn score(stream: ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Sco
         // that holds less, or a limit the viewer chose, compares the file,
         // so a row that fits or holds more ranks first (plans/streaming-window.md
         // 3.1, plans/streaming-window-chunks.md).
-        size_ok: (matches!(window, Some(Room::Window { ahead_s, .. }) if ahead_s >= WINDOW_AHEAD_S)
-            && !input.conditions.limit_chosen)
-            || size_ok(weight.size, class, input.prefs),
+        // A download keeps the whole file whatever its source: the limit
+        // holds for every row.
+        size_ok: if download {
+            size_ok(weight.size, SourceClass::Swarm, input.prefs)
+        } else {
+            (matches!(window, Some(Room::Window { ahead_s, .. }) if ahead_s >= WINDOW_AHEAD_S)
+                && !input.conditions.limit_chosen)
+                || size_ok(weight.size, class, input.prefs)
+        },
         tier: tier(class, start),
         binge: matches!((input.last_binge_group, &s.binge_group), (Some(a), Some(b)) if a == b),
         effective_height: effective_height(s, bitrate, input),
         start,
-        within: within(s, class, bitrate, safe, input),
+        // Among versions as good to keep, the smaller file first.
+        within: if download {
+            smaller(weight.size)
+        } else {
+            within(s, class, bitrate, safe, input)
+        },
     };
     let line = line(s, class, &key, weight, judged, window, input);
     Scored {
@@ -1058,6 +1115,14 @@ fn line(
 }
 
 /// Bounded 0..=1000 score among rows whose key fields tie (3.6).
+/// A download's tiebreak: the smaller file higher, in MB; an unknown size
+/// last.
+fn smaller(size: Option<u64>) -> u16 {
+    size.map_or(0, |b| {
+        u16::MAX - (b / 1_000_000).min(u64::from(u16::MAX) - 1) as u16
+    })
+}
+
 fn within(
     s: &ParsedStream,
     class: SourceClass,

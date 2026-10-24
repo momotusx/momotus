@@ -945,7 +945,24 @@ impl VersionsView {
     /// takes the allowlist entry's names and the video's own season and
     /// episode, not the app's. A refused target opens denied: no work, an
     /// empty snapshot, and `denied()` says so.
-    pub fn open_checked(core: &Core, mut params: VersionsParams, item_id: Option<&str>) -> Self {
+    pub fn open_checked(core: &Core, params: VersionsParams, item_id: Option<&str>) -> Self {
+        Self::open_with(core, params, item_id, false)
+    }
+
+    /// `open_checked` ranked to download (plans/offline-downloads.md 4.5):
+    /// no speed rule, the size limit on every row, only what fits whole,
+    /// the smaller file first among versions as good, and no row for a
+    /// download already kept.
+    pub fn open_to_download(core: &Core, params: VersionsParams, item_id: Option<&str>) -> Self {
+        Self::open_with(core, params, item_id, true)
+    }
+
+    fn open_with(
+        core: &Core,
+        mut params: VersionsParams,
+        item_id: Option<&str>,
+        download: bool,
+    ) -> Self {
         let verified = if core.policy().kids() {
             let Some(verified) = verify_play(core, &params.kind, item_id, &params.video_id) else {
                 return Self::denied_view(core, &params);
@@ -1019,6 +1036,7 @@ impl VersionsView {
             committed_bytes,
             metered: core.network() == crate::speed::Network::Cellular,
             held,
+            download,
         };
         let item_id = item_id.map_or_else(
             || {
@@ -1081,7 +1099,7 @@ impl VersionsView {
             item_id,
         });
         lock(&state).ranking = Some(ranking.clone());
-        {
+        if !download {
             let mut s = lock(&state);
             if let Some(row) = downloaded(core, &s, &ranking) {
                 s.download = Some(row.clone());

@@ -2396,3 +2396,103 @@ fn an_xvid_avi_is_listed_only_where_apples_second_engine_is_on() {
     assert_eq!(hidden_on(&on), 0, "listed with the engine on");
     assert_eq!(hidden_on(&off), 1, "hidden with it off");
 }
+
+// ---- ranked to download (plans/offline-downloads.md 4.5) ----
+
+fn to_download(free_gb: u64, mbps: f32) -> Conditions {
+    Conditions {
+        engine: true,
+        debrid: true,
+        download: true,
+        free_bytes: Some(free_gb << 30),
+        http: Speed { mbps, samples: 3 },
+        p2p: Speed { mbps, samples: 3 },
+        runtime_s: Some(50 * 60),
+        ..Conditions::default()
+    }
+}
+
+fn movie_target() -> Target {
+    Target {
+        title: "Sintel".into(),
+        year: Some(2010),
+        season: None,
+        episode: None,
+    }
+}
+
+fn direct(title: &str, url: &str, size: u64) -> serde_json::Value {
+    json!({ "name": "Direct", "title": title, "url": url,
+            "behaviorHints": { "videoSize": size, "filename": format!("{title}.mkv") } })
+}
+
+/// A download keeps no playlist and no file a service has yet to prepare,
+/// and what does not fit whole with 1 GiB to spare is hidden for space.
+#[test]
+fn a_download_keeps_only_files_that_fit_whole() {
+    let all = streams(
+        "direct",
+        0,
+        json!({ "streams": [
+            direct("Sintel.2010.1080p.WEB-DL", "https://cdn.example/sintel/master.m3u8", 0),
+            direct("Sintel.2010.2160p.WEB-DL", "https://cdn.example/sintel4k.mkv", 9 << 30),
+            direct("Sintel.2010.720p.WEB-DL", "https://cdn.example/sintel720.mkv", 1 << 30),
+        ]}),
+    );
+    let prefs = StreamPrefs::default();
+    let c = to_download(6, 100.0);
+    let input = RankInput {
+        caps: &DeviceCaps::basic_1080p(),
+        prefs: &prefs,
+        target: &movie_target(),
+        last_binge_group: None,
+        kids: None,
+        conditions: &c,
+    };
+    let ranked = rank(all, &input);
+    let reasons: Vec<_> = ranked.hidden.iter().map(|h| h.reason).collect();
+    assert!(
+        reasons.contains(&HideReason::UnsupportedSource),
+        "{reasons:?}"
+    );
+    assert!(reasons.contains(&HideReason::NoSpace), "{reasons:?}");
+    assert_eq!(ranked.rows.len(), 1);
+    assert!(ranked.rows[0].stream.raw_name.contains("Direct"));
+}
+
+/// A download is judged by what it keeps: a speed too slow to stream it
+/// changes nothing, the size limit holds for a ready file too, and among
+/// versions as good the smaller file goes first.
+#[test]
+fn a_download_ignores_speed_and_takes_the_smaller_file() {
+    let all = streams(
+        "direct",
+        0,
+        json!({ "streams": [
+            direct("Sintel.2010.1080p.WEB-DL.x264-AAA", "https://cdn.example/a.mkv", 4 << 30),
+            direct("Sintel.2010.1080p.WEB-DL.x264-BBB", "https://cdn.example/b.mkv", 2 << 30),
+            direct("Sintel.2010.1080p.WEB-DL.x264-CCC", "https://cdn.example/c.mkv", 7 << 30),
+        ]}),
+    );
+    let prefs = StreamPrefs::default();
+    // 1 Mbit/s: none of them streams, every one downloads.
+    let c = to_download(100, 1.0);
+    let input = RankInput {
+        caps: &DeviceCaps::basic_1080p(),
+        prefs: &prefs,
+        target: &movie_target(),
+        last_binge_group: None,
+        kids: None,
+        conditions: &c,
+    };
+    let ranked = rank(all, &input);
+    let order: Vec<u64> = ranked
+        .rows
+        .iter()
+        .map(|r| r.stream.size_bytes.unwrap())
+        .collect();
+    assert_eq!(order, [2 << 30, 4 << 30, 7 << 30]);
+    assert!(ranked.rows.iter().all(|r| r.key.sustains));
+    // The 7 GB file is over the 5 GB limit, ready as it is.
+    assert!(ranked.rows[0].key.size_ok && !ranked.rows[2].key.size_ok);
+}

@@ -100,7 +100,10 @@ pub(super) async fn fetch(
     row.bytes_total = Some(len as i64);
     let _ = core.library().save_download(row);
     let held = row.bytes_done.max(0) as u64;
-    if !d.fits(core, &row.id, len.saturating_sub(held)) {
+    if !d
+        .fits_making_room(core, &row.id, len.saturating_sub(held))
+        .await
+    {
         return Ended::Wait(DownloadReason::Space);
     }
     let handle = match engine.download(t, file).await {

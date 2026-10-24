@@ -212,6 +212,11 @@ pub struct Conditions {
     /// `target_digest` for the target it opened for: it stands over the
     /// listing's, which often names none.
     pub containers: Vec<(String, String)>,
+    /// The versions are ranked to download, not to play now
+    /// (plans/offline-downloads.md 4.5): no speed rule, the size limit on
+    /// every row, the whole file plus 1 GiB must fit, and among versions as
+    /// good the smaller file first.
+    pub download: bool,
 }
 
 impl Default for Conditions {
@@ -249,6 +254,7 @@ impl Default for Conditions {
             committed_bytes: 0,
             metered: false,
             held: Default::default(),
+            download: false,
         }
     }
 }

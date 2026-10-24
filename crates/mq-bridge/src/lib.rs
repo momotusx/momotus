@@ -2038,8 +2038,16 @@ impl Session {
                 if let Some(network) = versions_network(params)? {
                     core.set_network(network);
                 }
-                let versions =
-                    VersionsView::open(&core, versions_params(params, core.prefs().streams)?);
+                let parsed = versions_params(params, core.prefs().streams)?;
+                // `purpose: "download"`: the Versions screen that picks a
+                // version to keep (plans/offline-downloads.md 3.2).
+                let versions = if params.get("purpose").and_then(Value::as_str) == Some("download")
+                {
+                    let item = params.get("itemId").and_then(Value::as_str);
+                    VersionsView::open_to_download(&core, parsed, item)
+                } else {
+                    VersionsView::open(&core, parsed)
+                };
                 let (snapshot, updates) = versions.subscribe();
                 let forward = tokio::spawn(forward(sub, updates, out, fence));
                 (View::Versions(versions), to_value(&snapshot)?, forward)
