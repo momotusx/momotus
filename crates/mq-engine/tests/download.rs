@@ -404,3 +404,28 @@ async fn a_ring_never_takes_a_downloads_pieces() {
     })
     .await;
 }
+
+/// A finished download that was played pauses after its keep-warm minute
+/// like any torrent: kept is no reason to stay connected (engine r2 P2-1).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_played_download_pauses_after_keep_warm() {
+    use tokio::io::AsyncReadExt;
+    let s = support::swarm_big(4 << 20, PIECE).await;
+    let root = tempfile::tempdir().unwrap();
+    let e = engine(root.path(), Vec::new(), u64::MAX).await;
+    let (t, file, handle) = download(&e, &s, "movie.mkv").await;
+    handle.stop().await;
+    {
+        let reader = e.open_reader(t, "default", file).await.unwrap();
+        let mut range = reader.range(0, Some(64 << 10)).await.unwrap();
+        range.read_to_end(&mut Vec::new()).await.unwrap();
+    }
+    assert!(!e.stats(t).await.unwrap().paused, "a read wakes it");
+    for _ in 0..80 {
+        if e.stats(t).await.unwrap().paused {
+            return;
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    panic!("a played download never paused");
+}
