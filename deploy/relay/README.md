@@ -87,6 +87,8 @@ sed -e "s|__SCRIPT__|$HOME/.local/share/momotus/pull-backup.sh|" -e "s|__SSH__|$
 launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/app.marquee.relay-backup.plist
 ```
 
+The pull reads the server's backups with `sudo -n`. The narrowest rule for the account it uses is one sudoers line, `<user> ALL=(root) NOPASSWD: /usr/bin/ls -1 /var/lib/momotus/backups, /usr/bin/cat /var/lib/momotus/backups/*`, added by the owner if he wants the pull to run without full sudo.
+
 It writes `~/.local/share/momotus/relay-backups/pull.log` and shows a notification when the last good pull or the public health check is more than 48 hours old. The folder is excluded from Time Machine.
 
 ## Restore

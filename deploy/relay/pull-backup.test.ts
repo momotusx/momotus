@@ -33,9 +33,13 @@ function pull(source: string, dest: string, extra: Record<string, string> = {}) 
 
 const fresh = () => join(mkdtempSync(join(tmpdir(), "pull-dest-")), "backups");
 
+/** Seconds since the epoch of a set's stamp, as the script reads it. */
+const at = (stamp: string) => Math.floor(Date.parse(stamp.replace(/T(\d\d)(\d\d)(\d\d)Z/, "T$1:$2:$3Z")) / 1000);
+const NOW = String(at("2026-10-25T042000Z") + 3600);
+
 test("the newest finished set is pulled and its sums checked", () => {
   const dest = fresh();
-  const run = pull(server(["2026-10-24T042000Z", "2026-10-25T042000Z"]), dest);
+  const run = pull(server(["2026-10-24T042000Z", "2026-10-25T042000Z"]), dest, { MQ_PULL_NOW: NOW });
   expect(run.status).toBe(0);
   expect(run.log).toContain("pulled: 2026-10-25T042000Z");
   expect(readdirSync(dest).filter((f) => !f.startsWith(".") && f !== "pull.log").sort()).toEqual([
@@ -44,7 +48,7 @@ test("the newest finished set is pulled and its sums checked", () => {
     "2026-10-25T042000Z.sqlite",
   ]);
   expect(run.notes).toBe("");
-  expect(pull(server(["2026-10-25T042000Z"]), dest).log).toContain("up to date: 2026-10-25T042000Z");
+  expect(pull(server(["2026-10-25T042000Z"]), dest, { MQ_PULL_NOW: NOW }).log).toContain("up to date: 2026-10-25T042000Z");
 });
 
 test("a set that does not match its sums is not kept", () => {
@@ -73,11 +77,22 @@ test("a Mac short of disk skips the pull and says so", () => {
 
 test("a pull or a health check older than 48 hours shows a notification", () => {
   const dest = fresh();
-  const now = Math.floor(Date.now() / 1000);
+  const now = Number(NOW);
   pull(server(["2026-10-25T042000Z"]), dest, { MQ_PULL_NOW: String(now) });
   // Two days and a minute later the server has nothing new to read and the relay does not answer.
   const later = pull(mkdtempSync(join(tmpdir(), "pull-empty-")), dest, { MQ_PULL_NOW: String(now + 48 * 3600 + 60), MQ_PULL_HEALTH: "file:///nonexistent" });
   expect(later.status).toBe(1);
   expect(later.notes).toContain("No good relay pull");
   expect(later.notes).toContain("No good relay health");
+});
+
+test("a server that keeps offering an old set is not a good pull", () => {
+  const dest = fresh();
+  const old = server(["2026-10-25T042000Z"]);
+  pull(old, dest, { MQ_PULL_NOW: NOW });
+  // Three days on, the server's newest set is the same: no fresh pull, so the notice comes.
+  const later = String(Number(NOW) + 3 * 24 * 3600);
+  const run = pull(old, dest, { MQ_PULL_NOW: later });
+  expect(run.log).toContain("older than 36 hours");
+  expect(run.notes).toContain("No good relay pull");
 });

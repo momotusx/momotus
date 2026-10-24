@@ -84,6 +84,13 @@ if ! health http://127.0.0.1:8787 15; then
   exit 1
 fi
 echo "remote: loopback health after $(awk "BEGIN { printf \"%.1f\", $(date +%s.%N) - $START }") s"
+# The client address behind the proxy: a budgeted call naming none is
+# refused (400 noClientAddress), one naming Cloudflare's is taken (a
+# pairing slot, gone in 10 minutes).
+without=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{}' http://127.0.0.1:8787/v1/pairings)
+with=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H 'cf-connecting-ip: 192.0.2.1' -d '{}' http://127.0.0.1:8787/v1/pairings)
+echo "remote: pairing without a client address $without, with one $with"
+[ "$without" = 400 ] && [ "$with" = 200 ] || { echo "remote: the client address check failed" >&2; exit 1; }
 # The newest three binaries stay.
 ls -1t /opt/momotus/bin/mq-sync-server-* | tail -n +4 | xargs -r rm -f --
 REMOTE

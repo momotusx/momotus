@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import shutil
 import sqlite3
 import sys
 import tempfile
@@ -54,7 +53,10 @@ def back_up(data: Path, keep: int = 14) -> str:
         with sqlite3.connect(data / DB) as src, sqlite3.connect(tmp_db) as dst:
             src.backup(dst)
         check_integrity(tmp_db)
-        shutil.copyfile(data / JOURNAL, tmp_journal)
+        # The relay appends while this runs: a line it is still writing is
+        # left for the next backup, so the copy ends on a whole line.
+        journal = (data / JOURNAL).read_bytes()
+        tmp_journal.write_bytes(journal[: journal.rfind(b"\n") + 1])
         os.replace(tmp_db, out / f"{stamp}.sqlite")
         os.replace(tmp_journal, out / f"{stamp}.roster.jsonl")
     finally:
@@ -90,7 +92,7 @@ def self_test() -> None:
         for i in range(500):
             live.execute("INSERT INTO records (body) VALUES (?)", (os.urandom(64),))
         live.commit()
-        (data / JOURNAL).write_text('{"account":"a","entry":{"body":"b"}}\n')
+        (data / JOURNAL).write_text('{"account":"a","entry":{"body":"b"}}\n{"account":"a","ent')
 
         stamp = back_up(data, keep=2)
         copy = data / "backups" / f"{stamp}.sqlite"
@@ -101,7 +103,7 @@ def self_test() -> None:
         for line in sums:
             digest, name = line.split("  ")
             assert sha256(data / "backups" / name) == digest, f"{name} does not match its sum"
-        assert (data / "backups" / f"{stamp}.roster.jsonl").read_text() == (data / JOURNAL).read_text()
+        assert (data / "backups" / f"{stamp}.roster.jsonl").read_text() == '{"account":"a","entry":{"body":"b"}}\n', "a torn last line is left out"
 
         # A damaged copy is refused.
         bad = data / "bad.sqlite"

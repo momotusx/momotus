@@ -50,7 +50,7 @@ def create(path: Path) -> str:
 
 def providers(env_text: str) -> dict:
     env = dict(line.split("=", 1) for line in env_text.splitlines() if "=" in line and not line.lstrip().startswith("#"))
-    env = {k.strip(): v.strip() for k, v in env.items()}
+    env = {k.strip(): v.strip().strip('"').strip("'") for k, v in env.items()}
     blocks: dict = {}
     if env.get("GOOGLE_WEB_CLIENT_ID"):
         blocks["google"] = {"webClientId": env["GOOGLE_WEB_CLIENT_ID"], "webClientSecret": env["GOOGLE_WEB_CLIENT_SECRET"]}
@@ -72,7 +72,9 @@ def merge(path: Path, env_text: str) -> str:
     if not key:
         raise SystemExit(f"{path} has no key: refusing to make a new one")
     before = fingerprint(key)
-    merged = {"key": key, "publicUrl": current["publicUrl"], "linkHost": current["linkHost"], **providers(env_text)}
+    # Every other entry (an Apple or OpenID provider set by hand) stays; the
+    # file's Google and Facebook blocks are the ones the env file names.
+    merged = {k: v for k, v in current.items() if k not in ("google", "facebook")} | providers(env_text)
     write(path.with_name(f"{path.name}.prev"), current)
     write(path, merged)
     after = fingerprint(json.loads(path.read_text())["key"])
@@ -86,12 +88,15 @@ def self_test() -> None:
         first = create(path)
         assert oct(path.stat().st_mode & 0o777) == "0o600"
         assert json.loads(path.read_text())["linkHost"] == HOST
-        env = "GOOGLE_WEB_CLIENT_ID=g.apps\nGOOGLE_WEB_CLIENT_SECRET=gs\n# a comment\nFACEBOOK_APP_ID=1\nFACEBOOK_APP_SECRET=fs\n"
+        current = json.loads(path.read_text())
+        write(path, current | {"oidc": [{"id": "x"}]})
+        env = "GOOGLE_WEB_CLIENT_ID=g.apps\nGOOGLE_WEB_CLIENT_SECRET=\"gs\"\n# a comment\nFACEBOOK_APP_ID=1\nFACEBOOK_APP_SECRET='fs'\n"
         assert merge(path, env) == first
         data = json.loads(path.read_text())
         assert data["google"] == {"webClientId": "g.apps", "webClientSecret": "gs"}
         assert data["facebook"]["graph"].endswith("/v26.0") and data["facebook"]["appSecret"] == "fs"
         assert json.loads(path.with_name("identity.json.prev").read_text()).get("google") is None
+        assert data["oidc"] == [{"id": "x"}], "entries set by hand stay"
         # A second merge replaces the providers and still keeps the key.
         assert merge(path, "FACEBOOK_APP_ID=2\nFACEBOOK_APP_SECRET=fs2\n") == first
         assert "google" not in json.loads(path.read_text())

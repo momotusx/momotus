@@ -18,6 +18,7 @@ MIN_FREE_KB=${MQ_PULL_MIN_FREE_KB:-5242880}
 NOW=${MQ_PULL_NOW:-$(date +%s)}
 KEEP=7
 STALE_S=$((48 * 3600))
+FRESH_S=$((36 * 3600))
 REMOTE_DIR=/var/lib/momotus/backups
 
 mkdir -p "$DEST"
@@ -47,9 +48,13 @@ pull() {
   newest=$(list | grep -E '^[0-9TZ-]+\.SHA256SUMS$' | sort | tail -n 1)
   [ -n "$newest" ] || { log "failed: no finished backup on the server"; return 1; }
   stamp=${newest%.SHA256SUMS}
+  # A good pull is a recent backup: a server whose nightly run stopped
+  # keeps offering the same old set, and that must not read as fine.
+  made=$(date -j -u -f "%Y-%m-%dT%H%M%SZ" "$stamp" +%s 2>/dev/null || echo 0)
+  fresh=$((NOW - made < FRESH_S))
   if [ -f "$DEST/$newest" ]; then
-    log "up to date: $stamp"
-    echo "$NOW" >"$DEST/.last-pull"
+    if [ "$fresh" = 1 ]; then echo "$NOW" >"$DEST/.last-pull"; fi
+    log "up to date: $stamp$([ "$fresh" = 1 ] || echo ", older than 36 hours")"
     return 0
   fi
   tmp=$(mktemp -d "$DEST/.pull.XXXXXX")
@@ -59,10 +64,12 @@ pull() {
     log "failed: $stamp does not match its sums; nothing kept"
     return 1
   fi
-  mv "$tmp"/* "$DEST"/
+  # The data first, the sums last: a set without its sums is unfinished.
+  mv "$tmp/$stamp.sqlite" "$tmp/$stamp.roster.jsonl" "$DEST"/
+  mv "$tmp/$newest" "$DEST"/
   rmdir "$tmp"
-  echo "$NOW" >"$DEST/.last-pull"
-  log "pulled: $stamp"
+  if [ "$fresh" = 1 ]; then echo "$NOW" >"$DEST/.last-pull"; fi
+  log "pulled: $stamp$([ "$fresh" = 1 ] || echo ", older than 36 hours")"
   # The newest $KEEP sets stay.
   find "$DEST" -maxdepth 1 -name '*.SHA256SUMS' -exec basename {} \; | sort -r | tail -n +$((KEEP + 1)) | while read -r old; do
     rm -f "${DEST:?}/${old%.SHA256SUMS}".*
