@@ -1,8 +1,8 @@
 //! Pairing a new device and recovering an account through a real relay.
 
 use mq_http::{ClientConfig, HttpClient, HttpError, RequestOptions};
-use mq_library::Library;
 use mq_library::hlc::HlcClock;
+use mq_library::{AddonRow, Library};
 use mq_sync::pair::{approve_pairing, cancel_pairing, make_kit, recover, start_pairing};
 use mq_sync::{
     Announced, Announcement, SyncConfig, SyncError, ack_announcements, devices, remove_devices,
@@ -765,5 +765,67 @@ async fn behind_the_proxy_the_client_is_cloudflares_address() {
     assert_eq!(
         status_with(&format!("{direct}/v1/pairings"), body(), &[]).await,
         200
+    );
+}
+
+/// A device that answered the defaults step and then joins takes the
+/// account's addon list through its own first sync: the account's
+/// untouched defaults reach it whatever the device ids (its clock's id here
+/// is above the account's), its own untouched defaults the account lacks
+/// are never sent, and nothing of them reaches the account (plans/accounts-
+/// social-sync.md 13; code review A P1-1, B P1-2, B P2-1).
+#[tokio::test]
+async fn a_joining_devices_first_sync_takes_the_accounts_addon_list() {
+    let (server, _) = relay().await;
+    let row = |url: &str| AddonRow {
+        transport_url: url.into(),
+        manifest_json: "{}".into(),
+        position: 0,
+        enabled: true,
+        allow_private: false,
+    };
+    let (x, y, z, v) = (
+        "https://x.example/manifest.json",
+        "https://y.example/manifest.json",
+        "https://z.example/manifest.json",
+        "https://v.example/manifest.json",
+    );
+    let urls = |lib: &Library| -> Vec<String> {
+        lib.addons("p")
+            .unwrap()
+            .into_iter()
+            .map(|r| r.transport_url)
+            .collect()
+    };
+    let zero = |device: u64| mq_library::Hlc::zero(device).encode();
+    // The account: X and Y untouched from the defaults step, Z added.
+    let mut phone = Device::first(&server, "Phone").await;
+    phone
+        .library
+        .set_addons("p", &[row(x), row(y)], &zero(1))
+        .unwrap();
+    phone
+        .library
+        .edit_addons("p", &phone.clock, |rows: &mut Vec<AddonRow>| {
+            rows.push(row(z));
+            Ok::<_, mq_library::LibraryError>(())
+        })
+        .unwrap();
+    phone.sync().await;
+    // The TV answered the defaults step before it joined: X and V untouched.
+    let mut tv = phone.pair(&server, "TV").await;
+    tv.clock = HlcClock::new(7);
+    tv.library
+        .set_addons("p", &[row(x), row(v)], &zero(7))
+        .unwrap();
+    tv.library.mark_join_defaults(7).unwrap();
+    tv.sync().await;
+    assert!(!tv.library.join_defaults_pending().unwrap());
+    assert_eq!(urls(&tv.library), [x, y, z]);
+    phone.sync().await;
+    assert_eq!(
+        urls(&phone.library),
+        [x, y, z],
+        "nothing of the TV's defaults reached the account"
     );
 }

@@ -1054,7 +1054,7 @@ pub struct CachedResponse {
 
 /// Device state key: a join waits for its first pull to settle the
 /// device's untouched defaults (`settle_join_defaults`).
-const JOIN_DEFAULTS: &str = "join_defaults";
+pub(crate) const JOIN_DEFAULTS: &str = "join_defaults";
 /// The time a joining device's untouched defaults wait at until its first
 /// pull settles them: the lowest there is, so the account's win.
 const WAITING: &str = "00000000000000000000000000000000";
