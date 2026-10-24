@@ -71,6 +71,9 @@ const desktopShelf = (k: number): Metrics => {
 /** Home's shelves per form: TV and phone from their tokens, desktop tv.apple.com's. */
 export const shelfMetrics = () => (form() === "desktop" ? desktopShelf(scale()) : metrics());
 
+/** The line under a Top 10 poster off the TV, in canvas pixels. */
+const RANK_GENRE = 22;
+
 // Survives the Home screen unmounting, so Back lands on the same offsets;
 // another profile's Home starts at the start of each row.
 const offsets = new Map<string, number>();
@@ -97,7 +100,7 @@ export function TileCard(props: {
   // Two lines under the art: the name, then the core's caption (Continue
   // Watching, Library) or the year.
   const cap = () => (props.captions === false ? null : caption(props.tile));
-  const sub = () => cap() ?? props.tile.releaseInfo;
+  const sub = () => cap() ?? props.tile.genre ?? props.tile.releaseInfo;
   // A 2:3 poster shows the core's cover (RPDB's, its scores drawn in) and its addon's poster when
   // that does not load; Continue Watching's still crops a poster from its top, so it takes the plain one.
   const plain = () => props.tile.posterFallback ?? props.tile.poster;
@@ -113,7 +116,7 @@ export function TileCard(props: {
       data-index={props.index}
       data-autofocus={props.autofocus ? "" : undefined}
       /* The cover's scores are pixels: the label speaks them from the core's ratings. */
-      aria-label={posterLabel([props.tile.name, cap()], props.wide ? null : props.tile.ratings)}
+      aria-label={posterLabel([props.tile.rank ? `Number ${props.tile.rank}` : null, props.tile.name, cap() ?? props.tile.genre], props.wide ? null : props.tile.ratings)}
       style={slotted ? { width: `${props.w}px` } : { width: `${props.w}px`, ...props.style }}
       onClick={() => props.onOpen?.()}
     >
@@ -133,6 +136,14 @@ export function TileCard(props: {
             top={!props.tile.background}
           />
         </Show>
+        {/* A Top 10 tile's place, white over a soft corner shade (plans/appletv-polish.md 4.3). */}
+        <Show when={props.tile.rank}>
+          {(n) => (
+            <span class="rank num" aria-hidden="true">
+              {n()}
+            </span>
+          )}
+        </Show>
         {/* A track and a fill on a dark strip, so progress shows on white art. */}
         <Show when={props.tile.progress !== null}>
           <div class="bar">
@@ -142,6 +153,13 @@ export function TileCard(props: {
           </div>
         </Show>
       </div>
+      <Show when={props.captions === false && props.tile.genre}>
+        {(g) => (
+          <p class="rank-genre" aria-hidden="true">
+            {g()}
+          </p>
+        )}
+      </Show>
       <Show when={props.captions !== false}>
         {/* The name, then the year or the core's caption: no scores (the cover carries them). */}
         <p class="cap">
@@ -220,7 +238,8 @@ export function Row(props: {
   const stride = () => size()[0] + m().gap;
   // Captions under the art: every TV tile; elsewhere Continue Watching alone (posters show none).
   const captions = () => form() === "tv" || wide();
-  const captionHeight = () => (!captions() ? 0 : m().caption);
+  // A Top 10 row off the TV gives its genre one line under the art.
+  const captionHeight = () => (captions() ? m().caption : props.row.ranked ? RANK_GENRE / (form() === "desktop" ? scale() : 1) : 0);
   const bodyHeight = () => size()[1] + m().pad * 2 + captionHeight();
   const [scroll, setScroll] = createSignal(offsets.get(id()) ?? 0);
   const [viewport, setViewport] = createSignal(1920);

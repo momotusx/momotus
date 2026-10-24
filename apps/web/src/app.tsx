@@ -9,6 +9,7 @@ import Settings from "lucide-solid/icons/settings";
 import { type Component, createEffect, createMemo, createSignal, For, on, onCleanup, Show, untrack } from "solid-js";
 import { ProfileButton } from "./components/avatar";
 import Brand from "./components/brand";
+import { TrailerMute } from "./components/hero";
 import { bridgeUrl, link } from "./core/client";
 // The debrid accounts follow the core from the start, whatever screen is open.
 import "./core/debrid";
@@ -144,6 +145,8 @@ function TopNav() {
       </div>
       <Show when={!tv()}>
         <div class="topnav-end">
+          {/* The hero trailer's sound switch, outside its player (plans/appletv-polish.md 4.2). */}
+          <TrailerMute />
           <A href={search.path} end class="nav nav-field" classList={{ on: section(location.pathname) === search.path }} data-f="nav:/search" on:click={paletteClick(search.path)}>
             <search.icon aria-hidden />
             <span>{search.label}</span>

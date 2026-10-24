@@ -1,17 +1,12 @@
 import { A, useNavigate } from "@solidjs/router";
 import CircleAlert from "lucide-solid/icons/circle-alert";
-import Info from "lucide-solid/icons/info";
-import Play from "lucide-solid/icons/play";
 import Puzzle from "lucide-solid/icons/puzzle";
 import Wrench from "lucide-solid/icons/wrench";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Sparkle from "lucide-solid/icons/sparkle";
 import ShieldAlert from "lucide-solid/icons/shield-alert";
 import { createEffect, createSignal, For, Match, on, Show, Switch } from "solid-js";
-import { Backdrop, Logo } from "../components/art";
-import { ProfileButton } from "../components/avatar";
-import { Ratings } from "../components/ratings";
-import { separators } from "../components/separators";
+import { HeroCarousel } from "../components/hero";
 import { CONTINUE_ROW, Row } from "../components/row";
 import { homeView, liveView, op, prefsView, retryHomeRow } from "../core/client";
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
@@ -27,8 +22,8 @@ import { allFailed } from "../lib/rows";
 import { autoFocusSoon, inputCount } from "../focus/dom";
 import { form } from "../form";
 import type { Tile } from "../core/generated/Tile";
-import { playPath, ratingParts, titlePath } from "../lib/format";
-import { kindLabel, syncWords } from "../lib/words";
+import { playPath } from "../lib/format";
+import { syncWords } from "../lib/words";
 import "./home.css";
 
 const pageScroll = { top: 0 };
@@ -255,7 +250,7 @@ export default function Home() {
   const [page, setPage] = createSignal<HTMLElement | null>(null);
   const hasContinue = () => home.rows[0]?.rowId === CONTINUE_ROW;
   const empty = () => home.status.state === "open" && home.rows.length === 0;
-  const hero = () => home.hero;
+  const hero = () => home.heroes.length > 0;
   // Rows still on their way: only then is a missing hero still coming. When
   // every row has answered and none gave a backdrop (offline, posters only),
   // the hero closes instead of shimmering for good.
@@ -271,7 +266,7 @@ export default function Home() {
   const opened = inputCount();
   createEffect(
     on(
-      () => !!hero(),
+      hero,
       (has, had) => {
         if (!has || had || inputCount() !== opened) return;
         if (!(document.activeElement instanceof HTMLElement) || !document.activeElement.closest("[data-row]")) return;
@@ -289,95 +284,7 @@ export default function Home() {
   return (
     <div class="home">
       <main class="page" data-vscroll ref={attach} onScroll={(e) => (pageScroll.top = e.currentTarget.scrollTop)}>
-        <section class="hero" classList={{ closed: !hero() && !waiting() }} data-reveal-top data-focus-wait={!hero() && waiting() ? "" : undefined} aria-label="Featured">
-          <Backdrop src={hero()?.tile.background ?? null} class="hero-bd" ramp={form() === "phone" ? "heroPhone" : "hero"} />
-          {/* The phone's large title and the profile button over the art, as the iPhone TV app; "Home" is
-              the page's heading there, the hero's logo the next level. */}
-          <Show when={form() === "phone"}>
-            <header class="ph-top">
-              <h1 class="ph-title">Home</h1>
-              <ProfileButton />
-            </header>
-          </Show>
-          <div class="hero-body">
-          <Show
-            when={hero()}
-            fallback={
-              <Show when={waiting()}>
-                <div class="hero-skel skel" aria-hidden="true" />
-              </Show>
-            }
-          >
-            {(h) => (
-              <>
-                <Logo src={h().tile.logo} name={h().tile.name} class="hero-logo" level={form() === "phone" ? 2 : 1} />
-                {/* The genre line, then the meta line with the ratings row; each form orders the column
-                    as its frame (home.css). */}
-                <div class="hero-lines">
-                  <p class="genre">{[kindLabel(h().tile.kind), ...h().genres].join(" · ")}</p>
-                  <p class="meta" ref={separators}>
-                    <Show when={h().tile.releaseInfo}>
-                      <span class="num yr">{h().tile.releaseInfo}</span>
-                    </Show>
-                    <Show when={h().runtime}>
-                      <b aria-hidden="true" class="yr">·</b>
-                      <span class="num yr">{h().runtime}</span>
-                    </Show>
-                    <Show when={(h().tile.releaseInfo || h().runtime) && ratingParts(h().tile.ratings).length}>
-                      <b aria-hidden="true" class="yr">·</b>
-                    </Show>
-                    <Ratings ratings={h().tile.ratings} sep={() => <b aria-hidden="true">·</b>} />
-                  </p>
-                </div>
-                <Show when={h().description}>
-                  <p class="hero-syn">{h().description}</p>
-                </Show>
-                <p class="reason">{h().reason}</p>
-                {/* One stack: Up from the first row lands on its first button, Play (`data-fentry`). */}
-                <div class="acts" data-fgroup="hero" data-fentry>
-                  <Show when={playHref(h().tile)}>
-                    {(href) => (
-                      <A class="btn primary" href={href()} data-f="hero:play" aria-label={`Play ${h().tile.name}`} data-autofocus="">
-                        <Play aria-hidden class="fill" />
-                        Play
-                      </A>
-                    )}
-                  </Show>
-                  {/* Details: a pill with its word on TV, as tvOS; the round button off the TV. */}
-                  <Show
-                    when={form() === "tv"}
-                    fallback={
-                      <A
-                        class="rbtn"
-                        href={titlePath(h().tile.kind, h().tile.id)}
-                        data-f="hero:details"
-                        aria-label={`Details for ${h().tile.name}`}
-                        data-autofocus={playHref(h().tile) ? undefined : ""}
-                      >
-                        <span class="ring">
-                          <Info aria-hidden />
-                        </span>
-                        <span class="lbl">Details</span>
-                      </A>
-                    }
-                  >
-                    <A
-                      class="btn"
-                      href={titlePath(h().tile.kind, h().tile.id)}
-                      data-f="hero:details"
-                      aria-label={`Details for ${h().tile.name}`}
-                      data-autofocus={playHref(h().tile) ? undefined : ""}
-                    >
-                      <Info aria-hidden />
-                      Details
-                    </A>
-                  </Show>
-                </div>
-              </>
-            )}
-          </Show>
-          </div>
-        </section>
+        <HeroCarousel heroes={home.heroes} waiting={waiting()} playHref={(h) => playHref(h.tile)} />
 
         {/* With no row to follow, the account's notices sit under the hero. */}
         <Show when={home.rows.length === 0}>
@@ -417,7 +324,7 @@ export default function Home() {
         </Show>
 
         <Show
-          when={!home.hero && allFailed(home.rows)}
+          when={!hero() && allFailed(home.rows)}
           fallback={
             <>
               {/* Under Continue Watching, or first when there is none; an empty

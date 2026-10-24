@@ -23,7 +23,7 @@ for (const form of Object.keys(FORMS) as Form[]) {
   test(`${form}: the hero sits on the rows' grid line`, async ({ browser }) => {
     const { context, page, go } = await open(browser, form, "/");
     await go();
-    await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
     await expect(page.locator(".row-head").first()).toBeVisible({ timeout: 30_000 });
     const at = await page.evaluate((phone) => {
       const head = document.querySelector<HTMLElement>(".row-head") as HTMLElement;
@@ -31,7 +31,7 @@ for (const form of Object.keys(FORMS) as Form[]) {
       const k = r.width / head.offsetWidth || 1;
       const grid = r.left + parseFloat(getComputedStyle(head).paddingLeft) * k;
       // TV and desktop: the words start on the line; phone: the hero is full bleed, its column centered.
-      const hero = document.querySelector(phone ? ".hero" : ".hero .reason") as HTMLElement;
+      const hero = document.querySelector(phone ? ".hero" : ".hero-page.on .reason") as HTMLElement;
       return { grid: phone ? 0 : grid, left: hero.getBoundingClientRect().left };
     }, form === "phone");
     expect(Math.abs(at.left - at.grid)).toBeLessThanOrEqual(1);
@@ -175,9 +175,9 @@ async function drawnLogo(browser: Browser, form: Form, path: string, selector: s
   const clear =
     path === "/" && form !== "phone"
       ? await page.evaluate(() => {
-          const syn = document.querySelector(".hero-syn");
+          const syn = document.querySelector(".hero-page.on .hero-syn");
           if (syn) syn.textContent = "A long synopsis. ".repeat(40);
-          const top = document.querySelector(".hero .hero-logo:not(.sr)")?.getBoundingClientRect().top ?? 0;
+          const top = document.querySelector(".hero-page.on .hero-logo:not(.sr)")?.getBoundingClientRect().top ?? 0;
           const nav = document.querySelector(".topnav .tabbar")?.getBoundingClientRect().bottom ?? 0;
           return top - nav;
         })
@@ -376,9 +376,9 @@ test("tv: with no backdrop from any catalog, Home's hero closes once the rows ha
       const m = JSON.parse(String(e.data));
       if (m.id !== undefined && asked.has(m.id) && m.ok) {
         homes.add(m.result.sub);
-        m.result.snapshot.header.hero = null;
+        m.result.snapshot.header.heroes = [];
       } else if (m.sub !== undefined && homes.has(m.sub) && Array.isArray(m.updates)) {
-        for (const u of m.updates) if (u.kind === "header") u.header.hero = null;
+        for (const u of m.updates) if (u.kind === "header") u.header.heroes = [];
       }
       ws.send(JSON.stringify(m));
     });

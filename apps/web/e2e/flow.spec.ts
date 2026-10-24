@@ -544,7 +544,7 @@ for (const [form, [width, height, scale]] of Object.entries(FORMS)) {
     await page.goto(`/?form=${form}`);
     // Continue Watching can land after the catalogs (its tiles wait on metas).
     await expect(page.locator(".row").first()).toHaveAttribute("aria-label", "Continue Watching", { timeout: 30_000 });
-    await expect(page.locator(".hero .acts .btn").first()).toBeVisible();
+    await expect(page.locator(".hero-page.on .acts .btn").first()).toBeVisible();
     await expect(page.locator(".row").nth(1).locator(".tile").first()).toBeVisible({ timeout: 30_000 });
     // Focus moves by itself only on TV: pointer and touch get no ring on load.
     if (form === "tv") await expect.poll(() => focused(page)).not.toBeNull();
@@ -556,7 +556,7 @@ for (const [form, [width, height, scale]] of Object.entries(FORMS)) {
       const bottom = (els: Element[]) => Math.max(...els.map((e) => e.getBoundingClientRect().bottom));
       const rows = [...document.querySelectorAll(".row")];
       const heading = (i: number) => rows[i]?.querySelector(".row-head h2")?.getBoundingClientRect().top ?? 0;
-      const hero = bottom([...document.querySelectorAll(".hero .acts .btn")]);
+      const hero = bottom([...document.querySelectorAll(".hero-page.on .acts .btn")]);
       const firstRow = bottom([...(rows[0]?.querySelectorAll(".tile") ?? [])]);
       return { hero: heading(0) - hero, row: heading(1) - firstRow };
     });
@@ -565,9 +565,9 @@ for (const [form, [width, height, scale]] of Object.entries(FORMS)) {
     // synopsis that runs to its three lines (24 canvas px, 15 at desktop scale).
     if (form !== "phone") {
       const clear = await page.evaluate(() => {
-        const syn = document.querySelector(".hero-syn");
+        const syn = document.querySelector(".hero-page.on .hero-syn");
         if (syn) syn.textContent = "A long synopsis. ".repeat(40);
-        const top = document.querySelector(".hero .hero-logo:not(.sr)")?.getBoundingClientRect().top ?? 0;
+        const top = document.querySelector(".hero-page.on .hero-logo:not(.sr)")?.getBoundingClientRect().top ?? 0;
         const nav = document.querySelector(".topnav .tabbar")?.getBoundingClientRect().bottom ?? 0;
         return top - nav;
       });

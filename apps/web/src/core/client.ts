@@ -161,7 +161,8 @@ export function liveView<S>(view: string, params: Record<string, unknown> = {}, 
 
 export interface HomeState {
   status: ViewStatus;
-  hero: Hero | null;
+  /** The hero carousel's pages, in the core's order. */
+  heroes: Hero[];
   rows: HomeRow[];
 }
 
@@ -172,15 +173,15 @@ let homeOpening: Promise<Subscription | null> | undefined;
  * rows, scroll offsets and focus without a reload. */
 export function homeView(): HomeState {
   if (home) return home;
-  const [state, setState] = createStore<HomeState>({ status: { state: "opening" }, hero: null, rows: [] });
+  const [state, setState] = createStore<HomeState>({ status: { state: "opening" }, heroes: [], rows: [] });
   home = state;
   homeOpening = bridge
     .subscribe<HomeSnapshot, HomeUpdate>("home", {}, {
-      snapshot: (snapshot) => setState({ status: { state: "open" }, hero: snapshot.header.heroes[0] ?? null, rows: snapshot.rows }),
+      snapshot: (snapshot) => setState({ status: { state: "open" }, heroes: snapshot.header.heroes, rows: snapshot.rows }),
       updates: (updates) =>
         batch(() => {
           for (const u of updates) {
-            if (u.kind === "header") setState("hero", reconcile(u.header.heroes[0] ?? null));
+            if (u.kind === "header") setState("heroes", reconcile(u.header.heroes));
             else setState("rows", reconcile(applyDiffs(state.rows, u.diffs), { key: "rowId" }));
           }
         }),

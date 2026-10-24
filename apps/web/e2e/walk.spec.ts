@@ -59,7 +59,7 @@ async function walk(browser: Browser, form: Form) {
   const t0 = Date.now();
   await page.goto(`/?form=${form}`);
   // The hero's reason shows on every form (the phone's meta line holds only the ratings row, empty without scores).
-  await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
   ms.homeHero = Date.now() - t0;
   await imageLoaded(page, `${cw(BBB_ID)} img`);
   ms.homeContinue = Date.now() - t0;

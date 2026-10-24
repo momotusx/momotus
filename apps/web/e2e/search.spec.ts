@@ -39,7 +39,7 @@ async function openFromNav(page: Page, form: Form) {
 for (const form of Object.keys(FORMS) as Form[]) {
   test(`${form}: the navigation opens the palette over the screen, and it closes again`, async ({ browser }) => {
     const { context, page, errors } = await open(browser, form, "/");
-    await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
     await openFromNav(page, form);
     // Over Home, not instead of it: same address, the page behind is inert.
     expect(new URL(page.url()).pathname).toBe("/");
@@ -85,7 +85,7 @@ for (const form of Object.keys(FORMS) as Form[]) {
 
 test("desktop: a query nothing matches says No matches, the addons can search", async ({ browser }) => {
   const { context, page } = await open(browser, "desktop", "/");
-  await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
   await openFromNav(page, "desktop");
   await page.locator('[data-f="search:input"]').fill("zqxjvkwpqzv");
   await expect(page.locator(".palette-layer .palette-note").last()).toHaveText('No matches for "zqxjvkwpqzv" in your catalogs.', { timeout: 30_000 });
@@ -95,7 +95,7 @@ test("desktop: a query nothing matches says No matches, the addons can search", 
 
 test("desktop: the scope pill steps through the kinds the results hold", async ({ browser }) => {
   const { context, page } = await open(browser, "desktop", "/");
-  await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
   await openFromNav(page, "desktop");
   await page.locator('[data-f="search:input"]').fill("thrones");
   await expect(page.locator(".hit").first()).toBeVisible({ timeout: 30_000 });
@@ -143,7 +143,7 @@ test("tv: a query typed while the search view is still opening is not lost", asy
     });
   });
   await page.goto("/?form=tv");
-  await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
   await page.locator('[data-f="nav:/search"]').click();
   // Typed at once, before the view has opened.
   await page.locator('[data-f="search:input"]').fill("thrones");
@@ -155,7 +155,7 @@ const onPaletteEntry = (page: Page) => page.evaluate(() => !!(history.state as {
 
 test("desktop: browser Back closes the palette and stays on the screen under it", async ({ browser }) => {
   const { context, page } = await open(browser, "desktop", "/");
-  await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
   await page.locator('[data-f="nav:/discover"]').click();
   await expect(page).toHaveURL(/\/discover/);
   await openFromNav(page, "desktop");
@@ -171,7 +171,7 @@ test("desktop: browser Back closes the palette and stays on the screen under it"
 
 test("phone: a labelled Close closes the palette and takes its history entry with it", async ({ browser }) => {
   const { context, page } = await open(browser, "phone", "/");
-  await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
   await openFromNav(page, "phone");
   const close = page.getByRole("button", { name: "Close search" });
   await expect(close).toBeVisible();
@@ -184,7 +184,7 @@ test("phone: a labelled Close closes the palette and takes its history entry wit
 
 test("phone: Back from a result returns to the results, Back again to the screen", async ({ browser }) => {
   const { context, page } = await open(browser, "phone", "/");
-  await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
   await openFromNav(page, "phone");
   await page.locator('[data-f="search:input"]').fill("thrones");
   await page.locator(".hit").first().tap({ timeout: 30_000 });
@@ -207,7 +207,7 @@ test("phone: Back from a result returns to the results, Back again to the screen
 
 test("tv: Back from a result reopens the palette on the result that was opened", async ({ browser }) => {
   const { context, page } = await open(browser, "tv", "/");
-  await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
   await openFromNav(page, "tv");
   await page.keyboard.type("thrones");
   await expect(page.locator(".hit").first()).toBeVisible({ timeout: 30_000 });

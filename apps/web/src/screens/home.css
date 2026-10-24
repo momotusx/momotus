@@ -252,3 +252,58 @@
 [data-form="phone"] .ph-title { font: 700 34px / 41px var(--font-display); letter-spacing: var(--tracking-display); color: #fff; }
 [data-form="phone"] .ph-top .pavatar { display: grid; place-items: center; width: 44px; height: 44px; }
 [data-form="phone"] .ph-top .avatar-s { width: 40px; height: 40px; border-radius: 50%; font-size: 17px; }
+
+/* The hero carousel (plans/appletv-polish.md 4.1): pages side by side in a snapping track, each with
+ * its own art and words; the phone's top row, the dots and the trailer's box stay put. */
+.hero-track { position: absolute; inset: 0; display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
+.hero-track::-webkit-scrollbar { display: none; }
+.hero-page { position: relative; flex: 0 0 100%; height: 100%; overflow: hidden; isolation: isolate; scroll-snap-align: start; scroll-snap-stop: always; }
+.hero-page .hero-bd { transition: opacity 600ms var(--ease); }
+/* The dots: the active one a pill whose white fill grows over the page's time (one value, --fill). */
+.hero-dots { position: absolute; left: 50%; transform: translateX(-50%); z-index: 2; display: flex; align-items: center; gap: 9px; transition: opacity 400ms var(--ease); }
+.hero-dots .dot { position: relative; flex: none; width: 7px; height: 7px; padding: 0; border: 0; border-radius: 999px; background: rgba(255, 255, 255, .6);
+  transition: width 350ms var(--ease), background-color 350ms var(--ease); }
+.hero-dots button.dot { box-sizing: content-box; padding: 7px 3px; margin: -7px -3px; background-clip: content-box; cursor: pointer; }
+.hero-dots .dot.on { width: 24px; background-color: rgba(255, 255, 255, .35); }
+.hero-dots .dot i { display: none; position: absolute; top: 0; bottom: 0; left: 0; width: calc(var(--fill, 0) * 100%); border-radius: 999px; background: #fff; }
+.hero-dots button.dot i { top: 7px; bottom: 7px; left: 3px; width: calc(var(--fill, 0) * (100% - 6px)); }
+.hero-dots .dot.on i { display: block; }
+.dots-pause { display: grid; place-items: center; padding: 0; border: 0; background: none; color: rgba(255, 255, 255, .7); cursor: pointer; }
+/* The trailer full bleed in the hero's frame (plans/appletv-polish.md 4.2): the player oversized and
+ * centered, clipped by the frame, under the pages; the active page's art fades away above it once
+ * YouTube's start controls have gone, its ramps staying so the words keep their contrast. */
+.hero-trailer { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.hero-player { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+.hero-player iframe { display: block; width: 100%; height: 100%; border: 0; pointer-events: none; }
+.hero-track { z-index: 1; }
+.hero-page .hero-bd img { transition: opacity 600ms var(--ease); }
+.hero.trailer-on .hero-page.on .hero-bd img { opacity: 0; }
+.trailer-mute { display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; color: #fff; background: rgba(255, 255, 255, .16); cursor: pointer; }
+@media (prefers-reduced-motion: reduce) { .hero-dots .dot, .hero-page .hero-bd img { transition: none; } }
+
+[data-form="tv"] .hero-dots { bottom: 262px; gap: 16px; }
+[data-form="tv"] .hero-dots .dot { width: 12px; height: 12px; }
+[data-form="tv"] .hero-dots .dot.on { width: 44px; }
+[data-form="desktop"] .hero-dots { bottom: calc(36 * var(--px)); gap: calc(8 * var(--px)); }
+/* tv.apple.com's platter without its blur: a live blur over the art is a render pass on every frame (home-perf),
+ * so a deeper fill stands in for it, as the hero's secondaries do. */
+[data-form="desktop"] .hero-dots.platter { padding: calc(6 * var(--px)) calc(12 * var(--px)); border-radius: calc(20 * var(--px)); background: rgba(0, 0, 0, .45); }
+[data-form="desktop"] .dots-pause { width: calc(20 * var(--px)); height: calc(20 * var(--px)); margin-left: calc(4 * var(--px)); }
+[data-form="desktop"] .dots-pause svg { width: calc(12 * var(--px)); height: calc(12 * var(--px)); }
+.topnav-end .trailer-mute { width: calc(28 * var(--px)); height: calc(28 * var(--px)); }
+.topnav-end .trailer-mute svg { width: calc(16 * var(--px)); height: calc(16 * var(--px)); }
+[data-form="phone"] .hero-dots { bottom: 22px; }
+[data-form="phone"] .ph-end { display: flex; align-items: center; gap: 10px; }
+[data-form="phone"] .ph-top .trailer-mute { width: 36px; height: 36px; }
+[data-form="phone"] .ph-top .trailer-mute svg { width: 18px; height: 18px; }
+
+/* Top 10 rows (plans/appletv-polish.md 4.3, the group C pick open: C2 until the owner picks): the place
+ * at the art's top left over a soft corner shade, the genre under the art. */
+.tile .rank { position: absolute; top: 4px; left: 9px; z-index: 1; font: 700 27px / 1 var(--font-display); color: #fff; letter-spacing: var(--tracking-display);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, .55); pointer-events: none; }
+.tile .pic:has(.rank)::before { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: radial-gradient(120% 60% at 0% 0%, rgba(0, 0, 0, .45), rgba(0, 0, 0, 0) 45%); }
+.tile .rank-genre { margin: 6px 0 0; font: 400 11px / 16px var(--font-text); color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-form="tv"] .tile .rank { top: 10px; left: 16px; font-size: 57px; }
+[data-form="desktop"] .tile .rank { top: calc(6 * var(--px)); left: calc(12 * var(--px)); font-size: calc(40 * var(--px)); }
+[data-form="desktop"] .tile .rank-genre { margin-top: calc(6 * var(--px)); font-size: calc(13 * var(--px)); line-height: calc(16 * var(--px)); }

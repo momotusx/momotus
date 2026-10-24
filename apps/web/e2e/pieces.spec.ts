@@ -60,12 +60,12 @@ for (const form of Object.keys(FORMS) as Form[]) {
 
   test(`${form}: the page takes its form's color, and the hero's ramps fade to it`, async ({ browser }) => {
     const { context, page } = await open(browser, form, "/");
-    await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
     const page_ = { tv: "rgb(28, 28, 30)", desktop: "rgb(31, 31, 31)", phone: "rgb(0, 0, 0)" }[form];
     expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe(page_);
     expect(await page.locator('meta[name="theme-color"]').getAttribute("content")).toBe({ tv: "#1C1C1E", desktop: "#1F1F1F", phone: "#000000" }[form]);
     // The ramps come from components/ramps.ts in the page color, never v2's blue-black.
-    const ramp = await page.locator(".hero-bd .ramp").evaluate((el) => (el as HTMLElement).style.background);
+    const ramp = await page.locator(".hero-page.on .hero-bd .ramp").evaluate((el) => (el as HTMLElement).style.background);
     expect(ramp).toContain(page_.replace("rgb(", "rgba(").replace(")", ", 0."));
     expect(ramp).not.toContain("6, 9, 14");
     if (form === "phone") expect((await style(page, ".row .tile .pic")).background).toBe("rgb(28, 28, 30)");
@@ -347,18 +347,18 @@ test("TV: the top shelf is full bleed, the first row's title at 850, and nothing
     await held;
     await route.continue();
   });
-  await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
   const column = () =>
-    page.evaluate(() => [".hero .genre", ".hero .meta", ".hero .reason", '[data-f="hero:details"]'].map((s) => Math.round(document.querySelector(s)?.getBoundingClientRect().top ?? -1)));
+    page.evaluate(() => [".hero-page.on .genre", ".hero-page.on .meta", ".hero-page.on .reason", '[data-f="hero:details"]'].map((s) => Math.round(document.querySelector(s)?.getBoundingClientRect().top ?? -1)));
   const before = await column();
   release();
-  await expect(page.locator(".hero-logo:not(.pending)")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".hero-page.on .hero-logo:not(.pending)")).toBeVisible({ timeout: 30_000 });
   await page.waitForTimeout(300);
   expect(await column()).toEqual(before);
   const geo = await page.evaluate(() => {
     const r = (s: string) => document.querySelector(s)?.getBoundingClientRect();
     const hero = r(".hero") as DOMRect;
-    const logo = r(".hero-logo") as DOMRect;
+    const logo = r(".hero-page.on .hero-logo") as DOMRect;
     return { hero: [hero.left, hero.top, hero.width, hero.height], logo: [logo.width, logo.height], row: Math.round(r(".row .row-head h2")?.top ?? -1), details: Math.round(r('[data-f="hero:details"]')?.bottom ?? -1) };
   });
   expect(geo).toEqual({ hero: [0, 0, 1920, 1080], logo: [640, 160], row: 850, details: 770 });
@@ -389,7 +389,7 @@ test("desktop: tv.apple.com's hero at every window, its column where the glass c
     const context = await browser.newContext({ viewport: { width: w, height: h }, reducedMotion: "reduce" });
     const page = await context.newPage();
     await page.goto("/?form=desktop");
-    await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
     await expect(page.locator(".row .row-head h2").first()).toBeVisible({ timeout: 30_000 });
     const g = await page.evaluate(() => {
       const r = (s: string) => document.querySelector(s)?.getBoundingClientRect() as DOMRect;
@@ -400,7 +400,7 @@ test("desktop: tv.apple.com's hero at every window, its column where the glass c
         return { top: rs[0]?.top ?? -1, right: Math.max(...rs.map((x) => x.right)) };
       };
       const hero = r(".hero");
-      return { left: hero.left, top: hero.top, width: hero.width, height: hero.height, foot: hero.bottom, row: r(".row .row-head h2").top, genre: text(".hero .genre").top, meta: text(".hero .meta").top, syn: text(".hero-syn"), reason: text(".hero .reason").top, play: r('[data-f="hero:play"]').bottom };
+      return { left: hero.left, top: hero.top, width: hero.width, height: hero.height, foot: hero.bottom, row: r(".row .row-head h2").top, genre: text(".hero-page.on .genre").top, meta: text(".hero-page.on .meta").top, syn: text(".hero-page.on .hero-syn"), reason: text(".hero-page.on .reason").top, play: r('[data-f="hero:play"]').bottom };
     });
     const label = `${w}x${h}`;
     // Under the 52 px header, 16:9 of the width, no taller than the window under the header less 90, no lower than 400.
@@ -438,8 +438,8 @@ async function pixel(page: Page, x: number, y: number): Promise<number[]> {
 test("the hero's foot meets the page with no seam, on every form", async ({ browser }) => {
   for (const form of ["tv", "desktop", "phone"] as const) {
     const { context, page } = await open(browser, form, "/");
-    await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
-    await expect(page.locator(".hero-bd img.in")).toBeAttached({ timeout: 30_000 });
+    await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator(".hero-page.on .hero-bd img.in")).toBeAttached({ timeout: 30_000 });
     await page.waitForTimeout(400);
     const { foot, width } = await page.evaluate(() => ({ foot: document.querySelector(".hero")!.getBoundingClientRect().bottom, width: innerWidth }));
     const bg = (await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).match(/\d+/g)!.map(Number);
@@ -461,7 +461,7 @@ test("TV: over white art, the genre line's spot reads as the legibility check co
   // The check (art.test.ts) composites the ramps by hand; here the browser paints them over a white backdrop
   // and the pixel under the genre line's spot (TV_EDGE 0.4688, 0.4083) is read with the column's words hidden.
   const { context, page } = await open(browser, "tv", "/");
-  await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
   await page.evaluate((white) => {
     const img = document.querySelector<HTMLImageElement>(".hero-bd img");
     if (img) img.src = white;
@@ -496,12 +496,12 @@ test("phone: the iPhone's hero at every screen, the large title and the profile 
     const context = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, reducedMotion: "reduce" });
     const page = await context.newPage();
     await page.goto("/?form=phone");
-    await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
     await expect(page.locator(".row .row-head").first()).toBeVisible({ timeout: 30_000 });
     const g = await page.evaluate(() => {
       const r = (s: string) => document.querySelector(s)?.getBoundingClientRect() as DOMRect;
       const tabs = r("nav.tabs");
-      return { hero: [r(".hero").left, r(".hero").top, r(".hero").width, r(".hero").height], foot: r(".hero").bottom, head: [r(".row .row-head").top, r(".row .row-head").bottom], tabs: tabs.top, lines: r(".hero-lines").top, reason: r(".hero .reason").top, play: r('[data-f="hero:play"]').bottom, title: r(".ph-title").top, avatar: [r(".ph-top .pavatar").width, r(".ph-top .pavatar").height] };
+      return { hero: [r(".hero").left, r(".hero").top, r(".hero").width, r(".hero").height], foot: r(".hero").bottom, head: [r(".row .row-head").top, r(".row .row-head").bottom], tabs: tabs.top, lines: r(".hero-page.on .hero-lines").top, reason: r(".hero-page.on .reason").top, play: r('[data-f="hero:play"]').bottom, title: r(".ph-title").top, avatar: [r(".ph-top .pavatar").width, r(".ph-top .pavatar").height] };
     });
     const label = `${w}x${h}`;
     // 680 at 390 wide, never taller than the window less 164: the first shelf's header shows above the tab bar.
@@ -520,9 +520,9 @@ test("phone: the iPhone's hero at every screen, the large title and the profile 
   }
   // "Home" is the page's heading, the hero's title the next level; the profile button opens the picker.
   const { context, page } = await open(browser, "phone", "/");
-  await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Home");
-  await expect(page.locator(".hero").getByRole("heading", { level: 2 })).toHaveCount(1);
+  await expect(page.locator(".hero-page.on").getByRole("heading", { level: 2 })).toHaveCount(1);
   await expect(page.locator('.ph-top [data-f="nav:/profiles"]')).toHaveAttribute("href", "/profiles");
   await context.close();
 });
@@ -545,15 +545,15 @@ const spot = (page: Page, selector: string, backdrop: string, maxWidth = false) 
 
 test("TV: the secondaries over a backdrop sit where the glass check measures them", async ({ browser }) => {
   const { context, page } = await open(browser, "tv", "/");
-  await expect(page.locator(".hero .reason")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
   // The top shelf's column (art.test.ts, TV_EDGE 0.4688 for every line): each line's top no higher than
   // the check measures it, the column no wider, Details' label no further right.
-  for (const [selector, y] of [[".hero .genre", 0.4083], [".hero-syn", 0.4509], [".hero .meta", 0.5491], [".hero .reason", 0.6046]] as const) {
-    const at = await spot(page, selector, ".hero-bd", true);
+  for (const [selector, y] of [[".hero-page.on .genre", 0.4083], [".hero-page.on .hero-syn", 0.4509], [".hero-page.on .meta", 0.5491], [".hero-page.on .reason", 0.6046]] as const) {
+    const at = await spot(page, selector, ".hero-page.on .hero-bd", true);
     expect(at.x, selector).toBeLessThanOrEqual(0.4688 + 0.002);
     expect(at.y, selector).toBeGreaterThanOrEqual(y - 0.005);
   }
-  const details = await spot(page, '[data-f="hero:details"]', ".hero-bd");
+  const details = await spot(page, '[data-f="hero:details"]', ".hero-page.on .hero-bd");
   expect(details.x).toBeLessThanOrEqual(0.2365 + 34 / 1920 + 0.002);
   expect(details.y).toBeGreaterThanOrEqual(0.663 - 18 / 1080 - 0.005);
   await page.goto(`/title/series/${GOT.id}?form=tv`);

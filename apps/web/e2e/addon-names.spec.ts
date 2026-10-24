@@ -113,7 +113,8 @@ test("Home, the hero and every row state name no addon, and the later twin waits
   // The late row is slow first, in words of its own.
   await expect(row("Late Movies").locator(".row-note")).toHaveText("Slow to answer, still trying", { timeout: 30_000 });
   await noAddonName(page);
-  await expect(page.locator(".hero .reason")).toHaveText("#1 in Popular Movies", { timeout: 30_000 });
+  // A catalog that is no ranking gives the row's title alone, with no place (plans/appletv-polish.md decision 2).
+  await expect(page.locator(".hero-page.on .reason")).toHaveText("Popular Movies", { timeout: 30_000 });
   await expect(row("Broken Movies").locator(".row-msg p").first()).toHaveText("This row did not load.");
   await expect(row("Quiet Movies").locator(".row-msg p")).toHaveText("Nothing in this row right now.");
   await expect(row("Late Movies").locator(".tile").first()).toBeVisible({ timeout: 30_000 });

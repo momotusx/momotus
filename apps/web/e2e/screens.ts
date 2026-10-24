@@ -37,7 +37,7 @@ export const SCREENS: Screen[] = [
     name: "home",
     path: "/",
     ready: async (page) => {
-      await visible(".hero .reason")(page);
+      await visible(".hero-page.on .reason")(page);
       for (const row of [0, 1]) {
         await expect(page.locator(".row").nth(row).locator(".tile img.in").first()).toBeVisible({ timeout: 30_000 });
       }
@@ -181,7 +181,7 @@ export const SCREENS: Screen[] = [
     name: "search-palette",
     path: "/",
     ready: async (page, form) => {
-      await visible(".hero .reason")(page);
+      await visible(".hero-page.on .reason")(page);
       if (form === "phone") await page.locator('.tabs a[href="/search"]').tap();
       else await page.locator('[data-f="nav:/search"]').click();
       await page.locator('[data-f="search:input"]').fill("thrones");

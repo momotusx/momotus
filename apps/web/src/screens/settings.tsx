@@ -18,7 +18,8 @@ import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import type { LanguageChoice } from "../core/generated/LanguageChoice";
 import type { Prefs } from "../core/generated/Prefs";
 import type { SubtitleSize } from "../core/generated/SubtitleSize";
-import { chooseForm, type Form, pinned } from "../form";
+import { chooseForm, type Form, form, pinned } from "../form";
+import { previewsOn, setPreviewsOn } from "../lib/trailers";
 import { defaultsWords } from "../lib/defaults";
 import { choiceSummary, choiceWords, findAddons, languageName, syncSummary, syncWords, tmdbCredit, turkceAltyaziCredit } from "../lib/words";
 import * as sync from "../core/sync";
@@ -219,6 +220,7 @@ export function LinkRow(props: { href: string; icon: JSX.Element; title: string;
 }
 
 export default function SettingsScreen() {
+  const [previews, setPreviews] = createSignal(previewsOn());
   const prefs = prefsView();
   const addons = liveView<AddonsSnapshot>("addons");
   const p = () => prefs.state.data;
@@ -368,8 +370,27 @@ export default function SettingsScreen() {
                 isOn={(v) => x().autoplayNext === v}
                 onPick={(v) => patch({ autoplayNext: v })}
               />
+              {/* This device only, never synced (plans/appletv-polish.md decision 13); the TV form has none. */}
+              <Show when={form() !== "tv"}>
+                <Choice<boolean>
+                  label="Trailer previews on Home"
+                  group="pref-previews"
+                  items={[
+                    { value: true, label: "On" },
+                    { value: false, label: "Off" },
+                  ]}
+                  isOn={(v) => previews() === v}
+                  onPick={(v) => {
+                    setPreviewsOn(v);
+                    setPreviews(v);
+                  }}
+                />
+              </Show>
             </div>
             <p class="note small">The numbers are the order you turned languages on; number 1 wins. A subtitle you pick while watching makes its language number 1.</p>
+            <Show when={form() !== "tv"}>
+              <p class="note small">Trailer previews play muted, from YouTube, when the connection is not metered.</p>
+            </Show>
           </section>
         )}
       </Show>
