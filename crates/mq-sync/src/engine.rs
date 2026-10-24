@@ -1360,6 +1360,13 @@ impl<'a> Session<'a> {
     }
 
     async fn push(&mut self, report: &mut SyncReport) -> Result<(), SyncError> {
+        // A device that just joined pulls first: what the account holds
+        // decides about its untouched defaults before it sends any
+        // (plans/accounts-social-sync.md 13).
+        if self.library.join_defaults_pending()? {
+            self.pull(report).await?;
+            self.library.settle_join_defaults(self.clock.device())?;
+        }
         let mut restamped = HashSet::new();
         let mut behind = 0;
         loop {

@@ -1,7 +1,5 @@
 use crate::schema::migrations;
-use crate::sync::{
-    Gone, POSITION_STEP, Stamp, coll, local, local_changed, queue, refuse_gone, sql,
-};
+use crate::sync::{Gone, POSITION_STEP, Stamp, coll, local, queue, refuse_gone, sql, url_hash};
 use rusqlite::hooks::Action;
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use std::path::{Path, PathBuf};
@@ -476,6 +474,122 @@ impl Library {
         refused.map_or(Ok(()), Err)
     }
 
+    /// Moves an installed addon to another link (a default's link that
+    /// changed), keeping its place and switch; when the new link is already
+    /// in the list, the old one only goes. It is upkeep, not a person's
+    /// edit, so it is stamped just above the old addon's own register: a
+    /// removal of the new link made on another device after the old link's
+    /// last change still wins. Answers whether the old link was here.
+    pub fn rename_addon(
+        &self,
+        profile: &str,
+        from: &str,
+        to: &str,
+        manifest_json: &str,
+        device: u64,
+    ) -> Result<bool, LibraryError> {
+        self.write(|c| {
+            refuse_gone(c, profile)?;
+            let before = addon_rows(c, profile)?;
+            if !before.iter().any(|r| r.transport_url == from) {
+                return Ok(false);
+            }
+            let stored = crate::sync::stored_hlc(
+                c,
+                coll::ADDON,
+                &crate::sync::key(&[profile, &url_hash(from)]),
+            )?
+            .as_deref()
+            .and_then(crate::hlc::Hlc::decode)
+            .unwrap_or_else(|| crate::hlc::Hlc::zero(device));
+            let stamp = stored.next_for(device).encode();
+            let has_new = before.iter().any(|r| r.transport_url == to);
+            let after: Vec<AddonRow> = before
+                .iter()
+                .filter(|r| !(has_new && r.transport_url == from))
+                .map(|r| match r.transport_url == from {
+                    true => AddonRow {
+                        transport_url: to.to_owned(),
+                        manifest_json: manifest_json.to_owned(),
+                        ..r.clone()
+                    },
+                    false => r.clone(),
+                })
+                .collect();
+            write_addons(c, profile, &before, after, &Stamp::Fixed(&stamp))?;
+            Ok(true)
+        })
+    }
+
+    /// Marks that this device just joined an account: before it next sends
+    /// anything, its first pull decides about its untouched recommended
+    /// defaults (`settle_join_defaults`).
+    pub fn mark_join_defaults(&self) -> Result<(), LibraryError> {
+        self.set_device_value(JOIN_DEFAULTS, "pending")
+    }
+
+    /// Whether a join waits for `settle_join_defaults`.
+    pub fn join_defaults_pending(&self) -> Result<bool, LibraryError> {
+        Ok(self.device_value(JOIN_DEFAULTS)?.is_some())
+    }
+
+    /// After the first pull of a join: a device that joins an account takes
+    /// the account's addon list, so for each profile the account has any
+    /// addon register for, this device's own untouched recommended defaults
+    /// (its addon registers at wall time 0, from the defaults step) go and
+    /// are never sent; what a person added, removed or switched here (a real
+    /// time) stays and merges. A profile the account has no addon register
+    /// for keeps them, so a device never ends a join with no addons. A
+    /// default's place goes only with its state. Only this device's own
+    /// registers (its id in the hlc) are judged, never pulled ones
+    /// (plans/accounts-social-sync.md 13).
+    pub fn settle_join_defaults(&self, device: u64) -> Result<(), LibraryError> {
+        self.write(|c| {
+            let pending: bool = c.query_row(
+                "SELECT EXISTS (SELECT 1 FROM device_state WHERE key = ?1)",
+                params![JOIN_DEFAULTS],
+                |r| r.get(0),
+            )?;
+            if !pending {
+                return Ok(());
+            }
+            let mine = format!("{device:016x}");
+            const OWN_UNTOUCHED: &str = "substr(hlc, 1, 12) = '000000000000' AND substr(hlc, 17) = ?2";
+            let profiles: Vec<String> = c
+                .prepare(
+                    "SELECT profile_id FROM addons WHERE substr(hlc, 1, 12) = '000000000000' AND substr(hlc, 17) = ?1
+                     UNION SELECT profile_id FROM addon_order WHERE substr(hlc, 1, 12) = '000000000000' AND substr(hlc, 17) = ?1",
+                )?
+                .query_map(params![mine], |r| r.get(0))?
+                .collect::<rusqlite::Result<_>>()?;
+            for profile in &profiles {
+                let account_has: bool = c.query_row(
+                    "SELECT EXISTS (SELECT 1 FROM addons WHERE profile_id = ?1 AND substr(hlc, 17) != ?2)
+                         OR EXISTS (SELECT 1 FROM addon_order WHERE profile_id = ?1 AND substr(hlc, 17) != ?2)",
+                    params![profile, mine],
+                    |r| r.get(0),
+                )?;
+                if !account_has {
+                    continue;
+                }
+                c.execute(
+                    &format!(
+                        "DELETE FROM addon_order WHERE profile_id = ?1 AND {OWN_UNTOUCHED}
+                           AND NOT EXISTS (SELECT 1 FROM addons a WHERE a.profile_id = addon_order.profile_id
+                             AND a.url_hash = addon_order.url_hash AND substr(a.hlc, 1, 12) != '000000000000')"
+                    ),
+                    params![profile, mine],
+                )?;
+                c.execute(
+                    &format!("DELETE FROM addons WHERE profile_id = ?1 AND {OWN_UNTOUCHED}"),
+                    params![profile, mine],
+                )?;
+            }
+            c.execute("DELETE FROM device_state WHERE key = ?1", params![JOIN_DEFAULTS])?;
+            Ok(())
+        })
+    }
+
     /// Puts newer manifests of installed addons in place, by link, and
     /// nothing else: the list's stamp stays and nothing is queued. A refresh
     /// caches what the addons serve on this device; it is never an edit, so
@@ -754,7 +868,7 @@ fn open_connection(target: &str) -> Result<Connection, LibraryError> {
 pub(crate) fn addon_rows(c: &Connection, profile: &str) -> rusqlite::Result<Vec<AddonRow>> {
     let mut stmt = c.prepare(
         "SELECT a.transport_url, a.manifest_json, COALESCE(o.position, 0) AS place, a.enabled, a.allow_private
-         FROM addons a LEFT JOIN addon_order o ON o.profile_id = a.profile_id AND o.transport_url = a.transport_url
+         FROM addons a LEFT JOIN addon_order o ON o.profile_id = a.profile_id AND o.url_hash = a.url_hash
          WHERE a.profile_id = ?1 AND a.installed = 1 ORDER BY place, a.transport_url",
     )?;
     stmt.query_map(params![profile], |r| {
@@ -913,6 +1027,10 @@ pub struct CachedResponse {
     pub stale_revalidate_s: i64,
     pub stale_error_s: i64,
 }
+
+/// Device state key: a join waits for its first pull to settle the
+/// device's untouched defaults (`settle_join_defaults`).
+const JOIN_DEFAULTS: &str = "join_defaults";
 
 /// Rows kept in the HTTP cache; the oldest are trimmed past this.
 const HTTP_CACHE_ROWS: i64 = 2000;
@@ -1215,9 +1333,7 @@ impl Library {
 /// list `before` to `after` (its order is the new one; a link listed twice
 /// keeps its first place). An addon added, switched or given another
 /// manifest gets a state register, one added or moved an order register,
-/// and one left out a removal; nothing else is stamped. A real edit (not the
-/// defaults step's zero stamp) also makes the list's untouched defaults its
-/// own (`endorse`).
+/// and one left out a removal; nothing else is stamped.
 pub(crate) fn write_addons(
     c: &Connection,
     profile: &str,
@@ -1235,80 +1351,29 @@ pub(crate) fn write_addons(
         .iter()
         .map(|a| old(&a.transport_url).map(|b| b.position))
         .collect();
-    let mut changed = false;
     let urls: Vec<&str> = after.iter().map(|a| a.transport_url.as_str()).collect();
     for (a, position) in after.iter().zip(places(&old_places, &urls)) {
         let was = old(&a.transport_url);
+        let hash = url_hash(&a.transport_url);
         let same_state = was.is_some_and(|b| {
             (&b.manifest_json, b.enabled, b.allow_private)
                 == (&a.manifest_json, a.enabled, a.allow_private)
         });
         if !same_state {
-            changed |= local_changed(c, coll::ADDON, &[profile, &a.transport_url], stamp, |h| {
-                sql::set_addon(c, profile, a, true, h)
+            local(c, coll::ADDON, &[profile, &hash], stamp, |h| {
+                sql::set_addon(c, profile, &hash, a, true, h)
             })?;
         }
         if was.map(|b| b.position) != Some(position) {
-            changed |= local_changed(
-                c,
-                coll::ADDON_ORDER,
-                &[profile, &a.transport_url],
-                stamp,
-                |h| sql::set_addon_order(c, profile, &a.transport_url, position, h),
-            )?;
+            local(c, coll::ADDON_ORDER, &[profile, &hash], stamp, |h| {
+                sql::set_addon_order(c, profile, &hash, position, h)
+            })?;
         }
     }
     for b in before.iter().filter(|b| !seen.contains(&b.transport_url)) {
-        changed |= local_changed(c, coll::ADDON, &[profile, &b.transport_url], stamp, |h| {
-            sql::set_addon(c, profile, b, false, h)
-        })?;
-    }
-    if changed && stamp.is_real() {
-        endorse(c, profile, stamp)?;
-    }
-    Ok(())
-}
-
-/// Stamps the profile's untouched defaults (registers at wall time 0, from
-/// the defaults step) with a real edit's stamp: once a person edits a list,
-/// the defaults they kept in it are their list too, and travel as such. An
-/// untouched default from another device loses to any real register of the
-/// profile (`sql::untouched_rule`), so until then a device's defaults never
-/// outrank an account's list (plans/accounts-social-sync.md 13).
-fn endorse(c: &Connection, profile: &str, stamp: &Stamp<'_>) -> rusqlite::Result<()> {
-    let untouched: Vec<(AddonRow, bool)> = c
-        .prepare(
-            "SELECT transport_url, manifest_json, enabled, allow_private, installed FROM addons
-             WHERE profile_id = ?1 AND substr(hlc, 1, 12) = '000000000000'",
-        )?
-        .query_map(params![profile], |r| {
-            Ok((
-                AddonRow {
-                    transport_url: r.get(0)?,
-                    manifest_json: r.get(1)?,
-                    position: 0,
-                    enabled: r.get(2)?,
-                    allow_private: r.get(3)?,
-                },
-                r.get(4)?,
-            ))
-        })?
-        .collect::<rusqlite::Result<_>>()?;
-    for (a, installed) in &untouched {
-        local(c, coll::ADDON, &[profile, &a.transport_url], stamp, |h| {
-            sql::set_addon(c, profile, a, *installed, h)
-        })?;
-    }
-    let places: Vec<(String, i64)> = c
-        .prepare(
-            "SELECT transport_url, position FROM addon_order
-             WHERE profile_id = ?1 AND substr(hlc, 1, 12) = '000000000000'",
-        )?
-        .query_map(params![profile], |r| Ok((r.get(0)?, r.get(1)?)))?
-        .collect::<rusqlite::Result<_>>()?;
-    for (url, position) in &places {
-        local(c, coll::ADDON_ORDER, &[profile, url], stamp, |h| {
-            sql::set_addon_order(c, profile, url, *position, h)
+        let hash = url_hash(&b.transport_url);
+        local(c, coll::ADDON, &[profile, &hash], stamp, |h| {
+            sql::set_addon(c, profile, &hash, b, false, h)
         })?;
     }
     Ok(())
@@ -1318,8 +1383,8 @@ fn endorse(c: &Connection, profile: &str, stamp: &Stamp<'_>) -> rusqlite::Result
 /// new one), in the list's new order. The longest run of old places already
 /// in order keeps them; every other addon gets a place between its
 /// neighbours, so a move or an insert changes only the addons that moved or
-/// came. When no whole number fits between two neighbours, the list is
-/// placed again in steps of `POSITION_STEP`.
+/// came. When no whole number fits between two neighbours, only the
+/// smallest neighbourhood around them is placed again.
 pub(crate) fn places(old: &[Option<i64>], urls: &[&str]) -> Vec<i64> {
     // Longest run of old places already in the list's order, (place, link)
     // as the list shows them, so two addons appended at once on two devices
@@ -1332,9 +1397,9 @@ pub(crate) fn places(old: &[Option<i64>], urls: &[&str]) -> Vec<i64> {
     let shown = |k: usize| (known[k].1, urls[known[k].0]);
     let mut tails: Vec<usize> = Vec::new(); // index into `known` of each run length's smallest tail
     let mut back: Vec<Option<usize>> = vec![None; known.len()];
-    for k in 0..known.len() {
+    for (k, from) in back.iter_mut().enumerate() {
         let at = tails.partition_point(|&t| shown(t) < shown(k));
-        back[k] = at.checked_sub(1).map(|a| tails[a]);
+        *from = at.checked_sub(1).map(|a| tails[a]);
         if at == tails.len() {
             tails.push(k);
         } else {
@@ -1347,35 +1412,52 @@ pub(crate) fn places(old: &[Option<i64>], urls: &[&str]) -> Vec<i64> {
         kept[known[i].0] = Some(known[i].1);
         k = back[i];
     }
-    // Every gap between kept places (or past either end) takes its addons
-    // spread evenly; a gap too narrow places the whole list again.
-    let mut out = vec![0; old.len()];
-    let mut i = 0;
-    while i < old.len() {
-        if let Some(p) = kept[i] {
-            out[i] = p;
-            i += 1;
-            continue;
+    // A run of new places between two kept ones too close for it widens
+    // to the kept neighbours on both sides until it fits: only that
+    // neighbourhood is placed again. Past either end there is always room,
+    // so this ends, and no other addon's place is touched.
+    let n = old.len();
+    let runs = |kept: &[Option<i64>]| {
+        let mut out = Vec::new();
+        let mut i = 0;
+        while i < n {
+            if kept[i].is_some() {
+                i += 1;
+                continue;
+            }
+            let end = (i..n).find(|&j| kept[j].is_some()).unwrap_or(n);
+            out.push((i, end));
+            i = end;
         }
-        let end = (i..old.len())
-            .find(|&j| kept[j].is_some())
-            .unwrap_or(old.len());
-        let n = (end - i) as i64;
-        let low = i.checked_sub(1).map(|j| out[j]);
+        out
+    };
+    while let Some((i, end)) = runs(&kept).into_iter().find(|&(i, end)| {
+        let low = i.checked_sub(1).and_then(|j| kept[j]);
         let high = kept.get(end).copied().flatten();
+        matches!((low, high), (Some(l), Some(h)) if (h as i128) - (l as i128) <= (end - i) as i128)
+    }) {
+        if i > 0 {
+            kept[i - 1] = None;
+        }
+        if end < n {
+            kept[end] = None;
+        }
+    }
+    let mut out: Vec<i64> = kept.iter().map(|p| p.unwrap_or(0)).collect();
+    for (i, end) in runs(&kept) {
+        let count = (end - i) as i128;
+        let low = i.checked_sub(1).and_then(|j| kept[j]).map(i128::from);
+        let high = kept.get(end).copied().flatten().map(i128::from);
+        let step = i128::from(POSITION_STEP);
         let (low, high) = match (low, high) {
             (Some(l), Some(h)) => (l, h),
-            (Some(l), None) => (l, l + (n + 1) * POSITION_STEP),
-            (None, Some(h)) => (h - (n + 1) * POSITION_STEP, h),
-            (None, None) => (0, (n + 1) * POSITION_STEP),
+            (Some(l), None) => (l, l + (count + 1) * step),
+            (None, Some(h)) => (h - (count + 1) * step, h),
+            (None, None) => (0, (count + 1) * step),
         };
-        if high - low <= n {
-            return (1..=old.len() as i64).map(|r| r * POSITION_STEP).collect();
+        for (k, slot) in out[i..end].iter_mut().enumerate() {
+            *slot = (low + (high - low) * (k as i128 + 1) / (count + 1)) as i64;
         }
-        for (step, slot) in out[i..end].iter_mut().enumerate() {
-            *slot = low + (high - low) * (step as i64 + 1) / (n + 1);
-        }
-        i = end;
     }
     out
 }

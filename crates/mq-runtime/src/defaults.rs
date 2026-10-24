@@ -279,15 +279,16 @@ impl Core {
                 }
                 let json = serde_json::to_string(&d.manifest)
                     .map_err(|e| CoreError::BadManifest(e.to_string()))?;
-                self.edit_addons(|rows| {
-                    if rows.iter().any(|r| r.transport_url == d.url) {
-                        rows.retain(|r| r.transport_url != old);
-                    } else if let Some(row) = rows.iter_mut().find(|r| r.transport_url == old) {
-                        row.transport_url = d.url.clone();
-                        row.manifest_json = json;
-                    }
-                    Ok(())
-                })?;
+                // Upkeep, not an edit: stamped just above the old link's
+                // own register, so a removal of the new link a person made
+                // on another device still wins (plans/accounts-social-sync.md 13).
+                self.library().rename_addon(
+                    self.profile(),
+                    old,
+                    &d.url,
+                    &json,
+                    self.clock().device(),
+                )?;
             }
             self.library()
                 .set_setting(self.profile(), &done, "true", self.clock())?;

@@ -140,7 +140,12 @@ async fn untouched_defaults_take_the_zero_hlc_and_never_outrank_another_devices_
         .library()
         .changed_since(&SyncCursor::default(), 1_000)
         .unwrap();
-    // ... and C's untouched list pushed to that device changes nothing there.
+    // C joins A's account: what it had only as untouched defaults goes, so
+    // nothing of it reaches A (plans/accounts-social-sync.md 13).
+    c.joined_sync_account();
+    c.library().apply(&from_a).unwrap();
+    let device = Hlc::decode(&c.zero_hlc()).unwrap().device;
+    c.library().settle_join_defaults(device).unwrap();
     let from_c = c
         .library()
         .changed_since(&SyncCursor::default(), 1_000)
@@ -294,48 +299,39 @@ async fn a_default_whose_manifest_id_changed_is_switched_on_its_own_row() {
     assert_eq!(kitsu_state, DefaultInstalled::Off);
 }
 
-/// Onboarding lists meet on a pull: a list a person built beats any of
-/// them, and one with a switch turned off beats untouched ones, whichever
-/// device pairs first.
+/// A device that joins takes the account's list: its untouched defaults,
+/// and choices it made only at onboarding, are not added; a removal its
+/// person made before joining merges (plans/accounts-social-sync.md 13).
 #[tokio::test]
-async fn onboarding_lists_lose_to_real_ones_and_a_choice_beats_untouched() {
+async fn a_joining_device_takes_the_accounts_list_and_its_persons_edits_merge() {
     let changes = |c: &Core| {
         c.library()
             .changed_since(&SyncCursor::default(), 1_000)
             .unwrap()
     };
-    let real = Core::temporary(OWNER).unwrap();
-    real.install_defaults(&switches(&[])).unwrap();
-    real.remove_addon(&defaults::list()[0].url).unwrap();
-    let chose = Core::temporary(OWNER).unwrap();
-    chose.install_defaults(&switches(&["torrentio"])).unwrap();
-    let untouched = Core::temporary(OWNER).unwrap();
-    untouched.install_defaults(&switches(&[])).unwrap();
     let off = |c: &Core| urls(c).iter().filter(|(_, on)| !on).count();
-
-    // A real list against a choice, either way round.
-    let (from_real, from_chose) = (changes(&real), changes(&chose));
-    real.library().apply(&from_chose).unwrap();
-    assert_eq!(
-        (urls(&real).len(), off(&real)),
-        (9, 0),
-        "the real list stays"
-    );
-    chose.library().apply(&from_real).unwrap();
-    assert_eq!(
-        (urls(&chose).len(), off(&chose)),
-        (9, 0),
-        "the real list wins"
-    );
-
-    // A choice against untouched defaults, either way round.
-    let chose = Core::temporary(OWNER).unwrap();
-    chose.install_defaults(&switches(&["torrentio"])).unwrap();
-    let (from_chose, from_untouched) = (changes(&chose), changes(&untouched));
-    chose.library().apply(&from_untouched).unwrap();
-    assert_eq!(off(&chose), 1, "the choice stays");
-    untouched.library().apply(&from_chose).unwrap();
-    assert_eq!(off(&untouched), 1, "the choice wins");
+    // The account's first device turned Torrentio off at onboarding.
+    let account = Core::temporary(OWNER).unwrap();
+    account.install_defaults(&switches(&["torrentio"])).unwrap();
+    // The joining device kept the defaults, then its person removed one.
+    let joining = Core::temporary(OWNER).unwrap();
+    joining.install_defaults(&switches(&[])).unwrap();
+    joining.remove_addon(&defaults::list()[0].url).unwrap();
+    joining.joined_sync_account();
+    // Its first pull, then the settle, before it sends anything.
+    joining.library().apply(&changes(&account)).unwrap();
+    let device = Hlc::decode(&joining.zero_hlc()).unwrap().device;
+    joining.library().settle_join_defaults(device).unwrap();
+    account.library().apply(&changes(&joining)).unwrap();
+    for core in [&account, &joining] {
+        assert_eq!(
+            urls(core).len(),
+            defaults::list().len() - 1,
+            "the person's removal merges"
+        );
+        assert_eq!(off(core), 1, "the account's choice stays");
+    }
+    assert_eq!(urls(&account), urls(&joining));
 }
 
 #[tokio::test]

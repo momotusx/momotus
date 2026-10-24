@@ -29,6 +29,12 @@ const Y: &str = "https://y/manifest.json";
 const Z: &str = "https://z/manifest.json";
 const W: &str = "https://w/manifest.json";
 
+/// An addon's register key half: the hex SHA-256 of its link.
+fn hash(url: &str) -> String {
+    use sha2::Digest;
+    hex::encode(sha2::Sha256::digest(url.as_bytes()))
+}
+
 fn urls(lib: &Library) -> Vec<String> {
     lib.addons("p")
         .unwrap()
@@ -151,7 +157,7 @@ fn a_move_stamps_only_the_moved_addon() {
         .collect();
     assert_eq!(
         moved,
-        [(coll::ADDON_ORDER, format!("p\u{1f}{W}"))],
+        [(coll::ADDON_ORDER, format!("p\u{1f}{}", hash(W)))],
         "one place, no state"
     );
     // An edit that changes nothing stamps nothing.
@@ -173,8 +179,17 @@ fn an_older_builds_list_is_skipped() {
         value: json!({ "profile": "p", "addons": [{ "url": Y, "manifest": "{}", "enabled": true, "allowPrivate": false }] }),
         hlc: hlc(9, 2),
     };
-    assert_eq!(lib.apply(&[list]).unwrap(), 0);
-    assert_eq!(urls(&lib), [X]);
+    // In a page with another record: skipped, and the page goes on.
+    let other = Library::temporary().unwrap();
+    add(&other, Z, &hlc(8, 3));
+    let mut page = vec![list];
+    page.extend(all(&other));
+    assert_eq!(
+        lib.apply(&page).unwrap(),
+        2,
+        "Z's state and place, the list skipped"
+    );
+    assert_eq!(urls(&lib), [X, Z]);
     assert!(all(&lib).iter().all(|r| r.coll != coll::ADDONS));
 }
 
@@ -253,26 +268,165 @@ fn any_order_of_the_same_records_gives_the_same_list() {
     assert_eq!(results[0].0, [Z, Y]);
 }
 
-/// A removal keeps the link, sealed like every record, and no manifest.
+/// A removal keeps neither the link, which can carry a key, nor the
+/// manifest: its registers are keyed by the link's hash.
 #[test]
-fn a_removal_keeps_no_manifest() {
+fn a_removal_keeps_neither_link_nor_manifest() {
     let lib = Library::temporary().unwrap();
+    let keyed = "https://addon.example/realdebrid=SECRETKEY123/manifest.json";
     lib.edit_addons("p", &hlc(1, 1), |rows: &mut Vec<AddonRow>| {
         rows.push(AddonRow {
-            manifest_json: "{\"id\":\"x\",\"big\":true}".into(),
-            ..row(X)
+            manifest_json: "{\"id\":\"x\"}".into(),
+            ..row(keyed)
         });
         Ok::<_, mq_library::LibraryError>(())
     })
     .unwrap();
-    remove(&lib, X, &hlc(2, 1));
-    let x = all(&lib)
-        .into_iter()
-        .find(|r| r.coll == coll::ADDON)
+    // Its cached answers are keyed by request links that carry its key.
+    let cached = "https://addon.example/realdebrid=SECRETKEY123/catalog/movie/top.json";
+    let other = "https://other.example/catalog/movie/top.json";
+    for link in [cached, other] {
+        lib.cache_put(
+            link,
+            &mq_library::CachedResponse {
+                body: b"{}".to_vec(),
+                stored_ms: 1,
+                max_age_s: 60,
+                stale_revalidate_s: 0,
+                stale_error_s: 0,
+            },
+            lib.removals(),
+        )
         .unwrap();
+    }
+    remove(&lib, keyed, &hlc(2, 1));
+    assert!(
+        lib.cache_get(cached).unwrap().is_none(),
+        "the removed addon's answers go"
+    );
+    assert!(
+        lib.cache_get(other).unwrap().is_some(),
+        "other addons' answers stay"
+    );
+    let records = all(&lib);
+    let text = serde_json::to_string(&records).unwrap();
+    assert!(!text.contains("SECRETKEY123"), "{text}");
+    let x = records.iter().find(|r| r.coll == coll::ADDON).unwrap();
+    assert_eq!(x.key, format!("p\u{1f}{}", hash(keyed)));
+    assert_eq!(x.value["installed"], json!(false));
+    assert!(
+        x.value.get("url").is_none() && x.value.get("manifest").is_none(),
+        "{x:?}"
+    );
+    // Added again later: the same register, installed with its link.
+    add(&lib, keyed, &hlc(3, 1));
+    assert_eq!(urls(&lib), [keyed]);
+}
+
+/// Imported addons go before the list: places below the first, and no
+/// other addon's place is written.
+#[test]
+fn addons_put_first_take_places_below_the_first_and_move_nothing_else() {
+    let lib = Library::temporary().unwrap();
+    add(&lib, X, &hlc(1, 1));
+    add(&lib, Y, &hlc(2, 1));
+    let done = lib.outbox(1000).unwrap().last_id.unwrap();
+    lib.outbox_done(done).unwrap();
+    lib.edit_addons("p", &hlc(3, 1), |rows: &mut Vec<AddonRow>| {
+        rows.splice(0..0, [row(Z), row(W)]);
+        Ok::<_, mq_library::LibraryError>(())
+    })
+    .unwrap();
+    assert_eq!(urls(&lib), [Z, W, X, Y]);
+    let written: Vec<String> = lib
+        .outbox(1000)
+        .unwrap()
+        .records
+        .into_iter()
+        .map(|(_, r)| r.key)
+        .collect();
+    for url in [X, Y] {
+        assert!(
+            !written.contains(&format!("p\u{1f}{}", hash(url))),
+            "{url} was written"
+        );
+    }
+}
+
+/// Many moves into one gap never place the whole list again: only the
+/// neighbourhood that ran out of room gets new places, and the list shows
+/// the order the edits made.
+#[test]
+fn moves_into_one_gap_place_only_the_neighbourhood_again() {
+    let lib = Library::temporary().unwrap();
+    let links: Vec<String> = (0..12)
+        .map(|i| format!("https://a{i:02}.example/manifest.json"))
+        .collect();
+    lib.set_addons(
+        "p",
+        &links.iter().map(|u| row(u)).collect::<Vec<_>>(),
+        &hlc(1, 1),
+    )
+    .unwrap();
+    let place = |url: &str| -> SyncRecord {
+        all(&lib)
+            .into_iter()
+            .find(|r| r.coll == coll::ADDON_ORDER && r.key == format!("p\u{1f}{}", hash(url)))
+            .unwrap()
+    };
+    // The last addon moved to the top first: a place below the others, so
+    // placing the whole list again would change it.
+    lib.edit_addons("p", &hlc(5, 1), |rows: &mut Vec<AddonRow>| {
+        let moved = rows.pop().unwrap();
+        rows.insert(0, moved);
+        Ok::<_, mq_library::LibraryError>(())
+    })
+    .unwrap();
+    let mut links = links;
+    let top = links.pop().unwrap();
+    links.insert(0, top);
+    let (first, last) = (place(&links[0]), place(&links[11]));
+    // Forty moves, each putting the list's last addon right after the fifth.
+    for n in 0..40u64 {
+        lib.edit_addons("p", &hlc(10 + n, 1), |rows: &mut Vec<AddonRow>| {
+            let moved = rows.pop().unwrap();
+            rows.insert(5, moved);
+            Ok::<_, mq_library::LibraryError>(())
+        })
+        .unwrap();
+    }
+    let mut want: Vec<String> = links.clone();
+    for _ in 0..40 {
+        let moved = want.pop().unwrap();
+        want.insert(5, moved);
+    }
+    assert_eq!(urls(&lib), want);
     assert_eq!(
-        (x.value["installed"].clone(), x.value["manifest"].clone()),
-        (json!(false), json!(""))
+        place(&links[0]),
+        first,
+        "the first addon's place never moved"
+    );
+    let _ = last;
+}
+
+/// Upkeep that moves a default to its new link is stamped just above the
+/// old link's own register, so a person's removal of the new link on
+/// another device, made after that, wins.
+#[test]
+fn a_moved_default_link_loses_to_a_later_removal_elsewhere() {
+    let (a, b) = (Library::temporary().unwrap(), Library::temporary().unwrap());
+    add(&a, X, &hlc(1, 1));
+    exchange(&a, &b);
+    // A moves X to Y and its person then removes Y at 5.
+    assert!(a.rename_addon("p", X, Y, "{}", 1).unwrap());
+    remove(&a, Y, &hlc(5, 1));
+    // B, which had not synced, runs the same move later in real time.
+    assert!(b.rename_addon("p", X, Y, "{}", 2).unwrap());
+    assert_eq!(urls(&b), [Y]);
+    exchange(&a, &b);
+    assert!(
+        urls(&a).is_empty() && urls(&b).is_empty(),
+        "the removal stands"
     );
 }
 
@@ -286,47 +440,87 @@ fn the_list_has_a_time_once_any_addon_did_and_keeps_it_after_the_last_goes() {
     assert_eq!(lib.addon_list_hlc("p").unwrap(), Some(hlc(2, 1)));
 }
 
-/// Untouched defaults (wall time 0) never outrank a list a person made, in
-/// either arrival order; a person's first edit makes the defaults they kept
-/// their own.
+/// A device that joins an account takes the account's list: what it only
+/// had as untouched recommended defaults (the defaults step's wall time 0)
+/// is dropped and never added; what a person did on it before joining
+/// merges (plans/accounts-social-sync.md 13).
 #[test]
-fn untouched_defaults_lose_to_a_real_list_in_either_order() {
-    let zero = |device: u64| hlc(0, device);
-    // C kept the defaults step's X and Y untouched; A made a list with Z.
-    let c = Library::temporary().unwrap();
-    c.set_addons("p", &[row(X), row(Y)], &zero(3)).unwrap();
+fn joining_takes_the_accounts_list_and_merges_a_persons_edits() {
+    let v = "https://v.example/manifest.json";
+    // The account: Y added and later removed, Z added.
     let a = Library::temporary().unwrap();
+    add(&a, Y, &hlc(2, 1));
+    remove(&a, Y, &hlc(4, 1));
     add(&a, Z, &hlc(5, 1));
-    let (from_a, from_c) = (all(&a), all(&c));
-    for first_a in [true, false] {
-        let lib = Library::temporary().unwrap();
-        let (one, two) = if first_a {
-            (&from_a, &from_c)
-        } else {
-            (&from_c, &from_a)
-        };
-        lib.apply(one).unwrap();
-        lib.apply(two).unwrap();
-        assert_eq!(urls(&lib), [Z], "first A: {first_a}");
-    }
-    c.apply(&from_a).unwrap();
-    a.apply(&from_c).unwrap();
-    assert_eq!(
-        (urls(&a), urls(&c)),
-        (vec![Z.to_owned()], vec![Z.to_owned()])
-    );
-
-    // B kept the defaults and then removed Y: X is now its list, and wins
-    // over untouched defaults elsewhere.
-    let b = Library::temporary().unwrap();
-    b.set_addons("p", &[row(X), row(Y)], &zero(2)).unwrap();
-    remove(&b, Y, &hlc(7, 2));
-    let d = Library::temporary().unwrap();
-    d.set_addons("p", &[row(X), row(Y), row(W)], &zero(4))
+    // The joining device answered the defaults step (X, Y, V untouched),
+    // then its person added W and switched X off.
+    let c = Library::temporary().unwrap();
+    c.set_addons("p", &[row(X), row(Y), row(v)], &hlc(0, 3))
         .unwrap();
-    exchange(&b, &d);
-    assert_eq!(
-        (urls(&b), urls(&d)),
-        (vec![X.to_owned()], vec![X.to_owned()])
+    add(&c, W, &hlc(6, 3));
+    c.edit_addons("p", &hlc(7, 3), |rows: &mut Vec<AddonRow>| {
+        rows[0].enabled = false;
+        Ok::<_, mq_library::LibraryError>(())
+    })
+    .unwrap();
+    // The join: the first pull, then the settle, before anything is sent.
+    c.mark_join_defaults().unwrap();
+    c.apply(&all(&a)).unwrap();
+    c.settle_join_defaults(3).unwrap();
+    assert!(!c.join_defaults_pending().unwrap());
+    // Nothing of the dropped defaults is sent (what goes out for Y is the
+    // account's own removal, back to it); the switched one keeps its place.
+    let sent: Vec<SyncRecord> = c
+        .outbox(1000)
+        .unwrap()
+        .records
+        .into_iter()
+        .map(|(_, r)| r)
+        .collect();
+    assert!(
+        sent.iter()
+            .all(|r| r.coll != coll::ADDON || !r.hlc.starts_with("000000000000")),
+        "a dropped default is sent: {sent:?}"
     );
+    assert!(
+        sent.iter().all(|r| !r.key.ends_with(&hash(v))),
+        "the untouched V is sent"
+    );
+    assert!(
+        sent.iter()
+            .any(|r| r.coll == coll::ADDON_ORDER && r.key == format!("p\u{1f}{}", hash(X))),
+        "X's place stays"
+    );
+    exchange(&a, &c);
+    for lib in [&a, &c] {
+        let list = lib.addons("p").unwrap();
+        let links: Vec<&str> = list.iter().map(|r| r.transport_url.as_str()).collect();
+        assert!(
+            links.contains(&X) && links.contains(&Z) && links.contains(&W),
+            "{links:?}"
+        );
+        assert!(!links.contains(&Y), "the account's removal stands");
+        assert!(!links.contains(&v), "an untouched default is not added");
+        assert!(
+            !list.iter().find(|r| r.transport_url == X).unwrap().enabled,
+            "the switch merges"
+        );
+    }
+    assert_eq!(urls(&a), urls(&c));
+}
+
+/// An account with no addon register: the joining device keeps its
+/// defaults, so a join never ends with no addons, and they become the
+/// account's.
+#[test]
+fn joining_an_account_with_no_addons_keeps_the_defaults() {
+    let a = Library::temporary().unwrap();
+    let c = Library::temporary().unwrap();
+    c.set_addons("p", &[row(X), row(Y)], &hlc(0, 3)).unwrap();
+    c.mark_join_defaults().unwrap();
+    c.apply(&all(&a)).unwrap();
+    c.settle_join_defaults(3).unwrap();
+    assert_eq!(urls(&c), [X, Y]);
+    exchange(&a, &c);
+    assert_eq!(urls(&a), [X, Y]);
 }

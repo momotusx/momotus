@@ -532,7 +532,7 @@ async fn imports_addons_library_progress_and_watched() {
     // (plans/accounts-social-sync.md 13).
     assert_eq!(
         rows.iter().map(|r| r.position).collect::<Vec<_>>(),
-        [1024, 2048, 3072, 4096]
+        [1 << 32, 2 << 32, 3 << 32, 4 << 32]
     );
     let stored: Value = serde_json::from_str(&rows[1].manifest_json).unwrap();
     assert_eq!(stored["behaviorHints"]["p2p"], true);

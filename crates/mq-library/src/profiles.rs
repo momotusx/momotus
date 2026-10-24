@@ -387,7 +387,7 @@ fn copy_owner_addons(
 ) -> rusqlite::Result<()> {
     let mut stmt = c.prepare(
         "SELECT a.transport_url, a.manifest_json, COALESCE(o.position, 0) AS place, a.enabled, a.allow_private
-         FROM addons a LEFT JOIN addon_order o ON o.profile_id = a.profile_id AND o.transport_url = a.transport_url
+         FROM addons a LEFT JOIN addon_order o ON o.profile_id = a.profile_id AND o.url_hash = a.url_hash
          WHERE a.profile_id = ?1 AND a.installed = 1 ORDER BY place, a.transport_url",
     )?;
     let addons = stmt

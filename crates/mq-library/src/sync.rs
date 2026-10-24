@@ -57,7 +57,7 @@ const ALL: [u8; 13] = [
 
 /// The gap between two neighbouring addons' places (`AddonRow::position`):
 /// room for an addon put between them without moving either.
-pub(crate) const POSITION_STEP: i64 = 1024;
+pub(crate) const POSITION_STEP: i64 = 1 << 32;
 
 /// Separates the parts of a register key; ids never contain it.
 const SEP: char = '\u{1f}';
@@ -250,13 +250,18 @@ struct AllowedValue {
     added_ms: i64,
 }
 
-/// One addon's state. `installed` is required: a record without it is
-/// skipped, never read as an install.
+/// One addon's state, keyed by a hash of its link (`url_hash`): a removal
+/// keeps neither the link, which can carry a key, nor the manifest.
+/// `installed` is required: a record without it is skipped, never read as
+/// an install; an installed one must name the link its hash is of.
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AddonEntryValue {
     profile: String,
+    url_hash: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     url: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     manifest: String,
     enabled: bool,
     allow_private: bool,
@@ -268,8 +273,15 @@ struct AddonEntryValue {
 #[serde(rename_all = "camelCase")]
 struct AddonOrderValue {
     profile: String,
-    url: String,
+    url_hash: String,
     position: i64,
+}
+
+/// The key half of an addon's registers: the lowercase hex SHA-256 of its
+/// link, so neither register of a removed addon holds the link.
+pub(crate) fn url_hash(url: &str) -> String {
+    use sha2::Digest;
+    hex::encode(sha2::Sha256::digest(url.as_bytes()))
 }
 
 #[derive(Serialize, Deserialize)]
@@ -446,8 +458,8 @@ impl Library {
                 "INSERT INTO sync_outbox (coll, key)
                  SELECT coll, key FROM (
                    SELECT 0 AS coll, id AS key FROM profiles
-                   UNION ALL SELECT 12, profile_id || char(31) || transport_url FROM addons
-                   UNION ALL SELECT 13, profile_id || char(31) || transport_url FROM addon_order
+                   UNION ALL SELECT 12, profile_id || char(31) || url_hash FROM addons
+                   UNION ALL SELECT 13, profile_id || char(31) || url_hash FROM addon_order
                    UNION ALL SELECT 2, profile_id || char(31) || item_id FROM library_items
                    UNION ALL SELECT 3, profile_id || char(31) || video_id FROM progress
                    UNION ALL SELECT 4, profile_id || char(31) || video_id FROM watched
@@ -708,12 +720,12 @@ fn export(c: &Connection, coll: u8, filter: Filter<'_>) -> rusqlite::Result<Vec<
             "profile_id || char(31) || item_id",
         ),
         coll::ADDON => (
-            "SELECT profile_id, transport_url, manifest_json, enabled, allow_private, installed, hlc FROM addons",
-            "profile_id || char(31) || transport_url",
+            "SELECT profile_id, url_hash, transport_url, manifest_json, enabled, allow_private, installed, hlc FROM addons",
+            "profile_id || char(31) || url_hash",
         ),
         coll::ADDON_ORDER => (
-            "SELECT profile_id, transport_url, position, hlc FROM addon_order",
-            "profile_id || char(31) || transport_url",
+            "SELECT profile_id, url_hash, position, hlc FROM addon_order",
+            "profile_id || char(31) || url_hash",
         ),
         coll::ITEMS => (
             "SELECT profile_id, item_id, kind, name, poster, poster_shape, in_library, added_ms, hlc FROM library_items",
@@ -818,24 +830,25 @@ fn export(c: &Connection, coll: u8, filter: Filter<'_>) -> rusqlite::Result<Vec<
             .query_map(args, |r| {
                 let value = AddonEntryValue {
                     profile: r.get(0)?,
-                    url: r.get(1)?,
-                    manifest: r.get(2)?,
-                    enabled: r.get(3)?,
-                    allow_private: r.get(4)?,
-                    installed: r.get(5)?,
+                    url_hash: r.get(1)?,
+                    url: r.get(2)?,
+                    manifest: r.get(3)?,
+                    enabled: r.get(4)?,
+                    allow_private: r.get(5)?,
+                    installed: r.get(6)?,
                 };
-                let k = key(&[&value.profile, &value.url]);
-                Ok(record(coll, k, &value, r.get(6)?))
+                let k = key(&[&value.profile, &value.url_hash]);
+                Ok(record(coll, k, &value, r.get(7)?))
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?,
         coll::ADDON_ORDER => stmt
             .query_map(args, |r| {
                 let value = AddonOrderValue {
                     profile: r.get(0)?,
-                    url: r.get(1)?,
+                    url_hash: r.get(1)?,
                     position: r.get(2)?,
                 };
-                let k = key(&[&value.profile, &value.url]);
+                let k = key(&[&value.profile, &value.url_hash]);
                 Ok(record(coll, k, &value, r.get(3)?))
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?,
@@ -1014,9 +1027,11 @@ fn apply_one(c: &Connection, r: &SyncRecord) -> Result<usize, ApplyError> {
         }
         coll::ADDON => {
             let v: AddonEntryValue = serde_json::from_value(value)?;
-            same_key(r, &[&v.profile, &v.url])?;
-            if !sql::untouched_rule(c, &v.profile, hlc)? {
-                return Ok(0);
+            same_key(r, &[&v.profile, &v.url_hash])?;
+            if v.installed && url_hash(&v.url) != v.url_hash {
+                return Err(ApplyError::Shape(
+                    "an installed addon's link is not its key's".into(),
+                ));
             }
             let row = AddonRow {
                 transport_url: v.url,
@@ -1025,15 +1040,12 @@ fn apply_one(c: &Connection, r: &SyncRecord) -> Result<usize, ApplyError> {
                 enabled: v.enabled,
                 allow_private: v.allow_private,
             };
-            sql::set_addon(c, &v.profile, &row, v.installed, hlc)?
+            sql::set_addon(c, &v.profile, &v.url_hash, &row, v.installed, hlc)?
         }
         coll::ADDON_ORDER => {
             let v: AddonOrderValue = serde_json::from_value(value)?;
-            same_key(r, &[&v.profile, &v.url])?;
-            if !sql::untouched_rule(c, &v.profile, hlc)? {
-                return Ok(0);
-            }
-            sql::set_addon_order(c, &v.profile, &v.url, v.position, hlc)?
+            same_key(r, &[&v.profile, &v.url_hash])?;
+            sql::set_addon_order(c, &v.profile, &v.url_hash, v.position, hlc)?
         }
         coll::ITEMS => {
             let v: ItemValue = serde_json::from_value(value)?;
@@ -1097,8 +1109,8 @@ fn apply_one(c: &Connection, r: &SyncRecord) -> Result<usize, ApplyError> {
 fn tables(coll: u8) -> &'static [(&'static str, &'static str)] {
     match coll {
         coll::PROFILES => &[("profiles", "id")],
-        coll::ADDON => &[("addons", "profile_id || char(31) || transport_url")],
-        coll::ADDON_ORDER => &[("addon_order", "profile_id || char(31) || transport_url")],
+        coll::ADDON => &[("addons", "profile_id || char(31) || url_hash")],
+        coll::ADDON_ORDER => &[("addon_order", "profile_id || char(31) || url_hash")],
         coll::ITEMS => &[("library_items", "profile_id || char(31) || item_id")],
         coll::PROGRESS => &[("progress", "profile_id || char(31) || video_id")],
         coll::WATCHED => &[("watched", "profile_id || char(31) || video_id")],
@@ -1142,16 +1154,6 @@ pub enum Stamp<'a> {
 }
 
 impl Stamp<'_> {
-    /// A person's edit: the clock, or a given stamp with a wall time (an
-    /// import's too); not the zero stamp of a write that only caches or of
-    /// the defaults step.
-    pub(crate) fn is_real(&self) -> bool {
-        match self {
-            Stamp::Clock(_) => true,
-            Stamp::Fixed(hlc) => Hlc::decode(hlc).is_some_and(|h| h.wall_ms > 0),
-        }
-    }
-
     pub(crate) fn hlc(&self) -> String {
         match self {
             Stamp::Clock(clock) => clock.tick(clock.wall_now()).encode(),
@@ -1351,80 +1353,67 @@ pub(crate) mod sql {
     /// One addon's state register, written when `hlc` is newer than the
     /// stored one (local edits are guarded too: a pull can apply a newer
     /// version between an edit taking its hlc and reaching the writer). A
-    /// removal keeps the row as a tombstone (`installed` 0) with no
-    /// manifest. Returns 1 on change.
+    /// removal keeps the row as a tombstone (`installed` 0) with neither
+    /// the link nor the manifest, only the link's hash (`hash`, its key).
+    /// Returns 1 on change.
     pub fn set_addon(
         c: &Connection,
         profile: &str,
+        hash: &str,
         a: &AddonRow,
         installed: bool,
         hlc: &str,
     ) -> rusqlite::Result<usize> {
-        let manifest = if installed {
-            a.manifest_json.as_str()
-        } else {
-            ""
+        let (url, manifest) = match installed {
+            true => (a.transport_url.as_str(), a.manifest_json.as_str()),
+            false => ("", ""),
         };
-        c.execute(
-            "INSERT INTO addons (profile_id, transport_url, manifest_json, enabled, allow_private, installed, hlc)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-             ON CONFLICT(profile_id, transport_url) DO UPDATE SET
-               manifest_json = excluded.manifest_json, enabled = excluded.enabled,
-               allow_private = excluded.allow_private, installed = excluded.installed, hlc = excluded.hlc
+        // The link this row held before a removal empties it: its cached
+        // answers are keyed by request links that carry it (a key too), so
+        // they go with it.
+        let was: Option<String> = match installed {
+            true => None,
+            false => c
+                .query_row(
+                    "SELECT transport_url FROM addons WHERE profile_id = ?1 AND url_hash = ?2 AND installed = 1",
+                    params![profile, hash],
+                    |r| r.get(0),
+                )
+                .optional()?,
+        };
+        let changed = c.execute(
+            "INSERT INTO addons (profile_id, url_hash, transport_url, manifest_json, enabled, allow_private, installed, hlc)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+             ON CONFLICT(profile_id, url_hash) DO UPDATE SET
+               transport_url = excluded.transport_url, manifest_json = excluded.manifest_json,
+               enabled = excluded.enabled, allow_private = excluded.allow_private,
+               installed = excluded.installed, hlc = excluded.hlc
              WHERE excluded.hlc > addons.hlc",
-            params![
-                profile,
-                a.transport_url,
-                manifest,
-                a.enabled,
-                a.allow_private,
-                installed,
-                hlc
-            ],
-        )
-    }
-
-    /// Untouched defaults never outrank a list a person made (the defaults
-    /// step writes them at wall time 0, `store::endorse`): an incoming
-    /// register at wall time 0 is skipped while the profile has a real
-    /// register here, and an incoming real one first drops the profile's
-    /// untouched ones, which no person here chose. Either arrival order
-    /// gives the same list. Answers whether to apply the record.
-    pub fn untouched_rule(c: &Connection, profile: &str, hlc: &str) -> rusqlite::Result<bool> {
-        const UNTOUCHED: &str = "substr(hlc, 1, 12) = '000000000000'";
-        if Hlc::decode(hlc).is_some_and(|h| h.wall_ms == 0) {
-            let real: bool = c.query_row(
-                &format!(
-                    "SELECT EXISTS (SELECT 1 FROM addons WHERE profile_id = ?1 AND NOT {UNTOUCHED})
-                         OR EXISTS (SELECT 1 FROM addon_order WHERE profile_id = ?1 AND NOT {UNTOUCHED})"
-                ),
-                params![profile],
-                |r| r.get(0),
-            )?;
-            return Ok(!real);
-        }
-        for table in ["addons", "addon_order"] {
+            params![profile, hash, url, manifest, a.enabled, a.allow_private, installed, hlc],
+        )?;
+        if let Some(link) = was.filter(|_| changed > 0) {
+            let base = link.strip_suffix("manifest.json").unwrap_or(&link);
             c.execute(
-                &format!("DELETE FROM {table} WHERE profile_id = ?1 AND {UNTOUCHED}"),
-                params![profile],
+                "DELETE FROM http_cache WHERE substr(key, 1, length(?1)) = ?1",
+                params![base],
             )?;
         }
-        Ok(true)
+        Ok(changed)
     }
 
     /// One addon's place register, as `set_addon`. Returns 1 on change.
     pub fn set_addon_order(
         c: &Connection,
         profile: &str,
-        url: &str,
+        hash: &str,
         position: i64,
         hlc: &str,
     ) -> rusqlite::Result<usize> {
         c.execute(
-            "INSERT INTO addon_order (profile_id, transport_url, position, hlc) VALUES (?1, ?2, ?3, ?4)
-             ON CONFLICT(profile_id, transport_url) DO UPDATE SET position = excluded.position, hlc = excluded.hlc
+            "INSERT INTO addon_order (profile_id, url_hash, position, hlc) VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(profile_id, url_hash) DO UPDATE SET position = excluded.position, hlc = excluded.hlc
              WHERE excluded.hlc > addon_order.hlc",
-            params![profile, url, position, hlc],
+            params![profile, hash, position, hlc],
         )
     }
 

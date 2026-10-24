@@ -14,7 +14,7 @@ pub(crate) fn migrations() -> Migrations<'static> {
         M::up(V10),
         M::up(V11),
         M::up(V12),
-        M::up(V13),
+        M::up_with_hook(V13, hash_addon_links),
     ])
 }
 
@@ -341,31 +341,73 @@ CREATE TABLE ratings (
 CREATE INDEX ratings_age ON ratings (fetched_ms);
 "#;
 
-/// The addon list merges per addon (plans/accounts-social-sync.md 13): each
-/// row is an addon's state register, kept after a removal as a tombstone
-/// (`installed` 0); its place moves to `addon_order`, a register of its own,
-/// with gaps (`POSITION_STEP`) so an addon fits between two without moving
-/// them. Whole lists (coll 1) are no longer sent: every addon is queued as
-/// its two registers instead. `addon_list` stays, unsynced, as the mark that
-/// a profile had a list.
+/// The addon list merges per addon (plans/accounts-social-sync.md 13).
+/// Each addon becomes two registers keyed by a hash of its link: its state
+/// in `addons` (a removal kept as a tombstone with neither link nor
+/// manifest, `installed` 0) and its place in `addon_order`, with gaps
+/// (`POSITION_STEP`). The table is rebuilt for its new key; the hook fills
+/// the hashes (`hash_addon_links`), then queues every addon as its two
+/// registers. Whole lists (coll 1) are no longer sent. `addon_list` stays,
+/// unsynced, as the mark that a profile had a list.
 const V13: &str = r#"
-ALTER TABLE addons ADD COLUMN installed INTEGER NOT NULL DEFAULT 1;
-CREATE TABLE addon_order (
+CREATE TABLE addons_v13 (
     profile_id     TEXT NOT NULL,
+    url_hash       TEXT NOT NULL,
     transport_url  TEXT NOT NULL,
-    position       INTEGER NOT NULL,
+    manifest_json  TEXT NOT NULL,
+    enabled        INTEGER NOT NULL DEFAULT 1,
+    allow_private  INTEGER NOT NULL DEFAULT 0,
+    installed      INTEGER NOT NULL DEFAULT 1,
     hlc            TEXT NOT NULL,
-    PRIMARY KEY (profile_id, transport_url)
+    PRIMARY KEY (profile_id, url_hash)
 );
-INSERT INTO addon_order (profile_id, transport_url, position, hlc)
+INSERT INTO addons_v13 (profile_id, url_hash, transport_url, manifest_json, enabled, allow_private, hlc)
+    SELECT profile_id, transport_url, transport_url, manifest_json, enabled, allow_private, hlc FROM addons;
+CREATE TABLE addon_order (
+    profile_id  TEXT NOT NULL,
+    url_hash    TEXT NOT NULL,
+    position    INTEGER NOT NULL,
+    hlc         TEXT NOT NULL,
+    PRIMARY KEY (profile_id, url_hash)
+);
+INSERT INTO addon_order (profile_id, url_hash, position, hlc)
     SELECT profile_id, transport_url,
-           1024 * ROW_NUMBER() OVER (PARTITION BY profile_id ORDER BY position, transport_url), hlc
+           4294967296 * ROW_NUMBER() OVER (PARTITION BY profile_id ORDER BY position, transport_url), hlc
     FROM addons;
-ALTER TABLE addons DROP COLUMN position;
+DROP TABLE addons;
+ALTER TABLE addons_v13 RENAME TO addons;
 DELETE FROM sync_outbox WHERE coll = 1;
-INSERT INTO sync_outbox (coll, key) SELECT 12, profile_id || char(31) || transport_url FROM addons;
-INSERT INTO sync_outbox (coll, key) SELECT 13, profile_id || char(31) || transport_url FROM addon_order;
 "#;
+
+/// V13's hook: each link's hash in place of the link the SQL put in its
+/// key, in both tables, then every addon queued as its two registers.
+fn hash_addon_links(tx: &rusqlite::Transaction) -> rusqlite_migration::HookResult {
+    let links: Vec<(String, String)> = tx
+        .prepare("SELECT profile_id, transport_url FROM addons")?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    for (profile, url) in &links {
+        let hash = crate::sync::url_hash(url);
+        for table in ["addons", "addon_order"] {
+            tx.execute(
+                &format!(
+                    "UPDATE {table} SET url_hash = ?3 WHERE profile_id = ?1 AND url_hash = ?2"
+                ),
+                rusqlite::params![profile, url, hash],
+            )?;
+        }
+    }
+    for coll in [12, 13] {
+        tx.execute(
+            &format!(
+                "INSERT INTO sync_outbox (coll, key) SELECT {coll}, profile_id || char(31) || url_hash FROM {}",
+                if coll == 12 { "addons" } else { "addon_order" }
+            ),
+            [],
+        )?;
+    }
+    Ok(())
+}
 
 #[cfg(test)]
 mod tests {
@@ -472,10 +514,22 @@ mod tests {
         )
         .unwrap();
         migrations().to_latest(&mut c).unwrap();
+        let hashed: Vec<(String, String)> = c
+            .prepare("SELECT transport_url, url_hash FROM addons")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert!(
+            hashed.iter().all(|(u, h)| *h == crate::sync::url_hash(u)),
+            "{hashed:?}"
+        );
         let rows: Vec<(String, String, i64, String)> = c
             .prepare(
                 "SELECT a.profile_id, a.transport_url, o.position, a.hlc FROM addons a
-                 JOIN addon_order o USING (profile_id, transport_url) WHERE a.installed = 1 AND o.hlc = a.hlc
+                 JOIN addon_order o USING (profile_id, url_hash)
+                 WHERE a.installed = 1 AND o.hlc = a.hlc
                  ORDER BY a.profile_id, o.position",
             )
             .unwrap()
@@ -487,14 +541,14 @@ mod tests {
         assert_eq!(
             rows,
             [
-                row("p", "https://b", 1024, "h1"),
-                row("p", "https://a", 2048, "h1"),
-                row("q", "https://c", 1024, "h2")
+                row("p", "https://b", 1 << 32, "h1"),
+                row("p", "https://a", 2 << 32, "h1"),
+                row("q", "https://c", 1 << 32, "h2")
             ]
         );
         let positions: i64 = c
             .query_row(
-                "SELECT COUNT(*) FROM pragma_table_info('addons') WHERE name = 'position'",
+                "SELECT COUNT(*) FROM pragma_table_info('addons') WHERE name IN ('position', 'url')",
                 [],
                 |r| r.get(0),
             )
@@ -511,9 +565,10 @@ mod tests {
         let mut want = vec![(2, k("p", "tt1"))];
         for coll in [12, 13] {
             for (p, u) in [("p", "https://a"), ("p", "https://b"), ("q", "https://c")] {
-                want.push((coll, k(p, u)));
+                want.push((coll, k(p, &crate::sync::url_hash(u))));
             }
         }
+        want.sort();
         assert_eq!(queued, want);
         let marks: i64 = c
             .query_row("SELECT COUNT(*) FROM addon_list", [], |r| r.get(0))

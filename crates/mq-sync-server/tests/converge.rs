@@ -21,6 +21,12 @@ const URLS: [&str; 3] = [
     "https://c.example/manifest.json",
 ];
 
+/// An addon's register key half: the hex SHA-256 of its link.
+fn link_hash(url: &str) -> String {
+    use sha2::Digest;
+    hex::encode(sha2::Sha256::digest(url.as_bytes()))
+}
+
 #[derive(Debug, Clone)]
 enum Op {
     Progress {
@@ -262,7 +268,7 @@ impl Device {
                     Ok::<_, mq_library::LibraryError>(())
                 })
                 .unwrap();
-                ((coll::ADDON, key(&[PROFILE, u])), hlc)
+                ((coll::ADDON, key(&[PROFILE, &link_hash(u)])), hlc)
             }
             Op::Memory { item, group, .. } => {
                 let item_id = format!("tt{item}");
@@ -285,7 +291,9 @@ fn written(op: &Op, value: &serde_json::Value) -> bool {
         Op::Setting { value: v, .. } => value["valueJson"].as_str() == Some(v.to_string().as_str()),
         // Which way an action went depends on the state it met; the oracle
         // checks the addon's register holds its newest write.
-        Op::Addon { url, .. } => value["url"] == URLS[*url] && value["installed"].is_boolean(),
+        Op::Addon { url, .. } => {
+            value["urlHash"] == link_hash(URLS[*url]) && value["installed"].is_boolean()
+        }
         Op::Memory { group, .. } => value["bingeGroup"] == format!("g{group}"),
         Op::StalePullWrite { position, .. } => value["positionMs"] == *position,
         _ => true,
@@ -637,7 +645,7 @@ async fn run(ops: Vec<Op>, slow: bool) {
                 // left between them (the list is placed again).
                 if let Op::Addon { .. } = op {
                     for u in URLS {
-                        let order = (coll::ADDON_ORDER, [PROFILE, u].join("\u{1f}"));
+                        let order = (coll::ADDON_ORDER, [PROFILE, &link_hash(u)].join("\u{1f}"));
                         if let Some(stored) = devices[*device]
                             .library
                             .register(order.0, &order.1)

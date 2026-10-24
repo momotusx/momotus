@@ -1238,6 +1238,12 @@ impl Core {
     /// go at the next start.
     pub fn joined_sync_account(&self) {
         self.clear_removal();
+        // It takes the account's addon list: its first pull decides about
+        // what it had only as untouched recommended defaults, before it
+        // sends anything (plans/accounts-social-sync.md 13).
+        if let Err(e) = self.library().mark_join_defaults() {
+            tracing::warn!("could not mark the join's defaults: {e}");
+        }
         // Announced as an addons change: an open addons view drops `fresh`.
         if let Err(e) =
             self.library()
