@@ -662,12 +662,8 @@ impl Library {
                 self.announce(Table::Addons);
             }
             // A join that never reached its first push is over with the
-            // account; defaults still waiting stay installed at the lowest
-            // time, and the next join settles them.
-            c.execute(
-                "DELETE FROM device_state WHERE key = ?1",
-                params![crate::store::JOIN_DEFAULTS],
-            )?;
+            // account: its waiting defaults get their own times back.
+            crate::store::restore_waiting(c, &Hlc::zero(0).encode())?;
             Ok(())
         })
     }

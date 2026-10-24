@@ -6,7 +6,9 @@
 Each run writes one set into DATA_DIR/backups: <stamp>.sqlite (SQLite's online backup API, so
 pages still in the WAL are in it), <stamp>.roster.jsonl (copied after the database, so it holds at
 least every entry the database does) and <stamp>.SHA256SUMS, written last: a set without its sums
-is unfinished. Every file is written under a temporary name and renamed. Standard library only:
+is unfinished. Every file is written under a temporary name and renamed. The journal is
+read after the database, so it holds every entry the database does, and is cut at its last
+whole line (the relay may be writing one). Standard library only:
 the server has python3 and no sqlite3 tool.
 """
 

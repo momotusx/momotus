@@ -585,3 +585,37 @@ fn a_move_alone_is_announced_as_an_addons_change() {
     );
     assert_eq!(urls(&b), [Y, X]);
 }
+
+/// Defaults a join leaves in place get their own time back, an onboarding
+/// choice's counter with it: after a join into an account with no addons,
+/// and after leaving before the first sync (code review B r2 items 1, 2).
+#[test]
+fn defaults_a_join_leaves_in_place_keep_their_own_time() {
+    let chose = mq_library::Hlc {
+        wall_ms: 0,
+        counter: 1,
+        device: 3,
+    }
+    .encode();
+    let times = |lib: &Library| -> Vec<String> {
+        all(lib)
+            .into_iter()
+            .filter(|r| r.coll == coll::ADDON || r.coll == coll::ADDON_ORDER)
+            .map(|r| r.hlc)
+            .collect()
+    };
+    // A kept join: the account holds no addons.
+    let c = Library::temporary().unwrap();
+    c.set_addons("p", &[row(X), row(Y)], &chose).unwrap();
+    c.mark_join_defaults(3).unwrap();
+    c.apply(&all(&Library::temporary().unwrap())).unwrap();
+    c.settle_join_defaults(3).unwrap();
+    assert!(times(&c).iter().all(|t| *t == chose), "{:?}", times(&c));
+    // Left before the first sync.
+    let d = Library::temporary().unwrap();
+    d.set_addons("p", &[row(X), row(Y)], &chose).unwrap();
+    d.mark_join_defaults(3).unwrap();
+    d.forget_sync().unwrap();
+    assert!(!d.join_defaults_pending().unwrap());
+    assert!(times(&d).iter().all(|t| *t == chose), "{:?}", times(&d));
+}

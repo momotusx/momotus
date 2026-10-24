@@ -77,20 +77,23 @@ systemctl enable --quiet momotus-relay momotus-backup.timer
 systemctl restart momotus-relay
 systemctl start momotus-backup.timer
 START=$(date +%s.%N)
-if ! health http://127.0.0.1:8787 15; then
-  echo "remote: no health on loopback; rolling back to ${PREVIOUS:-nothing}" >&2
+# Loopback health, then the client address behind the proxy (the one step
+# that exercises --trust-proxy): a budgeted call naming none is refused (400
+# noClientAddress), one naming Cloudflare's is taken (a pairing slot, gone in
+# 10 minutes). Either failing puts the previous binary back.
+pairing() { curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' "$@" -d '{}' http://127.0.0.1:8787/v1/pairings; }
+if health http://127.0.0.1:8787 15; then
+  echo "remote: loopback health after $(awk "BEGIN { printf \"%.1f\", $(date +%s.%N) - $START }") s"
+  without=$(pairing)
+  with=$(pairing -H 'cf-connecting-ip: 192.0.2.1')
+  echo "remote: pairing without a client address $without, with one $with"
+fi
+if [ "${with:-}" != 200 ] || [ "${without:-}" != 400 ]; then
+  echo "remote: no health or no client address check on loopback; rolling back to ${PREVIOUS:-nothing}" >&2
   journalctl -u momotus-relay -n 20 --no-pager >&2 || true
   if [ -n "$PREVIOUS" ]; then ln -sfn "$(basename "$PREVIOUS")" /opt/momotus/bin/mq-sync-server; systemctl restart momotus-relay; fi
   exit 1
 fi
-echo "remote: loopback health after $(awk "BEGIN { printf \"%.1f\", $(date +%s.%N) - $START }") s"
-# The client address behind the proxy: a budgeted call naming none is
-# refused (400 noClientAddress), one naming Cloudflare's is taken (a
-# pairing slot, gone in 10 minutes).
-without=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{}' http://127.0.0.1:8787/v1/pairings)
-with=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H 'cf-connecting-ip: 192.0.2.1' -d '{}' http://127.0.0.1:8787/v1/pairings)
-echo "remote: pairing without a client address $without, with one $with"
-[ "$without" = 400 ] && [ "$with" = 200 ] || { echo "remote: the client address check failed" >&2; exit 1; }
 # The newest three binaries stay.
 ls -1t /opt/momotus/bin/mq-sync-server-* | tail -n +4 | xargs -r rm -f --
 REMOTE

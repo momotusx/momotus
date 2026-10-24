@@ -531,7 +531,18 @@ impl Library {
     pub fn mark_join_defaults(&self, device: u64) -> Result<(), LibraryError> {
         let mine = format!("{device:016x}");
         self.write(|c| {
+            // Each one's own time is kept beside it (an onboarding choice's
+            // counter with it), so whatever stays gets it back.
+            let mut held: Vec<(String, String, String, String)> = Vec::new();
             for table in ["addons", "addon_order"] {
+                let rows: Vec<(String, String, String)> = c
+                    .prepare(&format!(
+                        "SELECT profile_id, url_hash, hlc FROM {table}
+                         WHERE substr(hlc, 1, 12) = '000000000000' AND substr(hlc, 17) = ?1"
+                    ))?
+                    .query_map(params![mine], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+                    .collect::<rusqlite::Result<_>>()?;
+                held.extend(rows.into_iter().map(|(p, h, t)| (table.to_owned(), p, h, t)));
                 c.execute(
                     &format!(
                         "UPDATE {table} SET hlc = ?2 WHERE substr(hlc, 1, 12) = '000000000000' AND substr(hlc, 17) = ?1"
@@ -539,10 +550,11 @@ impl Library {
                     params![mine, WAITING],
                 )?;
             }
+            let held = serde_json::to_string(&held).expect("strings serialize");
             c.execute(
-                "INSERT INTO device_state (key, value) VALUES (?1, 'pending')
+                "INSERT INTO device_state (key, value) VALUES (?1, ?2)
                  ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                params![JOIN_DEFAULTS],
+                params![JOIN_DEFAULTS, held],
             )?;
             Ok(())
         })
@@ -603,13 +615,7 @@ impl Library {
                     params![profile, WAITING],
                 )?;
             }
-            for table in ["addons", "addon_order"] {
-                c.execute(
-                    &format!("UPDATE {table} SET hlc = ?2 WHERE hlc = ?1"),
-                    params![WAITING, own_zero],
-                )?;
-            }
-            c.execute("DELETE FROM device_state WHERE key = ?1", params![JOIN_DEFAULTS])?;
+            restore_waiting(c, &own_zero)?;
             Ok(())
         })
     }
@@ -1058,6 +1064,43 @@ pub(crate) const JOIN_DEFAULTS: &str = "join_defaults";
 /// The time a joining device's untouched defaults wait at until its first
 /// pull settles them: the lowest there is, so the account's win.
 const WAITING: &str = "00000000000000000000000000000000";
+
+/// Gives every addon register still waiting from a join its own time back
+/// (kept by `mark_join_defaults`; `fallback` for one it does not name), and
+/// ends the join: after its settle, or when the device leaves first.
+pub(crate) fn restore_waiting(c: &Connection, fallback: &str) -> rusqlite::Result<()> {
+    let held: Vec<(String, String, String, String)> = c
+        .query_row(
+            "SELECT value FROM device_state WHERE key = ?1",
+            params![JOIN_DEFAULTS],
+            |r| r.get::<_, String>(0),
+        )
+        .optional()?
+        .and_then(|v| serde_json::from_str(&v).ok())
+        .unwrap_or_default();
+    for (table, profile, hash, hlc) in &held {
+        if !matches!(table.as_str(), "addons" | "addon_order") {
+            continue;
+        }
+        c.execute(
+            &format!(
+                "UPDATE {table} SET hlc = ?4 WHERE profile_id = ?1 AND url_hash = ?2 AND hlc = ?3"
+            ),
+            params![profile, hash, WAITING, hlc],
+        )?;
+    }
+    for table in ["addons", "addon_order"] {
+        c.execute(
+            &format!("UPDATE {table} SET hlc = ?2 WHERE hlc = ?1"),
+            params![WAITING, fallback],
+        )?;
+    }
+    c.execute(
+        "DELETE FROM device_state WHERE key = ?1",
+        params![JOIN_DEFAULTS],
+    )?;
+    Ok(())
+}
 
 /// Rows kept in the HTTP cache; the oldest are trimmed past this.
 const HTTP_CACHE_ROWS: i64 = 2000;

@@ -1515,3 +1515,193 @@ async fn a_device_that_left_no_longer_counts_as_signed_in_to_trakt() {
     drop((phone, laptop, phone_core, laptop_core));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// An addon server answering only its manifest, under its own id.
+async fn manifest_only(id: &str) -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}/manifest.json", listener.local_addr().unwrap());
+    let body = json!({"id": id, "version": "1.0.0", "name": id, "types": ["movie"],
+                      "resources": ["stream"], "catalogs": []})
+    .to_string();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let body = body.clone();
+            tokio::spawn(async move {
+                let mut buf = vec![0u8; 4096];
+                let _ = socket.read(&mut buf).await;
+                let reply = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(reply.as_bytes()).await;
+            });
+        }
+    });
+    url
+}
+
+/// The owner's ask (plans/accounts-social-sync.md 13): addons follow the
+/// person across devices through a real relay. A installs, moves and
+/// removes; B joins and its Addons view shows A's list in A's order; then
+/// B edits and A shows B's.
+#[tokio::test]
+async fn addons_follow_the_account_both_ways_through_a_relay() {
+    use mq_runtime::views::addons::AddonsView;
+    use mq_runtime::views::pairing::{PairingSnapshot, PairingView};
+    let dir = std::env::temp_dir().join(format!("mq-bridge-addons-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let app = mq_sync_server::router(&dir.join("relay.sqlite"), Default::default()).unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+    let (one, two, three) = (
+        manifest_only("one").await,
+        manifest_only("two").await,
+        manifest_only("three").await,
+    );
+
+    let core_a = Core::temporary("default").unwrap();
+    let (tx_a, mut rx_a) = Output::channel();
+    let mut a = Session::new(core_a.clone(), tx_a);
+    let mut id = 100;
+    let mut call = |request: Value| {
+        id += 1;
+        let mut request = request;
+        request["id"] = json!(id);
+        (id, request.to_string())
+    };
+    let (n, text) = call(json!({"op": "createSyncAccount", "server": server, "name": "Phone"}));
+    a.handle_text(&text).await;
+    let mut record_a = reply_to(&mut rx_a, n).await["result"].clone();
+    for request in [
+        json!({"op": "installAddon", "url": one}),
+        json!({"op": "installAddon", "url": two}),
+        json!({"op": "installAddon", "url": three}),
+        json!({"op": "moveAddon", "url": three, "to": 0}),
+        json!({"op": "removeAddon", "url": two}),
+    ] {
+        let (n, text) = call(request);
+        a.handle_text(&text).await;
+        assert_eq!(reply_to(&mut rx_a, n).await["ok"], true);
+    }
+    let shown = |core: &Core| -> Vec<String> {
+        AddonsView::open(core)
+            .snapshot()
+            .addons
+            .into_iter()
+            .map(|a| a.url)
+            .collect()
+    };
+    assert_eq!(shown(&core_a), [three.clone(), one.clone()]);
+    let (n, text) = call(json!({"op": "syncNow", "record": record_a}));
+    a.handle_text(&text).await;
+    let synced = reply_to(&mut rx_a, n).await;
+    assert_eq!(synced["ok"], true, "{synced}");
+    if !synced["result"]["record"].is_null() {
+        record_a = synced["result"]["record"].clone();
+    }
+
+    // B joins by the QR, A approving.
+    let core_b = Core::temporary("default").unwrap();
+    let (tx_b, mut rx_b) = Output::channel();
+    let mut b = Session::new(core_b.clone(), tx_b);
+    let pairing = PairingView::open(&core_b, &server, "Tablet", Some("tablet"));
+    let until = |want: fn(&PairingSnapshot) -> bool| {
+        let pairing = &pairing;
+        async move {
+            tokio::time::timeout(Duration::from_secs(20), async {
+                loop {
+                    let now = pairing.snapshot();
+                    if want(&now) {
+                        return now;
+                    }
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                }
+            })
+            .await
+            .expect("pairing moved on")
+        }
+    };
+    let PairingSnapshot::Waiting { qr, .. } =
+        until(|s| matches!(s, PairingSnapshot::Waiting { .. })).await
+    else {
+        unreachable!()
+    };
+    let (n, text) = call(json!({"op": "approvePairing", "record": record_a, "qr": qr}));
+    a.handle_text(&text).await;
+    let approved = reply_to(&mut rx_a, n).await;
+    assert_eq!(approved["ok"], true, "{approved}");
+    record_a = approved["result"]["record"].clone();
+    until(|s| matches!(s, PairingSnapshot::Confirm { .. })).await;
+    pairing.confirm();
+    let PairingSnapshot::Joined { record } =
+        until(|s| matches!(s, PairingSnapshot::Joined { .. })).await
+    else {
+        unreachable!()
+    };
+    let mut record_b = serde_json::to_value(&*record).unwrap();
+    let (n, text) = call(json!({"op": "syncNow", "record": record_b}));
+    b.handle_text(&text).await;
+    let synced = reply_to(&mut rx_b, n).await;
+    assert_eq!(synced["ok"], true, "{synced}");
+    if !synced["result"]["record"].is_null() {
+        record_b = synced["result"]["record"].clone();
+    }
+    // A syncs again (a profile whose list predates the defaults step is
+    // given the newer defaults on each device after its pull, and those
+    // meet too); after that both show one list in one order.
+    let (n, text) = call(json!({"op": "syncNow", "record": record_a}));
+    a.handle_text(&text).await;
+    let synced = reply_to(&mut rx_a, n).await;
+    assert_eq!(synced["ok"], true, "{synced}");
+    if !synced["result"]["record"].is_null() {
+        record_a = synced["result"]["record"].clone();
+    }
+    let (n, text) = call(json!({"op": "syncNow", "record": record_b}));
+    b.handle_text(&text).await;
+    assert_eq!(reply_to(&mut rx_b, n).await["ok"], true);
+    let mine = |list: Vec<String>| -> Vec<String> {
+        list.into_iter()
+            .filter(|u| *u == one || *u == two || *u == three)
+            .collect()
+    };
+    assert_eq!(
+        shown(&core_b),
+        shown(&core_a),
+        "B shows A's list in A's order"
+    );
+    assert_eq!(mine(shown(&core_b)), [three.clone(), one.clone()]);
+
+    // B edits: two back at the top, three removed; A follows.
+    for request in [
+        json!({"op": "installAddon", "url": two}),
+        json!({"op": "moveAddon", "url": two, "to": 0}),
+        json!({"op": "removeAddon", "url": three}),
+    ] {
+        let (n, text) = call(request);
+        b.handle_text(&text).await;
+        assert_eq!(reply_to(&mut rx_b, n).await["ok"], true);
+    }
+    let (n, text) = call(json!({"op": "syncNow", "record": record_b}));
+    b.handle_text(&text).await;
+    assert_eq!(reply_to(&mut rx_b, n).await["ok"], true);
+    let (n, text) = call(json!({"op": "syncNow", "record": record_a}));
+    a.handle_text(&text).await;
+    let synced = reply_to(&mut rx_a, n).await;
+    assert_eq!(synced["ok"], true, "{synced}");
+    let (n, text) = call(json!({"op": "syncNow", "record": record_b}));
+    b.handle_text(&text).await;
+    assert_eq!(reply_to(&mut rx_b, n).await["ok"], true);
+    assert_eq!(
+        shown(&core_a),
+        shown(&core_b),
+        "A shows B's list in B's order"
+    );
+    assert_eq!(
+        mine(shown(&core_a)),
+        [two.clone(), one.clone()],
+        "A shows B's edits"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
