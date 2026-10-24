@@ -148,3 +148,9 @@ test("a placeholder no value fills stops the build", () => {
   writeFileSync(join(from, "privacy/index.html"), read("privacy/index.html").replace("</main>", "{{OWNER_NAME}}</main>"));
   expect(() => build(ENV, mkdtempSync(join(tmpdir(), "linkhost-")), from)).toThrow("placeholders left in privacy/index.html");
 });
+
+test("the deletion page names where the request lives in the app: Settings, Account, never Home", () => {
+  const html = read("delete/index.html");
+  expect(html).toContain("in Settings, Account, with Cancel");
+  expect(html).not.toMatch(/\bHome\b/);
+});
