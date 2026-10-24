@@ -151,6 +151,8 @@ struct AppState {
     /// (`PAIRINGS_PER_CLIENT`). In memory: a restart forgets them, and the
     /// relay-wide cap still holds.
     open_pairings: Arc<Mutex<OpenPairings>>,
+    /// Whole addon lists refused since start (older apps), for the log.
+    old_lists: Arc<std::sync::atomic::AtomicU64>,
 }
 
 /// Opens (or creates) the relay database at `db` and its roster journal
@@ -192,6 +194,7 @@ pub fn router(db: &Path, config: Config) -> Result<Router, String> {
         identity,
         grace_created: Arc::default(),
         open_pairings: Arc::default(),
+        old_lists: Arc::default(),
     };
     if tokio::runtime::Handle::try_current().is_ok() {
         tokio::spawn(housekeeping(state.clone(), every));
@@ -1835,6 +1838,30 @@ async fn push(
     if request.records.len() > PAGE {
         return error(StatusCode::BAD_REQUEST, "too many records in one push");
     }
+    // A whole addon list (coll 1) comes only from a build older than the
+    // per-addon merge (plans/accounts-social-sync.md 13); taken, it would
+    // undo other devices' addons on any device that read it. That device
+    // updates first.
+    if request.records.iter().any(|r| r.coll == 1) {
+        // The count and the app's own build tag (its user agent), nothing
+        // of the person or the address.
+        let n = state.old_lists.fetch_add(1, Ordering::Relaxed) + 1;
+        let build: String = headers
+            .get("user-agent")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("unknown")
+            .chars()
+            .take(64)
+            .collect();
+        tracing::warn!(
+            "refused whole addon list {n} since start, from {build}: an app older than the per-addon merge"
+        );
+        return identity::coded(
+            StatusCode::BAD_REQUEST,
+            "oldBuild",
+            "this app is older than its sync service: update it to sync",
+        );
+    }
     let server_ms = state.now_ms();
     let mut db = lock(&state);
     let auth = match active(authorize(&db, &headers)) {
@@ -2548,6 +2575,7 @@ mod tests {
             identity: None,
             grace_created: Arc::default(),
             open_pairings: Arc::default(),
+            old_lists: Arc::default(),
         };
         let create = || {
             let (entry, _) =
@@ -2600,6 +2628,7 @@ mod tests {
             identity: None,
             grace_created: Arc::default(),
             open_pairings: Arc::default(),
+            old_lists: Arc::default(),
         };
         let member = MemberSecret::generate();
         let genesis = || Roster::genesis_entry(&member, Hex(random()), "a", now_ms()).0;

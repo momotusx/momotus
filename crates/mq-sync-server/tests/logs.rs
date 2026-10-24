@@ -4,6 +4,17 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Command, Stdio};
 
+/// The relay process, stopped however the test ends, so a failed
+/// assertion never leaves it running.
+struct Stopped(std::process::Child);
+
+impl Drop for Stopped {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
 #[test]
 fn a_refused_sign_in_start_is_logged_on_stderr() {
     let mut b = [0u8; 8];
@@ -32,16 +43,18 @@ fn a_refused_sign_in_start_is_logged_on_stderr() {
         .to_string(),
     )
     .unwrap();
-    let mut relay = Command::new(env!("CARGO_BIN_EXE_mq-sync-server"))
-        .args(["--db", dir.join("relay.sqlite").to_str().unwrap()])
-        .args(["--listen", &format!("127.0.0.1:{port}")])
-        .args(["--public-host", "127.0.0.1"])
-        .args(["--identity", identity.to_str().unwrap()])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    let mut stdout = BufReader::new(relay.stdout.take().unwrap());
+    let mut relay = Stopped(
+        Command::new(env!("CARGO_BIN_EXE_mq-sync-server"))
+            .args(["--db", dir.join("relay.sqlite").to_str().unwrap()])
+            .args(["--listen", &format!("127.0.0.1:{port}")])
+            .args(["--public-host", "127.0.0.1"])
+            .args(["--identity", identity.to_str().unwrap()])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap(),
+    );
+    let mut stdout = BufReader::new(relay.0.stdout.take().unwrap());
     let mut ready = String::new();
     stdout.read_line(&mut ready).unwrap();
     assert!(ready.contains("sync_server_ready"), "{ready}");
@@ -59,10 +72,11 @@ fn a_refused_sign_in_start_is_logged_on_stderr() {
     stream.read_to_string(&mut answer).unwrap();
     assert!(!answer.starts_with("HTTP/1.1 200"), "{answer}");
 
-    relay.kill().unwrap();
-    relay.wait().unwrap();
+    relay.0.kill().unwrap();
+    relay.0.wait().unwrap();
     let mut stderr = String::new();
     relay
+        .0
         .stderr
         .take()
         .unwrap()

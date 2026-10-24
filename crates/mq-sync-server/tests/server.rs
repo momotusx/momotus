@@ -430,3 +430,29 @@ async fn a_register_ahead_of_the_relay_is_not_walked_further_ahead() {
     let r = relay.push(&a, vec![record(1, above.encode(), "c")]).await;
     assert_eq!(r.unwrap().accepted, 1, "just above the stored version");
 }
+
+/// A whole addon list (coll 1) from a build older than the per-addon merge
+/// is refused, and nothing of that push is kept.
+#[tokio::test]
+async fn an_older_builds_whole_addon_list_is_refused() {
+    let relay = relay(Config::default()).await;
+    let a = relay.account().await;
+    let mut list = record(1, Hlc::zero(1).encode(), "list");
+    list.coll = 1;
+    let item = record(2, Hlc::zero(1).encode(), "item");
+    match relay.push(&a, vec![item, list]).await {
+        Err(HttpError::Status { status, body, .. }) => {
+            assert_eq!(status, 400);
+            assert!(
+                String::from_utf8_lossy(&body).contains("\"oldBuild\""),
+                "{body:?}"
+            );
+        }
+        other => panic!("{other:?}"),
+    }
+    assert!(relay.pull(&a.device_token, 0, 100).await.records.is_empty());
+    // Per-addon records go through.
+    let mut addon = record(3, Hlc::zero(1).encode(), "addon");
+    addon.coll = 12;
+    assert_eq!(relay.push(&a, vec![addon]).await.unwrap().accepted, 1);
+}
