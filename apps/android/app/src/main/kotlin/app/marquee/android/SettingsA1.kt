@@ -119,6 +119,7 @@ internal enum class SettingsSection(
     Account("Account", Tone.Sky, Icons.MonitorSmartphone),
     Home("Home", Tone.Mint, Icons.Rows3),
     Playback("Playback", Tone.Teal, Icons.CirclePlay),
+    Downloads("Downloads", Tone.Blue, Icons.ArrowDownToLine),
     Device("This device", Tone.Sea, Icons.Monitor),
     About("About", Tone.Grey, Icons.Info),
 }

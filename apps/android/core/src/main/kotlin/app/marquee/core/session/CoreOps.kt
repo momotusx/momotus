@@ -1,6 +1,7 @@
 package app.marquee.core.session
 
 import app.marquee.core.client.CoreClient
+import app.marquee.core.client.DeviceCapsParams
 import app.marquee.core.model.AddonInfo
 import app.marquee.core.model.ApprovedPairing
 import app.marquee.core.model.DebridRecord
@@ -55,6 +56,38 @@ enum class LifecycleEvent(
     NetworkChanged("networkChanged"),
 }
 
+/** What a `downloadAdd` covers. */
+enum class DownloadScope(
+    val wire: String,
+) {
+    Video("video"),
+    Season("season"),
+    Series("series"),
+}
+
+enum class DownloadAction(
+    val op: String,
+) {
+    Pause("downloadPause"),
+    Resume("downloadResume"),
+    Remove("downloadRemove"),
+    Retry("downloadRetry"),
+}
+
+/** Which downloads an op names. */
+sealed interface DownloadTarget {
+    data class Ids(
+        val ids: List<String>,
+    ) : DownloadTarget
+
+    /** Every download of a title. */
+    data class Title(
+        val itemId: String,
+    ) : DownloadTarget
+
+    data object All : DownloadTarget
+}
+
 /**
  * The core's one-shot ops (plans/core-protocol.md "Ops"). Home, Discover and Search follow addon
  * changes on their own, so nothing here reopens a view. Secrets (debrid keys, the sync record)
@@ -96,6 +129,87 @@ class CoreOps(
             network?.let { put("network", text(it.wire)) }
         },
     )
+
+    /**
+     * The default network changed (plans/offline-downloads.md 4.13): [network] null is none (lost, or blocked for the
+     * app), [metered] the platform's cost flag, never the interface, so a hotspot or a VPN over mobile data holds
+     * downloads set to Wi-Fi only.
+     */
+    fun networkChanged(
+        network: Network?,
+        metered: Boolean,
+    ) = client.post(
+        "lifecycle",
+        mapOf(
+            "event" to text(LifecycleEvent.NetworkChanged.wire),
+            "network" to text(network?.wire ?: "none"),
+            "metered" to JsonPrimitive(metered),
+        ),
+    )
+
+    /**
+     * Downloads a video, the aired episodes of [season], or every regular season's ([scope]); [pick] is a row of an open
+     * download-purpose Versions view (its subscription and the row's key). Answers the downloads' ids.
+     */
+    suspend fun downloadAdd(
+        kind: String,
+        itemId: String,
+        scope: DownloadScope,
+        caps: DeviceCapsParams,
+        videoId: String? = null,
+        season: Int? = null,
+        pick: Pair<Long, String>? = null,
+    ): List<String> {
+        val fields =
+            buildMap {
+                put("kind", text(kind))
+                put("itemId", text(itemId))
+                put("scope", text(scope.wire))
+                put("params", JsonObject(caps.toJson()))
+                videoId?.let { put("videoId", text(it)) }
+                season?.let { put("season", JsonPrimitive(it)) }
+                pick?.let { (sub, key) ->
+                    put("pick", JsonObject(mapOf("versionsSub" to JsonPrimitive(sub), "key" to text(key))))
+                }
+            }
+        val ids = (client.request("downloadAdd", fields) as? JsonObject)?.get("ids") as? JsonArray
+        return ids?.map { it.jsonPrimitive.content }.orEmpty()
+    }
+
+    /** Pause, Resume, Cancel or Delete (remove), Try again: on [which] downloads. */
+    suspend fun downloadAct(
+        action: DownloadAction,
+        which: DownloadTarget,
+        mobileData: Boolean = false,
+    ) {
+        val fields =
+            buildMap {
+                when (which) {
+                    is DownloadTarget.Ids -> put("ids", JsonArray(which.ids.map(::text)))
+                    is DownloadTarget.Title -> put("itemId", text(which.itemId))
+                    DownloadTarget.All -> put("all", JsonPrimitive(true))
+                }
+                if (mobileData) put("mobileData", JsonPrimitive(true))
+            }
+        client.request(action.op, fields)
+    }
+
+    /** The device's downloads settings; null leaves one as it is. */
+    suspend fun setDownloadSettings(
+        wifiOnly: Boolean? = null,
+        smart: Boolean? = null,
+    ) {
+        client.request(
+            "setDownloadSettings",
+            buildMap {
+                wifiOnly?.let { put("wifiOnly", JsonPrimitive(it)) }
+                smart?.let { put("smart", JsonPrimitive(it)) }
+            },
+        )
+    }
+
+    /** The keeper's say: whether downloads may run now (the system keeps the app running for them). */
+    fun downloadsAllowed(allowed: Boolean) = client.post("downloadsAllowed", mapOf("allowed" to JsonPrimitive(allowed)))
 
     /**
      * The app came to the front: as [lifecycle] with `foreground`, waiting for the answer. True when the

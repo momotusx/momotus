@@ -304,6 +304,15 @@ private fun AppNav(
         if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
     }
 
+    val downloadsNav =
+        DownloadsNav(
+            onPlay = { backStack.add(Route.Player(it.kind, it.itemId, it.videoId, it.name)) },
+            onVersion = { backStack.add(Route.Versions(it.kind, it.itemId, it.videoId, it.name, download = true)) },
+            onSeries = { backStack.add(Route.DownloadedSeries(it)) },
+        )
+    // The first download asks for notifications once (plans/offline-downloads.md 3.3).
+    if (!tv) NotificationAsk(app.downloads)
+
     // An addon's Install button (stremio://): the page with the link field, filled in, waits for Add.
     LaunchedEffect(marquee.addonLink) {
         val link = marquee.addonLink ?: return@LaunchedEffect
@@ -549,6 +558,15 @@ private fun AppNav(
                                 onRemove = { app.removal.remove(it, accessibility::actionWindow) },
                                 removing = app.removal.removing?.id,
                                 notice = notice,
+                                banner =
+                                    app.home.offline?.let {
+                                        {
+                                            OfflineBanner {
+                                                choose(Route.Library)
+                                                backStack.add(Route.Downloads)
+                                            }
+                                        }
+                                    },
                             )
                         }
                     }
@@ -579,6 +597,20 @@ private fun AppNav(
                             ::open,
                             onCalendar = if (tv) null else ({ backStack.add(Route.Calendar) }),
                             onDiscover = { choose(Route.Discover) },
+                            onDownloads = if (tv) null else ({ backStack.add(Route.Downloads) }),
+                        )
+                    }
+                    entry<Route.Downloads> {
+                        DownloadsScreen(session, app.downloads, downloadsNav, kids = gate.snapshot?.kids != false)
+                    }
+                    entry<Route.DownloadedSeries> { route ->
+                        DownloadedSeriesScreen(
+                            session,
+                            route.itemId,
+                            app.downloads,
+                            downloadsNav,
+                            kids = gate.snapshot?.kids != false,
+                            onGone = { if (backStack.lastOrNull() == route) pop() },
                         )
                     }
                     entry<Route.Calendar> {
@@ -729,6 +761,10 @@ private fun AppNav(
                             onPerson = { name ->
                                 app.searchRequest = name
                                 link(Route.Search)
+                            },
+                            canDownload = !tv && gate.snapshot?.kids == false,
+                            onDownloadVersion = { videoId, name ->
+                                backStack.add(Route.Versions(route.kind, route.id, videoId, name, download = true))
                             },
                         )
                     }

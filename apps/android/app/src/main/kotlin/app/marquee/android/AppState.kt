@@ -52,6 +52,9 @@ class AppState(
      */
     val stacksSeen = HashSet<String?>()
 
+    /** Downloads started from the screens; on the session's scope, so a start outlives its page. */
+    val downloads = DownloadActions(session, caps, session.scope)
+
     /** The one open Versions view, shared by the title page, the Versions screen and the player. */
     val versions = VersionsHolder(session, caps, viewModelScope)
 

@@ -31,6 +31,7 @@ import app.marquee.core.views.CalendarView
 import app.marquee.core.views.DebridLoginView
 import app.marquee.core.views.DebridView
 import app.marquee.core.views.DiscoverView
+import app.marquee.core.views.DownloadsView
 import app.marquee.core.views.HomeView
 import app.marquee.core.views.ImportView
 import app.marquee.core.views.LibraryView
@@ -283,6 +284,8 @@ class CoreSession(
 
     fun library() = LibraryView(client, scope).also { it.open() }
 
+    fun downloads() = DownloadsView(client, scope).also { it.open() }
+
     /** [today] is the local date, `YYYY-MM-DD`. */
     fun calendar(today: String) = CalendarView(client, scope, today).also { it.open() }
 
@@ -319,7 +322,8 @@ class CoreSession(
     /**
      * Ranked stream choices for one video. `title` is the movie or series name, never an episode
      * title (ranking uses it to hide wrong content); `season` and `episode` come from the
-     * selected episode or from the video id.
+     * selected episode or from the video id. [downloadFor] (the title's id) ranks the versions to keep for a
+     * download instead (`purpose: "download"`, plans/offline-downloads.md 4.5).
      */
     fun versions(
         kind: String,
@@ -330,11 +334,12 @@ class CoreSession(
         episode: Int? = null,
         bingeGroup: String? = null,
         facts: TitleFacts? = null,
+        downloadFor: String? = null,
     ): VersionsView =
         VersionsView(
             client,
             scope,
-            versionsParams(kind, videoId, title, caps, season, episode, bingeGroup, facts),
+            versionsParams(kind, videoId, title, caps, season, episode, bingeGroup, facts, downloadFor),
         ).also { it.open() }
 
     /** Starts playback of one row of an open Versions view; the Versions view must stay open until this one is. */

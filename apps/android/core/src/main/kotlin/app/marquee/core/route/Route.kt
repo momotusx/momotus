@@ -155,6 +155,18 @@ sealed interface Route : NavKey {
         val videoId: String,
         /** The movie or series name, which the ranking needs (never an episode title). */
         val title: String,
+        /** Choose the version to download (plans/offline-downloads.md 3.2) instead of the one to play. */
+        val download: Boolean = false,
+    ) : Route
+
+    /** This device's downloads (plans/offline-downloads.md 3.4): a row at the top of Library on the phone. */
+    @Serializable
+    data object Downloads : Route
+
+    /** One series' downloaded episodes, by season. */
+    @Serializable
+    data class DownloadedSeries(
+        val itemId: String,
     ) : Route
 
     /**

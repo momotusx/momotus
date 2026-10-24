@@ -5,6 +5,15 @@ import androidx.compose.ui.graphics.vector.ImageVector
 
 /** The one outline icon set (Lucide), always shown with a text label. */
 object Icons {
+    val ArrowDownToLine: ImageVector by lazy {
+        strokeIcon(
+            "arrow-down-to-line",
+        "M12 17V3",
+        "m6 11 6 6 6-6",
+        "M19 21H5",
+        )
+    }
+
     val ArrowLeft: ImageVector by lazy {
         strokeIcon(
             "arrow-left",
@@ -348,6 +357,16 @@ object Icons {
         "M14 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0z",
         "M14 5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0z",
         "M14 19a1 1 0 1 0 2 0a1 1 0 1 0 -2 0z",
+        )
+    }
+
+    val HardDrive: ImageVector by lazy {
+        strokeIcon(
+            "hard-drive",
+        "M10 16h.01",
+        "M2.212 11.577a2 2 0 0 0-.212.896V18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-5.527a2 2 0 0 0-.212-.896L18.55 5.11A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z",
+        "M21.946 12.013H2.054",
+        "M6 16h.01",
         )
     }
 
@@ -746,6 +765,13 @@ object Icons {
         "M20 2v4",
         "M22 4h-4",
         "M2 20a2 2 0 1 0 4 0a2 2 0 1 0 -4 0z",
+        )
+    }
+
+    val Square: ImageVector by lazy {
+        strokeIcon(
+            "square",
+        "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2z",
         )
     }
 

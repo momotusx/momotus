@@ -35,6 +35,8 @@ object CoreTimeouts {
             "signOut",
             "useServerRoster",
             "traktSync",
+            // A season or series reads the title's meta first.
+            "downloadAdd",
         )
 
     fun forOp(op: String): Duration = if (op in networkOps) network else local
@@ -122,9 +124,14 @@ fun versionsParams(
     episode: Int? = null,
     bingeGroup: String? = null,
     facts: TitleFacts? = null,
+    downloadFor: String? = null,
 ): JsonObject =
     JsonObject(
         buildMap {
+            downloadFor?.let {
+                put("purpose", JsonPrimitive("download"))
+                put("itemId", JsonPrimitive(it))
+            }
             put("kind", JsonPrimitive(kind))
             put("videoId", JsonPrimitive(videoId))
             put("title", JsonPrimitive(title))

@@ -771,6 +771,12 @@ fun RoundButton(
     busy: Boolean = false,
     /** A toggle (Watched): spoken as a switch under one name, on or off, not as a button whose name changes. */
     toggle: Boolean = false,
+    /** A download's progress: a ring around the icon at this fill. */
+    ring: Float? = null,
+    /** What a screen reader says of its state ("45 percent"). */
+    value: String? = null,
+    /** What a press does, where the label alone does not say it ("Shows download options"). */
+    clickLabel: String? = null,
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
@@ -817,19 +823,30 @@ fun RoundButton(
                     } else if (selected) {
                         stateDescription = "On"
                     }
+                    value?.let { stateDescription = it }
                 }.focusClickable(
                     onClick,
                     if (toggle) Role.Switch else Role.Button,
                     enabled,
                     onLongClick,
                     longClickLabel,
+                    clickLabel,
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            if (busy) {
-                Spinner(size = glyph, color = ink)
-            } else {
-                MqIcon(icon, tint = ink, size = glyph)
+            when {
+                busy -> {
+                    Spinner(size = glyph, color = ink)
+                }
+
+                ring != null -> {
+                    ProgressRing(ring, size = glyph + 6.dp, color = ink)
+                    MqIcon(icon, tint = ink, size = glyph * 0.55f)
+                }
+
+                else -> {
+                    MqIcon(icon, tint = ink, size = glyph)
+                }
             }
             if (badge != null && !busy) {
                 // The label already says the seconds; the badge is only for the eye. A third of the

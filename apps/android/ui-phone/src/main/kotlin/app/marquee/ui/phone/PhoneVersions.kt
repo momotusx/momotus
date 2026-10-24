@@ -43,6 +43,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -114,6 +115,8 @@ private const val SHOWN = 3
  * @param onBack the empty state's Back.
  * @param onUndo Undo on the learned note.
  * @param held the page is open over the player: rows keep the order they opened in, new ones after them.
+ * @param download the versions to keep for a download (plans/offline-downloads.md 3.2): each row's action
+ *   downloads it, and [onPlay] gets the key to download.
  */
 @Composable
 fun PhoneVersions(
@@ -125,8 +128,10 @@ fun PhoneVersions(
     onUndo: suspend (LearnedNote) -> Unit,
     modifier: Modifier = Modifier,
     held: Boolean = false,
+    download: Boolean = false,
 ) {
     val side = Marquee.safe.side
+    val action = if (download) Action(DOWNLOAD_THIS, Icons.ArrowDownToLine) else Action(PLAY_THIS, PlayFilled)
     val colors = Marquee.colors
     val snapshot = versions?.snapshot
     val empty = snapshot?.empty?.takeIf { snapshot.recommended == null }
@@ -226,6 +231,7 @@ fun PhoneVersions(
                         maxLines = 1,
                     )
                     MqText("Versions", Modifier.semantics { heading() }, role = TextRole.Title1, maxLines = 1)
+                    if (download) MqText(KEEP_LINE, role = TextRole.Callout, color = colors.muted)
                     VersionsCopy.progress(snapshot)?.let { (text, tone) ->
                         StatusWord(text, tone(tone), Modifier.padding(top = 4.dp))
                     }
@@ -238,12 +244,14 @@ fun PhoneVersions(
                     { versions?.retry() },
                     onPlay,
                     Modifier.padding(vertical = Marquee.space.s),
+                    action,
                 ) {
                     if (empty != null) Empty(empty, step)
                 }
             }
             // The shortcuts under the card, each one tap to play; keyed apart from the section rows they may repeat.
-            for ((label, row) in VersionsCopy.shortcuts(snapshot)) {
+            // The shortcuts play: a download's pick is the card or a row.
+            for ((label, row) in if (download) emptyList() else VersionsCopy.shortcuts(snapshot)) {
                 val key = if (label == StreamChoiceCopy.SMALLER) "short:smaller" else "short:sharper"
                 item(key = key) {
                     SecondaryButton(
@@ -311,7 +319,9 @@ fun PhoneVersions(
             }
             snapshot?.note?.let { note -> item(key = "note") { LearnedLine(note, onUndo) } }
         }
-        sheet?.let { row -> DetailsSheet(row, why = empty?.kind, onPlay = onPlay, onClose = { sheet = null }) }
+        sheet?.let { row ->
+            DetailsSheet(row, why = empty?.kind, onPlay = onPlay, onClose = { sheet = null }, action = action)
+        }
     }
 }
 
@@ -332,6 +342,7 @@ private fun Pick(
     onRetry: () -> Unit,
     onPlay: (String) -> Unit,
     modifier: Modifier,
+    action: Action,
     empty: @Composable () -> Unit,
 ) {
     val colors = Marquee.colors
@@ -365,8 +376,8 @@ private fun Pick(
                     VersionsCopy.cardSpoken(StreamChoiceCopy.BEST_PHONE, best),
                 ) {
                     PrimaryButton(
-                        label = "Play this version",
-                        icon = PlayFilled,
+                        label = action.label,
+                        icon = action.icon,
                         onClick = { onPlay(best.key) },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                     )
@@ -556,6 +567,7 @@ private fun DetailsSheet(
     why: EmptyKind?,
     onPlay: (String) -> Unit,
     onClose: () -> Unit,
+    action: Action,
 ) {
     BackHandler(onBack = onClose)
     val colors = Marquee.colors
@@ -596,10 +608,10 @@ private fun DetailsSheet(
             )
             MqText(VersionsCopy.detail(row), role = TextRole.Caption, color = colors.muted)
             PrimaryButton(
-                "Play this version",
+                action.label,
                 { onPlay(row.key) },
                 Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                icon = PlayFilled,
+                icon = action.icon,
                 focusRequester = play,
             )
         }
@@ -607,6 +619,16 @@ private fun DetailsSheet(
 }
 
 const val DETAILS_SHEET = "versions-details"
+
+/** The pick's primary: play it, or keep it for a download. */
+private class Action(
+    val label: String,
+    val icon: ImageVector,
+)
+
+private const val PLAY_THIS = "Play this version"
+private const val DOWNLOAD_THIS = "Download this version"
+private const val KEEP_LINE = "Pick the version to keep on this device"
 
 /**
  * The card's parts (plans/versions-android-spec.md, section 1): the kicker, the version's badges, one why line clamped

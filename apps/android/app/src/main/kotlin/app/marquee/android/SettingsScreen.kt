@@ -308,6 +308,8 @@ fun SettingsScreen(
                     }
                 },
             )
+            // Downloads are the phone's (plans/offline-downloads.md 3.7).
+            if (!tv) add(SettingsPart(SettingsSection.Downloads) { DownloadsSettings(session) })
             // This device only, never synced (plans/appletv-polish.md decision 13): on a TV where its title pages may
             // play the header trailer (plans/trailer-inline.md 4a).
             if (!tv || TrailerPreviews.headerOnTv(context)) add(SettingsPart(SettingsSection.Device) { DevicePrefs() })

@@ -145,15 +145,44 @@ class DeviceCapsTest {
 
     @Test
     fun `each new default network is sent once with its type, the one at start too`() {
-        val sent = mutableListOf<Network>()
-        val default = DefaultNetwork { sent += it }
-        default.seen("net-1", Network.Wifi)
-        default.seen("net-1", Network.Wifi)
+        val sent = mutableListOf<Network?>()
+        val default = DefaultNetwork { type, _ -> sent += type }
+        default.seen("net-1", Network.Wifi, false)
+        default.seen("net-1", Network.Wifi, false)
         // The core starts each run on "other": it hears the network current at registration.
-        assertEquals(listOf(Network.Wifi), sent)
-        default.seen("net-2", Network.Cellular)
-        default.seen("net-2", Network.Cellular)
-        default.seen("net-3", Network.Wifi)
-        assertEquals(listOf(Network.Wifi, Network.Cellular, Network.Wifi), sent)
+        assertEquals(listOf<Network?>(Network.Wifi), sent)
+        default.seen("net-2", Network.Cellular, true)
+        default.seen("net-2", Network.Cellular, true)
+        default.seen("net-3", Network.Wifi, false)
+        assertEquals(listOf<Network?>(Network.Wifi, Network.Cellular, Network.Wifi), sent)
+    }
+
+    @Test
+    fun `a lost or blocked default network is none, and the cost flag says metered`() {
+        val sent = mutableListOf<Pair<Network?, Boolean>>()
+        val default = DefaultNetwork { type, metered -> sent += type to metered }
+        // A phone's hotspot: Wi-Fi, metered by its cost flag.
+        default.seen("net-1", Network.Wifi, true)
+        default.seen("net-1", Network.Wifi, false)
+        // Blocked for this app (the walk's package cut, Data Saver): none until it lifts.
+        default.blocked("net-1", true)
+        default.blocked("net-1", true)
+        default.blocked("net-1", false)
+        // A loss of another network is old news; the current one's is none.
+        default.lost("net-0")
+        default.lost("net-1")
+        default.lost("net-1")
+        default.seen("net-2", Network.Cellular, true)
+        assertEquals(
+            listOf(
+                Network.Wifi to true,
+                Network.Wifi to false,
+                null to false,
+                Network.Wifi to false,
+                null to false,
+                Network.Cellular to true,
+            ),
+            sent,
+        )
     }
 }

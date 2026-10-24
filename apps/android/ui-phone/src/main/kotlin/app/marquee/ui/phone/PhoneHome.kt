@@ -138,6 +138,8 @@ fun PhoneHome(
     removing: String? = null,
     /** The removal's note (Undo, or why it failed), under Continue Watching. */
     notice: (@Composable () -> Unit)? = null,
+    /** Above the rows: offline, the way to the downloads (plans/offline-downloads.md 3.5). */
+    banner: (@Composable () -> Unit)? = null,
 ) {
     var menuFor by remember { mutableStateOf<Tile?>(null) }
     menuFor?.let { tile ->
@@ -180,6 +182,7 @@ fun PhoneHome(
         ) {
             item(key = "hero") { PhoneHeroCarousel(home.heroes, onOpen, onPlay, trailers) { heroVisible } }
         }
+        if (banner != null) item(key = "banner") { banner() }
         if (home.rows.isEmpty()) item(key = "state") { HomeState(home, onSetup, onAddons, rowsHidden, onHomeRows) }
         if (hero == null && home.rows.toList().allFailed()) {
             item(key = "failed") { AllFailed(home, Modifier.padding(horizontal = Marquee.safe.side)) }

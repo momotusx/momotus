@@ -54,6 +54,14 @@ const LONG = new Set([
   "haveBytes",
   "needBytes",
   "bytesPerS",
+  // Offline downloads (plans/offline-downloads.md 4.15).
+  "bytesDone",
+  "bytesTotal",
+  "speedBps",
+  "etaSecs",
+  "downloadsBytes",
+  "neededBytes",
+  "bytes",
 ]);
 const FLOAT = new Set(["progress", "bitrateMbps", "needMbps", "haveMbps", "mbps", "madeForFps"]);
 /** Scalar fields the core added after the golden traces were recorded, as `Type.field`, with the
@@ -105,6 +113,8 @@ const DEFAULTED = new Map([
   // Accounts phase 1c: passkey kits and the devices that joined through one.
   ["MemberInfo.passkey", "false"],
   ["MemberInfo.viaPasskey", "false"],
+  // Offline downloads: an older core never shows a title built from them.
+  ["TitleHeader.offline", "false"],
   ["Devices.account", "\"\""],
   // The streaming window's no-punch words: an older core says nothing, as on a volume without windows.
   ["VersionsConditions.window", "false"],
@@ -139,6 +149,15 @@ const INT = new Set([
   "services",
   "failed",
   "looked",
+  // Offline downloads: counts (plans/offline-downloads.md 4.15).
+  "running",
+  "queued",
+  "seasons",
+  "episodes",
+  "downloaded",
+  "active",
+  "downloads",
+  "count",
   // Captions.languages: how many subtitle languages a video has (C34).
   "languages",
   "delayMs",

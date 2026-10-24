@@ -461,6 +461,138 @@ sealed interface DiscoverState {
     ) : DiscoverState
 }
 
+@Serializable
+data class DownloadActivity(
+    val running: Int,
+    val queued: Int,
+    val bytesDone: Long,
+    val bytesTotal: Long,
+    /** The title the first running download belongs to. */
+    val title: String? = null,
+)
+
+/** The download control's state for one video (3.1). */
+@Serializable
+data class DownloadBadge(
+    val id: String,
+    val state: DownloadState,
+    val reason: DownloadReason? = null,
+    val mobileData: Boolean,
+    /** 0 to 1, when the size is known. */
+    val progress: Float? = null,
+    val bytesTotal: Long? = null,
+)
+
+/** Why a download waits or failed. */
+@Serializable(with = DownloadReason.Serializer::class)
+enum class DownloadReason(
+    val wire: String,
+) {
+    Wifi("wifi"),
+    LowData("lowData"),
+    Space("space"),
+    Network("network"),
+    Playing("playing"),
+    App("app"),
+    NoVersion("noVersion"),
+    Source("source"),
+    Retries("retries"),
+    NotVideo("notVideo"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<DownloadReason>("DownloadReason", DownloadReason.entries, DownloadReason::wire, Unknown)
+}
+
+/** One download as the screens show it. */
+@Serializable
+data class DownloadRow(
+    val id: String,
+    val kind: String,
+    val itemId: String,
+    val videoId: String,
+    val season: Int? = null,
+    val episode: Int? = null,
+    val name: String,
+    val episodeTitle: String? = null,
+    val poster: String? = null,
+    val still: String? = null,
+    val runtime: String? = null,
+    /** The episode's air date ("2013-09-16"). */
+    val released: String? = null,
+    val state: DownloadState,
+    val reason: DownloadReason? = null,
+    /** Released onto mobile data by the user. */
+    val mobileData: Boolean,
+    val bytesDone: Long,
+    val bytesTotal: Long? = null,
+    val speedBps: Long? = null,
+    val etaSecs: Long? = null,
+    /** "1080p", from the version kept. */
+    val quality: String? = null,
+)
+
+/** The device's downloads settings (3.7), kept in `device_state`. */
+@Serializable
+data class DownloadSettings(
+    val wifiOnly: Boolean,
+    val smart: Boolean,
+)
+
+@Serializable
+data class DownloadsSnapshot(
+    val storage: DownloadStorage,
+    val settings: DownloadSettings,
+    /** What the platform's keeper shows (a notification, the system's progress) and whether it keeps the app running. */
+    val active: DownloadActivity,
+    /** Queued, running, paused and waiting, in queue order. */
+    val downloading: List<DownloadRow> = emptyList(),
+    /** Done, failed and missing, by title, newest first. */
+    val titles: List<DownloadTitle> = emptyList(),
+)
+
+/** Where a download stands. */
+@Serializable(with = DownloadState.Serializer::class)
+enum class DownloadState(
+    val wire: String,
+) {
+    Queued("queued"),
+    Running("running"),
+    Paused("paused"),
+    Waiting("waiting"),
+    Done("done"),
+    Failed("failed"),
+    Missing("missing"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<DownloadState>("DownloadState", DownloadState.entries, DownloadState::wire, Unknown)
+}
+
+@Serializable
+data class DownloadStorage(
+    /** What downloads hold on disk. */
+    val downloadsBytes: Long,
+    val freeBytes: Long? = null,
+    /** More space a download waiting for it needs. */
+    val neededBytes: Long? = null,
+)
+
+@Serializable
+data class DownloadTitle(
+    val itemId: String,
+    val kind: String,
+    val name: String,
+    val poster: String? = null,
+    val count: Int,
+    val bytes: Long,
+    val rows: List<DownloadRow> = emptyList(),
+)
+
 @Serializable(with = EmptyAction.Serializer::class)
 enum class EmptyAction(
     val wire: String,
@@ -524,6 +656,8 @@ data class Episode(
     val progress: Float? = null,
     /** As [`PlayTarget::left_ms`], for this episode. */
     val leftMs: Long? = null,
+    /** Its download on this device. */
+    val download: DownloadBadge? = null,
 )
 
 /** The `firstRunStill` answer: a title's backdrop, its logo when it has one, and its name. */
@@ -586,6 +720,17 @@ enum class Group(
     object Serializer : FallbackEnumSerializer<Group>("Group", Group.entries, Group::wire, Unknown)
 }
 
+/** A season's or a series' downloads: its aired episodes (regular seasons for a series), how many have a download, and how many are on their way. */
+@Serializable
+data class GroupDownload(
+    val seasons: Int,
+    val episodes: Int,
+    /** Episodes with a download in any state but failed or missing. */
+    val downloaded: Int,
+    /** Of those, queued, running, paused or waiting. */
+    val active: Int,
+)
+
 @Serializable
 data class Hero(
     val tile: Tile,
@@ -646,6 +791,13 @@ data class HomeCatalog(
 data class HomeHeader(
     /** The hero carousel's pages, in order, at most `HERO_MAX`; empty while nothing is ready and on a kids profile. It only grows, except that a page whose row no longer holds its title leaves. */
     val heroes: List<Hero> = emptyList(),
+    /** No network, and this many downloads play: "You're offline. Your downloads still play." with Go to Downloads (plans/offline-downloads.md 3.5). Null online or with nothing downloaded. */
+    val offline: HomeOffline? = null,
+)
+
+@Serializable
+data class HomeOffline(
+    val downloads: Int,
 )
 
 @Serializable
@@ -1909,6 +2061,14 @@ data class TitleHeader(
     val watched: Boolean,
     /** The title is in Continue Watching on this profile: a video in progress, or a series finished up to an episode with a next one out (Next Up), as Home's row has it. With the header from the first render, so a control that depends on it (TV's Remove from Continue Watching) is drawn at once, never late. */
     val continuing: Boolean = false,
+    /** A movie's download on this device (plans/offline-downloads.md 3.1). */
+    val download: DownloadBadge? = null,
+    /** The selected season's downloads, for its menu item. */
+    val seasonDownload: GroupDownload? = null,
+    /** Every regular season's, for "Download every season". */
+    val seriesDownload: GroupDownload? = null,
+    /** The meta could not be read and the page shows what the downloads kept (4.18): hide Versions and Trailer, say "Showing what's downloaded". */
+    val offline: Boolean = false,
 )
 
 /** The title page's numbers beyond the addon's IMDb score, per source: TMDB's user score and Trakt's community score, each as a percentage ("87%", "92%"), shown only with at least 10 votes. */

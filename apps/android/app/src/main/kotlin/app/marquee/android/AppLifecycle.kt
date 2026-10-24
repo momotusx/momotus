@@ -70,15 +70,27 @@ class AppLifecycle(
 
     private fun watchNetwork() {
         val connectivity = app.getSystemService(ConnectivityManager::class.java) ?: return
-        val default = DefaultNetwork { session.ops.lifecycle(LifecycleEvent.NetworkChanged, it) }
+        val default = DefaultNetwork { type, metered -> session.ops.networkChanged(type, metered) }
         try {
             connectivity.registerDefaultNetworkCallback(
                 object : ConnectivityManager.NetworkCallback() {
-                    // Follows onAvailable with the new network's transports.
+                    // Follows onAvailable with the new network's transports; metered from the cost flag, never the
+                    // interface (plans/offline-downloads.md 4.13), so a hotspot or a VPN over mobile data is metered.
                     override fun onCapabilitiesChanged(
                         network: Network,
                         caps: NetworkCapabilities,
-                    ) = default.seen(network, DeviceCaps.networkType(caps::hasTransport))
+                    ) = default.seen(
+                        network,
+                        DeviceCaps.networkType(caps::hasTransport),
+                        !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED),
+                    )
+
+                    override fun onBlockedStatusChanged(
+                        network: Network,
+                        blocked: Boolean,
+                    ) = default.blocked(network, blocked)
+
+                    override fun onLost(network: Network) = default.lost(network)
                 },
             )
         } catch (e: SecurityException) {
@@ -95,20 +107,51 @@ class AppLifecycle(
 
 /**
  * The default network as the callbacks report it, on their one thread: each new network is sent once
- * with its type, the one current at registration too. The core starts every run on `other`, so without
- * it Settings' This device and Measure again would read and clear another network's speeds.
+ * with its type and cost, the one current at registration too, and again when its cost changes. A lost
+ * network, or one blocked for this app, is sent as none (null). The core starts every run on `other`, so
+ * without it Settings' This device and Measure again would read and clear another network's speeds.
  */
 internal class DefaultNetwork(
-    private val send: (NetworkType) -> Unit,
+    private val send: (type: NetworkType?, metered: Boolean) -> Unit,
 ) {
     private var current: Any? = null
+    private var type: NetworkType? = null
+    private var metered = false
+    private var blocked = false
+    private var said: Triple<Any?, NetworkType?, Boolean>? = null
 
     fun seen(
         network: Any,
         type: NetworkType,
+        metered: Boolean,
     ) {
-        if (network == current) return
+        if (network != current) blocked = false
         current = network
-        send(type)
+        this.type = type
+        this.metered = metered
+        say()
+    }
+
+    fun blocked(
+        network: Any,
+        blocked: Boolean,
+    ) {
+        if (network != current) return
+        this.blocked = blocked
+        say()
+    }
+
+    fun lost(network: Any) {
+        if (network != current) return
+        current = null
+        say()
+    }
+
+    private fun say() {
+        val up = current != null && !blocked
+        val now = Triple(current.takeIf { up }, type.takeIf { up }, up && metered)
+        if (now == said) return
+        said = now
+        send(now.second, now.third)
     }
 }

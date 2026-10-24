@@ -12,6 +12,7 @@ export const iconsPath = join(import.meta.dir, "../design/src/main/kotlin/app/ma
 const nodesPath = join(import.meta.dir, "../node_modules/lucide-static/icon-nodes.json");
 
 export const ICONS = [
+  "arrow-down-to-line",
   "arrow-left",
   "ban",
   "bookmark",
@@ -51,6 +52,7 @@ export const ICONS = [
   "gem",
   "ghost",
   "grip-vertical",
+  "hard-drive",
   "headphones",
   "house",
   "info",
@@ -94,6 +96,7 @@ export const ICONS = [
   "sliders-horizontal",
   "smartphone",
   "sparkles",
+  "square",
   "star",
   "sun",
   "trash",

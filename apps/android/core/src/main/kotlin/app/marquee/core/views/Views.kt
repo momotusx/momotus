@@ -15,8 +15,10 @@ import app.marquee.core.model.DebridLoginSnapshot
 import app.marquee.core.model.DebridRecord
 import app.marquee.core.model.DebridSnapshot
 import app.marquee.core.model.DiscoverSnapshot
+import app.marquee.core.model.DownloadsSnapshot
 import app.marquee.core.model.Episode
 import app.marquee.core.model.Hero
+import app.marquee.core.model.HomeOffline
 import app.marquee.core.model.HomeRow
 import app.marquee.core.model.HomeSnapshot
 import app.marquee.core.model.HomeUpdate
@@ -68,9 +70,13 @@ class HomeView(
 
     /** The first page: what the TV's start focus and the app's checks ask about. */
     val hero: Hero? get() = heroes.firstOrNull()
+    /** No network and downloads that play (plans/offline-downloads.md 3.5); null otherwise. */
+    var offline: HomeOffline? by mutableStateOf(null)
+        private set
 
     override fun applySnapshot(snapshot: HomeSnapshot) {
         heroes = snapshot.header.heroes
+        offline = snapshot.header.offline
         rows.clear()
         rows.addAll(snapshot.rows)
         logFailures()
@@ -99,8 +105,14 @@ class HomeView(
     override fun applyUpdates(updates: List<HomeUpdate>) {
         for (update in updates) {
             when (update) {
-                is HomeUpdate.Header -> heroes = update.header.heroes
-                is HomeUpdate.Rows -> rows.applyDiffs(update.diffs)
+                is HomeUpdate.Header -> {
+                    heroes = update.header.heroes
+                    offline = update.header.offline
+                }
+
+                is HomeUpdate.Rows -> {
+                    rows.applyDiffs(update.diffs)
+                }
             }
         }
         logFailures()
@@ -297,6 +309,15 @@ class AddonsView(
     client: CoreClient,
     scope: CoroutineScope,
 ) : RecordView<AddonsSnapshot>(client, scope, "addons", NO_PARAMS, AddonsSnapshot.serializer())
+
+/**
+ * This device's downloads (plans/offline-downloads.md 3.4): storage, settings, what runs and what is kept. One
+ * stays open for the life of the process (the keeper reads `active` from it); screens open their own.
+ */
+class DownloadsView(
+    client: CoreClient,
+    scope: CoroutineScope,
+) : RecordView<DownloadsSnapshot>(client, scope, "downloads", NO_PARAMS, DownloadsSnapshot.serializer())
 
 /**
  * Find addons: Cinemeta's Official and Community lists, read at open. [fresh] waits for the network

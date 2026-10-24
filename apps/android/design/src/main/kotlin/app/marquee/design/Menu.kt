@@ -65,6 +65,8 @@ fun ActionMenu(
     actions: List<MenuAction>,
     onDismiss: () -> Unit,
     start: Int = 0,
+    /** A line under the title: why a download waits or failed, in full. */
+    detail: String? = null,
 ) {
     val tv = Marquee.form == Form.Tv
     val pad = if (tv) Marquee.space.m else Marquee.space.s
@@ -108,6 +110,7 @@ fun ActionMenu(
                 verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
             ) {
                 MqText(title, role = TextRole.Title3, maxLines = 2)
+                detail?.let { MqText(it, role = TextRole.Callout, color = Marquee.colors.muted) }
                 actions.forEachIndexed { index, action ->
                     if (action.heading) {
                         MqText(

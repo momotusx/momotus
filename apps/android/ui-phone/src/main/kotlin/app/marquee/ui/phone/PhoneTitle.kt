@@ -51,12 +51,16 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import app.marquee.core.DownloadCopy
+import app.marquee.core.DownloadItem
 import app.marquee.core.Format
+import app.marquee.core.GroupAct
 import app.marquee.core.Mark
 import app.marquee.core.PlayTo
 import app.marquee.core.TitleCopy
 import app.marquee.core.VersionLine
 import app.marquee.core.VersionsCopy
+import app.marquee.core.model.DownloadBadge
 import app.marquee.core.model.Episode
 import app.marquee.core.model.Tile
 import app.marquee.core.model.TitleDetails
@@ -122,6 +126,7 @@ private val HERO_FADE = 96.dp
  *
  * @param onEpisode an episode was tapped: it plays.
  * @param onEpisodeVersions "Choose a version" for an episode, from its press-and-hold menu.
+ * @param downloads what the download controls do; null shows none (a kids profile).
  */
 @Composable
 fun PhoneTitle(
@@ -139,6 +144,7 @@ fun PhoneTitle(
     onOpen: (Tile) -> Unit = {},
     /** A person's name: Search for them. */
     onPerson: (String) -> Unit = {},
+    downloads: TitleDownloads? = null,
 ) {
     val header = title.header
     val details = header?.details
@@ -173,6 +179,7 @@ fun PhoneTitle(
         else -> {
             val hasArt = details.background != null || details.poster != null
             var menuFor by remember { mutableStateOf<Episode?>(null) }
+            var downloadMenu by remember { mutableStateOf<DownloadAsk?>(null) }
             val list = rememberLazyListState()
             val bar = WindowInsets.statusBars.getTop(LocalDensity.current)
             // The page reaches the status bar once the artwork has scrolled out from under it (without
@@ -195,7 +202,7 @@ fun PhoneTitle(
                                 if (episode.watched) "Mark as not watched" else "Mark as watched",
                                 if (episode.watched) Icons.EyeOff else Icons.Check,
                             ) { title.setWatched(episode.videoId, !episode.watched) },
-                        ),
+                        ) + episodeDownloadItems(episode, downloads),
                     onDismiss = { menuFor = null },
                 )
             }
@@ -220,7 +227,8 @@ fun PhoneTitle(
                 trailers,
                 headerTrailer,
                 details.id,
-                details.trailers.firstOrNull()?.youtubeId,
+                // Offline the page plays no trailer (plans/offline-downloads.md 4.18).
+                details.trailers.firstOrNull()?.youtubeId?.takeIf { !header.offline },
                 artVisible && !fullTrailer,
                 tv = false,
             )
@@ -230,6 +238,15 @@ fun PhoneTitle(
                 label = "titleArt",
             )
             if (fullTrailer) TrailerDialog(details.trailers, trailers) { fullTrailer = false }
+            downloadMenu?.let { ask ->
+                DownloadMenu(
+                    ask.title,
+                    DownloadCopy.control(ask.badge),
+                    onItem = { downloads?.item(it, ask.videoId, ask.badge) },
+                    onDismiss = { downloadMenu = null },
+                    items = ask.items ?: DownloadCopy.control(ask.badge).items,
+                )
+            }
             Box(modifier.fillMaxSize()) {
                 LazyColumn(
                     state = list,
@@ -281,11 +298,23 @@ fun PhoneTitle(
                     item(
                         key = "info",
                     ) {
-                        Info(title, versions, versionsFailed, onPlay, onVersions, onGenre) {
-                            TitleTrailers.spent += details.id
-                            // Stopped here, before the full screen starts on the same player.
-                            if (headerTrailer.loading) trailers.stop()
-                            fullTrailer = true
+                        Info(
+                            title,
+                            versions,
+                            versionsFailed,
+                            onPlay,
+                            onVersions,
+                            onGenre,
+                            onTrailer = {
+                                TitleTrailers.spent += details.id
+                                // Stopped here, before the full screen starts on the same player.
+                                if (headerTrailer.loading) trailers.stop()
+                                fullTrailer = true
+                            },
+                            downloads = downloads,
+                        ) {
+                            downloadMenu =
+                                it
                         }
                     }
                     if (header.seasons.isNotEmpty()) {
@@ -324,6 +353,17 @@ fun PhoneTitle(
                             details.runtime,
                             onClick = { onEpisode(episode) },
                             onMore = { menuFor = episode },
+                            download =
+                                downloads?.takeIf { TitleCopy.airs(episode) == null }?.let { actions ->
+                                    {
+                                        val badge = episode.download
+                                        if (DownloadCopy.control(badge).items.isEmpty()) {
+                                            actions.item(DownloadItem.Start, episode.videoId, null)
+                                        } else {
+                                            downloadMenu = DownloadAsk(episodeName(episode), episode.videoId, badge)
+                                        }
+                                    }
+                                },
                         )
                     }
                     // Rotten Tomatoes shows on the page through the rated cover, above Information
@@ -597,6 +637,32 @@ private fun Hero(
     }
 }
 
+/** A download's menu to open: for [videoId], titled [title]; [items] in place of the state's (a press and hold). */
+private data class DownloadAsk(
+    val title: String,
+    val videoId: String,
+    val badge: DownloadBadge?,
+    val items: List<DownloadItem>? = null,
+)
+
+private fun episodeName(episode: Episode) =
+    episode.title.ifBlank {
+        Format.episodeLabel(episode.season, episode.episode)
+    }
+
+/** An episode's press-and-hold items for its download: Download and the version, or the state's. */
+private fun episodeDownloadItems(
+    episode: Episode,
+    downloads: TitleDownloads?,
+): List<MenuAction> {
+    if (downloads == null || TitleCopy.airs(episode) != null) return emptyList()
+    val badge = episode.download
+    val items = if (badge == null) START_ITEMS else DownloadCopy.control(badge).items
+    return items.map { item -> MenuAction(item.label, item.icon) { downloads.item(item, episode.videoId, badge) } }
+}
+
+private val START_ITEMS = listOf(DownloadItem.Start, DownloadItem.Choose)
+
 @Composable
 private fun Info(
     title: TitleView,
@@ -606,6 +672,8 @@ private fun Info(
     onVersions: (String) -> Unit,
     onGenre: (String, String) -> Unit,
     onTrailer: () -> Unit,
+    downloads: TitleDownloads?,
+    onDownloadMenu: (DownloadAsk) -> Unit,
 ) {
     val header = checkNotNull(title.header)
     val details = checkNotNull(header.details)
@@ -617,6 +685,8 @@ private fun Info(
         verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
     ) {
         val context = LocalContext.current
+        // Offline, the page shows what the downloads kept (plans/offline-downloads.md 4.18).
+        if (header.offline) StatusNote(DownloadCopy.TITLE_OFFLINE)
         // Each score links to the title's page on its service (none on a kids profile: the core sends no URL).
         TitleRatingLine(
             TitleCopy.meta(details, TitleCopy.seasonCount(header.seasons), genres = false),
@@ -645,19 +715,38 @@ private fun Info(
         } else {
             VersionStatus(VersionsCopy.line(versions, versionsFailed))
         }
+        var seriesMenu by remember { mutableStateOf(false) }
+        if (seriesMenu && downloads != null) {
+            val ids = title.episodes.mapNotNull { it.download?.id }
+            ActionMenu(
+                title = details.name,
+                actions =
+                    DownloadCopy.seriesMenu(header.selectedSeason, header.seasonDownload, header.seriesDownload).map {
+                        val icon =
+                            when (it.act) {
+                                GroupAct.DeleteSeason -> Icons.Trash
+                                GroupAct.None -> null
+                                else -> Icons.ArrowDownToLine
+                            }
+                        MenuAction(it.label, icon) { downloads.group(it.act, header.selectedSeason, ids) }
+                    },
+                onDismiss = { seriesMenu = false },
+            )
+        }
         val labels =
             listOfNotNull(
-                "Versions".takeIf { target != null },
-                "Trailer".takeIf { details.trailers.isNotEmpty() },
+                "Versions".takeIf { target != null && !header.offline },
+                "Trailer".takeIf { details.trailers.isNotEmpty() && !header.offline },
                 (if (header.inLibrary) "In Library" else "Add to Library").takeIf { header.librarySettable },
                 "Watched".takeIf { details.kind == "movie" },
+                "Download".takeIf { downloads != null },
             )
         BoxWithConstraints(Modifier.fillMaxWidth().padding(top = Marquee.space.xs)) {
             // The words under the circles only where they fit whole (two lines, no word broken); a large font on a narrow
             // phone gets the circles alone, each still named for TalkBack.
             val words = roundLabelsFit(labels, maxWidth)
             Row(Modifier.fillMaxWidth()) {
-                if (target != null) {
+                if (target != null && !header.offline) {
                     RoundButton(
                         Icons.Layers,
                         "Versions",
@@ -666,7 +755,7 @@ private fun Info(
                         showLabel = words,
                     )
                 }
-                if (details.trailers.isNotEmpty()) {
+                if (details.trailers.isNotEmpty() && !header.offline) {
                     RoundButton(
                         Icons.Film,
                         "Trailer",
@@ -697,6 +786,41 @@ private fun Info(
                         showLabel = words,
                         toggle = true,
                     )
+                }
+                // Download last (design/DECISION.md, the title's action order): a film's own control, a series' menu.
+                if (downloads != null) {
+                    if (details.kind == "movie") {
+                        val videoId = target?.videoId ?: details.id
+                        val badge = header.download
+                        val control = DownloadCopy.control(badge)
+                        DownloadButton(
+                            control,
+                            onClick = {
+                                if (control.items.isEmpty()) {
+                                    downloads.item(DownloadItem.Start, videoId, null)
+                                } else {
+                                    onDownloadMenu(DownloadAsk(details.name, videoId, badge))
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            showLabel = words,
+                            onLongClick =
+                                if (badge ==
+                                    null
+                                ) {
+                                    ({ onDownloadMenu(DownloadAsk(details.name, videoId, null, START_ITEMS)) })
+                                } else {
+                                    null
+                                },
+                        )
+                    } else if (header.seriesDownload != null || header.seasonDownload != null) {
+                        DownloadButton(
+                            DownloadCopy.seriesControl(header.seriesDownload),
+                            onClick = { seriesMenu = true },
+                            modifier = Modifier.weight(1f),
+                            showLabel = words,
+                        )
+                    }
                 }
             }
         }
@@ -759,6 +883,8 @@ private fun EpisodeRow(
     runtime: String?,
     onClick: () -> Unit,
     onMore: () -> Unit,
+    /** The download control's tap; null shows none. */
+    download: (() -> Unit)? = null,
 ) {
     val colors = Marquee.colors
     val spoken = TitleCopy.episode(episode)
@@ -822,5 +948,12 @@ private fun EpisodeRow(
             episode.overview?.let { MqText(it, role = TextRole.Caption, color = colors.muted, maxLines = 2) }
         }
         if (episode.watched) MqIcon(Icons.Check, tint = colors.text)
+        download?.let {
+            DownloadButton(
+                DownloadCopy.control(episode.download),
+                it,
+                Modifier.align(Alignment.CenterVertically),
+            )
+        }
     }
 }

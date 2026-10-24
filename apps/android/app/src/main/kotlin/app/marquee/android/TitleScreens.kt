@@ -34,6 +34,7 @@ import app.marquee.core.model.LearnedNote
 import app.marquee.core.model.Tile
 import app.marquee.core.route.Route
 import app.marquee.core.session.CoreSession
+import app.marquee.core.session.DownloadScope
 import app.marquee.core.views.TitleView
 import app.marquee.core.views.ViewStatus
 import app.marquee.design.Form
@@ -116,6 +117,10 @@ fun TitleScreen(
     onGenre: (kind: String, genre: String) -> Unit,
     onOpen: (Tile) -> Unit,
     onPerson: (String) -> Unit,
+    /** Download controls show (a phone, not a kids profile). */
+    canDownload: Boolean = false,
+    /** Versions, to pick the version a download keeps. */
+    onDownloadVersion: (videoId: String, title: String) -> Unit = { _, _ -> },
 ) {
     val holder =
         viewModel<TitleHolder>(
@@ -162,6 +167,17 @@ fun TitleScreen(
     }
     val episodeVersions: (Episode) -> Unit = { onVersions(it.videoId, title) }
     val play: (String?, String) -> Unit = { key, id -> onPlay(key, id, title) }
+    val downloads =
+        if (canDownload && form != Form.Tv) {
+            app.downloads.forTitle(
+                route.kind,
+                route.id,
+                onVersion = { onDownloadVersion(it, title) },
+                onPlay = { onPlayEpisode(it, title) },
+            )
+        } else {
+            null
+        }
     Box(Modifier.fillMaxSize()) {
         if (form == Form.Tv) {
             TvTitle(
@@ -190,6 +206,7 @@ fun TitleScreen(
                 onGenre = onGenre,
                 onOpen = onOpen,
                 onPerson = onPerson,
+                downloads = downloads,
             )
         }
         note?.let { (id, words) ->
@@ -222,16 +239,31 @@ fun VersionsScreen(
     /** Open over the paused player: rows keep the order they opened in. */
     held: Boolean = false,
 ) {
-    val key = keyFor(route.kind, route.videoId, route.title)
+    val key =
+        keyFor(route.kind, route.videoId, route.title).let {
+            if (route.download) it.copy(downloadFor = route.id) else it
+        }
     LaunchedEffect(key) { app.versions.use(key) }
     val view = app.versions.view(key)
+    // A download's pick is added with this view's subscription, and the page gives way to the title.
+    val chosen: (String) -> Unit =
+        if (route.download) {
+            { picked ->
+                view?.currentSubscription?.sub?.let { sub ->
+                    app.downloads.add(route.kind, route.id, DownloadScope.Video, route.videoId, pick = sub to picked)
+                }
+                onBack()
+            }
+        } else {
+            onPlay
+        }
     val heading =
         key.episode?.let { "${route.title}, ${Format.episodeLabel(key.season ?: 0, it)}" } ?: route.title
     if (form == Form.Tv) {
         val focus = viewModel<VersionsFocus>(key = "versions:${route.videoId}").focus
         TvVersions(heading, view, focus, onPlay, onAddSource, onBack, onUndo, held = held)
     } else {
-        PhoneVersions(heading, view, onPlay, onAddSource, onBack, onUndo, held = held)
+        PhoneVersions(heading, view, chosen, onAddSource, onBack, onUndo, held = held, download = route.download)
     }
 }
 

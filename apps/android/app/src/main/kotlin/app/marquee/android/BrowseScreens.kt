@@ -209,6 +209,9 @@ internal fun Kicker(
 /** The Calendar row's line in Library. */
 private const val CALENDAR_LINE = "New episodes of the series in your library"
 
+/** The Downloads row's line in Library. */
+private const val DOWNLOADS_LINE = "Movies and episodes kept on this device"
+
 /** Past this many choices a row of chips is a pull-down on TV. */
 private const val SEGMENTS = 4
 
@@ -1009,6 +1012,8 @@ fun LibraryScreen(
     onCalendar: (() -> Unit)? = null,
     /** An empty library's way on: Discover. */
     onDiscover: (() -> Unit)? = null,
+    /** The phone's Downloads row, first (plans/offline-downloads.md 3.4); null shows none. */
+    onDownloads: (() -> Unit)? = null,
 ) {
     val holder =
         viewModel<LibraryHolder>(
@@ -1035,6 +1040,9 @@ fun LibraryScreen(
         verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
     ) {
         full("head") { BrowseHeader("Library", side = 0.dp) }
+        if (onDownloads != null) {
+            full("downloads") { LinkRow(Icons.ArrowDownToLine, "Downloads", DOWNLOADS_LINE, onDownloads, side = 0.dp) }
+        }
         if (onCalendar != null) {
             full("calendar") { LinkRow(Icons.CalendarDays, "Calendar", CALENDAR_LINE, onCalendar, side = 0.dp) }
         }

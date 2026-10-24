@@ -62,6 +62,10 @@ class MarqueeApp :
     var scanAgain: Boolean by mutableStateOf(false)
     private lateinit var lifecycle: AppLifecycle
 
+    /** Keeps downloads running while the user is away (plans/offline-downloads.md 5). */
+    lateinit var downloadKeeper: DownloadKeeper
+        private set
+
     /**
      * What this device can play, read for each Versions view: the codec list is scanned once off the
      * main thread, the display, receiver and language are read fresh. A failed read means a plain
@@ -127,6 +131,7 @@ class MarqueeApp :
             }
         }
         lifecycle = AppLifecycle(this, session, sync).also { it.register() }
+        downloadKeeper = DownloadKeeper(this, session).also { it.start() }
         val scan = session.scope.async(Dispatchers.Default) { DeviceCaps.scanCodecs() }
         deviceCaps = {
             runCatching {

@@ -394,12 +394,15 @@ fun Modifier.focusClickable(
     enabled: Boolean = true,
     onLongClick: (() -> Unit)? = null,
     longClickLabel: String? = null,
+    /** What a press does, where the name alone does not say it ("Shows download options"). */
+    clickLabel: String? = null,
 ): Modifier =
     if (onLongClick == null) {
         clickable(
             interactionSource = remember { MutableInteractionSource() },
             indication = pressIndication(),
             enabled = enabled,
+            onClickLabel = clickLabel,
             role = role,
             onClick = onClick,
         )
@@ -409,6 +412,7 @@ fun Modifier.focusClickable(
             interactionSource = remember { MutableInteractionSource() },
             indication = pressIndication(),
             enabled = enabled,
+            onClickLabel = clickLabel,
             role = role,
             onLongClickLabel = longClickLabel,
             onLongClick = onLongClick,
