@@ -856,7 +856,13 @@ fn kids_edits_read_the_state_they_change() {
     lib.set_addons("kid", std::slice::from_ref(&own), &hlc(6, 1))
         .unwrap();
     assert!(!lib.make_standard("kid", &hlc(7, 1)).unwrap());
-    assert_eq!(lib.addons("kid").unwrap(), [own]);
+    let kept: Vec<String> = lib
+        .addons("kid")
+        .unwrap()
+        .into_iter()
+        .map(|a| a.transport_url)
+        .collect();
+    assert_eq!(kept, [own.transport_url]);
     assert!(!lib.make_standard("std", &hlc(8, 1)).unwrap());
 }
 

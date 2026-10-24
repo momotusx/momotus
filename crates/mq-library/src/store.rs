@@ -1,5 +1,5 @@
 use crate::schema::migrations;
-use crate::sync::{Gone, Stamp, coll, local, queue, refuse_gone, sql, stored_hlc};
+use crate::sync::{Gone, POSITION_STEP, Stamp, coll, local, queue, refuse_gone, sql};
 use rusqlite::hooks::Action;
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use std::path::{Path, PathBuf};
@@ -436,21 +436,23 @@ impl Library {
         addons: &[AddonRow],
         stamp: impl Into<Stamp<'a>>,
     ) -> Result<(), LibraryError> {
-        let stamp = stamp.into();
-        self.write(|c| {
-            local(c, coll::ADDONS, &[profile], &stamp, |h| {
-                sql::set_addons(c, profile, addons, h)
-            })
+        self.edit_addons(profile, stamp, |rows: &mut Vec<AddonRow>| {
+            *rows = addons.to_vec();
+            Ok::<_, LibraryError>(())
         })
     }
 
     /// Edits the profile's addon list in one write transaction: `edit` gets
-    /// the list as stored and what it leaves is written, positions in its
-    /// order. Nothing (a pull, another edit) lands between the read and the
-    /// write, so the edit never rewrites a list it did not see. An error
-    /// from `edit` writes nothing and is returned.
-    /// The edit is stamped inside the transaction, as every local write is
-    /// (`Stamp`).
+    /// the list as stored and what it leaves is written, in its order.
+    /// Nothing (a pull, another edit) lands between the read and the write,
+    /// so the edit never rewrites a list it did not see. An error from
+    /// `edit` writes nothing and is returned.
+    ///
+    /// Each addon is a register of its own (plans/accounts-social-sync.md
+    /// 13): only the addons the edit added, removed, changed or moved are
+    /// stamped and queued, each in the transaction as every local write is
+    /// (`Stamp`), so another device's edits to other addons stay. An edit
+    /// that changed nothing stamps nothing.
     pub fn edit_addons<'a, E: From<LibraryError>>(
         &self,
         profile: &str,
@@ -461,20 +463,13 @@ impl Library {
         let mut refused = None;
         self.write(|c| {
             refuse_gone(c, profile)?;
-            let mut rows = addon_rows(c, profile)?;
-            let before = rows.clone();
+            let before = addon_rows(c, profile)?;
+            let mut rows = before.clone();
             if let Err(e) = edit(&mut rows) {
                 refused = Some(e);
                 return Ok(());
             }
-            // An edit that changed nothing (a retried request, a switch set
-            // to what it was) is no edit: no new stamp, nothing to push.
-            if rows == before && stored_hlc(c, coll::ADDONS, profile)?.is_some() {
-                return Ok(());
-            }
-            local(c, coll::ADDONS, &[profile], &stamp, |h| {
-                sql::set_addons(c, profile, &rows, h)
-            })
+            write_addons(c, profile, &before, rows, &stamp)
         })?;
         refused.map_or(Ok(()), Err)
     }
@@ -505,10 +500,16 @@ impl Library {
         self.read(|c| addon_rows(c, profile))
     }
 
-    /// The hlc of the profile's addon list register, or `None` when no list
-    /// was ever written for it here or pulled (a profile that never had one).
+    /// The newest hlc among the profile's addon registers, installed or
+    /// removed, or `None` when it never had an addon here or pulled.
     pub fn addon_list_hlc(&self, profile: &str) -> Result<Option<String>, LibraryError> {
-        self.read(|c| stored_hlc(c, coll::ADDONS, profile))
+        self.read(|c| {
+            c.query_row(
+                "SELECT MAX(hlc) FROM addons WHERE profile_id = ?1",
+                params![profile],
+                |r| r.get(0),
+            )
+        })
     }
 
     pub fn upsert_item<'a>(
@@ -747,7 +748,7 @@ fn open_connection(target: &str) -> Result<Connection, LibraryError> {
 fn addon_rows(c: &Connection, profile: &str) -> rusqlite::Result<Vec<AddonRow>> {
     let mut stmt = c.prepare(
         "SELECT transport_url, manifest_json, position, enabled, allow_private
-         FROM addons WHERE profile_id = ?1 ORDER BY position",
+         FROM addons WHERE profile_id = ?1 AND installed = 1 ORDER BY position, transport_url",
     )?;
     stmt.query_map(params![profile], |r| {
         Ok(AddonRow {
@@ -1201,4 +1202,118 @@ impl Library {
                 .collect()
         })
     }
+}
+
+/// Writes the addons whose register an edit changed, from the installed list
+/// `before` to `after` (its order is the new one; a link listed twice keeps
+/// its first place). Each added, toggled, re-manifested or moved addon is
+/// stamped on its own, and each one left out is kept as a removal.
+fn write_addons(
+    c: &Connection,
+    profile: &str,
+    before: &[AddonRow],
+    after: Vec<AddonRow>,
+    stamp: &Stamp<'_>,
+) -> rusqlite::Result<()> {
+    let mut seen = std::collections::HashSet::new();
+    let after: Vec<AddonRow> = after
+        .into_iter()
+        .filter(|a| seen.insert(a.transport_url.clone()))
+        .collect();
+    let old = |url: &str| before.iter().find(|b| b.transport_url == url);
+    let places = places(
+        &after
+            .iter()
+            .map(|a| old(&a.transport_url).map(|b| b.position))
+            .collect::<Vec<_>>(),
+    );
+    for (a, position) in after.iter().zip(places) {
+        let row = AddonRow {
+            position,
+            ..a.clone()
+        };
+        let same = old(&a.transport_url).is_some_and(|b| {
+            (&b.manifest_json, b.position, b.enabled, b.allow_private)
+                == (
+                    &row.manifest_json,
+                    row.position,
+                    row.enabled,
+                    row.allow_private,
+                )
+        });
+        if !same {
+            local(c, coll::ADDON, &[profile, &a.transport_url], stamp, |h| {
+                sql::set_addon(c, profile, &row, true, h)
+            })?;
+        }
+    }
+    for b in before.iter().filter(|b| !seen.contains(&b.transport_url)) {
+        local(c, coll::ADDON, &[profile, &b.transport_url], stamp, |h| {
+            sql::set_addon(c, profile, b, false, h)
+        })?;
+    }
+    Ok(())
+}
+
+/// New places for a list whose addons had the places `old` (`None` for a
+/// new one), in the list's new order. The longest run of old places already
+/// in order keeps them; every other addon gets a place between its
+/// neighbours, so a move or an insert changes only the addons that moved or
+/// came. When no whole number fits between two neighbours, the list is
+/// placed again in steps of `POSITION_STEP`.
+pub(crate) fn places(old: &[Option<i64>]) -> Vec<i64> {
+    // Longest strictly increasing run of the old places (patience sort).
+    let known: Vec<(usize, i64)> = old
+        .iter()
+        .enumerate()
+        .filter_map(|(i, p)| p.map(|p| (i, p)))
+        .collect();
+    let mut tails: Vec<usize> = Vec::new(); // index into `known` of each run length's smallest tail
+    let mut back: Vec<Option<usize>> = vec![None; known.len()];
+    for (k, &(_, p)) in known.iter().enumerate() {
+        let at = tails.partition_point(|&t| known[t].1 < p);
+        back[k] = at.checked_sub(1).map(|a| tails[a]);
+        if at == tails.len() {
+            tails.push(k);
+        } else {
+            tails[at] = k;
+        }
+    }
+    let mut kept: Vec<Option<i64>> = vec![None; old.len()];
+    let mut k = tails.last().copied();
+    while let Some(i) = k {
+        kept[known[i].0] = Some(known[i].1);
+        k = back[i];
+    }
+    // Every gap between kept places (or past either end) takes its addons
+    // spread evenly; a gap too narrow places the whole list again.
+    let mut out = vec![0; old.len()];
+    let mut i = 0;
+    while i < old.len() {
+        if let Some(p) = kept[i] {
+            out[i] = p;
+            i += 1;
+            continue;
+        }
+        let end = (i..old.len())
+            .find(|&j| kept[j].is_some())
+            .unwrap_or(old.len());
+        let n = (end - i) as i64;
+        let low = i.checked_sub(1).map(|j| out[j]);
+        let high = kept.get(end).copied().flatten();
+        let (low, high) = match (low, high) {
+            (Some(l), Some(h)) => (l, h),
+            (Some(l), None) => (l, l + (n + 1) * POSITION_STEP),
+            (None, Some(h)) => (h - (n + 1) * POSITION_STEP, h),
+            (None, None) => (0, (n + 1) * POSITION_STEP),
+        };
+        if high - low <= n {
+            return (1..=old.len() as i64).map(|r| r * POSITION_STEP).collect();
+        }
+        for (step, slot) in out[i..end].iter_mut().enumerate() {
+            *slot = low + (high - low) * (step as i64 + 1) / (n + 1);
+        }
+        i = end;
+    }
+    out
 }

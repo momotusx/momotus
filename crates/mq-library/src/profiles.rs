@@ -387,7 +387,7 @@ fn copy_owner_addons(
 ) -> rusqlite::Result<()> {
     let mut stmt = c.prepare(
         "SELECT transport_url, manifest_json, position, enabled, allow_private
-         FROM addons WHERE profile_id = ?1 ORDER BY position",
+         FROM addons WHERE profile_id = ?1 AND installed = 1 ORDER BY position, transport_url",
     )?;
     let addons = stmt
         .query_map(params![OWNER], |r| {
@@ -400,9 +400,12 @@ fn copy_owner_addons(
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    local(c, coll::ADDONS, &[id], stamp, |h| {
-        sql::set_addons(c, id, &addons, h)
-    })?;
+    // Each addon its own register, in the owner's places.
+    for a in &addons {
+        local(c, coll::ADDON, &[id, &a.transport_url], stamp, |h| {
+            sql::set_addon(c, id, a, true, h)
+        })?;
+    }
     let mut stmt = c.prepare("SELECT key, value_json FROM settings WHERE profile_id = ?1")?;
     let given = stmt
         .query_map(params![OWNER], |r| {

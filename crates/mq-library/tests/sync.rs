@@ -74,7 +74,7 @@ fn apply_is_last_writer_wins_and_idempotent() {
 }
 
 #[test]
-fn the_addon_list_is_one_register_even_when_empty() {
+fn removing_every_addon_keeps_each_removal() {
     let a = Library::temporary().unwrap();
     let b = Library::temporary().unwrap();
     let row = |url: &str| AddonRow {
@@ -101,12 +101,21 @@ fn the_addon_list_is_one_register_even_when_empty() {
     assert_eq!(b.apply(&all(&a)).unwrap(), 0);
     a.apply(&all(&b)).unwrap();
     assert!(a.addons("p").unwrap().is_empty());
-    let lists: Vec<_> = all(&a)
+    // Each addon is its own register, kept as a removal (plans/accounts-social-sync.md 13).
+    let addons: Vec<_> = all(&a)
         .into_iter()
-        .filter(|r| r.coll == coll::ADDONS)
+        .filter(|r| r.coll == coll::ADDON)
         .collect();
-    assert_eq!(lists.len(), 1);
-    assert_eq!(lists[0].hlc, hlc(2, 2));
+    assert_eq!(addons.len(), 2);
+    assert!(
+        addons
+            .iter()
+            .all(|r| r.hlc == hlc(2, 2) && r.value["installed"] == false)
+    );
+    assert!(
+        all(&a).iter().all(|r| r.coll != coll::ADDONS),
+        "no whole list is written"
+    );
 }
 
 #[test]
@@ -192,7 +201,11 @@ fn a_local_addon_edit_lands_above_a_newer_pulled_list_and_is_queued() {
             .collect()
     };
     assert_eq!(urls(&b), ["https://b/manifest.json"]);
-    assert_eq!(b.outbox(10).unwrap().records.len(), 1);
+    assert_eq!(
+        b.outbox(10).unwrap().records.len(),
+        2,
+        "a's removal, above R, and b"
+    );
     a.apply(&all(&b)).unwrap();
     assert_eq!(urls(&a), ["https://b/manifest.json"]);
     assert_eq!(all(&b), all(&a));
@@ -229,7 +242,12 @@ fn a_pull_during_an_addon_edit_lands_after_it_and_keeps_the_other_devices_addon(
     let pulled = all(&a);
     std::thread::scope(|s| {
         b.edit_addons("p", &hlc(5, 2), |rows| {
-            assert_eq!(*rows, [row(x)]);
+            assert_eq!(
+                rows.iter()
+                    .map(|r| r.transport_url.as_str())
+                    .collect::<Vec<_>>(),
+                [x]
+            );
             let (done, applied) = std::sync::mpsc::channel();
             let (b, pulled) = (&b, &pulled);
             s.spawn(move || {
@@ -245,9 +263,9 @@ fn a_pull_during_an_addon_edit_lands_after_it_and_keeps_the_other_devices_addon(
         })
         .unwrap();
     });
-    // The pull applied after the edit, and A's newer list won as a whole:
-    // y is kept, never overwritten by an edit of the list before it.
-    assert_eq!(urls(&b), [x, y]);
+    // The pull applied after the edit, and each addon merged on its own:
+    // A's y and B's z are both kept (plans/accounts-social-sync.md 13).
+    assert_eq!(urls(&b), [x, y, z]);
 }
 
 #[test]
