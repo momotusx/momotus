@@ -1703,5 +1703,37 @@ async fn addons_follow_the_account_both_ways_through_a_relay() {
         [two.clone(), one.clone()],
         "A shows B's edits"
     );
+
+    // A recommended addon the account was given, turned off on B, stays off
+    // on both, through more rounds on each.
+    let given = shown(&core_a)
+        .into_iter()
+        .find(|u| *u != one && *u != two && *u != three)
+        .expect("the newer defaults were given");
+    let (n, text) = call(json!({"op": "setAddonEnabled", "url": given, "enabled": false}));
+    b.handle_text(&text).await;
+    assert_eq!(reply_to(&mut rx_b, n).await["ok"], true);
+    for _ in 0..2 {
+        let (n, text) = call(json!({"op": "syncNow", "record": record_b}));
+        b.handle_text(&text).await;
+        assert_eq!(reply_to(&mut rx_b, n).await["ok"], true);
+        let (n, text) = call(json!({"op": "syncNow", "record": record_a}));
+        a.handle_text(&text).await;
+        assert_eq!(reply_to(&mut rx_a, n).await["ok"], true);
+    }
+    let enabled = |core: &Core| {
+        AddonsView::open(core)
+            .snapshot()
+            .addons
+            .into_iter()
+            .find(|a| a.url == given)
+            .map(|a| a.enabled)
+    };
+    assert_eq!(
+        (enabled(&core_a), enabled(&core_b)),
+        (Some(false), Some(false)),
+        "off stays off"
+    );
+    assert_eq!(shown(&core_a), shown(&core_b));
     let _ = std::fs::remove_dir_all(&dir);
 }
