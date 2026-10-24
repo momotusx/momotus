@@ -19,6 +19,14 @@ use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() {
+    // Warnings and errors to stderr (journald under systemd, which adds the
+    // time); stdout keeps only the one-line ready event.
+    tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
+        .with_ansi(false)
+        .without_time()
+        .with_max_level(tracing::Level::INFO)
+        .init();
     let mut db = PathBuf::from("mq-sync.sqlite");
     let mut listen: SocketAddr = ([127, 0, 0, 1], 8787).into();
     let mut config = Config::default();

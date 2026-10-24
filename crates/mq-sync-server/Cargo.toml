@@ -22,6 +22,8 @@ hex = "0.4"
 base64 = "0.22"
 getrandom = "0.3"
 tracing.workspace = true
+# The binary's log lines (main.rs), to stderr.
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
 # Sign-in (src/identity.rs): provider calls, ID token checks, Apple's secrets.
 mq-http = { path = "../mq-http" }
 ring = "0.17"

@@ -43,9 +43,13 @@ enum Op {
         key: u8,
         value: u8,
     },
-    Addons {
+    /// One addon of the list (plans/accounts-social-sync.md 13): action 0
+    /// installs it (or switches it, when installed), 1 removes it (or
+    /// installs it, when absent), 2 moves it first (or installs it).
+    Addon {
         device: usize,
-        order: Vec<usize>,
+        url: usize,
+        action: u8,
     },
     /// App restart: a fresh clock seeded from the stored registers.
     Restart {
@@ -137,11 +141,11 @@ fn op() -> impl Strategy<Value = Op> {
             key,
             value
         }),
-        (
-            device.clone(),
-            proptest::sample::subsequence(vec![0usize, 1, 2], 0..=3).prop_shuffle()
-        )
-            .prop_map(|(device, order)| Op::Addons { device, order }),
+        (device.clone(), 0..3usize, 0..3u8).prop_map(|(device, url, action)| Op::Addon {
+            device,
+            url,
+            action
+        }),
         (device.clone(), 0..2u8, 0..3u8).prop_map(|(device, item, group)| Op::Memory {
             device,
             item,
@@ -234,19 +238,31 @@ impl Device {
                     .unwrap();
                 ((coll::SETTINGS, key(&[PROFILE, &name])), hlc)
             }
-            Op::Addons { order, .. } => {
-                let rows: Vec<AddonRow> = order
-                    .iter()
-                    .map(|&i| AddonRow {
-                        transport_url: URLS[i].into(),
-                        manifest_json: format!("{{\"n\":{i}}}"),
-                        position: 0,
-                        enabled: i != 1,
-                        allow_private: false,
-                    })
-                    .collect();
-                lib.set_addons(PROFILE, &rows, &hlc).unwrap();
-                ((coll::ADDONS, key(&[PROFILE])), hlc)
+            Op::Addon { url, action, .. } => {
+                let u = URLS[*url];
+                // Every action changes the addon, so its register is written.
+                lib.edit_addons(PROFILE, &hlc, |rows: &mut Vec<AddonRow>| {
+                    let at = rows.iter().position(|r| r.transport_url == u);
+                    match (at, action) {
+                        (Some(i), 0) => rows[i].enabled = !rows[i].enabled,
+                        (Some(i), 1) => drop(rows.remove(i)),
+                        (Some(0), _) => rows[0].enabled = !rows[0].enabled,
+                        (Some(i), _) => {
+                            let moved = rows.remove(i);
+                            rows.insert(0, moved);
+                        }
+                        (None, _) => rows.push(AddonRow {
+                            transport_url: u.into(),
+                            manifest_json: format!("{{\"n\":{url}}}"),
+                            position: 0,
+                            enabled: true,
+                            allow_private: false,
+                        }),
+                    }
+                    Ok::<_, mq_library::LibraryError>(())
+                })
+                .unwrap();
+                ((coll::ADDON, key(&[PROFILE, u])), hlc)
             }
             Op::Memory { item, group, .. } => {
                 let item_id = format!("tt{item}");
@@ -267,14 +283,9 @@ fn written(op: &Op, value: &serde_json::Value) -> bool {
         Op::Watched { watched, .. } => value["watched"] == *watched,
         Op::InLibrary { added, .. } => value["inLibrary"] == *added,
         Op::Setting { value: v, .. } => value["valueJson"].as_str() == Some(v.to_string().as_str()),
-        Op::Addons { order, .. } => {
-            let urls: Vec<&str> = order.iter().map(|&i| URLS[i]).collect();
-            let stored: Vec<&str> = value["addons"]
-                .as_array()
-                .map(|a| a.iter().filter_map(|x| x["url"].as_str()).collect())
-                .unwrap_or_default();
-            urls == stored
-        }
+        // Which way an action went depends on the state it met; the oracle
+        // checks the addon's register holds its newest write.
+        Op::Addon { url, .. } => value["url"] == URLS[*url] && value["installed"].is_boolean(),
         Op::Memory { group, .. } => value["bingeGroup"] == format!("g{group}"),
         Op::StalePullWrite { position, .. } => value["positionMs"] == *position,
         _ => true,
@@ -602,7 +613,7 @@ async fn run(ops: Vec<Op>, slow: bool) {
             | Op::Watched { device, .. }
             | Op::InLibrary { device, .. }
             | Op::Setting { device, .. }
-            | Op::Addons { device, .. }
+            | Op::Addon { device, .. }
             | Op::Memory { device, .. } => {
                 let (register, _) = devices[*device].apply(op);
                 // Read your own write: a local edit always lands, even over a

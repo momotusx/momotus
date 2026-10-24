@@ -63,6 +63,11 @@ const MAX_REQUEST: usize = 8 * 1024 * 1024;
 const RECORD_OVERHEAD: i64 = 96;
 /// Pairing slots open at once across the relay, and how long one lives.
 const MAX_PAIRINGS: i64 = 1000;
+/// Pairing slots one client address may hold open at once: a TV holds one,
+/// a household behind one address joining a few devices stays far below,
+/// and a handful of addresses can no longer fill `MAX_PAIRINGS` and stop
+/// every QR join (plans/accounts-social-sync.md, review A P2-9).
+const PAIRINGS_PER_CLIENT: usize = 10;
 const PAIRING_MS: u64 = 10 * 60 * 1000;
 /// Largest sealed pairing blob.
 const MAX_SMALL_BLOB: usize = 64 * 1024;
@@ -117,6 +122,9 @@ impl Default for Config {
     }
 }
 
+/// Each client address's open pairing slots: (slot id, when it ends).
+type OpenPairings = HashMap<IpAddr, Vec<(String, u64)>>;
+
 #[derive(Clone)]
 struct AppState {
     db: Arc<Mutex<Connection>>,
@@ -139,6 +147,10 @@ struct AppState {
     identity: Option<Arc<identity::Identity>>,
     /// Accounts each client address created by replay in the grace hour.
     grace_created: Arc<Mutex<HashMap<IpAddr, u32>>>,
+    /// Pairing slots each client address opened, with when they end
+    /// (`PAIRINGS_PER_CLIENT`). In memory: a restart forgets them, and the
+    /// relay-wide cap still holds.
+    open_pairings: Arc<Mutex<OpenPairings>>,
 }
 
 /// Opens (or creates) the relay database at `db` and its roster journal
@@ -179,6 +191,7 @@ pub fn router(db: &Path, config: Config) -> Result<Router, String> {
         clock: Arc::default(),
         identity,
         grace_created: Arc::default(),
+        open_pairings: Arc::default(),
     };
     if tokio::runtime::Handle::try_current().is_ok() {
         tokio::spawn(housekeeping(state.clone(), every));
@@ -1614,7 +1627,11 @@ async fn replay_roster(
     headers: HeaderMap,
     Json(request): Json<ReplayRequest>,
 ) -> Response {
-    if limited(&state, client(&state, peer, &headers), REPLAY) {
+    let address = match client(&state, peer, &headers) {
+        Ok(address) => address,
+        Err(refused) => return refused,
+    };
+    if limited(&state, address, REPLAY) {
         return error(StatusCode::TOO_MANY_REQUESTS, "too many replays");
     }
     let mut db = lock(&state);
@@ -1637,7 +1654,7 @@ async fn replay_roster(
         .optional();
     match exists {
         // Replaying an account from its genesis creates it.
-        Ok(None) if !may_replay_create(&state, &headers, client(&state, peer, &headers)) => {
+        Ok(None) if !may_replay_create(&state, &headers, address) => {
             return error(StatusCode::FORBIDDEN, "an invite is required");
         }
         Ok(_) => {}
@@ -1663,7 +1680,11 @@ async fn fresh_token(
     headers: HeaderMap,
     Json(grant): Json<TokenGrant>,
 ) -> Response {
-    if limited(&state, client(&state, peer, &headers), TOKENS) {
+    let address = match client(&state, peer, &headers) {
+        Ok(address) => address,
+        Err(refused) => return refused,
+    };
+    if limited(&state, address, TOKENS) {
         return error(StatusCode::TOO_MANY_REQUESTS, "too many token requests");
     }
     let now = state.now_ms();
@@ -2176,33 +2197,44 @@ pub(crate) fn relay_limited(state: &AppState, (which, _, global): (usize, u32, u
     spend(&mut limits.global[which], now, global)
 }
 
-/// The caller's address for rate limits: the peer, or the last
-/// `X-Forwarded-For` hop (the one the trusted proxy appended; earlier hops
-/// are whatever the client wrote). IPv6 counts per /64, which one client
-/// usually holds whole.
-fn client(state: &AppState, peer: SocketAddr, headers: &HeaderMap) -> IpAddr {
-    let forwarded = || {
-        headers
-            .get("x-forwarded-for")?
-            .to_str()
-            .ok()?
-            .rsplit(',')
-            .next()?
-            .trim()
-            .parse()
-            .ok()
-    };
+/// The caller's address for rate limits. Without a proxy, the peer. Behind
+/// the trusted proxy (`--trust-proxy`, Cloudflare's tunnel): Cloudflare's
+/// own `CF-Connecting-IP`, which a client cannot set, else the last
+/// `X-Forwarded-For` hop (the one the proxy appended; earlier hops are
+/// whatever the client wrote); with neither, the request is refused, since
+/// the peer is then the proxy and every client would share one budget.
+/// IPv6 counts per /64, which one client usually holds whole.
+// The refusal is the answer itself, as in identity.rs's handlers.
+#[allow(clippy::result_large_err)]
+fn client(state: &AppState, peer: SocketAddr, headers: &HeaderMap) -> Result<IpAddr, Response> {
+    let header = |name: &str| headers.get(name)?.to_str().ok();
     let ip = match state.config.trust_proxy {
-        true => forwarded().unwrap_or(peer.ip()),
+        true => header("cf-connecting-ip")
+            .and_then(|v| v.trim().parse().ok())
+            .or_else(|| {
+                header("x-forwarded-for")?
+                    .rsplit(',')
+                    .next()?
+                    .trim()
+                    .parse()
+                    .ok()
+            })
+            .ok_or_else(|| {
+                identity::coded(
+                    StatusCode::BAD_REQUEST,
+                    "noClientAddress",
+                    "the proxy in front of this relay named no client address",
+                )
+            })?,
         false => peer.ip(),
     };
-    match ip {
+    Ok(match ip {
         IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
             Some(v4) => IpAddr::V4(v4),
             None => IpAddr::V6((u128::from(v6) & !u128::from(u64::MAX)).into()),
         },
         v4 => v4,
-    }
+    })
 }
 
 /// Serves the relay with peer addresses available to the rate limits.
@@ -2233,11 +2265,45 @@ async fn open_pairing(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
 ) -> Response {
-    if limited(&state, client(&state, peer, &headers), OPEN_PAIRING) {
-        return error(StatusCode::TOO_MANY_REQUESTS, "too many pairings started");
+    let address = match client(&state, peer, &headers) {
+        Ok(address) => address,
+        Err(refused) => return refused,
+    };
+    // Coded `busy`, so the apps say to try again in a moment.
+    if limited(&state, address, OPEN_PAIRING) {
+        return identity::coded(
+            StatusCode::TOO_MANY_REQUESTS,
+            "busy",
+            "too many pairings started",
+        );
     }
     let now = state.now_ms();
     let db = lock(&state);
+    let mut open_pairings = state
+        .open_pairings
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    if open_pairings.len() > 50_000 {
+        open_pairings.retain(|_, held| held.iter().any(|(_, expires_ms)| *expires_ms > now));
+    }
+    // The address's slots still open: neither ended nor taken.
+    let held = open_pairings.entry(address).or_default();
+    held.retain(|(id, expires_ms)| {
+        *expires_ms > now
+            && db
+                .query_row("SELECT 1 FROM pairing WHERE id = ?1", params![id], |_| {
+                    Ok(())
+                })
+                .optional()
+                .is_ok_and(|row| row.is_some())
+    });
+    if held.len() >= PAIRINGS_PER_CLIENT {
+        return identity::coded(
+            StatusCode::TOO_MANY_REQUESTS,
+            "busy",
+            "too many pairings open from this address",
+        );
+    }
     let open = (|| -> rusqlite::Result<i64> {
         db.execute(
             "DELETE FROM pairing WHERE expires_ms <= ?1",
@@ -2262,6 +2328,7 @@ async fn open_pairing(
         params![id, token_hash(&take), expires_ms as i64],
     ) {
         Ok(_) => {
+            held.push((id.clone(), expires_ms));
             Json(json!({ "pairing": id, "take": take, "expiresMs": expires_ms })).into_response()
         }
         Err(e) => storage_error("open pairing", e),
@@ -2403,7 +2470,11 @@ async fn redeem_kit(
     headers: HeaderMap,
     Json(redeem): Json<Redeem>,
 ) -> Response {
-    if limited(&state, client(&state, peer, &headers), REDEEM_KIT) {
+    let address = match client(&state, peer, &headers) {
+        Ok(address) => address,
+        Err(refused) => return refused,
+    };
+    if limited(&state, address, REDEEM_KIT) {
         return error(StatusCode::TOO_MANY_REQUESTS, "too many recovery attempts");
     }
     let not_found = || {
@@ -2476,6 +2547,7 @@ mod tests {
             clock: Arc::default(),
             identity: None,
             grace_created: Arc::default(),
+            open_pairings: Arc::default(),
         };
         let create = || {
             let (entry, _) =
@@ -2527,6 +2599,7 @@ mod tests {
             clock: Arc::default(),
             identity: None,
             grace_created: Arc::default(),
+            open_pairings: Arc::default(),
         };
         let member = MemberSecret::generate();
         let genesis = || Roster::genesis_entry(&member, Hex(random()), "a", now_ms()).0;

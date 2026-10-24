@@ -974,7 +974,7 @@ async fn start_flow(
     request: StartRequest,
 ) -> Result<Response, Response> {
     let id = identity(state)?;
-    let address = client(state, peer, headers);
+    let address = client(state, peer, headers)?;
     if limited(state, address, AUTH) {
         return Err(busy());
     }
@@ -1295,7 +1295,7 @@ pub(crate) async fn take(
 ) -> Response {
     let answer = (|| {
         identity(&state)?;
-        if limited(&state, client(&state, peer, &headers), AUTH) {
+        if limited(&state, client(&state, peer, &headers)?, AUTH) {
             return Err(busy());
         }
         let now = state.now_ms();
@@ -1345,7 +1345,11 @@ pub(crate) async fn native(
         Ok(id) => id,
         Err(r) => return r,
     };
-    if limited(&state, client(&state, peer, &headers), AUTH) {
+    let address = match client(&state, peer, &headers) {
+        Ok(address) => address,
+        Err(refused) => return refused,
+    };
+    if limited(&state, address, AUTH) {
         return busy();
     }
     let now = state.now_ms();
@@ -1692,7 +1696,7 @@ pub(crate) async fn delete_request(
 ) -> Response {
     let answer = (|| {
         identity(&state)?;
-        if limited(&state, client(&state, peer, &headers), AUTH) {
+        if limited(&state, client(&state, peer, &headers)?, AUTH) {
             return Err(busy());
         }
         let now = state.now_ms();
@@ -1817,7 +1821,11 @@ pub(crate) async fn apple_notification(
     let Some(apple) = id.file.apple.as_ref() else {
         return error(StatusCode::NOT_FOUND, "no Apple sign-in here");
     };
-    if client_limited(&state, client(&state, peer, &headers), APPLE_NOTICES) {
+    let address = match client(&state, peer, &headers) {
+        Ok(address) => address,
+        Err(refused) => return refused,
+    };
+    if client_limited(&state, address, APPLE_NOTICES) {
         return busy();
     }
     let now = state.now_ms();

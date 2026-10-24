@@ -1106,10 +1106,24 @@ async fn cancel_and_unlink_drops_only_this_accounts_link() {
 /// so Apple's own still lands.
 #[tokio::test]
 async fn forged_notices_from_many_addresses_leave_room_for_apple() {
-    let relay = Relay::with(|c| c.trust_proxy = true).await;
+    let relay = Relay::new().await;
     Device::create(&relay, &relay.sign_in("apple", "apple-1").await, false)
         .await
         .unwrap();
+    // The notices come through a trusted proxy (the same database behind
+    // `--trust-proxy`), which names each sender's address; the sign-in above
+    // came straight, as a proxy-trusting relay refuses a request naming none.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let proxied = format!("http://{}", listener.local_addr().unwrap());
+    let config = Config {
+        clock_offset_ms: relay.offset.clone(),
+        public_host: Some("127.0.0.1".into()),
+        identity: Some(identity(&relay.mock, &proxied, KEY, &relay.apple_key)),
+        trust_proxy: true,
+        ..Config::default()
+    };
+    let app = router(&relay.db, config).unwrap();
+    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
@@ -1119,7 +1133,7 @@ async fn forged_notices_from_many_addresses_leave_room_for_apple() {
         "events": json!({ "type": "consent-revoked", "sub": "apple-1", "event_time": now }).to_string(),
     });
     let post = |from: String, payload: String| {
-        let url = format!("{}/v1/auth/apple/notifications", relay.url);
+        let url = format!("{proxied}/v1/auth/apple/notifications");
         async move {
             let headers = vec![("x-forwarded-for".to_owned(), from)];
             status(

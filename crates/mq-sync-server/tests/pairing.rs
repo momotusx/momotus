@@ -548,8 +548,16 @@ async fn reporting_a_lost_phone_after_recovering_keeps_what_the_user_holds() {
 
 /// The status of a POST from `client`, as a trusted proxy would forward it.
 async fn status_from(url: &str, body: serde_json::Value, client: &str) -> u16 {
+    status_with(url, body, &[("x-forwarded-for", client)]).await
+}
+
+/// The status of a POST carrying `headers`.
+async fn status_with(url: &str, body: serde_json::Value, headers: &[(&str, &str)]) -> u16 {
     let options = RequestOptions {
-        headers: vec![("x-forwarded-for".into(), client.into())],
+        headers: headers
+            .iter()
+            .map(|(name, value)| ((*name).into(), (*value).into()))
+            .collect(),
         ..local()
     };
     match http().post_json(url, &body, &options).await {
@@ -568,15 +576,16 @@ async fn one_flooding_client_does_not_block_anyone_else() {
     let (server, _) = relay_with(config).await;
     let open = format!("{server}/v1/pairings");
     let opens = |client: &'static str| status_from(&open, serde_json::json!({}), client);
-    for _ in 0..20 {
+    // Ten open slots per address (PAIRINGS_PER_CLIENT), under the minute's 20.
+    for _ in 0..10 {
         assert_eq!(opens("198.51.100.7").await, 200);
     }
-    assert_eq!(opens("198.51.100.7").await, 429, "over its own budget");
+    assert_eq!(opens("198.51.100.7").await, 429, "over its own slots");
     // Hops before the proxy's are whatever the client wrote.
     assert_eq!(opens("203.0.113.1, 198.51.100.7").await, 429);
     assert_eq!(opens("203.0.113.9").await, 200, "another client");
     // An IPv6 client holds its whole /64.
-    for _ in 0..20 {
+    for _ in 0..10 {
         assert_eq!(opens("2001:db8::1").await, 200);
     }
     assert_eq!(opens("2001:db8::2").await, 429);
@@ -669,4 +678,92 @@ async fn an_approval_ended_late_drops_the_devices_it_let_in() {
             .unwrap_err();
         assert!(matches!(err, SyncError::Dropped), "{err:?}");
     }
+}
+
+/// A handful of addresses can no longer hold every pairing slot open: each
+/// holds at most ten, and an ended slot frees its place.
+#[tokio::test]
+async fn one_address_holds_ten_pairing_slots_at_most() {
+    let offset = std::sync::Arc::<std::sync::atomic::AtomicI64>::default();
+    let config = Config {
+        trust_proxy: true,
+        clock_offset_ms: offset.clone(),
+        ..Config::default()
+    };
+    let relay = relay_with(config).await;
+    let open = format!("{}/v1/pairings", relay.0);
+    let opens = |client: &'static str| status_from(&open, serde_json::json!({}), client);
+    for _ in 0..10 {
+        assert_eq!(opens("198.51.100.7").await, 200);
+    }
+    assert_eq!(opens("198.51.100.7").await, 429, "its eleventh open slot");
+    assert_eq!(
+        opens("203.0.113.9").await,
+        200,
+        "another address still opens one"
+    );
+    // The count lives in memory only: no address in the database, so none in
+    // a backup (the privacy page says the relay keeps none).
+    let (_, db) = &relay;
+    for file in [db.clone(), db.with_extension("sqlite-wal")] {
+        let bytes = std::fs::read(&file).unwrap_or_default();
+        for address in ["198.51.100.7", "203.0.113.9"] {
+            assert!(
+                !bytes
+                    .windows(address.len())
+                    .any(|w| w == address.as_bytes()),
+                "{address} in {}",
+                file.display()
+            );
+        }
+    }
+    // Ten minutes on, the slots have ended and the address may open again.
+    offset.store(11 * 60 * 1000, std::sync::atomic::Ordering::Relaxed);
+    assert_eq!(opens("198.51.100.7").await, 200);
+}
+
+/// Behind the trusted proxy the client is Cloudflare's `CF-Connecting-IP`,
+/// then the proxy's own `X-Forwarded-For` hop; with neither the request is
+/// refused rather than counted against the proxy's address, which every
+/// client would share.
+#[tokio::test]
+async fn behind_the_proxy_the_client_is_cloudflares_address() {
+    let config = Config {
+        trust_proxy: true,
+        ..Config::default()
+    };
+    let (server, _) = relay_with(config).await;
+    let open = format!("{server}/v1/pairings");
+    let body = || serde_json::json!({});
+    // CF-Connecting-IP names the client; an X-Forwarded-For that changes on
+    // every request does not make it another one.
+    for n in 0..10 {
+        let hop = format!("192.0.2.{n}");
+        let headers = [
+            ("cf-connecting-ip", "198.51.100.7"),
+            ("x-forwarded-for", hop.as_str()),
+        ];
+        assert_eq!(status_with(&open, body(), &headers).await, 200);
+    }
+    let headers = [
+        ("cf-connecting-ip", "198.51.100.7"),
+        ("x-forwarded-for", "192.0.2.99"),
+    ];
+    assert_eq!(status_with(&open, body(), &headers).await, 429);
+    // Without it, the last X-Forwarded-For hop, as before.
+    assert_eq!(
+        status_with(&open, body(), &[("x-forwarded-for", "203.0.113.9")]).await,
+        200
+    );
+    // Neither: refused, for every budgeted route.
+    assert_eq!(status_with(&open, body(), &[]).await, 400);
+    let redeem = format!("{server}/v1/recovery/redeem");
+    let kit = serde_json::json!({ "lookup": "00", "auth": "00" });
+    assert_eq!(status_with(&redeem, kit, &[]).await, 400);
+    // A relay with no proxy in front counts the peer and needs no header.
+    let (direct, _) = relay().await;
+    assert_eq!(
+        status_with(&format!("{direct}/v1/pairings"), body(), &[]).await,
+        200
+    );
 }
