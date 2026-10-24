@@ -2080,3 +2080,30 @@ fn a_kept_file_is_never_evicted_nor_counted_in_a_window() {
     assert!(h.s.trimmable(0).iter().all(|&p| p >= 32));
     assert!(h.s.kept().get(0) && h.s.kept().get(31));
 }
+
+/// A reader's readahead goes before a download: with every piece the
+/// reader needs now verified, the first free slots take its readahead,
+/// not the other file's download.
+#[test]
+fn readahead_goes_before_a_download() {
+    let g = Geometry::new(64 * KIB as u32, &[8 * MIB, 8 * MIB]).unwrap();
+    let cfg = Config {
+        max_depth: 4,
+        min_depth: 4,
+        ..small_cfg()
+    };
+    let mut h = Harness::new(g, cfg);
+    h.s.set_bulk(1, true);
+    for piece in (0..5).chain([127]) {
+        h.send(Event::PieceVerified { piece });
+    }
+    open(&mut h, 1, 0, 0, None);
+    h.peer(1, 4 * MIB);
+    let first: Vec<PieceIdx> = h.out.iter().map(|&(b, _)| h.geo.piece_of(b)).collect();
+    assert!(
+        first
+            .iter()
+            .all(|&p| h.s.class_of(p) == Some(Class::Readahead)),
+        "{first:?}"
+    );
+}

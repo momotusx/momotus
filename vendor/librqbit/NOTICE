@@ -18,7 +18,7 @@ Marquee changes (each changed spot carries a "Marquee fork" comment):
 
 - src/torrent_state/live/ext.rs (new): the external scheduler hook,
   `ExtSched` and `ExtEvent`, `TorrentStateLive::ext_request` and
-  `ext_cancel`, `ManagedTorrent::ext_have_pieces`.
+  `ext_cancel`, `ManagedTorrent::ext_have_pieces`, `ManagedTorrent::ext_flush_have`.
 - src/torrent_state/live/mod.rs: event calls at the bitfield, have, choke,
   unchoke, extended handshake, peer death, block arrival and hash check
   sites; in drive mode the chunk requester only keeps the peer interested,

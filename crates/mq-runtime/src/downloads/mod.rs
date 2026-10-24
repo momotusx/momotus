@@ -1545,3 +1545,32 @@ fn torrent_of(row: &DownloadRecord) -> Option<String> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A stream from the network holds downloads (4.4), but a torrent's own
+    /// download goes on while that torrent plays: its scheduler puts the
+    /// reader first (engine r1 P1-3).
+    #[tokio::test]
+    async fn a_stream_holds_every_download_but_its_own_torrents() {
+        let core = Core::temporary("default").unwrap();
+        let d = core.downloads();
+        d.set_link(Link::default());
+        let (mine, other) = ("a".repeat(40), "b".repeat(40));
+        assert_eq!(d.held_by(false, Some(&mine)), None);
+        let playing = d.streaming(Some(&mine));
+        assert_eq!(d.held_by(false, Some(&mine)), None);
+        assert_eq!(
+            d.held_by(false, Some(&other)),
+            Some(DownloadReason::Playing)
+        );
+        assert_eq!(d.held_by(false, None), Some(DownloadReason::Playing));
+        drop(playing);
+        let http = d.streaming(None);
+        assert_eq!(d.held_by(false, Some(&mine)), Some(DownloadReason::Playing));
+        drop(http);
+        assert_eq!(d.held_by(false, None), None);
+    }
+}

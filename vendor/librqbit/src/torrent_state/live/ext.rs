@@ -145,4 +145,14 @@ impl ManagedTorrent {
         self.with_chunk_tracker(|ct| ct.get_have_pieces().as_bytes().to_vec())
             .ok()
     }
+
+    /// Writes the bitfield's claims since the last flush now, the data
+    /// synced first: an offline download finished while its torrent stays
+    /// live (a stream of another of its files) is on disk for a relaunch.
+    pub fn ext_flush_have(&self) {
+        if let Some(live) = self.live() {
+            live.lock_write("ext_flush_have")
+                .try_flush_bitv(&live.shared, false);
+        }
+    }
 }

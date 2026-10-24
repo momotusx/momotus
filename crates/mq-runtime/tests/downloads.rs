@@ -893,3 +893,30 @@ async fn a_torrent_download_plays_offline() {
         others.board().get()
     );
 }
+
+/// Online, a partial torrent download whose start is not on disk (its
+/// swarm may be dead) is no pick: the ranking places the versions the
+/// addons list (apps r2 P2-2).
+#[cfg(feature = "torrent")]
+#[tokio::test]
+async fn a_partial_torrent_with_nothing_on_disk_is_no_pick() {
+    let core = bare();
+    let wire = serde_json::json!({ "streams": [{
+        "name": "Fixture\n1080p", "title": "Sintel.2010.1080p.WEB.x264-GROUP",
+        "infoHash": "c".repeat(40), "fileIdx": 1
+    }]});
+    let decoded = mq_protocol::decode_streams(wire.to_string().as_bytes()).unwrap();
+    let stream = mq_streams::normalize(&decoded.streams[0], "local", "Local", 0, 0);
+    let version = serde_json::json!({
+        "key": stream.key,
+        "chain": [{ "stream": stream }],
+        "torrent": { "hash": "c".repeat(40), "file": 1, "name": "Sintel.mkv" }
+    });
+    let mut row = record("t1", ITEM, ITEM, "paused", version);
+    row.bytes_done = 4 << 20;
+    row.bytes_total = Some(100 << 20);
+    core.library().add_download(&row).unwrap();
+    core.downloads().set_link(Link::default());
+    let view = VersionsView::open(&core, params());
+    assert!(view.snapshot().recommended.is_none());
+}

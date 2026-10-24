@@ -141,6 +141,8 @@ pub struct Scheduler {
     kept_files: Bitfield,
     /// A reader opened with none before: queued Bulk blocks give way.
     preempt_bulk: bool,
+    /// A download stopped: requests for pieces no class wants go.
+    drop_unwanted: bool,
 }
 
 impl Scheduler {
@@ -196,6 +198,7 @@ impl Scheduler {
             bulk: vec![false; files],
             kept_files: Bitfield::new(pieces),
             preempt_bulk: false,
+            drop_unwanted: false,
         }
     }
 
@@ -208,6 +211,9 @@ impl Scheduler {
         {
             *b = on;
             self.dirty = true;
+            // A stopped download's requests go at once (the disk under
+            // its reserve): what is in flight lands, nothing more.
+            self.drop_unwanted |= !on;
         }
     }
 
@@ -1229,6 +1235,17 @@ impl Scheduler {
                 .filter(|&(_, b)| self.class[self.geo.piece_of(b) as usize] == Some(Class::Bulk))
                 .collect();
             for (id, b) in bulk {
+                self.cancel(id, b, out);
+            }
+        }
+        if std::mem::take(&mut self.drop_unwanted) {
+            let unwanted: Vec<(PeerId, BlockIdx)> = self
+                .peers
+                .iter()
+                .flat_map(|(&id, p)| p.queue.iter().map(move |r| (id, r.block)))
+                .filter(|&(_, b)| self.class[self.geo.piece_of(b) as usize].is_none())
+                .collect();
+            for (id, b) in unwanted {
                 self.cancel(id, b, out);
             }
         }

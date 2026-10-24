@@ -398,6 +398,82 @@ async fn scrape_in(
     }))
 }
 
+/// `mq download-magnet`: one file of a torrent downloaded whole with no
+/// reader, upload off, as an offline download (plans/offline-downloads.md
+/// 4.6). Reports the time to metadata, the bytes, the seconds and the mean
+/// rate, for bench/downloads.
+pub async fn download_magnet(
+    input: &str,
+    file: Option<usize>,
+    data_dir: Option<PathBuf>,
+    peer: Option<std::net::SocketAddr>,
+    timeout: Duration,
+) -> Result<Value, String> {
+    let (hash, trackers) = parse_magnet(input)?;
+    let temporary = data_dir.is_none();
+    let dir = data_dir.unwrap_or_else(|| {
+        std::env::temp_dir().join(format!("mq-download-{}", std::process::id()))
+    });
+    let started = Instant::now();
+    let result = async {
+        let http = HttpClient::new(ClientConfig::default()).map_err(|e| e.to_string())?;
+        let local: Vec<std::net::IpAddr> = peer.iter().map(|p| p.ip()).collect();
+        let config = EngineConfig {
+            upload: false,
+            discovery: peer.is_none(),
+            ..EngineConfig::new(&dir, http.torrent_scope(&local))
+        };
+        let engine = Engine::start(config).await.map_err(|e| e.to_string())?;
+        let peers: Vec<std::net::SocketAddr> = peer.into_iter().collect();
+        let t = tokio::time::timeout(
+            METADATA_TIMEOUT,
+            engine.add_magnet(&hash, &trackers, &peers),
+        )
+        .await
+        .map_err(|_| "no metadata in time".to_owned())?
+        .map_err(|e| e.to_string())?;
+        let metadata_ms = ms(started);
+        let hint = file.map_or(FileHint::Largest, FileHint::Index);
+        let index = engine
+            .select_file(t, "", &hint)
+            .await
+            .map_err(|e| e.to_string())?;
+        let handle = engine.download(t, index).await.map_err(|e| e.to_string())?;
+        let begun = Instant::now();
+        let mut first_byte_ms = None;
+        let progress = loop {
+            let p = handle.progress().await;
+            if p.have > 0 && first_byte_ms.is_none() {
+                first_byte_ms = Some(ms(begun));
+            }
+            if p.have >= p.len || begun.elapsed() >= timeout || p.failed.is_some() {
+                break p;
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        };
+        let secs = begun.elapsed().as_secs_f64();
+        handle.stop().await;
+        Ok::<_, String>(json!({
+            "event": "download",
+            "hash": hash,
+            "file": index,
+            "metadata_ms": metadata_ms,
+            "first_piece_ms": first_byte_ms,
+            "bytes": progress.have,
+            "len": progress.len,
+            "whole": progress.have >= progress.len,
+            "seconds": (secs * 10.0).round() / 10.0,
+            "mean_mb_s": ((progress.have as f64 / 1e6 / secs.max(0.001)) * 100.0).round() / 100.0,
+            "failed": progress.failed,
+        }))
+    }
+    .await;
+    if temporary {
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+    result
+}
+
 pub async fn play_magnet(input: &str, o: MagnetOptions) -> Result<Value, String> {
     let (hash, trackers) = parse_magnet(input)?;
     let temporary = o.data_dir.is_none();

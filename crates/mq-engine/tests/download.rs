@@ -135,6 +135,18 @@ async fn a_kept_file_survives_every_sweep() {
     assert!(counted.reclaimable < 2 * MIB, "{}", counted.reclaimable);
     let held = &counted.held[&s.info_hash.to_ascii_lowercase()];
     assert!(!held.idle);
+    // Loaded and idle (no reader, no claim), it is no cache either: it
+    // stays, and the leftover with it.
+    let t = e.add_magnet(&s.info_hash, &[], &[]).await.unwrap();
+    e.select_file(t, "default", &FileHint::Index(file))
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_secs(6)).await;
+    assert!(e.stats(t).await.is_ok(), "the kept torrent was evicted");
+    assert!(
+        idle.exists(),
+        "the idle leftover went though under the budget"
+    );
 }
 
 /// A window on a pack's other file: the kept file is no part of it, so its
@@ -146,12 +158,11 @@ async fn a_kept_file_is_no_part_of_a_window() {
     let root = tempfile::tempdir().unwrap();
     let e = engine(root.path(), Vec::new(), u64::MAX).await;
     let (t, e01, handle) = download(&e, &s, "e01.mkv").await;
-    handle.stop().await;
     let e02 = e
         .select_file(t, "default", &FileHint::Name("e02.mkv".into()))
         .await
         .unwrap();
-    let _claim = e.claim(t, "default").unwrap();
+    let claim = e.claim(t, "default").unwrap();
     let plan = WindowPlan {
         budget: 8 * MIB,
         behind: 2 * MIB,
@@ -182,6 +193,14 @@ async fn a_kept_file_is_no_part_of_a_window() {
         held < 2 * MIB,
         "the kept file counted in the window: {held}"
     );
+    // The stream stops while e01's download still runs: the download holds
+    // no playback claim, so the window ends (engine r1 P1-1).
+    drop(claim);
+    until("the window ends", || async {
+        e.stats(t).await.unwrap().window_bytes.is_none()
+    })
+    .await;
+    handle.stop().await;
 }
 
 /// A delete in a pack after a relaunch: the torrent loads from its details,
@@ -264,6 +283,8 @@ async fn complete_on_disk_needs_every_piece_and_its_data() {
         .await;
         file
     };
+    // The engine's last bitfield writes land before the test edits it.
+    tokio::time::sleep(Duration::from_secs(1)).await;
     let have = root.path().join(&s.info_hash).with_extension("have");
     let bits = std::fs::read(&have).unwrap();
     // A middle piece left out of the bitfield.
@@ -310,4 +331,66 @@ async fn a_running_download_is_committed() {
         "its own window's C"
     );
     drop(handle);
+}
+
+/// Where the volume cannot punch, a ring may keep a stream's pieces in RAM;
+/// never on a torrent with a download: a window opened while one runs
+/// leaves the download's pieces on disk.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_ring_never_takes_a_downloads_pieces() {
+    use mq_engine::librqbit::sync_log::{Fail, fail};
+    let s = support::swarm_pack(&[("e01.mkv", 12 << 20), ("e02.mkv", 12 << 20)], PIECE).await;
+    let root = tempfile::tempdir().unwrap();
+    fail(root.path(), Fail::PunchRefused, usize::MAX);
+    let cfg = EngineConfig {
+        limits: mq_engine::librqbit::limits::LimitsConfig {
+            download_bps: std::num::NonZeroU32::new(4 << 20),
+            upload_bps: None,
+        },
+        ..config(root.path(), Vec::new(), u64::MAX)
+    };
+    let e = Engine::start(cfg).await.unwrap();
+    let t = e
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let files = e.files(t).unwrap();
+    let at = |name: &str| files.iter().position(|f| f.path.ends_with(name)).unwrap();
+    let (e01, e02) = (at("e01.mkv"), at("e02.mkv"));
+    let handle = e.download(t, e01).await.unwrap();
+    e.select_file(t, "default", &FileHint::Index(e02))
+        .await
+        .unwrap();
+    let _claim = e.claim(t, "default").unwrap();
+    let plan = WindowPlan {
+        budget: 4 * MIB,
+        behind: MIB,
+        slack: MIB,
+        ahead: MIB,
+        open_floor: MIB,
+        open_cap: 2 * MIB,
+        floor: 2 * MIB,
+        playing: MIB,
+        memory: true,
+    };
+    let w = Window {
+        plan,
+        bitrate: 64 << 10,
+        metered: false,
+        resume_at: None,
+    };
+    e.window(t, e02, w).await.unwrap();
+    until("e01 is whole", || async {
+        let p = handle.progress().await;
+        p.have == p.len
+    })
+    .await;
+    handle.stop().await;
+    let dir = root.path().to_owned();
+    let hash = s.info_hash.clone();
+    until("e01 is whole on disk", || {
+        let (dir, hash) = (dir.clone(), hash.clone());
+        async move { complete_on_disk(&dir, &hash, e01) }
+    })
+    .await;
 }

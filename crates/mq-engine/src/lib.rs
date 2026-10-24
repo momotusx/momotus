@@ -2270,6 +2270,11 @@ impl DownloadHandle {
         self.stopped = true;
         let (engine, t, file) = (self.engine.clone(), self.torrent.clone(), self.file);
         engine.end_download(&t, file).await;
+        // Its bitfield on disk now, whether the torrent pauses or goes on
+        // for a stream: a relaunch finds the file whole.
+        if let Some(l) = t.live.lock().await.as_ref() {
+            l.managed.ext_flush_have();
+        }
         if !t.active() && t.readers.load(Ordering::Relaxed) == 0 {
             let live = t.live.lock().await;
             if let Some(l) = live.as_ref().filter(|l| !l.managed.is_paused()) {

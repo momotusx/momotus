@@ -197,6 +197,24 @@ enum Command {
         #[arg(long)]
         free: Option<u64>,
     },
+    /// Download one file of a torrent whole, as an offline download does
+    /// (plans/offline-downloads.md 4.6): no reader, upload off, and report
+    /// the time to metadata, the bytes and the mean rate.
+    DownloadMagnet {
+        magnet: String,
+        /// File index (default: the largest video).
+        #[arg(long)]
+        file: Option<usize>,
+        /// Keep torrent data here (default: a temporary folder, deleted).
+        #[arg(long)]
+        data_dir: Option<PathBuf>,
+        /// A peer to dial (a seeder on this machine): the DHT stays off.
+        #[arg(long)]
+        peer: Option<std::net::SocketAddr>,
+        /// Give up after this many seconds.
+        #[arg(long, default_value_t = 3600)]
+        timeout: u64,
+    },
     /// Scrape info hashes on a fresh engine (the app's first scrape) and
     /// report each tracker's stages.
     Scrape {
@@ -331,6 +349,27 @@ async fn main() {
         }
         return;
     }
+    if let Command::DownloadMagnet {
+        magnet,
+        file,
+        data_dir,
+        peer,
+        timeout,
+    } = &cli.command
+    {
+        let run = magnet::download_magnet(
+            magnet,
+            *file,
+            data_dir.clone(),
+            *peer,
+            Duration::from_secs(*timeout),
+        );
+        match run.await {
+            Ok(run) => emit(run),
+            Err(e) => fail(&e),
+        }
+        return;
+    }
     if let Command::Scrape {
         hashes,
         wait_ms,
@@ -420,7 +459,7 @@ async fn main() {
             };
             versions(&core, kind, id, device).await
         }
-        Command::PlayMagnet { .. } | Command::Scrape { .. } => {
+        Command::PlayMagnet { .. } | Command::Scrape { .. } | Command::DownloadMagnet { .. } => {
             unreachable!("handled before the core opens")
         }
         Command::PlayUrl {
