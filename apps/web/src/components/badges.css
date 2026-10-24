@@ -1,0 +1,11 @@
+/* Quality badges (plans/appletv-polish.md 4.4): Apple's shapes in words, 13 tall at 64 percent white
+ * (23 on TV); "4K" and "HD" filled, the others outlined. One line: the meta row clips, never wraps. */
+.qbadges { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; vertical-align: middle; }
+.qbadge { display: inline-flex; align-items: center; height: 13px; padding: 0 3px; border-radius: 3px; font: 700 9px / 1 var(--font-text); letter-spacing: .02em; color: var(--dim); }
+.qbadge.outlined { box-shadow: inset 0 0 0 1px var(--dim); }
+.qbadge.filled { background: var(--dim); color: rgba(0, 0, 0, .88); }
+[data-form="tv"] .qbadges { gap: 12px; }
+[data-form="tv"] .qbadge { height: 23px; padding: 0 6px; border-radius: 5px; font-size: 16px; }
+[data-form="tv"] .qbadge.outlined { box-shadow: inset 0 0 0 2px var(--dim); }
+[data-form="desktop"] .qbadge { height: calc(13 * var(--px)); padding: 0 calc(3 * var(--px)); font-size: calc(9 * var(--px)); }
+[data-form="phone"] .qbadges { gap: 8px; }
