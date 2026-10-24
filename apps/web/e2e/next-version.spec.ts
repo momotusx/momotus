@@ -452,7 +452,7 @@ test("moving on drops the old version's subtitle and turns on the new one's", as
   await p.goto(`/play/movie/${SINTEL}/${SINTEL}?form=desktop`);
   const cue = () => p.evaluate(() => {
     const t = document.querySelector("video")?.textTracks[0];
-    return t && t.mode === "showing" ? (t.cues?.[0] as VTTCue | undefined)?.text ?? null : null;
+    return t && t.mode === "hidden" ? (t.cues?.[0] as VTTCue | undefined)?.text ?? null : null;
   });
   await expect.poll(() => p.evaluate(() => !!document.querySelector("video")), { timeout: 30_000 }).toBe(true);
   await mute(p);

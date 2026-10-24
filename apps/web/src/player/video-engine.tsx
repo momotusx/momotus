@@ -47,10 +47,6 @@ export function createVideoEngine(events: EngineEvents): Engine {
     }
   };
 
-  // The page draws the lines itself: the track runs hidden.
-  let own = false;
-  const trackMode = () => (own ? "hidden" : "showing");
-
   const start = pendingStart();
   // The listener that applies the loading source's start; a source that
   // fails before its metadata must not leave it to seek the next one.
@@ -162,17 +158,13 @@ export function createVideoEngine(events: EngineEvents): Engine {
       if (sub)
         queueMicrotask(() => {
           const tt = video.textTracks[0];
-          if (tt) tt.mode = trackMode();
+          // The page draws the lines itself (player.tsx): the track runs hidden.
+          if (tt) tt.mode = "hidden";
         });
     },
     setSubtitleDelay(sec) {
       delay = sec;
       shiftCues();
-    },
-    setSubtitleOwn(next) {
-      own = next;
-      const tt = video?.textTracks[0];
-      if (tt && tt.mode !== "disabled") tt.mode = trackMode();
     },
     selectTrack(kind, id) {
       const list = audioList();

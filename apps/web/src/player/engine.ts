@@ -71,9 +71,6 @@ export interface Engine {
   /** Shows the subtitle `sec` seconds later (earlier when negative), for
    * this play and every track loaded after. */
   setSubtitleDelay(sec: number): void;
-  /** The page draws the lines itself (a phone, to place them clear of the
-   * controls): the track still runs, unseen. */
-  setSubtitleOwn(own: boolean): void;
   /** One of the engine's own tracks (`tracks`). */
   selectTrack(kind: Track["kind"], id: string): void;
   /** Leaving the player: stop and let go of the source. */

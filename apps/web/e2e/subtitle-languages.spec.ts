@@ -143,7 +143,7 @@ test("the profile's language turns on at start; Off wins and is remembered", asy
   const summary = page.locator('[data-f="player:subs"] small');
   // Turkish is the profile's subtitle language, the audio is not Turkish.
   await expect(summary).toHaveText("Turkish", { timeout: 30_000 });
-  await expect.poll(() => page.evaluate(() => document.querySelector("video")?.textTracks[0]?.mode)).toBe("showing");
+  await expect.poll(() => page.evaluate(() => document.querySelector("video")?.textTracks[0]?.mode)).toBe("hidden");
   // The viewer turns it off: off now, and on the next play of the title.
   await page.locator('[data-f="player:subs"]').dispatchEvent("click");
   await page.locator('[data-f="sub:off"]').dispatchEvent("click");

@@ -106,7 +106,7 @@ test("two broken start subtitles hand over to the next best, quietly, and the go
   expect(picks).toEqual(["broken-a", "broken-b", "good"]);
   // The player follows: the good file is the one on, with its line, and nothing alarms the viewer.
   await expect.poll(() => shownLabel(page, seen)).toBe("good");
-  await expect.poll(() => page.evaluate(() => document.querySelector("video")?.textTracks[0]?.mode)).toBe("showing");
+  await expect.poll(() => page.evaluate(() => document.querySelector("video")?.textTracks[0]?.mode)).toBe("hidden");
   await expect(page.locator(".toast")).toHaveCount(0);
   expect(seen.at(-1)?.subtitleNotes).toEqual([]);
   expect(seen.at(-1)?.startSubtitleFailed).toBe(false);

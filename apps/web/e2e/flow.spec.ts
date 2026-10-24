@@ -109,7 +109,7 @@ test("plays a direct source through the core's stream server", async ({ page }) 
   await expect
     .poll(() => page.evaluate(() => document.querySelector("video")?.textTracks[0]?.cues?.length ?? 0), { timeout: 30_000 })
     .toBeGreaterThan(0);
-  expect(await page.evaluate(() => document.querySelector("video")?.textTracks[0]?.mode)).toBe("showing");
+  expect(await page.evaluate(() => document.querySelector("video")?.textTracks[0]?.mode)).toBe("hidden");
   await expect.poll(() => focused(page)).toBe("player:subs");
   await expect(page.locator('[data-f="player:subs"] small')).not.toContainText("Off");
 

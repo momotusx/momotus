@@ -42,6 +42,7 @@ import { createVideoEngine } from "../player/video-engine";
 import { loadedSource, type Retry, sourceStart, TRYING_AGAIN_MS, tryingAgain } from "../lib/failover";
 import { bytes, clock, decoded, startsText, episodeLabel, groupFailures, playPath, playState, seasonName, titlePath, versionsPath } from "../lib/format";
 import { DELAY_SETTLE_MS } from "../lib/delay";
+import { cuePlace } from "../lib/cues";
 import { bufferShare, loadingLines, STALL_AHEAD_S, startFill } from "../lib/loading";
 import { fileChoice, offSummary, pickerLanguages, startOption } from "../lib/subtitles";
 import { choiceWords, emptyWords, languageName, nextVersion, qualityCell, qualityText, restartLine, subtitleNote } from "../lib/words";
@@ -343,15 +344,9 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     sound.muted = muted();
     engine.setVolume(muted() ? 0 : volume());
   });
-  // A phone draws its lines itself (the same rule on the iPhone and
-  // Android), so they are placed exactly: under the picture at full size
-  // when the black band below it holds them (portrait); else at the
-  // picture's foot, inside it, and while the controls show, 8 px over the
-  // scrubber where they cover the picture (landscape). Lines that would
-  // still meet the transport shrink to 85% while the controls show. Never
-  // under a control, never at the top.
-  const ownCues = () => form() === "phone";
-  createEffect(() => engine.setSubtitleOwn(ownCues()));
+  // The page draws the lines itself on every form, as Stremio does, so they
+  // are placed exactly (lib/cues.ts): the browser's own cues end under the
+  // title-safe line and never clear the controls.
   const [lines, setLines] = createSignal<string[]>([]);
   const [shrink, setShrink] = createSignal(false);
   // Until placed, at the foot (never a frame at the top).
@@ -360,30 +355,25 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   const readCues = () => {
     const video = engine.view as HTMLVideoElement;
     const active = track() ? video.textTracks[0]?.activeCues : null;
-    setLines(active ? Array.from(active).flatMap((c) => (c as VTTCue).text.replace(/<[^>]+>/g, "").split("\n")) : []);
+    setLines(active ? Array.from(active).flatMap((c) => ((c as VTTCue).getCueAsHTML().textContent ?? "").split("\n")) : []);
   };
   const placeCues = () => {
     const video = engine.view as HTMLVideoElement;
-    if (!ownCues() || !cuesEl) return;
-    const box = video.getBoundingClientRect();
-    // The picture inside the element (object-fit: contain).
-    const scale = video.videoWidth && video.videoHeight ? Math.min(box.width / video.videoWidth, box.height / video.videoHeight) : 0;
-    const band = scale ? (box.height - video.videoHeight * scale) / 2 : 0;
-    const pictureFoot = box.bottom - band;
-    const bar = document.querySelector<HTMLElement>(".player-scr .osd")?.getBoundingClientRect();
-    const scrubber = document.querySelector<HTMLElement>(".player-scr .scrub")?.getBoundingClientRect();
-    const transport = document.querySelector<HTMLElement>(".player-scr .transport")?.getBoundingClientRect();
-    const up = osd() && !ended() && !!bar;
-    // The lines' height at full size (drawn now at 85% when shrunk).
-    const height = cuesEl.getBoundingClientRect().height / (shrink() ? 0.85 : 1);
-    if (band > 0 && (bar?.top ?? box.bottom) - pictureFoot >= height + 8) {
-      setShrink(false);
-      return setCueAt({ top: pictureFoot - box.top + 10 });
-    }
-    let foot = band > 0 ? pictureFoot - 8 : box.bottom - 16;
-    if (up && scrubber) foot = Math.min(foot, scrubber.top - 8);
-    setShrink(up && !!transport && foot - height < transport.bottom && foot > transport.top);
-    setCueAt({ bottom: box.bottom - foot });
+    if (!cuesEl) return;
+    const rect = (sel: string) => document.querySelector<HTMLElement>(`.player-scr ${sel}`)?.getBoundingClientRect();
+    const bar = rect(".osd");
+    const place = cuePlace({
+      box: video.getBoundingClientRect(),
+      video: { width: video.videoWidth, height: video.videoHeight },
+      bar,
+      scrubber: rect(".scrub"),
+      transport: rect(".transport"),
+      up: osd() && !ended() && !!bar,
+      // The lines' height at full size (drawn now at 85% when shrunk).
+      lines: cuesEl.getBoundingClientRect().height / (shrink() ? 0.85 : 1),
+    });
+    setShrink(place.shrink);
+    setCueAt(place.at);
   };
   createEffect(on([lines, osd, ended, () => prefs.state.data?.subtitleSize], () => requestAnimationFrame(placeCues)));
   onMount(() => {
@@ -958,8 +948,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     >
       <Backdrop src={ctx.details()?.background} class="player-bd" dim />
       {engine.view}
-      {/* Not over an open panel or a card. */}
-      <Show when={ownCues() && lines().length > 0 && !panel() && !ended()}>
+      {/* Not under a phone's panel (its sheet covers the foot) nor a card; a TV's or a desktop's side panel draws over them. */}
+      <Show when={lines().length > 0 && !(panel() && form() === "phone") && !ended()}>
         <div
           class="cues"
           classList={{ small: shrink() }}
