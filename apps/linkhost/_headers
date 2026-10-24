@@ -11,5 +11,8 @@
 /delete*
   Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src {{RELAY_URL}}; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
 
+/privacy*
+  Content-Security-Policy: default-src 'none'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+
 /.well-known/apple-app-site-association
   Content-Type: application/json

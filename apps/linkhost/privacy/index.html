@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; base-uri 'none'; form-action 'none'" />
+    <title>Marquee privacy</title>
+    <link rel="stylesheet" href="/linkhost.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Marquee privacy</h1>
+      <p>This page covers Marquee's sync service, the server your devices use to keep your library the same everywhere. Marquee works without it: an account is optional.</p>
+
+      <h2>What the sync service keeps</h2>
+      <ul>
+        <li>Your synced data: profiles, addons and their addresses, library, progress, watched marks and settings. Your devices encrypt it before sending it, and the service cannot read it. Only your devices hold the key.</li>
+        <li>For each device in your account: a public key, its encrypted name, and when it joined.</li>
+        <li>For each sign-in you link (Google, Facebook): a keyed hash of the account number that provider gives Marquee. Not your email, name, photo or any token from the provider.</li>
+        <li>To limit abuse: that keyed hash with the time of each Marquee account it created, kept 30 days.</li>
+        <li>While you sign in: a record of that sign-in, kept 10 minutes.</li>
+      </ul>
+      <p>The service keeps no access log, shows no ads, has no analytics and sells nothing. Cloudflare carries the traffic to it and sees addresses as part of that.</p>
+
+      <h2>Deleting your account</h2>
+      <p>In the app: Settings, Account, Delete account. It is deleted from the sync service at once.</p>
+      <p>Without the app: <a href="/delete">sign in on the deletion page</a>. That deletion runs after 7 days, so a stolen sign-in cannot delete your library at once.</p>
+      <p>Backups of the sync service keep an encrypted copy of a deleted account for up to 14 days more, then it is gone.</p>
+
+      <h2>Questions</h2>
+      <p>Write to <a href="mailto:hey@normalisdead.mom">hey@normalisdead.mom</a>.</p>
+    </main>
+  </body>
+</html>

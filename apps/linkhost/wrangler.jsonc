@@ -1,0 +1,21 @@
+// The link host on the relay's own hostname (plans/accounts-social-sync.md H3): static files only,
+// no script, on the paths below; every other path reaches the relay through the tunnel.
+// Build dist first: bun apps/linkhost/build.ts (deploy/relay/README.md has the values).
+{
+  "name": "marquee-linkhost",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": false,
+  "assets": {
+    "directory": "./dist",
+    // /pair serves pair/index.html with no redirect: the App Link and the AASA name /pair.
+    "html_handling": "drop-trailing-slash",
+    "not_found_handling": "none"
+  },
+  "routes": [
+    { "pattern": "momotus.normalisdead.mom/pair*", "zone_name": "normalisdead.mom" },
+    { "pattern": "momotus.normalisdead.mom/delete*", "zone_name": "normalisdead.mom" },
+    { "pattern": "momotus.normalisdead.mom/privacy*", "zone_name": "normalisdead.mom" },
+    { "pattern": "momotus.normalisdead.mom/.well-known/*", "zone_name": "normalisdead.mom" },
+    { "pattern": "momotus.normalisdead.mom/linkhost.css", "zone_name": "normalisdead.mom" }
+  ]
+}
