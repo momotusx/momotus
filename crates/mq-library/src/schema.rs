@@ -342,26 +342,29 @@ CREATE INDEX ratings_age ON ratings (fetched_ms);
 "#;
 
 /// The addon list merges per addon (plans/accounts-social-sync.md 13): each
-/// row is a register of its own, kept after a removal as a tombstone
-/// (`installed` 0); places get gaps (`POSITION_STEP`) so an addon fits
-/// between two without moving them; a queued list becomes its addons queued;
-/// the list's own register goes (its hlc is on every row already).
+/// row is an addon's state register, kept after a removal as a tombstone
+/// (`installed` 0); its place moves to `addon_order`, a register of its own,
+/// with gaps (`POSITION_STEP`) so an addon fits between two without moving
+/// them. Whole lists (coll 1) are no longer sent: every addon is queued as
+/// its two registers instead. `addon_list` stays, unsynced, as the mark that
+/// a profile had a list.
 const V13: &str = r#"
 ALTER TABLE addons ADD COLUMN installed INTEGER NOT NULL DEFAULT 1;
-CREATE TEMP TABLE addon_rank AS
-    SELECT profile_id, transport_url,
-           ROW_NUMBER() OVER (PARTITION BY profile_id ORDER BY position, transport_url) AS rank
-    FROM addons;
-UPDATE addons SET position = 1024 * (
-    SELECT rank FROM addon_rank r WHERE r.profile_id = addons.profile_id AND r.transport_url = addons.transport_url
+CREATE TABLE addon_order (
+    profile_id     TEXT NOT NULL,
+    transport_url  TEXT NOT NULL,
+    position       INTEGER NOT NULL,
+    hlc            TEXT NOT NULL,
+    PRIMARY KEY (profile_id, transport_url)
 );
-DROP TABLE addon_rank;
-INSERT INTO sync_outbox (coll, key)
-    SELECT DISTINCT 12, a.profile_id || char(31) || a.transport_url
-    FROM sync_outbox o JOIN addons a ON a.profile_id = o.key
-    WHERE o.coll = 1;
+INSERT INTO addon_order (profile_id, transport_url, position, hlc)
+    SELECT profile_id, transport_url,
+           1024 * ROW_NUMBER() OVER (PARTITION BY profile_id ORDER BY position, transport_url), hlc
+    FROM addons;
+ALTER TABLE addons DROP COLUMN position;
 DELETE FROM sync_outbox WHERE coll = 1;
-DROP TABLE addon_list;
+INSERT INTO sync_outbox (coll, key) SELECT 12, profile_id || char(31) || transport_url FROM addons;
+INSERT INTO sync_outbox (coll, key) SELECT 13, profile_id || char(31) || transport_url FROM addon_order;
 "#;
 
 #[cfg(test)]
@@ -453,29 +456,34 @@ mod tests {
         }
     }
 
-    /// V13 on a V12 database: the rows keep their hlc and order with gaps,
-    /// a queued list becomes its addons queued, the list register goes.
+    /// V13 on a V12 database: each addon keeps its hlc as its state
+    /// register and gets its place, with gaps, as an order register; every
+    /// addon is queued as both; whole lists are no longer queued; the list
+    /// mark stays.
     #[test]
-    fn v13_makes_each_addon_a_register() {
+    fn v13_makes_each_addon_two_registers() {
         let mut c = Connection::open_in_memory().unwrap();
         migrations().to_version(&mut c, 12).unwrap();
         c.execute_batch(
             "INSERT INTO addons (profile_id, transport_url, manifest_json, position, hlc) VALUES
                ('p', 'https://b', '{}', 0, 'h1'), ('p', 'https://a', '{}', 1, 'h1'), ('q', 'https://c', '{}', 0, 'h2');
-             INSERT INTO addon_list (profile_id, hlc) VALUES ('p', 'h1'), ('q', 'h2');
+             INSERT INTO addon_list (profile_id, hlc) VALUES ('p', 'h1'), ('q', 'h2'), ('emptied', 'h3');
              INSERT INTO sync_outbox (coll, key) VALUES (1, 'p'), (2, 'p' || char(31) || 'tt1');",
         )
         .unwrap();
         migrations().to_latest(&mut c).unwrap();
-        let rows: Vec<(String, String, i64, bool, String)> = c
-            .prepare("SELECT profile_id, transport_url, position, installed, hlc FROM addons ORDER BY profile_id, position")
+        let rows: Vec<(String, String, i64, String)> = c
+            .prepare(
+                "SELECT a.profile_id, a.transport_url, o.position, a.hlc FROM addons a
+                 JOIN addon_order o USING (profile_id, transport_url) WHERE a.installed = 1 AND o.hlc = a.hlc
+                 ORDER BY a.profile_id, o.position",
+            )
             .unwrap()
-            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap();
-        let row =
-            |p: &str, u: &str, pos, h: &str| (p.to_owned(), u.to_owned(), pos, true, h.to_owned());
+        let row = |p: &str, u: &str, pos, h: &str| (p.to_owned(), u.to_owned(), pos, h.to_owned());
         assert_eq!(
             rows,
             [
@@ -484,6 +492,14 @@ mod tests {
                 row("q", "https://c", 1024, "h2")
             ]
         );
+        let positions: i64 = c
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('addons') WHERE name = 'position'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(positions, 0, "places live in addon_order only");
         let queued: Vec<(i64, String)> = c
             .prepare("SELECT coll, key FROM sync_outbox ORDER BY coll, key")
             .unwrap()
@@ -491,21 +507,17 @@ mod tests {
             .unwrap()
             .collect::<Result<_, _>>()
             .unwrap();
-        assert_eq!(
-            queued,
-            [
-                (2, "p\u{1f}tt1".to_owned()),
-                (12, "p\u{1f}https://a".to_owned()),
-                (12, "p\u{1f}https://b".to_owned())
-            ]
-        );
-        let lists: i64 = c
-            .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE name = 'addon_list'",
-                [],
-                |r| r.get(0),
-            )
+        let k = |p: &str, u: &str| format!("{p}\u{1f}{u}");
+        let mut want = vec![(2, k("p", "tt1"))];
+        for coll in [12, 13] {
+            for (p, u) in [("p", "https://a"), ("p", "https://b"), ("q", "https://c")] {
+                want.push((coll, k(p, u)));
+            }
+        }
+        assert_eq!(queued, want);
+        let marks: i64 = c
+            .query_row("SELECT COUNT(*) FROM addon_list", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(lists, 0);
+        assert_eq!(marks, 3, "the list marks stay, an emptied list's too");
     }
 }

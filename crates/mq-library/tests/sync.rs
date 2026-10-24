@@ -203,8 +203,8 @@ fn a_local_addon_edit_lands_above_a_newer_pulled_list_and_is_queued() {
     assert_eq!(urls(&b), ["https://b/manifest.json"]);
     assert_eq!(
         b.outbox(10).unwrap().records.len(),
-        2,
-        "a's removal, above R, and b"
+        3,
+        "a's removal, above R, and b's state and place"
     );
     a.apply(&all(&b)).unwrap();
     assert_eq!(urls(&a), ["https://b/manifest.json"]);
@@ -415,11 +415,13 @@ fn one_millisecond_clock() -> mq_library::HlcClock {
 
 /// 16 threads make 40 writes each to one register, all waiting for the
 /// writer at once, stamped by one device clock. Every write must change the
-/// register: each queues one outbox entry, so the outbox holds 640. Stamped
+/// register: each queues `per_write` outbox entries (one, or an addon's
+/// state and place), so the outbox holds 640 times that. Stamped
 /// before it held the writer, a write could commit after a newer one, be
 /// stamped again just above it, onto the hlc a third write already held,
 /// and that third write was lost as no newer than the register (C31).
 fn all_concurrent_writes_land(
+    per_write: i64,
     write: impl Fn(&Library, &mq_library::HlcClock, usize) + Sync,
 ) -> Library {
     let lib = Library::temporary().unwrap();
@@ -435,13 +437,13 @@ fn all_concurrent_writes_land(
         }
     });
     let outbox = lib.outbox(usize::MAX).unwrap();
-    assert_eq!(outbox.last_id, Some(640), "writes were lost");
+    assert_eq!(outbox.last_id, Some(640 * per_write), "writes were lost");
     lib
 }
 
 #[test]
 fn concurrent_addon_edits_stamped_in_commit_order_all_land() {
-    let lib = all_concurrent_writes_land(|lib, clock, n| {
+    let lib = all_concurrent_writes_land(2, |lib, clock, n| {
         lib.edit_addons("p", clock, |rows: &mut Vec<AddonRow>| {
             rows.push(AddonRow {
                 transport_url: format!("https://a{n}.example/manifest.json"),
@@ -459,7 +461,7 @@ fn concurrent_addon_edits_stamped_in_commit_order_all_land() {
 
 #[test]
 fn concurrent_item_writes_all_land() {
-    all_concurrent_writes_land(|lib, clock, n| {
+    all_concurrent_writes_land(1, |lib, clock, n| {
         let mut row = item("tt1");
         row.name = format!("name {n}");
         lib.upsert_item("p", &row, n % 2 == 0, clock).unwrap();
@@ -468,7 +470,7 @@ fn concurrent_item_writes_all_land() {
 
 #[test]
 fn concurrent_progress_writes_all_land() {
-    all_concurrent_writes_land(|lib, clock, n| {
+    all_concurrent_writes_land(1, |lib, clock, n| {
         let row = ProgressRow {
             video_id: "tt1",
             item_id: "tt1",
@@ -482,7 +484,7 @@ fn concurrent_progress_writes_all_land() {
 
 #[test]
 fn concurrent_watched_marks_all_land() {
-    all_concurrent_writes_land(|lib, clock, n| {
+    all_concurrent_writes_land(1, |lib, clock, n| {
         lib.set_watched("p", "tt1", "tt1", n % 2 == 0, clock)
             .unwrap();
     });
@@ -490,12 +492,12 @@ fn concurrent_watched_marks_all_land() {
 
 #[test]
 fn concurrent_stream_memory_and_settings_writes_all_land() {
-    all_concurrent_writes_land(|lib, clock, n| {
+    all_concurrent_writes_land(1, |lib, clock, n| {
         let stream = format!("{{\"key\":\"{n}\"}}");
         lib.set_stream_memory("p", "tt1", Some("g"), &stream, clock)
             .unwrap();
     });
-    all_concurrent_writes_land(|lib, clock, n| {
+    all_concurrent_writes_land(1, |lib, clock, n| {
         lib.set_setting("p", "notes", &format!("\"{n}\""), clock)
             .unwrap();
     });
@@ -503,11 +505,11 @@ fn concurrent_stream_memory_and_settings_writes_all_land() {
 
 #[test]
 fn concurrent_profile_and_lock_writes_all_land() {
-    all_concurrent_writes_land(|lib, clock, n| {
+    all_concurrent_writes_land(1, |lib, clock, n| {
         lib.update_profile("p", &format!("name {n}"), "", 0, clock)
             .unwrap();
     });
-    all_concurrent_writes_land(|lib, clock, n| {
+    all_concurrent_writes_land(1, |lib, clock, n| {
         let hash = format!("$argon2id$v=19$m=1,t=1,p=1$c2FsdA${n}");
         lib.set_pin_hash("p", Some(&hash), clock).unwrap();
     });

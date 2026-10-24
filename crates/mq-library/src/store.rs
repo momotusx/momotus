@@ -488,7 +488,7 @@ impl Library {
             for (url, json) in manifests {
                 changed += c.execute(
                     "UPDATE addons SET manifest_json = ?3
-                     WHERE profile_id = ?1 AND transport_url = ?2 AND manifest_json != ?3",
+                     WHERE profile_id = ?1 AND transport_url = ?2 AND manifest_json != ?3 AND installed = 1",
                     rusqlite::params![profile, url, json],
                 )?;
             }
@@ -501,11 +501,15 @@ impl Library {
     }
 
     /// The newest hlc among the profile's addon registers, installed or
-    /// removed, or `None` when it never had an addon here or pulled.
+    /// removed, and the list mark an older build left (`addon_list`, kept
+    /// unsynced); `None` when the profile never had a list here or pulled.
     pub fn addon_list_hlc(&self, profile: &str) -> Result<Option<String>, LibraryError> {
         self.read(|c| {
             c.query_row(
-                "SELECT MAX(hlc) FROM addons WHERE profile_id = ?1",
+                "SELECT MAX(h) FROM (
+                   SELECT MAX(hlc) AS h FROM addons WHERE profile_id = ?1
+                   UNION ALL SELECT MAX(hlc) FROM addon_order WHERE profile_id = ?1
+                   UNION ALL SELECT hlc FROM addon_list WHERE profile_id = ?1)",
                 params![profile],
                 |r| r.get(0),
             )
@@ -747,8 +751,9 @@ fn open_connection(target: &str) -> Result<Connection, LibraryError> {
 /// The profile's addons in their order.
 fn addon_rows(c: &Connection, profile: &str) -> rusqlite::Result<Vec<AddonRow>> {
     let mut stmt = c.prepare(
-        "SELECT transport_url, manifest_json, position, enabled, allow_private
-         FROM addons WHERE profile_id = ?1 AND installed = 1 ORDER BY position, transport_url",
+        "SELECT a.transport_url, a.manifest_json, COALESCE(o.position, 0) AS place, a.enabled, a.allow_private
+         FROM addons a LEFT JOIN addon_order o ON o.profile_id = a.profile_id AND o.transport_url = a.transport_url
+         WHERE a.profile_id = ?1 AND a.installed = 1 ORDER BY place, a.transport_url",
     )?;
     stmt.query_map(params![profile], |r| {
         Ok(AddonRow {
@@ -1204,10 +1209,11 @@ impl Library {
     }
 }
 
-/// Writes the addons whose register an edit changed, from the installed list
-/// `before` to `after` (its order is the new one; a link listed twice keeps
-/// its first place). Each added, toggled, re-manifested or moved addon is
-/// stamped on its own, and each one left out is kept as a removal.
+/// Writes the addons whose registers an edit changed, from the installed
+/// list `before` to `after` (its order is the new one; a link listed twice
+/// keeps its first place). An addon added, switched or given another
+/// manifest gets a state register, one added or moved an order register,
+/// and one left out a removal; nothing else is stamped.
 fn write_addons(
     c: &Connection,
     profile: &str,
@@ -1221,30 +1227,29 @@ fn write_addons(
         .filter(|a| seen.insert(a.transport_url.clone()))
         .collect();
     let old = |url: &str| before.iter().find(|b| b.transport_url == url);
-    let places = places(
-        &after
-            .iter()
-            .map(|a| old(&a.transport_url).map(|b| b.position))
-            .collect::<Vec<_>>(),
-    );
-    for (a, position) in after.iter().zip(places) {
-        let row = AddonRow {
-            position,
-            ..a.clone()
-        };
-        let same = old(&a.transport_url).is_some_and(|b| {
-            (&b.manifest_json, b.position, b.enabled, b.allow_private)
-                == (
-                    &row.manifest_json,
-                    row.position,
-                    row.enabled,
-                    row.allow_private,
-                )
+    let old_places: Vec<Option<i64>> = after
+        .iter()
+        .map(|a| old(&a.transport_url).map(|b| b.position))
+        .collect();
+    for (a, position) in after.iter().zip(places(&old_places)) {
+        let was = old(&a.transport_url);
+        let same_state = was.is_some_and(|b| {
+            (&b.manifest_json, b.enabled, b.allow_private)
+                == (&a.manifest_json, a.enabled, a.allow_private)
         });
-        if !same {
+        if !same_state {
             local(c, coll::ADDON, &[profile, &a.transport_url], stamp, |h| {
-                sql::set_addon(c, profile, &row, true, h)
+                sql::set_addon(c, profile, a, true, h)
             })?;
+        }
+        if was.map(|b| b.position) != Some(position) {
+            local(
+                c,
+                coll::ADDON_ORDER,
+                &[profile, &a.transport_url],
+                stamp,
+                |h| sql::set_addon_order(c, profile, &a.transport_url, position, h),
+            )?;
         }
     }
     for b in before.iter().filter(|b| !seen.contains(&b.transport_url)) {

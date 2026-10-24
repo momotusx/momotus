@@ -149,7 +149,11 @@ fn a_move_stamps_only_the_moved_addon() {
         .into_iter()
         .map(|(_, r)| (r.coll, r.key))
         .collect();
-    assert_eq!(moved, [(coll::ADDON, format!("p\u{1f}{W}"))]);
+    assert_eq!(
+        moved,
+        [(coll::ADDON_ORDER, format!("p\u{1f}{W}"))],
+        "one place, no state"
+    );
     // An edit that changes nothing stamps nothing.
     lib.edit_addons("p", &hlc(10, 1), |_: &mut Vec<AddonRow>| {
         Ok::<_, mq_library::LibraryError>(())
@@ -158,34 +162,118 @@ fn a_move_stamps_only_the_moved_addon() {
     assert_eq!(lib.outbox(1000).unwrap().records.len(), 1);
 }
 
-/// A whole list from an older build is a write to each addon at its hlc.
+/// A whole list from an older build is skipped, and none is written.
 #[test]
-fn an_older_builds_list_is_a_write_to_each_addon() {
+fn an_older_builds_list_is_skipped() {
     let lib = Library::temporary().unwrap();
     add(&lib, X, &hlc(5, 1));
-    add(&lib, Y, &hlc(5, 1));
-    let list = |addons: &[&str], at: String| SyncRecord {
+    let list = SyncRecord {
         coll: coll::ADDONS,
         key: "p".into(),
-        value: json!({
-            "profile": "p",
-            "addons": addons.iter().map(|u| json!({ "url": u, "manifest": "{}", "enabled": true, "allowPrivate": false })).collect::<Vec<_>>(),
-        }),
-        hlc: at,
+        value: json!({ "profile": "p", "addons": [{ "url": Y, "manifest": "{}", "enabled": true, "allowPrivate": false }] }),
+        hlc: hlc(9, 2),
     };
-    // Older than both addons: X listed and Y absent change nothing.
-    lib.apply(&[list(&[X], hlc(3, 2))]).unwrap();
-    assert_eq!(urls(&lib), [X, Y]);
-    // Newer: Y and Z listed, X absent, so X is removed.
-    lib.apply(&[list(&[Y, Z], hlc(9, 2))]).unwrap();
-    assert_eq!(urls(&lib), [Y, Z]);
+    assert_eq!(lib.apply(&[list]).unwrap(), 0);
+    assert_eq!(urls(&lib), [X]);
+    assert!(all(&lib).iter().all(|r| r.coll != coll::ADDONS));
+}
+
+/// A move on one device and a switch of the same addon on another both
+/// stand: place and state are registers of their own.
+#[test]
+fn a_move_and_a_switch_of_the_same_addon_both_stand() {
+    let (a, b) = (Library::temporary().unwrap(), Library::temporary().unwrap());
+    add(&a, X, &hlc(1, 1));
+    add(&a, Y, &hlc(2, 1));
+    exchange(&a, &b);
+    a.edit_addons("p", &hlc(5, 1), |rows: &mut Vec<AddonRow>| {
+        let y = rows.pop().unwrap();
+        rows.insert(0, y);
+        Ok::<_, mq_library::LibraryError>(())
+    })
+    .unwrap();
+    b.edit_addons("p", &hlc(6, 2), |rows: &mut Vec<AddonRow>| {
+        rows[1].enabled = false;
+        Ok::<_, mq_library::LibraryError>(())
+    })
+    .unwrap();
+    exchange(&a, &b);
+    for lib in [&a, &b] {
+        assert_eq!(urls(lib), [Y, X], "the move stands");
+        assert!(!lib.addons("p").unwrap()[0].enabled, "the switch stands");
+    }
+}
+
+/// The same records applied in any order give the same library, and twice
+/// change nothing.
+#[test]
+fn any_order_of_the_same_records_gives_the_same_list() {
+    let (a, b, c) = (
+        Library::temporary().unwrap(),
+        Library::temporary().unwrap(),
+        Library::temporary().unwrap(),
+    );
+    add(&a, X, &hlc(1, 1));
+    exchange(&a, &b);
+    exchange(&a, &c);
+    add(&a, Y, &hlc(3, 1));
+    remove(&b, X, &hlc(4, 2));
+    add(&c, Z, &hlc(2, 3));
+    c.edit_addons("p", &hlc(5, 3), |rows: &mut Vec<AddonRow>| {
+        let z = rows.pop().unwrap();
+        rows.insert(0, z);
+        Ok::<_, mq_library::LibraryError>(())
+    })
+    .unwrap();
+    let sets = [all(&a), all(&b), all(&c)];
+    let orders = [
+        [0, 1, 2],
+        [0, 2, 1],
+        [1, 0, 2],
+        [1, 2, 0],
+        [2, 0, 1],
+        [2, 1, 0],
+    ];
+    let mut results = Vec::new();
+    for order in orders {
+        let lib = Library::temporary().unwrap();
+        for i in order {
+            lib.apply(&sets[i]).unwrap();
+        }
+        for i in order {
+            assert_eq!(
+                lib.apply(&sets[i]).unwrap(),
+                0,
+                "applied twice changes nothing"
+            );
+        }
+        results.push((urls(&lib), all(&lib)));
+    }
+    assert!(results.iter().all(|r| *r == results[0]), "{results:?}");
+    assert_eq!(results[0].0, [Z, Y]);
+}
+
+/// A removal keeps the link, sealed like every record, and no manifest.
+#[test]
+fn a_removal_keeps_no_manifest() {
+    let lib = Library::temporary().unwrap();
+    lib.edit_addons("p", &hlc(1, 1), |rows: &mut Vec<AddonRow>| {
+        rows.push(AddonRow {
+            manifest_json: "{\"id\":\"x\",\"big\":true}".into(),
+            ..row(X)
+        });
+        Ok::<_, mq_library::LibraryError>(())
+    })
+    .unwrap();
+    remove(&lib, X, &hlc(2, 1));
     let x = all(&lib)
         .into_iter()
-        .find(|r| r.coll == coll::ADDON && r.key == format!("p\u{1f}{X}"))
-        .expect("the removal is kept and travels");
-    assert_eq!(x.value["installed"], false);
-    // Lists are no longer written.
-    assert!(all(&lib).iter().all(|r| r.coll != coll::ADDONS));
+        .find(|r| r.coll == coll::ADDON)
+        .unwrap();
+    assert_eq!(
+        (x.value["installed"].clone(), x.value["manifest"].clone()),
+        (json!(false), json!(""))
+    );
 }
 
 #[test]

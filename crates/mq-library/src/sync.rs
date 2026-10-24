@@ -13,8 +13,8 @@ use serde_json::Value;
 /// Collection numbers on the wire. Never renumber.
 pub mod coll {
     pub const PROFILES: u8 = 0;
-    /// A profile's whole addon list as one register: written by older
-    /// builds, read only (as a write to each addon, `sql::apply_list`).
+    /// A profile's whole addon list as one register, from older builds:
+    /// never written or read since the list merges per addon (`ADDON`).
     pub const ADDONS: u8 = 1;
     pub const ITEMS: u8 = 2;
     pub const PROGRESS: u8 = 3;
@@ -29,16 +29,20 @@ pub mod coll {
     pub const ALLOWED: u8 = 10;
     /// A title taken off Continue Watching and Next Up.
     pub const DISMISSED: u8 = 11;
-    /// One addon of a profile's list, removals kept as tombstones, so two
-    /// devices editing the list each keep their edits
-    /// (plans/accounts-social-sync.md 13).
+    /// One addon of a profile's list: installed or not, its switches and
+    /// manifest; removals kept as tombstones, so two devices editing the
+    /// list each keep their edits (plans/accounts-social-sync.md 13).
     pub const ADDON: u8 = 12;
+    /// One addon's place in the list, apart from its state, so a move and a
+    /// switch of the same addon on two devices both stand.
+    pub const ADDON_ORDER: u8 = 13;
 }
 
 /// Every collection this build reads and writes, in export order.
-const ALL: [u8; 12] = [
+const ALL: [u8; 13] = [
     coll::PROFILES,
     coll::ADDON,
+    coll::ADDON_ORDER,
     coll::ITEMS,
     coll::PROGRESS,
     coll::WATCHED,
@@ -105,11 +109,13 @@ pub(crate) fn refuse_gone(c: &Connection, profile: &str) -> rusqlite::Result<()>
 }
 
 /// Every row a profile has on this device, except its gone register.
-pub(crate) const PROFILE_TABLES: [&str; 16] = [
+pub(crate) const PROFILE_TABLES: [&str; 18] = [
     "profile_lock",
     "profile_access",
     "allowed",
     "addons",
+    "addon_order",
+    "addon_list",
     "library_items",
     "progress",
     "watched",
@@ -244,24 +250,8 @@ struct AllowedValue {
     added_ms: i64,
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct AddonValue {
-    url: String,
-    manifest: String,
-    enabled: bool,
-    allow_private: bool,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct AddonsValue {
-    profile: String,
-    addons: Vec<AddonValue>,
-}
-
-/// One addon's register. `installed` and `position` are required: a record
-/// without them is skipped, never read as an install or a place.
+/// One addon's state. `installed` is required: a record without it is
+/// skipped, never read as an install.
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AddonEntryValue {
@@ -271,6 +261,14 @@ struct AddonEntryValue {
     enabled: bool,
     allow_private: bool,
     installed: bool,
+}
+
+/// One addon's place.
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AddonOrderValue {
+    profile: String,
+    url: String,
     position: i64,
 }
 
@@ -397,6 +395,7 @@ impl Library {
             c.query_row(
                 "SELECT MAX(h) FROM (
                    SELECT MAX(hlc) AS h FROM profiles UNION ALL SELECT MAX(hlc) FROM addons
+                   UNION ALL SELECT MAX(hlc) FROM addon_order
                    UNION ALL SELECT MAX(hlc) FROM library_items UNION ALL SELECT MAX(hlc) FROM progress
                    UNION ALL SELECT MAX(hlc) FROM watched UNION ALL SELECT MAX(hlc) FROM settings
                    UNION ALL SELECT MAX(hlc) FROM stream_memory UNION ALL SELECT MAX(hlc) FROM profile_lock
@@ -448,6 +447,7 @@ impl Library {
                  SELECT coll, key FROM (
                    SELECT 0 AS coll, id AS key FROM profiles
                    UNION ALL SELECT 12, profile_id || char(31) || transport_url FROM addons
+                   UNION ALL SELECT 13, profile_id || char(31) || transport_url FROM addon_order
                    UNION ALL SELECT 2, profile_id || char(31) || item_id FROM library_items
                    UNION ALL SELECT 3, profile_id || char(31) || video_id FROM progress
                    UNION ALL SELECT 4, profile_id || char(31) || video_id FROM watched
@@ -708,7 +708,11 @@ fn export(c: &Connection, coll: u8, filter: Filter<'_>) -> rusqlite::Result<Vec<
             "profile_id || char(31) || item_id",
         ),
         coll::ADDON => (
-            "SELECT profile_id, transport_url, manifest_json, enabled, allow_private, installed, position, hlc FROM addons",
+            "SELECT profile_id, transport_url, manifest_json, enabled, allow_private, installed, hlc FROM addons",
+            "profile_id || char(31) || transport_url",
+        ),
+        coll::ADDON_ORDER => (
+            "SELECT profile_id, transport_url, position, hlc FROM addon_order",
             "profile_id || char(31) || transport_url",
         ),
         coll::ITEMS => (
@@ -819,10 +823,20 @@ fn export(c: &Connection, coll: u8, filter: Filter<'_>) -> rusqlite::Result<Vec<
                     enabled: r.get(3)?,
                     allow_private: r.get(4)?,
                     installed: r.get(5)?,
-                    position: r.get(6)?,
                 };
                 let k = key(&[&value.profile, &value.url]);
-                Ok(record(coll, k, &value, r.get(7)?))
+                Ok(record(coll, k, &value, r.get(6)?))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?,
+        coll::ADDON_ORDER => stmt
+            .query_map(args, |r| {
+                let value = AddonOrderValue {
+                    profile: r.get(0)?,
+                    url: r.get(1)?,
+                    position: r.get(2)?,
+                };
+                let k = key(&[&value.profile, &value.url]);
+                Ok(record(coll, k, &value, r.get(3)?))
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?,
         coll::ITEMS => stmt
@@ -998,34 +1012,22 @@ fn apply_one(c: &Connection, r: &SyncRecord) -> Result<usize, ApplyError> {
             .map_err(|e| ApplyError::Shape(e.into()))?;
             sql::set_allowed(c, &v.profile, &row, hlc)?
         }
-        coll::ADDONS => {
-            let v: AddonsValue = serde_json::from_value(value)?;
-            same_key(r, &[&v.profile])?;
-            let rows: Vec<AddonRow> = v
-                .addons
-                .into_iter()
-                .enumerate()
-                .map(|(i, a)| AddonRow {
-                    transport_url: a.url,
-                    manifest_json: a.manifest,
-                    position: (i as i64 + 1) * POSITION_STEP,
-                    enabled: a.enabled,
-                    allow_private: a.allow_private,
-                })
-                .collect();
-            sql::apply_list(c, &v.profile, &rows, hlc)?
-        }
         coll::ADDON => {
             let v: AddonEntryValue = serde_json::from_value(value)?;
             same_key(r, &[&v.profile, &v.url])?;
             let row = AddonRow {
                 transport_url: v.url,
                 manifest_json: v.manifest,
-                position: v.position,
+                position: 0,
                 enabled: v.enabled,
                 allow_private: v.allow_private,
             };
             sql::set_addon(c, &v.profile, &row, v.installed, hlc)?
+        }
+        coll::ADDON_ORDER => {
+            let v: AddonOrderValue = serde_json::from_value(value)?;
+            same_key(r, &[&v.profile, &v.url])?;
+            sql::set_addon_order(c, &v.profile, &v.url, v.position, hlc)?
         }
         coll::ITEMS => {
             let v: ItemValue = serde_json::from_value(value)?;
@@ -1090,6 +1092,7 @@ fn tables(coll: u8) -> &'static [(&'static str, &'static str)] {
     match coll {
         coll::PROFILES => &[("profiles", "id")],
         coll::ADDON => &[("addons", "profile_id || char(31) || transport_url")],
+        coll::ADDON_ORDER => &[("addon_order", "profile_id || char(31) || transport_url")],
         coll::ITEMS => &[("library_items", "profile_id || char(31) || item_id")],
         coll::PROGRESS => &[("progress", "profile_id || char(31) || video_id")],
         coll::WATCHED => &[("watched", "profile_id || char(31) || video_id")],
@@ -1329,10 +1332,11 @@ pub(crate) mod sql {
         Ok(changed)
     }
 
-    /// One addon's register, written when `hlc` is newer than the stored
-    /// one (local edits are guarded too: a pull can apply a newer version
-    /// between an edit taking its hlc and reaching the writer). A removal
-    /// keeps the row as a tombstone (`installed` 0). Returns 1 on change.
+    /// One addon's state register, written when `hlc` is newer than the
+    /// stored one (local edits are guarded too: a pull can apply a newer
+    /// version between an edit taking its hlc and reaching the writer). A
+    /// removal keeps the row as a tombstone (`installed` 0) with no
+    /// manifest. Returns 1 on change.
     pub fn set_addon(
         c: &Connection,
         profile: &str,
@@ -1340,19 +1344,22 @@ pub(crate) mod sql {
         installed: bool,
         hlc: &str,
     ) -> rusqlite::Result<usize> {
+        let manifest = if installed {
+            a.manifest_json.as_str()
+        } else {
+            ""
+        };
         c.execute(
-            "INSERT INTO addons (profile_id, transport_url, manifest_json, position, enabled, allow_private, installed, hlc)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            "INSERT INTO addons (profile_id, transport_url, manifest_json, enabled, allow_private, installed, hlc)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
              ON CONFLICT(profile_id, transport_url) DO UPDATE SET
-               manifest_json = excluded.manifest_json, position = excluded.position,
-               enabled = excluded.enabled, allow_private = excluded.allow_private,
-               installed = excluded.installed, hlc = excluded.hlc
+               manifest_json = excluded.manifest_json, enabled = excluded.enabled,
+               allow_private = excluded.allow_private, installed = excluded.installed, hlc = excluded.hlc
              WHERE excluded.hlc > addons.hlc",
             params![
                 profile,
                 a.transport_url,
-                a.manifest_json,
-                a.position,
+                manifest,
                 a.enabled,
                 a.allow_private,
                 installed,
@@ -1361,43 +1368,20 @@ pub(crate) mod sql {
         )
     }
 
-    /// A whole list from an older build (coll 1), as the write to every
-    /// addon it meant: each listed one installed in its place, each one
-    /// stored here and missing from it removed, each only where `hlc` is
-    /// newer than that addon's own register. Replaying old lists then
-    /// neither brings back an addon removed later nor drops one added later.
-    pub fn apply_list(
+    /// One addon's place register, as `set_addon`. Returns 1 on change.
+    pub fn set_addon_order(
         c: &Connection,
         profile: &str,
-        listed: &[AddonRow],
+        url: &str,
+        position: i64,
         hlc: &str,
     ) -> rusqlite::Result<usize> {
-        let mut changed = 0;
-        for a in listed {
-            changed += set_addon(c, profile, a, true, hlc)?;
-        }
-        let stored: Vec<AddonRow> = c
-            .prepare(
-                "SELECT transport_url, manifest_json, position, enabled, allow_private
-                 FROM addons WHERE profile_id = ?1 AND installed = 1",
-            )?
-            .query_map(params![profile], |r| {
-                Ok(AddonRow {
-                    transport_url: r.get(0)?,
-                    manifest_json: r.get(1)?,
-                    position: r.get(2)?,
-                    enabled: r.get(3)?,
-                    allow_private: r.get(4)?,
-                })
-            })?
-            .collect::<rusqlite::Result<_>>()?;
-        for a in stored
-            .iter()
-            .filter(|a| !listed.iter().any(|l| l.transport_url == a.transport_url))
-        {
-            changed += set_addon(c, profile, a, false, hlc)?;
-        }
-        Ok(changed.min(1))
+        c.execute(
+            "INSERT INTO addon_order (profile_id, transport_url, position, hlc) VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(profile_id, transport_url) DO UPDATE SET position = excluded.position, hlc = excluded.hlc
+             WHERE excluded.hlc > addon_order.hlc",
+            params![profile, url, position, hlc],
+        )
     }
 
     pub fn upsert_item(
