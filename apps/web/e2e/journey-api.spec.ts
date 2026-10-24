@@ -1443,41 +1443,49 @@ test("phone player, portrait and landscape: transport centred, scrubber then opt
 
 test("TV and desktop player: the page draws the lines, over the 5% line, clear of the scrubber", async ({ browser }) => {
   // The scaled canvas (TV at 960x540, a desktop window) is where rects and placed px differ (plans/subtitles-letterbox.md).
-  const c = new Client(`ws://127.0.0.1:${JOURNEY_PORT}/ws`);
-  await c.req("setPrefs", { patch: { subtitleLanguages: ["eng"] } }).finally(() => c.close());
-  for (const [form, size] of [["tv", { width: 960, height: 540 }], ["desktop", { width: 1440, height: 900 }]] as const) {
-    const { context, page: p } = await page(browser, size);
-    await p.goto(`/play/movie/mqjm/mqjm?form=${form}`);
-    await expect(p.locator('[data-f="player:toggle"]')).toBeAttached({ timeout: 30_000 });
-    await startIfPaused(p);
-    await p.evaluate(() => {
-      const v = document.querySelector("video");
-      if (v) v.currentTime = 2;
-    });
-    await expect.poll(() => p.evaluate(() => document.querySelector("video")?.textTracks[0]?.activeCues?.length ?? 0), { timeout: 30_000 }).toBeGreaterThan(0);
-    expect(await p.evaluate(() => document.querySelector("video")?.textTracks[0]?.mode)).toBe("hidden");
-    const cue = () =>
-      p.evaluate(() => {
-        const el = document.querySelector<HTMLElement>(".cues");
-        const v = document.querySelector("video") as HTMLVideoElement;
-        const s = document.querySelector<HTMLElement>(".player-scr .scrub");
-        if (!el) return null;
-        const box = v.getBoundingClientRect();
-        return { bottom: el.getBoundingClientRect().bottom, foot: box.bottom, height: box.height, scrub: s?.getBoundingClientRect().top ?? Infinity };
+  const before = (await prefs()).subtitleLanguages;
+  const set = async (subtitleLanguages: string[]) => {
+    const c = new Client(`ws://127.0.0.1:${JOURNEY_PORT}/ws`);
+    await c.req("setPrefs", { patch: { subtitleLanguages } }).finally(() => c.close());
+  };
+  await set(["eng"]);
+  try {
+    for (const [form, size] of [["tv", { width: 960, height: 540 }], ["desktop", { width: 1440, height: 900 }]] as const) {
+      const { context, page: p } = await page(browser, size);
+      await p.goto(`/play/movie/mqjm/mqjm?form=${form}`);
+      await expect(p.locator('[data-f="player:toggle"]')).toBeAttached({ timeout: 30_000 });
+      await startIfPaused(p);
+      await p.evaluate(() => {
+        const v = document.querySelector("video");
+        if (v) v.currentTime = 2;
       });
-    // Controls hidden: the lines end over the title-safe line.
-    await expect(p.locator(".player-scr")).toHaveClass(/idle/, { timeout: 10_000 });
-    await expect.poll(async () => { const c = await cue(); return c ? c.foot - c.bottom - c.height * 0.05 : -1; }).toBeGreaterThanOrEqual(-1);
-    // The controls up (a key on a TV, the pointer on a desktop; while hidden the first press only shows them):
-    // the lines end over the scrubber, which is on screen.
-    if (form === "tv") await p.keyboard.press("ArrowUp");
-    else {
-      await p.mouse.move(size.width / 2, size.height / 2);
-      await p.mouse.move(size.width / 2 + 20, size.height / 2);
+      await expect.poll(() => p.evaluate(() => document.querySelector("video")?.textTracks[0]?.activeCues?.length ?? 0), { timeout: 30_000 }).toBeGreaterThan(0);
+      expect(await p.evaluate(() => document.querySelector("video")?.textTracks[0]?.mode)).toBe("hidden");
+      const cue = () =>
+        p.evaluate(() => {
+          const el = document.querySelector<HTMLElement>(".cues");
+          const v = document.querySelector("video") as HTMLVideoElement;
+          const s = document.querySelector<HTMLElement>(".player-scr .scrub");
+          if (!el) return null;
+          const box = v.getBoundingClientRect();
+          return { bottom: el.getBoundingClientRect().bottom, foot: box.bottom, height: box.height, scrub: s?.getBoundingClientRect().top ?? Infinity };
+        });
+      // Controls hidden: the lines end over the title-safe line.
+      await expect(p.locator(".player-scr")).toHaveClass(/idle/, { timeout: 10_000 });
+      await expect.poll(async () => { const c = await cue(); return c ? c.foot - c.bottom - c.height * 0.05 : -1; }).toBeGreaterThanOrEqual(-1);
+      // The controls up (a key on a TV, the pointer on a desktop; while hidden the first press only shows them):
+      // the lines end over the scrubber, which is on screen.
+      if (form === "tv") await p.keyboard.press("ArrowUp");
+      else {
+        await p.mouse.move(size.width / 2, size.height / 2);
+        await p.mouse.move(size.width / 2 + 20, size.height / 2);
+      }
+      await expect(p.locator(".player-scr")).not.toHaveClass(/idle/);
+      expect((await cue())?.scrub ?? Infinity).toBeLessThan(size.height);
+      await expect.poll(async () => { const c = await cue(); return c ? c.scrub - c.bottom : -1; }).toBeGreaterThanOrEqual(0);
+      await context.close();
     }
-    await expect(p.locator(".player-scr")).not.toHaveClass(/idle/);
-    expect((await cue())?.scrub ?? Infinity).toBeLessThan(size.height);
-    await expect.poll(async () => { const c = await cue(); return c ? c.scrub - c.bottom : -1; }).toBeGreaterThanOrEqual(0);
-    await context.close();
+  } finally {
+    await set(before);
   }
 });
