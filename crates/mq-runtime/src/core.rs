@@ -1241,7 +1241,7 @@ impl Core {
         // It takes the account's addon list: its first pull decides about
         // what it had only as untouched recommended defaults, before it
         // sends anything (plans/accounts-social-sync.md 13).
-        if let Err(e) = self.library().mark_join_defaults() {
+        if let Err(e) = self.library().mark_join_defaults(self.clock().device()) {
             tracing::warn!("could not mark the join's defaults: {e}");
         }
         // Announced as an addons change: an open addons view drops `fresh`.

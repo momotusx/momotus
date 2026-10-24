@@ -85,7 +85,8 @@ impl Table {
         Some(match name {
             // A profile's PIN and its removal show in its picker entry.
             "profiles" | "profile_lock" | "profile_gone" => Table::Profiles,
-            "addons" => Table::Addons,
+            // A move writes only an addon's place (plans/accounts-social-sync.md 13).
+            "addons" | "addon_order" => Table::Addons,
             "library_items" => Table::LibraryItems,
             // A removal from Continue Watching shows where progress does.
             "progress" | "dismissed" => Table::Progress,
@@ -521,11 +522,30 @@ impl Library {
         })
     }
 
-    /// Marks that this device just joined an account: before it next sends
-    /// anything, its first pull decides about its untouched recommended
-    /// defaults (`settle_join_defaults`).
-    pub fn mark_join_defaults(&self) -> Result<(), LibraryError> {
-        self.set_device_value(JOIN_DEFAULTS, "pending")
+    /// Marks that this device (`device`) just joined an account: before it
+    /// next sends anything, its first pull decides about its untouched
+    /// recommended defaults (`settle_join_defaults`). Until then they wait
+    /// at the lowest time there is (all zero), so whatever the account holds
+    /// for the same addon wins over them on that pull, whichever device id
+    /// is higher (code review A P1-1).
+    pub fn mark_join_defaults(&self, device: u64) -> Result<(), LibraryError> {
+        let mine = format!("{device:016x}");
+        self.write(|c| {
+            for table in ["addons", "addon_order"] {
+                c.execute(
+                    &format!(
+                        "UPDATE {table} SET hlc = ?2 WHERE substr(hlc, 1, 12) = '000000000000' AND substr(hlc, 17) = ?1"
+                    ),
+                    params![mine, WAITING],
+                )?;
+            }
+            c.execute(
+                "INSERT INTO device_state (key, value) VALUES (?1, 'pending')
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                params![JOIN_DEFAULTS],
+            )?;
+            Ok(())
+        })
     }
 
     /// Whether a join waits for `settle_join_defaults`.
@@ -534,16 +554,18 @@ impl Library {
     }
 
     /// After the first pull of a join: a device that joins an account takes
-    /// the account's addon list, so for each profile the account has any
-    /// addon register for, this device's own untouched recommended defaults
-    /// (its addon registers at wall time 0, from the defaults step) go and
-    /// are never sent; what a person added, removed or switched here (a real
-    /// time) stays and merges. A profile the account has no addon register
-    /// for keeps them, so a device never ends a join with no addons. A
-    /// default's place goes only with its state. Only this device's own
-    /// registers (its id in the hlc) are judged, never pulled ones
+    /// the account's addon list. For each profile the account holds any
+    /// addon register for, this device's untouched recommended defaults (the
+    /// ones `mark_join_defaults` set waiting, and that nothing from the
+    /// account replaced) go and are never sent; what a person added,
+    /// removed or switched here (a real time) stays and merges. A profile
+    /// the account holds no addon register for keeps them, so a device
+    /// never ends a join with no addons. A default's place goes only with
+    /// its state. What stays goes back to this device's own zero time
     /// (plans/accounts-social-sync.md 13).
     pub fn settle_join_defaults(&self, device: u64) -> Result<(), LibraryError> {
+        let mine = format!("{device:016x}");
+        let own_zero = crate::hlc::Hlc::zero(device).encode();
         self.write(|c| {
             let pending: bool = c.query_row(
                 "SELECT EXISTS (SELECT 1 FROM device_state WHERE key = ?1)",
@@ -553,36 +575,38 @@ impl Library {
             if !pending {
                 return Ok(());
             }
-            let mine = format!("{device:016x}");
-            const OWN_UNTOUCHED: &str = "substr(hlc, 1, 12) = '000000000000' AND substr(hlc, 17) = ?2";
             let profiles: Vec<String> = c
                 .prepare(
-                    "SELECT profile_id FROM addons WHERE substr(hlc, 1, 12) = '000000000000' AND substr(hlc, 17) = ?1
-                     UNION SELECT profile_id FROM addon_order WHERE substr(hlc, 1, 12) = '000000000000' AND substr(hlc, 17) = ?1",
+                    "SELECT profile_id FROM addons WHERE hlc = ?1 UNION SELECT profile_id FROM addon_order WHERE hlc = ?1",
                 )?
-                .query_map(params![mine], |r| r.get(0))?
+                .query_map(params![WAITING], |r| r.get(0))?
                 .collect::<rusqlite::Result<_>>()?;
             for profile in &profiles {
+                // Anything another device wrote: the account's.
                 let account_has: bool = c.query_row(
-                    "SELECT EXISTS (SELECT 1 FROM addons WHERE profile_id = ?1 AND substr(hlc, 17) != ?2)
-                         OR EXISTS (SELECT 1 FROM addon_order WHERE profile_id = ?1 AND substr(hlc, 17) != ?2)",
-                    params![profile, mine],
+                    "SELECT EXISTS (SELECT 1 FROM addons WHERE profile_id = ?1 AND hlc != ?3 AND substr(hlc, 17) != ?2)
+                         OR EXISTS (SELECT 1 FROM addon_order WHERE profile_id = ?1 AND hlc != ?3 AND substr(hlc, 17) != ?2)",
+                    params![profile, mine, WAITING],
                     |r| r.get(0),
                 )?;
                 if !account_has {
                     continue;
                 }
                 c.execute(
-                    &format!(
-                        "DELETE FROM addon_order WHERE profile_id = ?1 AND {OWN_UNTOUCHED}
-                           AND NOT EXISTS (SELECT 1 FROM addons a WHERE a.profile_id = addon_order.profile_id
-                             AND a.url_hash = addon_order.url_hash AND substr(a.hlc, 1, 12) != '000000000000')"
-                    ),
-                    params![profile, mine],
+                    "DELETE FROM addon_order WHERE profile_id = ?1 AND hlc = ?2
+                       AND NOT EXISTS (SELECT 1 FROM addons a WHERE a.profile_id = addon_order.profile_id
+                         AND a.url_hash = addon_order.url_hash AND a.hlc != ?2)",
+                    params![profile, WAITING],
                 )?;
                 c.execute(
-                    &format!("DELETE FROM addons WHERE profile_id = ?1 AND {OWN_UNTOUCHED}"),
-                    params![profile, mine],
+                    "DELETE FROM addons WHERE profile_id = ?1 AND hlc = ?2",
+                    params![profile, WAITING],
+                )?;
+            }
+            for table in ["addons", "addon_order"] {
+                c.execute(
+                    &format!("UPDATE {table} SET hlc = ?2 WHERE hlc = ?1"),
+                    params![WAITING, own_zero],
                 )?;
             }
             c.execute("DELETE FROM device_state WHERE key = ?1", params![JOIN_DEFAULTS])?;
@@ -1031,6 +1055,9 @@ pub struct CachedResponse {
 /// Device state key: a join waits for its first pull to settle the
 /// device's untouched defaults (`settle_join_defaults`).
 const JOIN_DEFAULTS: &str = "join_defaults";
+/// The time a joining device's untouched defaults wait at until its first
+/// pull settles them: the lowest there is, so the account's win.
+const WAITING: &str = "00000000000000000000000000000000";
 
 /// Rows kept in the HTTP cache; the oldest are trimmed past this.
 const HTTP_CACHE_ROWS: i64 = 2000;
@@ -1456,7 +1483,10 @@ pub(crate) fn places(old: &[Option<i64>], urls: &[&str]) -> Vec<i64> {
             (None, None) => (0, (count + 1) * step),
         };
         for (k, slot) in out[i..end].iter_mut().enumerate() {
-            *slot = (low + (high - low) * (k as i128 + 1) / (count + 1)) as i64;
+            // A place pulled from elsewhere can sit near the ends of i64;
+            // held there, never wrapped.
+            *slot = (low + (high - low) * (k as i128 + 1) / (count + 1))
+                .clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64;
         }
     }
     out

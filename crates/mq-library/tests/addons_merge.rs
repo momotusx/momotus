@@ -464,7 +464,7 @@ fn joining_takes_the_accounts_list_and_merges_a_persons_edits() {
     })
     .unwrap();
     // The join: the first pull, then the settle, before anything is sent.
-    c.mark_join_defaults().unwrap();
+    c.mark_join_defaults(3).unwrap();
     c.apply(&all(&a)).unwrap();
     c.settle_join_defaults(3).unwrap();
     assert!(!c.join_defaults_pending().unwrap());
@@ -517,10 +517,71 @@ fn joining_an_account_with_no_addons_keeps_the_defaults() {
     let a = Library::temporary().unwrap();
     let c = Library::temporary().unwrap();
     c.set_addons("p", &[row(X), row(Y)], &hlc(0, 3)).unwrap();
-    c.mark_join_defaults().unwrap();
+    c.mark_join_defaults(3).unwrap();
     c.apply(&all(&a)).unwrap();
     c.settle_join_defaults(3).unwrap();
     assert_eq!(urls(&c), [X, Y]);
     exchange(&a, &c);
     assert_eq!(urls(&a), [X, Y]);
+}
+
+/// The account's untouched defaults win on the joiner's first pull over
+/// the joiner's own untouched copy of the same addon, whichever device id
+/// is higher, so the settle never takes the account's away (code review A
+/// P1-1).
+#[test]
+fn a_join_keeps_the_accounts_untouched_defaults_whatever_the_device_ids() {
+    for (creator, real) in [(1u64, true), (9, true), (1, false), (9, false)] {
+        // The account: X and Y untouched from its creator, and maybe one real add.
+        let a = Library::temporary().unwrap();
+        a.set_addons("p", &[row(X), row(Y)], &hlc(0, creator))
+            .unwrap();
+        if real {
+            add(&a, Z, &hlc(5, creator));
+        }
+        // The joiner (device 3) kept the same defaults untouched.
+        let c = Library::temporary().unwrap();
+        c.set_addons("p", &[row(X), row(Y)], &hlc(0, 3)).unwrap();
+        c.mark_join_defaults(3).unwrap();
+        c.apply(&all(&a)).unwrap();
+        c.settle_join_defaults(3).unwrap();
+        assert_eq!(urls(&c), urls(&a), "creator {creator}, real {real}");
+        let want: &[&str] = if real { &[X, Y, Z] } else { &[X, Y] };
+        assert_eq!(urls(&c), want, "creator {creator}, real {real}");
+    }
+}
+
+/// A move writes only places, and still tells the addons views to read
+/// again, here and on a device that pulls it (code review B P1-1).
+#[test]
+fn a_move_alone_is_announced_as_an_addons_change() {
+    let (a, b) = (Library::temporary().unwrap(), Library::temporary().unwrap());
+    add(&a, X, &hlc(1, 1));
+    add(&a, Y, &hlc(2, 1));
+    exchange(&a, &b);
+    let mut here = a.subscribe();
+    a.edit_addons("p", &hlc(5, 1), |rows: &mut Vec<AddonRow>| {
+        let y = rows.pop().unwrap();
+        rows.insert(0, y);
+        Ok::<_, mq_library::LibraryError>(())
+    })
+    .unwrap();
+    assert!(
+        here.try_recv()
+            .unwrap()
+            .contains(&mq_library::Table::Addons)
+    );
+    let moved: Vec<SyncRecord> = all(&a)
+        .into_iter()
+        .filter(|r| r.coll == coll::ADDON_ORDER)
+        .collect();
+    let mut there = b.subscribe();
+    b.apply(&moved).unwrap();
+    assert!(
+        there
+            .try_recv()
+            .unwrap()
+            .contains(&mq_library::Table::Addons)
+    );
+    assert_eq!(urls(&b), [Y, X]);
 }
