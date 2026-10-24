@@ -103,7 +103,7 @@ pub use torrent_state::{
 // Marquee fork: external block scheduler hook.
 pub use torrent_state::ext::{ExtEvent, ExtSched};
 // Marquee fork (plans/streaming-window.md 2.5): eviction rounds.
-pub use storage::filesystem::punch_supported;
+pub use storage::filesystem::{punch_probe, punch_supported};
 pub use torrent_state::evict::Evicted;
 // Marquee fork: per-peer counters for the engine's start diagnostics.
 pub use torrent_state::peer::stats::snapshot::{

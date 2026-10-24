@@ -1014,16 +1014,26 @@ fn a_torrent_that_does_not_fit_shows_in_a_window_however_short() {
     };
     let ranked = case(3 << 29, true, 7200).rank(remux());
     assert_eq!(ranked.rows.len(), 1, "{:?}", ranked.hidden);
-    // And with no room at all: a ring, under a minute ahead, which reads
-    // as a row that fits (no "about 0 min ahead").
+    // And with no room at all: a ring, under a minute ahead. No "about 0
+    // min ahead": it reads as the large file it is.
     let full = case(0, true, 7200).rank(remux());
     assert!(
-        matches!(
-            full.rows[0].line,
-            ReasonLine::Quick { .. } | ReasonLine::Should { .. }
-        ),
+        matches!(full.rows[0].line, ReasonLine::Large { .. }),
         "{:?}",
         full.rows[0].line
+    );
+    // Shown is not ranked equal (review r1 P2): with 600 MiB free on a 4K
+    // device, a 30 GiB 4K remux the line sustains plays in a ring of
+    // seconds and comes after a 1.2 GiB 1080p under the size limit.
+    let both = windowed_case((512 + 88) << 20, Some(9000), caps_4k_dv()).rank(vec![
+        seeded(2, "Movie.2020.2160p.BluRay.REMUX.HEVC-GRP", 300, 30.0),
+        seeded(4, "Movie.2020.1080p.WEB-DL.x264-GRP", 300, 1.2),
+    ]);
+    assert_eq!(
+        first_line(both.best().unwrap()),
+        "Movie.2020.1080p.WEB-DL.x264-GRP",
+        "{:?}",
+        both.rows
     );
     // 0.13 GiB with 1.1 GB free fits whole (the 1 GiB spare hid it).
     let small = vec![seeded(3, "Movie.2010.1080p.WEB.x264-GRP", 300, 0.133)];

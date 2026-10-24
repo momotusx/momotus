@@ -289,10 +289,21 @@ impl Written {
                     }
                     any |= on_disk;
                 }
-                // The new files' names too.
+                // The new files' names too; a volume that cannot sync a
+                // folder (some FUSE ones) gets the files' syncs alone.
                 #[cfg(unix)]
                 if any {
-                    std::fs::File::open(path)?.sync_all()?;
+                    match std::fs::File::open(path).and_then(|d| d.sync_all()) {
+                        Err(e)
+                            if !matches!(
+                                e.kind(),
+                                std::io::ErrorKind::InvalidInput | std::io::ErrorKind::Unsupported
+                            ) =>
+                        {
+                            return Err(e);
+                        }
+                        _ => {}
+                    }
                 }
                 any
             } else {

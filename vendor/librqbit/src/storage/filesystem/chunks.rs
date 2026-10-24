@@ -107,6 +107,15 @@ impl Chunked {
             {
                 let mut ram = self.ram.lock();
                 if self.memory.load(Ordering::Relaxed) || ram.contains_key(&piece) {
+                    // A piece that enters RAM leaves its piece file, so a
+                    // piece file there always means the piece is on disk
+                    // (the bitfield claims it by that).
+                    if !ram.contains_key(&piece) {
+                        match std::fs::remove_file(self.path(piece)) {
+                            Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e.into()),
+                            _ => {}
+                        }
+                    }
                     let p = ram
                         .entry(piece)
                         .or_insert_with(|| vec![0; piece_len as usize].into_boxed_slice());
@@ -185,15 +194,17 @@ fn blocks(m: &std::fs::Metadata) -> u64 {
     }
 }
 
-/// `dir` holds piece files only (files named by a number): one torrent
-/// file, not a folder of the torrent.
+/// `dir` holds piece files only (files named by a number), at least one:
+/// one torrent file, not a folder of the torrent.
 pub fn is_chunked(dir: &Path) -> bool {
     std::fs::read_dir(dir).is_ok_and(|entries| {
+        let mut any = false;
         entries.flatten().all(|e| {
+            any = true;
             e.file_type().is_ok_and(|t| t.is_file())
                 && e.file_name()
                     .to_str()
                     .is_some_and(|n| n.parse::<u64>().is_ok())
-        })
+        }) && any
     })
 }

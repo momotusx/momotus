@@ -501,6 +501,8 @@ pub(crate) struct Torrent {
     /// Its piece files keep new pieces in RAM: a ring the disk cannot hold
     /// plays (plans/streaming-window-chunks.md).
     memory: Arc<std::sync::atomic::AtomicBool>,
+    /// Its files are piece files, so a RAM ring can play it.
+    chunked: std::sync::atomic::AtomicBool,
 }
 
 impl Torrent {
@@ -616,10 +618,11 @@ impl Engine {
         // Where holes do not punch, files are kept as piece files, so a
         // window frees space everywhere (plans/streaming-window-chunks.md).
         let dir = cfg.data_dir.clone();
-        let punches = tokio::task::spawn_blocking(move || librqbit::punch_supported(&dir))
+        // A probe that could not tell (a full disk) keeps whole files.
+        let punches = tokio::task::spawn_blocking(move || librqbit::punch_probe(&dir))
             .await
-            .unwrap_or(false);
-        tracing::info!(punches, "torrent folder probed");
+            .unwrap_or(None);
+        tracing::info!(?punches, "torrent folder probed");
         let session = Session::new_with_opts(cfg.data_dir.clone(), opts).await?;
         let scraper = scrape::Scraper::new(scopes.trackers.clone());
         let engine = Self {
@@ -642,7 +645,7 @@ impl Engine {
                 #[cfg(feature = "test-hooks")]
                 free_base: Mutex::default(),
                 counted: Mutex::default(),
-                chunked: !punches,
+                chunked: punches == Some(false),
             }),
         };
         tokio::spawn(maintenance(Arc::downgrade(&engine.inner)));
@@ -840,6 +843,7 @@ impl Engine {
             starved: Default::default(),
             rounds: AtomicU64::new(0),
             memory: Arc::default(),
+            chunked: std::sync::atomic::AtomicBool::new(false),
         });
         let mut torrents = lock(&self.inner.torrents);
         if let Some((&h, _)) = torrents
@@ -974,6 +978,14 @@ impl Engine {
         // The details beside the `.have`, so the next start reads them with
         // no peer (start-latency cause 5); they go with the folder.
         keep_torrent(t.dir.with_extension(TORRENT), t.torrent_bytes.clone()).await;
+        // Piece files where holes do not punch, and on any volume with no
+        // room for a ring on disk, so a RAM ring can play it
+        // (plans/streaming-window-chunks.md).
+        let chunked = self.inner.chunked
+            || self
+                .free()
+                .is_some_and(|free| free < RESERVE_BYTES + window::RING_BYTES);
+        t.chunked.store(chunked, Ordering::Relaxed);
         let opts = AddTorrentOptions {
             only_files: Some(vec![idx]),
             overwrite: true,
@@ -986,7 +998,7 @@ impl Engine {
             }),
             storage_factory: Some(librqbit::storage::StorageFactoryExt::boxed(
                 librqbit::storage::filesystem::FilesystemStorageFactory {
-                    chunked: self.inner.chunked,
+                    chunked,
                     memory: t.memory.clone(),
                 },
             )),
@@ -1517,7 +1529,7 @@ impl Engine {
         }
         // A ring the disk cannot hold keeps its pieces in RAM, where they are
         // piece files (plans/streaming-window-chunks.md); it needs no disk.
-        let memory = w.plan.memory && self.inner.chunked;
+        let memory = w.plan.memory && t.chunked.load(Ordering::Relaxed);
         t.memory.store(memory, Ordering::Relaxed);
         if !memory {
             let dir = t.dir.clone();
@@ -1650,21 +1662,25 @@ impl Engine {
     async fn trim(&self, h: TorrentHandle, t: &Torrent, w: window::WindowState) {
         // A RAM ring leaves the session instead, so no RAM is held between
         // playbacks; the next file choice starts it again
-        // (plans/streaming-window-chunks.md).
-        if t.memory.load(Ordering::Relaxed) && t.readers.load(Ordering::Relaxed) == 0 {
-            t.memory.store(false, Ordering::Relaxed);
+        // (plans/streaming-window-chunks.md). A playback claims before it
+        // chooses a file, so one that came meanwhile keeps the torrent; a
+        // reader with no claim is a closed playback's.
+        if t.memory.load(Ordering::Relaxed) {
             let mut live = t.live.lock().await;
-            let _round = t.keeper.lock().await;
-            if let Some(l) = live.take()
-                && let Err(e) = self
-                    .inner
-                    .session
-                    .delete(l.managed.id().into(), false)
-                    .await
-            {
-                tracing::warn!("unloading {}: {e:#}", t.info_hash);
+            if !t.claimed() {
+                let _round = t.keeper.lock().await;
+                t.memory.store(false, Ordering::Relaxed);
+                if let Some(l) = live.take()
+                    && let Err(e) = self
+                        .inner
+                        .session
+                        .delete(l.managed.id().into(), false)
+                        .await
+                {
+                    tracing::warn!("unloading {}: {e:#}", t.info_hash);
+                }
             }
-            drop((_round, live));
+            drop(live);
             self.put_window(t, None, None, Some(w.generation)).await;
             return;
         }

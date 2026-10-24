@@ -300,6 +300,49 @@ async fn a_ram_ring_plays_without_the_disk() {
     assert!(w.read(30 * MIB, 31 * MIB).await == w.movie(30 * MIB, 31 * MIB));
 }
 
+/// The RAM ring a 4K remux gets (review r1 P2-4): 16 MiB pieces, the plan's
+/// own ring for a 7.5 MB/s file with no room (45 MiB, under two pieces of
+/// pins), on a folder that cannot punch. 128 MiB read byte for byte, the
+/// scheduler holding at most the ring and a blocking span (two pieces).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_ram_ring_of_large_pieces_plays() {
+    const BIG: u32 = 16 << 20;
+    let mut ring = mq_engine::window_plan(
+        mq_engine::DeviceClass::Standard,
+        mq_engine::WindowInputs {
+            bitrate: 7_500_000,
+            piece_len: u64::from(BIG),
+            fill: 5_000_000,
+            ..Default::default()
+        },
+    );
+    assert!(ring.memory && ring.budget == RING_BYTES, "{ring:?}");
+    // The scheduler's budget leaves out APFS's head on this Mac.
+    ring.budget += APFS_HEAD_BYTES;
+    let s = support::swarm_big(128 << 20, BIG).await;
+    let root = tempfile::tempdir().unwrap();
+    sync_log::fail(root.path(), Fail::PunchRefused, usize::MAX);
+    let w = windowed_on(s, root, ring, None).await;
+    let held = Arc::new(AtomicU64::new(0));
+    let watch = tokio::spawn({
+        let (engine, t, held) = (w.engine.clone(), w.t, held.clone());
+        async move {
+            loop {
+                if let Ok(s) = engine.stats(t).await {
+                    held.fetch_max(s.held_bytes.unwrap_or(0), Ordering::Relaxed);
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        }
+    });
+    let len = w.s.movie.len() as u64;
+    let got = w.read(0, len).await;
+    watch.abort();
+    assert!(got == w.s.movie, "bytes differ");
+    let held = held.load(Ordering::Relaxed);
+    assert!(held <= RING_BYTES + 2 * u64::from(BIG), "held {held}");
+}
+
 /// m. A parked read whose readahead (12 MiB here) wants more than the
 /// window has room for: the torrent fills up to the cap. Then, the
 /// bitfield's fsync held (a round can free nothing until it ends), a seek:
@@ -1135,7 +1178,7 @@ async fn a_slow_fsync_never_stalls_the_adapter() {
 
 /// o. Room under `W_min + 64 MiB` (a 38 Mbit/s remux): a ring, never a
 /// refusal (plans/streaming-window-chunks.md). `max(room, RING)`, in RAM
-/// when the room is under the ring; at least four pieces.
+/// when the room is under the ring; at least two pieces.
 #[test]
 fn a_device_under_the_window_floor_plays_in_a_ring() {
     let plan = |free: u64, piece_len: u64| {
@@ -1159,7 +1202,12 @@ fn a_device_under_the_window_floor_plays_in_a_ring() {
     let ram = plan(RESERVE_BYTES + 32 * MIB, 4 * MIB);
     assert_eq!((ram.budget, ram.memory), (RING_BYTES, true));
     assert_eq!(plan(0, 4 * MIB).budget, RING_BYTES, "a full disk too");
-    assert_eq!(plan(0, 16 * MIB).budget, 64 * MIB, "four pieces");
+    assert_eq!(
+        plan(0, 16 * MIB).budget,
+        RING_BYTES,
+        "45 MiB at 16 MiB pieces"
+    );
+    assert_eq!(plan(0, 32 * MIB).budget, 64 * MIB, "two pieces");
     assert!(
         disk.within(disk.budget - 1).is_none(),
         "a walk under the ring"

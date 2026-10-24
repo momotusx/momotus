@@ -21,6 +21,9 @@ pub struct RankInput<'a> {
 }
 
 const MAX_REASONS: usize = 3;
+/// A window that holds less than this much of a file ahead ranks as a file
+/// too large, never hidden (plans/streaming-window-chunks.md).
+const WINDOW_AHEAD_S: u64 = 120;
 /// Torrents under this many seeders may not start at all.
 const FEW_SEEDERS: u32 = 5;
 /// Seeders count in the score up to this many, then the file decides. The
@@ -907,9 +910,12 @@ fn score(stream: ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Sco
         },
         viable: start > 0 && !fails_here,
         // A windowed row frees the disk as it plays: under the default
-        // limit it passes; a limit the viewer chose compares the file
-        // (plans/streaming-window.md 3.1).
-        size_ok: (window.is_some() && !input.conditions.limit_chosen)
+        // limit it passes when its window holds 2 minutes ahead; a ring
+        // that holds less, or a limit the viewer chose, compares the file,
+        // so a row that fits or holds more ranks first (plans/streaming-window.md
+        // 3.1, plans/streaming-window-chunks.md).
+        size_ok: (matches!(window, Some(Room::Window { ahead_s, .. }) if ahead_s >= WINDOW_AHEAD_S)
+            && !input.conditions.limit_chosen)
             || size_ok(weight.size, class, input.prefs),
         tier: tier(class, start),
         binge: matches!((input.last_binge_group, &s.binge_group), (Some(a), Some(b)) if a == b),

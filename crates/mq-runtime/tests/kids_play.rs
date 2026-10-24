@@ -1601,7 +1601,20 @@ async fn a_packs_played_episode_is_room_for_the_next_only_in_a_window() {
     // counting episode 1's 140 MiB. Maintenance counts the folder idle.
     let free = mq_engine::RESERVE_BYTES + 40 * MIB;
     tokio::time::sleep(Duration::from_secs(6)).await;
-    // Episode 2 in a window, which evicts episode 1 first.
+    // A new start of the torrent with its folder kept, as after a
+    // relaunch: the loopback swarm has no tracker, so the seeder is given
+    // again (an idle connection to it may have closed). Then episode 1
+    // again, and episode 2 in a window, which evicts episode 1 first.
+    until_async("the torrent let go", || async {
+        s.leecher.remove(t, true).await.is_ok()
+    })
+    .await;
+    let t = s
+        .leecher
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    play_first().await;
     owner.set_free_bytes(free);
     let view = PlaybackView::open(&owner, next, target("movie", "tt2", "tt2"));
     let url = ready(&view).await;

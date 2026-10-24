@@ -13,7 +13,9 @@ pub const RESERVE_BYTES: u64 = 512 * MIB;
 
 /// The least ring a window plays in when the room cannot hold `W_min`
 /// (plans/streaming-window-chunks.md): Stremio's 45 MiB RAM ring on the
-/// owner's Fire TV, and at least four pieces.
+/// owner's Fire TV, and at least two pieces (the one read and the next),
+/// so a torrent of large pieces does not take a large share of a stick's
+/// RAM.
 pub const RING_BYTES: u64 = 45 * MIB;
 
 /// APFS keeps a file's first 16 MiB allocated through a punch (2.6): on
@@ -182,7 +184,7 @@ pub fn window_plan(cfg: &Config, i: WindowInputs) -> WindowPlan {
     let fixed = fixed + playing;
     let floor = fixed + playing;
     if room < floor + 64 * MIB {
-        let budget = room.max(RING_BYTES.max(4 * piece));
+        let budget = room.max(RING_BYTES.max(2 * piece));
         let (_, slack, open_floor, open_cap, _) = parts(budget);
         let behind = budget / 4;
         return WindowPlan {

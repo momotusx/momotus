@@ -727,6 +727,17 @@ async fn a_failed_punch_never_claims_its_pieces_again() {
     let refused = tempfile::tempdir().unwrap();
     sync_log::fail(refused.path(), Fail::Punch, usize::MAX);
     assert!(!mq_engine::librqbit::punch_supported(refused.path()));
+    // A punch that failed after work says nothing about the volume, so it
+    // keeps whole files; only a refusal says it cannot punch (review r1
+    // P2-2).
+    assert_eq!(mq_engine::librqbit::punch_probe(refused.path()), None);
+    let unsupported = tempfile::tempdir().unwrap();
+    sync_log::fail(unsupported.path(), Fail::PunchRefused, usize::MAX);
+    assert_eq!(
+        mq_engine::librqbit::punch_probe(unsupported.path()),
+        Some(false)
+    );
+    assert_eq!(mq_engine::librqbit::punch_probe(ok.path()), Some(true));
 
     let l = leeched().await;
     sync_log::fail(l.root(), Fail::Punch, usize::MAX);
@@ -1303,4 +1314,45 @@ fn piece_files_read_write_and_evict_across_boundaries() {
     assert_eq!(read(c, 1300, 1000), d[1300..2300]);
     assert!(is_chunked(dir));
     assert!(!is_chunked(td.path()), "a folder of folders is no file");
+    let empty = td.path().join("empty");
+    std::fs::create_dir(&empty).unwrap();
+    assert!(!is_chunked(&empty), "an empty folder is no file");
+}
+
+/// A piece half written to its piece file when the RAM switch turns on
+/// (review r1 P2-1): its piece file goes as it enters RAM, so a piece file
+/// on disk always holds the piece (the bitfield claims it by that), and
+/// what was on disk reads as zeros until it is fetched again.
+#[test]
+fn a_piece_that_enters_ram_leaves_its_piece_file() {
+    use mq_engine::librqbit::storage::filesystem::Chunked;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let td = tempfile::tempdir().unwrap();
+    let dir = td.path().join("f");
+    std::fs::create_dir(&dir).unwrap();
+    let memory = Arc::new(AtomicBool::new(false));
+    let c = Chunked::new(dir.clone(), 0, 1000, 3000).with_memory(memory.clone());
+    c.write_all_at(0, &[1; 500]).unwrap();
+    c.write_all_at(1000, &[2; 1000]).unwrap();
+    assert!(dir.join("0").exists() && dir.join("1").exists());
+    memory.store(true, Ordering::Relaxed);
+    c.write_all_at(500, &[3; 500]).unwrap();
+    assert!(!dir.join("0").exists(), "piece 0 is in RAM now");
+    let mut buf = vec![9; 1000];
+    c.read_exact_at(0, &mut buf).unwrap();
+    assert_eq!(&buf[..500], &[0; 500][..], "its disk part is gone");
+    assert_eq!(&buf[500..], &[3; 500][..]);
+    // Piece 1, whole on disk, stays there and reads from it.
+    c.read_exact_at(1000, &mut buf).unwrap();
+    assert_eq!(buf, [2; 1000]);
+    assert!(dir.join("1").exists());
+    // A new piece goes to RAM, never to disk; an eviction drops it.
+    c.write_all_at(2000, &[4; 1000]).unwrap();
+    assert!(!dir.join("2").exists());
+    c.read_exact_at(2000, &mut buf).unwrap();
+    assert_eq!(buf, [4; 1000]);
+    assert_eq!(c.punch(2000, 1000).unwrap(), 2000..3000);
+    c.read_exact_at(2000, &mut buf).unwrap();
+    assert_eq!(buf, [0; 1000], "evicted from RAM");
 }

@@ -127,12 +127,30 @@ fn punch_once(_file: &File, _offset: u64, _len: u64) -> io::Result<()> {
 /// scratch file of its own, so two probes at once (the core's at open and
 /// the engine's at start) never truncate each other's.
 pub fn punch_supported(dir: &Path) -> bool {
+    punch_probe(dir) == Some(true)
+}
+
+/// Marquee fork (plans/streaming-window-chunks.md): the probe of
+/// [`punch_supported`], with `None` when it could not tell (a write or a
+/// sync failed, a full disk): only `Some(false)`, a punch refused or no
+/// fall, says the volume cannot punch.
+pub fn punch_probe(dir: &Path) -> Option<bool> {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let path = dir.join(format!(".mq-punch-probe-{}-{n}", std::process::id()));
-    let ok = probe(&path).unwrap_or(false);
+    let answer = probe(&path).ok();
     let _ = std::fs::remove_file(&path);
-    ok
+    answer
+}
+
+/// A punch the volume refuses before any work: no support for it.
+#[cfg(unix)]
+fn refused(e: &io::Error) -> bool {
+    e.kind() == io::ErrorKind::Unsupported
+        || matches!(
+            e.raw_os_error(),
+            Some(libc::EOPNOTSUPP | libc::ENOTTY | libc::EINVAL | libc::ENOSYS)
+        )
 }
 
 #[cfg(unix)]
@@ -150,7 +168,10 @@ fn probe(path: &Path) -> io::Result<bool> {
     }
     file.sync_all()?;
     let before = file.metadata()?.blocks() * 512;
-    let freed = punch_file(&file, path, EXTENT, EXTENT)?;
+    let freed = match punch_file(&file, path, EXTENT, EXTENT) {
+        Err(e) if refused(&e) => return Ok(false),
+        r => r?,
+    };
     file.sync_all()?;
     let after = file.metadata()?.blocks() * 512;
     Ok(freed == (EXTENT..2 * EXTENT) && before.saturating_sub(after) >= EXTENT)

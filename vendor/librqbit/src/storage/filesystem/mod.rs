@@ -7,4 +7,4 @@ mod sparse;
 pub use chunks::{Chunked, allocated, is_chunked};
 pub use fs::{FilesystemStorage, FilesystemStorageFactory};
 pub use opened_file::OurFileExt;
-pub use punch::punch_supported;
+pub use punch::{punch_probe, punch_supported};
