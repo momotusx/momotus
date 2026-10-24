@@ -225,7 +225,13 @@ fun TvHome(
             state.focus.refresh()
         }
     }
-    LaunchedEffect(state) { restoreFocus(home, state, state.focus.focusedKey) }
+    // Shown from the bar (focus rested on its tab, or Back from the bar), Home leaves focus there: Down comes in.
+    // At a start the system's own focus may sit on the bar before any key; Home takes it then.
+    val nav = LocalTvNav.current
+    LaunchedEffect(state) {
+        if (nav?.held == true && state.focus.interactions > 0) return@LaunchedEffect
+        restoreFocus(home, state, state.focus.focusedKey)
+    }
     // On the first lane the hero shows above it: the page rests at its top. The page's anchor leaves
     // that move to this alone, so two scrolls never take turns; it runs again when the hero arrives
     // (the list keeps the first lane in place, so a hero that arrives later starts out of view).

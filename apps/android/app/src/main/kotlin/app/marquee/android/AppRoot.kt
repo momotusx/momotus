@@ -69,6 +69,7 @@ import app.marquee.design.actionWindow
 import app.marquee.ui.phone.PhoneHome
 import app.marquee.ui.phone.PhoneShell
 import app.marquee.ui.tv.TvHome
+import app.marquee.ui.tv.TvNavFocus
 import app.marquee.ui.tv.TvShell
 import app.marquee.ui.tv.firstTarget
 import app.marquee.ui.tv.focusFirstRow
@@ -334,6 +335,7 @@ private fun AppNav(
     // finishes and the process stays cached for a quick return. On TV the first Back on Home
     // first moves focus to the first row, so a second Back leaves.
     HomeBackHandler(app, active = tv && top == Route.Home)
+    val tvNav = remember { TvNavFocus() }
     // Home stays composed under a title page while it fades: what focus does there must not change where Back returns to.
     SideEffect { app.tvHome.focus.paused = top != Route.Home }
 
@@ -341,7 +343,12 @@ private fun AppNav(
         val fade = screenFade(Marquee.panelMs)
         NavDisplay(
             backStack = backStack,
-            onBack = { if (backStack.size > 1) backStack.removeAt(backStack.lastIndex) },
+            onBack = {
+                // TV: Back in a place's content first puts focus on its tab, as Menu does on Apple TV; Back on the bar
+                // then goes Home. Home keeps its own chain (HomeBackHandler).
+                val toBar = tv && top.isTopLevel && !tvNav.held && tvNav.take()
+                if (!toBar && backStack.size > 1) backStack.removeAt(backStack.lastIndex)
+            },
             entryDecorators =
                 listOf(
                     rememberSaveableStateHolderNavEntryDecorator(),
@@ -763,6 +770,7 @@ private fun AppNav(
             contentEntry = { if (top == Route.Home) app.tvHome.focus.lastEntry() else null },
             onNavFocus = { app.tvHome.focus.leftContent() },
             onKey = { app.tvHome.focus.interacted() },
+            nav = tvNav,
             profileButton = { PillProfile(gate) { backStack.add(Route.Profiles) } },
             content = content,
         )
