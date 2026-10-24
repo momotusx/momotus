@@ -1838,8 +1838,15 @@ async fn push(
     if request.records.len() > PAGE {
         return error(StatusCode::BAD_REQUEST, "too many records in one push");
     }
+    let server_ms = state.now_ms();
+    let mut db = lock(&state);
+    let auth = match active(authorize(&db, &headers)) {
+        Ok(auth) => auth,
+        Err(refusal) => return *refusal,
+    };
     // A whole addon list (coll 1) comes only from a build older than the
-    // per-addon merge (plans/accounts-social-sync.md 13); taken, it would
+    // per-addon merge, checked once the device is known (so strangers cannot
+    // fill the log) (plans/accounts-social-sync.md 13); taken, it would
     // undo other devices' addons on any device that read it. That device
     // updates first.
     if request.records.iter().any(|r| r.coll == 1) {
@@ -1853,21 +1860,18 @@ async fn push(
             .chars()
             .take(64)
             .collect();
-        tracing::warn!(
-            "refused whole addon list {n} since start, from {build}: an app older than the per-addon merge"
-        );
+        // The first and every hundredth: an older app retries each round.
+        if n == 1 || n % 100 == 0 {
+            tracing::warn!(
+                "refused whole addon list {n} since start, from {build}: an app older than the per-addon merge"
+            );
+        }
         return identity::coded(
             StatusCode::BAD_REQUEST,
             "oldBuild",
             "this app is older than its sync service: update it to sync",
         );
     }
-    let server_ms = state.now_ms();
-    let mut db = lock(&state);
-    let auth = match active(authorize(&db, &headers)) {
-        Ok(auth) => auth,
-        Err(refusal) => return *refusal,
-    };
     let account = hex::encode(auth.account.0);
     let result = (|| -> rusqlite::Result<Result<PushResponse, Response>> {
         let tx = db.transaction()?;
