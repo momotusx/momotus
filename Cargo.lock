@@ -2549,6 +2549,7 @@ dependencies = [
  "mq-sync-server",
  "serde",
  "serde_json",
+ "sha2 0.11.1",
  "tokio",
  "url",
 ]

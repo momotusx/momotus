@@ -9,7 +9,13 @@ publish.workspace = true
 name = "mq"
 path = "src/main.rs"
 
+[features]
+# Bench only: `play-magnet --no-punch` and `--free` force the engine's
+# piece files and a set free space (plans/streaming-window-chunks.md).
+test-hooks = ["mq-engine/test-hooks"]
+
 [dependencies]
+sha2 = "0.11"
 mq-runtime = { path = "../mq-runtime", features = ["torrent"] }
 mq-engine = { path = "../mq-engine" }
 mq-server = { path = "../mq-server", features = ["torrent"] }

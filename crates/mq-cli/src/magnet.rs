@@ -12,6 +12,7 @@ use mq_engine::{Engine, EngineConfig, FileHint, PieceCheck, TorrentHandle};
 use mq_http::{ClientConfig, HttpClient, Priority, RequestOptions};
 use mq_server::{StreamServer, Upstream};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 
 use crate::play::{PlayOptions, play_url};
 
@@ -47,6 +48,9 @@ pub struct MagnetOptions {
     pub window: Option<u64>,
     /// No open-pieces limit in the window.
     pub no_open_limit: bool,
+    /// Bench only: files kept as piece files, and the free space set.
+    pub no_punch: bool,
+    pub free: Option<u64>,
 }
 
 /// The P2P speed the CLI plans a window with (the app's prior).
@@ -162,6 +166,7 @@ async fn read_checked(
         Err(e) => return json!({ "offset": offset, "error": e.to_string() }),
     };
     let (mut got, mut first, mut stalls, mut stall_ms) = (0u64, None, 0u32, 0u64);
+    let (mut sha, mut mib10) = (Sha256::new(), None);
     let mut per_s: Vec<u64> = Vec::new();
     while got < want && stop.is_none_or(|s| started.elapsed() < s) {
         if let Some(rate) = rate.filter(|r| *r > 0) {
@@ -184,7 +189,11 @@ async fn read_checked(
             .len()
             .min(usize::try_from(want - got).unwrap_or(usize::MAX));
         check.feed(&chunk[..take]);
+        sha.update(&chunk[..take]);
         got += take as u64;
+        if got >= 10 * MIB {
+            mib10.get_or_insert_with(|| ms(started));
+        }
         let first = *first.get_or_insert_with(|| ms(started));
         let second = (ms(started) - first) as usize / 1000;
         if per_s.len() <= second {
@@ -195,8 +204,9 @@ async fn read_checked(
     // The last second is partial.
     per_s.pop();
     json!({
-        "offset": offset, "bytes": got, "first_byte_ms": first,
+        "offset": offset, "bytes": got, "first_byte_ms": first, "mib10_ms": mib10,
         "ms": (got >= want).then(|| ms(started)), "stalls": stalls, "stall_ms": stall_ms,
+        "sha256": sha.finalize().iter().map(|b| format!("{b:02x}")).collect::<String>(),
         "fill_secs": per_s.len(),
         "fill_p10_bytes_per_s": percentile(&per_s, 0.1),
         "fill_p50_bytes_per_s": percentile(&per_s, 0.5),
@@ -221,7 +231,8 @@ async fn swarm_rate(engine: Engine, t: TorrentHandle, out: Arc<std::sync::Mutex<
 }
 
 /// `--walk`: reads at 25, 50 and 75% (4 MiB each), the whole file from
-/// `from` at `rate` (for at most `stop`), then 64 MiB back at 10%. During
+/// `from` at `rate` (for at most `stop`), then 64 MiB back at 10% and
+/// 50 MiB at 50%. During
 /// the whole read the swarm's rate is sampled each second: what the engine
 /// verified and what it received.
 async fn walk(
@@ -248,8 +259,10 @@ async fn walk(
     let received: Vec<u64> = rates.iter().map(|r| r.1).collect();
     let back = (at(10.0), (64 * MIB).min(len - at(10.0)));
     let back = read_checked(http, url, back, (None, None), &mut check).await;
+    let mid = (at(50.0), (50 * MIB).min(len - at(50.0)));
+    let mid = read_checked(http, url, mid, (None, None), &mut check).await;
     json!({
-        "forward": forward, "whole": whole, "back": [back],
+        "forward": forward, "whole": whole, "back": [back], "mid": mid,
         "checked": check.checked, "wrong": check.wrong,
         "swarm": {
             "secs": rates.len(),
@@ -421,7 +434,19 @@ async fn run(
         config.cache_budget_bytes = bytes;
     }
     config.limits.download_bps = o.download_limit.and_then(std::num::NonZeroU32::new);
+    if o.no_punch || o.free.is_some() {
+        #[cfg(not(feature = "test-hooks"))]
+        return Err("--no-punch and --free need a build with test-hooks".into());
+        #[cfg(feature = "test-hooks")]
+        if o.no_punch {
+            use mq_engine::librqbit::sync_log::{Fail, fail};
+            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+            fail(dir, Fail::PunchRefused, usize::MAX);
+        }
+    }
     let engine = Engine::start(config).await.map_err(|e| e.to_string())?;
+    #[cfg(feature = "test-hooks")]
+    mq_engine::test_hooks::set_free(&engine, o.free);
     // The data folder's allocated bytes, sampled every 250 ms.
     let max_allocated = Arc::new(AtomicU64::new(0));
     let sampler = tokio::spawn({
@@ -524,14 +549,14 @@ async fn run(
         &name,
     );
     let url = lease.url.clone();
-    // A player's first request (time to first byte and to 4 MiB through the
+    // A player's first request (time to first byte, 4 and 10 MiB through the
     // loopback) runs beside the readiness wait. A player starts at Ready, as
     // in the app; the byte probe needs no container tail and starts its seeks
     // after the head read (Ready is then recorded if it came by the end).
     let mut head = reader.range(0, None).await.map_err(|e| e.to_string())?;
     let first = tokio::spawn({
         let (http, url) = (http.clone(), url.clone());
-        async move { timed_read(&http, &url, 0, 4 * MIB).await }
+        async move { timed_read(&http, &url, 0, 10 * MIB).await }
     });
     // The task keeps the head range open (its demand stays) until it ends.
     let mut ready_task = Some(tokio::spawn(async move {
@@ -615,6 +640,8 @@ async fn run(
             "fill_p10_bytes_per_s": walked.and_then(|w| w.get("fill_p10_bytes_per_s")),
             "fill_p50_bytes_per_s": walked.and_then(|w| w.get("fill_p50_bytes_per_s")),
             "back": played.get("back"), "forward": played.get("forward"),
+            "mid": played.get("mid"), "sha256": walked.and_then(|w| w.get("sha256")),
+            "mib10_ms": walked.and_then(|w| w.get("mib10_ms")),
             "checked": played.get("checked"), "wrong": played.get("wrong"),
             "swarm": played.get("swarm"),
         })
@@ -629,7 +656,8 @@ async fn run(
         "mode": if stats.dwh { "dwh" } else { "stock" },
         "metadata_ms": metadata_ms,
         "ttfb_ms": first.get("first_byte_ms"),
-        "head_4mib_ms": first.get("mib4_ms"),
+        "head_4mib_ms": first.get("per_mib_ms").and_then(|m| m.get(3)),
+        "head_10mib_ms": first.get("mib4_ms"),
         "ready_ms": ready_ms,
         "engine_ready_ms": stats.ready_ms,
         "first_frame_ms": played.get("first_frame_ms"),

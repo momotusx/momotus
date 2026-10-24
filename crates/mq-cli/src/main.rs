@@ -1,6 +1,9 @@
 //! Headless driver for the core: exercises the same code paths the apps use
 //! and prints one JSON line per event with timings.
 
+// The run row of `play-magnet` is one large `json!`.
+#![recursion_limit = "256"]
+
 use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
 use mq_addons::{AddonEvent, Deadlines};
@@ -185,6 +188,14 @@ enum Command {
         /// arm).
         #[arg(long, requires = "window")]
         no_open_limit: bool,
+        /// Bench only (built with `test-hooks`): the data folder's punch
+        /// probe fails, so files are kept as piece files.
+        #[arg(long)]
+        no_punch: bool,
+        /// Bench only (built with `test-hooks`): the free space the engine
+        /// reads, in bytes.
+        #[arg(long)]
+        free: Option<u64>,
     },
     /// Scrape info hashes on a fresh engine (the app's first scrape) and
     /// report each tracker's stages.
@@ -288,6 +299,8 @@ async fn main() {
         rate,
         window,
         no_open_limit,
+        no_punch,
+        free,
     } = cli.command
     {
         let options = magnet::MagnetOptions {
@@ -309,6 +322,8 @@ async fn main() {
             rate,
             window,
             no_open_limit,
+            no_punch,
+            free,
         };
         match magnet::play_magnet(&magnet, options).await {
             Ok(run) => emit(run),
