@@ -505,8 +505,16 @@ extension PlayerLayout {
     /// the lower part of the screen, never its top.
     static func subtitleFoot(screenHeight: CGFloat, pictureHeight: CGFloat, safeBottom: CGFloat, controlsShown: Bool, controlsHeight: CGFloat) -> CGFloat {
         let pictureFoot = (screenHeight + pictureHeight) / 2 - 16
-        let clear = controlsShown ? safeBottom + controlsHeight + 16 : max(40, safeBottom + 24)
+        let clear = controlsShown ? safeBottom + controlsHeight + 16 : subtitleClear(screenHeight: screenHeight, safeBottom: safeBottom)
         return min(pictureFoot, screenHeight - clear)
+    }
+
+    /// The least room under a subtitle's foot with the controls hidden: 24 pt
+    /// over the safe area, 40 pt at least, and never under the title-safe line,
+    /// 5% of the screen over its foot (EBU R 95; plans/subtitles-letterbox.md),
+    /// which a tall Mac window whose picture fills it would pass.
+    static func subtitleClear(screenHeight: CGFloat, safeBottom: CGFloat) -> CGFloat {
+        max(40, safeBottom + 24, screenHeight * 0.05)
     }
 }
 
@@ -541,7 +549,7 @@ extension PhoneFrame {
     /// `boxHeight` is the box at full size.
     static func subtitle(screenHeight: CGFloat, pictureHeight: CGFloat, safeBottom: CGFloat, controlsShown: Bool, scrubberTop: CGFloat, boxHeight: CGFloat, pillTop: CGFloat? = nil) -> (foot: CGFloat, scale: CGFloat) {
         let pictureBottom = (screenHeight + pictureHeight) / 2
-        let plain = controlsShown ? scrubberTop - subtitleGap : screenHeight - max(40, safeBottom + 24)
+        let plain = controlsShown ? scrubberTop - subtitleGap : screenHeight - PlayerLayout.subtitleClear(screenHeight: screenHeight, safeBottom: safeBottom)
         let overPill = pillTop.map { $0 - subtitleGap } ?? .infinity
         if min(plain, overPill) - pictureBottom >= boxHeight + bandGap {
             return (pictureBottom + bandGap + boxHeight, 1)

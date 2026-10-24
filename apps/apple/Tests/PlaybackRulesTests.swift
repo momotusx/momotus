@@ -750,8 +750,23 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     #expect(PlayerLayout.subtitleFoot(screenHeight: 402, pictureHeight: 402, safeBottom: 21, controlsShown: false, controlsHeight: 92) == 357)
     // Upright, at the picture's foot, well over the scrubber at the screen's foot.
     #expect(PlayerLayout.subtitleFoot(screenHeight: 874, pictureHeight: 226, safeBottom: 34, controlsShown: true, controlsHeight: 92) == 534)
-    // A Mac window: no safe area, as before.
-    #expect(PlayerLayout.subtitleFoot(screenHeight: 900, pictureHeight: 900, safeBottom: 0, controlsShown: false, controlsHeight: 200) == 860)
+    // A Mac window: no safe area; over the title-safe line, 5% of its height.
+    #expect(PlayerLayout.subtitleFoot(screenHeight: 900, pictureHeight: 900, safeBottom: 0, controlsShown: false, controlsHeight: 200) == 855)
+}
+
+@Test func drawnSubtitlesKeepOverTheTitleSafeLine() {
+    // A 2.39:1 film on a 1080 pt TV (tvOS safe area 60 pt): two lines hang from a foot inside the picture, over
+    // the 5% line, and grow upward (the view keeps the foot and aligns the box to it).
+    let picture: CGFloat = 1920 / 2.39
+    let tv = PlayerLayout.subtitleFoot(screenHeight: 1080, pictureHeight: picture, safeBottom: 60, controlsShown: false, controlsHeight: 200)
+    #expect(tv <= (1080 + picture) / 2, "inside the picture, not on its bar")
+    #expect(tv <= 1080 * 0.95, "over the title-safe line")
+    // A Mac screen 1117 pt tall whose picture fills it: 40 pt was under the 5% line (55.85 pt).
+    let mac = PlayerLayout.subtitleFoot(screenHeight: 1117, pictureHeight: 1117, safeBottom: 0, controlsShown: false, controlsHeight: 200)
+    #expect(1117 - mac >= 55.8, "over the title-safe line: \(mac)")
+    // The iPhone's own rule keeps the same floor with the controls hidden.
+    let phone = PhoneFrame.subtitle(screenHeight: 1117, pictureHeight: 1117, safeBottom: 0, controlsShown: false, scrubberTop: 1000, boxHeight: 80)
+    #expect(1117 - phone.foot >= 55.8)
 }
 
 @Test func aSubtitleClearsThePhoneControlsDownToItsFloor() {
