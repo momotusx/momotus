@@ -1000,6 +1000,7 @@ impl Engine {
                 librqbit::storage::filesystem::FilesystemStorageFactory {
                     chunked,
                     memory: t.memory.clone(),
+                    migrate: self.inner.chunked,
                 },
             )),
             ..Default::default()

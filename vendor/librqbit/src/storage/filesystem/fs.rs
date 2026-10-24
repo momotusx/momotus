@@ -25,6 +25,10 @@ pub struct FilesystemStorageFactory {
     /// The torrent's switch: its piece files keep new pieces in RAM while
     /// it is on.
     pub memory: Arc<AtomicBool>,
+    /// The volume cannot punch: a whole file from an earlier build is
+    /// deleted for piece files. Elsewhere it stays whole (a download, or a
+    /// cache that can still punch).
+    pub migrate: bool,
 }
 
 impl StorageFactory for FilesystemStorageFactory {
@@ -40,6 +44,7 @@ impl StorageFactory for FilesystemStorageFactory {
             opened_files: Default::default(),
             chunked: self.chunked,
             memory: self.memory.clone(),
+            migrate: self.migrate,
         })
     }
 
@@ -53,6 +58,7 @@ pub struct FilesystemStorage {
     pub(crate) opened_files: Vec<OpenedFile>,
     chunked: bool,
     memory: Arc<AtomicBool>,
+    migrate: bool,
 }
 
 impl FilesystemStorage {
@@ -67,6 +73,7 @@ impl FilesystemStorage {
             output_folder: self.output_folder.clone(),
             chunked: self.chunked,
             memory: self.memory.clone(),
+            migrate: self.migrate,
         })
     }
 }
@@ -142,6 +149,7 @@ impl TorrentStorage for FilesystemStorage {
             output_folder: self.output_folder.clone(),
             chunked: self.chunked,
             memory: self.memory.clone(),
+            migrate: self.migrate,
         }))
     }
 
@@ -176,9 +184,10 @@ impl TorrentStorage for FilesystemStorage {
             std::fs::create_dir_all(full_path.parent().context("bug: no parent")?)?;
             // Marquee fork (plans/streaming-window-chunks.md): a folder at
             // the path is piece files. A whole file where piece files are
-            // wanted is from an earlier build: deleted, so the bitfield that
+            // wanted stays whole where the volume punches; where it cannot,
+            // it is from an earlier build: deleted, so the bitfield that
             // claims it fails the fast-resume check and is cleared.
-            if full_path.is_dir() || self.chunked {
+            if full_path.is_dir() || (self.chunked && (self.migrate || !full_path.is_file())) {
                 if full_path.is_file() {
                     std::fs::remove_file(&full_path)?;
                 }

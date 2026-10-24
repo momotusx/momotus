@@ -398,6 +398,75 @@ async fn a_whole_file_from_before_becomes_piece_files() {
     assert!(file.is_dir(), "not piece files: {file:?}");
 }
 
+/// The same whole file where the volume punches but the free space is
+/// short of a ring, so the torrent gets piece files (review r1): the file
+/// stays whole, never deleted (a download may be one), and reads right.
+#[cfg(feature = "test-hooks")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_whole_file_stays_whole_where_the_volume_punches() {
+    let s = support::swarm(true).await;
+    let dir = tempfile::tempdir().unwrap();
+    let head = 64 << 10;
+    let first = engine_on(dir.path()).await;
+    let t = first
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let movie = first
+        .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
+        .await
+        .unwrap();
+    read_range(&first, t, movie, 0, head as u64).await;
+    first.remove(t, true).await.unwrap();
+    drop(first);
+    let file = find(&dir.path().join(&s.info_hash), "movie.mkv").expect("the movie file");
+    let again = engine_on(dir.path()).await;
+    mq_engine::test_hooks::set_free(&again, Some(mq_engine::RESERVE_BYTES + (1 << 20)));
+    let t = again
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let movie = again
+        .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
+        .await
+        .unwrap();
+    assert!(file.is_file(), "the whole file went: {file:?}");
+    let got = read_range(&again, t, movie, 0, head as u64).await;
+    assert!(got == s.movie[..head], "the head read wrong");
+    // A fresh folder in the same state gets piece files.
+    let fresh = tempfile::tempdir().unwrap();
+    let third = engine_on(fresh.path()).await;
+    mq_engine::test_hooks::set_free(&third, Some(mq_engine::RESERVE_BYTES + (1 << 20)));
+    let t = third
+        .add_magnet(&s.info_hash, &[], &[s.seeder_addr])
+        .await
+        .unwrap();
+    let movie = third
+        .select_file(t, "default", &FileHint::Name("movie.mkv".into()))
+        .await
+        .unwrap();
+    let got = read_range(&third, t, movie, 0, head as u64).await;
+    assert!(got == s.movie[..head], "the fresh head read wrong");
+    let pieces = find_dir(&fresh.path().join(&s.info_hash), "movie.mkv");
+    assert!(pieces.is_some(), "no piece files in a fresh folder");
+}
+
+/// The folder named `name` under `dir`, at any depth.
+fn find_dir(dir: &Path, name: &str) -> Option<std::path::PathBuf> {
+    for e in std::fs::read_dir(dir).ok()?.flatten() {
+        let path = e.path();
+        if path.is_dir() {
+            if e.file_name() == name {
+                return Some(path);
+            }
+            if let Some(found) = find_dir(&path, name) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
 /// The file named `name` under `dir`, at any depth.
 fn find(dir: &Path, name: &str) -> Option<std::path::PathBuf> {
     for e in std::fs::read_dir(dir).ok()?.flatten() {
