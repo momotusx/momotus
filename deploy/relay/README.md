@@ -15,6 +15,8 @@ Checks: `bun test deploy/relay`, `uv run python -I deploy/relay/backup.py --self
 
 ## First time
 
+The SSH account runs `sudo` without a password for these commands (`deploy.sh`, `identity.py`, the backup pull); a narrower rule than full `NOPASSWD` is the owner's choice (the backup pull's line is below).
+
 ```sh
 # The service user, and the identity file with a fresh key (the script prints only its fingerprint).
 ssh "$MQ_RELAY_SSH" 'sudo useradd --system --no-create-home --shell /usr/sbin/nologin momotus'
@@ -70,10 +72,15 @@ set -a; . ./.env.hosted.local; set +a
 # Android (the core first, with the link host; add -Pmarquee.applicationIdSuffix=.walk for a walk build)
 (cd apps/android && MARQUEE_LINK_HOST=$MARQUEE_LINK_HOST scripts/build-core.sh && ./gradlew assembleRelease \
   -Pmarquee.syncServer=$MARQUEE_SYNC_SERVER -Pmarquee.linkHost=$MARQUEE_LINK_HOST -Pmarquee.googleWebClientId=$MARQUEE_GOOGLE_WEB_CLIENT_ID)
-# Apple: the sync service only (no link host without the paid Apple program)
-xcodebuild ... MARQUEE_SYNC_SERVER=$MARQUEE_SYNC_SERVER
+# Apple, in a fresh shell (the line above exported MARQUEE_LINK_HOST, which an Apple core
+# must not carry: no associated domains without the paid Apple program): the sync service only
+env -u MARQUEE_LINK_HOST xcodebuild ... MARQUEE_SYNC_SERVER=$MARQUEE_SYNC_SERVER
 # Web: apps/web/.env.production.local holds VITE_MARQUEE_SYNC_SERVER; mq-bridge built with MARQUEE_LINK_HOST
 ```
+
+A walk build (`-Pmarquee.applicationIdSuffix=.walk`) installs beside the owner's app; its home-screen shortcut still opens `app.marquee.android` (`res/xml/shortcuts.xml` names the package), so a walk never uses the shortcut.
+
+The relay runs with `--trust-proxy`: a budgeted call to it on the server itself (a `curl` to `127.0.0.1:8787/v1/pairings`) needs a `cf-connecting-ip` header, else it answers 400 `noClientAddress`; `/v1/relay` is not budgeted.
 
 The web app signs in only from `http://127.0.0.1:<port>`: the relay sends brokered returns only to loopback, the app scheme and the link host's `/delete`.
 
@@ -96,7 +103,7 @@ It writes `~/.local/share/momotus/relay-backups/pull.log` and shows a notificati
 1. `sudo systemctl stop momotus-relay`.
 2. Remove `/var/lib/momotus/relay.sqlite-wal` and `relay.sqlite-shm`: beside a restored database they corrupt it. Never copy `relay.sqlite` while the relay runs; restore only from `backup.py` sets (check them with `shasum -a 256 -c <stamp>.SHA256SUMS`).
 3. The set's `.sqlite` becomes `relay.sqlite`. The journal: the server's own `relay.roster.jsonl` when its disk survived (it is a superset), else the set's. Owner `momotus`, mode 0600.
-4. One start with `--new-generation`, so devices send back what the backup lost: a runtime drop-in, `/run/systemd/system/momotus-relay.service.d/restore.conf`:
+4. One start with `--new-generation`, so devices send back what the backup lost: a runtime drop-in (`sudo mkdir -p /run/systemd/system/momotus-relay.service.d`, then this file as `restore.conf` in it; copy the `ExecStart` line from the installed unit and add the flag, so it matches the unit as it is now):
 
    ```ini
    [Service]
