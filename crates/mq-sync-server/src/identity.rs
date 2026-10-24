@@ -373,6 +373,13 @@ impl Identity {
         mac.finalize().into_bytes().to_vec()
     }
 
+    /// What a sign-in in progress keeps of its client's address (to count
+    /// its open flows): a keyed hash, so neither the database nor a backup
+    /// taken meanwhile holds the address itself.
+    fn client_tag(&self, address: &std::net::IpAddr) -> String {
+        hex::encode(self.subject("client address", &address.to_string()))
+    }
+
     fn issuer(&self, kind: Kind) -> Option<&str> {
         match kind {
             Kind::Apple => self.file.apple.as_ref().map(|a| a.issuer.as_str()),
@@ -1035,7 +1042,7 @@ async fn start_flow(
         )?;
         let mine = db.query_row(
             "SELECT COUNT(*) FROM auth_flow WHERE client = ?1",
-            params![address.to_string()],
+            params![id.client_tag(&address)],
             |r| r.get(0),
         )?;
         Ok((all, mine))
@@ -1054,7 +1061,7 @@ async fn start_flow(
             verifier_hash,
             nonce,
             return_to,
-            address.to_string(),
+            id.client_tag(&address),
             now as i64
         ],
     )

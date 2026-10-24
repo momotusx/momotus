@@ -619,3 +619,32 @@ fn defaults_a_join_leaves_in_place_keep_their_own_time() {
     assert!(!d.join_defaults_pending().unwrap());
     assert!(times(&d).iter().all(|t| *t == chose), "{:?}", times(&d));
 }
+
+/// A device that left and joins again pulls back its own earlier registers:
+/// they replace the waiting copies, count as its own, and stay; a second
+/// mark before the first sync keeps the first one's times.
+#[test]
+fn a_rejoining_device_keeps_its_own_earlier_defaults() {
+    let chose = mq_library::Hlc { wall_ms: 0, counter: 1, device: 3 }.encode();
+    let c = Library::temporary().unwrap();
+    c.set_addons("p", &[row(X), row(Y)], &chose).unwrap();
+    // Its first join: the account held no addons, so they stayed and were sent.
+    let a = Library::temporary().unwrap();
+    add(&a, Z, &hlc(5, 1));
+    a.apply(&all(&c)).unwrap();
+    // It leaves, then joins again (marked twice before the first sync).
+    c.forget_sync().unwrap();
+    c.mark_join_defaults(3).unwrap();
+    c.mark_join_defaults(3).unwrap();
+    c.apply(&all(&a)).unwrap();
+    c.settle_join_defaults(3).unwrap();
+    assert_eq!(urls(&c), [X, Y, Z]);
+    assert_eq!(urls(&c), urls(&a));
+    // Without the pull, a second mark still restores the onboarding counter.
+    let d = Library::temporary().unwrap();
+    d.set_addons("p", &[row(X)], &chose).unwrap();
+    d.mark_join_defaults(3).unwrap();
+    d.mark_join_defaults(3).unwrap();
+    d.forget_sync().unwrap();
+    assert!(all(&d).iter().filter(|r| r.coll == coll::ADDON).all(|r| r.hlc == chose));
+}

@@ -532,8 +532,17 @@ impl Library {
         let mine = format!("{device:016x}");
         self.write(|c| {
             // Each one's own time is kept beside it (an onboarding choice's
-            // counter with it), so whatever stays gets it back.
-            let mut held: Vec<(String, String, String, String)> = Vec::new();
+            // counter with it), so whatever stays gets it back; a second
+            // mark before the first sync adds to what the first kept.
+            let mut held: Vec<(String, String, String, String)> = c
+                .query_row(
+                    "SELECT value FROM device_state WHERE key = ?1",
+                    params![JOIN_DEFAULTS],
+                    |r| r.get::<_, String>(0),
+                )
+                .optional()?
+                .and_then(|v| serde_json::from_str(&v).ok())
+                .unwrap_or_default();
             for table in ["addons", "addon_order"] {
                 let rows: Vec<(String, String, String)> = c
                     .prepare(&format!(

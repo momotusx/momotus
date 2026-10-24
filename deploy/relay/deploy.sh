@@ -81,7 +81,7 @@ START=$(date +%s.%N)
 # that exercises --trust-proxy): a budgeted call naming none is refused (400
 # noClientAddress), one naming Cloudflare's is taken (a pairing slot, gone in
 # 10 minutes). Either failing puts the previous binary back.
-pairing() { curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' "$@" -d '{}' http://127.0.0.1:8787/v1/pairings; }
+pairing() { curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' "$@" -d '{}' http://127.0.0.1:8787/v1/pairings || true; }
 if health http://127.0.0.1:8787 15; then
   echo "remote: loopback health after $(awk "BEGIN { printf \"%.1f\", $(date +%s.%N) - $START }") s"
   without=$(pairing)
@@ -91,7 +91,11 @@ fi
 if [ "${with:-}" != 200 ] || [ "${without:-}" != 400 ]; then
   echo "remote: no health or no client address check on loopback; rolling back to ${PREVIOUS:-nothing}" >&2
   journalctl -u momotus-relay -n 20 --no-pager >&2 || true
-  if [ -n "$PREVIOUS" ]; then ln -sfn "$(basename "$PREVIOUS")" /opt/momotus/bin/mq-sync-server; systemctl restart momotus-relay; fi
+  if [ -n "$PREVIOUS" ]; then
+    ln -sfn "$(basename "$PREVIOUS")" /opt/momotus/bin/mq-sync-server
+    systemctl restart momotus-relay
+    if health http://127.0.0.1:8787 15; then echo "remote: the previous binary answers again" >&2; else echo "remote: the previous binary does not answer either" >&2; fi
+  fi
   exit 1
 fi
 # The newest three binaries stay.

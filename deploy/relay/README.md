@@ -82,6 +82,8 @@ A walk build (`-Pmarquee.applicationIdSuffix=.walk`) installs beside the owner's
 
 The relay runs with `--trust-proxy`: a budgeted call to it on the server itself (a `curl` to `127.0.0.1:8787/v1/pairings`) needs a `cf-connecting-ip` header, else it answers 400 `noClientAddress`; `/v1/relay` is not budgeted.
 
+Release note for the per-addon sync: a profile whose addon list is older than the recommended-addons step gets the newer recommended addons, on, on each device after its first pull, and they then sync; turning one off sticks on every device.
+
 The web app signs in only from `http://127.0.0.1:<port>`: the relay sends brokered returns only to loopback, the app scheme and the link host's `/delete`.
 
 ## Backups on the Mac
