@@ -208,7 +208,15 @@ async fn a_kept_file_is_no_part_of_a_window() {
 /// and the shared boundary pieces stay as they were.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_delete_in_a_pack_keeps_the_other_file() {
-    let s = support::swarm_pack(&[("e01.mkv", 12 << 20), ("e02.mkv", 12 << 20)], PIECE).await;
+    // Sizes off the piece grid, so the two files share a boundary piece.
+    let s = support::swarm_pack(
+        &[
+            ("e01.mkv", (12 << 20) + 300_000),
+            ("e02.mkv", (12 << 20) + 200_000),
+        ],
+        PIECE,
+    )
+    .await;
     let root = tempfile::tempdir().unwrap();
     let (e01, e02) = {
         let e = engine(root.path(), Vec::new(), u64::MAX).await;
