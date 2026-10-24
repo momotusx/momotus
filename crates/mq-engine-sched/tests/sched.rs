@@ -2107,3 +2107,39 @@ fn readahead_goes_before_a_download() {
         "{first:?}"
     );
 }
+
+/// A reader whose urgent pieces are all on disk takes the peers' slots from
+/// a download at once: the download's queued blocks go when it opens, so
+/// its playback pieces never wait behind them.
+#[test]
+fn a_readers_first_range_cancels_queued_download_blocks() {
+    let g = Geometry::new(64 * KIB as u32, &[4 * MIB, 4 * MIB]).unwrap();
+    let cfg = Config {
+        max_depth: 8,
+        min_depth: 8,
+        ..small_cfg()
+    };
+    let mut h = Harness::new(g, cfg);
+    for piece in (0..3).chain([63]) {
+        h.send(Event::PieceVerified { piece });
+    }
+    h.s.set_bulk(1, true);
+    h.peer(1, 4 * MIB);
+    assert_eq!(h.peer_out(1), 8, "full of the download");
+    let acts = h.send(Event::RangeOpened {
+        demand: 1,
+        file: 0,
+        start: 0,
+        end_hint: None,
+    });
+    let asked: Vec<PieceIdx> = requests(&acts)
+        .iter()
+        .map(|r| h.geo.piece_of(r.1))
+        .collect();
+    assert!(
+        asked
+            .iter()
+            .any(|&p| h.s.class_of(p) == Some(Class::Playback)),
+        "no playback piece asked: {asked:?}"
+    );
+}

@@ -2182,7 +2182,7 @@ impl Engine {
             managed.wait_until_initialized().await?;
         }
         self.send_kept(&t).await;
-        let pieces = exclusive_pieces(&t, file, &left);
+        let pieces = exclusive_pieces(&t, file);
         if !pieces.is_empty() {
             self.evict_pieces(h, &pieces).await?;
         }
@@ -2300,28 +2300,14 @@ impl Drop for DownloadHandle {
     }
 }
 
-/// The pieces of `t` wholly inside `file` that hold no byte of the files
-/// in `keep`: what a delete of `file` may evict.
-fn exclusive_pieces(
-    t: &Torrent,
-    file: usize,
-    keep: &std::collections::BTreeSet<usize>,
-) -> Vec<u32> {
+/// The pieces of `t` wholly inside `file`: what a delete of `file` may
+/// evict. A piece it shares with a neighbour (another kept file's, or one a
+/// stream reads) stays.
+fn exclusive_pieces(t: &Torrent, file: usize) -> Vec<u32> {
     let piece = u64::from(t.piece_len);
     let start: u64 = t.files[..file].iter().map(|f| f.len).sum();
     let end = start + t.files[file].len;
-    let spans: Vec<(u64, u64)> = keep
-        .iter()
-        .filter_map(|&k| {
-            let s: u64 = t.files.get(..k)?.iter().map(|f| f.len).sum();
-            Some((s, s + t.files.get(k)?.len))
-        })
-        .collect();
     (start.div_ceil(piece)..end / piece)
-        .filter(|&p| {
-            let (a, b) = (p * piece, (p + 1) * piece);
-            !spans.iter().any(|&(s, e)| a < e && s < b)
-        })
         .map(|p| p as u32)
         .collect()
 }
