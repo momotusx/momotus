@@ -31,7 +31,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -48,6 +47,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -59,8 +59,10 @@ import androidx.compose.ui.node.DelegatableNode
 import androidx.compose.ui.node.DrawModifierNode
 import androidx.compose.ui.node.invalidateDraw
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalGraphicsContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.collectLatest
@@ -120,6 +122,16 @@ fun Modifier.marqueeFocus(
     val halo = Marquee.focusHalo
     val rises = tv && rise && scale >= Tokens.FOCUS_SCALE_TILE
     val shape = RoundedCornerShape(radius)
+    val graphics = LocalGraphicsContext.current
+    // Apple's lift (the web's --lift-focus-edge, 0 30px 60px at .6), and for art the deeper one
+    // (--lift-focus-art, 0 44px 88px at .55).
+    val shadow =
+        Shadow(
+            radius = if (art) Tokens.focusArtShadowBlur else halo * 2,
+            color = Color.Black,
+            offset = DpOffset(0.dp, if (art) Tokens.focusArtShadowY else halo),
+            alpha = if (art) Tokens.FOCUS_ART_SHADOW_ALPHA else colors.halo.alpha,
+        )
     return this
         .onFocusChanged { focused = it.isFocused }
         .then(if (lift == null) Modifier.lifted(raised) else Modifier)
@@ -140,13 +152,14 @@ fun Modifier.marqueeFocus(
                     .drawWithContent {
                         val up = (if (art) Tokens.focusRiseArt else Tokens.focusRise).toPx() * progress.value
                         translate(top = -up) { this@drawWithContent.drawContent() }
-                    }.dropShadow(shape) {
-                        // Apple's lift (the web's --lift-focus-edge, 0 30px 60px at .6), and for art the
-                        // deeper one (--lift-focus-art, 0 44px 88px at .55).
-                        this.radius = (if (art) Tokens.focusArtShadowBlur else halo * 2).toPx()
-                        offset = Offset(0f, (if (art) Tokens.focusArtShadowY else halo).toPx())
-                        color = Color.Black
-                        alpha = (if (art) Tokens.FOCUS_ART_SHADOW_ALPHA else colors.halo.alpha) * progress.value
+                    }.drawBehind {
+                        // The shadow fades through the painter's alpha, never its own: Compose keeps one blurred
+                        // bitmap per Shadow, alpha included, until the app leaves the screen, so an animated
+                        // alpha kept one a frame and filled the Fire TV's heap (FocusShadowTest). The painter
+                        // comes from the window's shadow context as it is now (a trim replaces it).
+                        val p = progress.value
+                        if (p <= 0f) return@drawBehind
+                        with(graphics.shadowContext.createDropShadowPainter(shape, shadow)) { draw(size, alpha = p) }
                     }
             } else {
                 Modifier
