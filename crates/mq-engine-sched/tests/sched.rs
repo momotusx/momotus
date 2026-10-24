@@ -1954,3 +1954,129 @@ fn property_streams_cover_every_path() {
         "hedges {hedges} snubs {snubs} seeks {seeks} cancels {cancels} ready {ready}"
     );
 }
+
+// ---- offline downloads (plans/offline-downloads.md 4.6) ----
+
+/// Serves every outstanding request until none is left (or `rounds` pass).
+fn serve_all(h: &mut Harness, rounds: usize) {
+    for _ in 0..rounds {
+        let out: Vec<(BlockIdx, PeerId)> = h.out.iter().copied().collect();
+        if out.is_empty() {
+            return;
+        }
+        for (b, p) in out {
+            h.deliver(p, b);
+        }
+    }
+}
+
+/// With no reader at all, a download's file comes whole, in piece order.
+#[test]
+fn bulk_fetches_a_whole_file_in_order_with_no_reader() {
+    let g = Geometry::new(64 * KIB as u32, &[2 * MIB, 2 * MIB]).unwrap();
+    let mut h = Harness::new(g, small_cfg());
+    h.s.set_bulk(1, true);
+    let acts = h.tick(1);
+    assert!(requests(&acts).is_empty(), "no peer yet");
+    h.peer(1, 4 * MIB);
+    let first: Vec<PieceIdx> = h.out.iter().map(|&(b, _)| h.geo.piece_of(b)).collect();
+    assert_eq!(
+        first.iter().min(),
+        Some(&32),
+        "the file's first piece first"
+    );
+    assert_eq!(h.s.class_of(32), Some(Class::Bulk));
+    assert_eq!(h.s.class_of(31), None, "the other file is not fetched");
+    serve_all(&mut h, 10_000);
+    assert_eq!(h.s.file_verified_bytes(1), 2 * MIB);
+    assert_eq!(h.s.file_verified_bytes(0), 0);
+}
+
+/// A reader comes to a torrent whose peers are full of the download's
+/// requests: its first block is asked for in the same call, the queued
+/// download blocks go, and while its pieces wait a peer holds one download
+/// piece at most.
+#[test]
+fn a_reader_goes_before_a_download() {
+    let g = Geometry::new(64 * KIB as u32, &[4 * MIB, 4 * MIB]).unwrap();
+    let cfg = Config {
+        max_depth: 8,
+        min_depth: 8,
+        ..small_cfg()
+    };
+    let mut h = Harness::new(g, cfg);
+    h.s.set_bulk(1, true);
+    h.peer(1, 4 * MIB);
+    h.peer(2, 4 * MIB);
+    assert_eq!(h.peer_out(1), 8, "full of the download");
+    let acts = h.send(Event::RangeOpened {
+        demand: 1,
+        file: 0,
+        start: 0,
+        end_hint: None,
+    });
+    let asked: Vec<PieceIdx> = requests(&acts)
+        .iter()
+        .map(|r| h.geo.piece_of(r.1))
+        .collect();
+    assert!(
+        asked.contains(&0),
+        "the reader's first piece at once: {asked:?}"
+    );
+    for peer in [1, 2] {
+        let mut bulk: Vec<PieceIdx> = h
+            .out
+            .iter()
+            .filter(|&&(_, p)| p == peer)
+            .map(|&(b, _)| h.geo.piece_of(b))
+            .filter(|&p| h.s.class_of(p) == Some(Class::Bulk))
+            .collect();
+        bulk.dedup();
+        assert!(
+            bulk.len() <= 1,
+            "peer {peer} holds {bulk:?} of the download"
+        );
+    }
+}
+
+/// Two downloads of one pack are on and off on their own.
+#[test]
+fn two_files_download_on_their_own() {
+    let g = Geometry::new(64 * KIB as u32, &[MIB, MIB]).unwrap();
+    let mut h = Harness::new(g, small_cfg());
+    h.s.set_bulk(0, true);
+    h.s.set_bulk(1, true);
+    h.tick(1);
+    assert_eq!(h.s.class_of(0), Some(Class::Bulk));
+    assert_eq!(h.s.class_of(16), Some(Class::Bulk));
+    h.s.set_bulk(0, false);
+    h.tick(1);
+    assert_eq!(h.s.class_of(0), None);
+    assert_eq!(h.s.class_of(16), Some(Class::Bulk));
+}
+
+/// A kept file's pieces are not the window's: they leave its held bytes,
+/// so a window on the pack's other file keeps its cap, and the keeper and
+/// the trim never name one.
+#[test]
+fn a_kept_file_is_never_evicted_nor_counted_in_a_window() {
+    let g = Geometry::new(64 * KIB as u32, &[2 * MIB, 2 * MIB]).unwrap();
+    let mut h = Harness::new(g, small_cfg());
+    let n = h.geo.num_pieces();
+    let mut kept = Bitfield::new(n);
+    (0..32).for_each(|p| kept.set(p, true));
+    h.s.set_kept(kept);
+    for piece in 0..32 {
+        h.send(Event::PieceVerified { piece });
+    }
+    h.s.set_window(Some(Window {
+        budget: 512 * KIB,
+        ..window(1)
+    }));
+    open(&mut h, 1, 1, 0, None);
+    assert_eq!(h.s.held_bytes(), 0, "the kept file is not held");
+    assert_eq!(h.s.written_bytes(), 0);
+    assert!(h.s.evictable(u64::MAX).iter().all(|&p| p >= 32));
+    assert!(h.s.trimmable(0).iter().all(|&p| p >= 32));
+    assert!(h.s.kept().get(0) && h.s.kept().get(31));
+}

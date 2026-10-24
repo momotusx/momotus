@@ -69,11 +69,20 @@ pub struct Counted {
 /// [`Counted`] before the engine starts: every torrent folder in
 /// `data_dir`, none in use. Blocking: walks the disk.
 pub fn counted_on_disk(data_dir: &Path) -> Counted {
-    let left = crate::leftovers(data_dir, &[]).0;
+    counted_on_disk_keeping(data_dir, &[])
+}
+
+/// [`counted_on_disk`] with the torrents of `kept` (lowercase info hashes
+/// of offline downloads) neither reclaimable nor idle
+/// (plans/offline-downloads.md 4.6).
+pub fn counted_on_disk_keeping(data_dir: &Path, kept: &[String]) -> Counted {
+    let kept: Vec<std::path::PathBuf> = kept.iter().map(|h| data_dir.join(h)).collect();
+    let held: Vec<&Path> = kept.iter().map(std::path::PathBuf::as_path).collect();
+    let left = crate::leftovers(data_dir, &held).0;
     Counted {
         reclaimable: left.iter().map(|l| l.2).sum(),
         committed: 0,
-        held: crate::counted_on_disk_except(data_dir, &[]),
+        held: crate::counted_on_disk_except(data_dir, &[], &kept),
     }
 }
 

@@ -80,6 +80,20 @@ pub(crate) enum Msg {
         ahead: u64,
         tx: tokio::sync::oneshot::Sender<Vec<u32>>,
     },
+    /// An offline download fetches `file` whole, or no longer
+    /// (plans/offline-downloads.md 4.6).
+    Bulk {
+        file: usize,
+        on: bool,
+    },
+    /// The files kept for download: their pieces are never evicted,
+    /// trimmed or counted against a window.
+    Kept(Vec<usize>),
+    /// The bytes of `file` in verified pieces.
+    FileHave {
+        file: usize,
+        tx: tokio::sync::oneshot::Sender<u64>,
+    },
 }
 
 /// What one peer did for us since the file was chosen: counts only.
@@ -345,6 +359,32 @@ impl Translator {
             (*addr, t)
         });
         live.chain(self.gone.iter().cloned()).collect()
+    }
+
+    /// The pieces holding any byte of `file`.
+    fn pieces_of(&self, file: usize) -> std::ops::Range<u32> {
+        let Some(&(offset, len)) = self.files.get(file) else {
+            return 0..0;
+        };
+        if len == 0 {
+            return 0..0;
+        }
+        (offset / self.piece_len) as u32..(offset + len).div_ceil(self.piece_len) as u32
+    }
+
+    /// The bytes of `file` in verified pieces, in either mode.
+    pub fn file_have(&self, file: usize) -> u64 {
+        let Some(&(offset, len)) = self.files.get(file) else {
+            return 0;
+        };
+        self.pieces_of(file)
+            .filter(|&p| self.have.get(p as usize).copied().unwrap_or(false))
+            .map(|p| {
+                let start = u64::from(p) * self.piece_len;
+                let end = (start + self.piece_len).min(offset + len);
+                end - start.max(offset)
+            })
+            .sum()
     }
 
     pub fn drives(&self) -> bool {
@@ -675,6 +715,30 @@ impl Translator {
                         .map(|s| s.empty_unkept(&pieces))
                         .unwrap_or_default(),
                 );
+                Vec::new()
+            }
+            Msg::Bulk { file, on } => {
+                if let Some(s) = self.sched.as_mut() {
+                    s.set_bulk(file, on);
+                }
+                self.feed(Event::Tick {
+                    now_us: self.now_us,
+                })
+            }
+            Msg::Kept(files) => {
+                let mut kept = mq_engine_sched::Bitfield::new(self.num_pieces);
+                for p in files.iter().flat_map(|&f| self.pieces_of(f)) {
+                    kept.set(p, true);
+                }
+                if let Some(s) = self.sched.as_mut() {
+                    s.set_kept(kept);
+                }
+                self.feed(Event::Tick {
+                    now_us: self.now_us,
+                })
+            }
+            Msg::FileHave { file, tx } => {
+                let _ = tx.send(self.file_have(file));
                 Vec::new()
             }
             Msg::Trim { ahead, tx } => {

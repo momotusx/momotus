@@ -134,6 +134,13 @@ pub struct Scheduler {
     full_budget: u64,
     /// Per file: a range of it was Ready once, so its start is over.
     started: Vec<bool>,
+    /// Per file: an offline download fetches it whole (`Class::Bulk`).
+    bulk: Vec<bool>,
+    /// Pieces of files kept for download: never evicted, trimmed or
+    /// counted against a window (plans/offline-downloads.md 4.6).
+    kept_files: Bitfield,
+    /// A reader opened with none before: queued Bulk blocks give way.
+    preempt_bulk: bool,
 }
 
 impl Scheduler {
@@ -186,7 +193,48 @@ impl Scheduler {
             held: 0,
             full_budget: 0,
             started: vec![false; files],
+            bulk: vec![false; files],
+            kept_files: Bitfield::new(pieces),
+            preempt_bulk: false,
         }
+    }
+
+    /// `file` downloads whole, or no longer (plans/offline-downloads.md
+    /// 4.6). Each file is on or off on its own, so two jobs on one pack
+    /// never replace each other's.
+    pub fn set_bulk(&mut self, file: usize, on: bool) {
+        if let Some(b) = self.bulk.get_mut(file)
+            && *b != on
+        {
+            *b = on;
+            self.dirty = true;
+        }
+    }
+
+    /// The pieces of files kept for download.
+    pub fn set_kept(&mut self, kept: Bitfield) {
+        if kept.len() == self.geo.num_pieces() {
+            self.kept_files = kept;
+            self.dirty = true;
+        }
+    }
+
+    /// Bytes of `file` in verified pieces, the parts of each piece that
+    /// fall in the file (a download's progress).
+    pub fn file_verified_bytes(&self, file: usize) -> u64 {
+        let Some(f) = self.geo.files().get(file).copied() else {
+            return 0;
+        };
+        let piece_len = u64::from(self.geo.piece_len());
+        self.geo
+            .pieces_in(f.offset, f.offset + f.len)
+            .filter(|&p| self.verified.get(p))
+            .map(|p| {
+                let start = u64::from(p) * piece_len;
+                let end = start + u64::from(self.geo.piece_size(p));
+                end.min(f.offset + f.len) - start.max(f.offset)
+            })
+            .sum()
     }
 
     /// Windows a file (plans/streaming-window.md 2.2), or ends windowing.
@@ -306,6 +354,9 @@ impl Scheduler {
                     _ => start,
                 };
                 if !probe {
+                    if !self.demands.iter().any(|d| !d.probe) {
+                        self.preempt_bulk = true;
+                    }
                     self.player_read = true;
                     // A seek in a window: the previous focus (or the anchor)
                     // keeps its window for a moment (2.3).
@@ -775,7 +826,7 @@ impl Scheduler {
         let Some(win) = self.window else {
             return Bitfield::full(n);
         };
-        let mut kept = Bitfield::new(n);
+        let mut kept = self.kept_files.clone();
         let g = &self.geo;
         let mut keep = |r: Range<PieceIdx>| {
             for p in r {
@@ -825,8 +876,11 @@ impl Scheduler {
 
     /// Bytes the torrent holds for the keeper (2.4): verified pieces, and
     /// pieces partly received or requested, at full size.
+    /// A kept file's pieces are not counted: a window on another file of
+    /// the pack keeps its whole cap (plans/offline-downloads.md 4.6).
     pub fn held_bytes(&self) -> u64 {
         (0..self.geo.num_pieces())
+            .filter(|&p| !self.kept_files.get(p))
             .filter(|&p| self.verified.get(p) || self.busy[p as usize] > 0)
             .map(|p| u64::from(self.geo.piece_size(p)))
             .sum()
@@ -850,6 +904,7 @@ impl Scheduler {
     /// flight at full size, since free space has not dropped for those yet.
     pub fn written_bytes(&self) -> u64 {
         (0..self.geo.num_pieces())
+            .filter(|&p| !self.kept_files.get(p))
             .map(|p| {
                 if self.verified.get(p) {
                     u64::from(self.geo.piece_size(p))
@@ -910,7 +965,7 @@ impl Scheduler {
         };
         let g = &self.geo;
         let f = g.files()[win.file];
-        let mut keep = Bitfield::new(g.num_pieces());
+        let mut keep = self.kept_files.clone();
         let mut set = |r: Range<PieceIdx>| {
             for p in r {
                 keep.set(p, true);
@@ -1057,6 +1112,11 @@ impl Scheduler {
             }
         }
 
+        for (file, _) in self.bulk.iter().enumerate().filter(|(_, on)| **on) {
+            let f = self.geo.files()[file];
+            spans.push((self.geo.pieces_in(f.offset, f.offset + f.len), Class::Bulk));
+        }
+
         let mut marked = Vec::new();
         for (range, c) in spans {
             for p in range {
@@ -1075,9 +1135,14 @@ impl Scheduler {
         let (mut urgent, rest): (Vec<_>, Vec<_>) = marked
             .into_iter()
             .partition(|&p| class[p as usize].is_some_and(Class::is_urgent));
-        let (mut playback, mut readahead): (Vec<_>, Vec<_>) = rest
+        let (mut playback, rest): (Vec<_>, Vec<_>) = rest
             .into_iter()
             .partition(|&p| class[p as usize] == Some(Class::Playback));
+        let (mut readahead, mut bulk): (Vec<_>, Vec<_>) = rest
+            .into_iter()
+            .partition(|&p| class[p as usize] == Some(Class::Readahead));
+        // A download fetches in piece order, so it plays while it downloads.
+        bulk.sort_unstable();
         // Deadline order: the focused reader's blocking pieces, then the tail,
         // then other readers' blocking, then critical by offset (one focused
         // reader, so offset order is deadline order).
@@ -1091,6 +1156,7 @@ impl Scheduler {
         // helps no peer, and the minutes ahead become one run).
         readahead.sort_unstable_by_key(|&p| (self.avail[p as usize] > 1, p));
         playback.extend(readahead);
+        playback.extend(bulk);
         // Deadlines: blocking and tail are due now; a critical piece is due
         // when playback reaches it, minus the safety margin.
         let safety = self.cfg.safety_ms * 1000;
@@ -1149,6 +1215,20 @@ impl Scheduler {
                 })
                 .collect();
             for (id, b) in stale {
+                self.cancel(id, b, out);
+            }
+        }
+        // A reader came to a torrent that only downloaded: its first blocks
+        // do not queue behind the download's (plans/offline-downloads.md
+        // 4.6).
+        if std::mem::take(&mut self.preempt_bulk) {
+            let bulk: Vec<(PeerId, BlockIdx)> = self
+                .peers
+                .iter()
+                .flat_map(|(&id, p)| p.queue.iter().map(move |r| (id, r.block)))
+                .filter(|&(_, b)| self.class[self.geo.piece_of(b) as usize] == Some(Class::Bulk))
+                .collect();
+            for (id, b) in bulk {
                 self.cancel(id, b, out);
             }
         }
@@ -1526,11 +1606,23 @@ impl Scheduler {
             }
         }
         let limit = self.open_limit();
+        // While a reader's piece waits for a slot, a peer holds one Bulk
+        // piece at most, so a reader's next piece never waits behind a
+        // queue of the download's (plans/offline-downloads.md 4.6).
+        // Readers' pieces come first in `normal`, the download's after.
+        let reader_waits = self.normal[self.normal_cursor.min(self.normal.len())..]
+            .iter()
+            .take_while(|&&p| self.class[p as usize] != Some(Class::Bulk))
+            .any(|&p| {
+                !self.verified.get(p)
+                    && (self.busy[p as usize] as usize) < self.geo.piece_blocks(p).len()
+            });
         let mut advancing = true;
         let mut i = self.normal_cursor;
         while i < self.normal.len() && room > 0 {
             let piece = self.normal[i];
             i += 1;
+            let bulk = self.class[piece as usize] == Some(Class::Bulk);
             let n = self.geo.piece_blocks(piece).len();
             if self.verified.get(piece) || self.busy[piece as usize] as usize >= n {
                 if advancing {
@@ -1542,10 +1634,14 @@ impl Scheduler {
             if !self.peers[&id].have.get(piece) {
                 continue;
             }
+            if bulk && reader_waits && self.bulk_pieces_queued(id) > 0 {
+                continue;
+            }
             // Past the window's cap no new piece starts; the keeper
-            // makes room (2.4).
+            // makes room (2.4). A download's pieces are not the window's.
             if let Some(w) = self.window
                 && self.busy[piece as usize] == 0
+                && !bulk
             {
                 let size = u64::from(self.geo.piece_size(piece));
                 if self.held + size > self.cap(&w) {
@@ -1567,6 +1663,21 @@ impl Scheduler {
             }
             room = self.take_blocks(id, piece, room, out);
         }
+    }
+
+    /// Bulk pieces `peer` has a request out for.
+    fn bulk_pieces_queued(&self, peer: PeerId) -> usize {
+        let Some(p) = self.peers.get(&peer) else {
+            return 0;
+        };
+        let mut pieces: Vec<PieceIdx> = p
+            .queue
+            .iter()
+            .map(|r| self.geo.piece_of(r.block))
+            .filter(|&piece| self.class[piece as usize] == Some(Class::Bulk))
+            .collect();
+        pieces.dedup();
+        pieces.len()
     }
 
     fn take_blocks(

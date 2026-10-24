@@ -31,7 +31,7 @@ pub use reader::{RangeReader, StreamReader};
 pub use scrape::{SwarmCount, TrackerTrace};
 pub use window::{
     APFS_HEAD_BYTES, Counted, HeldBytes, RESERVE_BYTES, RING_BYTES, WindowInputs, WindowPlan,
-    counted_on_disk, free_space, window_plan,
+    counted_on_disk, counted_on_disk_keeping, free_space, window_plan,
 };
 
 use std::collections::{HashMap, HashSet};
@@ -101,6 +101,9 @@ pub struct EngineConfig {
     pub policy: AddressScope,
     /// Session rate limits; none by default (a slow seeder in live checks).
     pub limits: librqbit::limits::LimitsConfig,
+    /// Files kept for offline download (plans/offline-downloads.md 4.6), by
+    /// lowercase info hash and file index: known from the first sweep on.
+    pub kept: Vec<(String, usize)>,
 }
 
 impl EngineConfig {
@@ -115,6 +118,7 @@ impl EngineConfig {
             discovery: true,
             policy,
             limits: Default::default(),
+            kept: Vec::new(),
         }
     }
 }
@@ -435,6 +439,9 @@ struct Inner {
     /// The data folder cannot punch holes: files are kept as piece files,
     /// whose pieces a ring may keep in RAM (plans/streaming-window-chunks.md).
     chunked: bool,
+    /// Files kept for offline download, by lowercase info hash, loaded or
+    /// not (plans/offline-downloads.md 4.6).
+    kept: Mutex<HashMap<String, std::collections::BTreeSet<usize>>>,
 }
 
 /// The session's tasks hang off its token, each torrent's as a child: a
@@ -503,9 +510,26 @@ pub(crate) struct Torrent {
     memory: Arc<std::sync::atomic::AtomicBool>,
     /// Its files are piece files, so a RAM ring can play it.
     chunked: std::sync::atomic::AtomicBool,
+    /// Running downloads of its files, by file (plans/offline-downloads.md
+    /// 4.6): no playback claim, so the keeper, the whole-file guard and
+    /// `remove` read playbacks alone.
+    downloading: Mutex<HashMap<usize, usize>>,
+    /// The disk fell under the reserve: its downloads stopped fetching.
+    out_of_space: std::sync::atomic::AtomicBool,
 }
 
 impl Torrent {
+    /// A download of one of its files runs.
+    fn downloading(&self) -> bool {
+        !lock(&self.downloading).is_empty()
+    }
+
+    /// A playback claims it or a download runs: keep-warm and a kids hold
+    /// leave it running.
+    fn active(&self) -> bool {
+        self.claimed() || self.downloading()
+    }
+
     /// Some playback uses it: neither a removal nor the disk budget deletes
     /// it (a paused playback has no range open but still plays it).
     fn claimed(&self) -> bool {
@@ -624,6 +648,12 @@ impl Engine {
             .unwrap_or(None);
         tracing::info!(?punches, "torrent folder probed");
         let session = Session::new_with_opts(cfg.data_dir.clone(), opts).await?;
+        let mut kept: HashMap<String, std::collections::BTreeSet<usize>> = HashMap::new();
+        for (hash, file) in &cfg.kept {
+            kept.entry(hash.to_ascii_lowercase())
+                .or_default()
+                .insert(*file);
+        }
         let scraper = scrape::Scraper::new(scopes.trackers.clone());
         let engine = Self {
             inner: Arc::new(Inner {
@@ -646,6 +676,7 @@ impl Engine {
                 free_base: Mutex::default(),
                 counted: Mutex::default(),
                 chunked: punches == Some(false),
+                kept: Mutex::new(kept),
             }),
         };
         tokio::spawn(maintenance(Arc::downgrade(&engine.inner)));
@@ -844,6 +875,8 @@ impl Engine {
             rounds: AtomicU64::new(0),
             memory: Arc::default(),
             chunked: std::sync::atomic::AtomicBool::new(false),
+            downloading: Mutex::default(),
+            out_of_space: Default::default(),
         });
         let mut torrents = lock(&self.inner.torrents);
         if let Some((&h, _)) = torrents
@@ -1266,7 +1299,7 @@ impl Engine {
             hold.hold_gen = hold.hold_gen.max(generation);
             hold.held = true;
             holds.claims.keys().any(|p| p != profile)
-        };
+        } || t.downloading();
         if shared {
             return Ok(true);
         }
@@ -1387,15 +1420,12 @@ impl Engine {
             .filter(|(h, t)| {
                 Some(**h) == own
                     || (t.readers.load(Ordering::Relaxed) == 0
-                        && !t.claimed()
+                        && !self.busy(t)
                         && !lock(&t.hold).by_profile.values().any(|h| h.held))
             })
             .map(|(_, t)| t.dir.clone())
             .collect();
-        let held: Vec<PathBuf> = lock(&self.inner.torrents)
-            .values()
-            .map(|t| t.dir.clone())
-            .collect();
+        let held = self.unreclaimable_dirs();
         let data_dir = self.inner.cfg.data_dir.clone();
         tokio::task::spawn_blocking(move || {
             let held: Vec<&Path> = held.iter().map(PathBuf::as_path).collect();
@@ -1422,7 +1452,7 @@ impl Engine {
         let mut loaded: Vec<(String, PathBuf, Vec<PathBuf>, bool, u64)> = Vec::new();
         for (h, t) in all {
             let idle = t.readers.load(Ordering::Relaxed) == 0
-                && !t.claimed()
+                && !self.busy(&t)
                 && !lock(&t.hold).by_profile.values().any(|h| h.held);
             let files = t.files.iter().map(|f| t.dir.join(&f.path)).collect();
             // Its own window's part of `C`: the ranking leaves it out for
@@ -1438,9 +1468,10 @@ impl Engine {
             ));
         }
         let data_dir = self.inner.cfg.data_dir.clone();
+        let kept = self.kept_unloaded();
         tokio::task::spawn_blocking(move || {
             let dirs: Vec<&Path> = loaded.iter().map(|l| l.1.as_path()).collect();
-            let mut held = counted_on_disk_except(&data_dir, &dirs);
+            let mut held = counted_on_disk_except(&data_dir, &dirs, &kept);
             for (hash, dir, files, idle, committed) in &loaded {
                 let files = files.iter().map(|f| file_allocated(f)).collect();
                 let folder = allocated(dir);
@@ -1475,10 +1506,23 @@ impl Engine {
         let t = self.torrent(h)?;
         let path = t.files.get(file).ok_or(EngineError::NoFile)?.path.clone();
         let dir = t.dir.clone();
-        let (own, own_file) =
-            tokio::task::spawn_blocking(move || (allocated(&dir), file_allocated(&dir.join(path))))
-                .await
-                .unwrap_or((0, 0));
+        // A kept file's bytes are not the window's (plans/offline-downloads.md
+        // 4.6).
+        let kept: Vec<PathBuf> = self
+            .kept_of(&t)
+            .iter()
+            .filter(|&&f| f != file)
+            .filter_map(|&f| t.files.get(f).map(|f| dir.join(&f.path)))
+            .collect();
+        let (own, own_file) = tokio::task::spawn_blocking(move || {
+            let kept: u64 = kept.iter().map(|p| file_allocated(p)).sum();
+            (
+                allocated(&dir).saturating_sub(kept),
+                file_allocated(&dir.join(path)),
+            )
+        })
+        .await
+        .unwrap_or((0, 0));
         Ok(WindowInputs {
             free,
             reclaimable: self.reclaimable(Some(h)).await,
@@ -1499,7 +1543,8 @@ impl Engine {
     }
 
     /// `C` (2.1): what the windows playing, but `except`'s, will still take
-    /// (`W` less what each holds).
+    /// (`W` less what each holds), and what running downloads will still
+    /// write, `except`'s too (plans/offline-downloads.md 4.9).
     pub async fn committed(&self, except: Option<TorrentHandle>) -> u64 {
         let all: Vec<(TorrentHandle, Arc<Torrent>)> = lock(&self.inner.torrents)
             .iter()
@@ -1507,6 +1552,14 @@ impl Engine {
             .collect();
         let mut sum = 0;
         for (h, t) in all {
+            let files: Vec<usize> = lock(&t.downloading).keys().copied().collect();
+            for file in files {
+                let have = self
+                    .ask(&t, |tx| adapter::Msg::FileHave { file, tx })
+                    .await
+                    .unwrap_or(0);
+                sum += t.files[file].len.saturating_sub(have);
+            }
             let Some(w) = *lock(&t.window) else {
                 continue;
             };
@@ -1535,9 +1588,19 @@ impl Engine {
         if t.live.lock().await.is_none() {
             return Err(EngineError::NoFile);
         }
+        // A file kept for download, or downloading, is whole on disk: no
+        // window, cap or keeper (plans/offline-downloads.md 4.6).
+        if self.kept_of(&t).contains(&file) || lock(&t.downloading).contains_key(&file) {
+            return self.play_whole(h, file).await;
+        }
         // A ring the disk cannot hold keeps its pieces in RAM, where they are
         // piece files (plans/streaming-window-chunks.md); it needs no disk.
-        let memory = w.plan.memory && t.chunked.load(Ordering::Relaxed);
+        // Never on a torrent with a download: the switch is the torrent's,
+        // and a download's pieces must reach the disk.
+        let memory = w.plan.memory
+            && t.chunked.load(Ordering::Relaxed)
+            && self.kept_of(&t).is_empty()
+            && !t.downloading();
         t.memory.store(memory, Ordering::Relaxed);
         if !memory {
             let dir = t.dir.clone();
@@ -1829,13 +1892,18 @@ impl Engine {
         // Sizes, dates and the folder listing walk the disk: off the
         // runtime workers, which the app has two of (engine review r3,
         // P3-2).
+        // Kept torrents are no cache: out of the scan and the total, so a
+        // season kept over the budget never makes every round delete the
+        // whole idle cache (plans/offline-downloads.md 4.6, engine r2 P1-1).
         let dirs: Vec<(Instant, TorrentHandle, PathBuf)> = all
             .iter()
+            .filter(|(_, t)| !self.busy(t))
             .map(|(h, t)| (*lock(&t.last_used), *h, t.dir.clone()))
             .collect();
+        let held_dirs = self.unreclaimable_dirs();
         let data_dir = self.inner.cfg.data_dir.clone();
         let scan = tokio::task::spawn_blocking(move || {
-            let held: Vec<&Path> = dirs.iter().map(|d| d.2.as_path()).collect();
+            let held: Vec<&Path> = held_dirs.iter().map(PathBuf::as_path).collect();
             let (left, trash) = leftovers(&data_dir, &held);
             let used: Vec<(Instant, TorrentHandle, u64)> = dirs
                 .iter()
@@ -1878,7 +1946,10 @@ impl Engine {
             let Some(t) = all.iter().find(|(x, _)| *x == h).map(|(_, t)| t) else {
                 continue;
             };
-            if Some(h) == keep || t.readers.load(Ordering::Relaxed) > 0 || t.claimed() || bytes == 0
+            if Some(h) == keep
+                || t.readers.load(Ordering::Relaxed) > 0
+                || self.busy(t)
+                || bytes == 0
             {
                 continue;
             }
@@ -1888,7 +1959,7 @@ impl Engine {
                 // Again under the lock a claim counts under: one may have
                 // come since the check above (engine review r1).
                 let mut torrents = lock(&self.inner.torrents);
-                if t.readers.load(Ordering::Relaxed) > 0 || t.claimed() {
+                if t.readers.load(Ordering::Relaxed) > 0 || self.busy(t) {
                     continue;
                 }
                 torrents.remove(&h);
@@ -1901,6 +1972,221 @@ impl Engine {
                 Err(e) => tracing::warn!("evicting {}: {e}", t.info_hash),
             }
         }
+    }
+
+    // ---- offline downloads (plans/offline-downloads.md 4.6) ----
+
+    /// A playback claims it, a download runs, or a file of it is kept: no
+    /// sweep or budget round deletes it, and it is not reclaimable.
+    fn busy(&self, t: &Torrent) -> bool {
+        t.active() || !self.kept_of(t).is_empty()
+    }
+
+    /// The files of `t` kept for download.
+    fn kept_of(&self, t: &Torrent) -> std::collections::BTreeSet<usize> {
+        lock(&self.inner.kept)
+            .get(&t.info_hash.to_ascii_lowercase())
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// The folders of kept torrents that are not loaded.
+    fn kept_unloaded(&self) -> Vec<PathBuf> {
+        let loaded: Vec<String> = lock(&self.inner.torrents)
+            .values()
+            .map(|t| t.info_hash.to_ascii_lowercase())
+            .collect();
+        lock(&self.inner.kept)
+            .keys()
+            .filter(|h| !loaded.contains(h))
+            .map(|h| self.inner.cfg.data_dir.join(h))
+            .collect()
+    }
+
+    /// Folders that are never leftovers: every loaded torrent's, and every
+    /// kept one's.
+    fn unreclaimable_dirs(&self) -> Vec<PathBuf> {
+        let mut dirs: Vec<PathBuf> = lock(&self.inner.torrents)
+            .values()
+            .map(|t| t.dir.clone())
+            .collect();
+        dirs.extend(self.kept_unloaded());
+        dirs
+    }
+
+    /// Tells `t`'s scheduler which of its files are kept.
+    async fn send_kept(&self, t: &Torrent) {
+        let files: Vec<usize> = self.kept_of(t).into_iter().collect();
+        if let Some(l) = t.live.lock().await.as_ref() {
+            let _ = l.msgs.send(adapter::Msg::Kept(files));
+        }
+    }
+
+    /// Downloads `file` of `h` whole for offline viewing: the file is
+    /// selected and kept, and the scheduler fetches it in piece order on
+    /// the slots readers leave (`Class::Bulk`). The torrent wakes and stays
+    /// awake while the handle lives. A torrent left in librqbit's error
+    /// state (a full disk) is loaded again from its kept details first.
+    pub async fn download(&self, h: TorrentHandle, file: usize) -> Result<DownloadHandle> {
+        let t = self.torrent(h)?;
+        if file >= t.files.len() {
+            return Err(EngineError::NoFile);
+        }
+        // An errored torrent goes and comes back from its details, files
+        // kept: `select_file` alone neither unpauses nor restarts it.
+        let errored = t
+            .live
+            .lock()
+            .await
+            .as_ref()
+            .is_some_and(|l| l.managed.with_state(|s| s.name() == "error"));
+        if errored {
+            let mut live = t.live.lock().await;
+            if let Some(l) = live.take() {
+                let _round = t.keeper.lock().await;
+                let _ = self
+                    .inner
+                    .session
+                    .delete(l.managed.id().into(), false)
+                    .await;
+            }
+        }
+        self.select_file(h, "", &FileHint::Index(file)).await?;
+        lock(&self.inner.kept)
+            .entry(t.info_hash.to_ascii_lowercase())
+            .or_default()
+            .insert(file);
+        // Raised before the scheduler is told, so no maintenance round in
+        // between finds a fresh torrent with no reader idle (engine r2
+        // P3-1).
+        *lock(&t.downloading).entry(file).or_default() += 1;
+        t.out_of_space.store(false, Ordering::Relaxed);
+        // The switch is the torrent's: a ring's RAM never takes a
+        // download's pieces.
+        t.memory.store(false, Ordering::Relaxed);
+        self.send_kept(&t).await;
+        {
+            let live = t.live.lock().await;
+            if let Some(l) = live.as_ref() {
+                if l.managed.is_paused() {
+                    self.inner.session.unpause(&l.managed).await?;
+                }
+                let _ = l.msgs.send(adapter::Msg::Bulk { file, on: true });
+            }
+        }
+        *lock(&t.last_used) = Instant::now();
+        Ok(DownloadHandle {
+            engine: self.clone(),
+            torrent: t,
+            handle: h,
+            file,
+            stopped: false,
+        })
+    }
+
+    /// Ends one running download of `t`'s `file`; the last one stops the
+    /// scheduler's fetch. The file stays kept.
+    async fn end_download(&self, t: &Torrent, file: usize) {
+        let last = {
+            let mut running = lock(&t.downloading);
+            match running.get_mut(&file) {
+                Some(n) if *n > 1 => {
+                    *n -= 1;
+                    false
+                }
+                Some(_) => {
+                    running.remove(&file);
+                    true
+                }
+                None => false,
+            }
+        };
+        if last && let Some(l) = t.live.lock().await.as_ref() {
+            let _ = l.msgs.send(adapter::Msg::Bulk { file, on: false });
+        }
+    }
+
+    /// The disk fell under the reserve: every download stops fetching
+    /// before a write fails, and says so on its handle; the caller waits
+    /// for space and downloads again (engine r2 P2-3).
+    async fn guard_downloads(&self) {
+        let low = self.free().is_some_and(|free| free < RESERVE_BYTES);
+        if !low {
+            return;
+        }
+        let all: Vec<Arc<Torrent>> = lock(&self.inner.torrents).values().cloned().collect();
+        for t in all {
+            let files: Vec<usize> = lock(&t.downloading).keys().copied().collect();
+            if files.is_empty() || t.out_of_space.swap(true, Ordering::Relaxed) {
+                continue;
+            }
+            tracing::warn!("{}: downloads stop under the reserve", t.info_hash);
+            if let Some(l) = t.live.lock().await.as_ref() {
+                for file in files {
+                    let _ = l.msgs.send(adapter::Msg::Bulk { file, on: false });
+                }
+            }
+        }
+    }
+
+    /// Lets go of downloaded `file` of `info_hash` and frees its bytes
+    /// (plans/offline-downloads.md 4.6 step 9): a torrent not loaded is
+    /// loaded from its details first; only the pieces wholly inside the
+    /// file that no other kept file shares are evicted, the boundary ones
+    /// stay; with no kept file left and no playback, the torrent goes with
+    /// its folder, else its folder is left to the budget's sweep.
+    pub async fn delete_file(&self, info_hash: &str, file: usize) -> Result<()> {
+        let hex = hex_hash(info_hash.trim()).ok_or(EngineError::BadInfoHash)?;
+        let left = {
+            let mut kept = lock(&self.inner.kept);
+            let files = kept.entry(hex.clone()).or_default();
+            files.remove(&file);
+            let left = files.clone();
+            if left.is_empty() {
+                kept.remove(&hex);
+            }
+            left
+        };
+        let loaded = lock(&self.inner.torrents)
+            .iter()
+            .find(|(_, t)| t.info_hash == hex)
+            .map(|(h, _)| *h);
+        let h = match loaded {
+            Some(h) => h,
+            None if left.is_empty() => {
+                // Nothing loaded and nothing kept: the folder goes now.
+                let dir = self.inner.cfg.data_dir.join(&hex);
+                if let Some(trash) = self.set_aside(&dir) {
+                    let _ = tokio::fs::remove_dir_all(&trash).await;
+                }
+                return Ok(());
+            }
+            None => self.add_magnet(&hex, &[], &[]).await?,
+        };
+        let t = self.torrent(h)?;
+        if let Some(l) = t.live.lock().await.as_ref() {
+            let _ = l.msgs.send(adapter::Msg::Bulk { file, on: false });
+        }
+        lock(&t.downloading).remove(&file);
+        if left.is_empty() && !t.claimed() {
+            return match self.remove(h, false).await {
+                Err(EngineError::Claimed) => Ok(()),
+                other => other,
+            };
+        }
+        // Live, with the file selected and its check over: an eviction
+        // skips pieces of a torrent that is not.
+        self.select_file(h, "", &FileHint::Index(file)).await?;
+        let managed = t.live.lock().await.as_ref().map(|l| l.managed.clone());
+        if let Some(managed) = managed {
+            managed.wait_until_initialized().await?;
+        }
+        self.send_kept(&t).await;
+        let pieces = exclusive_pieces(&t, file, &left);
+        if !pieces.is_empty() {
+            self.evict_pieces(h, &pieces).await?;
+        }
+        Ok(())
     }
 
     /// Moves a folder an earlier launch left out of the way under the
@@ -1919,6 +2205,161 @@ impl Engine {
         let _ = std::fs::rename(dir.with_extension(TORRENT), trash.join(TORRENT));
         Some(trash)
     }
+}
+
+/// A running download ([`Engine::download`]): it fetches while this lives,
+/// and [`DownloadHandle::progress`] says how far it got.
+pub struct DownloadHandle {
+    engine: Engine,
+    torrent: Arc<Torrent>,
+    handle: TorrentHandle,
+    file: usize,
+    stopped: bool,
+}
+
+/// Where a download stands.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DownloadProgress {
+    /// Bytes of the file in verified pieces.
+    pub have: u64,
+    pub len: u64,
+    /// The disk fell under the reserve and fetching stopped.
+    pub out_of_space: bool,
+    /// The torrent ended (a window's space guard) or librqbit stopped it
+    /// with an error: download again to go on.
+    pub failed: Option<String>,
+    /// Connected peers.
+    pub peers: usize,
+}
+
+impl DownloadHandle {
+    pub fn handle(&self) -> TorrentHandle {
+        self.handle
+    }
+
+    pub async fn progress(&self) -> DownloadProgress {
+        let t = &self.torrent;
+        let file = self.file;
+        let have = self
+            .engine
+            .ask(t, |tx| adapter::Msg::FileHave { file, tx })
+            .await
+            .unwrap_or(0);
+        let errored = t.live.lock().await.as_ref().and_then(|l| {
+            l.managed
+                .with_state(|s| (s.name() == "error").then(|| "error".to_owned()))
+        });
+        let peers = self
+            .engine
+            .stats(self.handle)
+            .await
+            .map(|s| s.peers)
+            .unwrap_or(0);
+        DownloadProgress {
+            have,
+            len: t.files[file].len,
+            out_of_space: t.out_of_space.load(Ordering::Relaxed),
+            failed: lock(&t.ended).clone().or(errored),
+            peers,
+        }
+    }
+
+    /// Ends the download; the file stays kept. A done download's torrent
+    /// pauses when nothing else uses it, which writes its bitfield out.
+    pub async fn stop(mut self) {
+        self.stopped = true;
+        let (engine, t, file) = (self.engine.clone(), self.torrent.clone(), self.file);
+        engine.end_download(&t, file).await;
+        if !t.active() && t.readers.load(Ordering::Relaxed) == 0 {
+            let live = t.live.lock().await;
+            if let Some(l) = live.as_ref().filter(|l| !l.managed.is_paused()) {
+                let _round = t.keeper.lock().await;
+                if let Err(e) = engine.inner.session.pause(&l.managed).await {
+                    tracing::warn!("pausing a finished download: {e:#}");
+                }
+                let _ = l.msgs.send(adapter::Msg::Stopped);
+            }
+        }
+    }
+}
+
+impl Drop for DownloadHandle {
+    fn drop(&mut self) {
+        if self.stopped {
+            return;
+        }
+        let (engine, t, file) = (self.engine.clone(), self.torrent.clone(), self.file);
+        if let Ok(rt) = tokio::runtime::Handle::try_current() {
+            rt.spawn(async move { engine.end_download(&t, file).await });
+        }
+    }
+}
+
+/// The pieces of `t` wholly inside `file` that hold no byte of the files
+/// in `keep`: what a delete of `file` may evict.
+fn exclusive_pieces(
+    t: &Torrent,
+    file: usize,
+    keep: &std::collections::BTreeSet<usize>,
+) -> Vec<u32> {
+    let piece = u64::from(t.piece_len);
+    let start: u64 = t.files[..file].iter().map(|f| f.len).sum();
+    let end = start + t.files[file].len;
+    let spans: Vec<(u64, u64)> = keep
+        .iter()
+        .filter_map(|&k| {
+            let s: u64 = t.files.get(..k)?.iter().map(|f| f.len).sum();
+            Some((s, s + t.files.get(k)?.len))
+        })
+        .collect();
+    (start.div_ceil(piece)..end / piece)
+        .filter(|&p| {
+            let (a, b) = (p * piece, (p + 1) * piece);
+            !spans.iter().any(|&(s, e)| a < e && s < b)
+        })
+        .map(|p| p as u32)
+        .collect()
+}
+
+/// Whether `file` of the torrent `info_hash` is whole on this device
+/// (plans/offline-downloads.md 4.8): every piece holding a byte of it is
+/// in the torrent's `.have`, and its data is all there: a whole file at
+/// full length whose allocated blocks cover it but a piece (a punched hole
+/// keeps the length), or a folder of piece files, each at its size.
+/// Blocking: reads the disk. A filesystem with transparent compression
+/// counts fewer blocks than bytes and reads as not whole here.
+pub fn complete_on_disk(data_dir: &Path, info_hash: &str, file: usize) -> bool {
+    let Some(hex) = hex_hash(info_hash.trim()) else {
+        return false;
+    };
+    let dir = data_dir.join(&hex);
+    let Some(shape) = kept_shape(&dir, &hex) else {
+        return false;
+    };
+    let Some(f) = shape.files.get(file) else {
+        return false;
+    };
+    let have = std::fs::read(dir.with_extension(HAVE)).unwrap_or_default();
+    let piece = u64::from(shape.piece_len);
+    let start: u64 = shape.files[..file].iter().map(|f| f.len).sum();
+    if f.len == 0 {
+        return true;
+    }
+    let pieces = start / piece..(start + f.len).div_ceil(piece);
+    let has = |p: u64| {
+        have.get((p / 8) as usize)
+            .is_some_and(|byte| byte & (0x80 >> (p % 8)) != 0)
+    };
+    if !pieces.clone().all(has) {
+        return false;
+    }
+    let path = dir.join(&f.path);
+    if path.is_dir() {
+        // Piece files, named by piece index.
+        return pieces.clone().all(|p| path.join(p.to_string()).is_file());
+    }
+    std::fs::metadata(&path)
+        .is_ok_and(|m| m.is_file() && m.len() == f.len && file_allocated(&path) + piece >= f.len)
 }
 
 /// The ending of a torrent folder on its way out.
@@ -2220,6 +2661,7 @@ async fn maintenance(inner: std::sync::Weak<Inner>) {
             if t.readers.load(Ordering::Relaxed) > 0
                 || lock(&t.last_used).elapsed() < KEEP_WARM
                 || t.player_paused.load(Ordering::Relaxed)
+                || t.downloading()
             {
                 continue;
             }
@@ -2234,6 +2676,7 @@ async fn maintenance(inner: std::sync::Weak<Inner>) {
         }
         engine.enforce_budget(None, 0).await;
         engine.guard_whole_files().await;
+        engine.guard_downloads().await;
         let counts = window::Counted {
             reclaimable: engine.reclaimable(None).await,
             committed: engine.committed(None).await,
@@ -2267,7 +2710,32 @@ fn file_allocated(path: &Path) -> u64 {
 }
 
 /// [`window::counted_on_disk`]'s folders, but those in `held`.
-fn counted_on_disk_except(data_dir: &Path, held: &[&Path]) -> HashMap<String, HeldBytes> {
+/// Kept folders (`kept`, not loaded) are held, never idle.
+fn counted_on_disk_except(
+    data_dir: &Path,
+    held: &[&Path],
+    kept: &[PathBuf],
+) -> HashMap<String, HeldBytes> {
+    let mut not_idle: Vec<&Path> = held.to_vec();
+    not_idle.extend(kept.iter().map(PathBuf::as_path));
+    let mut counted: HashMap<String, HeldBytes> = kept
+        .iter()
+        .filter_map(|path| {
+            let hash = path.file_name()?.to_str()?.to_ascii_lowercase();
+            let held = HeldBytes {
+                folder: allocated(path),
+                files: single_file(path).into_iter().collect(),
+                idle: false,
+                committed: 0,
+            };
+            Some((hash, held))
+        })
+        .collect();
+    counted.extend(leftovers_counted(data_dir, &not_idle));
+    counted
+}
+
+fn leftovers_counted(data_dir: &Path, held: &[&Path]) -> HashMap<String, HeldBytes> {
     leftovers(data_dir, held)
         .0
         .into_iter()

@@ -475,6 +475,10 @@ pub enum Class {
     Critical,
     Playback,
     Readahead,
+    /// An offline download's whole file (plans/offline-downloads.md 4.6):
+    /// in piece order, on the peer slots readers leave, outside a window's
+    /// cap and its open-pieces limit.
+    Bulk,
 }
 
 impl Class {
