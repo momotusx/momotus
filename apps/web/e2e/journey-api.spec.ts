@@ -1468,13 +1468,16 @@ test("TV and desktop player: the page draws the lines, over the 5% line, clear o
     // Controls hidden: the lines end over the title-safe line.
     await expect(p.locator(".player-scr")).toHaveClass(/idle/, { timeout: 10_000 });
     await expect.poll(async () => { const c = await cue(); return c ? c.foot - c.bottom - c.height * 0.05 : -1; }).toBeGreaterThanOrEqual(-1);
-    if (form === "desktop") {
-      // The controls up: the lines end over the scrubber.
+    // The controls up (a key on a TV, the pointer on a desktop; while hidden the first press only shows them):
+    // the lines end over the scrubber, which is on screen.
+    if (form === "tv") await p.keyboard.press("ArrowUp");
+    else {
       await p.mouse.move(size.width / 2, size.height / 2);
       await p.mouse.move(size.width / 2 + 20, size.height / 2);
-      await expect(p.locator(".player-scr")).not.toHaveClass(/idle/);
-      await expect.poll(async () => { const c = await cue(); return c ? c.scrub - c.bottom : -1; }).toBeGreaterThanOrEqual(0);
     }
+    await expect(p.locator(".player-scr")).not.toHaveClass(/idle/);
+    expect((await cue())?.scrub ?? Infinity).toBeLessThan(size.height);
+    await expect.poll(async () => { const c = await cue(); return c ? c.scrub - c.bottom : -1; }).toBeGreaterThanOrEqual(0);
     await context.close();
   }
 });
