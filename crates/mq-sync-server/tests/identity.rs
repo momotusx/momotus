@@ -1576,3 +1576,32 @@ async fn a_token_alone_deletes_nothing() {
     assert_eq!(send(&asked, me.sign_delete(&asked)).await, 200);
     assert_eq!((relay.count("account"), relay.count("identity")), (0, 0));
 }
+
+/// A sign-in in progress keeps a keyed hash of its client's address, never
+/// the address, so neither the database nor a backup taken meanwhile holds
+/// one; two starts from one address still count together.
+#[tokio::test]
+async fn a_sign_in_in_progress_keeps_no_client_address() {
+    let relay = Relay::new().await;
+    for _ in 0..2 {
+        start_brokered(&http(), &relay.url, "mock", "marquee://auth", false)
+            .await
+            .unwrap();
+    }
+    let clients: Vec<String> = relay
+        .sql()
+        .prepare("SELECT client FROM auth_flow")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(clients.len(), 2);
+    assert!(
+        clients
+            .iter()
+            .all(|c| c.len() == 64 && !c.contains("127.0.0.1")),
+        "{clients:?}"
+    );
+    assert_eq!(clients[0], clients[1], "one address, one tag");
+}
