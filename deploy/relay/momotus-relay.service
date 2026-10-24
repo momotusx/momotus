@@ -1,0 +1,43 @@
+# Marquee's sync relay (plans/accounts-social-sync.md section 3). Installed as is into
+# /etc/systemd/system; the identity file comes in through LoadCredential, never readable by the
+# service user on disk.
+[Unit]
+Description=Marquee sync relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=momotus
+Group=momotus
+LoadCredential=identity.json:/etc/momotus/identity.json
+ExecStart=/opt/momotus/bin/mq-sync-server --db /var/lib/momotus/relay.sqlite --listen 127.0.0.1:8787 --trust-proxy --public-host momotus.normalisdead.mom --identity %d/identity.json
+Restart=always
+RestartSec=2
+# The relay's refusals (a bad identity file, a database of another schema) exit 2: no restart loop.
+RestartPreventExitStatus=2
+MemoryMax=256M
+TasksMax=64
+StateDirectory=momotus
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+# AF_NETLINK: mq-http's getifaddrs reads the machine's own addresses for its address guard.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

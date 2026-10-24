@@ -1,0 +1,9 @@
+[Unit]
+Description=Marquee sync relay backup, nightly
+
+[Timer]
+OnCalendar=*-*-* 04:20
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,30 @@
+# The relay's nightly backup (backup.py), as the relay's own user, with no network.
+[Unit]
+Description=Marquee sync relay backup
+
+[Service]
+Type=oneshot
+User=momotus
+Group=momotus
+ExecStart=/usr/bin/python3 -I /opt/momotus/backup.py /var/lib/momotus
+StateDirectory=momotus
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateNetwork=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX
+CapabilityBoundingSet=
