@@ -378,6 +378,12 @@ impl Resolver {
         Ok(())
     }
 
+    /// Forgets the cached link `url`: its origin refused it (an expired
+    /// download link), so the next resolve asks the store again.
+    pub fn forget(&self, url: &str) {
+        lock(&self.state.cache).retain(|_, e| e.link.url != url);
+    }
+
     /// Drops what gone connections left in the cache and their flights. Call
     /// after cancelling.
     pub fn prune(&self) {

@@ -17,6 +17,7 @@
 //! fetches from an origin.
 
 mod ahead;
+mod file;
 mod manifest;
 mod subtitles;
 #[cfg(all(test, feature = "torrent"))]
@@ -66,6 +67,15 @@ pub enum Upstream {
     Torrent {
         claim: mq_engine::Claim,
         file: usize,
+    },
+    /// A file on this device: an offline download (plans/offline-downloads.md
+    /// 4.12). `len` is the whole video's; `held`, for one still being
+    /// written, is how much of it is on disk now and ends when its download
+    /// stops.
+    File {
+        path: std::path::PathBuf,
+        len: u64,
+        held: Option<tokio::sync::watch::Receiver<u64>>,
     },
 }
 
@@ -152,6 +162,7 @@ enum Content {
         claim: mq_engine::Claim,
         file: usize,
     },
+    File(Arc<file::LocalFile>),
 }
 
 /// One playback: its body and its subtitles, under one token.
@@ -182,7 +193,6 @@ pub enum SubtitleTrouble {
 type Reporter = Arc<dyn Fn(&str, SubtitleTrouble) + Send + Sync>;
 
 impl Playback {
-    #[allow(irrefutable_let_patterns)] // one variant without `torrent`
     fn release(&self) {
         self.released.cancel();
         if let Content::Http(source) = &self.body {
@@ -391,8 +401,8 @@ impl StreamServer {
         // The token goes in the map only at the end, but a playlist's dry run
         // writes it into the children's URLs, so the size limit sees them.
         let token = new_token();
-        // Torrent playbacks are checked before they get here.
-        #[allow(irrefutable_let_patterns)] // one variant without `torrent`
+        // Torrent playbacks are checked before they get here; a file on
+        // this device needs no check.
         let Content::Http(source) = &playback.body else {
             return Ok(self.lease(token, playback, &file_name(filename), None));
         };
@@ -562,6 +572,9 @@ impl StreamServer {
             }
             #[cfg(feature = "torrent")]
             Upstream::Torrent { claim, file } => Content::Torrent { claim, file },
+            Upstream::File { path, len, held } => {
+                Content::File(Arc::new(file::LocalFile { path, len, held }))
+            }
         };
         Arc::new(Playback {
             body,
@@ -784,6 +797,7 @@ impl Lease {
             Content::Http(source) if !source.passthrough() => {
                 Some(Box::new(ahead::Reader(source.clone())))
             }
+            Content::File(file) => Some(Box::new(mq_media::FileRangeReader::new(&file.path))),
             _ => None,
         }
     }
@@ -1143,6 +1157,20 @@ async fn serve(
             let relabel = relabels(playback.clone());
             cors(torrent::serve(claim, *file, range.as_deref(), head_only, released, relabel).await)
         }
+        Content::File(local) => {
+            let released = playback.released.clone();
+            let relabel = relabels(playback.clone());
+            cors(
+                file::serve(
+                    local.clone(),
+                    range.as_deref(),
+                    head_only,
+                    released,
+                    relabel,
+                )
+                .await,
+            )
+        }
     }
 }
 
@@ -1191,11 +1219,14 @@ async fn scan(playback: &Playback) -> Scan {
             // A torrent's file names are its own: only an MP4 or MOV one is
             // read, so other files never wait on the scan's pieces.
             Content::Torrent { claim, file } => match claim.open_reader(*file).await {
-                Ok(reader) if torrent::iso_bmff(&reader.file().path) => {
+                Ok(reader) if iso_bmff(&reader.file().path) => {
                     Box::new(torrent::TorrentBytes(reader))
                 }
                 _ => return Scan::default(),
             },
+            Content::File(local) if iso_bmff(&local.path.to_string_lossy()) => {
+                Box::new(mq_media::FileRangeReader::new(&local.path))
+            }
             _ => return Scan::default(),
         };
         let cancel = playback.released.clone();
@@ -1688,30 +1719,31 @@ fn range_headers(
     Some((status, start, end))
 }
 
+/// An MP4 or MOV file by its name (in a torrent, or a download's).
+pub(crate) fn iso_bmff(name: &str) -> bool {
+    matches!(content_type(name), "video/mp4" | "video/quicktime")
+}
+
+/// A video file's type by its name's extension.
+pub(crate) fn content_type(name: &str) -> &'static str {
+    let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
+    match ext.as_deref() {
+        Some("mkv") => "video/x-matroska",
+        Some("mp4" | "m4v") => "video/mp4",
+        Some("webm") => "video/webm",
+        Some("avi") => "video/x-msvideo",
+        Some("mov") => "video/quicktime",
+        Some("ts" | "m2ts") => "video/mp2t",
+        Some("mpg" | "mpeg") => "video/mpeg",
+        Some("wmv") => "video/x-ms-wmv",
+        Some("flv") => "video/x-flv",
+        _ => "application/octet-stream",
+    }
+}
+
 #[cfg(feature = "torrent")]
 mod torrent {
     use super::*;
-
-    /// An MP4 or MOV file by its name in the torrent.
-    pub(crate) fn iso_bmff(name: &str) -> bool {
-        matches!(content_type(name), "video/mp4" | "video/quicktime")
-    }
-
-    fn content_type(name: &str) -> &'static str {
-        let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
-        match ext.as_deref() {
-            Some("mkv") => "video/x-matroska",
-            Some("mp4" | "m4v") => "video/mp4",
-            Some("webm") => "video/webm",
-            Some("avi") => "video/x-msvideo",
-            Some("mov") => "video/quicktime",
-            Some("ts" | "m2ts") => "video/mp2t",
-            Some("mpg" | "mpeg") => "video/mpeg",
-            Some("wmv") => "video/x-ms-wmv",
-            Some("flv") => "video/x-flv",
-            _ => "application/octet-stream",
-        }
-    }
 
     /// Serves one file of the engine with Range support. Headers go out at
     /// once; the body follows as pieces are verified. HEAD opens no demand.

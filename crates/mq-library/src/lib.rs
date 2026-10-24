@@ -6,6 +6,7 @@
 //! row carries an `hlc` string that sorts in causal order.
 
 mod archive;
+mod downloads;
 pub mod hlc;
 mod policy;
 mod profiles;
@@ -15,6 +16,7 @@ mod sync;
 mod tracker;
 
 pub use archive::ArchiveFilm;
+pub use downloads::DownloadRecord;
 pub use hlc::{Hlc, HlcClock};
 
 pub use policy::{AllowedList, AllowedRow, Authorization, MAX_ALLOWED, Policy};

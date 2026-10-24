@@ -16,7 +16,7 @@ mq-http = { path = "../mq-http" }
 mq-media = { path = "../mq-media" }
 mq-engine = { path = "../mq-engine", optional = true }
 axum = "0.8"
-tokio = { workspace = true, features = ["net"] }
+tokio = { workspace = true, features = ["net", "fs", "io-util"] }
 futures-util = "0.3"
 bytes = "1"
 getrandom = "0.3"

@@ -26,14 +26,15 @@
 
 use futures_util::StreamExt;
 use mq_library::Table;
+use mq_runtime::downloads::Action;
 use mq_runtime::{
     AddonCatalogView, AddonsView, CalendarView, Core, DebridLoginView, DebridRecord,
-    DebridTombstone, DebridView, DiscoverView, GenresView, HomeView, ImportView, LibrarySort,
-    LibraryView, ListedError, ListedFailure, PairingView, PlayTarget, PlaybackView, ProfileError,
-    ProfilesView, SearchView, SessionState, SettingsView, SignInSnapshot, SignInView, StoreId,
-    TitleFacts, TitleView, TraktLoginView, TraktRecord, TraktView, VersionsParams, VersionsView,
+    DebridTombstone, DebridView, DiscoverView, DownloadsView, GenresView, HomeView, ImportView,
+    LibrarySort, LibraryView, ListedError, ListedFailure, PairingView, PlayTarget, PlaybackView,
+    ProfileError, ProfilesView, SearchView, SessionState, SettingsView, SignInSnapshot, SignInView,
+    StoreId, TitleView, TraktLoginView, TraktRecord, TraktView, VersionsParams, VersionsView,
 };
-use mq_streams::{DeviceCaps, StreamPrefs, Target};
+use mq_streams::StreamPrefs;
 use mq_sync::SyncConfig;
 use mq_sync::roster::Digest32;
 use mq_sync::roster::Id;
@@ -457,15 +458,86 @@ enum Request {
         row_id: String,
         by: i64,
     },
+    /// Downloads a video, a season's aired episodes or every regular
+    /// season's (plans/offline-downloads.md 4.15). `params` carries what
+    /// `versions` takes (the device's caps, `language`); `pick` a version
+    /// the user chose on a `purpose: "download"` Versions screen. Replies
+    /// `{ids}`.
+    DownloadAdd {
+        id: u64,
+        kind: String,
+        #[serde(rename = "itemId")]
+        item_id: String,
+        scope: mq_runtime::downloads::Scope,
+        #[serde(default, rename = "videoId")]
+        video_id: Option<String>,
+        #[serde(default)]
+        season: Option<u32>,
+        #[serde(default)]
+        params: Value,
+        #[serde(default)]
+        pick: Option<DownloadPick>,
+    },
+    /// Pauses, resumes, removes (cancels and deletes) or tries again the
+    /// downloads `ids`, or with `all` every one; remove also takes a
+    /// title's (`itemId`). Retry with `mobileData` lets one waiting for
+    /// Wi-Fi go on mobile data. Replies `{}`.
+    DownloadPause {
+        id: u64,
+        #[serde(flatten)]
+        which: DownloadIds,
+    },
+    DownloadResume {
+        id: u64,
+        #[serde(flatten)]
+        which: DownloadIds,
+    },
+    DownloadRemove {
+        id: u64,
+        #[serde(flatten)]
+        which: DownloadIds,
+    },
+    DownloadRetry {
+        id: u64,
+        #[serde(flatten)]
+        which: DownloadIds,
+        #[serde(default, rename = "mobileData")]
+        mobile_data: bool,
+    },
+    /// The device's downloads settings. Replies `{}`.
+    SetDownloadSettings {
+        id: u64,
+        #[serde(default, rename = "wifiOnly")]
+        wifi_only: Option<bool>,
+        #[serde(default)]
+        smart: Option<bool>,
+    },
+    /// The platform's say: whether downloads may run now (an iPhone left
+    /// in the background without a continued task, an Android job the
+    /// system stopped) and its free-space figure. Send it on every change
+    /// of the `downloads` view's `active`, once a minute while downloads
+    /// run, and at foreground. Replies `{}`.
+    DownloadsAllowed {
+        id: u64,
+        allowed: bool,
+        #[serde(default, rename = "freeBytes")]
+        free_bytes: Option<u64>,
+    },
     /// The app's life as the OS reports it: `foreground`, `background`,
     /// `memoryPressure` (frees caches) or `networkChanged` (drops pooled
     /// connections; `network` is the new type when the app knows it:
-    /// `wifi`, `ethernet`, `cellular` or `other`).
+    /// `wifi`, `ethernet`, `cellular`, `other`, or `none` with no
+    /// connection; `metered` from the platform's cost flag, `lowData` for
+    /// Low Data Mode, plans/offline-downloads.md 4.13).
     Lifecycle {
         id: u64,
         event: String,
         #[serde(default)]
-        network: Option<mq_runtime::speed::Network>,
+        network: Option<NetworkWord>,
+        #[serde(default)]
+        metered: Option<bool>,
+        #[serde(default, rename = "lowData")]
+        low_data: Option<bool>,
     },
     /// The profile's Trakt record from the keystore (right after `open` and
     /// after a switch or unlock), or the acknowledgement of one the `trakt`
@@ -560,10 +632,45 @@ impl Request {
             | Request::SetDebridKey { .. }
             | Request::DisconnectDebrid { .. }
             | Request::Ping { .. }
+            // The platform's say on downloads is the device's.
+            | Request::DownloadsAllowed { .. }
             | Request::Lifecycle { .. } => true,
             _ => false,
         }
     }
+}
+
+/// `networkChanged`'s `network`: a type, or `none`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(untagged)]
+enum NetworkWord {
+    Known(mq_runtime::speed::Network),
+    Other(NoNetwork),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum NoNetwork {
+    None,
+}
+
+/// Which downloads an op names.
+#[derive(Debug, Clone, Default, Deserialize)]
+struct DownloadIds {
+    #[serde(default)]
+    ids: Vec<String>,
+    #[serde(default, rename = "itemId")]
+    item_id: Option<String>,
+    #[serde(default)]
+    all: bool,
+}
+
+/// A version picked on a Versions screen to download.
+#[derive(Debug, Clone, Deserialize)]
+struct DownloadPick {
+    #[serde(rename = "versionsSub")]
+    versions_sub: u64,
+    key: String,
 }
 
 /// Holding a view keeps its background work alive; dropping it cancels.
@@ -588,6 +695,7 @@ enum View {
     DebridLogin { _view: DebridLoginView },
     Trakt { _view: TraktView },
     TraktLogin { _view: TraktLoginView },
+    Downloads { _view: DownloadsView },
 }
 
 impl View {
@@ -613,6 +721,7 @@ impl View {
             View::DebridLogin { .. } => "debridLogin",
             View::Trakt { .. } => "trakt",
             View::TraktLogin { .. } => "traktLogin",
+            View::Downloads { .. } => "downloads",
         }
     }
 }
@@ -757,6 +866,8 @@ impl Session {
             email: HashMap::new(),
         }));
         refresh_addons(&core);
+        // A launch resumes the downloads a kill or a reboot left.
+        let _ = core.downloads();
         let watcher = tokio::spawn(watch_gone(
             Arc::downgrade(&shared),
             core,
@@ -1367,6 +1478,78 @@ impl Session {
                 let result = core.remove_from_continue(&item_id);
                 self.reply(json!(id), done(result));
             }
+            Request::DownloadAdd {
+                id,
+                kind,
+                item_id,
+                scope,
+                video_id,
+                season,
+                params,
+                pick,
+            } => {
+                let pick = match pick {
+                    Some(pick) => match self.download_pick(&pick) {
+                        Ok(chain) => Some(chain),
+                        Err(e) => {
+                            self.reply(json!(id), Err(e));
+                            return;
+                        }
+                    },
+                    None => None,
+                };
+                let request = mq_runtime::downloads::AddRequest {
+                    kind,
+                    item_id,
+                    scope,
+                    video_id,
+                    season,
+                    params,
+                    pick,
+                };
+                self.spawn(id, async move {
+                    let ids = mq_runtime::downloads::add(&core, request).await;
+                    ids.map(|ids| json!({ "ids": ids }))
+                        .map_err(|e| e.to_string())
+                });
+            }
+            Request::DownloadPause { id, which } => {
+                let result = downloads_act(&core, &which, Action::Pause);
+                self.reply(json!(id), done(result));
+            }
+            Request::DownloadResume { id, which } => {
+                let result = downloads_act(&core, &which, Action::Resume);
+                self.reply(json!(id), done(result));
+            }
+            Request::DownloadRemove { id, which } => {
+                let result = downloads_act(&core, &which, Action::Remove);
+                self.reply(json!(id), done(result));
+            }
+            Request::DownloadRetry {
+                id,
+                which,
+                mobile_data,
+            } => {
+                let result = downloads_act(&core, &which, Action::Retry { mobile_data });
+                self.reply(json!(id), done(result));
+            }
+            Request::SetDownloadSettings {
+                id,
+                wifi_only,
+                smart,
+            } => {
+                let result = mq_runtime::downloads::owner(&core)
+                    .and_then(|d| d.set_settings(wifi_only, smart));
+                self.reply(json!(id), done(result));
+            }
+            Request::DownloadsAllowed {
+                id,
+                allowed,
+                free_bytes,
+            } => {
+                core.downloads().set_allowed(allowed, free_bytes);
+                self.reply(json!(id), Ok(json!({})));
+            }
             Request::Languages { id, device } => {
                 let all = mq_runtime::languages::all(device.as_deref());
                 self.reply(json!(id), Ok(json!(all)));
@@ -1450,14 +1633,31 @@ impl Session {
                     Ok::<_, Failure>(json!({ "serverMoved": moved }))
                 });
             }
-            Request::Lifecycle { id, event, network } => {
+            Request::Lifecycle {
+                id,
+                event,
+                network,
+                metered,
+                low_data,
+            } => {
                 let result = match event.as_str() {
                     "memoryPressure" => {
                         core.on_memory_pressure();
                         Ok(json!({}))
                     }
                     "networkChanged" => {
-                        core.on_network_changed(network);
+                        let known = match network {
+                            Some(NetworkWord::Known(n)) => Some(n),
+                            _ => None,
+                        };
+                        let offline = network == Some(NetworkWord::Other(NoNetwork::None));
+                        core.downloads().set_link(mq_runtime::downloads::Link {
+                            offline,
+                            metered: metered
+                                .unwrap_or(known == Some(mq_runtime::speed::Network::Cellular)),
+                            low_data: low_data.unwrap_or(false),
+                        });
+                        core.on_network_changed(known);
                         Ok(json!({}))
                     }
                     other => Err(format!("unknown lifecycle event: {other}")),
@@ -1948,6 +2148,16 @@ impl Session {
                 let forward = tokio::spawn(forward(sub, updates, out, fence));
                 (View::Search(search), to_value(&snapshot)?, forward)
             }
+            "downloads" => {
+                let downloads = DownloadsView::open(&core);
+                let (snapshot, updates) = downloads.subscribe();
+                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                (
+                    View::Downloads { _view: downloads },
+                    to_value(&snapshot)?,
+                    forward,
+                )
+            }
             "playback" => {
                 let playback = self.playback(&core, params)?;
                 let (snapshot, updates) = playback.subscribe();
@@ -2140,6 +2350,24 @@ impl Session {
     /// Playback params: `versionsSub` (the open Versions view), `key` (its
     /// row), `kind`, `itemId`, `videoId`, optional `name`, `poster`, `season`,
     /// `episode`.
+    /// The version a download add names: its row of an open Versions view
+    /// and that row's failover chain. No learning: a download is no pick.
+    fn download_pick(&self, pick: &DownloadPick) -> Result<Vec<mq_streams::ParsedStream>, String> {
+        let shared = lock(&self.shared);
+        let Some(Subscription {
+            view: View::Versions(versions),
+            ..
+        }) = shared.subs.get(&pick.versions_sub)
+        else {
+            return Err(format!("no versions subscription {}", pick.versions_sub));
+        };
+        let chain = versions.candidates(&pick.key);
+        if chain.is_empty() {
+            return Err("that version is no longer listed".into());
+        }
+        Ok(chain)
+    }
+
     fn playback(&self, core: &Core, params: &Value) -> Result<PlaybackView, String> {
         let versions_sub = params
             .get("versionsSub")
@@ -2308,6 +2536,24 @@ fn done(result: Result<(), mq_runtime::CoreError>) -> Result<Value, String> {
     result.map(|()| json!({})).map_err(|e| e.to_string())
 }
 
+/// A download op on the downloads `which` names; refused for a kids
+/// profile.
+fn downloads_act(
+    core: &Core,
+    which: &DownloadIds,
+    action: Action,
+) -> Result<(), mq_runtime::CoreError> {
+    let downloads = mq_runtime::downloads::owner(core)?;
+    let ids: Vec<String> = if which.all {
+        downloads.ids()
+    } else if let Some(item) = &which.item_id {
+        downloads.ids_of(item)
+    } else {
+        which.ids.clone()
+    };
+    downloads.act(&ids, action)
+}
+
 fn debrid_service(name: &str) -> Result<StoreId, String> {
     StoreId::from_service(name).ok_or(format!("unknown debrid service: {name}"))
 }
@@ -2438,67 +2684,8 @@ async fn watch_gone(
 /// `language` (the device's, read as the core's tag: "nb" is "no") stands in
 /// for audio preferences the user has not set: that language first, then
 /// English.
-fn versions_params(params: &Value, mut prefs: StreamPrefs) -> Result<VersionsParams, String> {
-    let num = |key: &str| params.get(key).and_then(Value::as_u64).map(|n| n as u32);
-    if prefs.languages.is_empty() {
-        let device: Option<String> = field(params, "language")?;
-        let device = device.map(|code| mq_runtime::languages::tag(&code));
-        prefs.languages = device.into_iter().chain(["en".to_owned()]).collect();
-        prefs.languages.dedup();
-    }
-    let mut caps = DeviceCaps::basic_1080p();
-    if let Some(height) = num("displayHeight") {
-        caps.display_height = height;
-    }
-    if let Some(hdr) = field(params, "hdr")? {
-        caps.display_hdr = hdr;
-    }
-    if let Some(decoders) = field(params, "decoders")? {
-        caps.decoders = decoders;
-    }
-    if let Some(ten_bit) = field(params, "tenBitHevc")? {
-        caps.ten_bit_hevc = ten_bit;
-    }
-    if let Some(ten_bit) = field(params, "tenBitH264")? {
-        caps.ten_bit_h264 = ten_bit;
-    }
-    if let Some(passthrough) = field(params, "passthrough")? {
-        caps.passthrough = passthrough;
-    }
-    if let Some(fallback) = field(params, "hasFallbackEngine")? {
-        caps.has_fallback_engine = fallback;
-    }
-    if let Some(hvc1_only) = field(params, "hvc1Only")? {
-        caps.hvc1_only = hvc1_only;
-    }
-    if let Some(audio) = field(params, "audioDecoders")? {
-        caps.audio_decoders = audio;
-    }
-    if let Some(containers) = field::<Vec<String>>(params, "containers")? {
-        caps.containers = containers.iter().map(|c| c.to_ascii_lowercase()).collect();
-    }
-    Ok(VersionsParams {
-        kind: param(params, "kind")?,
-        video_id: param(params, "videoId")?,
-        target: Target {
-            title: param(params, "title").unwrap_or_default(),
-            year: None,
-            season: num("season"),
-            episode: num("episode"),
-        },
-        caps,
-        prefs,
-        last_binge_group: params
-            .get("bingeGroup")
-            .and_then(Value::as_str)
-            .map(str::to_owned),
-        facts: TitleFacts::read(
-            field::<String>(params, "runtime")?.as_deref(),
-            field::<String>(params, "releaseInfo")?.as_deref(),
-            field::<String>(params, "released")?.as_deref(),
-            num("episodesInSeason"),
-        ),
-    })
+fn versions_params(params: &Value, prefs: StreamPrefs) -> Result<VersionsParams, String> {
+    VersionsParams::from_json(params, prefs)
 }
 
 /// The network type a `versions` subscription names, if any.
@@ -2605,7 +2792,7 @@ mod tests {
         let caps = versions_params(&defaults, StreamPrefs::default())
             .unwrap()
             .caps;
-        assert_eq!(caps, DeviceCaps::basic_1080p());
+        assert_eq!(caps, mq_streams::DeviceCaps::basic_1080p());
 
         let wrong = json!({"kind": "movie", "videoId": "tt1", "decoders": ["betamax"]});
         let err = versions_params(&wrong, StreamPrefs::default())

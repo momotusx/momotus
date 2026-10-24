@@ -3,6 +3,7 @@
 //! state from the library, and library and watched commands.
 
 use crate::Core;
+use crate::downloads::DownloadBadge;
 use crate::live::{FRAME, ListDiff, coalesce};
 use crate::ratings::Ratings;
 use crate::views::home::Tile;
@@ -13,7 +14,7 @@ use futures_util::{Stream, StreamExt};
 use mq_library::{LibraryItemRow, Table};
 use mq_protocol::MetaItem;
 use serde::Serialize;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -183,6 +184,34 @@ pub struct TitleHeader {
     /// render, so a control that depends on it (TV's Remove from Continue
     /// Watching) is drawn at once, never late.
     pub continuing: bool,
+    /// A movie's download on this device (plans/offline-downloads.md 3.1).
+    pub download: Option<DownloadBadge>,
+    /// The selected season's downloads, for its menu item.
+    pub season_download: Option<GroupDownload>,
+    /// Every regular season's, for "Download every season".
+    pub series_download: Option<GroupDownload>,
+    /// The meta could not be read and the page shows what the downloads
+    /// kept (4.18): hide Versions and Trailer, say "Showing what's
+    /// downloaded".
+    pub offline: bool,
+}
+
+/// A season's or a series' downloads: its aired episodes (regular seasons
+/// for a series), how many have a download, and how many are on their way.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupDownload {
+    pub seasons: u32,
+    pub episodes: u32,
+    /// Episodes with a download in any state but failed or missing.
+    pub downloaded: u32,
+    /// Of those, queued, running, paused or waiting.
+    pub active: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -223,6 +252,8 @@ pub struct Episode {
     /// As [`PlayTarget::left_ms`], for this episode.
     #[cfg_attr(feature = "ts", ts(type = "number | null"))]
     pub left_ms: Option<i64>,
+    /// Its download on this device.
+    pub download: Option<DownloadBadge>,
 }
 
 /// What the subtitles addons list for one video.
@@ -273,6 +304,8 @@ struct State {
     /// RPDB's cover for the title, read when the meta lands and again when
     /// the addons change (the key comes from one), not on every render.
     rated_poster: Option<String>,
+    /// `meta` was built from the downloads (4.18).
+    offline: bool,
 }
 
 /// A live title page. Dropping it cancels its work.
@@ -325,6 +358,10 @@ impl TitleView {
             next_airs: None,
             watched: false,
             continuing: false,
+            download: None,
+            season_download: None,
+            series_download: None,
+            offline: false,
         });
         let mut view = Self {
             core: core.clone(),
@@ -341,6 +378,7 @@ impl TitleView {
                 tmdb: None,
                 trakt: None,
                 rated_poster: None,
+                offline: false,
             })),
             similar: SharedObservable::new(Vec::new()),
             lookup: Mutex::new(JoinSet::new()),
@@ -350,6 +388,7 @@ impl TitleView {
             view._tasks.spawn(load_meta(view.ctx()));
             view._tasks.spawn(watch_library(view.ctx()));
             view._tasks.spawn(watch_captions(view.ctx()));
+            view._tasks.spawn(watch_downloads(view.ctx()));
             // Versions usually come next: their first scrape finds the
             // trackers resolved and connected.
             let core = core.clone();
@@ -625,9 +664,87 @@ async fn load_meta(ctx: Ctx) {
             ctx.render_with_source(&source);
         }
         Err(reason) => {
+            // No meta, no network: what the downloads kept (4.18).
+            if let Some(meta) = downloaded_meta(&ctx) {
+                {
+                    let mut state = lock(&ctx.state);
+                    state.meta = Some(meta);
+                    state.offline = true;
+                }
+                ctx.render_with_source("");
+                return;
+            }
             let mut header = ctx.header.get();
             header.state = TitleState::Failed { reason };
             ctx.header.set(header);
+        }
+    }
+}
+
+/// The title as its downloads describe it (plans/offline-downloads.md
+/// 4.18): its name, poster and runtime, and the downloaded episodes as its
+/// videos. `None` without a download that holds bytes.
+fn downloaded_meta(ctx: &Ctx) -> Option<MetaItem> {
+    let rows: Vec<_> = ctx
+        .core
+        .downloads()
+        .board()
+        .get()
+        .rows
+        .into_iter()
+        .filter(|r| r.item_id == ctx.id && r.bytes_done > 0)
+        .collect();
+    let first = rows.first()?;
+    let videos: Vec<serde_json::Value> = rows
+        .iter()
+        .filter(|r| r.season.is_some())
+        .map(|r| {
+            serde_json::json!({
+                "id": r.video_id,
+                "title": r.episode_title.clone().unwrap_or_default(),
+                "season": r.season,
+                "episode": r.episode,
+                "thumbnail": r.still,
+                "released": r.released.as_deref().map(|d| format!("{d}T00:00:00.000Z")),
+            })
+        })
+        .collect();
+    let body = serde_json::json!({ "meta": {
+        "id": ctx.id,
+        "type": ctx.kind,
+        "name": first.name,
+        "poster": first.poster,
+        "runtime": first.runtime,
+        "videos": videos,
+    }});
+    match mq_protocol::decode_meta(body.to_string().as_bytes()).ok()? {
+        mq_protocol::ResourceResponse::Meta { meta } => Some(meta),
+        _ => None,
+    }
+}
+
+/// Follows the downloads: each change of this title's shows (a ring
+/// filling, a state), and a network that comes back reads the meta again
+/// for a page built from the downloads.
+async fn watch_downloads(ctx: Ctx) {
+    let downloads = ctx.core.downloads();
+    let mut boards = downloads.board().subscribe();
+    let mut offline = downloads.link().offline;
+    let mut shown = Vec::new();
+    while let Some(board) = boards.next().await {
+        if offline && !board.link.offline && lock(&ctx.state).offline {
+            tokio::spawn(load_meta(ctx.clone()));
+        }
+        offline = board.link.offline;
+        // Only this title's rows move its page.
+        let mine: Vec<_> = board
+            .rows
+            .into_iter()
+            .filter(|r| r.item_id == ctx.id)
+            .collect();
+        if mine != shown {
+            shown = mine;
+            ctx.render();
         }
     }
 }
@@ -737,6 +854,16 @@ async fn watch_library(ctx: Ctx) {
 }
 
 impl Ctx {
+    /// This title's downloads by video, as this profile sees them.
+    fn downloads(&self) -> HashMap<String, crate::downloads::DownloadRow> {
+        let board = self.core.downloads().board().get();
+        crate::views::downloads::visible(&self.core, &board)
+            .into_iter()
+            .filter(|r| r.item_id == self.id)
+            .map(|r| (r.video_id.clone(), r))
+            .collect()
+    }
+
     /// The page's TMDB and Trakt slots: an answer that landed, `pending`
     /// while one can still come, `none` when no call will be made.
     fn scores(&self) -> TitleScores {
@@ -919,6 +1046,7 @@ impl Ctx {
                         (dur > 0).then(|| (pos as f32 / dur as f32).clamp(0.0, 1.0))
                     }),
                     left_ms: progress.and_then(|(pos, dur)| left(pos, dur)),
+                    download: None,
                 })
             })
             .collect();
@@ -941,6 +1069,7 @@ impl Ctx {
             || entry(true).is_some_and(|done| {
                 crate::views::playback::next_after(&meta, &done.video_id).is_some()
             });
+        let downloads = self.downloads();
         let rated_poster = lock(&self.state).rated_poster.clone();
         let imdb = self.imdb();
         let mut details = details(&meta, source, rated_poster, imdb.as_deref(), self.scores());
@@ -950,7 +1079,25 @@ impl Ctx {
             details.trailers.clear();
             details.imdb_url = None;
         }
+        let episodes: Vec<Episode> = episodes
+            .into_iter()
+            .map(|e| Episode {
+                download: downloads.get(&e.video_id).map(|r| r.badge()),
+                ..e
+            })
+            .collect();
+        let series = series_like(&self.kind, &meta);
         let header = TitleHeader {
+            download: (!series)
+                .then(|| downloads.get(&self.id).map(|r| r.badge()))
+                .flatten(),
+            season_download: series
+                .then(|| group_download(&meta, &downloads, now, |s| Some(s) == season))
+                .flatten(),
+            series_download: series
+                .then(|| group_download(&meta, &downloads, now, |s| s > 0))
+                .flatten(),
+            offline: lock(&self.state).offline,
             state: TitleState::Ready,
             details: Some(details),
             in_library,
@@ -981,6 +1128,42 @@ impl Ctx {
             list.append(episodes.into_iter().collect());
         }
     }
+}
+
+/// The downloads of the aired episodes in the seasons `wanted` takes.
+fn group_download(
+    meta: &MetaItem,
+    downloads: &HashMap<String, crate::downloads::DownloadRow>,
+    now_ms: i64,
+    wanted: impl Fn(u32) -> bool,
+) -> Option<GroupDownload> {
+    use crate::downloads::DownloadState as S;
+    let videos: Vec<&Video> = meta
+        .videos
+        .iter()
+        .filter(|v| v.series_info.as_ref().is_some_and(|i| wanted(i.season)))
+        .filter(|v| aired(v, now_ms))
+        .collect();
+    if videos.is_empty() {
+        return None;
+    }
+    let mut seasons: Vec<u32> = videos
+        .iter()
+        .filter_map(|v| v.series_info.as_ref().map(|i| i.season))
+        .collect();
+    seasons.sort_unstable();
+    seasons.dedup();
+    let rows: Vec<_> = videos
+        .iter()
+        .filter_map(|v| downloads.get(&v.id))
+        .filter(|r| !matches!(r.state, S::Failed | S::Missing))
+        .collect();
+    Some(GroupDownload {
+        seasons: seasons.len() as u32,
+        episodes: videos.len() as u32,
+        downloaded: rows.len() as u32,
+        active: rows.iter().filter(|r| r.state != S::Done).count() as u32,
+    })
 }
 
 fn season_of(meta: &MetaItem, video_id: &str) -> Option<u32> {

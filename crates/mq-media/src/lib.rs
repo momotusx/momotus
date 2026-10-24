@@ -7,6 +7,7 @@
 
 mod cache;
 mod codec;
+mod file;
 mod http;
 mod io;
 mod mkv;
@@ -17,6 +18,7 @@ use futures_util::future::BoxFuture;
 use std::time::Duration;
 
 pub use cache::{BLOCK_SIZE, ByteCache};
+pub use file::FileRangeReader;
 pub use http::HttpRangeReader;
 pub use tokio_util::sync::CancellationToken;
 
@@ -274,6 +276,16 @@ pub async fn probe(
     out.bytes_read = src.bytes_read;
     out.elapsed = started.elapsed();
     out
+}
+
+/// Whether a file's first bytes are a video container's: Matroska or
+/// WebM, MP4 or MOV, MPEG-TS, AVI. A download whose source answered with a
+/// page (a dead debrid link, a captive portal) is refused by this
+/// (plans/offline-downloads.md 4.7).
+pub fn looks_like_video(head: &[u8]) -> bool {
+    let ts = head.len() > 188 && head[0] == 0x47 && head[188] == 0x47;
+    let avi = head.len() >= 12 && &head[..4] == b"RIFF" && &head[8..12] == b"AVI ";
+    mkv::sniff(head) || mp4::sniff(head) || ts || avi
 }
 
 /// The `hev1` and `dvhe` sample entries of an MP4 or MOV file; none for any

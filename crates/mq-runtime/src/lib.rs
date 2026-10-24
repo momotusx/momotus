@@ -9,6 +9,7 @@ mod core;
 mod covers;
 mod debrid;
 pub mod defaults;
+pub mod downloads;
 pub mod languages;
 pub mod learn;
 pub mod live;
@@ -46,6 +47,9 @@ pub use views::calendar::{
 pub use views::discover::{
     CatalogChoice, DiscoverChoice, DiscoverSnapshot, DiscoverState, DiscoverView, GenreChoice,
     Platform, Scope, SortChoice,
+};
+pub use views::downloads::{
+    DownloadActivity, DownloadStorage, DownloadTitle, DownloadsSnapshot, DownloadsView,
 };
 pub use views::genres::{GenreTile, GenresSnapshot, GenresView, KindGenres};
 pub use views::home::{HomeCatalog, HomeRow, HomeUpdate, HomeView, RowState, Tile};

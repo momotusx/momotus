@@ -70,6 +70,20 @@ pub fn rank(streams: Vec<ParsedStream>, input: &RankInput<'_>) -> Ranked {
     )
 }
 
+/// The row of a version this device keeps whole, an offline download
+/// (plans/offline-downloads.md 4.12): it starts from disk, so no space,
+/// speed or account rule applies and it ranks as ready. Only the kids rule
+/// hides it: a kept file is no exception to a child's list.
+pub fn rank_kept(stream: ParsedStream, input: &RankInput<'_>) -> Option<RankedRow> {
+    if let Some(names) = input.kids
+        && kids_gate(&stream, names).is_some()
+    {
+        return None;
+    }
+    let scored = score(stream, SourceClass::Ready, input);
+    dedupe(vec![scored], input).into_iter().next()
+}
+
 fn rank_within(streams: Vec<ParsedStream>, input: &RankInput<'_>) -> Ranked {
     let mut scored = Vec::new();
     let mut hidden = Vec::new();

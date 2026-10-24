@@ -3,6 +3,7 @@ pub mod addons;
 pub mod calendar;
 pub mod discover;
 pub(crate) mod discover_sets;
+pub mod downloads;
 pub mod genres;
 pub mod home;
 pub mod import;

@@ -21,6 +21,7 @@ use mq_streams::{
     rank, screen_class,
 };
 use serde::Serialize;
+use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
@@ -404,6 +405,9 @@ struct State {
     counting: usize,
     /// The key of the version that starts from what this device keeps.
     on_device: Option<String>,
+    /// The version an offline download keeps here (plans/offline-downloads.md
+    /// 4.12): the pick, frozen from the start, before any addon answers.
+    download: Option<RankedRow>,
     /// That version's stream from the stream memory, startable with no
     /// addon when every source failed ("Play from this device").
     kept: Option<ParsedStream>,
@@ -785,6 +789,88 @@ pub struct VersionsParams {
     pub facts: TitleFacts,
 }
 
+impl VersionsParams {
+    /// From a `versions` subscription's params (plans/core-protocol.md), and
+    /// from a download's stored request (plans/offline-downloads.md 4.5).
+    pub fn from_json(params: &Value, mut prefs: StreamPrefs) -> Result<Self, String> {
+        let num = |key: &str| params.get(key).and_then(Value::as_u64).map(|n| n as u32);
+        if prefs.languages.is_empty() {
+            let device: Option<String> = field(params, "language")?;
+            let device = device.map(|code| crate::languages::tag(&code));
+            prefs.languages = device.into_iter().chain(["en".to_owned()]).collect();
+            prefs.languages.dedup();
+        }
+        let mut caps = DeviceCaps::basic_1080p();
+        if let Some(height) = num("displayHeight") {
+            caps.display_height = height;
+        }
+        if let Some(hdr) = field(params, "hdr")? {
+            caps.display_hdr = hdr;
+        }
+        if let Some(decoders) = field(params, "decoders")? {
+            caps.decoders = decoders;
+        }
+        if let Some(ten_bit) = field(params, "tenBitHevc")? {
+            caps.ten_bit_hevc = ten_bit;
+        }
+        if let Some(ten_bit) = field(params, "tenBitH264")? {
+            caps.ten_bit_h264 = ten_bit;
+        }
+        if let Some(passthrough) = field(params, "passthrough")? {
+            caps.passthrough = passthrough;
+        }
+        if let Some(fallback) = field(params, "hasFallbackEngine")? {
+            caps.has_fallback_engine = fallback;
+        }
+        if let Some(hvc1_only) = field(params, "hvc1Only")? {
+            caps.hvc1_only = hvc1_only;
+        }
+        if let Some(audio) = field(params, "audioDecoders")? {
+            caps.audio_decoders = audio;
+        }
+        if let Some(containers) = field::<Vec<String>>(params, "containers")? {
+            caps.containers = containers.iter().map(|c| c.to_ascii_lowercase()).collect();
+        }
+        Ok(Self {
+            kind: param(params, "kind")?,
+            video_id: param(params, "videoId")?,
+            target: Target {
+                title: param(params, "title").unwrap_or_default(),
+                year: None,
+                season: num("season"),
+                episode: num("episode"),
+            },
+            caps,
+            prefs,
+            last_binge_group: params
+                .get("bingeGroup")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+            facts: TitleFacts::read(
+                field::<String>(params, "runtime")?.as_deref(),
+                field::<String>(params, "releaseInfo")?.as_deref(),
+                field::<String>(params, "released")?.as_deref(),
+                num("episodesInSeason"),
+            ),
+        })
+    }
+}
+
+fn field<T: serde::de::DeserializeOwned>(params: &Value, key: &str) -> Result<Option<T>, String> {
+    params
+        .get(key)
+        .map(|v| serde_json::from_value(v.clone()).map_err(|e| format!("bad {key}: {e}")))
+        .transpose()
+}
+
+fn param(params: &Value, key: &str) -> Result<String, String> {
+    params
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+        .ok_or_else(|| format!("missing parameter: {key}"))
+}
+
 /// The title's runtime and years and the season's size, as the app sends
 /// them with `versions` (4.3).
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -974,6 +1060,7 @@ impl VersionsView {
             counting: 0,
             ranking: None,
             on_device: None,
+            download: None,
             kept: None,
             why: None,
             unreached: 0,
@@ -994,6 +1081,15 @@ impl VersionsView {
             item_id,
         });
         lock(&state).ranking = Some(ranking.clone());
+        {
+            let mut s = lock(&state);
+            if let Some(row) = downloaded(core, &s, &ranking) {
+                s.download = Some(row.clone());
+                s.recommended = Some(row);
+                s.frozen = true;
+                snapshot.set(render(&s));
+            }
+        }
         tasks.spawn(follow_network(
             core.clone(),
             core.library().subscribe(),
@@ -1064,6 +1160,7 @@ impl VersionsView {
             counting: 0,
             ranking: None,
             on_device: None,
+            download: None,
             kept: None,
             why: None,
             unreached: 0,
@@ -1156,6 +1253,18 @@ impl VersionsView {
                         .collect()
                 })
                 .unwrap_or_default();
+        }
+        // The kept file first, then the same version from the addons, so a
+        // file that fails to play falls over to the network (4.12.3).
+        if let Some(download) = s.download.as_ref().filter(|d| d.stream.key == key) {
+            let online = holding(&s.ranked.rows, |st| st.key == key);
+            return std::iter::once(download.stream.clone())
+                .chain(
+                    online
+                        .into_iter()
+                        .flat_map(|r| std::iter::once(r.stream).chain(r.failover)),
+                )
+                .collect();
         }
         // The frozen pick plays its own source first, wherever a later
         // answer folded it (code review 2026-10-20 P2-3).
@@ -2112,7 +2221,10 @@ fn rerank(s: &mut State, ranking: &Ranking) {
         conditions: &s.rank,
     };
     s.ranked = rank(s.streams.clone(), &input);
-    if !s.frozen {
+    if let Some(download) = &s.download {
+        // The kept file stays the pick, whatever the addons list.
+        s.recommended = Some(download.clone());
+    } else if !s.frozen {
         s.recommended = preferred(&s.ranked.rows, ranking).or_else(|| s.ranked.best().cloned());
         let screen = screen_class(params.caps.display_height);
         let pick = s.recommended.as_ref();
@@ -2132,6 +2244,30 @@ fn rerank(s: &mut State, ranking: &Ranking) {
     }
     rank_archive(s, ranking);
     reblock(s, ranking);
+}
+
+/// The row of the version a download keeps for this video, when it plays
+/// from disk now (plans/offline-downloads.md 4.12): done, or (offline) a
+/// file still being written, which plays as far as it holds.
+fn downloaded(core: &Core, s: &State, ranking: &Ranking) -> Option<RankedRow> {
+    let downloads = core.downloads();
+    let (stream, row) = downloads.kept(&ranking.item_id, &ranking.params.video_id)?;
+    let partial = row.bytes_done > 0 && row.state != crate::downloads::DownloadState::Done;
+    let plays =
+        row.state == crate::downloads::DownloadState::Done || (partial && downloads.link().offline);
+    if !plays {
+        return None;
+    }
+    let params = &ranking.params;
+    let input = RankInput {
+        caps: &params.caps,
+        prefs: &params.prefs,
+        target: &params.target,
+        last_binge_group: params.last_binge_group.as_deref(),
+        kids: ranking.kids.as_deref(),
+        conditions: &s.rank,
+    };
+    mq_streams::rank_kept(stream, &input)
 }
 
 /// The same source: one key from one install and one service.
@@ -2251,10 +2387,13 @@ fn render(s: &State) -> VersionsSnapshot {
         blocked: s.blocked.clone(),
         empty: empty(s),
         note: s.note.clone(),
-        recommended: s
-            .recommended
-            .as_ref()
-            .map(|r| row_dto(r, kept, s.rank.debrid)),
+        recommended: s.recommended.as_ref().map(|r| {
+            let mut row = row_dto(r, kept, s.rank.debrid);
+            if s.download.is_some() {
+                row.on_device = Some(crate::views::playback::DOWNLOADED.to_owned());
+            }
+            row
+        }),
         rows,
         hidden: HiddenSummary {
             count: s.ranked.hidden.len() as u32,
@@ -2301,7 +2440,7 @@ fn empty(s: &State) -> Option<EmptyVersions> {
     if s.archive_pending || !s.archive_ranked.rows.is_empty() {
         return None;
     }
-    if !s.done || !s.ranked.rows.is_empty() {
+    if !s.done || !s.ranked.rows.is_empty() || s.download.is_some() {
         return None;
     }
     if s.addons == 0 {
@@ -2415,7 +2554,7 @@ fn row_dto(r: &RankedRow, kept: Option<&str>, account: bool) -> VersionRow {
     }
 }
 
-fn quality_word(height: u32, source: mq_relparse::Quality) -> String {
+pub(crate) fn quality_word(height: u32, source: mq_relparse::Quality) -> String {
     use mq_relparse::Quality as Q;
     match height {
         h if h >= 2160 => "4K",

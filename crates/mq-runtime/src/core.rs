@@ -76,6 +76,10 @@ pub enum CoreError {
     /// the owner keeps (plans/m11-kids.md), never written from a session.
     #[error("a kids profile's Library is its list")]
     KidsLibrary,
+    /// An offline download op refused: a kids profile, a title whose
+    /// episodes cannot be read, a scope that names none.
+    #[error("downloads: {0}")]
+    Downloads(String),
 }
 
 #[derive(Debug, Clone)]
@@ -152,6 +156,9 @@ struct Inner {
     /// Each genre's art for the genre grids, by catalog and genre (core
     /// backlog C43), with when it was looked up.
     genre_art: std::sync::Mutex<HashMap<String, crate::views::genres::Looked>>,
+    /// Offline downloads' files (plans/offline-downloads.md 4.2).
+    downloads_dir: PathBuf,
+    downloads: std::sync::OnceLock<Arc<crate::downloads::Downloads>>,
 }
 
 /// What is one per data directory however often it is opened: the library
@@ -238,7 +245,9 @@ impl Core {
         let device = Device::open(&config.data_dir, config.device_id)?;
         let torrents = config.data_dir.join("torrents");
         let walk = Walk::read(&config.data_dir);
-        let core = Self::with_device(device, &config.profile_id, torrents, walk)?.active();
+        let downloads = config.data_dir.join("downloads");
+        let core =
+            Self::with_device(device, &config.profile_id, (torrents, downloads), walk)?.active();
         // A default a profile never had arrives once (plans/m13-default-addons.md
         // 5); in a sync account, after the run's first pull (`sync`).
         if !core.in_account() {
@@ -254,8 +263,12 @@ impl Core {
     /// created (with no PIN) and made the active one.
     pub fn temporary(profile: &str) -> Result<Self, CoreError> {
         let torrents = std::env::temp_dir().join(format!("mq-torrents-{}", std::process::id()));
+        static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let downloads =
+            std::env::temp_dir().join(format!("mq-downloads-{}-{n}", std::process::id()));
         let device = Device::new(Library::temporary()?, 1)?;
-        let core = Self::with_device(device, profile, torrents, None)?;
+        let core = Self::with_device(device, profile, (torrents, downloads), None)?;
         // A throwaway core never asks real trackers: no swarm has a live
         // count unless a test gives one.
         core.set_live_seeders(HashMap::new());
@@ -271,7 +284,7 @@ impl Core {
     fn with_device(
         device: Arc<Device>,
         profile: &str,
-        torrent_dir: PathBuf,
+        (torrent_dir, downloads_dir): (PathBuf, PathBuf),
         walk: Option<Walk>,
     ) -> Result<Self, CoreError> {
         // Build the release-name rule table off the UI path, so the first
@@ -299,6 +312,8 @@ impl Core {
                 turkcealtyazi: std::sync::OnceLock::new(),
                 archive: std::sync::OnceLock::new(),
                 genre_art: std::sync::Mutex::default(),
+                downloads_dir,
+                downloads: std::sync::OnceLock::new(),
                 walk,
             }),
             profile: profile.into(),
@@ -361,6 +376,17 @@ impl Core {
     #[cfg(debug_assertions)]
     pub fn use_archive_at(&self, origin: url::Url) {
         let _ = self.inner.archive.set(crate::archive::Archive::new(origin));
+    }
+
+    /// The device's offline downloads (plans/offline-downloads.md); the
+    /// queue starts on the first call made on a runtime, and a launch's
+    /// first call resumes what a kill or a reboot left.
+    pub fn downloads(&self) -> Arc<crate::downloads::Downloads> {
+        let downloads = self.inner.downloads.get_or_init(|| {
+            crate::downloads::Downloads::new(self.downgrade(), self.inner.downloads_dir.clone())
+        });
+        downloads.start();
+        downloads.clone()
     }
 
     pub fn segments(&self) -> &crate::segments::Finder {

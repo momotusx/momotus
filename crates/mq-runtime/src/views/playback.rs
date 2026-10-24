@@ -655,6 +655,9 @@ struct State {
     /// The playing source's token: its URL and its subtitles' URLs live as
     /// long as it is kept here.
     lease: Option<Lease>,
+    /// Held while the playing source streams from the network: downloads
+    /// wait meanwhile (plans/offline-downloads.md 4.4).
+    streaming: Option<crate::downloads::Streaming>,
     /// Bumped under this lock by every new resolve and every failover; a
     /// resolve task adopts a lease, and publishes tracks, only while its own
     /// number is the newest.
@@ -823,6 +826,7 @@ impl State {
             played_ms: 0,
             retry_until: None,
             lease: None,
+            streaming: None,
             run: 0,
             closed: false,
             pick: None,
@@ -1923,6 +1927,7 @@ fn release_all(s: &mut State) {
     s.start_tried.clear();
     s.order.clear();
     s.lease = None;
+    s.streaming = None;
 }
 
 /// The container of the file a source opened (plans/apple-second-engine.md
@@ -2398,6 +2403,9 @@ async fn resolve_next(
                     if !adopt(&mut s, run, lease) {
                         return;
                     }
+                    // A file on this device takes nothing from the network.
+                    s.streaming = (!matches!(upstream, Upstream::File { .. }))
+                        .then(|| core.downloads().streaming());
                     let proven = s.dead.reached();
                     if let Some(pick) = &s.pick {
                         pick.ready();
@@ -2452,7 +2460,13 @@ async fn resolve_next(
                 // The addons ask with the hash; the built-in source lists at
                 // once and ranks with the frame rate. Pending ends with both.
                 let subtitles = async {
-                    let installed = core.installed_addons().unwrap_or_default();
+                    // With no network no source is asked: nothing waits on a
+                    // request that cannot go (plans/offline-downloads.md 4.12).
+                    let installed = if core.downloads().link().offline {
+                        Vec::new()
+                    } else {
+                        core.installed_addons().unwrap_or_default()
+                    };
                     let reader = video_reader(&upstream, reader).await;
                     let reader = reader.as_deref();
                     // Read once, for every track's release match (the
@@ -2736,6 +2750,9 @@ async fn open_source(
     run: InRun<'_>,
 ) -> Result<Opened, String> {
     let state = run.0;
+    if let Some(local) = downloaded_file(core, stream, target) {
+        return Ok(local);
+    }
     let (url, headers, filename, size, addon_url) = match &stream.source {
         Source::Http { url } => (
             url.to_string(),
@@ -2806,6 +2823,35 @@ async fn open_source(
         },
         filename,
         size,
+    ))
+}
+
+/// The download of this version of the video, when it plays from disk now
+/// (plans/offline-downloads.md 4.12): a whole file; one still being
+/// written while its download runs, or with no network, as far as it
+/// holds. One held back online (paused, queued) plays from the network.
+fn downloaded_file(core: &Core, stream: &ParsedStream, target: &PlayTarget) -> Option<Opened> {
+    let downloads = core.downloads();
+    let (key, local) = downloads.local(&target.item_id, &target.video_id)?;
+    if key != stream.key {
+        return None;
+    }
+    let plays = local
+        .held
+        .as_ref()
+        .is_none_or(|held| downloads.link().offline || held.has_changed().is_ok());
+    if !plays {
+        return None;
+    }
+    let size = local.len;
+    Some((
+        Upstream::File {
+            path: local.path,
+            len: local.len,
+            held: local.held,
+        },
+        Some(local.file_name),
+        Some(size),
     ))
 }
 
@@ -3964,7 +4010,7 @@ pub(crate) fn debrid_request(
 
 /// Uses the store the addon named when that account is configured, else the
 /// default store.
-fn with_store(
+pub(crate) fn with_store(
     resolver: &Resolver,
     service: Option<&str>,
     mut request: ResolveRequest,
@@ -4763,7 +4809,7 @@ async fn video_reader(
     reader: Option<Box<dyn mq_media::RangeReader>>,
 ) -> Option<Box<dyn mq_media::RangeReader>> {
     match upstream {
-        Upstream::Http { .. } => reader,
+        Upstream::Http { .. } | Upstream::File { .. } => reader,
         #[cfg(feature = "torrent")]
         Upstream::Torrent { claim, file } => match claim.open_reader(*file).await {
             Ok(reader) => Some(Box::new(TorrentBytes(reader)) as Box<dyn mq_media::RangeReader>),
@@ -5091,6 +5137,10 @@ fn remember_stream(
 /// The core's words for a version, or a title, that starts from what this
 /// device keeps (plans/player-polish.md 2b).
 pub(crate) const ON_DEVICE: &str = "On this device";
+
+/// The core's words for a version an offline download keeps
+/// (plans/offline-downloads.md 4.12).
+pub(crate) const DOWNLOADED: &str = "Downloaded";
 
 /// The key of the stream `item_id` last played for `video_id`, when it is a
 /// torrent whose start at the video's resume point this device holds: its

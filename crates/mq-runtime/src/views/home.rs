@@ -210,6 +210,21 @@ pub struct HomeHeader {
     /// nothing is ready and on a kids profile. It only grows, except that a
     /// page whose row no longer holds its title leaves.
     pub heroes: Vec<Hero>,
+    /// No network, and this many downloads play: "You're offline. Your
+    /// downloads still play." with Go to Downloads (plans/offline-downloads.md
+    /// 3.5). Null online or with nothing downloaded.
+    pub offline: Option<HomeOffline>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub struct HomeOffline {
+    pub downloads: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -314,6 +329,7 @@ impl HomeView {
             rows.clone(),
             header.clone(),
         ));
+        tasks.spawn(watch_offline(core.clone(), header.clone()));
         tasks.spawn(load_catalogs(
             core.clone(),
             slots,
@@ -759,7 +775,8 @@ fn recover_home(
         }
     }
     if heroes != header.get().heroes {
-        header.set(HomeHeader { heroes });
+        // The offline banner stays as it is.
+        header.update(|h| h.heroes = heroes);
     }
 }
 
@@ -1149,7 +1166,28 @@ fn maybe_pick_hero(rows: &Mutex<ObservableVector<HomeRow>>, header: &SharedObser
         }
     }
     if current != next {
-        header.set(HomeHeader { heroes: next });
+        header.update(|h| h.heroes = next);
+    }
+}
+
+/// The offline banner follows the network and the downloads.
+async fn watch_offline(core: Core, header: SharedObservable<HomeHeader>) {
+    let downloads = core.downloads();
+    let mut boards = downloads.board().subscribe();
+    let mut board = downloads.board().get();
+    loop {
+        let done = crate::views::downloads::visible(&core, &board)
+            .iter()
+            .filter(|r| r.state == crate::downloads::DownloadState::Done)
+            .count() as u32;
+        let offline = (board.link.offline && done > 0).then_some(HomeOffline { downloads: done });
+        if header.get().offline != offline {
+            header.update(|h| h.offline = offline);
+        }
+        match boards.next().await {
+            Some(next) => board = next,
+            None => return,
+        }
     }
 }
 

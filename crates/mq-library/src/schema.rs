@@ -17,6 +17,7 @@ pub(crate) fn migrations() -> Migrations<'static> {
         M::up_with_hook(V13, hash_addon_links),
         M::up(V14),
         M::up(V15),
+        M::up(V16),
     ])
 }
 
@@ -438,6 +439,38 @@ CREATE TABLE archive_index (
 ) WITHOUT ROWID;
 "#;
 
+/// Offline downloads (plans/offline-downloads.md 4.1): this device's files,
+/// never synced and not purged with a profile. The JSON columns are the
+/// runtime's; one row per video.
+const V16: &str = r#"
+CREATE TABLE downloads (
+    id              TEXT PRIMARY KEY,
+    added_by        TEXT NOT NULL,
+    kind            TEXT NOT NULL,
+    item_id         TEXT NOT NULL,
+    video_id        TEXT NOT NULL,
+    season          INTEGER,
+    episode         INTEGER,
+    facts           TEXT NOT NULL,
+    request         TEXT NOT NULL,
+    version         TEXT,
+    state           TEXT NOT NULL,
+    reason          TEXT,
+    mobile_data     INTEGER NOT NULL DEFAULT 0,
+    hand_picked     INTEGER NOT NULL DEFAULT 0,
+    bytes_done      INTEGER NOT NULL DEFAULT 0,
+    bytes_total     INTEGER,
+    moves           INTEGER NOT NULL DEFAULT 0,
+    subtitles       TEXT NOT NULL DEFAULT '[]',
+    subtitles_state TEXT NOT NULL DEFAULT 'pending',
+    position        INTEGER NOT NULL,
+    created_ms      INTEGER NOT NULL,
+    done_ms         INTEGER,
+    UNIQUE (item_id, video_id)
+);
+CREATE INDEX downloads_queue ON downloads (state, position);
+"#;
+
 #[cfg(test)]
 mod tests {
     use super::migrations;
@@ -508,6 +541,78 @@ mod tests {
         assert_eq!(kept, 0, "imdb_ids comes empty");
         assert_eq!(schema(&c), schema_before);
         assert_eq!(rows(&c), rows_before);
+    }
+
+    /// V16 on a V15 database: the empty `downloads` table and its queue
+    /// index come, one row per video, and every other table keeps its
+    /// schema and its rows.
+    #[test]
+    fn v16_adds_the_downloads_table_and_touches_nothing_else() {
+        let mut c = Connection::open_in_memory().unwrap();
+        migrations().to_version(&mut c, 15).unwrap();
+        c.execute_batch(
+            "INSERT INTO profiles (id, name, hlc) VALUES ('default', 'Main', '0000000000000000000000000000000a');
+             INSERT INTO library_items (profile_id, item_id, kind, name, added_ms, hlc)
+               VALUES ('default', 'tt1', 'movie', 'One', 1, '1');
+             INSERT INTO imdb_ids (id, imdb_id) VALUES ('kitsu:1', 'tt2');",
+        )
+        .unwrap();
+        let dump = |c: &Connection| -> Vec<String> {
+            let tables: Vec<(String, String)> = c
+                .prepare(
+                    "SELECT name, sql FROM sqlite_master WHERE type = 'table'
+                     AND tbl_name != 'downloads' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+                )
+                .unwrap()
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+                .unwrap()
+                .collect::<Result<_, _>>()
+                .unwrap();
+            let mut all = Vec::new();
+            for (table, sql) in tables {
+                all.push(sql);
+                let mut stmt = c.prepare(&format!("SELECT * FROM \"{table}\"")).unwrap();
+                let n = stmt.column_count();
+                let rows = stmt
+                    .query_map([], |r| {
+                        Ok((0..n)
+                            .map(|i| format!("{:?}", r.get_ref(i).unwrap()))
+                            .collect::<Vec<_>>()
+                            .join(", "))
+                    })
+                    .unwrap()
+                    .collect::<Result<Vec<_>, _>>()
+                    .unwrap();
+                all.extend(rows.into_iter().map(|r| format!("{table}: {r}")));
+            }
+            all
+        };
+        let before = dump(&c);
+        assert!(before.iter().any(|r| r.starts_with("imdb_ids: ")));
+        migrations().to_version(&mut c, 16).unwrap();
+        assert_eq!(dump(&c), before);
+        let empty: i64 = c
+            .query_row("SELECT COUNT(*) FROM downloads", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(empty, 0, "downloads comes empty");
+        let index: i64 = c
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE name = 'downloads_queue'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(index, 1);
+        let add = |id: &str| {
+            c.execute(
+                "INSERT INTO downloads (id, added_by, kind, item_id, video_id, facts, request, state,
+                 position, created_ms) VALUES (?1, 'default', 'movie', 'tt1', 'tt1', '{}', '{}',
+                 'queued', 0, 1)",
+                [id],
+            )
+        };
+        add("d1").unwrap();
+        assert!(add("d2").is_err(), "one row per video");
     }
 
     /// V10 on a V9 database: every profile still here is standard at the

@@ -282,7 +282,9 @@ pub struct Target {
 }
 
 /// One stream after normalization: addon hints merged with parsed facts.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+/// Read back from JSON only by a kept copy that restores the skipped
+/// fields itself (an offline download, plans/offline-downloads.md 4.1).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ParsedStream {
     /// Identity used for dedupe and as the UI row key.

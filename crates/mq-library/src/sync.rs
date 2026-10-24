@@ -145,6 +145,8 @@ pub(crate) const DEVICE_TABLES: [&str; 8] = [
     "http_cache",
     "imdb_ids",
     "archive_index",
+    // The device's files: every standard profile shares them.
+    "downloads",
 ];
 
 /// Deletes every row of a gone profile.
