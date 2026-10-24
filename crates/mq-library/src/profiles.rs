@@ -401,15 +401,9 @@ fn copy_owner_addons(
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    // Each addon its own registers, in the owner's places.
-    for a in &addons {
-        local(c, coll::ADDON, &[id, &a.transport_url], stamp, |h| {
-            sql::set_addon(c, id, a, true, h)
-        })?;
-        local(c, coll::ADDON_ORDER, &[id, &a.transport_url], stamp, |h| {
-            sql::set_addon_order(c, id, &a.transport_url, a.position, h)
-        })?;
-    }
+    // The copy replaces the profile's own list, addon by addon.
+    let own = crate::store::addon_rows(c, id)?;
+    crate::store::write_addons(c, id, &own, addons, stamp)?;
     let mut stmt = c.prepare("SELECT key, value_json FROM settings WHERE profile_id = ?1")?;
     let given = stmt
         .query_map(params![OWNER], |r| {

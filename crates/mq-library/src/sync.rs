@@ -1015,6 +1015,9 @@ fn apply_one(c: &Connection, r: &SyncRecord) -> Result<usize, ApplyError> {
         coll::ADDON => {
             let v: AddonEntryValue = serde_json::from_value(value)?;
             same_key(r, &[&v.profile, &v.url])?;
+            if !sql::untouched_rule(c, &v.profile, hlc)? {
+                return Ok(0);
+            }
             let row = AddonRow {
                 transport_url: v.url,
                 manifest_json: v.manifest,
@@ -1027,6 +1030,9 @@ fn apply_one(c: &Connection, r: &SyncRecord) -> Result<usize, ApplyError> {
         coll::ADDON_ORDER => {
             let v: AddonOrderValue = serde_json::from_value(value)?;
             same_key(r, &[&v.profile, &v.url])?;
+            if !sql::untouched_rule(c, &v.profile, hlc)? {
+                return Ok(0);
+            }
             sql::set_addon_order(c, &v.profile, &v.url, v.position, hlc)?
         }
         coll::ITEMS => {
@@ -1136,6 +1142,16 @@ pub enum Stamp<'a> {
 }
 
 impl Stamp<'_> {
+    /// A person's edit: the clock, or a given stamp with a wall time (an
+    /// import's too); not the zero stamp of a write that only caches or of
+    /// the defaults step.
+    pub(crate) fn is_real(&self) -> bool {
+        match self {
+            Stamp::Clock(_) => true,
+            Stamp::Fixed(hlc) => Hlc::decode(hlc).is_some_and(|h| h.wall_ms > 0),
+        }
+    }
+
     pub(crate) fn hlc(&self) -> String {
         match self {
             Stamp::Clock(clock) => clock.tick(clock.wall_now()).encode(),
@@ -1366,6 +1382,34 @@ pub(crate) mod sql {
                 hlc
             ],
         )
+    }
+
+    /// Untouched defaults never outrank a list a person made (the defaults
+    /// step writes them at wall time 0, `store::endorse`): an incoming
+    /// register at wall time 0 is skipped while the profile has a real
+    /// register here, and an incoming real one first drops the profile's
+    /// untouched ones, which no person here chose. Either arrival order
+    /// gives the same list. Answers whether to apply the record.
+    pub fn untouched_rule(c: &Connection, profile: &str, hlc: &str) -> rusqlite::Result<bool> {
+        const UNTOUCHED: &str = "substr(hlc, 1, 12) = '000000000000'";
+        if Hlc::decode(hlc).is_some_and(|h| h.wall_ms == 0) {
+            let real: bool = c.query_row(
+                &format!(
+                    "SELECT EXISTS (SELECT 1 FROM addons WHERE profile_id = ?1 AND NOT {UNTOUCHED})
+                         OR EXISTS (SELECT 1 FROM addon_order WHERE profile_id = ?1 AND NOT {UNTOUCHED})"
+                ),
+                params![profile],
+                |r| r.get(0),
+            )?;
+            return Ok(!real);
+        }
+        for table in ["addons", "addon_order"] {
+            c.execute(
+                &format!("DELETE FROM {table} WHERE profile_id = ?1 AND {UNTOUCHED}"),
+                params![profile],
+            )?;
+        }
+        Ok(true)
     }
 
     /// One addon's place register, as `set_addon`. Returns 1 on change.

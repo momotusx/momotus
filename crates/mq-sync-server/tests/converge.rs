@@ -633,17 +633,20 @@ async fn run(ops: Vec<Op>, slow: bool) {
                     *slot = stored.hlc;
                 }
                 // An addon's place is a register of its own, written by an
-                // install or a move.
-                if let Op::Addon { url, .. } = op {
-                    let order = (coll::ADDON_ORDER, [PROFILE, URLS[*url]].join("\u{1f}"));
-                    if let Some(stored) = devices[*device]
-                        .library
-                        .register(order.0, &order.1)
-                        .unwrap()
-                    {
-                        let slot = newest.entry(order).or_default();
-                        if stored.hlc > *slot {
-                            *slot = stored.hlc;
+                // install or a move, and for its neighbours when no place is
+                // left between them (the list is placed again).
+                if let Op::Addon { .. } = op {
+                    for u in URLS {
+                        let order = (coll::ADDON_ORDER, [PROFILE, u].join("\u{1f}"));
+                        if let Some(stored) = devices[*device]
+                            .library
+                            .register(order.0, &order.1)
+                            .unwrap()
+                        {
+                            let slot = newest.entry(order).or_default();
+                            if stored.hlc > *slot {
+                                *slot = stored.hlc;
+                            }
                         }
                     }
                 }

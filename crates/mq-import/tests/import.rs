@@ -528,9 +528,11 @@ async fn imports_addons_library_progress_and_watched() {
         rows.iter().map(|r| r.allow_private).collect::<Vec<_>>(),
         [false, false, true, false]
     );
+    // Places with gaps, so another device's addon fits between two
+    // (plans/accounts-social-sync.md 13).
     assert_eq!(
         rows.iter().map(|r| r.position).collect::<Vec<_>>(),
-        [0, 1, 2, 3]
+        [1024, 2048, 3072, 4096]
     );
     let stored: Value = serde_json::from_str(&rows[1].manifest_json).unwrap();
     assert_eq!(stored["behaviorHints"]["p2p"], true);

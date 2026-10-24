@@ -12,3 +12,4 @@ cc de7f8558a3c0a9278d6f2d764d4333f0963dfffebd31daa2afecb21e98ff33ab # shrinks to
 cc 8ffcfde287a776caf116ec802a9bcaf5549f69d90e593c5900a1b24be158b359 # shrinks to ops = [Snapshot, DropRecord { device: 2 }, Restore], slow = false
 cc 6502e9da3b6c713fe0f0132c66b78699810cddc9065fe2dd894d7f7060f29997
 cc 35ca18b9d38ba9f8557bcf054e23acfe1168390dd5225f73d222be881a91e7c0 # shrinks to ops = [Snapshot, Sync { device: 2 }, Restore], slow = false
+cc 136dd8c4e064a9cb2fed6eefaf2e87d7048b3391d247ee56b411b22aeaaa6f92 # shrinks to ops = [Addon { device: 0, url: 0, action: 0 }, Addon { device: 2, url: 1, action: 0 }, SignOut { by: 0 }, Pull { device: 0 }, Addon { device: 0, url: 1, action: 0 }], slow = false

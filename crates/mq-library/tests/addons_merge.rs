@@ -285,3 +285,48 @@ fn the_list_has_a_time_once_any_addon_did_and_keeps_it_after_the_last_goes() {
     assert!(urls(&lib).is_empty());
     assert_eq!(lib.addon_list_hlc("p").unwrap(), Some(hlc(2, 1)));
 }
+
+/// Untouched defaults (wall time 0) never outrank a list a person made, in
+/// either arrival order; a person's first edit makes the defaults they kept
+/// their own.
+#[test]
+fn untouched_defaults_lose_to_a_real_list_in_either_order() {
+    let zero = |device: u64| hlc(0, device);
+    // C kept the defaults step's X and Y untouched; A made a list with Z.
+    let c = Library::temporary().unwrap();
+    c.set_addons("p", &[row(X), row(Y)], &zero(3)).unwrap();
+    let a = Library::temporary().unwrap();
+    add(&a, Z, &hlc(5, 1));
+    let (from_a, from_c) = (all(&a), all(&c));
+    for first_a in [true, false] {
+        let lib = Library::temporary().unwrap();
+        let (one, two) = if first_a {
+            (&from_a, &from_c)
+        } else {
+            (&from_c, &from_a)
+        };
+        lib.apply(one).unwrap();
+        lib.apply(two).unwrap();
+        assert_eq!(urls(&lib), [Z], "first A: {first_a}");
+    }
+    c.apply(&from_a).unwrap();
+    a.apply(&from_c).unwrap();
+    assert_eq!(
+        (urls(&a), urls(&c)),
+        (vec![Z.to_owned()], vec![Z.to_owned()])
+    );
+
+    // B kept the defaults and then removed Y: X is now its list, and wins
+    // over untouched defaults elsewhere.
+    let b = Library::temporary().unwrap();
+    b.set_addons("p", &[row(X), row(Y)], &zero(2)).unwrap();
+    remove(&b, Y, &hlc(7, 2));
+    let d = Library::temporary().unwrap();
+    d.set_addons("p", &[row(X), row(Y), row(W)], &zero(4))
+        .unwrap();
+    exchange(&b, &d);
+    assert_eq!(
+        (urls(&b), urls(&d)),
+        (vec![X.to_owned()], vec![X.to_owned()])
+    );
+}

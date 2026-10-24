@@ -113,12 +113,21 @@ async fn untouched_defaults_take_the_zero_hlc_and_never_outrank_another_devices_
         Hlc::decode(&c.zero_hlc()).unwrap(),
         "this device's zero hlc"
     );
-    // Another device's list, written at any real time, replaces them on a pull.
+    // Another device's list, written at any real time, replaces them on a
+    // pull. (A list is its addons' registers: one that never held an addon
+    // sends nothing, so the other device holds one it chose.)
     let a = Core::temporary(OWNER).unwrap();
+    let own = "https://own.example/manifest.json";
     a.library()
         .set_addons(
             OWNER,
-            &[],
+            &[AddonRow {
+                transport_url: own.into(),
+                manifest_json: "{}".into(),
+                position: 0,
+                enabled: true,
+                allow_private: false,
+            }],
             &Hlc {
                 wall_ms: 1,
                 counter: 0,
@@ -137,9 +146,13 @@ async fn untouched_defaults_take_the_zero_hlc_and_never_outrank_another_devices_
         .changed_since(&SyncCursor::default(), 1_000)
         .unwrap();
     a.library().apply(&from_c).unwrap();
-    assert!(urls(&a).is_empty(), "the real list stays");
+    assert_eq!(urls(&a), [(own.to_owned(), true)], "the real list stays");
     c.library().apply(&from_a).unwrap();
-    assert!(urls(&c).is_empty(), "the account's list wins");
+    assert_eq!(
+        urls(&c),
+        [(own.to_owned(), true)],
+        "the account's list wins"
+    );
 }
 
 #[tokio::test]

@@ -1,5 +1,7 @@
 use crate::schema::migrations;
-use crate::sync::{Gone, POSITION_STEP, Stamp, coll, local, queue, refuse_gone, sql};
+use crate::sync::{
+    Gone, POSITION_STEP, Stamp, coll, local, local_changed, queue, refuse_gone, sql,
+};
 use rusqlite::hooks::Action;
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use std::path::{Path, PathBuf};
@@ -749,7 +751,7 @@ fn open_connection(target: &str) -> Result<Connection, LibraryError> {
 /// One write transaction: committed when `f` succeeds, rolled back (on
 /// drop) otherwise.
 /// The profile's addons in their order.
-fn addon_rows(c: &Connection, profile: &str) -> rusqlite::Result<Vec<AddonRow>> {
+pub(crate) fn addon_rows(c: &Connection, profile: &str) -> rusqlite::Result<Vec<AddonRow>> {
     let mut stmt = c.prepare(
         "SELECT a.transport_url, a.manifest_json, COALESCE(o.position, 0) AS place, a.enabled, a.allow_private
          FROM addons a LEFT JOIN addon_order o ON o.profile_id = a.profile_id AND o.transport_url = a.transport_url
@@ -1213,8 +1215,10 @@ impl Library {
 /// list `before` to `after` (its order is the new one; a link listed twice
 /// keeps its first place). An addon added, switched or given another
 /// manifest gets a state register, one added or moved an order register,
-/// and one left out a removal; nothing else is stamped.
-fn write_addons(
+/// and one left out a removal; nothing else is stamped. A real edit (not the
+/// defaults step's zero stamp) also makes the list's untouched defaults its
+/// own (`endorse`).
+pub(crate) fn write_addons(
     c: &Connection,
     profile: &str,
     before: &[AddonRow],
@@ -1231,19 +1235,21 @@ fn write_addons(
         .iter()
         .map(|a| old(&a.transport_url).map(|b| b.position))
         .collect();
-    for (a, position) in after.iter().zip(places(&old_places)) {
+    let mut changed = false;
+    let urls: Vec<&str> = after.iter().map(|a| a.transport_url.as_str()).collect();
+    for (a, position) in after.iter().zip(places(&old_places, &urls)) {
         let was = old(&a.transport_url);
         let same_state = was.is_some_and(|b| {
             (&b.manifest_json, b.enabled, b.allow_private)
                 == (&a.manifest_json, a.enabled, a.allow_private)
         });
         if !same_state {
-            local(c, coll::ADDON, &[profile, &a.transport_url], stamp, |h| {
+            changed |= local_changed(c, coll::ADDON, &[profile, &a.transport_url], stamp, |h| {
                 sql::set_addon(c, profile, a, true, h)
             })?;
         }
         if was.map(|b| b.position) != Some(position) {
-            local(
+            changed |= local_changed(
                 c,
                 coll::ADDON_ORDER,
                 &[profile, &a.transport_url],
@@ -1253,8 +1259,56 @@ fn write_addons(
         }
     }
     for b in before.iter().filter(|b| !seen.contains(&b.transport_url)) {
-        local(c, coll::ADDON, &[profile, &b.transport_url], stamp, |h| {
+        changed |= local_changed(c, coll::ADDON, &[profile, &b.transport_url], stamp, |h| {
             sql::set_addon(c, profile, b, false, h)
+        })?;
+    }
+    if changed && stamp.is_real() {
+        endorse(c, profile, stamp)?;
+    }
+    Ok(())
+}
+
+/// Stamps the profile's untouched defaults (registers at wall time 0, from
+/// the defaults step) with a real edit's stamp: once a person edits a list,
+/// the defaults they kept in it are their list too, and travel as such. An
+/// untouched default from another device loses to any real register of the
+/// profile (`sql::untouched_rule`), so until then a device's defaults never
+/// outrank an account's list (plans/accounts-social-sync.md 13).
+fn endorse(c: &Connection, profile: &str, stamp: &Stamp<'_>) -> rusqlite::Result<()> {
+    let untouched: Vec<(AddonRow, bool)> = c
+        .prepare(
+            "SELECT transport_url, manifest_json, enabled, allow_private, installed FROM addons
+             WHERE profile_id = ?1 AND substr(hlc, 1, 12) = '000000000000'",
+        )?
+        .query_map(params![profile], |r| {
+            Ok((
+                AddonRow {
+                    transport_url: r.get(0)?,
+                    manifest_json: r.get(1)?,
+                    position: 0,
+                    enabled: r.get(2)?,
+                    allow_private: r.get(3)?,
+                },
+                r.get(4)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    for (a, installed) in &untouched {
+        local(c, coll::ADDON, &[profile, &a.transport_url], stamp, |h| {
+            sql::set_addon(c, profile, a, *installed, h)
+        })?;
+    }
+    let places: Vec<(String, i64)> = c
+        .prepare(
+            "SELECT transport_url, position FROM addon_order
+             WHERE profile_id = ?1 AND substr(hlc, 1, 12) = '000000000000'",
+        )?
+        .query_map(params![profile], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    for (url, position) in &places {
+        local(c, coll::ADDON_ORDER, &[profile, url], stamp, |h| {
+            sql::set_addon_order(c, profile, url, *position, h)
         })?;
     }
     Ok(())
@@ -1266,17 +1320,20 @@ fn write_addons(
 /// neighbours, so a move or an insert changes only the addons that moved or
 /// came. When no whole number fits between two neighbours, the list is
 /// placed again in steps of `POSITION_STEP`.
-pub(crate) fn places(old: &[Option<i64>]) -> Vec<i64> {
-    // Longest strictly increasing run of the old places (patience sort).
+pub(crate) fn places(old: &[Option<i64>], urls: &[&str]) -> Vec<i64> {
+    // Longest run of old places already in the list's order, (place, link)
+    // as the list shows them, so two addons appended at once on two devices
+    // (one place, told apart by link) are in order (patience sort).
     let known: Vec<(usize, i64)> = old
         .iter()
         .enumerate()
         .filter_map(|(i, p)| p.map(|p| (i, p)))
         .collect();
+    let shown = |k: usize| (known[k].1, urls[known[k].0]);
     let mut tails: Vec<usize> = Vec::new(); // index into `known` of each run length's smallest tail
     let mut back: Vec<Option<usize>> = vec![None; known.len()];
-    for (k, &(_, p)) in known.iter().enumerate() {
-        let at = tails.partition_point(|&t| known[t].1 < p);
+    for k in 0..known.len() {
+        let at = tails.partition_point(|&t| shown(t) < shown(k));
         back[k] = at.checked_sub(1).map(|a| tails[a]);
         if at == tails.len() {
             tails.push(k);
