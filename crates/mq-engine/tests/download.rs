@@ -235,6 +235,8 @@ async fn a_delete_in_a_pack_keeps_the_other_file() {
         "e01 kept its bytes: {e01_before} then {e01_after}"
     );
     assert!(read(root.path(), &s.info_hash, "e02.mkv") == before);
+    // Its shared boundary piece too: e02 is still whole by its bitfield.
+    assert!(complete_on_disk(root.path(), &s.info_hash, e02));
     // The last kept file goes with the folder.
     e.delete_file(&s.info_hash, e02).await.unwrap();
     until("the folder is gone", || async { !dir.exists() }).await;
