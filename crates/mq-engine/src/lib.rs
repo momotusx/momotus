@@ -985,7 +985,11 @@ impl Engine {
             || self
                 .free()
                 .is_some_and(|free| free < RESERVE_BYTES + window::RING_BYTES);
-        t.chunked.store(chunked, Ordering::Relaxed);
+        // What the chosen file will be: a whole file already there stays
+        // whole where the volume punches (the storage's own rule), and then
+        // no RAM ring, so the disk guards stay on (review r2).
+        let whole = !self.inner.chunked && t.dir.join(&t.files[idx].path).is_file();
+        t.chunked.store(chunked && !whole, Ordering::Relaxed);
         let opts = AddTorrentOptions {
             only_files: Some(vec![idx]),
             overwrite: true,
@@ -998,6 +1002,9 @@ impl Engine {
             }),
             storage_factory: Some(librqbit::storage::StorageFactoryExt::boxed(
                 librqbit::storage::filesystem::FilesystemStorageFactory {
+                    // `chunked`: this torrent's new files are piece files;
+                    // `migrate`: the volume cannot punch, so an old whole
+                    // file goes for them.
                     chunked,
                     memory: t.memory.clone(),
                     migrate: self.inner.chunked,

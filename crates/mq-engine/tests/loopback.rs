@@ -433,6 +433,40 @@ async fn a_whole_file_stays_whole_where_the_volume_punches() {
     assert!(file.is_file(), "the whole file went: {file:?}");
     let got = read_range(&again, t, movie, 0, head as u64).await;
     assert!(got == s.movie[..head], "the head read wrong");
+    // The file is whole, so a RAM ring's plan plays on disk with the disk
+    // guards on (review r2): under the floor the window ends.
+    let _claim = again.claim(t, "default").unwrap();
+    let ring = mq_engine::window_plan(
+        mq_engine::DeviceClass::Standard,
+        mq_engine::WindowInputs {
+            bitrate: 100_000,
+            piece_len: 256 << 10,
+            fill: 5_000_000,
+            ..Default::default()
+        },
+    );
+    assert!(ring.memory);
+    let w = mq_engine::Window {
+        plan: ring,
+        bitrate: 100_000,
+        metered: false,
+        resume_at: None,
+    };
+    again.window(t, movie, w).await.unwrap();
+    mq_engine::test_hooks::set_free(&again, Some(64 << 20));
+    let started = Instant::now();
+    loop {
+        let reader = again.open_reader(t, "default", movie).await.unwrap();
+        if let Err(mq_engine::EngineError::Storage(why)) = reader.range(0, None).await {
+            assert_eq!(why, "storage full");
+            break;
+        }
+        assert!(
+            started.elapsed() < Duration::from_secs(20),
+            "the disk guard is off"
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
     // A fresh folder in the same state gets piece files.
     let fresh = tempfile::tempdir().unwrap();
     let third = engine_on(fresh.path()).await;
