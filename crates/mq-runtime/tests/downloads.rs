@@ -35,6 +35,8 @@ struct How {
     ignore_ranges: bool,
     /// An HTML page instead of the file.
     html: bool,
+    /// The body in 64 KiB pieces 20 ms apart.
+    slow: bool,
 }
 
 #[derive(Clone, Default)]
@@ -112,6 +114,15 @@ async fn origin(data: Arc<Vec<u8>>, how: How) -> (String, Seen) {
                 }
                 head.push_str("\r\n");
                 let _ = socket.write_all(head.as_bytes()).await;
+                if how.slow {
+                    for chunk in body[..cut].chunks(64 << 10) {
+                        if socket.write_all(chunk).await.is_err() {
+                            return;
+                        }
+                        tokio::time::sleep(Duration::from_millis(20)).await;
+                    }
+                    return;
+                }
                 let _ = socket.write_all(&body[..cut]).await;
             });
         }
@@ -1144,7 +1155,15 @@ async fn a_downloads_poster_is_kept_and_served() {
 /// keeps it (4.14).
 #[tokio::test]
 async fn a_finished_episode_brings_the_next_and_goes() {
-    let (url, _) = origin(video(1 << 20), How::default()).await;
+    // Slow enough that a deletion before e2 is whole would show.
+    let (url, _) = origin(
+        video(2 << 20),
+        How {
+            slow: true,
+            ..How::default()
+        },
+    )
+    .await;
     let stream = serde_json::json!({ "name": "Direct\n1080p", "title": "Show.S02.1080p.WEB-DL.mp4", "url": url });
     let core = core_with(addon_listing(stream, Duration::ZERO).await).await;
     let one = AddRequest {
