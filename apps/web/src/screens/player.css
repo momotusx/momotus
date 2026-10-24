@@ -121,7 +121,7 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 [data-form="phone"] .sub-step svg { width: 20px; height: 20px; }
 .opt-note { padding: 14px 18px 14px 56px; font: 400 var(--type-caption) var(--font-text); color: var(--muted); }
 
-.next { position: absolute; right: var(--safe-side); bottom: 330px; display: flex; gap: 28px; align-items: flex-end; padding: 24px; border-radius: var(--radius-l);
+.next { position: absolute; z-index: 2; right: var(--safe-side); bottom: 330px; display: flex; gap: 28px; align-items: flex-end; padding: 24px; border-radius: var(--radius-l);
   max-width: 900px; }
 .next img { width: 320px; height: 180px; border-radius: var(--radius-m); object-fit: cover; }
 .next .kicker { color: var(--muted); }
@@ -218,7 +218,7 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 [data-form="phone"] .next img { width: 120px; height: 68px; }
 /* The page's own lines (player.tsx places them, lib/cues.ts), at the
  * profile's size (Prefs.subtitleSize: 0.8, 1, 1.25 and 1.5 times); 85% while
- * they would meet the transport. A side panel draws over them. */
+ * they would meet the transport. A side panel or the Up next card draws over them. */
 .cues { position: absolute; left: 12px; right: 12px; z-index: 1; display: flex; flex-direction: column; align-items: center; pointer-events: none; }
 .cues span { padding: 0 6px; font: 500 44px / 1.3 var(--font-text); color: var(--text); background: var(--scrim); text-align: center; }
 [data-subsize="small"] .cues span { font-size: 35px; }

@@ -1,6 +1,7 @@
 /** Where the page draws its subtitle lines (player.tsx), on every form, as
- * Stremio draws its own (stremio-video withHTMLSubtitles): the same rule as
- * the iPhone and Android (plans/subtitles-letterbox.md). Under the picture at
+ * Stremio draws its own (stremio-video withHTMLSubtitles): the iPhone's rule
+ * (Android hangs them 8% over the screen's foot; plans/subtitles-letterbox.md),
+ * in the page's own px (player.tsx undoes the canvas scale). Under the picture at
  * full size when the black band below it holds them (a phone upright); else
  * hung from a foot at the picture's, growing upward, and while the controls
  * show 8 px over the scrubber. Lines that would still meet the transport

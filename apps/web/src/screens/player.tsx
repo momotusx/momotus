@@ -360,22 +360,29 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   const placeCues = () => {
     const video = engine.view as HTMLVideoElement;
     if (!cuesEl) return;
-    const rect = (sel: string) => document.querySelector<HTMLElement>(`.player-scr ${sel}`)?.getBoundingClientRect();
+    // The canvas is scaled on TV and desktop (.app, --k): rects in the page's own px, as the lines are placed.
+    const screen = video.getBoundingClientRect();
+    const k = video.offsetHeight ? screen.height / video.offsetHeight : 1;
+    const local = (r: DOMRect) => ({ top: r.top / k, bottom: r.bottom / k, width: r.width / k, height: r.height / k });
+    const rect = (sel: string) => {
+      const r = document.querySelector<HTMLElement>(`.player-scr ${sel}`)?.getBoundingClientRect();
+      return r && local(r);
+    };
     const bar = rect(".osd");
     const place = cuePlace({
-      box: video.getBoundingClientRect(),
+      box: local(screen),
       video: { width: video.videoWidth, height: video.videoHeight },
       bar,
       scrubber: rect(".scrub"),
       transport: rect(".transport"),
       up: osd() && !ended() && !!bar,
       // The lines' height at full size (drawn now at 85% when shrunk).
-      lines: cuesEl.getBoundingClientRect().height / (shrink() ? 0.85 : 1),
+      lines: cuesEl.getBoundingClientRect().height / k / (shrink() ? 0.85 : 1),
     });
     setShrink(place.shrink);
     setCueAt(place.at);
   };
-  createEffect(on([lines, osd, ended, () => prefs.state.data?.subtitleSize], () => requestAnimationFrame(placeCues)));
+  createEffect(on([lines, osd, ended, panel, () => prefs.state.data?.subtitleSize], () => requestAnimationFrame(placeCues)));
   onMount(() => {
     const video = engine.view as HTMLVideoElement;
     window.addEventListener("resize", placeCues);
